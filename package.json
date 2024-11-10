@@ -1,0 +1,51 @@
+{
+  "name": "pavillion",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/server/app.ts",
+  "scripts": {
+    "dev:frontend": "vite",
+    "dev:backend": "nodemon src/server/app.ts",
+    "dev": "concurrently 'npm:dev:frontend' 'npm:dev:backend'",
+    "start": "NODE_ENV=production node src/server/app.ts",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@intlify/unplugin-vue-i18n": "^5.2.0",
+    "@types/passport": "^1.0.17",
+    "activitypub-express": "^4.4.2",
+    "axios": "^1.7.7",
+    "debug": "^2.6.9",
+    "ejs": "^3.1.10",
+    "express": "^4.21.1",
+    "http-errors": "^1.8.1",
+    "jsonwebtoken": "^9.0.2",
+    "moment": "^2.30.1",
+    "passport": "^0.7.0",
+    "passport-jwt": "^4.0.1",
+    "passport-local": "^1.0.0",
+    "pg": "^8.13.1",
+    "pg-hstore": "^2.3.4",
+    "sequelize": "^6.37.5",
+    "sqlite3": "^5.1.7",
+    "vue": "^3.2.45",
+    "vue-i18n": "^9.14.1",
+    "vue-router": "^4.4.5"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^15.14.9",
+    "@types/passport-jwt": "^4.0.1",
+    "@types/passport-local": "^1.0.38",
+    "@vitejs/plugin-vue": "^4.6.2",
+    "@vue/tsconfig": "^0.5.1",
+    "concurrently": "^7.6.0",
+    "nodemon": "^3.1.7",
+    "sass": "^1.80.6",
+    "sass-loader": "^16.0.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^4.9.5",
+    "vite": "^4.5.5"
+  }
+}

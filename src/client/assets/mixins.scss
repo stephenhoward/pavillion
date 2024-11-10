@@ -1,0 +1,106 @@
+
+$light-mode-background: #fff;
+$dark-mode-background: #3a3a3a;
+$dark-mode-background-gradient: linear-gradient(0deg, #111 0%, #3a3a3a 50%);
+
+$light-mode-sidebar-background: #3a3a3a;
+$dark-mode-sidebar-background: #222;
+
+$light-mode-text: #000;
+$dark-mode-text: #eee;
+
+$light-mode-border: rgba(0,0,0,.3);
+$dark-mode-border: rgba(238,238,238,.3);
+
+$light-mode-panel-background: #fff;
+$dark-mode-panel-background: rgba(0,0,0,.2);
+
+$light-mode-button-background: #359F37;
+$light-mode-button-gradient: linear-gradient(0deg, #18671A 0%, #359F37 100%);
+
+$dark-mode-button-background: #C86002;
+$dark-mode-button-gradient: linear-gradient(0deg, #9C4B02 0%, #C86002 100%);
+
+$main-area-menu-gutter: 40px;
+
+$capsule-background: #CCC;
+$dark-mode-capsule-background: #555;
+
+@mixin flexible-container {
+    display: flex;
+    justify-content: space-between;
+}
+@mixin hstack {
+    @include flexible-container;
+    flex-direction: row;
+}
+@mixin vstack {
+    @include flexible-container;
+    flex-direction: column;
+}
+@mixin flexible {
+    flex: 1 1 auto;
+}
+@mixin inflexible {
+    flex: 0 0 auto;
+}
+
+@mixin medium-size-device {
+    @media ( min-width: 600px ) {
+        @content;
+    }
+}
+@mixin large-size-device {
+    @media ( min-width: 1024px ) {
+        @content;
+    }
+}
+
+@mixin dark-mode {
+    @media (prefers-color-scheme: dark) {
+        @content;
+    }
+}
+
+@mixin page-title-positioning {
+    grid-row-start:    top;
+    grid-column-start: main;
+    justify-self:      start;
+    margin:            10px 0 0 10px;
+    display: inline-block;
+    vertical-align: top;
+}
+
+@mixin auth-form {
+        margin: 20px;
+        & > * {
+            display: block;
+        }
+        input {
+            font-size: 100%;
+            margin: 8px 0;
+            width: 100%;
+            border-radius: 4px;
+            padding: 4px;
+        }
+        button {
+            font-size: 100%;
+            padding: 4px;
+            margin-top: 15px;
+            width: 100%;
+        }
+        a {
+            margin: 10px 0 20px 0;
+            text-align: right;
+            font-size: 85%;
+
+            @include dark-mode {
+                color: $dark-mode-text;
+            }
+        }
+
+        div.error {
+            color: #f50;
+            margin: 10px 0;
+        }
+}
