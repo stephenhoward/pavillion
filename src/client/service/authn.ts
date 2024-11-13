@@ -29,7 +29,7 @@ export default class AuthenticationService {
     async login(email: string,password: string) {
 
         try {
-            let response = await axios.post( this._authUrl('/token'), {
+            let response = await axios.post( this._authUrl('/login'), {
                 email    : email,
                 password : password
             });
@@ -39,6 +39,48 @@ export default class AuthenticationService {
         }
         catch(error) {
             this._unset_token();
+            throw( error );
+        }
+    }
+
+    async register(email: string) {
+
+        try {
+            let response = await axios.post( this._authUrl('/register'), {
+                email: email
+            });
+
+            return response.data;
+        }
+        catch (error) {
+            throw( error );
+        }
+    }
+
+    async register_apply(email: string, message: string) {
+        try {
+            let response = await axios.post( this._authUrl('/register-apply'), {
+                email: email,
+                message: message
+            });
+
+            return response.data;
+        }
+        catch (error) {
+            throw( error );
+        }
+    }
+
+    async accept_invitation(code: string, password: string) {
+        try {
+            let response = await axios.post( this._authUrl('/register-invitation'), {
+                code: code,
+                message: password
+            });
+
+            return response.data;
+        }
+        catch (error) {
             throw( error );
         }
     }
@@ -66,7 +108,7 @@ export default class AuthenticationService {
         }
 
         try {
-            let response = await axios.post( this._authUrl('/reset'), {
+            let response = await axios.post( this._authUrl('/reset-password'), {
                 email: email
             });
 
@@ -87,7 +129,7 @@ export default class AuthenticationService {
         }
 
         try {
-            let response = await axios.get( this._authUrl('/reset/' + token) );
+            let response = await axios.get( this._authUrl('/reset-password/' + token) );
             return response.data;
         }
         catch (error) {

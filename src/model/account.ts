@@ -6,11 +6,16 @@ class Account {
     email: string = '';
     profile: Profile | null = null;
 
-    constructor (entity: AccountEntity) {
-        this.id = entity.id;
-        this.username = entity.username;
-        this.email = entity.email;
-    }
+    constructor (id?: string, username?: string, email?: string) {
+        this.id = id ?? '';
+        this.username = username ?? '';
+        this.email = email ?? '';
+    };
+
+    static fromEntity (entity: AccountEntity): Account {
+        return new Account( entity.id, entity.username, entity.email );
+    };
+
 };
 
 class AccountSecrets {

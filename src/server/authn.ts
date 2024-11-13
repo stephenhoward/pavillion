@@ -58,7 +58,7 @@ const serverAuth = {
                 if (err) {
                     res.send(err);
                 }
-                // generate a signed son web token with the contents of user object and return it in the response
+                // generate a signed json web token with the contents of user object and return it in the response
                 let payload = {id: account.id};
                 const token = jwt.sign(payload, jwtSecret);
                 return res.json({payload, token});

@@ -1,14 +1,13 @@
 <template>
-    <div class="login">
+    <div v-if="state.showSuccess" class="login">
+        <h3>{{ t('title') }}</h3>
+        Check your email "{{ state.email }}" for a confirmation link
+    </div>
+    <div v-else class="login">
         <h3>{{ t('title') }}</h3>
         <div class="error" v-if="state.err">{{ state.err }}</div>
         <input type="email"    v-bind:placeholder="t('email')"    v-model="state.email">
-        <input type="password" v-bind:placeholder="t('password')" v-model="state.password" @keyup.enter="doLogin">
-        <router-link :to="{ name: 'forgot_password', params: { em: state.email }}" >{{ t("forgot_password") }}</router-link>
-        <button @click="doLogin" type="button">{{ t("login_button") }}</button>
-        <router-link :to="{ name: 'register', params: { em: state.email}}" class="button">
-            {{ t("register_button") }}
-        </router-link>
+        <button @click="doRegister" type="button">{{ t("create_button") }}</button>
     </div>
 </template>
 
@@ -22,13 +21,9 @@
     const { t } = useI18n({
         messages: {
             en: {
-                'title': 'Sign in to your account',
-                'login_button': 'Sign in',
+                'title': 'Create an account',
+                'create_button': 'Create an account',
                 email: 'email',
-                password: 'password',
-                forgot_password: 'Forgot Password?',
-                register_button: 'Create an Account',
-                UnknownLogin: 'unknown email or password',
                 '400': 'bad sign in',
                 'unknown_error': 'An unknown error occurred'
             }
@@ -40,7 +35,8 @@
     const state = reactive({
         err      : '',
         email    : '',
-        password : ''
+        password : '',
+        showSuccess: false
     });
 
     onBeforeMount(() => {
@@ -48,12 +44,12 @@
         state.email = state.em || '';
     });
 
-    async function doLogin() {
+    async function doRegister() {
         try {
 
-            await authn.login(state.email,state.password);
+            await authn.register(state.email);
             state.err = '';
-            router.push('/manage');
+            state.showSuccess = true;
         }
         catch(error) {
 

@@ -11,6 +11,7 @@ import LoginView from './components/login.vue';
 import LogoutView from './components/logout.vue';
 import PasswordForgotView from './components/password_forgot.vue';
 import PasswordResetView from './components/password_reset.vue';
+import RegisterView from './components/register.vue';
 import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
 import { createI18n, useI18n } from 'vue-i18n';
 import Authentication from './service/authn';
@@ -30,6 +31,7 @@ const routes: RouteRecordRaw[] = [
         children: [
             { path: 'login',  component: LoginView, name: 'login', props: true },
             { path: 'logout', component: LogoutView, name: 'logout' },
+            { path: 'register',  component: RegisterView, name: 'register', props: true },
             { path: 'forgot', component: PasswordForgotView, name: 'forgot_password', props: true },
             { path: 'reset',  component: PasswordResetView, name: 'reset_password', props: true }
         ]
