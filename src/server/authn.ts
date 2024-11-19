@@ -23,7 +23,6 @@ const serverAuth = {
                     let passwordMatch = await AccountService.checkPassword(account, password);
 
                     if ( passwordMatch ) {
-                        //    return res.json({user, token});
                         return done(null, account);
                     }
                 }
@@ -59,7 +58,7 @@ const serverAuth = {
                     res.send(err);
                 }
                 // generate a signed json web token with the contents of user object and return it in the response
-                let payload = {id: account.id};
+                let payload = {id: account.id, isAdmin: account.hasRole('admin')};
                 const token = jwt.sign(payload, jwtSecret);
                 return res.json({payload, token});
             });

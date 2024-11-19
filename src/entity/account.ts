@@ -20,6 +20,22 @@ AccountEntity.init({
     tableName: 'account'
 });
 
+class AccountRoleEntity extends Model<InferAttributes<AccountRoleEntity>,InferCreationAttributes<AccountRoleEntity>> {
+    declare account_id: string;
+    declare role: string;
+}
+
+AccountRoleEntity.init({
+    account_id: {
+        type: DataTypes.UUID,
+        primaryKey: true
+    },
+    role: DataTypes.STRING
+},{
+    sequelize: db,
+    tableName: 'account_role'
+});
+
 class AccountInvitationEntity extends Model<InferAttributes<AccountInvitationEntity>,InferCreationAttributes<AccountInvitationEntity>> {
     declare id: string;
     declare email: string;
@@ -104,9 +120,11 @@ AccountSecretsEntity.init({
 
 ProfileEntity.belongsTo(AccountEntity, {foreignKey: 'account_id'});
 AccountSecretsEntity.belongsTo(AccountEntity, {foreignKey: 'account_id'});
+AccountRoleEntity.belongsTo(AccountEntity, {foreignKey: 'account_id'});
 
 export {
     AccountEntity,
+    AccountRoleEntity,
     AccountSecretsEntity,
     AccountApplicationEntity,
     AccountInvitationEntity,
