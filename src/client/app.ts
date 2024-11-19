@@ -15,6 +15,9 @@ import RegisterView from './components/register.vue';
 import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
 import { createI18n, useI18n } from 'vue-i18n';
 import Authentication from './service/authn';
+import Config from './service/config';
+
+Config.init().then( (config) => {
 
 const app: App = createApp(AppVue);
 
@@ -43,8 +46,9 @@ const router = createRouter({
     routes
 });
 
-const authentication = new Authentication(window.sessionStorage);
+const authentication = new Authentication(localStorage);
 
+console.log(localStorage)
 const i18n = createI18n({
     legacy: false,
     globalInjection: false,
@@ -57,4 +61,7 @@ app.use(router);
 app.use(i18n);
 app.provide('i18n', i18n);
 app.provide('authn', authentication);
+app.provide('site_config',config);
 app.mount('#app');
+
+});

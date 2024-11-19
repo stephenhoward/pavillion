@@ -5,7 +5,7 @@
   "main": "src/server/app.ts",
   "scripts": {
     "dev:frontend": "vite",
-    "dev:backend": "nodemon src/server/app.ts",
+    "dev:backend": "NODE_ENV=development nodemon src/server/app.ts",
     "dev": "concurrently 'npm:dev:frontend' 'npm:dev:backend'",
     "start": "NODE_ENV=production node src/server/app.ts",
     "build": "vite build",
@@ -17,6 +17,7 @@
     "@types/passport": "^1.0.17",
     "activitypub-express": "^4.4.2",
     "axios": "^1.7.7",
+    "config": "^3.3.12",
     "debug": "^4.3.7",
     "ejs": "^3.1.10",
     "express": "^4.21.1",
@@ -37,6 +38,7 @@
     "vue-router": "^4.4.5"
   },
   "devDependencies": {
+    "@types/config": "^3.3.5",
     "@types/express": "^5.0.0",
     "@types/moment": "^2.11.29",
     "@types/node": "^22.9.0",

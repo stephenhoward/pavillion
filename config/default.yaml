@@ -1,0 +1,4 @@
+database:
+  dialect: sqlite
+  storage: ':memory:'
+  logging: false
