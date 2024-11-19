@@ -19,7 +19,10 @@ const noUserOnly = async (req: express.Request, res: express.Response, next: (er
  * @param email
  * @param password
  */
-router.post('/login', serverAuth.login );
+router.post('/login',
+    noUserOnly,
+    serverAuth.login
+);
 
 /**
  * Register a new account

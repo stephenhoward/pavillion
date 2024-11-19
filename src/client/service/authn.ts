@@ -26,21 +26,26 @@ export default class AuthenticationService {
 
     }
 
-    async login(email: string,password: string) {
+    async login(email: string,password: string): Promise<boolean> {
 
         try {
             let response = await axios.post( this._authUrl('/login'), {
                 email    : email,
                 password : password
             });
-
-            this._set_token(response.statusText);
+            this._set_token(response.data.token);
             return response.data;
         }
         catch(error) {
             this._unset_token();
-            throw( error );
+            if ( error.status == 400 ) {
+                return false;
+            }
+            else {
+                throw( error );
+            }
         }
+        return true;
     }
 
     async register(email: string) {
@@ -172,7 +177,7 @@ export default class AuthenticationService {
 
     _authUrl(path: string) {
 
-        return '/v1/auth' + path;
+        return '/api/v1/auth' + path;
     }
 
     async _wait(ms: number): Promise<NodeJS.Timeout> {
@@ -207,12 +212,13 @@ export default class AuthenticationService {
 
     _set_token(data: string) {
         this.localStore.setItem('jwt',data);
+        console.log(data);
 
         let jw_token: JWTClaims = JSON.parse(
             atob( data.split('.')[1].replace('-','+').replace('_','/') )
         );
         this.localStore.setItem('jw_token', JSON.stringify(jw_token) );
-        this._refresh_login( jw_token.exp );
+        //this._refresh_login( jw_token.exp );
 
     }
 

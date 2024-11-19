@@ -8,6 +8,9 @@
         <div class="error" v-if="state.err">{{ state.err }}</div>
         <input type="email"    v-bind:placeholder="t('email')"    v-model="state.email">
         <button @click="doRegister" type="button">{{ t("create_button") }}</button>
+        <router-link :to="{ name: 'login', params: { em: state.email}}" class="button">
+            {{ t("go_login") }}
+        </router-link>
     </div>
 </template>
 
@@ -24,6 +27,7 @@
                 'title': 'Create an account',
                 'create_button': 'Create an account',
                 email: 'email',
+                go_login: 'back to sign in',
                 '400': 'bad sign in',
                 'unknown_error': 'An unknown error occurred'
             }

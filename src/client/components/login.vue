@@ -6,7 +6,10 @@
         <input type="password" v-bind:placeholder="t('password')" v-model="state.password" @keyup.enter="doLogin">
         <router-link :to="{ name: 'forgot_password', params: { em: state.email }}" >{{ t("forgot_password") }}</router-link>
         <button @click="doLogin" type="button">{{ t("login_button") }}</button>
-        <router-link :to="{ name: 'register', params: { em: state.email}}" class="button">
+        <router-link v-if="state.registrationMode == 'open'" :to="{ name: 'register', params: { em: state.email}}" class="button">
+            {{ t("register_button") }}
+        </router-link>
+        <router-link v-if="state.registrationMode == 'apply'" :to="{ name: 'register-apply', params: { em: state.email}}" class="button">
             {{ t("register_button") }}
         </router-link>
     </div>
@@ -19,6 +22,7 @@
 
     const router = useRouter();
     const authn = inject('authn');
+    const site_config = inject('site_config');
     const { t } = useI18n({
         messages: {
             en: {
@@ -40,7 +44,8 @@
     const state = reactive({
         err      : '',
         email    : '',
-        password : ''
+        password : '',
+        registrationMode : site_config.settings.registrationMode
     });
 
     onBeforeMount(() => {
@@ -51,12 +56,20 @@
     async function doLogin() {
         try {
 
-            await authn.login(state.email,state.password);
-            state.err = '';
-            router.push('/manage');
+            if ( await authn.login(state.email,state.password) ) {
+                console.log("login success");
+                state.err = '';
+                router.push('/manage');
+            }
+            else {
+                console.log("login failed");
+                state.err = t('400');
+            }
         }
         catch(error) {
 
+            console.log("catch error from login");
+            console.log(error);
             let error_text = "unknown_error";
 
             if ( typeof error  == "object" && "message" in error ) {
