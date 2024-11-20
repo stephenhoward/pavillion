@@ -15,6 +15,20 @@ router.get('/', async (req, res) => {
   res.render("index.html.ejs", data);
 });
 
+const supportedAssets = ["svg", "png", "jpg", "png", "jpeg", "mp4", "ogv"];
+
+const assetExtensionRegex = () => {
+  const formattedExtensionList = supportedAssets.join("|");
+
+  return new RegExp(`/src/.+\.(${formattedExtensionList})$`);
+};
+
+router.get(assetExtensionRegex(), (req, res) => {
+  console.log("ASSET PATH" + req.path);
+  res.redirect(303, `http://localhost:5173/src${req.path}`);
+});
+
+
 const parseManifest = async () => {
   if (environment !== "production") return {};
 

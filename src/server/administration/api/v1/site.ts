@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import ServiceSettings from '../../../../service/settings';
+import ServiceSettings from '../../../common/service/settings';
 
 var router = express.Router();
 

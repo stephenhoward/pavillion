@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import AccountService from '../../../../service/account';
+import AccountService from '../../../service/account';
 
 interface User {
     id: number;
@@ -25,6 +25,13 @@ const adminOnly = async (req: Request, res: Response, next: (err?: any) => void)
     }
 }
 
+/**
+ * Send a registration invitation
+ * @route POST /api/admin/v1/invite
+ * @param email
+ * @param message
+ * Use a valid password reset code to set a new password
+ */
 router.post('/invite', adminOnly,
     async (req, res) => {
         AccountService.inviteNewAccount(req.body.email, req.body.message);

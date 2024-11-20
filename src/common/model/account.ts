@@ -1,4 +1,4 @@
-import { AccountEntity, AccountRoleEntity } from '../entity/account';
+import { AccountEntity, AccountRoleEntity } from '../../server/common/entity/account';
 
 class Account {
     id: string = '';

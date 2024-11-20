@@ -1,8 +1,11 @@
-import express from 'express';
-import serverAuth from '../../../authn';
-import AccountService from '../../../../service/account';
+import express, { Response } from 'express';
+import AccountService from '../../service/account';
+import passport from 'passport';
+import { Account } from '../../../../common/model/account';
+import jwt from 'jsonwebtoken';
 
 var router = express.Router();
+const jwtSecret = 'secret';  // TODO: add secret here
 
 const noUserOnly = async (req: express.Request, res: express.Response, next: (err?: any) => void) => {
     if ( !req.user ) {
@@ -13,6 +16,13 @@ const noUserOnly = async (req: express.Request, res: express.Response, next: (er
     }
 }
 
+const sendJWT = (account: Account, res: Response) => {
+    // generate a signed json web token with the contents of user object and return it in the response
+    let payload = {id: account.id, isAdmin: account.hasRole('admin')};
+    let token = jwt.sign(payload, jwtSecret);
+    return res.json({payload, token});
+}
+
 /**
  * Accept login credentials
  * @route POST /api/v1/auth/login
@@ -21,7 +31,22 @@ const noUserOnly = async (req: express.Request, res: express.Response, next: (er
  */
 router.post('/login',
     noUserOnly,
-    serverAuth.login
+    async(req, res) => {
+        passport.authenticate('local', {session: false}, (err: any, account: Account, info?: any) => {
+            if (err || !account) {
+                return res.status(400).json({
+                    message: 'Something is not right',
+                    user   : account
+                });
+            }
+            req.login(account, {session: false}, (err: any) => {
+                if (err) {
+                    res.send(err);
+                }
+                sendJWT(account, res);
+            });
+        })(req, res);
+    }
 );
 
 /**
@@ -81,11 +106,12 @@ router.get('/register-invitation/:code',
  */
 router.post('/register-invitation',
     noUserOnly,
-    async (req, res, next) => {
-        AccountService.acceptAccountInvite(req.body.code, req.body.password);
-        next();
-    },
-    serverAuth.login
+    async (req, res) => {
+        let account = await AccountService.acceptAccountInvite(req.body.code, req.body.password);
+        if ( account ) {
+            sendJWT(account, res);
+        }
+    }
 );
 
 /**
@@ -111,11 +137,12 @@ router.get('/reset-password/:code', async (req, res) => {
  * Use a valid password reset code to set a new password
  */
 router.post('/reset-password',
-    async (req, res, next) => {
-        AccountService.resetPassword(req.body.code, req.body.password);
-        next()
-    },
-    serverAuth.login
+    async (req, res) => {
+        let account = await AccountService.resetPassword(req.body.code, req.body.password);
+        if ( account ) {
+            sendJWT(account, res);
+        }
+    }
 );
 
 export default router;

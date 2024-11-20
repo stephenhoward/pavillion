@@ -1,5 +1,5 @@
 import config from 'config';
-import { Model, Sequelize } from 'sequelize';
+import { Model, Sequelize } from 'sequelize-typescript';
 import path from 'path';
 import fs from 'fs/promises';
 
