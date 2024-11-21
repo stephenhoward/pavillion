@@ -5,6 +5,7 @@ import CommonAccountService from '../../common/service/accounts';
 import sendEmail from "../../common/service/mail";
 import { AccountInvitationEntity, AccountApplicationEntity } from "../../common/entity/account"
 import { AccountAlreadyExistsError, AccountInviteAlreadyExistsError, noAccountApplicationExistsError } from '../../exceptions/account_exceptions';
+import AccountInvitation from '../../../common/model/invitation';
 
 type AccountInfo = {
     account: Account,
@@ -28,7 +29,7 @@ class AccountService {
      * @throws AccountAlreadyExistsError if an account already exists for the provided email
      * @throws AccountInviteAlreadyExistsError if an invitation already exists for the provided email
      */
-    static async inviteNewAccount(email:string, message: string): Promise<undefined> {
+    static async inviteNewAccount(email:string, message: string): Promise<AccountInvitation|undefined> {
 
         if ( await CommonAccountService.getAccountByEmail(email) ) {
             throw new AccountAlreadyExistsError();
@@ -48,7 +49,7 @@ class AccountService {
         await invitation.save()
         AccountService.sendNewAccountInvite(invitation);
 
-        return;
+        return invitation.toModel();
     }
 
     static async sendNewAccountInvite(invitation:AccountInvitationEntity): Promise<boolean> {
@@ -69,6 +70,25 @@ class AccountService {
 
         sendEmail(accountInfo.account.email, 'Welcome to our service', 'Thank you for applying' + accountInfo.password_code);
         return accountInfo.account;
+    }
+
+    static async rejectAccountApplication(id: string): Promise<undefined> {
+
+        const application = await AccountApplicationEntity.findByPk(id);
+
+        if (! application ) {
+            throw new noAccountApplicationExistsError();
+        }
+
+        sendEmail(application.email, 'Your account application was declined', 'Thank you for applying');
+    }
+
+    static async listInvitations(): Promise<AccountInvitation[]> {
+        return (await AccountInvitationEntity.findAll()).map( (invitation) => invitation.toModel() );
+    }
+
+    static async listAccountApplications(): Promise<AccountInvitation[]> {
+        return (await AccountApplicationEntity.findAll()).map( (application) => application.toModel() );
     }
 }
 

@@ -23,7 +23,7 @@ export default class Config {
     }
 
     static async _load_settings() {
-        let settings = await axios.get( '/api/v1/site');
+        let settings = await axios.get( '/api/admin/v1/site');
         Config._settings = settings.data;
     }
     

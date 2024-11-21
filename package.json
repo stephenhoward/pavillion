@@ -6,7 +6,7 @@
   "main": "src/server/app.ts",
   "scripts": {
     "dev:frontend": "vite",
-    "dev:backend": "NODE_ENV=development nodemon src/server/app.ts",
+    "dev:backend": "NODE_ENV=development tsx watch src/server/app.ts",
     "dev": "concurrently 'npm:dev:frontend' 'npm:dev:backend'",
     "start": "NODE_ENV=production node src/server/app.ts",
     "build": "vite build",
@@ -58,6 +58,7 @@
     "sass-loader": "^16.0.3",
     "sinon": "^19.0.2",
     "ts-node": "^10.9.2",
+    "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "vite": "^5.4.10",
     "vitest": "^2.1.4"

@@ -38,44 +38,6 @@ class AccountService {
         return accountInfo.account;
     }
 
-    /**
-     * Sends the owner of the provided email a message inviting them to create an account,
-     * if they do not already have an account.
-     * @param email
-     * @param message
-     * @returns a promise that resolves to undefined
-     * @throws AccountAlreadyExistsError if an account already exists for the provided email
-     * @throws AccountInviteAlreadyExistsError if an invitation already exists for the provided email
-     */
-    static async inviteNewAccount(email:string, message: string): Promise<undefined> {
-
-        if ( await CommonAccountService.getAccountByEmail(email) ) {
-            throw new AccountAlreadyExistsError();
-        }
-
-        if ( await AccountInvitationEntity.findOne({ where: { email: email }}) ) {
-            throw new AccountInviteAlreadyExistsError();
-        }
-
-        const invitation = AccountInvitationEntity.build({
-            id: uuidv4(),
-            email: email,
-            message: message,
-            invitation_code: randomBytes(16).toString('hex')
-        });
-
-        await invitation.save()
-        AccountService.sendNewAccountInvite(invitation);
-
-        return;
-    }
-
-    static async sendNewAccountInvite(invitation:AccountInvitationEntity): Promise<boolean> {
-
-        sendEmail(invitation.email, 'Welcome to our service', 'Thank you for applying' + invitation.invitation_code);
-        return true;
-    }
-
     static async applyForNewAccount(email:string, message: string): Promise<boolean> {
 
         const settings = await ServiceSettings.getInstance();
@@ -118,20 +80,6 @@ class AccountService {
         return accountInfo.account;
     }
 
-    static async acceptAccountApplication(id: string): Promise<Account|undefined> {
-
-        const application = await AccountApplicationEntity.findByPk(id);
-
-        if (! application ) {
-            throw new noAccountApplicationExistsError();
-        }
-
-        const accountInfo = await CommonAccountService._setupAccount(application.email);
-
-        sendEmail(accountInfo.account.email, 'Welcome to our service', 'Thank you for applying' + accountInfo.password_code);
-        return accountInfo.account;
-    }
-
     static async validatePasswordResetCode(code: string): Promise<boolean> {
         const secret = await AccountSecretsEntity.findOne({where: {password_reset_code: code}});
 
@@ -149,7 +97,7 @@ class AccountService {
         if ( secret ) {
 
             if ( moment().isBefore(secret.password_reset_expiration) ) {
-                const account = Account.fromEntity(secret.account);
+                const account = secret.account.toModel();
 
                 if ( await CommonAccountService.setPassword(account, password) == true ) {
                     return account;

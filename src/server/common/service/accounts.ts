@@ -24,7 +24,7 @@ class AccountService {
         const account = await AccountEntity.findOne({ where: {email: email}});
 
         if ( account ) {
-            return Account.fromEntity(account);
+            return account.toModel();
         }
     }
 
@@ -32,7 +32,7 @@ class AccountService {
         const account = await AccountEntity.findByPk(id);
 
         if ( account ) {
-            return Account.fromEntity(account);
+            return account.toModel();
         }
     }
 
@@ -73,7 +73,7 @@ class AccountService {
 
         if( password ) {
             await accountSecretsEntity.save();
-            AccountService.setPassword(Account.fromEntity(accountEntity), password);
+            AccountService.setPassword(accountEntity.toModel(), password);
         }
         else {
             accountSecretsEntity.password_reset_code = randomBytes(16).toString('hex');
@@ -82,7 +82,7 @@ class AccountService {
         }
 
         return {
-            account: Account.fromEntity(accountEntity),
+            account: accountEntity.toModel(),
             password_code: accountSecretsEntity.password_reset_code
         };
     }

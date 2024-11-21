@@ -1,5 +1,8 @@
 import { Model, Column, Table, BelongsTo, ForeignKey, DataType, PrimaryKey } from 'sequelize-typescript';
 import db from './db';
+import { Account } from '../../../common/model/account';
+import AccountInvitation from '../../../common/model/invitation';
+import AccountApplication from '../../../common/model/application';
 
 @Table({ tableName: 'account' })
 class AccountEntity extends Model {
@@ -13,6 +16,10 @@ class AccountEntity extends Model {
 
     @Column({ type: DataType.STRING })
     declare email: string;
+
+    toModel(): Account {
+        return new Account( this.id, this.username, this.email );
+    };
 };
 
 @Table({ tableName: 'account_role' })
@@ -42,6 +49,10 @@ class AccountInvitationEntity extends Model {
 
     @Column({ type: DataType.STRING })
     declare invitation_code: string;
+
+    toModel(): AccountInvitation {
+        return new AccountInvitation(this.id, this.email, this.message);
+    }
 };
 
 @Table({ tableName: 'account_application' })
@@ -55,6 +66,11 @@ class AccountApplicationEntity extends Model {
 
     @Column({ type: DataType.STRING })
     declare message: string;
+
+    toModel(): AccountApplication {
+        return new AccountApplication( this.id, this.email, this.message );
+    };
+
 };
 
 @Table({ tableName: 'profile' })

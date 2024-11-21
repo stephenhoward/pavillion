@@ -13,10 +13,6 @@ class Account {
         this.email = email ?? '';
     };
 
-    static fromEntity (entity: AccountEntity): Account {
-        return new Account( entity.id, entity.username, entity.email );
-    };
-
     async hasRole(role: string): Promise<boolean> {
         await this.loadRoles();
         if ( this.roles ) {
