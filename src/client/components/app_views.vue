@@ -1,16 +1,5 @@
 <script setup>
 import loggedInNavigation from './loggedInNavigation.vue'
-import { inject, onBeforeMount } from 'vue';
-import { useRouter} from 'vue-router';
-
-const authn = inject('authn');
-
-onBeforeMount(() => {
-  if (!authn.is_logged_in()) {
-    useRouter().replace({ name: 'login'});
-  }
-
-})
 </script>
 
 <template>

@@ -98,16 +98,16 @@ test ('is_logged_in', () => {
     let store = new LocalStore();
     let authentication = new AuthenticationService( store );
 
-    expect( authentication.is_logged_in() ).toBe(false);
+    expect( authentication.isLoggedIn() ).toBe(false);
 
     authentication._set_token(fake_jwt);
 
-    expect( authentication.is_logged_in() ).toBe(false);
+    expect( authentication.isLoggedIn() ).toBe(false);
 
     let good_jwt = '1234.'+btoa('{ "exp": "'+(Date.now()+500)+'"}');
     authentication._set_token(good_jwt);
 
-    expect( authentication.is_logged_in() ).toBe(true);
+    expect( authentication.isLoggedIn() ).toBe(true);
 
 });
 

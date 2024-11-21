@@ -94,7 +94,7 @@ export default class AuthenticationService {
         this._unset_token();
     }
 
-    is_logged_in() {
+    isLoggedIn() {
         let token =  this.localStore.getItem('jw_token');
 
         if ( token ) {
@@ -212,7 +212,6 @@ export default class AuthenticationService {
 
     _set_token(data: string) {
         this.localStore.setItem('jwt',data);
-        console.log(data);
 
         let jw_token: JWTClaims = JSON.parse(
             atob( data.split('.')[1].replace('-','+').replace('_','/') )

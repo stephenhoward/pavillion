@@ -20,9 +20,18 @@ import Config from './service/config';
 Config.init().then( (config) => {
 
 const app: App = createApp(AppVue);
+const authentication = new Authentication(localStorage);
 
 const routes: RouteRecordRaw[] = [
     { path: '/', component: AppViews, name: 'app',
+        beforeEnter: (to, from, next) => {
+            if (!authentication.isLoggedIn()) {
+                next({ name: 'login'});
+            }
+            else {
+                next();
+            }
+        },
         children: [
             { path: 'calendar', component: CalendarView, name: 'calendar' },
             { path: 'inbox', component: InboxView, name: 'inbox' },
@@ -46,9 +55,6 @@ const router = createRouter({
     routes
 });
 
-const authentication = new Authentication(localStorage);
-
-console.log(localStorage)
 const i18n = createI18n({
     legacy: false,
     globalInjection: false,
