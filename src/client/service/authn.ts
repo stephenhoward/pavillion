@@ -2,6 +2,7 @@ import axios, { AxiosError } from 'axios';
 
 interface JWTClaims {
     exp: number;
+    isAdmin: boolean;
 }
 
 export default class AuthenticationService {
@@ -101,6 +102,18 @@ export default class AuthenticationService {
             const claims: JWTClaims = JSON.parse(token);
             if ( token && claims.exp > Math.floor(Date.now() / 1000) ) {
                 return true;
+            }
+        }
+        return false;
+    }
+
+    isAdmin() {
+        let token =  this.localStore.getItem('jw_token');
+
+        if ( token ) {
+            const claims: JWTClaims = JSON.parse(token);
+            if ( claims.exp > Math.floor(Date.now() / 1000) ) {
+                return claims.isAdmin == true;
             }
         }
         return false;

@@ -1,8 +1,18 @@
 <script setup>
+import { reactive, inject } from 'vue';
 import loggedInNavigation from './loggedInNavigation.vue'
+
+const authn = inject('authn');
+
+const state = reactive({
+    userInfo: {
+        isAdmin: authn.isAdmin()
+    }
+});
 </script>
 
 <template>
+    <router-link v-if="state.userInfo.isAdmin" to="/admin" class="button">Admin</router-link>
     <RouterView />
     <loggedInNavigation />
 </template>
