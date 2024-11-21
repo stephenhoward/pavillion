@@ -4,7 +4,7 @@ import passport from 'passport';
 import { Account } from '../../../common/model/account';
 import { Strategy as LocalStrategy } from 'passport-local';
 import passportJWT from 'passport-jwt';
-import AccountService from '../service/account';
+import AuthenticationService from '../service/auth';
 import CommonAccountService from '../../common/service/accounts';
 
 const jwtSecret = 'secret';  // TODO: add secret here
@@ -19,7 +19,7 @@ const apiV1 = (app: Application) => {
         let account = await CommonAccountService.getAccountByEmail(email);
 
         if ( account ) {
-            let passwordMatch = await AccountService.checkPassword(account, password);
+            let passwordMatch = await AuthenticationService.checkPassword(account, password);
 
             if ( passwordMatch ) {
                 return done(null, account);

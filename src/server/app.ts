@@ -1,7 +1,7 @@
 import express from 'express';
 import path from "path";
 import indexRouter from './app_routes';
-import AdminV1Routes from './administration/api/v1';
+import AdminV1Routes from './accounts/api/v1';
 import AuthV1Routes from './authentication/api/v1';
 import db, { seedDB } from './common/entity/db';
 

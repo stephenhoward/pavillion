@@ -1,16 +1,6 @@
 import { scryptSync, randomBytes } from 'crypto';
-import { v4 as uuidv4 } from 'uuid';
-import moment from 'moment';
-import ServiceSettings from './settings';
-import { AccountEntity, AccountSecretsEntity, AccountApplicationEntity, AccountInvitationEntity } from "../entity/account"
+import { AccountEntity, AccountSecretsEntity } from "../entity/account"
 import { Account } from "../../../common/model/account"
-import sendEmail from "./mail";
-import { AccountAlreadyExistsError, AccountInviteAlreadyExistsError, AccountApplicationAlreadyExistsError, noAccountInviteExistsError, noAccountApplicationExistsError, AccountRegistrationClosedError, AccountApplicationsClosedError } from '../../exceptions/account_exceptions';
-
-type AccountInfo = {
-    account: Account,
-    password_code: string | null
-};
 
 /**
  * Service class for managing accounts
@@ -53,38 +43,6 @@ class AccountService {
             return true;
         }
         return false;
-    }
-
-
-    static async _setupAccount(email: string, password?: string): Promise<AccountInfo> {
-        if ( await AccountService.getAccountByEmail(email) ) {
-            throw new AccountAlreadyExistsError();
-        }
-
-        const accountEntity = AccountEntity.build({
-            id: uuidv4(),
-            email: email,
-            username: ''
-        });
-
-        await accountEntity.save();
-
-        const accountSecretsEntity = AccountSecretsEntity.build({ account_id: accountEntity.id });
-
-        if( password ) {
-            await accountSecretsEntity.save();
-            AccountService.setPassword(accountEntity.toModel(), password);
-        }
-        else {
-            accountSecretsEntity.password_reset_code = randomBytes(16).toString('hex');
-            accountSecretsEntity.password_reset_expiration = moment().add(1,'hours').toDate();
-            await accountSecretsEntity.save();
-        }
-
-        return {
-            account: accountEntity.toModel(),
-            password_code: accountSecretsEntity.password_reset_code
-        };
     }
 }
 

@@ -1,11 +1,10 @@
 import { test, expect, expectTypeOf } from 'vitest';
 import sinon from 'sinon';
-import AccountService from '../service/account';
+import AuthenticationService from '../service/auth';
 import CommonAccountService from '../../common/service/accounts';
-import { AccountEntity, AccountSecretsEntity } from '../../common/entity/account';
+import { AccountSecretsEntity } from '../../common/entity/account';
 import { Account } from '../../../common/model/account';
 
-let accountEntityStub = sinon.stub(AccountEntity, 'findOne');
 let findSecretStub = sinon.stub(AccountSecretsEntity, 'findByPk');
 
 test( 'checkPassword', async () => {
@@ -14,8 +13,6 @@ test( 'checkPassword', async () => {
     let secrets = AccountSecretsEntity.build({
         account_id: '1234',
     });
-    let saveSecretStub = sinon.stub(secrets, 'save');
-
 
     findSecretStub.callsFake( async (args) => {  return secrets;  });
 
@@ -23,6 +20,6 @@ test( 'checkPassword', async () => {
     expect( secrets.password ).not.toBe('testme');
     expect( secrets.password ).not.toBe('newPassword');
     expect( secrets.salt ).not.toBe('testme');
-    expect( await AccountService.checkPassword(new Account(), 'testme') ).toBe(false);
-    expect( await AccountService.checkPassword(new Account(), 'newPassword') ).toBe(true);
+    expect( await AuthenticationService.checkPassword(new Account(), 'testme') ).toBe(false);
+    expect( await AuthenticationService.checkPassword(new Account(), 'newPassword') ).toBe(true);
 });
