@@ -17,6 +17,7 @@ declare module 'express-serve-static-core' {
 }
 
 const jwtSecret = 'secret';  // TODO: add secret here
+const expirationMinutes = 5;
 
 export default {
     adminOnly:  async (req: Request, res: Response, next: (err?: any) => void) => {
@@ -46,7 +47,11 @@ export default {
 
     sendJWT: (account: Account, res: Response) => {
         // generate a signed json web token with the contents of user object and return it in the response
-        let payload = {id: account.id, isAdmin: account.hasRole('admin')};
+        let payload = {
+            exp: Math.floor(Date.now() / 1000) + (60 * expirationMinutes),
+            id: account.id,
+            isAdmin: account.hasRole('admin')
+        };
         let token = jwt.sign(payload, jwtSecret);
         return res.json({payload, token});
     }

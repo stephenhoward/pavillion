@@ -7,7 +7,7 @@
     <li>email: {{ email }}</li>
     <li><a href="/follow-list">Following {{ following_count }}</a></li>
     <li><a href="/password">Update Password</a></li>
-    <li><a href="/logout">Logout</a></li>
+    <router-link :to="{ name: 'logout' }">Logout</router-link>
   </ul>
 </template>
 

@@ -7,7 +7,7 @@
     import { useRouter } from 'vue-router';
 
     const router = useRouter();
-    const authentication = inject('authentication');
+    const authentication = inject('authn');
 
     onBeforeMount( () => {
         authentication.logout();
