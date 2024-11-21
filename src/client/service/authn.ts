@@ -177,7 +177,7 @@ export default class AuthenticationService {
 
     _authUrl(path: string) {
 
-        return '/api/v1/auth' + path;
+        return '/api/auth/v1' + path;
     }
 
     async _wait(ms: number): Promise<NodeJS.Timeout> {

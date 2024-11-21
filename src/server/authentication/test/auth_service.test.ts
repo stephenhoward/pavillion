@@ -6,6 +6,7 @@ import { AccountSecretsEntity } from '../../common/entity/account';
 import { Account } from '../../../common/model/account';
 
 let findSecretStub = sinon.stub(AccountSecretsEntity, 'findByPk');
+let saveSecretStub = sinon.stub(AccountSecretsEntity.prototype, 'save');
 
 test( 'checkPassword', async () => {
 

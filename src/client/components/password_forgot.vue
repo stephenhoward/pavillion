@@ -5,7 +5,7 @@
         <div class="error" v-if="state.error">{{ state.error }}</div>
         <input type="email" v-bind:placeholder="t('email')" v-model="state.email">
         <button v-on:click="startReset" type="button">{{ t('go_button') }}</button>
-        <router-link :to="{ name: 'login', params: { em: state.email }}" >{{ t("login_link") }}</router-link>
+        <router-link :to="{ name: 'login', query: { email: state.email }}" >{{ t("login_link") }}</router-link>
     </div>
 </template>
 
@@ -26,11 +26,10 @@ body {
 </style>
 
 <script setup>
-    import { reactive, onBeforeMount, inject } from 'vue';
-    import { useRouter } from 'vue-router'
+    import { reactive, inject } from 'vue';
+    import { useRouter, useRoute } from 'vue-router'
     import { useI18n } from 'vue-i18n';
 
-    const router = useRouter();
     const { t } = useI18n({
         messages: {
             en: {
@@ -47,18 +46,14 @@ body {
             }
         }
     });
-    const authentication = inject('authentication');
+    const authentication = inject('authn');
 
-    const props = defineProps(['em','err']);
+    const router = useRouter();
+    const route = useRoute();
     const state = reactive({
-        error: '',
-        email: ''
+        error: route.query.err,
+        email: route.query.email
     })
-
-    onBeforeMount(() => {
-        state.email = props.em  || '';
-        state.error = props.err || '';
-    });
 
     async function startReset() {
 
@@ -66,7 +61,7 @@ body {
 
             await authentication.reset_password( state.email )
 
-            router.push({ name:'reset_password', params: { email: state.email } });
+            router.push({ name:'reset_password', query: { email: state.email } });
         }
         catch(error) {
             let error_text = "unknown_error";
