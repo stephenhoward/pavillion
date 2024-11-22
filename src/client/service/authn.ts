@@ -25,7 +25,14 @@ export default class AuthenticationService {
 
         this._refresh_timer = null;
 
-    }
+        axios.interceptors.request.use( (config) => {
+            let jwt = this.jwt();
+            if ( jwt ) {
+                config.headers['Authorization'] = 'Bearer ' + jwt;
+            }
+            return config;
+        });
+            }
 
     async login(email: string,password: string): Promise<boolean> {
 
@@ -205,13 +212,16 @@ export default class AuthenticationService {
 
             try {
                 this._refresh_timer = await this._wait( timer * 1000 );
-                let response = await axios.get( this._authUrl('/token'), {} );
+                console.log("refresh token");
+                if ( this.jwt() ) {
+                    let response = await axios.get( this._authUrl('/token'), {} );
 
-                if ( response.status >= 400 ) {
-                    throw(response.statusText);
+                    if ( response.status >= 400 ) {
+                        throw(response.statusText);
+                    }
+
+                    this._set_token(response.data.token);
                 }
-
-                this._set_token(response.data);
             }
             catch (error) {
                 this._unset_token();
@@ -230,8 +240,9 @@ export default class AuthenticationService {
             atob( data.split('.')[1].replace('-','+').replace('_','/') )
         );
         this.localStore.setItem('jw_token', JSON.stringify(jw_token) );
-        //this._refresh_login( jw_token.exp );
-
+        if ( jw_token.exp ) {
+            this._refresh_login( jw_token.exp );
+        }
     }
 
     _unset_token() {

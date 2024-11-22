@@ -12,7 +12,7 @@ var router = express.Router();
  * If the server is not configured to allow open registrations, this will send store a request
  * for an account that the server administrator can approve
  */
-router.post('/applications', ExpressHelper.noUserOnly,
+router.post('/applications', ...ExpressHelper.noUserOnly,
     async (req, res) => {
         AccountService.applyForNewAccount(req.body.email, req.body.message);
         res.json({message: 'application sent'})
@@ -23,7 +23,7 @@ router.post('/applications', ExpressHelper.noUserOnly,
  * Retrieve current registration applications
  * @route GET /api/accounts/v1/applications
  */
-router.get('/applications', ExpressHelper.adminOnly,
+router.get('/applications', ...ExpressHelper.adminOnly,
     async (req, res) => {
         const applications = await AccountService.listAccountApplications();
         res.json({applications});
@@ -36,7 +36,7 @@ router.get('/applications', ExpressHelper.adminOnly,
  * @param id
  * @param accepted
  */
-router.post('/applications/:id', ExpressHelper.adminOnly,
+router.post('/applications/:id', ...ExpressHelper.adminOnly,
     async (req, res) => {
         if ( req.body.accepted == true ) {
             AccountService.acceptAccountApplication(req.params.id);

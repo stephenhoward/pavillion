@@ -1,9 +1,10 @@
 import express, { Request, Response } from 'express';
 import { Account } from '../../../common/model/account';
 import jwt from 'jsonwebtoken';
+import passport from 'passport';
 
 interface User {
-    id: number;
+    id: string;
     name: string;
     email: string;
     role: string;
@@ -20,31 +21,38 @@ const jwtSecret = 'secret';  // TODO: add secret here
 const expirationMinutes = 5;
 
 export default {
-    adminOnly:  async (req: Request, res: Response, next: (err?: any) => void) => {
-        if ( req.user && req.user.hasRole('admin') ) {
-            next();
+    adminOnly: [
+        passport.authenticate('jwt', {session: false}),
+        async (req: Request, res: Response, next: (err?: any) => void) => {
+            if ( req.user && req.user.hasRole('admin') ) {
+                next();
+            }
+            else {
+                res.status(403).json({message: 'forbidden'});
+            }
         }
-        else {
-            res.status(403).json({message: 'forbidden'});
+    ],
+    noUserOnly: [
+        async (req: express.Request, res: express.Response, next: (err?: any) => void) => {
+            if ( !req.user ) {
+                next();
+            }
+            else {
+                res.status(403).json({message: 'forbidden'});
+            }
         }
-    },
-    noUserOnly: async (req: express.Request, res: express.Response, next: (err?: any) => void) => {
-        if ( !req.user ) {
-            next();
+    ],
+    loggedInOnly: [
+        passport.authenticate('jwt', {session: false}),
+        async (req: express.Request, res: express.Response, next: (err?: any) => void) => {
+            if ( req.user ) {
+                next();
+            }
+            else {
+                res.status(403).json({message: 'forbidden'});
+            }
         }
-        else {
-            res.status(403).json({message: 'forbidden'});
-        }
-    },
-    loggedInOnly: async (req: express.Request, res: express.Response, next: (err?: any) => void) => {
-        if ( req.user ) {
-            next();
-        }
-        else {
-            res.status(403).json({message: 'forbidden'});
-        }
-    },
-
+    ],
     sendJWT: async (account: Account, res: Response) => {
         // generate a signed json web token with the contents of user object and return it in the response
         let payload = {

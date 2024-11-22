@@ -11,7 +11,7 @@ var router = express.Router();
  * Sends an email to the provided email address to complete the registration process
  */
 router.post('/register',
-    ExpressHelper.noUserOnly,
+    ...ExpressHelper.noUserOnly,
     async (req, res) => {
         AccountService.registerNewAccount(req.body.email);
         res.json({message: 'register'})
