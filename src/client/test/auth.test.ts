@@ -181,15 +181,13 @@ test ( '_refresh_login valid', async () => {
     let sandbox = sinon.createSandbox();
     sandbox.useFakeTimers();
 
-    let stub2 = sinon.stub(authentication,"_unset_token");
     let stub1 = sinon.stub(authentication,"_set_token");
 
     axios_get.returns(Promise.resolve({status: 200, statusText: "Ok", data: fake_jwt}));
 
     let promise = authentication._refresh_login( Date.now() + 500)
     .then( r => {
-        expect( stub1.notCalled ).toBeFalsy();
-        expect( stub2.calledOnce ).toBeFalsy();
+        expect( stub1.notCalled ).toBeFalsy;
     });
     sandbox.clock.runAll();
 

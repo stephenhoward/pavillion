@@ -41,7 +41,7 @@ export default class AuthenticationService {
                 email    : email,
                 password : password
             });
-            this._set_token(response.data.token);
+            this._set_token(response.data);
             return response.data;
         }
         catch(error) {
@@ -212,7 +212,6 @@ export default class AuthenticationService {
 
             try {
                 this._refresh_timer = await this._wait( timer * 1000 );
-                console.log("refresh token");
                 if ( this.jwt() ) {
                     let response = await axios.get( this._authUrl('/token'), {} );
 
@@ -220,7 +219,7 @@ export default class AuthenticationService {
                         throw(response.statusText);
                     }
 
-                    this._set_token(response.data.token);
+                    this._set_token(response.data);
                 }
             }
             catch (error) {

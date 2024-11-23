@@ -61,6 +61,6 @@ export default {
             isAdmin: await account.hasRole('admin')
         };
         let token = jwt.sign(payload, jwtSecret);
-        return res.json({payload, token});
+        return res.send(token);
     }
 }
