@@ -1,5 +1,5 @@
 import { scryptSync, randomBytes } from 'crypto';
-import { AccountEntity, AccountSecretsEntity } from "../entity/account"
+import { AccountEntity, AccountRoleEntity, AccountSecretsEntity } from "../entity/account"
 import { Account } from "../../../common/model/account"
 
 /**
@@ -10,11 +10,27 @@ import { Account } from "../../../common/model/account"
  */
 class AccountService {
 
+    static async loadAccountRoles(account: Account): Promise<Account> {
+        const roles = await AccountEntity.findByPk(account.id, { include: { model: AccountRoleEntity } });
+
+        if ( roles ) {
+            let roles = await AccountRoleEntity.findAll({ where: { account_id: account.id } });
+            if ( roles ) {
+                account.roles = roles.map( (role) => role.role );
+            }
+            else {
+                account.roles = [];
+            }
+        }
+
+        return account;
+    }
+
     static async getAccountByEmail(email: string): Promise<Account|undefined> {
         const account = await AccountEntity.findOne({ where: {email: email}});
 
         if ( account ) {
-            return account.toModel();
+            return await this.loadAccountRoles(account.toModel());
         }
     }
 
@@ -22,7 +38,7 @@ class AccountService {
         const account = await AccountEntity.findByPk(id);
 
         if ( account ) {
-            return account.toModel();
+            return await this.loadAccountRoles(account.toModel());
         }
     }
 

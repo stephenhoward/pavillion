@@ -1,15 +1,17 @@
 import express, { Request, Response } from 'express';
 import ServiceSettings from '../../../common/service/settings';
 
-var router = express.Router();
-
-router.get('/site',
-    async (req, res) => {
+const handlers = {
+    site: async (req: Request, res: Response) => {
         const settings = await ServiceSettings.getInstance();
         res.json({
             registrationMode: settings.get('registrationMode')
         })
     }
-);
+};
 
-export default router;
+var router = express.Router();
+
+router.get('/site', handlers.site);
+
+export { handlers, router };

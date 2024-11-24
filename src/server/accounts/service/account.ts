@@ -31,7 +31,7 @@ class AccountService {
      * @throws AccountAlreadyExistsError if an account already exists for the provided email
      * @throws AccountInviteAlreadyExistsError if an invitation already exists for the provided email
      */
-    static async inviteNewAccount(email:string, message: string): Promise<AccountInvitation|undefined> {
+    static async inviteNewAccount(email:string, message: string): Promise<AccountInvitation> {
 
         if ( await CommonAccountService.getAccountByEmail(email) ) {
             throw new AccountAlreadyExistsError();

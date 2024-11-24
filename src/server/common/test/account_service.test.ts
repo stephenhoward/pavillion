@@ -1,16 +1,18 @@
 import { test, expect, expectTypeOf } from 'vitest';
 import sinon from 'sinon';
 import AccountService from '../service/accounts';
-import { AccountEntity, AccountSecretsEntity } from '../entity/account';
+import { AccountEntity, AccountSecretsEntity, AccountRoleEntity } from '../entity/account';
 import { Account } from '../../../common/model/account';
 
 let accountEntityStub = sinon.stub(AccountEntity, 'findOne');
+let accountRoleEntityStub = sinon.stub(AccountRoleEntity, 'findAll');
 let findSecretStub = sinon.stub(AccountSecretsEntity, 'findByPk');
 
 test( 'getAccountBy success', async () => {
     accountEntityStub.callsFake( async (args) => {
         return AccountEntity.build({email: 'testme', username: 'testme', id: '1234'});
     });
+    accountRoleEntityStub.callsFake( async(args) => {return []} );
     
     expectTypeOf( await AccountService.getAccountByEmail('testme') ).exclude<undefined>().toEqualTypeOf<Account>();
     expectTypeOf( await AccountService.getAccountById('1234') ).exclude<undefined>().toEqualTypeOf<Account>();

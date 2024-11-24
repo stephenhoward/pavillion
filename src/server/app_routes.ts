@@ -1,19 +1,10 @@
+import { Request, Response, Router } from 'express';
 import express from 'express';
 import fs from "fs/promises";
 import path from "path";
 
-const router = express.Router();
+const router = Router();
 const environment = process.env.NODE_ENV;
-
-/* GET home page. */
-router.get('/', async (req, res) => {
-  const data = {
-    environment,
-    manifest: await parseManifest(),
-  };
-
-  res.render("index.html.ejs", data);
-});
 
 const supportedAssets = ["svg", "png", "jpg", "png", "jpeg", "mp4", "ogv"];
 
@@ -22,12 +13,6 @@ const assetExtensionRegex = () => {
 
   return new RegExp(`/.+\.(${formattedExtensionList})$`);
 };
-
-router.get(assetExtensionRegex(), (req, res) => {
-  console.log("ASSET PATH" + req.path);
-  res.redirect(303, `http://localhost:5173/${req.path}`);
-});
-
 
 const parseManifest = async () => {
   if (environment !== "production") return {};
@@ -38,4 +23,25 @@ const parseManifest = async () => {
   return JSON.parse(manifestFile);
 };
 
-export default router;
+const handlers = {
+  index: async (req: Request, res: Response) => {
+    const data = {
+      environment,
+      manifest: await parseManifest(),
+    };
+
+    res.render("index.html.ejs", data);
+  },
+  assets: async (req: Request, res: Response) => {
+    console.log("ASSET PATH" + req.path);
+    res.redirect(303, `http://localhost:5173/${req.path}`);
+  }
+};
+
+/* GET home page. */
+router.get('/', handlers.index);
+
+/* redirect to assets server */
+router.get(assetExtensionRegex(), handlers.assets);
+
+export { handlers, router };

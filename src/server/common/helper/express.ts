@@ -5,9 +5,8 @@ import passport from 'passport';
 
 interface User {
     id: string;
-    name: string;
     email: string;
-    role: string;
+    roles: string[] | null;
     hasRole(role: string): boolean;
 }
 
@@ -53,14 +52,14 @@ export default {
             }
         }
     ],
-    sendJWT: async (account: Account, res: Response) => {
+    generateJWT: (account: Account): string => {
         // generate a signed json web token with the contents of user object and return it in the response
         let payload = {
             exp: Math.floor(Date.now() / 1000) + (60 * expirationMinutes),
             id: account.id,
-            isAdmin: await account.hasRole('admin')
+            isAdmin: account.hasRole('admin')
         };
         let token = jwt.sign(payload, jwtSecret);
-        return res.send(token);
+        return token;
     }
 }

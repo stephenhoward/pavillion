@@ -2,3 +2,5 @@ database:
   dialect: sqlite
   storage: ':memory:'
   logging: false
+host:
+  port: 3000

@@ -1,21 +1,12 @@
-import express, { Response } from 'express';
+import express, { Request, Response } from 'express';
 import AuthenticationService from '../../service/auth';
 import CommonAccountService from '../../../common/service/accounts';
 import passport from 'passport';
 import { Account } from '../../../../common/model/account';
 import ExpressHelper from '../../../common/helper/express';
 
-var router = express.Router();
-
-/**
- * Accept login credentials
- * @route POST /api/auth/v1/login
- * @param email
- * @param password
- */
-router.post('/login',
-    ...ExpressHelper.noUserOnly,
-    async(req, res) => {
+const handlers = {
+    login: async (req: Request, res: Response) => {
         passport.authenticate('local', {session: false}, (err: any, account: Account, info?: any) => {
             if (err || !account) {
                 return res.status(400).json({
@@ -27,28 +18,61 @@ router.post('/login',
                 if (err) {
                     res.send(err);
                 }
-                ExpressHelper.sendJWT(account, res);
+                else {
+                    res.send(ExpressHelper.generateJWT(account));
+                }
             });
         })(req, res);
+    },
+    getToken: async (req: Request, res: Response) => {
+        if ( req.user ) {
+            const account = await CommonAccountService.getAccountById(req.user.id);
+            if ( account ) {
+                res.send(ExpressHelper.generateJWT(account));
+            }
+            else {
+                res.status(400).json({message: 'error refreshing token'});
+            }
+        }
+        else {
+            res.status(400).json({message: 'error refreshing token'});
+        }
+    },
+    checkPasswordResetCode: async (req: Request, res: Response) => {
+        if ( await AuthenticationService.validatePasswordResetCode(req.params.code) ) {
+            res.json({ message: 'ok' });
+        }
+        else {
+            res.json({message: 'not ok'});
+        }
+    },
+    resetPassword: async (req: Request, res: Response) => {
+        let account = await AuthenticationService.resetPassword(req.body.code, req.body.password);
+        if ( account ) {
+            res.send(ExpressHelper.generateJWT(account));
+        }
+        else {
+            res.status(400).json({message: 'error resetting password' });
+        }
     }
-);
+};
+
+var router = express.Router();
+
+/**
+ * Accept login credentials
+ * @route POST /api/auth/v1/login
+ * @param email
+ * @param password
+ */
+router.post('/login', ...ExpressHelper.noUserOnly, handlers.login );
 
 /**
  * Re-issue a token with a fresh expiration time
  * @route POST /api/auth/v1/token
  * Only succeeds if the token provided in the request is still valid
  */
-router.get('/token',
-    ...ExpressHelper.loggedInOnly,
-    async (req, res) => {
-        if ( req.user ) {
-            const account = await CommonAccountService.getAccountById(req.user.id);
-            if ( account ) {
-                ExpressHelper.sendJWT(account, res);
-            }
-        }
-    }
-);
+router.get('/token', ...ExpressHelper.loggedInOnly, handlers.getToken );
 
 /**
  * Validate a password reset code
@@ -56,14 +80,7 @@ router.get('/token',
  * @param code
  * Check if the password reset code is valid, including that it's timestamp is not expired
  */
-router.get('/reset-password/:code', async (req, res) => {
-    if ( await AuthenticationService.validatePasswordResetCode(req.params.code) ) {
-        res.json({ message: 'ok' });
-    }
-    else {
-        res.json({message: 'not ok'});
-    }
-});
+router.get('/reset-password/:code', handlers.checkPasswordResetCode );
 
 /**
  * Reset a password
@@ -72,13 +89,6 @@ router.get('/reset-password/:code', async (req, res) => {
  * @param password
  * Use a valid password reset code to set a new password
  */
-router.post('/reset-password',
-    async (req, res) => {
-        let account = await AuthenticationService.resetPassword(req.body.code, req.body.password);
-        if ( account ) {
-            ExpressHelper.sendJWT(account, res);
-        }
-    }
-);
+router.post('/reset-password', handlers.resetPassword );
 
-export default router;
+export { handlers, router };

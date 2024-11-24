@@ -1,5 +1,5 @@
 import express, { Application, Router } from 'express';
-import AuthRoutes from './v1/auth';
+import { router as AuthRoutes} from './v1/auth';
 import passport from 'passport';
 import { Account } from '../../../common/model/account';
 import { Strategy as LocalStrategy } from 'passport-local';

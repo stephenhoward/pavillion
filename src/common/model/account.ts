@@ -13,24 +13,11 @@ class Account {
         this.email = email ?? '';
     };
 
-    async hasRole(role: string): Promise<boolean> {
-        await this.loadRoles();
+    hasRole(role: string): boolean {
         if ( this.roles ) {
             return this.roles.includes(role);
         }
         return false;
-    }
-
-    async loadRoles(): Promise<void> {
-        if ( this.roles == null ) {
-            let roles = await AccountRoleEntity.findAll({ where: { account_id: this.id } });
-            if ( roles ) {
-                this.roles = roles.map( (role) => role.role );
-            }
-            else {
-                this.roles = [];
-            }
-        }
     }
 };
 

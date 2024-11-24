@@ -2,18 +2,48 @@ import express, { Request, Response } from 'express';
 import AccountService from '../../service/account';
 import ExpressHelper from '../../../common/helper/express';
 
+const handlers = {
+    listInvitations: async (req: Request, res: Response) => {
+        const invitations = await AccountService.listInvitations();
+        res.json({invitations});
+    },
+    inviteToRegister: async (req: Request, res: Response) => {
+        if( await AccountService.inviteNewAccount(req.body.email, req.body.message) ) {
+            res.json({message: 'invitation sent to '+req.body.email});
+        }
+        else {
+            res.status(400);
+            res.json({message: 'not ok'});
+        }
+    },
+    checkInviteCode: async (req: Request, res: Response) => {
+        if ( await AccountService.validateInviteCode(req.params.code) ) {
+            res.json({ message: 'ok' });
+        }
+        else {
+            res.status(404);
+            res.json({message: 'not ok'});
+        }
+    },
+    acceptInvite: async (req: Request, res: Response) => {
+        let account = await AccountService.acceptAccountInvite(req.params.code, req.body.password);
+        if ( account ) {
+            res.send(ExpressHelper.generateJWT(account));
+        }
+        else {
+            res.status(400);
+            res.json({message: 'not ok'});
+        }
+    }
+};
+
 var router = express.Router();
 
 /**
  * Retrieve current registration invitations
  * @route GET /api/accounts/v1/invitations
  */
-router.get('/invitations', ExpressHelper.adminOnly,
-    async (req: Request, res: Response) => {
-        const invitations = await AccountService.listInvitations();
-        res.json({invitations});
-    }
-);
+router.get('/invitations', ExpressHelper.adminOnly, handlers.listInvitations);
 
 /**
  * Send a registration invitation
@@ -22,12 +52,7 @@ router.get('/invitations', ExpressHelper.adminOnly,
  * @param message
  * Use a valid password reset code to set a new password
  */
-router.post('/invitations', ExpressHelper.adminOnly,
-    async (req: Request, res: Response) => {
-        AccountService.inviteNewAccount(req.body.email, req.body.message);
-        res.json({message: 'invitation sent'});
-    }
-);
+router.post('/invitations', ExpressHelper.adminOnly, handlers.inviteToRegister);
 
 /** 
  * Validate an invitation code
@@ -35,16 +60,7 @@ router.post('/invitations', ExpressHelper.adminOnly,
  * @param code
  * Check if the provided code is valid
  */
-router.get('/invitations/:code', ...ExpressHelper.noUserOnly,
-    async (req: Request, res: Response) => {
-        if ( await AccountService.validateInviteCode(req.params.code) ) {
-            res.json({ message: 'ok' });
-        }
-        else {
-            res.json({message: 'not ok'});
-        }
-    }
-);
+router.get('/invitations/:code', ...ExpressHelper.noUserOnly, handlers.checkInviteCode);
 
 /**
  * Accept an invitation to register
@@ -53,13 +69,6 @@ router.get('/invitations/:code', ...ExpressHelper.noUserOnly,
  * @param password
  * Accept an invitation to create an account. Provide the password to finish setting up the account
  */
-router.post('/invitations/:code', ...ExpressHelper.noUserOnly,
-    async (req: Request, res: Response) => {
-        let account = await AccountService.acceptAccountInvite(req.params.code, req.body.password);
-        if ( account ) {
-            ExpressHelper.sendJWT(account, res);
-        }
-    }
-);
+router.post('/invitations/:code', ...ExpressHelper.noUserOnly, handlers.acceptInvite);
 
-export default router;
+export { handlers, router };
