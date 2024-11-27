@@ -4,8 +4,6 @@ import Login from '../components/login.vue';
 import sinon from 'sinon';
 import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { RouteRecordRaw } from 'vue-router';
-import { beforeEach } from 'node:test';
-import { log } from 'node:console';
 
 const routes: RouteRecordRaw[] = [
     { path: '/login',  component: {}, name: 'login', props: true },

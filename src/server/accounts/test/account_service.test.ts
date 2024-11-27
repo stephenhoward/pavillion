@@ -71,6 +71,7 @@ describe('registerNewAccount', () => {
     it('open registration', async () => {
         let getSettingStub = sandbox.stub(ServiceSettings.prototype, 'get');
         let setupAccountStub = sandbox.stub(AccountService, '_setupAccount');
+        let emailStub = sandbox.stub(EmailService, 'sendEmail');
 
         getSettingStub.withArgs('registrationMode').returns('open');
         setupAccountStub.resolves({ account: new Account('id', 'testme', 'test_email'), password_code: 'test_code' });
@@ -114,6 +115,7 @@ describe('applyForNewAccount', () => {
         let getSettingStub = applySandbox.stub(ServiceSettings.prototype, 'get');
         let findApplicationStub = applySandbox.stub(AccountApplicationEntity, 'findOne');
         let saveApplicationStub = applySandbox.stub(AccountApplicationEntity.prototype, 'save');
+        let emailStub = applySandbox.stub(EmailService, 'sendEmail');
 
         getSettingStub.withArgs('registrationMode').returns('apply');
         findApplicationStub.resolves(undefined);
@@ -274,9 +276,11 @@ describe('_setupAccount', () => {
 
         let accountServiceStub = setupSandbox.stub(CommonAccountService, 'getAccountByEmail');
         let accountSaveStub = setupSandbox.stub(AccountEntity.prototype, 'save');
+        let setPasswordStub = sinon.stub(CommonAccountService, 'setPassword');
         let accountSecretsSaveStub = setupSandbox.stub(AccountSecretsEntity.prototype, 'save');
 
         accountServiceStub.resolves(undefined);
+        setPasswordStub.resolves(true);
 
         let accountInfo = await AccountService._setupAccount('test_email','test_password');
 

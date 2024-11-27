@@ -49,6 +49,7 @@ describe('Account Retrieval', () => {
 describe('Password Resets', () => {
     it( 'setPassword missing secret', async () => {
         let findSecretStub = sinon.stub(AccountSecretsEntity, 'findByPk');
+        let saveSecretStub = sinon.stub(AccountSecretsEntity.prototype, 'save');
         let account = new Account('1234', 'testme', 'testme');
 
         findSecretStub.callsFake( async (args) => {  return null;  });
