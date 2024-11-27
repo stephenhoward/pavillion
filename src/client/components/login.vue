@@ -5,11 +5,11 @@
         <input type="email"    v-bind:placeholder="t('email')"    v-model="state.email">
         <input type="password" v-bind:placeholder="t('password')" v-model="state.password" @keyup.enter="doLogin">
         <router-link :to="{ name: 'forgot_password', query: { email: state.email }}" >{{ t("forgot_password") }}</router-link>
-        <button @click="doLogin" type="button">{{ t("login_button") }}</button>
-        <router-link v-if="state.registrationMode == 'open'" :to="{ name: 'register', query: { email: state.email}}" class="button">
+        <button type="submit" @click="doLogin">{{ t("login_button") }}</button>
+        <router-link id="register" v-if="state.registrationMode == 'open'" :to="{ name: 'register', query: { email: state.email}}" class="button">
             {{ t("register_button") }}
         </router-link>
-        <router-link v-if="state.registrationMode == 'apply'" :to="{ name: 'register-apply', query: { email: state.email}}" class="button">
+        <router-link id="apply" v-if="state.registrationMode == 'apply'" :to="{ name: 'register-apply', query: { email: state.email}}" class="button">
             {{ t("register_button") }}
         </router-link>
     </div>
@@ -34,6 +34,7 @@
                 forgot_password: 'Forgot Password?',
                 register_button: 'Create an Account',
                 UnknownLogin: 'unknown email or password',
+                MissingLogin: 'missing email or password',
                 '400': 'bad sign in',
                 'unknown_error': 'An unknown error occurred'
             }
@@ -49,6 +50,10 @@
     });
 
     async function doLogin() {
+        if ( state.email == '' || state.password == '' ) {
+            state.err = t('MissingLogin');
+            return;
+        }
         try {
 
             if ( await authn.login(state.email,state.password) ) {
