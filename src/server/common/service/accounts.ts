@@ -11,18 +11,13 @@ import { Account } from "../../../common/model/account"
 class AccountService {
 
     static async loadAccountRoles(account: Account): Promise<Account> {
-        const roles = await AccountEntity.findByPk(account.id, { include: { model: AccountRoleEntity } });
-
+        let roles = await AccountRoleEntity.findAll({ where: { account_id: account.id } });
         if ( roles ) {
-            let roles = await AccountRoleEntity.findAll({ where: { account_id: account.id } });
-            if ( roles ) {
-                account.roles = roles.map( (role) => role.role );
-            }
-            else {
-                account.roles = [];
-            }
+            account.roles = roles.map( (role) => role.role );
         }
-
+        else {
+            account.roles = [];
+        }
         return account;
     }
 

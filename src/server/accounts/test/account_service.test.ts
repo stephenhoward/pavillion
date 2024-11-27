@@ -2,9 +2,10 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import CommonAccountService from '../../common/service/accounts';
 import AccountService from '../service/account';
-import { AccountInvitationEntity,AccountApplicationEntity } from '../../common/entity/account';
+import { AccountEntity, AccountSecretsEntity, AccountInvitationEntity,AccountApplicationEntity } from '../../common/entity/account';
 import { Account } from '../../../common/model/account';
-import { AccountAlreadyExistsError, AccountInviteAlreadyExistsError, AccountRegistrationClosedError, AccountApplicationAlreadyExistsError, AccountApplicationsClosedError } from '../../exceptions/account_exceptions';
+import EmailService from '../../common/service/mail';
+import { AccountAlreadyExistsError, AccountInviteAlreadyExistsError, AccountRegistrationClosedError, AccountApplicationAlreadyExistsError, AccountApplicationsClosedError, noAccountInviteExistsError, noAccountApplicationExistsError } from '../../exceptions/account_exceptions';
 import ServiceSettings from '../../common/service/settings';
 
 describe('inviteNewAccount', () => {
@@ -121,4 +122,168 @@ describe('applyForNewAccount', () => {
 
         expect(result).toBe(true);
     });
+});
+
+describe('validateInviteCode', () => {
+    let validateSandbox = sinon.createSandbox();
+
+    afterEach(() => {
+        validateSandbox.restore();
+    });
+
+    it('no invite found', async () => {
+        let findInviteStub = validateSandbox.stub(AccountInvitationEntity, 'findOne');
+
+        findInviteStub.resolves(undefined);
+
+        await expect(AccountService.validateInviteCode('test_code')).resolves.toBe(false);
+    });
+
+    it('invite found', async () => {
+        let findInviteStub = validateSandbox.stub(AccountInvitationEntity, 'findOne');
+
+        findInviteStub.resolves(AccountInvitationEntity.build({ invitation_code: 'test_code' }));
+
+        await expect(AccountService.validateInviteCode('test_code')).resolves.toBe(true);
+    });
+});
+
+describe('acceptAccountInvite', () => {
+    let acceptSandbox = sinon.createSandbox();
+
+    afterEach(() => {
+        acceptSandbox.restore();
+    });
+
+    it('no invite found', async () => {
+        let findInviteStub = acceptSandbox.stub(AccountInvitationEntity, 'findOne');
+
+        findInviteStub.resolves(undefined);
+
+        await expect(AccountService.acceptAccountInvite('test_code','test_password')).rejects
+            .toThrow(noAccountInviteExistsError);
+    });
+
+    it('invite found', async () => {
+        let findInviteStub = acceptSandbox.stub(AccountInvitationEntity, 'findOne');
+        let setupAccountStub = acceptSandbox.stub(AccountService, '_setupAccount');
+
+        findInviteStub.resolves(AccountInvitationEntity.build({ invitation_code: 'test_code' }));
+        setupAccountStub.resolves({ account: new Account('id', 'testme', 'test_email'), password_code: 'test_code' });
+
+        let account = await AccountService.acceptAccountInvite('test_code','test_password');
+
+        expect(account).toBeTruthy();
+    });
+});
+
+describe('acceptAccountApplication', () => {
+    let acceptSandbox = sinon.createSandbox();
+
+    afterEach(() => {
+        acceptSandbox.restore();
+    });
+
+    it('no application found', async () => {
+        let findApplicationStub = acceptSandbox.stub(AccountApplicationEntity, 'findByPk');
+
+        findApplicationStub.resolves(undefined);
+
+        await expect(AccountService.acceptAccountApplication('test_id')).rejects
+            .toThrow(noAccountApplicationExistsError);
+    });
+
+    it('application found', async () => {
+        let findApplicationStub = acceptSandbox.stub(AccountApplicationEntity, 'findByPk');
+        let setupAccountStub = acceptSandbox.stub(AccountService, '_setupAccount');
+        let sendEmailStub = acceptSandbox.stub(EmailService, 'sendEmail');
+
+        findApplicationStub.resolves(AccountApplicationEntity.build({ email: 'test_email' }));
+        setupAccountStub.resolves({ account: new Account('id', 'testme', 'test_email'), password_code: 'test_code' });
+
+        let account = await AccountService.acceptAccountApplication('test_id');
+
+        expect(sendEmailStub.called).toBe(true);
+        expect(account).toBeTruthy();
+    });
+});
+
+describe('rejectAccountApplication', () => {
+    let rejectSandbox = sinon.createSandbox();
+
+    afterEach(() => {
+        rejectSandbox.restore();
+    });
+
+    it('no application found', async () => {
+        let findApplicationStub = rejectSandbox.stub(AccountApplicationEntity, 'findByPk');
+
+        findApplicationStub.resolves(undefined);
+
+        await expect(AccountService.acceptAccountApplication('test_id')).rejects
+            .toThrow(noAccountApplicationExistsError);
+    });
+
+    it('application found', async () => {
+        let findApplicationStub = rejectSandbox.stub(AccountApplicationEntity, 'findByPk');
+        let sendEmailStub = rejectSandbox.stub(EmailService, 'sendEmail');
+        let destroyStub = rejectSandbox.stub(AccountApplicationEntity.prototype, 'destroy');
+
+        findApplicationStub.resolves(AccountApplicationEntity.build({ email: 'test_email' }));
+
+        let account = await AccountService.rejectAccountApplication('test_id');
+
+        expect(sendEmailStub.called).toBe(true);
+        expect(destroyStub.called).toBe(true);
+    });
+});
+
+describe('_setupAccount', () => {
+    let setupSandbox = sinon.createSandbox();
+
+    afterEach(() => {
+        setupSandbox.restore();
+    });
+
+    it('should fail to create an account with an existing email', async () => {
+        let accountServiceStub = setupSandbox.stub(CommonAccountService, 'getAccountByEmail');
+
+        accountServiceStub.resolves(new Account('id', 'testme', 'test_email'));
+
+        await expect(AccountService._setupAccount('test_email','test_password')).rejects
+            .toThrow(AccountAlreadyExistsError);
+    });
+
+    it('should create an account without a password', async () => {
+
+        let accountServiceStub = setupSandbox.stub(CommonAccountService, 'getAccountByEmail');
+        let accountSaveStub = setupSandbox.stub(AccountEntity.prototype, 'save');
+        let accountSecretsSaveStub = setupSandbox.stub(AccountSecretsEntity.prototype, 'save');
+
+        accountServiceStub.resolves(undefined);
+
+        let accountInfo = await AccountService._setupAccount('test_email');
+
+        expect(accountInfo.account.email).toBe('test_email');
+        expect(accountInfo.password_code).toBeTruthy();
+        expect(accountSaveStub.called).toBe(true);
+        expect(accountSecretsSaveStub.called).toBe(true);
+    });
+
+    it('should create an account with a password', async () => {
+
+        let accountServiceStub = setupSandbox.stub(CommonAccountService, 'getAccountByEmail');
+        let accountSaveStub = setupSandbox.stub(AccountEntity.prototype, 'save');
+        let accountSecretsSaveStub = setupSandbox.stub(AccountSecretsEntity.prototype, 'save');
+
+        accountServiceStub.resolves(undefined);
+
+        let accountInfo = await AccountService._setupAccount('test_email','test_password');
+
+        expect(accountInfo.account.email).toBe('test_email');
+        expect(accountInfo.password_code).toBe(undefined);
+        expect(accountSaveStub.called).toBe(true);
+        expect(accountSecretsSaveStub.called).toBe(true);
+    });
+
 });

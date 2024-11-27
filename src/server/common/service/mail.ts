@@ -9,7 +9,8 @@ const smtpTransport = nodemailer.createTransport({
     }
 });
 
-const sendEmail = async (emailAddress: string, subject: string, textMessage: string, htmlMessage?: string ) => {
+const EmailService = {
+ sendEmail: async (emailAddress: string, subject: string, textMessage: string, htmlMessage?: string ) => {
     try {
       const info = await smtpTransport.sendMail({
         from: 'sender@example.com',
@@ -22,6 +23,7 @@ const sendEmail = async (emailAddress: string, subject: string, textMessage: str
     } catch (error) {
       console.error('Error sending email:', error);
     }
-  };
+  }
+}
 
-  export default sendEmail;
+  export default EmailService;

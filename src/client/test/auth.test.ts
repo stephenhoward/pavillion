@@ -1,4 +1,4 @@
-import { test, expect } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import sinon from 'sinon';
 import axios from 'axios';
 
@@ -53,7 +53,8 @@ let fake_jwt = '1234.'+btoa('{ "exp": "1000"}');
 //     return await authentication[auth_method](...params);
 // }
 
-test( 'login fail', async () => {
+describe('Login', () => {
+it( 'login fail', async () => {
 
     let authentication = new AuthenticationService( new LocalStore() );
     let stub1 = sinon.stub(authentication,"_unset_token");
@@ -70,7 +71,7 @@ test( 'login fail', async () => {
 
 });
 
-test( 'login succeed', async () => {
+it( 'login succeed', async () => {
 
     let authentication = new AuthenticationService( new LocalStore() );
 
@@ -83,8 +84,9 @@ test( 'login succeed', async () => {
     expect(stub1.called).toBe(false);
     expect(stub2.called).toBe(true);
 });
-
-test( 'logout', () => {
+});
+describe('Logout', () => {
+it( 'logout', () => {
 
     let authentication = new AuthenticationService( new LocalStore() );
     let stub1 = sinon.stub(authentication,"_unset_token");
@@ -93,8 +95,7 @@ test( 'logout', () => {
 
     expect(stub1.called).toBe(true);
 });
-
-test ('is_logged_in', () => {
+it ('is_logged_in', () => {
     let store = new LocalStore();
     let authentication = new AuthenticationService( store );
 
@@ -109,6 +110,7 @@ test ('is_logged_in', () => {
 
     expect( authentication.isLoggedIn() ).toBe(true);
 
+});
 });
 
 // test( 'reset_password', async () => {
@@ -129,7 +131,8 @@ test ('is_logged_in', () => {
 //     await test_basic_axios_roundtrip(axios_post,'use_password_reset_token',['token','password']);
 // });
 
-test( '_set_token', () => {
+describe('Token Setting', () => {
+it( '_set_token', () => {
 
     let authentication = new AuthenticationService( new LocalStore() );
     let stub1 = sinon.stub(authentication,"_refresh_login");
@@ -142,7 +145,7 @@ test( '_set_token', () => {
     expect(stub1.calledOnce).toBe(true);;
 });
 
-test( '_unset_token', () => {
+it( '_unset_token', () => {
 
     let authentication = new AuthenticationService( new LocalStore() );
     let sandbox = sinon.createSandbox();
@@ -162,8 +165,10 @@ test( '_unset_token', () => {
     expect( authentication._refresh_timer ).toBeFalsy();
 
 });
+});
 
-test ( '_refresh_login 0 timer', () => {
+describe('Token Refresh', () => {
+it ( '_refresh_login 0 timer', () => {
 
     let authentication = new AuthenticationService( new LocalStore() );
     let sandbox = sinon.createSandbox();
@@ -175,7 +180,7 @@ test ( '_refresh_login 0 timer', () => {
     expect( stub1.calledOnce ).toBe(true);
 });
 
-test ( '_refresh_login valid', async () => {
+it ( '_refresh_login valid', async () => {
 
     let authentication = new AuthenticationService( new LocalStore() );
     let sandbox = sinon.createSandbox();
@@ -192,4 +197,5 @@ test ( '_refresh_login valid', async () => {
     sandbox.clock.runAll();
 
     return promise;
+});
 });

@@ -4,7 +4,7 @@ import { Account } from "../../../common/model/account"
 import moment from 'moment';
 import CommonAccountService from '../../common/service/accounts';
 import ServiceSettings from '../../common/service/settings';
-import sendEmail from "../../common/service/mail";
+import EmailService from "../../common/service/mail";
 import { AccountEntity, AccountSecretsEntity, AccountInvitationEntity, AccountApplicationEntity } from "../../common/entity/account"
 import { AccountApplicationAlreadyExistsError, noAccountInviteExistsError, AccountRegistrationClosedError, AccountApplicationsClosedError, AccountAlreadyExistsError, AccountInviteAlreadyExistsError, noAccountApplicationExistsError } from '../../exceptions/account_exceptions';
 import AccountInvitation from '../../../common/model/invitation';
@@ -67,7 +67,7 @@ class AccountService {
         }
         const accountInfo = await AccountService._setupAccount(email);
 
-        sendEmail(email, 'Welcome to our service', 'Thank you for registering' + accountInfo.password_code);
+        EmailService.sendEmail(email, 'Welcome to our service', 'Thank you for registering' + accountInfo.password_code);
         return accountInfo.account;
     }
 
@@ -88,7 +88,7 @@ class AccountService {
             message: message
         });
 
-        sendEmail(application.email, 'Thank you for applying to our service', 'Thank you for applying');
+        EmailService.sendEmail(application.email, 'Thank you for applying to our service', 'Thank you for applying');
 
         return true;
     }
@@ -146,7 +146,7 @@ class AccountService {
 
     static async sendNewAccountInvite(invitation:AccountInvitationEntity): Promise<boolean> {
 
-        sendEmail(invitation.email, 'Welcome to our service', 'Thank you for applying' + invitation.invitation_code);
+        EmailService.sendEmail(invitation.email, 'Welcome to our service', 'Thank you for applying' + invitation.invitation_code);
         return true;
     }
 
@@ -160,7 +160,7 @@ class AccountService {
 
         const accountInfo = await AccountService._setupAccount(application.email);
 
-        sendEmail(accountInfo.account.email, 'Welcome to our service', 'Thank you for applying' + accountInfo.password_code);
+        EmailService.sendEmail(accountInfo.account.email, 'Welcome to our service', 'Thank you for applying' + accountInfo.password_code);
         return accountInfo.account;
     }
 
@@ -172,7 +172,8 @@ class AccountService {
             throw new noAccountApplicationExistsError();
         }
 
-        sendEmail(application.email, 'Your account application was declined', 'Thank you for applying');
+        application.destroy();
+        EmailService.sendEmail(application.email, 'Your account application was declined', 'Thank you for applying');
     }
 
     static async listInvitations(): Promise<AccountInvitation[]> {
