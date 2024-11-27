@@ -17,7 +17,7 @@ describe('loading account roles', () => {
     });
 
     it( 'loadAccountRoles with roles', async () => {
-        accountRoleEntityStub.callsFake( async(args) => {return [{role: 'admin'}]} );
+        accountRoleEntityStub.callsFake( async() => {return [AccountRoleEntity.build({role: 'admin'})]} );
 
         let account = new Account('1234', 'testme', 'testme');
         account = await AccountService.loadAccountRoles(account);

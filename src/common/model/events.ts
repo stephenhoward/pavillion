@@ -1,11 +1,18 @@
 import { Account } from './account';
 
-type CalendarEvent = {
-    account: string;
-    id: string;
-    date: string;
-    location: string;
-    organizer: Account;
+class CalendarEvent {
+    account: Account;
+    id: string = '';
+    date: string = '';
+    location: string = '';
+    parentEvent: CalendarEvent | null = null;
+
+    constructor(account: Account, id?: string, date?: string, location?: string) {
+        this.account = account;
+        this.id = id ?? '';
+        this.date = date ?? '';
+        this.location = location ?? '';
+    }
 };
 
 enum language {
@@ -16,8 +23,20 @@ enum language {
     IT = "it"
 };
 
-type CalendarEventContent = {
-    name: string;
-    description: string;
+class CalendarEventContent {
+    event: CalendarEvent;
     language: language;
+    name: string = '';
+    description: string = '';
+
+    constructor(event: CalendarEvent, language: language, name?: string, description?: string) {
+        this.name = name ?? '';
+        this.description = description ?? '';
+        this.language = language;
+        this.event = event;
+    }
 };
+
+export {
+    CalendarEvent, CalendarEventContent
+}

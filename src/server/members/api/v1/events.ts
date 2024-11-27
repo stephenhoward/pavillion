@@ -1,29 +1,58 @@
-import express from 'express';
-import passport from 'passport';
-//import EventService from '../../../../service/events';
-import { VoidExpression } from 'typescript';
-var router = express.Router();
+import express, { Request, Response } from 'express';
+import ExpressHelper from '../../../common/helper/express';
+import EventService from '../../service/events';
+import { Account } from '../../../../common/model/account';
 
-router.get('/events', async (req, res) => {
-    const { account } = req.query;
+const handlers = {
+    listEvents: async (req: Request, res: Response) => {
+        const account = req.user as Account;
 
-    if (!account || typeof account !== "string") {
-        res.status(400).json({
-            "error": "missing username parameter"
-        });
-        return;
+        if (!account) {
+            res.status(400).json({
+                "error": "missing account for events. Not logged in?"
+            });
+            return;
+        }
+
+        const events = EventService.listEvents(account);
+        res.json(events);
+    },
+    createEvent: async (req: Request, res: Response) => {
+        const account = req.user as Account;
+
+        if (!account) {
+            res.status(400).json({
+                "error": "missing account for events. Not logged in?"
+            });
+            return;
+        }
+        // TODO: pass specific data
+        const event = EventService.createEvent(account, req.body);
+
+        res.json(event);
+    },
+    updateEvent: async (req: Request, res: Response) => {
+        const account = req.user as Account;
+
+        if (!account) {
+            res.status(400).json({
+                "error": "missing account for events. Not logged in?"
+            });
+            return;
+        }
+        // TODO: pass specific data
+        const event = EventService.updateEvent(account, req.params.id, req.body);
+
+        res.json(event);
     }
 
-    //const events = EventService.listEvents(account, 10, 0, req.user);
-    //res.json(events);
-});
+};
+var router = express.Router();
 
-router.post('/events', async (req, res) => {
-    //EventService.addEvent(req.body, req.user);
-});
+router.get('/events', ExpressHelper.loggedInOnly, handlers.listEvents);
 
-router.post('/events/:id', async (req, res) => {
-    //EventService.updateEvent(req.params.id, req.body, req.user);
-});
+router.post('/events', ExpressHelper.loggedInOnly, handlers.createEvent);
 
-export default router;
+router.post('/events/:id', ExpressHelper.loggedInOnly, handlers.updateEvent);
+
+export { handlers, router };
