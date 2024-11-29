@@ -57,19 +57,15 @@
         try {
 
             if ( await authn.login(state.email,state.password) ) {
-                console.log("login success");
                 state.err = '';
                 router.push('/calendar');
             }
             else {
-                console.log("login failed");
                 state.err = t('400');
             }
         }
         catch(error) {
 
-            console.log("catch error from login");
-            console.log(error);
             let error_text = "unknown_error";
 
             if ( typeof error  == "object" && "message" in error ) {

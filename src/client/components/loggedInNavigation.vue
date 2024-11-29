@@ -1,5 +1,8 @@
 <script setup>
+    import EditEventView from './edit_event.vue';
+    import { reactive } from 'vue';
     import { useI18n } from 'vue-i18n';
+    import { CalendarEvent } from '../../common/model/events';
     const { t } = useI18n({
         messages: {
             "en": {
@@ -12,17 +15,31 @@
             }
         }
     });
+    const state = reactive({
+        currentEvent: null
+    });
+
+    const newEvent = () => {
+        console.log("newEvent");
+        state.currentEvent = new CalendarEvent();
+    };
 
 </script>
 
 <template>
+<div>
     <nav>
     <RouterLink to="/calendar"><li class="selected"><img src="../assets/calendar_icon.svg" alt="My Calendar" /><label>{{ t("calendar") }}</label></li></RouterLink>
     <RouterLink to="/inbox"><li><img src="../assets/inbox_icon.svg" alt="Inbox"/><label>{{ t("inbox") }}</label></li></RouterLink>
-    <li><img class="new-event" src="../assets/add_icon.svg" alt="Add Event" /><label>{{ t("new_event") }}</label></li>
+    <li><img class="new-event" src="../assets/add_icon.svg" alt="Add Event" @click="newEvent()" /><label>{{ t("new_event") }}</label></li>
     <RouterLink to="/feed"><li><img src="../assets/feed_icon.svg" alt="Events from Followees"><label>Event Feed</label></li></RouterLink>
     <RouterLink to="/profile"><li><img src="../assets/profile_icon.svg" alt="Profile and Settings" /><label>Profile and Settings</label></li></RouterLink>
   </nav>
+
+  <div v-if="state.currentEvent != null">
+    <edit-event-view :event="state.currentEvent" />
+  </div>
+</div>
 </template>
     
 <style scoped lang="scss">

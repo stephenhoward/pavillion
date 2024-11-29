@@ -4,11 +4,9 @@ import request from 'supertest';
 import express from 'express';
 import { handlers as eventHandlers } from '../api/v1/events';
 import EventService from '../service/events';
-import { Account } from '../../../common/model/account';
+import { CalendarEvent } from '../../../common/model/events';
 import { testApp, countRoutes, addRequestUser } from '../../common/test/lib/express';
-import AccountInvitation from '../../../common/model/invitation';
 import apiV1 from '../api/v1';
-import ServiceSettings from '../../common/service/settings';
 
 describe('API v1', () => {
 
@@ -46,13 +44,14 @@ describe('Event API', () => {
     it('listEvents: should succeed', async () => {
         let eventStub = eventSandbox.stub(EventService, 'listEvents');
         router.get('/handler', addRequestUser, eventHandlers.listEvents);
+        eventStub.resolves([]);
 
         const response = await request(testApp(router))
             .get('/handler');
 
-        expect(response.status).toBe(200);
-        expect(eventStub.called).toBe(true);
-    });
+            expect(response.status).toBe(200);
+            expect(eventStub.called).toBe(true);
+        });
     
     it('createEvent: should fail without account', async () => {
         let eventStub = eventSandbox.stub(EventService, 'createEvent');
@@ -69,6 +68,7 @@ describe('Event API', () => {
     it('createEvent: should succeed', async () => {
         let eventStub = eventSandbox.stub(EventService, 'createEvent');
         router.post('/handler', addRequestUser, eventHandlers.createEvent);
+        eventStub.resolves(new CalendarEvent('id', 'testme', 'testme'));
 
         const response = await request(testApp(router))
             .post('/handler');

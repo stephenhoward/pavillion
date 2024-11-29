@@ -1,8 +1,8 @@
 import { randomBytes } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { Account } from "../../../common/model/account"
-import { EventEntity } from "../../common/entity/event"
-import { CalendarEvent } from "../../../common/model/events"
+import { EventContentEntity, EventEntity } from "../../common/entity/event"
+import { CalendarEvent, CalendarEventContent } from "../../../common/model/events"
 
 /**
  * Service class for managing events
@@ -19,9 +19,17 @@ class EventService {
      */
     static async listEvents(account: Account): Promise<CalendarEvent[]> {
 
-        const events = await EventEntity.findAll({ where: { account_id: account.id } });
+        const events = await EventEntity.findAll({ where: { accountId: account.id }, include: [EventContentEntity] });
 
-        return events.map( (event) => event.toModel() );
+        return events.map( (event) => {
+            let e = event.toModel();
+            for ( let c in event.content ) {
+                let co = c as unknown as EventContentEntity; // make typescript happy
+                e.addContent( co.toModel() );
+            }
+
+            return e;
+        });
     }
 
     /**
@@ -32,16 +40,26 @@ class EventService {
      */
     static async createEvent(account: Account, eventParams:Record<string,any>): Promise<CalendarEvent> {
 
-        // TODO: validation
-        const event = EventEntity.build({
-            id: uuidv4(),
-            account_id: account.id,
-            ...eventParams
-        });
+        eventParams.id = uuidv4();
 
-        await event.save();
+        const event = CalendarEvent.fromObject(eventParams);
+        const eventEntity = EventEntity.fromModel(event);
+        eventEntity.accountId = account.id;
+        eventEntity.save();
 
-        return event.toModel();
+        for( let [language,strings] of Object.entries(eventParams.content) ) {
+            let c = strings as Record<string,any>;
+            c.id = uuidv4();
+            c.event_id = event.id;
+
+            const content = CalendarEventContent.fromObject(c);
+            const contentEntity = EventContentEntity.fromModel(content);
+            contentEntity.save();
+
+            event.addContent(content);
+        }
+
+        return event;
     }
 
     /**
@@ -51,20 +69,39 @@ class EventService {
      * @returns a promise that resolves to the Event
      */
     static async updateEvent(account: Account, eventId: string, eventParams:Record<string,any>): Promise<CalendarEvent> {
-        const event = await EventEntity.findByPk(eventId);
+        const eventEntity = await EventEntity.findByPk(eventId);
 
-        if ( ! event ) {
+        if ( ! eventEntity ) {
             throw new Error('Event not found');
         }
 
-        if ( event.accountId !== account.id ) {
+        if ( eventEntity.accountId !== account.id ) {
             throw( new Error('account does not own event') );
         }
 
-        // TODO: validation
-        event.update(eventParams);
-        await event.save();
-        return event.toModel();
+        // // TODO: validation
+        // event.update(eventParams);
+        // await event.save();
+        let event = eventEntity.toModel();
+
+        // TODO: handle dropping languages
+        // TODO: creating missing languages
+        for( let [language,content] of Object.entries(eventParams.content) ) {
+            const contentEntity = await EventContentEntity.findOne({
+                where: { event_id: eventId, language: language }
+            });
+
+            if ( contentEntity ) {
+                let c = content as Record<string,any>;
+                contentEntity.update({
+                    name: c.name,
+                    description: c.description
+                });
+                event.addContent(contentEntity.toModel());
+            }
+        }
+
+        return event;
     }
 
 }

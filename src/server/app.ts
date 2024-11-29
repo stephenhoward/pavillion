@@ -4,6 +4,7 @@ import path from "path";
 import { router as indexRoutes } from './app_routes';
 import AdminV1Routes from './accounts/api/v1';
 import AuthV1Routes from './authentication/api/v1';
+import MemberV1Routes from './members/api/v1';
 import db, { seedDB } from './common/entity/db';
 
 const publicPath = path.join(path.resolve(), "public");
@@ -22,6 +23,7 @@ app.use('/', indexRoutes);
 
 AuthV1Routes(app);
 AdminV1Routes(app);
+MemberV1Routes(app);
 
 app.listen(config.get('host.port'), () => {
   if ( process.env.NODE_ENV == "development" ) {

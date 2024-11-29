@@ -1,12 +1,18 @@
-import { Model, Table, Column, PrimaryKey, BelongsTo, DataType, ForeignKey } from 'sequelize-typescript';
+import { Model, Table, Column, PrimaryKey, BelongsTo, DataType, ForeignKey, HasMany } from 'sequelize-typescript';
 import db from './db';
-import { CalendarEvent } from '../../../common/model/events';
+import { CalendarEvent, CalendarEventContent, language } from '../../../common/model/events';
 import { AccountEntity } from './account';
+import { a } from 'vitest/dist/chunks/suite.B2jumIFP';
+import { lang } from 'moment';
 
 @Table({ tableName: 'event' })
 class EventEntity extends Model {
     @PrimaryKey
-    @Column({ type: DataType.UUID })
+    @Column({
+        type: DataType.UUID,
+        defaultValue: DataType.UUIDV4,
+        allowNull: false
+    })
     declare id: string;
 
     @ForeignKey(() => EventEntity)
@@ -23,9 +29,18 @@ class EventEntity extends Model {
     @BelongsTo(() => AccountEntity)
     declare account: AccountEntity;
 
+    @HasMany(() => EventContentEntity)
+    declare content: EventContentEntity[];
+
     toModel(): CalendarEvent {
-        return new CalendarEvent( this.account.toModel(), this.id );
+        return new CalendarEvent( this.accountId, this.id );
     };
+
+    static fromModel(event: CalendarEvent): EventEntity {
+        return EventEntity.build({
+            id: event.id,
+        });
+    }
 };
 
 @Table({ tableName: 'event_content' })
@@ -49,6 +64,23 @@ class EventContentEntity extends Model {
 
     @BelongsTo(() => EventEntity)
     declare event: EventEntity;
+
+    toModel(): CalendarEventContent {
+        let content = new CalendarEventContent( this.id, this.language as language );
+        content.name = this.name;
+        content.description = this.description;
+
+        return content;
+    }
+
+    static fromModel(content: CalendarEventContent): EventContentEntity {
+        return EventContentEntity.build({
+            id: content.id,
+            language: content.language as string,
+            name: content.name,
+            description: content.description
+        });
+    }
 };
 
 @Table({ tableName: 'event_schedule' })

@@ -1,6 +1,6 @@
-import { AccountEntity, AccountRoleEntity } from '../../server/common/entity/account';
+import Model from './model';
 
-class Account {
+class Account extends Model {
     id: string = '';
     username: string = '';
     email: string = '';
@@ -8,6 +8,7 @@ class Account {
     roles: string[] | null = null;
 
     constructor (id?: string, username?: string, email?: string) {
+        super();
         this.id = id ?? '';
         this.username = username ?? '';
         this.email = email ?? '';
@@ -18,6 +19,22 @@ class Account {
             return this.roles.includes(role);
         }
         return false;
+    }
+
+    toObject(): Record<string,any> {
+        return {
+            id: this.id,
+            username: this.username,
+            email: this.email,
+            profile: this.profile,
+            roles: this.roles
+        };
+    };
+    static fromObject(obj: Record<string,any>): Account {
+        let account = new Account(obj.id, obj.username, obj.email);
+        account.profile = obj.profile;
+        account.roles = obj.roles;
+        return account;
     }
 };
 

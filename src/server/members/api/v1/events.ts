@@ -14,8 +14,8 @@ const handlers = {
             return;
         }
 
-        const events = EventService.listEvents(account);
-        res.json(events);
+        const events = await EventService.listEvents(account);
+        res.json(events.map((event) => event.toObject()));
     },
     createEvent: async (req: Request, res: Response) => {
         const account = req.user as Account;
@@ -27,9 +27,8 @@ const handlers = {
             return;
         }
         // TODO: pass specific data
-        const event = EventService.createEvent(account, req.body);
-
-        res.json(event);
+        const event = await EventService.createEvent(account, req.body);
+        res.json(event.toObject());
     },
     updateEvent: async (req: Request, res: Response) => {
         const account = req.user as Account;
@@ -41,9 +40,9 @@ const handlers = {
             return;
         }
         // TODO: pass specific data
-        const event = EventService.updateEvent(account, req.params.id, req.body);
+        const event = await EventService.updateEvent(account, req.params.id, req.body);
 
-        res.json(event);
+        res.json(event.toObject());
     }
 
 };
