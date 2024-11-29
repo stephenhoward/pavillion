@@ -23,9 +23,10 @@ class EventService {
 
         return events.map( (event) => {
             let e = event.toModel();
-            for ( let c in event.content ) {
-                let co = c as unknown as EventContentEntity; // make typescript happy
-                e.addContent( co.toModel() );
+            if ( event.content ) {
+                for ( let c of event.content ) {
+                    e.addContent( c.toModel() );
+                }
             }
 
             return e;
@@ -49,11 +50,13 @@ class EventService {
 
         for( let [language,strings] of Object.entries(eventParams.content) ) {
             let c = strings as Record<string,any>;
-            c.id = uuidv4();
-            c.event_id = event.id;
+            c.language = language;
 
             const content = CalendarEventContent.fromObject(c);
+
             const contentEntity = EventContentEntity.fromModel(content);
+            contentEntity.id = uuidv4();
+            contentEntity.event_id = event.id;
             contentEntity.save();
 
             event.addContent(content);
@@ -79,9 +82,6 @@ class EventService {
             throw( new Error('account does not own event') );
         }
 
-        // // TODO: validation
-        // event.update(eventParams);
-        // await event.save();
         let event = eventEntity.toModel();
 
         // TODO: handle dropping languages
@@ -97,6 +97,7 @@ class EventService {
                     name: c.name,
                     description: c.description
                 });
+                await contentEntity.save();
                 event.addContent(contentEntity.toModel());
             }
         }

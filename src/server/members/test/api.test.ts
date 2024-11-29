@@ -77,4 +77,29 @@ describe('Event API', () => {
         expect(response.body.error).toBeUndefined();
         expect(eventStub.called).toBe(true);
     });
+
+    it('updateEvent: should fail without account', async () => {
+        let eventStub = eventSandbox.stub(EventService, 'updateEvent');
+        router.post('/handler', eventHandlers.updateEvent);
+
+        const response = await request(testApp(router))
+            .post('/handler');
+
+        expect(response.status).toBe(400);
+        expect(response.body.error).toBeDefined();
+        expect(eventStub.called).toBe(false);
+    });
+
+    it('updateEvent: should succeed', async () => {
+        let eventStub = eventSandbox.stub(EventService, 'updateEvent');
+        router.post('/handler', addRequestUser, eventHandlers.updateEvent);
+        eventStub.resolves(new CalendarEvent('id', 'testme', 'testme'));
+
+        const response = await request(testApp(router))
+            .post('/handler');
+
+        expect(response.status).toBe(200);
+        expect(response.body.error).toBeUndefined();
+        expect(eventStub.called).toBe(true);
+    });
 });
