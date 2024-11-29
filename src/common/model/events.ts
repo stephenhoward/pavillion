@@ -1,19 +1,20 @@
-class CalendarEvent {
-    id: string = '';
+import { Model, PrimaryModel } from './model';
+
+class CalendarEvent extends PrimaryModel {
     date: string = '';
     location: string = '';
     parentEvent: CalendarEvent | null = null;
     _content: Record<string, CalendarEventContent> = {};
 
     constructor(id?: string, date?: string, location?: string) {
-        this.id = id ?? '';
+        super(id);
         this.date = date ?? '';
         this.location = location ?? '';
     }
 
     content(language: string): CalendarEventContent {
         if ( ! this._content[language] ) {
-            this._content[language] = new CalendarEventContent('', language as language);
+            this._content[language] = new CalendarEventContent(language as language);
         }
         return this._content[language];
     }
@@ -57,26 +58,24 @@ enum language {
     IT = "it"
 };
 
-class CalendarEventContent {
-    id: string;
+class CalendarEventContent extends Model {
     language: language;
     name: string = '';
     description: string = '';
 
-    constructor(id: string, language: language, name?: string, description?: string) {
+    constructor( language: language, name?: string, description?: string) {
+        super();
         this.name = name ?? '';
         this.description = description ?? '';
         this.language = language;
-        this.id = id;
     }
 
     static fromObject(obj: Record<string, any>): CalendarEventContent {
-        return new CalendarEventContent(obj.id, obj.language, obj.name, obj.description);
+        return new CalendarEventContent(obj.language, obj.name, obj.description);
     }
 
     toObject(): Record<string, any> {
         return {
-            id: this.id,
             language: this.language,
             name: this.name,
             description: this.description

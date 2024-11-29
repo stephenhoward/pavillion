@@ -1,5 +1,5 @@
 import axios, { AxiosError } from 'axios';
-import Model from '../../common/model/model';
+import { PrimaryModel } from '../../common/model/model';
 
 interface JWTClaims {
     exp: number;
@@ -8,12 +8,12 @@ interface JWTClaims {
 
 export default class ModelService {
 
-    static async createModel(model: Model,url: string): Promise<Record<string,any>> {
+    static async createModel(model: PrimaryModel,url: string): Promise<Record<string,any>> {
 
         try {
             let response = await axios.post( url, model.toObject() );
             model.id = response.data.id;
-            const constructor = model.constructor as typeof Model;
+            const constructor = model.constructor as typeof PrimaryModel;
             return response.data;
         }
         catch(error) {
@@ -21,7 +21,7 @@ export default class ModelService {
         }
     }
 
-    static async updateModel(model: Model,url: string): Promise<Record<string,any>> {
+    static async updateModel(model: PrimaryModel,url: string): Promise<Record<string,any>> {
 
         try {
             let response = await axios.post( url + '/' + model.id, model.toObject() );

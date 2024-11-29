@@ -66,7 +66,7 @@ class EventContentEntity extends Model {
     declare event: EventEntity;
 
     toModel(): CalendarEventContent {
-        let content = new CalendarEventContent( this.id, this.language as language );
+        let content = new CalendarEventContent( this.language as language );
         content.name = this.name;
         content.description = this.description;
 
@@ -75,7 +75,6 @@ class EventContentEntity extends Model {
 
     static fromModel(content: CalendarEventContent): EventContentEntity {
         return EventContentEntity.build({
-            id: content.id,
             language: content.language as string,
             name: content.name,
             description: content.description

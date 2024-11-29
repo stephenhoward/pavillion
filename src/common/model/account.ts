@@ -1,15 +1,13 @@
-import Model from './model';
+import { Model, PrimaryModel } from './model';
 
-class Account extends Model {
-    id: string = '';
+class Account extends PrimaryModel {
     username: string = '';
     email: string = '';
     profile: Profile | null = null;
     roles: string[] | null = null;
 
     constructor (id?: string, username?: string, email?: string) {
-        super();
-        this.id = id ?? '';
+        super(id);
         this.username = username ?? '';
         this.email = email ?? '';
     };
@@ -38,16 +36,10 @@ class Account extends Model {
     }
 };
 
-class AccountSecrets {
-    accountId: string = '';
-    password: string = '';
-    url_verification_code: string = '';
-};
-
 class Profile {
     declare username: string;
     declare description: string;
     declare url: string;
 };
 
-export { Account, AccountSecrets, Profile}
+export { Account, Profile}
