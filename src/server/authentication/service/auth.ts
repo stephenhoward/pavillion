@@ -21,6 +21,9 @@ class AuthenticationService {
                 const account = secret.account.toModel();
 
                 if ( await CommonAccountService.setPassword(account, password) == true ) {
+                    secret.password_reset_code = null;
+                    secret.password_reset_expiration = null;
+                    await secret.save();
                     return account;
                 }
             }
