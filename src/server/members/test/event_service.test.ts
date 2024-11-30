@@ -1,10 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import sinon from 'sinon';
-import CommonAccountService from '../../common/service/accounts';
 import EventService from '../service/events';
 import { EventEntity, EventContentEntity } from '../../common/entity/event';
 import { Account } from '../../../common/model/account';
-import { AccountAlreadyExistsError, AccountInviteAlreadyExistsError, AccountRegistrationClosedError, AccountApplicationAlreadyExistsError, AccountApplicationsClosedError, noAccountInviteExistsError, noAccountApplicationExistsError } from '../../exceptions/account_exceptions';
 
 describe('listEvents', () => {
 

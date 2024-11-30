@@ -6,7 +6,7 @@ import CommonAccountService from '../../common/service/accounts';
 import ServiceSettings from '../../common/service/settings';
 import EmailService from "../../common/service/mail";
 import { AccountEntity, AccountSecretsEntity, AccountInvitationEntity, AccountApplicationEntity } from "../../common/entity/account"
-import { AccountApplicationAlreadyExistsError, noAccountInviteExistsError, AccountRegistrationClosedError, AccountApplicationsClosedError, AccountAlreadyExistsError, AccountInviteAlreadyExistsError, noAccountApplicationExistsError } from '../../exceptions/account_exceptions';
+import { AccountApplicationAlreadyExistsError, noAccountInviteExistsError, AccountRegistrationClosedError, AccountApplicationsClosedError, AccountAlreadyExistsError, AccountInviteAlreadyExistsError, noAccountApplicationExistsError } from '../exceptions';
 import AccountInvitation from '../../../common/model/invitation';
 
 type AccountInfo = {

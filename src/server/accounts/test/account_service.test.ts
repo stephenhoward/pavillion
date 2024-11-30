@@ -5,7 +5,7 @@ import AccountService from '../service/account';
 import { AccountEntity, AccountSecretsEntity, AccountInvitationEntity,AccountApplicationEntity } from '../../common/entity/account';
 import { Account } from '../../../common/model/account';
 import EmailService from '../../common/service/mail';
-import { AccountAlreadyExistsError, AccountInviteAlreadyExistsError, AccountRegistrationClosedError, AccountApplicationAlreadyExistsError, AccountApplicationsClosedError, noAccountInviteExistsError, noAccountApplicationExistsError } from '../../exceptions/account_exceptions';
+import { AccountAlreadyExistsError, AccountInviteAlreadyExistsError, AccountRegistrationClosedError, AccountApplicationAlreadyExistsError, AccountApplicationsClosedError, noAccountInviteExistsError, noAccountApplicationExistsError } from '../exceptions';
 import ServiceSettings from '../../common/service/settings';
 
 describe('inviteNewAccount', () => {
