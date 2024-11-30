@@ -48,21 +48,23 @@ class EventService {
         eventEntity.accountId = account.id;
         eventEntity.save();
 
-        for( let [language,strings] of Object.entries(eventParams.content) ) {
-            let c = strings as Record<string,any>;
-            c.language = language;
-
-            const content = CalendarEventContent.fromObject(c);
-
-            const contentEntity = EventContentEntity.fromModel(content);
-            contentEntity.id = uuidv4();
-            contentEntity.event_id = event.id;
-            contentEntity.save();
-
-            event.addContent(content);
+        for( let [language,content] of Object.entries(eventParams.content) ) {
+            event.addContent(await EventService.createEventContent(event.id, language, content as Record<string,any>));
         }
 
         return event;
+    }
+
+    static async createEventContent(eventId: string, language: string, contentParams: Record<string,any>): Promise<CalendarEventContent> {
+        contentParams.language = language;
+        const content = CalendarEventContent.fromObject(contentParams);
+
+        const contentEntity = EventContentEntity.fromModel(content);
+        contentEntity.id = uuidv4();
+        contentEntity.event_id = eventId;
+        contentEntity.save();
+
+        return content;
     }
 
     /**
@@ -84,21 +86,43 @@ class EventService {
 
         let event = eventEntity.toModel();
 
-        // TODO: handle dropping languages
-        // TODO: creating missing languages
         for( let [language,content] of Object.entries(eventParams.content) ) {
-            const contentEntity = await EventContentEntity.findOne({
+            let contentEntity = await EventContentEntity.findOne({
                 where: { event_id: eventId, language: language }
             });
 
             if ( contentEntity ) {
+
+                if ( ! content ) {
+                    await contentEntity.destroy();
+                    continue;
+                }
+
                 let c = content as Record<string,any>;
-                contentEntity.update({
+                delete c.language;
+
+                if ( Object.keys(c).length === 0 ) {
+                    await contentEntity.destroy();
+                    continue;
+                }
+
+                await contentEntity.update({
                     name: c.name,
                     description: c.description
                 });
-                await contentEntity.save();
                 event.addContent(contentEntity.toModel());
+            }
+            else {
+                if ( !content ) {
+                    continue;
+                }
+
+                let c = content as Record<string,any>;
+                delete c.language;
+
+                if ( Object.keys(c).length > 0 ) {
+                    event.addContent(await EventService.createEventContent(eventId, language, c));
+                }
             }
         }
 

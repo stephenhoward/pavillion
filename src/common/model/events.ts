@@ -81,6 +81,10 @@ class CalendarEventContent extends Model {
             description: this.description
         };
     }
+
+    isEmpty(): boolean {
+        return this.name === '' && this.description === '';
+    }
 };
 
 export {

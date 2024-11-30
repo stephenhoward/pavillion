@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import sinon from 'sinon';
 import EventService from '../service/events';
 import { EventEntity, EventContentEntity } from '../../common/entity/event';
+import { CalendarEventContent, language } from '../../../common/model/events';
 import { Account } from '../../../common/model/account';
 
 describe('listEvents', () => {
@@ -130,6 +131,87 @@ describe('updateEvent', () => {
         expect(updatedEvent.content("en").name).toBe('updatedName');
         expect(updatedEvent.content("en").description).toBe('updatedDescription');
         expect(saveContentStub.called).toBe(true);
+    });
+
+    it('should delete event content if given empty data', async () => {
+        console.log('should delete event content if given empty data');
+        let findEventStub = sandbox.stub(EventEntity, 'findByPk');
+        let findEventContentStub = sandbox.stub(EventContentEntity, 'findOne');
+        let destroyContentStub = sandbox.stub(EventContentEntity.prototype, 'destroy');
+
+        findEventStub.resolves(new EventEntity({ accountId: 'testAccountId' }));
+        findEventContentStub.resolves(new EventContentEntity({ event_id: 'testEventId', language: 'en' }));
+
+        let updatedEvent = await EventService.updateEvent(new Account('testAccountId', 'testme', 'testme'), 'testEventId', {
+            content: {
+                en: {}
+            }
+        });
+
+        expect(updatedEvent.content("en").isEmpty()).toBe(true);
+        expect(destroyContentStub.called).toBe(true);
+    });
+
+    it('should delete event content if given empty data except for language', async () => {
+        console.log('delete empty except language');
+        let findEventStub = sandbox.stub(EventEntity, 'findByPk');
+        let findEventContentStub = sandbox.stub(EventContentEntity, 'findOne');
+        let destroyContentStub = sandbox.stub(EventContentEntity.prototype, 'destroy');
+
+        findEventStub.resolves(new EventEntity({ accountId: 'testAccountId' }));
+        findEventContentStub.resolves(new EventContentEntity({ event_id: 'testEventId', language: 'en' }));
+
+        let updatedEvent = await EventService.updateEvent(new Account('testAccountId', 'testme', 'testme'), 'testEventId', {
+            content: {
+                en: { language: 'en'}
+            }
+        });
+
+        expect(updatedEvent.content("en").isEmpty()).toBe(true);
+        expect(destroyContentStub.called).toBe(true);
+    });
+
+    it('should delete event content if given undefined data', async () => {
+        console.log('delete undefined');
+        let findEventStub = sandbox.stub(EventEntity, 'findByPk');
+        let findEventContentStub = sandbox.stub(EventContentEntity, 'findOne');
+        let destroyContentStub = sandbox.stub(EventContentEntity.prototype, 'destroy');
+
+        findEventStub.resolves(new EventEntity({ accountId: 'testAccountId' }));
+        findEventContentStub.resolves(new EventContentEntity({ event_id: 'testEventId', language: 'en' }));
+
+        let updatedEvent = await EventService.updateEvent(new Account('testAccountId', 'testme', 'testme'), 'testEventId', {
+            content: {
+                en: undefined
+            }
+        });
+
+        expect(updatedEvent.content("en").isEmpty()).toBe(true);
+        expect(destroyContentStub.called).toBe(true);
+    })
+
+    it('should create event content if not found', async () => {
+        console.log('create content');
+        let findEventStub = sandbox.stub(EventEntity, 'findByPk');
+        let findEventContentStub = sandbox.stub(EventContentEntity, 'findOne');
+        let createContentStub = sandbox.stub(EventService, 'createEventContent');
+
+        findEventStub.resolves(new EventEntity({ accountId: 'testAccountId' }));
+        findEventContentStub.resolves(undefined);
+        createContentStub.resolves(new CalendarEventContent(language.EN, 'updatedName', 'updatedDescription'));
+
+        let updatedEvent = await EventService.updateEvent(new Account('testAccountId', 'testme', 'testme'), 'testEventId', {
+            content: {
+                en: {
+                    name: "updatedName",
+                    description: "updatedDescription"
+                }
+            }
+        });
+
+        expect(updatedEvent.content("en").name).toBe('updatedName');
+        expect(updatedEvent.content("en").description).toBe('updatedDescription');
+        expect(createContentStub.called).toBe(true);
     });
 
 
