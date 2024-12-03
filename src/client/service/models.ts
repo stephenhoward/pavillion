@@ -1,10 +1,5 @@
-import axios, { AxiosError } from 'axios';
+import axios from 'axios';
 import { PrimaryModel } from '../../common/model/model';
-
-interface JWTClaims {
-    exp: number;
-    isAdmin: boolean;
-}
 
 export default class ModelService {
 

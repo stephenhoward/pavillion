@@ -33,7 +33,6 @@ const handlers = {
     res.render("index.html.ejs", data);
   },
   assets: async (req: Request, res: Response) => {
-    console.log("ASSET PATH" + req.path);
     res.redirect(303, `http://localhost:5173/${req.path}`);
   }
 };

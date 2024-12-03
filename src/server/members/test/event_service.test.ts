@@ -134,7 +134,6 @@ describe('updateEvent', () => {
     });
 
     it('should delete event content if given empty data', async () => {
-        console.log('should delete event content if given empty data');
         let findEventStub = sandbox.stub(EventEntity, 'findByPk');
         let findEventContentStub = sandbox.stub(EventContentEntity, 'findOne');
         let destroyContentStub = sandbox.stub(EventContentEntity.prototype, 'destroy');
@@ -153,7 +152,6 @@ describe('updateEvent', () => {
     });
 
     it('should delete event content if given empty data except for language', async () => {
-        console.log('delete empty except language');
         let findEventStub = sandbox.stub(EventEntity, 'findByPk');
         let findEventContentStub = sandbox.stub(EventContentEntity, 'findOne');
         let destroyContentStub = sandbox.stub(EventContentEntity.prototype, 'destroy');
@@ -172,7 +170,6 @@ describe('updateEvent', () => {
     });
 
     it('should delete event content if given undefined data', async () => {
-        console.log('delete undefined');
         let findEventStub = sandbox.stub(EventEntity, 'findByPk');
         let findEventContentStub = sandbox.stub(EventContentEntity, 'findOne');
         let destroyContentStub = sandbox.stub(EventContentEntity.prototype, 'destroy');
@@ -191,7 +188,6 @@ describe('updateEvent', () => {
     })
 
     it('should create event content if not found', async () => {
-        console.log('create content');
         let findEventStub = sandbox.stub(EventEntity, 'findByPk');
         let findEventContentStub = sandbox.stub(EventContentEntity, 'findOne');
         let createContentStub = sandbox.stub(EventService, 'createEventContent');

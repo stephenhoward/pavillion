@@ -1,8 +1,8 @@
 <template>
     <div class="event">
         <div class="error" v-if="state.err">{{ state.err }}</div>
-        <input type="text" v-bind:placeholder="t('name_placeholder')"    v-model="props.event.content('en').name">
-        <input type="text" v-bind:placeholder="t('description_placeholder')" v-model="props.event.content('en').description">
+        <input type="text" name="name" v-bind:placeholder="t('name_placeholder')"    v-model="props.event.content('en').name">
+        <input type="text" name="description" v-bind:placeholder="t('description_placeholder')" v-model="props.event.content('en').description">
         <button type="submit" @click="saveModel(props.event)">{{ props.event.id ? t("update_button") : t("create_button") }}</button>
     </div>
 </template>
@@ -12,6 +12,9 @@
     import { useI18n } from 'vue-i18n';
     import { CalendarEvent } from '../../common/model/events';
     import ModelService from '../service/models';
+    import { useEventStore } from '../stores/eventStore';
+
+    const eventStore = useEventStore();
 
     const { t } = useI18n({
         messages: {
@@ -29,12 +32,20 @@
         event: CalendarEvent
     });
 
-    const state = reactive({ err: ''});
+    const state = reactive({ err: '' });
 
     const saveModel = async (model) => {
-        props.event = model.id
-            ? CalendarEvent.fromObject(await ModelService.updateModel(model, '/api/v1/events'))
-            : CalendarEvent.fromObject(await ModelService.createModel(model, '/api/v1/events'));
+        const isNew = !model.id;
+        state.event = isNew
+            ? CalendarEvent.fromObject(await ModelService.createModel(model, '/api/v1/events'))
+            : CalendarEvent.fromObject(await ModelService.updateModel(model, '/api/v1/events'));
+
+        if ( isNew == true ) {
+            eventStore.addEvent(state.event);
+        }
+        else {
+            eventStore.updateEvent(state.event);
+        }
     };
 </script>
 

@@ -26,10 +26,12 @@ const mountedLogin = () => {
     }
 
     const wrapper = mountComponent(Login, router, {
-        site_config: {
-            settings: {}
-        },
-        authn
+        provide: {
+            site_config: {
+                settings: {}
+            },
+            authn
+        }
     });
 
     return {
@@ -46,8 +48,10 @@ describe('Login Screen', () => {
         routes: routes
     });
     const wrapper = mountComponent(Login, router, {
-        site_config: {
-            settings: {}
+        provide: {
+            site_config: {
+                settings: {}
+            }
         }
     });
 
@@ -63,9 +67,11 @@ describe('Login Screen', () => {
 
     describe('Closed Registration', () => {
         const closedWrapper = mountComponent(Login, router, {
-            site_config: {
-                settings: {
-                    registrationMode: 'closed'
+            provide: {
+                site_config: {
+                    settings: {
+                        registrationMode: 'closed'
+                    }
                 }
             }
         });
@@ -80,9 +86,11 @@ describe('Login Screen', () => {
 
     describe('Open Registration', () => {
         const openWrapper = mountComponent(Login, router, {
-            site_config: {
-                settings: {
-                    registrationMode: 'open'
+            provide: {
+                site_config: {
+                    settings: {
+                        registrationMode: 'open'
+                    }
                 }
             }
         });
@@ -97,9 +105,11 @@ describe('Login Screen', () => {
 
     describe('Open Applies', () => {
         const applyWrapper = mountComponent(Login, router, {
-            site_config: {
-                settings: {
-                    registrationMode: 'apply'
+            provide: {
+                site_config: {
+                    settings: {
+                        registrationMode: 'apply'
+                    }
                 }
             }
         });

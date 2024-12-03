@@ -3,6 +3,7 @@ import { onBeforeMount, reactive } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { CalendarEvent } from '../../common/model/events';
 import ModelService from '../service/models';
+import { useEventStore } from '../stores/eventStore';
 
 const { t } = useI18n({
     messages: {
@@ -16,17 +17,19 @@ const { t } = useI18n({
     }
 });
 
-const state = reactive({ err: '', events: []});
+const state = reactive({ err: ''});
+const store = useEventStore();
 
 onBeforeMount(async () => {
-    state.events = await ModelService.listModels('/api/v1/events');
+  let events = await ModelService.listModels('/api/v1/events');
+  store.events = events.map(event => CalendarEvent.fromObject(event)); 
 });
 </script>
 
 <template>
   <p>Calendar</p>
-  <ul v-for="event in state.events">
-    <li>{{ event.name }}</li>
+  <ul v-for="event in store.events">
+    <li>{{ event.content("en").name }}</li>
   </ul>
 </template>
 

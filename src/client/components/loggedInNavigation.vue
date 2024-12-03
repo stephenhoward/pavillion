@@ -20,7 +20,6 @@
     });
 
     const newEvent = () => {
-        console.log("newEvent");
         state.currentEvent = new CalendarEvent();
     };
 

@@ -17,6 +17,7 @@ import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
 import { createI18n, useI18n } from 'vue-i18n';
 import Authentication from './service/authn';
 import Config from './service/config';
+import { createPinia } from 'pinia';
 
 Config.init().then( (config) => {
 
@@ -75,6 +76,9 @@ const i18n = createI18n({
     // datetimeFormats,
 });
 
+const pinia = createPinia();
+
+app.use(pinia);
 app.use(router);
 app.use(i18n);
 app.provide('i18n', i18n);
