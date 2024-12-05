@@ -148,7 +148,9 @@ describe('login', () => {
     it('login fail on error', async () => {
         let router = express.Router();
         passportStub.callsFake((strategy: string, options: any, cb: any) => {
-            cb('hasAnError', new Account('id', 'testme', 'testme'));
+            return (req: Request, res: Response) => {
+                cb('hasAnError', new Account('id', 'testme', 'testme'));
+            }
         });
 
         router.post('/handler', handlers.login);
@@ -162,7 +164,9 @@ describe('login', () => {
     it('login fail on missing account', async () => {
         let router = express.Router();
         passportStub.callsFake((strategy: string, options: any, cb: any) => {
-            cb(null, null);
+            return (req: Request, res: Response) => {
+                cb(null, null);
+            }
         });
 
         router.post('/handler', handlers.login);
@@ -174,10 +178,12 @@ describe('login', () => {
     });
 
     //TODO: Fix this login test
-    it.skip('login success', async () => {
+    it('login success', async () => {
         let router = express.Router();
         passportStub.callsFake((strategy: string, options: any, cb: any) => {
-            cb(null, new Account('id', 'testme', 'testme'));
+            return (req: Request, res: Response) => {
+                cb(null, new Account('id', 'testme', 'testme'));
+            }
         });
 
         router.post('/handler', handlers.login);

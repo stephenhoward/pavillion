@@ -14,14 +14,9 @@ const handlers = {
                     user   : account
                 });
             }
-            req.login(account, {session: false}, (err: any) => {
-                if (err) {
-                    res.send(err);
-                }
-                else {
-                    res.send(ExpressHelper.generateJWT(account));
-                }
-            });
+
+            req.user = account;
+            res.send(ExpressHelper.generateJWT(account));
         })(req, res);
     },
     getToken: async (req: Request, res: Response) => {
