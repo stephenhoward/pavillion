@@ -177,7 +177,6 @@ describe('login', () => {
 
     });
 
-    //TODO: Fix this login test
     it('login success', async () => {
         let router = express.Router();
         passportStub.callsFake((strategy: string, options: any, cb: any) => {

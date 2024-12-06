@@ -34,6 +34,8 @@ class Account extends PrimaryModel {
         account.roles = obj.roles;
         return account;
     }
+
+    clone(): Account { return Account.fromObject(this.toObject()); }
 };
 
 class Profile {

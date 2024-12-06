@@ -41,10 +41,10 @@
             : CalendarEvent.fromObject(await ModelService.updateModel(model, '/api/v1/events'));
 
         if ( isNew == true ) {
-            eventStore.addEvent(state.event);
+            eventStore.addEvent(props.event.clone());
         }
         else {
-            eventStore.updateEvent(state.event);
+            eventStore.updateEvent(props.event.clone());
         }
     };
 </script>

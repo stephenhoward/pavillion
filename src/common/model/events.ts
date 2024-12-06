@@ -48,6 +48,7 @@ class CalendarEvent extends PrimaryModel {
         };
     }
 
+    clone(): CalendarEvent { return CalendarEvent.fromObject(this.toObject()); }
 };
 
 enum language {

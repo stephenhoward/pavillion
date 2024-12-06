@@ -26,7 +26,6 @@ const handlers = {
             });
             return;
         }
-        // TODO: pass specific data
         const event = await EventService.createEvent(account, req.body);
         res.json(event.toObject());
     },
@@ -39,7 +38,6 @@ const handlers = {
             });
             return;
         }
-        // TODO: pass specific data
         const event = await EventService.updateEvent(account, req.params.id, req.body);
 
         res.json(event.toObject());

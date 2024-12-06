@@ -53,7 +53,8 @@ describe('Editor Behavior', () => {
 
         let createStub = sandbox.stub(ModelService, 'createModel');
         let updateStub = sandbox.stub(ModelService, 'updateModel');
-        let eventStoreStub = sandbox.stub(eventStore, 'addEvent');
+        let addEventStoreStub = sandbox.stub(eventStore, 'addEvent');
+        let updateEventStoreStub = sandbox.stub(eventStore, 'updateEvent');
 
         createStub.resolves(new CalendarEvent('id', 'testName', 'testDescription'));
 
@@ -64,7 +65,8 @@ describe('Editor Behavior', () => {
 
         expect(createStub.called).toBe(true);
         expect(updateStub.called).toBe(false);
-        expect(eventStoreStub.called).toBe(true);
+        expect(addEventStoreStub.called).toBe(true);
+        expect(updateEventStoreStub.called).toBe(false);
     });
 
     it('existing event', async () => {
@@ -73,7 +75,8 @@ describe('Editor Behavior', () => {
 
         let createStub = sandbox.stub(ModelService, 'createModel');
         let updateStub = sandbox.stub(ModelService, 'updateModel');
-        let eventStoreStub = sandbox.stub(eventStore, 'addEvent');
+        let addEventStoreStub = sandbox.stub(eventStore, 'addEvent');
+        let updateEventStoreStub = sandbox.stub(eventStore, 'updateEvent');
 
         updateStub.resolves(new CalendarEvent('hasId', 'testName', 'testDescription'));
 
@@ -84,7 +87,8 @@ describe('Editor Behavior', () => {
 
         expect(createStub.called).toBe(false);
         expect(updateStub.called).toBe(true);
-        expect(eventStoreStub.called).toBe(false);
+        expect(addEventStoreStub.called).toBe(false);
+        expect(updateEventStoreStub.called).toBe(true);
     });
 
 });
