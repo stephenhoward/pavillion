@@ -34,13 +34,21 @@ const handlers = {
   },
   assets: async (req: Request, res: Response) => {
     res.redirect(303, `http://localhost:5173/${req.path}`);
+  },
+  coverage: async (req: Request, res: Response) => {
+    res.redirect(303, `http://localhost:5173/${req.path}`);
   }
 };
 
 /* GET home page. */
 router.get('/', handlers.index);
 
-/* redirect to assets server */
-router.get(assetExtensionRegex(), handlers.assets);
+if (environment !== "production") {
+    /* redirect to assets server */
+    router.get(assetExtensionRegex(), handlers.assets);
+
+    /* redirect to coverage server */
+    router.get("/coverage/*", handlers.coverage);
+};
 
 export { handlers, router };
