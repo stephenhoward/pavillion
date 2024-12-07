@@ -111,7 +111,7 @@ describe('findLocation', () => {
                 );
         
                 expect(location.id).toBeDefined();
-                expect(eventSpy.returnValues[0].accountId).toBe('testAccountId');
+                expect(eventSpy.returnValues[0].account_id).toBe('testAccountId');
                 expect(saveStub.called).toBe(true);
             });
         

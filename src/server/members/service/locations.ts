@@ -8,15 +8,21 @@ class LocationService {
 
         if ( location.id ) {
             let entity = await LocationEntity.findByPk(location.id);
-            if ( entity && entity.accountId === account.id ) {
+            if ( entity && entity.account_id === account.id ) {
                 return entity.toModel();
             }
         }
         else {
-            let conditions = location.toObject();
-            conditions['account_id'] = account.id;
             let entity = await LocationEntity.findOne({
-                where: conditions
+                where: {
+                    account_id: account.id,
+                    name: location.name,
+                    address: location.address,
+                    city: location.city,
+                    state: location.state,
+                    postal_code: location.postalCode,
+                    country: location.country
+                }
             });
             if ( entity ) {
                 return entity.toModel();
@@ -28,7 +34,7 @@ class LocationService {
     static async createLocation(account: Account, location: EventLocation): Promise<EventLocation> {
         const entity = LocationEntity.fromModel(location);
         entity.id = uuidv4();
-        entity.accountId = account.id;
+        entity.account_id = account.id;
         await entity.save();
         return entity.toModel();
     }

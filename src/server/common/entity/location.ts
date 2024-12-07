@@ -11,7 +11,7 @@ class LocationEntity extends Model {
 
     @ForeignKey(() => AccountEntity)
     @Column({ type: DataType.UUID })
-    declare accountId: string;
+    declare account_id: string;
 
     @Column({ type: DataType.STRING })
     declare name: string;
@@ -35,11 +35,12 @@ class LocationEntity extends Model {
     declare account: AccountEntity;
 
     toModel(): EventLocation {
-        return new EventLocation( this.name, this.address, this.city, this.state, this.postal_code, this.country );
+        return new EventLocation( this.id, this.name, this.address, this.city, this.state, this.postal_code, this.country );
     }
 
     static fromModel(location: EventLocation): LocationEntity {
         return LocationEntity.build({
+            id: location.id,
             name: location.name,
             address: location.address,
             city: location.city,

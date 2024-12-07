@@ -18,15 +18,15 @@ class EventEntity extends Model {
 
     @ForeignKey(() => EventEntity)
     @Column({ type: DataType.UUID })
-    declare parentEventId: string;
+    declare parent_event_id: string;
 
     @ForeignKey(() => AccountEntity)
     @Column({ type: DataType.UUID })
-    declare accountId: string;
+    declare account_id: string;
 
     @ForeignKey(() => LocationEntity)
     @Column({ type: DataType.UUID })
-    declare locationId: string;
+    declare location_id: string;
 
     @BelongsTo(() => EventEntity)
     declare parentEvent: EventEntity;
@@ -41,7 +41,7 @@ class EventEntity extends Model {
     declare location: LocationEntity;
 
     toModel(): CalendarEvent {
-        return new CalendarEvent( this.accountId, this.id );
+        return new CalendarEvent( this.account_id, this.id );
     };
 
     static fromModel(event: CalendarEvent): EventEntity {

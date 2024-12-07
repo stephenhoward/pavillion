@@ -20,7 +20,7 @@ class EventService {
      */
     static async listEvents(account: Account): Promise<CalendarEvent[]> {
 
-        const events = await EventEntity.findAll({ where: { accountId: account.id }, include: [EventContentEntity] });
+        const events = await EventEntity.findAll({ where: { account_id: account.id }, include: [EventContentEntity] });
 
         return events.map( (event) => {
             let e = event.toModel();
@@ -46,12 +46,12 @@ class EventService {
 
         const event = CalendarEvent.fromObject(eventParams);
         const eventEntity = EventEntity.fromModel(event);
-        eventEntity.accountId = account.id;
+        eventEntity.account_id = account.id;
 
         if( eventParams.location ) {
 
             let location = await LocationService.findOrCreateLocation(account, eventParams.location);
-            eventEntity.locationId = location.id;
+            eventEntity.location_id = location.id;
             event.location = location;
         }
 
@@ -91,7 +91,7 @@ class EventService {
             throw new Error('Event not found');
         }
 
-        if ( eventEntity.accountId !== account.id ) {
+        if ( eventEntity.account_id !== account.id ) {
             throw( new Error('account does not own event') );
         }
 
@@ -139,14 +139,14 @@ class EventService {
             }
         }
 
-        if ( eventEntity.locationId && ! eventParams.location ) {
-            eventEntity.locationId = '';
+        if ( eventEntity.location_id && ! eventParams.location ) {
+            eventEntity.location_id = '';
             event.location = null;
         }
         else if( eventParams.location ) {
 
             let location = await LocationService.findOrCreateLocation(account, eventParams.location);
-            eventEntity.locationId = location.id;
+            eventEntity.location_id = location.id;
             event.location = location;
         }
         await eventEntity.save();

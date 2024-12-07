@@ -40,11 +40,6 @@
     const props = defineProps({
         event: CalendarEvent
     });
-    onBeforeMount(() => {
-        if (props.event && ! props.event.location ) {
-            props.event.location = new EventLocation();
-        }
-    });
 
     const state = reactive({ err: '' });
 

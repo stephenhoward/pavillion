@@ -68,7 +68,7 @@ describe('createEvent', () => {
         });
 
         expect(event.id).toBeDefined();
-        expect(eventSpy.returnValues[0].accountId).toBe('testAccountId');
+        expect(eventSpy.returnValues[0].account_id).toBe('testAccountId');
         expect(contentSpy.returnValues[0].event_id).toBe(event.id);
         expect(event.content("en").name).toBe('testName');
         expect(saveStub.called).toBe(true);
@@ -90,7 +90,7 @@ describe('createEvent', () => {
         });
 
         expect(event.id).toBeDefined();
-        expect(eventSpy.returnValues[0].accountId).toBe('testAccountId');
+        expect(eventSpy.returnValues[0].account_id).toBe('testAccountId');
         expect(event.location).toBeDefined();
         expect(saveStub.called).toBe(true);
     })
@@ -139,8 +139,8 @@ describe('updateEvent', () => {
         let saveEventStub = sandbox.stub(EventEntity.prototype, 'save');
         let saveContentStub = sandbox.stub(EventContentEntity.prototype, 'save');
 
-        findEventStub.resolves(new EventEntity({ accountId: 'testAccountId' }));
-        findEventContentStub.resolves(new EventContentEntity({ event_id: 'testEventId', language: 'en' }));
+        findEventStub.resolves(EventEntity.build({ account_id: 'testAccountId' }));
+        findEventContentStub.resolves(EventContentEntity.build({ event_id: 'testEventId', language: 'en' }));
 
         let updatedEvent = await EventService.updateEvent(new Account('testAccountId', 'testme', 'testme'), 'testEventId', {
             content: {
@@ -162,8 +162,8 @@ describe('updateEvent', () => {
         let findEventContentStub = sandbox.stub(EventContentEntity, 'findOne');
         let destroyContentStub = sandbox.stub(EventContentEntity.prototype, 'destroy');
 
-        findEventStub.resolves(new EventEntity({ accountId: 'testAccountId' }));
-        findEventContentStub.resolves(new EventContentEntity({ event_id: 'testEventId', language: 'en' }));
+        findEventStub.resolves(EventEntity.build({ account_id: 'testAccountId' }));
+        findEventContentStub.resolves(EventContentEntity.build({ event_id: 'testEventId', language: 'en' }));
 
         let updatedEvent = await EventService.updateEvent(new Account('testAccountId', 'testme', 'testme'), 'testEventId', {
             content: {
@@ -181,8 +181,8 @@ describe('updateEvent', () => {
         let findEventContentStub = sandbox.stub(EventContentEntity, 'findOne');
         let destroyContentStub = sandbox.stub(EventContentEntity.prototype, 'destroy');
 
-        findEventStub.resolves(new EventEntity({ accountId: 'testAccountId' }));
-        findEventContentStub.resolves(new EventContentEntity({ event_id: 'testEventId', language: 'en' }));
+        findEventStub.resolves(EventEntity.build({ account_id: 'testAccountId' }));
+        findEventContentStub.resolves(EventContentEntity.build({ event_id: 'testEventId', language: 'en' }));
 
         let updatedEvent = await EventService.updateEvent(new Account('testAccountId', 'testme', 'testme'), 'testEventId', {
             content: {
@@ -200,8 +200,8 @@ describe('updateEvent', () => {
         let findEventContentStub = sandbox.stub(EventContentEntity, 'findOne');
         let destroyContentStub = sandbox.stub(EventContentEntity.prototype, 'destroy');
 
-        findEventStub.resolves(new EventEntity({ accountId: 'testAccountId' }));
-        findEventContentStub.resolves(new EventContentEntity({ event_id: 'testEventId', language: 'en' }));
+        findEventStub.resolves(EventEntity.build({ account_id: 'testAccountId' }));
+        findEventContentStub.resolves(EventContentEntity.build({ event_id: 'testEventId', language: 'en' }));
 
         let updatedEvent = await EventService.updateEvent(new Account('testAccountId', 'testme', 'testme'), 'testEventId', {
             content: {
@@ -219,7 +219,7 @@ describe('updateEvent', () => {
         let findEventContentStub = sandbox.stub(EventContentEntity, 'findOne');
         let createContentStub = sandbox.stub(EventService, 'createEventContent');
 
-        findEventStub.resolves(new EventEntity({ accountId: 'testAccountId' }));
+        findEventStub.resolves(EventEntity.build({ account_id: 'testAccountId' }));
         findEventContentStub.resolves(undefined);
         createContentStub.resolves(new CalendarEventContent(language.EN, 'updatedName', 'updatedDescription'));
 
@@ -242,7 +242,7 @@ describe('updateEvent', () => {
         let saveEventStub = sandbox.stub(EventEntity.prototype, 'save');
         let findLocationStub = sandbox.stub(LocationService, 'findOrCreateLocation');
 
-        findEventStub.resolves(new EventEntity({ accountId: 'testAccountId' }));
+        findEventStub.resolves(EventEntity.build({ account_id: 'testAccountId' }));
         findLocationStub.resolves(new EventLocation('testId','testLocation', 'testAddress'));
 
         let updatedEvent = await EventService.updateEvent(new Account('testAccountId', 'testme', 'testme'), 'testEventId', {
@@ -260,7 +260,7 @@ describe('updateEvent', () => {
 
     it('should clear location from an event', async () => {
 
-        let eventEntity = EventEntity.build({ accountId: 'testAccountId', locationId: 'testLocationId' });
+        let eventEntity = EventEntity.build({ account_id: 'testAccountId', location_id: 'testLocationId' });
 
         let findEventStub = sandbox.stub(EventEntity, 'findByPk');
         let saveEventStub = sandbox.stub(EventEntity.prototype, 'save');
@@ -274,7 +274,7 @@ describe('updateEvent', () => {
         expect(saveEventStub.called).toBe(true);
         expect(findLocationStub.called).toBe(false);
         expect(updatedEvent.location).toBeNull();
-        expect(eventEntity.locationId).toBe('');
+        expect(eventEntity.location_id).toBe('');
     });
 
 

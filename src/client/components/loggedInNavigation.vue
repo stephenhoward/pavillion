@@ -3,6 +3,7 @@
     import { reactive } from 'vue';
     import { useI18n } from 'vue-i18n';
     import { CalendarEvent } from '../../common/model/events';
+    import { EventLocation } from '../../common/model/location';
     const { t } = useI18n({
         messages: {
             "en": {
@@ -20,7 +21,9 @@
     });
 
     const newEvent = () => {
-        state.currentEvent = new CalendarEvent();
+        let event = new CalendarEvent();
+        event.location = new EventLocation();
+        state.currentEvent = event;
     };
 
 </script>

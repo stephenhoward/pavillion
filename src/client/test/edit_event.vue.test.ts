@@ -7,6 +7,7 @@ import { RouteRecordRaw } from 'vue-router';
 import { useEventStore } from '../stores/eventStore';
 import ModelService from '../service/models';
 import { CalendarEvent } from '../../common/model/events';
+import { EventLocation } from '../../common/model/location';
 
 const routes: RouteRecordRaw[] = [
     { path: '/login',  component: {}, name: 'login', props: true },
@@ -48,7 +49,9 @@ describe('Editor Behavior', () => {
     })
 
     it('new event', async () => {
-        const { wrapper, router } = mountedEditor(new CalendarEvent('', ''));
+        let event = new CalendarEvent('', '');
+        event.location = new EventLocation('', '');
+        const { wrapper, router } = mountedEditor(event);
         const eventStore = useEventStore();
 
         let createStub = sandbox.stub(ModelService, 'createModel');
@@ -70,7 +73,9 @@ describe('Editor Behavior', () => {
     });
 
     it('existing event', async () => {
-        const { wrapper, router } = mountedEditor(new CalendarEvent('hasId', ''));
+        let event = new CalendarEvent('hasId', '');
+        event.location = new EventLocation('', '');
+        const { wrapper, router } = mountedEditor(event);
         const eventStore = useEventStore();
 
         let createStub = sandbox.stub(ModelService, 'createModel');
