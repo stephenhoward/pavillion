@@ -1,5 +1,5 @@
-import { scryptSync, randomBytes } from 'crypto';
-import moment from 'moment';
+import { scryptSync } from 'crypto';
+import { DateTime } from 'luxon';
 import { AccountEntity, AccountSecretsEntity, AccountApplicationEntity, AccountInvitationEntity } from "../../common/entity/account"
 import { Account } from "../../../common/model/account"
 import CommonAccountService from '../../common/service/accounts';
@@ -17,7 +17,7 @@ class AuthenticationService {
 
         if ( secret ) {
 
-            if ( moment().isBefore(secret.password_reset_expiration) ) {
+            if ( secret.password_reset_expiration && DateTime.now() < DateTime.fromJSDate(secret.password_reset_expiration) ) {
                 const account = secret.account.toModel();
 
                 if ( await CommonAccountService.setPassword(account, password) == true ) {
@@ -39,7 +39,7 @@ class AuthenticationService {
         const secret = await AccountSecretsEntity.findOne({where: {password_reset_code: code}});
 
         if ( secret ) {
-            if ( moment().isBefore(secret.password_reset_expiration) ) {
+            if ( secret.password_reset_expiration && DateTime.now() < DateTime.fromJSDate(secret.password_reset_expiration) ) {
                 return true;
             }
         }

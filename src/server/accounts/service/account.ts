@@ -1,7 +1,7 @@
 import { randomBytes } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { Account } from "../../../common/model/account"
-import moment from 'moment';
+import { DateTime } from 'luxon';
 import CommonAccountService from '../../common/service/accounts';
 import ServiceSettings from '../../common/service/settings';
 import EmailService from "../../common/service/mail";
@@ -114,7 +114,7 @@ class AccountService {
         }
         else {
             accountSecretsEntity.password_reset_code = randomBytes(16).toString('hex');
-            accountSecretsEntity.password_reset_expiration = moment().add(1,'hours').toDate();
+            accountSecretsEntity.password_reset_expiration = DateTime.now().plus({ hours: 1}).toJSDate();
             await accountSecretsEntity.save();
         }
 

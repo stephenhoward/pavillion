@@ -23,6 +23,7 @@
     const newEvent = () => {
         let event = new CalendarEvent();
         event.location = new EventLocation();
+        event.addSchedule();
         state.currentEvent = event;
     };
 
@@ -39,7 +40,7 @@
   </nav>
 
   <div v-if="state.currentEvent != null">
-    <edit-event-view :event="state.currentEvent" />
+    <edit-event-view :event="state.currentEvent" @close="state.currentEvent=null" />
   </div>
 </div>
 </template>

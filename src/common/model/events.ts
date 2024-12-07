@@ -1,11 +1,14 @@
 import { Model, PrimaryModel } from './model';
 import { EventLocation } from './location';
+import { DateTime } from 'luxon';
+
 
 class CalendarEvent extends PrimaryModel {
     date: string = '';
     location: EventLocation | null = null;
     parentEvent: CalendarEvent | null = null;
     _content: Record<string, CalendarEventContent> = {};
+    schedules: CalendarEventSchedule[] = [];
 
     constructor(id?: string, date?: string, location?: EventLocation) {
         super(id);
@@ -22,6 +25,22 @@ class CalendarEvent extends PrimaryModel {
 
     addContent(content: CalendarEventContent) {
         this._content[content.language] = content;
+    }
+
+    addSchedule(schedule?: CalendarEventSchedule) {
+        if ( schedule ) {
+            this.schedules.push(schedule);
+        }
+        else {
+            this.schedules.push(new CalendarEventSchedule());
+        }
+    }
+
+    dropSchedule(index: number) {
+        if ( index < 0 || index >= this.schedules.length ) {
+            throw new Error('Invalid schedule index');
+        }
+        this.schedules.splice(index, 1);
     }
 
     static fromObject(obj: Record<string, any>): CalendarEvent {
@@ -91,6 +110,85 @@ class CalendarEventContent extends Model {
     }
 };
 
+enum EventFrequency {
+    DAILY = 'daily',
+    WEEKLY = 'weekly',
+    MONTHLY = 'monthly',
+    YEARLY = 'yearly'
+};
+
+class CalendarEventSchedule extends Model {
+    id: string = '';
+    startDate: DateTime | null = null;
+    endDate: DateTime | null = null;
+    count: number = 0;
+    frequency: EventFrequency | null = null;
+    interval: number = 0;
+    byMonth: number[] = [];
+    byMonthDay: string[] = [];
+    byYearDay: number[] = [];
+    byWeekNumber: number[] = [];
+    byWeekday: number[] = [];
+    isException: boolean = false;
+
+    constructor(id?: string, startDate?: DateTime, endDate?: DateTime) {
+        super();
+        this.id = id ?? '';
+        this.startDate = startDate ?? null;
+        this.endDate = endDate ?? null;
+    }
+
+    static parseFrequency(freq: string): EventFrequency | null {
+        const enumValues = Object.values(EventFrequency) as string[];
+        const isValidRole = enumValues.includes(freq);
+        return isValidRole ? freq as EventFrequency : null;
+    }
+    
+    static fromObject(obj: Record<string, any>): CalendarEventSchedule {
+        let start = obj.start
+            ? DateTime.fromISO(obj.start)
+            : undefined;
+
+        let end = obj.end
+            ? DateTime.fromISO(obj.end)
+            : undefined;
+
+            
+        let schedule = new CalendarEventSchedule(obj.id, start, end);
+
+        if ( obj.frequency ) {
+            schedule.frequency = CalendarEventSchedule.parseFrequency(obj.frequency);
+        }
+        schedule.interval = obj.interval;
+        schedule.count = obj.count;
+        schedule.byWeekNumber = obj.byWeekNumber;
+        schedule.byWeekday = obj.byWeekday;
+        schedule.byMonth = obj.byMonth;
+        schedule.byMonthDay = obj.byMonthDay;
+        schedule.byYearDay = obj.byYearDay;
+        schedule.isException = obj.isException;
+
+        return schedule;
+    }
+
+    toObject(): Record<string, any> {
+        return {
+            id: this.id,
+            start: this.startDate?.toISO(),
+            end: this.endDate?.toISO(),
+            frequency: this.frequency as string,
+            interval: this.interval,
+            count: this.count,
+            byWeekNumber: this.byWeekNumber,
+            byWeekday: this.byWeekday,
+            byMonth: this.byMonth,
+            byMonthDay: this.byMonthDay,
+            byYearDay: this.byYearDay,
+            isException: this.isException
+        };
+    }
+}
+
 export {
-    CalendarEvent, CalendarEventContent, language
+    CalendarEvent, CalendarEventContent, CalendarEventSchedule, language
 }

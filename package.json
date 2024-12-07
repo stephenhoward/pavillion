@@ -24,7 +24,7 @@
     "express": "^4.21.1",
     "http-errors": "^2.0.0",
     "jsonwebtoken": "^9.0.2",
-    "moment": "^2.30.1",
+    "luxon": "^3.5.0",
     "nodemailer": "^6.9.16",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
@@ -43,7 +43,7 @@
   "devDependencies": {
     "@types/config": "^3.3.5",
     "@types/express": "^5.0.0",
-    "@types/moment": "^2.11.29",
+    "@types/luxon": "^3.4.2",
     "@types/node": "^22.9.0",
     "@types/nodemailer": "^6.4.16",
     "@types/passport-jwt": "^4.0.1",

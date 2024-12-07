@@ -1,23 +1,77 @@
+<style scoped lang="scss">
+@import '../assets/mixins.scss';
+section {
+    border-top: 1px soilid $light-mode-border;
+    padding: 10px;
+    margin-top: 10px;
+    label {
+        display: block;
+    }
+    input {
+        font-size: 14px;
+        &[type="datetime-local"] {
+            font-size: 14px;
+        }
+    }
+    @include dark-mode {
+        border-top: 1px solid $dark-mode-border;
+    }
+}
+button {
+    &.remove {
+        background: none;
+        border: none;
+        display: block;
+        float: right;
+    }
+    img {
+        width: 16px;
+    }
+}
+
+div.schedule {
+    width: 100%;
+}
+</style>
+
 <template>
+    <modal-layout >
     <div class="event">
         <div class="error" v-if="state.err">{{ state.err }}</div>
-        <input type="text" name="name" v-bind:placeholder="t('name_placeholder')"    v-model="props.event.content('en').name">
-        <input type="text" name="description" v-bind:placeholder="t('description_placeholder')" v-model="props.event.content('en').description">
-        <input type="text" name="address" v-bind:placeholder="t('address_placeholder')" v-model="props.event.location.address">
-        <input type="text" name="city" v-bind:placeholder="t('city_placeholder')" v-model="props.event.location.city">
-        <input type="text" name="state" v-bind:placeholder="t('state_placeholder')" v-model="props.event.location.state">
-        <input type="text" name="postalCode" v-bind:placeholder="t('postalCode_placeholder')" v-model="props.event.location.postalCode">
+        <section>
+            <label>Event Description</label>
+            <input type="text" name="name" v-bind:placeholder="t('name_placeholder')"    v-model="props.event.content('en').name">
+            <input type="text" name="description" v-bind:placeholder="t('description_placeholder')" v-model="props.event.content('en').description">
+        </section>
+        <section>
+            <label>Location</label>
+            <input type="text" name="address" v-bind:placeholder="t('address_placeholder')" v-model="props.event.location.address">
+            <input type="text" name="city" v-bind:placeholder="t('city_placeholder')" v-model="props.event.location.city">
+            <input type="text" name="state" v-bind:placeholder="t('state_placeholder')" v-model="props.event.location.state">
+            <input type="text" name="postalCode" v-bind:placeholder="t('postalCode_placeholder')" v-model="props.event.location.postalCode">
+        </section>
+        <section>
+            <label>Dates</label>
+            <div class="schedule" v-for="(schedule,index) in props.event.schedules">
+                <button class="remove" v-if="props.event.schedules.length > 1" type="button" @click="props.event.dropSchedule(index)"><img src="../assets/remove_icon.svg" alt="Remove Schedule"/></button>
+                <event-recurrence-view :schedule="schedule" />
+            </div>
+        <button type="button" @click="props.event.addSchedule()">Add Schedule</button>
+        </section>
         <button type="submit" @click="saveModel(props.event)">{{ props.event.id ? t("update_button") : t("create_button") }}</button>
+        <button type="button" @click="$emit('close')">Close</button>
     </div>
+    </modal-layout>
 </template>
 
 <script setup>
-    import { reactive, defineProps, onBeforeMount } from 'vue';
+    import { reactive, defineProps } from 'vue';
     import { useI18n } from 'vue-i18n';
     import { CalendarEvent } from '../../common/model/events';
-    import { EventLocation } from '../../common/model/location';
     import ModelService from '../service/models';
     import { useEventStore } from '../stores/eventStore';
+    import EventRecurrenceView from './event_recurrence.vue';
+    import ModalLayout from './modal.vue';
 
     const eventStore = useEventStore();
 
@@ -26,6 +80,7 @@
             en: {
                 'create_button': 'Create Event',
                 'update_button': 'Update Event',
+                'close_button': 'Close',
                 name_placeholder: 'event name',
                 description_placeholder: 'event description',
                 address_placeholder: 'event address',
@@ -57,19 +112,3 @@
         }
     };
 </script>
-
-<style scoped lang="scss">
-@import '../assets/mixins.scss';
-
-body {
-    display:               grid;
-
-    grid-template-columns: [ begin ] auto [ end ];
-    grid-template-rows:    [ top ] auto [ bottom ];
-    justify-items: center;
-    align-items: center;
-    div.event {
-        @include auth-form;
-    }
-}
-</style>

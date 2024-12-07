@@ -1,10 +1,8 @@
 import { Model, Table, Column, PrimaryKey, BelongsTo, DataType, ForeignKey, HasMany } from 'sequelize-typescript';
 import db from './db';
-import { CalendarEvent, CalendarEventContent, language } from '../../../common/model/events';
+import { CalendarEvent, CalendarEventContent, CalendarEventSchedule, language } from '../../../common/model/events';
 import { LocationEntity } from './location';
 import { AccountEntity } from './account';
-import { a } from 'vitest/dist/chunks/suite.B2jumIFP';
-import { lang } from 'moment';
 
 @Table({ tableName: 'event' })
 class EventEntity extends Model {
@@ -118,35 +116,62 @@ class EventScheduleEntity extends Model {
     @Column({ type: DataType.INTEGER })
     declare count: number;
 
-    @Column({ type: DataType.INTEGER })
-    declare by_setpos: number;
+    @Column({ type: DataType.STRING })
+    declare by_week_number: string;
 
-    @Column({ type: DataType.INTEGER })
-    declare by_month: number;
+    @Column({ type: DataType.STRING })
+    declare by_weekday: string;
 
-    @Column({ type: DataType.INTEGER })
-    declare by_monthday: number;
+    @Column({ type: DataType.STRING })
+    declare by_month: string;
 
-    @Column({ type: DataType.INTEGER })
-    declare by_year_day: number;
+    @Column({ type: DataType.STRING })
+    declare by_month_day: string;
 
-    @Column({ type: DataType.INTEGER })
-    declare by_week_no: number;
+    @Column({ type: DataType.STRING })
+    declare by_year_day: string;
 
-    @Column({ type: DataType.INTEGER })
-    declare by_weekday: number;
-
-    @Column({ type: DataType.INTEGER })
-    declare by_hour: number;
-
-    @Column({ type: DataType.INTEGER })
-    declare by_minute: number;
-
-    @Column({ type: DataType.INTEGER })
-    declare by_second: number;
+    @Column({ type: DataType.BOOLEAN })
+    declare is_exception: boolean;
 
     @BelongsTo(() => EventEntity)
     declare event: EventEntity;
+
+    // TODO: use timezone field
+    toModel(): CalendarEventSchedule {
+        return CalendarEventSchedule.fromObject({
+            id: this.id,
+            start: this.start_date,
+            end: this.end_date,
+            frequency: this.frequency,
+            interval: this.interval,
+            count: this.count,
+            byWeekNumber: this.by_week_number.split(','),
+            byWeekday: this.by_weekday.split(','),
+            byMonth: this.by_month.split(','),
+            byMonthDay: this.by_month_day.split(','),
+            byYearDay: this.by_year_day.split(','),
+            isException: this.is_exception
+        });
+    }
+
+    // TODO: set timezone field
+    fromModel(schedule: CalendarEventSchedule): EventScheduleEntity {
+        return EventScheduleEntity.build({
+            id: schedule.id,
+            start_date: schedule.startDate?.toJSDate(),
+            end_date: schedule.endDate?.toJSDate(),
+            frequency: schedule.frequency as string,
+            interval: schedule.interval,
+            count: schedule.count,
+            by_week_number: schedule.byWeekNumber.join(','),
+            by_weekday: schedule.byWeekday.join(','),
+            by_month: schedule.byMonth.join(','),
+            by_month_day: schedule.byMonthDay.join(','),
+            by_year_day: schedule.byYearDay.join(','),
+            is_exception: schedule.isException
+        });
+    }
 };
 
 db.addModels([EventEntity, EventContentEntity, EventScheduleEntity]);

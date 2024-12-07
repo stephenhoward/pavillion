@@ -4,7 +4,7 @@ import AuthenticationService from '../service/auth';
 import CommonAccountService from '../../common/service/accounts';
 import { AccountEntity, AccountSecretsEntity } from '../../common/entity/account';
 import { Account } from '../../../common/model/account';
-import moment from 'moment';
+import { DateTime } from 'luxon';
 
 
 describe( 'checkPassword', async () => {
@@ -72,7 +72,7 @@ describe('resetPassword', async () => {
         let findSecretStub = sandbox.stub(AccountSecretsEntity, 'findOne');
         let saveStub = sandbox.stub(AccountSecretsEntity.prototype, 'save');
         let secrets = AccountSecretsEntity.build({
-            password_reset_expiration: moment().subtract(1, 'day'),
+            password_reset_expiration: DateTime.now().minus({ days: 1}),
             password_reset_code: '1234',
         });
 
@@ -90,7 +90,7 @@ describe('resetPassword', async () => {
         setPassSttub.resolves(true);
         let account = AccountEntity.build({ id: '1234', username: 'testme', email: 'testme'});
         let secrets = AccountSecretsEntity.build({
-            password_reset_expiration: moment().add(1, 'day'),
+            password_reset_expiration: DateTime.now().plus({ days: 1 }).toJSDate(),
             password_reset_code: '1234',
         });
         secrets.account = account;
