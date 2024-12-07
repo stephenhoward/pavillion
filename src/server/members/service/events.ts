@@ -1,8 +1,9 @@
-import { randomBytes } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { Account } from "../../../common/model/account"
 import { EventContentEntity, EventEntity } from "../../common/entity/event"
+import { EventLocation } from "../../../common/model/location"
 import { CalendarEvent, CalendarEventContent } from "../../../common/model/events"
+import LocationService from "./locations"
 
 /**
  * Service class for managing events
@@ -46,10 +47,20 @@ class EventService {
         const event = CalendarEvent.fromObject(eventParams);
         const eventEntity = EventEntity.fromModel(event);
         eventEntity.accountId = account.id;
+
+        if( eventParams.location ) {
+
+            let location = await LocationService.findOrCreateLocation(account, eventParams.location);
+            eventEntity.locationId = location.id;
+            event.location = location;
+        }
+
         eventEntity.save();
 
-        for( let [language,content] of Object.entries(eventParams.content) ) {
-            event.addContent(await EventService.createEventContent(event.id, language, content as Record<string,any>));
+        if ( eventParams.content ) {
+            for( let [language,content] of Object.entries(eventParams.content) ) {
+                event.addContent(await EventService.createEventContent(event.id, language, content as Record<string,any>));
+            }
         }
 
         return event;
@@ -86,49 +97,62 @@ class EventService {
 
         let event = eventEntity.toModel();
 
-        for( let [language,content] of Object.entries(eventParams.content) ) {
-            let contentEntity = await EventContentEntity.findOne({
-                where: { event_id: eventId, language: language }
-            });
-
-            if ( contentEntity ) {
-
-                if ( ! content ) {
-                    await contentEntity.destroy();
-                    continue;
-                }
-
-                let c = content as Record<string,any>;
-                delete c.language;
-
-                if ( Object.keys(c).length === 0 ) {
-                    await contentEntity.destroy();
-                    continue;
-                }
-
-                await contentEntity.update({
-                    name: c.name,
-                    description: c.description
+        if ( eventParams.content ) {
+            for( let [language,content] of Object.entries(eventParams.content) ) {
+                let contentEntity = await EventContentEntity.findOne({
+                    where: { event_id: eventId, language: language }
                 });
-                event.addContent(contentEntity.toModel());
-            }
-            else {
-                if ( !content ) {
-                    continue;
+
+                if ( contentEntity ) {
+
+                    if ( ! content ) {
+                        await contentEntity.destroy();
+                        continue;
+                    }
+
+                    let c = content as Record<string,any>;
+                    delete c.language;
+
+                    if ( Object.keys(c).length === 0 ) {
+                        await contentEntity.destroy();
+                        continue;
+                    }
+
+                    await contentEntity.update({
+                        name: c.name,
+                        description: c.description
+                    });
+                    event.addContent(contentEntity.toModel());
                 }
+                else {
+                    if ( !content ) {
+                        continue;
+                    }
 
-                let c = content as Record<string,any>;
-                delete c.language;
+                    let c = content as Record<string,any>;
+                    delete c.language;
 
-                if ( Object.keys(c).length > 0 ) {
-                    event.addContent(await EventService.createEventContent(eventId, language, c));
+                    if ( Object.keys(c).length > 0 ) {
+                        event.addContent(await EventService.createEventContent(eventId, language, c));
+                    }
                 }
             }
         }
 
+        if ( eventEntity.locationId && ! eventParams.location ) {
+            eventEntity.locationId = '';
+            event.location = null;
+        }
+        else if( eventParams.location ) {
+
+            let location = await LocationService.findOrCreateLocation(account, eventParams.location);
+            eventEntity.locationId = location.id;
+            event.location = location;
+        }
+        await eventEntity.save();
+
         return event;
     }
-
 }
 
 export default EventService;

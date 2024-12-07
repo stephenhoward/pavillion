@@ -3,14 +3,19 @@
         <div class="error" v-if="state.err">{{ state.err }}</div>
         <input type="text" name="name" v-bind:placeholder="t('name_placeholder')"    v-model="props.event.content('en').name">
         <input type="text" name="description" v-bind:placeholder="t('description_placeholder')" v-model="props.event.content('en').description">
+        <input type="text" name="address" v-bind:placeholder="t('address_placeholder')" v-model="props.event.location.address">
+        <input type="text" name="city" v-bind:placeholder="t('city_placeholder')" v-model="props.event.location.city">
+        <input type="text" name="state" v-bind:placeholder="t('state_placeholder')" v-model="props.event.location.state">
+        <input type="text" name="postalCode" v-bind:placeholder="t('postalCode_placeholder')" v-model="props.event.location.postalCode">
         <button type="submit" @click="saveModel(props.event)">{{ props.event.id ? t("update_button") : t("create_button") }}</button>
     </div>
 </template>
 
 <script setup>
-    import { reactive, defineProps } from 'vue';
+    import { reactive, defineProps, onBeforeMount } from 'vue';
     import { useI18n } from 'vue-i18n';
     import { CalendarEvent } from '../../common/model/events';
+    import { EventLocation } from '../../common/model/location';
     import ModelService from '../service/models';
     import { useEventStore } from '../stores/eventStore';
 
@@ -23,6 +28,10 @@
                 'update_button': 'Update Event',
                 name_placeholder: 'event name',
                 description_placeholder: 'event description',
+                address_placeholder: 'event address',
+                city_placeholder: 'city',
+                state_placeholder: 'state',
+                postalCode_placeholder: 'zip code'
             }
 
         }
@@ -30,6 +39,11 @@
 
     const props = defineProps({
         event: CalendarEvent
+    });
+    onBeforeMount(() => {
+        if (props.event && ! props.event.location ) {
+            props.event.location = new EventLocation();
+        }
     });
 
     const state = reactive({ err: '' });

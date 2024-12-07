@@ -3,7 +3,9 @@ import sinon from 'sinon';
 import EventService from '../service/events';
 import { EventEntity, EventContentEntity } from '../../common/entity/event';
 import { CalendarEventContent, language } from '../../../common/model/events';
+import LocationService from '../service/locations';
 import { Account } from '../../../common/model/account';
+import { EventLocation } from '../../../common/model/location';
 
 describe('listEvents', () => {
 
@@ -73,6 +75,26 @@ describe('createEvent', () => {
         expect(saveContentStub.called).toBe(true);
     });
 
+    it('should create an event with a location', async () => {
+        let saveStub = sandbox.stub(EventEntity.prototype, 'save');
+        let findLocationStub = sandbox.stub(LocationService, 'findOrCreateLocation');
+        let eventSpy = sandbox.spy(EventEntity, 'fromModel');
+
+        findLocationStub.resolves(new EventLocation('testId','testLocation', 'testAddress'));
+
+        let event = await EventService.createEvent(new Account('testAccountId', 'testme', 'testme'), {
+            location: {
+                name: "testLocation",
+                address: "testAddress"
+            }
+        });
+
+        expect(event.id).toBeDefined();
+        expect(eventSpy.returnValues[0].accountId).toBe('testAccountId');
+        expect(event.location).toBeDefined();
+        expect(saveStub.called).toBe(true);
+    })
+
 });
 
 describe('updateEvent', () => {
@@ -114,6 +136,7 @@ describe('updateEvent', () => {
     it('should update an event', async () => {
         let findEventStub = sandbox.stub(EventEntity, 'findByPk');
         let findEventContentStub = sandbox.stub(EventContentEntity, 'findOne');
+        let saveEventStub = sandbox.stub(EventEntity.prototype, 'save');
         let saveContentStub = sandbox.stub(EventContentEntity.prototype, 'save');
 
         findEventStub.resolves(new EventEntity({ accountId: 'testAccountId' }));
@@ -135,6 +158,7 @@ describe('updateEvent', () => {
 
     it('should delete event content if given empty data', async () => {
         let findEventStub = sandbox.stub(EventEntity, 'findByPk');
+        let saveEventStub = sandbox.stub(EventEntity.prototype, 'save');
         let findEventContentStub = sandbox.stub(EventContentEntity, 'findOne');
         let destroyContentStub = sandbox.stub(EventContentEntity.prototype, 'destroy');
 
@@ -153,6 +177,7 @@ describe('updateEvent', () => {
 
     it('should delete event content if given empty data except for language', async () => {
         let findEventStub = sandbox.stub(EventEntity, 'findByPk');
+        let saveEventStub = sandbox.stub(EventEntity.prototype, 'save');
         let findEventContentStub = sandbox.stub(EventContentEntity, 'findOne');
         let destroyContentStub = sandbox.stub(EventContentEntity.prototype, 'destroy');
 
@@ -171,6 +196,7 @@ describe('updateEvent', () => {
 
     it('should delete event content if given undefined data', async () => {
         let findEventStub = sandbox.stub(EventEntity, 'findByPk');
+        let saveEventStub = sandbox.stub(EventEntity.prototype, 'save');
         let findEventContentStub = sandbox.stub(EventContentEntity, 'findOne');
         let destroyContentStub = sandbox.stub(EventContentEntity.prototype, 'destroy');
 
@@ -189,6 +215,7 @@ describe('updateEvent', () => {
 
     it('should create event content if not found', async () => {
         let findEventStub = sandbox.stub(EventEntity, 'findByPk');
+        let saveEventStub = sandbox.stub(EventEntity.prototype, 'save');
         let findEventContentStub = sandbox.stub(EventContentEntity, 'findOne');
         let createContentStub = sandbox.stub(EventService, 'createEventContent');
 
@@ -208,6 +235,46 @@ describe('updateEvent', () => {
         expect(updatedEvent.content("en").name).toBe('updatedName');
         expect(updatedEvent.content("en").description).toBe('updatedDescription');
         expect(createContentStub.called).toBe(true);
+    });
+
+    it('should add a location to an event', async () => {
+        let findEventStub = sandbox.stub(EventEntity, 'findByPk');
+        let saveEventStub = sandbox.stub(EventEntity.prototype, 'save');
+        let findLocationStub = sandbox.stub(LocationService, 'findOrCreateLocation');
+
+        findEventStub.resolves(new EventEntity({ accountId: 'testAccountId' }));
+        findLocationStub.resolves(new EventLocation('testId','testLocation', 'testAddress'));
+
+        let updatedEvent = await EventService.updateEvent(new Account('testAccountId', 'testme', 'testme'), 'testEventId', {
+            location: {
+                name: "testLocation",
+                address: "testAddress"
+            }
+        });
+
+        expect(saveEventStub.called).toBe(true);
+        expect(findLocationStub.called).toBe(true);
+        expect(updatedEvent.location).toBeDefined();
+        expect(updatedEvent.location?.id === 'testId');
+    });
+
+    it('should clear location from an event', async () => {
+
+        let eventEntity = EventEntity.build({ accountId: 'testAccountId', locationId: 'testLocationId' });
+
+        let findEventStub = sandbox.stub(EventEntity, 'findByPk');
+        let saveEventStub = sandbox.stub(EventEntity.prototype, 'save');
+        let findLocationStub = sandbox.stub(LocationService, 'findOrCreateLocation');
+
+        findEventStub.resolves(eventEntity);
+        findLocationStub.resolves(new EventLocation('testId','testLocation', 'testAddress'));
+
+        let updatedEvent = await EventService.updateEvent(new Account('testAccountId', 'testme', 'testme'), 'testEventId', {});
+
+        expect(saveEventStub.called).toBe(true);
+        expect(findLocationStub.called).toBe(false);
+        expect(updatedEvent.location).toBeNull();
+        expect(eventEntity.locationId).toBe('');
     });
 
 

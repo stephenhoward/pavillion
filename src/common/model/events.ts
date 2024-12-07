@@ -1,15 +1,16 @@
 import { Model, PrimaryModel } from './model';
+import { EventLocation } from './location';
 
 class CalendarEvent extends PrimaryModel {
     date: string = '';
-    location: string = '';
+    location: EventLocation | null = null;
     parentEvent: CalendarEvent | null = null;
     _content: Record<string, CalendarEventContent> = {};
 
-    constructor(id?: string, date?: string, location?: string) {
+    constructor(id?: string, date?: string, location?: EventLocation) {
         super(id);
         this.date = date ?? '';
-        this.location = location ?? '';
+        this.location = location ?? null;
     }
 
     content(language: string): CalendarEventContent {
@@ -24,7 +25,9 @@ class CalendarEvent extends PrimaryModel {
     }
 
     static fromObject(obj: Record<string, any>): CalendarEvent {
-        let event = new CalendarEvent(obj.id, obj.date, obj.location);
+        let event = new CalendarEvent(obj.id, obj.date);
+
+        event.location = obj.location ? EventLocation.fromObject(obj.location) : null;
 
         if ( obj.content ) {
             for( let [language,strings] of Object.entries(obj.content) ) {
@@ -40,7 +43,7 @@ class CalendarEvent extends PrimaryModel {
         return {
             id: this.id,
             date: this.date,
-            location: this.location,
+            location: this.location?.toObject(),
             content: Object.fromEntries(
                 Object.entries(this._content)
                     .map(([language, strings]: [string, CalendarEventContent]) => [language, strings.toObject()])

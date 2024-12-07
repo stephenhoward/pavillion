@@ -48,7 +48,7 @@ describe('Editor Behavior', () => {
     })
 
     it('new event', async () => {
-        const { wrapper, router } = mountedEditor(new CalendarEvent('', '', ''));
+        const { wrapper, router } = mountedEditor(new CalendarEvent('', ''));
         const eventStore = useEventStore();
 
         let createStub = sandbox.stub(ModelService, 'createModel');
@@ -56,7 +56,7 @@ describe('Editor Behavior', () => {
         let addEventStoreStub = sandbox.stub(eventStore, 'addEvent');
         let updateEventStoreStub = sandbox.stub(eventStore, 'updateEvent');
 
-        createStub.resolves(new CalendarEvent('id', 'testName', 'testDescription'));
+        createStub.resolves(new CalendarEvent('id', 'testDate'));
 
         wrapper.find('input[name="name"]').setValue('testName');
         wrapper.find('input[name="description"]').setValue('testDescription');
@@ -70,7 +70,7 @@ describe('Editor Behavior', () => {
     });
 
     it('existing event', async () => {
-        const { wrapper, router } = mountedEditor(new CalendarEvent('hasId', '', ''));
+        const { wrapper, router } = mountedEditor(new CalendarEvent('hasId', ''));
         const eventStore = useEventStore();
 
         let createStub = sandbox.stub(ModelService, 'createModel');
@@ -78,7 +78,7 @@ describe('Editor Behavior', () => {
         let addEventStoreStub = sandbox.stub(eventStore, 'addEvent');
         let updateEventStoreStub = sandbox.stub(eventStore, 'updateEvent');
 
-        updateStub.resolves(new CalendarEvent('hasId', 'testName', 'testDescription'));
+        updateStub.resolves(new CalendarEvent('hasId', 'testDate'));
 
         wrapper.find('input[name="name"]').setValue('testName');
         wrapper.find('input[name="description"]').setValue('testDescription');

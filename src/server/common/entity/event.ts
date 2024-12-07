@@ -1,6 +1,7 @@
 import { Model, Table, Column, PrimaryKey, BelongsTo, DataType, ForeignKey, HasMany } from 'sequelize-typescript';
 import db from './db';
 import { CalendarEvent, CalendarEventContent, language } from '../../../common/model/events';
+import { LocationEntity } from './location';
 import { AccountEntity } from './account';
 import { a } from 'vitest/dist/chunks/suite.B2jumIFP';
 import { lang } from 'moment';
@@ -23,6 +24,10 @@ class EventEntity extends Model {
     @Column({ type: DataType.UUID })
     declare accountId: string;
 
+    @ForeignKey(() => LocationEntity)
+    @Column({ type: DataType.UUID })
+    declare locationId: string;
+
     @BelongsTo(() => EventEntity)
     declare parentEvent: EventEntity;
 
@@ -31,6 +36,9 @@ class EventEntity extends Model {
 
     @HasMany(() => EventContentEntity)
     declare content: EventContentEntity[];
+
+    @BelongsTo(() => LocationEntity)
+    declare location: LocationEntity;
 
     toModel(): CalendarEvent {
         return new CalendarEvent( this.accountId, this.id );

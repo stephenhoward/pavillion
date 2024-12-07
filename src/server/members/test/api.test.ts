@@ -68,7 +68,7 @@ describe('Event API', () => {
     it('createEvent: should succeed', async () => {
         let eventStub = eventSandbox.stub(EventService, 'createEvent');
         router.post('/handler', addRequestUser, eventHandlers.createEvent);
-        eventStub.resolves(new CalendarEvent('id', 'testme', 'testme'));
+        eventStub.resolves(new CalendarEvent('id', 'testme'));
 
         const response = await request(testApp(router))
             .post('/handler');
@@ -93,7 +93,7 @@ describe('Event API', () => {
     it('updateEvent: should succeed', async () => {
         let eventStub = eventSandbox.stub(EventService, 'updateEvent');
         router.post('/handler', addRequestUser, eventHandlers.updateEvent);
-        eventStub.resolves(new CalendarEvent('id', 'testme', 'testme'));
+        eventStub.resolves(new CalendarEvent('id', 'testme'));
 
         const response = await request(testApp(router))
             .post('/handler');

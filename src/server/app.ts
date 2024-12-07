@@ -7,7 +7,7 @@ import AuthV1Routes from './authentication/api/v1';
 import MemberV1Routes from './members/api/v1';
 import db, { seedDB } from './common/entity/db';
 
-const main = (providedApp: express.Application): express.Application => {
+const main = (providedApp?: express.Application): express.Application => {
     const app: express.Application = providedApp || express();
 
     app.set("views", path.join(path.resolve(), "src/server/templates"));
