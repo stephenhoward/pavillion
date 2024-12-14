@@ -6,19 +6,44 @@ section {
     margin-top: 10px;
     label {
         display: block;
+        margin-bottom: 10px;
     }
     input {
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        appearance: none;
         font-size: 14px;
-        &[type="datetime-local"] {
-            font-size: 14px;
+        display: block;
+        margin: 6px 0;
+        border-radius: 6px;
+        border: 1px solid $light-mode-border;
+        padding: 6px;
+        @include dark-mode {
+            color: $dark-mode-input-text;
+            background: $dark-mode-input-background;
+            border-color: $dark-mode-border;
         }
+    }
+    div.schedule {
+        margin-bottom: 15px;
     }
     @include dark-mode {
         border-top: 1px solid $dark-mode-border;
     }
 }
 button {
+    font-size: 14px;
+    border: 1px solid $light-mode-border;
+    border-radius: 6px;
+    padding: 6px 10px;
+    margin-right: 10px;
+    @include dark-mode {
+        color: $dark-mode-text;
+        background: $dark-mode-background;
+        border-color: $dark-mode-border;
+    }
     &.remove {
+        font-size: 20px;
         background: none;
         border: none;
         display: block;
@@ -54,10 +79,10 @@ div.schedule {
         <section>
             <label>Dates</label>
             <div class="schedule" v-for="(schedule,index) in props.event.schedules">
-                <button class="remove" v-if="props.event.schedules.length > 1" type="button" @click="props.event.dropSchedule(index)"><img src="../assets/remove_icon.svg" alt="Remove Schedule"/></button>
+                <button class="remove" v-if="props.event.schedules.length > 1" type="button" @click="props.event.dropSchedule(index)">&times;</button>
                 <event-recurrence-view :schedule="schedule" />
             </div>
-        <button type="button" @click="props.event.addSchedule()">Add Schedule</button>
+            <button type="button" @click="props.event.addSchedule()">{{ t("add_date_button") }}</button>
         </section>
         <section>
           <button type="submit" @click="saveModel(props.event)">{{ props.event.id ? t("update_button") : t("create_button") }}</button>
@@ -86,6 +111,7 @@ div.schedule {
                 'create_button': 'Create Event',
                 'update_button': 'Update Event',
                 'close_button': 'Close',
+                'add_date_button': 'Add another date',
                 name_placeholder: 'event name',
                 description_placeholder: 'event description',
                 location_name_placeholder: 'name',

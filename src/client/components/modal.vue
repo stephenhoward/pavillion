@@ -47,6 +47,8 @@ div.modal {
         span.close {
             display: block;
             text-align: right;
+            font-size: 20px;
+            cursor: pointer;
         }
         span.title {
             font-size: 16px;

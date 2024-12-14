@@ -1,6 +1,7 @@
 
 $light-mode-background: #fff;
 $dark-mode-background: #3a3a3a;
+$dark-mode-input-background: #2a2a2a;
 $dark-mode-background-gradient: linear-gradient(0deg, #111 0%, #3a3a3a 50%);
 
 $light-mode-sidebar-background: #3a3a3a;
@@ -8,6 +9,8 @@ $dark-mode-sidebar-background: #222;
 
 $light-mode-text: #000;
 $dark-mode-text: #eee;
+$dark-mode-input-text: #fff;
+$dark-mode-filter: brightness(93.3%);
 
 $light-mode-border: rgba(0,0,0,.3);
 $dark-mode-border: rgba(238,238,238,.3);
