@@ -1,5 +1,5 @@
 <style scoped lang="scss">
-@import '../assets/mixins.scss';
+@use '../assets/mixins' as *;
 section {
     border-top: 1px soilid $light-mode-border;
     padding: 10px;
@@ -35,7 +35,7 @@ div.schedule {
 </style>
 
 <template>
-    <modal-layout >
+    <modal-layout :title="props.event.id ? t('edit_event_title') : t('create_event_title')">
     <div class="event">
         <div class="error" v-if="state.err">{{ state.err }}</div>
         <section>
@@ -45,6 +45,7 @@ div.schedule {
         </section>
         <section>
             <label>Location</label>
+            <input type="text" name="name" v-bind:placeholder="t('location_name_placeholder')" v-model="props.event.location.name">
             <input type="text" name="address" v-bind:placeholder="t('address_placeholder')" v-model="props.event.location.address">
             <input type="text" name="city" v-bind:placeholder="t('city_placeholder')" v-model="props.event.location.city">
             <input type="text" name="state" v-bind:placeholder="t('state_placeholder')" v-model="props.event.location.state">
@@ -58,14 +59,16 @@ div.schedule {
             </div>
         <button type="button" @click="props.event.addSchedule()">Add Schedule</button>
         </section>
-        <button type="submit" @click="saveModel(props.event)">{{ props.event.id ? t("update_button") : t("create_button") }}</button>
-        <button type="button" @click="$emit('close')">Close</button>
+        <section>
+          <button type="submit" @click="saveModel(props.event)">{{ props.event.id ? t("update_button") : t("create_button") }}</button>
+          <button type="button" @click="$emit('close')">Close</button>
+        </section>
     </div>
     </modal-layout>
 </template>
 
 <script setup>
-    import { reactive, defineProps } from 'vue';
+    import { reactive } from 'vue';
     import { useI18n } from 'vue-i18n';
     import { CalendarEvent } from '../../common/model/events';
     import ModelService from '../service/models';
@@ -78,11 +81,14 @@ div.schedule {
     const { t } = useI18n({
         messages: {
             en: {
+                'edit_event_title': 'Edit Event',
+                'create_event_title': 'Create Event',
                 'create_button': 'Create Event',
                 'update_button': 'Update Event',
                 'close_button': 'Close',
                 name_placeholder: 'event name',
                 description_placeholder: 'event description',
+                location_name_placeholder: 'name',
                 address_placeholder: 'event address',
                 city_placeholder: 'city',
                 state_placeholder: 'state',

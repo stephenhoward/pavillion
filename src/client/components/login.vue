@@ -84,7 +84,7 @@
 </script>
 
 <style scoped lang="scss">
-@import '../assets/mixins.scss';
+@use '../assets/mixins' as *;
 
 body {
     display:               grid;

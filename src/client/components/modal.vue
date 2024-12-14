@@ -2,6 +2,7 @@
     <div>
         <div class="modal">
             <div class="modal-content">
+                <span class="title" >{{ props.title }}</span>
                 <span class="close" @click="$emit('close')">&times;</span>
                 <slot></slot>
             </div>
@@ -10,13 +11,15 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
 
+const props = defineProps({
+    title: String
+});
 
 </script>
 
 <style scoped lang="scss">
-@import '../assets/mixins.scss';
+@use '../assets/mixins' as *;
 
 div.modal {
     position: fixed;
@@ -44,6 +47,11 @@ div.modal {
         span.close {
             display: block;
             text-align: right;
+        }
+        span.title {
+            font-size: 16px;
+            display: block;
+            float: left;
         }
     }
  }

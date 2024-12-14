@@ -58,7 +58,7 @@
 </template>
 
 <script setup>
-import { defineProps, reactive } from 'vue';
+import { reactive } from 'vue';
 import { CalendarEventSchedule } from '../../common/model/events';
 
 const props = defineProps({

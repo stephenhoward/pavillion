@@ -8,7 +8,7 @@
 </template>
 
 <style scoped lang="scss">
-@import '../assets/mixins.scss';
+@use '../assets/mixins' as *;
 
 * {
     font-family: 'Helvetica Neue';
@@ -45,11 +45,6 @@ body {
 
     div.root {
 
-      @include dark-mode {
-            background: $dark-mode-background;
-            color:            $dark-mode-text;
-          }
-
         display:    grid;
         height:     100%;
         min-height: 100%;
@@ -69,6 +64,11 @@ body {
         @include large-size-device {
             grid-template-rows: [ top ] 280px  [ main ] auto [ end ];
         }
+
+        @include dark-mode {
+            background: $dark-mode-background;
+            color:            $dark-mode-text;
+          }
     }
 }
 .logo {

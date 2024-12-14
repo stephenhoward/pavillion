@@ -13,4 +13,11 @@ export default defineConfig({
       input: "./src/client/app.ts",
     },
   },
+  css: {
+    preprocessorOptions: {
+      scss: {
+        api: `modern-compiler`,
+      },
+    },
+  },
 });
