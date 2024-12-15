@@ -29,6 +29,9 @@ class EventService {
                     e.addContent( c.toModel() );
                 }
             }
+            if ( event.location ) {
+                e.location = event.location.toModel();
+            }
 
             return e;
         });

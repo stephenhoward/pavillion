@@ -21,7 +21,7 @@ class EventLocation extends PrimaryModel {
     }
 
     static fromObject(obj: Record<string, any>): EventLocation {
-        return new EventLocation(obj.name, obj.address, obj.city, obj.state, obj.postalCode);
+        return new EventLocation(obj.id, obj.name, obj.address, obj.city, obj.state, obj.postalCode);
     }
 
     toObject(): Record<string, any> {
