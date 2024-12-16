@@ -55,6 +55,12 @@ class CalendarEvent extends PrimaryModel {
             }
         }
 
+        if ( obj.schedules ) {
+            for( let schedule of obj.schedules ) {
+                event.addSchedule(CalendarEventSchedule.fromObject(schedule));
+            }
+        }
+
         return event;
     }
 
@@ -66,7 +72,8 @@ class CalendarEvent extends PrimaryModel {
             content: Object.fromEntries(
                 Object.entries(this._content)
                     .map(([language, strings]: [string, CalendarEventContent]) => [language, strings.toObject()])
-            )
+            ),
+            schedules: this.schedules.map(schedule => schedule.toObject())
         };
     }
 
@@ -124,12 +131,8 @@ class CalendarEventSchedule extends Model {
     count: number = 0;
     frequency: EventFrequency | null = null;
     interval: number = 0;
-    byMonth: number[] = [];
-    byMonthDay: string[] = [];
-    byYearDay: number[] = [];
-    byWeekNumber: number[] = [];
-    byWeekday: number[] = [];
-    isException: boolean = false;
+    byDay: string[] = [];
+    isExclusion: boolean = false;
 
     constructor(id?: string, startDate?: DateTime, endDate?: DateTime) {
         super();
@@ -161,12 +164,8 @@ class CalendarEventSchedule extends Model {
         }
         schedule.interval = obj.interval;
         schedule.count = obj.count;
-        schedule.byWeekNumber = obj.byWeekNumber;
-        schedule.byWeekday = obj.byWeekday;
-        schedule.byMonth = obj.byMonth;
-        schedule.byMonthDay = obj.byMonthDay;
-        schedule.byYearDay = obj.byYearDay;
-        schedule.isException = obj.isException;
+        schedule.byDay = obj.byDay;
+        schedule.isExclusion = obj.isException;
 
         return schedule;
     }
@@ -179,12 +178,8 @@ class CalendarEventSchedule extends Model {
             frequency: this.frequency as string,
             interval: this.interval,
             count: this.count,
-            byWeekNumber: this.byWeekNumber,
-            byWeekday: this.byWeekday,
-            byMonth: this.byMonth,
-            byMonthDay: this.byMonthDay,
-            byYearDay: this.byYearDay,
-            isException: this.isException
+            byDay: this.byDay,
+            isException: this.isExclusion
         };
     }
 }

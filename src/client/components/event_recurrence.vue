@@ -67,11 +67,11 @@ div.month-parameters {
 <template>
 <div class="recurrence-rule">
     <div class="summary">
-        <input type="datetime-local" v-model="props.schedule.startDate" />
+        <input type="datetime-local" v-model="state.startDate" @input="compileRecurrence()"/>
     <label>
         <!--button class="disclosure" v-if="props.schedule.frequency.length > 0" type="button" @click="state.showRecurrence = !state.showRecurrence">{{ state.showRecurrence ? '▼' : '▶' }}</button-->
         {{ t('frequency-label') }}:
-            <select v-model="props.schedule.frequency" @change="state.showRecurrence = props.schedule.frequency.length > 0 ? true : false">
+            <select v-model="props.schedule.frequency" @change="state.showRecurrence = props.schedule.frequency.length > 0 ? true : false; compileRecurrence()">
             <option value="">{{ t('frequencyNone') }}</option>
             <option value="daily">{{  t('frequencyDaily') }}</option>
             <option value="weekly">{{ t('frequencyWeekly') }}</option>
@@ -82,29 +82,29 @@ div.month-parameters {
     </div>
     <form class="repeats" v-if="state.showRecurrence == true">
         <label class="repeat-interval" v-if="props.schedule.frequency">
-            every <input type="number" v-model="props.schedule.interval" /> {{  props.schedule.frequency ? t( props.schedule.frequency + 'Term') : '' }}
+            every <input type="number" v-model="props.schedule.interval" @change="compileRecurrence()" /> {{  props.schedule.frequency ? t( props.schedule.frequency + 'Term') : '' }}
         </label>
 
         <div class="week-parameters" v-if="props.schedule.frequency === 'weekly'">
             {{ t('on-weekday-label') }}:
-            <label v-for="day in ['sun','mon','tue','wed','thu','fri','sat']">
-            <input type="checkbox" v-model="state.weekdays[day]" /> {{ t(day) }}
+            <label v-for="day in Object.keys(state.weekdays)">
+            <input type="checkbox" v-model="state.weekdays[day]" @change="compileRecurrence()" /> {{ t(day) }}
             </label>
         </div>
 
         <div class="month-parameters" v-if="props.schedule.frequency == 'monthly'" >
             <div v-for="week in [1,2,3,4,5]">
-                <label v-for="day in ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']">
-                    <input type="checkbox" v-model="state.monthlyWeekdayCheckboxes[week + day.toUpperCase()]" /> {{ t(week + 'ord') }} {{ t(day) }}
+                <label v-for="day in Object.keys(state.weekdays)">
+                    <input type="checkbox" v-model="state.monthlyWeekdayCheckboxes[week + day]" @change="compileRecurrence()" /> {{ t(week + 'ord') }} {{ t(day) }}
                 </label>
             </div>
         </div>
 
         <div class="end-type" v-if="props.schedule.frequency">
             {{ t('endType-label') }}: 
-            <label><input type="radio" value="none" v-model="state.endType" /> never</label>
-            <label><input type="radio" value="after" v-model="state.endType" /> after <input type="number" v-model="props.schedule.count" /> occurrences</label>
-            <label><input type="radio" value="on" v-model="state.endType" /> on <input type="date" v-model="props.schedule.endDate" /></label>
+            <label><input type="radio" value="none" v-model="state.endType" @change="compileRecurrence()"/> never</label>
+            <label><input type="radio" value="after" v-model="state.endType" @change="compileRecurrence()" /> after <input type="number" v-model="props.schedule.count" @change="state.endType='after'; compileRecurrence()" /> occurrences</label>
+            <label><input type="radio" value="on" v-model="state.endType" @change="compileRecurrence()" /> on <input type="date" v-model="state.endDate" @input="state.endType='on'; compileRecurrence()" /></label>
         </div>
     </form>
 </div>
@@ -114,6 +114,7 @@ div.month-parameters {
 import { reactive } from 'vue';
 import { CalendarEventSchedule } from '../../common/model/events';
 import { useI18n } from 'vue-i18n';
+import { DateTime } from 'luxon';
 
 const props = defineProps({
     schedule: CalendarEventSchedule,
@@ -133,13 +134,13 @@ const { t } = useI18n({
                 '4ord': '4th',
                 '5ord': '5th',
 
-                'sun': 'Sunday',
-                'mon': 'Monday',
-                'tue': 'Tuesday',
-                'wed': 'Wednesday',
-                'thu': 'Thursday',
-                'fri': 'Friday',
-                'sat': 'Saturday',
+                'SU': 'Sunday',
+                'MO': 'Monday',
+                'TU': 'Tuesday',
+                'WE': 'Wednesday',
+                'TH': 'Thursday',
+                'FR': 'Friday',
+                'SA': 'Saturday',
 
                 'frequency-label': 'repeats',
                 'frequencyNone': 'Never',
@@ -155,63 +156,77 @@ const { t } = useI18n({
         }
     });
 
+    console.log(props.schedule.startDate);
 const state = reactive({
     showRecurrence: false,
+    startDate: props.schedule.startDate ? props.schedule.startDate.toISO() : '',
+    endDate: props.schedule.endDate ? props.schedule.endDate.toISO() : '',
     endType: 'none',
     weekdays: {
-        sun: false,
-        mon: false,
-        tue: false,
-        wed: false,
-        thu: false,
-        fri: false,
-        sat: false
+        SU: false,
+        MO: false,
+        TU: false,
+        WE: false,
+        TH: false,
+        FR: false,
+        SA: false
     },
     monthlyWeekdayCheckboxes: {
-        '1SUN': false,
-        '1MON': false,
-        '1TUE': false,
-        '1WED': false,
-        '1THU': false,
-        '1FRI': false,
-        '1SAT': false,
-        '2SUN': false,
-        '2MON': false,
-        '2TUE': false,
-        '2WED': false,
-        '2THU': false,
-        '2FRI': false,
-        '2SAT': false,
-        '3SUN': false,
-        '3MON': false,
-        '3TUE': false,
-        '3WED': false,
-        '3THU': false,
-        '3FRI': false,
-        '3SAT': false,
-        '4SUN': false,
-        '4MON': false,
-        '4TUE': false,
-        '4WED': false,
-        '4THU': false,
-        '4FRI': false,
-        '4SAT': false,
-        '5SUN': false,
-        '5MON': false,
-        '5TUE': false,
-        '5WED': false,
-        '5THU': false,
-        '5FRI': false,
-        '5SAT': false
-    },
-    monthlyWeekdayCheckboxes: {
-        sunday: false,
-        monday: false,
-        tuesday: false,
-        wednesday: false,
-        thursday: false,
-        friday: false,
-        saturday: false
+        '1SU': false,
+        '1MO': false,
+        '1TU': false,
+        '1WE': false,
+        '1TH': false,
+        '1FR': false,
+        '1SA': false,
+        '2SU': false,
+        '2MO': false,
+        '2TU': false,
+        '2WE': false,
+        '2TH': false,
+        '2FR': false,
+        '2SA': false,
+        '3SU': false,
+        '3MO': false,
+        '3TU': false,
+        '3WE': false,
+        '3TH': false,
+        '3FR': false,
+        '3SA': false,
+        '4SU': false,
+        '4MO': false,
+        '4TU': false,
+        '4WE': false,
+        '4TH': false,
+        '4FR': false,
+        '4SA': false,
+        '5SU': false,
+        '5MO': false,
+        '5TU': false,
+        '5WE': false,
+        '5TH': false,
+        '5FR': false,
+        '5SA': false
     }
-});    
+});
+
+const compileRecurrence = () => {
+
+    props.schedule.startDate = state.startDate ? DateTime.fromISO(state.startDate) : null;
+    props.schedule.interval = props.schedule.frequency ? props.schedule.interval || 1 : 0;
+    props.schedule.count = props.schedule.frequency && state.endType == 'after' ? props.schedule.count : 0;
+    props.schedule.endDate = props.schedule.frequency && state.endType == 'on' ? props.schedule.endDate : '';
+
+    console.log('compileRecurrence', props.schedule.startDate);
+    props.schedule.byDay = props.schedule.frequency == 'weekly'
+        ? Object.keys(state.weekdays).filter( (day) => state.weekdays[day] )
+        : props.schedule.frequency == 'monthly'
+          ? Object.keys(state.monthlyWeekdayCheckboxes).filter( (day) => state.monthlyWeekdayCheckboxes[day] )
+          : [];
+
+    props.schedule.endDate = state.endType == 'on' && state.endDate
+        ? DateTime.fromISO(state.endDate)
+        : null;
+
+}
 </script>

@@ -29,7 +29,7 @@ onBeforeMount(async () => {
 <template>
   <p>Calendar</p>
   <ul v-for="event in store.events">
-    <li @click="$emit('openEvent',event)">{{ event.content("en").name }}</li>
+    <li @click="$emit('openEvent',event.clone())">{{ event.content("en").name }}</li>
   </ul>
 </template>
 

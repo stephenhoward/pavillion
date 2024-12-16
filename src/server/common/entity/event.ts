@@ -117,22 +117,10 @@ class EventScheduleEntity extends Model {
     declare count: number;
 
     @Column({ type: DataType.STRING })
-    declare by_week_number: string;
-
-    @Column({ type: DataType.STRING })
-    declare by_weekday: string;
-
-    @Column({ type: DataType.STRING })
-    declare by_month: string;
-
-    @Column({ type: DataType.STRING })
-    declare by_month_day: string;
-
-    @Column({ type: DataType.STRING })
-    declare by_year_day: string;
+    declare by_day: string;
 
     @Column({ type: DataType.BOOLEAN })
-    declare is_exception: boolean;
+    declare is_exclusion: boolean;
 
     @BelongsTo(() => EventEntity)
     declare event: EventEntity;
@@ -146,12 +134,8 @@ class EventScheduleEntity extends Model {
             frequency: this.frequency,
             interval: this.interval,
             count: this.count,
-            byWeekNumber: this.by_week_number.split(','),
-            byWeekday: this.by_weekday.split(','),
-            byMonth: this.by_month.split(','),
-            byMonthDay: this.by_month_day.split(','),
-            byYearDay: this.by_year_day.split(','),
-            isException: this.is_exception
+            byDay: this.by_day.split(','),
+            isExclusion: this.is_exclusion
         });
     }
 
@@ -164,12 +148,8 @@ class EventScheduleEntity extends Model {
             frequency: schedule.frequency as string,
             interval: schedule.interval,
             count: schedule.count,
-            by_week_number: schedule.byWeekNumber.join(','),
-            by_weekday: schedule.byWeekday.join(','),
-            by_month: schedule.byMonth.join(','),
-            by_month_day: schedule.byMonthDay.join(','),
-            by_year_day: schedule.byYearDay.join(','),
-            is_exception: schedule.isException
+            by_day: schedule.byDay.join(','),
+            is_exclusion: schedule.isExclusion
         });
     }
 };
