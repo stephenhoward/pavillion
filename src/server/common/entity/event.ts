@@ -3,6 +3,7 @@ import db from './db';
 import { CalendarEvent, CalendarEventContent, CalendarEventSchedule, language } from '../../../common/model/events';
 import { LocationEntity } from './location';
 import { AccountEntity } from './account';
+import { DateTime } from 'luxon';
 
 @Table({ tableName: 'event' })
 class EventEntity extends Model {
@@ -34,6 +35,9 @@ class EventEntity extends Model {
 
     @HasMany(() => EventContentEntity)
     declare content: EventContentEntity[];
+
+    @HasMany(() => EventScheduleEntity)
+    declare schedules: EventScheduleEntity[];
 
     @BelongsTo(() => LocationEntity)
     declare location: LocationEntity;
@@ -129,8 +133,8 @@ class EventScheduleEntity extends Model {
     toModel(): CalendarEventSchedule {
         return CalendarEventSchedule.fromObject({
             id: this.id,
-            start: this.start_date,
-            end: this.end_date,
+            start: DateTime.fromJSDate(this.start_date),
+            end: DateTime.fromJSDate(this.end_date),
             frequency: this.frequency,
             interval: this.interval,
             count: this.count,
@@ -140,7 +144,7 @@ class EventScheduleEntity extends Model {
     }
 
     // TODO: set timezone field
-    fromModel(schedule: CalendarEventSchedule): EventScheduleEntity {
+    static fromModel(schedule: CalendarEventSchedule): EventScheduleEntity {
         return EventScheduleEntity.build({
             id: schedule.id,
             start_date: schedule.startDate?.toJSDate(),

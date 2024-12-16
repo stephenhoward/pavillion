@@ -1,8 +1,8 @@
 import { v4 as uuidv4 } from 'uuid';
 import { Account } from "../../../common/model/account"
-import { EventContentEntity, EventEntity } from "../../common/entity/event"
-import { EventLocation } from "../../../common/model/location"
-import { CalendarEvent, CalendarEventContent } from "../../../common/model/events"
+import { EventContentEntity, EventEntity, EventScheduleEntity } from "../../common/entity/event"
+import { CalendarEvent, CalendarEventContent, CalendarEventSchedule } from "../../../common/model/events"
+import { LocationEntity } from "../../common/entity/location";
 import LocationService from "./locations"
 
 /**
@@ -20,7 +20,10 @@ class EventService {
      */
     static async listEvents(account: Account): Promise<CalendarEvent[]> {
 
-        const events = await EventEntity.findAll({ where: { account_id: account.id }, include: [EventContentEntity] });
+        const events = await EventEntity.findAll({
+            where: { account_id: account.id },
+            include: [EventContentEntity, LocationEntity, EventScheduleEntity]
+        });
 
         return events.map( (event) => {
             let e = event.toModel();
@@ -31,6 +34,11 @@ class EventService {
             }
             if ( event.location ) {
                 e.location = event.location.toModel();
+            }
+            if ( event.schedules ) {
+                for ( let s of event.schedules ) {
+                    e.addSchedule( s.toModel() );
+                }
             }
 
             return e;
@@ -66,7 +74,24 @@ class EventService {
             }
         }
 
+        if ( eventParams.schedules ) {
+            for( let schedule of eventParams.schedules ) {
+                event.addSchedule(await EventService.createEventSchedule(event.id, schedule as Record<string,any>));
+            }
+        }
+
         return event;
+    }
+
+    static async createEventSchedule(eventId: string, scheduleParams: Record<string,any>): Promise<CalendarEventSchedule> {
+        const schedule = CalendarEventSchedule.fromObject(scheduleParams);
+
+        schedule.id = uuidv4();
+        const scheduleEntity = EventScheduleEntity.fromModel(schedule);
+        scheduleEntity.event_id = eventId;
+        await scheduleEntity.save();
+
+        return schedule;
     }
 
     static async createEventContent(eventId: string, language: string, contentParams: Record<string,any>): Promise<CalendarEventContent> {
@@ -76,7 +101,7 @@ class EventService {
         const contentEntity = EventContentEntity.fromModel(content);
         contentEntity.id = uuidv4();
         contentEntity.event_id = eventId;
-        contentEntity.save();
+        await contentEntity.save();
 
         return content;
     }
@@ -152,6 +177,37 @@ class EventService {
             eventEntity.location_id = location.id;
             event.location = location;
         }
+
+        if ( eventParams.schedules ) {
+            for( let schedule of eventParams.schedules ) {
+
+                // TODO: validate schedule data so we don't store junk
+                if ( schedule.id ) {
+                    let scheduleEntity = await EventScheduleEntity.findOne({
+                        where: { event_id: eventId, id: schedule.id }
+                    });
+
+                    if ( ! scheduleEntity ) {
+                        throw Error ('Schedule not found for event');
+                    }
+
+                    await scheduleEntity.update({
+                        start_date: schedule.startDate,
+                        end_date: schedule.endDate,
+                        frequency: schedule.frequency,
+                        interval: schedule.interval,
+                        count: schedule.count,
+                        by_day: schedule.byDay,
+                        is_exclusion: schedule.isExclusion
+                    });
+                    event.addSchedule(scheduleEntity.toModel());
+                }
+                else {
+                    event.addSchedule(await EventService.createEventSchedule(eventId, schedule.toObject()));
+                }
+            }
+        }
+
         await eventEntity.save();
 
         return event;
