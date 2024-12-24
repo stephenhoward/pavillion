@@ -1,6 +1,8 @@
 {
   "name": "pavillion",
   "version": "0.0.0",
+  "repository": "github:stephenhoward/pavilion",
+  "license": "MIT",
   "type": "module",
   "private": true,
   "main": "src/server/app.ts",
