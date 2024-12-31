@@ -15,8 +15,13 @@ Pavillion is a federated events calendar. Using federation it aims to provide an
 
 - Open Source
 - No centralized service
-- No account required for the public to view events
-- Different pavillion hosts can determine what content they wish to host
+- No account required for the public to view events.
+- Different pavillion servers can determine what content they wish to host.
+
+### Flexibility
+
+- Provide an embeddable version of a calendar for easy inclusion in an organization's website.
+- Provide syncing/exporting to popular platforms (eg, Facebook) to reduce the effort of sharing events far and wide.
 
 ### Community
 
