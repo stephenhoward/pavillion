@@ -1,13 +1,14 @@
 import{ expect, describe, it, afterEach } from 'vitest';
-import { mountComponent } from '../test/lib/vue';
-import EditEvent from '../components/edit_event.vue';
-import sinon from 'sinon';
 import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { RouteRecordRaw } from 'vue-router';
-import { useEventStore } from '../stores/eventStore';
-import ModelService from '../service/models';
-import { CalendarEvent } from '../../common/model/events';
-import { EventLocation } from '../../common/model/location';
+import sinon from 'sinon';
+
+import { CalendarEvent } from '@/common/model/events';
+import { EventLocation } from '@/common/model/location';
+import { mountComponent } from '@/client/test/lib/vue';
+import { useEventStore } from '@/client/stores/eventStore';
+import ModelService from '@/client/service/models';
+import EditEvent from '@/client/components/edit_event.vue';
 
 const routes: RouteRecordRaw[] = [
     { path: '/login',  component: {}, name: 'login', props: true },

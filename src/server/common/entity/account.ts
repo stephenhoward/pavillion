@@ -1,8 +1,9 @@
 import { Model, Column, Table, BelongsTo, ForeignKey, DataType, PrimaryKey } from 'sequelize-typescript';
-import db from './db';
-import { Account } from '../../../common/model/account';
-import AccountInvitation from '../../../common/model/invitation';
-import AccountApplication from '../../../common/model/application';
+
+import { Account } from '@/common/model/account';
+import AccountInvitation from '@/common/model/invitation';
+import AccountApplication from '@/common/model/application';
+import db from '@/server/common/entity/db';
 
 @Table({ tableName: 'account' })
 class AccountEntity extends Model {

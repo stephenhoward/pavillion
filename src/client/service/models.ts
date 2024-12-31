@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { PrimaryModel } from '../../common/model/model';
+import { PrimaryModel } from '@/common/model/model';
 
 export default class ModelService {
 

@@ -1,17 +1,19 @@
 import config from 'config';
 import express from 'express';
 import path from "path";
-import { router as indexRoutes } from './app_routes';
-import AdminV1Routes from './accounts/api/v1';
-import AuthV1Routes from './authentication/api/v1';
-import MemberV1Routes from './members/api/v1';
-import db, { seedDB } from './common/entity/db';
+
+import db, { seedDB } from '@/server/common/entity/db';
+import { router as indexRoutes } from '@/server/app_routes';
+import AdminV1Routes from '@/server/accounts/api/v1';
+import AuthV1Routes from '@/server/authentication/api/v1';
+import MemberV1Routes from '@/server/members/api/v1';
 
 const main = (providedApp?: express.Application): express.Application => {
     const app: express.Application = providedApp || express();
 
     app.set("views", path.join(path.resolve(), "src/server/templates"));
 
+    // TODO: figure out dev vs prod asset serving
     // const publicPath = path.join(path.resolve(), "public");
     // const distPath = path.join(path.resolve(), "dist");
     // if (process.env.NODE_ENV === "production") {

@@ -1,10 +1,11 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import sinon from 'sinon';
-import AuthenticationService from '../service/auth';
-import CommonAccountService from '../../common/service/accounts';
-import { AccountEntity, AccountSecretsEntity } from '../../common/entity/account';
-import { Account } from '../../../common/model/account';
 import { DateTime } from 'luxon';
+
+import { Account } from '@/common/model/account';
+import { AccountEntity, AccountSecretsEntity } from '@/server/common/entity/account';
+import CommonAccountService from '@/server/common/service/accounts';
+import AuthenticationService from '@/server/authentication/service/auth';
 
 
 describe( 'checkPassword', async () => {

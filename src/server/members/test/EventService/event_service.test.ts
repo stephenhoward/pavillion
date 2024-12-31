@@ -1,9 +1,9 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import sinon from 'sinon';
 
-import { Account } from '../../../../common/model/account';
-import { EventEntity, EventContentEntity } from '../../../common/entity/event';
-import EventService from '../../service/events';
+import { Account } from '@/common/model/account';
+import { EventEntity, EventContentEntity } from '@/server/common/entity/event';
+import EventService from '@/server/members/service/events';
 
 describe('listEvents', () => {
 

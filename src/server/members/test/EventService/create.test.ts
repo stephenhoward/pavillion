@@ -2,11 +2,11 @@ import { describe, it, expect, afterEach } from 'vitest';
 import sinon from 'sinon';
 import { DateTime } from 'luxon';
 
-import { Account } from '../../../../common/model/account';
-import { EventLocation } from '../../../../common/model/location';
-import { EventEntity, EventContentEntity, EventScheduleEntity } from '../../../common/entity/event';
-import EventService from '../../service/events';
-import LocationService from '../../service/locations';
+import { Account } from '@/common/model/account';
+import { EventLocation } from '@/common/model/location';
+import { EventEntity, EventContentEntity, EventScheduleEntity } from '@/server/common/entity/event';
+import EventService from '@/server/members/service/events';
+import LocationService from '@/server/members/service/locations';
 
 describe('createEvent', () => {
 

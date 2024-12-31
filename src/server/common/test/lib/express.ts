@@ -1,5 +1,5 @@
 import express, { Request, Response, Router } from 'express';
-import { Account } from '../../../../common/model/account';
+import { Account } from '@/common/model/account';
 
 const addRequestUser = (req: Request, _res: Response, next: express.NextFunction): void => {
     req.user = new Account('id', 'testme', 'testme');

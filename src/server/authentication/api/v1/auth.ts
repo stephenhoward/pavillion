@@ -1,9 +1,10 @@
 import express, { Request, Response } from 'express';
-import AuthenticationService from '../../service/auth';
-import CommonAccountService from '../../../common/service/accounts';
 import passport from 'passport';
-import { Account } from '../../../../common/model/account';
-import ExpressHelper from '../../../common/helper/express';
+
+import { Account } from '@/common/model/account';
+import ExpressHelper from '@/server/common/helper/express';
+import CommonAccountService from '@/server/common/service/accounts';
+import AuthenticationService from '@/server/authentication/service/auth';
 
 const handlers = {
     login: async (req: Request, res: Response) => {

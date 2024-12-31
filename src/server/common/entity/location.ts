@@ -1,7 +1,8 @@
 import { Model, Table, Column, PrimaryKey, BelongsTo, DataType, ForeignKey, HasMany } from 'sequelize-typescript';
-import { EventLocation } from '../../../common/model/location';
-import { AccountEntity } from './account';
-import db from './db';
+
+import { EventLocation } from '@/common/model/location';
+import db from '@/server/common/entity/db';
+import { AccountEntity } from '@/server/common/entity/account';
 
 @Table({ tableName: 'location' })
 class LocationEntity extends Model {

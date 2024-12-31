@@ -1,7 +1,8 @@
 import { v4 as uuidv4 } from 'uuid';
-import { Account } from '../../../common/model/account';
-import { EventLocation } from '../../../common/model/location';
-import { LocationEntity } from '../../common/entity/location';
+
+import { Account } from '@/common/model/account';
+import { EventLocation } from '@/common/model/location';
+import { LocationEntity } from '@/server/common/entity/location';
 
 class LocationService {
     static async findLocation(account: Account, location: EventLocation): Promise<EventLocation|null> {

@@ -1,7 +1,8 @@
 import express, { Request, Response } from 'express';
-import ExpressHelper from '../../../common/helper/express';
-import EventService from '../../service/events';
-import { Account } from '../../../../common/model/account';
+
+import { Account } from '@/common/model/account';
+import ExpressHelper from '@/server/common/helper/express';
+import EventService from '@/server/members/service/events';
 
 const handlers = {
     listEvents: async (req: Request, res: Response) => {

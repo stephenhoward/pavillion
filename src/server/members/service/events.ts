@@ -1,9 +1,10 @@
 import { v4 as uuidv4 } from 'uuid';
-import { Account } from "../../../common/model/account"
-import { EventContentEntity, EventEntity, EventScheduleEntity } from "../../common/entity/event"
-import { CalendarEvent, CalendarEventContent, CalendarEventSchedule } from "../../../common/model/events"
-import { LocationEntity } from "../../common/entity/location";
-import LocationService from "./locations"
+
+import { Account } from "@/common/model/account"
+import { CalendarEvent, CalendarEventContent, CalendarEventSchedule } from "@/common/model/events"
+import { EventContentEntity, EventEntity, EventScheduleEntity } from "@/server/common/entity/event"
+import { LocationEntity } from "@/server/common/entity/location";
+import LocationService from "@/server/members/service/locations";
 
 /**
  * Service class for managing events
@@ -76,10 +77,7 @@ class EventService {
 
         if ( eventParams.schedules ) {
             for( let schedule of eventParams.schedules ) {
-                console.log('adding a schedule');
-                console.log(event.schedules);
                 event.addSchedule(await EventService.createEventSchedule(event.id, schedule as Record<string,any>));
-                console.log(event.schedules);
             }
         }
 

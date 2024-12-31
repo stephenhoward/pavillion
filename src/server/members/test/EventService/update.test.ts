@@ -1,12 +1,12 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import sinon from 'sinon';
 
-import { CalendarEventContent, language } from '../../../../common/model/events';
-import { Account } from '../../../../common/model/account';
-import { EventLocation } from '../../../../common/model/location';
-import { EventEntity, EventContentEntity } from '../../../common/entity/event';
-import EventService from '../../service/events';
-import LocationService from '../../service/locations';
+import { Account } from '@/common/model/account';
+import { CalendarEventContent, language } from '@/common/model/events';
+import { EventLocation } from '@/common/model/location';
+import { EventEntity, EventContentEntity } from '@/server/common/entity/event';
+import EventService from '@/server/members/service/events';
+import LocationService from '@/server/members/service/locations';
 
 describe('updateEvent', () => {
 

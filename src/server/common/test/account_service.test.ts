@@ -1,8 +1,9 @@
 import { describe, it, expect, expectTypeOf } from 'vitest';
 import sinon from 'sinon';
-import AccountService from '../service/accounts';
-import { AccountEntity, AccountSecretsEntity, AccountRoleEntity } from '../entity/account';
-import { Account } from '../../../common/model/account';
+
+import { Account } from '@/common/model/account';
+import { AccountEntity, AccountSecretsEntity, AccountRoleEntity } from '@/server/common/entity/account';
+import AccountService from '@/server/common/service/accounts';
 
 let accountEntityStub = sinon.stub(AccountEntity, 'findOne');
 let accountRoleEntityStub = sinon.stub(AccountRoleEntity, 'findAll');

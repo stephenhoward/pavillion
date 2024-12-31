@@ -1,23 +1,24 @@
 import { createApp, App } from 'vue';
-import './assets/style.scss';
-import AppVue from './components/app.vue';
-import CalendarView from './components/calendar.vue';
-import FeedView from './components/feed.vue';
-import ProfileView from './components/profile.vue';
-import InboxView from './components/inbox.vue';
-import AppViews from './components/app_views.vue';
-import AuthViews from './components/auth_views.vue';
-import AdminViews from './components/admin_views.vue';
-import LoginView from './components/login.vue';
-import LogoutView from './components/logout.vue';
-import PasswordForgotView from './components/password_forgot.vue';
-import PasswordResetView from './components/password_reset.vue';
-import RegisterView from './components/register.vue';
 import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
 import { createI18n, useI18n } from 'vue-i18n';
-import Authentication from './service/authn';
-import Config from './service/config';
 import { createPinia } from 'pinia';
+
+import '@/client/assets/style.scss';
+import AppVue from '@/client/components/app.vue';
+import CalendarView from '@/client/components/calendar.vue';
+import FeedView from '@/client/components/feed.vue';
+import ProfileView from '@/client/components/profile.vue';
+import InboxView from '@/client/components/inbox.vue';
+import AppViews from '@/client/components/app_views.vue';
+import AuthViews from '@/client/components/auth_views.vue';
+import AdminViews from '@/client/components/admin_views.vue';
+import LoginView from '@/client/components/login.vue';
+import LogoutView from '@/client/components/logout.vue';
+import PasswordForgotView from '@/client/components/password_forgot.vue';
+import PasswordResetView from '@/client/components/password_reset.vue';
+import RegisterView from '@/client/components/register.vue';
+import Authentication from '@/client/service/authn';
+import Config from '@/client/service/config';
 
 Config.init().then( (config) => {
 

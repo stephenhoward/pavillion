@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
-import LocationService from '../service/locations';
-import { EventLocation } from '../../../common/model/location';
-import { LocationEntity } from '../../common/entity/location';
-import { Account } from '../../../common/model/account';
-import { CalendarEvent } from '../../../common/model/events';
+
+import { Account } from '@/common/model/account';
+import { EventLocation } from '@/common/model/location';
+import { LocationEntity } from '@/server/common/entity/location';
+import LocationService from '@/server/members/service/locations';
 
 describe('findLocation', () => {
     

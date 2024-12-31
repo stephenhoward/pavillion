@@ -1,11 +1,12 @@
 import express, { Application, Router } from 'express';
-import { router as AuthRoutes} from './v1/auth';
 import passport from 'passport';
-import { Account } from '../../../common/model/account';
-import { Strategy as LocalStrategy } from 'passport-local';
 import passportJWT from 'passport-jwt';
-import AuthenticationService from '../service/auth';
-import CommonAccountService from '../../common/service/accounts';
+import { Strategy as LocalStrategy } from 'passport-local';
+
+import { Account } from '@/common/model/account';
+import CommonAccountService from '@/server/common/service/accounts';
+import { router as AuthRoutes} from '@/server/authentication/api/v1/auth';
+import AuthenticationService from '@/server/authentication/service/auth';
 
 const jwtSecret = 'secret';  // TODO: add secret here
 

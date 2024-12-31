@@ -8,6 +8,10 @@
     "outDir": "./build",
     "esModuleInterop": true,
     "strict": true,
-    "types": ["./vue.d.ts"]
+    "types": ["./vue.d.ts"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+    }
   }
 }

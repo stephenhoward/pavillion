@@ -1,8 +1,9 @@
 import { scryptSync } from 'crypto';
 import { DateTime } from 'luxon';
-import { AccountEntity, AccountSecretsEntity, AccountApplicationEntity, AccountInvitationEntity } from "../../common/entity/account"
-import { Account } from "../../../common/model/account"
-import CommonAccountService from '../../common/service/accounts';
+
+import { Account } from "@/common/model/account"
+import { AccountEntity, AccountSecretsEntity, AccountApplicationEntity, AccountInvitationEntity } from "@/server/common/entity/account"
+import CommonAccountService from '@/server/common/service/accounts';
 
 /**
  * Service class for managing accounts

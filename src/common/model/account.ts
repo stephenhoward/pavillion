@@ -1,4 +1,4 @@
-import { Model, PrimaryModel } from './model';
+import { Model, PrimaryModel } from '@/common/model/model';
 
 class Account extends PrimaryModel {
     username: string = '';

@@ -1,9 +1,10 @@
 import { Model, Table, Column, PrimaryKey, BelongsTo, DataType, ForeignKey, HasMany } from 'sequelize-typescript';
-import db from './db';
-import { CalendarEvent, CalendarEventContent, CalendarEventSchedule, language } from '../../../common/model/events';
-import { LocationEntity } from './location';
-import { AccountEntity } from './account';
 import { DateTime } from 'luxon';
+
+import { CalendarEvent, CalendarEventContent, CalendarEventSchedule, language } from '@/common/model/events';
+import db from '@/server/common/entity/db';
+import { LocationEntity } from '@/server/common/entity/location';
+import { AccountEntity } from '@/server/common/entity/account';
 
 @Table({ tableName: 'event' })
 class EventEntity extends Model {

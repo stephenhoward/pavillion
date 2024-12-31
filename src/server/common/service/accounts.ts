@@ -1,6 +1,7 @@
 import { scryptSync, randomBytes } from 'crypto';
-import { AccountEntity, AccountRoleEntity, AccountSecretsEntity } from "../entity/account"
-import { Account } from "../../../common/model/account"
+
+import { Account } from "@/common/model/account"
+import { AccountEntity, AccountRoleEntity, AccountSecretsEntity } from "@/server/common/entity/account"
 
 /**
  * Service class for managing accounts

@@ -1,6 +1,7 @@
-import { Model, PrimaryModel } from './model';
-import { EventLocation } from './location';
 import { DateTime } from 'luxon';
+
+import { Model, PrimaryModel } from '@/common/model/model';
+import { EventLocation } from '@/common/model/location';
 
 
 class CalendarEvent extends PrimaryModel {

@@ -1,5 +1,5 @@
 import express, { Application } from 'express';
-import { router as eventsRoutes } from './v1/events';
+import { router as eventsRoutes } from '@/server/members/api/v1/events';
 
 const apiV1 = (app: Application) => {
 

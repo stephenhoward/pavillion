@@ -2,11 +2,12 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import request from 'supertest';
 import express from 'express';
-import { handlers as eventHandlers } from '../api/v1/events';
-import EventService from '../service/events';
-import { CalendarEvent } from '../../../common/model/events';
-import { testApp, countRoutes, addRequestUser } from '../../common/test/lib/express';
-import apiV1 from '../api/v1';
+
+import { CalendarEvent } from '@/common/model/events';
+import { testApp, countRoutes, addRequestUser } from '@/server/common/test/lib/express';
+import apiV1 from '@/server/members/api/v1';
+import { handlers as eventHandlers } from '@/server/members/api/v1/events';
+import EventService from '@/server/members/service/events';
 
 describe('API v1', () => {
 

@@ -2,14 +2,16 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import request from 'supertest';
 import express, { Router } from 'express';
-import { handlers } from '../api/v1/auth';
-import CommonAccountService from '../../common/service/accounts';
-import AuthenticationService from '../service/auth';
-import { Account } from '../../../common/model/account';
 import passport from 'passport';
-import apiV1 from '../api/v1';
-import { addRequestUser, testApp, countRoutes } from '../../common/test/lib/express';
-import ExpressHelper from '../../common/helper/express';
+
+import { Account } from '@/common/model/account';
+import CommonAccountService from '@/server/common/service/accounts';
+import ExpressHelper from '@/server/common/helper/express';
+import { addRequestUser, testApp, countRoutes } from '@/server/common/test/lib/express';
+
+import apiV1 from '@/server/authentication/api/v1';
+import { handlers } from '@/server/authentication/api/v1/auth';
+import AuthenticationService from '@/server/authentication/service/auth';
 
 describe('API v1', () => {
 

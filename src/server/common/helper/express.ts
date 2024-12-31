@@ -1,7 +1,8 @@
 import express, { Request, Response } from 'express';
-import { Account } from '../../../common/model/account';
 import jwt from 'jsonwebtoken';
 import passport from 'passport';
+
+import { Account } from '@/common/model/account';
 
 interface User {
     id: string;

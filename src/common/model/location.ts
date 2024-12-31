@@ -1,4 +1,4 @@
-import { PrimaryModel } from './model';
+import { PrimaryModel } from '@/common/model/model';
 
 class EventLocation extends PrimaryModel {
     id: string = '';

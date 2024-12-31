@@ -1,9 +1,10 @@
 import{ expect, describe, it } from 'vitest';
-import { mountComponent } from '../test/lib/vue';
-import Login from '../components/login.vue';
-import sinon from 'sinon';
 import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { RouteRecordRaw } from 'vue-router';
+import sinon from 'sinon';
+
+import { mountComponent } from '@/client/test/lib/vue';
+import Login from '@/client/components/login.vue';
 
 const routes: RouteRecordRaw[] = [
     { path: '/login',  component: {}, name: 'login', props: true },

@@ -1,9 +1,7 @@
 import { mount } from '@vue/test-utils';
-import { createMemoryHistory, createRouter, RouteRecordRaw, Router } from 'vue-router';
+import { Router } from 'vue-router';
 import { createI18n } from 'vue-i18n';
-import { createApp } from 'vue';
 import { createPinia } from 'pinia';
-import { k } from 'vite/dist/node/types.d-aGj9QkWt';
 
 const mountComponent = (component: any, router: Router, config: Record<string, any> ) => {
 

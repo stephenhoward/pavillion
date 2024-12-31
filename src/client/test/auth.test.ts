@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import sinon from 'sinon';
 import axios from 'axios';
 
-import AuthenticationService from '../service/authn';
+import AuthenticationService from '@/client/service/authn';
 
 class LocalStore implements Storage {
 

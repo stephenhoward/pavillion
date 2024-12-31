@@ -156,7 +156,6 @@ const { t } = useI18n({
         }
     });
 
-    console.log(props.schedule.startDate);
 const state = reactive({
     showRecurrence: false,
     startDate: props.schedule.startDate ? props.schedule.startDate.toISO() : '',
@@ -217,7 +216,6 @@ const compileRecurrence = () => {
     props.schedule.count = props.schedule.frequency && state.endType == 'after' ? props.schedule.count : 0;
     props.schedule.endDate = props.schedule.frequency && state.endType == 'on' ? props.schedule.endDate : '';
 
-    console.log('compileRecurrence', props.schedule.startDate);
     props.schedule.byDay = props.schedule.frequency == 'weekly'
         ? Object.keys(state.weekdays).filter( (day) => state.weekdays[day] )
         : props.schedule.frequency == 'monthly'
