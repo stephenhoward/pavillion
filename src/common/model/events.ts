@@ -55,12 +55,6 @@ class CalendarEvent extends PrimaryModel {
             }
         }
 
-        if ( obj.schedules ) {
-            for( let schedule of obj.schedules ) {
-                event.addSchedule(CalendarEventSchedule.fromObject(schedule));
-            }
-        }
-
         return event;
     }
 

@@ -76,7 +76,10 @@ class EventService {
 
         if ( eventParams.schedules ) {
             for( let schedule of eventParams.schedules ) {
+                console.log('adding a schedule');
+                console.log(event.schedules);
                 event.addSchedule(await EventService.createEventSchedule(event.id, schedule as Record<string,any>));
+                console.log(event.schedules);
             }
         }
 
@@ -203,7 +206,7 @@ class EventService {
                     event.addSchedule(scheduleEntity.toModel());
                 }
                 else {
-                    event.addSchedule(await EventService.createEventSchedule(eventId, schedule.toObject()));
+                    event.addSchedule(await EventService.createEventSchedule(eventId, schedule));
                 }
             }
         }

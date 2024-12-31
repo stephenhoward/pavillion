@@ -138,7 +138,7 @@ class EventScheduleEntity extends Model {
             frequency: this.frequency,
             interval: this.interval,
             count: this.count,
-            byDay: this.by_day.split(','),
+            byDay: this.by_day ? this.by_day.split(',') : [],
             isExclusion: this.is_exclusion
         });
     }
@@ -152,7 +152,7 @@ class EventScheduleEntity extends Model {
             frequency: schedule.frequency as string,
             interval: schedule.interval,
             count: schedule.count,
-            by_day: schedule.byDay.join(','),
+            by_day: schedule.byDay ? schedule.byDay.join(',') : '',
             is_exclusion: schedule.isExclusion
         });
     }
