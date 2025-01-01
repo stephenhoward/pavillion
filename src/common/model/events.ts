@@ -180,5 +180,5 @@ class CalendarEventSchedule extends Model {
 }
 
 export {
-    CalendarEvent, CalendarEventContent, CalendarEventSchedule, language
+    CalendarEvent, CalendarEventContent, CalendarEventSchedule, language, EventFrequency
 }

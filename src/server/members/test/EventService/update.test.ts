@@ -1,14 +1,15 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import sinon from 'sinon';
+import { DateTime } from 'luxon';
 
 import { Account } from '@/common/model/account';
-import { CalendarEventContent, language } from '@/common/model/events';
+import { CalendarEventContent, CalendarEventSchedule, language, EventFrequency } from '@/common/model/events';
 import { EventLocation } from '@/common/model/location';
-import { EventEntity, EventContentEntity } from '@/server/common/entity/event';
+import { EventEntity, EventContentEntity, EventScheduleEntity } from '@/server/common/entity/event';
 import EventService from '@/server/members/service/events';
 import LocationService from '@/server/members/service/locations';
 
-describe('updateEvent', () => {
+describe('updateEvent with content', () => {
 
     let sandbox = sinon.createSandbox();
 
@@ -148,6 +149,16 @@ describe('updateEvent', () => {
         expect(createContentStub.called).toBe(true);
     });
 
+});
+
+describe('updateEvent with location', () => {
+
+    let sandbox = sinon.createSandbox();
+
+    afterEach(() => {
+        sandbox.restore();
+    });
+
     it('should add a location to an event', async () => {
         let findEventStub = sandbox.stub(EventEntity, 'findByPk');
         let saveEventStub = sandbox.stub(EventEntity.prototype, 'save');
@@ -188,5 +199,129 @@ describe('updateEvent', () => {
         expect(eventEntity.location_id).toBe('');
     });
 
+
+});
+
+describe('updateEvent with schedules', () => {
+
+    let sandbox = sinon.createSandbox();
+
+    afterEach(() => {
+        sandbox.restore();
+    });
+
+    it('should add a schedule to an event', async () => {
+        let findEventStub = sandbox.stub(EventEntity, 'findByPk');
+        let saveEventStub = sandbox.stub(EventEntity.prototype, 'save');
+        let createScheduleStub = sandbox.stub(EventService, 'createEventSchedule');
+        let findSchedulesStub = sandbox.stub(EventScheduleEntity, 'findAll');
+
+        findEventStub.resolves(EventEntity.build({ account_id: 'testAccountId', id: 'testEventId' }));
+        createScheduleStub.resolves(new CalendarEventSchedule('testScheduleId', DateTime.now(), DateTime.now().plus({days: 12})));
+        findSchedulesStub.resolves([]);
+
+        let updatedEvent = await EventService.updateEvent(new Account('testAccountId', 'testme', 'testme'), 'testEventId', {
+            schedules: [
+                {
+                    start: new Date(),
+                    end: new Date()
+                }
+            ]
+        });
+
+        expect(saveEventStub.called).toBe(true);
+        expect(createScheduleStub.called).toBe(true);
+        expect(updatedEvent.schedules.length).toBe(1);
+    });
+
+    it('should clear schedules from an event', async () => {
+
+        let findEventStub = sandbox.stub(EventEntity, 'findByPk');
+        let saveEventStub = sandbox.stub(EventEntity.prototype, 'save');
+        let findSchedulesStub = sandbox.stub(EventScheduleEntity, 'findAll');
+        let destroySchedulesStub = sandbox.stub(EventScheduleEntity, 'destroy');
+
+        findEventStub.resolves(EventEntity.build({ account_id: 'testAccountId', id: 'testEventId' }));
+        findSchedulesStub.resolves([ EventScheduleEntity.build({ event_id: 'testEventId', id: 'testScheduleId' }) ]);
+
+        let updatedEvent = await EventService.updateEvent(new Account('testAccountId', 'testme', 'testme'), 'testEventId', {
+            schedules: []
+        });
+
+        expect(saveEventStub.called).toBe(true);
+        expect(destroySchedulesStub.called).toBe(true);
+        expect(updatedEvent.schedules.length).toBe(0);
+    });
+
+    it('should modify a schedule in an event', async () => {
+        let scheduleEntity = EventScheduleEntity.build({
+            id: 'testScheduleId',
+            frequency: EventFrequency.WEEKLY as string,
+            interval: 3,
+        });
+
+        let findEventStub = sandbox.stub(EventEntity, 'findByPk');
+        let saveEventStub = sandbox.stub(EventEntity.prototype, 'save');
+        let findSchedulesStub = sandbox.stub(EventScheduleEntity, 'findAll');
+        let updateScheduleStub = sandbox.stub(EventScheduleEntity.prototype, 'update');
+
+        findEventStub.resolves(EventEntity.build({ account_id: 'testAccountId', id: 'testEventId' }));
+        findSchedulesStub.resolves([ scheduleEntity ]);
+        updateScheduleStub.callsFake(async (params) => {
+            for (let key in params) {
+                scheduleEntity.set(key, params[key]);
+            }
+
+            return scheduleEntity;
+        });
+
+        let updatedEvent = await EventService.updateEvent(new Account('testAccountId', 'testme', 'testme'), 'testEventId', {
+            schedules: [
+                {
+                    id: 'testScheduleId',
+                    frequency: EventFrequency.DAILY,
+                }
+            ]
+        });
+
+        expect(saveEventStub.called).toBe(true);
+        expect(findSchedulesStub.called).toBe(true);
+        expect(updatedEvent.schedules.length).toBe(1);
+        expect(updatedEvent.schedules[0].interval).toBe(3);
+        expect(updatedEvent.schedules[0].frequency).toBe(EventFrequency.DAILY);
+    });
+
+    // TODO: test replacing an event schedule with another one
+    it('should remove an existing schedule and add a new one', async () => {
+        let scheduleEntity = EventScheduleEntity.build({
+            id: 'testScheduleId',
+            frequency: EventFrequency.WEEKLY as string,
+            interval: 3,
+        });
+
+        let findEventStub = sandbox.stub(EventEntity, 'findByPk');
+        let saveEventStub = sandbox.stub(EventEntity.prototype, 'save');
+        let createScheduleStub = sandbox.stub(EventService, 'createEventSchedule');
+        let findSchedulesStub = sandbox.stub(EventScheduleEntity, 'findAll');
+        let destroySchedulesStub = sandbox.stub(EventScheduleEntity, 'destroy');
+
+        findEventStub.resolves(EventEntity.build({ account_id: 'testAccountId', id: 'testEventId' }));
+        findSchedulesStub.resolves([ scheduleEntity ]);
+        createScheduleStub.resolves(new CalendarEventSchedule('otherTestScheduleId', DateTime.now(), DateTime.now().plus({days: 12})));
+
+        let updatedEvent = await EventService.updateEvent(new Account('testAccountId', 'testme', 'testme'), 'testEventId', {
+            schedules: [ {
+                start: new Date(),
+                end: new Date()
+            } ]
+        });
+
+        expect(saveEventStub.called).toBe(true);
+        expect(createScheduleStub.called).toBe(true);
+        expect(destroySchedulesStub.called).toBe(true);
+        expect(updatedEvent.schedules.length).toBe(1);
+        expect(updatedEvent.schedules[0].id).toBe('otherTestScheduleId');
+
+    });
 
 });

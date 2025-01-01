@@ -180,32 +180,39 @@ class EventService {
         }
 
         if ( eventParams.schedules ) {
+            let existingSchedules = await EventScheduleEntity.findAll({ where: { event_id: eventId } });
+            let existingScheduleIds = existingSchedules.map( s => s.id );
+
+            console.log(existingScheduleIds);
             for( let schedule of eventParams.schedules ) {
 
-                // TODO: validate schedule data so we don't store junk
                 if ( schedule.id ) {
-                    let scheduleEntity = await EventScheduleEntity.findOne({
-                        where: { event_id: eventId, id: schedule.id }
-                    });
+                    let scheduleEntity = existingSchedules.find( s => s.id === schedule.id );
 
                     if ( ! scheduleEntity ) {
                         throw Error ('Schedule not found for event');
                     }
 
+                    existingScheduleIds = existingScheduleIds.filter( id => id !== schedule.id );
+                    // TODO: validate schedule data so we don't store junk
                     await scheduleEntity.update({
-                        start_date: schedule.startDate,
-                        end_date: schedule.endDate,
-                        frequency: schedule.frequency,
-                        interval: schedule.interval,
-                        count: schedule.count,
-                        by_day: schedule.byDay,
-                        is_exclusion: schedule.isExclusion
+                        start_date: schedule.startDate ?? scheduleEntity.start_date,
+                        end_date: schedule.endDate ?? scheduleEntity.end_date,
+                        frequency: schedule.frequency ?? scheduleEntity.frequency,
+                        interval: schedule.interval ?? scheduleEntity.interval,
+                        count: schedule.count ?? scheduleEntity.count,
+                        by_day: schedule.byDay ?? scheduleEntity.by_day,
+                        is_exclusion: schedule.isExclusion ?? scheduleEntity.is_exclusion
                     });
                     event.addSchedule(scheduleEntity.toModel());
                 }
                 else {
                     event.addSchedule(await EventService.createEventSchedule(eventId, schedule));
                 }
+            }
+
+            if ( existingScheduleIds.length > 0 ) {
+                await EventScheduleEntity.destroy({ where: { id: existingScheduleIds } });
             }
         }
 
