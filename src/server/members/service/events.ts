@@ -1,3 +1,4 @@
+import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
 
 import { Account } from "@/common/model/account"
@@ -12,14 +13,18 @@ import LocationService from "@/server/members/service/locations";
  * @remarks
  * Use this class to manage the lifecycle of events in the system
  */
-class EventService {
+class EventService extends EventEmitter {
+
+    constructor() {
+        super();
+    }
 
     /**
      * retrieves the events for the provided account
      * @param account
      * @returns a promise that resolves to the list of events
      */
-    static async listEvents(account: Account): Promise<CalendarEvent[]> {
+    async listEvents(account: Account): Promise<CalendarEvent[]> {
 
         const events = await EventEntity.findAll({
             where: { account_id: account.id },
@@ -52,11 +57,17 @@ class EventService {
      * @param eventParams - the parameters for the new event
      * @returns a promise that resolves to the created Event
      */
-    static async createEvent(account: Account, eventParams:Record<string,any>): Promise<CalendarEvent> {
+    async createEvent(account: Account, eventParams:Record<string,any>): Promise<CalendarEvent> {
 
         eventParams.id = uuidv4();
 
         const event = CalendarEvent.fromObject(eventParams);
+        if ( account.profile?.username.length ) {
+            event.eventSourceUrl = '/' + account.profile.username + '/' + event.id;
+        }
+        else {
+            event.eventSourceUrl = '';
+        }
         const eventEntity = EventEntity.fromModel(event);
         eventEntity.account_id = account.id;
 
@@ -71,20 +82,21 @@ class EventService {
 
         if ( eventParams.content ) {
             for( let [language,content] of Object.entries(eventParams.content) ) {
-                event.addContent(await EventService.createEventContent(event.id, language, content as Record<string,any>));
+                event.addContent(await this.createEventContent(event.id, language, content as Record<string,any>));
             }
         }
 
         if ( eventParams.schedules ) {
             for( let schedule of eventParams.schedules ) {
-                event.addSchedule(await EventService.createEventSchedule(event.id, schedule as Record<string,any>));
+                event.addSchedule(await this.createEventSchedule(event.id, schedule as Record<string,any>));
             }
         }
 
+        this.emit('eventCreated', event);
         return event;
     }
 
-    static async createEventSchedule(eventId: string, scheduleParams: Record<string,any>): Promise<CalendarEventSchedule> {
+    async createEventSchedule(eventId: string, scheduleParams: Record<string,any>): Promise<CalendarEventSchedule> {
         const schedule = CalendarEventSchedule.fromObject(scheduleParams);
 
         schedule.id = uuidv4();
@@ -95,7 +107,7 @@ class EventService {
         return schedule;
     }
 
-    static async createEventContent(eventId: string, language: string, contentParams: Record<string,any>): Promise<CalendarEventContent> {
+    async createEventContent(eventId: string, language: string, contentParams: Record<string,any>): Promise<CalendarEventContent> {
         contentParams.language = language;
         const content = CalendarEventContent.fromObject(contentParams);
 
@@ -113,7 +125,7 @@ class EventService {
      * @param eventParams - the parameters and values to update for the event
      * @returns a promise that resolves to the Event
      */
-    static async updateEvent(account: Account, eventId: string, eventParams:Record<string,any>): Promise<CalendarEvent> {
+    async updateEvent(account: Account, eventId: string, eventParams:Record<string,any>): Promise<CalendarEvent> {
         const eventEntity = await EventEntity.findByPk(eventId);
 
         if ( ! eventEntity ) {
@@ -162,7 +174,7 @@ class EventService {
                     delete c.language;
 
                     if ( Object.keys(c).length > 0 ) {
-                        event.addContent(await EventService.createEventContent(eventId, language, c));
+                        event.addContent(await this.createEventContent(eventId, language, c));
                     }
                 }
             }
@@ -207,7 +219,7 @@ class EventService {
                     event.addSchedule(scheduleEntity.toModel());
                 }
                 else {
-                    event.addSchedule(await EventService.createEventSchedule(eventId, schedule));
+                    event.addSchedule(await this.createEventSchedule(eventId, schedule));
                 }
             }
 
@@ -218,6 +230,7 @@ class EventService {
 
         await eventEntity.save();
 
+        this.emit('eventUpdated', event);
         return event;
     }
 }

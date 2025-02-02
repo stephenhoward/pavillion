@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import { DateTime } from 'luxon';
 
@@ -9,8 +9,12 @@ import EventService from '@/server/members/service/events';
 import LocationService from '@/server/members/service/locations';
 
 describe('createEvent', () => {
+    let service: EventService;
+    let sandbox: sinon.SinonSandbox = sinon.createSandbox();
 
-    let sandbox = sinon.createSandbox();
+    beforeEach(() => {
+        service = new EventService();
+    });
 
     afterEach(() => {
         sandbox.restore();
@@ -22,7 +26,7 @@ describe('createEvent', () => {
         let eventSpy = sandbox.spy(EventEntity, 'fromModel');
         let contentSpy = sandbox.spy(EventContentEntity, 'fromModel');
 
-        let event = await EventService.createEvent(new Account('testAccountId', 'testme', 'testme'), {
+        let event = await service.createEvent(new Account('testAccountId', 'testme', 'testme'), {
             content: {
                 en: {
                     name: "testName",
@@ -46,7 +50,7 @@ describe('createEvent', () => {
 
         findLocationStub.resolves(new EventLocation('testId','testLocation', 'testAddress'));
 
-        let event = await EventService.createEvent(new Account('testAccountId', 'testme', 'testme'), {
+        let event = await service.createEvent(new Account('testAccountId', 'testme', 'testme'), {
             location: {
                 name: "testLocation",
                 address: "testAddress"
@@ -65,7 +69,7 @@ describe('createEvent', () => {
 
         const when = DateTime.now();
 
-        let event = await EventService.createEvent(new Account('testAccountId', 'testme', 'testme'), {
+        let event = await service.createEvent(new Account('testAccountId', 'testme', 'testme'), {
             schedules: [{ start: when.toString() }]
         });
 

@@ -4,9 +4,10 @@ import path from "path";
 
 import db, { seedDB } from '@/server/common/entity/db';
 import { router as indexRoutes } from '@/server/app_routes';
-import AdminV1Routes from '@/server/accounts/api/v1';
-import AuthV1Routes from '@/server/authentication/api/v1';
-import MemberV1Routes from '@/server/members/api/v1';
+import AdminAPI from '@/server/accounts/api/v1';
+import AuthAPI from '@/server/authentication/api/v1';
+import MemberAPI from '@/server/members/api/v1';
+import ActivityPubAPI from '@/server/activitypub/api/v1';
 
 const main = (providedApp?: express.Application): express.Application => {
     const app: express.Application = providedApp || express();
@@ -24,9 +25,11 @@ const main = (providedApp?: express.Application): express.Application => {
 
     app.use('/', indexRoutes);
 
-    AuthV1Routes(app);
-    AdminV1Routes(app);
-    MemberV1Routes(app);
+    AuthAPI(app);
+    AdminAPI(app);
+    let memberAPI = new MemberAPI(app);
+    let activitypubAPI = new ActivityPubAPI(app);
+    activitypubAPI.registerListeners(memberAPI);
 
     app.listen(config.get('host.port'), () => {
       if ( process.env.NODE_ENV == "development" ) {

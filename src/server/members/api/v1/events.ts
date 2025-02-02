@@ -2,10 +2,29 @@ import express, { Request, Response } from 'express';
 
 import { Account } from '@/common/model/account';
 import ExpressHelper from '@/server/common/helper/express';
+import EventProxy from '@/server/common/helper/event_proxy';
 import EventService from '@/server/members/service/events';
 
-const handlers = {
-    listEvents: async (req: Request, res: Response) => {
+class EventRoutes extends EventProxy {
+    router: express.Router;
+    service: EventService;
+
+    constructor() {
+        super();
+
+        this.router = express.Router();
+
+        this.router.get('/events', ExpressHelper.loggedInOnly, this.listEvents);
+
+        this.router.post('/events', ExpressHelper.loggedInOnly, this.createEvent);
+
+        this.router.post('/events/:id', ExpressHelper.loggedInOnly, this.updateEvent);
+
+        this.service = new EventService();
+        this.proxyEvents(this.service, ['eventCreated', 'eventUpdated']);
+    }
+
+    async listEvents(req: Request, res: Response) {
         const account = req.user as Account;
 
         if (!account) {
@@ -15,10 +34,11 @@ const handlers = {
             return;
         }
 
-        const events = await EventService.listEvents(account);
+        const events = await this.service.listEvents(account);
         res.json(events.map((event) => event.toObject()));
-    },
-    createEvent: async (req: Request, res: Response) => {
+    }
+
+    async createEvent(req: Request, res: Response) {
         const account = req.user as Account;
 
         if (!account) {
@@ -27,30 +47,23 @@ const handlers = {
             });
             return;
         }
-        const event = await EventService.createEvent(account, req.body);
-        res.json(event.toObject());
-    },
-    updateEvent: async (req: Request, res: Response) => {
-        const account = req.user as Account;
-
-        if (!account) {
-            res.status(400).json({
-                "error": "missing account for events. Not logged in?"
-            });
-            return;
-        }
-        const event = await EventService.updateEvent(account, req.params.id, req.body);
-
+        const event = await this.service.createEvent(account, req.body);
         res.json(event.toObject());
     }
 
-};
-var router = express.Router();
+    async updateEvent(req: Request, res: Response) {
+        const account = req.user as Account;
 
-router.get('/events', ExpressHelper.loggedInOnly, handlers.listEvents);
+        if (!account) {
+            res.status(400).json({
+                "error": "missing account for events. Not logged in?"
+            });
+            return;
+        }
+        const event = await this.service.updateEvent(account, req.params.id, req.body);
 
-router.post('/events', ExpressHelper.loggedInOnly, handlers.createEvent);
+        res.json(event.toObject());
+    }
+}
 
-router.post('/events/:id', ExpressHelper.loggedInOnly, handlers.updateEvent);
-
-export { handlers, router };
+export default EventRoutes;

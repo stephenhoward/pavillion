@@ -16,6 +16,12 @@ class EventEntity extends Model {
     })
     declare id: string;
 
+    @Column({
+        type: DataType.STRING,
+        allowNull: true
+    })
+    declare event_source_url: string;
+
     @ForeignKey(() => EventEntity)
     @Column({ type: DataType.UUID })
     declare parent_event_id: string;
@@ -44,12 +50,13 @@ class EventEntity extends Model {
     declare location: LocationEntity;
 
     toModel(): CalendarEvent {
-        return new CalendarEvent( this.account_id, this.id );
+        return new CalendarEvent( this.account_id, this.id, this.event_source_url );
     };
 
     static fromModel(event: CalendarEvent): EventEntity {
         return EventEntity.build({
             id: event.id,
+            event_source_url: event.eventSourceUrl,
         });
     }
 };

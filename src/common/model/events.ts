@@ -8,12 +8,14 @@ class CalendarEvent extends PrimaryModel {
     date: string = '';
     location: EventLocation | null = null;
     parentEvent: CalendarEvent | null = null;
+    eventSourceUrl: string = '';
     _content: Record<string, CalendarEventContent> = {};
     schedules: CalendarEventSchedule[] = [];
 
-    constructor(id?: string, date?: string, location?: EventLocation) {
+    constructor(id?: string, date?: string, eventSourceUrl?: string, location?: EventLocation) {
         super(id);
         this.date = date ?? '';
+        this.eventSourceUrl = eventSourceUrl ?? '';
         this.location = location ?? null;
     }
 
@@ -45,7 +47,7 @@ class CalendarEvent extends PrimaryModel {
     }
 
     static fromObject(obj: Record<string, any>): CalendarEvent {
-        let event = new CalendarEvent(obj.id, obj.date);
+        let event = new CalendarEvent(obj.id, obj.date, obj.eventSourceUrl);
 
         event.location = obj.location ? EventLocation.fromObject(obj.location) : null;
 
@@ -64,6 +66,7 @@ class CalendarEvent extends PrimaryModel {
             id: this.id,
             date: this.date,
             location: this.location?.toObject(),
+            eventSourceUrl: this.eventSourceUrl,
             content: Object.fromEntries(
                 Object.entries(this._content)
                     .map(([language, strings]: [string, CalendarEventContent]) => [language, strings.toObject()])
@@ -82,6 +85,10 @@ enum language {
     DE = "de",
     IT = "it"
 };
+
+enum event_activity {
+    SHARE = "share",
+}
 
 class CalendarEventContent extends Model {
     language: language;
@@ -180,5 +187,5 @@ class CalendarEventSchedule extends Model {
 }
 
 export {
-    CalendarEvent, CalendarEventContent, CalendarEventSchedule, language, EventFrequency
+    CalendarEvent, CalendarEventContent, CalendarEventSchedule, language, event_activity, EventFrequency
 }

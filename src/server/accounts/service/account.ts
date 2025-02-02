@@ -5,7 +5,7 @@ import { DateTime } from 'luxon';
 import CommonAccountService from '../../common/service/accounts';
 import ServiceSettings from '../../common/service/settings';
 import EmailService from "../../common/service/mail";
-import { AccountEntity, AccountSecretsEntity, AccountInvitationEntity, AccountApplicationEntity } from "../../common/entity/account"
+import { AccountEntity, AccountSecretsEntity, AccountInvitationEntity, AccountApplicationEntity, ProfileEntity } from "../../common/entity/account"
 import { AccountApplicationAlreadyExistsError, noAccountInviteExistsError, AccountRegistrationClosedError, AccountApplicationsClosedError, AccountAlreadyExistsError, AccountInviteAlreadyExistsError, noAccountApplicationExistsError } from '../exceptions';
 import AccountInvitation from '../../../common/model/invitation';
 
@@ -182,6 +182,31 @@ class AccountService {
 
     static async listAccountApplications(): Promise<AccountInvitation[]> {
         return (await AccountApplicationEntity.findAll()).map( (application) => application.toModel() );
+    }
+
+    // ToDo: return signature, and return a model instead of an entity
+    static async getProfileForUsername( username: string ) {
+        let profile = await ProfileEntity.findOne({ where: { username: username } });
+
+        return profile ? profile : null;
+    }
+
+    static async getAccount(id: string): Promise<Account|null> {
+        const account = await AccountEntity.findByPk(id);
+        return account ? account.toModel() : null;
+    }
+
+    static async getAccountFromUsername(name: string): Promise<Account|null> {
+        let profile = await ProfileEntity.findOne({ where: { username: name } });
+
+        if ( profile ) {
+            let account = await AccountEntity.findByPk(profile.account_id);
+
+            if ( account ) {
+                return account.toModel();
+            }
+        }
+        return null;
     }
 }
 

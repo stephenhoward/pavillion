@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 
 import { Account } from '@/common/model/account';
@@ -6,9 +6,12 @@ import { EventEntity, EventContentEntity } from '@/server/common/entity/event';
 import EventService from '@/server/members/service/events';
 
 describe('listEvents', () => {
-
+    let service: EventService;
     let sandbox = sinon.createSandbox();
 
+    beforeEach(() => {
+        service = new EventService();
+    })
     afterEach(() => {
         sandbox.restore();
     });
@@ -17,7 +20,7 @@ describe('listEvents', () => {
         let findEventsStub = sandbox.stub(EventEntity, 'findAll');
         findEventsStub.resolves([]);
 
-        let events = await EventService.listEvents(new Account('id', 'testme', 'testme'));
+        let events = await service.listEvents(new Account('id', 'testme', 'testme'));
         expect(events).toEqual([]);
     });
 
@@ -25,7 +28,7 @@ describe('listEvents', () => {
         let findEventsStub = sandbox.stub(EventEntity, 'findAll');
         findEventsStub.resolves([new EventEntity()]);
 
-        let events = await EventService.listEvents(new Account('id', 'testme', 'testme'));
+        let events = await service.listEvents(new Account('id', 'testme', 'testme'));
         expect(events.length).toBe(1);
         expect(events[0].content("en").name).toBe('');
     });
@@ -36,7 +39,7 @@ describe('listEvents', () => {
         entity.content = [ EventContentEntity.build({language: "en", name: "testName", description: "description"}) ];
         findEventsStub.resolves([entity]);
 
-        let events = await EventService.listEvents(new Account('id', 'testme', 'testme'));
+        let events = await service.listEvents(new Account('id', 'testme', 'testme'));
         expect(events[0].content("en").name).toBe('testName');
     });
 

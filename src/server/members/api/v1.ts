@@ -1,10 +1,20 @@
 import express, { Application } from 'express';
-import { router as eventsRoutes } from '@/server/members/api/v1/events';
+import EventRoutes from '@/server/members/api/v1/events';
+import EventProxy from '@/server/common/helper/event_proxy';
 
-const apiV1 = (app: Application) => {
+class EventAPI extends EventProxy{
+    app: Application;
 
-    app.use(express.json());
-    app.use('/api/v1', eventsRoutes );
-};
+    constructor(app: Application) {
+        super();
+        this.app = app;
 
-export default apiV1;
+        let eventsRoutes = new EventRoutes();
+        this.proxyEvents(eventsRoutes,['eventCreated', 'eventUpdated']);
+
+        app.use(express.json());
+        app.use('/api/v1', eventsRoutes.router );
+    }
+}
+
+export default EventAPI;
