@@ -5,13 +5,11 @@ import express from 'express';
 import { handlers as accountHandlers } from '../api/v1/accounts';
 import { handlers as inviteHandlers } from '../api/v1/invitations';
 import { handlers as applicationHandlers } from '../api/v1/applications';
-import { handlers as siteHandlers } from '../api/v1/site';
 import AccountService from '../service/account';
 import { Account } from '../../../common/model/account';
 import { testApp, countRoutes } from '../../common/test/lib/express';
 import AccountInvitation from '../../../common/model/invitation';
 import apiV1 from '../api/v1';
-import ServiceSettings from '../../common/service/settings';
 
 describe('API v1', () => {
 
@@ -240,29 +238,5 @@ describe('Applications API', () => {
         expect(response.status).toBe(400);
         expect(stub.called).toBe(false);
         expect(stub2.called).toBe(false);
-    });
-});
-
-describe('Site API', () => {
-    let router: express.Router;
-
-    beforeEach(() => {
-        router = express.Router();
-    });
-
-    afterEach(() => {
-        sinon.restore();
-    });
-
-    it('site: should succeed', async () => {
-        let stub = sinon.stub(ServiceSettings.prototype, 'get');
-        let stub2 = sinon.stub(ServiceSettings.prototype, 'init');
-        stub.withArgs('registrationMode').returns('testValue');
-        router.get('/handler', siteHandlers.site);
-
-        const response = await request(testApp(router)).get('/handler');
-
-        expect(response.status).toBe(200);
-        expect(response.body.registrationMode).toBe('testValue');
     });
 });

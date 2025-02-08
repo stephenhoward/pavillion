@@ -1,5 +1,5 @@
 import express, { Application } from 'express';
-import EventRoutes from '@/server/members/api/v1/events';
+import EventRoutes from '@/server/calendar/api/v1/events';
 import EventProxy from '@/server/common/helper/event_proxy';
 
 class EventAPI extends EventProxy{

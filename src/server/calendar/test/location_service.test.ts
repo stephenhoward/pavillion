@@ -3,8 +3,8 @@ import sinon from 'sinon';
 
 import { Account } from '@/common/model/account';
 import { EventLocation } from '@/common/model/location';
-import { LocationEntity } from '@/server/common/entity/location';
-import LocationService from '@/server/members/service/locations';
+import { LocationEntity } from '@/server/calendar/entity/location';
+import LocationService from '@/server/calendar/service/locations';
 
 describe('findLocation', () => {
     

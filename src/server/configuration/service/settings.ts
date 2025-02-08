@@ -1,5 +1,4 @@
-import { ObjectBindingOrAssignmentPattern } from "typescript";
-import ServiceSettingEntity from "@/server/common/entity/service";
+import ServiceSettingEntity from "@/server/configuration/entity/settings";
 
 interface Config {
     [registrationMode: string] : 'open' | 'apply' | 'invite' | 'closed';

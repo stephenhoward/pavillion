@@ -1,12 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
-import CommonAccountService from '../../common/service/accounts';
-import AccountService from '../service/account';
-import { AccountEntity, AccountSecretsEntity, AccountInvitationEntity,AccountApplicationEntity } from '../../common/entity/account';
-import { Account } from '../../../common/model/account';
-import EmailService from '../../common/service/mail';
-import { AccountAlreadyExistsError, AccountInviteAlreadyExistsError, AccountRegistrationClosedError, AccountApplicationAlreadyExistsError, AccountApplicationsClosedError, noAccountInviteExistsError, noAccountApplicationExistsError } from '../exceptions';
-import ServiceSettings from '../../common/service/settings';
+
+import { Account } from '@/common/model/account';
+import { AccountEntity, AccountSecretsEntity, AccountInvitationEntity,AccountApplicationEntity } from '@/server/common/entity/account';
+import CommonAccountService from '@/server/common/service/accounts';
+import EmailService from '@/server/common/service/mail';
+import ServiceSettings from '@/server/configuration/service/settings';
+import AccountService from '@/server/accounts/service/account';
+import { AccountAlreadyExistsError, AccountInviteAlreadyExistsError, AccountRegistrationClosedError, AccountApplicationAlreadyExistsError, AccountApplicationsClosedError, noAccountInviteExistsError, noAccountApplicationExistsError } from '@/server/accounts/exceptions';
 
 describe('inviteNewAccount', () => {
 

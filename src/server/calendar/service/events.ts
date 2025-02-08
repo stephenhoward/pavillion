@@ -3,9 +3,9 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { Account } from "@/common/model/account"
 import { CalendarEvent, CalendarEventContent, CalendarEventSchedule } from "@/common/model/events"
-import { EventContentEntity, EventEntity, EventScheduleEntity } from "@/server/common/entity/event"
-import { LocationEntity } from "@/server/common/entity/location";
-import LocationService from "@/server/members/service/locations";
+import { EventContentEntity, EventEntity, EventScheduleEntity } from "@/server/calendar/entity/event"
+import { LocationEntity } from "@/server/calendar/entity/location";
+import LocationService from "@/server/calendar/service/locations";
 
 /**
  * Service class for managing events

@@ -1,10 +1,9 @@
-import { Model, Table, Column, PrimaryKey, BelongsTo, DataType, ForeignKey, HasMany } from 'sequelize-typescript';
+import { Model, Table, Column, PrimaryKey, BelongsTo, DataType, ForeignKey } from 'sequelize-typescript';
 
 import { ActivityPubMessage, CreateMessage, UpdateMessage, DeleteMessage, FollowMessage, AnnounceMessage, UndoMessage } from '@/common/model/message/actions';
 import db from '@/server/common/entity/db';
 import { event_activity } from '@/common/model/events';
 import { AccountEntity } from '@/server/common/entity/account';
-import { EventEntity } from '@/server/common/entity/event';
 
 // TODO: should incoming messages be stored somewhere other than an RDB?
 class ActivityPubMessageEntity extends Model {
@@ -36,28 +35,34 @@ class ActivityPubMessageEntity extends Model {
     declare account: AccountEntity;
 
     toModel(): ActivityPubMessage {
+
+        let builder;
         switch( this.type ) {
             case 'Create':
-                return CreateMessage.fromObject(this.message);
+                builder = (object: any) => CreateMessage.fromObject(object);
                 break;
             case 'Update':
-                return UpdateMessage.fromObject(this.message);
+                builder = (object: any) => UpdateMessage.fromObject(object);
                 break;
             case 'Delete':
-                return DeleteMessage.fromObject(this.message);
+                builder = (object: any) => DeleteMessage.fromObject(object);
                 break;
             case 'Follow':
-                return FollowMessage.fromObject(this.message);
+                builder = (object: any) => FollowMessage.fromObject(object);
                 break;
             case 'Announce':
-                return AnnounceMessage.fromObject(this.message);
+                builder = (object: any) => AnnounceMessage.fromObject(object);
                 break;
             case 'Undo':
-                return UndoMessage.fromObject(this.message);
+                builder = (object: any) => UndoMessage.fromObject(object);
                 break;
         }
 
-        throw new Error('Invalid message type: "' + this.type + '"');
+        if ( ! builder ) {
+            throw new Error('Invalid message type: "' + this.type + '"');
+        }
+
+        return builder( this.message );
     }
 }
 
@@ -89,21 +94,16 @@ class FollowedAccountEntity extends Model {
 @Table({ tableName: 'ap_shared_event'})
 class SharedEventEntity extends Model {
 
-    @ForeignKey(() => EventEntity)
     @Column({ type: DataType.STRING })
     declare event_id: string;
 
     @Column({ type: DataType.STRING })
     declare account_id: string;
-
-    @BelongsTo(() => EventEntity)
-    declare event: EventEntity;
 }
 
 @Table({ tableName: 'ap_event_activity'})
 class EventActivityEntity extends Model {
 
-    @ForeignKey(() => EventEntity)
     @Column({ type: DataType.STRING })
     declare event_id: string;
 
@@ -113,9 +113,6 @@ class EventActivityEntity extends Model {
 
     @Column({ type: DataType.STRING })
     declare remote_account_id: string;
-
-    @BelongsTo(() => EventEntity)
-    declare event: EventEntity;
 }
 
 db.addModels([ActivityPubInboxMessageEntity, ActivityPubOutboxMessageEntity, FollowedAccountEntity, SharedEventEntity, EventActivityEntity]);

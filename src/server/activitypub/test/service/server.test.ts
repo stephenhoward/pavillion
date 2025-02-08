@@ -8,7 +8,7 @@ import AccountService from '@/server/accounts/service/account';
 import { ProfileEntity } from '@/server/common/entity/account';
 import { Account } from '@/common/model/account';
 import { ActivityPubMessage } from '@/common/model/message/actions';
-import { ActivityPubInboxMessageEntity } from '@/server/common/entity/activitypub';
+import { ActivityPubInboxMessageEntity } from '@/server/activitypub/entity/activitypub';
 
 describe('parseWebFingerResource', () => {
 

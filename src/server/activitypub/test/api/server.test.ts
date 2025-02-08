@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 
 import ActivityPubServerRoutes from '@/server/activitypub/api/v1/server';
+import { WebFingerResponse } from '@/common/model/message/webfinger';
+import { UserProfileResponse } from '@/common/model/message/userprofile';
 
 describe('lookupUser', () => {
     let routes: ActivityPubServerRoutes;
@@ -45,7 +47,7 @@ describe('lookupUser', () => {
         let res = { json: sinon.stub() };
 
         let lookupMock = sandbox.stub(routes.service, 'lookupWebFinger');
-        lookupMock.resolves({ toObject: () => ({}) });
+        lookupMock.resolves(new WebFingerResponse('testuser', 'testdomain.com'));
 
         await routes.lookupUser(req as any, res as any);
 
@@ -84,7 +86,7 @@ describe('getUserProfile', () => {
         let res = { json: sinon.stub() };
 
         let lookupMock = sandbox.stub(routes.service, 'lookupUserProfile');
-        lookupMock.resolves({ toObject: () => ({}) });
+        lookupMock.resolves(new UserProfileResponse('testuser','testdomain.com'));
 
         await routes.getUserProfile(req as any, res as any);
 

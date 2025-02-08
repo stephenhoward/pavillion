@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import ServiceSettings from '../../../common/service/settings';
+import ServiceSettings from '../../service/settings';
 
 const handlers = {
     site: async (req: Request, res: Response) => {

@@ -5,9 +5,9 @@ import { Account } from "@/common/model/account";
 import { WebFingerResponse } from "@/common/model/message/webfinger";
 import { UserProfileResponse } from "@/common/model/message/userprofile";
 import { CreateMessage, UpdateMessage, DeleteMessage } from "@/common/model/message/actions";
-import { ActivityPubInboxMessageEntity, EventActivityEntity, FollowedAccountEntity, SharedEventEntity } from "@/server/common/entity/activitypub";
+import { ActivityPubInboxMessageEntity, EventActivityEntity, FollowedAccountEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
 import AccountService from "@/server/accounts/service/account";
-import EventService from "@/server/members/service/events";
+import EventService from "@/server/calendar/service/events";
 
 
 class ActivityPubService {
