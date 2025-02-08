@@ -1,6 +1,11 @@
 import express, { Request, Response } from 'express';
 
-import { CreateMessage, UpdateMessage, DeleteMessage, APObject } from '@/common/model/message/actions';
+import CreateActivity from '../../model/action/create';
+import UpdateActivity from '../../model/action/update';
+import DeleteActivity from '../../model/action/delete';
+import FollowActivity from '../../model/action/follow';
+import AnnounceActivity from '../../model/action/announce';
+import UndoActivity from '../../model/action/undo';
 import ActivityPubService from '@/server/activitypub/service/server';
 import AccountService from '@/server/accounts/service/account';
 
@@ -78,19 +83,22 @@ class ActivityPubServerRoutes {
 
         switch(req.body.type) {
             case 'Create':
-                message = CreateMessage.fromObject(req.body);
+                message = CreateActivity.fromObject(req.body);
                 break;
             case 'Update':
-                message = UpdateMessage.fromObject(req.body);
+                message = UpdateActivity.fromObject(req.body);
                 break;
             case 'Delete':
-                message = DeleteMessage.fromObject(req.body);
+                message = DeleteActivity.fromObject(req.body);
                 break;
             case 'Follow':
+                message = FollowActivity.fromObject(req.body);
                 break;
             case 'Announce':
+                message = AnnounceActivity.fromObject(req.body);
                 break;
             case 'Undo':
+                message = UndoActivity.fromObject(req.body);
                 break;
         }
 

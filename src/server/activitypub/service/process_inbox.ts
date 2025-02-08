@@ -1,12 +1,12 @@
 import { DateTime } from "luxon";
 
 import { Account } from "@/common/model/account";
-import { WebFingerResponse } from "@/common/model/message/webfinger";
-import { UserProfileResponse } from "@/common/model/message/userprofile";
-import { CreateMessage, UpdateMessage, DeleteMessage, UndoMessage, AnnounceMessage, FollowMessage } from "@/common/model/message/actions";
-import { ActivityPubInboxMessageEntity, EventActivityEntity, FollowedAccountEntity, SharedEventEntity } from "@/server/common/entity/activitypub";
+import { WebFingerResponse } from "@/server/activitypub/model/webfinger";
+import { UserProfileResponse } from "@/server/activitypub/model/userprofile";
+import { CreateMessage, UpdateMessage, DeleteMessage, UndoMessage, AnnounceMessage, FollowMessage } from "@/server/activitypub/model/actions";
+import { ActivityPubInboxMessageEntity, EventActivityEntity, FollowedAccountEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
 import AccountService from "@/server/accounts/service/account";
-import EventService from "@/server/members/service/events";
+import EventService from "@/server/calendar/service/events";
 
 
 class ProcessInboxService {
@@ -37,7 +37,7 @@ class ProcessInboxService {
 
     // TODO: validate message sender was allowed to send this message
     async processInboxMessage(message: ActivityPubInboxMessageEntity ) {
-        const account = await AccountService.getAccount(message.accountId);
+        const account = await AccountService.getAccount(message.account_id);
 
         if ( ! account ) {
             console.error('No account found for message');
@@ -69,10 +69,10 @@ class ProcessInboxService {
 
                     switch( targetEntity.type ) {
                         case 'Follow':
-                            this.processUnfollowAccount(account, target);
+                            this.processUnfollowAccount(account, targetEntity);
                             break;
                         case 'Announce':
-                            this.processUnshareEvent(account, target);
+                            this.processUnshareEvent(account, targetEntity);
                             break;
                         }
                 }

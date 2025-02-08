@@ -1,13 +1,14 @@
 import { randomBytes } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
-import { Account } from "../../../common/model/account"
 import { DateTime } from 'luxon';
-import CommonAccountService from '../../common/service/accounts';
-import ServiceSettings from '../../common/service/settings';
-import EmailService from "../../common/service/mail";
-import { AccountEntity, AccountSecretsEntity, AccountInvitationEntity, AccountApplicationEntity, ProfileEntity } from "../../common/entity/account"
-import { AccountApplicationAlreadyExistsError, noAccountInviteExistsError, AccountRegistrationClosedError, AccountApplicationsClosedError, AccountAlreadyExistsError, AccountInviteAlreadyExistsError, noAccountApplicationExistsError } from '../exceptions';
-import AccountInvitation from '../../../common/model/invitation';
+
+import { Account, Profile } from "@/common/model/account"
+import AccountInvitation from '@/common/model/invitation';
+import CommonAccountService from '@/server/common/service/accounts';
+import EmailService from "@/server/common/service/mail";
+import { AccountEntity, AccountSecretsEntity, AccountInvitationEntity, AccountApplicationEntity, ProfileEntity } from "@/server/common/entity/account"
+import ServiceSettings from '@/server/configuration/service/settings';
+import { AccountApplicationAlreadyExistsError, noAccountInviteExistsError, AccountRegistrationClosedError, AccountApplicationsClosedError, AccountAlreadyExistsError, AccountInviteAlreadyExistsError, noAccountApplicationExistsError } from '@/server/accounts/exceptions';
 
 type AccountInfo = {
     account: Account,
@@ -207,6 +208,11 @@ class AccountService {
             }
         }
         return null;
+    }
+
+    static async getProfileForAccount(account: Account): Promise<Profile|null> {
+        let profileEntity = await ProfileEntity.findOne({ where: { account_id: account.id } });
+        return profileEntity ? profileEntity.toModel() : null;
     }
 }
 

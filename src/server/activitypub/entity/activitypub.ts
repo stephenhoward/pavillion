@@ -1,10 +1,15 @@
-import { Model, Table, Column, PrimaryKey, BelongsTo, DataType, ForeignKey, HasMany } from 'sequelize-typescript';
+import { Model, Table, Column, PrimaryKey, BelongsTo, DataType, ForeignKey } from 'sequelize-typescript';
 
-import { ActivityPubMessage, CreateMessage, UpdateMessage, DeleteMessage, FollowMessage, AnnounceMessage, UndoMessage } from '@/common/model/message/actions';
-import db from '@/server/common/entity/db';
 import { event_activity } from '@/common/model/events';
+import db from '@/server/common/entity/db';
 import { AccountEntity } from '@/server/common/entity/account';
-import { EventEntity } from '@/server/common/entity/event';
+import { ActivityPubActivity } from '@/server/activitypub/model/base';
+import CreateActivity from '@/server/activitypub/model/action/create';
+import UpdateActivity from '@/server/activitypub/model/action/update';
+import DeleteActivity from '@/server/activitypub/model/action/delete';
+import AnnounceActivity from '@/server/activitypub/model/action/announce';
+import FollowActivity from '@/server/activitypub/model/action/follow';
+import UndoActivity from '@/server/activitypub/model/action/undo';
 
 // TODO: should incoming messages be stored somewhere other than an RDB?
 class ActivityPubMessageEntity extends Model {
@@ -35,29 +40,35 @@ class ActivityPubMessageEntity extends Model {
     @BelongsTo(() => AccountEntity)
     declare account: AccountEntity;
 
-    toModel(): ActivityPubMessage {
+    toModel(): ActivityPubActivity {
+
+        let builder;
         switch( this.type ) {
             case 'Create':
-                return CreateMessage.fromObject(this.message);
+                builder = (object: any) => CreateActivity.fromObject(object);
                 break;
             case 'Update':
-                return UpdateMessage.fromObject(this.message);
+                builder = (object: any) => UpdateActivity.fromObject(object);
                 break;
             case 'Delete':
-                return DeleteMessage.fromObject(this.message);
+                builder = (object: any) => DeleteActivity.fromObject(object);
                 break;
             case 'Follow':
-                return FollowMessage.fromObject(this.message);
+                builder = (object: any) => FollowActivity.fromObject(object);
                 break;
             case 'Announce':
-                return AnnounceMessage.fromObject(this.message);
+                builder = (object: any) => AnnounceActivity.fromObject(object);
                 break;
             case 'Undo':
-                return UndoMessage.fromObject(this.message);
+                builder = (object: any) => UndoActivity.fromObject(object);
                 break;
         }
 
-        throw new Error('Invalid message type: "' + this.type + '"');
+        if ( ! builder ) {
+            throw new Error('Invalid message type: "' + this.type + '"');
+        }
+
+        return builder( this.message );
     }
 }
 
@@ -71,6 +82,13 @@ class ActivityPubOutboxMessageEntity extends ActivityPubMessageEntity {
 
 @Table({ tableName: 'ap_follow'})
 class FollowedAccountEntity extends Model {
+
+    @PrimaryKey
+    @Column({
+        type: DataType.STRING,
+        allowNull: false
+    })
+    declare id: string;
 
     @Column({ type: DataType.STRING })
     declare remoteAccountId: string;
@@ -89,21 +107,23 @@ class FollowedAccountEntity extends Model {
 @Table({ tableName: 'ap_shared_event'})
 class SharedEventEntity extends Model {
 
-    @ForeignKey(() => EventEntity)
+    @PrimaryKey
+    @Column({
+        type: DataType.STRING,
+        allowNull: false
+    })
+    declare id: string;
+
     @Column({ type: DataType.STRING })
     declare event_id: string;
 
     @Column({ type: DataType.STRING })
     declare account_id: string;
-
-    @BelongsTo(() => EventEntity)
-    declare event: EventEntity;
 }
 
 @Table({ tableName: 'ap_event_activity'})
 class EventActivityEntity extends Model {
 
-    @ForeignKey(() => EventEntity)
     @Column({ type: DataType.STRING })
     declare event_id: string;
 
@@ -113,9 +133,6 @@ class EventActivityEntity extends Model {
 
     @Column({ type: DataType.STRING })
     declare remote_account_id: string;
-
-    @BelongsTo(() => EventEntity)
-    declare event: EventEntity;
 }
 
 db.addModels([ActivityPubInboxMessageEntity, ActivityPubOutboxMessageEntity, FollowedAccountEntity, SharedEventEntity, EventActivityEntity]);

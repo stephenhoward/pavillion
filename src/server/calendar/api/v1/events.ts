@@ -3,7 +3,7 @@ import express, { Request, Response } from 'express';
 import { Account } from '@/common/model/account';
 import ExpressHelper from '@/server/common/helper/express';
 import EventProxy from '@/server/common/helper/event_proxy';
-import EventService from '@/server/members/service/events';
+import EventService from '@/server/calendar/service/events';
 
 class EventRoutes extends EventProxy {
     router: express.Router;
@@ -14,11 +14,11 @@ class EventRoutes extends EventProxy {
 
         this.router = express.Router();
 
-        this.router.get('/events', ExpressHelper.loggedInOnly, this.listEvents);
+        this.router.get('/events', ExpressHelper.loggedInOnly, (req, res) => this.listEvents(req, res));
 
-        this.router.post('/events', ExpressHelper.loggedInOnly, this.createEvent);
+        this.router.post('/events', ExpressHelper.loggedInOnly, (req, res) => this.createEvent(req, res));
 
-        this.router.post('/events/:id', ExpressHelper.loggedInOnly, this.updateEvent);
+        this.router.post('/events/:id', ExpressHelper.loggedInOnly, (req, res) => this.updateEvent(req,res));
 
         this.service = new EventService();
         this.proxyEvents(this.service, ['eventCreated', 'eventUpdated']);

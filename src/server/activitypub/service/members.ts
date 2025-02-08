@@ -2,13 +2,17 @@ import { DateTime } from "luxon";
 import { EventEmitter } from "events";
 
 import { Account } from "@/common/model/account";
-import { WebFingerResponse } from "@/common/model/message/webfinger";
-import { UserProfileResponse } from "@/common/model/message/userprofile";
-import { CreateMessage, UpdateMessage, DeleteMessage } from "@/common/model/message/actions";
-import { ActivityPubInboxMessageEntity, EventActivityEntity, FollowedAccountEntity, SharedEventEntity } from "@/server/common/entity/activitypub";
+import { ActivityPubActivity } from "@/server/activitypub/model/base";
+import CreateActivity from '@/server/activitypub/model/action/create';
+import UpdateActivity from '@/server/activitypub/model/action/update';
+import DeleteActivity from '@/server/activitypub/model/action/delete';
+import FollowActivity from "@/server/activitypub/model/action/follow";
+import AnnounceActivity from "@/server/activitypub/model/action/announce";
+import { EventObject } from '@/server/activitypub/model/object/event';
 import AccountService from "@/server/accounts/service/account";
-import EventService from "@/server/members/service/events";
-
+import EventService from "@/server/calendar/service/events";
+import { ActivityPubOutboxMessageEntity, FollowedAccountEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
+import UndoActivity from "../model/action/undo";
 
 class ActivityPubService {
     eventService: EventService;
@@ -17,48 +21,179 @@ class ActivityPubService {
         this.eventService = new EventService();
     }
 
-    registerListeners(source: EventEmitter) {
-        source.on('eventCreated', (event) => { console.log('eventCreated, send to fediverse'); });
-        source.on('eventUpdated', (event) => { console.log('eventUpdated, send to fediverse'); });
-        source.on('eventDeleted', (event) => { console.log('eventDeleted, send to fediverse'); });
+    async actorUrl(account: Account): Promise<string> {
+        // TODO url safety of username
+        let profile = await AccountService.getProfileForAccount(account);
+        
+        return profile
+          ? 'https://' + profile.domain + '/users/' + profile.username
+          : '';
     }
 
-    async followAccount(account: Account, remoteAccount: string) {
-        // send follow message to remote account
-        FollowedAccountEntity.create({
-            remoteAccountId: remoteAccount,
-            accountId: account.id,
-            direction: 'following'
+    registerListeners(source: EventEmitter) {
+        source.on('eventCreated', async (e) => {
+            let actorUrl = await this.actorUrl(e.account);
+            let profile = await AccountService.getProfileForAccount(e.account);
+            if ( profile ) {
+                this.addToOutbox(
+                    e.account,
+                    new CreateActivity(
+                        actorUrl,
+                        new EventObject(profile, e.event)
+                    )
+                );
+                }
+        });
+        source.on('eventUpdated', async (e) => {
+            let actorUrl = await this.actorUrl(e.account);
+            let profile = await AccountService.getProfileForAccount(e.account);
+            if ( profile ) {
+                this.addToOutbox(
+                    e.account,
+                    new UpdateActivity(
+                        actorUrl,
+                        new EventObject(e.profile, e.event)
+                    )
+                );
+                }
+        });
+        source.on('eventDeleted', async (e) => {
+            let profile = await AccountService.getProfileForAccount(e.account);
+            if ( profile ) {
+                let actorUrl = await this.actorUrl(e.account);
+                this.addToOutbox(
+                    e.account,
+                    new DeleteActivity(
+                        actorUrl,
+                        EventObject.eventUrl(profile, e.event)
+                    )
+                );
+            }
         });
     }
 
-    async unfollowAccount(account: Account, remoteAccount: string) {
-        // send undo follow message to remote account
-        FollowedAccountEntity.destroy({
+    static isValidDomain(domain: string): boolean {
+        return domain.match(/^((?!-)[A-Za-z0-9-]{1,63}(?<!-)\.)+[A-Za-z]{2,}$/) !== null;
+    }
+    static isValidUsername(username: string): boolean {
+        return username.match(/^[a-z0-9_]{3,16}$/) !== null;
+    }
+
+    static isValidUserIdentifier(identifier: string): boolean {
+        let parts = identifier.split('@');
+        return parts.length === 2
+            && ActivityPubService.isValidUsername(parts[0])
+            && ActivityPubService.isValidDomain(parts[1]);
+    }
+
+    async followAccount(account: Account, accountIdentifier: string) {
+
+        if ( ! ActivityPubService.isValidUserIdentifier(accountIdentifier) ) {
+            throw new Error('Invalid remote account identifier: ' + accountIdentifier);
+        }
+
+        let existingFollowEntity = await FollowedAccountEntity.findOne({ where: {
+            remote_account_id: accountIdentifier,
+            account_id: account.id,
+            direction: 'following'
+        }});
+        if ( existingFollowEntity ) {
+            return;
+        }
+
+        let actor = await this.actorUrl(account);
+        // TODO: transform accountIdentifier into a URL (via webfinger?)
+        let followActivity = new FollowActivity( actor, accountIdentifier );
+
+        let followEntity = FollowedAccountEntity.build({
+            id: followActivity.id,
+            remote_account_id: accountIdentifier,
+            account_id: account.id,
+            direction: 'following'
+        });
+        await followEntity.save()
+    
+        this.addToOutbox( account, followActivity );
+    }
+
+    async unfollowAccount(account: Account, accountIdentifier: string) {
+
+        let follows = await FollowedAccountEntity.findAll({
             where: {
-                remoteAccountId: remoteAccount,
-                accountId: account.id,
+                remote_account_id: accountIdentifier,
+                account_id: account.id,
                 direction: 'following'
             }
         });
-    }
+        let actor = await this.actorUrl(account);
+        for ( let follow of follows ) {
+            this.addToOutbox(account, new UndoActivity(actor, follow.id ));
+            follow.destroy();
+        }
+     }
 
-    async shareEvent(account: Account, eventId: string) {
-        // send announce message to followers
+    /**
+     * user on this server shares an event from someone else
+     * @param account 
+     * @param eventUrl - url of remote event
+     */
+    async shareEvent(account: Account, eventUrl: string) {
+
+        if ( ! eventUrl.match("^https:\/\/") ) {
+            throw new Error('Invalid shared event url: ' + eventUrl);
+        }
+
+        let existingShareEntity = await FollowedAccountEntity.findOne({ where: {
+            event_id: eventUrl,
+            account_id: account.id,
+        }});
+        if ( existingShareEntity ) {
+            return;
+        }
+
+        let actor = await this.actorUrl(account);
+        let shareActivity = new AnnounceActivity( actor, eventUrl );
+
         SharedEventEntity.create({
-            eventId: eventId,
+            id: shareActivity.id,
+            eventId: eventUrl,
             accountId: account.id
         });
+        this.addToOutbox( account, shareActivity );
     }
 
-    async unshareEvent(account: Account, eventId: string) {
-        // send undo announce message to followers
-        SharedEventEntity.destroy({
+    /**
+     * user on this server stops sharing an event from someone else
+     * @param account - account of user stopping sharing
+     * @param eventId - url of remote event
+     */
+    async unshareEvent(account: Account, eventUrl: string) {
+        let shares = await SharedEventEntity.findAll({
             where: {
-                eventId: eventId,
+                eventId: eventUrl,
                 accountId: account.id
             }
         });
+        let actorUrl = await this.actorUrl(account);
+        for ( let share of shares ) {
+            this.addToOutbox(account, new UndoActivity(actorUrl, share.id ));
+            share.destroy();
+        }
+    }
+
+    async addToOutbox(account: Account, message: ActivityPubActivity) {
+        let accountUrl = await this.actorUrl(account);
+
+        if ( accountUrl == message.actor ) {
+            let messageEntity = ActivityPubOutboxMessageEntity.build({
+                id: message.id,
+                type: message.type,
+                account_id: account.id,
+                message_time: DateTime.utc(),
+                message: message
+            })
+            await messageEntity.save();
+        }
     }
 }
 

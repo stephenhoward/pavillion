@@ -1,5 +1,5 @@
-import { Model, InferAttributes, InferCreationAttributes, Sequelize, DataTypes } from 'sequelize';
-import db from './db';
+import { Model, InferAttributes, InferCreationAttributes, DataTypes } from 'sequelize';
+import db from '@/server/common/entity/db';
 
 class ServiceSettingEntity extends Model<InferAttributes<ServiceSettingEntity>,InferCreationAttributes<ServiceSettingEntity>> {
 

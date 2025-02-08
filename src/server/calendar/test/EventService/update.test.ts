@@ -5,9 +5,9 @@ import { DateTime } from 'luxon';
 import { Account } from '@/common/model/account';
 import { CalendarEventContent, CalendarEventSchedule, language, EventFrequency } from '@/common/model/events';
 import { EventLocation } from '@/common/model/location';
-import { EventEntity, EventContentEntity, EventScheduleEntity } from '@/server/common/entity/event';
-import EventService from '@/server/members/service/events';
-import LocationService from '@/server/members/service/locations';
+import { EventEntity, EventContentEntity, EventScheduleEntity } from '@/server/calendar/entity/event';
+import EventService from '@/server/calendar/service/events';
+import LocationService from '@/server/calendar/service/locations';
 
 describe('updateEvent with content', () => {
     let service: EventService

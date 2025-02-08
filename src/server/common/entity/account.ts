@@ -1,6 +1,6 @@
 import { Model, Column, Table, BelongsTo, ForeignKey, DataType, PrimaryKey } from 'sequelize-typescript';
 
-import { Account } from '@/common/model/account';
+import { Account, Profile } from '@/common/model/account';
 import AccountInvitation from '@/common/model/invitation';
 import AccountApplication from '@/common/model/application';
 import db from '@/server/common/entity/db';
@@ -85,6 +85,9 @@ class ProfileEntity extends Model {
     declare username: string;
 
     @Column({ type: DataType.STRING })
+    declare domain: string;
+
+    @Column({ type: DataType.STRING })
     declare description: string;
 
     @Column({ type: DataType.STRING })
@@ -92,6 +95,16 @@ class ProfileEntity extends Model {
 
     @BelongsTo(() => AccountEntity)
     declare account: AccountEntity;
+
+    toModel(): Profile {
+        return {
+            id: this.account_id,
+            username: this.username,
+            domain: this.domain,
+            description: this.description,
+            url: this.url
+        };
+    };
 };
 
 @Table({ tableName: 'account_secrets' })

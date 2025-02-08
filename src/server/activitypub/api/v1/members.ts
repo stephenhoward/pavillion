@@ -3,7 +3,6 @@ import { EventEmitter } from 'events';
 
 import { Account } from '@/common/model/account';
 import ExpressHelper from '@/server/common/helper/express';
-import ActivityPubService from '@/server/activitypub/service/server';
 import ActivityPubMemberService from '@/server/activitypub/service/members'
 
 class ActivityPubMemberRoutes {

@@ -3,8 +3,8 @@ import { DateTime } from 'luxon';
 
 import { CalendarEvent, CalendarEventContent, CalendarEventSchedule, language } from '@/common/model/events';
 import db from '@/server/common/entity/db';
-import { LocationEntity } from '@/server/common/entity/location';
 import { AccountEntity } from '@/server/common/entity/account';
+import { LocationEntity } from '@/server/calendar/entity/location';
 
 @Table({ tableName: 'event' })
 class EventEntity extends Model {

@@ -1,14 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 
-import { UserProfileResponse } from '@/common/model/message/userprofile';
-import { WebFingerResponse } from '@/common/model/message/webfinger';
+import { UserProfileResponse } from '@/server/activitypub/model/userprofile';
+import { WebFingerResponse } from '@/server/activitypub/model/webfinger';
 import ActivityPubService from '@/server/activitypub/service/server';
 import AccountService from '@/server/accounts/service/account';
 import { ProfileEntity } from '@/server/common/entity/account';
 import { Account } from '@/common/model/account';
-import { ActivityPubMessage } from '@/common/model/message/actions';
-import { ActivityPubInboxMessageEntity } from '@/server/common/entity/activitypub';
+import { ActivityPubActivity } from '@/server/activitypub/model/base';
+import { ActivityPubInboxMessageEntity } from '@/server/activitypub/entity/activitypub';
 
 describe('parseWebFingerResource', () => {
 
@@ -130,7 +130,7 @@ describe("addToInbox", () => {
     });
 
     it('should save the message', async () => {
-        let message = ActivityPubMessage.fromObject({ type: 'Create', id: 'testid' });
+        let message = ActivityPubActivity.fromObject({ type: 'Create', id: 'testid' });
         let account = Account.fromObject({ id: 'testid' });
 
         let getAccountStub = sandbox.stub(AccountService, 'getAccount');
@@ -146,7 +146,7 @@ describe("addToInbox", () => {
     });
 
     it('should throw an error if account not found', async () => {
-        let message = ActivityPubMessage.fromObject({ type: 'Create', id: 'testid' });
+        let message = ActivityPubActivity.fromObject({ type: 'Create', id: 'testid' });
         let account = Account.fromObject({ id: 'testid' });
 
         let getAccountStub = sandbox.stub(AccountService, 'getAccount');

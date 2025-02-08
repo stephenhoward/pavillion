@@ -5,8 +5,8 @@ import express from 'express';
 
 import { CalendarEvent } from '@/common/model/events';
 import { testApp, countRoutes, addRequestUser } from '@/server/common/test/lib/express';
-import MemberAPI from '@/server/members/api/v1';
-import EventRoutes from '@/server/members/api/v1/events';
+import MemberAPI from '@/server/calendar/api/v1';
+import EventRoutes from '@/server/calendar/api/v1/events';
 
 describe('API v1', () => {
 

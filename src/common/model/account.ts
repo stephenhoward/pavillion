@@ -39,8 +39,10 @@ class Account extends PrimaryModel {
 };
 
 class Profile {
+    declare id: string;
     declare username: string;
     declare description: string;
+    declare domain: string;
     declare url: string;
 };
 
