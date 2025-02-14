@@ -3,8 +3,7 @@ import { DateTime } from "luxon";
 import { Account } from "@/common/model/account";
 import { WebFingerResponse } from "@/server/activitypub/model/webfinger";
 import { UserProfileResponse } from "@/server/activitypub/model/userprofile";
-import { ActivityPubMessage } from "@/server/activitypub/model/actions";
-import { CreateMessage, UpdateMessage, DeleteMessage } from "@/server/activitypub/model/actions";
+import { ActivityPubActivity } from "@/server/activitypub/model/base";
 import { ActivityPubInboxMessageEntity, EventActivityEntity, FollowedAccountEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
 import AccountService from "@/server/accounts/service/account";
 
@@ -69,7 +68,7 @@ class ActivityPubService {
      * @returns null
      */
     // TODO permissions? block lists? rate limiting?
-    async addToInbox(account: Account, message: ActivityPubMessage ): Promise<null> {
+    async addToInbox(account: Account, message: ActivityPubActivity ): Promise<null> {
         let foundAccount = await AccountService.getAccount(account.id);
 
         if ( foundAccount === null ) {
@@ -91,7 +90,7 @@ class ActivityPubService {
      * @param limit 
      * @returns a list of ActivityPubMessage objects
      */
-    async readOutbox(account: Account, limit?: DateTime): Promise<ActivityPubMessage[]> {
+    async readOutbox(account: Account, limit?: DateTime): Promise<ActivityPubActivity[]> {
         let messageEntities = await ActivityPubInboxMessageEntity.findAll({
             where: { account_id: account.id },
             order: [['created_at', 'DESC']]

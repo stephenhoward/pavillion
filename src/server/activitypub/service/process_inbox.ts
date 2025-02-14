@@ -1,9 +1,11 @@
 import { DateTime } from "luxon";
 
 import { Account } from "@/common/model/account";
-import { WebFingerResponse } from "@/server/activitypub/model/webfinger";
-import { UserProfileResponse } from "@/server/activitypub/model/userprofile";
-import { CreateMessage, UpdateMessage, DeleteMessage, UndoMessage, AnnounceMessage, FollowMessage } from "@/server/activitypub/model/actions";
+import CreateActivity from "@/server/activitypub/model/action/create";
+import UpdateActivity from "@/server/activitypub/model/action/update";
+import DeleteActivity from "@/server/activitypub/model/action/delete";
+import FollowActivity from "@/server/activitypub/model/action/follow";
+import AnnounceActivity from "@/server/activitypub/model/action/announce";
 import { ActivityPubInboxMessageEntity, EventActivityEntity, FollowedAccountEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
 import AccountService from "@/server/accounts/service/account";
 import EventService from "@/server/calendar/service/events";
@@ -46,19 +48,19 @@ class ProcessInboxService {
 
         switch( message.type ) {
             case 'Create':
-                await this.processCreateEvent(account, CreateMessage.fromObject(message.message) );
+                await this.processCreateEvent(account, CreateActivity.fromObject(message.message) );
                 break;
             case 'Update':
-                this.processUpdateEvent(account, UpdateMessage.fromObject(message.message) );
+                this.processUpdateEvent(account, UpdateActivity.fromObject(message.message) );
                 break;
             case 'Delete':
-                this.processDeleteEvent(account, DeleteMessage.fromObject(message.message) );
+                this.processDeleteEvent(account, DeleteActivity.fromObject(message.message) );
                 break;
             case 'Follow':
-                this.processFollowAccount(account, FollowMessage.fromObject(message.message) );
+                this.processFollowAccount(account, FollowActivity.fromObject(message.message) );
                 break;
             case 'Announce':
-                this.processShareEvent(account, AnnounceMessage.fromObject(message.message) );
+                this.processShareEvent(account, AnnounceActivity.fromObject(message.message) );
                 break;
             case 'Undo':
                 let targetEntity = await ActivityPubInboxMessageEntity.findOne({
@@ -79,17 +81,22 @@ class ProcessInboxService {
         }
     }
 
-    async processCreateEvent(account: Account, message: CreateMessage) {
+    async processCreateEvent(account: Account, message: CreateActivity) {
+        //TODO: implement eventService.importEvent
         let event = await this.eventService.createEvent(null, message.object.toObject());
+        //TODO add to account's feed table if they follow the event owner
     }
 
-    async processUpdateEvent(account: Account, message: UpdateMessage) {
+    async processUpdateEvent(account: Account, message: UpdateActivity) {
+        //TODO: implement eventService.updateImportedEvent
         let event = await this.eventService.updateEvent(null, message.object.id, message.object.toObject());
     }
 
-    async processDeleteEvent(account: Account, message: DeleteMessage) {
+    async processDeleteEvent(account: Account, message: DeleteActivity) {
+        //TODO: implement eventService.deleteImportedEvent
         let event = await this.eventService.deleteEvent(null, message.object.id);
         SharedEventEntity.destroy({ where: { eventId: message.object.id } });
+        //TODO remove from feed table for all users
     }
 
     async processFollowAccount(account: Account, message: any) {
@@ -111,14 +118,17 @@ class ProcessInboxService {
     }
 
     async processShareEvent(account: Account, message: any) {
+        // If it's the account's own event
         EventActivityEntity.create({
             eventId: message.object.attributedTo,
             accountId: account.id,
             type: 'share'
         });
+        // TODO: otherwise import the event and put it in the account's feed
     }
 
     async processUnshareEvent(account: Account, message: any) {
+        // If it's the account's own event
         EventActivityEntity.destroy({
             where: {
                 eventId: message.object.attributedTo,
@@ -126,6 +136,7 @@ class ProcessInboxService {
                 type: 'share'
             }
         });
+        // TODO: otherwise remove it from all follower accounts' feeds
     }
 }
 

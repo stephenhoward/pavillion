@@ -72,14 +72,17 @@ class ActivityPubMessageEntity extends Model {
     }
 }
 
+// messages from accounts the account follows from across the web
 @Table({ tableName: 'ap_inbox'})
 class ActivityPubInboxMessageEntity extends ActivityPubMessageEntity {
 }
 
+// messages from the account holder to their followers/ the public
 @Table({ tableName: 'ap_outbox'})
 class ActivityPubOutboxMessageEntity extends ActivityPubMessageEntity {
 }
 
+// a list of follows and followers for an account
 @Table({ tableName: 'ap_follow'})
 class FollowedAccountEntity extends Model {
 
@@ -104,6 +107,7 @@ class FollowedAccountEntity extends Model {
     declare account: AccountEntity;
 }
 
+// a list of remote events the account has chosen to share to their calendar
 @Table({ tableName: 'ap_shared_event'})
 class SharedEventEntity extends Model {
 
@@ -121,6 +125,8 @@ class SharedEventEntity extends Model {
     declare account_id: string;
 }
 
+// a list of activities (shares, etc) that other accounts have done to an account's
+// own events
 @Table({ tableName: 'ap_event_activity'})
 class EventActivityEntity extends Model {
 
@@ -133,6 +139,18 @@ class EventActivityEntity extends Model {
 
     @Column({ type: DataType.STRING })
     declare remote_account_id: string;
+}
+
+// A collection of events that have been processed from an account's inbox,
+// from accounts they follow
+@Table({ tableName: 'ap_event_feed' })
+class EventFeed extends Model {
+
+    @Column({ type: DataType.STRING })
+    declare event_id: string;
+
+    @Column({ DataType.STRING })
+    declare account_id: string;
 }
 
 db.addModels([ActivityPubInboxMessageEntity, ActivityPubOutboxMessageEntity, FollowedAccountEntity, SharedEventEntity, EventActivityEntity]);
