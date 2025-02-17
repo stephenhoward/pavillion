@@ -42,7 +42,10 @@ class ActivityPubService {
                         new EventObject(profile, e.event)
                     )
                 );
-                }
+            }
+            else {
+                console.log('no profile found for account that created event');
+            }
         });
         source.on('eventUpdated', async (e) => {
             let actorUrl = await this.actorUrl(e.account);
@@ -56,7 +59,10 @@ class ActivityPubService {
                     )
                 );
                 }
-        });
+                else {
+                    console.log('no profile found for account that updated event');
+                }
+            });
         source.on('eventDeleted', async (e) => {
             let profile = await AccountService.getProfileForAccount(e.account);
             if ( profile ) {
@@ -68,6 +74,9 @@ class ActivityPubService {
                         EventObject.eventUrl(profile, e.event)
                     )
                 );
+            }
+            else {
+                console.log('no profile found for account that deleted event');
             }
         });
     }

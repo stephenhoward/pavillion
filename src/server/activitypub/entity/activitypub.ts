@@ -149,7 +149,7 @@ class EventFeed extends Model {
     @Column({ type: DataType.STRING })
     declare event_id: string;
 
-    @Column({ DataType.STRING })
+    @Column({ type: DataType.STRING })
     declare account_id: string;
 }
 

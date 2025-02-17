@@ -97,7 +97,7 @@ describe("followAccount", () => {
         let addToOutboxStub = sandbox.stub(service, 'addToOutbox');
         addToOutboxStub.resolves();
 
-        expect( service.followAccount(account,'invalidUserIdentifier') ).rejects.toThrow('Invalid remote account identifier: invalidUserIdentifier');
+        await expect( service.followAccount(account,'invalidUserIdentifier') ).rejects.toThrow('Invalid remote account identifier: invalidUserIdentifier');
         expect( buildFollowStub.called ).toBe(false);
         expect( saveFollowStub.called ).toBe(false);
         expect( addToOutboxStub.called ).toBe(false);

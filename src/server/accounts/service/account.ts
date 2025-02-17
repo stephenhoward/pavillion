@@ -125,6 +125,23 @@ class AccountService {
         };
     }
 
+    static async _setUsername(account: Account, username: string): Promise<boolean> {
+        let profile = await ProfileEntity.findOne({ where: { account_id: account.id } });
+
+        if ( profile ) {
+            profile.username = username;
+            await profile.save();
+        }
+        else {
+            profile = ProfileEntity.build({
+                account_id: account.id,
+                username: username
+            });
+            await profile.save();
+        }
+        return true;
+    }
+
     static async validateInviteCode(code: string): Promise<boolean> {
         const invitation = await AccountInvitationEntity.findOne({ where: {invitation_code: code}});
         if ( invitation ) {
