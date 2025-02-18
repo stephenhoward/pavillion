@@ -8,7 +8,7 @@ import CommonAccountService from '@/server/common/service/accounts';
 import EmailService from "@/server/common/service/mail";
 import { AccountEntity, AccountSecretsEntity, AccountInvitationEntity, AccountApplicationEntity, ProfileEntity } from "@/server/common/entity/account"
 import ServiceSettings from '@/server/configuration/service/settings';
-import { AccountApplicationAlreadyExistsError, noAccountInviteExistsError, AccountRegistrationClosedError, AccountApplicationsClosedError, AccountAlreadyExistsError, AccountInviteAlreadyExistsError, noAccountApplicationExistsError } from '@/server/accounts/exceptions';
+import { AccountApplicationAlreadyExistsError, noAccountInviteExistsError, AccountRegistrationClosedError, AccountApplicationsClosedError, AccountAlreadyExistsError, AccountInviteAlreadyExistsError, noAccountApplicationExistsError, UsernameAlreadyExistsError } from '@/server/accounts/exceptions';
 
 type AccountInfo = {
     account: Account,
@@ -125,8 +125,17 @@ class AccountService {
         };
     }
 
-    static async _setUsername(account: Account, username: string): Promise<boolean> {
-        let profile = await ProfileEntity.findOne({ where: { account_id: account.id } });
+    static async setUsername(account: Account, username: string): Promise<boolean> {
+        let profile = await ProfileEntity.findOne({ where: { username: name } });
+
+        if ( profile ) {
+            if ( profile.account_id != account.id ) {
+                throw new UsernameAlreadyExistsError();
+            }
+        }
+        else {
+            profile = await ProfileEntity.findOne({ where: { account_id: account.id } });
+        }
 
         if ( profile ) {
             profile.username = username;

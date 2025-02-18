@@ -14,10 +14,11 @@ import EventService from "@/server/calendar/service/events";
 import { ActivityPubOutboxMessageEntity, FollowedAccountEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
 import UndoActivity from "../model/action/undo";
 
-class ActivityPubService {
+class ActivityPubService extends EventEmitter {
     eventService: EventService;
 
     constructor() {
+        super();
         this.eventService = new EventService();
     }
 
@@ -202,6 +203,8 @@ class ActivityPubService {
                 message: message
             })
             await messageEntity.save();
+
+            this.emit('outboxMessageAdded', message);
         }
     }
 }

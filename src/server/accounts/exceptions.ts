@@ -22,6 +22,12 @@ class noAccountApplicationExistsError extends Error {
     }
 }
 
+class UsernameAlreadyExistsError extends Error {
+    constructor() {
+        super('Username already exists');
+    }
+}
+
 class AccountInviteAlreadyExistsError extends Error {
     constructor() {
       super('Account Invitation already exists');
@@ -48,6 +54,7 @@ class AccountRegistrationClosedError extends Error {
 
 export {
     AccountAlreadyExistsError,
+    UsernameAlreadyExistsError,
     AccountInviteAlreadyExistsError,
     AccountApplicationAlreadyExistsError,
     noAccountExistsError,

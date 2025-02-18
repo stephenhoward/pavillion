@@ -1,4 +1,5 @@
 import { DateTime } from "luxon";
+import { EventEmitter } from "events";
 import AccountService from "@/server/accounts/service/account";
 import { ActivityPubOutboxMessageEntity } from "@/server/activitypub/entity/activitypub"
 import UpdateActivity from "@/server/activitypub/model/action/update";
@@ -15,6 +16,18 @@ class ProcessOutboxService {
 
     }
 
+    registerListeners(source: EventEmitter) {
+        source.on('outboxMessageAdded', async (e) => {
+            let message = await ActivityPubOutboxMessageEntity.findByPk(e.id);
+            if ( message ) {
+                await this.processOutboxMessage(message);
+            }
+            else {
+                console.error("outbox message not found for processing");
+            }
+        });
+    }
+
     async processOutboxMessages() {
 
         let messages: ActivityPubOutboxMessageEntity[] = [];
@@ -28,7 +41,6 @@ class ProcessOutboxService {
 
             for( const message of messages ) {
                 await this.processOutboxMessage(message);
-                await message.update({ processedAt: DateTime.now().toJSDate() })
             }
         } while( messages.length > 0 );
     }
@@ -65,9 +77,14 @@ class ProcessOutboxService {
         }
 
         if ( activity ) {
+            console.log("going to process this message now");
             // TODO: send the the appropriate inboxes across the web
             // usually followers, but also anyone who has announced
             // an object we're modifying/deleting
         }
+
+        await message.update({ processed_time: DateTime.now().toJSDate() })
     }
 }
+
+export default ProcessOutboxService;

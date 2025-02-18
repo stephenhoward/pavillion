@@ -7,8 +7,8 @@ import { router as indexRoutes } from '@/server/app_routes';
 import AccountsAPI from '@/server/accounts/api/v1';
 import AuthenticationAPI from '@/server/authentication/api/v1';
 import MemberAPI from '@/server/calendar/api/v1';
-import ActivityPubAPI from '@/server/activitypub/api/v1';
 import ConfigurationAPI from '@/server/configuration/api/v1';
+import ActivityPubAPI from '@/server/activitypub/api/v1';
 
 const initPavillionServer = (app: express.Application) => {
 
@@ -30,6 +30,7 @@ const initPavillionServer = (app: express.Application) => {
         AccountsAPI(app);
         let memberAPI = new MemberAPI(app);
         let activitypubAPI = new ActivityPubAPI(app);
+
         activitypubAPI.registerListeners(memberAPI);
 
         app.listen(config.get('host.port'), () => {

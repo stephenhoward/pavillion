@@ -2,14 +2,16 @@ import express, { Request, Response } from 'express';
 import { EventEmitter } from 'events';
 
 import { Account } from '@/common/model/account';
+import EventProxy from '@/server/common/helper/event_proxy';
 import ExpressHelper from '@/server/common/helper/express';
 import ActivityPubMemberService from '@/server/activitypub/service/members'
 
-class ActivityPubMemberRoutes {
+class ActivityPubMemberRoutes extends EventProxy {
     router: express.Router;
     service: ActivityPubMemberService;
 
     constructor() {
+        super();
         this.router = express.Router();
         this.router.post('/social/follows', ExpressHelper.loggedInOnly, this.followAccount);
         this.router.delete('/social/follows/:id', ExpressHelper.loggedInOnly, this.unfollowAccount);
@@ -17,6 +19,7 @@ class ActivityPubMemberRoutes {
         this.router.delete('/social/shares/:id', ExpressHelper.loggedInOnly, this.unshareEvent);
 
         this.service = new ActivityPubMemberService();
+        this.proxyEvents(this.service,['outboxMessageAdded']);
     }
 
     registerListeners(source: EventEmitter) {
