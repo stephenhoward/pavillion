@@ -23,7 +23,6 @@ class ActivityPubService extends EventEmitter {
     }
 
     async actorUrl(account: Account): Promise<string> {
-        // TODO url safety of username
         let profile = await AccountService.getProfileForAccount(account);
         
         return profile

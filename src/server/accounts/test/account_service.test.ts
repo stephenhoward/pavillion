@@ -9,6 +9,30 @@ import ServiceSettings from '@/server/configuration/service/settings';
 import AccountService from '@/server/accounts/service/account';
 import { AccountAlreadyExistsError, AccountInviteAlreadyExistsError, AccountRegistrationClosedError, AccountApplicationAlreadyExistsError, AccountApplicationsClosedError, noAccountInviteExistsError, noAccountApplicationExistsError } from '@/server/accounts/exceptions';
 
+describe('isValidUsername', () => {
+
+    let sandbox = sinon.createSandbox();
+
+    afterEach(() => {
+        sandbox.restore();
+    });
+
+    it('should return false if username is invalid', async () => {
+        const tests: [string,boolean][] = [
+            ['_noleadunderscore', false],
+            ['thisisamuchtoolongusername', false],
+            ['no spaces allowed', false],
+            ['illegal@character', false],
+            ['legalusername', true],
+            ['9alsolegal', true],
+            ['alsolegal_', true]
+        ]
+        for( let test of tests) {
+            expect(AccountService.isValidUsername(test[0])).toBe(test[1]);
+        }
+    });
+});
+
 describe('inviteNewAccount', () => {
 
     let sandbox = sinon.createSandbox();

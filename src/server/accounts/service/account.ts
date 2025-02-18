@@ -8,7 +8,7 @@ import CommonAccountService from '@/server/common/service/accounts';
 import EmailService from "@/server/common/service/mail";
 import { AccountEntity, AccountSecretsEntity, AccountInvitationEntity, AccountApplicationEntity, ProfileEntity } from "@/server/common/entity/account"
 import ServiceSettings from '@/server/configuration/service/settings';
-import { AccountApplicationAlreadyExistsError, noAccountInviteExistsError, AccountRegistrationClosedError, AccountApplicationsClosedError, AccountAlreadyExistsError, AccountInviteAlreadyExistsError, noAccountApplicationExistsError, UsernameAlreadyExistsError } from '@/server/accounts/exceptions';
+import { AccountApplicationAlreadyExistsError, noAccountInviteExistsError, AccountRegistrationClosedError, AccountApplicationsClosedError, AccountAlreadyExistsError, AccountInviteAlreadyExistsError, noAccountApplicationExistsError, UsernameAlreadyExistsError, InvalidUsernameError } from '@/server/accounts/exceptions';
 
 type AccountInfo = {
     account: Account,
@@ -107,6 +107,8 @@ class AccountService {
 
         await accountEntity.save();
 
+        // TODO: add creating a username as a required step to having a valid account
+
         const accountSecretsEntity = AccountSecretsEntity.build({ account_id: accountEntity.id });
 
         if( password ) {
@@ -125,7 +127,16 @@ class AccountService {
         };
     }
 
+    static isValidUsername(username: string): boolean {
+        return username.match(/^[a-z0-9][a-z0-9_]{2,23}$/i) ? true : false;
+    }
+
     static async setUsername(account: Account, username: string): Promise<boolean> {
+
+        if ( ! AccountService.isValidUsername(username) ) {
+            throw new InvalidUsernameError();
+        }
+
         let profile = await ProfileEntity.findOne({ where: { username: name } });
 
         if ( profile ) {

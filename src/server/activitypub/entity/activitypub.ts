@@ -11,7 +11,6 @@ import AnnounceActivity from '@/server/activitypub/model/action/announce';
 import FollowActivity from '@/server/activitypub/model/action/follow';
 import UndoActivity from '@/server/activitypub/model/action/undo';
 
-// TODO: should incoming messages be stored somewhere other than an RDB?
 class ActivityPubMessageEntity extends Model {
     
     @PrimaryKey
