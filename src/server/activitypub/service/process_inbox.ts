@@ -1,4 +1,5 @@
 import { DateTime } from "luxon";
+import { v4 as uuidv4 } from 'uuid';
 
 import { Account } from "@/common/model/account";
 import CreateActivity from "@/server/activitypub/model/action/create";
@@ -101,8 +102,9 @@ class ProcessInboxService {
 
     async processFollowAccount(account: Account, message: any) {
         FollowedAccountEntity.create({
-            remoteAccountId: message.object.attributedTo,
-            accountId: account.id,
+            id: uuidv4(),
+            remote_account_id: message.object.attributedTo,
+            account_id: account.id,
             direction: 'follower'
         });
     }
@@ -110,8 +112,8 @@ class ProcessInboxService {
     async processUnfollowAccount(account: Account, message: any) {
         FollowedAccountEntity.destroy({
             where: {
-                remoteAccountId: message.object.attributedTo,
-                accountId: account.id,
+                remote_account_id: message.object.attributedTo,
+                account_id: account.id,
                 direction: 'follower'
             }
         });
@@ -120,8 +122,8 @@ class ProcessInboxService {
     async processShareEvent(account: Account, message: any) {
         // If it's the account's own event
         EventActivityEntity.create({
-            eventId: message.object.attributedTo,
-            accountId: account.id,
+            event_id: message.object.attributedTo,
+            account_id: account.id,
             type: 'share'
         });
         // TODO: otherwise import the event and put it in the account's feed

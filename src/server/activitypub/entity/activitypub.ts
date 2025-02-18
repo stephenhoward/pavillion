@@ -93,7 +93,7 @@ class FollowedAccountEntity extends Model {
     declare id: string;
 
     @Column({ type: DataType.STRING })
-    declare remoteAccountId: string;
+    declare remote_account_id: string;
 
     @ForeignKey(() => AccountEntity)
     @Column({ type: DataType.STRING })
