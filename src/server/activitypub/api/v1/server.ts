@@ -1,22 +1,24 @@
 import express, { Request, Response } from 'express';
 
-import CreateActivity from '../../model/action/create';
-import UpdateActivity from '../../model/action/update';
-import DeleteActivity from '../../model/action/delete';
-import FollowActivity from '../../model/action/follow';
-import AnnounceActivity from '../../model/action/announce';
-import UndoActivity from '../../model/action/undo';
+import EventProxy from '@/server/common/helper/event_proxy';
+import CreateActivity from '@/server/activitypub/model/action/create';
+import UpdateActivity from '@/server/activitypub/model/action/update';
+import DeleteActivity from '@/server/activitypub/model/action/delete';
+import FollowActivity from '@/server/activitypub/model/action/follow';
+import AnnounceActivity from '@/server/activitypub/model/action/announce';
+import UndoActivity from '@/server/activitypub/model/action/undo';
 import ActivityPubService from '@/server/activitypub/service/server';
 import AccountService from '@/server/accounts/service/account';
 
 /**
  * Routes for the ActivityPub Server to Server API
  */
-class ActivityPubServerRoutes {
+class ActivityPubServerRoutes extends EventProxy {
     router: express.Router;
     service: ActivityPubService;
 
     constructor() {
+        super();
         this.router = express.Router();
         this.router.get('/.well-known/webfinger', this.lookupUser);
         this.router.get('/users/:user', this.getUserProfile);
@@ -24,6 +26,7 @@ class ActivityPubServerRoutes {
         this.router.get('/users/:user/outbox', this.readOutbox);
 
         this.service = new ActivityPubService();
+        this.proxyEvents(this.service,['inboxMessageAdded']);
     }
 
     /** Find user profile location by webfinger resource

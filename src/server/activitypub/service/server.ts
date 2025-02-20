@@ -1,4 +1,5 @@
 import { DateTime } from "luxon";
+import { EventEmitter } from "events";
 
 import { Account } from "@/common/model/account";
 import { WebFingerResponse } from "@/server/activitypub/model/webfinger";
@@ -8,9 +9,11 @@ import { ActivityPubInboxMessageEntity, EventActivityEntity, FollowedAccountEnti
 import AccountService from "@/server/accounts/service/account";
 
 
-class ActivityPubService {
+class ActivityPubService extends EventEmitter {
 
-    constructor() {}
+    constructor() {
+        super();
+    }
 
     /**
      * parse the webfinger resource format into username and domain
@@ -80,6 +83,7 @@ class ActivityPubService {
             message: message
         });
         await messageEntity.save();
+        this.emit('inboxMessageAdded', { id: messageEntity.id });
 
         return null;
     }

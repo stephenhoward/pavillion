@@ -1,5 +1,6 @@
 import { DateTime } from "luxon";
 import { v4 as uuidv4 } from 'uuid';
+import { EventEmitter } from "events";
 
 import { Account } from "@/common/model/account";
 import CreateActivity from "@/server/activitypub/model/action/create";
@@ -17,6 +18,18 @@ class ProcessInboxService {
 
     constructor() {
         this.eventService = new EventService();
+    }
+
+    registerListeners(source: EventEmitter) {
+        source.on('inboxMessageAdded', async (e) => {
+            let message = await ActivityPubInboxMessageEntity.findByPk(e.id);
+            if ( message ) {
+                await this.processInboxMessage(message);
+            }
+            else {
+                console.error("inbox message not found for processing");
+            }
+        });
     }
 
     async processInboxMessages() {
@@ -43,43 +56,62 @@ class ProcessInboxService {
         const account = await AccountService.getAccount(message.account_id);
 
         if ( ! account ) {
-            console.error('No account found for message');
-            return;
+            throw new Error("No account found for message");
         }
 
-        switch( message.type ) {
-            case 'Create':
-                await this.processCreateEvent(account, CreateActivity.fromObject(message.message) );
-                break;
-            case 'Update':
-                this.processUpdateEvent(account, UpdateActivity.fromObject(message.message) );
-                break;
-            case 'Delete':
-                this.processDeleteEvent(account, DeleteActivity.fromObject(message.message) );
-                break;
-            case 'Follow':
-                this.processFollowAccount(account, FollowActivity.fromObject(message.message) );
-                break;
-            case 'Announce':
-                this.processShareEvent(account, AnnounceActivity.fromObject(message.message) );
-                break;
-            case 'Undo':
-                let targetEntity = await ActivityPubInboxMessageEntity.findOne({
-                     where: { accountId: message.account_id, id: message.message.object }
-                });
+        try {
+            switch( message.type ) {
+                case 'Create':
+                    await this.processCreateEvent(account, CreateActivity.fromObject(message.message) );
+                    break;
+                case 'Update':
+                    this.processUpdateEvent(account, UpdateActivity.fromObject(message.message) );
+                    break;
+                case 'Delete':
+                    this.processDeleteEvent(account, DeleteActivity.fromObject(message.message) );
+                    break;
+                case 'Follow':
+                    this.processFollowAccount(account, FollowActivity.fromObject(message.message) );
+                    break;
+                case 'Announce':
+                    this.processShareEvent(account, AnnounceActivity.fromObject(message.message) );
+                    break;
+                case 'Undo':
+                    let targetEntity = await ActivityPubInboxMessageEntity.findOne({
+                        where: { accountId: message.account_id, id: message.message.object }
+                    });
 
-                if ( targetEntity ) {
+                    if ( targetEntity ) {
 
-                    switch( targetEntity.type ) {
-                        case 'Follow':
-                            this.processUnfollowAccount(account, targetEntity);
-                            break;
-                        case 'Announce':
-                            this.processUnshareEvent(account, targetEntity);
-                            break;
-                        }
-                }
+                        switch( targetEntity.type ) {
+                            case 'Follow':
+                                this.processUnfollowAccount(account, targetEntity);
+                                break;
+                            case 'Announce':
+                                this.processUnshareEvent(account, targetEntity);
+                                break;
+                            }
+                    }
+                    else {
+                        throw new Error('Undo target not found');
+                    }
+                    break;
+                default:
+                    throw new Error('bad message type');
+            }
+            await message.update({
+                processed_time: DateTime.now().toJSDate(),
+                processed_status: 'ok'
+            });
         }
+        catch (e) {
+            console.error('Error processing message', e);
+            await message.update({
+                processed_time: DateTime.now().toJSDate(),
+                processed_status: 'error'
+            });
+        }
+
     }
 
     async processCreateEvent(account: Account, message: CreateActivity) {
