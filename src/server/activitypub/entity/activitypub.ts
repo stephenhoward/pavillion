@@ -36,6 +36,9 @@ class ActivityPubMessageEntity extends Model {
     @Column({ type: DataType.DATE })
     declare processed_time: Date;
 
+    @Column({ type: DataType.STRING })
+    declare processed_status: string;
+
     @BelongsTo(() => AccountEntity)
     declare account: AccountEntity;
 

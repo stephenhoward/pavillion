@@ -50,11 +50,10 @@ class ProcessOutboxService {
     }
 
     async processOutboxMessage(message: ActivityPubOutboxMessageEntity) {
-        const account = await AccountService.getAccount(message.account_id);
+        let account = await AccountService.getAccount(message.account_id);
 
         if ( ! account ) {
-            console.error("No account found for message");
-            return;
+            throw new Error("No account found for message");
         }
 
         let activity = null;
@@ -84,7 +83,7 @@ class ProcessOutboxService {
             const recipients = await this.getRecipients(account, activity.object);
 
             for( const recipient of recipients ) {
-                const inboxUrl = await this.resolveInbox(recipient);
+                const inboxUrl = await this.resolveInboxUrl(recipient);
 
                 if ( inboxUrl ) {
                     axios.post(inboxUrl, activity);
@@ -93,9 +92,17 @@ class ProcessOutboxService {
                     console.log("skipping message to " + recipient + " because no inbox found");
                 }
             }
+            await message.update({
+                processed_time: DateTime.now().toJSDate(),
+                processed_status: 'ok'
+            });
         }
-
-        await message.update({ processed_time: DateTime.now().toJSDate() })
+        else {
+            await message.update({
+                processed_time: DateTime.now().toJSDate(),
+                processed_status: 'bad message type'
+            });
+        }
     }
 
     async getRecipients(account: Account, object: ActivityPubObject|string): Promise<string[]> {
@@ -115,7 +122,7 @@ class ProcessOutboxService {
         return recipients;
     }
 
-    async resolveInbox(remote_user: string): Promise<string|null> {
+    async resolveInboxUrl(remote_user: string): Promise<string|null> {
 
         const profileUrl = await this.fetchProfileUrl(remote_user);
         if ( profileUrl ) {

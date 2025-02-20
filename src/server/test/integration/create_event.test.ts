@@ -9,7 +9,7 @@ import initPavillionServer from '@/server/server';
 import AccountService from '@/server/accounts/service/account';
 import { EventEntity } from '@/server/calendar/entity/event';
 import { ActivityPubOutboxMessageEntity } from '@/server/activitypub/entity/activitypub';
-import ProcessInboxService from '@/server/activitypub/service/process_inbox';
+import ProcessInboxService from '@/server/activitypub/service/inbox';
 
 describe('Event API', async () => {
 
@@ -45,7 +45,7 @@ describe('Event API', async () => {
         let entity = await EventEntity.findOne({ where: { id: response.body.id } });
 
         // wait for create event to propogate to activitypub service:
-        await new Promise(resolve => setTimeout(resolve, 100))
+        await new Promise(resolve => setTimeout(resolve, 100));
 
         let message = await ActivityPubOutboxMessageEntity.findOne({ where: { account_id: account.account.id } });
 
