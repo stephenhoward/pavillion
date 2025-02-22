@@ -16,6 +16,9 @@ class AccountEntity extends Model {
     declare username: string;
 
     @Column({ type: DataType.STRING })
+    declare domain: string;
+
+    @Column({ type: DataType.STRING })
     declare email: string;
 
     toModel(): Account {
@@ -82,12 +85,6 @@ class ProfileEntity extends Model {
     declare account_id: string;
 
     @Column({ type: DataType.STRING })
-    declare username: string;
-
-    @Column({ type: DataType.STRING })
-    declare domain: string;
-
-    @Column({ type: DataType.STRING })
     declare description: string;
 
     @Column({ type: DataType.STRING })
@@ -97,13 +94,11 @@ class ProfileEntity extends Model {
     declare account: AccountEntity;
 
     toModel(): Profile {
-        return {
+        return Profile.fromObject({
             id: this.account_id,
-            username: this.username,
-            domain: this.domain,
             description: this.description,
             url: this.url
-        };
+        });
     };
 };
 

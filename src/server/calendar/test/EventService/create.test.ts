@@ -36,6 +36,7 @@ describe('createEvent', () => {
         });
 
         expect(event.id).toBeDefined();
+        expect(event.id).toMatch(/^https:\/\/pavillion.dev\/events\/[a-z0-9-]+$/);
         expect(eventSpy.returnValues[0].account_id).toBe('testAccountId');
         expect(contentSpy.returnValues[0].event_id).toBe(event.id);
         expect(event.content("en").name).toBe('testName');

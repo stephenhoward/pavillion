@@ -93,7 +93,7 @@ describe('findLocation', () => {
             expect(findLocationStub.called).toBe(true);
         });
 
-        describe('createEvent', () => {
+        describe('createLocation', () => {
 
             let sandbox = sinon.createSandbox();
         
@@ -111,6 +111,7 @@ describe('findLocation', () => {
                 );
         
                 expect(location.id).toBeDefined();
+                expect(location.id).toMatch(/^https:\/\/pavillion.dev\/places\/[a-z0-9-]+$/);
                 expect(eventSpy.returnValues[0].account_id).toBe('testAccountId');
                 expect(saveStub.called).toBe(true);
             });

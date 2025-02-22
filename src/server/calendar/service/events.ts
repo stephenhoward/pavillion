@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
+import config from 'config';
 
 import { Account } from "@/common/model/account"
 import { CalendarEvent, CalendarEventContent, CalendarEventSchedule } from "@/common/model/events"
@@ -51,6 +52,11 @@ class EventService extends EventEmitter {
         });
     }
 
+    generateEventUrl(account: Account): string {
+        const domain = account.domain || config.get('domain');
+        return 'https://' + domain + '/events/' + uuidv4();
+    }
+
     /**
      * Creates a new event for the provided account
      * @param account - account the event belongs to
@@ -59,7 +65,7 @@ class EventService extends EventEmitter {
      */
     async createEvent(account: Account, eventParams:Record<string,any>): Promise<CalendarEvent> {
 
-        eventParams.id = uuidv4();
+        eventParams.id = this.generateEventUrl(account);
 
         const event = CalendarEvent.fromObject(eventParams);
         if ( account.profile?.username.length ) {

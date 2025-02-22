@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
+import config from 'config';
 
 import { Account } from '@/common/model/account';
 import { EventLocation } from '@/common/model/location';
@@ -32,9 +33,14 @@ class LocationService {
         return null;
     }
 
+    static generateLocationUrl(account: Account): string {
+        const domain = account.domain || config.get('domain');
+        return 'https://' + domain + '/places/' + uuidv4();
+    }
+
     static async createLocation(account: Account, location: EventLocation): Promise<EventLocation> {
         const entity = LocationEntity.fromModel(location);
-        entity.id = uuidv4();
+        entity.id = LocationService.generateLocationUrl(account);
         entity.account_id = account.id;
         await entity.save();
         return entity.toModel();

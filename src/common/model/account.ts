@@ -2,6 +2,7 @@ import { Model, PrimaryModel } from '@/common/model/model';
 
 class Account extends PrimaryModel {
     username: string = '';
+    domain: string = '';
     email: string = '';
     profile: Profile | null = null;
     roles: string[] | null = null;

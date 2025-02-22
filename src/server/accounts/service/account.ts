@@ -137,28 +137,23 @@ class AccountService {
             throw new InvalidUsernameError();
         }
 
-        let profile = await ProfileEntity.findOne({ where: { username: name } });
-
-        if ( profile ) {
-            if ( profile.account_id != account.id ) {
-                throw new UsernameAlreadyExistsError();
-            }
-        }
-        else {
-            profile = await ProfileEntity.findOne({ where: { account_id: account.id } });
+        let accountEntity = await AccountEntity.findByPk(account.id);
+        if ( ! accountEntity ) {
+            throw new Error('Account not found');
         }
 
-        if ( profile ) {
-            profile.username = username;
-            await profile.save();
+        if ( accountEntity.username == username ) {
+            return true;
         }
-        else {
-            profile = ProfileEntity.build({
-                account_id: account.id,
-                username: username
-            });
-            await profile.save();
+
+        let existingAccount = await AccountEntity.findOne({ where: { username: name } });
+
+        if ( existingAccount && existingAccount.id != accountEntity.id ) {
+            throw new UsernameAlreadyExistsError();
         }
+
+        accountEntity.update({ username: username });
+
         return true;
     }
 
