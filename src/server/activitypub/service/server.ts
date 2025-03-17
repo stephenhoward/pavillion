@@ -1,5 +1,6 @@
 import { DateTime } from "luxon";
 import { EventEmitter } from "events";
+import config from 'config';
 
 import { Account } from "@/common/model/account";
 import { WebFingerResponse } from "@/server/activitypub/model/webfinger";
@@ -39,10 +40,10 @@ class ActivityPubService extends EventEmitter {
      */
     // TODO: something useful with the domain info (validation?)
     async lookupWebFinger(username: string, domain: string): Promise<WebFingerResponse|null> {
-        let profile = await AccountService.getProfileForUsername(username);
+        let account = await AccountService.getAccountFromUsername(username,domain);
 
-        if ( profile ) {
-            return new WebFingerResponse(profile.username, domain);
+        if ( account ) {
+            return new WebFingerResponse(account.username, account.domain || config.get('domain'));
         }
 
         return null;
@@ -54,11 +55,11 @@ class ActivityPubService extends EventEmitter {
      * @param domain 
      * @returns UserProfileResponse message
      */
-    async lookupUserProfile(username: string, domain: string): Promise<UserProfileResponse|null> {
-        let profile = await AccountService.getProfileForUsername(username);
+    async lookupUserProfile(username: string): Promise<UserProfileResponse|null> {
+        let account = await AccountService.getAccountFromUsername(username,config.get('domain'));
 
-        if ( profile ) {
-            return new UserProfileResponse(profile.username, domain);
+        if ( account ) {
+            return new UserProfileResponse(account.username, account.domain || config.get('domain'));
         }
 
         return null;
@@ -78,12 +79,19 @@ class ActivityPubService extends EventEmitter {
             throw new Error('Account not found');
         }
 
-        let messageEntity = ActivityPubInboxMessageEntity.build({
-            account_id: account.id,
-            message: message
-        });
-        await messageEntity.save();
-        this.emit('inboxMessageAdded', { id: messageEntity.id });
+        let messageEntity = await ActivityPubInboxMessageEntity.findByPk(message.id);
+        if ( ! messageEntity ) {
+            messageEntity = ActivityPubInboxMessageEntity.build({
+                id: message.id,
+                account_id: account.id,
+                type: message.type,
+                message_time: message.published,
+                message: message
+            });
+            await messageEntity.save();
+        }
+
+        this.emit('inboxMessageAdded', { account_id: account.id, id: messageEntity.id });
 
         return null;
     }

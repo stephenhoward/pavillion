@@ -1,12 +1,13 @@
 import { randomBytes } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { DateTime } from 'luxon';
+import config from 'config';
 
-import { Account, Profile } from "@/common/model/account"
+import { Account } from "@/common/model/account"
 import AccountInvitation from '@/common/model/invitation';
 import CommonAccountService from '@/server/common/service/accounts';
 import EmailService from "@/server/common/service/mail";
-import { AccountEntity, AccountSecretsEntity, AccountInvitationEntity, AccountApplicationEntity, ProfileEntity } from "@/server/common/entity/account"
+import { AccountEntity, AccountSecretsEntity, AccountInvitationEntity, AccountApplicationEntity } from "@/server/common/entity/account"
 import ServiceSettings from '@/server/configuration/service/settings';
 import { AccountApplicationAlreadyExistsError, noAccountInviteExistsError, AccountRegistrationClosedError, AccountApplicationsClosedError, AccountAlreadyExistsError, AccountInviteAlreadyExistsError, noAccountApplicationExistsError, UsernameAlreadyExistsError, InvalidUsernameError } from '@/server/accounts/exceptions';
 
@@ -157,6 +158,32 @@ class AccountService {
         return true;
     }
 
+    static async setUsername(account: Account, username: string): Promise<boolean> {
+
+        if ( ! AccountService.isValidUsername(username) ) {
+            throw new InvalidUsernameError();
+        }
+
+        let accountEntity = await AccountEntity.findByPk(account.id);
+        if ( ! accountEntity ) {
+            throw new Error('Account not found');
+        }
+
+        if ( accountEntity.username == username ) {
+            return true;
+        }
+
+        let existingAccount = await AccountEntity.findOne({ where: { username: name } });
+
+        if ( existingAccount && existingAccount.id != accountEntity.id ) {
+            throw new UsernameAlreadyExistsError();
+        }
+
+        accountEntity.update({ username: username });
+
+        return true;
+    }
+
     static async validateInviteCode(code: string): Promise<boolean> {
         const invitation = await AccountInvitationEntity.findOne({ where: {invitation_code: code}});
         if ( invitation ) {
@@ -217,34 +244,26 @@ class AccountService {
         return (await AccountApplicationEntity.findAll()).map( (application) => application.toModel() );
     }
 
-    // ToDo: return signature, and return a model instead of an entity
-    static async getProfileForUsername( username: string ) {
-        let profile = await ProfileEntity.findOne({ where: { username: username } });
-
-        return profile ? profile : null;
-    }
-
     static async getAccount(id: string): Promise<Account|null> {
         const account = await AccountEntity.findByPk(id);
         return account ? account.toModel() : null;
     }
 
-    static async getAccountFromUsername(name: string): Promise<Account|null> {
-        let profile = await ProfileEntity.findOne({ where: { username: name } });
+    static async getAccountFromUsername(name: string, domain?: string): Promise<Account|null> {
 
-        if ( profile ) {
-            let account = await AccountEntity.findByPk(profile.account_id);
+        let account = !domain || config.get('domain') == domain
+            ? await AccountEntity.findOne({ where: {
+                username: name
+            } })
+            : await AccountEntity.findOne({ where: {
+                username: name,
+                domain: domain
+            } });
 
-            if ( account ) {
-                return account.toModel();
-            }
+        if ( account ) {
+            return account.toModel();
         }
         return null;
-    }
-
-    static async getProfileForAccount(account: Account): Promise<Profile|null> {
-        let profileEntity = await ProfileEntity.findOne({ where: { account_id: account.id } });
-        return profileEntity ? profileEntity.toModel() : null;
     }
 }
 

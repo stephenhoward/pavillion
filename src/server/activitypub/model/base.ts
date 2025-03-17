@@ -1,4 +1,5 @@
-import { Profile } from '@/common/model/account';
+import config from 'config';
+import { Account } from '@/common/model/account';
 
 class ActivityPubActivity {
     context: string[] = ['https://www.w3.org/ns/activitystreams'];
@@ -30,19 +31,20 @@ class ActivityPubObject {
 }
 
 class ActivityPubActor {
-    static actorUrl(profile: Profile|string ): string {
-        let id = typeof profile == 'string'
-            ? profile
-            : profile.id;
+    static actorUrl(account: Account|string ): string {
+        let id = typeof account == 'string'
+            ? account
+            : account.id;
 
         if( id.match('^https?:\/\/') ) {
             return id;
         }
-        else if ( profile instanceof Profile ) {
-            return 'https://'+profile.domain+'/users/'+profile.username+'/events/'+id;
+        else if ( account instanceof Account ) {
+            const domain = account.domain || config.get('domain');
+            return 'https://'+domain+'/users/'+account.username+'/events/'+id;
         }
 
-        throw('cannot generate url for this account profile: '+ profile);
+        throw('cannot generate url for this account profile: '+ account);
     }
 }
 

@@ -33,6 +33,7 @@ class Account extends PrimaryModel {
         let account = new Account(obj.id, obj.username, obj.email);
         account.profile = obj.profile;
         account.roles = obj.roles;
+        account.domain = obj.domain;
         return account;
     }
 

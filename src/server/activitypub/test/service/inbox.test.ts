@@ -23,10 +23,17 @@ describe('processInboxMessage', () => {
 
     it('should fail without account', async () => {
         let message = ActivityPubInboxMessageEntity.build({ account_id: 'testid', type: 'Create', message: { to: 'remoteaccount@remotedomain' } });
-        let getAccountStub = sandbox.stub(AccountService,'getAccount');
-        getAccountStub.resolves(null);
-        await expect(service.processInboxMessage(message)).rejects.toThrow('No account found for message');
 
+        let getAccountStub = sandbox.stub(AccountService,'getAccount');
+        let updateStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype,'update');
+
+        getAccountStub.resolves(null);
+
+        await service.processInboxMessage(message);
+
+        expect(updateStub.calledOnce).toBe(true);
+        expect(updateStub.getCalls()[0].args[0]['processed_time']).toBeDefined();
+        expect(updateStub.getCalls()[0].args[0]['processed_status']).toBe('error');
     });
 
     it('should skip invalid message type', async () => {

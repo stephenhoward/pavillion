@@ -1,4 +1,4 @@
-import { Profile } from '@/common/model/account';
+import { Account } from '@/common/model/account';
 import { CalendarEvent } from '@/common/model/events';
 import { ActivityPubObject } from '@/server/activitypub/model/base'
 
@@ -11,19 +11,19 @@ class EventObject extends ActivityPubObject {
     content: Record<string, APEventContent>;
     schedules: CalendarEventSchedule[];
 
-    static eventUrl(profile: Profile, event: CalendarEvent|string ): string {
+    static eventUrl(account: Account, event: CalendarEvent|string ): string {
         let id = typeof event == 'string'
             ? event
             : event.id;
 
         return id.match('^https?:\/\/')
             ? id
-            : 'https://'+profile.domain+'/users/'+profile.username+'/events/'+id;
+            : 'https://'+account.domain+'/users/'+account.username+'/events/'+id;
     }
 
-    constructor( profile: Profile, event: CalendarEvent ) {
+    constructor( account: Account, event: CalendarEvent ) {
         super();
-        this.id = EventObject.eventUrl(profile,event);
+        this.id = EventObject.eventUrl(account,event);
 
         this.date = event.date;
         this.content = event.toObject().content;

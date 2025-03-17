@@ -5,7 +5,6 @@ import { UserProfileResponse } from '@/server/activitypub/model/userprofile';
 import { WebFingerResponse } from '@/server/activitypub/model/webfinger';
 import ActivityPubService from '@/server/activitypub/service/server';
 import AccountService from '@/server/accounts/service/account';
-import { ProfileEntity } from '@/server/common/entity/account';
 import { Account } from '@/common/model/account';
 import { ActivityPubActivity } from '@/server/activitypub/model/base';
 import { ActivityPubInboxMessageEntity } from '@/server/activitypub/entity/activitypub';
@@ -64,7 +63,7 @@ describe('lookupWebFinger', () => {
     });
 
     it('should return null if no profile', async () => {
-        let profileStub = sandbox.stub(AccountService, 'getProfileForUsername');
+        let profileStub = sandbox.stub(AccountService, 'getAccountFromUsername');
         profileStub.resolves(null);
 
         let response = await service.lookupWebFinger('testuser', 'testdomain.com');
@@ -73,8 +72,8 @@ describe('lookupWebFinger', () => {
     });
 
     it('should return a WebFingerResponse', async () => {
-        let profileStub = sandbox.stub(AccountService, 'getProfileForUsername');
-        profileStub.resolves(ProfileEntity.build({ account_id: 'testid', username: 'testuser'}));
+        let accountStub = sandbox.stub(AccountService, 'getAccountFromUsername');
+        accountStub.resolves(Account.fromObject({ account_id: 'testid', username: 'testuser', domain: 'testdomain.com' }));
 
         let response = await service.lookupWebFinger('testuser', 'testdomain.com');
         let expected = new WebFingerResponse('testuser', 'testdomain.com').toObject();
@@ -97,8 +96,8 @@ describe('lookupUserProfile', () => {
     });
 
     it('should return null if no profile', async () => {
-        let profileStub = sandbox.stub(AccountService, 'getProfileForUsername');
-        profileStub.resolves(null);
+        let accountStub = sandbox.stub(AccountService, 'getAccountFromUsername');
+        accountStub.resolves(null);
 
         let response = await service.lookupUserProfile('testuser', 'testdomain.com');
 
@@ -106,14 +105,14 @@ describe('lookupUserProfile', () => {
     });
 
     it('should return a UserProfileResponse', async () => {
-        let profileStub = sandbox.stub(AccountService, 'getProfileForUsername');
-        profileStub.resolves(ProfileEntity.build({ account_id: 'testid', username: 'testuser'}));
+        let accountStub = sandbox.stub(AccountService, 'getAccountFromUsername');
+        accountStub.resolves(Account.fromObject({ account_id: 'testid', username: 'testuser', domain: 'testdomain.com' }));
 
         let response = await service.lookupUserProfile('testuser', 'testdomain.com');
         let expected = new UserProfileResponse('testuser', 'testdomain.com').toObject();
 
         expect(response).toBeDefined();
-        expect(response).toEqual(expected);
+        expect(response?.toObject()).toEqual(expected);
     });
 });
 
@@ -135,6 +134,9 @@ describe("addToInbox", () => {
 
         let getAccountStub = sandbox.stub(AccountService, 'getAccount');
         getAccountStub.resolves(account);
+
+        let findMessageStub = sandbox.stub(ActivityPubInboxMessageEntity, 'findByPk');
+        findMessageStub.resolves(null);
 
         let saveMessageStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype, 'save');
         saveMessageStub.resolves(undefined);

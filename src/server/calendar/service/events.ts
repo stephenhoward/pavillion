@@ -239,6 +239,60 @@ class EventService extends EventEmitter {
         this.emit('eventUpdated', { account, event });
         return event;
     }
+
+    /**
+     * Add a new event from a remote account
+     * @param eventParams - the parameters for the new event
+     * @returns a promise that resolves to the created Event
+     */
+    async addRemoteEvent(eventParams:Record<string,any>): Promise<CalendarEvent> {
+
+        if ( ! eventParams.id ) {
+            throw new Error('Event id is required');
+        }
+        // TODO: validate id is legit.
+        if ( eventParams.id.match(/^https:\/\/[^\/]+\/events\/[0-9a-f-]+$/) === null ) {
+            throw new Error('Invalid event id');
+        }
+
+        const event = CalendarEvent.fromObject(eventParams);
+        const eventEntity = EventEntity.fromModel(event);
+
+        //TODO: check and validate the account id
+
+        if( eventParams.location ) {
+            // Todo: See if we already imported this location
+
+            let location = await LocationService.findOrCreateRemoteLocation(eventParams.location);
+            eventEntity.location_id = location.id;
+            event.location = location;
+        }
+
+        eventEntity.save();
+
+        if ( eventParams.content ) {
+            for( let [language,content] of Object.entries(eventParams.content) ) {
+                event.addContent(await this.createEventContent(event.id, language, content as Record<string,any>));
+            }
+        }
+
+        if ( eventParams.schedules ) {
+            for( let schedule of eventParams.schedules ) {
+                event.addSchedule(await this.createEventSchedule(event.id, schedule as Record<string,any>));
+            }
+        }
+
+        return event;
+    }
+
+    getEventById(eventId: string): Promise<CalendarEvent> {
+        return EventEntity.findByPk(eventId).then( (event) => {
+            if ( event ) {
+                return event.toModel();
+            }
+            return null;
+        });
+    }
 }
 
 export default EventService;

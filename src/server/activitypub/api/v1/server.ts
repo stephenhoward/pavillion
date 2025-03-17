@@ -9,6 +9,7 @@ import AnnounceActivity from '@/server/activitypub/model/action/announce';
 import UndoActivity from '@/server/activitypub/model/action/undo';
 import ActivityPubService from '@/server/activitypub/service/server';
 import AccountService from '@/server/accounts/service/account';
+import { verifyHttpSignature } from '@/server/activitypub/helper/http_signature';
 
 /**
  * Routes for the ActivityPub Server to Server API
@@ -20,10 +21,14 @@ class ActivityPubServerRoutes extends EventProxy {
     constructor() {
         super();
         this.router = express.Router();
-        this.router.get('/.well-known/webfinger', this.lookupUser);
-        this.router.get('/users/:user', this.getUserProfile);
-        this.router.post('/users/:user/inbox', this.addToInbox);
-        this.router.get('/users/:user/outbox', this.readOutbox);
+
+        // Public endpoints (no signature verification required)
+        this.router.get('/.well-known/webfinger', async (req,res) => { await this.lookupUser(req,res) });
+        this.router.get('/users/:user', async (req,res) => { await this.getUserProfile(req,res) });
+        this.router.get('/users/:user/outbox', async (req,res) => { this.readOutbox(req,res) });
+
+        // Secure endpoints (require signature verification)
+        this.router.post('/users/:user/inbox', verifyHttpSignature, async (req,res) => { this.addToInbox(req,res) });
 
         this.service = new ActivityPubService();
         this.proxyEvents(this.service,['inboxMessageAdded']);
@@ -58,7 +63,7 @@ class ActivityPubServerRoutes extends EventProxy {
      */
     async getUserProfile(req: Request, res: Response) {
         // todo: grab proper domain for this
-        let profileResponse = await this.service.lookupUserProfile(req.params.user, 'localhost');
+        let profileResponse = await this.service.lookupUserProfile(req.params.user);
         if ( profileResponse === null ) {
             res.status(404).send('User not found');
         }

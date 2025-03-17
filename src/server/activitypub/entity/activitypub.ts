@@ -74,7 +74,7 @@ class ActivityPubMessageEntity extends Model {
     }
 }
 
-// messages from accounts the account follows from across the web
+// messages from accounts from across the web
 @Table({ tableName: 'ap_inbox'})
 class ActivityPubInboxMessageEntity extends ActivityPubMessageEntity {
 }

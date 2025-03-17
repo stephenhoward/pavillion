@@ -1,5 +1,6 @@
 import { DateTime } from "luxon";
 import { EventEmitter } from "events";
+import config from 'config';
 
 import { Account } from "@/common/model/account";
 import { ActivityPubActivity } from "@/server/activitypub/model/base";
@@ -13,6 +14,7 @@ import AccountService from "@/server/accounts/service/account";
 import EventService from "@/server/calendar/service/events";
 import { ActivityPubOutboxMessageEntity, FollowedAccountEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
 import UndoActivity from "../model/action/undo";
+import { EventEntity } from "@/server/calendar/entity/event";
 
 class ActivityPubService extends EventEmitter {
     eventService: EventService;
@@ -23,61 +25,41 @@ class ActivityPubService extends EventEmitter {
     }
 
     async actorUrl(account: Account): Promise<string> {
-        let profile = await AccountService.getProfileForAccount(account);
-        
-        return profile
-          ? 'https://' + profile.domain + '/users/' + profile.username
-          : '';
+
+        const domain = account.domain || config.get('domain');
+        return 'https://' + domain + '/users/' + account.username;
     }
 
     registerListeners(source: EventEmitter) {
         source.on('eventCreated', async (e) => {
             let actorUrl = await this.actorUrl(e.account);
-            let profile = await AccountService.getProfileForAccount(e.account);
-            if ( profile ) {
-                this.addToOutbox(
-                    e.account,
-                    new CreateActivity(
-                        actorUrl,
-                        new EventObject(profile, e.event)
-                    )
-                );
-            }
-            else {
-                console.log('no profile found for account that created event');
-            }
+            this.addToOutbox(
+                e.account,
+                new CreateActivity(
+                    actorUrl,
+                    new EventObject(e.account, e.event)
+                )
+            );
         });
         source.on('eventUpdated', async (e) => {
             let actorUrl = await this.actorUrl(e.account);
-            let profile = await AccountService.getProfileForAccount(e.account);
-            if ( profile ) {
-                this.addToOutbox(
-                    e.account,
-                    new UpdateActivity(
-                        actorUrl,
-                        new EventObject(e.profile, e.event)
-                    )
-                );
-                }
-                else {
-                    console.log('no profile found for account that updated event');
-                }
-            });
+            this.addToOutbox(
+                e.account,
+                new UpdateActivity(
+                    actorUrl,
+                    new EventObject(e.account, e.event)
+                )
+            );
+        });
         source.on('eventDeleted', async (e) => {
-            let profile = await AccountService.getProfileForAccount(e.account);
-            if ( profile ) {
-                let actorUrl = await this.actorUrl(e.account);
-                this.addToOutbox(
-                    e.account,
-                    new DeleteActivity(
-                        actorUrl,
-                        EventObject.eventUrl(profile, e.event)
-                    )
-                );
-            }
-            else {
-                console.log('no profile found for account that deleted event');
-            }
+            let actorUrl = await this.actorUrl(e.account);
+            this.addToOutbox(
+                e.account,
+                new DeleteActivity(
+                    actorUrl,
+                    EventObject.eventUrl(e.account, e.event)
+                )
+            );
         });
     }
 
@@ -205,6 +187,24 @@ class ActivityPubService extends EventEmitter {
 
             this.emit('outboxMessageAdded', message);
         }
+    }
+
+    async getFeed(account: Account, page?: number, pageSize?: number) {
+
+        EventEntity.findAll({
+            include: [{
+                model: FollowedAccountEntity,
+                as: 'follows',
+                required: true,
+                where: {
+                    account_id: account.id,
+                    direction: 'follows'
+                }
+            }],
+            limit: pageSize,
+            offset: page ? page * pageSize : 0,
+            order: [['start', 'DESC']]
+        });
     }
 }
 

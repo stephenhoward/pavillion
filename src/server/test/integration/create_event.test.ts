@@ -17,11 +17,29 @@ describe('Event API', async () => {
     let account = await AccountService._setupAccount('testuser@pavillion.dev','testpassword');
     await AccountService.setUsername(account.account,'testuser');
     let inboxService = new ProcessInboxService();
-    await inboxService.processFollowAccount(account.account,{ object: { attributedTo: 'testuser@remotedomain' }});
+    await inboxService.processFollowAccount(account.account,{ actor: 'testuser@remotedomain', object: 'testuser@pavillion.dev' });
+
+    let app = express();
+    initPavillionServer(app);
+
+    it('createEvent: should fail without user', async () => {
+
+        const response = await request(app)
+            .post('/api/v1/events')
+            .send({
+                content: {
+                    en: {
+                        name: 'Test Event',
+                        description: 'This is a test event'
+                    }
+                }
+            });
+
+        expect(response.status,"api call failed").toBe(401);
+    });
+
 
     it('createEvent: should succeed', async () => {
-        let app = express();
-        initPavillionServer(app);
 
         let getStub = sinon.stub(axios, 'get');
         let postStub = sinon.stub(axios, 'post');

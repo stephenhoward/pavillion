@@ -25,6 +25,7 @@
     "ejs": "^3.1.10",
     "express": "^4.21.1",
     "http-errors": "^2.0.0",
+    "http-signature": "^1.4.0",
     "jsonwebtoken": "^9.0.2",
     "luxon": "^3.5.0",
     "nodemailer": "^6.9.16",
@@ -45,6 +46,7 @@
   "devDependencies": {
     "@types/config": "^3.3.5",
     "@types/express": "^5.0.0",
+    "@types/http-signature": "^1.4.0",
     "@types/luxon": "^3.4.2",
     "@types/node": "^22.9.0",
     "@types/nodemailer": "^6.4.16",

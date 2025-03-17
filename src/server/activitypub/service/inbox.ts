@@ -11,6 +11,7 @@ import AnnounceActivity from "@/server/activitypub/model/action/announce";
 import { ActivityPubInboxMessageEntity, EventActivityEntity, FollowedAccountEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
 import AccountService from "@/server/accounts/service/account";
 import EventService from "@/server/calendar/service/events";
+import { CalendarEvent } from "@/common/model/events";
 
 
 class ProcessInboxService {
@@ -23,11 +24,13 @@ class ProcessInboxService {
     registerListeners(source: EventEmitter) {
         source.on('inboxMessageAdded', async (e) => {
             let message = await ActivityPubInboxMessageEntity.findByPk(e.id);
-            if ( message ) {
-                await this.processInboxMessage(message);
-            }
-            else {
+
+            if ( ! message ) {
                 console.error("inbox message not found for processing");
+                return;
+            }
+            if ( ! message.processed_time ) {
+                await this.processInboxMessage(message);
             }
         });
     }
@@ -46,7 +49,6 @@ class ProcessInboxService {
     
             for( const message of messages ) {
                 await this.processInboxMessage(message);
-                await message.update({ processedAt: DateTime.now().toJSDate() });
             }
         } while( messages.length > 0 );
     }
@@ -55,11 +57,10 @@ class ProcessInboxService {
     async processInboxMessage(message: ActivityPubInboxMessageEntity ) {
         const account = await AccountService.getAccount(message.account_id);
 
-        if ( ! account ) {
-            throw new Error("No account found for message");
-        }
-
         try {
+            if ( ! account ) {
+                throw new Error("No account found for inbox");
+            }
             switch( message.type ) {
                 case 'Create':
                     await this.processCreateEvent(account, CreateActivity.fromObject(message.message) );
@@ -114,37 +115,73 @@ class ProcessInboxService {
 
     }
 
+    async actorOwnsObject(message: any): Promise<boolean> {
+        // TODO: implement a remote verification of the actor's ownership of the object
+        // by retrieving the object from its server and checking that attributedTo.
+        if ( message.actor == message.object.attributedTo ) {
+            return true;
+        }
+        return false;
+    }
+
     async processCreateEvent(account: Account, message: CreateActivity) {
-        //TODO: implement eventService.importEvent
-        let event = await this.eventService.createEvent(null, message.object.toObject());
-        //TODO add to account's feed table if they follow the event owner
+        let existingEvent = await this.eventService.getEventById(message.object.id);
+        if ( ! existingEvent ) {
+            let ok = await this.actorOwnsObject(message);
+            if ( ok ) {
+                await this.eventService.addRemoteEvent(message.object);
+            }
+        }
+    }
+
+    isLocalEvent(event: CalendarEvent): boolean {
+        // TODO: implement this propely
+        return event.origin === 'local';
     }
 
     async processUpdateEvent(account: Account, message: UpdateActivity) {
-        //TODO: implement eventService.updateImportedEvent
-        let event = await this.eventService.updateEvent(null, message.object.id, message.object.toObject());
+        let existingEvent = await this.eventService.getEventById(message.object.id);
+        if ( existingEvent && ! this.isLocalEvent(existingEvent) ) {
+            let ok = await this.actorOwnsObject(message);
+            if ( ok ) {
+                await this.eventService.updateRemoteEvent(message.object);
+            }
+        }
     }
 
     async processDeleteEvent(account: Account, message: DeleteActivity) {
-        //TODO: implement eventService.deleteImportedEvent
-        let event = await this.eventService.deleteEvent(null, message.object.id);
-        SharedEventEntity.destroy({ where: { eventId: message.object.id } });
-        //TODO remove from feed table for all users
+        let existingEvent = await this.eventService.getEventById(message.object.id);
+        if ( existingEvent && ! this.isLocalEvent(existingEvent) ) {
+            let ok = await this.actorOwnsObject(message);
+            if ( ok ) {
+                await this.eventService.deleteRemoteEvent(message.object.id);
+            }
+        }
     }
 
     async processFollowAccount(account: Account, message: any) {
-        FollowedAccountEntity.create({
-            id: uuidv4(),
-            remote_account_id: message.object.attributedTo,
-            account_id: account.id,
-            direction: 'follower'
+        let existingFollow = await FollowedAccountEntity.findOne({
+            where: {
+                remote_account_id: message.actor,
+                account_id: account.id,
+                direction: 'follower'
+            }
         });
+
+        if( ! existingFollow ) {
+            FollowedAccountEntity.create({
+                id: uuidv4(),
+                remote_account_id: message.actor,
+                account_id: account.id,
+                direction: 'follower'
+            });
+        }
     }
 
     async processUnfollowAccount(account: Account, message: any) {
         FollowedAccountEntity.destroy({
             where: {
-                remote_account_id: message.object.attributedTo,
+                remote_account_id: message.actor,
                 account_id: account.id,
                 direction: 'follower'
             }
@@ -152,25 +189,36 @@ class ProcessInboxService {
     }
 
     async processShareEvent(account: Account, message: any) {
-        // If it's the account's own event
-        EventActivityEntity.create({
-            event_id: message.object.attributedTo,
-            account_id: account.id,
-            type: 'share'
-        });
-        // TODO: otherwise import the event and put it in the account's feed
-    }
-
-    async processUnshareEvent(account: Account, message: any) {
-        // If it's the account's own event
-        EventActivityEntity.destroy({
+        let existingShare = await EventActivityEntity.findOne({
             where: {
-                eventId: message.object.attributedTo,
-                accountId: account.id,
+                event_id: message.object.id,
+                account_id: account.id,
                 type: 'share'
             }
         });
-        // TODO: otherwise remove it from all follower accounts' feeds
+
+        if ( ! existingShare ) {
+            EventActivityEntity.create({
+                event_id: message.object.id,
+                account_id: account.id,
+                type: 'share'
+            });
+            // IF it's a event local to this server, send to all followers and sharers
+        }
+    }
+
+    async processUnshareEvent(account: Account, message: any) {
+        let existingShare = await EventActivityEntity.findOne({
+            where: {
+                event_id: message.object.id,
+                account_id: account.id,
+                type: 'share'
+            }
+        });
+        if ( existingShare ) {
+            existingShare.destroy();
+            // IF it's a event local to this server, send to all followers and sharers
+        };
     }
 }
 

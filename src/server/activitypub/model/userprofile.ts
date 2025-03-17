@@ -4,13 +4,16 @@ class UserProfileResponse {
     preferredUsername: string;
     inbox: string;
     outbox: string;
+    publicKey: string;
 
     constructor(preferredUsername: string, domain: string) {
         this.id = 'https://' + domain + '/users/' + preferredUsername;
         this.type = 'Person';
         this.preferredUsername = preferredUsername;
-        this.inbox = 'https://' + domain + '/inbox/' + preferredUsername;
-        this.outbox = 'https://' + domain + '/outbox/' + preferredUsername;
+        this.inbox = 'https://' + domain + '/users/' + preferredUsername + '/inbox';
+        this.outbox = 'https://' + domain + '/users/' + preferredUsername + '/outbox';
+        // TODO provide public key in profile response:
+        this.publicKey = '';
     }
 
     toObject(): Record<string, any> {
@@ -19,7 +22,12 @@ class UserProfileResponse {
             type: this.type,
             preferredUsername: this.preferredUsername,
             inbox: this.inbox,
-            outbox: this.outbox
+            outbox: this.outbox,
+            publicKey: {
+                id: this.id + '#main-key',
+                owner: this.id,
+                publicKeyPem: this.publicKey
+            }
         };
     }
 }
