@@ -10,6 +10,7 @@ export default defineConfig({
   })],
   build: {
     manifest: true,
+    sourcemap: true,
     rollupOptions: {
       input: "./src/client/app.ts",
     },

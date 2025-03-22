@@ -24,12 +24,6 @@
 @use '../assets/mixins' as *;
 
 body {
-    display:               grid;
-
-    grid-template-columns: [ begin ] auto [ end ];
-    grid-template-rows:    [ top ] auto [ bottom ];
-    justify-items: center;
-    align-items: center;
     div.password_reset {
         @include auth-form;
 

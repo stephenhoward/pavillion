@@ -1,0 +1,48 @@
+@use '../assets/mixins' as *;
+
+* {
+    font-family: 'Helvetica Neue';
+    box-sizing:  border-box;
+    &:focus {
+        outline: none;
+    }
+}
+
+html,body {
+  height: 100%;
+  min-height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+#app {
+    height: 100%;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background-color: $light-mode-background;
+    color:            $light-mode-text;
+}
+@include dark-mode {
+    #app {
+        background-color: $dark-mode-background;
+        background: $dark-mode-background-gradient;
+        color:            $dark-mode-text;
+    }
+}
+
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+.logo:hover {
+  filter: drop-shadow(0 0 2em #646cffaa);
+}
+.logo.vue:hover {
+  filter: drop-shadow(0 0 2em #42b883aa);
+}

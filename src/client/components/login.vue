@@ -4,8 +4,8 @@
         <div class="error" v-if="state.err">{{ state.err }}</div>
         <input type="email"    v-bind:placeholder="t('email')"    v-model="state.email">
         <input type="password" v-bind:placeholder="t('password')" v-model="state.password" @keyup.enter="doLogin">
-        <router-link :to="{ name: 'forgot_password', query: { email: state.email }}" >{{ t("forgot_password") }}</router-link>
         <button type="submit" @click="doLogin">{{ t("login_button") }}</button>
+        <router-link :to="{ name: 'forgot_password', query: { email: state.email }}" >{{ t("forgot_password") }}</router-link>
         <router-link id="register" v-if="state.registrationMode == 'open'" :to="{ name: 'register', query: { email: state.email}}" class="button">
             {{ t("register_button") }}
         </router-link>
@@ -86,15 +86,53 @@
 <style scoped lang="scss">
 @use '../assets/mixins' as *;
 
-body {
-    display:               grid;
+div.login {
+    background-color: rgba(0,0,0,0.2);
+    display: grid;
+    border-radius: 8px;
+    grid-template-columns: 1fr 1fr;
+    margin: 20px;
+    padding: 20px;
+    max-width: 400px;
+    font-size: 14pt;
 
-    grid-template-columns: [ begin ] auto [ end ];
-    grid-template-rows:    [ top ] auto [ bottom ];
-    justify-items: center;
-    align-items: center;
-    div.login {
-        @include auth-form;
+    a {
+        display: block;
+        color: $light-mode-text;
+        grid-column-end: 3;
+    }
+
+        input[type="email"], input[type="password"] {
+            font-size: 14pt;
+            margin: 4px 0px;
+            grid-column: 1 / span 2;
+        }
+        h3 {
+            grid-column: 1 / span 2;
+        }
+    button {
+        font-size: 14pt;
+            margin: 4px 0px;
+        background: $light-mode-button-background;
+        background: $light-mode-button-gradient;
+        border: 0;
+            border-radius: 4px;
+        grid-column-end: 3;
     }
 }
+@include dark-mode {
+    div.login {
+        background-color: rgba(255,255,255,0.2);
+        a {
+        color: $dark-mode-text;
+    }
+        button {
+            background: $dark-mode-button-background;
+            background: $dark-mode-button-gradient;
+            padding: 4px 8px;
+            color: $dark-mode-text;
+        }
+    }
+}
+
 </style>

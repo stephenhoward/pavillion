@@ -14,9 +14,13 @@ const state = reactive({
 </script>
 
 <template>
-    <router-link v-if="state.userInfo.isAdmin" to="/admin" class="button">Admin</router-link>
-    <RouterView @open-event="(e) => state.currentEvent = e"/>
-    <loggedInNavigation @open-event="(e) => state.currentEvent = e" />
+  <div class="root">
+      <router-link v-if="state.userInfo.isAdmin" to="/admin" class="button">Admin</router-link>
+      <loggedInNavigation @open-event="(e) => state.currentEvent = e" />
+      <div class="main">
+      <RouterView @open-event="(e) => state.currentEvent = e"/>
+      </div>
+  </div>
 
     <div v-if="state.currentEvent != null">
     <edit-event-view :event="state.currentEvent" @close="state.currentEvent=null" />
@@ -24,16 +28,30 @@ const state = reactive({
 </template>
 
 <style scoped lang="scss">
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
+@use '../assets/mixins' as *;
+
+div.root {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  height: 100%;
+
+  nav {
+    order: 1;
+  }
 }
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
+div.main {
+  flex: 1;
 }
-.logo.vue:hover {
-  filter: drop-shadow(0 0 2em #42b883aa);
+@include medium-size-device {
+  div.root {
+    flex-direction: row;
+
+    nav {
+      order: 0;
+    }
+  }
 }
 </style>
