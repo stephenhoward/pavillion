@@ -60,13 +60,22 @@ div.schedule {
 </style>
 
 <template>
-    <modal-layout :title="props.event.id ? t('edit_event_title') : t('create_event_title')">
+    <modal-layout :title="props.event.id ? t('edit_event_title') : t('create_event_title')" @close="$emit('close')">
     <div class="event">
         <div class="error" v-if="state.err">{{ state.err }}</div>
         <section>
             <label>Event Description</label>
-            <input type="text" name="name" v-bind:placeholder="t('name_placeholder')"    v-model="props.event.content('en').name">
-            <input type="text" name="description" v-bind:placeholder="t('description_placeholder')" v-model="props.event.content('en').description">
+            <select v-model="state.lang">
+                <option v-for="lang in languages" :value="lang">{{  iso6391.getName(lang) }}</option>
+            </select>
+            <button @click="state.showLanguagePicker=true;">{{ t('add_language') }}</button>
+            <div v-for="language in languages" >
+                <div v-if="language == state.lang" :dir="iso6391.getDir(language) == 'rtl' ? 'rtl' : ''">
+                    <input type="text" name="name" v-bind:placeholder="t('name_placeholder')"    v-model="props.event.content(language).name">
+                    <input type="text" name="description" v-bind:placeholder="t('description_placeholder')" v-model="props.event.content(language).description">
+                    <button @click="removeLanguage(language)">{{ t('remove_language') }}</button>
+                </div>
+            </div>
         </section>
         <section>
             <label>Location</label>
@@ -90,16 +99,21 @@ div.schedule {
         </section>
     </div>
     </modal-layout>
+    <div v-if="state.showLanguagePicker">
+        <language-picker :languages="availableLanguages" :selectedLanguages="languages"  @close="state.showLanguagePicker = false" @select="(lang) => addLanguage(lang)"/>
+    </div>
 </template>
 
 <script setup>
-    import { reactive } from 'vue';
+    import { reactive, ref } from 'vue';
     import { useI18n } from 'vue-i18n';
     import { CalendarEvent } from '../../common/model/events';
     import ModelService from '../service/models';
     import { useEventStore } from '../stores/eventStore';
     import EventRecurrenceView from './event_recurrence.vue';
+    import languagePicker from './languagePicker.vue';
     import ModalLayout from './modal.vue';
+    import iso6391 from 'iso-639-1-dir';
 
     const eventStore = useEventStore();
 
@@ -112,6 +126,8 @@ div.schedule {
                 'update_button': 'Update Event',
                 'close_button': 'Close',
                 'add_date_button': 'Add another date',
+                'add_language': 'Add a Language',
+                'remove_language': 'Remove This Language',
                 name_placeholder: 'event name',
                 description_placeholder: 'event description',
                 location_name_placeholder: 'name',
@@ -128,7 +144,31 @@ div.schedule {
         event: CalendarEvent
     });
 
-    const state = reactive({ err: '' });
+    let defaultLanguage = 'en';
+    let l = props.event.languages();
+    l.unshift(defaultLanguage);
+    const languages = ref([...new Set(l)]);
+
+    let allLanguages = iso6391.getAllCodes();
+    allLanguages.unshift(defaultLanguage);
+    let availableLanguages = ref([...new Set(allLanguages)]);
+
+    const state = reactive({
+        err: '',
+        showLanguagePicker: false,
+        lang: defaultLanguage,
+    });
+
+    const addLanguage = (language) => {
+        languages.value = [...new Set(languages.value.concat(language))];
+        state.lang = language;
+    }
+
+    const removeLanguage = (language) => {
+        props.event.dropContent(language);
+        languages.value = languages.value.filter(l => l != language);
+        state.lang = languages.value[0];
+    }
 
     const saveModel = async (model) => {
         const isNew = !model.id;

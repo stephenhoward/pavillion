@@ -30,6 +30,19 @@ class CalendarEvent extends PrimaryModel {
         this._content[content.language] = content;
     }
 
+    dropContent(langauge: string) {
+        delete this._content[langauge];
+    }
+
+    hasContent(language: string): boolean {
+        return this._content[language] !== undefined
+            && ! this._content[language].isEmpty();
+    }
+
+    languages(): string[] {
+        return Object.keys(this._content);
+    }
+
     addSchedule(schedule?: CalendarEventSchedule) {
         if ( schedule ) {
             this.schedules.push(schedule);
