@@ -2,10 +2,11 @@ import { Model, PrimaryModel } from '@/common/model/model';
 
 class Account extends PrimaryModel {
     username: string = '';
-    domain: string = '';
     email: string = '';
     profile: Profile | null = null;
     roles: string[] | null = null;
+    calendarLanguages: string[] = ['en'];
+    language: string = 'en';
 
     constructor (id?: string, username?: string, email?: string) {
         super(id);
@@ -33,7 +34,6 @@ class Account extends PrimaryModel {
         let account = new Account(obj.id, obj.username, obj.email);
         account.profile = obj.profile;
         account.roles = obj.roles;
-        account.domain = obj.domain;
         return account;
     }
 
@@ -43,7 +43,6 @@ class Account extends PrimaryModel {
 class Profile {
     declare id: string;
     declare username: string;
-    declare description: string;
     declare domain: string;
     declare url: string;
 };

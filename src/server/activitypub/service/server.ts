@@ -2,12 +2,12 @@ import { DateTime } from "luxon";
 import { EventEmitter } from "events";
 import config from 'config';
 
-import { Account } from "@/common/model/account";
+import { Calendar } from "@/common/model/calendar";
 import { WebFingerResponse } from "@/server/activitypub/model/webfinger";
 import { UserProfileResponse } from "@/server/activitypub/model/userprofile";
 import { ActivityPubActivity } from "@/server/activitypub/model/base";
-import { ActivityPubInboxMessageEntity, EventActivityEntity, FollowedAccountEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
-import AccountService from "@/server/accounts/service/account";
+import { ActivityPubInboxMessageEntity, EventActivityEntity, FollowedCalendarEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
+import CalendarService from "@/server/calendar/service/calendar";
 
 
 class ActivityPubService extends EventEmitter {
@@ -34,16 +34,16 @@ class ActivityPubService extends EventEmitter {
 
     /**
      * Generate a webfinger response for the provided username
-     * @param username 
+     * @param urlName 
      * @param domain 
      * @returns WebFingerResponse message
      */
     // TODO: something useful with the domain info (validation?)
-    async lookupWebFinger(username: string, domain: string): Promise<WebFingerResponse|null> {
-        let account = await AccountService.getAccountFromUsername(username,domain);
+    async lookupWebFinger(urlName: string, domain: string): Promise<WebFingerResponse|null> {
+        let calendar = await CalendarService.getCalendarByName(urlName);
 
-        if ( account ) {
-            return new WebFingerResponse(account.username, account.domain || config.get('domain'));
+        if ( calendar ) {
+            return new WebFingerResponse(calendar.urlName, config.get('domain'));
         }
 
         return null;
@@ -51,31 +51,32 @@ class ActivityPubService extends EventEmitter {
 
     /**
      * Generate an actor message for the provided username
-     * @param username 
+     * @param calendarName 
      * @param domain 
      * @returns UserProfileResponse message
      */
-    async lookupUserProfile(username: string): Promise<UserProfileResponse|null> {
-        let account = await AccountService.getAccountFromUsername(username,config.get('domain'));
+    async lookupUserProfile(calendarName: string): Promise<UserProfileResponse|null> {
+        let calendar = await CalendarService.getCalendarByName(calendarName);
 
-        if ( account ) {
-            return new UserProfileResponse(account.username, account.domain || config.get('domain'));
+        console.log(calendar);
+        if ( calendar ) {
+            return new UserProfileResponse(calendar.urlName, config.get('domain'));
         }
 
         return null;
     }
 
     /**
-     * Add provided message to the account's inbox
-     * @param account
+     * Add provided message to the calendar's inbox
+     * @param calendar
      * @param message 
      * @returns null
      */
     // TODO permissions? block lists? rate limiting?
-    async addToInbox(account: Account, message: ActivityPubActivity ): Promise<null> {
-        let foundAccount = await AccountService.getAccount(account.id);
+    async addToInbox(calendar: Calendar, message: ActivityPubActivity ): Promise<null> {
+        let foundCalendar = await CalendarService.getCalendar(calendar.id);
 
-        if ( foundAccount === null ) {
+        if ( foundCalendar === null ) {
             throw new Error('Account not found');
         }
 
@@ -83,7 +84,7 @@ class ActivityPubService extends EventEmitter {
         if ( ! messageEntity ) {
             messageEntity = ActivityPubInboxMessageEntity.build({
                 id: message.id,
-                account_id: account.id,
+                calendar_id: calendar.id,
                 type: message.type,
                 message_time: message.published,
                 message: message
@@ -91,20 +92,20 @@ class ActivityPubService extends EventEmitter {
             await messageEntity.save();
         }
 
-        this.emit('inboxMessageAdded', { account_id: account.id, id: messageEntity.id });
+        this.emit('inboxMessageAdded', { calendar_id: calendar.id, id: messageEntity.id });
 
         return null;
     }
 
     /**
      * 
-     * @param account Retrieve messages from the outbox of the provided account
+     * @param calendar Retrieve messages from the outbox of the provided calendar
      * @param limit 
      * @returns a list of ActivityPubMessage objects
      */
-    async readOutbox(account: Account, limit?: DateTime): Promise<ActivityPubActivity[]> {
+    async readOutbox(calendar: Calendar, limit?: DateTime): Promise<ActivityPubActivity[]> {
         let messageEntities = await ActivityPubInboxMessageEntity.findAll({
-            where: { account_id: account.id },
+            where: { calendar_id: calendar.id },
             order: [['created_at', 'DESC']]
         });
 

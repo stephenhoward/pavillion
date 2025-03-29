@@ -13,4 +13,39 @@ class PrimaryModel extends Model {
     };
 };
 
-export { Model, PrimaryModel };
+interface TranslatedContentModel {
+    language: string;
+    isEmpty(): boolean;
+}
+
+abstract class TranslatedModel<T extends TranslatedContentModel> extends PrimaryModel {
+    _content: Record<string, T> = {};
+
+    protected abstract createContent(language: string): T;
+
+    content(language: string): T {
+        if ( ! this._content[language] ) {
+            this._content[language] = this.createContent(language);
+        }
+        return this._content[language];
+    }
+
+    addContent(content: T) {
+        this._content[content.language] = content;
+    }
+
+    dropContent(langauge: string) {
+        delete this._content[langauge];
+    }
+
+    hasContent(language: string): boolean {
+        return this._content[language] !== undefined
+            && ! this._content[language].isEmpty();
+    }
+
+    getLanguages(): string[] {
+        return Object.keys(this._content);
+    }
+};
+
+export { Model, PrimaryModel, TranslatedContentModel, TranslatedModel };

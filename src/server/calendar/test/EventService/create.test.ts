@@ -3,17 +3,24 @@ import sinon from 'sinon';
 import { DateTime } from 'luxon';
 
 import { Account } from '@/common/model/account';
+import { Calendar } from '@/common/model/calendar';
 import { EventLocation } from '@/common/model/location';
 import { EventEntity, EventContentEntity, EventScheduleEntity } from '@/server/calendar/entity/event';
 import EventService from '@/server/calendar/service/events';
+import CalendarService from '@/server/calendar/service/calendar';
 import LocationService from '@/server/calendar/service/locations';
 
 describe('createEvent', () => {
     let service: EventService;
     let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+    const cal = new Calendar('testCalendarId', 'testme');
+    const acct = new Account('testAccountId', 'testme', 'testme');
+    let editableCalendarsStub: sinon.SinonStub;
 
     beforeEach(() => {
         service = new EventService();
+        editableCalendarsStub = sandbox.stub(CalendarService, 'editableCalendarsForUser');
+        editableCalendarsStub.resolves([cal]);
     });
 
     afterEach(() => {
@@ -26,7 +33,7 @@ describe('createEvent', () => {
         let eventSpy = sandbox.spy(EventEntity, 'fromModel');
         let contentSpy = sandbox.spy(EventContentEntity, 'fromModel');
 
-        let event = await service.createEvent(new Account('testAccountId', 'testme', 'testme'), {
+        let event = await service.createEvent(acct, cal, {
             content: {
                 en: {
                     name: "testName",
@@ -37,7 +44,7 @@ describe('createEvent', () => {
 
         expect(event.id).toBeDefined();
         expect(event.id).toMatch(/^https:\/\/pavillion.dev\/events\/[a-z0-9-]+$/);
-        expect(eventSpy.returnValues[0].account_id).toBe('testAccountId');
+        expect(eventSpy.returnValues[0].calendar_id).toBe('testCalendarId');
         expect(contentSpy.returnValues[0].event_id).toBe(event.id);
         expect(event.content("en").name).toBe('testName');
         expect(saveStub.called).toBe(true);
@@ -51,7 +58,7 @@ describe('createEvent', () => {
 
         findLocationStub.resolves(new EventLocation('testId','testLocation', 'testAddress'));
 
-        let event = await service.createEvent(new Account('testAccountId', 'testme', 'testme'), {
+        let event = await service.createEvent(acct, cal, {
             location: {
                 name: "testLocation",
                 address: "testAddress"
@@ -59,7 +66,7 @@ describe('createEvent', () => {
         });
 
         expect(event.id).toBeDefined();
-        expect(eventSpy.returnValues[0].account_id).toBe('testAccountId');
+        expect(eventSpy.returnValues[0].calendar_id).toBe('testCalendarId');
         expect(event.location).toBeDefined();
         expect(saveStub.called).toBe(true);
     })
@@ -70,7 +77,7 @@ describe('createEvent', () => {
 
         const when = DateTime.now();
 
-        let event = await service.createEvent(new Account('testAccountId', 'testme', 'testme'), {
+        let event = await service.createEvent(acct, cal, {
             schedules: [{ start: when.toString() }]
         });
 

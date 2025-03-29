@@ -1,10 +1,10 @@
 import { DateTime } from 'luxon';
 
-import { Model, PrimaryModel } from '@/common/model/model';
+import { Model, PrimaryModel, TranslatedModel, TranslatedContentModel } from '@/common/model/model';
 import { EventLocation } from '@/common/model/location';
 
 
-class CalendarEvent extends PrimaryModel {
+class CalendarEvent extends TranslatedModel<CalendarEventContent> {
     date: string = '';
     location: EventLocation | null = null;
     parentEvent: CalendarEvent | null = null;
@@ -19,28 +19,8 @@ class CalendarEvent extends PrimaryModel {
         this.location = location ?? null;
     }
 
-    content(language: string): CalendarEventContent {
-        if ( ! this._content[language] ) {
-            this._content[language] = new CalendarEventContent(language as language);
-        }
-        return this._content[language];
-    }
-
-    addContent(content: CalendarEventContent) {
-        this._content[content.language] = content;
-    }
-
-    dropContent(langauge: string) {
-        delete this._content[langauge];
-    }
-
-    hasContent(language: string): boolean {
-        return this._content[language] !== undefined
-            && ! this._content[language].isEmpty();
-    }
-
-    languages(): string[] {
-        return Object.keys(this._content);
+    protected createContent(language: string): CalendarEventContent {
+        return new CalendarEventContent(language);
     }
 
     addSchedule(schedule?: CalendarEventSchedule) {
@@ -103,12 +83,12 @@ enum event_activity {
     SHARE = "share",
 }
 
-class CalendarEventContent extends Model {
-    language: language;
+class CalendarEventContent extends Model implements TranslatedContentModel {
+    language: string;
     name: string = '';
     description: string = '';
 
-    constructor( language: language, name?: string, description?: string) {
+    constructor( language: string, name?: string, description?: string) {
         super();
         this.name = name ?? '';
         this.description = description ?? '';

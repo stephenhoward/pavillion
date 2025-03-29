@@ -2,9 +2,9 @@ import { DateTime } from "luxon";
 import { EventEmitter } from "events";
 import axios from "axios";
 
-import { Account } from "@/common/model/account";
-import AccountService from "@/server/accounts/service/account";
-import { ActivityPubOutboxMessageEntity, EventActivityEntity, FollowedAccountEntity } from "@/server/activitypub/entity/activitypub"
+import { Calendar } from "@/common/model/calendar";
+import CalendarService from "@/server/calendar/service/calendar";
+import { ActivityPubOutboxMessageEntity, EventActivityEntity, FollowedCalendarEntity } from "@/server/activitypub/entity/activitypub"
 import UpdateActivity from "@/server/activitypub/model/action/update";
 import DeleteActivity from "@/server/activitypub/model/action/delete";
 import FollowActivity from "@/server/activitypub/model/action/follow";
@@ -50,10 +50,10 @@ class ProcessOutboxService {
     }
 
     async processOutboxMessage(message: ActivityPubOutboxMessageEntity) {
-        let account = await AccountService.getAccount(message.account_id);
+        let calendar = await CalendarService.getCalendar(message.calendar_id);
 
-        if ( ! account ) {
-            throw new Error("No account found for message");
+        if ( ! calendar ) {
+            throw new Error("No calendar found for message");
         }
 
         let activity = null;
@@ -80,7 +80,7 @@ class ProcessOutboxService {
         }
 
         if ( activity ) {
-            const recipients = await this.getRecipients(account, activity.object);
+            const recipients = await this.getRecipients(calendar, activity.object);
 
             for( const recipient of recipients ) {
                 const inboxUrl = await this.resolveInboxUrl(recipient);
@@ -105,18 +105,18 @@ class ProcessOutboxService {
         }
     }
 
-    async getRecipients(account: Account, object: ActivityPubObject|string): Promise<string[]> {
+    async getRecipients(calendar: Calendar, object: ActivityPubObject|string): Promise<string[]> {
         let recipients: string[] = [];
 
-        const followers = await FollowedAccountEntity.findAll({ where: { account_id: account.id, direction: 'follower' } });
+        const followers = await FollowedCalendarEntity.findAll({ where: { calendar_id: calendar.id, direction: 'follower' } });
         for( const follower of followers ) {
-            recipients.push(follower.remote_account_id);
+            recipients.push(follower.remote_calendar_id);
         }
 
         const object_id = typeof object === 'string' ? object : object.id;
         const observers = await EventActivityEntity.findAll({ where: { event_id: object_id } });
         for( const observer of observers ) {
-            recipients.push(observer.remote_account_id);
+            recipients.push(observer.remote_calendar_id);
         }
 
         return recipients;

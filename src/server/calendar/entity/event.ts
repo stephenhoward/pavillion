@@ -3,7 +3,7 @@ import { DateTime } from 'luxon';
 
 import { CalendarEvent, CalendarEventContent, CalendarEventSchedule, language } from '@/common/model/events';
 import db from '@/server/common/entity/db';
-import { AccountEntity } from '@/server/common/entity/account';
+import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { LocationEntity } from '@/server/calendar/entity/location';
 
 @Table({ tableName: 'event' })
@@ -26,9 +26,9 @@ class EventEntity extends Model {
     @Column({ type: DataType.UUID })
     declare parent_event_id: string;
 
-    @ForeignKey(() => AccountEntity)
+    @ForeignKey(() => CalendarEntity)
     @Column({ type: DataType.UUID })
-    declare account_id: string;
+    declare calendar_id: string;
 
     @ForeignKey(() => LocationEntity)
     @Column({ type: DataType.UUID })
@@ -37,8 +37,8 @@ class EventEntity extends Model {
     @BelongsTo(() => EventEntity)
     declare parentEvent: EventEntity;
 
-    @BelongsTo(() => AccountEntity)
-    declare account: AccountEntity;
+    @BelongsTo(() => CalendarEntity)
+    declare calendar: CalendarEntity;
 
     @HasMany(() => EventContentEntity)
     declare content: EventContentEntity[];
@@ -50,7 +50,7 @@ class EventEntity extends Model {
     declare location: LocationEntity;
 
     toModel(): CalendarEvent {
-        return new CalendarEvent( this.account_id, this.id, this.event_source_url );
+        return new CalendarEvent( this.calendar_id, this.id, this.event_source_url );
     };
 
     static fromModel(event: CalendarEvent): EventEntity {

@@ -9,7 +9,8 @@ import CommonAccountService from '@/server/common/service/accounts';
 import EmailService from "@/server/common/service/mail";
 import { AccountEntity, AccountSecretsEntity, AccountInvitationEntity, AccountApplicationEntity } from "@/server/common/entity/account"
 import ServiceSettings from '@/server/configuration/service/settings';
-import { AccountApplicationAlreadyExistsError, noAccountInviteExistsError, AccountRegistrationClosedError, AccountApplicationsClosedError, AccountAlreadyExistsError, AccountInviteAlreadyExistsError, noAccountApplicationExistsError, UsernameAlreadyExistsError, InvalidUsernameError } from '@/server/accounts/exceptions';
+import CalendarService from '@/server/calendar/service/calendar';
+import { AccountApplicationAlreadyExistsError, noAccountInviteExistsError, AccountRegistrationClosedError, AccountApplicationsClosedError, AccountAlreadyExistsError, AccountInviteAlreadyExistsError, noAccountApplicationExistsError } from '@/server/accounts/exceptions';
 
 type AccountInfo = {
     account: Account,
@@ -122,66 +123,12 @@ class AccountService {
             await accountSecretsEntity.save();
         }
 
+        const calendar = await CalendarService.createCalendarForUser(accountEntity.toModel());
+
         return {
             account: accountEntity.toModel(),
             password_code: accountSecretsEntity.password_reset_code
         };
-    }
-
-    static isValidUsername(username: string): boolean {
-        return username.match(/^[a-z0-9][a-z0-9_]{2,23}$/i) ? true : false;
-    }
-
-    static async setUsername(account: Account, username: string): Promise<boolean> {
-
-        if ( ! AccountService.isValidUsername(username) ) {
-            throw new InvalidUsernameError();
-        }
-
-        let accountEntity = await AccountEntity.findByPk(account.id);
-        if ( ! accountEntity ) {
-            throw new Error('Account not found');
-        }
-
-        if ( accountEntity.username == username ) {
-            return true;
-        }
-
-        let existingAccount = await AccountEntity.findOne({ where: { username: name } });
-
-        if ( existingAccount && existingAccount.id != accountEntity.id ) {
-            throw new UsernameAlreadyExistsError();
-        }
-
-        accountEntity.update({ username: username });
-
-        return true;
-    }
-
-    static async setUsername(account: Account, username: string): Promise<boolean> {
-
-        if ( ! AccountService.isValidUsername(username) ) {
-            throw new InvalidUsernameError();
-        }
-
-        let accountEntity = await AccountEntity.findByPk(account.id);
-        if ( ! accountEntity ) {
-            throw new Error('Account not found');
-        }
-
-        if ( accountEntity.username == username ) {
-            return true;
-        }
-
-        let existingAccount = await AccountEntity.findOne({ where: { username: name } });
-
-        if ( existingAccount && existingAccount.id != accountEntity.id ) {
-            throw new UsernameAlreadyExistsError();
-        }
-
-        accountEntity.update({ username: username });
-
-        return true;
     }
 
     static async validateInviteCode(code: string): Promise<boolean> {

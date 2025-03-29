@@ -114,6 +114,18 @@ export default class AuthenticationService {
         return false;
     }
 
+    userSettings() {
+        let token =  this.localStore.getItem('jw_token');
+
+        if ( token ) {
+            const claims: JWTClaims = JSON.parse(token);
+            if ( claims.exp > Math.floor(Date.now() / 1000) ) {
+                return claims;
+            }
+        }
+        return null;
+    }
+
     isAdmin() {
         let token =  this.localStore.getItem('jw_token');
 

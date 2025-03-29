@@ -22,18 +22,6 @@ class noAccountApplicationExistsError extends Error {
     }
 }
 
-class InvalidUsernameError extends Error {
-    constructor() {
-        super('Invalid username');
-    }
-}
-
-class UsernameAlreadyExistsError extends Error {
-    constructor() {
-        super('Username already exists');
-    }
-}
-
 class AccountInviteAlreadyExistsError extends Error {
     constructor() {
       super('Account Invitation already exists');

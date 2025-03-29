@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 
-import { Account } from '@/common/model/account';
-import AccountService from '@/server/accounts/service/account';
+import { Calendar } from '@/common/model/calendar';
+import CalendarService from '@/server/calendar/service/calendar';
 import { WebFingerResponse } from '@/server/activitypub/model/webfinger';
 import { UserProfileResponse } from '@/server/activitypub/model/userprofile';
 import ActivityPubServerRoutes from '@/server/activitypub/api/v1/server';
@@ -41,7 +41,7 @@ describe('lookupUser', () => {
         await routes.lookupUser(req as any, res as any);
 
         expect(res.status.calledWith(404)).toBe(true);
-        expect(res.send.calledWith('User not found')).toBe(true);
+        expect(res.send.calledWith('Calendar not found')).toBe(true);
     });
 
     it('should succeed with known user', async () => {
@@ -80,7 +80,7 @@ describe('getUserProfile', () => {
         await routes.getUserProfile(req as any, res as any);
 
         expect(res.status.calledWith(404)).toBe(true);
-        expect(res.send.calledWith('User not found')).toBe(true);
+        expect(res.send.calledWith('Calendar not found')).toBe(true);
     });
 
     it('should succeed with known user', async () => {
@@ -111,24 +111,24 @@ describe('addToInbox', () => {
     it('should fail without user', async () => {
         let req = { params: {} };
         let res = { status: sinon.stub(), send: sinon.stub() };
-        let userFindMock = sandbox.stub(AccountService, 'getAccountFromUsername');
+        let calendarFindMock = sandbox.stub(CalendarService, 'getCalendarByName');
         res.status.returns(res);
-        userFindMock.resolves(null);
+        calendarFindMock.resolves(null);
 
         await routes.addToInbox(req as any, res as any);
 
         expect(res.status.calledWith(404)).toBe(true);
-        expect(res.send.calledWith('User not found')).toBe(true);
+        expect(res.send.calledWith('Calendar not found')).toBe(true);
     });
 
     it('should fail with invalid message type', async () => {
-        let req = { params: { user: 'testuser' }, body: { type: 'Foobar' } };
+        let req = { params: { orgname: 'testuser' }, body: { type: 'Foobar' } };
         let res = { status: sinon.stub(), send: sinon.stub() };
-        let userFindMock = sandbox.stub(AccountService, 'getAccountFromUsername');
+        let userFindMock = sandbox.stub(CalendarService, 'getCalendarByName');
         let inboxMock = sandbox.stub(routes.service, 'addToInbox');
 
         res.status.returns(res);
-        userFindMock.resolves(new Account("testId","testuser"));
+        userFindMock.resolves(new Calendar("testId","testuser"));
         inboxMock.resolves();
 
         await routes.addToInbox(req as any, res as any);
@@ -138,13 +138,13 @@ describe('addToInbox', () => {
     });
 
     it('should succeed with valid message type', async () => {
-        let req = { params: { user: 'testuser' }, body: { type: 'Create', object: { id: 'testObjectId' } } };
+        let req = { params: { orgname: 'testuser' }, body: { type: 'Create', object: { id: 'testObjectId' } } };
         let res = { status: sinon.stub(), send: sinon.stub() };
-        let userFindMock = sandbox.stub(AccountService, 'getAccountFromUsername');
+        let userFindMock = sandbox.stub(CalendarService, 'getCalendarByName');
         let inboxMock = sandbox.stub(routes.service, 'addToInbox');
 
         res.status.returns(res);
-        userFindMock.resolves(new Account("testId","testuser"));
+        userFindMock.resolves(new Calendar("testId","testuser"));
         inboxMock.resolves();
 
         await routes.addToInbox(req as any, res as any);

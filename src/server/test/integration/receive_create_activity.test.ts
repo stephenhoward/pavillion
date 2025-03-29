@@ -11,14 +11,16 @@ import AccountService from '@/server/accounts/service/account';
 import { EventEntity } from '@/server/calendar/entity/event';
 import { ActivityPubOutboxMessageEntity } from '@/server/activitypub/entity/activitypub';
 import ProcessInboxService from '@/server/activitypub/service/inbox';
+import CalendarService from '@/server/calendar/service/calendar';
 
 describe('ActivityPub Create Activity', async () => {
 
     await db.sync({force: true});
-    let account = await AccountService._setupAccount('testuser@pavillion.dev','testpassword');
-    await AccountService.setUsername(account.account,'testuser');
+    let account = await AccountService._setupAccount('testcalendar@pavillion.dev','testpassword');
+    let calendar = await CalendarService.getPrimaryCalendarForUser(account.account);
+    await CalendarService.setUrlName(account.account, calendar, 'testcalendar');
     // let inboxService = new ProcessInboxService();
-    // await inboxService.processFollowAccount(account.account,{ actor: 'testuser@remotedomain', object: 'testuser@pavillion.dev' });
+    // await inboxService.processFollowAccount(account.account,{ actor: 'testcalendar@remotedomain', object: 'testcalendar@pavillion.dev' });
 
     let app = express();
     initPavillionServer(app);
@@ -33,7 +35,7 @@ describe('ActivityPub Create Activity', async () => {
 
         // let getStub = sinon.stub(axios, 'get');
         // let postStub = sinon.stub(axios, 'post');
-        const webFingerResponse = await request(app).get('/.well-known/webfinger?resource=acct:testuser@pavillion.dev');
+        const webFingerResponse = await request(app).get('/.well-known/webfinger?resource=acct:testcalendar@pavillion.dev');
         expect(webFingerResponse.status,"webfinger lookup succeeded").toBe(200);
         
         const profileLink = webFingerResponse.body.links.find( (link: any) => link.rel === 'self' );
@@ -48,7 +50,7 @@ describe('ActivityPub Create Activity', async () => {
                 '@context': 'https://www.w3.org/ns/activitystreams',
                 id: 'https://remotedomain.dev/api/v1/events/1',
                 type: 'Create',
-                actor: 'testuser@remotedomain',
+                actor: 'testcalendar@remotedomain',
                 object: {
                     '@context': 'https://www.w3.org/ns/activitystreams',
                     type: 'Event',
@@ -68,7 +70,7 @@ describe('ActivityPub Create Activity', async () => {
 
     it('createEvent: should succeed', async () => {
 
-        const webFingerResponse = await request(app).get('/.well-known/webfinger?resource=acct:testuser@pavillion.dev');
+        const webFingerResponse = await request(app).get('/.well-known/webfinger?resource=acct:testcalendar@pavillion.dev');
         expect(webFingerResponse.status,"webfinger lookup succeeded").toBe(200);
         
         const profileLink = webFingerResponse.body.links.find( (link: any) => link.rel === 'self' );
@@ -77,13 +79,13 @@ describe('ActivityPub Create Activity', async () => {
         const profileResponse = await request(app).get(profileLink.href.replace('https://pavillion.dev',''));
         expect(profileResponse.status,"webfinger lookup succeeded").toBe(200);
 
-        const authHeader = 'Signature keyId="https://remotedomain.dev/users/testuser#main_key",algorithm="rsa-sha256",' +
+        const authHeader = 'Signature keyId="https://remotedomain.dev/o/testcalendar#main_key",algorithm="rsa-sha256",' +
                         'headers="(request-target) host date content-type digest",' +
                         'signature="fakeSignature"';
                        
         const getStub = sandbox.stub(axios, 'get');
         const verifyStub = sandbox.stub(httpSignature, 'verifySignature');
-        getStub.withArgs('https://remotedomain.dev/users/testuser').resolves({
+        getStub.withArgs('https://remotedomain.dev/o/testcalendar').resolves({
             status: 200,
             data: {
                 publicKey: {
@@ -101,11 +103,11 @@ describe('ActivityPub Create Activity', async () => {
                     '@context': 'https://www.w3.org/ns/activitystreams',
                     id: 'https://remotedomain.dev/api/v1/events/1',
                     type: 'Create',
-                    actor: 'https://remotedomain.dev/users/testuser',
+                    actor: 'https://remotedomain.dev/o/testcalendar',
                     object: {
                         '@context': 'https://www.w3.org/ns/activitystreams',
                         type: 'Event',
-                        attributedTo: 'https://remotedomain.dev/users/testuser',
+                        attributedTo: 'https://remotedomain.dev/o/testcalendar',
                         content: {
                             en: {
                                 name: 'Test Event',
@@ -120,7 +122,7 @@ describe('ActivityPub Create Activity', async () => {
         // wait for create event to propogate to activitypub service:
         await new Promise(resolve => setTimeout(resolve, 100));
 
-        let message = await ActivityPubOutboxMessageEntity.findOne({ where: { account_id: account.account.id } });
+        let message = await ActivityPubOutboxMessageEntity.findOne({ where: { calendar_id: calendar.id } });
 
         expect(response.status,"api call succeeded").toBe(200);
         expect(response.body.error,"no error in the response").toBeUndefined();

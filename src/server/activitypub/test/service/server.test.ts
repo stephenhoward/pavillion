@@ -4,8 +4,8 @@ import sinon from 'sinon';
 import { UserProfileResponse } from '@/server/activitypub/model/userprofile';
 import { WebFingerResponse } from '@/server/activitypub/model/webfinger';
 import ActivityPubService from '@/server/activitypub/service/server';
-import AccountService from '@/server/accounts/service/account';
-import { Account } from '@/common/model/account';
+import CalendarService from '@/server/calendar/service/calendar';
+import { Calendar } from '@/common/model/calendar';
 import { ActivityPubActivity } from '@/server/activitypub/model/base';
 import { ActivityPubInboxMessageEntity } from '@/server/activitypub/entity/activitypub';
 
@@ -63,7 +63,7 @@ describe('lookupWebFinger', () => {
     });
 
     it('should return null if no profile', async () => {
-        let profileStub = sandbox.stub(AccountService, 'getAccountFromUsername');
+        let profileStub = sandbox.stub(CalendarService, 'getCalendarByName');
         profileStub.resolves(null);
 
         let response = await service.lookupWebFinger('testuser', 'testdomain.com');
@@ -72,11 +72,11 @@ describe('lookupWebFinger', () => {
     });
 
     it('should return a WebFingerResponse', async () => {
-        let accountStub = sandbox.stub(AccountService, 'getAccountFromUsername');
-        accountStub.resolves(Account.fromObject({ account_id: 'testid', username: 'testuser', domain: 'testdomain.com' }));
+        let calendarStub = sandbox.stub(CalendarService, 'getCalendarByName');
+        calendarStub.resolves(Calendar.fromObject({ id: 'testid', urlName: 'testuser' }));
 
-        let response = await service.lookupWebFinger('testuser', 'testdomain.com');
-        let expected = new WebFingerResponse('testuser', 'testdomain.com').toObject();
+        let response = await service.lookupWebFinger('testuser', 'pavillion.dev');
+        let expected = new WebFingerResponse('testuser', 'pavillion.dev').toObject();
 
         expect(response).toBeDefined();
         expect(response).toEqual(expected);
@@ -96,20 +96,20 @@ describe('lookupUserProfile', () => {
     });
 
     it('should return null if no profile', async () => {
-        let accountStub = sandbox.stub(AccountService, 'getAccountFromUsername');
-        accountStub.resolves(null);
+        let calendarStub = sandbox.stub(CalendarService, 'getCalendarByName');
+        calendarStub.resolves(null);
 
-        let response = await service.lookupUserProfile('testuser', 'testdomain.com');
+        let response = await service.lookupUserProfile('testuser');
 
         expect(response).toBe(null);
     });
 
     it('should return a UserProfileResponse', async () => {
-        let accountStub = sandbox.stub(AccountService, 'getAccountFromUsername');
-        accountStub.resolves(Account.fromObject({ account_id: 'testid', username: 'testuser', domain: 'testdomain.com' }));
+        let calendarStub = sandbox.stub(CalendarService, 'getCalendarByName');
+        calendarStub.resolves(Calendar.fromObject({ id: 'testid', urlName: 'testCalendar' }));
 
-        let response = await service.lookupUserProfile('testuser', 'testdomain.com');
-        let expected = new UserProfileResponse('testuser', 'testdomain.com').toObject();
+        let response = await service.lookupUserProfile('testCalendar');
+        let expected = new UserProfileResponse('testCalendar', 'pavillion.dev').toObject();
 
         expect(response).toBeDefined();
         expect(response?.toObject()).toEqual(expected);
@@ -130,10 +130,10 @@ describe("addToInbox", () => {
 
     it('should save the message', async () => {
         let message = ActivityPubActivity.fromObject({ type: 'Create', id: 'testid' });
-        let account = Account.fromObject({ id: 'testid' });
+        let calendar = Calendar.fromObject({ id: 'testid' });
 
-        let getAccountStub = sandbox.stub(AccountService, 'getAccount');
-        getAccountStub.resolves(account);
+        let getCalendarStub = sandbox.stub(CalendarService, 'getCalendar');
+        getCalendarStub.resolves(calendar);
 
         let findMessageStub = sandbox.stub(ActivityPubInboxMessageEntity, 'findByPk');
         findMessageStub.resolves(null);
@@ -141,19 +141,19 @@ describe("addToInbox", () => {
         let saveMessageStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype, 'save');
         saveMessageStub.resolves(undefined);
 
-        let response = await service.addToInbox(account, message);
+        let response = await service.addToInbox(calendar, message);
 
         expect(response).toBe(null);
         expect(saveMessageStub.called).toBe(true);
     });
 
-    it('should throw an error if account not found', async () => {
+    it('should throw an error if calendar not found', async () => {
         let message = ActivityPubActivity.fromObject({ type: 'Create', id: 'testid' });
-        let account = Account.fromObject({ id: 'testid' });
+        let calendar = Calendar.fromObject({ id: 'testid' });
 
-        let getAccountStub = sandbox.stub(AccountService, 'getAccount');
-        getAccountStub.resolves(null);
+        let getCalendarStub = sandbox.stub(CalendarService, 'getCalendar');
+        getCalendarStub.resolves(null);
 
-        await expect( service.addToInbox(account, message) ).rejects.toThrow('Account not found');
+        await expect( service.addToInbox(calendar, message) ).rejects.toThrow('Account not found');
     });
 });

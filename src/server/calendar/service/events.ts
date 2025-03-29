@@ -3,8 +3,10 @@ import { v4 as uuidv4 } from 'uuid';
 import config from 'config';
 
 import { Account } from "@/common/model/account"
+import { Calendar } from "@/common/model/calendar";
 import { CalendarEvent, CalendarEventContent, CalendarEventSchedule } from "@/common/model/events"
 import { EventContentEntity, EventEntity, EventScheduleEntity } from "@/server/calendar/entity/event"
+import CalendarService from "@/server/calendar/service/calendar";
 import { LocationEntity } from "@/server/calendar/entity/location";
 import LocationService from "@/server/calendar/service/locations";
 
@@ -52,8 +54,8 @@ class EventService extends EventEmitter {
         });
     }
 
-    generateEventUrl(account: Account): string {
-        const domain = account.domain || config.get('domain');
+    generateEventUrl(): string {
+        const domain = config.get('domain');
         return 'https://' + domain + '/events/' + uuidv4();
     }
 
@@ -63,23 +65,28 @@ class EventService extends EventEmitter {
      * @param eventParams - the parameters for the new event
      * @returns a promise that resolves to the created Event
      */
-    async createEvent(account: Account, eventParams:Record<string,any>): Promise<CalendarEvent> {
+    async createEvent(account: Account, calendar: Calendar, eventParams:Record<string,any>): Promise<CalendarEvent> {
 
-        eventParams.id = this.generateEventUrl(account);
+        const calendars = await CalendarService.editableCalendarsForUser(account);
+        if ( ! calendars.some(c => c.id == calendar.id) ) {
+            throw( new Error('account cannot add to calendar') );
+        }
+
+        eventParams.id = this.generateEventUrl();
 
         const event = CalendarEvent.fromObject(eventParams);
-        if ( account.profile?.username.length ) {
-            event.eventSourceUrl = '/' + account.profile.username + '/' + event.id;
+        if ( calendar.urlName.length > 0 ) {
+            event.eventSourceUrl = '/' + calendar.urlName + '/' + event.id;
         }
         else {
             event.eventSourceUrl = '';
         }
         const eventEntity = EventEntity.fromModel(event);
-        eventEntity.account_id = account.id;
+        eventEntity.calendar_id = calendar.id;
 
         if( eventParams.location ) {
 
-            let location = await LocationService.findOrCreateLocation(account, eventParams.location);
+            let location = await LocationService.findOrCreateLocation(calendar, eventParams.location);
             eventEntity.location_id = location.id;
             event.location = location;
         }
@@ -98,7 +105,7 @@ class EventService extends EventEmitter {
             }
         }
 
-        this.emit('eventCreated', { account, event });
+        this.emit('eventCreated', { calendar, event });
         return event;
     }
 
@@ -137,9 +144,13 @@ class EventService extends EventEmitter {
         if ( ! eventEntity ) {
             throw new Error('Event not found');
         }
-
-        if ( eventEntity.account_id !== account.id ) {
-            throw( new Error('account does not own event') );
+        const calendar = await CalendarService.getCalendar(eventEntity.calendar_id);
+        const calendars = await CalendarService.editableCalendarsForUser(account);
+        if ( ! calendar ) {
+            throw( new Error('calendar for event does not exist') );
+        }
+        if ( ! calendars.some(c => c.id == calendar.id) ) {
+            throw( new Error('account cannot modify event') );
         }
 
         let event = eventEntity.toModel();
@@ -192,7 +203,7 @@ class EventService extends EventEmitter {
         }
         else if( eventParams.location ) {
 
-            let location = await LocationService.findOrCreateLocation(account, eventParams.location);
+            let location = await LocationService.findOrCreateLocation(calendar, eventParams.location);
             eventEntity.location_id = location.id;
             event.location = location;
         }
@@ -201,7 +212,6 @@ class EventService extends EventEmitter {
             let existingSchedules = await EventScheduleEntity.findAll({ where: { event_id: eventId } });
             let existingScheduleIds = existingSchedules.map( s => s.id );
 
-            console.log(existingScheduleIds);
             for( let schedule of eventParams.schedules ) {
 
                 if ( schedule.id ) {
@@ -236,12 +246,12 @@ class EventService extends EventEmitter {
 
         await eventEntity.save();
 
-        this.emit('eventUpdated', { account, event });
+        this.emit('eventUpdated', { calendar, event });
         return event;
     }
 
     /**
-     * Add a new event from a remote account
+     * Add a new event from a remote calendar
      * @param eventParams - the parameters for the new event
      * @returns a promise that resolves to the created Event
      */
@@ -258,7 +268,7 @@ class EventService extends EventEmitter {
         const event = CalendarEvent.fromObject(eventParams);
         const eventEntity = EventEntity.fromModel(event);
 
-        //TODO: check and validate the account id
+        //TODO: check and validate the calendar id
 
         if( eventParams.location ) {
             // Todo: See if we already imported this location

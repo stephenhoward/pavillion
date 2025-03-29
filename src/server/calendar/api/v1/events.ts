@@ -4,6 +4,7 @@ import { Account } from '@/common/model/account';
 import ExpressHelper from '@/server/common/helper/express';
 import EventProxy from '@/server/common/helper/event_proxy';
 import EventService from '@/server/calendar/service/events';
+import CalendarService from '@/server/calendar/service/calendar';
 
 class EventRoutes extends EventProxy {
     router: express.Router;
@@ -47,7 +48,20 @@ class EventRoutes extends EventProxy {
             });
             return;
         }
-        const event = await this.service.createEvent(account, req.body);
+        if (!req.body.calendarId) {
+            res.status(400).json({
+                "error": "missing calendar id"
+            });
+            return;
+        }
+        const calendar = await CalendarService.getCalendar(req.body.calendarId);
+        if (!calendar) {
+            res.status(404).json({
+                "error": "calendar not found"
+            });
+            return;
+        }
+        const event = await this.service.createEvent(account, calendar, req.body);
         res.json(event.toObject());
     }
 

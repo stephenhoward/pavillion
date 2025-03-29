@@ -1,5 +1,5 @@
 import config from 'config';
-import { Account } from '@/common/model/account';
+import { Calendar } from '@/common/model/calendar';
 
 class ActivityPubActivity {
     context: string[] = ['https://www.w3.org/ns/activitystreams'];
@@ -31,20 +31,20 @@ class ActivityPubObject {
 }
 
 class ActivityPubActor {
-    static actorUrl(account: Account|string ): string {
-        let id = typeof account == 'string'
-            ? account
-            : account.id;
+    static actorUrl(calendar: Calendar|string ): string {
+        let id = typeof calendar == 'string'
+            ? calendar
+            : calendar.id;
 
         if( id.match('^https?:\/\/') ) {
             return id;
         }
-        else if ( account instanceof Account ) {
-            const domain = account.domain || config.get('domain');
-            return 'https://'+domain+'/users/'+account.username+'/events/'+id;
+        else if ( calendar instanceof Calendar ) {
+            const domain = config.get('domain');
+            return 'https://'+domain+'/o/'+calendar.urlName;
         }
 
-        throw('cannot generate url for this account profile: '+ account);
+        throw('cannot generate url for this account profile: '+ calendar);
     }
 }
 

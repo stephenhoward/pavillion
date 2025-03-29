@@ -2,7 +2,7 @@ import { Model, Table, Column, PrimaryKey, BelongsTo, DataType, ForeignKey } fro
 
 import { event_activity } from '@/common/model/events';
 import db from '@/server/common/entity/db';
-import { AccountEntity } from '@/server/common/entity/account';
+import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { ActivityPubActivity } from '@/server/activitypub/model/base';
 import CreateActivity from '@/server/activitypub/model/action/create';
 import UpdateActivity from '@/server/activitypub/model/action/update';
@@ -29,9 +29,9 @@ class ActivityPubMessageEntity extends Model {
     @Column({ type: DataType.JSON })
     declare message: object;
 
-    @ForeignKey(() => AccountEntity)
+    @ForeignKey(() => CalendarEntity)
     @Column({ type: DataType.STRING })
-    declare account_id: string;
+    declare calendar_id: string;
 
     @Column({ type: DataType.DATE })
     declare processed_time: Date;
@@ -39,8 +39,8 @@ class ActivityPubMessageEntity extends Model {
     @Column({ type: DataType.STRING })
     declare processed_status: string;
 
-    @BelongsTo(() => AccountEntity)
-    declare account: AccountEntity;
+    @BelongsTo(() => CalendarEntity)
+    declare calendar: CalendarEntity;
 
     toModel(): ActivityPubActivity {
 
@@ -74,19 +74,19 @@ class ActivityPubMessageEntity extends Model {
     }
 }
 
-// messages from accounts from across the web
+// messages from calendars from across the web
 @Table({ tableName: 'ap_inbox'})
 class ActivityPubInboxMessageEntity extends ActivityPubMessageEntity {
 }
 
-// messages from the account holder to their followers/ the public
+// messages from the calendar holder to their followers/ the public
 @Table({ tableName: 'ap_outbox'})
 class ActivityPubOutboxMessageEntity extends ActivityPubMessageEntity {
 }
 
-// a list of follows and followers for an account
+// a list of follows and followers for an calendar
 @Table({ tableName: 'ap_follow'})
-class FollowedAccountEntity extends Model {
+class FollowedCalendarEntity extends Model {
 
     @PrimaryKey
     @Column({
@@ -96,20 +96,20 @@ class FollowedAccountEntity extends Model {
     declare id: string;
 
     @Column({ type: DataType.STRING })
-    declare remote_account_id: string;
+    declare remote_calendar_id: string;
 
-    @ForeignKey(() => AccountEntity)
+    @ForeignKey(() => CalendarEntity)
     @Column({ type: DataType.STRING })
-    declare account_id: string;
+    declare calendar_id: string;
 
     @Column({ type: DataType.STRING })
     declare direction: 'following' | 'follower';
 
-    @BelongsTo(() => AccountEntity)
-    declare account: AccountEntity;
+    @BelongsTo(() => CalendarEntity)
+    declare calendar: CalendarEntity;
 }
 
-// a list of remote events the account has chosen to share to their calendar
+// a list of remote events the calendar has chosen to repost (share)
 @Table({ tableName: 'ap_shared_event'})
 class SharedEventEntity extends Model {
 
@@ -124,10 +124,10 @@ class SharedEventEntity extends Model {
     declare event_id: string;
 
     @Column({ type: DataType.STRING })
-    declare account_id: string;
+    declare calendar_id: string;
 }
 
-// a list of activities (shares, etc) that other accounts have done to an account's
+// a list of activities (shares, etc) that other calendars have done to a calendar's
 // own events
 @Table({ tableName: 'ap_event_activity'})
 class EventActivityEntity extends Model {
@@ -140,11 +140,11 @@ class EventActivityEntity extends Model {
     declare type: event_activity;
 
     @Column({ type: DataType.STRING })
-    declare remote_account_id: string;
+    declare remote_calendar_id: string;
 }
 
-// A collection of events that have been processed from an account's inbox,
-// from accounts they follow
+// A collection of events that have been processed from an calendar's inbox,
+// from calendars they follow
 @Table({ tableName: 'ap_event_feed' })
 class EventFeed extends Model {
 
@@ -152,16 +152,16 @@ class EventFeed extends Model {
     declare event_id: string;
 
     @Column({ type: DataType.STRING })
-    declare account_id: string;
+    declare calendar_id: string;
 }
 
-db.addModels([ActivityPubInboxMessageEntity, ActivityPubOutboxMessageEntity, FollowedAccountEntity, SharedEventEntity, EventActivityEntity]);
+db.addModels([ActivityPubInboxMessageEntity, ActivityPubOutboxMessageEntity, FollowedCalendarEntity, SharedEventEntity, EventActivityEntity]);
 
 export {
     ActivityPubMessageEntity,
     ActivityPubInboxMessageEntity,
     ActivityPubOutboxMessageEntity,
-    FollowedAccountEntity,
+    FollowedCalendarEntity,
     SharedEventEntity,
     EventActivityEntity
 };

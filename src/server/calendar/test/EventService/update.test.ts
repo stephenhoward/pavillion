@@ -3,18 +3,24 @@ import sinon from 'sinon';
 import { DateTime } from 'luxon';
 
 import { Account } from '@/common/model/account';
+import { Calendar } from '@/common/model/calendar';
 import { CalendarEventContent, CalendarEventSchedule, language, EventFrequency } from '@/common/model/events';
 import { EventLocation } from '@/common/model/location';
 import { EventEntity, EventContentEntity, EventScheduleEntity } from '@/server/calendar/entity/event';
 import EventService from '@/server/calendar/service/events';
 import LocationService from '@/server/calendar/service/locations';
+import CalendarService from '@/server/calendar/service/calendar';
 
 describe('updateEvent with content', () => {
     let service: EventService
     let sandbox = sinon.createSandbox();
+    let getCalendarStub: sinon.SinonStub;
+    let editableCalendarsStub: sinon.SinonStub;
 
     beforeEach(() => {
         service = new EventService();
+        getCalendarStub = sandbox.stub(CalendarService, 'getCalendar');
+        editableCalendarsStub = sandbox.stub(CalendarService, 'editableCalendarsForUser');
     })
     afterEach(() => {
         sandbox.restore();
@@ -36,7 +42,9 @@ describe('updateEvent with content', () => {
 
     it('should throw an error if account does not own event', async () => {
         let findEventStub = sandbox.stub(EventEntity, 'findByPk');
-        findEventStub.resolves(new EventEntity({ accountId: 'notTestAccountId' }));
+        getCalendarStub.resolves(new Calendar('notTestCalendarId', 'testme'));
+        editableCalendarsStub.resolves([]);
+        findEventStub.resolves(new EventEntity({ calendar_id: 'testCalendarId' }));
 
         await expect(service.updateEvent(new Account('testAccountId', 'testme', 'testme'), 'testEventId', {
             content: {
@@ -45,7 +53,7 @@ describe('updateEvent with content', () => {
                     description: "description"
                 }
             }
-        })).rejects.toThrow('account does not own event');
+        })).rejects.toThrow('account cannot modify event');
     });
 
     it('should update an event', async () => {
@@ -54,7 +62,10 @@ describe('updateEvent with content', () => {
         let saveEventStub = sandbox.stub(EventEntity.prototype, 'save');
         let saveContentStub = sandbox.stub(EventContentEntity.prototype, 'save');
 
-        findEventStub.resolves(EventEntity.build({ account_id: 'testAccountId' }));
+        const cal = new Calendar('testCalendarId', 'testme');
+        getCalendarStub.resolves(cal);
+        editableCalendarsStub.resolves([cal]);
+        findEventStub.resolves(EventEntity.build({ calendar_id: 'testCalendarId' }));
         findEventContentStub.resolves(EventContentEntity.build({ event_id: 'testEventId', language: 'en' }));
 
         let updatedEvent = await service.updateEvent(new Account('testAccountId', 'testme', 'testme'), 'testEventId', {
@@ -77,7 +88,10 @@ describe('updateEvent with content', () => {
         let findEventContentStub = sandbox.stub(EventContentEntity, 'findOne');
         let destroyContentStub = sandbox.stub(EventContentEntity.prototype, 'destroy');
 
-        findEventStub.resolves(EventEntity.build({ account_id: 'testAccountId' }));
+        const cal = new Calendar('testCalendarId', 'testme');
+        getCalendarStub.resolves(cal);
+        editableCalendarsStub.resolves([cal]);
+        findEventStub.resolves(EventEntity.build({ calendar_id: 'testCalendarId' }));
         findEventContentStub.resolves(EventContentEntity.build({ event_id: 'testEventId', language: 'en' }));
 
         let updatedEvent = await service.updateEvent(new Account('testAccountId', 'testme', 'testme'), 'testEventId', {
@@ -96,7 +110,10 @@ describe('updateEvent with content', () => {
         let findEventContentStub = sandbox.stub(EventContentEntity, 'findOne');
         let destroyContentStub = sandbox.stub(EventContentEntity.prototype, 'destroy');
 
-        findEventStub.resolves(EventEntity.build({ account_id: 'testAccountId' }));
+        const cal = new Calendar('testCalendarId', 'testme');
+        getCalendarStub.resolves(cal);
+        editableCalendarsStub.resolves([cal]);
+        findEventStub.resolves(EventEntity.build({ calendar_id: 'testCalendarId' }));
         findEventContentStub.resolves(EventContentEntity.build({ event_id: 'testEventId', language: 'en' }));
 
         let updatedEvent = await service.updateEvent(new Account('testAccountId', 'testme', 'testme'), 'testEventId', {
@@ -115,7 +132,10 @@ describe('updateEvent with content', () => {
         let findEventContentStub = sandbox.stub(EventContentEntity, 'findOne');
         let destroyContentStub = sandbox.stub(EventContentEntity.prototype, 'destroy');
 
-        findEventStub.resolves(EventEntity.build({ account_id: 'testAccountId' }));
+        const cal = new Calendar('testCalendarId', 'testme');
+        getCalendarStub.resolves(cal);
+        editableCalendarsStub.resolves([cal]);
+        findEventStub.resolves(EventEntity.build({ calendar_id: 'testCalendarId' }));
         findEventContentStub.resolves(EventContentEntity.build({ event_id: 'testEventId', language: 'en' }));
 
         let updatedEvent = await service.updateEvent(new Account('testAccountId', 'testme', 'testme'), 'testEventId', {
@@ -134,7 +154,10 @@ describe('updateEvent with content', () => {
         let findEventContentStub = sandbox.stub(EventContentEntity, 'findOne');
         let createContentStub = sandbox.stub(service, 'createEventContent');
 
-        findEventStub.resolves(EventEntity.build({ account_id: 'testAccountId' }));
+        const cal = new Calendar('testCalendarId', 'testme');
+        getCalendarStub.resolves(cal);
+        editableCalendarsStub.resolves([cal]);
+        findEventStub.resolves(EventEntity.build({ calendar_id: 'testCalendarId' }));
         findEventContentStub.resolves(undefined);
         createContentStub.resolves(new CalendarEventContent(language.EN, 'updatedName', 'updatedDescription'));
 
@@ -157,9 +180,16 @@ describe('updateEvent with content', () => {
 describe('updateEvent with location', () => {
     let service: EventService;
     let sandbox = sinon.createSandbox();
+    let getCalendarStub: sinon.SinonStub;
+    let editableCalendarsStub: sinon.SinonStub;
 
     beforeEach(() => {
         service = new EventService();
+        getCalendarStub = sandbox.stub(CalendarService, 'getCalendar');
+        editableCalendarsStub = sandbox.stub(CalendarService, 'editableCalendarsForUser');
+        const cal = new Calendar('testCalendarId', 'testme');
+        getCalendarStub.resolves(cal);
+        editableCalendarsStub.resolves([cal]);
     });
 
     afterEach(() => {
@@ -212,9 +242,16 @@ describe('updateEvent with location', () => {
 describe('updateEvent with schedules', () => {
     let service: EventService;
     let sandbox = sinon.createSandbox();
+    let getCalendarStub: sinon.SinonStub;
+    let editableCalendarsStub: sinon.SinonStub;
 
     beforeEach(() => {
         service = new EventService();
+        getCalendarStub = sandbox.stub(CalendarService, 'getCalendar');
+        editableCalendarsStub = sandbox.stub(CalendarService, 'editableCalendarsForUser');
+        const cal = new Calendar('testCalendarId', 'testme');
+        getCalendarStub.resolves(cal);
+        editableCalendarsStub.resolves([cal]);
     });
     afterEach(() => {
         sandbox.restore();

@@ -31,6 +31,16 @@ section {
         border-top: 1px solid $dark-mode-border;
     }
 }
+section.location, section.description {
+    input[type="text"] {
+        width: 100%;
+    }
+}
+section.location {
+    input[type="text"] {
+        max-width: 500px;
+    }
+}
 button {
     font-size: 14px;
     border: 1px solid $light-mode-border;
@@ -63,12 +73,12 @@ div.schedule {
     <modal-layout :title="props.event.id ? t('edit_event_title') : t('create_event_title')" @close="$emit('close')">
     <div class="event">
         <div class="error" v-if="state.err">{{ state.err }}</div>
-        <section>
+        <section class="description">
             <label>Event Description</label>
             <select v-model="state.lang">
                 <option v-for="lang in languages" :value="lang">{{  iso6391.getName(lang) }}</option>
             </select>
-            <button @click="state.showLanguagePicker=true;">{{ t('add_language') }}</button>
+            <button :aria-label="t('add_language')" @click="state.showLanguagePicker=true;">➕</button>
             <div v-for="language in languages" >
                 <div v-if="language == state.lang" :dir="iso6391.getDir(language) == 'rtl' ? 'rtl' : ''">
                     <input type="text" name="name" v-bind:placeholder="t('name_placeholder')"    v-model="props.event.content(language).name">
@@ -77,7 +87,7 @@ div.schedule {
                 </div>
             </div>
         </section>
-        <section>
+        <section class="location">
             <label>Location</label>
             <input type="text" name="name" v-bind:placeholder="t('location_name_placeholder')" v-model="props.event.location.name">
             <input type="text" name="address" v-bind:placeholder="t('address_placeholder')" v-model="props.event.location.address">
@@ -145,7 +155,7 @@ div.schedule {
     });
 
     let defaultLanguage = 'en';
-    let l = props.event.languages();
+    let l = props.event.getLanguages();
     l.unshift(defaultLanguage);
     const languages = ref([...new Set(l)]);
 

@@ -8,7 +8,7 @@ import FollowActivity from '@/server/activitypub/model/action/follow';
 import AnnounceActivity from '@/server/activitypub/model/action/announce';
 import UndoActivity from '@/server/activitypub/model/action/undo';
 import ActivityPubService from '@/server/activitypub/service/server';
-import AccountService from '@/server/accounts/service/account';
+import CalendarService from '@/server/calendar/service/calendar';
 import { verifyHttpSignature } from '@/server/activitypub/helper/http_signature';
 
 /**
@@ -24,18 +24,18 @@ class ActivityPubServerRoutes extends EventProxy {
 
         // Public endpoints (no signature verification required)
         this.router.get('/.well-known/webfinger', async (req,res) => { await this.lookupUser(req,res) });
-        this.router.get('/users/:user', async (req,res) => { await this.getUserProfile(req,res) });
-        this.router.get('/users/:user/outbox', async (req,res) => { this.readOutbox(req,res) });
+        this.router.get('/o/:orgname', async (req,res) => { await this.getUserProfile(req,res) });
+        this.router.get('/o/:orgname/outbox', async (req,res) => { this.readOutbox(req,res) });
 
         // Secure endpoints (require signature verification)
-        this.router.post('/users/:user/inbox', verifyHttpSignature, async (req,res) => { this.addToInbox(req,res) });
+        this.router.post('/o/:orgname/inbox', verifyHttpSignature, async (req,res) => { this.addToInbox(req,res) });
 
         this.service = new ActivityPubService();
         this.proxyEvents(this.service,['inboxMessageAdded']);
     }
 
-    /** Find user profile location by webfinger resource
-     * @params resource - acct:username@domain
+    /** Find calendar profile location by webfinger resource
+     * @params resource - acct:orgname@domain
      * @returns a WebFingerResponse record
      * reference: https://www.w3.org/community/reports/socialcg/CG-FINAL-apwf-20240608/#forward-discovery
      */
@@ -44,7 +44,7 @@ class ActivityPubServerRoutes extends EventProxy {
             let { username, domain } = this.service.parseWebFingerResource(req.query.resource);
             let webfingerResponse = await this.service.lookupWebFinger(username, domain);
             if ( webfingerResponse === null ) {
-                res.status(404).send('User not found');
+                res.status(404).send('Calendar not found');
             }
             else {
                 res.json(webfingerResponse.toObject());
@@ -56,16 +56,16 @@ class ActivityPubServerRoutes extends EventProxy {
     }
 
     /**
-     * Get user actor record by username
-     * @params user - username for the profile
+     * Get orginzation actor record by org name
+     * @params orgname - org name for the profile
      * @returns a UserProfileResponse record
      * reference: https://www.w3.org/TR/activitypub/#actor-objects
      */
     async getUserProfile(req: Request, res: Response) {
         // todo: grab proper domain for this
-        let profileResponse = await this.service.lookupUserProfile(req.params.user);
+        let profileResponse = await this.service.lookupUserProfile(req.params.orgname);
         if ( profileResponse === null ) {
-            res.status(404).send('User not found');
+            res.status(404).send('Calendar not found');
         }
         else {
             res.json(profileResponse.toObject());
@@ -73,16 +73,16 @@ class ActivityPubServerRoutes extends EventProxy {
     }
 
     /**
-     * Add an activity message to a user's inbox
-     * @param user - the username of the owner of the inbox
+     * Add an activity message to a calendar's inbox
+     * @param orgname - the org name of the owner of the inbox
      * @param req.body - the message to add to the inbox
      * reference: https://www.w3.org/TR/activitypub/#server-to-server-interactions
      */
     async addToInbox(req: Request, res: Response) {
-        let account = await AccountService.getAccountFromUsername(req.params.user);
+        let calendar = await CalendarService.getCalendarByName(req.params.orgname);
 
-        if ( account === null ) {
-            res.status(404).send('User not found');
+        if ( calendar === null ) {
+            res.status(404).send('Calendar not found');
             return;
         }
 
@@ -111,7 +111,7 @@ class ActivityPubServerRoutes extends EventProxy {
         }
 
         if ( message ) {
-            await this.service.addToInbox(account, message);
+            await this.service.addToInbox(calendar, message);
             res.status(200).send('Message received');
         }
         else {
@@ -120,8 +120,8 @@ class ActivityPubServerRoutes extends EventProxy {
     }
 
     /**
-     * Read the outbox of a user
-     * @param user - the username of the owner of the outbox
+     * Read the outbox of a calendar
+     * @param orgname - the org name of the owner of the outbox
      * @returns a list of messages in the outbox
      * reference: https://www.w3.org/TR/activitypub/#outbox
      */

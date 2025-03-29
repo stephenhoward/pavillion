@@ -3,9 +3,9 @@ class WebFingerResponse {
     subject: string;
     links: WebFingerLink[];
 
-    constructor(username: string, domain: string) {
-        this.subject = 'acct:' + username + '@' + domain;
-        this.links = [ new WebFingerLink(username, domain) ];
+    constructor(orgName: string, domain: string) {
+        this.subject = 'acct:' + orgName + '@' + domain;
+        this.links = [ new WebFingerLink(orgName, domain) ];
     }
 
     toObject(): Record<string, any> {
@@ -21,10 +21,10 @@ class WebFingerLink {
     type: string;
     href: string;
 
-    constructor(username: string, domain: string) {
+    constructor(orgName: string, domain: string) {
         this.rel = 'self';
         this.type = 'application/activity+json';
-        this.href = 'https://' + domain + '/users/' + username;
+        this.href = 'https://' + domain + '/o/' + orgName;
     }
 
     toObject(): Record<string, any> {

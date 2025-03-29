@@ -8,10 +8,11 @@ import UpdateActivity from "@/server/activitypub/model/action/update";
 import DeleteActivity from "@/server/activitypub/model/action/delete";
 import FollowActivity from "@/server/activitypub/model/action/follow";
 import AnnounceActivity from "@/server/activitypub/model/action/announce";
-import { ActivityPubInboxMessageEntity, EventActivityEntity, FollowedAccountEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
-import AccountService from "@/server/accounts/service/account";
+import { ActivityPubInboxMessageEntity, EventActivityEntity, FollowedCalendarEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
+import CalendarService from "@/server/calendar/service/calendar";
 import EventService from "@/server/calendar/service/events";
 import { CalendarEvent } from "@/common/model/events";
+import { Calendar } from "@/common/model/calendar";
 
 
 class ProcessInboxService {
@@ -55,41 +56,41 @@ class ProcessInboxService {
 
     // TODO: validate message sender was allowed to send this message
     async processInboxMessage(message: ActivityPubInboxMessageEntity ) {
-        const account = await AccountService.getAccount(message.account_id);
+        const calendar = await CalendarService.getCalendar(message.calendar_id);
 
         try {
-            if ( ! account ) {
-                throw new Error("No account found for inbox");
+            if ( ! calendar ) {
+                throw new Error("No calendar found for inbox");
             }
             switch( message.type ) {
                 case 'Create':
-                    await this.processCreateEvent(account, CreateActivity.fromObject(message.message) );
+                    await this.processCreateEvent(calendar, CreateActivity.fromObject(message.message) );
                     break;
                 case 'Update':
-                    this.processUpdateEvent(account, UpdateActivity.fromObject(message.message) );
+                    this.processUpdateEvent(calendar, UpdateActivity.fromObject(message.message) );
                     break;
                 case 'Delete':
-                    this.processDeleteEvent(account, DeleteActivity.fromObject(message.message) );
+                    this.processDeleteEvent(calendar, DeleteActivity.fromObject(message.message) );
                     break;
                 case 'Follow':
-                    this.processFollowAccount(account, FollowActivity.fromObject(message.message) );
+                    this.processFollowAccount(calendar, FollowActivity.fromObject(message.message) );
                     break;
                 case 'Announce':
-                    this.processShareEvent(account, AnnounceActivity.fromObject(message.message) );
+                    this.processShareEvent(calendar, AnnounceActivity.fromObject(message.message) );
                     break;
                 case 'Undo':
                     let targetEntity = await ActivityPubInboxMessageEntity.findOne({
-                        where: { accountId: message.account_id, id: message.message.object }
+                        where: { calendarId: message.calendar_id, id: message.message.object }
                     });
 
                     if ( targetEntity ) {
 
                         switch( targetEntity.type ) {
                             case 'Follow':
-                                this.processUnfollowAccount(account, targetEntity);
+                                this.processUnfollowAccount(calendar, targetEntity);
                                 break;
                             case 'Announce':
-                                this.processUnshareEvent(account, targetEntity);
+                                this.processUnshareEvent(calendar, targetEntity);
                                 break;
                             }
                     }
@@ -124,7 +125,7 @@ class ProcessInboxService {
         return false;
     }
 
-    async processCreateEvent(account: Account, message: CreateActivity) {
+    async processCreateEvent(calendar: Calendar, message: CreateActivity) {
         let existingEvent = await this.eventService.getEventById(message.object.id);
         if ( ! existingEvent ) {
             let ok = await this.actorOwnsObject(message);
@@ -139,7 +140,7 @@ class ProcessInboxService {
         return event.origin === 'local';
     }
 
-    async processUpdateEvent(account: Account, message: UpdateActivity) {
+    async processUpdateEvent(calendar: Calendar, message: UpdateActivity) {
         let existingEvent = await this.eventService.getEventById(message.object.id);
         if ( existingEvent && ! this.isLocalEvent(existingEvent) ) {
             let ok = await this.actorOwnsObject(message);
@@ -149,7 +150,7 @@ class ProcessInboxService {
         }
     }
 
-    async processDeleteEvent(account: Account, message: DeleteActivity) {
+    async processDeleteEvent(calendar: Calendar, message: DeleteActivity) {
         let existingEvent = await this.eventService.getEventById(message.object.id);
         if ( existingEvent && ! this.isLocalEvent(existingEvent) ) {
             let ok = await this.actorOwnsObject(message);
@@ -159,40 +160,40 @@ class ProcessInboxService {
         }
     }
 
-    async processFollowAccount(account: Account, message: any) {
-        let existingFollow = await FollowedAccountEntity.findOne({
+    async processFollowAccount(calendar: Calendar, message: any) {
+        let existingFollow = await FollowedCalendarEntity.findOne({
             where: {
-                remote_account_id: message.actor,
-                account_id: account.id,
+                remote_calendar_id: message.actor,
+                calendar_id: calendar.id,
                 direction: 'follower'
             }
         });
 
         if( ! existingFollow ) {
-            FollowedAccountEntity.create({
+            FollowedCalendarEntity.create({
                 id: uuidv4(),
-                remote_account_id: message.actor,
-                account_id: account.id,
+                remote_calendar_id: message.actor,
+                calendar_id: calendar.id,
                 direction: 'follower'
             });
         }
     }
 
-    async processUnfollowAccount(account: Account, message: any) {
-        FollowedAccountEntity.destroy({
+    async processUnfollowAccount(calendar: Calendar, message: any) {
+        FollowedCalendarEntity.destroy({
             where: {
-                remote_account_id: message.actor,
-                account_id: account.id,
+                remote_calendar_id: message.actor,
+                calendar_id: calendar.id,
                 direction: 'follower'
             }
         });
     }
 
-    async processShareEvent(account: Account, message: any) {
+    async processShareEvent(calendar: Calendar, message: any) {
         let existingShare = await EventActivityEntity.findOne({
             where: {
                 event_id: message.object.id,
-                account_id: account.id,
+                calendar_id: calendar.id,
                 type: 'share'
             }
         });
@@ -200,18 +201,18 @@ class ProcessInboxService {
         if ( ! existingShare ) {
             EventActivityEntity.create({
                 event_id: message.object.id,
-                account_id: account.id,
+                calendar_id: calendar.id,
                 type: 'share'
             });
             // IF it's a event local to this server, send to all followers and sharers
         }
     }
 
-    async processUnshareEvent(account: Account, message: any) {
+    async processUnshareEvent(calendar: Calendar, message: any) {
         let existingShare = await EventActivityEntity.findOne({
             where: {
                 event_id: message.object.id,
-                account_id: account.id,
+                calendar_id: calendar.id,
                 type: 'share'
             }
         });
