@@ -51,4 +51,7 @@ if (environment !== "production") {
     router.get("/coverage/*", handlers.coverage);
 };
 
+// This goes last:
+router.get(/^\/(?!(api|assets|\.well-known|o)\/).*/i, handlers.index);
+
 export { handlers, router };
