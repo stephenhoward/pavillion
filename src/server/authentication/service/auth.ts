@@ -1,9 +1,11 @@
 import { scryptSync } from 'crypto';
 import { DateTime } from 'luxon';
+import { randomBytes } from 'crypto';
 
 import { Account } from "@/common/model/account"
 import { AccountEntity, AccountSecretsEntity } from "@/server/common/entity/account"
 import CommonAccountService from '@/server/common/service/accounts';
+import { noAccountExistsError } from '@/server/accounts/exceptions';
 
 /**
  * Service class for managing accounts
@@ -22,18 +24,50 @@ class AuthenticationService {
                 const account = secret.account.toModel();
 
                 if ( await CommonAccountService.setPassword(account, password) == true ) {
-                    secret.password_reset_code = null;
+                    secret.password_reset_code = '';
                     secret.password_reset_expiration = null;
                     await secret.save();
                     return account;
                 }
             }
             else {
-                secret.password_reset_code = null;
+                secret.password_reset_code = '';
                 secret.password_reset_expiration = null;
                 await secret.save();
             }
         }
+    }
+
+    static async generatePasswordResetCode(email: string) {
+        const account = await CommonAccountService.getAccountByEmail(email);
+        if ( ! account ) {
+            throw new noAccountExistsError();
+        }
+
+        let secret = await AccountSecretsEntity.findByPk(account.id);
+        if ( ! secret ) {
+            secret = AccountSecretsEntity.build({
+                id: account.id,
+            });
+        }
+        const passwordResetCode = await AuthenticationService.generatePasswordResetCodeForAccount(account);
+        console.log(passwordResetCode);
+        // TODO: send email
+        // await EmailService.sendPasswordResetEmail(account, passwordResetCode);
+    }
+
+    static async generatePasswordResetCodeForAccount(account: Account): Promise<string> {
+        let secret = await AccountSecretsEntity.findByPk(account.id);
+        if ( ! secret ) {
+            secret = AccountSecretsEntity.build({
+                id: account.id,
+            });
+        }
+        secret.password_reset_code = randomBytes(16).toString('hex');
+        secret.password_reset_expiration = DateTime.now().plus({ hours: 1 }).toJSDate();
+        await secret.save();
+
+        return secret.password_reset_code;
     }
 
     static async validatePasswordResetCode(code: string): Promise<boolean> {

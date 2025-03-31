@@ -8,6 +8,7 @@ import EmailService from '@/server/common/service/mail';
 import ServiceSettings from '@/server/configuration/service/settings';
 import AccountService from '@/server/accounts/service/account';
 import CalendarService from '@/server/calendar/service/calendar';
+import AuthenticationService from '@/server/authentication/service/auth';
 import { AccountAlreadyExistsError, AccountInviteAlreadyExistsError, AccountRegistrationClosedError, AccountApplicationAlreadyExistsError, AccountApplicationsClosedError, noAccountInviteExistsError, noAccountApplicationExistsError } from '@/server/accounts/exceptions';
 
 describe('inviteNewAccount', () => {
@@ -262,9 +263,10 @@ describe('_setupAccount', () => {
 
         let accountServiceStub = setupSandbox.stub(CommonAccountService, 'getAccountByEmail');
         let accountSaveStub = setupSandbox.stub(AccountEntity.prototype, 'save');
-        let calendarCreateStub = setupSandbox.stub(CalendarService, 'createCalendarForUser');
         let accountSecretsSaveStub = setupSandbox.stub(AccountSecretsEntity.prototype, 'save');
+        let passwordCodeStub = setupSandbox.stub(AuthenticationService, 'generatePasswordResetCodeForAccount');
 
+        passwordCodeStub.resolves('test_code');
         accountServiceStub.resolves(undefined);
 
         let accountInfo = await AccountService._setupAccount('test_email');
@@ -272,7 +274,6 @@ describe('_setupAccount', () => {
         expect(accountInfo.account.email).toBe('test_email');
         expect(accountInfo.password_code).toBeTruthy();
         expect(accountSaveStub.called).toBe(true);
-        expect(calendarCreateStub.called).toBe(true);
         expect(accountSecretsSaveStub.called).toBe(true);
     });
 
@@ -281,8 +282,8 @@ describe('_setupAccount', () => {
         let accountServiceStub = setupSandbox.stub(CommonAccountService, 'getAccountByEmail');
         let accountSaveStub = setupSandbox.stub(AccountEntity.prototype, 'save');
         let setPasswordStub = sinon.stub(CommonAccountService, 'setPassword');
-        let calendarCreateStub = setupSandbox.stub(CalendarService, 'createCalendarForUser');
         let accountSecretsSaveStub = setupSandbox.stub(AccountSecretsEntity.prototype, 'save');
+        let passwordCodeStub = setupSandbox.stub(AuthenticationService, 'generatePasswordResetCodeForAccount');
 
         accountServiceStub.resolves(undefined);
         setPasswordStub.resolves(true);
@@ -290,9 +291,9 @@ describe('_setupAccount', () => {
         let accountInfo = await AccountService._setupAccount('test_email','test_password');
 
         expect(accountInfo.account.email).toBe('test_email');
-        expect(accountInfo.password_code).toBe(undefined);
+        expect(accountInfo.password_code).toBe('');
         expect(accountSaveStub.called).toBe(true);
-        expect(calendarCreateStub.called).toBe(true);
+        expect(passwordCodeStub.called).toBe(false);
         expect(accountSecretsSaveStub.called).toBe(true);
     });
 

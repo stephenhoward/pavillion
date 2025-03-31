@@ -16,7 +16,7 @@ describe('Event API', async () => {
 
     await db.sync({force: true});
     let account = await AccountService._setupAccount('testcalendar@pavillion.dev','testpassword');
-    let calendar = await CalendarService.getPrimaryCalendarForUser(account.account);
+    let calendar = await CalendarService.createCalendarForUser(account.account);
     await CalendarService.setUrlName(account.account, calendar, 'testCalendar');
     let inboxService = new ProcessInboxService();
     await inboxService.processFollowAccount(calendar,{ actor: 'testcalendar@remotedomain', object: 'testcalendar@pavillion.dev' });

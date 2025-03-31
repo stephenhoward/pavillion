@@ -56,7 +56,7 @@ const routes: RouteRecordRaw[] = [
             { path: 'logout', component: LogoutView, name: 'logout' },
             { path: 'register',  component: RegisterView, name: 'register', props: true },
             { path: 'forgot', component: PasswordForgotView, name: 'forgot_password', props: true },
-            { path: 'reset',  component: PasswordResetView, name: 'reset_password', props: true }
+            { path: 'password',  component: PasswordResetView, name: 'reset_password', props: true }
         ]
     },
     { path: '/admin', component: AdminViews, name: 'admin', beforeEnter: mustBeAdmin,

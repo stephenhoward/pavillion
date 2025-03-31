@@ -29,7 +29,7 @@ const mountedLogin = () => {
     const wrapper = mountComponent(Login, router, {
         provide: {
             site_config: {
-                settings: {}
+                settings: () => { return {};}
             },
             authn
         }
@@ -51,7 +51,7 @@ describe('Login Screen', () => {
     const wrapper = mountComponent(Login, router, {
         provide: {
             site_config: {
-                settings: {}
+                settings: () => { return {}; }
             }
         }
     });
@@ -70,9 +70,9 @@ describe('Login Screen', () => {
         const closedWrapper = mountComponent(Login, router, {
             provide: {
                 site_config: {
-                    settings: {
+                    settings: () => { return {
                         registrationMode: 'closed'
-                    }
+                    };}
                 }
             }
         });
@@ -89,9 +89,9 @@ describe('Login Screen', () => {
         const openWrapper = mountComponent(Login, router, {
             provide: {
                 site_config: {
-                    settings: {
+                    settings: () => { return {
                         registrationMode: 'open'
-                    }
+                    };}
                 }
             }
         });
@@ -108,9 +108,9 @@ describe('Login Screen', () => {
         const applyWrapper = mountComponent(Login, router, {
             provide: {
                 site_config: {
-                    settings: {
+                    settings: () => { return {
                         registrationMode: 'apply'
-                    }
+                    };}
                 }
             }
         });

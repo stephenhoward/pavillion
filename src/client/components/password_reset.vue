@@ -9,8 +9,8 @@
                 <router-link :to="{ name: 'login', params: { em: state.email }}" >{{ t("login_link") }}</router-link>
             </li>
             <li v-else>
-                <h3>{{ t('code_validated_title') }}</h3>
-                <p>{{ t('code_validated') }}</p>
+                <h3>{{ state.isRegistration ? t('new_account_password_title') : t('code_validated_title') }}</h3>
+                <p>{{ state.isRegistration ? t('registration_new_password') : t('set_password_prompt') }}</p>
                 <input type="password" :placeholder="t('password_placeholder')" v-model="state.password">
                 <input type="password" :placeholder="t('password2_placeholder')" v-model="state.password2" @keyup.enter="setPassword">
                 <button type="button" @click="setPassword" class="icofont-arrow-right"><span class="sr-only">Next</span></button>
@@ -46,17 +46,20 @@ body {
 
 <script setup>
     import { reactive, onBeforeMount, inject } from 'vue';
-    import { useRouter } from 'vue-router'
+    import { useRouter, useRoute } from 'vue-router'
     import { useI18n } from 'vue-i18n';
 
     const router = useRouter();
+    const route = useRoute();
     const { t } = useI18n({
         messages: {
             en: {
                 check_email_title: 'Password Reset Sent',
+                new_account_password_title: 'Welcome to your new account',
                 check_email: 'We have sent a code to reset your password to',
                 code_validated_title: 'Valid Code',
-                code_validated: 'Please set a new password',
+                set_password_prompt: 'Please set a new password',
+                registration_new_password: 'Please set a password',
                 login_link: 'back to sign in',
                 reset_code: 'reset code',
                 reset_button: 'submit code',
@@ -75,21 +78,35 @@ body {
     });
     const authn = inject('authn');
 
-    const props = defineProps(['email']);
     const state = reactive({
-        reset_code: '',
+        reset_code: route.query.code || '',
+        email: route.query.email || '',
         codeValidated: false,
         password:    '',
         password2:   '',
         form_error: ''
     });
 
-    function submitResetCode() {
+    onBeforeMount(async () => {
+        if ( state.reset_code ) {
+            console.log("checking password reset token");
+            await submitResetCode();
+        }
+    });
+
+    async function submitResetCode() {
 
         state.form_error = '';
-        authentication.check_password_reset_token(state.reset_code)
-            .then(  () => { state.codeValidated = true } )
-            .catch( () => { state.form_error = 'bad_token' } )
+        const response = await authn.check_password_reset_token(state.reset_code);
+        console.log(response);
+        if ( response.message == 'ok' ) {
+            state.codeValidated = true;
+            state.isRegistration = response.isNewAccount;
+        }
+        else {
+            state.codeValidated = false;
+            state.form_error = 'bad_token';
+        }
     }
 
     async function setPassword() {
@@ -105,8 +122,8 @@ body {
         else {
             state.form_error = '';
             try {
-                await authentication.use_password_reset_token(state.reset_code, state.password);
-                router.push('/login');
+                await authn.use_password_reset_token(state.reset_code, state.password);
+                router.push('/auth/login');
             }
             catch (error) {
                 let error_text = "unknown_error";

@@ -18,15 +18,26 @@ class CalendarEntity extends Model {
     @Column({ type: DataType.STRING })
     declare url_name: string;
 
+    @Column({ type: DataType.STRING })
+    declare languages: string;
+
     toModel(): Calendar {
-        return new Calendar( this.id, this.url_name );
+        let calendar = new Calendar( this.id, this.url_name );
+        if ( ! this.languages ) {
+            calendar.languages = [];
+        }
+        else {
+            calendar.languages = this.languages.split(',');
+        }
+
+        return calendar;
     };
 
     static fromModel(calendar: Calendar): CalendarEntity {
         return CalendarEntity.build({
             id: calendar.id,
-            account_id: calendar.accountId,
-            url_name: calendar.urlName
+            url_name: calendar.urlName,
+            languages: calendar.languages.join(',')
         });
     }
 };

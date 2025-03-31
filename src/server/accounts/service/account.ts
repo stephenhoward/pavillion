@@ -9,12 +9,12 @@ import CommonAccountService from '@/server/common/service/accounts';
 import EmailService from "@/server/common/service/mail";
 import { AccountEntity, AccountSecretsEntity, AccountInvitationEntity, AccountApplicationEntity } from "@/server/common/entity/account"
 import ServiceSettings from '@/server/configuration/service/settings';
-import CalendarService from '@/server/calendar/service/calendar';
 import { AccountApplicationAlreadyExistsError, noAccountInviteExistsError, AccountRegistrationClosedError, AccountApplicationsClosedError, AccountAlreadyExistsError, AccountInviteAlreadyExistsError, noAccountApplicationExistsError } from '@/server/accounts/exceptions';
+import AuthenticationService from '@/server/authentication/service/auth';
 
 type AccountInfo = {
     account: Account,
-    password_code: string | null
+    password_code: string | ''
 };
 
 /**
@@ -109,26 +109,22 @@ class AccountService {
 
         await accountEntity.save();
 
-        // TODO: add creating a username as a required step to having a valid account
-
         const accountSecretsEntity = AccountSecretsEntity.build({ account_id: accountEntity.id });
+        await accountSecretsEntity.save();
+
+        let accountInfo:AccountInfo = {
+            account: accountEntity.toModel(),
+            password_code: ''
+        };
 
         if( password ) {
-            await accountSecretsEntity.save();
             CommonAccountService.setPassword(accountEntity.toModel(), password);
         }
         else {
-            accountSecretsEntity.password_reset_code = randomBytes(16).toString('hex');
-            accountSecretsEntity.password_reset_expiration = DateTime.now().plus({ hours: 1}).toJSDate();
-            await accountSecretsEntity.save();
+            const passwordResetCode = await AuthenticationService.generatePasswordResetCodeForAccount(accountEntity.toModel());
+            accountInfo.password_code = passwordResetCode;
         }
-
-        const calendar = await CalendarService.createCalendarForUser(accountEntity.toModel());
-
-        return {
-            account: accountEntity.toModel(),
-            password_code: accountSecretsEntity.password_reset_code
-        };
+        return accountInfo;
     }
 
     static async validateInviteCode(code: string): Promise<boolean> {
@@ -212,6 +208,18 @@ class AccountService {
         }
         return null;
     }
+
+    static async isRegisteringAccount(account: Account): Promise<boolean> {
+        const secretsEntity = await AccountSecretsEntity.findByPk(account.id);
+        if ( secretsEntity ) {
+            console.log("secretsEntity", secretsEntity);
+            if ( secretsEntity.password?.length ) {
+                return false;
+            }
+        }
+        return true;
+    }
+
 }
 
 export default AccountService;

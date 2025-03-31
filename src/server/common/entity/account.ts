@@ -21,8 +21,14 @@ class AccountEntity extends Model {
     @Column({ type: DataType.STRING })
     declare email: string;
 
+    @Column({ type: DataType.STRING })
+    declare language: string;
+
     toModel(): Account {
-        return new Account( this.id, this.username, this.email );
+        let account = new Account( this.id, this.username, this.email );
+        account.language = this.language;
+
+        return account;
     };
 };
 
@@ -121,7 +127,7 @@ class AccountSecretsEntity extends Model {
     @Column({ type: DataType.STRING })
     declare password_reset_code: string | null;
 
-    @Column({ type: DataType.STRING })
+    @Column({ type: DataType.DATE })
     declare password_reset_expiration: Date | null;
 
     @BelongsTo(() => AccountEntity)

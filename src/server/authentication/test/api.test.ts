@@ -115,7 +115,7 @@ describe('resetPassword', () => {
         let router = express.Router();
         stub.resolves(new Account('id', 'testme', 'testme'));
         let jwtSpy = sinon.spy(ExpressHelper, 'generateJWT');
-        router.post('/handler', handlers.resetPassword);
+        router.post('/handler', handlers.setPassword);
 
         let response = await request(testApp(router)).post('/handler').send({code: '1234', password: 'password'});
 
@@ -127,7 +127,7 @@ describe('resetPassword', () => {
     it('resetPassword: should fail', async () => {
         let router = express.Router();
         stub.resolves(undefined);
-        router.post('/handler', handlers.resetPassword);
+        router.post('/handler', handlers.setPassword);
 
         let response = await request(testApp(router)).post('/handler').send({code: '1234', password: 'password'});
 

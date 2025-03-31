@@ -5,13 +5,13 @@
         <input type="email"    v-bind:placeholder="t('email')"    v-model="state.email">
         <input type="password" v-bind:placeholder="t('password')" v-model="state.password" @keyup.enter="doLogin">
         <button type="submit" @click="doLogin">{{ t("login_button") }}</button>
-        <router-link :to="{ name: 'forgot_password', query: { email: state.email }}" >{{ t("forgot_password") }}</router-link>
         <router-link id="register" v-if="state.registrationMode == 'open'" :to="{ name: 'register', query: { email: state.email}}" class="button">
             {{ t("register_button") }}
         </router-link>
         <router-link id="apply" v-if="state.registrationMode == 'apply'" :to="{ name: 'register-apply', query: { email: state.email}}" class="button">
             {{ t("register_button") }}
         </router-link>
+        <router-link :to="{ name: 'forgot_password', query: { email: state.email }}" >{{ t("forgot_password") }}</router-link>
     </div>
 </template>
 
@@ -46,7 +46,7 @@
         err      : '',
         email    : route.query.email || '',
         password : '',
-        registrationMode : site_config.settings.registrationMode
+        registrationMode : site_config.settings().registrationMode
     });
 
     async function doLogin() {
@@ -110,13 +110,17 @@ div.login {
         h3 {
             grid-column: 1 / span 2;
         }
-    button {
+    button, a.button {
         font-size: 14pt;
-            margin: 4px 0px;
+        margin: 4px 0px;
         background: $light-mode-button-background;
         background: $light-mode-button-gradient;
         border: 0;
-            border-radius: 4px;
+        text-align: center;
+        text-decoration: none;
+        padding: 4px 8px;
+        border-radius: 4px;
+        grid-column-start: 1;
         grid-column-end: 3;
     }
 }
@@ -126,7 +130,7 @@ div.login {
         a {
         color: $dark-mode-text;
     }
-        button {
+        button, a.button {
             background: $dark-mode-button-background;
             background: $dark-mode-button-gradient;
             padding: 4px 8px;

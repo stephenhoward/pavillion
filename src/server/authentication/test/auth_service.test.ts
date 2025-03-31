@@ -69,7 +69,7 @@ describe('resetPassword', async () => {
         expect( await AuthenticationService.resetPassword('1234', 'password') ).toBe(undefined);
     });
 
-    it('should return undefined if the code is expired', async () => {
+    it('should return empty string if the code is expired', async () => {
         let findSecretStub = sandbox.stub(AccountSecretsEntity, 'findOne');
         let saveStub = sandbox.stub(AccountSecretsEntity.prototype, 'save');
         let secrets = AccountSecretsEntity.build({
@@ -80,7 +80,7 @@ describe('resetPassword', async () => {
         findSecretStub.resolves( secrets );
 
         expect( await AuthenticationService.resetPassword('1234', 'password') ).toBe(undefined);
-        expect(secrets.password_reset_code).toBe(null);
+        expect(secrets.password_reset_code).toBe('');
         expect(secrets.password_reset_expiration).toBe(null);
     });
 
@@ -103,7 +103,7 @@ describe('resetPassword', async () => {
         if ( acct ) {
             expect( acct.id ).toBe(account.id);
         }
-        expect(secrets.password_reset_code).toBe(null);
+        expect(secrets.password_reset_code).toBe('');
         expect(secrets.password_reset_expiration).toBe(null);
     });
 });

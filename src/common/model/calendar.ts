@@ -5,7 +5,6 @@ class Calendar extends TranslatedModel<CalendarContent> {
     urlName: string = '';
     languages: string[] = ['en'];
     description: string = '';
-    domain: string = config.get('domain');
     _content: Record<string, CalendarContent> = {};
 
     protected createContent(language: string): CalendarContent {

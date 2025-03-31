@@ -59,7 +59,7 @@ export default class AuthenticationService {
     async register(email: string) {
 
         try {
-            let response = await axios.post( this._authUrl('/register'), {
+            let response = await axios.post( this._accountUrl('/register'), {
                 email: email
             });
 
@@ -72,7 +72,7 @@ export default class AuthenticationService {
 
     async register_apply(email: string, message: string) {
         try {
-            let response = await axios.post( this._authUrl('/register-apply'), {
+            let response = await axios.post( this._accountUrl('/register-apply'), {
                 email: email,
                 message: message
             });
@@ -86,7 +86,7 @@ export default class AuthenticationService {
 
     async accept_invitation(code: string, password: string) {
         try {
-            let response = await axios.post( this._authUrl('/register-invitation'), {
+            let response = await axios.post( this._accountUrl('/register-invitation'), {
                 code: code,
                 message: password
             });
@@ -190,7 +190,7 @@ export default class AuthenticationService {
         }
 
         try {
-            let response = await axios.post( this._authUrl('/reset/' + token), { password: password });
+            let response = await axios.post( this._authUrl('/reset-password/' + token), { password: password });
             return response.data;
         }
         catch (error) {
@@ -210,6 +210,10 @@ export default class AuthenticationService {
     _authUrl(path: string) {
 
         return '/api/auth/v1' + path;
+    }
+    _accountUrl(path: string) {
+
+        return '/api/accounts/v1' + path;
     }
 
     async _wait(ms: number): Promise<NodeJS.Timeout> {

@@ -16,7 +16,7 @@
 
 <script setup>
     import { reactive, onBeforeMount, inject } from 'vue';
-    import { useRouter } from 'vue-router'
+    import { useRouter, useRoute } from 'vue-router'
     import { useI18n } from 'vue-i18n';
 
     const router = useRouter();
@@ -29,9 +29,9 @@
                 email: 'email',
                 go_login: 'back to sign in',
                 '400': 'bad sign in',
-                'unknown_error': 'An unknown error occurred'
+                'unknown_error': 'An unknown error occurred',
+                'account_exists': 'An account already exists for this email address'
             }
-
         }
     });
 
@@ -42,8 +42,13 @@
         password : '',
         showSuccess: false
     });
+    const route = useRoute();
 
     onBeforeMount(() => {
+        if ( route.query.code ) {
+            router.push({ name: 'reset_password', query: { code: route.query.code }});
+        }
+
         state.err   = state.error || '';
         state.email = state.em || '';
     });
@@ -56,11 +61,17 @@
             state.showSuccess = true;
         }
         catch(error) {
+            console.log(error);
 
             let error_text = "unknown_error";
 
-            if ( typeof error  == "object" && "message" in error ) {
-                error_text = error.message;
+            if ( typeof error  == "object" && "response" in error ) {
+                if ( "data" in error.response ) {
+                    error_text = error.response.data.message;
+                }
+                else {
+                    error_text = error.message;
+                }
             }
             else if ( typeof error == "string" ) {
                 error_text = error;
