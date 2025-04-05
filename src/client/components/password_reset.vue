@@ -1,21 +1,18 @@
 <template>
-    <div class="password_reset">
-        <ol>
-            <li v-if="! state.codeValidated">
-                <h3>{{ t('check_email_title') }}</h3>
-                <p>{{ t('check_email') }} {{ state.email }}.</p>
-                <input v-model="state.reset_code" :placeholder="t('reset_code')" >
-                <button @click="submitResetCode">{{ t('reset_button') }}</button>
-                <router-link :to="{ name: 'login', params: { em: state.email }}" >{{ t("login_link") }}</router-link>
-            </li>
-            <li v-else>
-                <h3>{{ state.isRegistration ? t('new_account_password_title') : t('code_validated_title') }}</h3>
-                <p>{{ state.isRegistration ? t('registration_new_password') : t('set_password_prompt') }}</p>
-                <input type="password" :placeholder="t('password_placeholder')" v-model="state.password">
-                <input type="password" :placeholder="t('password2_placeholder')" v-model="state.password2" @keyup.enter="setPassword">
-                <button type="button" @click="setPassword" class="icofont-arrow-right"><span class="sr-only">Next</span></button>
-            </li>
-        </ol>
+    <div v-if="! state.codeValidated" class="password_reset">
+        <h3>{{ t('check_email_title') }}</h3>
+        <p>{{ t('check_email') }} {{ state.email }}.</p>
+        <input type="text" v-model="state.reset_code" :placeholder="t('reset_code')" >
+        <button class="primary" @click="submitResetCode">{{ t('reset_button') }}</button>
+        <router-link :to="{ name: 'login', params: { em: state.email }}" >{{ t("login_link") }}</router-link>
+        <div v-if="state.form_error" class="error">{{ t(state.form_error) }}</div>
+    </div>
+    <div v-else class="password_reset">
+        <h3>{{ state.isRegistration ? t('new_account_password_title') : t('code_validated_title') }}</h3>
+        <p>{{ state.isRegistration ? t('registration_new_password') : t('set_password_prompt') }}</p>
+        <input type="password" :placeholder="t('password_placeholder')" v-model="state.password">
+        <input type="password" :placeholder="t('password2_placeholder')" v-model="state.password2" @keyup.enter="setPassword">
+        <button type="button" @click="setPassword" class="primary icofont-arrow-right"><span class="sr-only">Next</span></button>
         <div v-if="state.form_error" class="error">{{ t(state.form_error) }}</div>
     </div>
 </template>
@@ -23,25 +20,15 @@
 <style lang="scss">
 @use '../assets/mixins' as *;
 
-body {
+div.password_reset {
+    @include auth-form;
+}
+@include dark-mode {
     div.password_reset {
-        @include auth-form;
-
-        ol {
-            list-style-type: none;
-            margin: 0;
-            padding: 0;
-            li {
-                margin: 0;
-                padding: 0;
-
-                & > * {
-                    display: block;
-                }
-            }
-        }
+        @include auth-form-dark-mode;
     }
 }
+
 </style>
 
 <script setup>

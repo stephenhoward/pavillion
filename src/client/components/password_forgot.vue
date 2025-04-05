@@ -4,7 +4,7 @@
         <p>{{ t('instructions') }}</p>
         <div class="error" v-if="state.error">{{ state.error }}</div>
         <input type="email" v-bind:placeholder="t('email')" v-model="state.email">
-        <button v-on:click="startReset" type="button">{{ t('go_button') }}</button>
+        <button class="primary" v-on:click="startReset" type="button">{{ t('go_button') }}</button>
         <router-link :to="{ name: 'login', query: { email: state.email }}" >{{ t("login_link") }}</router-link>
     </div>
 </template>
@@ -12,9 +12,12 @@
 <style lang="scss">
 @use '../assets/mixins' as *;
 
-body {
+div.forgot_password {
+    @include auth-form;
+}
+@include dark-mode {
     div.forgot_password {
-        @include auth-form;
+        @include auth-form-dark-mode;
     }
 }
 </style>
@@ -30,7 +33,7 @@ body {
                 title: 'Forgot your password?',
                 instructions: 'No problem. Enter your email address and we will email you a password reset link.',
                 email: 'your email address',
-                go_button: 'send password reset',
+                go_button: 'Send Password Reset',
                 login_link: 'back to sign in',
                 error_400: 'There is a problem with the email you submitted',
                 error_404: 'We could not find an account with that email address',

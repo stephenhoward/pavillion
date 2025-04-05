@@ -4,14 +4,14 @@
         <div class="error" v-if="state.err">{{ state.err }}</div>
         <input type="email"    v-bind:placeholder="t('email')"    v-model="state.email">
         <input type="password" v-bind:placeholder="t('password')" v-model="state.password" @keyup.enter="doLogin">
-        <button type="submit" @click="doLogin">{{ t("login_button") }}</button>
+        <button class="primary" type="submit" @click="doLogin">{{ t("login_button") }}</button>
         <router-link id="register" v-if="state.registrationMode == 'open'" :to="{ name: 'register', query: { email: state.email}}" class="button">
             {{ t("register_button") }}
         </router-link>
         <router-link id="apply" v-if="state.registrationMode == 'apply'" :to="{ name: 'register-apply', query: { email: state.email}}" class="button">
-            {{ t("register_button") }}
+            {{ t("apply_button") }}
         </router-link>
-        <router-link :to="{ name: 'forgot_password', query: { email: state.email }}" >{{ t("forgot_password") }}</router-link>
+        <router-link class="forgot" :to="{ name: 'forgot_password', query: { email: state.email }}" >{{ t("forgot_password") }}</router-link>
     </div>
 </template>
 
@@ -33,6 +33,7 @@
                 password: 'password',
                 forgot_password: 'Forgot Password?',
                 register_button: 'Create an Account',
+                apply_button: 'Apply for an Account',
                 UnknownLogin: 'unknown email or password',
                 MissingLogin: 'missing email or password',
                 '400': 'bad sign in',
@@ -87,55 +88,11 @@
 @use '../assets/mixins' as *;
 
 div.login {
-    background-color: rgba(0,0,0,0.2);
-    display: grid;
-    border-radius: 8px;
-    grid-template-columns: 1fr 1fr;
-    margin: 20px;
-    padding: 20px;
-    max-width: 400px;
-    font-size: 14pt;
-
-    a {
-        display: block;
-        color: $light-mode-text;
-        grid-column-end: 3;
-    }
-
-        input[type="email"], input[type="password"] {
-            font-size: 14pt;
-            margin: 4px 0px;
-            grid-column: 1 / span 2;
-        }
-        h3 {
-            grid-column: 1 / span 2;
-        }
-    button, a.button {
-        font-size: 14pt;
-        margin: 4px 0px;
-        background: $light-mode-button-background;
-        background: $light-mode-button-gradient;
-        border: 0;
-        text-align: center;
-        text-decoration: none;
-        padding: 4px 8px;
-        border-radius: 4px;
-        grid-column-start: 1;
-        grid-column-end: 3;
-    }
+    @include auth-form;
 }
 @include dark-mode {
     div.login {
-        background-color: rgba(255,255,255,0.2);
-        a {
-        color: $dark-mode-text;
-    }
-        button, a.button {
-            background: $dark-mode-button-background;
-            background: $dark-mode-button-gradient;
-            padding: 4px 8px;
-            color: $dark-mode-text;
-        }
+        @include auth-form-dark-mode;
     }
 }
 

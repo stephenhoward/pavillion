@@ -1,0 +1,8 @@
+{
+    "ServiceSettingEntity": [
+        {
+            "parameter": "registrationMode",
+            "value": "apply"
+        }
+    ]
+}

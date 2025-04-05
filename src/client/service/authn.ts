@@ -72,7 +72,7 @@ export default class AuthenticationService {
 
     async register_apply(email: string, message: string) {
         try {
-            let response = await axios.post( this._accountUrl('/register-apply'), {
+            let response = await axios.post( this._accountUrl('/applications'), {
                 email: email,
                 message: message
             });

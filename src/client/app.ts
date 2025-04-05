@@ -5,6 +5,7 @@ import { createPinia } from 'pinia';
 
 import '@/client/assets/style.scss';
 import AppVue from '@/client/components/app.vue';
+import CalendarsView from '@/client/components/calendars.vue';
 import CalendarView from '@/client/components/calendar.vue';
 import FeedView from '@/client/components/feed.vue';
 import ProfileView from '@/client/components/profile.vue';
@@ -17,6 +18,7 @@ import LogoutView from '@/client/components/logout.vue';
 import PasswordForgotView from '@/client/components/password_forgot.vue';
 import PasswordResetView from '@/client/components/password_reset.vue';
 import RegisterView from '@/client/components/register.vue';
+import RegisterApplyView from '@/client/components/register_apply.vue';
 import Authentication from '@/client/service/authn';
 import Config from '@/client/service/config';
 
@@ -44,7 +46,8 @@ const routes: RouteRecordRaw[] = [
     { path: '/', component: AppViews, name: 'app', beforeEnter: mustBeLoggedIn,
 
         children: [
-            { path: 'calendar', component: CalendarView, name: 'calendar', beforeEnter: mustBeLoggedIn },
+            { path: 'calendar', component: CalendarsView, name: 'calendars', beforeEnter: mustBeLoggedIn },
+            { path: 'calendar/:id', component: CalendarView, name: 'calendar', beforeEnter: mustBeLoggedIn },
             { path: 'inbox', component: InboxView, name: 'inbox', beforeEnter: mustBeLoggedIn },
             { path: 'feed', component: FeedView, name: 'feed', beforeEnter: mustBeLoggedIn },
             { path: 'profile', component: ProfileView, name: 'profile', beforeEnter: mustBeLoggedIn },
@@ -55,6 +58,7 @@ const routes: RouteRecordRaw[] = [
             { path: 'login',  component: LoginView, name: 'login', props: true },
             { path: 'logout', component: LogoutView, name: 'logout' },
             { path: 'register',  component: RegisterView, name: 'register', props: true },
+            { path: 'apply',  component: RegisterApplyView, name: 'register-apply', props: true },
             { path: 'forgot', component: PasswordForgotView, name: 'forgot_password', props: true },
             { path: 'password',  component: PasswordResetView, name: 'reset_password', props: true }
         ]

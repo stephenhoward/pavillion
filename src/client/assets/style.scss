@@ -28,8 +28,8 @@ html,body {
 }
 @include dark-mode {
     #app {
-        background-color: $dark-mode-background;
-        background: $dark-mode-background-gradient;
+        background-color: #44444a;
+        // background: $dark-mode-background-gradient;
         color:            $dark-mode-text;
     }
 }
