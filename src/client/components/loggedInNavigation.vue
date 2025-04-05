@@ -5,9 +5,11 @@
     const { t } = useI18n({
         messages: {
             "en": {
-                "calendar": "My Calendar",
-                "inbox": "Inbox",
-                "new_event": "New Event"
+                "calendar_button": "Calendar",
+                "inbox_button": "Inbox",
+                "new_event": "New Event",
+                "profile_button": "Settings",
+                "feed_button": "Feed",
             },
             "es": {
                 "calendar": "Mi Calendar",
@@ -26,11 +28,11 @@
 
 <template>
     <nav>
-    <li class="new-event"><img class="new-event" src="../assets/add_icon.svg" alt="Add Event" @click="$emit('openEvent',newEvent())" /><label>{{ t("new_event") }}</label></li>
-    <RouterLink class="calendar" to="/calendar" ><li class="selected"><img src="../assets/calendar_icon.svg" alt="My Calendar" /><label>{{ t("calendar") }}</label></li></RouterLink>
-    <RouterLink class="feed" to="/feed"><li><img src="../assets/feed_icon.svg" alt="Events from Followees"><label>Event Feed</label></li></RouterLink>
-    <RouterLink class="alerts" to="/inbox"><li><img src="../assets/inbox_icon.svg" alt="Inbox"/><label>{{ t("inbox") }}</label></li></RouterLink>
-    <RouterLink class="profile" to="/profile"><li><img src="../assets/profile_icon.svg" alt="Profile and Settings" /><label>Profile and Settings</label></li></RouterLink>
+    <li class="new-event" @click="$emit('openEvent',newEvent())"><div :aria-label="t('new_event')" class="icon" id="new-event-button" ></div><label>{{ t("new_event") }}</label></li>
+    <RouterLink class="calendar" to="/calendar" ><li class="selected"><div class="icon" id="calendar-button"></div> <label>{{ t("calendar_button") }}</label></li></RouterLink>
+    <RouterLink class="feed" to="/feed"><li><div class="icon" id="feed-button"></div> <label>{{ t("feed_button") }}</label></li></RouterLink>
+    <RouterLink class="alerts" to="/inbox"><li><div class="icon" id="alerts-button"></div> <label>{{ t("inbox_button") }}</label></li></RouterLink>
+    <RouterLink class="profile" to="/profile"><li><div class="icon" id="profile-button"></div> <label>{{ t("profile_button") }}</label></li></RouterLink>
   </nav>
 </template>
     
@@ -39,12 +41,14 @@
 
 nav {
   display: flex;
+  background-color: rgba(0,0,0,0.2);
   flex-direction: row;
   justify-content: space-around;
   align-items: center;
   padding: 1em;
-  background: #555;
+
   a {
+    color: $light-mode-text;
     text-decoration: none;
     &.calendar, &.feed {
         order: 1;
@@ -54,30 +58,77 @@ nav {
     }
   }
   li {
-    &.new-event {
-    order: 2;
-  }
     padding: 10px;
     list-style-type: none;
     display: flex;
     flex-direction: column;
     align-items: center;
-    img, label {
-        display: block;
-    }
-    img {
-        width: 24px;
-        &.new-event {
-            width: 48px;
-        }
-    }
+    font-size: 10pt;
     &.selected {
-        color: #4f4;
-        img {
-            filter: invert(48%) sepia(79%) saturate(2476%) hue-rotate(86deg) brightness(118%) contrast(119%);
+        color: $light-mode-button-background;
+        div.icon {
+            background-color: $light-mode-button-background;
         }
+    }
+    &.new-event {
+        order: 2;
+        label {
+            display: none;
+        }
+    }
+    label {
+        display: block;
+        text-align: center;
+    }
+    div.icon {
+        width: 24px;
+        height: 24px;
+        background-color: #000;
+        -webkit-mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-size: contain;
+        mask-repeat: no-repeat;
     }
   }
+}
+
+#calendar-button {
+    -webkit-mask-image: url('../assets/calendar_icon.svg');
+}
+#feed-button {
+    -webkit-mask-image: url('../assets/feed_icon.svg');
+}
+#alerts-button {
+    -webkit-mask-image: url('../assets/inbox_icon.svg');
+}
+#profile-button {
+    -webkit-mask-image: url('../assets/profile_icon.svg');
+}
+#new-event-button {
+    -webkit-mask-image: url('../assets/add_icon.svg');
+    width: 48px;
+    height: 48px;
+}
+
+@include dark-mode {
+    nav {
+        background: $dark-mode-background;
+        a {
+            color: $dark-mode-text;
+        }
+        li {
+            color: #ccc;
+            &.selected {
+                color: $dark-mode-button-background;
+                div.icon {
+                    background-color: $dark-mode-button-background;
+                }
+            }
+            div.icon {
+                background-color: #ccc;
+            }
+        }
+    }
 }
 
 @include medium-size-device {
@@ -86,17 +137,21 @@ nav {
     align-items: flex-start;
     justify-content: flex-start;
     li {
-        img {
+        div.icon {
             margin-right: 5px;
         }
         &.new-event {
             order: 0;
-            img {
-                width: 24px;
+            label {
+                display: block;
             }
         }
         padding: 10px;
     }
+  }
+  #new-event-button {
+    width: 24px;
+    height: 24px;
   }
 }
 
