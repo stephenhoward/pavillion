@@ -1,14 +1,19 @@
+import config from 'config';
 import ServiceSettingEntity from "@/server/configuration/entity/settings";
 
-interface Config {
-    [registrationMode: string] : 'open' | 'apply' | 'invite' | 'closed';
+type Config = {
+    registrationMode: 'open' | 'apply' | 'invite' | 'closed';
+    siteTitle: string;
 }
 class ServiceSettings {
     private static instance: ServiceSettings;
     private config: Config;
 
     private constructor() {
-        this.config = {};
+        this.config = {
+            registrationMode: 'closed',
+            siteTitle: config.get('domain')
+        };
     }
 
     async init() {
@@ -19,6 +24,9 @@ class ServiceSettings {
                 if ( ['open', 'apply', 'invite', 'closed'].includes(entity.value) ) {
                     this.config[entity.parameter] = entity.value as 'open' | 'apply' | 'invite' | 'closed';
                 }
+            }
+            if( entity.parameter == 'siteTitle' ) {
+                this.config.siteTitle = entity.value;
             }
         });
         Object.freeze(this.config);

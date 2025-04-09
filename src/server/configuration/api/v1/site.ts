@@ -5,7 +5,8 @@ const handlers = {
     site: async (req: Request, res: Response) => {
         const settings = await ServiceSettings.getInstance();
         res.json({
-            registrationMode: settings.get('registrationMode')
+            registrationMode: settings.get('registrationMode'),
+            siteTitle: settings.get('siteTitle')
         })
     }
 };
