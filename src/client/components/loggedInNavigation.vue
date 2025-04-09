@@ -28,11 +28,11 @@
 
 <template>
     <nav>
-    <li class="new-event" @click="$emit('openEvent',newEvent())"><div :aria-label="t('new_event')" class="icon" id="new-event-button" ></div><label>{{ t("new_event") }}</label></li>
-    <RouterLink class="calendar" to="/calendar" ><li class="selected"><div class="icon" id="calendar-button"></div> <label>{{ t("calendar_button") }}</label></li></RouterLink>
-    <RouterLink class="feed" to="/feed"><li><div class="icon" id="feed-button"></div> <label>{{ t("feed_button") }}</label></li></RouterLink>
-    <RouterLink class="alerts" to="/inbox"><li><div class="icon" id="alerts-button"></div> <label>{{ t("inbox_button") }}</label></li></RouterLink>
-    <RouterLink class="profile" to="/profile"><li><div class="icon" id="profile-button"></div> <label>{{ t("profile_button") }}</label></li></RouterLink>
+    <li id="new-event-button"><a @click="$emit('openEvent',newEvent())"><div :aria-label="t('new_event')" class="icon"></div><label>{{ t("new_event") }}</label></a></li>
+    <li id="calendar-button" class="selected"><RouterLink class="calendar" to="/calendar" ><div class="icon"></div> <label>{{ t("calendar_button") }}</label></RouterLink></li>
+    <li id="feed-button"><RouterLink class="feed" to="/feed"><div class="icon"></div> <label>{{ t("feed_button") }}</label></RouterLink></li>
+    <li id="alerts-button"><RouterLink class="alerts" to="/inbox"><div class="icon"></div> <label>{{ t("inbox_button") }}</label></RouterLink></li>
+    <li id="profile-button"><RouterLink class="profile" to="/profile"><div class="icon"></div> <label>{{ t("profile_button") }}</label></RouterLink></li>
   </nav>
 </template>
     
@@ -41,46 +41,34 @@
 
 nav {
   display: flex;
-  background-color: rgba(0,0,0,0.2);
   flex-direction: row;
   justify-content: space-around;
   align-items: center;
   padding: 1em;
 
-  a {
-    color: $light-mode-text;
-    text-decoration: none;
-    &.calendar, &.feed {
-        order: 1;
-    }
-    &.alerts, &.profile {
-        order: 3;
-    }
-  }
   li {
     padding: 10px;
     list-style-type: none;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
     font-size: 10pt;
     &.selected {
-        color: $light-mode-button-background;
-        div.icon {
-            background-color: $light-mode-button-background;
+        a {
+            color: $light-mode-button-background;
+            div.icon {
+                background-color: $light-mode-button-background;
+            }
         }
     }
-    &.new-event {
-        order: 2;
-        label {
-            display: none;
-        }
-    }
-    label {
+    a {
+      color: $light-mode-text;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-decoration: none;
+      label {
         display: block;
         text-align: center;
-    }
-    div.icon {
+      }
+      div.icon {
         width: 24px;
         height: 24px;
         background-color: #000;
@@ -88,47 +76,36 @@ nav {
         -webkit-mask-repeat: no-repeat;
         mask-size: contain;
         mask-repeat: no-repeat;
+      }
     }
   }
 }
 
-#calendar-button {
+#calendar-button div.icon {
     -webkit-mask-image: url('../assets/calendar_icon.svg');
 }
-#feed-button {
+#feed-button div.icon {
     -webkit-mask-image: url('../assets/feed_icon.svg');
 }
-#alerts-button {
+#alerts-button div.icon {
     -webkit-mask-image: url('../assets/inbox_icon.svg');
 }
-#profile-button {
+#profile-button div.icon {
     -webkit-mask-image: url('../assets/profile_icon.svg');
 }
 #new-event-button {
-    -webkit-mask-image: url('../assets/add_icon.svg');
-    width: 48px;
-    height: 48px;
-}
-
-@include dark-mode {
-    nav {
-        background: $dark-mode-background;
-        a {
-            color: $dark-mode-text;
-        }
-        li {
-            color: #ccc;
-            &.selected {
-                color: $dark-mode-button-background;
-                div.icon {
-                    background-color: $dark-mode-button-background;
-                }
-            }
-            div.icon {
-                background-color: #ccc;
-            }
-        }
+    order: 2;
+    div.icon{
+      -webkit-mask-image: url('../assets/add_icon.svg');
+      width: 48px;
+      height: 48px;
     }
+    label {
+      display: none;
+    }
+}
+#alerts-button, #profile-button {
+    order: 3;
 }
 
 @include medium-size-device {
@@ -137,21 +114,35 @@ nav {
     align-items: flex-start;
     justify-content: flex-start;
     li {
-        div.icon {
-            margin-right: 5px;
-        }
-        &.new-event {
-            order: 0;
+        a {
+            flex-direction: row;
             label {
-                display: block;
+                text-align: left;
             }
+        }
+        div.icon {
+            display: inline-block;
+            margin-right: 5px;
         }
         padding: 10px;
     }
   }
   #new-event-button {
-    width: 24px;
-    height: 24px;
+    order: 0;
+    border-radius: 10px;
+    background: $light-mode-button-background;
+    width: 100%;
+    a {
+        display: block;
+        width: 100%;
+        text-align: center;
+        label {
+            display: inline-block;
+        }
+        div.icon {
+            display: none;
+        }
+    }
   }
 }
 
@@ -160,6 +151,36 @@ nav {
     li {
         justify-content: flex-start;
         flex-direction: row;
+    }
+  }
+}
+
+@include dark-mode {
+    nav {
+        li {
+            color: #ccc;
+            &.selected {
+                a {
+                  color: $dark-mode-button-background;
+                  div.icon {
+                    background-color: $dark-mode-button-background;
+                  }
+                }
+            }
+            a {
+                color: $dark-mode-text;
+                div.icon {
+                    background-color: $dark-mode-text;
+                }
+            }
+        }
+    }
+    @include medium-size-device {
+    #new-event-button {
+      background: $dark-mode-button-background;
+      a {
+          color: $dark-mode-text;
+      }
     }
   }
 }
