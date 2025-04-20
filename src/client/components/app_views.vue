@@ -1,14 +1,11 @@
 <script setup>
-import { reactive, inject, watch } from 'vue';
+import { reactive, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import loggedInNavigation from './loggedInNavigation.vue'
 import EditEventView from './edit_event.vue';
 
-const authn = inject('authn');
-
 const state = reactive({
     userInfo: {
-        isAdmin: authn.isAdmin(),
         currentEvent: null
     }
 });
@@ -17,11 +14,9 @@ const { t } = useI18n({
         messages: {
             "en": {
                 "skip_to_content": "Skip to main content",
-                "admin_link": "Admin"
             },
             "es": {
               "skip_to_content": "Skip to main content",
-                "admin_link": "Admin"
             }
         }
     });
@@ -30,7 +25,6 @@ const { t } = useI18n({
 <template>
   <div class="root">
       <a href="#main" class="skip-link">{{ t("skip_to_content") }}</a>
-      <router-link v-if="state.userInfo.isAdmin" to="/admin" class="button">{{ t("admin_link") }}</router-link>
       <loggedInNavigation @open-event="(e) => state.currentEvent = e" />
       <div id="main">
       <RouterView @open-event="(e) => state.currentEvent = e"/>
