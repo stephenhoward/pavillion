@@ -4,6 +4,7 @@ import express from 'express';
 import sinon from 'sinon';
 import axios from 'axios';
 import httpSignature from 'http-signature';
+import crypto from 'crypto';
 
 import db from '@/server/common/entity/db';
 import initPavillionServer from '@/server/server';
@@ -94,28 +95,31 @@ describe('ActivityPub Create Activity', async () => {
             }
         });
         verifyStub.returns(true);
+
+        const requestData = {
+            '@context': 'https://www.w3.org/ns/activitystreams',
+            id: 'https://remotedomain.dev/api/v1/events/1',
+            type: 'Create',
+            actor: 'https://remotedomain.dev/o/testcalendar',
+            object: {
+                '@context': 'https://www.w3.org/ns/activitystreams',
+                type: 'Event',
+                attributedTo: 'https://remotedomain.dev/o/testcalendar',
+                content: {
+                    en: {
+                        name: 'Test Event',
+                        description: 'This is a test event'
+                    }
+                }
+            }
+        };
+
         const response = await request(app)
             .post(profileResponse.body.inbox.replace('https://pavillion.dev',''))
             .set('Authorization', authHeader )
             .set('Date', new Date().toUTCString())
-            .set('Digest', 'SHA-256=X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=')
-            .send({
-                    '@context': 'https://www.w3.org/ns/activitystreams',
-                    id: 'https://remotedomain.dev/api/v1/events/1',
-                    type: 'Create',
-                    actor: 'https://remotedomain.dev/o/testcalendar',
-                    object: {
-                        '@context': 'https://www.w3.org/ns/activitystreams',
-                        type: 'Event',
-                        attributedTo: 'https://remotedomain.dev/o/testcalendar',
-                        content: {
-                            en: {
-                                name: 'Test Event',
-                                description: 'This is a test event'
-                            }
-                        }
-                    }
-                });
+            .set('Digest', 'SHA-256='+crypto.createHash('sha256').update(JSON.stringify(requestData)).digest('base64'))
+            .send(requestData);
 
         let entity = await EventEntity.findOne({ where: { id: 'https://remotedomain.dev/api/v1/events/1' } });
 
