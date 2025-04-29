@@ -4,7 +4,7 @@ import axios from 'axios';
 import { URL } from 'url';
 import { ClientRequest } from 'http';
 import crypto from 'crypto';
-import { Cache } from '../service/cache';
+import { Cache } from '@/server/activitypub/helper/cache';
 
 // Add a key cache to prevent frequent key fetching
 const keyCache = new Cache<string>(60 * 60 * 1000); // 1 hour expiration
