@@ -4,7 +4,7 @@ import axios from "axios";
 
 import { Calendar } from "@/common/model/calendar";
 import CalendarService from "@/server/calendar/service/calendar";
-import { ActivityPubOutboxMessageEntity, EventActivityEntity, FollowedCalendarEntity } from "@/server/activitypub/entity/activitypub"
+import { ActivityPubOutboxMessageEntity, EventActivityEntity, FollowerCalendarEntity } from "@/server/activitypub/entity/activitypub"
 import UpdateActivity from "@/server/activitypub/model/action/update";
 import DeleteActivity from "@/server/activitypub/model/action/delete";
 import FollowActivity from "@/server/activitypub/model/action/follow";
@@ -108,7 +108,7 @@ class ProcessOutboxService {
     async getRecipients(calendar: Calendar, object: ActivityPubObject|string): Promise<string[]> {
         let recipients: string[] = [];
 
-        const followers = await FollowedCalendarEntity.findAll({ where: { calendar_id: calendar.id, direction: 'follower' } });
+        const followers = await FollowerCalendarEntity.findAll({ where: { calendar_id: calendar.id } });
         for( const follower of followers ) {
             recipients.push(follower.remote_calendar_id);
         }

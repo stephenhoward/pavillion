@@ -11,6 +11,13 @@ import AnnounceActivity from '@/server/activitypub/model/action/announce';
 import FollowActivity from '@/server/activitypub/model/action/follow';
 import UndoActivity from '@/server/activitypub/model/action/undo';
 
+// Define enum for auto-repost policy
+enum AutoRepostPolicy {
+    MANUAL = 'manual',         // No auto-repost, manual sharing only
+    ORIGINAL = 'original',     // Auto-repost only events that originate from the followed calendar
+    ALL = 'all'                // Auto-repost all events including those the followed calendar has reposted
+}
+
 class ActivityPubMessageEntity extends Model {
     
     @PrimaryKey
@@ -84,10 +91,10 @@ class ActivityPubInboxMessageEntity extends ActivityPubMessageEntity {
 class ActivityPubOutboxMessageEntity extends ActivityPubMessageEntity {
 }
 
-// a list of follows and followers for an calendar
-@Table({ tableName: 'ap_follow'})
-class FollowedCalendarEntity extends Model {
-
+/**
+ * Base class for calendar follow relationships with common properties
+ */
+abstract class BaseFollowEntity extends Model {
     @PrimaryKey
     @Column({
         type: DataType.STRING,
@@ -102,11 +109,35 @@ class FollowedCalendarEntity extends Model {
     @Column({ type: DataType.STRING })
     declare calendar_id: string;
 
-    @Column({ type: DataType.STRING })
-    declare direction: 'following' | 'follower';
-
     @BelongsTo(() => CalendarEntity)
     declare calendar: CalendarEntity;
+}
+
+/**
+ * Represents a remote calendar that the local calendar is following
+ * This entity stores information about calendars we follow, including
+ * auto-repost policy settings
+ */
+@Table({ tableName: 'ap_following'})
+class FollowingCalendarEntity extends BaseFollowEntity {
+    @Column({
+        type: DataType.STRING,
+        defaultValue: AutoRepostPolicy.MANUAL,
+        allowNull: false,
+        validate: {
+            isIn: [[AutoRepostPolicy.MANUAL, AutoRepostPolicy.ORIGINAL, AutoRepostPolicy.ALL]]
+        }
+    })
+    declare repost_policy: AutoRepostPolicy;
+}
+
+/**
+ * Represents a remote calendar that is following the local calendar
+ * This entity stores information about our followers
+ */
+@Table({ tableName: 'ap_follower'})
+class FollowerCalendarEntity extends BaseFollowEntity {
+    // Any follower-specific fields can be added here
 }
 
 // a list of remote events the calendar has chosen to repost (share)
@@ -155,13 +186,22 @@ class EventFeed extends Model {
     declare calendar_id: string;
 }
 
-db.addModels([ActivityPubInboxMessageEntity, ActivityPubOutboxMessageEntity, FollowedCalendarEntity, SharedEventEntity, EventActivityEntity]);
+db.addModels([
+    ActivityPubInboxMessageEntity,
+    ActivityPubOutboxMessageEntity,
+    FollowingCalendarEntity,
+    FollowerCalendarEntity,
+    SharedEventEntity,
+    EventActivityEntity
+]);
 
 export {
     ActivityPubMessageEntity,
     ActivityPubInboxMessageEntity,
     ActivityPubOutboxMessageEntity,
-    FollowedCalendarEntity,
+    FollowingCalendarEntity,
+    FollowerCalendarEntity,
     SharedEventEntity,
-    EventActivityEntity
+    EventActivityEntity,
+    AutoRepostPolicy
 };

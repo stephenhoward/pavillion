@@ -8,7 +8,7 @@ import UpdateActivity from "@/server/activitypub/model/action/update";
 import DeleteActivity from "@/server/activitypub/model/action/delete";
 import FollowActivity from "@/server/activitypub/model/action/follow";
 import AnnounceActivity from "@/server/activitypub/model/action/announce";
-import { ActivityPubInboxMessageEntity, EventActivityEntity, FollowedCalendarEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
+import { ActivityPubInboxMessageEntity, EventActivityEntity, FollowerCalendarEntity } from "@/server/activitypub/entity/activitypub";
 import CalendarService from "@/server/calendar/service/calendar";
 import EventService from "@/server/calendar/service/events";
 import { CalendarEvent } from "@/common/model/events";
@@ -161,30 +161,27 @@ class ProcessInboxService {
     }
 
     async processFollowAccount(calendar: Calendar, message: any) {
-        let existingFollow = await FollowedCalendarEntity.findOne({
+        let existingFollow = await FollowerCalendarEntity.findOne({
             where: {
                 remote_calendar_id: message.actor,
-                calendar_id: calendar.id,
-                direction: 'follower'
+                calendar_id: calendar.id
             }
         });
 
-        if( ! existingFollow ) {
-            FollowedCalendarEntity.create({
+        if (!existingFollow) {
+            await FollowerCalendarEntity.create({
                 id: uuidv4(),
                 remote_calendar_id: message.actor,
-                calendar_id: calendar.id,
-                direction: 'follower'
+                calendar_id: calendar.id
             });
         }
     }
 
     async processUnfollowAccount(calendar: Calendar, message: any) {
-        FollowedCalendarEntity.destroy({
+        await FollowerCalendarEntity.destroy({
             where: {
                 remote_calendar_id: message.actor,
-                calendar_id: calendar.id,
-                direction: 'follower'
+                calendar_id: calendar.id
             }
         });
     }

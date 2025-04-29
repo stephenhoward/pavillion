@@ -6,7 +6,7 @@ import { EventEmitter } from 'events';
 import { Calendar } from '@/common/model/calendar';
 import CalendarService from '@/server/calendar/service/calendar';
 import ProcessOutboxService from '@/server/activitypub/service/outbox';
-import { FollowedCalendarEntity, EventActivityEntity, ActivityPubOutboxMessageEntity } from '@/server/activitypub/entity/activitypub';
+import { EventActivityEntity, ActivityPubOutboxMessageEntity, FollowerCalendarEntity } from '@/server/activitypub/entity/activitypub';
 
 
 describe('resolveInbox', () => {
@@ -102,7 +102,7 @@ describe ('getRecipients', () => {
     });
 
     it('should return an empty array with no followers or observers', async () => {
-        let followersStub = sandbox.stub(FollowedCalendarEntity,'findAll');
+        let followersStub = sandbox.stub(FollowerCalendarEntity,'findAll');
         followersStub.resolves([]);
 
         let observersStub = sandbox.stub(EventActivityEntity,'findAll');
@@ -113,8 +113,8 @@ describe ('getRecipients', () => {
     });
 
     it('should return an array with followers and observers', async () => {
-        let followersStub = sandbox.stub(FollowedCalendarEntity,'findAll');
-        followersStub.resolves([ FollowedCalendarEntity.build({ remote_calendar_id: 'remotecalendar@remotedomain' }) ]);
+        let followersStub = sandbox.stub(FollowerCalendarEntity,'findAll');
+        followersStub.resolves([ FollowerCalendarEntity.build({ remote_calendar_id: 'remotecalendar@remotedomain' }) ]);
 
         let observersStub = sandbox.stub(EventActivityEntity,'findAll');
         observersStub.resolves([ EventActivityEntity.build({ remote_calendar_id: 'observercalendar@observerdomain' }) ]);

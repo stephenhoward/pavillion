@@ -4,7 +4,7 @@ import sinon from 'sinon';
 import { Account } from '@/common/model/account';
 import ActivityPubService from '@/server/activitypub/service/members';
 import { Calendar } from '@/common/model/calendar';
-import { FollowedCalendarEntity } from '@/server/activitypub/entity/activitypub';
+import { FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
 import CalendarService from '@/server/calendar/service/calendar';
 
 describe("followCalendar", () => {
@@ -30,15 +30,15 @@ describe("followCalendar", () => {
 
         let calendar = Calendar.fromObject({ id: 'testid' });
 
-        let getExistingFollowStub = sandbox.stub(FollowedCalendarEntity, 'findOne');
+        let getExistingFollowStub = sandbox.stub(FollowingCalendarEntity, 'findOne');
         getExistingFollowStub.resolves(null);
 
         let getActorUrlStub = sandbox.stub(service, 'actorUrl');
         getActorUrlStub.resolves('https://testdomain.com/o/testcalendar');
 
-        let buildFollowStub = sandbox.spy(FollowedCalendarEntity, 'build');
+        let buildFollowStub = sandbox.spy(FollowingCalendarEntity, 'build');
 
-        let saveFollowStub = sandbox.stub(FollowedCalendarEntity.prototype, 'save');
+        let saveFollowStub = sandbox.stub(FollowingCalendarEntity.prototype, 'save');
         saveFollowStub.resolves();
 
         let addToOutboxStub = sandbox.stub(service, 'addToOutbox');
@@ -56,7 +56,6 @@ describe("followCalendar", () => {
             expect( callargs.id ).toMatch(/https:\/\/testdomain.com\/o\/testcalendar\/follows\/[a-z0-9-]+/);
             expect( callargs.calendar_id ).toBe('testid');
             expect( callargs.remote_calendar_id ).toBe('testcalendar@testdomain.com');
-            expect( callargs.direction ).toBe('following');
 
             let outboxCall = addToOutboxStub.getCall(0);
             if ( outboxCall ) {
@@ -71,15 +70,15 @@ describe("followCalendar", () => {
 
         let calendar = Calendar.fromObject({ id: 'testid' });
 
-        let getExistingFollowStub = sandbox.stub(FollowedCalendarEntity, 'findOne');
-        getExistingFollowStub.resolves(FollowedCalendarEntity.build({}));
+        let getExistingFollowStub = sandbox.stub(FollowingCalendarEntity, 'findOne');
+        getExistingFollowStub.resolves(FollowingCalendarEntity.build({}));
 
         let getActorUrlStub = sandbox.stub(service, 'actorUrl');
         getActorUrlStub.resolves('https://testdomain.com/o/testcalendar');
 
-        let buildFollowStub = sandbox.spy(FollowedCalendarEntity, 'build');
+        let buildFollowStub = sandbox.spy(FollowingCalendarEntity, 'build');
 
-        let saveFollowStub = sandbox.stub(FollowedCalendarEntity.prototype, 'save');
+        let saveFollowStub = sandbox.stub(FollowingCalendarEntity.prototype, 'save');
         saveFollowStub.resolves();
 
         let addToOutboxStub = sandbox.stub(service, 'addToOutbox');
@@ -96,9 +95,9 @@ describe("followCalendar", () => {
 
         let calendar = Calendar.fromObject({ id: 'testid' });
 
-        let buildFollowStub = sandbox.spy(FollowedCalendarEntity, 'build');
+        let buildFollowStub = sandbox.spy(FollowingCalendarEntity, 'build');
 
-        let saveFollowStub = sandbox.stub(FollowedCalendarEntity.prototype, 'save');
+        let saveFollowStub = sandbox.stub(FollowingCalendarEntity.prototype, 'save');
         saveFollowStub.resolves();
 
         let addToOutboxStub = sandbox.stub(service, 'addToOutbox');
@@ -135,9 +134,9 @@ describe("unfollowCalendar", () => {
 
         let calendar = Calendar.fromObject({ id: 'testid' });
 
-        let getExistingFollowStub = sandbox.stub(FollowedCalendarEntity, 'findAll');
+        let getExistingFollowStub = sandbox.stub(FollowingCalendarEntity, 'findAll');
         getExistingFollowStub.resolves([
-            FollowedCalendarEntity.build({
+            FollowingCalendarEntity.build({
                 id: 'testfollowid',
                 remote_calendar_id: 'testcalendar@testdomain.com'
             })
@@ -146,7 +145,7 @@ describe("unfollowCalendar", () => {
         let getActorUrlStub = sandbox.stub(service, 'actorUrl');
         getActorUrlStub.resolves('https://testdomain.com/o/testcalendar');
 
-        let destroyFollowStub = sandbox.stub(FollowedCalendarEntity.prototype, 'destroy');
+        let destroyFollowStub = sandbox.stub(FollowingCalendarEntity.prototype, 'destroy');
         destroyFollowStub.resolves();
 
         let addToOutboxStub = sandbox.stub(service, 'addToOutbox');
@@ -170,13 +169,13 @@ describe("unfollowCalendar", () => {
 
         let calendar = Calendar.fromObject({ id: 'testid' });
 
-        let getExistingFollowStub = sandbox.stub(FollowedCalendarEntity, 'findAll');
+        let getExistingFollowStub = sandbox.stub(FollowingCalendarEntity, 'findAll');
         getExistingFollowStub.resolves([]);
 
         let getActorUrlStub = sandbox.stub(service, 'actorUrl');
         getActorUrlStub.resolves('https://testdomain.com/o/testcalendar');
 
-        let destroyFollowStub = sandbox.stub(FollowedCalendarEntity.prototype, 'destroy');
+        let destroyFollowStub = sandbox.stub(FollowingCalendarEntity.prototype, 'destroy');
         destroyFollowStub.resolves();
 
         let addToOutboxStub = sandbox.stub(service, 'addToOutbox');

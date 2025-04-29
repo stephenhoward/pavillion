@@ -13,7 +13,7 @@ import AnnounceActivity from "@/server/activitypub/model/action/announce";
 import { EventObject } from '@/server/activitypub/model/object/event';
 import EventService from "@/server/calendar/service/events";
 import CalendarService from "@/server/calendar/service/calendar";
-import { ActivityPubOutboxMessageEntity, FollowedCalendarEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
+import { ActivityPubOutboxMessageEntity, FollowingCalendarEntity, SharedEventEntity, AutoRepostPolicy } from "@/server/activitypub/entity/activitypub";
 import UndoActivity from "../model/action/undo";
 import { EventEntity } from "@/server/calendar/entity/event";
 
@@ -65,6 +65,7 @@ class ActivityPubService extends EventEmitter {
     static isValidDomain(domain: string): boolean {
         return domain.match(/^((?!-)[A-Za-z0-9-]{1,63}(?<!-)\.)+[A-Za-z]{2,}$/) !== null;
     }
+
     static isValidUsername(username: string): boolean {
         return username.match(/^[a-z0-9_]{3,16}$/) !== null;
     }
@@ -76,56 +77,78 @@ class ActivityPubService extends EventEmitter {
             && ActivityPubService.isValidDomain(parts[1]);
     }
 
-    async followCalendar(account: Account, calendar: Calendar, orgIdentifier: string) {
-
-        if ( ! ActivityPubService.isValidOrgIdentifier(orgIdentifier) ) {
+    /**
+     * Follow a calendar from another server
+     * @param account The local account requesting to follow
+     * @param calendar The local calendar that will follow the remote calendar
+     * @param orgIdentifier The remote calendar identifier to follow
+     * @param repostPolicy The auto-repost policy to use for this follow relationship
+     */
+    async followCalendar(account: Account, calendar: Calendar, orgIdentifier: string, repostPolicy = AutoRepostPolicy.MANUAL) {
+        if (!ActivityPubService.isValidOrgIdentifier(orgIdentifier)) {
             throw new Error('Invalid remote calendar identifier: ' + orgIdentifier);
         }
 
-        let existingFollowEntity = await FollowedCalendarEntity.findOne({ where: {
-            remote_calendar_id: orgIdentifier,
-            calendar_id: calendar.id,
-            direction: 'following'
-        }});
-        if ( existingFollowEntity ) {
+        if (!CalendarService.userCanModifyCalendar(account, calendar)) {
+            throw new Error('User does not have permission to modify calendar: ' + calendar.id);
+        }
+
+        // Check if we're already following this calendar
+        let existingFollowEntity = await FollowingCalendarEntity.findOne({
+            where: {
+                remote_calendar_id: orgIdentifier,
+                calendar_id: calendar.id
+            }
+        });
+
+        // Update the repost policy if follow already exists
+        if (existingFollowEntity) {
+            if ( existingFollowEntity.repost_policy !== repostPolicy ) {
+                existingFollowEntity.repost_policy = repostPolicy;
+                await existingFollowEntity.save();
+            }
             return;
         }
 
         let actor = await this.actorUrl(calendar);
         // TODO: transform accountIdentifier into a URL (via webfinger?)
-        let followActivity = new FollowActivity( actor, orgIdentifier );
+        let followActivity = new FollowActivity(actor, orgIdentifier);
 
-        let followEntity = FollowedCalendarEntity.build({
+        let followEntity = FollowingCalendarEntity.build({
             id: followActivity.id,
             remote_calendar_id: orgIdentifier,
             calendar_id: calendar.id,
-            direction: 'following'
+            repost_policy: repostPolicy
         });
-        await followEntity.save()
-    
-        this.addToOutbox( calendar, followActivity );
+        await followEntity.save();
+
+        this.addToOutbox(calendar, followActivity);
     }
 
     async unfollowCalendar(account: Account, calendar: Calendar, orgIdentifier: string) {
+        if (!CalendarService.userCanModifyCalendar(account, calendar)) {
+            throw new Error('User does not have permission to modify calendar: ' + calendar.id);
+        }
 
-        let follows = await FollowedCalendarEntity.findAll({
+        let followings = await FollowingCalendarEntity.findAll({
             where: {
                 remote_calendar_id: orgIdentifier,
-                calendar_id: calendar.id,
-                direction: 'following'
+                calendar_id: calendar.id
             }
         });
+
         let actor = await this.actorUrl(calendar);
-        for ( let follow of follows ) {
-            this.addToOutbox(calendar, new UndoActivity(actor, follow.id ));
-            follow.destroy();
+        for (let following of followings) {
+            this.addToOutbox(calendar, new UndoActivity(actor, following.id));
+            await following.destroy();
         }
      }
 
     /**
      * user on this server shares an event from someone else
-     * @param calendar 
-     * @param eventUrl - url of remote event
+     * @param account The account performing the sharing
+     * @param calendar The calendar to share to
+     * @param eventUrl URL of remote event
      */
     async shareEvent(account: Account, calendar: Calendar, eventUrl: string) {
 
@@ -133,37 +156,41 @@ class ActivityPubService extends EventEmitter {
             throw new Error('User does not have permission to modify calendar: ' + calendar.id);
         }
 
-        if ( ! eventUrl.match("^https:\/\/") ) {
+        if (!eventUrl.match("^https:\/\/")) {
             throw new Error('Invalid shared event url: ' + eventUrl);
         }
 
-        let existingShareEntity = await FollowedCalendarEntity.findOne({ where: {
-            event_id: eventUrl,
-            calendar_id: calendar.id,
-        }});
-        if ( existingShareEntity ) {
+        let existingShareEntity = await SharedEventEntity.findOne({
+            where: {
+                event_id: eventUrl,
+                calendar_id: calendar.id,
+            }
+        });
+
+        if (existingShareEntity) {
             return;
         }
 
         let actor = await this.actorUrl(calendar);
-        let shareActivity = new AnnounceActivity( actor, eventUrl );
+        let shareActivity = new AnnounceActivity(actor, eventUrl);
 
         SharedEventEntity.create({
             id: shareActivity.id,
             event_id: eventUrl,
             calendar_id: calendar.id
         });
-        this.addToOutbox( calendar, shareActivity );
+        this.addToOutbox(calendar, shareActivity);
     }
 
     /**
      * user on this server stops sharing an event from someone else
-     * @param calendar - calendar of user stopping sharing
-     * @param eventId - url of remote event
+     * @param account The account performing the unsharing
+     * @param calendar The calendar to remove the share from
+     * @param eventUrl URL of remote event
      */
     async unshareEvent(account: Account, calendar: Calendar, eventUrl: string) {
 
-        if ( ! CalendarService.userCanModifyCalendar(account, calendar) ) {
+        if (!CalendarService.userCanModifyCalendar(account, calendar)) {
             throw new Error('User does not have permission to modify calendar: ' + calendar.id);
         }
 
@@ -174,8 +201,8 @@ class ActivityPubService extends EventEmitter {
             }
         });
         let actorUrl = await this.actorUrl(calendar);
-        for ( let share of shares ) {
-            this.addToOutbox(calendar, new UndoActivity(actorUrl, share.id ));
+        for (let share of shares) {
+            this.addToOutbox(calendar, new UndoActivity(actorUrl, share.id));
             share.destroy();
         }
     }
@@ -183,7 +210,7 @@ class ActivityPubService extends EventEmitter {
     async addToOutbox(calendar: Calendar, message: ActivityPubActivity) {
         let calendarUrl = await this.actorUrl(calendar);
 
-        if ( calendarUrl == message.actor ) {
+        if (calendarUrl == message.actor) {
             let messageEntity = ActivityPubOutboxMessageEntity.build({
                 id: message.id,
                 type: message.type,
@@ -199,14 +226,13 @@ class ActivityPubService extends EventEmitter {
 
     async getFeed(calendar: Calendar, page?: number, pageSize?: number) {
 
-        EventEntity.findAll({
+        return EventEntity.findAll({
             include: [{
-                model: FollowedCalendarEntity,
+                model: FollowingCalendarEntity,
                 as: 'follows',
                 required: true,
                 where: {
-                    calendar_id: calendar.id,
-                    direction: 'follows'
+                    calendar_id: calendar.id
                 }
             }],
             limit: pageSize,

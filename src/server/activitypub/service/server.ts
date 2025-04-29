@@ -6,7 +6,7 @@ import { Calendar } from "@/common/model/calendar";
 import { WebFingerResponse } from "@/server/activitypub/model/webfinger";
 import { UserProfileResponse } from "@/server/activitypub/model/userprofile";
 import { ActivityPubActivity } from "@/server/activitypub/model/base";
-import { ActivityPubInboxMessageEntity, EventActivityEntity, FollowedCalendarEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
+import { ActivityPubInboxMessageEntity, FollowerCalendarEntity } from "@/server/activitypub/entity/activitypub";
 import CalendarService from "@/server/calendar/service/calendar";
 
 
@@ -64,6 +64,53 @@ class ActivityPubService extends EventEmitter {
         }
 
         return null;
+    }
+
+    /**
+     * Record a new follower for a local calendar
+     * @param remoteCalendarId The remote calendar identifier
+     * @param localCalendar The local calendar being followed
+     * @param followActivityId The ID of the follow activity
+     */
+    async addFollower(remoteCalendarId: string, localCalendar: Calendar, followActivityId: string) {
+        // Check if this follower already exists
+        let existingFollower = await FollowerCalendarEntity.findOne({
+            where: {
+                remote_calendar_id: remoteCalendarId,
+                calendar_id: localCalendar.id
+            }
+        });
+
+        if (existingFollower) {
+            return; // Already following
+        }
+
+        // Create new follower record
+        let followerEntity = FollowerCalendarEntity.build({
+            id: followActivityId,
+            remote_calendar_id: remoteCalendarId,
+            calendar_id: localCalendar.id
+        });
+
+        await followerEntity.save();
+    }
+
+    /**
+     * Remove a follower from a local calendar
+     * @param remoteCalendarId The remote calendar identifier
+     * @param localCalendar The local calendar being unfollowed
+     */
+    async removeFollower(remoteCalendarId: string, localCalendar: Calendar) {
+        let followers = await FollowerCalendarEntity.findAll({
+            where: {
+                remote_calendar_id: remoteCalendarId,
+                calendar_id: localCalendar.id
+            }
+        });
+
+        for (let follower of followers) {
+            await follower.destroy();
+        }
     }
 
     /**
