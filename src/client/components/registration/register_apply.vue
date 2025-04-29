@@ -1,14 +1,15 @@
 <template>
     <div v-if="state.showSuccess" class="login">
         <h3>{{ t('title') }}</h3>
-        Check your email "{{ state.email }}" for a confirmation link
+        Your account application has been recorded.
     </div>
-    <div v-else class="login">
+    <div v-else class="register-apply">
         <h3>{{ t('title') }}</h3>
         <div class="error" v-if="state.err">{{ state.err }}</div>
         <input type="email"    v-bind:placeholder="t('email')"    v-model="state.email">
-        <button @click="doRegister" type="button">{{ t("create_button") }}</button>
-        <router-link :to="{ name: 'login', params: { em: state.email}}" class="button">
+        <label>{{  t('message_label') }}</label><textarea :model="state.message"></textarea>
+        <button class="primary" @click="doApply" type="button">{{ t("create_button") }}</button>
+        <router-link :to="{ name: 'login', params: { em: state.email}}">
             {{ t("go_login") }}
         </router-link>
     </div>
@@ -24,9 +25,10 @@
     const { t } = useI18n({
         messages: {
             en: {
-                'title': 'Create an account',
-                'create_button': 'Create an account',
+                'title': 'Apply for an Account',
+                'create_button': 'Apply for an Account',
                 email: 'email',
+                message_label: 'Message',
                 go_login: 'back to sign in',
                 '400': 'bad sign in',
                 'unknown_error': 'An unknown error occurred',
@@ -39,7 +41,7 @@
     const state = reactive({
         err      : '',
         email    : '',
-        password : '',
+        message: '',
         showSuccess: false
     });
     const route = useRoute();
@@ -53,10 +55,10 @@
         state.email = state.em || '';
     });
 
-    async function doRegister() {
+    async function doApply() {
         try {
 
-            await authn.register(state.email);
+            await authn.register_apply(state.email,state.message);
             state.err = '';
             state.showSuccess = true;
         }
@@ -86,11 +88,15 @@
 </script>
 
 <style scoped lang="scss">
-@use '../assets/mixins' as *;
+@use '../../assets/mixins' as *;
 
-body {
-    div.login {
-        @include auth-form;
+div.register-apply {
+    @include auth-form;
+}
+@include dark-mode {
+    div.register-apply {
+        @include auth-form-dark-mode;
     }
 }
+
 </style>

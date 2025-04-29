@@ -2,8 +2,8 @@
 import { onBeforeMount, reactive } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
-import { Calendar } from '../../common/model/calendar';
-import ModelService from '../service/models';
+import { Calendar } from '../../../common/model/calendar';
+import ModelService from '../../service/models';
 
 const { t } = useI18n({
     messages: {

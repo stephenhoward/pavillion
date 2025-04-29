@@ -1,5 +1,5 @@
 <style scoped lang="scss">
-@use '../assets/mixins' as *;
+@use '../../assets/mixins' as *;
 section {
     border-top: 1px soilid $light-mode-border;
     padding: 10px;
@@ -117,12 +117,12 @@ div.schedule {
 <script setup>
     import { reactive, ref } from 'vue';
     import { useI18n } from 'vue-i18n';
-    import { CalendarEvent } from '../../common/model/events';
-    import ModelService from '../service/models';
-    import { useEventStore } from '../stores/eventStore';
+    import { CalendarEvent } from '../../../common/model/events';
+    import ModelService from '../../service/models';
+    import { useEventStore } from '../../stores/eventStore';
     import EventRecurrenceView from './event_recurrence.vue';
-    import languagePicker from './languagePicker.vue';
-    import ModalLayout from './modal.vue';
+    import languagePicker from '../languagePicker.vue';
+    import ModalLayout from '../modal.vue';
     import iso6391 from 'iso-639-1-dir';
 
     const eventStore = useEventStore();

@@ -18,7 +18,7 @@
 </template>
 
 <style lang="scss">
-@use '../assets/mixins' as *;
+@use '../../assets/mixins' as *;
 
 div.password_reset {
     @include auth-form;

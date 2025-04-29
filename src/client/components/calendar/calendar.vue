@@ -1,9 +1,9 @@
 <script setup>
 import { onBeforeMount, reactive } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { CalendarEvent } from '../../common/model/events';
-import ModelService from '../service/models';
-import { useEventStore } from '../stores/eventStore';
+import { CalendarEvent } from '../../../common/model/events';
+import ModelService from '../../service/models';
+import { useEventStore } from '../../stores/eventStore';
 
 const { t } = useI18n({
     messages: {

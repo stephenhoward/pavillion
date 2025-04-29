@@ -8,7 +8,7 @@ import { EventLocation } from '@/common/model/location';
 import { mountComponent } from '@/client/test/lib/vue';
 import { useEventStore } from '@/client/stores/eventStore';
 import ModelService from '@/client/service/models';
-import EditEvent from '@/client/components/edit_event.vue';
+import EditEvent from '@/client/components/calendar/edit_event.vue';
 
 const routes: RouteRecordRaw[] = [
     { path: '/login',  component: {}, name: 'login', props: true },

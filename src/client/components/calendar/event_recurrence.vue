@@ -1,5 +1,5 @@
 <style scoped lang="scss">
-@use '../assets/mixins' as *;
+@use '../../assets/mixins' as *;
 
 button.disclosure {
     background: none;
@@ -112,7 +112,7 @@ div.month-parameters {
 
 <script setup>
 import { reactive } from 'vue';
-import { CalendarEventSchedule } from '../../common/model/events';
+import { CalendarEventSchedule } from '../../../common/model/events';
 import { useI18n } from 'vue-i18n';
 import { DateTime } from 'luxon';
 

@@ -10,7 +10,7 @@
 </template>
 
 <style lang="scss">
-@use '../assets/mixins' as *;
+@use '../../assets/mixins' as *;
 
 div.forgot_password {
     @include auth-form;

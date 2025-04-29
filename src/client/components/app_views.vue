@@ -2,7 +2,7 @@
 import { reactive, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import loggedInNavigation from './loggedInNavigation.vue'
-import EditEventView from './edit_event.vue';
+import EditEventView from './calendar/edit_event.vue';
 
 const state = reactive({
     userInfo: {
