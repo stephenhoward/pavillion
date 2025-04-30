@@ -13,7 +13,7 @@ Pavillion is a federated events calendar. Using federation it aims to provide an
 
 ### Autonomy
 
-- Open Source
+- Open Source under the [Mozilla Public License 2.0](https://mozilla.org/MPL/2.0/)
 - No centralized service
 - No account required for the public to view events.
 - Different pavillion servers can determine what content they wish to host.
@@ -39,3 +39,11 @@ This will set up the pavillion service on port 3000, and an asset serving servic
 ## Tests
 
 Tests are run under the vitest framework. You can either `npx vitest` or `npm run test`. I am working towards a goal of maintaining 80% or better unit test coverage.
+
+## License
+
+Pavillion is licensed under the [Mozilla Public License 2.0](https://mozilla.org/MPL/2.0/). This means:
+
+- You can use, modify, and distribute the software
+- If you modify Pavillion's files, those modifications must be released under MPL-2.0
+- You must make the source code available when you distribute the software

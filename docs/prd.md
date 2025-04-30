@@ -23,7 +23,7 @@ Pavillion addresses these issues by creating a federated network of event calend
 - Structured event information to communicate accessibility details
 
 ### Autonomy
-- Open source codebase (license to be determined)
+- Open source codebase licensed under Mozilla Public License 2.0 (MPL-2.0)
 - Decentralized architecture with no central authority
 - Public viewing without registration requirements
 - Instance-level control over content moderation and federation
