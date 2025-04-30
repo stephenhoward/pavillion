@@ -1,7 +1,11 @@
 <script setup>
     import { useI18n } from 'vue-i18n';
+    import { useRoute } from 'vue-router';
     import { CalendarEvent } from '../../common/model/events';
     import { EventLocation } from '../../common/model/location';
+
+    const route = useRoute();
+
     const { t } = useI18n({
         messages: {
             "en": {
@@ -24,15 +28,18 @@
         return event;
     };
 
+    const isActive = (path) => {
+        return route.path === path;
+    };
 </script>
 
 <template>
     <nav>
     <li id="new-event-button"><a @click="$emit('openEvent',newEvent())"><div :aria-label="t('new_event')" class="icon"></div><label>{{ t("new_event") }}</label></a></li>
-    <li id="calendar-button" class="selected"><RouterLink class="calendar" to="/calendar" ><div class="icon"></div> <label>{{ t("calendar_button") }}</label></RouterLink></li>
-    <li id="feed-button"><RouterLink class="feed" to="/feed"><div class="icon"></div> <label>{{ t("feed_button") }}</label></RouterLink></li>
-    <li id="alerts-button"><RouterLink class="alerts" to="/inbox"><div class="icon"></div> <label>{{ t("inbox_button") }}</label></RouterLink></li>
-    <li id="profile-button"><RouterLink class="profile" to="/profile"><div class="icon"></div> <label>{{ t("profile_button") }}</label></RouterLink></li>
+    <li id="calendar-button" :class="{ selected: isActive('/calendar') }"><RouterLink class="calendar" to="/calendar"><div class="icon"></div> <label>{{ t("calendar_button") }}</label></RouterLink></li>
+    <li id="feed-button" :class="{ selected: isActive('/feed') }"><RouterLink class="feed" to="/feed"><div class="icon"></div> <label>{{ t("feed_button") }}</label></RouterLink></li>
+    <li id="alerts-button" :class="{ selected: isActive('/inbox') }"><RouterLink class="alerts" to="/inbox"><div class="icon"></div> <label>{{ t("inbox_button") }}</label></RouterLink></li>
+    <li id="profile-button" :class="{ selected: isActive('/profile') || isActive('/admin') }"><RouterLink class="profile" to="/profile"><div class="icon"></div> <label>{{ t("profile_button") }}</label></RouterLink></li>
   </nav>
 </template>
     
@@ -52,9 +59,9 @@ nav {
     font-size: 10pt;
     &.selected {
         a {
-            color: $light-mode-button-background;
+            color: #fff;
             div.icon {
-                background-color: $light-mode-button-background;
+                background-color: #fff;
             }
         }
     }
@@ -158,19 +165,11 @@ nav {
 @include dark-mode {
     nav {
         li {
-            color: #ccc;
-            &.selected {
-                a {
-                  color: $dark-mode-button-background;
-                  div.icon {
-                    background-color: $dark-mode-button-background;
-                  }
-                }
-            }
+            color: #999;
             a {
-                color: $dark-mode-text;
+                color: #999;
                 div.icon {
-                    background-color: $dark-mode-text;
+                    background-color: #999;
                 }
             }
         }
