@@ -51,7 +51,10 @@ const routes: RouteRecordRaw[] = [
             { path: 'inbox', component: InboxView, name: 'inbox', beforeEnter: mustBeLoggedIn },
             { path: 'feed', component: FeedView, name: 'feed', beforeEnter: mustBeLoggedIn },
             { path: 'profile', component: ProfileView, name: 'profile', beforeEnter: mustBeLoggedIn },
-       ]
+            { path: 'admin', component: AdminViews, name: 'admin', beforeEnter: mustBeAdmin,
+                children: []
+            }
+        ]
     },
     { path: '/auth', component: AuthViews, name: 'auth',
         children: [
@@ -62,9 +65,6 @@ const routes: RouteRecordRaw[] = [
             { path: 'forgot', component: PasswordForgotView, name: 'forgot_password', props: true },
             { path: 'password',  component: PasswordResetView, name: 'reset_password', props: true }
         ]
-    },
-    { path: '/admin', component: AdminViews, name: 'admin', beforeEnter: mustBeAdmin,
-        children: []
     }
 ];
 

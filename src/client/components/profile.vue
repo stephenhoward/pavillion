@@ -28,7 +28,6 @@ const { t } = useI18n({
   <p>profile</p>
   <ul>
     <li>email: {{ email }}</li>
-    <li><a href="/follow-list">Following {{ following_count }}</a></li>
     <li><a href="/password">Update Password</a></li>
     <li><router-link v-if="state.userInfo.isAdmin" to="/admin" class="button">{{ t("admin_link") }}</router-link></li>
     <router-link :to="{ name: 'logout' }">Logout</router-link>
