@@ -38,8 +38,8 @@
     <li id="new-event-button"><a @click="$emit('openEvent',newEvent())"><div :aria-label="t('new_event')" class="icon"></div><label>{{ t("new_event") }}</label></a></li>
     <li id="calendar-button" :class="{ selected: isActive('/calendar') }"><RouterLink class="calendar" to="/calendar"><div class="icon"></div> <label>{{ t("calendar_button") }}</label></RouterLink></li>
     <li id="feed-button" :class="{ selected: isActive('/feed') }"><RouterLink class="feed" to="/feed"><div class="icon"></div> <label>{{ t("feed_button") }}</label></RouterLink></li>
-    <li id="alerts-button" :class="{ selected: isActive('/inbox') }"><RouterLink class="alerts" to="/inbox"><div class="icon"></div> <label>{{ t("inbox_button") }}</label></RouterLink></li>
-    <li id="profile-button" :class="{ selected: isActive('/profile') || isActive('/admin') }"><RouterLink class="profile" to="/profile"><div class="icon"></div> <label>{{ t("profile_button") }}</label></RouterLink></li>
+    <li id="alerts-button" :class="{ selected: isActive('/inbox'), badged: true }"><RouterLink class="alerts" to="/inbox"><div class="icon"></div> <label>{{ t("inbox_button") }}</label></RouterLink></li>
+    <li id="profile-button" :class="{ selected: isActive('/profile') || isActive('/admin'), badged: true }"><RouterLink class="profile" to="/profile"><div class="icon"></div> <label>{{ t("profile_button") }}</label></RouterLink></li>
   </nav>
 </template>
     
@@ -56,6 +56,7 @@ nav {
   li {
     padding: 10px;
     list-style-type: none;
+    position: relative;
     font-size: 10pt;
     &.selected {
         a {
@@ -63,6 +64,16 @@ nav {
             div.icon {
                 background-color: #fff;
             }
+        }
+    }
+    &.badged {
+      &::after {
+          content: "●";
+          position: absolute;
+          top: 2px;
+          right: 4px;
+          color: $light-mode-button-background;
+          font-size: 16pt;
         }
     }
     a {
@@ -121,6 +132,11 @@ nav {
     align-items: flex-start;
     justify-content: flex-start;
     li {
+        &.badged {
+          &::after {
+              left: 28px;
+            }
+        }
         a {
             flex-direction: row;
             label {
@@ -129,7 +145,7 @@ nav {
         }
         div.icon {
             display: inline-block;
-            margin-right: 5px;
+            margin-right: 10px;
         }
         padding: 10px;
     }
