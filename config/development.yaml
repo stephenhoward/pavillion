@@ -1,1 +1,20 @@
 domain: "pavillion.dev"
+
+# Example mail configurations - uncomment and adjust as needed
+# mail:
+#   transport: smtp
+#   from: noreply@pavillion.dev
+#   settings:
+#     host: smtp.example.com
+#     port: 587
+#     secure: false
+#     user: youruser
+#     pass: yourpassword
+
+# Development configuration - writes emails to files
+mail:
+  transport: development
+  from: noreply@pavillion.dev
+  settings:
+    outputDir: logs/mail
+    console: true

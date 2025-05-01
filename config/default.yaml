@@ -4,3 +4,7 @@ database:
   logging: false
 host:
   port: 3000
+mail:
+  transport: test
+  from: noreply@example.com
+  settings: {}

@@ -1,1 +1,7 @@
 domain: "pavillion.dev"
+
+# Test environment configuration
+mail:
+  transport: testing
+  from: test@pavillion.dev
+  settings: {}
