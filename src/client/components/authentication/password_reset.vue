@@ -34,34 +34,12 @@ div.password_reset {
 <script setup>
     import { reactive, onBeforeMount, inject } from 'vue';
     import { useRouter, useRoute } from 'vue-router'
-    import { useI18n } from 'vue-i18n';
+    import { useTranslation } from 'i18next-vue';    
 
     const router = useRouter();
     const route = useRoute();
-    const { t } = useI18n({
-        messages: {
-            en: {
-                check_email_title: 'Password Reset Sent',
-                new_account_password_title: 'Welcome to your new account',
-                check_email: 'We have sent a code to reset your password to',
-                code_validated_title: 'Valid Code',
-                set_password_prompt: 'Please set a new password',
-                registration_new_password: 'Please set a password',
-                login_link: 'back to sign in',
-                reset_code: 'reset code',
-                reset_button: 'submit code',
-                password_placeholder: 'password',
-                password2_placeholder: 'confirm password',
-
-                bad_token: 'invalid or expired token',
-                missing_password: 'please enter a password',
-                missing_password2: 'please re-type your password to confirm',
-                bad_password_match: 'Passwords do not match',
-                no_token_provided: 'Must provide a password reset token',
-                no_password_provided: 'Must provide a password',
-                unknown_error: 'An unknown error occurred'
-            }
-        }
+    const { t } = useTranslation('authentication', {
+        keyPrefix: 'reset_password'
     });
     const authn = inject('authn');
 

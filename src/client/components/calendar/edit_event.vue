@@ -116,7 +116,7 @@ div.schedule {
 
 <script setup>
     import { reactive, ref } from 'vue';
-    import { useI18n } from 'vue-i18n';
+    import { useTranslation } from 'i18next-vue';
     import { CalendarEvent } from '../../../common/model/events';
     import ModelService from '../../service/models';
     import { useEventStore } from '../../stores/eventStore';
@@ -127,29 +127,9 @@ div.schedule {
 
     const eventStore = useEventStore();
 
-    const { t } = useI18n({
-        messages: {
-            en: {
-                'edit_event_title': 'Edit Event',
-                'create_event_title': 'Create Event',
-                'create_button': 'Create Event',
-                'update_button': 'Update Event',
-                'close_button': 'Close',
-                'add_date_button': 'Add another date',
-                'add_language': 'Add a Language',
-                'remove_language': 'Remove This Language',
-                name_placeholder: 'event name',
-                description_placeholder: 'event description',
-                location_name_placeholder: 'name',
-                address_placeholder: 'event address',
-                city_placeholder: 'city',
-                state_placeholder: 'state',
-                postalCode_placeholder: 'zip code'
-            }
-
-        }
+    const { t } = useTranslation('event_editor', {
+        keyPrefix: 'editor'
     });
-
     const props = defineProps({
         event: CalendarEvent
     });

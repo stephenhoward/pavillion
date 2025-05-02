@@ -113,48 +113,16 @@ div.month-parameters {
 <script setup>
 import { reactive } from 'vue';
 import { CalendarEventSchedule } from '../../../common/model/events';
-import { useI18n } from 'vue-i18n';
+import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
 
 const props = defineProps({
     schedule: CalendarEventSchedule,
 });
 
-const { t } = useI18n({
-        messages: {
-            en: {
-                'dailyTerm': 'days',
-                'weeklyTerm': 'weeks',
-                'monthlyTerm': 'months',
-                'yearlyTerm': 'years',
-
-                '1ord': '1st',
-                '2ord': '2nd',
-                '3ord': '3rd',
-                '4ord': '4th',
-                '5ord': '5th',
-
-                'SU': 'Sunday',
-                'MO': 'Monday',
-                'TU': 'Tuesday',
-                'WE': 'Wednesday',
-                'TH': 'Thursday',
-                'FR': 'Friday',
-                'SA': 'Saturday',
-
-                'frequency-label': 'repeats',
-                'frequencyNone': 'Never',
-                'frequencyDaily': 'Daily',
-                'frequencyWeekly': 'Weekly',
-                'frequencyMonthly': 'Monthly',
-                'frequencyYearly': 'Yearly',
-
-                'on-weekday-label': 'on',
-                'endType-label': 'ends',
-            }
-
-        }
-    });
+const { t } = useTranslation('event_editor', {
+    keyPrefix: 'recurrence'
+});
 
 const state = reactive({
     showRecurrence: false,

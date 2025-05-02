@@ -1,6 +1,6 @@
 <script setup>
 import { reactive, inject } from 'vue';
-import { useI18n } from 'vue-i18n';
+import { useTranslation } from 'i18next-vue';
 
 const authn = inject('authn');
 
@@ -11,16 +11,7 @@ const state = reactive({
     }
 });
 
-const { t } = useI18n({
-        messages: {
-            "en": {
-                "admin_link": "Admin"
-            },
-            "es": {
-                "admin_link": "Admin"
-            }
-        }
-    });
+const { t } = useTranslation('profile');
 
 </script>
 

@@ -1,20 +1,12 @@
 <script setup>
 import { onBeforeMount, reactive } from 'vue';
 import { useRouter } from 'vue-router';
-import { useI18n } from 'vue-i18n';
+import { useTranslation } from 'i18next-vue';
 import { Calendar } from '../../../common/model/calendar';
 import ModelService from '../../service/models';
 
-const { t } = useI18n({
-    messages: {
-        en: {
-            'create_button': 'Create Event',
-            'update_button': 'Update Event',
-            name_placeholder: 'event name',
-            description_placeholder: 'event description',
-        }
-
-    }
+const { t } = useTranslation('calendars', {
+    keyPrefix: 'list'
 });
 
 const router = useRouter();
@@ -34,7 +26,7 @@ onBeforeMount(async () => {
 </script>
 
 <template>
-  <p>Calendars</p>
+  <p>{{ t('my_calendars_header') }}</p>
     <section v-if="state.calendars.length > 0">
         <ul v-for="calendar in state.calendars">
             <RouterLink to="/calendar" prop="calendar">
@@ -43,7 +35,7 @@ onBeforeMount(async () => {
         </ul>
     </section>
     <section v-else>
-        <p>No calendars found</p>
+        <p>{{ t('no_calendars_message') }}</p>
     </section>
 </template>
 

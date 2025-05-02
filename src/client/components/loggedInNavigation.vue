@@ -1,26 +1,14 @@
 <script setup>
-    import { useI18n } from 'vue-i18n';
+    import { useTranslation } from 'i18next-vue';
     import { useRoute } from 'vue-router';
     import { CalendarEvent } from '../../common/model/events';
     import { EventLocation } from '../../common/model/location';
 
     const route = useRoute();
 
-    const { t } = useI18n({
-        messages: {
-            "en": {
-                "calendar_button": "Calendar",
-                "inbox_button": "Inbox",
-                "new_event": "New Event",
-                "profile_button": "Settings",
-                "feed_button": "Feed",
-            },
-            "es": {
-                "calendar": "Mi Calendar",
-            }
-        }
+    const { t } = useTranslation('system',{
+        keyPrefix: 'main_navigation'
     });
-
     const newEvent = () => {
         let event = new CalendarEvent();
         event.location = new EventLocation();

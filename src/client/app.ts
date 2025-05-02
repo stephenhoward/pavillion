@@ -1,8 +1,10 @@
 import { createApp, App } from 'vue';
 import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
-import { createI18n, useI18n } from 'vue-i18n';
 import { createPinia } from 'pinia';
+import i18next from 'i18next';
+import I18NextVue from 'i18next-vue';
 
+import { initI18Next } from '@/client/service/locale';
 import '@/client/assets/style.scss';
 import AppVue from '@/client/components/app.vue';
 import CalendarsView from '@/client/components/calendar/calendars.vue';
@@ -73,22 +75,15 @@ const router = createRouter({
     routes
 });
 
-const i18n = createI18n({
-    legacy: false,
-    globalInjection: false,
-    locale: navigator.language.substring(0,2),
-    fallbackLocale: 'en',
-    // datetimeFormats,
-});
+
 
 const pinia = createPinia();
-
+initI18Next();
 app.use(pinia);
 app.use(router);
-app.use(i18n);
-app.provide('i18n', i18n);
+app.use(I18NextVue, { i18next });
 app.provide('authn', authentication);
-app.provide('site_config',config);
+app.provide('site_config', config);
 app.mount('#app');
 
 });

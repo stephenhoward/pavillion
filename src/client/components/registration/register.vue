@@ -17,23 +17,11 @@
 <script setup>
     import { reactive, onBeforeMount, inject } from 'vue';
     import { useRouter, useRoute } from 'vue-router'
-    import { useI18n } from 'vue-i18n';
+    import { useTranslation } from 'i18next-vue';
 
     const router = useRouter();
     const authn = inject('authn');
-    const { t } = useI18n({
-        messages: {
-            en: {
-                'title': 'Create an account',
-                'create_button': 'Create an account',
-                email: 'email',
-                go_login: 'back to sign in',
-                '400': 'bad sign in',
-                'unknown_error': 'An unknown error occurred',
-                'account_exists': 'An account already exists for this email address'
-            }
-        }
-    });
+    const { t } = useTranslation('register');
 
     const props = defineProps(['error', 'em']);
     const state = reactive({

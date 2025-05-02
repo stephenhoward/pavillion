@@ -1,20 +1,12 @@
 <script setup>
 import { onBeforeMount, reactive } from 'vue';
-import { useI18n } from 'vue-i18n';
+import { useTranslation } from 'i18next-vue';
 import { CalendarEvent } from '../../../common/model/events';
 import ModelService from '../../service/models';
 import { useEventStore } from '../../stores/eventStore';
 
-const { t } = useI18n({
-    messages: {
-        en: {
-            'create_button': 'Create Event',
-            'update_button': 'Update Event',
-            name_placeholder: 'event name',
-            description_placeholder: 'event description',
-        }
-
-    }
+const { t } = useTranslation('calendars',{
+  keyPrefix: 'calendar'
 });
 
 const state = reactive({ err: ''});

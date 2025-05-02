@@ -1,0 +1,47 @@
+{
+  "login": {
+    "title": "Sign in to your account",
+    "login_button": "Sign in",
+    "email": "email",
+    "password": "password",
+    "forgot_password": "Forgot Password?",
+    "register_button": "Create an Account",
+    "apply_button": "Apply for an Account",
+    "UnknownLogin": "unknown email or password",
+    "MissingLogin": "missing email or password",
+    "400": "bad sign in",
+    "unknown_error": "An unknown error occurred"
+  },
+  "forgot_password": {
+    "title": "Forgot your password?",
+    "instructions": "No problem. Enter your email address and we will email you a password reset link.",
+    "email": "your email address",
+    "go_button": "Send Password Reset",
+    "login_link": "back to sign in",
+    "error_400": "There is a problem with the email you submitted",
+    "error_404": "We could not find an account with that email address",
+    "error_500": "Oops. The server ran into an error. Please contact support",
+    "no_email_provided": "Please enter your email address"
+  },
+  "reset_password": {
+    "check_email_title": "Password Reset Sent",
+    "new_account_password_title": "Welcome to your new account",
+    "check_email": "We have sent a code to reset your password to",
+    "code_validated_title": "Valid Code",
+    "set_password_prompt": "Please set a new password",
+    "registration_new_password": "Please set a password",
+    "login_link": "back to sign in",
+    "reset_code": "reset code",
+    "reset_button": "submit code",
+    "password_placeholder": "password",
+    "password2_placeholder": "confirm password",
+
+    "bad_token": "invalid or expired token",
+    "missing_password": "please enter a password",
+    "missing_password2": "please re-type your password to confirm",
+    "bad_password_match": "Passwords do not match",
+    "no_token_provided": "Must provide a password reset token",
+    "no_password_provided": "Must provide a password",
+    "unknown_error": "An unknown error occurred"
+  }
+}

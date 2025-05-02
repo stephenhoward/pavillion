@@ -25,23 +25,10 @@ div.forgot_password {
 <script setup>
     import { reactive, inject } from 'vue';
     import { useRouter, useRoute } from 'vue-router'
-    import { useI18n } from 'vue-i18n';
+    import { useTranslation } from 'i18next-vue';
 
-    const { t } = useI18n({
-        messages: {
-            en: {
-                title: 'Forgot your password?',
-                instructions: 'No problem. Enter your email address and we will email you a password reset link.',
-                email: 'your email address',
-                go_button: 'Send Password Reset',
-                login_link: 'back to sign in',
-                error_400: 'There is a problem with the email you submitted',
-                error_404: 'We could not find an account with that email address',
-                error_500: 'Oops. The server ran into an error. Please contact support',
-                no_email_provided: 'Please enter your email address'
-
-            }
-        }
+    const { t } = useTranslation('authentication', {
+        keyPrefix: 'forgot_password'
     });
     const authentication = inject('authn');
 

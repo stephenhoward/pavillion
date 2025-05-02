@@ -1,0 +1,14 @@
+{
+  "list": {
+    "my_calendars_header": "My Calendars",
+    "no_calendars_message": "No calendars found",
+    "add_calendar": "Add Calendar"
+  },
+  "calendar": {
+    "create_button": "Create Event",
+    "update_button": "Update Event",
+    "name_placeholder": "event name",
+    "description_placeholder": "event description"
+  }
+}
+

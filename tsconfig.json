@@ -8,6 +8,7 @@
     "outDir": "./build",
     "esModuleInterop": true,
     "strict": true,
+    "resolveJsonModule": true,
     "types": ["./vue.d.ts"],
     "baseUrl": ".",
     "paths": {

@@ -1,30 +1,20 @@
 <script setup>
-import { reactive, watch } from 'vue';
-import { useI18n } from 'vue-i18n';
+import { reactive } from 'vue';
+import { useTranslation } from 'i18next-vue';
 import loggedInNavigation from './loggedInNavigation.vue'
 import EditEventView from './calendar/edit_event.vue';
 
+const { t } = useTranslation('system');
 const state = reactive({
     userInfo: {
         currentEvent: null
     }
 });
-
-const { t } = useI18n({
-        messages: {
-            "en": {
-                "skip_to_content": "Skip to main content",
-            },
-            "es": {
-              "skip_to_content": "Skip to main content",
-            }
-        }
-    });
 </script>
 
 <template>
   <div class="root">
-      <a href="#main" class="skip-link">{{ t("skip_to_content") }}</a>
+      <a href="#main" class="skip-link">{{ t("navigation.skip_to_content") }}</a>
       <loggedInNavigation @open-event="(e) => state.currentEvent = e" />
       <div id="main">
       <RouterView @open-event="(e) => state.currentEvent = e"/>

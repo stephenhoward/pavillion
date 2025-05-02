@@ -18,29 +18,14 @@
 <script setup>
     import { reactive, inject } from 'vue';
     import { useRouter, useRoute } from 'vue-router'
-    import { useI18n } from 'vue-i18n';
+    import { useTranslation } from 'i18next-vue';
 
     const router = useRouter();
     const route = useRoute();
     const authn = inject('authn');
     const site_config = inject('site_config');
-    const { t } = useI18n({
-        messages: {
-            en: {
-                'title': 'Sign in to your account',
-                'login_button': 'Sign in',
-                email: 'email',
-                password: 'password',
-                forgot_password: 'Forgot Password?',
-                register_button: 'Create an Account',
-                apply_button: 'Apply for an Account',
-                UnknownLogin: 'unknown email or password',
-                MissingLogin: 'missing email or password',
-                '400': 'bad sign in',
-                'unknown_error': 'An unknown error occurred'
-            }
-
-        }
+    const { t } = useTranslation('authentication', {
+        keyPrefix: 'login'
     });
 
     const state = reactive({
@@ -79,7 +64,7 @@
                 console.log(error);
             }
 
-            state.err = t( error_text ) || error_text;
+            state.err = t(error_text) || error_text;
         }
     }
 </script>

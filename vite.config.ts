@@ -1,13 +1,10 @@
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
-import vueI18n from '@intlify/unplugin-vue-i18n/vite'
 import tsconfigPaths from 'vite-tsconfig-paths'
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [tsconfigPaths(), vue(), vueI18n({
-    runtimeOnly: false
-  })],
+  plugins: [tsconfigPaths(), vue()],
   build: {
     manifest: true,
     sourcemap: true,
@@ -22,4 +19,10 @@ export default defineConfig({
       },
     },
   },
+  resolve: {
+    alias: {
+      // Ensure JSON imports work properly for i18next translation files
+      '@/client/locale': '/src/client/locale'
+    }
+  }
 });

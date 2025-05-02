@@ -56,20 +56,14 @@ input[type="search"] {
 </template>
 
 <script setup>
-    import { reactive, ref } from 'vue';
-    import { useI18n } from 'vue-i18n';
+    import { reactive } from 'vue';
+    import { useTranslation } from 'i18next-vue';
     import ModalLayout from './modal.vue';
     import iso6391 from 'iso-639-1-dir';
     const emit = defineEmits(['close', 'select']);
 
-    const { t } = useI18n({
-        messages: {
-            en: {
-                'search_language': 'Search for a language',
-                'select_language': 'Select a Language',
-            }
-
-        }
+    const { t } = useTranslation('system', {
+        keyPrefix: 'language_picker',
     });
 
     const defaultLanguage = 'en';
