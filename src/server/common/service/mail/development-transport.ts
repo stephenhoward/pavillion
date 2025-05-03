@@ -35,7 +35,8 @@ export class DevelopmentTransport extends MailTransport {
                 }
                 
                 // Extract email data for simpler logging
-                const { from, to, subject } = mail.message.getEnvelope();
+                const { from, to } = mail.message.getEnvelope();
+                const subject = mail.data.subject;
                 const timestamp = new Date().toISOString().replace(/[:\.]/g, '-');
                 const sanitizedSubject = (subject || 'no-subject').replace(/[^a-z0-9]/gi, '-').substring(0, 30);
                 const sanitizedTo = (typeof to === 'string' ? to : to.join('-')).replace(/[^a-z0-9@\.]/gi, '-');
@@ -69,7 +70,6 @@ export class DevelopmentTransport extends MailTransport {
                 callback(null, {
                   messageId: `<development-${Date.now()}@${sanitizedTo}>`,
                   envelope: mail.message.getEnvelope(),
-                  // originalMessage: mail.message, // Removed as it's not a valid property
                   filePath: filePath
                 });
               } catch (err) {

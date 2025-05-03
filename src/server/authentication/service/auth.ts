@@ -6,6 +6,8 @@ import { Account } from "@/common/model/account"
 import { AccountEntity, AccountSecretsEntity } from "@/server/common/entity/account"
 import CommonAccountService from '@/server/common/service/accounts';
 import { noAccountExistsError } from '@/server/accounts/exceptions';
+import EmailService from '@/server/common/service/mail';
+import PasswordResetEmail from '@/server/authentication/service/mail/password_reset';
 
 /**
  * Service class for managing accounts
@@ -51,9 +53,11 @@ class AuthenticationService {
             });
         }
         const passwordResetCode = await AuthenticationService.generatePasswordResetCodeForAccount(account);
+
+        // Send the email
         console.log(passwordResetCode);
-        // TODO: send email
-        // await EmailService.sendPasswordResetEmail(account, passwordResetCode);
+        const message = new PasswordResetEmail(account, passwordResetCode);
+        await EmailService.sendEmail(message.buildMessage(account.language));
     }
 
     static async generatePasswordResetCodeForAccount(account: Account): Promise<string> {

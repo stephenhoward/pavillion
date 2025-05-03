@@ -1,7 +1,7 @@
 import config from 'config';
 import { SentMessageInfo } from 'nodemailer';
 
-import { MailConfig } from '@/server/common/service/mail/types';
+import { MailConfig, MailData } from '@/server/common/service/mail/types';
 import { MailTransport } from '@/server/common/service/mail/mail-transport';
 import { SmtpTransport } from '@/server/common/service/mail/smtp-transport';
 import { SendmailTransport } from '@/server/common/service/mail/sendmail-transport';
@@ -86,25 +86,22 @@ class EmailServiceClass {
   /**
    * Send an email using the configured transport
    *
-   * @param emailAddress - Recipient email address
-   * @param subject - Email subject
-   * @param textMessage - Plain text email body
-   * @param htmlMessage - Optional HTML email body
+   * @param data - MailData object containing email details:
+   * - emailAddress: Recipient email address
+   * - subject: Email subject
+   * - textMessage: Plain text email body
+   * - htmlMessage: Optional HTML email body
    * @returns Promise resolving to the message info or null if sending failed
    */
-  public async sendEmail(
-    emailAddress: string,
-    subject: string,
-    textMessage: string,
-    htmlMessage?: string
-  ): Promise<SentMessageInfo | null> {
+
+  public async sendEmail(data: MailData): Promise<SentMessageInfo | null> {
     try {
       const info = await this.transportInstance.sendMail({
         from: process.env.MAIL_FROM || this.mailConfig.from,
-        to: emailAddress,
-        subject: subject,
-        text: textMessage,
-        html: htmlMessage
+        to: data.emailAddress,
+        subject: data.subject,
+        text: data.textMessage,
+        html: data.htmlMessage
       });
 
       console.log(`Message sent (${this.mailConfig.transport}):`, info.messageId);

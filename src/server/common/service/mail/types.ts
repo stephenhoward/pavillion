@@ -7,4 +7,11 @@ export interface MailConfig {
   settings: {
     [key: string]: any;
   };
-}
+};
+
+export interface MailData {
+    emailAddress: string;
+    subject: string;
+    textMessage: string;
+    htmlMessage?: string;
+};
