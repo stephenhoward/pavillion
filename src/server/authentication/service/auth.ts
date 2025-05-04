@@ -7,7 +7,7 @@ import { AccountEntity, AccountSecretsEntity } from "@/server/common/entity/acco
 import CommonAccountService from '@/server/common/service/accounts';
 import { noAccountExistsError } from '@/server/accounts/exceptions';
 import EmailService from '@/server/common/service/mail';
-import PasswordResetEmail from '@/server/authentication/service/mail/password_reset';
+import PasswordResetEmail from '@/server/authentication/model/password_reset_email';
 
 /**
  * Service class for managing accounts
@@ -55,7 +55,6 @@ class AuthenticationService {
         const passwordResetCode = await AuthenticationService.generatePasswordResetCodeForAccount(account);
 
         // Send the email
-        console.log(passwordResetCode);
         const message = new PasswordResetEmail(account, passwordResetCode);
         await EmailService.sendEmail(message.buildMessage(account.language));
     }

@@ -7,9 +7,11 @@ import CommonAccountService from '@/server/common/service/accounts';
 import EmailService from '@/server/common/service/mail';
 import ServiceSettings from '@/server/configuration/service/settings';
 import AccountService from '@/server/accounts/service/account';
-import CalendarService from '@/server/calendar/service/calendar';
 import AuthenticationService from '@/server/authentication/service/auth';
 import { AccountAlreadyExistsError, AccountInviteAlreadyExistsError, AccountRegistrationClosedError, AccountApplicationAlreadyExistsError, AccountApplicationsClosedError, noAccountInviteExistsError, noAccountApplicationExistsError } from '@/server/accounts/exceptions';
+import { initI18Next } from '@/server/common/test/lib/i18next';
+
+initI18Next();
 
 describe('inviteNewAccount', () => {
 
@@ -63,11 +65,14 @@ describe('registerNewAccount', () => {
     it('no registration allowed', async () => {
         let getSettingStub = sandbox.stub(ServiceSettings.prototype, 'get');
         let initSettingsStub = sandbox.stub(ServiceSettings.prototype, 'init');
+        let emailStub = sandbox.stub(EmailService, 'sendEmail');
 
         for (let mode of ['closed', 'apply', 'invite']) {
             getSettingStub.withArgs('registrationMode').returns(mode);
             await expect(AccountService.registerNewAccount('test_email')).rejects
                 .toThrow(AccountRegistrationClosedError);
+            expect(emailStub.called).toBe(false);
+
         }
     });
 
@@ -82,6 +87,7 @@ describe('registerNewAccount', () => {
         let account = await AccountService.registerNewAccount('test_email');
 
         expect(account.email).toBe('test_email');
+        expect(emailStub.called).toBe(true);
     });
 });
 

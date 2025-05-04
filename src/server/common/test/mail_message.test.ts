@@ -6,6 +6,9 @@ import i18next from 'i18next';
 import handlebars from 'handlebars';
 import { EmailMessage, compileTemplate } from '@/server/common/service/mail/message';
 import { MailData } from '@/server/common/service/mail/types';
+import { initI18Next } from '@/server/common/test/lib/i18next';
+
+initI18Next();
 
 // Test implementation of EmailMessage
 class TestEmailMessage extends EmailMessage {

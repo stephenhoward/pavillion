@@ -1,0 +1,13 @@
+{
+    "subject": "Account Registration Verification",
+    "title": "Verify Your Account",
+    "greeting": "Hello,",
+    "instructions": "Thank you for registering. To verify your account, please click the button below or copy and paste the link into your browser:",
+    "button": "Verify Account",
+    "copy_link_text": "Or copy this link:",
+    "verification_code": "Verification Code",
+    "expiry_notice": "This verification link will expire in 24 hours.",
+    "signature": "Thank you,",
+    "team_name": "The Pavillion Team",
+    "footer_text": "This is an automated message, please do not reply to this email."
+}

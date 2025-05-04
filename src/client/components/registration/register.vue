@@ -7,7 +7,7 @@
         <h3>{{ t('title') }}</h3>
         <div class="error" v-if="state.err">{{ state.err }}</div>
         <input type="email"    v-bind:placeholder="t('email')"    v-model="state.email">
-        <button @click="doRegister" type="button">{{ t("create_button") }}</button>
+        <button class="primary" @click="doRegister" type="button">{{ t("create_button") }}</button>
         <router-link :to="{ name: 'login', params: { em: state.email}}" class="button">
             {{ t("go_login") }}
         </router-link>
@@ -21,7 +21,9 @@
 
     const router = useRouter();
     const authn = inject('authn');
-    const { t } = useTranslation('register');
+    const { t } = useTranslation('registration', {
+        keyPrefix: 'register'
+    });
 
     const props = defineProps(['error', 'em']);
     const state = reactive({
@@ -76,9 +78,13 @@
 <style scoped lang="scss">
 @use '../../assets/mixins' as *;
 
-body {
+div.login {
+    @include auth-form;
+}
+@include dark-mode {
     div.login {
-        @include auth-form;
+        @include auth-form-dark-mode;
     }
 }
+
 </style>

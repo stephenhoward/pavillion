@@ -11,6 +11,7 @@ import { AccountEntity, AccountSecretsEntity, AccountInvitationEntity, AccountAp
 import ServiceSettings from '@/server/configuration/service/settings';
 import { AccountApplicationAlreadyExistsError, noAccountInviteExistsError, AccountRegistrationClosedError, AccountApplicationsClosedError, AccountAlreadyExistsError, AccountInviteAlreadyExistsError, noAccountApplicationExistsError } from '@/server/accounts/exceptions';
 import AuthenticationService from '@/server/authentication/service/auth';
+import AccountRegistrationEmail from '@/server/accounts/model/registration_email';
 
 type AccountInfo = {
     account: Account,
@@ -70,7 +71,8 @@ class AccountService {
         }
         const accountInfo = await AccountService._setupAccount(email);
 
-        EmailService.sendEmail(email, 'Welcome to our service', 'Thank you for registering' + accountInfo.password_code);
+        const message = new AccountRegistrationEmail(accountInfo.account, accountInfo.password_code);
+        EmailService.sendEmail(message.buildMessage(accountInfo.account.language));
         return accountInfo.account;
     }
 
