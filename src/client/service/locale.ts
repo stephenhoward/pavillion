@@ -2,12 +2,13 @@ import i18next from 'i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 
 // Import English translation resources
-import enSystem from '@/client/locale/en/system.json';
-import enAuthentication from '@/client/locale/en/authentication.json';
-import enRegistration from '@/client/locale/en/registration.json';
-import enCalendars from '@/client/locale/en/calendars.json';
-import enEditEvent from '@/client/locale/en/event_editor.json';
-import enProfile from '@/client/locale/en/profile.json';
+import enSystem from '@/client/locales/en/system.json';
+import enAuthentication from '@/client/locales/en/authentication.json';
+import enRegistration from '@/client/locales/en/registration.json';
+import enCalendars from '@/client/locales/en/calendars.json';
+import enEditEvent from '@/client/locales/en/event_editor.json';
+import enProfile from '@/client/locales/en/profile.json';
+import enAdmin from '@/client/locales/en/admin.json';
 
 export const initI18Next = () => {
   // Initialize i18next with the standard initialization method
@@ -23,7 +24,8 @@ export const initI18Next = () => {
           registration: enRegistration,
           calendars: enCalendars,
           event_editor: enEditEvent,
-          profile: enProfile
+          profile: enProfile,
+          admin: enAdmin,
         }
       },
       detection: {

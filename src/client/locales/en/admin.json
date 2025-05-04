@@ -1,0 +1,8 @@
+{
+    "invite_form": {
+        "title": "Invite a new user",
+        "email_placeholder": "email address",
+        "invite_button": "Send invite",
+        "close_button": "Cancel"
+    }
+}

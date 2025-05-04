@@ -26,6 +26,7 @@ onBeforeMount(async () => {
 </script>
 
 <template>
+    <div>
   <p>{{ t('my_calendars_header') }}</p>
     <section v-if="state.calendars.length > 0">
         <ul v-for="calendar in state.calendars">
@@ -37,6 +38,7 @@ onBeforeMount(async () => {
     <section v-else>
         <p>{{ t('no_calendars_message') }}</p>
     </section>
+    </div>
 </template>
 
 <style scoped lang="scss">

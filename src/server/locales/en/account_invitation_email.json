@@ -1,0 +1,14 @@
+{
+    "subject": "Invitation to Join Pavillion",
+    "title": "You've Been Invited",
+    "greeting": "Hello,",
+    "instructions": "You've been invited to join Pavillion. To accept this invitation and create your account, please click the button below or copy and paste the link into your browser:",
+    "button": "Accept Invitation",
+    "copy_link_text": "Or copy this link:",
+    "invitation_code": "Invitation Code",
+    "expiry_notice": "This invitation link will expire in 7 days.",
+    "signature": "Thank you,",
+    "team_name": "The Pavillion Team",
+    "footer_text": "This is an automated message, please do not reply to this email.",
+    "inviter_message": "Personal message from inviter: {{message}}"
+}

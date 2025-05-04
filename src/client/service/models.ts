@@ -37,4 +37,20 @@ export default class ModelService {
             throw( error );
         }
     }
+
+    /**
+     * Delete a model from the server
+     * @param model - The model to delete
+     * @param url - The base URL for the API endpoint
+     * @returns Promise resolving to the server response data
+     */
+    static async deleteModel(model: PrimaryModel, url: string): Promise<Record<string,any>> {
+        try {
+            let response = await axios.delete(`${url}/${model.id}`);
+            return response.data;
+        }
+        catch(error) {
+            throw(error);
+        }
+    }
 }

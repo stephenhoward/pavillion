@@ -16,6 +16,7 @@ const { t } = useTranslation('profile');
 </script>
 
 <template>
+  <div>
   <p>profile</p>
   <ul>
     <li>email: {{ email }}</li>
@@ -23,6 +24,7 @@ const { t } = useTranslation('profile');
     <li><router-link v-if="state.userInfo.isAdmin" to="/admin" class="button">{{ t("admin_link") }}</router-link></li>
     <router-link :to="{ name: 'logout' }">Logout</router-link>
   </ul>
+</div>
 </template>
 
 <style scoped lang="scss">

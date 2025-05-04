@@ -86,15 +86,35 @@ export default class AuthenticationService {
 
     async accept_invitation(code: string, password: string) {
         try {
-            let response = await axios.post( this._accountUrl('/register-invitation'), {
+            let response = await axios.post( this._accountUrl('/invitations/' + code), {
                 code: code,
-                message: password
+                password: password
             });
 
             return response.data;
         }
         catch (error) {
             throw( error );
+        }
+    }
+
+    async check_invite_token(code: string) {
+        if (!code || code === '') {
+            throw("no_invite_code_provided");
+        }
+
+        try {
+            let response = await axios.get(this._accountUrl('/invitations/' + code));
+            return response.data;
+        }
+        catch (error) {
+            if (axios.isAxiosError(error)) {
+                const axiosError = error as AxiosError;
+                if (axiosError.response) {
+                    throw(axiosError.response.status);
+                }
+            }
+            throw(error);
         }
     }
 

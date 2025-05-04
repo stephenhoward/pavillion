@@ -150,10 +150,39 @@ describe('validateInviteCode', () => {
         await expect(AccountService.validateInviteCode('test_code')).resolves.toBe(false);
     });
 
-    it('invite found', async () => {
+    it('invite expired with null time', async () => {
         let findInviteStub = validateSandbox.stub(AccountInvitationEntity, 'findOne');
 
-        findInviteStub.resolves(AccountInvitationEntity.build({ invitation_code: 'test_code' }));
+        findInviteStub.resolves(AccountInvitationEntity.build({
+            invitation_code: 'test_code',
+            expiration_time: null
+        }));
+        await expect(AccountService.validateInviteCode('test_code')).resolves.toBe(false);
+    });
+
+    it('invite expired with null time', async () => {
+        let findInviteStub = validateSandbox.stub(AccountInvitationEntity, 'findOne');
+
+        const pastDate = new Date();
+        pastDate.setDate(pastDate.getDate() - 1); // yesterday
+
+        findInviteStub.resolves(AccountInvitationEntity.build({
+            invitation_code: 'test_code',
+            expiration_time: pastDate
+        }));
+        await expect(AccountService.validateInviteCode('test_code')).resolves.toBe(false);
+    });
+
+    it('invite valid', async () => {
+        let findInviteStub = validateSandbox.stub(AccountInvitationEntity, 'findOne');
+
+        const futureDate = new Date();
+        futureDate.setDate(futureDate.getDate() + 1); // tomorrow
+
+        findInviteStub.resolves(AccountInvitationEntity.build({
+            invitation_code: 'test_code',
+            expiration_time: futureDate
+        }));
 
         await expect(AccountService.validateInviteCode('test_code')).resolves.toBe(true);
     });
@@ -166,24 +195,65 @@ describe('acceptAccountInvite', () => {
         acceptSandbox.restore();
     });
 
-    it('no invite found', async () => {
-        let findInviteStub = acceptSandbox.stub(AccountInvitationEntity, 'findOne');
+    it('rejects expired invitations', async () => {
+        let setupAccountStub = acceptSandbox.stub(AccountService, '_setupAccount');
+        let destroyStub = acceptSandbox.stub(AccountInvitationEntity, 'destroy').resolves();
+        // Set up validateInviteCode to return false (expired or invalid)
+        let validateStub = acceptSandbox.stub(AccountService, 'validateInviteCode');
+        validateStub.resolves(false);
 
-        findInviteStub.resolves(undefined);
+        await expect(AccountService.acceptAccountInvite('test_code', 'test_password'))
+            .rejects.toThrow('Invitation has expired or does not exist');
 
-        await expect(AccountService.acceptAccountInvite('test_code','test_password')).rejects
-            .toThrow(noAccountInviteExistsError);
+        expect(setupAccountStub.called).toBe(false);
+        expect(destroyStub.called).toBe(false);
     });
 
-    it('invite found', async () => {
-        let findInviteStub = acceptSandbox.stub(AccountInvitationEntity, 'findOne');
+    it('rejects when invite not found after validation', async () => {
         let setupAccountStub = acceptSandbox.stub(AccountService, '_setupAccount');
+        let destroyStub = acceptSandbox.stub(AccountInvitationEntity, 'destroy').resolves();
+        let validateStub = acceptSandbox.stub(AccountService, 'validateInviteCode');
 
-        findInviteStub.resolves(AccountInvitationEntity.build({ invitation_code: 'test_code' }));
-        setupAccountStub.resolves({ account: new Account('id', 'testme', 'test_email'), password_code: 'test_code' });
+        // validateInviteCode returns true but invitation is not found
+        validateStub.resolves(true);
 
-        let account = await AccountService.acceptAccountInvite('test_code','test_password');
+        let findInviteStub = acceptSandbox.stub(AccountInvitationEntity, 'findOne');
+        findInviteStub.resolves(undefined);
 
+        await expect(AccountService.acceptAccountInvite('test_code', 'test_password'))
+            .rejects.toThrow(noAccountInviteExistsError);
+
+        expect(setupAccountStub.called).toBe(false);
+        expect(destroyStub.called).toBe(false);
+    });
+
+    it('accepts valid invitation and creates account', async () => {
+        // Set up validateInviteCode to return true (valid)
+        let validateStub = acceptSandbox.stub(AccountService, 'validateInviteCode');
+        validateStub.resolves(true);
+
+        // Mock the invitation entity
+        let findInviteStub = acceptSandbox.stub(AccountInvitationEntity, 'findOne');
+        const invitation = AccountInvitationEntity.build({
+            invitation_code: 'test_code',
+            email: 'test_email@example.com'
+        });
+        findInviteStub.resolves(invitation);
+
+        // Mock destroy method
+        let destroyStub = acceptSandbox.stub(invitation, 'destroy').resolves();
+
+        // Mock account creation
+        let setupAccountStub = acceptSandbox.stub(AccountService, '_setupAccount');
+        setupAccountStub.resolves({
+            account: new Account('id', 'test_email@example.com', 'testme'),
+            password_code: ''
+        });
+
+        const account = await AccountService.acceptAccountInvite('test_code', 'test_password');
+
+        expect(setupAccountStub.called).toBe(true);
+        expect(destroyStub.called).toBe(true);
         expect(account).toBeTruthy();
     });
 });

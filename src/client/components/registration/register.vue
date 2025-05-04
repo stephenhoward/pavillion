@@ -19,6 +19,7 @@
     import { useRouter, useRoute } from 'vue-router'
     import { useTranslation } from 'i18next-vue';
 
+    const site_config = inject('site_config');
     const router = useRouter();
     const authn = inject('authn');
     const { t } = useTranslation('registration', {
@@ -35,6 +36,13 @@
     const route = useRoute();
 
     onBeforeMount(() => {
+        if ( site_config.settings().registrationMode == 'apply' ) {
+            router.push({ name: 'register-apply', query: { email: route.query.email }});
+        }
+        else if ( site_config.settings().registrationMode == 'closed' ) {
+            router.push({ name: 'login', query: { em: route.query.email }});
+        }
+
         if ( route.query.code ) {
             router.push({ name: 'reset_password', query: { code: route.query.code }});
         }

@@ -17,5 +17,10 @@
     "400": "bad sign in",
     "unknown_error": "An unknown error occurred",
     "account_exists": "An account already exists for this email address"
+  },
+  "accept_invite": {
+    "bad_invite_title": "Invitation expired",
+    "bad_invite_explanation": "Your invite has expired or is invalid. Please contact the administrator for a new invite.",
+    "go_login": "back to sign in"
   }
 }

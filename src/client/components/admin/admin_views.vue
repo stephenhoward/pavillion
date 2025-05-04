@@ -4,17 +4,17 @@
 </script>
 
 <template>
-    <router-link to="/profile" class="button">&lt; back</router-link>
-    <ul>
+<div>
+        <router-link to="/profile" class="button">&lt; back</router-link>
+    <nav>
         <li>Instance Name/Title</li>
         <li>Registration Mode: {{ site_config.settings.registrationMode || 'closed' }}</li>
-        <li>List of account applications (with badge for outstanding ones)</li>
-        <li>List of accounts on this instance</li>
+        <li><router-link :to="{ name: 'accounts' }">Accounts (with badge for outstanding applications)</router-link></li>
         <li>List of blocked instances</li>
         <li>details needed for pay-what-you-can form</li>
-    </ul>
-
-    Powered by Pavillion
+        <RouterView />
+    </nav>
+</div>
 </template>
 
 <style scoped lang="scss">

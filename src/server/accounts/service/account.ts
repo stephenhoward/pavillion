@@ -12,6 +12,7 @@ import ServiceSettings from '@/server/configuration/service/settings';
 import { AccountApplicationAlreadyExistsError, noAccountInviteExistsError, AccountRegistrationClosedError, AccountApplicationsClosedError, AccountAlreadyExistsError, AccountInviteAlreadyExistsError, noAccountApplicationExistsError } from '@/server/accounts/exceptions';
 import AuthenticationService from '@/server/authentication/service/auth';
 import AccountRegistrationEmail from '@/server/accounts/model/registration_email';
+import AccountInvitationEmail from '@/server/accounts/model/invitation_email';
 
 type AccountInfo = {
     account: Account,
@@ -131,27 +132,52 @@ class AccountService {
 
     static async validateInviteCode(code: string): Promise<boolean> {
         const invitation = await AccountInvitationEntity.findOne({ where: {invitation_code: code}});
-        if ( invitation ) {
-            return true;
+        if (!invitation) {
+            return false;
         }
-        return false;
+
+        // Check if invitation has expired
+        // If expiration time is null, consider the invitation expired
+        if (!invitation.expiration_time) {
+            return false;
+        }
+
+        const now = DateTime.utc();
+        const expirationTime = DateTime.fromJSDate(invitation.expiration_time);
+
+        if (now > expirationTime) {
+            return false;
+        }
+
+        return true;
     }
 
     static async acceptAccountInvite(code: string, password: string): Promise<Account|undefined> {
+        // Check if invitation code is valid (not expired)
+        const isValid = await AccountService.validateInviteCode(code);
+        if (!isValid) {
+            throw new Error('Invitation has expired or does not exist');
+        }
+
+        // At this point, we know the code is valid, so retrieve the invitation
         const invitation = await AccountInvitationEntity.findOne({ where: {invitation_code: code}});
 
-        if (! invitation ) {
+        if (!invitation) {
             throw new noAccountInviteExistsError();
         }
 
-        const accountInfo = await AccountService._setupAccount(invitation.email,password);
+        const accountInfo = await AccountService._setupAccount(invitation.email, password);
+
+        // Remove the invitation after it's been accepted
+        await invitation.destroy();
 
         return accountInfo.account;
     }
 
     static async sendNewAccountInvite(invitation:AccountInvitationEntity): Promise<boolean> {
 
-        EmailService.sendEmail(invitation.email, 'Welcome to our service', 'Thank you for applying' + invitation.invitation_code);
+        const message = new AccountInvitationEmail(invitation.toModel(), invitation.invitation_code);
+        EmailService.sendEmail(message.buildMessage('en'));
         return true;
     }
 
@@ -187,6 +213,21 @@ class AccountService {
 
     static async listAccountApplications(): Promise<AccountInvitation[]> {
         return (await AccountApplicationEntity.findAll()).map( (application) => application.toModel() );
+    }
+
+    /**
+     * Deletes an account invitation by ID
+     * @param id - The ID of the invitation to delete
+     * @returns a promise that resolves to true if successful, false if not found
+     */
+    static async cancelInvite(id: string): Promise<boolean> {
+        const invitation = await AccountInvitationEntity.findByPk(id);
+        if (!invitation) {
+            return false;
+        }
+
+        await invitation.destroy();
+        return true;
     }
 
     static async getAccount(id: string): Promise<Account|null> {

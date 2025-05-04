@@ -5,11 +5,12 @@ import ExpressHelper from '../../../common/helper/express';
 const handlers = {
     listInvitations: async (req: Request, res: Response) => {
         const invitations = await AccountService.listInvitations();
-        res.json({invitations});
+        res.json(invitations);
     },
     inviteToRegister: async (req: Request, res: Response) => {
-        if( await AccountService.inviteNewAccount(req.body.email, req.body.message) ) {
-            res.json({message: 'invitation sent to '+req.body.email});
+        const invitation = await AccountService.inviteNewAccount(req.body.email, req.body.message);
+        if( invitation ) {
+            res.json(invitation);
         }
         else {
             res.status(400);
@@ -33,6 +34,16 @@ const handlers = {
         else {
             res.status(400);
             res.json({message: 'not ok'});
+        }
+    },
+    cancelInvite: async (req: Request, res: Response) => {
+        const result = await AccountService.cancelInvite(req.params.id);
+        if (result) {
+            res.status(200);
+            res.json({ message: 'invitation cancelled successfully' });
+        } else {
+            res.status(404);
+            res.json({ message: 'invitation not found' });
         }
     }
 };
@@ -70,5 +81,13 @@ router.get('/invitations/:code', ...ExpressHelper.noUserOnly, handlers.checkInvi
  * Accept an invitation to create an account. Provide the password to finish setting up the account
  */
 router.post('/invitations/:code', ...ExpressHelper.noUserOnly, handlers.acceptInvite);
+
+/**
+ * Cancel an invitation
+ * @route DELETE /api/accounts/v1/invitations/:id
+ * @param id
+ * Cancel an invitation by its ID
+ */
+router.delete('/invitations/:id', ExpressHelper.adminOnly, handlers.cancelInvite);
 
 export { handlers, router };
