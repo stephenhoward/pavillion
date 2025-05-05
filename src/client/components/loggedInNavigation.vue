@@ -33,59 +33,7 @@
     
 <style scoped lang="scss">
 @use '../assets/mixins' as *;
-
-nav {
-  display: flex;
-  flex-direction: row;
-  justify-content: space-around;
-  align-items: center;
-  padding: 1em;
-
-  li {
-    padding: 10px;
-    list-style-type: none;
-    position: relative;
-    font-size: 10pt;
-    &.selected {
-        a {
-            color: #fff;
-            div.icon {
-                background-color: #fff;
-            }
-        }
-    }
-    &.badged {
-      &::after {
-          content: "●";
-          position: absolute;
-          top: 2px;
-          right: 4px;
-          color: $light-mode-button-background;
-          font-size: 16pt;
-        }
-    }
-    a {
-      color: $light-mode-text;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      text-decoration: none;
-      label {
-        display: block;
-        text-align: center;
-      }
-      div.icon {
-        width: 24px;
-        height: 24px;
-        background-color: #000;
-        -webkit-mask-size: contain;
-        -webkit-mask-repeat: no-repeat;
-        mask-size: contain;
-        mask-repeat: no-repeat;
-      }
-    }
-  }
-}
+@use '../assets/layout.scss' as *;
 
 #calendar-button div.icon {
     -webkit-mask-image: url('../assets/calendar_icon.svg');
@@ -115,29 +63,6 @@ nav {
 }
 
 @include medium-size-device {
-  nav {
-    flex-direction: column;
-    align-items: flex-start;
-    justify-content: flex-start;
-    li {
-        &.badged {
-          &::after {
-              left: 28px;
-            }
-        }
-        a {
-            flex-direction: row;
-            label {
-                text-align: left;
-            }
-        }
-        div.icon {
-            display: inline-block;
-            margin-right: 10px;
-        }
-        padding: 10px;
-    }
-  }
   #new-event-button {
     order: 0;
     border-radius: 10px;
@@ -157,27 +82,7 @@ nav {
   }
 }
 
-@include large-size-device {
-  nav {
-    li {
-        justify-content: flex-start;
-        flex-direction: row;
-    }
-  }
-}
-
 @include dark-mode {
-    nav {
-        li {
-            color: #999;
-            a {
-                color: #999;
-                div.icon {
-                    background-color: #999;
-                }
-            }
-        }
-    }
     @include medium-size-device {
     #new-event-button {
       background: $dark-mode-button-background;

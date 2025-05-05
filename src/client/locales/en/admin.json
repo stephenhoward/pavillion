@@ -9,7 +9,7 @@
         "back": "< back",
         "instance_name_title": "Instance Name/Title",
         "registration_mode": "Registration Mode",
-        "accounts_link": "Accounts (with badge for outstanding applications)",
+        "accounts_link": "Accounts",
         "blocked_instances": "List of blocked instances",
         "payment_details": "Details needed for pay-what-you-can form"
     },
