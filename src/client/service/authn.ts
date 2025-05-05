@@ -98,6 +98,22 @@ export default class AuthenticationService {
         }
     }
 
+    async resend_invitation(invitationId: string) {
+        try {
+            let response = await axios.post( this._accountUrl('/invitations/' + invitationId + '/resend'));
+            return response.data;
+        }
+        catch (error) {
+            if (axios.isAxiosError(error)) {
+                const axiosError = error as AxiosError;
+                if (axiosError.response) {
+                    throw(axiosError.response.status);
+                }
+            }
+            throw(error);
+        }
+    }
+
     async check_invite_token(code: string) {
         if (!code || code === '') {
             throw("no_invite_code_provided");

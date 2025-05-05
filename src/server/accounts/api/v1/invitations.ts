@@ -45,6 +45,16 @@ const handlers = {
             res.status(404);
             res.json({ message: 'invitation not found' });
         }
+    },
+    resendInvite: async (req: Request, res: Response) => {
+        const invitation = await AccountService.resendInvite(req.params.id);
+        if (invitation) {
+            res.status(200);
+            res.json(invitation);
+        } else {
+            res.status(404);
+            res.json({ message: 'invitation not found' });
+        }
     }
 };
 
@@ -89,5 +99,13 @@ router.post('/invitations/:code', ...ExpressHelper.noUserOnly, handlers.acceptIn
  * Cancel an invitation by its ID
  */
 router.delete('/invitations/:id', ExpressHelper.adminOnly, handlers.cancelInvite);
+
+/**
+ * Resend an invitation
+ * @route POST /api/accounts/v1/invitations/:id/resend
+ * @param id
+ * Resend an invitation email and reset its expiration date
+ */
+router.post('/invitations/:id/resend', ExpressHelper.adminOnly, handlers.resendInvite);
 
 export { handlers, router };

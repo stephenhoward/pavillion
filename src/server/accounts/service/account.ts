@@ -60,6 +60,30 @@ class AccountService {
     }
 
     /**
+     * Resends an invitation email and resets the expiration time
+     * @param id - The ID of the invitation to resend
+     * @returns a promise that resolves to the updated invitation or undefined if not found
+     */
+    static async resendInvite(id: string): Promise<AccountInvitation|undefined> {
+        const invitation = await AccountInvitationEntity.findByPk(id);
+        if (!invitation) {
+            return undefined;
+        }
+
+        // Reset expiration time to 1 week from now
+        const oneWeekFromNow = new Date();
+        oneWeekFromNow.setDate(oneWeekFromNow.getDate() + 7);
+        invitation.expiration_time = oneWeekFromNow;
+
+        await invitation.save();
+
+        // Resend the invitation email
+        await AccountService.sendNewAccountInvite(invitation);
+
+        return invitation.toModel();
+    }
+
+    /**
      * Creates a new account for the provided email address, if it does not yet exist
      * @param - email the email address to associate with the new account
      * @returns a promise that resolves to a boolean
