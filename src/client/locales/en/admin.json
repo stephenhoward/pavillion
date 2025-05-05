@@ -4,5 +4,29 @@
         "email_placeholder": "email address",
         "invite_button": "Send invite",
         "close_button": "Cancel"
+    },
+    "menu": {
+        "back": "< back",
+        "instance_name_title": "Instance Name/Title",
+        "registration_mode": "Registration Mode",
+        "accounts_link": "Accounts (with badge for outstanding applications)",
+        "blocked_instances": "List of blocked instances",
+        "payment_details": "Details needed for pay-what-you-can form"
+    },
+    "accounts": {
+        "account_applications": "Account Applications",
+        "account_invitations": "Account Invitations",
+        "resend_success": "Successfully resent invitation to {{email}}",
+        "resend_error": "Failed to resend invitation to {{email}}",
+        "invite_new_account": "Invite New Account",
+        "email_column": "Email",
+        "expires_column": "Expires At",
+        "actions_column": "Actions",
+        "sending": "Sending...",
+        "resend": "Resend",
+        "cancel": "Cancel",
+        "accounts_title": "Accounts",
+        "unknown_expiration": "Unknown",
+        "expired": "Expired"
     }
 }

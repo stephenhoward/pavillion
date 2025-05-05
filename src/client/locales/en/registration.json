@@ -16,7 +16,8 @@
     "go_login": "back to sign in",
     "400": "bad sign in",
     "unknown_error": "An unknown error occurred",
-    "account_exists": "An account already exists for this email address"
+    "account_exists": "An account already exists for this email address",
+    "application_submitted": "Your account application has been recorded."
   },
   "accept_invite": {
     "bad_invite_title": "Invitation expired",

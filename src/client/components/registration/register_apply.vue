@@ -1,7 +1,7 @@
 <template>
     <div v-if="state.showSuccess" class="login">
         <h3>{{ t('title') }}</h3>
-        Your account application has been recorded.
+        {{ t('application_submitted') }}
     </div>
     <div v-else class="register-apply">
         <h3>{{ t('title') }}</h3>

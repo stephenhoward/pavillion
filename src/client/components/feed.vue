@@ -1,13 +1,16 @@
 <script setup>
+import { useTranslation } from 'i18next-vue';
+
+const { t } = useTranslation('feed');
 </script>
 
 <template>
-  <p>feed</p>
+  <p>{{ t("title") }}</p>
   <section>
-    events from calendars you follow<br>
-    calendars you follow<br>
-    an interface for following new calendars<br>
-    a place to see your own follow identifier<br>
+    {{ t("events_description") }}<br>
+    {{ t("calendars_description") }}<br>
+    {{ t("follow_interface_description") }}<br>
+    {{ t("follow_identifier_description") }}<br>
     <div class="event">
     </div>
   </section>

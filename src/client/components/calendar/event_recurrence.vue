@@ -82,7 +82,7 @@ div.month-parameters {
     </div>
     <form class="repeats" v-if="state.showRecurrence == true">
         <label class="repeat-interval" v-if="props.schedule.frequency">
-            every <input type="number" v-model="props.schedule.interval" @change="compileRecurrence()" /> {{  props.schedule.frequency ? t( props.schedule.frequency + 'Term') : '' }}
+            {{ t('every') }} <input type="number" v-model="props.schedule.interval" @change="compileRecurrence()" /> {{  props.schedule.frequency ? t( props.schedule.frequency + 'Term') : '' }}
         </label>
 
         <div class="week-parameters" v-if="props.schedule.frequency === 'weekly'">
@@ -102,9 +102,9 @@ div.month-parameters {
 
         <div class="end-type" v-if="props.schedule.frequency">
             {{ t('endType-label') }}: 
-            <label><input type="radio" value="none" v-model="state.endType" @change="compileRecurrence()"/> never</label>
-            <label><input type="radio" value="after" v-model="state.endType" @change="compileRecurrence()" /> after <input type="number" v-model="props.schedule.count" @change="state.endType='after'; compileRecurrence()" /> occurrences</label>
-            <label><input type="radio" value="on" v-model="state.endType" @change="compileRecurrence()" /> on <input type="date" v-model="state.endDate" @input="state.endType='on'; compileRecurrence()" /></label>
+            <label><input type="radio" value="none" v-model="state.endType" @change="compileRecurrence()"/> {{ t('never') }}</label>
+            <label><input type="radio" value="after" v-model="state.endType" @change="compileRecurrence()" /> {{ t('after') }} <input type="number" v-model="props.schedule.count" @change="state.endType='after'; compileRecurrence()" /> {{ t('occurrences') }}</label>
+            <label><input type="radio" value="on" v-model="state.endType" @change="compileRecurrence()" /> {{ t('on_date') }} <input type="date" v-model="state.endDate" @input="state.endType='on'; compileRecurrence()" /></label>
         </div>
     </form>
 </div>

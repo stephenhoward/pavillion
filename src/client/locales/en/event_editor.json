@@ -14,7 +14,10 @@
     "address_placeholder": "event address",
     "city_placeholder": "city",
     "state_placeholder": "state",
-    "postalCode_placeholder": "zip code"
+    "postalCode_placeholder": "zip code",
+    "event_description_label": "Event Description",
+    "location_label": "Location",
+    "dates_label": "Dates"
   },
   "recurrence": {
     "dailyTerm": "days",
@@ -40,6 +43,11 @@
     "frequencyMonthly": "Monthly",
     "frequencyYearly": "Yearly",
     "on-weekday-label": "on",
-    "endType-label": "ends"
+    "endType-label": "ends",
+    "every": "every",
+    "never": "never",
+    "after": "after",
+    "occurrences": "occurrences",
+    "on_date": "on"
   }
 }

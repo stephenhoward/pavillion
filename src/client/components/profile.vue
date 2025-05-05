@@ -17,12 +17,12 @@ const { t } = useTranslation('profile');
 
 <template>
   <div>
-  <p>profile</p>
+  <p>{{ t("title") }}</p>
   <ul>
-    <li>email: {{ email }}</li>
-    <li><a href="/password">Update Password</a></li>
+    <li>{{ t("email_label") }}: {{ email }}</li>
+    <li><a href="/password">{{ t("update_password") }}</a></li>
     <li><router-link v-if="state.userInfo.isAdmin" to="/admin" class="button">{{ t("admin_link") }}</router-link></li>
-    <router-link :to="{ name: 'logout' }">Logout</router-link>
+    <router-link :to="{ name: 'logout' }">{{ t("logout") }}</router-link>
   </ul>
 </div>
 </template>

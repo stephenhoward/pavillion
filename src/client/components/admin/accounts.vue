@@ -1,6 +1,7 @@
 <script setup>
   import { onBeforeMount, reactive, inject } from 'vue';
   import { DateTime } from 'luxon';
+  import { useTranslation } from 'i18next-vue';
   import ModelService from '../../service/models';
   import AccountInvitation from '../../../common/model/invitation';
   import { useInvitationStore } from '../../stores/invitationStore';
@@ -8,6 +9,9 @@
 
   const store = useInvitationStore();
   const authn = inject('authn');
+  const { t } = useTranslation('admin', {
+    keyPrefix: 'accounts',
+  });
 
   onBeforeMount(async () => {
     let invitations = await ModelService.listModels('/api/accounts/v1/invitations');
@@ -21,12 +25,12 @@
   });
   
   const formatExpirationTime = (expTime) => {
-    if (!expTime) return 'Unknown';
+    if (!expTime) return t('unknown_expiration');
     
     const expirationDateTime = DateTime.fromJSDate(new Date(expTime));
     const now = DateTime.now();
     
-    return expirationDateTime < now ? 'Expired' : expirationDateTime.toLocaleString(DateTime.DATETIME_SHORT);
+    return expirationDateTime < now ? t('expired') : expirationDateTime.toLocaleString(DateTime.DATETIME_SHORT);
   };
 
   const isExpired = (expTime) => {
@@ -74,21 +78,21 @@
 
 <template>
     <div>
-      <h3>Account Applications</h3>
-    <h3>Account Invitations</h3>
+      <h3>{{ t('account_applications') }}</h3>
+    <h3>{{ t('account_invitations') }}</h3>
     <div v-if="state.resendSuccess" class="success-message">
-      Successfully resent invitation to {{ state.resendSuccess }}
+      {{ t('resend_success', { email: state.resendSuccess }) }}
     </div>
     <div v-if="state.resendError" class="error-message">
-      Failed to resend invitation to {{ state.resendError }}
+      {{ t('resend_error', { email: state.resendError }) }}
     </div>
-    <button type="button" @click="state.addInvite=true">Invite New Account</button>
+    <button type="button" @click="state.addInvite=true">{{ t('invite_new_account') }}</button>
     <table>
         <thead>
             <tr>
-            <th scope="col">Email</th>
-            <th scope="col">Expires At</th>
-            <th scope="col">Actions</th>
+            <th scope="col">{{ t('email_column') }}</th>
+            <th scope="col">{{ t('expires_column') }}</th>
+            <th scope="col">{{ t('actions_column') }}</th>
             </tr>
         </thead>
         <tbody>
@@ -99,10 +103,10 @@
             </td>
             <td>
                 <button type="button" @click="resendInvitation(invitation)" :disabled="state.resending === invitation.id">
-                  <span v-if="state.resending === invitation.id">Sending...</span>
-                  <span v-else>Resend</span>
+                  <span v-if="state.resending === invitation.id">{{ t('sending') }}</span>
+                  <span v-else>{{ t('resend') }}</span>
                 </button>
-                <button type="button" @click="cancelInvitation(invitation)">Cancel</button>
+                <button type="button" @click="cancelInvitation(invitation)">{{ t('cancel') }}</button>
             </td>
             </tr>
         </tbody>
@@ -110,7 +114,7 @@
     <div v-if="state.addInvite">
     <invite-form-view @close="state.addInvite=false" />
     </div>
-    <h3>Accounts</h3>
+    <h3>{{ t('accounts_title') }}</h3>
     </div>
 </template>
 

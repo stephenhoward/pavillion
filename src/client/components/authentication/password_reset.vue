@@ -12,7 +12,7 @@
         <p>{{ state.isRegistration ? t('registration_new_password') : t('set_password_prompt') }}</p>
         <input type="password" :placeholder="t('password_placeholder')" v-model="state.password">
         <input type="password" :placeholder="t('password2_placeholder')" v-model="state.password2" @keyup.enter="setPassword">
-        <button type="button" @click="setPassword" class="primary icofont-arrow-right"><span class="sr-only">Next</span></button>
+        <button type="button" @click="setPassword" class="primary icofont-arrow-right"><span class="sr-only">{{ t("next") }}</span></button>
         <div v-if="state.form_error" class="error">{{ t(state.form_error) }}</div>
     </div>
 </template>

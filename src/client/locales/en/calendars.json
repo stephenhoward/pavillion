@@ -8,7 +8,8 @@
     "create_button": "Create Event",
     "update_button": "Update Event",
     "name_placeholder": "event name",
-    "description_placeholder": "event description"
+    "description_placeholder": "event description",
+    "title": "Calendar"
   }
 }
 

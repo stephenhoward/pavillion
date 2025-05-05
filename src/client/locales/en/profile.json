@@ -1,3 +1,7 @@
 {
-  "admin_link": "Admin"
+  "admin_link": "Admin",
+  "title": "Profile",
+  "email_label": "Email",
+  "update_password": "Update Password",
+  "logout": "Logout"
 }

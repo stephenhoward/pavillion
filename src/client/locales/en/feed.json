@@ -1,0 +1,7 @@
+{
+    "title": "Feed",
+    "events_description": "Events from calendars you follow",
+    "calendars_description": "Calendars you follow",
+    "follow_interface_description": "An interface for following new calendars",
+    "follow_identifier_description": "A place to see your own follow identifier"
+}

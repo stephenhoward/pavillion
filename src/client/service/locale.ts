@@ -9,6 +9,8 @@ import enCalendars from '@/client/locales/en/calendars.json';
 import enEditEvent from '@/client/locales/en/event_editor.json';
 import enProfile from '@/client/locales/en/profile.json';
 import enAdmin from '@/client/locales/en/admin.json';
+import enInbox from '@/client/locales/en/inbox.json';
+import enFeed from '@/client/locales/en/feed.json';
 
 export const initI18Next = () => {
   // Initialize i18next with the standard initialization method
@@ -26,6 +28,8 @@ export const initI18Next = () => {
           event_editor: enEditEvent,
           profile: enProfile,
           admin: enAdmin,
+          inbox: enInbox,
+          feed: enFeed,
         }
       },
       detection: {

@@ -35,6 +35,7 @@
     "reset_button": "submit code",
     "password_placeholder": "password",
     "password2_placeholder": "confirm password",
+    "next": "Next",
 
     "bad_token": "invalid or expired token",
     "missing_password": "please enter a password",

@@ -74,7 +74,7 @@ div.schedule {
     <div class="event">
         <div class="error" v-if="state.err">{{ state.err }}</div>
         <section class="description">
-            <label>Event Description</label>
+            <label>{{ t('event_description_label') }}</label>
             <select v-model="state.lang">
                 <option v-for="lang in languages" :value="lang">{{  iso6391.getName(lang) }}</option>
             </select>
@@ -88,7 +88,7 @@ div.schedule {
             </div>
         </section>
         <section class="location">
-            <label>Location</label>
+            <label>{{ t('location_label') }}</label>
             <input type="text" name="name" v-bind:placeholder="t('location_name_placeholder')" v-model="props.event.location.name">
             <input type="text" name="address" v-bind:placeholder="t('address_placeholder')" v-model="props.event.location.address">
             <input type="text" name="city" v-bind:placeholder="t('city_placeholder')" v-model="props.event.location.city">
@@ -96,7 +96,7 @@ div.schedule {
             <input type="text" name="postalCode" v-bind:placeholder="t('postalCode_placeholder')" v-model="props.event.location.postalCode">
         </section>
         <section>
-            <label>Dates</label>
+            <label>{{ t('dates_label') }}</label>
             <div class="schedule" v-for="(schedule,index) in props.event.schedules">
                 <button class="remove" v-if="props.event.schedules.length > 1" type="button" @click="props.event.dropSchedule(index)">&times;</button>
                 <event-recurrence-view :schedule="schedule" />
@@ -105,7 +105,7 @@ div.schedule {
         </section>
         <section>
           <button type="submit" @click="saveModel(props.event)">{{ props.event.id ? t("update_button") : t("create_button") }}</button>
-          <button type="button" @click="$emit('close')">Close</button>
+          <button type="button" @click="$emit('close')">{{ t("close_button") }}</button>
         </section>
     </div>
     </modal-layout>

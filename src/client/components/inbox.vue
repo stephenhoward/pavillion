@@ -1,9 +1,12 @@
 <script setup>
+import { useTranslation } from 'i18next-vue';
+
+const { t } = useTranslation('inbox');
 </script>
 
 <template>
-  <p>Notifications</p>
-  notifications of follows and reposts
+  <p>{{ t("title") }}</p>
+  {{ t("description") }}
 </template>
 
 <style scoped lang="scss">
