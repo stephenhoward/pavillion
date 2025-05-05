@@ -1,5 +1,5 @@
 <style scoped lang="scss">
-@use '../../assets/mixins' as *;
+@use '../../../assets/mixins' as *;
 section {
     border-top: 1px soilid $light-mode-border;
     padding: 10px;
@@ -83,10 +83,10 @@ div.schedule {
 <script setup>
     import { reactive } from 'vue';
     import { useTranslation } from 'i18next-vue';
-    import AccountInvitation from '../../../common/model/invitation';
-    import { useInvitationStore } from '../../stores/invitationStore';
-    import ModelService from '../../service/models';
-    import ModalLayout from '../modal.vue';
+    import AccountInvitation from '../../../../common/model/invitation';
+    import { useInvitationStore } from '../../../stores/invitationStore';
+    import ModelService from '../../../service/models';
+    import ModalLayout from '../../modal.vue';
 
     const emit = defineEmits(['close']);
     const invitationStore = useInvitationStore();

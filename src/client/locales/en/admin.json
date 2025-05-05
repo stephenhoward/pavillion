@@ -17,7 +17,10 @@
     },
     "accounts": {
         "account_applications": "Account Applications",
-        "account_invitations": "Account Invitations",
+        "accounts_title": "Accounts"
+    },
+    "invitations": {
+        "title": "Account Invitations",
         "resend_success": "Successfully resent invitation to {{email}}",
         "resend_error": "Failed to resend invitation to {{email}}",
         "invite_new_account": "Invite New Account",
@@ -27,7 +30,6 @@
         "sending": "Sending...",
         "resend": "Resend",
         "cancel": "Cancel",
-        "accounts_title": "Accounts",
         "unknown_expiration": "Unknown",
         "expired": "Expired"
     },
