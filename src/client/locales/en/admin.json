@@ -7,11 +7,13 @@
     },
     "menu": {
         "back": "< back",
+        "general_settings": "General",
         "instance_name_title": "Instance Name/Title",
         "registration_mode": "Registration Mode",
         "accounts_link": "Accounts",
+        "federation_settings": "Federation",
         "blocked_instances": "List of blocked instances",
-        "payment_details": "Details needed for pay-what-you-can form"
+        "payment_details": "Funding"
     },
     "accounts": {
         "account_applications": "Account Applications",
@@ -28,5 +30,24 @@
         "accounts_title": "Accounts",
         "unknown_expiration": "Unknown",
         "expired": "Expired"
+    },
+    "settings": {
+        "title": "General settings",
+        "instance_name": "Instance Name",
+        "instance_name_placeholder": "Instance Name",
+        "registration_mode": "Registration Mode",
+        "open": "Open",
+        "invite": "Invite Only",
+        "apply": "Application Only",
+        "closed": "Closed"
+    },
+    "federation": {
+        "title": "Federation settings",
+        "blocked_instances_title": "Blocked instances",
+        "blocked_instances_description": "This instance will not send or receive messages from these instances:"
+    },
+    "funding": {
+        "title": "Funding settings",
+        "tmp_note": "settings for pay-what-you-can feature"
     }
 }

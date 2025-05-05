@@ -25,6 +25,9 @@ import Authentication from '@/client/service/authn';
 import Config from '@/client/service/config';
 import InvitesListView from '@/client/components/admin/accounts.vue';
 import AcceptInviteView from '@/client/components/registration/accept_invite.vue';
+import AdminSettingsView from '@/client/components/admin/settings.vue';
+import FederationSettingsView from '@/client/components/admin/federation.vue';
+import FundingSettingsView from '@/client/components/admin/funding.vue';
 
 Config.init().then( (config) => {
 
@@ -59,7 +62,10 @@ const routes: RouteRecordRaw[] = [
     },
     { path: '/admin', component: AdminViews, name: 'admin', beforeEnter: mustBeAdmin,
         children: [
+            { path: 'settings', component: AdminSettingsView, name: 'admin_settings', beforeEnter: mustBeAdmin },
             { path: 'accounts', component: InvitesListView, name: 'accounts', beforeEnter: mustBeAdmin },
+            { path: 'federation', component: FederationSettingsView, name: 'federation', beforeEnter: mustBeAdmin },
+            { path: 'funding', component: FundingSettingsView, name: 'funding', beforeEnter: mustBeAdmin },
         ]
     },
     { path: '/auth', component: AuthViews, name: 'auth',

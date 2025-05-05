@@ -1,5 +1,5 @@
 <script setup>
-    import { reactive, inject } from 'vue';
+    import { inject } from 'vue';
     import { useTranslation } from 'i18next-vue';
     import { useRoute } from 'vue-router';
 
@@ -19,11 +19,10 @@
 <div class="root">
     <nav>
         <li><router-link to="/profile" class="button">{{ t("back") }}</router-link></li>
-        <li>{{ t("instance_name_title") }}</li>
-        <li>{{ t("registration_mode") }}: {{ site_config.settings.registrationMode || 'closed' }}</li>
-        <li :class="{ selected: isActive('/accounts'), badged: true }"><router-link :to="{ name: 'accounts' }">{{ t("accounts_link") }}</router-link></li>
-        <li>{{ t("blocked_instances") }}</li>
-        <li>{{ t("payment_details") }}</li>
+        <li :class="{ selected: isActive('/admin/settings') }"><router-link :to="{ name: 'admin_settings'}">{{  t("general_settings") }}</router-link></li>
+        <li :class="{ selected: isActive('/admin/accounts'), badged: false }"><router-link :to="{ name: 'accounts' }">{{ t("accounts_link") }}</router-link></li>
+        <li :class="{ selected: isActive('/admin/federation') }"><router-link :to="{ name: 'federation' }">{{ t("federation_settings") }}</router-link></li>
+        <li :class="{ selected: isActive('/admin/funding') }"><router-link :to="{ name: 'funding' }">{{ t("payment_details") }}</router-link></li>
     </nav>
     <div id="main">
         <RouterView />
