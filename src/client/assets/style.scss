@@ -16,6 +16,25 @@ html,body {
   padding: 0;
 }
 
+button, a.button {
+  font-size: 10pt;
+  background: none;
+  border: 0;
+  border: 1px solid #ccc;
+  text-align: center;
+  text-decoration: none;
+  padding: 8px 8px;
+  border-radius: $form-input-border-radius;
+  color: #ccc;
+}
+button.primary {
+  font-size: 12pt;
+  padding: 8px 8px;
+  background: $light-mode-button-background;
+  border: none;
+  color: $light-mode-text;
+}
+
 #app {
     height: 100%;
     width: 100%;
@@ -31,6 +50,14 @@ html,body {
         background-color: #44444a;
         // background: $dark-mode-background-gradient;
         color:            $dark-mode-text;
+    }
+    button, a.button {
+      color: $dark-mode-text;
+      border: 1px solid #777;
+    }
+    button.primary {
+        background: $dark-mode-button-background;
+        color: $dark-mode-text;
     }
 }
 

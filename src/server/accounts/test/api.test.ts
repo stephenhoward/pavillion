@@ -194,7 +194,7 @@ describe('Applications API', () => {
         const response = await request(testApp(router)).get('/handler');
 
         expect(response.status).toBe(200);
-        expect(response.body.applications).toEqual([]);
+        expect(response.body).toEqual([]);
         expect(stub2.called).toBe(true);
     });
 

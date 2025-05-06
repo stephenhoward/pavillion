@@ -1,13 +1,13 @@
 <template>
     <section>
-    <h3>{{ t('account_invitations') }}</h3>
+    <h3>{{ t('title') }}</h3>
+    <button type="button" @click="state.addInvite=true">{{ t('invite_new_account') }}</button>
     <div v-if="state.resendSuccess" class="success-message">
     {{ t('resend_success', { email: state.resendSuccess }) }}
     </div>
     <div v-if="state.resendError" class="error-message">
     {{ t('resend_error', { email: state.resendError }) }}
     </div>
-    <button type="button" @click="state.addInvite=true">{{ t('invite_new_account') }}</button>
     <table>
         <thead>
             <tr>
@@ -138,5 +138,16 @@
 }
 button {
   margin-right: 5px;
+}
+
+section > h3 {
+  margin-top: 0;
+  float: left;
+}
+section > button {
+  float: right;
+}
+table, div.success-message, div.error-message {
+  clear: both;
 }
 </style>

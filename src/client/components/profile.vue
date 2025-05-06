@@ -21,7 +21,7 @@ const { t } = useTranslation('profile');
   <ul>
     <li>{{ t("email_label") }}: {{ email }}</li>
     <li><a href="/password">{{ t("update_password") }}</a></li>
-    <li><router-link v-if="state.userInfo.isAdmin" to="/admin/settings" class="button">{{ t("admin_link") }}</router-link></li>
+    <li><router-link v-if="state.userInfo.isAdmin" to="/admin/settings">{{ t("admin_link") }}</router-link></li>
     <router-link :to="{ name: 'logout' }">{{ t("logout") }}</router-link>
   </ul>
 </div>

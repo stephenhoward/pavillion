@@ -32,6 +32,8 @@ $main-area-menu-gutter: 40px;
 $capsule-background: #CCC;
 $dark-mode-capsule-background: #555;
 
+$form-input-border-radius: 20px;
+
 @mixin flexible-container {
     display: flex;
     justify-content: space-between;
@@ -78,7 +80,6 @@ $dark-mode-capsule-background: #555;
 }
 
 @mixin auth-form {
-    $form-input-border-radius: 20px;
     background-color: rgba(0,0,0,0.1);
     background: #eef;
     box-shadow: rgba(0,0,0,0.2) 8px 8px 12px;
@@ -124,23 +125,12 @@ $dark-mode-capsule-background: #555;
     button, a.button {
         font-size: 12pt;
         margin: 6px 0px;
-        background: none;
-        border: 0;
-        border: 1px solid #ccc;
         text-align: center;
-        text-decoration: none;
-        padding: 8px 8px;
-        border-radius: $form-input-border-radius;
         grid-column-start: 1;
         grid-column-end: 3;
-        color: #555;
     }
     button.primary {
         font-size: 14pt;
-        padding: 8px 8px;
-        background: $light-mode-button-background;
-        border: none;
-        color: $light-mode-text;
     }
 }
 
@@ -157,14 +147,6 @@ $dark-mode-capsule-background: #555;
     }
 
     a {
-        color: $dark-mode-text;
-    }
-    button, a.button {
-        color: $dark-mode-text;
-        border: 1px solid #777;
-    }
-    button.primary {
-        background: $dark-mode-button-background;
         color: $dark-mode-text;
     }
 }

@@ -43,9 +43,12 @@ const mustBeLoggedIn = (to, from, next) => {
     }
 };
 
-const mustBeAdmin = (to, from) => {
+const mustBeAdmin = (to, from, next) => {
     if (!authentication.isAdmin()) {
-        return false;
+        next({ name: 'login'});
+    }
+    else {
+        next();
     }
 };
 

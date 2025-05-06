@@ -16,8 +16,30 @@
         "payment_details": "Funding"
     },
     "accounts": {
-        "account_applications": "Account Applications",
+        "applications_tab": "Applications",
+        "invitations_tab": "Invitations",
+        "accounts_tab": "Accounts",
         "accounts_title": "Accounts"
+    },
+    "applications": {
+        "title": "Account Applications",
+        "processing_success": "Successfully processed application for {{email}}",
+        "processing_error": "Failed to process application for {{email}}",
+        "email_column": "Email",
+        "status_column": "Status",
+        "date_column": "Date",
+        "actions_column": "Actions",
+        "view": "View",
+        "application_details": "Application Details",
+        "email_label": "Email",
+        "status_label": "Status",
+        "message_label": "Application Message",
+        "processing": "Processing...",
+        "accept": "Accept",
+        "reject": "Reject",
+        "silent_reject": "Reject (No Email)",
+        "status_pending": "Pending",
+        "status_rejected": "Rejected"
     },
     "invitations": {
         "title": "Account Invitations",

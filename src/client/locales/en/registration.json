@@ -9,7 +9,7 @@
     "account_exists": "An account already exists for this email address"
   },
   "apply": {
-    "title": "Apply for an Account",
+    "title": "Apply for an account",
     "create_button": "Apply for an Account",
     "email": "email",
     "message_label": "Message",

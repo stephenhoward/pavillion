@@ -18,7 +18,7 @@
 <template>
 <div class="root">
     <nav>
-        <li><router-link to="/profile" class="button">{{ t("back") }}</router-link></li>
+        <li><router-link to="/profile">{{ t("back") }}</router-link></li>
         <li :class="{ selected: isActive('/admin/settings') }"><router-link :to="{ name: 'admin_settings'}">{{  t("general_settings") }}</router-link></li>
         <li :class="{ selected: isActive('/admin/accounts'), badged: false }"><router-link :to="{ name: 'accounts' }">{{ t("accounts_link") }}</router-link></li>
         <li :class="{ selected: isActive('/admin/federation') }"><router-link :to="{ name: 'federation' }">{{ t("federation_settings") }}</router-link></li>

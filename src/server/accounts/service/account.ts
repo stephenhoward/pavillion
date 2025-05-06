@@ -13,6 +13,9 @@ import { AccountApplicationAlreadyExistsError, noAccountInviteExistsError, Accou
 import AuthenticationService from '@/server/authentication/service/auth';
 import AccountRegistrationEmail from '@/server/accounts/model/registration_email';
 import AccountInvitationEmail from '@/server/accounts/model/invitation_email';
+import ApplicationAcceptedEmail from '@/server/accounts/model/application_accepted_email';
+import ApplicationRejectedEmail from '@/server/accounts/model/application_rejected_email';
+import ApplicationAcknowledgmentEmail from '@/server/accounts/model/application_acknowledgment_email';
 
 type AccountInfo = {
     account: Account,
@@ -101,6 +104,15 @@ class AccountService {
         return accountInfo.account;
     }
 
+    /**
+     * Allows a user to apply for an account when registration mode is set to 'apply'
+     *
+     * @param email - The email address of the applicant
+     * @param message - Any message the applicant wants to include with their application
+     * @returns A promise that resolves to true if the application was successfully created
+     * @throws AccountApplicationsClosedError if registration mode is not set to 'apply'
+     * @throws AccountApplicationAlreadyExistsError if an application already exists for the provided email
+     */
     static async applyForNewAccount(email:string, message: string): Promise<boolean> {
 
         const settings = await ServiceSettings.getInstance();
@@ -118,7 +130,11 @@ class AccountService {
             message: message
         });
 
-        EmailService.sendEmail(application.email, 'Thank you for applying to our service', 'Thank you for applying');
+        await application.save();
+
+        // Send acknowledgment email to the applicant
+        const acknowledgmentEmail = new ApplicationAcknowledgmentEmail(application.toModel());
+        await EmailService.sendEmail(acknowledgmentEmail.buildMessage('en'));
 
         return true;
     }
@@ -205,6 +221,13 @@ class AccountService {
         return true;
     }
 
+    /**
+     * Approves an account application and creates a new account for the applicant
+     *
+     * @param id - The ID of the application to approve
+     * @returns A promise that resolves to the newly created account or undefined if there was an error
+     * @throws noAccountApplicationExistsError if no application exists with the given ID
+     */
     static async acceptAccountApplication(id: string): Promise<Account|undefined> {
 
         const application = await AccountApplicationEntity.findByPk(id);
@@ -215,20 +238,40 @@ class AccountService {
 
         const accountInfo = await AccountService._setupAccount(application.email);
 
-        EmailService.sendEmail(accountInfo.account.email, 'Welcome to our service', 'Thank you for applying' + accountInfo.password_code);
+        // Send email before destroying the application
+        const message = new ApplicationAcceptedEmail(accountInfo.account, accountInfo.password_code);
+        EmailService.sendEmail(message.buildMessage(accountInfo.account.language));
+
+        // Delete the application now that it's been accepted and account created
+        await application.destroy();
+
         return accountInfo.account;
     }
 
-    static async rejectAccountApplication(id: string): Promise<undefined> {
-
+    /**
+     * Rejects an account application and optionally notifies the applicant
+     *
+     * @param id - The ID of the application to reject
+     * @param silent - If true, no email notification will be sent to the applicant (default: false)
+     * @returns A promise that resolves to undefined
+     * @throws noAccountApplicationExistsError if no application exists with the given ID
+     */
+    static async rejectAccountApplication(id: string, silent: boolean = false): Promise<undefined> {
         const application = await AccountApplicationEntity.findByPk(id);
 
-        if (! application ) {
+        if (!application) {
             throw new noAccountApplicationExistsError();
         }
 
-        application.destroy();
-        EmailService.sendEmail(application.email, 'Your account application was declined', 'Thank you for applying');
+        // Update application status instead of destroying it
+        application.status = 'rejected';
+        application.status_timestamp = new Date();
+        await application.save();
+
+        if (!silent) {
+            const message = new ApplicationRejectedEmail(application.toModel());
+            await EmailService.sendEmail(message.buildMessage('en'));
+        }
     }
 
     static async listInvitations(): Promise<AccountInvitation[]> {

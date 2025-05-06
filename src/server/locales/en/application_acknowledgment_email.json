@@ -1,0 +1,10 @@
+{
+    "subject": "Account Application Received",
+    "title": "Application Confirmation",
+    "greeting": "Hello,",
+    "acknowledgment_message": "We've received your application for an account on our service. Thank you for your interest in joining our community.",
+    "review_message": "Our administrators will review your application. You'll be notified via email when a decision has been made.",
+    "signature": "Thank you,",
+    "team_name": "The Team",
+    "footer_text": "This is an automated message, please do not reply to this email."
+}

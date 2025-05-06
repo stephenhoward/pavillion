@@ -1,0 +1,13 @@
+{
+    "subject": "Your Account Application Has Been Approved",
+    "title": "Application Approved",
+    "greeting": "Hello,",
+    "application_accepted_message": "We're pleased to inform you that your application for an account has been approved. We're excited to welcome you to our community.",
+    "complete_registration_instruction": "To complete your registration and set up your account, please click the button below or copy and paste the link into your browser:",
+    "complete_registration_button": "Complete Registration",
+    "copy_link_text": "Or copy this link:",
+    "link_expiry_notice": "This link will expire in 24 hours. If you don't complete your registration within that time, you may need to contact support.",
+    "signature": "Thank you,",
+    "team_name": "The Team",
+    "footer_text": "This is an automated message, please do not reply to this email."
+}

@@ -134,6 +134,18 @@ export default class AuthenticationService {
         }
     }
 
+    async process_application(id: string, accepted: boolean, silent: boolean = false) {
+        try {
+            let response = await axios.post(this._accountUrl('/applications/' + id), {
+                accepted: accepted,
+                silent: silent
+            });
+            return response.data;
+        } catch (error) {
+            throw(error);
+        }
+    }
+
     logout() {
         this._unset_token();
     }

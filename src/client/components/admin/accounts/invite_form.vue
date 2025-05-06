@@ -1,72 +1,38 @@
 <style scoped lang="scss">
 @use '../../../assets/mixins' as *;
-section {
-    border-top: 1px soilid $light-mode-border;
-    padding: 10px;
-    margin-top: 10px;
-    label {
-        display: block;
-        margin-bottom: 10px;
+
+input[type="text"],input[type="password"],textarea {
+    font-size: 14pt;
+    background-color: rgba(255,255,255,0.5);
+    margin: 6px 0px;
+    grid-column: 1 / span 2;
+    border: 1px solid #ccc;
+    border-radius: $form-input-border-radius;
+    padding: 8px 18px;
+    &:focus {
+        border: 1px solid rgb(73, 111, 186);
     }
-    input {
-        -webkit-appearance: none;
-        -moz-appearance: none;
-        appearance: none;
-        font-size: 14px;
-        display: block;
-        margin: 6px 0;
-        border-radius: 6px;
-        border: 1px solid $light-mode-border;
-        padding: 6px;
-        @include dark-mode {
-            color: $dark-mode-input-text;
-            background: $dark-mode-input-background;
-            border-color: $dark-mode-border;
-        }
-    }
-    div.schedule {
-        margin-bottom: 15px;
-    }
-    @include dark-mode {
-        border-top: 1px solid $dark-mode-border;
-    }
+    display: block;
 }
-section.location, section.description {
-    input[type="text"] {
-        width: 100%;
-    }
-}
-section.location {
-    input[type="text"] {
-        max-width: 500px;
-    }
-}
+
 button {
-    font-size: 14px;
-    border: 1px solid $light-mode-border;
-    border-radius: 6px;
-    padding: 6px 10px;
+    display: inline-block;
     margin-right: 10px;
-    @include dark-mode {
+}
+
+
+@include dark-mode {
+
+    input[type="text"],textarea {
+        background-color: rgba(100,100,100,0.2);
+        border: 1px solid #777;
         color: $dark-mode-text;
-        background: $dark-mode-background;
-        border-color: $dark-mode-border;
-    }
-    &.remove {
-        font-size: 20px;
-        background: none;
-        border: none;
-        display: block;
-        float: right;
-    }
-    img {
-        width: 16px;
+        &:focus {
+            border: 1px solid #abd;
+        }
     }
 }
 
-div.schedule {
-    width: 100%;
-}
 </style>
 
 <template>
@@ -74,7 +40,7 @@ div.schedule {
     <div class="invite">
         <div class="error" v-if="state.err">{{ state.err }}</div>
         <input type="text" name="email" v-bind:placeholder="t('email_placeholder')" v-model="state.email">
-        <button type="submit" @click="sendInvite(state.email)">{{ t("invite_button") }}</button>
+        <button type="submit" class="primary" @click="sendInvite(state.email)">{{ t("invite_button") }}</button>
         <button type="button" @click="$emit('close')">{{ t("close_button") }}</button>
     </div>
     </modal-layout>

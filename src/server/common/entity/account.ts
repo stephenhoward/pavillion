@@ -88,10 +88,24 @@ class AccountApplicationEntity extends Model {
     @Column({ type: DataType.STRING })
     declare message: string;
 
+    @Column({
+        type: DataType.ENUM('pending', 'rejected'),
+        defaultValue: 'pending'
+    })
+    declare status: string;
+
+    @Column({ type: DataType.DATE })
+    declare status_timestamp: Date;
+
     toModel(): AccountApplication {
-        return new AccountApplication( this.id, this.email, this.message );
+        return new AccountApplication(this.id, this.email, this.message, this.status, this.status_timestamp);
     };
 
+    @BeforeCreate
+    static setInitialStatus(instance: AccountApplicationEntity) {
+        instance.status = 'pending';
+        instance.status_timestamp = new Date();
+    }
 };
 
 @Table({ tableName: 'profile' })

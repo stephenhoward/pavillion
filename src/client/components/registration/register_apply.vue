@@ -1,13 +1,16 @@
 <template>
-    <div v-if="state.showSuccess" class="login">
+    <div v-if="state.showSuccess" class="register-apply">
         <h3>{{ t('title') }}</h3>
-        {{ t('application_submitted') }}
+        <p>{{ t('application_submitted') }}</p>
+        <router-link :to="{ name: 'login', params: { em: state.email}}">
+            {{ t("go_login") }}
+        </router-link>
     </div>
     <div v-else class="register-apply">
         <h3>{{ t('title') }}</h3>
         <div class="error" v-if="state.err">{{ state.err }}</div>
         <input type="email"    v-bind:placeholder="t('email')"    v-model="state.email">
-        <label>{{  t('message_label') }}</label><textarea :model="state.message"></textarea>
+        <label>{{  t('message_label') }}</label><textarea v-model="state.message"></textarea>
         <button class="primary" @click="doApply" type="button">{{ t("create_button") }}</button>
         <router-link :to="{ name: 'login', params: { em: state.email}}">
             {{ t("go_login") }}
@@ -30,7 +33,7 @@
     const state = reactive({
         err      : '',
         email    : '',
-        message: '',
+        message  : '',
         showSuccess: false
     });
     const route = useRoute();

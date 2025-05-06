@@ -1,0 +1,9 @@
+{
+    "subject": "Regarding Your Account Application",
+    "title": "Account Application Status",
+    "greeting": "Hello,",
+    "application_rejected_message": "Thank you for your interest in joining our service. After careful review of your application, we regret to inform you that we are unable to approve your request for an account at this time.",
+    "signature": "Best regards,",
+    "team_name": "The Team",
+    "footer_text": "This is an automated message, please do not reply to this email."
+}
