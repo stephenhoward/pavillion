@@ -2,33 +2,32 @@ import express, { Request, Response } from 'express';
 
 import { Account } from '@/common/model/account';
 import ExpressHelper from '@/server/common/helper/express';
-import EventProxy from '@/server/common/helper/event_proxy';
 import CalendarService from '@/server/calendar/service/calendar';
 
 class CalendarRoutes {
-    router: express.Router;
+  router: express.Router;
 
-    constructor() {
+  constructor() {
 
-        this.router = express.Router();
+    this.router = express.Router();
 
-        this.router.get('/calendars', ExpressHelper.loggedInOnly, (req, res) => this.listCalendars(req, res));
+    this.router.get('/calendars', ExpressHelper.loggedInOnly, (req, res) => this.listCalendars(req, res));
 
+  }
+
+  async listCalendars(req: Request, res: Response) {
+    const account = req.user as Account;
+
+    if (!account) {
+      res.status(400).json({
+        "error": "missing account for calendars. Not logged in?",
+      });
+      return;
     }
 
-    async listCalendars(req: Request, res: Response) {
-        const account = req.user as Account;
-
-        if (!account) {
-            res.status(400).json({
-                "error": "missing account for calendars. Not logged in?"
-            });
-            return;
-        }
-
-        const calendars = await CalendarService.editableCalendarsForUser(account);
-        res.json(calendars.map((calendar) => calendar.toObject()));
-    }
+    const calendars = await CalendarService.editableCalendarsForUser(account);
+    res.json(calendars.map((calendar) => calendar.toObject()));
+  }
 
 }
 

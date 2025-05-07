@@ -1,51 +1,51 @@
 <template>
-    <modal-layout :title="t('application_details')" @close="$emit('close')">
-      <div>
-        <p><strong>{{ t('email_label') }}:</strong> {{ application.email }}</p>
-        <p>
-          <strong>{{ t('status_label') }}:</strong> 
-          <span :class="getStatusClass(application.status)">{{ formatStatus(application.status) }}</span>
-          <span v-if="application.statusTimestamp" class="status-date">
-            ({{ formatDate(application.statusTimestamp) }})
-          </span>
-        </p>
-        <div class="message-container">
-          <p><strong>{{ t('message_label') }}:</strong></p>
-          <pre>{{ application.message }}</pre>
-        </div>
-        <div class="action-buttons">
-          <button 
-            type="button" 
-            class="accept" 
-            @click="accept" 
-            :disabled="processing"
-          >
-            <span v-if="processing === 'accept'">{{ t('processing') }}</span>
-            <span v-else>{{ t('accept') }}</span>
-          </button>
-          <button 
-            v-if="application.status !== 'rejected'"
-            type="button" 
-            class="reject" 
-            @click="reject(false)" 
-            :disabled="processing"
-          >
-            <span v-if="processing === 'reject'">{{ t('processing') }}</span>
-            <span v-else>{{ t('reject') }}</span>
-          </button>
-          <button 
-            v-if="application.status !== 'rejected'"
-            type="button" 
-            class="silent-reject" 
-            @click="reject(true)" 
-            :disabled="processing"
-          >
-            <span v-if="processing === 'silent-reject'">{{ t('processing') }}</span>
-            <span v-else>{{ t('silent_reject') }}</span>
-          </button>
-        </div>
+  <ModalLayout :title="t('application_details')" @close="$emit('close')">
+    <div>
+      <p><strong>{{ t('email_label') }}:</strong> {{ application.email }}</p>
+      <p>
+        <strong>{{ t('status_label') }}:</strong>
+        <span :class="getStatusClass(application.status)">{{ formatStatus(application.status) }}</span>
+        <span v-if="application.statusTimestamp" class="status-date">
+          ({{ formatDate(application.statusTimestamp) }})
+        </span>
+      </p>
+      <div class="message-container">
+        <p><strong>{{ t('message_label') }}:</strong></p>
+        <pre>{{ application.message }}</pre>
       </div>
-  </modal-layout>
+      <div class="action-buttons">
+        <button
+          type="button"
+          class="accept"
+          @click="accept"
+          :disabled="processing"
+        >
+          <span v-if="processing === 'accept'">{{ t('processing') }}</span>
+          <span v-else>{{ t('accept') }}</span>
+        </button>
+        <button
+          v-if="application.status !== 'rejected'"
+          type="button"
+          class="reject"
+          @click="reject(false)"
+          :disabled="processing"
+        >
+          <span v-if="processing === 'reject'">{{ t('processing') }}</span>
+          <span v-else>{{ t('reject') }}</span>
+        </button>
+        <button
+          v-if="application.status !== 'rejected'"
+          type="button"
+          class="silent-reject"
+          @click="reject(true)"
+          :disabled="processing"
+        >
+          <span v-if="processing === 'silent-reject'">{{ t('processing') }}</span>
+          <span v-else>{{ t('silent_reject') }}</span>
+        </button>
+      </div>
+    </div>
+  </ModalLayout>
 </template>
 
 <script setup>
@@ -57,8 +57,8 @@ import ModalLayout from '../../modal.vue';
 const props = defineProps({
   application: {
     type: Object,
-    required: true
-  }
+    required: true,
+  },
 });
 
 const emit = defineEmits(['close', 'accept', 'reject']);
@@ -77,7 +77,8 @@ const accept = async () => {
   processing.value = 'accept';
   try {
     await emit('accept', props.application);
-  } finally {
+  }
+  finally {
     processing.value = null;
   }
 };
@@ -86,7 +87,8 @@ const reject = async (silent) => {
   processing.value = silent ? 'silent-reject' : 'reject';
   try {
     await emit('reject', props.application, silent);
-  } finally {
+  }
+  finally {
     processing.value = null;
   }
 };
@@ -142,7 +144,7 @@ const formatDate = (date) => {
   margin-top: 20px;
   display: flex;
   gap: 10px;
-  
+
   .accept {
     background-color: #4CAF50;
     color: white;
@@ -150,7 +152,7 @@ const formatDate = (date) => {
       background-color: darken(#4CAF50, 10%);
     }
   }
-  
+
   .reject, .silent-reject {
     background-color: #F44336;
     color: white;

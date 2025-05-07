@@ -7,77 +7,77 @@ import EventService from '@/server/calendar/service/events';
 import CalendarService from '@/server/calendar/service/calendar';
 
 class EventRoutes extends EventProxy {
-    router: express.Router;
-    service: EventService;
+  router: express.Router;
+  service: EventService;
 
-    constructor() {
-        super();
+  constructor() {
+    super();
 
-        this.router = express.Router();
+    this.router = express.Router();
 
-        this.router.get('/events', ExpressHelper.loggedInOnly, (req, res) => this.listEvents(req, res));
+    this.router.get('/events', ExpressHelper.loggedInOnly, (req, res) => this.listEvents(req, res));
 
-        this.router.post('/events', ExpressHelper.loggedInOnly, (req, res) => this.createEvent(req, res));
+    this.router.post('/events', ExpressHelper.loggedInOnly, (req, res) => this.createEvent(req, res));
 
-        this.router.post('/events/:id', ExpressHelper.loggedInOnly, (req, res) => this.updateEvent(req,res));
+    this.router.post('/events/:id', ExpressHelper.loggedInOnly, (req, res) => this.updateEvent(req,res));
 
-        this.service = new EventService();
-        this.proxyEvents(this.service, ['eventCreated', 'eventUpdated']);
+    this.service = new EventService();
+    this.proxyEvents(this.service, ['eventCreated', 'eventUpdated']);
+  }
+
+  async listEvents(req: Request, res: Response) {
+    const account = req.user as Account;
+
+    if (!account) {
+      res.status(400).json({
+        "error": "missing account for events. Not logged in?",
+      });
+      return;
     }
 
-    async listEvents(req: Request, res: Response) {
-        const account = req.user as Account;
+    const events = await this.service.listEvents(account);
+    res.json(events.map((event) => event.toObject()));
+  }
 
-        if (!account) {
-            res.status(400).json({
-                "error": "missing account for events. Not logged in?"
-            });
-            return;
-        }
+  async createEvent(req: Request, res: Response) {
+    const account = req.user as Account;
 
-        const events = await this.service.listEvents(account);
-        res.json(events.map((event) => event.toObject()));
+    if (!account) {
+      res.status(400).json({
+        "error": "missing account for events. Not logged in?",
+      });
+      return;
     }
-
-    async createEvent(req: Request, res: Response) {
-        const account = req.user as Account;
-
-        if (!account) {
-            res.status(400).json({
-                "error": "missing account for events. Not logged in?"
-            });
-            return;
-        }
-        if (!req.body.calendarId) {
-            res.status(400).json({
-                "error": "missing calendar id"
-            });
-            return;
-        }
-        const calendar = await CalendarService.getCalendar(req.body.calendarId);
-        if (!calendar) {
-            res.status(404).json({
-                "error": "calendar not found"
-            });
-            return;
-        }
-        const event = await this.service.createEvent(account, calendar, req.body);
-        res.json(event.toObject());
+    if (!req.body.calendarId) {
+      res.status(400).json({
+        "error": "missing calendar id",
+      });
+      return;
     }
-
-    async updateEvent(req: Request, res: Response) {
-        const account = req.user as Account;
-
-        if (!account) {
-            res.status(400).json({
-                "error": "missing account for events. Not logged in?"
-            });
-            return;
-        }
-        const event = await this.service.updateEvent(account, req.params.id, req.body);
-
-        res.json(event.toObject());
+    const calendar = await CalendarService.getCalendar(req.body.calendarId);
+    if (!calendar) {
+      res.status(404).json({
+        "error": "calendar not found",
+      });
+      return;
     }
+    const event = await this.service.createEvent(account, calendar, req.body);
+    res.json(event.toObject());
+  }
+
+  async updateEvent(req: Request, res: Response) {
+    const account = req.user as Account;
+
+    if (!account) {
+      res.status(400).json({
+        "error": "missing account for events. Not logged in?",
+      });
+      return;
+    }
+    const event = await this.service.updateEvent(account, req.params.id, req.body);
+
+    res.json(event.toObject());
+  }
 }
 
 export default EventRoutes;

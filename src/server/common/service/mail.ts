@@ -27,15 +27,17 @@ class EmailServiceClass {
     const defaultConfig: MailConfig = {
       transport: 'development',
       from: 'noreply@example.com',
-      settings: {}
+      settings: {},
     };
 
     try {
       if (config.has('mail')) {
         return config.get('mail');
       }
-    } catch (err) {
+    }
+    catch (err) {
       console.warn('Mail configuration not found, using default transport');
+      console.warn(err);
     }
 
     // For test environment, use testing transport
@@ -43,7 +45,7 @@ class EmailServiceClass {
       return {
         transport: 'testing',
         from: process.env.MAIL_FROM || defaultConfig.from,
-        settings: {}
+        settings: {},
       };
     }
 
@@ -54,8 +56,8 @@ class EmailServiceClass {
         from: process.env.MAIL_FROM || defaultConfig.from,
         settings: {
           outputDir: process.env.MAIL_OUTPUT_DIR || 'logs/mail',
-          console: process.env.MAIL_CONSOLE !== 'false'
-        }
+          console: process.env.MAIL_CONSOLE !== 'false',
+        },
       };
     }
 
@@ -101,12 +103,13 @@ class EmailServiceClass {
         to: data.emailAddress,
         subject: data.subject,
         text: data.textMessage,
-        html: data.htmlMessage
+        html: data.htmlMessage,
       });
 
       console.log(`Message sent (${this.mailConfig.transport}):`, info.messageId);
       return info;
-    } catch (error) {
+    }
+    catch (error) {
       console.error('Error sending email:', error);
       return null;
     }

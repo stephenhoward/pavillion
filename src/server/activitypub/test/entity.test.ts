@@ -1,5 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, assertType } from 'vitest';
-import sinon from 'sinon';
+import { describe, it, expect, assertType } from 'vitest';
 
 import CreateActivity from '@/server/activitypub/model/action/create';
 import UpdateActivity from '@/server/activitypub/model/action/update';
@@ -10,53 +9,53 @@ import UndoActivity from '@/server/activitypub/model/action/undo';
 import { ActivityPubInboxMessageEntity } from '@/server/activitypub/entity/activitypub';
 
 describe('toModel', () => {
-    it('should fail to make a message', async () => {
-        let testEntity = ActivityPubInboxMessageEntity.build({
-            type: 'NotAValidType'
-        });
-
-        expect( () => testEntity.toModel() ).toThrowError('Invalid message type: "NotAValidType"');
+  it('should fail to make a message', async () => {
+    let testEntity = ActivityPubInboxMessageEntity.build({
+      type: 'NotAValidType',
     });
 
-    it('should make a create message', async () => {
+    expect( () => testEntity.toModel() ).toThrowError('Invalid message type: "NotAValidType"');
+  });
 
-        let testEntity = ActivityPubInboxMessageEntity.build({ id: 'testId1', type: 'Create', message: { object: { id: 'testObjectId' } }});
+  it('should make a create message', async () => {
 
-        assertType<CreateActivity>( testEntity.toModel() )
-    });
+    let testEntity = ActivityPubInboxMessageEntity.build({ id: 'testId1', type: 'Create', message: { object: { id: 'testObjectId' } }});
 
-    it('should make an update message', async () => {
+    assertType<CreateActivity>( testEntity.toModel() );
+  });
 
-        let testEntity = ActivityPubInboxMessageEntity.build({ id: 'testId1', type: 'Update', message: { object: { id: 'testObjectId' } } });
+  it('should make an update message', async () => {
 
-        assertType<UpdateActivity>( testEntity.toModel() )
-    });
+    let testEntity = ActivityPubInboxMessageEntity.build({ id: 'testId1', type: 'Update', message: { object: { id: 'testObjectId' } } });
 
-    it('should make a delete message', async () => {
+    assertType<UpdateActivity>( testEntity.toModel() );
+  });
 
-        let testEntity = ActivityPubInboxMessageEntity.build({ id: 'testId1', type: 'Delete', message: {} });
+  it('should make a delete message', async () => {
 
-        assertType<DeleteActivity>( testEntity.toModel() )
-    });
+    let testEntity = ActivityPubInboxMessageEntity.build({ id: 'testId1', type: 'Delete', message: {} });
 
-    it('should make a follow message', async () => {
+    assertType<DeleteActivity>( testEntity.toModel() );
+  });
 
-        let testEntity = ActivityPubInboxMessageEntity.build({ id: 'testId1', type: 'Follow', message: {} });
+  it('should make a follow message', async () => {
 
-        assertType<FollowActivity>( testEntity.toModel() )
-    });
+    let testEntity = ActivityPubInboxMessageEntity.build({ id: 'testId1', type: 'Follow', message: {} });
 
-    it('should make an announce message', async () => {
+    assertType<FollowActivity>( testEntity.toModel() );
+  });
 
-        let testEntity = ActivityPubInboxMessageEntity.build({id: 'testId1', type: 'Announce', message: {} });
+  it('should make an announce message', async () => {
 
-        assertType<AnnounceActivity>( testEntity.toModel() )
-    });
+    let testEntity = ActivityPubInboxMessageEntity.build({id: 'testId1', type: 'Announce', message: {} });
 
-    it('should make an undo message', async () => {
+    assertType<AnnounceActivity>( testEntity.toModel() );
+  });
 
-        let testEntity = ActivityPubInboxMessageEntity.build({ id: 'testId1', type: 'Undo', message: {} });
+  it('should make an undo message', async () => {
 
-        assertType<UndoActivity>( testEntity.toModel() )
-    });
+    let testEntity = ActivityPubInboxMessageEntity.build({ id: 'testId1', type: 'Undo', message: {} });
+
+    assertType<UndoActivity>( testEntity.toModel() );
+  });
 });

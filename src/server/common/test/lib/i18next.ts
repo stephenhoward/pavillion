@@ -5,16 +5,16 @@ import path from 'path';
 
 export const initI18Next = () => {
 
-    i18next.use(Backend).init({
-        fallbackLng: 'en',
-        initAsync: false,
-        backend: {
-            loadPath: path.join(path.resolve(), "src/server/locales/{{lng}}/{{ns}}.json"),
-        }
-    });
+  i18next.use(Backend).init({
+    fallbackLng: 'en',
+    initAsync: false,
+    backend: {
+      loadPath: path.join(path.resolve(), "src/server/locales/{{lng}}/{{ns}}.json"),
+    },
+  });
 
-    handlebars.registerHelper('t', function(key: string, options: any) {
-        const lng = options.data.root.language || 'en';
-        return i18next.t(key, { lng, ...options.hash });
-    });
-}
+  handlebars.registerHelper('t', function(key: string, options: any) {
+    const lng = options.data.root.language || 'en';
+    return i18next.t(key, { lng, ...options.hash });
+  });
+};

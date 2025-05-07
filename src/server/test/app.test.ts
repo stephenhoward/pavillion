@@ -5,12 +5,12 @@ import sinon from 'sinon';
 import express from 'express';
 
 describe('Main App', () => {
-    it('should start', () => {
-        let app = express();
-        let listenStub = sinon.stub(app, 'listen');
-        main(app);
+  it('should start', () => {
+    let app = express();
+    let listenStub = sinon.stub(app, 'listen');
+    main(app);
 
-        expect(countRoutes(app)).toBeGreaterThan(0);
-        expect(listenStub.called).toBe(true);
-    });
+    expect(countRoutes(app)).toBeGreaterThan(0);
+    expect(listenStub.called).toBe(true);
+  });
 });

@@ -3,59 +3,61 @@ import AccountService from '../../service/account';
 import ExpressHelper from '../../../common/helper/express';
 
 const handlers = {
-    listInvitations: async (req: Request, res: Response) => {
-        const invitations = await AccountService.listInvitations();
-        res.json(invitations);
-    },
-    inviteToRegister: async (req: Request, res: Response) => {
-        const invitation = await AccountService.inviteNewAccount(req.body.email, req.body.message);
-        if( invitation ) {
-            res.json(invitation);
-        }
-        else {
-            res.status(400);
-            res.json({message: 'not ok'});
-        }
-    },
-    checkInviteCode: async (req: Request, res: Response) => {
-        if ( await AccountService.validateInviteCode(req.params.code) ) {
-            res.json({ message: 'ok' });
-        }
-        else {
-            res.status(404);
-            res.json({message: 'not ok'});
-        }
-    },
-    acceptInvite: async (req: Request, res: Response) => {
-        let account = await AccountService.acceptAccountInvite(req.params.code, req.body.password);
-        if ( account ) {
-            res.send(ExpressHelper.generateJWT(account));
-        }
-        else {
-            res.status(400);
-            res.json({message: 'not ok'});
-        }
-    },
-    cancelInvite: async (req: Request, res: Response) => {
-        const result = await AccountService.cancelInvite(req.params.id);
-        if (result) {
-            res.status(200);
-            res.json({ message: 'invitation cancelled successfully' });
-        } else {
-            res.status(404);
-            res.json({ message: 'invitation not found' });
-        }
-    },
-    resendInvite: async (req: Request, res: Response) => {
-        const invitation = await AccountService.resendInvite(req.params.id);
-        if (invitation) {
-            res.status(200);
-            res.json(invitation);
-        } else {
-            res.status(404);
-            res.json({ message: 'invitation not found' });
-        }
+  listInvitations: async (req: Request, res: Response) => {
+    const invitations = await AccountService.listInvitations();
+    res.json(invitations);
+  },
+  inviteToRegister: async (req: Request, res: Response) => {
+    const invitation = await AccountService.inviteNewAccount(req.body.email, req.body.message);
+    if( invitation ) {
+      res.json(invitation);
     }
+    else {
+      res.status(400);
+      res.json({message: 'not ok'});
+    }
+  },
+  checkInviteCode: async (req: Request, res: Response) => {
+    if ( await AccountService.validateInviteCode(req.params.code) ) {
+      res.json({ message: 'ok' });
+    }
+    else {
+      res.status(404);
+      res.json({message: 'not ok'});
+    }
+  },
+  acceptInvite: async (req: Request, res: Response) => {
+    let account = await AccountService.acceptAccountInvite(req.params.code, req.body.password);
+    if ( account ) {
+      res.send(ExpressHelper.generateJWT(account));
+    }
+    else {
+      res.status(400);
+      res.json({message: 'not ok'});
+    }
+  },
+  cancelInvite: async (req: Request, res: Response) => {
+    const result = await AccountService.cancelInvite(req.params.id);
+    if (result) {
+      res.status(200);
+      res.json({ message: 'invitation cancelled successfully' });
+    }
+    else {
+      res.status(404);
+      res.json({ message: 'invitation not found' });
+    }
+  },
+  resendInvite: async (req: Request, res: Response) => {
+    const invitation = await AccountService.resendInvite(req.params.id);
+    if (invitation) {
+      res.status(200);
+      res.json(invitation);
+    }
+    else {
+      res.status(404);
+      res.json({ message: 'invitation not found' });
+    }
+  },
 };
 
 var router = express.Router();
@@ -75,7 +77,7 @@ router.get('/invitations', ExpressHelper.adminOnly, handlers.listInvitations);
  */
 router.post('/invitations', ExpressHelper.adminOnly, handlers.inviteToRegister);
 
-/** 
+/**
  * Validate an invitation code
  * @route GET /api/accounts/v1/invitations/:code
  * @param code

@@ -1,19 +1,19 @@
 <template>
-    <div>
-        <div class="modal">
-            <div class="modal-content">
-                <span class="title" >{{ props.title }}</span>
-                <span class="close" @click="$emit('close')">&times;</span>
-                <slot></slot>
-            </div>
-        </div>
+  <div>
+    <div class="modal">
+      <div class="modal-content">
+        <span class="title" >{{ props.title }}</span>
+        <span class="close" @click="$emit('close')">&times;</span>
+        <slot/>
+      </div>
     </div>
+  </div>
 </template>
 
 <script setup>
 
 const props = defineProps({
-    title: String
+  title: String,
 });
 
 </script>

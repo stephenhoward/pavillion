@@ -1,95 +1,95 @@
 <script setup>
-  import { reactive, nextTick } from 'vue';
-  import { useTranslation } from 'i18next-vue';
-  import InvitationsView from './accounts/invitations.vue';
-  import ApplicationsView from './accounts/applications.vue';
+import { reactive, nextTick } from 'vue';
+import { useTranslation } from 'i18next-vue';
+import InvitationsView from './accounts/invitations.vue';
+import ApplicationsView from './accounts/applications.vue';
 
-  const { t } = useTranslation('admin', {
-    keyPrefix: 'accounts',
+const { t } = useTranslation('admin', {
+  keyPrefix: 'accounts',
+});
+
+const state = reactive({
+  activeTab: 'accounts',
+});
+
+const activateTab = (tab) => {
+  state.activeTab = tab;
+  nextTick(() => {
+    const panel = document.getElementById(`${tab}-panel`);
+    if (panel) {
+      panel.focus();
+    }
   });
-
-  const state = reactive({
-    activeTab: 'accounts',
-  });
-
-  const activateTab = (tab) => {
-    state.activeTab = tab;
-    nextTick(() => {
-      const panel = document.getElementById(`${tab}-panel`);
-      if (panel) {
-        panel.focus();
-      }
-    });
-  };
+};
 </script>
 
 <template>
-    <div id="accounts">
-      <div role="tablist">
-        <button
-          type="button"
-          role="tab"
-          :aria-selected=" state.activeTab === 'accounts' ? 'true' : 'false'"
-          aria-controls="accounts-panel"
-          class="tab"
-          :class="{ 'active-tab': state.activeTab === index }"
-          @click="activateTab('accounts')"
-          >
-          {{ t('accounts_tab') }}
-        </button>
-        <button
+  <div id="accounts">
+    <div role="tablist">
+      <button
         type="button"
         role="tab"
-          :aria-selected=" state.activeTab === 'applications' ? 'true' : 'false'"
-          aria-controls="applications-panel"
-          class="tab"
-          :class="{ 'active-tab': state.activeTab === 'applications' }"
-          @click="activateTab('applications')"
-          >
-          {{ t('applications_tab') }}
-        </button>
-        <button
+        :aria-selected=" state.activeTab === 'accounts' ? 'true' : 'false'"
+        aria-controls="accounts-panel"
+        class="tab"
+        :class="{ 'active-tab': state.activeTab === index }"
+        @click="activateTab('accounts')"
+      >
+        {{ t('accounts_tab') }}
+      </button>
+      <button
         type="button"
         role="tab"
-          :aria-selected=" state.activeTab === 'invitations' ? 'true' : 'false'"
-          aria-controls="invitations-panel"
-          class="tab"
-          :class="{ 'active-tab': state.activeTab === index }"
-          @click="activateTab('invitations')"
-          >
-          {{ t('invitations_tab') }}
-        </button>
-      </div>
-      <div id="accounts-panel"
-        role="tabpanel"
-        aria-labelledby="accounts-tab"
-        :aria-hidden="state.activeTab == 'accounts' ? 'true' : 'false'"
-        :hidden="state.activeTab !== 'accounts'"
-        class="tab-panel"
+        :aria-selected=" state.activeTab === 'applications' ? 'true' : 'false'"
+        aria-controls="applications-panel"
+        class="tab"
+        :class="{ 'active-tab': state.activeTab === 'applications' }"
+        @click="activateTab('applications')"
       >
-      <h3>{{ t('accounts_title') }}</h3>
-      </div>
-      <div
-        id="applications-panel"
-        role="tabpanel"
-        aria-labelledby="applications-tab"
-        :aria-hidden="state.activeTab == 'applications' ? 'true' : 'false'"
-        :hidden="state.activeTab !== 'applications'"
-        class="tab-panel"
+        {{ t('applications_tab') }}
+      </button>
+      <button
+        type="button"
+        role="tab"
+        :aria-selected=" state.activeTab === 'invitations' ? 'true' : 'false'"
+        aria-controls="invitations-panel"
+        class="tab"
+        :class="{ 'active-tab': state.activeTab === index }"
+        @click="activateTab('invitations')"
       >
-      <applications-view />
-      </div>
-      <div
-        id="invitations-panel"
-        role="tabpanel"
-        aria-labelledby="invitations-tab"
-        :aria-hidden="state.activeTab == 'invitations' ? 'true' : 'false'"
-        :hidden="state.activeTab !== 'invitations'"
-        class="tab-panel"
-      >
-      <invitations-view />
-      </div>
+        {{ t('invitations_tab') }}
+      </button>
     </div>
+    <div id="accounts-panel"
+         role="tabpanel"
+         aria-labelledby="accounts-tab"
+         :aria-hidden="state.activeTab == 'accounts' ? 'true' : 'false'"
+         :hidden="state.activeTab !== 'accounts'"
+         class="tab-panel"
+    >
+      <h3>{{ t('accounts_title') }}</h3>
+    </div>
+    <div
+      id="applications-panel"
+      role="tabpanel"
+      aria-labelledby="applications-tab"
+      :aria-hidden="state.activeTab == 'applications' ? 'true' : 'false'"
+      :hidden="state.activeTab !== 'applications'"
+      class="tab-panel"
+    >
+      <ApplicationsView />
+    </div>
+    <div
+      id="invitations-panel"
+      role="tabpanel"
+      aria-labelledby="invitations-tab"
+      :aria-hidden="state.activeTab == 'invitations' ? 'true' : 'false'"
+      :hidden="state.activeTab !== 'invitations'"
+      class="tab-panel"
+    >
+      <InvitationsView />
+    </div>
+  </div>
 </template>
 
 <style lang="scss">

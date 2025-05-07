@@ -10,8 +10,8 @@ export interface MailConfig {
 };
 
 export interface MailData {
-    emailAddress: string;
-    subject: string;
-    textMessage: string;
-    htmlMessage?: string;
+  emailAddress: string;
+  subject: string;
+  textMessage: string;
+  htmlMessage?: string;
 };

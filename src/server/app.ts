@@ -2,11 +2,11 @@ import express from 'express';
 import initPavillionServer from '@/server/server';
 
 const main = (providedApp?: express.Application): express.Application => {
-    const app: express.Application = providedApp || express();
+  const app: express.Application = providedApp || express();
 
-    initPavillionServer(app);
+  initPavillionServer(app);
 
-    return app;
+  return app;
 };
 
 main();

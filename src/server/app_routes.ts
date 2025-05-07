@@ -1,5 +1,4 @@
 import { Request, Response, Router } from 'express';
-import express from 'express';
 import fs from "fs/promises";
 import path from "path";
 
@@ -37,18 +36,18 @@ const handlers = {
   },
   coverage: async (req: Request, res: Response) => {
     res.redirect(303, `http://localhost:5173/${req.path}`);
-  }
+  },
 };
 
 /* GET home page. */
 router.get('/', handlers.index);
 
 if (environment !== "production") {
-    /* redirect to assets server */
-    router.get(assetExtensionRegex(), handlers.assets);
+  /* redirect to assets server */
+  router.get(assetExtensionRegex(), handlers.assets);
 
-    /* redirect to coverage server */
-    router.get("/coverage/*", handlers.coverage);
+  /* redirect to coverage server */
+  router.get("/coverage/*", handlers.coverage);
 };
 
 // This goes last:

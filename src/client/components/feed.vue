@@ -7,12 +7,11 @@ const { t } = useTranslation('feed');
 <template>
   <p>{{ t("title") }}</p>
   <section>
-    {{ t("events_description") }}<br>
-    {{ t("calendars_description") }}<br>
-    {{ t("follow_interface_description") }}<br>
-    {{ t("follow_identifier_description") }}<br>
-    <div class="event">
-    </div>
+    {{ t("events_description") }}<br/>
+    {{ t("calendars_description") }}<br/>
+    {{ t("follow_interface_description") }}<br/>
+    {{ t("follow_identifier_description") }}<br/>
+    <div class="event"/>
   </section>
 </template>
 

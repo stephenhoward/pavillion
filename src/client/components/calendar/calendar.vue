@@ -6,7 +6,7 @@ import ModelService from '../../service/models';
 import { useEventStore } from '../../stores/eventStore';
 
 const { t } = useTranslation('calendars',{
-  keyPrefix: 'calendar'
+  keyPrefix: 'calendar',
 });
 
 const state = reactive({ err: ''});
@@ -14,7 +14,7 @@ const store = useEventStore();
 
 onBeforeMount(async () => {
   let events = await ModelService.listModels('/api/v1/events');
-  store.events = events.map(event => CalendarEvent.fromObject(event)); 
+  store.events = events.map(event => CalendarEvent.fromObject(event));
 });
 </script>
 

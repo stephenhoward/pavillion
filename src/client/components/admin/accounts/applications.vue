@@ -31,7 +31,7 @@
     </table>
 
     <!-- Application detail modal using the new component -->
-    <application-review-view
+    <ApplicationReviewView
       v-if="state.modalOpen"
       :application="state.selectedApplication"
       @close="state.modalOpen = false"
@@ -65,14 +65,15 @@ const loadApplications = async () => {
     const applications = await ModelService.listModels('/api/accounts/v1/applications');
     store.setApplications(applications.map(app => {
       return new AccountApplication(
-        app.id, 
-        app.email, 
-        app.message, 
-        app.status, 
-        app.statusTimestamp ? new Date(app.statusTimestamp) : null
+        app.id,
+        app.email,
+        app.message,
+        app.status,
+        app.statusTimestamp ? new Date(app.statusTimestamp) : null,
       );
     }));
-  } catch (error) {
+  }
+  catch (error) {
     console.error('Error loading applications:', error);
   }
 };
@@ -94,7 +95,7 @@ const state = reactive({
   modalOpen: false,
   selectedApplication: null,
   processingSuccess: null,
-  processingError: null
+  processingError: null,
 });
 
 const viewApplication = (application) => {
@@ -109,11 +110,12 @@ const acceptApplication = async (application) => {
     store.removeApplication(toRaw(application));
     state.processingSuccess = application.email;
     state.modalOpen = false;
-    
+
     setTimeout(() => {
       state.processingSuccess = null;
     }, 3000);
-  } catch (error) {
+  }
+  catch (error) {
     console.error('Error accepting application:', error);
     state.processingError = application.email;
     setTimeout(() => {
@@ -130,11 +132,12 @@ const rejectApplication = async (application, silent) => {
     application.statusTimestamp = new Date();
     state.processingSuccess = application.email;
     state.modalOpen = false;
-    
+
     setTimeout(() => {
       state.processingSuccess = null;
     }, 3000);
-  } catch (error) {
+  }
+  catch (error) {
     console.error('Error rejecting application:', error);
     state.processingError = application.email;
     setTimeout(() => {

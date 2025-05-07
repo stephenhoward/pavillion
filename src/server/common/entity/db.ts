@@ -21,25 +21,25 @@ const db = new Sequelize( config.get('database') );
 //     });
 
 export const seedDB = async () => {
-    if ( process.env.NODE_ENV === "development" ) {
-        const seedPath = path.join(path.resolve(), "layouts/development/db");
-        let  files = await fs.readdir(seedPath);
+  if ( process.env.NODE_ENV === "development" ) {
+    const seedPath = path.join(path.resolve(), "layouts/development/db");
+    let  files = await fs.readdir(seedPath);
 
-        for (const file of files.sort() ) {
-            const data = await fs.readFile(path.join(seedPath, file), 'utf8');
-            await seedTable(JSON.parse(data));
-        }
+    for (const file of files.sort() ) {
+      const data = await fs.readFile(path.join(seedPath, file), 'utf8');
+      await seedTable(JSON.parse(data));
     }
+  }
 };
 
 const seedTable = async (data: object) => {
-    
-    for (const [modelName, models] of Object.entries(data)) {
-        const model = db.models[modelName];
-        if ( model ) {
-            await model.bulkCreate(models);
-        }
+
+  for (const [modelName, models] of Object.entries(data)) {
+    const model = db.models[modelName];
+    if ( model ) {
+      await model.bulkCreate(models);
     }
+  }
 };
 
 export default db;

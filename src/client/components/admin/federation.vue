@@ -2,7 +2,7 @@
 import { useTranslation } from 'i18next-vue';
 
 const { t } = useTranslation('admin', {
-    keyPrefix: 'federation'
+  keyPrefix: 'federation',
 });
 </script>
 

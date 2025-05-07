@@ -1,16 +1,16 @@
 <template>
-    <div class="logout"></div>
+  <div class="logout"/>
 </template>
 
 <script setup>
-    import { inject, onBeforeMount } from 'vue';
-    import { useRouter } from 'vue-router';
+import { inject, onBeforeMount } from 'vue';
+import { useRouter } from 'vue-router';
 
-    const router = useRouter();
-    const authentication = inject('authn');
+const router = useRouter();
+const authentication = inject('authn');
 
-    onBeforeMount( () => {
-        authentication.logout();
-        router.replace('/');
-    });
+onBeforeMount( () => {
+  authentication.logout();
+  router.replace('/');
+});
 </script>

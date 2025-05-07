@@ -11,81 +11,81 @@ import CalendarService from '@/server/calendar/service/calendar';
 import LocationService from '@/server/calendar/service/locations';
 
 describe('createEvent', () => {
-    let service: EventService;
-    let sandbox: sinon.SinonSandbox = sinon.createSandbox();
-    const cal = new Calendar('testCalendarId', 'testme');
-    const acct = new Account('testAccountId', 'testme', 'testme');
-    let editableCalendarsStub: sinon.SinonStub;
+  let service: EventService;
+  let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+  const cal = new Calendar('testCalendarId', 'testme');
+  const acct = new Account('testAccountId', 'testme', 'testme');
+  let editableCalendarsStub: sinon.SinonStub;
 
-    beforeEach(() => {
-        service = new EventService();
-        editableCalendarsStub = sandbox.stub(CalendarService, 'editableCalendarsForUser');
-        editableCalendarsStub.resolves([cal]);
+  beforeEach(() => {
+    service = new EventService();
+    editableCalendarsStub = sandbox.stub(CalendarService, 'editableCalendarsForUser');
+    editableCalendarsStub.resolves([cal]);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('should create an event with content', async () => {
+    let saveStub = sandbox.stub(EventEntity.prototype, 'save');
+    let saveContentStub = sandbox.stub(EventContentEntity.prototype, 'save');
+    let eventSpy = sandbox.spy(EventEntity, 'fromModel');
+    let contentSpy = sandbox.spy(EventContentEntity, 'fromModel');
+
+    let event = await service.createEvent(acct, cal, {
+      content: {
+        en: {
+          name: "testName",
+          description: "description",
+        },
+      },
     });
 
-    afterEach(() => {
-        sandbox.restore();
+    expect(event.id).toBeDefined();
+    expect(event.id).toMatch(/^https:\/\/pavillion.dev\/events\/[a-z0-9-]+$/);
+    expect(eventSpy.returnValues[0].calendar_id).toBe('testCalendarId');
+    expect(contentSpy.returnValues[0].event_id).toBe(event.id);
+    expect(event.content("en").name).toBe('testName');
+    expect(saveStub.called).toBe(true);
+    expect(saveContentStub.called).toBe(true);
+  });
+
+  it('should create an event with a location', async () => {
+    let saveStub = sandbox.stub(EventEntity.prototype, 'save');
+    let findLocationStub = sandbox.stub(LocationService, 'findOrCreateLocation');
+    let eventSpy = sandbox.spy(EventEntity, 'fromModel');
+
+    findLocationStub.resolves(new EventLocation('testId','testLocation', 'testAddress'));
+
+    let event = await service.createEvent(acct, cal, {
+      location: {
+        name: "testLocation",
+        address: "testAddress",
+      },
     });
 
-    it('should create an event with content', async () => {
-        let saveStub = sandbox.stub(EventEntity.prototype, 'save');
-        let saveContentStub = sandbox.stub(EventContentEntity.prototype, 'save');
-        let eventSpy = sandbox.spy(EventEntity, 'fromModel');
-        let contentSpy = sandbox.spy(EventContentEntity, 'fromModel');
+    expect(event.id).toBeDefined();
+    expect(eventSpy.returnValues[0].calendar_id).toBe('testCalendarId');
+    expect(event.location).toBeDefined();
+    expect(saveStub.called).toBe(true);
+  });
 
-        let event = await service.createEvent(acct, cal, {
-            content: {
-                en: {
-                    name: "testName",
-                    description: "description"
-                }
-            }
-        });
+  it('should create an event with a schedule', async () => {
+    let saveStub = sandbox.stub(EventEntity.prototype, 'save');
+    let saveScheduleStub = sandbox.stub(EventScheduleEntity.prototype, 'save');
 
-        expect(event.id).toBeDefined();
-        expect(event.id).toMatch(/^https:\/\/pavillion.dev\/events\/[a-z0-9-]+$/);
-        expect(eventSpy.returnValues[0].calendar_id).toBe('testCalendarId');
-        expect(contentSpy.returnValues[0].event_id).toBe(event.id);
-        expect(event.content("en").name).toBe('testName');
-        expect(saveStub.called).toBe(true);
-        expect(saveContentStub.called).toBe(true);
+    const when = DateTime.now();
+
+    let event = await service.createEvent(acct, cal, {
+      schedules: [{ start: when.toString() }],
     });
 
-    it('should create an event with a location', async () => {
-        let saveStub = sandbox.stub(EventEntity.prototype, 'save');
-        let findLocationStub = sandbox.stub(LocationService, 'findOrCreateLocation');
-        let eventSpy = sandbox.spy(EventEntity, 'fromModel');
-
-        findLocationStub.resolves(new EventLocation('testId','testLocation', 'testAddress'));
-
-        let event = await service.createEvent(acct, cal, {
-            location: {
-                name: "testLocation",
-                address: "testAddress"
-            }
-        });
-
-        expect(event.id).toBeDefined();
-        expect(eventSpy.returnValues[0].calendar_id).toBe('testCalendarId');
-        expect(event.location).toBeDefined();
-        expect(saveStub.called).toBe(true);
-    })
-
-    it('should create an event with a schedule', async () => {
-        let saveStub = sandbox.stub(EventEntity.prototype, 'save');
-        let saveScheduleStub = sandbox.stub(EventScheduleEntity.prototype, 'save');
-
-        const when = DateTime.now();
-
-        let event = await service.createEvent(acct, cal, {
-            schedules: [{ start: when.toString() }]
-        });
-
-        expect(event.id).toBeDefined();
-        expect(event.schedules.length).toBe(1);
-        expect(event.schedules[0].startDate?.toString() === when.toString()).toBeTruthy();
-        expect(saveStub.called).toBe(true);
-        expect(saveScheduleStub.called).toBe(true);
-    });
+    expect(event.id).toBeDefined();
+    expect(event.schedules.length).toBe(1);
+    expect(event.schedules[0].startDate?.toString() === when.toString()).toBeTruthy();
+    expect(saveStub.called).toBe(true);
+    expect(saveScheduleStub.called).toBe(true);
+  });
 
 });

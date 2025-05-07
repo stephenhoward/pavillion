@@ -9,68 +9,68 @@ import { noAccountExistsError } from '@/server/accounts/exceptions';
 import AccountService from '@/server/accounts/service/account';
 
 const handlers = {
-    login: async (req: Request, res: Response) => {
-        passport.authenticate('local', {session: false}, (err: any, account: Account, info?: any) => {
-            if (err || !account) {
-                return res.status(400).json({
-                    message: 'Something is not right',
-                    user   : account
-                });
-            }
+  login: async (req: Request, res: Response) => {
+    passport.authenticate('local', {session: false}, (err: any, account: Account, info?: any) => {
+      if (err || !account) {
+        return res.status(400).json({
+          message: 'Something is not right',
+          user   : account,
+        });
+      }
 
-            req.user = account;
-            res.send(ExpressHelper.generateJWT(account));
-        })(req, res);
-    },
-    getToken: async (req: Request, res: Response) => {
-        if ( req.user ) {
-            const account = await CommonAccountService.getAccountById(req.user.id);
-            if ( account ) {
-                res.send(ExpressHelper.generateJWT(account));
-            }
-            else {
-                res.status(400).json({message: 'error refreshing token'});
-            }
-        }
-        else {
-            res.status(400).json({message: 'error refreshing token'});
-        }
-    },
-    checkPasswordResetCode: async (req: Request, res: Response) => {
-        const account = await AuthenticationService.validatePasswordResetCode(req.params.code);
-        if ( account ) {
-            const isNewAccount = await AccountService.isRegisteringAccount(account);
-            res.json({ message: 'ok', isNewAccount: isNewAccount });
-        }
-        else {
-            res.json({message: 'not ok'});
-        }
-    },
-    generatePasswordResetCode: async (req: Request, res: Response) => {
-        try {
-            await AuthenticationService.generatePasswordResetCode(req.body.email);
-        }
-        catch (error) {
-            if ( error instanceof noAccountExistsError ) {
-                console.info('Password reset code requested for non-existent account');
-            }
-            else {
-                console.error(error);
-                res.status(400).json({message: 'error generating password reset code'});
-                return;
-            }
-        }
-        res.json({ message: 'ok' });
-    },
-    setPassword: async (req: Request, res: Response) => {
-        let account = await AuthenticationService.resetPassword(req.params.code, req.body.password);
-        if ( account ) {
-            res.send(ExpressHelper.generateJWT(account));
-        }
-        else {
-            res.status(400).json({message: 'error resetting password' });
-        }
+      req.user = account;
+      res.send(ExpressHelper.generateJWT(account));
+    })(req, res);
+  },
+  getToken: async (req: Request, res: Response) => {
+    if ( req.user ) {
+      const account = await CommonAccountService.getAccountById(req.user.id);
+      if ( account ) {
+        res.send(ExpressHelper.generateJWT(account));
+      }
+      else {
+        res.status(400).json({message: 'error refreshing token'});
+      }
     }
+    else {
+      res.status(400).json({message: 'error refreshing token'});
+    }
+  },
+  checkPasswordResetCode: async (req: Request, res: Response) => {
+    const account = await AuthenticationService.validatePasswordResetCode(req.params.code);
+    if ( account ) {
+      const isNewAccount = await AccountService.isRegisteringAccount(account);
+      res.json({ message: 'ok', isNewAccount: isNewAccount });
+    }
+    else {
+      res.json({message: 'not ok'});
+    }
+  },
+  generatePasswordResetCode: async (req: Request, res: Response) => {
+    try {
+      await AuthenticationService.generatePasswordResetCode(req.body.email);
+    }
+    catch (error) {
+      if ( error instanceof noAccountExistsError ) {
+        console.info('Password reset code requested for non-existent account');
+      }
+      else {
+        console.error(error);
+        res.status(400).json({message: 'error generating password reset code'});
+        return;
+      }
+    }
+    res.json({ message: 'ok' });
+  },
+  setPassword: async (req: Request, res: Response) => {
+    let account = await AuthenticationService.resetPassword(req.params.code, req.body.password);
+    if ( account ) {
+      res.send(ExpressHelper.generateJWT(account));
+    }
+    else {
+      res.status(400).json({message: 'error resetting password' });
+    }
+  },
 };
 
 var router = express.Router();

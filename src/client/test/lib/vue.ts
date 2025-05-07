@@ -7,37 +7,37 @@ import { createPinia } from 'pinia';
 
 const mountComponent = (component: any, router: Router, config: Record<string, any> ) => {
 
-    let pinia = createPinia();
+  let pinia = createPinia();
 
-    let defaultProvide: Record<string, any> = {
-        authn: {},
-        site_config: {}
+  let defaultProvide: Record<string, any> = {
+    authn: {},
+    site_config: {},
+  };
+
+  if ( config.provide ) {
+    for ( let key in config.provide ) {
+      defaultProvide[key] = config.provide[key];
     }
+  }
 
-    if ( config.provide ) {
-        for ( let key in config.provide ) {
-            defaultProvide[key] = config.provide[key];
-        }
-    }
+  if (! config.props ) {
+    config.props = {};
+  }
 
-    if (! config.props ) {
-        config.props = {};
-    }
+  initI18Next();
+  const wrapper = mount(component, {
+    global: {
+      plugins: [
+        router,
+        [I18NextVue, { i18next }],
+        pinia,
+      ],
+      provide: defaultProvide,
+    },
+    props: config.props,
+  });
 
-    initI18Next();
-    const wrapper = mount(component, {
-        global: {
-            plugins: [
-                router,
-                [I18NextVue, { i18next }],
-                pinia
-            ],
-            provide: defaultProvide,
-        },
-        props: config.props
-    });
-
-    return wrapper;
+  return wrapper;
 };
 
 export { mountComponent };

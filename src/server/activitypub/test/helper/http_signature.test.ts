@@ -12,7 +12,7 @@ describe('HTTP Signature Verification', () => {
   let res: Partial<Response>;
   let next: sinon.SinonSpy;
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
-  
+
   // Create stubs that we'll configure in each test
   let parseRequestStub: sinon.SinonStub;
   let verifySignatureStub: sinon.SinonStub;
@@ -25,14 +25,14 @@ describe('HTTP Signature Verification', () => {
     req = {
       headers: {
         'date': new Date().toUTCString(),
-        'host': 'example.com'
+        'host': 'example.com',
       },
-      body: { actor: 'https://example.com/users/someactor' }
+      body: { actor: 'https://example.com/users/someactor' },
     };
 
     res = {
       status: sandbox.stub().returnsThis(),
-      json: sandbox.stub().returnsThis()
+      json: sandbox.stub().returnsThis(),
     };
 
     next = sandbox.spy();
@@ -41,7 +41,7 @@ describe('HTTP Signature Verification', () => {
     parseRequestStub = sandbox.stub(httpSignature, 'parseRequest');
     verifySignatureStub = sandbox.stub(httpSignature, 'verifySignature');
     axiosGetStub = sandbox.stub(axios, 'get');
-    
+
     // Set up stub for Cache class
     cacheGetStub = sandbox.stub(Cache.prototype, 'get');
     cacheSetStub = sandbox.stub(Cache.prototype, 'set');
@@ -66,7 +66,7 @@ describe('HTTP Signature Verification', () => {
   it('should reject requests with missing signature parameters', async () => {
     // Configure parseRequest to return object with empty params
     parseRequestStub.returns({
-      params: {} 
+      params: {},
     } as any);
 
     await verifyHttpSignature(req as Request, res as Response, next as any);
@@ -82,8 +82,8 @@ describe('HTTP Signature Verification', () => {
       params: {
         keyId: 'https://example.com/users/someactor#main-key',
         signature: 'validSignature',
-        headers: ['(request-target)', 'host'] // missing 'date'
-      }
+        headers: ['(request-target)', 'host'], // missing 'date'
+      },
     } as any);
 
     await verifyHttpSignature(req as Request, res as Response, next as any);
@@ -101,8 +101,8 @@ describe('HTTP Signature Verification', () => {
       params: {
         keyId: 'https://example.com/users/someactor#main-key',
         signature: 'validSignature',
-        headers: ['(request-target)', 'host', 'date']
-      }
+        headers: ['(request-target)', 'host', 'date'],
+      },
     } as any);
 
     await verifyHttpSignature(req as Request, res as Response, next as any);
@@ -115,20 +115,20 @@ describe('HTTP Signature Verification', () => {
   it('should reject requests with invalid digest', async () => {
     // Add digest header
     req.headers.digest = 'SHA-256=invalidHash';
-    
+
     parseRequestStub.returns({
       params: {
         keyId: 'https://example.com/users/someactor#main-key',
         signature: 'validSignature',
-        headers: ['(request-target)', 'host', 'date']
-      }
+        headers: ['(request-target)', 'host', 'date'],
+      },
     } as any);
 
     // Spy on crypto.createHash
     const hashStub = sandbox.stub(crypto, 'createHash');
     const mockDigest = {
       update: sandbox.stub().returnsThis(),
-      digest: sandbox.stub().returns('differentHash')
+      digest: sandbox.stub().returns('differentHash'),
     };
     hashStub.returns(mockDigest as any);
 
@@ -144,13 +144,13 @@ describe('HTTP Signature Verification', () => {
   it('should reject requests with unsupported digest algorithm', async () => {
     // Add digest header with unsupported algorithm
     req.headers.digest = 'MD5=someHash';
-    
+
     parseRequestStub.returns({
       params: {
         keyId: 'https://example.com/users/someactor#main-key',
         signature: 'validSignature',
-        headers: ['(request-target)', 'host', 'date']
-      }
+        headers: ['(request-target)', 'host', 'date'],
+      },
     } as any);
 
     await verifyHttpSignature(req as Request, res as Response, next as any);
@@ -163,13 +163,13 @@ describe('HTTP Signature Verification', () => {
   it('should reject requests with malformed digest header', async () => {
     // Add malformed digest header
     req.headers.digest = 'malformed-digest';
-    
+
     parseRequestStub.returns({
       params: {
         keyId: 'https://example.com/users/someactor#main-key',
         signature: 'validSignature',
-        headers: ['(request-target)', 'host', 'date']
-      }
+        headers: ['(request-target)', 'host', 'date'],
+      },
     } as any);
 
     await verifyHttpSignature(req as Request, res as Response, next as any);
@@ -184,8 +184,8 @@ describe('HTTP Signature Verification', () => {
       params: {
         keyId: 'https://example.com/users/someactor#main-key',
         signature: 'validSignature',
-        headers: ['(request-target)', 'host', 'date']
-      }
+        headers: ['(request-target)', 'host', 'date'],
+      },
     } as any);
 
     // Configure axios.get to simulate failure to get public key
@@ -204,8 +204,8 @@ describe('HTTP Signature Verification', () => {
       params: {
         keyId: 'https://example.com/users/someactor#main-key',
         signature: 'invalidSignature',
-        headers: ['(request-target)', 'host', 'date']
-      }
+        headers: ['(request-target)', 'host', 'date'],
+      },
     } as any);
 
     // Configure successful public key retrieval
@@ -213,9 +213,9 @@ describe('HTTP Signature Verification', () => {
       status: 200,
       data: {
         publicKey: {
-          publicKeyPem: '-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0Rdj53hR\n-----END PUBLIC KEY-----'
-        }
-      }
+          publicKeyPem: '-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0Rdj53hR\n-----END PUBLIC KEY-----',
+        },
+      },
     });
 
     // Configure signature verification failure
@@ -237,8 +237,8 @@ describe('HTTP Signature Verification', () => {
       params: {
         keyId: 'https://example.com/users/someactor#main-key',
         signature: 'validSignature',
-        headers: ['(request-target)', 'host', 'date']
-      }
+        headers: ['(request-target)', 'host', 'date'],
+      },
     } as any);
 
     // Configure successful public key retrieval
@@ -246,9 +246,9 @@ describe('HTTP Signature Verification', () => {
       status: 200,
       data: {
         publicKey: {
-          publicKeyPem: '-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0Rdj53hR\n-----END PUBLIC KEY-----'
-        }
-      }
+          publicKeyPem: '-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0Rdj53hR\n-----END PUBLIC KEY-----',
+        },
+      },
     });
 
     // Configure successful signature verification
@@ -268,8 +268,8 @@ describe('HTTP Signature Verification', () => {
       params: {
         keyId: 'https://example.com/users/someactor#main-key',
         signature: 'validSignature',
-        headers: ['(request-target)', 'host', 'date']
-      }
+        headers: ['(request-target)', 'host', 'date'],
+      },
     } as any);
 
     // Configure successful public key retrieval
@@ -277,9 +277,9 @@ describe('HTTP Signature Verification', () => {
       status: 200,
       data: {
         publicKey: {
-          publicKeyPem: '-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0Rdj53hR\n-----END PUBLIC KEY-----'
-        }
-      }
+          publicKeyPem: '-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0Rdj53hR\n-----END PUBLIC KEY-----',
+        },
+      },
     });
 
     // Configure successful signature verification
@@ -296,8 +296,8 @@ describe('HTTP Signature Verification', () => {
       params: {
         keyId: 'https://example.com/users/someactor#main-key',
         signature: 'validSignature',
-        headers: ['(request-target)', 'host', 'date']
-      }
+        headers: ['(request-target)', 'host', 'date'],
+      },
     } as any);
 
     // Configure Cache stub to return a key
@@ -319,24 +319,24 @@ describe('HTTP Signature Verification', () => {
       params: {
         keyId: 'https://example.com/users/someactor#main-key',
         signature: 'validSignature',
-        headers: ['(request-target)', 'host', 'date']
-      }
+        headers: ['(request-target)', 'host', 'date'],
+      },
     } as any);
 
     // Configure first response with URL to key
     axiosGetStub.onFirstCall().resolves({
       status: 200,
       data: {
-        publicKey: 'https://example.com/users/someactor/key'
-      }
+        publicKey: 'https://example.com/users/someactor/key',
+      },
     });
 
     // Configure second response with actual key
     axiosGetStub.onSecondCall().resolves({
       status: 200,
       data: {
-        publicKeyPem: '-----BEGIN PUBLIC KEY-----\nALTERNATIVE_KEY\n-----END PUBLIC KEY-----'
-      }
+        publicKeyPem: '-----BEGIN PUBLIC KEY-----\nALTERNATIVE_KEY\n-----END PUBLIC KEY-----',
+      },
     });
 
     // Configure successful signature verification

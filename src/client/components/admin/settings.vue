@@ -4,7 +4,7 @@ import { inject } from 'vue';
 
 const site_config = inject('site_config');
 const { t } = useTranslation('admin', {
-    keyPrefix: 'settings'
+  keyPrefix: 'settings',
 });
 </script>
 

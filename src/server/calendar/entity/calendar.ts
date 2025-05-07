@@ -7,83 +7,83 @@ import db from '@/server/common/entity/db';
 @Table({ tableName: 'calendar' })
 class CalendarEntity extends Model {
 
-    @PrimaryKey
-    @Column({ type: DataType.UUID })
-    declare id: string;
+  @PrimaryKey
+  @Column({ type: DataType.UUID })
+  declare id: string;
 
-    @ForeignKey(() => AccountEntity)
-    @Column({ type: DataType.UUID })
-    declare account_id: string;
+  @ForeignKey(() => AccountEntity)
+  @Column({ type: DataType.UUID })
+  declare account_id: string;
 
-    @Column({ type: DataType.STRING })
-    declare url_name: string;
+  @Column({ type: DataType.STRING })
+  declare url_name: string;
 
-    @Column({ type: DataType.STRING })
-    declare languages: string;
+  @Column({ type: DataType.STRING })
+  declare languages: string;
 
-    toModel(): Calendar {
-        let calendar = new Calendar( this.id, this.url_name );
-        if ( ! this.languages ) {
-            calendar.languages = [];
-        }
-        else {
-            calendar.languages = this.languages.split(',');
-        }
-
-        return calendar;
-    };
-
-    static fromModel(calendar: Calendar): CalendarEntity {
-        return CalendarEntity.build({
-            id: calendar.id,
-            url_name: calendar.urlName,
-            languages: calendar.languages.join(',')
-        });
+  toModel(): Calendar {
+    let calendar = new Calendar( this.id, this.url_name );
+    if ( ! this.languages ) {
+      calendar.languages = [];
     }
+    else {
+      calendar.languages = this.languages.split(',');
+    }
+
+    return calendar;
+  };
+
+  static fromModel(calendar: Calendar): CalendarEntity {
+    return CalendarEntity.build({
+      id: calendar.id,
+      url_name: calendar.urlName,
+      languages: calendar.languages.join(','),
+    });
+  }
 };
 
 @Table({ tableName: 'calendar_content' })
 class CalendarContentEntity extends Model {
-    @PrimaryKey
-    @Column({ type: DataType.UUID }) 
-    declare id: string;
-    
-    @ForeignKey(() => CalendarEntity)
-    @Column({ type: DataType.UUID })
-    declare calendar_id: string;
+  @PrimaryKey
+  @Column({ type: DataType.UUID })
+  declare id: string;
 
-    @Column({ type: DataType.STRING })
-    declare language: string
+  @ForeignKey(() => CalendarEntity)
+  @Column({ type: DataType.UUID })
+  declare calendar_id: string;
 
-    @Column({ type: DataType.STRING })
-    declare name: string;
+  @Column({ type: DataType.STRING })
+  declare language: string;
 
-    @Column({ type: DataType.STRING })
-    declare description: string;
+  @Column({ type: DataType.STRING })
+  declare name: string;
 
-    @BelongsTo(() => CalendarEntity)
-    declare calendar: CalendarEntity;
+  @Column({ type: DataType.STRING })
+  declare description: string;
 
-    toModel(): CalendarContent {
-        let content = new CalendarContent( this.language );
-        content.name = this.name;
-        content.description = this.description;
+  @BelongsTo(() => CalendarEntity)
+  declare calendar: CalendarEntity;
 
-        return content;
-    }
+  toModel(): CalendarContent {
+    let content = new CalendarContent( this.language );
+    content.name = this.name;
+    content.description = this.description;
 
-    static fromModel(content: CalendarContent): CalendarContentEntity {
-        return CalendarContentEntity.build({
-            language: content.language as string,
-            name: content.name,
-            description: content.description
-        });
-    }
+    return content;
+  }
+
+  static fromModel(content: CalendarContent): CalendarContentEntity {
+    return CalendarContentEntity.build({
+      language: content.language as string,
+      name: content.name,
+      description: content.description,
+    });
+  }
 };
 
 db.addModels([CalendarEntity, CalendarContentEntity]);
 
 export {
-    CalendarEntity,
-    CalendarContentEntity
+  CalendarEntity,
+  CalendarContentEntity,
 };

@@ -40,6 +40,10 @@ This will set up the pavillion service on port 3000, and an asset serving servic
 
 Tests are run under the vitest framework. You can either `npx vitest` or `npm run test`. I am working towards a goal of maintaining 80% or better unit test coverage.
 
+## Formatting
+
+We have an eslint config. Use `npm run lint` or `npm run lint:fix` to check formatting and other code conventions.
+
 ## License
 
 Pavillion is licensed under the [Mozilla Public License 2.0](https://mozilla.org/MPL/2.0/). This means:

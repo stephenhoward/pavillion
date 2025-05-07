@@ -1,29 +1,29 @@
 <script setup>
 import { reactive } from 'vue';
 import { useTranslation } from 'i18next-vue';
-import loggedInNavigation from './loggedInNavigation.vue'
+import loggedInNavigation from './loggedInNavigation.vue';
 import EditEventView from './calendar/edit_event.vue';
 
 const { t } = useTranslation('system');
 const state = reactive({
-    userInfo: {
-        currentEvent: null
-    }
+  userInfo: {
+    currentEvent: null,
+  },
 });
 </script>
 
 <template>
   <div class="root">
-      <a href="#main" class="skip-link">{{ t("navigation.skip_to_content") }}</a>
-      <loggedInNavigation @open-event="(e) => state.currentEvent = e" />
-      <div id="main">
+    <a href="#main" class="skip-link">{{ t("navigation.skip_to_content") }}</a>
+    <loggedInNavigation @open-event="(e) => state.currentEvent = e" />
+    <div id="main">
       <RouterView @open-event="(e) => state.currentEvent = e"/>
-      </div>
+    </div>
   </div>
 
-    <div v-if="state.currentEvent != null">
-    <edit-event-view :event="state.currentEvent" @close="state.currentEvent=null" />
-    </div>
+  <div v-if="state.currentEvent != null">
+    <EditEventView :event="state.currentEvent" @close="state.currentEvent=null" />
+  </div>
 </template>
 
 <style scoped lang="scss">
@@ -47,7 +47,7 @@ div.root {
     z-index: 1000;
     &:focus {
       top: 0;
-    } 
+    }
   }
 
   nav {

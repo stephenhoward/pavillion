@@ -20,7 +20,7 @@ export const initI18Next = () => {
       debug: process.env.NODE_ENV === 'development',
       fallbackLng: 'en',
       resources: {
-        en: { 
+        en: {
           system: enSystem,
           authentication: enAuthentication,
           registration: enRegistration,
@@ -30,13 +30,13 @@ export const initI18Next = () => {
           admin: enAdmin,
           inbox: enInbox,
           feed: enFeed,
-        }
+        },
       },
       detection: {
         order: ['navigator'],
         caches: ['localStorage'],
-      }
+      },
     });
-  
+
   return i18next;
 };

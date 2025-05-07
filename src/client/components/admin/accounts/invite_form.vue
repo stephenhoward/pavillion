@@ -36,41 +36,44 @@ button {
 </style>
 
 <template>
-    <modal-layout :title="t('title')" @close="$emit('close')">
+  <ModalLayout :title="t('title')" @close="$emit('close')">
     <div class="invite">
-        <div class="error" v-if="state.err">{{ state.err }}</div>
-        <input type="text" name="email" v-bind:placeholder="t('email_placeholder')" v-model="state.email">
-        <button type="submit" class="primary" @click="sendInvite(state.email)">{{ t("invite_button") }}</button>
-        <button type="button" @click="$emit('close')">{{ t("close_button") }}</button>
+      <div class="error" v-if="state.err">{{ state.err }}</div>
+      <input type="text"
+             name="email"
+             v-bind:placeholder="t('email_placeholder')"
+             v-model="state.email"/>
+      <button type="submit" class="primary" @click="sendInvite(state.email)">{{ t("invite_button") }}</button>
+      <button type="button" @click="$emit('close')">{{ t("close_button") }}</button>
     </div>
-    </modal-layout>
+  </ModalLayout>
 </template>
 
 <script setup>
-    import { reactive } from 'vue';
-    import { useTranslation } from 'i18next-vue';
-    import AccountInvitation from '../../../../common/model/invitation';
-    import { useInvitationStore } from '../../../stores/invitationStore';
-    import ModelService from '../../../service/models';
-    import ModalLayout from '../../modal.vue';
+import { reactive } from 'vue';
+import { useTranslation } from 'i18next-vue';
+import AccountInvitation from '../../../../common/model/invitation';
+import { useInvitationStore } from '../../../stores/invitationStore';
+import ModelService from '../../../service/models';
+import ModalLayout from '../../modal.vue';
 
-    const emit = defineEmits(['close']);
-    const invitationStore = useInvitationStore();
+const emit = defineEmits(['close']);
+const invitationStore = useInvitationStore();
 
-    const { t } = useTranslation('admin', {
-        keyPrefix: 'invite_form'
-    });
-    const state = reactive({
-        email: '',
-    });
+const { t } = useTranslation('admin', {
+  keyPrefix: 'invite_form',
+});
+const state = reactive({
+  email: '',
+});
 
 
-    const sendInvite = async (email) => {
-        const model = AccountInvitation.fromObject({
-            email: email,
-        });
-        const invite = AccountInvitation.fromObject(await ModelService.createModel(model, '/api/accounts/v1/invitations'));
-            invitationStore.addInvitation(invite);
-            emit('close');
-    };
+const sendInvite = async (email) => {
+  const model = AccountInvitation.fromObject({
+    email: email,
+  });
+  const invite = AccountInvitation.fromObject(await ModelService.createModel(model, '/api/accounts/v1/invitations'));
+  invitationStore.addInvitation(invite);
+  emit('close');
+};
 </script>

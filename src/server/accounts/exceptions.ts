@@ -5,56 +5,56 @@ class AccountAlreadyExistsError extends Error {
 }
 
 class noAccountExistsError extends Error {
-    constructor() {
-        super('Account does not exist');
-    }
+  constructor() {
+    super('Account does not exist');
+  }
 }
 
 class noAccountInviteExistsError extends Error {
-    constructor() {
-        super('Account Invitation does not exist');
-    }
+  constructor() {
+    super('Account Invitation does not exist');
+  }
 }
 
 class noAccountApplicationExistsError extends Error {
-    constructor() {
-        super('Account Application does not exist');
-    }
+  constructor() {
+    super('Account Application does not exist');
+  }
 }
 
 class AccountInviteAlreadyExistsError extends Error {
-    constructor() {
-      super('Account Invitation already exists');
-    }
+  constructor() {
+    super('Account Invitation already exists');
+  }
 }
 
 class AccountApplicationAlreadyExistsError extends Error {
-    constructor() {
-      super('Account Application already exists');
-    }
+  constructor() {
+    super('Account Application already exists');
+  }
 }
 
 class AccountApplicationsClosedError extends Error {
-    constructor() {
-      super('Account Applications are closed');
-    }
+  constructor() {
+    super('Account Applications are closed');
+  }
 }
 
 class AccountRegistrationClosedError extends Error {
-    constructor() {
-      super('Account Registration is closed');
-    }
+  constructor() {
+    super('Account Registration is closed');
+  }
 }
 
 export {
-    AccountAlreadyExistsError,
-    InvalidUsernameError,
-    UsernameAlreadyExistsError,
-    AccountInviteAlreadyExistsError,
-    AccountApplicationAlreadyExistsError,
-    noAccountExistsError,
-    noAccountInviteExistsError,
-    noAccountApplicationExistsError,
-    AccountApplicationsClosedError,
-    AccountRegistrationClosedError
- };
+  AccountAlreadyExistsError,
+  InvalidUsernameError,
+  UsernameAlreadyExistsError,
+  AccountInviteAlreadyExistsError,
+  AccountApplicationAlreadyExistsError,
+  noAccountExistsError,
+  noAccountInviteExistsError,
+  noAccountApplicationExistsError,
+  AccountApplicationsClosedError,
+  AccountRegistrationClosedError,
+};
