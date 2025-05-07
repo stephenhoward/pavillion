@@ -6,7 +6,7 @@ this document to make participation easy and effective for everyone involved.
 Key links for contributors:
 - [Project Overview & Principles](../README.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
-- [Issues Tracker](https://github.com/stephenhoward/pavilion/issues)
+- [Issues Tracker](https://github.com/stephenhoward/pavillion/issues)
 
 ## Getting Started
 
@@ -18,8 +18,8 @@ Key links for contributors:
 
 1. Clone the repository:
    ```
-   git clone https://github.com/stephenhoward/pavilion.git
-   cd pavilion
+   git clone https://github.com/stephenhoward/pavillion.git
+   cd pavillion
    ```
 2. Install dependencies:
    ```

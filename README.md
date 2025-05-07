@@ -27,22 +27,9 @@ Pavillion is a federated events calendar. Using federation it aims to provide an
 
 The goal of the project, both in it's open source development, and it's end use, is to find help people find more connections with their communities.
 
-## Running Pavillion for Development
+## Getting Involved
 
-At the moment you can run Pavillion on node on your machine directly. Containerized development is coming.
-
-    npm install
-    npm run dev
-
-This will set up the pavillion service on port 3000, and an asset serving service under Vite on port 5173. This setup hot-reloads both the server and client code.
-
-## Tests
-
-Tests are run under the vitest framework. You can either `npx vitest` or `npm run test`. I am working towards a goal of maintaining 80% or better unit test coverage.
-
-## Formatting
-
-We have an eslint config. Use `npm run lint` or `npm run lint:fix` to check formatting and other code conventions.
+Please see our [code of conduct](docs/CODE_OF_CONDUCT.md) and [contribution guide](docs/CONTRIBUTING.md) for details on how to get started and have a positive impact on the project.
 
 ## License
 
