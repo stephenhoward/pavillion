@@ -3,5 +3,25 @@
     "events_description": "Events from calendars you follow",
     "calendars_description": "Calendars you follow",
     "follow_interface_description": "An interface for following new calendars",
-    "follow_identifier_description": "A place to see your own follow identifier"
+    "follow_identifier_description": "A place to see your own follow identifier",
+    "events_tab": "Events",
+    "follows_tab": "Following",
+    "followers_tab": "Followers",
+    "followers": {
+        "title": "Followers",
+        "description": "People who follow you",
+        "no_followers": "You have no followers."
+    },
+    "follows": {
+        "title": "Follows",
+        "description": "Calendars you follow",
+        "no_follows": "You are not following any calendars.",
+        "follow_button": "Add a Calendar"
+    },
+    "events": {
+        "title": "Events",
+        "description": "Events from calendars you follow",
+        "no_events": "No events.",
+        "follow_button": "Follow a Calendar"
+    }
 }

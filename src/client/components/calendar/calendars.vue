@@ -26,20 +26,23 @@ onBeforeMount(async () => {
 </script>
 
 <template>
-  <div>
+  <div v-if="state.calendars.length > 0">
     <p>{{ t('my_calendars_header') }}</p>
-    <section v-if="state.calendars.length > 0">
-      <ul v-for="calendar in state.calendars">
-        <RouterLink to="/calendar" prop="calendar">
-          <li>{{ calendar.content("en").name || calendar.urlName }}</li>
-        </RouterLink>
-      </ul>
-    </section>
-    <section v-else>
-      <p>{{ t('no_calendars_message') }}</p>
-    </section>
+    <ul v-for="calendar in state.calendars">
+      <RouterLink to="/calendar" prop="calendar">
+        <li>{{ calendar.content("en").name || calendar.urlName }}</li>
+      </RouterLink>
+    </ul>
+  </div>
+  <div v-else class="empty-screen">
+    <h2>{{ t('no_calendars_message') }}</h2>
+    <button type="button" class="primary" @click="$emit('openEvent', new Calendar())">
+      {{ t('create_calendar_button') }}
+    </button>
   </div>
 </template>
 
-<style scoped lang="scss">
+<style lang="scss">
+@use '../../assets/layout.scss' as *;
+
 </style>

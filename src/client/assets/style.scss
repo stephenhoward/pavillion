@@ -29,7 +29,7 @@ button, a.button {
 }
 button.primary {
   font-size: 12pt;
-  padding: 8px 8px;
+  padding: 8px 16px;
   background: $light-mode-button-background;
   border: none;
   color: $light-mode-text;
@@ -72,4 +72,47 @@ button.primary {
 }
 .logo.vue:hover {
   filter: drop-shadow(0 0 2em #42b883aa);
+}
+
+div[role="tablist"] {
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid $light-mode-border;
+  button[role="tab"] {
+    border-radius: 0;
+    font-size: 10pt;
+    background:none;
+    border: none;
+    color: $light-mode-text;
+    flex: 1;
+    max-width: 150px;
+    padding: 10px 20px;
+    cursor: pointer;
+    &[aria-selected="true"] {
+      border-bottom: 4px solid $light-mode-button-background;
+    }
+  }
+}
+
+@include medium-size-device {
+  div[role="tablist"] {
+    justify-content: left;
+    button[role="tab"] {
+      margin-right: 15px;
+    }
+  }
+}
+
+@include dark-mode {
+div[role="tablist"] {
+  border-bottom-color: $dark-mode-border;
+  button[role="tab"] {
+    color: $dark-mode-text;
+    &[aria-selected="true"] {
+      border-bottom-color: $dark-mode-button-background;
+      ;
+    }
+  }
+}
 }

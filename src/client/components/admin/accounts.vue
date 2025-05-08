@@ -140,42 +140,5 @@ const activateTab = (tab) => {
       font-weight: bold;
     }
   }
-
-  div[role="tablist"] {
-    margin-bottom: 20px;
-    display: flex;
-    border-bottom: 1px solid $light-mode-border;
-    button[role="tab"] {
-      border-radius: 0;
-      font-size: 10pt;
-      background:none;
-      border: none;
-      color: $light-mode-text;
-      flex: 1;
-      max-width: 150px;
-      padding: 10px 20px;
-      cursor: pointer;
-      margin-right: 15px;
-      &[aria-selected="true"] {
-        border-bottom: 4px solid $light-mode-button-background;
-      }
-    }
-  }
 }
-
-@include dark-mode {
-  #accounts {
-  div[role="tablist"] {
-    border-bottom-color: $dark-mode-border;
-    button[role="tab"] {
-      color: $dark-mode-text;
-      &[aria-selected="true"] {
-        border-bottom-color: $dark-mode-button-background;
-        ;
-      }
-    }
-  }
-}
-}
-
 </style>

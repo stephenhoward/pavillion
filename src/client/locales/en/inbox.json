@@ -1,4 +1,5 @@
 {
     "title": "Notifications",
-    "description": "Notifications of follows and reposts"
+    "description": "Notifications of follows and reposts",
+    "noNotifications": "You have no notifications."
 }

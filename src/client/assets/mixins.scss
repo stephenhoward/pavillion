@@ -1,5 +1,5 @@
 
-$light-mode-background: #7683ad;
+$light-mode-background: #a2a9c1;
 $light-mode-selected-background: #ccc;
 $dark-mode-background: #33333a;
 $dark-mode-selected-background: #222;
@@ -116,7 +116,7 @@ $form-input-border-radius: 20px;
             &:focus {
                 border: 1px solid rgb(73, 111, 186);
             }
-            }
+        }
         h3 {
             grid-column: 1 / span 2;
             font-weight: 300;

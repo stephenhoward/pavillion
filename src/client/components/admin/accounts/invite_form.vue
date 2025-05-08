@@ -9,10 +9,10 @@ input[type="text"],input[type="password"],textarea {
     border: 1px solid #ccc;
     border-radius: $form-input-border-radius;
     padding: 8px 18px;
+    display: block;
     &:focus {
         border: 1px solid rgb(73, 111, 186);
     }
-    display: block;
 }
 
 button {

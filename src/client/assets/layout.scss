@@ -77,6 +77,21 @@ div.root {
 
   #main {
     flex: 1;
+    background-color: #fff;
+
+    div.empty-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      text-align: center;
+
+      h2 {
+        font-weight: 300;
+      }
+
+    }
   }
 }
 
@@ -133,6 +148,9 @@ div.root {
                 }
             }
         }
+    }
+    #main {
+      background-color: #22222a;
     }
 }
 }

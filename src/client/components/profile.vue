@@ -17,7 +17,7 @@ const { t } = useTranslation('profile');
 
 <template>
   <div>
-    <p>{{ t("title") }}</p>
+    <h2>{{ t("title") }}</h2>
     <ul>
       <li>{{ t("email_label") }}: {{ email }}</li>
       <li><a href="/password">{{ t("update_password") }}</a></li>
@@ -28,4 +28,7 @@ const { t } = useTranslation('profile');
 </template>
 
 <style scoped lang="scss">
+h2 {
+  font-weight: 300;
+}
 </style>
