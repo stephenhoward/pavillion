@@ -8,12 +8,22 @@ export const useEventStore = defineStore('events', {
     };
   },
   actions: {
+    /**
+     * Adds a new calendar event to the store.
+     *
+     * @param {CalendarEvent} event - The event to add to the store
+     */
     addEvent(event: CalendarEvent) {
       this.events.push(event);
     },
 
+    /**
+     * Updates an existing event in the store or adds it if not found.
+     *
+     * @param {CalendarEvent} event - The event to update or add
+     */
     updateEvent(event: CalendarEvent) {
-      const index = this.events.findIndex((e) => e.id === event.id );
+      const index = this.events.findIndex((e: CalendarEvent) => e.id === event.id );
       if ( index >= 0 ) {
         this.events[index] = event;
       }

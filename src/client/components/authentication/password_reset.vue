@@ -65,14 +65,12 @@ onBeforeMount(async () => {
 async function submitResetCode() {
 
   state.form_error = '';
-  const response = await authn.check_password_reset_token(state.reset_code);
-  console.log(response);
-  if ( response.message == 'ok' ) {
-    state.codeValidated = true;
+  const valid = await authn.check_password_reset_token(state.reset_code);
+  state.codeValidated = valid;
+  if ( valid ) {
     state.isRegistration = response.isNewAccount;
   }
   else {
-    state.codeValidated = false;
     state.form_error = 'bad_token';
   }
 }

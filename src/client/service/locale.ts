@@ -12,6 +12,12 @@ import enAdmin from '@/client/locales/en/admin.json';
 import enInbox from '@/client/locales/en/inbox.json';
 import enFeed from '@/client/locales/en/feed.json';
 
+/**
+ * Initializes the i18next internationalization framework with all translation resources.
+ * Sets up language detection from the browser and configures fallback language to English.
+ *
+ * @returns {i18next.i18n} The configured i18next instance
+ */
 export const initI18Next = () => {
   // Initialize i18next with the standard initialization method
   i18next

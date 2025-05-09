@@ -13,6 +13,12 @@ import MemberAPI from '@/server/calendar/api/v1';
 import ConfigurationAPI from '@/server/configuration/api/v1';
 import ActivityPubAPI from '@/server/activitypub/api/v1';
 
+/**
+ * Initializes the Pavillion server with express application configuration.
+ * Sets up view templates, internationalization, API routes and starts the server listener.
+ *
+ * @param {express.Application} app - The Express application instance to configure
+ */
 const initPavillionServer = (app: express.Application) => {
 
   app.set("views", path.join(path.resolve(), "src/server/templates"));

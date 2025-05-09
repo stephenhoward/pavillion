@@ -9,19 +9,28 @@ import { DevelopmentTransport } from '@/server/common/service/mail/development-t
 import { TestingTransport } from '@/server/common/service/mail/testing-transport';
 
 /**
- * Email Service for sending messages via various transports
+ * Email Service for sending messages via various transports.
+ * Provides a unified interface for sending emails regardless of the underlying transport mechanism.
  */
 class EmailServiceClass {
   public transportInstance: MailTransport;
   private mailConfig: MailConfig;
 
+  /**
+   * Initializes the Email Service with configured transport.
+   * Reads configuration and creates appropriate transport instance.
+   */
   constructor() {
     this.mailConfig = this.getMailConfig();
     this.transportInstance = this.createTransport();
   }
 
   /**
-   * Get mail configuration from config files with defaults
+   * Gets mail configuration from config files with sensible defaults.
+   * Falls back to environment-specific defaults if configuration is missing.
+   *
+   * @returns {MailConfig} The mail configuration object
+   * @private
    */
   private getMailConfig(): MailConfig {
     const defaultConfig: MailConfig = {
@@ -65,7 +74,11 @@ class EmailServiceClass {
   }
 
   /**
-   * Create a nodemailer transport based on configuration
+   * Creates a mail transport based on the configuration.
+   * Supports SMTP, sendmail, development, and testing transports.
+   *
+   * @returns {MailTransport} The configured mail transport instance
+   * @private
    */
   private createTransport(): MailTransport {
     console.log('Creating mail transport:', this.mailConfig.transport);
@@ -86,16 +99,15 @@ class EmailServiceClass {
   }
 
   /**
-   * Send an email using the configured transport
+   * Sends an email using the configured transport.
    *
-   * @param data - MailData object containing email details:
-   * - emailAddress: Recipient email address
-   * - subject: Email subject
-   * - textMessage: Plain text email body
-   * - htmlMessage: Optional HTML email body
-   * @returns Promise resolving to the message info or null if sending failed
+   * @param {MailData} data - Mail data object containing email details:
+   * @param {string} data.emailAddress - Recipient email address
+   * @param {string} data.subject - Email subject
+   * @param {string} data.textMessage - Plain text email body
+   * @param {string} [data.htmlMessage] - Optional HTML email body
+   * @returns {Promise<SentMessageInfo | null>} Promise resolving to the message info or null if sending failed
    */
-
   public async sendEmail(data: MailData): Promise<SentMessageInfo | null> {
     try {
       const info = await this.transportInstance.sendMail({

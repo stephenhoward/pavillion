@@ -13,7 +13,9 @@ import EventService from "@/server/calendar/service/events";
 import { CalendarEvent } from "@/common/model/events";
 import { Calendar } from "@/common/model/calendar";
 
-
+/**
+ * Service responsible for processing incoming ActivityPub messages in the inbox.
+ */
 class ProcessInboxService {
   eventService: EventService;
 
@@ -21,6 +23,13 @@ class ProcessInboxService {
     this.eventService = new EventService();
   }
 
+  /**
+   * Registers event listeners for inbox message processing.
+   * Events include:
+   * - 'inboxMessageAdded'
+   *
+   * @param {EventEmitter} source - The event emitter source to listen to for inbox events
+   */
   registerListeners(source: EventEmitter) {
     source.on('inboxMessageAdded', async (e) => {
       let message = await ActivityPubInboxMessageEntity.findByPk(e.id);
@@ -35,6 +44,11 @@ class ProcessInboxService {
     });
   }
 
+  /**
+   * Processes all unprocessed inbox messages in batches.
+   *
+   * @returns {Promise<void>}
+   */
   async processInboxMessages() {
 
     let messages: ActivityPubInboxMessageEntity[] = [];
@@ -53,7 +67,12 @@ class ProcessInboxService {
     } while( messages.length > 0 );
   }
 
-  // TODO: validate message sender was allowed to send this message
+  /**
+   * Processes a single inbox message based on its type.
+   *
+   * @param {ActivityPubInboxMessageEntity} message - The message entity to process
+   * @returns {Promise<void>}
+   */
   async processInboxMessage(message: ActivityPubInboxMessageEntity ) {
     const calendar = await CalendarService.getCalendar(message.calendar_id);
 
@@ -112,9 +131,14 @@ class ProcessInboxService {
         processed_status: 'error',
       });
     }
-
   }
 
+  /**
+   * Verifies that an actor owns the object they're trying to modify.
+   *
+   * @param {any} message - The message containing actor and object information
+   * @returns {Promise<boolean>} True if the actor owns the object, false otherwise
+   */
   async actorOwnsObject(message: any): Promise<boolean> {
     // TODO: implement a remote verification of the actor's ownership of the object
     // by retrieving the object from its server and checking that attributedTo.
@@ -124,6 +148,13 @@ class ProcessInboxService {
     return false;
   }
 
+  /**
+   * Processes a Create activity by creating a new event if it doesn't exist.
+   *
+   * @param {Calendar} calendar - The calendar context for the event
+   * @param {CreateActivity} message - The Create activity message
+   * @returns {Promise<void>}
+   */
   async processCreateEvent(calendar: Calendar, message: CreateActivity) {
     let existingEvent = await this.eventService.getEventById(message.object.id);
     if ( ! existingEvent ) {
@@ -134,11 +165,24 @@ class ProcessInboxService {
     }
   }
 
+  /**
+   * Determines if an event originated from the local server.
+   *
+   * @param {CalendarEvent} event - The event to check
+   * @returns {boolean} True if the event is local, false otherwise
+   */
   isLocalEvent(event: CalendarEvent): boolean {
     // TODO: implement this propely
     return event.origin === 'local';
   }
 
+  /**
+   * Processes an Update activity by updating the local copy of a remote event.
+   *
+   * @param {Calendar} calendar - The calendar context for the event
+   * @param {UpdateActivity} message - The Update activity message
+   * @returns {Promise<void>}
+   */
   async processUpdateEvent(calendar: Calendar, message: UpdateActivity) {
     let existingEvent = await this.eventService.getEventById(message.object.id);
     if ( existingEvent && ! this.isLocalEvent(existingEvent) ) {
@@ -149,6 +193,13 @@ class ProcessInboxService {
     }
   }
 
+  /**
+   * Processes a Delete activity by deleting the local copy of a remote event.
+   *
+   * @param {Calendar} calendar - The calendar context for the event
+   * @param {DeleteActivity} message - The Delete activity message
+   * @returns {Promise<void>}
+   */
   async processDeleteEvent(calendar: Calendar, message: DeleteActivity) {
     let existingEvent = await this.eventService.getEventById(message.object.id);
     if ( existingEvent && ! this.isLocalEvent(existingEvent) ) {
@@ -159,7 +210,14 @@ class ProcessInboxService {
     }
   }
 
-  async processFollowAccount(calendar: Calendar, message: any) {
+  /**
+   * Processes a Follow activity by creating a new follower relationship.
+   *
+   * @param {Calendar} calendar - The calendar being followed
+   * @param {FollowActivity} message - The Follow activity message
+   * @returns {Promise<void>}
+   */
+  async processFollowAccount(calendar: Calendar, message: FollowActivity) {
     let existingFollow = await FollowerCalendarEntity.findOne({
       where: {
         remote_calendar_id: message.actor,
@@ -176,6 +234,14 @@ class ProcessInboxService {
     }
   }
 
+  /**
+   * Processes an Unfollow action (via Undo) by removing a follower relationship.
+   *
+   * @param {Calendar} calendar - The calendar being unfollowed
+   * @param {any} message - The message containing the unfollow information
+   * @returns {Promise<void>}
+   */
+  // TODO: proper message type
   async processUnfollowAccount(calendar: Calendar, message: any) {
     await FollowerCalendarEntity.destroy({
       where: {
@@ -185,7 +251,14 @@ class ProcessInboxService {
     });
   }
 
-  async processShareEvent(calendar: Calendar, message: any) {
+  /**
+   * Processes an Announce (Share) activity for an event.
+   *
+   * @param {Calendar} calendar - The calendar context for the share
+   * @param {AnnounceActivity} message - The Announce activity message
+   * @returns {Promise<void>}
+   */
+  async processShareEvent(calendar: Calendar, message: AnnounceActivity) {
     let existingShare = await EventActivityEntity.findOne({
       where: {
         event_id: message.object.id,
@@ -204,6 +277,14 @@ class ProcessInboxService {
     }
   }
 
+  /**
+   * Processes an Unshare action (via Undo) for an event.
+   *
+   * @param {Calendar} calendar - The calendar context for the unshare
+   * @param {any} message - The message containing the unshare information
+   * @returns {Promise<void>}
+   */
+  // TODO: proper message type
   async processUnshareEvent(calendar: Calendar, message: any) {
     let existingShare = await EventActivityEntity.findOne({
       where: {

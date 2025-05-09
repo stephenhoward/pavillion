@@ -17,6 +17,13 @@ import PasswordResetEmail from '@/server/authentication/model/password_reset_ema
  */
 class AuthenticationService {
 
+  /**
+   * Resets a user's password using a valid password reset code.
+   *
+   * @param {string} code - The password reset code to validate
+   * @param {string} password - The new password to set
+   * @returns {Promise<Account|undefined>} The account if password was reset successfully, undefined otherwise
+   */
   static async resetPassword(code: string, password: string): Promise<Account| undefined> {
     const secret = await AccountSecretsEntity.findOne({ where: {password_reset_code: code}, include: AccountEntity});
 
@@ -40,6 +47,13 @@ class AuthenticationService {
     }
   }
 
+  /**
+   * Generates a password reset code for an account with the given email and sends a reset email.
+   *
+   * @param {string} email - Email address of the account to generate a reset code for
+   * @returns {Promise<void>}
+   * @throws {noAccountExistsError} If no account exists with the given email
+   */
   static async generatePasswordResetCode(email: string) {
     const account = await CommonAccountService.getAccountByEmail(email);
     if ( ! account ) {
@@ -59,6 +73,12 @@ class AuthenticationService {
     await EmailService.sendEmail(message.buildMessage(account.language));
   }
 
+  /**
+   * Generates a password reset code for a specific account.
+   *
+   * @param {Account} account - The account to generate a password reset code for
+   * @returns {Promise<string>} The generated password reset code
+   */
   static async generatePasswordResetCodeForAccount(account: Account): Promise<string> {
     let secret = await AccountSecretsEntity.findByPk(account.id);
     if ( ! secret ) {
@@ -73,6 +93,12 @@ class AuthenticationService {
     return secret.password_reset_code;
   }
 
+  /**
+   * Validates if a password reset code is valid and not expired.
+   *
+   * @param {string} code - The password reset code to validate
+   * @returns {Promise<boolean>} True if the code is valid and not expired, false otherwise
+   */
   static async validatePasswordResetCode(code: string): Promise<boolean> {
     const secret = await AccountSecretsEntity.findOne({where: {password_reset_code: code}});
 
@@ -84,6 +110,13 @@ class AuthenticationService {
     return false;
   }
 
+  /**
+   * Checks if the provided password is correct for the given account.
+   *
+   * @param {Account} account - The account to check the password for
+   * @param {string} password - The password to verify
+   * @returns {Promise<boolean>} True if the password is correct, false otherwise
+   */
   static async checkPassword(account:Account, password:string): Promise<boolean> {
     const secret = await AccountSecretsEntity.findByPk(account.id);
 

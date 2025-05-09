@@ -7,12 +7,20 @@ const environment = process.env.NODE_ENV;
 
 const supportedAssets = ["svg", "png", "jpg", "png", "jpeg", "mp4", "ogv"];
 
+/**
+ * @returns {RegExp} A regular expression matching URLs ending with supported asset extensions
+ */
 const assetExtensionRegex = () => {
   const formattedExtensionList = supportedAssets.join("|");
 
   return new RegExp(`/.+\.(${formattedExtensionList})$`);
 };
 
+/**
+ * Parses the asset manifest file in production environment.
+ *
+ * @returns {Promise<Record<string, any>>} Manifest data as an object, or empty object in non-production environments
+ */
 const parseManifest = async () => {
   if (environment !== "production") return {};
 
@@ -23,6 +31,14 @@ const parseManifest = async () => {
 };
 
 const handlers = {
+  /**
+   * Handles requests for the index/home page.
+   * Renders the single-page-application template.
+   *
+   * @param {Request} req - Express request object
+   * @param {Response} res - Express response object
+   * @returns {Promise<void>}
+   */
   index: async (req: Request, res: Response) => {
     const data = {
       environment,
@@ -31,9 +47,25 @@ const handlers = {
 
     res.render("index.html.ejs", data);
   },
+
+  /**
+   * Handles asset requests in development mode by redirecting to the dev server.
+   *
+   * @param {Request} req - Express request object
+   * @param {Response} res - Express response object
+   * @returns {Promise<void>}
+   */
   assets: async (req: Request, res: Response) => {
     res.redirect(303, `http://localhost:5173/${req.path}`);
   },
+
+  /**
+   * Handles coverage report requests in development mode by redirecting to the dev server.
+   *
+   * @param {Request} req - Express request object
+   * @param {Response} res - Express response object
+   * @returns {Promise<void>}
+   */
   coverage: async (req: Request, res: Response) => {
     res.redirect(303, `http://localhost:5173/${req.path}`);
   },

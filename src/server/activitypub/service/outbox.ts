@@ -13,13 +13,21 @@ import CreateActivity from "@/server/activitypub/model/action/create";
 import UndoActivity from "@/server/activitypub/model/action/undo";
 import { ActivityPubObject } from "@/server/activitypub/model/base";
 
-
+/**
+ * Service responsible for processing and distributing outgoing ActivityPub messages.
+ * Handles delivery of various activity types to followers and other recipients.
+ */
 class ProcessOutboxService {
 
-  constructor() {
+  constructor() { }
 
-  }
-
+  /**
+   * Registers event listeners for processing outbox messages.
+   * Events include:
+   * - 'outboxMessageAdded'
+   *
+   * @param {EventEmitter} source - The event emitter source to listen to for outbox events
+   */
   registerListeners(source: EventEmitter) {
     source.on('outboxMessageAdded', async (e) => {
       let message = await ActivityPubOutboxMessageEntity.findByPk(e.id);
@@ -32,6 +40,11 @@ class ProcessOutboxService {
     });
   }
 
+  /**
+   * Processes all unprocessed outbox messages in batches.
+   *
+   * @returns {Promise<void>}
+   */
   async processOutboxMessages() {
 
     let messages: ActivityPubOutboxMessageEntity[] = [];
@@ -49,6 +62,13 @@ class ProcessOutboxService {
     } while( messages.length > 0 );
   }
 
+  /**
+   * Processes a single outbox message, determining its type and sending it to appropriate recipients.
+   *
+   * @param {ActivityPubOutboxMessageEntity} message - The outbox message to process
+   * @returns {Promise<void>}
+   * @throws {Error} If no calendar is found for the message
+   */
   async processOutboxMessage(message: ActivityPubOutboxMessageEntity) {
     let calendar = await CalendarService.getCalendar(message.calendar_id);
 
@@ -105,6 +125,14 @@ class ProcessOutboxService {
     }
   }
 
+  /**
+   * Gets a list of recipient IDs for a given calendar and object.
+   * Includes followers of the calendar and calendars that have shared the specific object.
+   *
+   * @param {Calendar} calendar - The source calendar
+   * @param {ActivityPubObject|string} object - The ActivityPub object or its ID
+   * @returns {Promise<string[]>} List of recipient IDs
+   */
   async getRecipients(calendar: Calendar, object: ActivityPubObject|string): Promise<string[]> {
     let recipients: string[] = [];
 
@@ -122,6 +150,12 @@ class ProcessOutboxService {
     return recipients;
   }
 
+  /**
+   * Resolves the inbox URL for a remote user by fetching their profile.
+   *
+   * @param {string} remote_user - The remote user identifier
+   * @returns {Promise<string|null>} The inbox URL if found, otherwise null
+   */
   async resolveInboxUrl(remote_user: string): Promise<string|null> {
 
     const profileUrl = await this.fetchProfileUrl(remote_user);
@@ -136,6 +170,12 @@ class ProcessOutboxService {
     return null;
   }
 
+  /**
+   * Fetches the profile URL for a remote user using WebFinger protocol.
+   *
+   * @param {string} remote_user - The remote user identifier (username@domain)
+   * @returns {Promise<string|null>} The profile URL if found, otherwise null
+   */
   async fetchProfileUrl(remote_user: string): Promise<string|null> {
     const [username, domain] = remote_user.split('@');
     if ( username && domain ) {

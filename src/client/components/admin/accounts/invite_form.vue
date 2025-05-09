@@ -67,7 +67,15 @@ const state = reactive({
   email: '',
 });
 
-
+/**
+ * Sends an invitation to the specified email address.
+ * Creates an AccountInvitation model, submits it to the API,
+ * adds the created invitation to the invitationStore, and
+ * closes the modal form.
+ *
+ * @param {string} email - The email address to send the invitation to
+ * @returns {Promise<void>}
+ */
 const sendInvite = async (email) => {
   const model = AccountInvitation.fromObject({
     email: email,

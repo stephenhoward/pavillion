@@ -6,9 +6,18 @@ import { ClientRequest } from 'http';
 import crypto from 'crypto';
 import { Cache } from '@/server/activitypub/helper/cache';
 
-// Add a key cache to prevent frequent key fetching
+// A key cache to prevent frequent key fetching
 const keyCache = new Cache<string>(60 * 60 * 1000); // 1 hour expiration
 
+/**
+ * Express middleware for verifying HTTP signatures in ActivityPub requests.
+ * Implements the HTTP Signature verification spec for securing ActivityPub interactions.
+ *
+ * @param {Request} req - Express request object
+ * @param {Response} res - Express response object
+ * @param {NextFunction} next - Express next middleware function
+ * @returns {Promise<void>}
+ */
 export async function verifyHttpSignature(req: Request, res: Response, next: NextFunction) {
   try {
     // Parse the signature header
@@ -87,7 +96,10 @@ export async function verifyHttpSignature(req: Request, res: Response, next: Nex
 }
 
 /**
- * Extract actor URL from keyId
+ * Extracts actor URL from a keyId.
+ *
+ * @param {string} keyId - The key identifier URL
+ * @returns {string} The extracted actor URL or empty string if extraction fails
  */
 function extractActorFromKeyId(keyId: string): string {
   try {
@@ -100,7 +112,10 @@ function extractActorFromKeyId(keyId: string): string {
 }
 
 /**
- * Get public key with caching
+ * Gets a public key with caching support to reduce network requests.
+ *
+ * @param {string} keyId - The key identifier URL
+ * @returns {Promise<string|null>} The public key as a string, or null if retrieval fails
  */
 async function getPublicKey(keyId: string): Promise<string | null> {
   // Check cache first
@@ -123,7 +138,11 @@ async function getPublicKey(keyId: string): Promise<string | null> {
 }
 
 /**
- * Fetch the public key from the keyId URL
+ * Fetches the public key from the keyId URL.
+ * Handles different formats of public keys in ActivityPub implementations.
+ *
+ * @param {string} keyId - The key identifier URL
+ * @returns {Promise<string|null>} The public key as a string, or null if fetching fails
  */
 async function fetchPublicKey(keyId: string): Promise<string | null> {
   try {
@@ -178,7 +197,12 @@ async function fetchPublicKey(keyId: string): Promise<string | null> {
 }
 
 /**
- * Check if the actor has permission for the operation in the request
+ * Verifies if the activitypub actor has permission for the operation in the request.
+ * Basic check to ensure the request actor matches the actor associated with the key.
+ *
+ * @param {string|null} requestActor - The actor identifier from the request
+ * @param {string} keyId - The key identifier URL
+ * @returns {Promise<boolean>} True if the actor has permission, false otherwise
  */
 async function verifyActorPermission(requestActor: string|null, keyId: string): Promise<boolean> {
   if(!requestActor || !keyId) {
