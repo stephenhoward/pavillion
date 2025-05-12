@@ -1,8 +1,8 @@
 {
   "list": {
     "my_calendars_header": "My Calendars",
-    "no_calendars_message": "No calendars found",
-    "create_calendar_button": "Create a Calendar"
+    "no_calendars_message": "No calendar found",
+    "create_calendar_button": "Create Your Calendar"
   },
   "calendar": {
     "create_button": "Create Event",

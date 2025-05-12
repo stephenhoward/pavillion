@@ -56,4 +56,26 @@ export default class Config {
   settings(): Settings {
     return Config._settings;
   }
+
+  /**
+   * Updates the registration mode setting on the server
+   *
+   * @param {string} mode - The new registration mode ('open', 'apply', 'invite', or 'closed')
+   * @returns {Promise<boolean>} A promise that resolves to true if the update was successful
+   */
+  async updateRegistrationMode(mode: string): Promise<boolean> {
+    try {
+      const response = await axios.post('/api/config/v1/site/registration-mode', { mode });
+      if (response.status === 200) {
+        // Reload settings after successful update
+        await Config._load_settings();
+        return true;
+      }
+      return false;
+    }
+    catch (error) {
+      console.error('Failed to update registration mode:', error);
+      return false;
+    }
+  }
 }
