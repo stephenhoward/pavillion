@@ -15,6 +15,7 @@ const errorMessage = ref('');
 
 // Initialize with current registration mode
 const selectedRegistrationMode = ref(site_config.settings().registrationMode || 'closed');
+const siteTitle = ref(site_config.settings().siteTitle);
 
 // Registration mode options
 const registrationModes = [
@@ -27,27 +28,30 @@ const registrationModes = [
 /**
  * Updates the registration mode setting
  */
-async function updateRegistrationMode() {
+async function updateSettings() {
   saving.value = true;
   errorMessage.value = '';
   successMessage.value = '';
 
   try {
     const configService = await Config.init();
-    const success = await configService.updateRegistrationMode(selectedRegistrationMode.value);
+    const success = await configService.updateSettings({
+      registrationMode: selectedRegistrationMode.value,
+      siteTitle: siteTitle.value,
+    });
 
     if (success) {
-      successMessage.value = t('registration_mode_updated');
+      successMessage.value = t('settings_update_success');
       // Update the site config after successful update
       site_config.settings.registrationMode = selectedRegistrationMode.value;
     }
     else {
-      errorMessage.value = t('registration_mode_update_failed');
+      errorMessage.value = t('settings_update_failed');
     }
   }
   catch (error) {
     console.error('Error updating registration mode:', error);
-    errorMessage.value = t('error_updating_settings');
+    errorMessage.value = t('settings_update_failed');
   }
   finally {
     saving.value = false;
@@ -68,7 +72,12 @@ async function updateRegistrationMode() {
       <div class="form-group">
         <label id="instance-name-label" class="form-label">{{ t("instance_name") }}</label>
         <div class="form-field" aria-labelledby="instance-name-label">
-          {{ site_config.settings.siteTitle }}
+          <input type="text"
+                 :disabled="saving"
+                 aria-describedby="site-title-description"
+                 v-model="siteTitle"
+          />
+          <div id="site-title-description" class="description">{{ t("site_title_description") }}</div>
         </div>
       </div>
 
@@ -78,7 +87,6 @@ async function updateRegistrationMode() {
           <select
             id="registrationMode"
             v-model="selectedRegistrationMode"
-            @change="updateRegistrationMode"
             :disabled="saving"
             aria-describedby="reg-mode-description">
             <option v-for="mode in registrationModes" :key="mode.value" :value="mode.value">
@@ -88,6 +96,12 @@ async function updateRegistrationMode() {
           <div id="reg-mode-description" class="description">{{ t("registration_mode_description") }}</div>
         </div>
       </div>
+
+      <button
+        type="button"
+        :disabled="saving"
+        @click="updateSettings"
+      >{{  t("save_settings_button") }}</button>
     </form>
   </section>
 </template>
@@ -96,7 +110,7 @@ async function updateRegistrationMode() {
 @use '../../assets/mixins' as *;
 
 .settings-section {
-  margin: 1.5rem 0;
+  margin: 10px;
 }
 
 h2 {
@@ -129,6 +143,13 @@ h2 {
 
 .form-field {
   flex: 1;
+  input, select {
+    width: 100%;
+    border-radius: 20px;
+    font-size: 12pt;
+    border: 0px;
+    padding: 4px 8px;
+  }
 }
 
 select {

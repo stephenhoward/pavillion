@@ -59,6 +59,7 @@
         "title": "General settings",
         "general_settings": "General Settings",
         "instance_name": "Instance Name",
+        "site_title_description": "The name of this server as it appears in the user interface",
         "instance_name_placeholder": "Instance Name",
         "registration_mode": "Registration Mode",
         "registration_mode_description": "Control how new users can join your instance",
@@ -66,13 +67,14 @@
         "registration_mode_apply": "Apply to Register",
         "registration_mode_invite": "Invite Only",
         "registration_mode_closed": "Closed",
-        "registration_mode_updated": "Registration mode updated successfully",
-        "registration_mode_update_failed": "Failed to update registration mode",
+        "settings_update_success": "Service settings updated successfully",
+        "settings_update_failed": "Failed to update service settings",
         "error_updating_settings": "An error occurred while updating settings",
         "open": "Open",
         "invite": "Invite Only",
         "apply": "Application Only",
-        "closed": "Closed"
+        "closed": "Closed",
+        "save_settings_button": "Save Settings"
     },
     "federation": {
         "title": "Federation settings",

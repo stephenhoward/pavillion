@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import ServiceSettings from '../../service/settings';
+import ExpressHelper from '../../../common/helper/express';
 
 const handlers = {
   site: async (req: Request, res: Response) => {
@@ -10,29 +11,21 @@ const handlers = {
     });
   },
 
-  updateRegistrationMode: async (req: Request, res: Response) => {
-    const { mode } = req.body;
-
-    // Validate the mode
-    if (!mode || !['open', 'apply', 'invite', 'closed'].includes(mode)) {
-      return res.status(400).json({
-        error: 'Invalid registration mode. Must be one of: open, apply, invite, closed',
-      });
-    }
-
+  updateSettings: async (req: Request, res: Response) => {
     try {
       const settings = await ServiceSettings.getInstance();
-      const success = await settings.setRegistrationMode(mode);
+      // TODO: wrap this in a transaction so we don't update some settings but not others:
+      for( const key in req.body ) {
+        const success = await settings.set(key, req.body[key]);
+        if (! success) {
+          return res.status(500).json({ error: 'Failed to update service setting: "'+key +'"' });
+        }
+      }
 
-      if (success) {
-        return res.status(200).json({ success: true, mode });
-      }
-      else {
-        return res.status(500).json({ error: 'Failed to update registration mode' });
-      }
+      return res.status(200).json({ success: true  });
     }
     catch (error) {
-      console.error('Error updating registration mode:', error);
+      console.error('Error updating service settings:', error);
       return res.status(500).json({ error: 'Internal server error' });
     }
   },
@@ -41,6 +34,6 @@ const handlers = {
 var router = express.Router();
 
 router.get('/site', handlers.site);
-router.post('/site/registration-mode', handlers.updateRegistrationMode);
+router.post('/site', ExpressHelper.adminOnly, handlers.updateSettings);
 
 export { handlers, router };

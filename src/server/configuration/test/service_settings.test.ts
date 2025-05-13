@@ -1,4 +1,3 @@
-// filepath: /Users/stephen/dev/pavillion/src/server/configuration/test/service_settings.test.ts
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import ServiceSettings from '@/server/configuration/service/settings';
@@ -44,8 +43,8 @@ describe('ServiceSettings', () => {
     it('should load settings from the database', async () => {
 
       const findAllStub = sandbox.stub(ServiceSettingEntity, 'findAll').resolves([
-        { parameter: 'registrationMode', value: 'open' },
-        { parameter: 'siteTitle', value: 'Test Site' },
+        { parameter: 'registrationMode', value: 'open' } as unknown as ServiceSettingEntity,
+        { parameter: 'siteTitle', value: 'Test Site' } as unknown as ServiceSettingEntity,
       ]);
 
       const settings = await ServiceSettings.getInstance();
@@ -61,7 +60,7 @@ describe('ServiceSettings', () => {
     it('should return the value for an existing key', async () => {
 
       sandbox.stub(ServiceSettingEntity, 'findAll').resolves([
-        { parameter: 'registrationMode', value: 'invite' },
+        { parameter: 'registrationMode', value: 'invite' } as unknown as ServiceSettingEntity,
       ]);
 
       const settings = await ServiceSettings.getInstance();
@@ -78,38 +77,56 @@ describe('ServiceSettings', () => {
     });
   });
 
-  describe('setRegistrationMode', () => {
-    it('should update an existing registration mode setting', async () => {
-      const mockRegSettingEntity = { value: 'open', save: sandbox.stub().resolves() };
-      const findOrCreateStub = sandbox.stub(ServiceSettingEntity, 'findOrCreate').resolves([
-        mockRegSettingEntity as unknown as ServiceSettingEntity, // Return a mock entity with a save method
+  describe('set', () => {
+    it('should update an existing setting', async () => {
+      const mockSettingEntity = { parameter: 'registrationMode', value: 'open', save: sandbox.stub().resolves() };
+      sandbox.stub(ServiceSettingEntity, 'findOrCreate').resolves([
+        mockSettingEntity as unknown as ServiceSettingEntity, // Return a mock entity with a save method
         false, // Not created, indicates entity existed
       ]);
 
       sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
 
       const settings = await ServiceSettings.getInstance();
-      const result = await settings.setRegistrationMode('open');
+      const result = await settings.set('registrationMode', 'open');
 
       expect(result).toBe(true);
       expect(settings.get('registrationMode')).toBe('open');
-      expect(findOrCreateStub.calledOnce).toBe(true);
-      expect(mockRegSettingEntity.save.calledOnce).toBe(true);
+      expect(mockSettingEntity.save.called).toBe(true);
     });
 
-    it('should create a new registration mode setting if none exists', async () => {
-      const findOrCreateStub = sandbox.stub(ServiceSettingEntity, 'findOrCreate').resolves([
-        { value: 'invite' }, // Return a mock entity
+    it('should create a new setting if none exists', async () => {
+      const mockSettingEntity = { parameter: 'registrationMode', value: 'invite', save: sandbox.stub().resolves() };
+      sandbox.stub(ServiceSettingEntity, 'findOrCreate').resolves([
+        mockSettingEntity as unknown as ServiceSettingEntity, // Return a mock entity with a save method
         true, // Created, indicates entity did not exist before
       ]);
 
       sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
 
       const settings = await ServiceSettings.getInstance();
-      const result = await settings.setRegistrationMode('invite');
+      const result = await settings.set('registrationMode', 'open');
 
       expect(result).toBe(true);
-      expect(findOrCreateStub.calledOnce).toBe(true);
+      expect(settings.get('registrationMode')).toBe('open');
+      expect(mockSettingEntity.save.called).toBe(false);
+    });
+
+    it('should update the site title', async () => {
+      const mockSettingEntity = { parameter: 'siteTitle', value: 'My Site', save: sandbox.stub().resolves() };
+      sandbox.stub(ServiceSettingEntity, 'findOrCreate').resolves([
+        mockSettingEntity as unknown as ServiceSettingEntity,
+        false,
+      ]);
+
+      sandbox.stub(ServiceSettingEntity, 'findAll').resolves([ mockSettingEntity as unknown as ServiceSettingEntity ]);
+
+      const settings = await ServiceSettings.getInstance();
+      const result = await settings.set('siteTitle', 'My New Site');
+
+      expect(result).toBe(true);
+      expect(settings.get('siteTitle')).toBe('My New Site');
+      expect(mockSettingEntity.save.calledOnce).toBe(true);
     });
 
     it('should reject invalid registration mode values', async () => {
@@ -119,15 +136,24 @@ describe('ServiceSettings', () => {
 
       // Using type assertion to bypass TypeScript's type checking
       // since we're deliberately testing an invalid input
-      const result = await settings.setRegistrationMode('invalid' as any);
+      const result = await settings.set('registrationMode', 'invalid');
 
       expect(result).toBe(false);
       expect(settings.get('registrationMode')).toBe('closed');
     });
 
+    it('should reject invalid parameter names', async () => {
+      sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+      const settings = await ServiceSettings.getInstance();
+      const result = await settings.set('invalidParameter', 'value');
+
+      expect(result).toBe(false);
+    });
+
     it('change should be reflected in all instances', async () => {
-      const findOrCreateStub = sandbox.stub(ServiceSettingEntity, 'findOrCreate').resolves([
-        { value: 'apply', save: sandbox.stub().resolves() },
+      sandbox.stub(ServiceSettingEntity, 'findOrCreate').resolves([
+        { parameter: 'registrationMode', value: 'invite', save: sandbox.stub().resolves() } as unknown as ServiceSettingEntity,
         false,
       ]);
 
@@ -136,7 +162,7 @@ describe('ServiceSettings', () => {
       const settings = await ServiceSettings.getInstance();
       const instanceBeforeUpdate = await ServiceSettings.getInstance();
 
-      await settings.setRegistrationMode('apply');
+      await settings.set('registrationMode', 'apply');
 
       const instanceAfterUpdate = await ServiceSettings.getInstance();
 

@@ -46,28 +46,37 @@ class ServiceSettings {
   }
 
   /**
-   * Updates the registration mode setting
-   * @param mode The new registration mode ('open', 'apply', 'invite', or 'closed')
+   * Updates a service setting
+   * @param parameter: a valid service setting from the Config type
+   * @param value: the new value for the setting
    * @returns Promise resolving to true if update was successful
    */
-  async setRegistrationMode(mode: 'open' | 'apply' | 'invite' | 'closed'): Promise<boolean> {
-    // Validate the mode
-    if (!['open', 'apply', 'invite', 'closed'].includes(mode)) {
+  async set(parameter: string, value: string): Promise<boolean> {
+    if( ! (parameter in this.config) ) {
+      console.error('Invalid parameter:', parameter);
       return false;
+    }
+
+    // Validate the mode
+    if ( parameter == 'registrationMode' ) {
+      if (!['open', 'apply', 'invite', 'closed'].includes(value)) {
+        console.error('Invalid registration mode:', value);
+        return false;
+      }
     }
 
     // Update or create the setting in the database
     const [entity, created] = await ServiceSettingEntity.findOrCreate({
-      where: { parameter: 'registrationMode' },
-      defaults: { parameter: 'registrationMode', value: mode },
+      where: { parameter },
+      defaults: { parameter, value },
     });
 
     if (!created) {
-      entity.value = mode;
+      entity.value = value;
       await entity.save();
     }
 
-    this.config.registrationMode = mode;
+    this.config[parameter as keyof Config] =  value;// as 'open' | 'apply' | 'invite' | 'closed';
 
     return true;
   }
