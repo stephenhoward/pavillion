@@ -355,6 +355,30 @@ Pavillion addresses these issues by creating a federated network of event calend
    - Protection against common web vulnerabilities
    - Domain isolation to minimize security breach impacts
 
+6. **Input Validation**
+   - Comprehensive validation for all user inputs
+   - Sanitization to prevent XSS and injection attacks
+   - Email format validation with disposable email detection
+   - Rate limiting for form submissions
+   - Size limits for all text inputs and file uploads
+   - Content type validation for all uploads
+   - Malicious pattern detection in user-generated content
+   - Client-side validation for UX with server-side validation for security
+   - Standardized error responses for validation failures
+   - Configuration options for validation rules per content type
+
+7. **Database Transactions**
+   - ACID compliance for all critical operations
+   - Transaction support for operations spanning multiple entities
+   - Proper rollback handling for error scenarios
+   - Optimistic concurrency control for collaborative editing
+   - Consistent state preservation during complex operations
+   - Idempotent operations where applicable
+   - Retry mechanisms for temporary failures
+   - Monitoring and alerting for transaction failures
+   - Performance optimization for transaction-heavy workflows
+   - Connection pooling and transaction timeout management
+
 ## Future Considerations
 
 1. **Integration Possibilities**
@@ -385,7 +409,16 @@ Pavillion addresses these issues by creating a federated network of event calend
    - Performance metrics and auto-scaling per domain
    - Pluggable domain implementation for community extensions
 
-5. **Location Information Sharing**
+5. **Rate Limiting**
+   - Advanced rate limiting based on user behavior patterns
+   - Adaptive rate limits based on server load and traffic
+   - IP-based and account-based rate limiting strategies
+   - Graduated response to rate limit violations
+   - Rate limit federation activities to prevent instance flooding
+   - Clear feedback for users approaching or exceeding limits
+   - Analytics for rate limit violations to identify potential attacks
+
+6. **Location Information Sharing**
    - Cross-calendar location sharing with owner permission
    - Opt-in model for making location records available to other calendar owners
    - Permission controls for allowing others to view vs. edit shared locations
