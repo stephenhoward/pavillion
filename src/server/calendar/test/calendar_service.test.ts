@@ -2,10 +2,10 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 
 import { Account } from '@/common/model/account';
-import { Calendar } from '@/common/model/calendar';
-import { CalendarEntity } from '@/server/calendar/entity/calendar';
+import { Calendar, CalendarContent } from '@/common/model/calendar';
+import { CalendarEntity, CalendarContentEntity } from '@/server/calendar/entity/calendar';
 import CalendarService from '@/server/calendar/service/calendar';
-
+import { UrlNameAlreadyExistsError, InvalidUrlNameError } from '@/server/calendar/exceptions';
 
 describe('isValidUrlName', () => {
 
@@ -120,4 +120,356 @@ describe('setUrlName', () => {
     expect(cal.urlName).toBe('validname');
   });
 
+});
+
+describe('getCalendar', () => {
+  let sandbox: sinon.SinonSandbox;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('should return a Calendar model if found', async () => {
+    const cal = new Calendar('testCalendarId', 'testme');
+    const calendarFindStub = sandbox.stub(CalendarEntity, 'findByPk');
+    calendarFindStub.resolves(CalendarEntity.fromModel(cal));
+
+    const result = await CalendarService.getCalendar('testCalendarId');
+
+    expect(result).not.toBeNull();
+    expect(result?.id).toBe('testCalendarId');
+    expect(result?.urlName).toBe('testme');
+    expect(calendarFindStub.calledWith('testCalendarId')).toBe(true);
+  });
+
+  it('should return null if calendar not found', async () => {
+    const calendarFindStub = sandbox.stub(CalendarEntity, 'findByPk');
+    calendarFindStub.resolves(null);
+
+    const result = await CalendarService.getCalendar('nonExistentId');
+
+    expect(result).toBeNull();
+    expect(calendarFindStub.calledWith('nonExistentId')).toBe(true);
+  });
+});
+
+describe('editableCalendarsForUser', () => {
+  let sandbox: sinon.SinonSandbox;
+  let acct: Account;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    acct = new Account('testAccountId', 'testme', 'testme');
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('should return list of calendars for user', async () => {
+    const cal1 = new Calendar('cal1', 'calendar1');
+    const cal2 = new Calendar('cal2', 'calendar2');
+
+    const calendarFindAllStub = sandbox.stub(CalendarEntity, 'findAll');
+    calendarFindAllStub.resolves([
+      CalendarEntity.fromModel(cal1),
+      CalendarEntity.fromModel(cal2),
+    ]);
+
+    const result = await CalendarService.editableCalendarsForUser(acct);
+
+    expect(result).toHaveLength(2);
+    expect(result[0].id).toBe('cal1');
+    expect(result[1].id).toBe('cal2');
+  });
+
+  it('should return empty array if no calendars found', async () => {
+    const calendarFindAllStub = sandbox.stub(CalendarEntity, 'findAll');
+    calendarFindAllStub.resolves([]);
+
+    const result = await CalendarService.editableCalendarsForUser(acct);
+
+    expect(result).toHaveLength(0);
+  });
+});
+
+describe('userCanModifyCalendar', () => {
+  let sandbox: sinon.SinonSandbox;
+  let acct: Account;
+  let cal: Calendar;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    acct = new Account('testAccountId', 'testme', 'testme');
+    cal = new Calendar('testCalendarId', 'testme');
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('should return true if user is admin', async () => {
+    acct.roles = ['admin'];
+    const editableCalendarsStub = sandbox.stub(CalendarService, 'editableCalendarsForUser');
+
+    const result = await CalendarService.userCanModifyCalendar(acct, cal);
+
+    expect(result).toBe(true);
+    expect(editableCalendarsStub.called).toBe(false);
+  });
+
+  it('should return true if user owns the calendar', async () => {
+    const editableCalendarsStub = sandbox.stub(CalendarService, 'editableCalendarsForUser');
+    editableCalendarsStub.resolves([cal]);
+
+    const result = await CalendarService.userCanModifyCalendar(acct, cal);
+
+    expect(result).toBe(true);
+    expect(editableCalendarsStub.calledWith(acct)).toBe(true);
+  });
+
+  it('should return false if user has no calendars', async () => {
+    const editableCalendarsStub = sandbox.stub(CalendarService, 'editableCalendarsForUser');
+    editableCalendarsStub.resolves([]);
+
+    const result = await CalendarService.userCanModifyCalendar(acct, cal);
+
+    expect(result).toBe(false);
+    expect(editableCalendarsStub.calledWith(acct)).toBe(true);
+  });
+
+  it('should return false if user does not own the calendar', async () => {
+    const otherCal = new Calendar('otherCalendarId', 'othercal');
+    const editableCalendarsStub = sandbox.stub(CalendarService, 'editableCalendarsForUser');
+    editableCalendarsStub.resolves([otherCal]);
+
+    const result = await CalendarService.userCanModifyCalendar(acct, cal);
+
+    expect(result).toBe(false);
+    expect(editableCalendarsStub.calledWith(acct)).toBe(true);
+  });
+});
+
+describe('getCalendarByName', () => {
+  let sandbox: sinon.SinonSandbox;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('should return a Calendar model if found by name', async () => {
+    const cal = new Calendar('testCalendarId', 'testme');
+    const calendarFindOneStub = sandbox.stub(CalendarEntity, 'findOne');
+    calendarFindOneStub.resolves(CalendarEntity.fromModel(cal));
+
+    const result = await CalendarService.getCalendarByName('testme');
+
+    expect(result).not.toBeNull();
+    expect(result?.id).toBe('testCalendarId');
+    expect(result?.urlName).toBe('testme');
+  });
+
+  it('should return null if calendar not found by name', async () => {
+    const calendarFindOneStub = sandbox.stub(CalendarEntity, 'findOne');
+    calendarFindOneStub.resolves(null);
+
+    const result = await CalendarService.getCalendarByName('nonexistent');
+
+    expect(result).toBeNull();
+  });
+});
+
+describe('getPrimaryCalendarForUser', () => {
+  let sandbox: sinon.SinonSandbox;
+  let acct: Account;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    acct = new Account('testAccountId', 'testme', 'testme');
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('should return primary calendar for user if found', async () => {
+    const cal = new Calendar('testCalendarId', 'testme');
+    const calendarFindOneStub = sandbox.stub(CalendarEntity, 'findOne');
+    calendarFindOneStub.resolves(CalendarEntity.fromModel(cal));
+
+    const result = await CalendarService.getPrimaryCalendarForUser(acct);
+
+    expect(result).not.toBeNull();
+    expect(result?.id).toBe('testCalendarId');
+    expect(calendarFindOneStub.calledWith({
+      where: { account_id: 'testAccountId' },
+    })).toBe(true);
+  });
+
+  it('should return null if no calendar found for user', async () => {
+    const calendarFindOneStub = sandbox.stub(CalendarEntity, 'findOne');
+    calendarFindOneStub.resolves(null);
+
+    const result = await CalendarService.getPrimaryCalendarForUser(acct);
+
+    expect(result).toBeNull();
+    expect(calendarFindOneStub.calledWith({
+      where: { account_id: 'testAccountId' },
+    })).toBe(true);
+  });
+});
+
+describe('createCalendar', () => {
+  let sandbox: sinon.SinonSandbox;
+  let acct: Account;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    acct = new Account('testAccountId', 'testme', 'testme');
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('should throw error if URL name is invalid', async () => {
+    const isValidUrlNameStub = sandbox.stub(CalendarService, 'isValidUrlName').returns(false);
+
+    await expect(() => CalendarService.createCalendar(acct, '_invalid')).rejects.toThrow(InvalidUrlNameError);
+    expect(isValidUrlNameStub.calledWith('_invalid')).toBe(true);
+  });
+
+  it('should throw error if URL name already exists', async () => {
+    sandbox.stub(CalendarService, 'isValidUrlName').returns(true);
+    const existingCalendar = CalendarEntity.build({ id: 'existingId', url_name: 'existingname' });
+    const calendarFindOneStub = sandbox.stub(CalendarEntity, 'findOne').resolves(existingCalendar);
+
+    await expect(() => CalendarService.createCalendar(acct, 'existingname')).rejects.toThrow(UrlNameAlreadyExistsError);
+    expect(calendarFindOneStub.calledWith({ where: { url_name: 'existingname' } })).toBe(true);
+  });
+
+  it('should create calendar with specified URL name', async () => {
+    sandbox.stub(CalendarService, 'isValidUrlName').returns(true);
+    sandbox.stub(CalendarEntity, 'findOne').resolves(null);
+    const calendarCreateStub = sandbox.stub(CalendarEntity, 'create');
+    const createdCalendarEntity = CalendarEntity.build({
+      id: 'newCalendarId',
+      account_id: 'testAccountId',
+      url_name: 'newcal',
+      languages: 'en',
+    });
+    calendarCreateStub.resolves(createdCalendarEntity);
+
+    const result = await CalendarService.createCalendar(acct, 'newcal');
+
+    expect(result).not.toBeNull();
+    expect(result.id).toBe('newCalendarId');
+    expect(result.urlName).toBe('newcal');
+    expect(calendarCreateStub.calledOnce).toBe(true);
+    const createArgs = calendarCreateStub.firstCall.args[0];
+    expect(createArgs).toHaveProperty('account_id', 'testAccountId');
+    expect(createArgs).toHaveProperty('url_name', 'newcal');
+  });
+
+  it('should create calendar with name if provided', async () => {
+    sandbox.stub(CalendarService, 'isValidUrlName').returns(true);
+    sandbox.stub(CalendarEntity, 'findOne').resolves(null);
+    const calendarCreateStub = sandbox.stub(CalendarEntity, 'create');
+    const createdCalendarEntity = CalendarEntity.build({
+      id: 'newCalendarId',
+      account_id: 'testAccountId',
+      url_name: 'newcal',
+      languages: 'en',
+    });
+    calendarCreateStub.resolves(createdCalendarEntity);
+    const createCalendarContentStub = sandbox.stub(CalendarService, 'createCalendarContent').resolves({} as any);
+
+    const result = await CalendarService.createCalendar(acct, 'newcal', 'My Calendar');
+
+    expect(result).not.toBeNull();
+    expect(result.id).toBe('newCalendarId');
+    expect(createCalendarContentStub.calledOnce).toBe(true);
+    const contentArg = createCalendarContentStub.firstCall.args[1];
+    expect(contentArg.name).toBe('My Calendar');
+  });
+});
+
+describe('createCalendarContent', () => {
+  let sandbox: sinon.SinonSandbox;
+  let calendarContent: CalendarContent;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    calendarContent = new CalendarContent('en', 'Test Calendar', 'A test calendar');
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('should update existing content if found for language', async () => {
+    const existingContent = CalendarContentEntity.build({
+      id: 'existingContentId',
+      calendar_id: 'calendarId',
+      language: 'en',
+      name: 'Old Name',
+      description: 'Old description',
+    });
+
+    const contentFindOneStub = sandbox.stub(CalendarContentEntity, 'findOne').resolves(existingContent);
+    const contentUpdateStub = sandbox.stub(existingContent, 'update').resolves(existingContent);
+
+    const result = await CalendarService.createCalendarContent('calendarId', calendarContent);
+
+    expect(contentFindOneStub.calledWith({
+      where: {
+        calendar_id: 'calendarId',
+        language: 'en',
+      },
+    })).toBe(true);
+
+    expect(contentUpdateStub.calledWith({
+      name: 'Test Calendar',
+      description: 'A test calendar',
+    })).toBe(true);
+
+    expect(result).toBe(existingContent);
+  });
+
+  it('should create new content if none exists for language', async () => {
+    const contentFindOneStub = sandbox.stub(CalendarContentEntity, 'findOne').resolves(null);
+    const contentCreateStub = sandbox.stub(CalendarContentEntity, 'create');
+    const newContent = CalendarContentEntity.build({
+      id: 'newContentId',
+      calendar_id: 'calendarId',
+      language: 'en',
+      name: 'Test Calendar',
+      description: 'A test calendar',
+    });
+    contentCreateStub.resolves(newContent);
+
+    const result = await CalendarService.createCalendarContent('calendarId', calendarContent);
+
+    expect(contentFindOneStub.calledWith({
+      where: {
+        calendar_id: 'calendarId',
+        language: 'en',
+      },
+    })).toBe(true);
+
+    expect(contentCreateStub.calledOnce).toBe(true);
+    const createArg = contentCreateStub.firstCall.args[0];
+    expect(createArg).toHaveProperty('calendar_id', 'calendarId');
+    expect(createArg).toHaveProperty('language', 'en');
+    expect(createArg).toHaveProperty('name', 'Test Calendar');
+    expect(createArg).toHaveProperty('description', 'A test calendar');
+  });
 });

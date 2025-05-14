@@ -66,14 +66,9 @@ class CalendarService {
     return true;
   }
 
-  static async getCalendarByName(username: string): Promise<Calendar|null> {
-    let calendar = await CalendarEntity.findOne({ where: { url_name: username } });
+  static async getCalendarByName(name: string): Promise<Calendar|null> {
+    let calendar = await CalendarEntity.findOne({ where: { url_name: name } });
     return calendar ? calendar.toModel() : null;
-  }
-
-  static async createCalendarForUser(account: Account): Promise<Calendar> {
-    let calendar = await CalendarEntity.create({ id: uuidv4(), account_id: account.id });
-    return calendar.toModel();
   }
 
   static async getPrimaryCalendarForUser(account: Account): Promise<Calendar|null> {
@@ -81,6 +76,88 @@ class CalendarService {
     return calendar ? calendar.toModel() : null;
   }
 
+  /**
+   * Creates a calendar with the specified URL name for a user
+   *
+   * @param account - User account for which to create the calendar
+   * @param urlName - Desired URL name for the calendar
+   * @param name - Optional display name for the calendar
+   * @returns The created calendar
+   * @throws InvalidUrlNameError if the URL name is invalid
+   * @throws UrlNameAlreadyExistsError if the URL name is already taken
+   */
+  static async createCalendar(account: Account, urlName: string, name?: string): Promise<Calendar> {
+    // Validate URL name format
+    if (!CalendarService.isValidUrlName(urlName)) {
+      throw new InvalidUrlNameError();
+    }
+
+    // Check if URL name is already taken
+    const existingCalendar = await CalendarEntity.findOne({ where: { url_name: urlName } });
+    if (existingCalendar) {
+      throw new UrlNameAlreadyExistsError();
+    }
+
+    // Create the calendar with the specified URL name
+    const calendarEntity = await CalendarEntity.create({
+      id: uuidv4(),
+      account_id: account.id,
+      url_name: urlName,
+      languages: 'en',  // Default language
+    });
+
+    const calendar = calendarEntity.toModel();
+
+    // Set the calendar name if provided
+    if (name) {
+      const content = calendar.content('en');
+      content.name = name;
+
+      // Create content entity and save to database
+      await CalendarService.createCalendarContent(calendar.id, content);
+    }
+
+    return calendar;
+  }
+
+  /**
+   * Saves a calendar content translation to the database
+   *
+   * @param calendarId - The ID of the calendar
+   * @param content - The content translation to save
+   * @returns The saved content entity
+   */
+  static async createCalendarContent(calendarId: string, content: import('@/common/model/calendar').CalendarContent): Promise<import('@/server/calendar/entity/calendar').CalendarContentEntity> {
+    const { CalendarContentEntity } = await import('@/server/calendar/entity/calendar');
+
+    // Create a new content entity from the model
+    const contentEntity = CalendarContentEntity.fromModel(content);
+
+    // Set the calendar ID and generate a new ID if needed
+    contentEntity.calendar_id = calendarId;
+    contentEntity.id = contentEntity.id || uuidv4();
+
+    // Find existing content for this language
+    const existingContent = await CalendarContentEntity.findOne({
+      where: {
+        calendar_id: calendarId,
+        language: content.language,
+      },
+    });
+
+    if (existingContent) {
+      // Update existing content
+      await existingContent.update({
+        name: content.name,
+        description: content.description,
+      });
+      return existingContent;
+    }
+    else {
+      // Create new content
+      return await CalendarContentEntity.create(contentEntity.toJSON());
+    }
+  }
 }
 
 export default CalendarService;

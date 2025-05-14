@@ -1,5 +1,6 @@
 <script setup>
 import { onBeforeMount, reactive } from 'vue';
+import { useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { CalendarEvent } from '../../../common/model/events';
 import ModelService from '../../service/models';
@@ -9,11 +10,13 @@ const { t } = useTranslation('calendars',{
   keyPrefix: 'calendar',
 });
 
+const route = useRoute();
 const state = reactive({ err: ''});
+const calendarId = route.params.calendar;
 const store = useEventStore();
 
 onBeforeMount(async () => {
-  let events = await ModelService.listModels('/api/v1/events');
+  let events = await ModelService.listModels('/api/v1/calendars/' + calendarId + '/events');
   store.events = events.map(event => CalendarEvent.fromObject(event));
 });
 </script>

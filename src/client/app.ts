@@ -57,7 +57,7 @@ Config.init().then( (config) => {
 
       children: [
         { path: 'calendar', component: CalendarsView, name: 'calendars', beforeEnter: mustBeLoggedIn },
-        { path: 'calendar/:id', component: CalendarView, name: 'calendar', beforeEnter: mustBeLoggedIn },
+        { path: 'calendar/:calendar', component: CalendarView, name: 'calendar', beforeEnter: mustBeLoggedIn },
         { path: 'inbox', component: InboxView, name: 'inbox', beforeEnter: mustBeLoggedIn },
         { path: 'feed', component: FeedView, name: 'feed', beforeEnter: mustBeLoggedIn },
         { path: 'profile', component: ProfileView, name: 'profile', beforeEnter: mustBeLoggedIn },

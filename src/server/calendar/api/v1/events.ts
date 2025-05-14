@@ -15,27 +15,34 @@ class EventRoutes extends EventProxy {
 
     this.router = express.Router();
 
-    this.router.get('/events', ExpressHelper.loggedInOnly, (req, res) => this.listEvents(req, res));
+    this.router.get('/calendars/:calendar/events', ExpressHelper.loggedInOnly, (req, res) => this.listEvents(req, res));
 
-    this.router.post('/events', ExpressHelper.loggedInOnly, (req, res) => this.createEvent(req, res));
+    this.router.post('/calendars/:calendar/events', ExpressHelper.loggedInOnly, (req, res) => this.createEvent(req, res));
 
-    this.router.post('/events/:id', ExpressHelper.loggedInOnly, (req, res) => this.updateEvent(req,res));
+    this.router.post('/calendars/:calendar/events/:id', ExpressHelper.loggedInOnly, (req, res) => this.updateEvent(req,res));
 
     this.service = new EventService();
     this.proxyEvents(this.service, ['eventCreated', 'eventUpdated']);
   }
 
   async listEvents(req: Request, res: Response) {
-    const account = req.user as Account;
-
-    if (!account) {
+    const calendarName = req.params.calendar;
+    if ( !req.params.calendar ) {
       res.status(400).json({
-        "error": "missing account for events. Not logged in?",
+        "error": "missing calendar name",
       });
       return;
     }
 
-    const events = await this.service.listEvents(account);
+    const calendar = await CalendarService.getCalendarByName(calendarName);
+    if (!calendar) {
+      res.status(404).json({
+        "error": "calendar not found",
+      });
+      return;
+    }
+
+    const events = await this.service.listEvents(calendar);
     res.json(events.map((event) => event.toObject()));
   }
 

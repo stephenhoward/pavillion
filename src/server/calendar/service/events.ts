@@ -27,10 +27,10 @@ class EventService extends EventEmitter {
      * @param account
      * @returns a promise that resolves to the list of events
      */
-  async listEvents(account: Account): Promise<CalendarEvent[]> {
+  async listEvents(calendar: Calendar): Promise<CalendarEvent[]> {
 
     const events = await EventEntity.findAll({
-      where: { account_id: account.id },
+      where: { calendar_id: calendar.id },
       include: [EventContentEntity, LocationEntity, EventScheduleEntity],
     });
 

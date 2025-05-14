@@ -17,8 +17,7 @@ describe('ActivityPub Create Activity', async () => {
 
   await db.sync({force: true});
   let account = await AccountService._setupAccount('testcalendar@pavillion.dev','testpassword');
-  let calendar = await CalendarService.createCalendarForUser(account.account);
-  await CalendarService.setUrlName(account.account, calendar, 'testcalendar');
+  let calendar = await CalendarService.createCalendar(account.account,'testcalendar');
   // let inboxService = new ProcessInboxService();
   // await inboxService.processFollowAccount(account.account,{ actor: 'testcalendar@remotedomain', object: 'testcalendar@pavillion.dev' });
 

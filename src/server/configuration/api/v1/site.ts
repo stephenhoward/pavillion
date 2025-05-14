@@ -1,3 +1,4 @@
+import config from 'config';
 import express, { Request, Response } from 'express';
 import ServiceSettings from '../../service/settings';
 import ExpressHelper from '../../../common/helper/express';
@@ -8,6 +9,7 @@ const handlers = {
     res.json({
       registrationMode: settings.get('registrationMode'),
       siteTitle: settings.get('siteTitle'),
+      domain: config.get('domain'),
     });
   },
 

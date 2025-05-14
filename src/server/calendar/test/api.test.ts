@@ -34,9 +34,10 @@ describe('Event API', () => {
     eventSandbox.restore();
   });
 
-  it('listEvents: should fail without account', async () => {
+  it('listEvents: should fail without calendar', async () => {
     let eventStub = eventSandbox.stub(routes.service, 'listEvents');
-    router.get('/handler', (req, res) => { routes.listEvents(req,res); });
+    router.get('/handler', addRequestUser, (req, res) => { routes.listEvents(req,res); });
+    eventStub.resolves([]);
 
     const response = await request(testApp(router))
       .get('/handler');
@@ -47,7 +48,12 @@ describe('Event API', () => {
 
   it('listEvents: should succeed', async () => {
     let eventStub = eventSandbox.stub(routes.service, 'listEvents');
-    router.get('/handler', addRequestUser, (req, res) => { routes.listEvents(req,res); });
+    let calendarStub = eventSandbox.stub(CalendarService, 'getCalendarByName');
+    calendarStub.resolves(new Calendar('id', 'test'));
+    router.get('/handler', addRequestUser, (req, res) => {
+      req.params.calendar = 'test';
+      routes.listEvents(req,res);
+    });
     eventStub.resolves([]);
 
     const response = await request(testApp(router))

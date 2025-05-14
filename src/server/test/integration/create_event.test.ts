@@ -1,8 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import sinon from 'sinon';
 import axios from 'axios';
+import { v4 as uuidv4 } from 'uuid';
 
 import db from '@/server/common/entity/db';
 import initPavillionServer from '@/server/server';
@@ -11,23 +12,35 @@ import CalendarService from '@/server/calendar/service/calendar';
 import { EventEntity } from '@/server/calendar/entity/event';
 import { ActivityPubOutboxMessageEntity } from '@/server/activitypub/entity/activitypub';
 import ProcessInboxService from '@/server/activitypub/service/inbox';
+import FollowActivity from '@/server/activitypub/model/action/follow';
 
-describe('Event API', async () => {
+describe('Event API', () => {
+  let account: any;
+  let calendar: any;
+  let app: express.Application;
 
-  await db.sync({force: true});
-  let account = await AccountService._setupAccount('testcalendar@pavillion.dev','testpassword');
-  let calendar = await CalendarService.createCalendarForUser(account.account);
-  await CalendarService.setUrlName(account.account, calendar, 'testCalendar');
-  let inboxService = new ProcessInboxService();
-  await inboxService.processFollowAccount(calendar,{ actor: 'testcalendar@remotedomain', object: 'testcalendar@pavillion.dev' });
+  beforeAll(async () => {
+    await db.sync({force: true});
+    account = await AccountService._setupAccount('testcalendar@pavillion.dev','testpassword');
+    calendar = await CalendarService.createCalendar(account.account,'testcalendar');
 
-  let app = express();
-  initPavillionServer(app);
+    // Create a proper FollowActivity object
+    let inboxService = new ProcessInboxService();
+    const followActivity = new FollowActivity('testcalendar@remotedomain', 'testcalendar@pavillion.dev');
+    followActivity.id = `https://remotedomain/users/testcalendar/follows/${uuidv4()}`;
+    await inboxService.processFollowAccount(calendar, followActivity);
+
+    app = express();
+    await initPavillionServer(app);
+  });
+
+  afterEach(() => {
+    sinon.restore();
+  });
 
   it('createEvent: should fail without user', async () => {
-
     const response = await request(app)
-      .post('/api/v1/events')
+      .post('/api/v1/calendars/testCalendar/events')
       .send({
         content: {
           en: {
@@ -42,7 +55,6 @@ describe('Event API', async () => {
 
 
   it('createEvent: should succeed', async () => {
-
     let getStub = sinon.stub(axios, 'get');
     let postStub = sinon.stub(axios, 'post');
     let webfingerStub = getStub.withArgs('https://remotedomain/.well-known/webfinger?resource=acct:testcalendar');
@@ -52,7 +64,7 @@ describe('Event API', async () => {
 
     let authResponse = await request(app).post('/api/auth/v1/login').send({ email: 'testcalendar@pavillion.dev', password: 'testpassword' });
     const response = await request(app)
-      .post('/api/v1/events')
+      .post('/api/v1/calendars/testCalendar/events')
       .set('Authorization','Bearer ' + authResponse.text)
       .send({
         calendarId: calendar.id,
@@ -65,7 +77,7 @@ describe('Event API', async () => {
       });
     let entity = await EventEntity.findOne({ where: { id: response.body.id } });
 
-    // wait for create event to propogate to activitypub service:
+    // wait for create event to propagate to activitypub service:
     await new Promise(resolve => setTimeout(resolve, 100));
 
     let message = await ActivityPubOutboxMessageEntity.findOne({ where: { calendar_id: calendar.id } });
@@ -75,9 +87,12 @@ describe('Event API', async () => {
     expect(response.body.error,"no error in the response").toBeUndefined();
     expect(entity,"found the event in the database").toBeDefined();
     expect(message,"activity message was sent to outbox").toBeDefined();
-    if ( message && entity ) {
-      expect(message.message.type,"proper message type created").toBe('Create');
-      expect(message.message.object.id, "has an appropriate id").toMatch(entity.id);
+
+    if (message && entity) {
+      // Use type assertion to access properties
+      const messageObj = message.message as any;
+      expect(messageObj.type,"proper message type created").toBe('Create');
+      expect(messageObj.object?.id, "has an appropriate id").toMatch(entity.id);
       expect(message.processed_time,"message in the outbox was processed").not.toBe(null);
     }
     expect(postStub.calledOnce,"post to remote inbox").toBe(true);
