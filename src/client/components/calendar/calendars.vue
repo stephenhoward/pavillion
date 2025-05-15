@@ -1,5 +1,5 @@
 <script setup>
-import { onBeforeMount, reactive, inject, ref } from 'vue';
+import { onBeforeMount, reactive, inject, ref, watch, nextTick, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { Calendar } from '../../../common/model/calendar';
@@ -21,6 +21,42 @@ const state = reactive({
 });
 
 const newCalendarName = ref('');
+const inputRef = ref(null);
+const inputWidth = ref('100px'); // default width
+const calendar_name_placeholder = t('calendar_name_placeholder');
+
+// Function to calculate and set the width of the input
+const updateInputWidth = () => {
+  if (!inputRef.value) return;
+
+  // Create a temporary span to measure text width
+  const tempSpan = document.createElement('span');
+  tempSpan.style.visibility = 'hidden';
+  tempSpan.style.position = 'absolute';
+  tempSpan.style.fontSize = window.getComputedStyle(inputRef.value).fontSize;
+  tempSpan.style.fontFamily = window.getComputedStyle(inputRef.value).fontFamily;
+  tempSpan.style.padding = window.getComputedStyle(inputRef.value).padding;
+
+  // Use either the input value or placeholder for measurement
+  const textToMeasure = newCalendarName.value || calendar_name_placeholder;
+  tempSpan.textContent = textToMeasure;
+
+  document.body.appendChild(tempSpan);
+  const width = tempSpan.getBoundingClientRect().width;
+  document.body.removeChild(tempSpan);
+
+  // Set the width with a small buffer (10px)
+  inputWidth.value = `${Math.max(width + 10, 50)}px`;
+};
+
+onMounted(() => {
+  updateInputWidth();
+});
+
+// Watch for changes in the input value to update width
+watch(newCalendarName, () => {
+  nextTick(updateInputWidth);
+});
 
 onBeforeMount(async () => {
   await loadCalendars();
@@ -104,7 +140,14 @@ async function createCalendar() {
   </div>
   <div v-else class="empty-screen">
     <div class="calendar-url">
-      https://{{ site_domain }}/@<input type="text" v-model="newCalendarName" placeholder="your-calendar-name" />
+      <input
+        type="text"
+        v-model="newCalendarName"
+        :style="{ width: inputWidth }"
+        ref="inputRef"
+        :placeholder="calendar_name_placeholder"
+        @focus="updateInputWidth"
+      />@{{ site_domain }}
     </div>
     <div v-if="state.errorMessage" class="error-message">{{ state.errorMessage }}</div>
     <button type="button"
@@ -130,6 +173,7 @@ div.calendar-url {
     background: none;
     font-size: 100%;
     color: $light-mode-text;
+    text-align: right;
   }
   @include medium-size-device {
     font-size: 14pt;

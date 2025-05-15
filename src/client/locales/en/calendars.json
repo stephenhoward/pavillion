@@ -6,7 +6,8 @@
     "creating_calendar": "Creating calendar...",
     "error_empty_calendar_name": "Calendar name cannot be empty",
     "error_calendar_name_taken": "This calendar name is already taken",
-    "error_create_calendar": "Error creating calendar"
+    "error_create_calendar": "Error creating calendar",
+    "calendar_name_placeholder": "your-calendar-name"
   },
   "calendar": {
     "create_button": "Create Event",
