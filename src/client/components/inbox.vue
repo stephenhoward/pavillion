@@ -17,10 +17,10 @@ const notifications = ref([]);
   </div>
   <div v-else class="empty-screen">
     <h2>{{ t("noNotifications") }}</h2>
-    {{ t("description") }}
+    <p>{{ t("description") }}</p>
   </div>
 </template>
 
-<style lang="scss">
+<style scoped lang="scss">
 @use '../assets/layout.scss' as *;
 </style>

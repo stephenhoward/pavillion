@@ -1,34 +1,40 @@
 <template>
   <section>
-    <h3>{{ t('title') }}</h3>
     <div v-if="state.processingSuccess" class="success-message">
       {{ t('processing_success', { email: state.processingSuccess }) }}
     </div>
     <div v-if="state.processingError" class="error-message">
       {{ t('processing_error', { email: state.processingError }) }}
     </div>
-    <table>
-      <thead>
-        <tr>
-          <th scope="col">{{ t('email_column') }}</th>
-          <th scope="col">{{ t('status_column') }}</th>
-          <th scope="col">{{ t('date_column') }}</th>
-          <th scope="col">{{ t('actions_column') }}</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="application in store.applications" :key="application.id">
-          <td>{{ application.email }}</td>
-          <td :class="getStatusClass(application.status)">{{ formatStatus(application.status) }}</td>
-          <td>{{ formatDate(application.statusTimestamp) }}</td>
-          <td>
-            <button type="button" @click="viewApplication(application)">
-              {{ t('view') }}
-            </button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+    <div v-if="store.applications && store.applications.length > 0">
+      <h3>{{ t('title') }}</h3>
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">{{ t('email_column') }}</th>
+            <th scope="col">{{ t('status_column') }}</th>
+            <th scope="col">{{ t('date_column') }}</th>
+            <th scope="col">{{ t('actions_column') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="application in store.applications" :key="application.id">
+            <td>{{ application.email }}</td>
+            <td :class="getStatusClass(application.status)">{{ formatStatus(application.status) }}</td>
+            <td>{{ formatDate(application.statusTimestamp) }}</td>
+            <td>
+              <button type="button" @click="viewApplication(application)">
+                {{ t('view') }}
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div v-else class="empty-screen">
+      <h2>{{ t('noApplications') }}</h2>
+      <p>{{ t('noApplicationsDescription') }}</p>
+    </div>
 
     <!-- Application detail modal using the new component -->
     <ApplicationReviewView
@@ -148,4 +154,9 @@ const rejectApplication = async (application, silent) => {
 </script>
 
 <style scoped lang="scss">
+@use '../../../assets/mixins' as *;
+
+.empty-screen {
+  @include empty-screen;
+}
 </style>

@@ -10,18 +10,18 @@
     "followers": {
         "title": "Followers",
         "description": "People who follow you",
-        "no_followers": "You have no followers."
+        "no_followers": "You have no followers"
     },
     "follows": {
         "title": "Follows",
         "description": "Calendars you follow",
-        "no_follows": "You are not following any calendars.",
+        "no_follows": "You are not following any calendars",
         "follow_button": "Add a Calendar"
     },
     "events": {
         "title": "Events",
         "description": "Events from calendars you follow",
-        "no_events": "No events.",
+        "no_events": "No events",
         "follow_button": "Follow a Calendar"
     }
 }

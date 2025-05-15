@@ -1,4 +1,3 @@
-
 $light-mode-background: #a2a9c1;
 $light-mode-selected-background: #ccc;
 $dark-mode-background: #33333a;
@@ -35,6 +34,37 @@ $capsule-background: #CCC;
 $dark-mode-capsule-background: #555;
 
 $form-input-border-radius: 20px;
+
+// Empty screen mixin
+@mixin empty-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px 20px;
+  min-height: 250px;
+
+  h2 {
+    margin-bottom: 10px;
+    font-weight: 300;
+  }
+
+  p {
+    margin-bottom: 20px;
+    color: $light-mode-secondary-text;
+  }
+
+  button {
+    margin-top: 10px;
+  }
+
+  @include dark-mode {
+    p {
+      color: $dark-mode-secondary-text;
+    }
+  }
+}
 
 @mixin flexible-container {
     display: flex;

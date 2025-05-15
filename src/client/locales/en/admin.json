@@ -19,7 +19,15 @@
         "applications_tab": "Applications",
         "invitations_tab": "Invitations",
         "accounts_tab": "Accounts",
-        "accounts_title": "Accounts"
+        "accounts_title": "Accounts",
+        "loading": "Loading accounts...",
+        "name_column": "Name",
+        "email_column": "Email",
+        "role_column": "Role",
+        "actions_column": "Actions",
+        "noAccounts": "No accounts",
+        "noAccountsDescription": "There are no accounts on this server yet.",
+        "inviteNewAccount": "Invite a New Account"
     },
     "applications": {
         "title": "Account Applications",
@@ -39,7 +47,9 @@
         "reject": "Reject",
         "silent_reject": "Reject (No Email)",
         "status_pending": "Pending",
-        "status_rejected": "Rejected"
+        "status_rejected": "Rejected",
+        "noApplications": "No Account Applications",
+        "noApplicationsDescription": "There are no pending account applications to review."
     },
     "invitations": {
         "title": "Account Invitations",
@@ -53,7 +63,9 @@
         "resend": "Resend",
         "cancel": "Cancel",
         "unknown_expiration": "Unknown",
-        "expired": "Expired"
+        "expired": "Expired",
+        "noInvitations": "No Invitations",
+        "noInvitationsDescription": "You haven't sent any account invitations yet."
     },
     "settings": {
         "title": "General settings",

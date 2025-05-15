@@ -22,11 +22,25 @@ onBeforeMount(async () => {
 </script>
 
 <template>
-  <p>{{ t('title') }}</p>
-  <ul v-for="event in store.events">
-    <li @click="$emit('openEvent',event.clone())">{{ event.content("en").name }}</li>
-  </ul>
+  <div v-if="store.events && store.events.length > 0">
+    <p>{{ t('title') }}</p>
+    <ul v-for="event in store.events">
+      <li @click="$emit('openEvent',event.clone())">{{ event.content("en").name }}</li>
+    </ul>
+  </div>
+  <div v-else class="empty-screen">
+    <h2>{{ t('noEvents') }}</h2>
+    <p>{{ t('noEventsDescription') }}</p>
+    <button type="button" class="primary" @click="$emit('createEvent')">
+      {{ t('createEvent') }}
+    </button>
+  </div>
 </template>
 
 <style scoped lang="scss">
+@use '../../assets/mixins' as *;
+
+.empty-screen {
+  @include empty-screen;
+}
 </style>

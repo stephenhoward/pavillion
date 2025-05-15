@@ -2,14 +2,21 @@
   "list": {
     "my_calendars_header": "My Calendars",
     "no_calendars_message": "No calendar found",
-    "create_calendar_button": "Create Your Calendar"
+    "create_calendar_button": "Create Your Calendar",
+    "creating_calendar": "Creating calendar...",
+    "error_empty_calendar_name": "Calendar name cannot be empty",
+    "error_calendar_name_taken": "This calendar name is already taken",
+    "error_create_calendar": "Error creating calendar"
   },
   "calendar": {
     "create_button": "Create Event",
     "update_button": "Update Event",
     "name_placeholder": "event name",
     "description_placeholder": "event description",
-    "title": "Calendar"
+    "title": "Calendar",
+    "noEvents": "No events",
+    "noEventsDescription": "You don't have any events in this calendar yet.",
+    "createEvent": "Create an Event"
   }
 }
 

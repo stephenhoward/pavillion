@@ -1,37 +1,46 @@
 <template>
   <section>
-    <h3>{{ t('title') }}</h3>
-    <button type="button" @click="state.addInvite=true">{{ t('invite_new_account') }}</button>
     <div v-if="state.resendSuccess" class="success-message">
       {{ t('resend_success', { email: state.resendSuccess }) }}
     </div>
     <div v-if="state.resendError" class="error-message">
       {{ t('resend_error', { email: state.resendError }) }}
     </div>
-    <table>
-      <thead>
-        <tr>
-          <th scope="col">{{ t('email_column') }}</th>
-          <th scope="col">{{ t('expires_column') }}</th>
-          <th scope="col">{{ t('actions_column') }}</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="invitation in store.invitations">
-          <td>{{ invitation.email }}</td>
-          <td :class="{ 'expired': isExpired(invitation.expirationTime) }">
-            {{ formatExpirationTime(invitation.expirationTime) }}
-          </td>
-          <td>
-            <button type="button" @click="resendInvitation(invitation)" :disabled="state.resending === invitation.id">
-              <span v-if="state.resending === invitation.id">{{ t('sending') }}</span>
-              <span v-else>{{ t('resend') }}</span>
-            </button>
-            <button type="button" @click="cancelInvitation(invitation)">{{ t('cancel') }}</button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+    <div v-if="store.invitations && store.invitations.length > 0">
+      <h3>{{ t('title') }}</h3>
+      <button type="button" @click="state.addInvite=true">{{ t('invite_new_account') }}</button>
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">{{ t('email_column') }}</th>
+            <th scope="col">{{ t('expires_column') }}</th>
+            <th scope="col">{{ t('actions_column') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="invitation in store.invitations">
+            <td>{{ invitation.email }}</td>
+            <td :class="{ 'expired': isExpired(invitation.expirationTime) }">
+              {{ formatExpirationTime(invitation.expirationTime) }}
+            </td>
+            <td>
+              <button type="button" @click="resendInvitation(invitation)" :disabled="state.resending === invitation.id">
+                <span v-if="state.resending === invitation.id">{{ t('sending') }}</span>
+                <span v-else>{{ t('resend') }}</span>
+              </button>
+              <button type="button" @click="cancelInvitation(invitation)">{{ t('cancel') }}</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div v-else class="empty-screen">
+      <h2>{{ t('noInvitations') }}</h2>
+      <p>{{ t('noInvitationsDescription') }}</p>
+      <button type="button" class="primary" @click="state.addInvite=true">
+        {{ t('invite_new_account') }}
+      </button>
+    </div>
     <div v-if="state.addInvite">
       <InviteFormView @close="state.addInvite=false" />
     </div>
@@ -120,6 +129,8 @@ const resendInvitation = async (invitation) => {
 </script>
 
 <style scoped lang="scss">
+@use '../../../assets/mixins' as *;
+
 .expired {
   color: red;
 }
@@ -151,6 +162,11 @@ section > button {
   float: right;
 }
 table, div.success-message, div.error-message {
+  clear: both;
+}
+
+.empty-screen {
+  @include empty-screen;
   clear: both;
 }
 </style>
