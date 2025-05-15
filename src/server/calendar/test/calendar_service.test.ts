@@ -5,7 +5,7 @@ import { Account } from '@/common/model/account';
 import { Calendar, CalendarContent } from '@/common/model/calendar';
 import { CalendarEntity, CalendarContentEntity } from '@/server/calendar/entity/calendar';
 import CalendarService from '@/server/calendar/service/calendar';
-import { UrlNameAlreadyExistsError, InvalidUrlNameError } from '@/server/calendar/exceptions';
+import { UrlNameAlreadyExistsError, InvalidUrlNameError } from '@/common/exceptions/calendar';
 
 describe('isValidUrlName', () => {
 
@@ -68,7 +68,7 @@ describe('setUrlName', () => {
 
   it('should throw an error if urlName is invalid', async () => {
     editableCalendarsStub.resolves(true);
-    await expect( () => CalendarService.setUrlName(acct, cal, '_noleadunderscore') ).rejects.toThrowError('Invalid url name');
+    await expect( () => CalendarService.setUrlName(acct, cal, '_noleadunderscore') ).rejects.toThrowError('Invalid Calendar URL name');
   });
 
   it('should throw an error if urlName already exists', async () => {
@@ -79,7 +79,7 @@ describe('setUrlName', () => {
     calendarCheckStub.resolves({ id: 'otherCalendarId', url_name: 'validname' });
     editableCalendarsStub.resolves(true);
 
-    await expect( () => CalendarService.setUrlName(acct, cal, 'validname') ).rejects.toThrowError('url name already exists');
+    await expect( () => CalendarService.setUrlName(acct, cal, 'validname') ).rejects.toThrowError('Calendar URL name already exists');
   });
 
   it('should throw an error if calendar not found', async () => {

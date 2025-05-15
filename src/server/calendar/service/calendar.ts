@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Calendar } from '@/common/model/calendar';
 import { Account } from '@/common/model/account';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
-import { UrlNameAlreadyExistsError, InvalidUrlNameError } from '@/server/calendar/exceptions';
+import { UrlNameAlreadyExistsError, InvalidUrlNameError } from '@/common/exceptions/calendar';
 
 class CalendarService {
   static async getCalendar(id: string): Promise<Calendar|null> {

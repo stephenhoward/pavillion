@@ -2,8 +2,8 @@
 import { onBeforeMount, reactive, inject, ref, watch, nextTick, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
-import { Calendar } from '../../../common/model/calendar';
-import ModelService from '../../service/models';
+import { EmptyValueError, InvalidUrlNameError, UnauthenticatedError, UrlNameAlreadyExistsError } from '../../../common/exceptions';
+import CalendarService from '../../service/calendar';
 
 const site_config = inject('site_config');
 const site_domain = site_config.settings().domain;
@@ -65,14 +65,13 @@ onBeforeMount(async () => {
 // Load all calendars from the server
 async function loadCalendars() {
   try {
-    let calendars = await ModelService.listModels('/api/v1/calendars');
+    let calendars = await CalendarService.loadCalendars();
     if (calendars.length == 1) {
       // If there is only one calendar, redirect to it
-      let calendar = calendars[0];
-      router.push({ path: '/calendar/' + calendar.urlName });
+      router.push({ path: '/calendar/' + calendars[0].urlName });
     }
     else {
-      state.calendars = calendars.map(calendar => Calendar.fromObject(calendar));
+      state.calendars = calendars;
     }
   }
   catch (error) {
@@ -84,44 +83,35 @@ async function loadCalendars() {
 // Create a new calendar with the name from the input field
 // TODO: run this function when the user hits enter
 async function createCalendar() {
-  if (!newCalendarName.value || newCalendarName.value.trim() === '') {
-    state.errorMessage = t('error_empty_calendar_name');
-    return;
-  }
+  const calendarName = newCalendarName.value.trim();
 
   state.isLoading = true;
   state.errorMessage = '';
 
   try {
-    // Check if calendar name is already taken
-    const existingCalendars = await ModelService.listModels('/api/v1/calendars');
-    const nameExists = existingCalendars.some(cal =>
-      cal.urlName && cal.urlName.toLowerCase() === newCalendarName.value.toLowerCase(),
-    );
-
-    if (nameExists) {
-      state.errorMessage = t('error_calendar_name_taken');
-      state.isLoading = false;
-      return;
-    }
-
-    // Create new calendar with the entered name
-    const newCalendar = new Calendar();
-    newCalendar.urlName = newCalendarName.value;
-
-    // Set content for the default language
-    const content = newCalendar.content('en');
-    content.name = newCalendarName.value;
-
-    // Send to server
-    const createdCalendar = await ModelService.createModel(newCalendar, '/api/v1/calendars');
+    const calendar = await CalendarService.createCalendar(calendarName);
 
     // Navigate to the new calendar
-    router.push({ path: '/calendar/' + newCalendarName.value });
+    router.push({ path: '/calendar/' + calendar.urlName });
   }
   catch (error) {
     console.error('Error creating calendar:', error);
-    state.errorMessage = t('error_create_calendar');
+    switch( error.constructor ) {
+      case EmptyValueError:
+        state.errorMessage = t('error_empty_calendar_name');
+        break;
+      case InvalidUrlNameError:
+        state.errorMessage = t('error_invalid_calendar_name');
+        break;
+      case UrlNameAlreadyExistsError:
+        state.errorMessage = t('error_calendar_name_taken');
+        break;
+      case UnauthenticatedError:
+        router.push({ path: '/auth/login' });
+        break;
+      default:
+        state.errorMessage = t('error_create_calendar');
+    }
   }
   finally {
     state.isLoading = false;

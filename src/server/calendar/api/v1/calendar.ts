@@ -3,7 +3,7 @@ import express, { Request, Response } from 'express';
 import { Account } from '@/common/model/account';
 import ExpressHelper from '@/server/common/helper/express';
 import CalendarService from '@/server/calendar/service/calendar';
-import { UrlNameAlreadyExistsError, InvalidUrlNameError } from '@/server/calendar/exceptions';
+import { UrlNameAlreadyExistsError, InvalidUrlNameError } from '@/common/exceptions/calendar';
 
 class CalendarRoutes {
   router: express.Router;
@@ -62,11 +62,13 @@ class CalendarRoutes {
       if (error instanceof InvalidUrlNameError) {
         res.status(400).json({
           "error": "Invalid URL name format",
+          "errorName": error.name,
         });
       }
       else if (error instanceof UrlNameAlreadyExistsError) {
         res.status(409).json({
           "error": "URL name already exists",
+          "errorName": error.name,
         });
       }
       else {

@@ -1,5 +1,5 @@
 <script setup>
-import { onBeforeMount, reactive } from 'vue';
+import { onBeforeMount, reactive, inject } from 'vue';
 import { useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { CalendarEvent } from '../../../common/model/events';
@@ -9,6 +9,8 @@ import { useEventStore } from '../../stores/eventStore';
 const { t } = useTranslation('calendars',{
   keyPrefix: 'calendar',
 });
+const site_config = inject('site_config');
+const site_domain = site_config.settings().domain;
 
 const route = useRoute();
 const state = reactive({ err: ''});
@@ -22,6 +24,7 @@ onBeforeMount(async () => {
 </script>
 
 <template>
+  <h1>calendar: {{ calendarId }}@{{ site_domain }}</h1>
   <div v-if="store.events && store.events.length > 0">
     <p>{{ t('title') }}</p>
     <ul v-for="event in store.events">
@@ -40,6 +43,11 @@ onBeforeMount(async () => {
 <style scoped lang="scss">
 @use '../../assets/mixins' as *;
 
+h1 {
+  font-size: 16pt;
+  font-weight: 200;
+  margin: 20px;
+}
 .empty-screen {
   @include empty-screen;
 }
