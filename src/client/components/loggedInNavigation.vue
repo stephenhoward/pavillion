@@ -17,7 +17,7 @@ const newEvent = () => {
 };
 
 const isActive = (path) => {
-  return route.path === path;
+  return route.path.startsWith(path);
 };
 </script>
 
