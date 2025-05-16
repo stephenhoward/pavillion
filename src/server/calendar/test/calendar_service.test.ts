@@ -49,7 +49,7 @@ describe('setUrlName', () => {
 
   it('should skip permission check if user is admin', async () => {
     const calendarFindStub = sandbox.stub(CalendarEntity, 'findByPk');
-    const calendarCheckStub = sandbox.stub(CalendarEntity, 'findOne');
+    const calendarCheckExistingStub = sandbox.stub(CalendarEntity, 'findOne');
     const calendarUpdateStub = sandbox.stub(CalendarEntity.prototype, 'update');
     calendarFindStub.resolves(CalendarEntity.fromModel(cal));
 
@@ -57,6 +57,7 @@ describe('setUrlName', () => {
     await CalendarService.setUrlName(acct, cal, 'validname');
 
     expect(editableCalendarsStub.called).toBe(false);
+    expect(calendarCheckExistingStub.called).toBe(true);
     expect(calendarUpdateStub.called).toBe(true);
   });
 
@@ -74,7 +75,6 @@ describe('setUrlName', () => {
   it('should throw an error if urlName already exists', async () => {
     const calendarFindStub = sandbox.stub(CalendarEntity, 'findByPk');
     const calendarCheckStub = sandbox.stub(CalendarEntity, 'findOne');
-    const calendarUpdateStub = sandbox.stub(CalendarEntity.prototype, 'update');
     calendarFindStub.resolves(CalendarEntity.fromModel(cal));
     calendarCheckStub.resolves({ id: 'otherCalendarId', url_name: 'validname' });
     editableCalendarsStub.resolves(true);
@@ -84,8 +84,6 @@ describe('setUrlName', () => {
 
   it('should throw an error if calendar not found', async () => {
     const calendarFindStub = sandbox.stub(CalendarEntity, 'findByPk');
-    const calendarCheckStub = sandbox.stub(CalendarEntity, 'findOne');
-    const calendarUpdateStub = sandbox.stub(CalendarEntity.prototype, 'update');
     calendarFindStub.resolves(null);
     editableCalendarsStub.resolves(true);
 
@@ -456,7 +454,7 @@ describe('createCalendarContent', () => {
     });
     contentCreateStub.resolves(newContent);
 
-    const result = await CalendarService.createCalendarContent('calendarId', calendarContent);
+    await CalendarService.createCalendarContent('calendarId', calendarContent);
 
     expect(contentFindOneStub.calledWith({
       where: {

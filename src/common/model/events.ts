@@ -81,6 +81,7 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
 
     if ( obj.content ) {
       for( let [language,strings] of Object.entries(obj.content) ) {
+        strings.language = language;
         const content = CalendarEventContent.fromObject(strings as Record<string,any>);
         event.addContent(content);
       }

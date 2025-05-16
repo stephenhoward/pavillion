@@ -15,7 +15,7 @@ describe('API v1', () => {
   it('should load routes properly', () => {
     let app = express();
     expect(countRoutes(app)).toBe(0);
-    let api = new MemberAPI(app);
+    new MemberAPI(app);
     expect(countRoutes(app)).toBeGreaterThan(0);
   });
 });

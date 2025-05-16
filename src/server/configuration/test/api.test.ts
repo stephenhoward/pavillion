@@ -18,14 +18,15 @@ describe('Site API', () => {
   });
 
   it('site: should succeed', async () => {
-    let stub = sinon.stub(ServiceSettings.prototype, 'get');
-    let stub2 = sinon.stub(ServiceSettings.prototype, 'init');
-    stub.withArgs('registrationMode').returns('testValue');
+    let getStub = sinon.stub(ServiceSettings.prototype, 'get');
+    let initStub = sinon.stub(ServiceSettings.prototype, 'init');
+    getStub.withArgs('registrationMode').returns('testValue');
     router.get('/handler', siteHandlers.site);
 
     const response = await request(testApp(router)).get('/handler');
 
     expect(response.status).toBe(200);
     expect(response.body.registrationMode).toBe('testValue');
+    expect(initStub.called).toBe(true);
   });
 });

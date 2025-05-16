@@ -150,7 +150,7 @@ describe('login', () => {
   it('login fail on error', async () => {
     let router = express.Router();
     passportStub.callsFake((strategy: string, options: any, cb: any) => {
-      return (req: Request, res: Response) => {
+      return () => {
         cb('hasAnError', new Account('id', 'testme', 'testme'));
       };
     });
@@ -166,7 +166,7 @@ describe('login', () => {
   it('login fail on missing account', async () => {
     let router = express.Router();
     passportStub.callsFake((strategy: string, options: any, cb: any) => {
-      return (req: Request, res: Response) => {
+      return () => {
         cb(null, null);
       };
     });
@@ -182,7 +182,7 @@ describe('login', () => {
   it('login success', async () => {
     let router = express.Router();
     passportStub.callsFake((strategy: string, options: any, cb: any) => {
-      return (req: Request, res: Response) => {
+      return () => {
         cb(null, new Account('id', 'testme', 'testme'));
       };
     });

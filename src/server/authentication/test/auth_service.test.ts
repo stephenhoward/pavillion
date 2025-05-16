@@ -16,7 +16,6 @@ describe( 'checkPassword', async () => {
   });
 
   it( 'should return true', async () => {
-    let findSecretStub = sandbox.stub(AccountSecretsEntity, 'findOne');
     let pkSecretStub = sandbox.stub(AccountSecretsEntity, 'findByPk');
     let saveStub = sandbox.stub(AccountSecretsEntity.prototype, 'save');
 
@@ -28,6 +27,7 @@ describe( 'checkPassword', async () => {
     pkSecretStub.resolves( secrets );
 
     expect( await CommonAccountService.setPassword(account, 'newPassword') ).toBe(true);
+    expect(saveStub.called).toBe(true);
     expect( secrets.password ).not.toBe('testme');
     expect( secrets.password ).not.toBe('newPassword');
     expect( secrets.salt ).not.toBe('testme');
@@ -80,6 +80,7 @@ describe('resetPassword', async () => {
     findSecretStub.resolves( secrets );
 
     expect( await AuthenticationService.resetPassword('1234', 'password') ).toBe(undefined);
+    expect(saveStub.called).toBe(true);
     expect(secrets.password_reset_code).toBe('');
     expect(secrets.password_reset_expiration).toBe(null);
   });
@@ -99,6 +100,8 @@ describe('resetPassword', async () => {
     findSecretStub.resolves( secrets );
 
     let acct = await AuthenticationService.resetPassword('1234', 'password');
+
+    expect(saveStub.called).toBe(true);
     expect( acct ).not.toBe(undefined);
     if ( acct ) {
       expect( acct.id ).toBe(account.id);

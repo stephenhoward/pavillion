@@ -77,6 +77,7 @@ describe('updateEvent with content', () => {
       },
     });
 
+    expect(saveEventStub.called).toBe(true);
     expect(updatedEvent.content("en").name).toBe('updatedName');
     expect(updatedEvent.content("en").description).toBe('updatedDescription');
     expect(saveContentStub.called).toBe(true);
@@ -100,6 +101,7 @@ describe('updateEvent with content', () => {
       },
     });
 
+    expect(saveEventStub.called).toBe(true);
     expect(updatedEvent.content("en").isEmpty()).toBe(true);
     expect(destroyContentStub.called).toBe(true);
   });
@@ -122,6 +124,7 @@ describe('updateEvent with content', () => {
       },
     });
 
+    expect(saveEventStub.called).toBe(true);
     expect(updatedEvent.content("en").isEmpty()).toBe(true);
     expect(destroyContentStub.called).toBe(true);
   });
@@ -144,6 +147,7 @@ describe('updateEvent with content', () => {
       },
     });
 
+    expect(saveEventStub.called).toBe(true);
     expect(updatedEvent.content("en").isEmpty()).toBe(true);
     expect(destroyContentStub.called).toBe(true);
   });
@@ -170,6 +174,7 @@ describe('updateEvent with content', () => {
       },
     });
 
+    expect(saveEventStub.called).toBe(true);
     expect(updatedEvent.content("en").name).toBe('updatedName');
     expect(updatedEvent.content("en").description).toBe('updatedDescription');
     expect(createContentStub.called).toBe(true);

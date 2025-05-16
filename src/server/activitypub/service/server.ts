@@ -1,4 +1,3 @@
-import { DateTime } from "luxon";
 import { EventEmitter } from "events";
 import config from 'config';
 
@@ -38,11 +37,10 @@ class ActivityPubService extends EventEmitter {
      * @param domain
      * @returns WebFingerResponse message
      */
-  // TODO: something useful with the domain info (validation?)
   async lookupWebFinger(urlName: string, domain: string): Promise<WebFingerResponse|null> {
     let calendar = await CalendarService.getCalendarByName(urlName);
 
-    if ( calendar ) {
+    if ( calendar && domain === config.get('domain') ) {
       return new WebFingerResponse(calendar.urlName, config.get('domain'));
     }
 
@@ -150,7 +148,8 @@ class ActivityPubService extends EventEmitter {
      * @param limit
      * @returns a list of ActivityPubMessage objects
      */
-  async readOutbox(calendar: Calendar, limit?: DateTime): Promise<ActivityPubActivity[]> {
+  // TODO: implement date ranges or other limits
+  async readOutbox(calendar: Calendar): Promise<ActivityPubActivity[]> {
     let messageEntities = await ActivityPubInboxMessageEntity.findAll({
       where: { calendar_id: calendar.id },
       order: [['created_at', 'DESC']],

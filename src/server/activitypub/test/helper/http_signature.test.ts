@@ -287,6 +287,7 @@ describe('HTTP Signature Verification', () => {
 
     await verifyHttpSignature(req as Request, res as Response, next as any);
 
+    expect(cacheSetStub.called).toBe(true);
     expect(next.called).toBe(true);
     expect(res.status.called).toBe(false);
   });

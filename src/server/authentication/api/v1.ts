@@ -1,4 +1,4 @@
-import express, { Application, Router } from 'express';
+import express, { Application } from 'express';
 import passport from 'passport';
 import passportJWT from 'passport-jwt';
 import { Strategy as LocalStrategy } from 'passport-local';

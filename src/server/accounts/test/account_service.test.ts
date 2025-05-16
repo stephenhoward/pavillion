@@ -44,13 +44,15 @@ describe('inviteNewAccount', () => {
     let getAccountStub = sandbox.stub(CommonAccountService, 'getAccountByEmail');
     let findInvitationStub = sandbox.stub(AccountInvitationEntity, 'findOne');
     let sendInviteStub = sandbox.stub(AccountService,'sendNewAccountInvite');
-    let saveinviteStub = sandbox.stub(AccountInvitationEntity.prototype, 'save');
+    let saveInviteStub = sandbox.stub(AccountInvitationEntity.prototype, 'save');
 
     getAccountStub.resolves(undefined);
     findInvitationStub.resolves(undefined);
 
     let invitation = await AccountService.inviteNewAccount('test_email','test_message');
     expect(invitation.email).toBe('test_email');
+    expect(sendInviteStub.called).toBe(true);
+    expect(saveInviteStub.called).toBe(true);
   });
 });
 
@@ -72,8 +74,8 @@ describe('registerNewAccount', () => {
       await expect(AccountService.registerNewAccount('test_email')).rejects
         .toThrow(AccountRegistrationClosedError);
       expect(emailStub.called).toBe(false);
-
     }
+    expect(initSettingsStub.called).toBe(true);
   });
 
   it('open registration', async () => {
@@ -100,7 +102,6 @@ describe('applyForNewAccount', () => {
 
   it('no applications allowed', async () => {
     let getSettingStub = applySandbox.stub(ServiceSettings.prototype, 'get');
-    let initSettingsStub = applySandbox.stub(ServiceSettings.prototype, 'init');
 
     for (let mode of ['closed', 'open', 'invite']) {
       getSettingStub.withArgs('registrationMode').returns(mode);
@@ -132,6 +133,8 @@ describe('applyForNewAccount', () => {
     let result = await AccountService.applyForNewAccount('test_email','test_message');
 
     expect(result).toBe(true);
+    expect(saveApplicationStub.called).toBe(true);
+    expect(emailStub.called).toBe(true);
   });
 });
 

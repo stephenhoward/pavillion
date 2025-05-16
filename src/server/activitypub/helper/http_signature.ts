@@ -107,6 +107,7 @@ function extractActorFromKeyId(keyId: string): string {
     return `${url.protocol}//${url.host}${url.pathname.split('#')[0]}`;
   }
   catch (e) {
+    console.error(e);
     return '';
   }
 }

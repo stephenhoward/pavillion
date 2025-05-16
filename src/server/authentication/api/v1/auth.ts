@@ -10,7 +10,7 @@ import AccountService from '@/server/accounts/service/account';
 
 const handlers = {
   login: async (req: Request, res: Response) => {
-    passport.authenticate('local', {session: false}, (err: any, account: Account, info?: any) => {
+    passport.authenticate('local', {session: false}, (err: any, account: Account) => {
       if (err || !account) {
         return res.status(400).json({
           message: 'Something is not right',
