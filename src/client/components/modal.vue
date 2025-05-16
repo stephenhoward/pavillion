@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="modal">
-      <div class="modal-content">
+      <div :class="{ 'modal-content': true, [props.modalClass]: props.modalClass }">
         <span class="title" >{{ props.title }}</span>
         <span class="close" @click="$emit('close')">&times;</span>
         <slot/>
@@ -14,6 +14,7 @@
 
 const props = defineProps({
   title: String,
+  modalClass: String,
 });
 
 </script>

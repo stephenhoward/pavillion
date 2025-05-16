@@ -6,6 +6,7 @@ import ExpressHelper from '@/server/common/helper/express';
 import CommonAccountService from '@/server/common/service/accounts';
 import AuthenticationService from '@/server/authentication/service/auth';
 import { noAccountExistsError } from '@/server/accounts/exceptions';
+import { EmailAlreadyExistsError, InvalidPasswordError } from '@/server/authentication/exceptions';
 import AccountService from '@/server/accounts/service/account';
 
 const handlers = {
@@ -71,6 +72,35 @@ const handlers = {
       res.status(400).json({message: 'error resetting password' });
     }
   },
+  changeEmail: async (req: Request, res: Response) => {
+    if (!req.user) {
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
+    }
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      res.status(400).json({ message: 'Email and password are required' });
+      return;
+    }
+
+    try {
+      await AuthenticationService.changeEmail(req.user as Account, email, password);
+      res.json({ message: 'ok' });
+    }
+    catch (error) {
+      if (error instanceof EmailAlreadyExistsError) {
+        res.status(409).json({ message: 'email_exists' });
+      }
+      else if (error instanceof InvalidPasswordError) {
+        res.status(401).json({ message: 'invalid_password' });
+      }
+      else {
+        console.error('Error changing email:', error);
+        res.status(500).json({ message: 'server_error' });
+      }
+    }
+  },
 };
 
 var router = express.Router();
@@ -114,5 +144,15 @@ router.post('/reset-password', handlers.generatePasswordResetCode );
  * Use a valid password reset code to set a new password
  */
 router.post('/reset-password/:code', handlers.setPassword );
+
+/**
+ * Change email address
+ * @route POST /api/auth/v1/email
+ * @param email
+ * @param password
+ * Change the logged in user's email address after verifying their password
+ */
+router.post('/email', ...ExpressHelper.loggedInOnly, handlers.changeEmail );
+
 
 export { handlers, router };

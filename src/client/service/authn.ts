@@ -3,6 +3,7 @@ import axios, { AxiosError } from 'axios';
 interface JWTClaims {
   exp: number;
   isAdmin: boolean;
+  email: string;
 }
 
 export default class AuthenticationService {
@@ -268,6 +269,22 @@ export default class AuthenticationService {
   }
 
   /**
+   *
+   * @returns {string|null} The email address of the current user or null if not logged in
+   */
+  userEmail() {
+    let token =  this.localStore.getItem('jw_token');
+
+    if ( token ) {
+      const claims: JWTClaims = JSON.parse(token);
+      if ( claims.exp > Math.floor(Date.now() / 1000) ) {
+        return claims.email;
+      }
+    }
+    return null;
+  }
+
+  /**
    * Initiates a password reset process for the given email.
    *
    * @param {string} email - Email address for password reset
@@ -293,6 +310,23 @@ export default class AuthenticationService {
       console.log(error);
       throw (error);
     }
+  }
+
+  async changeEmail ( email: string, password: string ): Promise<boolean> {
+    try {
+      let response = await axios.post(
+        this._authUrl('/email'),
+        { email, password },
+      );
+      if ( response.status === 200 ) {
+        await this._refresh_login( this.userSettings().exp );
+        return true;
+      }
+    }
+    catch {
+      // TODO: something more useful here
+    }
+    return false;
   }
 
   /**

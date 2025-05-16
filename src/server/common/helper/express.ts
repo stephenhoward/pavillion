@@ -58,6 +58,7 @@ export default {
     let payload = {
       exp: Math.floor(Date.now() / 1000) + (60 * expirationMinutes),
       id: account.id,
+      email: account.email,
       isAdmin: account.hasRole('admin'),
     };
     let token = jwt.sign(payload, jwtSecret);

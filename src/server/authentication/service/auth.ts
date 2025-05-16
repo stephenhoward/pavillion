@@ -6,6 +6,7 @@ import { Account } from "@/common/model/account";
 import { AccountEntity, AccountSecretsEntity } from "@/server/common/entity/account";
 import CommonAccountService from '@/server/common/service/accounts';
 import { noAccountExistsError } from '@/server/accounts/exceptions';
+import { EmailAlreadyExistsError, InvalidPasswordError } from '@/server/authentication/exceptions';
 import EmailService from '@/server/common/service/mail';
 import PasswordResetEmail from '@/server/authentication/model/password_reset_email';
 
@@ -16,6 +17,50 @@ import PasswordResetEmail from '@/server/authentication/model/password_reset_ema
  * Use this class to manage the lifecycle of accounts in the system
  */
 class AuthenticationService {
+
+  /**
+   * Changes the email address for an account after verifying the password
+   *
+   * @param {Account} account - The account to change email for
+   * @param {string} newEmail - The new email address
+   * @param {string} password - The current password for verification
+   * @returns {Promise<Account>} The updated account
+   * @throws {InvalidPasswordError} If the provided password is incorrect
+   * @throws {EmailAlreadyExistsError} If the new email is already in use by another account
+   */
+  static async changeEmail(account: Account, newEmail: string, password: string): Promise<Account> {
+    // Verify the password first
+    const passwordValid = await AuthenticationService.checkPassword(account, password);
+    if (!passwordValid) {
+      throw new InvalidPasswordError();
+    }
+
+    // Normalize the email address for case-insensitive comparison
+    const normalizedNewEmail = newEmail.toLowerCase();
+
+    // If the new email is the same as current (case-insensitive), just return the account
+    if (account.email.toLowerCase() === normalizedNewEmail) {
+      return account;
+    }
+
+    // Check if email is already in use by another account
+    const existingAccount = await CommonAccountService.getAccountByEmail(normalizedNewEmail);
+    if (existingAccount && existingAccount.id !== account.id) {
+      throw new EmailAlreadyExistsError();
+    }
+
+    // Update the email in the database
+    const accountEntity = await AccountEntity.findByPk(account.id);
+    if (accountEntity) {
+      accountEntity.email = normalizedNewEmail;
+      await accountEntity.save();
+
+      // Return the updated account
+      return await CommonAccountService.getAccountById(account.id) as Account;
+    }
+
+    throw new noAccountExistsError();
+  }
 
   /**
    * Resets a user's password using a valid password reset code.

@@ -3,8 +3,25 @@
   "title": "Settings",
   "language_preference_label": "Preferred Language",
   "account_email_label": "Email",
-  "change_email_button": "Change Password",
+  "change_email_button": "Change Email",
   "account_password_label": "Password",
-  "change_password_button": "Update Password",
-  "logout": "Logout"
+  "change_password_button": "Change Password",
+  "logout": "Logout",
+  "change_email_form": {
+      "title": "Change your email address",
+      "email_placeholder": "new email address",
+      "password_placeholder": "your password",
+      "change_email_button": "Change Email",
+      "close_button": "Cancel",
+      "change_email_failed_message": "Failed to change email address"
+  },
+  "change_password_form": {
+      "title": "Change your password",
+      "send_password_link_button": "Send Password Link",
+      "send_link_description": "Send a link to {{email}} to reset my password",
+      "cancel_button": "Cancel",
+      "close_button": "Close",
+      "link_sent_message": "Password reset link sent to {{email}}",
+      "change_email_failed_message": "Failed to change email address"
+  }
 }
