@@ -1,7 +1,7 @@
 <style lang="scss">
 @use '../../assets/mixins' as *;
 
-div.change-email-form {
+dialog.modal-dialog.change-email-form .modal-content {
   max-width: 400px;
   form {
     display: grid;
@@ -33,6 +33,14 @@ div.change-email-form {
       display: inline-block;
       margin-right: 10px;
     }
+
+    footer {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 15px;
+      grid-column-start: 1;
+      grid-column-end: 3;
+    }
   }
 }
 
@@ -51,8 +59,10 @@ div.change-email-form {
              name="password"
              v-bind:placeholder="t('password_placeholder')"
              v-model="state.password"/>
-      <button type="submit" class="primary" @click="changeEmail()">{{ t("change_email_button") }}</button>
-      <button type="button" @click="$emit('close', state.email)">{{ t("close_button") }}</button>
+      <footer>
+        <button type="submit" class="primary" @click="changeEmail()">{{ t("change_email_button") }}</button>
+        <button type="button" @click="$emit('close', state.email)">{{ t("close_button") }}</button>
+      </footer>
     </form>
   </ModalLayout>
 </template>
