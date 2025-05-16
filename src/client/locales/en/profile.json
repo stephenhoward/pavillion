@@ -1,7 +1,10 @@
 {
-  "admin_link": "Admin",
-  "title": "Profile",
-  "email_label": "Email",
-  "update_password": "Update Password",
+  "admin_link": "Admin Settings",
+  "title": "Settings",
+  "language_preference_label": "Preferred Language",
+  "account_email_label": "Email",
+  "change_email_button": "Change Password",
+  "account_password_label": "Password",
+  "change_password_button": "Update Password",
   "logout": "Logout"
 }

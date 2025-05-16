@@ -119,53 +119,6 @@ h2 {
   margin-bottom: 1.5rem;
 }
 
-.settings-form {
-  max-width: 800px;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  margin-bottom: 1.5rem;
-  gap: 0.5rem;
-
-  @include medium-size-device {
-    flex-direction: row;
-    align-items: flex-start;
-  }
-}
-
-.form-label {
-  font-weight: bold;
-  flex: 1;
-  padding-top: 0.5rem;
-}
-
-.form-field {
-  flex: 1;
-  input, select {
-    width: 100%;
-    border-radius: 20px;
-    font-size: 12pt;
-    border: 0px;
-    padding: 4px 8px;
-  }
-}
-
-select {
-  padding: 0.5rem;
-  border-radius: 4px;
-  min-width: 250px;
-  font-size: 1rem;
-  border: 1px solid #ccc;
-}
-
-.description {
-  margin-top: 0.5rem;
-  font-size: 0.875rem;
-  color: #555;
-}
-
 .success-message {
   margin-bottom: 1.5rem;
   padding: 0.75rem;
