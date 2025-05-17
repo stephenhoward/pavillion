@@ -3,8 +3,6 @@ import ModelService from '@/client/service/models';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError } from '@/common/exceptions/calendar';
 import { UnauthenticatedError, UnknownError, EmptyValueError } from '@/common/exceptions';
 import { useCalendarStore } from '@/client/stores/calendarStore';
-import { CalendarEvent } from '@/common/model/events';
-import { useEventStore } from '@/client/stores/eventStore';
 
 const errorMap = {
   UrlNameAlreadyExistsError,

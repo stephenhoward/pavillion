@@ -73,10 +73,10 @@ div.schedule {
   <ModalLayout :title="props.event.id ? t('edit_event_title') : t('create_event_title')" @close="$emit('close')">
     <div class="event">
       <div class="error" v-if="state.err">{{ state.err }}</div>
-      <section class="calendar-selection" v-if="availableCalendars.length > 1">
+      <section class="calendar-selection" v-if="state.availableCalendars.length > 1">
         <label>{{ t('calendar_label') }}</label>
         <select v-model="props.event.calendarId">
-          <option v-for="calendar in availableCalendars" :key="calendar.id" :value="calendar.id">
+          <option v-for="calendar in state.availableCalendars" :key="calendar.id" :value="calendar.id">
             {{ calendar.content('en').name || calendar.urlName }}
           </option>
         </select>
@@ -153,7 +153,6 @@ div.schedule {
 import { reactive, ref, onBeforeMount, computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { CalendarEvent } from '../../../common/model/events';
-import { useEventStore } from '../../stores/eventStore';
 import CalendarService from '../../service/calendar';
 import EventService from '../../service/event';
 import EventRecurrenceView from './event_recurrence.vue';
@@ -161,7 +160,6 @@ import languagePicker from '../languagePicker.vue';
 import ModalLayout from '../modal.vue';
 import iso6391 from 'iso-639-1-dir';
 
-const eventStore = useEventStore();
 const emit = defineEmits(['close']);
 
 const { t } = useTranslation('event_editor', {
@@ -184,6 +182,7 @@ const state = reactive({
   err: '',
   showLanguagePicker: false,
   lang: defaultLanguage,
+  availableCalendars: [],
 });
 
 const addLanguage = (language) => {
@@ -197,15 +196,14 @@ const removeLanguage = (language) => {
   state.lang = languages.value[0];
 };
 
-const availableCalendars = ref([]);
 
 onBeforeMount(async () => {
   try {
     // Load available calendars that the user can edit
-    availableCalendars.value = await CalendarService.loadCalendars();
+    state.availableCalendars = await CalendarService.loadCalendars();
 
-    if (!props.event.calendarId && availableCalendars.value.length > 0) {
-      props.event.calendarId = availableCalendars.value[0].id;
+    if (!props.event.calendarId && state.availableCalendars.length > 0) {
+      props.event.calendarId = state.availableCalendars[0].id;
     }
   }
   catch (error) {
@@ -216,8 +214,8 @@ onBeforeMount(async () => {
 
 const saveModel = async (model) => {
   // Ensure we have a calendarId
-  if (!model.calendarId && availableCalendars.value.length > 0) {
-    model.calendarId = availableCalendars.value[0].id;
+  if (!model.calendarId && state.availableCalendars.length > 0) {
+    model.calendarId = state.availableCalendars[0].id;
   }
 
   if (!model.calendarId) {

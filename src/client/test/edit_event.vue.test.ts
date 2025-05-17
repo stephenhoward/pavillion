@@ -5,10 +5,11 @@ import sinon from 'sinon';
 
 import { CalendarEvent } from '@/common/model/events';
 import { EventLocation } from '@/common/model/location';
+import { Calendar } from '@/common/model/calendar';
 import { mountComponent } from '@/client/test/lib/vue';
-import { useEventStore } from '@/client/stores/eventStore';
-import ModelService from '@/client/service/models';
 import EditEvent from '@/client/components/calendar/edit_event.vue';
+import EventService from '@/client/service/event';
+import CalendarService from '@/client/service/calendar';
 
 const routes: RouteRecordRaw[] = [
   { path: '/login',  component: {}, name: 'login', props: true },
@@ -49,42 +50,17 @@ describe('Editor Behavior', () => {
     sandbox.restore();
   });
 
-  it('new event', async () => {
+  it('new event, no calendar', async () => {
     let event = new CalendarEvent('', '');
     event.location = new EventLocation('', '');
-    const { wrapper } = mountedEditor(event);
-    const eventStore = useEventStore();
 
-    let createStub = sandbox.stub(ModelService, 'createModel');
-    let updateStub = sandbox.stub(ModelService, 'updateModel');
-    let addEventStoreStub = sandbox.stub(eventStore, 'addEvent');
-    let updateEventStoreStub = sandbox.stub(eventStore, 'updateEvent');
+    const calendarsStub = sandbox.stub(CalendarService, 'loadCalendars');
+    const createStub = sandbox.stub(EventService, 'createEvent');
 
+    calendarsStub.resolves([]);
     createStub.resolves(new CalendarEvent('id', 'testDate'));
 
-    wrapper.find('input[name="name"]').setValue('testName');
-    wrapper.find('input[name="description"]').setValue('testDescription');
-
-    await wrapper.find('button[type="submit"]').trigger('click');
-
-    expect(createStub.called).toBe(true);
-    expect(updateStub.called).toBe(false);
-    expect(addEventStoreStub.called).toBe(true);
-    expect(updateEventStoreStub.called).toBe(false);
-  });
-
-  it('existing event', async () => {
-    let event = new CalendarEvent('hasId', '');
-    event.location = new EventLocation('', '');
     const { wrapper } = mountedEditor(event);
-    const eventStore = useEventStore();
-
-    let createStub = sandbox.stub(ModelService, 'createModel');
-    let updateStub = sandbox.stub(ModelService, 'updateModel');
-    let addEventStoreStub = sandbox.stub(eventStore, 'addEvent');
-    let updateEventStoreStub = sandbox.stub(eventStore, 'updateEvent');
-
-    updateStub.resolves(new CalendarEvent('hasId', 'testDate'));
 
     wrapper.find('input[name="name"]').setValue('testName');
     wrapper.find('input[name="description"]').setValue('testDescription');
@@ -92,9 +68,27 @@ describe('Editor Behavior', () => {
     await wrapper.find('button[type="submit"]').trigger('click');
 
     expect(createStub.called).toBe(false);
-    expect(updateStub.called).toBe(true);
-    expect(addEventStoreStub.called).toBe(false);
-    expect(updateEventStoreStub.called).toBe(true);
   });
 
+  it('new event, with calendar', async () => {
+    const calendar = new Calendar('testId','testName');
+    const event = new CalendarEvent('', '');
+    event.location = new EventLocation('', '');
+    event.calendarId = 'testId';
+
+    const calendarsStub = sandbox.stub(CalendarService, 'loadCalendars');
+    const createStub = sandbox.stub(EventService, 'createEvent');
+
+    calendarsStub.resolves([calendar]);
+    createStub.resolves(new CalendarEvent('id', 'testDate'));
+
+    const { wrapper } = mountedEditor(event);
+
+    wrapper.find('input[name="name"]').setValue('testName');
+    wrapper.find('input[name="description"]').setValue('testDescription');
+
+    await wrapper.find('button[type="submit"]').trigger('click');
+
+    expect(createStub.called).toBe(true);
+  });
 });
