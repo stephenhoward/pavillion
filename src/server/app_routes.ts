@@ -5,7 +5,7 @@ import path from "path";
 const router = Router();
 const environment = process.env.NODE_ENV;
 
-const supportedAssets = ["svg", "png", "jpg", "png", "jpeg", "mp4", "ogv"];
+const supportedAssets = ["svg", "png", "jpg", "png", "jpeg", "mp4", "ogv", "otf", "ttf", "woff", "woff2"];
 
 /**
  * @returns {RegExp} A regular expression matching URLs ending with supported asset extensions
