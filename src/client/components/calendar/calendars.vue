@@ -59,15 +59,17 @@ watch(newCalendarName, () => {
 });
 
 onBeforeMount(async () => {
-  await loadCalendars();
+  loadCalendars();
+  state.isLoading = true;
 });
 
-// Load all calendars from the server
+// Load calendar data and handle routing
 async function loadCalendars() {
   try {
-    let calendars = await CalendarService.loadCalendars();
-    if (calendars.length == 1) {
-      // If there is only one calendar, redirect to it
+    const calendars = await CalendarService.loadCalendars();
+
+    // If there is only one calendar, redirect to it
+    if (calendars.length === 1) {
       router.push({ path: '/calendar/' + calendars[0].urlName });
     }
     else {
@@ -78,13 +80,15 @@ async function loadCalendars() {
     console.error('Error loading calendars:', error);
     state.err = 'Failed to load calendars';
   }
+  finally {
+    state.isLoading = false;
+  }
 }
 
 // Create a new calendar with the name from the input field
 // TODO: run this function when the user hits enter
 async function createCalendar() {
   const calendarName = newCalendarName.value.trim();
-
   state.isLoading = true;
   state.errorMessage = '';
 
@@ -149,21 +153,19 @@ async function createCalendar() {
   </div>
 </template>
 
-<style lang="scss">
+<style scoped lang="scss">
 @use '../../assets/mixins' as *;
 
 div.calendar-url {
   font-size: 12pt;
-  margin: 6px 0px;
   color: $light-mode-secondary-text;
-  margin-bottom: 30px;
   input {
     border: 0;
     border-bottom: 1px solid $light-mode-border;
     background: none;
     font-size: 100%;
     color: $light-mode-text;
-    text-align: right;
+    text-align: end;
   }
   @include medium-size-device {
     font-size: 14pt;
@@ -173,7 +175,6 @@ div.calendar-url {
 .error-message {
   color: #d32f2f; // Using a standard red color for errors in light mode
   font-size: 0.9rem;
-  margin-bottom: 15px;
 }
 
 @include dark-mode {
@@ -188,5 +189,9 @@ div.calendar-url {
     .error-message {
       color: #f44336; // A brighter red for visibility in dark mode
     }
+}
+
+.empty-screen {
+  @include empty-screen;
 }
 </style>

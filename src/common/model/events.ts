@@ -9,6 +9,7 @@ import { EventLocation } from '@/common/model/location';
  */
 class CalendarEvent extends TranslatedModel<CalendarEventContent> {
   date: string = '';
+  calendarId: string = '';
   location: EventLocation | null = null;
   parentEvent: CalendarEvent | null = null;
   eventSourceUrl: string = '';
@@ -77,13 +78,17 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
   static fromObject(obj: Record<string, any>): CalendarEvent {
     let event = new CalendarEvent(obj.id, obj.date, obj.eventSourceUrl);
 
+    event.calendarId = obj.calendarId || '';
     event.location = obj.location ? EventLocation.fromObject(obj.location) : null;
 
     if ( obj.content ) {
       for( let [language,strings] of Object.entries(obj.content) ) {
-        strings.language = language;
-        const content = CalendarEventContent.fromObject(strings as Record<string,any>);
-        event.addContent(content);
+        if (typeof strings === 'object' && strings !== null) {
+          const contentObj = strings as Record<string, any>;
+          contentObj.language = language;
+          const content = CalendarEventContent.fromObject(contentObj);
+          event.addContent(content);
+        }
       }
     }
 
@@ -99,6 +104,7 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
     return {
       id: this.id,
       date: this.date,
+      calendarId: this.calendarId,
       location: this.location?.toObject(),
       eventSourceUrl: this.eventSourceUrl,
       content: Object.fromEntries(

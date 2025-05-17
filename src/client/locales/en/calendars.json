@@ -10,6 +10,14 @@
     "error_create_calendar": "Error creating calendar",
     "calendar_name_placeholder": "your-calendar-name"
   },
+  "selector": {
+    "select_calendar_title": "Select Calendar",
+    "select_calendar_instructions": "Please select a calendar for your event:",
+    "loading_calendars": "Loading calendars...",
+    "no_calendars": "You don't have any calendars. Please create one first.",
+    "error_loading_calendars": "Error loading calendars",
+    "cancel_button": "Cancel"
+  },
   "calendar": {
     "create_button": "Create Event",
     "update_button": "Update Event",

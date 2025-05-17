@@ -73,6 +73,14 @@ div.schedule {
   <ModalLayout :title="props.event.id ? t('edit_event_title') : t('create_event_title')" @close="$emit('close')">
     <div class="event">
       <div class="error" v-if="state.err">{{ state.err }}</div>
+      <section class="calendar-selection" v-if="availableCalendars.length > 1">
+        <label>{{ t('calendar_label') }}</label>
+        <select v-model="props.event.calendarId">
+          <option v-for="calendar in availableCalendars" :key="calendar.id" :value="calendar.id">
+            {{ calendar.content('en').name || calendar.urlName }}
+          </option>
+        </select>
+      </section>
       <section class="description">
         <label>{{ t('event_description_label') }}</label>
         <select v-model="state.lang">
@@ -142,17 +150,19 @@ div.schedule {
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue';
+import { reactive, ref, onBeforeMount, computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { CalendarEvent } from '../../../common/model/events';
-import ModelService from '../../service/models';
 import { useEventStore } from '../../stores/eventStore';
+import CalendarService from '../../service/calendar';
+import EventService from '../../service/event';
 import EventRecurrenceView from './event_recurrence.vue';
 import languagePicker from '../languagePicker.vue';
 import ModalLayout from '../modal.vue';
 import iso6391 from 'iso-639-1-dir';
 
 const eventStore = useEventStore();
+const emit = defineEmits(['close']);
 
 const { t } = useTranslation('event_editor', {
   keyPrefix: 'editor',
@@ -187,17 +197,40 @@ const removeLanguage = (language) => {
   state.lang = languages.value[0];
 };
 
-const saveModel = async (model) => {
-  const isNew = !model.id;
-  state.event = isNew
-    ? CalendarEvent.fromObject(await ModelService.createModel(model, '/api/v1/events'))
-    : CalendarEvent.fromObject(await ModelService.updateModel(model, '/api/v1/events'));
+const availableCalendars = ref([]);
 
-  if ( isNew == true ) {
-    eventStore.addEvent(props.event.clone());
+onBeforeMount(async () => {
+  try {
+    // Load available calendars that the user can edit
+    availableCalendars.value = await CalendarService.loadCalendars();
+
+    if (!props.event.calendarId && availableCalendars.value.length > 0) {
+      props.event.calendarId = availableCalendars.value[0].id;
+    }
   }
-  else {
-    eventStore.updateEvent(props.event.clone());
+  catch (error) {
+    console.error('Error loading calendars:', error);
+    state.err = t('error_loading_calendars');
+  }
+});
+
+const saveModel = async (model) => {
+  // Ensure we have a calendarId
+  if (!model.calendarId && availableCalendars.value.length > 0) {
+    model.calendarId = availableCalendars.value[0].id;
+  }
+
+  if (!model.calendarId) {
+    state.err = t('error_no_calendar');
+    return;
+  }
+
+  try {
+    await EventService.createEvent(model);
+  }
+  catch (error) {
+    console.error('Error saving event:', error);
+    state.err = t('error_saving_event');
   }
 };
 </script>
