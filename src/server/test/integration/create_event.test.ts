@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import request from 'supertest';
-import express from 'express';
 import sinon from 'sinon';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 
-import db from '@/server/common/entity/db';
-import initPavillionServer from '@/server/server';
+import { Account } from '@/common/model/account';
+import { Calendar } from '@/common/model/calendar';
+import { TestEnvironment } from '@/server/test/lib/test_environment';
 import AccountService from '@/server/accounts/service/account';
 import CalendarService from '@/server/calendar/service/calendar';
 import { EventEntity } from '@/server/calendar/entity/event';
@@ -15,14 +15,18 @@ import ProcessInboxService from '@/server/activitypub/service/inbox';
 import FollowActivity from '@/server/activitypub/model/action/follow';
 
 describe('Event API', () => {
-  let account: any;
-  let calendar: any;
-  let app: express.Application;
+  let account: Account;
+  let calendar: Calendar;
+  let env: TestEnvironment;
+  let userEmail: string = 'testcalendar@pavillion.dev';
+  let userPassword: string = 'testpassword';
 
   beforeAll(async () => {
-    await db.sync({force: true});
-    account = await AccountService._setupAccount('testcalendar@pavillion.dev','testpassword');
-    calendar = await CalendarService.createCalendar(account.account,'testcalendar');
+    env = new TestEnvironment();
+    await env.init();
+    let accountInfo = await AccountService._setupAccount(userEmail,userPassword);
+    account = accountInfo.account;
+    calendar = await CalendarService.createCalendar(account,'testcalendar');
 
     // Create a proper FollowActivity object
     let inboxService = new ProcessInboxService();
@@ -30,8 +34,6 @@ describe('Event API', () => {
     followActivity.id = `https://remotedomain/users/testcalendar/follows/${uuidv4()}`;
     await inboxService.processFollowAccount(calendar, followActivity);
 
-    app = express();
-    await initPavillionServer(app);
   });
 
   afterEach(() => {
@@ -39,7 +41,7 @@ describe('Event API', () => {
   });
 
   it('createEvent: should fail without user', async () => {
-    const response = await request(app)
+    const response = await request(env.app)
       .post('/api/v1/calendars/testCalendar/events')
       .send({
         content: {
@@ -57,24 +59,18 @@ describe('Event API', () => {
   it('createEvent: should succeed', async () => {
     let getStub = sinon.stub(axios, 'get');
     let postStub = sinon.stub(axios, 'post');
-    let webfingerStub = getStub.withArgs('https://remotedomain/.well-known/webfinger?resource=acct:testcalendar');
-    webfingerStub.resolves({ data: { links: [ { rel:'self', href:'https://remotedomain/o/testcalendar' } ] } });
-    let profileStub = getStub.withArgs('https://remotedomain/o/testcalendar');
-    profileStub.resolves({ data: { inbox: 'https://remotedomain/o/testcalendar/inbox' } });
+    env.stubRemoteCalendar(getStub, 'remotedomain', 'testcalendar');
 
-    let authResponse = await request(app).post('/api/auth/v1/login').send({ email: 'testcalendar@pavillion.dev', password: 'testpassword' });
-    const response = await request(app)
-      .post('/api/v1/calendars/testCalendar/events')
-      .set('Authorization','Bearer ' + authResponse.text)
-      .send({
-        calendarId: calendar.id,
-        content: {
-          en: {
-            name: 'Test Event',
-            description: 'This is a test event',
-          },
+    let authKey = await env.login(userEmail,userPassword);
+    const response = await env.authPost(authKey, '/api/v1/calendars/testCalendar/events', {
+      calendarId: calendar.id,
+      content: {
+        en: {
+          name: 'Test Event',
+          description: 'This is a test event',
         },
-      });
+      },
+    });
     let entity = await EventEntity.findOne({ where: { id: response.body.id } });
 
     // wait for create event to propagate to activitypub service:

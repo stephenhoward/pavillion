@@ -1,53 +1,62 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeAll } from 'vitest';
 import request from 'supertest';
-import express from 'express';
 import sinon from 'sinon';
 import axios from 'axios';
 import httpSignature from 'http-signature';
-import crypto from 'crypto';
+import express from 'express';
 
-import db from '@/server/common/entity/db';
-import initPavillionServer from '@/server/server';
+import { Account } from '@/common/model/account';
+import { Calendar } from '@/common/model/calendar';
+import { TestEnvironment } from '@/server/test/lib/test_environment';
 import AccountService from '@/server/accounts/service/account';
 import { EventEntity } from '@/server/calendar/entity/event';
 import { ActivityPubOutboxMessageEntity } from '@/server/activitypub/entity/activitypub';
 import CalendarService from '@/server/calendar/service/calendar';
 
+const findInboxForCalendar = async (calendarName: string, app: express.Application): Promise<string> => {
+
+  const webFingerResponse = await request(app).get(`/.well-known/webfinger?resource=acct:${calendarName}@pavillion.dev`);
+  expect(webFingerResponse.status,"webfinger lookup succeeded").toBe(200);
+
+  const profileLink = webFingerResponse.body.links.find( (link: any) => link.rel === 'self' );
+  expect(profileLink,"found an inbox url").toBeDefined();
+
+  const profileResponse = await request(app).get(profileLink.href.replace('https://pavillion.dev',''));
+  expect(profileResponse.status,"webfinger lookup succeeded").toBe(200);
+
+  return profileResponse.body.inbox.replace('https://pavillion.dev','');
+};
+
 describe('ActivityPub Create Activity', async () => {
+  let env: TestEnvironment;
+  let account: Account;
+  let calendar: Calendar;
+  const calendarName: string = 'testcalendar';
+  const userEmail: string = 'testcalendar@pavillion.dev';
+  const userPassword: string = 'testpassword';
+  const sandbox: sinon.SinonSandbox = sinon.createSandbox();
 
-  await db.sync({force: true});
-  let account = await AccountService._setupAccount('testcalendar@pavillion.dev','testpassword');
-  let calendar = await CalendarService.createCalendar(account.account,'testcalendar');
-  // let inboxService = new ProcessInboxService();
-  // await inboxService.processFollowAccount(account.account,{ actor: 'testcalendar@remotedomain', object: 'testcalendar@pavillion.dev' });
-
-  let app = express();
-  initPavillionServer(app);
-
-  let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+  beforeAll(async () => {
+    env = new TestEnvironment();
+    await env.init();
+    let accountInfo = await AccountService._setupAccount(userEmail,userPassword);
+    account = accountInfo.account;
+    calendar = await CalendarService.createCalendar(account,calendarName);
+  });
 
   afterEach(() => {
     sandbox.restore();
   });
 
   it('createEvent: should fail without signature', async () => {
+    let remoteEventUrl = 'https://remotedomain.dev/api/v1/events/1';
 
-    // let getStub = sinon.stub(axios, 'get');
-    // let postStub = sinon.stub(axios, 'post');
-    const webFingerResponse = await request(app).get('/.well-known/webfinger?resource=acct:testcalendar@pavillion.dev');
-    expect(webFingerResponse.status,"webfinger lookup succeeded").toBe(200);
-
-    const profileLink = webFingerResponse.body.links.find( (link: any) => link.rel === 'self' );
-    expect(profileLink,"found an inbox url").toBeDefined();
-
-    const profileResponse = await request(app).get(profileLink.href.replace('https://pavillion.dev',''));
-    expect(profileResponse.status,"webfinger lookup succeeded").toBe(200);
-
-    const response = await request(app)
-      .post(profileResponse.body.inbox.replace('https://pavillion.dev',''))
+    const inboxUrl = await findInboxForCalendar(calendarName, env.app);
+    const response = await request(env.app)
+      .post(inboxUrl)
       .send({
         '@context': 'https://www.w3.org/ns/activitystreams',
-        id: 'https://remotedomain.dev/api/v1/events/1',
+        id: remoteEventUrl,
         type: 'Create',
         actor: 'testcalendar@remotedomain',
         object: {
@@ -61,70 +70,49 @@ describe('ActivityPub Create Activity', async () => {
           },
         },
       });
-    let entity = await EventEntity.findOne({ where: { id: 'https://remotedomain.dev/api/v1/events/1' } });
+    const entity = await EventEntity.findOne({ where: { id: remoteEventUrl } });
 
     expect(response.status).toBe(500);
     expect(entity).toBe(null);
   });
 
   it('createEvent: should succeed', async () => {
+    const remoteDomain = 'remotedomain.dev';
+    const remoteCalendar = 'testcalendar';
 
-    const webFingerResponse = await request(app).get('/.well-known/webfinger?resource=acct:testcalendar@pavillion.dev');
-    expect(webFingerResponse.status,"webfinger lookup succeeded").toBe(200);
-
-    const profileLink = webFingerResponse.body.links.find( (link: any) => link.rel === 'self' );
-    expect(profileLink,"found an inbox url").toBeDefined();
-
-    const profileResponse = await request(app).get(profileLink.href.replace('https://pavillion.dev',''));
-    expect(profileResponse.status,"webfinger lookup succeeded").toBe(200);
-
-    const authHeader = 'Signature keyId="https://remotedomain.dev/o/testcalendar#main_key",algorithm="rsa-sha256",' +
-                        'headers="(request-target) host date content-type digest",' +
-                        'signature="fakeSignature"';
-
+    const inboxUrl = await findInboxForCalendar(calendarName, env.app);
     const getStub = sandbox.stub(axios, 'get');
     const verifyStub = sandbox.stub(httpSignature, 'verifySignature');
-    getStub.withArgs('https://remotedomain.dev/o/testcalendar').resolves({
-      status: 200,
-      data: {
-        publicKey: {
-          publicKeyPem: 'fake key',
-        },
-      },
-    });
     verifyStub.returns(true);
+    env.stubRemoteCalendar(getStub, remoteDomain, remoteCalendar);
 
-    const requestData = {
-      '@context': 'https://www.w3.org/ns/activitystreams',
-      id: 'https://remotedomain.dev/api/v1/events/1',
-      type: 'Create',
-      actor: 'https://remotedomain.dev/o/testcalendar',
-      object: {
+    const response = await env.signedPost(
+      inboxUrl,
+      env.fakeRemoteAuth(remoteDomain, remoteCalendar),
+      {
         '@context': 'https://www.w3.org/ns/activitystreams',
-        type: 'Event',
-        attributedTo: 'https://remotedomain.dev/o/testcalendar',
-        content: {
-          en: {
-            name: 'Test Event',
-            description: 'This is a test event',
+        id: `https://${remoteDomain}/api/v1/events/1`,
+        type: 'Create',
+        actor: `https://${remoteDomain}/o/testcalendar`,
+        object: {
+          '@context': 'https://www.w3.org/ns/activitystreams',
+          type: 'Event',
+          attributedTo: `https://${remoteDomain}/o/testcalendar`,
+          content: {
+            en: {
+              name: 'Test Event',
+              description: 'This is a test event',
+            },
           },
         },
-      },
-    };
+      });
 
-    const response = await request(app)
-      .post(profileResponse.body.inbox.replace('https://pavillion.dev',''))
-      .set('Authorization', authHeader )
-      .set('Date', new Date().toUTCString())
-      .set('Digest', 'SHA-256='+crypto.createHash('sha256').update(JSON.stringify(requestData)).digest('base64'))
-      .send(requestData);
-
-    let entity = await EventEntity.findOne({ where: { id: 'https://remotedomain.dev/api/v1/events/1' } });
+    const entity = await EventEntity.findOne({ where: { id: `https://${remoteDomain}/api/v1/events/1` } });
 
     // wait for create event to propogate to activitypub service:
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    let message = await ActivityPubOutboxMessageEntity.findOne({ where: { calendar_id: calendar.id } });
+    const message = await ActivityPubOutboxMessageEntity.findOne({ where: { calendar_id: calendar.id } });
 
     expect(response.status,"api call succeeded").toBe(200);
     expect(response.body.error,"no error in the response").toBeUndefined();
