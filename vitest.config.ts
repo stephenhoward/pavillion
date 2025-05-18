@@ -6,6 +6,9 @@ export default defineConfig({
   test: {
     environment: 'happy-dom',
     globals: true,
+    coverage: {
+      reportOnFailure: true,
+    },
   },
   resolve: {
     alias: {
