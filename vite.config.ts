@@ -1,6 +1,6 @@
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
-import tsconfigPaths from 'vite-tsconfig-paths'
+import tsconfigPaths from 'vite-tsconfig-paths';
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -9,7 +9,10 @@ export default defineConfig({
     manifest: true,
     sourcemap: true,
     rollupOptions: {
-      input: "./src/client/app.ts",
+      input: {
+        client: "./src/client/app.ts",
+        site: "./src/site/app.ts",
+      },
     },
   },
   css: {
@@ -22,7 +25,8 @@ export default defineConfig({
   resolve: {
     alias: {
       // Ensure JSON imports work properly for i18next translation files
-      '@/client/locale': '/src/client/locale'
-    }
-  }
+      '@/client/locale': '/src/client/locale',
+      '@/site/locale': '/src/site/locale',
+    },
+  },
 });

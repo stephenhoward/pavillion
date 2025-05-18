@@ -32,20 +32,36 @@ const parseManifest = async () => {
 
 const handlers = {
   /**
-   * Handles requests for the index/home page.
+   * Handles requests for the client app index/home page.
    * Renders the single-page-application template.
    *
    * @param {Request} req - Express request object
    * @param {Response} res - Express response object
    * @returns {Promise<void>}
    */
-  index: async (req: Request, res: Response) => {
+  client_index: async (req: Request, res: Response) => {
     const data = {
       environment,
       manifest: await parseManifest(),
     };
 
-    res.render("index.html.ejs", data);
+    res.render("client.index.html.ejs", data);
+  },
+
+  /**
+   * Handles requests for the site index/home page.
+   * Renders the single-page-application template.
+   *
+   * @param {Request} req - Express request object
+   * @param {Response} res - Express response object
+   * @returns {Promise<void>}
+   */
+  site_index: async (req: Request, res: Response) => {
+    const data = {
+      environment,
+      manifest: await parseManifest(),
+    };
+    res.render("site.index.html.ejs", data);
   },
 
   /**
@@ -72,7 +88,7 @@ const handlers = {
 };
 
 /* GET home page. */
-router.get('/', handlers.index);
+router.get('/', handlers.client_index);
 
 if (environment !== "production") {
   /* redirect to assets server */
@@ -83,6 +99,10 @@ if (environment !== "production") {
 };
 
 // This goes last:
-router.get(/^\/(?!(api|assets|\.well-known|o)\/).*/i, handlers.index);
+router.get(/^\/@.*/i, handlers.site_index);
+
+
+// This goes last:
+router.get(/^\/(?!(api|assets|\.well-known|o)\/).*/i, handlers.client_index);
 
 export { handlers, router };
