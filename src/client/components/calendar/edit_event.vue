@@ -161,6 +161,7 @@ import ModalLayout from '../modal.vue';
 import iso6391 from 'iso-639-1-dir';
 
 const emit = defineEmits(['close']);
+const eventService = new EventService();
 
 const { t } = useTranslation('event_editor', {
   keyPrefix: 'editor',
@@ -168,6 +169,7 @@ const { t } = useTranslation('event_editor', {
 const props = defineProps({
   event: CalendarEvent,
 });
+const calendarService = new CalendarService();
 
 let defaultLanguage = 'en';
 let l = props.event.getLanguages();
@@ -200,7 +202,7 @@ const removeLanguage = (language) => {
 onBeforeMount(async () => {
   try {
     // Load available calendars that the user can edit
-    state.availableCalendars = await CalendarService.loadCalendars();
+    state.availableCalendars = await calendarService.loadCalendars();
 
     if (!props.event.calendarId && state.availableCalendars.length > 0) {
       props.event.calendarId = state.availableCalendars[0].id;
@@ -224,7 +226,7 @@ const saveModel = async (model) => {
   }
 
   try {
-    await EventService.createEvent(model);
+    await eventService.createEvent(model);
   }
   catch (error) {
     console.error('Error saving event:', error);

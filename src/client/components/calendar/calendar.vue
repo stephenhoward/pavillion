@@ -11,6 +11,7 @@ const { t } = useTranslation('calendars',{
 });
 const site_config = inject('site_config');
 const site_domain = site_config.settings().domain;
+const eventService = new EventService();
 
 const route = useRoute();
 const state = reactive({
@@ -20,15 +21,16 @@ const state = reactive({
 });
 const calendarId = route.params.calendar;
 const store = useEventStore();
+const calendarService = new CalendarService();
 
 onBeforeMount(async () => {
   try {
     state.isLoading = true;
     // Load calendar by URL name
-    state.calendar = await CalendarService.getCalendarByUrlName(calendarId);
+    state.calendar = await calendarService.getCalendarByUrlName(calendarId);
 
     // Load events for this calendar
-    await EventService.loadCalendarEvents(calendarId);
+    await eventService.loadCalendarEvents(calendarId);
   }
   catch (error) {
     console.error('Error loading calendar data:', error);

@@ -9,6 +9,8 @@ import CalendarSelector from './calendar/calendar_selector.vue';
 const route = useRoute();
 const router = useRouter();
 const emit = defineEmits(['openEvent']);
+const calendarService = new CalendarService();
+const eventService = new EventService();
 
 const { t } = useTranslation('system',{
   keyPrefix: 'main_navigation',
@@ -20,7 +22,7 @@ const selectedCalendar = ref(null);
 const newEvent = async () => {
   try {
     // Check if the user has any calendars
-    const calendars = await CalendarService.loadCalendars();
+    const calendars = await calendarService.loadCalendars();
 
     if (calendars.length === 0) {
       // User has no calendars, redirect to calendar creation page
@@ -30,7 +32,7 @@ const newEvent = async () => {
     else if (calendars.length === -1) {
       // User has one calendar, use it directly
       selectedCalendar.value = calendars[0];
-      const event = EventService.initEvent(selectedCalendar.value);
+      const event = eventService.initEvent(selectedCalendar.value);
       emit('openEvent', event);
     }
     else {
@@ -46,7 +48,7 @@ const newEvent = async () => {
 const onCalendarSelected = (calendar) => {
   selectedCalendar.value = calendar;
   showCalendarSelector.value = false;
-  const event = EventService.initEvent(calendar);
+  const event = eventService.initEvent(calendar);
   emit('openEvent', event);
 };
 

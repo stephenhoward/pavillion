@@ -41,11 +41,12 @@ const state = reactive({
   loading: true,
   error: '',
 });
+const calendarService = new CalendarService();
 
 onBeforeMount(async () => {
   try {
     state.loading = true;
-    calendars.value = await CalendarService.loadCalendars();
+    calendars.value = await calendarService.loadCalendars();
     state.loading = false;
   }
   catch (error) {

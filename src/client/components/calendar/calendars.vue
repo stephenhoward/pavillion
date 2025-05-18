@@ -7,6 +7,7 @@ import CalendarService from '../../service/calendar';
 
 const site_config = inject('site_config');
 const site_domain = site_config.settings().domain;
+const calendarService = new CalendarService();
 
 const { t } = useTranslation('calendars', {
   keyPrefix: 'list',
@@ -66,7 +67,7 @@ onBeforeMount(async () => {
 // Load calendar data and handle routing
 async function loadCalendars() {
   try {
-    const calendars = await CalendarService.loadCalendars();
+    const calendars = await calendarService.loadCalendars();
 
     // If there is only one calendar, redirect to it
     if (calendars.length === 1) {
@@ -93,7 +94,7 @@ async function createCalendar() {
   state.errorMessage = '';
 
   try {
-    const calendar = await CalendarService.createCalendar(calendarName);
+    const calendar = await calendarService.createCalendar(calendarName);
 
     // Navigate to the new calendar
     router.push({ path: '/calendar/' + calendar.urlName });

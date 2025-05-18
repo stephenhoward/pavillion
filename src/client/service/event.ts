@@ -5,12 +5,22 @@ import ModelService from '@/client/service/models';
 import { Calendar } from '@/common/model/calendar';
 
 export default class EventService {
+  store: ReturnType<typeof useEventStore>;
+
+  /**
+   * Constructor that accepts an event store instance
+   * @param store The event store to use (defaults to useEventStore())
+   */
+  constructor(store: ReturnType<typeof useEventStore> = useEventStore()) {
+    this.store = store;
+  }
+
   /**
    * Create a new event object
    * @param calendar The calendar to create the event in
    * @returns CalendarEvent A new event instance
    */
-  static initEvent(calendar: Calendar): CalendarEvent {
+  initEvent(calendar: Calendar): CalendarEvent {
     const event = new CalendarEvent();
     event.location = new EventLocation();
     event.addSchedule();
@@ -24,12 +34,11 @@ export default class EventService {
    * @param calendarUrlName The URL name of the calendar
    * @returns Promise<Array<CalendarEvent>> The events in the calendar
    */
-  static async loadCalendarEvents(calendarUrlName: string): Promise<Array<CalendarEvent>> {
-    const eventStore = useEventStore();
+  async loadCalendarEvents(calendarUrlName: string): Promise<Array<CalendarEvent>> {
     try {
       const events = await ModelService.listModels(`/api/v1/calendars/${calendarUrlName}/events`);
       const calendarEvents = events.map(event => CalendarEvent.fromObject(event));
-      eventStore.events = calendarEvents;
+      this.store.events = calendarEvents;
       return calendarEvents;
     }
     catch (error) {
@@ -43,8 +52,7 @@ export default class EventService {
    * @param event The event to save
    * @returns Promise<CalendarEvent> The saved event
    */
-  static async createEvent(event: CalendarEvent): Promise<CalendarEvent> {
-    const eventStore = useEventStore();
+  async createEvent(event: CalendarEvent): Promise<CalendarEvent> {
     const isNew = !event.id;
 
     if (!event.calendarId) {
@@ -60,7 +68,7 @@ export default class EventService {
           `/api/v1/calendars/${event.calendarId}/events`,
         );
         savedEvent = CalendarEvent.fromObject(createdEvent);
-        eventStore.addEvent(savedEvent);
+        this.store.addEvent(savedEvent);
       }
       else {
         const updatedEvent = await ModelService.updateModel(
@@ -68,7 +76,7 @@ export default class EventService {
           `/api/v1/calendars/${event.calendarId}/events`,
         );
         savedEvent = CalendarEvent.fromObject(updatedEvent);
-        eventStore.updateEvent(savedEvent);
+        this.store.updateEvent(savedEvent);
       }
 
       return savedEvent;

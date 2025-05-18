@@ -12,17 +12,21 @@ const errorMap = {
 };
 
 export default class CalendarService {
+  store: ReturnType<typeof useCalendarStore>;
+
+  constructor(store: ReturnType<typeof useCalendarStore> = useCalendarStore()) {
+    this.store = store;
+  }
 
   /**
    * Load calendars from the server if needed, updating the store
    * @returns Promise<Array<Calendar>> The list of calendars
    */
-  static async loadCalendars(forceLoad?: boolean): Promise<Array<Calendar>> {
-    const calendarStore = useCalendarStore();
+  async loadCalendars(forceLoad?: boolean): Promise<Array<Calendar>> {
 
     // If calendars are already loaded in the store, return them
-    if (!forceLoad && calendarStore.loaded && calendarStore.calendars.length > 0) {
-      return calendarStore.calendars;
+    if (!forceLoad && this.store.loaded && this.store.calendars.length > 0) {
+      return this.store.calendars;
     }
 
     // Otherwise, fetch from the server and update the store
@@ -31,7 +35,7 @@ export default class CalendarService {
       const calendars = calendarsData.map(calendar => Calendar.fromObject(calendar));
 
       // Update the store with fetched calendars
-      calendarStore.setCalendars(calendars);
+      this.store.setCalendars(calendars);
 
       return calendars;
     }
@@ -46,7 +50,7 @@ export default class CalendarService {
    * @param urlName The URL name for the calendar
    * @returns Promise<Calendar> The newly created calendar
    */
-  static async createCalendar(urlName: string): Promise<Calendar> {
+  async createCalendar(urlName: string): Promise<Calendar> {
     if (!urlName || urlName.trim() === '') {
       throw new EmptyValueError('urlName is empty');
     }
@@ -59,8 +63,7 @@ export default class CalendarService {
       const newCalendar = Calendar.fromObject(createdCalendar);
 
       // Add the new calendar to the store
-      const calendarStore = useCalendarStore();
-      calendarStore.addCalendar(newCalendar);
+      this.store.addCalendar(newCalendar);
 
       return newCalendar;
     }
@@ -89,13 +92,12 @@ export default class CalendarService {
    * @param urlName The URL name of the calendar
    * @returns Promise<Calendar|null> The calendar or null if not found
    */
-  static async getCalendarByUrlName(urlName: string): Promise<Calendar | null> {
-    const calendarStore = useCalendarStore();
+  async getCalendarByUrlName(urlName: string): Promise<Calendar | null> {
 
     // Ensure calendars are loaded
     await this.loadCalendars();
 
-    return calendarStore.getCalendarByUrlName(urlName);
+    return this.store.getCalendarByUrlName(urlName);
   }
 
   /**
@@ -103,7 +105,7 @@ export default class CalendarService {
    * @param calendar The calendar to update
    * @returns Promise<Calendar> The updated calendar
    */
-  static async updateCalendar(calendar: Calendar): Promise<Calendar> {
+  async updateCalendar(calendar: Calendar): Promise<Calendar> {
     try {
       const updatedCalendarData = await ModelService.updateModel(
         calendar,
@@ -112,8 +114,7 @@ export default class CalendarService {
       const updatedCalendar = Calendar.fromObject(updatedCalendarData);
 
       // Update the store
-      const calendarStore = useCalendarStore();
-      calendarStore.updateCalendar(updatedCalendar);
+      this.store.updateCalendar(updatedCalendar);
 
       return updatedCalendar;
     }
@@ -128,13 +129,12 @@ export default class CalendarService {
    * @param calendar The calendar to delete
    * @returns Promise<void>
    */
-  static async deleteCalendar(calendar: Calendar): Promise<void> {
+  async deleteCalendar(calendar: Calendar): Promise<void> {
     try {
       await ModelService.deleteModel(calendar, '/api/v1/calendars');
 
       // Remove from the store
-      const calendarStore = useCalendarStore();
-      calendarStore.removeCalendar(calendar);
+      this.store.removeCalendar(calendar);
     }
     catch (error) {
       console.error('Error deleting calendar:', error);

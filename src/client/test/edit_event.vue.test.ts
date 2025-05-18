@@ -54,8 +54,8 @@ describe('Editor Behavior', () => {
     let event = new CalendarEvent('', '');
     event.location = new EventLocation('', '');
 
-    const calendarsStub = sandbox.stub(CalendarService, 'loadCalendars');
-    const createStub = sandbox.stub(EventService, 'createEvent');
+    const calendarsStub = sandbox.stub(CalendarService.prototype, 'loadCalendars');
+    const createStub = sandbox.stub(EventService.prototype, 'createEvent');
 
     calendarsStub.resolves([]);
     createStub.resolves(new CalendarEvent('id', 'testDate'));
@@ -76,8 +76,8 @@ describe('Editor Behavior', () => {
     event.location = new EventLocation('', '');
     event.calendarId = 'testId';
 
-    const calendarsStub = sandbox.stub(CalendarService, 'loadCalendars');
-    const createStub = sandbox.stub(EventService, 'createEvent');
+    const calendarsStub = sandbox.stub(CalendarService.prototype, 'loadCalendars');
+    const createStub = sandbox.stub(EventService.prototype, 'createEvent');
 
     calendarsStub.resolves([calendar]);
     createStub.resolves(new CalendarEvent('id', 'testDate'));
