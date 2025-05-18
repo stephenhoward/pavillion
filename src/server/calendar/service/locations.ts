@@ -1,23 +1,23 @@
 import { v4 as uuidv4 } from 'uuid';
 import config from 'config';
 
-import { Account } from '@/common/model/account';
+import { Calendar } from '@/common/model/calendar';
 import { EventLocation } from '@/common/model/location';
 import { LocationEntity } from '@/server/calendar/entity/location';
 
 class LocationService {
-  static async findLocation(account: Account, location: EventLocation): Promise<EventLocation|null> {
+  static async findLocation(calendar: Calendar, location: EventLocation): Promise<EventLocation|null> {
 
     if ( location.id ) {
       let entity = await LocationEntity.findByPk(location.id);
-      if ( entity && entity.account_id === account.id ) {
+      if ( entity && entity.calendar_id === calendar.id ) {
         return entity.toModel();
       }
     }
     else {
       let entity = await LocationEntity.findOne({
         where: {
-          account_id: account.id,
+          calendar_id: calendar.id,
           name: location.name,
           address: location.address,
           city: location.city,
@@ -33,23 +33,23 @@ class LocationService {
     return null;
   }
 
-  static generateLocationUrl(account: Account): string {
-    const domain = account.domain || config.get('domain');
+  static generateLocationUrl(calendar: Calendar): string {
+    const domain = config.get('domain');
     return 'https://' + domain + '/places/' + uuidv4();
   }
 
-  static async createLocation(account: Account, location: EventLocation): Promise<EventLocation> {
+  static async createLocation(calendar: Calendar, location: EventLocation): Promise<EventLocation> {
     const entity = LocationEntity.fromModel(location);
-    entity.id = LocationService.generateLocationUrl(account);
-    entity.account_id = account.id;
+    entity.id = LocationService.generateLocationUrl(calendar);
+    entity.calendar_id = calendar.id;
     await entity.save();
     return entity.toModel();
   }
 
-  static async findOrCreateLocation(account: Account, locationParams: Record<string,any>): Promise<EventLocation> {
-    let location = await LocationService.findLocation(account, EventLocation.fromObject(locationParams));
+  static async findOrCreateLocation(calendar: Calendar, locationParams: Record<string,any>): Promise<EventLocation> {
+    let location = await LocationService.findLocation(calendar, EventLocation.fromObject(locationParams));
     if ( ! location ) {
-      location = await LocationService.createLocation(account, EventLocation.fromObject(locationParams));
+      location = await LocationService.createLocation(calendar, EventLocation.fromObject(locationParams));
     }
     return location;
   }

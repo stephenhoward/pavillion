@@ -1,6 +1,6 @@
 <script setup>
 import { onBeforeMount, reactive, inject } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { useEventStore } from '../../stores/eventStore';
 import CalendarService from '../../service/calendar';
@@ -12,8 +12,10 @@ const { t } = useTranslation('calendars',{
 const site_config = inject('site_config');
 const site_domain = site_config.settings().domain;
 const eventService = new EventService();
+const emit = defineEmits(['openEvent']);
 
 const route = useRoute();
+const router = useRouter();
 const state = reactive({
   err: '',
   calendar: null,
@@ -40,6 +42,16 @@ onBeforeMount(async () => {
     state.isLoading = false;
   }
 });
+
+const newEvent = async () => {
+  try {
+    const event = eventService.initEvent(state.calendar);
+    emit('openEvent', event);
+  }
+  catch (error) {
+    console.error('Error checking calendars:', error);
+  }
+};
 </script>
 
 <template>
@@ -59,7 +71,7 @@ onBeforeMount(async () => {
     <div v-else class="empty-screen">
       <h2>{{ t('noEvents') }}</h2>
       <p>{{ t('noEventsDescription') }}</p>
-      <button type="button" class="primary" @click="$emit('createEvent')">
+      <button type="button" class="primary" @click="newEvent()">
         {{ t('createEvent') }}
       </button>
     </div>

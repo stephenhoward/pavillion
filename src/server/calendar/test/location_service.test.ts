@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 
-import { Account } from '@/common/model/account';
+import { Calendar } from '@/common/model/calendar';
 import { EventLocation } from '@/common/model/location';
 import { LocationEntity } from '@/server/calendar/entity/location';
 import LocationService from '@/server/calendar/service/locations';
@@ -20,15 +20,15 @@ describe('findLocation', () => {
 
   it('should return a location by id', async () => {
     let findLocationStub = sandbox.stub(LocationEntity, 'findByPk');
-    let account = new Account('acctid', 'testme', 'testme');
+    let calendar = new Calendar('calid', 'testme');
 
     findLocationStub.resolves(LocationEntity.build({
-      accountId: account.id,
+      calendar_id: calendar.id,
       name: 'testLocation',
     }));
 
     let location = await LocationService.findLocation(
-      account,
+      calendar,
       new EventLocation('id', 'testLocation'),
     );
 
@@ -36,17 +36,17 @@ describe('findLocation', () => {
     expect(findLocationStub.called).toBe(true);
   });
 
-  it('account id mismatch', async () => {
+  it('calendar id mismatch', async () => {
     let findLocationStub = sandbox.stub(LocationEntity, 'findByPk');
-    let account = new Account('acctid', 'testme', 'testme');
+    let calendar = new Calendar('calid', 'testme');
 
     findLocationStub.resolves(LocationEntity.build({
-      accountId: 'someOtherAccountId',
+      calendar_id: 'someOtherCalendarId',
       name: 'testLocation',
     }));
 
     let location = await LocationService.findLocation(
-      account,
+      calendar,
       new EventLocation('id', 'testLocation'),
     );
 
@@ -59,7 +59,7 @@ describe('findLocation', () => {
     findLocationStub.resolves(undefined);
 
     let location = await LocationService.findLocation(
-      new Account('id', 'testme', 'testme'),
+      new Calendar('id', 'testme'),
       new EventLocation('id', 'testLocation'),
     );
 
@@ -72,7 +72,7 @@ describe('findLocation', () => {
     findLocationStub.resolves(LocationEntity.build({ name: 'testLocation' }));
 
     let location = await LocationService.findLocation(
-      new Account('id', 'testme', 'testme'),
+      new Calendar('id', 'testme'),
       new EventLocation('', 'testLocation'),
     );
 
@@ -85,7 +85,7 @@ describe('findLocation', () => {
     findLocationStub.resolves(undefined);
 
     let location = await LocationService.findLocation(
-      new Account('id', 'testme', 'testme'),
+      new Calendar('id', 'testme'),
       new EventLocation('', 'testLocation'),
     );
 
@@ -106,13 +106,13 @@ describe('findLocation', () => {
       let eventSpy = sandbox.spy(LocationEntity, 'fromModel');
 
       let location = await LocationService.createLocation(
-        new Account('testAccountId', 'testme', 'testme'),
+        new Calendar('testCalendarId', 'testme'),
         new EventLocation('', 'testName'),
       );
 
       expect(location.id).toBeDefined();
       expect(location.id).toMatch(/^https:\/\/pavillion.dev\/places\/[a-z0-9-]+$/);
-      expect(eventSpy.returnValues[0].account_id).toBe('testAccountId');
+      expect(eventSpy.returnValues[0].calendar_id).toBe('testCalendarId');
       expect(saveStub.called).toBe(true);
     });
 

@@ -23,8 +23,8 @@ class EventService extends EventEmitter {
   }
 
   /**
-     * retrieves the events for the provided account
-     * @param account
+     * retrieves the events for the provided calendar
+     * @param calendar - the calendar to retrieve events for
      * @returns a promise that resolves to the list of events
      */
   async listEvents(calendar: Calendar): Promise<CalendarEvent[]> {

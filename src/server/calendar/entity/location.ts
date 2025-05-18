@@ -2,7 +2,7 @@ import { Model, Table, Column, PrimaryKey, BelongsTo, DataType, ForeignKey } fro
 
 import { EventLocation } from '@/common/model/location';
 import db from '@/server/common/entity/db';
-import { AccountEntity } from '@/server/common/entity/account';
+import { CalendarEntity } from '@/server/calendar/entity/calendar';
 
 @Table({ tableName: 'location' })
 class LocationEntity extends Model {
@@ -10,9 +10,9 @@ class LocationEntity extends Model {
   @Column({ type: DataType.STRING })
   declare id: string;
 
-  @ForeignKey(() => AccountEntity)
+  @ForeignKey(() => CalendarEntity)
   @Column({ type: DataType.UUID })
-  declare account_id: string;
+  declare calendar_id: string;
 
   @Column({ type: DataType.STRING })
   declare name: string;
@@ -32,8 +32,8 @@ class LocationEntity extends Model {
   @Column({ type: DataType.STRING })
   declare country: string;
 
-  @BelongsTo(() => AccountEntity)
-  declare account: AccountEntity;
+  @BelongsTo(() => CalendarEntity)
+  declare calendar: CalendarEntity;
 
   toModel(): EventLocation {
     return new EventLocation( this.id, this.name, this.address, this.city, this.state, this.postal_code, this.country );

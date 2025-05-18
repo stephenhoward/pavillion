@@ -29,7 +29,7 @@ const newEvent = async () => {
       router.push('/calendar');
       return null;
     }
-    else if (calendars.length === -1) {
+    else if (calendars.length === 1) {
       // User has one calendar, use it directly
       selectedCalendar.value = calendars[0];
       const event = eventService.initEvent(selectedCalendar.value);
