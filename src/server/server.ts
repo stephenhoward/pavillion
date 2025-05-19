@@ -12,6 +12,7 @@ import AuthenticationAPI from '@/server/authentication/api/v1';
 import MemberAPI from '@/server/calendar/api/v1';
 import ConfigurationAPI from '@/server/configuration/api/v1';
 import ActivityPubAPI from '@/server/activitypub/api/v1';
+import PublicAPI from '@/server/public/api/v1';
 
 /**
  * Initializes the Pavillion server with express application configuration.
@@ -54,6 +55,7 @@ const initPavillionServer = (app: express.Application) => {
   AccountsAPI(app);
   let memberAPI = new MemberAPI(app);
   let activitypubAPI = new ActivityPubAPI(app);
+  new PublicAPI(app);
 
   activitypubAPI.registerListeners(memberAPI);
 

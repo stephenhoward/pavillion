@@ -9,10 +9,12 @@ import NotFound from './notFound.vue';
 const { t } = useTranslation('system');
 const route = useRoute();
 const calendarId = route.params.calendar;
+const eventId = route.params.event;
 const state = reactive({
   err: '',
   notFound: false,
   calendar: null,
+  event: null,
   isLoading: false,
 });
 const calendarService = new CalendarService();
@@ -23,6 +25,7 @@ onBeforeMount(async () => {
     state.isLoading = true;
     // Load calendar by URL name
     state.calendar = await calendarService.getCalendarByUrlName(calendarId);
+    console.log('Calendar:', state.calendar);
 
     if (!state.calendar) {
       state.notFound = true;
@@ -30,12 +33,17 @@ onBeforeMount(async () => {
     }
     else {
       // Load events for this calendar
-      await calendarService.loadCalendarEvents(calendarId);
+      state.event = await calendarService.loadEvent(eventId);
+      console.log('Event:', state.event);
+      if (!state.event) {
+        state.notFound = true;
+        return;
+      }
     }
   }
   catch (error) {
-    console.error('Error loading calendar data:', error);
-    state.err = 'Failed to load calendar data';
+    console.error('Error loading event data:', error);
+    state.err = 'Failed to load event data';
   }
   finally {
     state.isLoading = false;
