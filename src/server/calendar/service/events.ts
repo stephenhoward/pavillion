@@ -295,13 +295,33 @@ class EventService extends EventEmitter {
     return event;
   }
 
-  getEventById(eventId: string): Promise<CalendarEvent> {
-    return EventEntity.findByPk(eventId).then( (event) => {
-      if ( event ) {
-        return event.toModel();
-      }
-      return null;
+  async getEventById(eventId: string): Promise<CalendarEvent> {
+
+    const event = await EventEntity.findOne({
+      where: { id: eventId },
+      include: [EventContentEntity, LocationEntity, EventScheduleEntity],
     });
+
+    if ( ! event ) {
+      throw new Error('Event not found');
+    }
+
+    let e = event.toModel();
+    if ( event.content ) {
+      for ( let c of event.content ) {
+        e.addContent( c.toModel() );
+      }
+    }
+    if ( event.location ) {
+      e.location = event.location.toModel();
+    }
+    if ( event.schedules ) {
+      for ( let s of event.schedules ) {
+        e.addSchedule( s.toModel() );
+      }
+    }
+
+    return e;
   }
 }
 

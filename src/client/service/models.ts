@@ -14,7 +14,6 @@ export default class ModelService {
   static async getModel(url: string): Promise<Record<string,any>|null> {
     try {
       let response = await axios.get( url );
-      console.log(response);
       return response.data;
     }
     catch(error) {

@@ -1,0 +1,34 @@
+{
+    "LocationEntity": [
+        {
+            "id": "loc-1-1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+            "calendar_id": "c71f5c9e-7a3d-4e5f-8e1a-66c3612a05f3",
+            "name": "Washington Park",
+            "address": "4033 SW Canyon Rd",
+            "city": "Portland",
+            "state": "OR",
+            "postal_code": "97221",
+            "country": "USA"
+        },
+        {
+            "id": "loc-2-2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
+            "calendar_id": "c71f5c9e-7a3d-4e5f-8e1a-66c3612a05f3",
+            "name": "Multnomah County Library",
+            "address": "801 SW 10th Ave",
+            "city": "Portland",
+            "state": "OR",
+            "postal_code": "97205",
+            "country": "USA"
+        },
+        {
+            "id": "loc-3-3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f",
+            "calendar_id": "c71f5c9e-7a3d-4e5f-8e1a-66c3612a05f3",
+            "name": "Laurelhurst Park",
+            "address": "SE Cesar E Chavez Blvd & Stark St",
+            "city": "Portland",
+            "state": "OR",
+            "postal_code": "97214",
+            "country": "USA"
+        }
+    ]
+}

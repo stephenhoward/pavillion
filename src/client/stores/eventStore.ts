@@ -31,5 +31,12 @@ export const useEventStore = defineStore('events', {
         this.addEvent(event);
       }
     },
+    /**
+     * Set events in the store
+     * @param events - The events to set in the store
+     */
+    setEvents(events: CalendarEvent[]) {
+      this.events = events;
+    },
   },
 });

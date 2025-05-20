@@ -4,6 +4,12 @@
             "id": "03aa511a-4174-4773-9f99-b5b8e7bfcc50",
             "username": "Admin",
             "email": "admin@pavillion.dev"
+        },
+        {
+            "id": "6e87d5ca-4d89-42c1-aa9d-5ef437fe1111",
+            "username": "TestUser",
+            "email": "test@example.com",
+            "language": "en"
         }
     ]
 }

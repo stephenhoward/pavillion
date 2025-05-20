@@ -24,8 +24,9 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
    * @param {string} [eventSourceUrl] - URL source of the event
    * @param {EventLocation} [location] - Location where the event takes place
    */
-  constructor(id?: string, date?: string, eventSourceUrl?: string, location?: EventLocation) {
+  constructor(calendarId?: string, id?: string, date?: string, eventSourceUrl?: string, location?: EventLocation) {
     super(id);
+    this.calendarId = calendarId ?? '';
     this.date = date ?? '';
     this.eventSourceUrl = eventSourceUrl ?? '';
     this.location = location ?? null;
@@ -76,7 +77,7 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
    * @returns {CalendarEvent} A new CalendarEvent instance
    */
   static fromObject(obj: Record<string, any>): CalendarEvent {
-    let event = new CalendarEvent(obj.id, obj.date, obj.eventSourceUrl);
+    let event = new CalendarEvent(obj.calendarId, obj.id, obj.date, obj.eventSourceUrl);
 
     event.calendarId = obj.calendarId || '';
     event.location = obj.location ? EventLocation.fromObject(obj.location) : null;

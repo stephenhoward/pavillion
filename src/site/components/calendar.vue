@@ -16,7 +16,7 @@ const state = reactive({
   isLoading: false,
 });
 const calendarService = new CalendarService();
-const store = useEventStore();
+const eventStore = useEventStore();
 
 onBeforeMount(async () => {
   try {
@@ -55,10 +55,10 @@ onBeforeMount(async () => {
     </header>
     <main>
       <div v-if="state.err" class="error">{{ state.err }}</div>
-      <div v-if="store.events && store.events.length > 0">
+      <div v-if="eventStore.events && eventStore.events.length > 0">
         <ul>
-          <li v-for="event in store.events" :key="event.id">
-            {{ event.content("en").name }}
+          <li v-for="event in eventStore.events" :key="event.id">
+            <router-link :to="{ name: 'event', params: { event: event.id } }">{{ event.content("en").name }}</router-link>
           </li>
         </ul>
       </div>

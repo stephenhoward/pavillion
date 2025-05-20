@@ -55,8 +55,15 @@ class CalendarRoutes {
 
   async getEvent(req: Request, res: Response) {
     const eventId = req.params.id;
-    const event = await this.service.getEvent(eventId);
-    res.json(event.toObject());
+    const event = await this.service.getEventById(eventId);
+    if ( event ) {
+      res.json(event.toObject());
+    }
+    else {
+      res.status(404).json({
+        "error": "event not found",
+      });
+    }
   }
 
 }

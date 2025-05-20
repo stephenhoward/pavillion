@@ -4,6 +4,7 @@ import { UrlNameAlreadyExistsError, InvalidUrlNameError } from '@/common/excepti
 import { UnauthenticatedError, UnknownError, EmptyValueError } from '@/common/exceptions';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { CalendarEvent } from '@/common/model/events';
+import { useEventStore } from '@/client/stores/eventStore';
 
 const errorMap = {
   UrlNameAlreadyExistsError,
@@ -14,9 +15,11 @@ const errorMap = {
 
 export default class CalendarService {
   store: ReturnType<typeof useCalendarStore>;
+  eventStore: ReturnType<typeof useEventStore>;
 
-  constructor(store: ReturnType<typeof useCalendarStore> = useCalendarStore()) {
+  constructor(store: ReturnType<typeof useCalendarStore> = useCalendarStore(), eventStore: ReturnType<typeof useEventStore> = useEventStore()) {
     this.store = store;
+    this.eventStore = eventStore;
   }
 
 
@@ -51,7 +54,7 @@ export default class CalendarService {
     try {
       const events = await ModelService.listModels(`/api/public/v1/calendars/${calendarUrlName}/events`);
       const calendarEvents = events.map(event => CalendarEvent.fromObject(event));
-      this.store.events = calendarEvents;
+      this.eventStore.setEvents(calendarEvents);
       return calendarEvents;
     }
     catch (error) {
@@ -65,7 +68,7 @@ export default class CalendarService {
       const event = await ModelService.getModel(`/api/public/v1/events/${eventId}`);
       if (event) {
         const calendarEvent = CalendarEvent.fromObject(event);
-        this.store.addEvent(calendarEvent);
+        this.eventStore.addEvent(calendarEvent);
         return calendarEvent;
       }
       return null;

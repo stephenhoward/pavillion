@@ -25,7 +25,6 @@ onBeforeMount(async () => {
     state.isLoading = true;
     // Load calendar by URL name
     state.calendar = await calendarService.getCalendarByUrlName(calendarId);
-    console.log('Calendar:', state.calendar);
 
     if (!state.calendar) {
       state.notFound = true;
@@ -34,7 +33,6 @@ onBeforeMount(async () => {
     else {
       // Load events for this calendar
       state.event = await calendarService.loadEvent(eventId);
-      console.log('Event:', state.event);
       if (!state.event) {
         state.notFound = true;
         return;
@@ -56,20 +54,15 @@ onBeforeMount(async () => {
   <div v-if="state.notFound">
     <NotFound />
   </div>
-  <div v-else>
+  <div v-else-if="state.event">
     <header v-if="state.calendar">
       <!-- TODO: respect the user's language prefernces instead of using 'en' -->
-      <h1>{{ state.calendar.content("en").name || state.calendar.urlName }}</h1>
+      <p>{{ state.calendar.content("en").name || state.calendar.urlName }}</p>
     </header>
     <main>
       <div v-if="state.err" class="error">{{ state.err }}</div>
-      <div v-if="store.events && store.events.length > 0">
-        <ul>
-          <li v-for="event in store.events" :key="event.id">
-            {{ event.content("en").name }}
-          </li>
-        </ul>
-      </div>
+      <h1>{{ state.event.content("en").name }}</h1>
+      <p>{{ state.event.content("en").description }}</p>
     </main>
   </div>
 </template>

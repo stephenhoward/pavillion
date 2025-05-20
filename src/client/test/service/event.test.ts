@@ -67,8 +67,8 @@ describe('loadCalendarEvents', () => {
   it('should load events for a calendar and update the store', async () => {
     // Arrange
     const mockEvents = [
-      { id: 'evt1', date: '2023-01-01' },
-      { id: 'evt2', date: '2023-01-02' },
+      { calendar_id: 'c1', id: 'evt1', date: '2023-01-01' },
+      { calendar_id: 'c1', id: 'evt2', date: '2023-01-02' },
     ];
     mockListModels.resolves(mockEvents);
 

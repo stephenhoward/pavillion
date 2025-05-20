@@ -1,0 +1,18 @@
+{
+    "CalendarContentEntity": [
+        {
+            "id": "cc123a9e-0123-4567-8e1a-b5c3612a05ff",
+            "calendar_id": "c71f5c9e-7a3d-4e5f-8e1a-66c3612a05f3",
+            "language": "en",
+            "name": "Test Calendar",
+            "description": "A test calendar with sample events for development"
+        },
+        {
+            "id": "cc456a9e-0123-4567-8e1a-b5c3612a05ee", 
+            "calendar_id": "c71f5c9e-7a3d-4e5f-8e1a-66c3612a05f3",
+            "language": "es",
+            "name": "Calendario de Prueba",
+            "description": "Un calendario de prueba con eventos de muestra para desarrollo"
+        }
+    ]
+}
