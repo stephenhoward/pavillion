@@ -11,32 +11,5 @@
 </template>
 
 <style lang="scss">
-  @use '../../client/assets/mixins' as *;
-  footer {
-
-  div.logo {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12pt;
-    text-align: center;
-  }
-  div.pavillion-logo {
-    display: inline-block;
-    background-color: $light-mode-text;
-    -webkit-mask-size: contain;
-    -webkit-mask-repeat: no-repeat;
-    -webkit-mask-image: url('../../client/assets/pavillion-logo.svg');
-    mask-size: contain;
-    mask-repeat: no-repeat;
-    mask-image: url('../../client/assets/pavillion-logo.svg');
-    width: 24px;
-    height: 24px;
-  }
-  @include dark-mode {
-    div.pavillion-logo {
-      background-color: $dark-mode-text;
-    }
-  }
-  }
+@use '../../client/assets/mixins' as *;
 </style>

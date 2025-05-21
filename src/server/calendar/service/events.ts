@@ -100,6 +100,7 @@ class EventService extends EventEmitter {
     }
 
     if ( eventParams.schedules ) {
+      event.schedules = []; // "fromObject" auto-creates schedules, but we need to create them in the db
       for( let schedule of eventParams.schedules ) {
         event.addSchedule(await this.createEventSchedule(event.id, schedule as Record<string,any>));
       }

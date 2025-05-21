@@ -1,3 +1,4 @@
+import { DateTime } from 'luxon';
 import { Calendar } from '@/common/model/calendar';
 import ModelService from '@/client/service/models';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError } from '@/common/exceptions/calendar';
@@ -5,12 +6,19 @@ import { UnauthenticatedError, UnknownError, EmptyValueError } from '@/common/ex
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { CalendarEvent } from '@/common/model/events';
 import { useEventStore } from '@/client/stores/eventStore';
+import { startAndEndDates } from '@/common/model/events';
 
 const errorMap = {
   UrlNameAlreadyExistsError,
   InvalidUrlNameError,
   UnauthenticatedError,
   UnknownError,
+};
+
+type EventInstance = {
+  event: CalendarEvent;
+  start: DateTime;
+  end: DateTime|null;
 };
 
 export default class CalendarService {
@@ -61,6 +69,28 @@ export default class CalendarService {
       console.error('Error loading calendar events:', error);
       throw error;
     }
+  }
+
+
+  async loadCalendarEventsByDay(calendarUrlName: string): Promise<Record<string, Array<EventInstance>>> {
+    const events = await this.loadCalendarEvents(calendarUrlName);
+    const eventsByDay: Record<string,Array<EventInstance>> = {};
+    events.forEach((event: CalendarEvent) => {
+      event.instances(10).forEach((datetimes: startAndEndDates) => {
+        const dateKey = datetimes.start.toISODate();
+        if ( dateKey ) {
+          if (!eventsByDay[dateKey]) {
+            eventsByDay[dateKey] = [];
+          }
+          eventsByDay[dateKey].push({
+            event: event,
+            start: datetimes.start,
+            end: datetimes.end,
+          });
+        }
+      });
+    });
+    return eventsByDay;
   }
 
   async loadEvent(eventId: string): Promise<CalendarEvent|null> {

@@ -5,7 +5,7 @@ import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
 
 import { initI18Next } from '@/site/service/locale';
-import '@/client/assets/style.scss';
+import '@/site/assets/style.scss';
 import AppVue from '@/site/components/app.vue';
 import CalendarView from '@/site/components/calendar.vue';
 import EventView from '@/site/components/event.vue';

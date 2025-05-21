@@ -57,11 +57,11 @@ onBeforeMount(async () => {
   <div v-else-if="state.event">
     <header v-if="state.calendar">
       <!-- TODO: respect the user's language prefernces instead of using 'en' -->
-      <p>{{ state.calendar.content("en").name || state.calendar.urlName }}</p>
+      <p><router-link :to="{ name: 'calendar', params: { calendar: state.calendar.urlName } }">{{ state.calendar.content("en").name || state.calendar.urlName }}</router-link></p>
+      <h1>{{ state.event.content("en").name }}</h1>
     </header>
     <main>
       <div v-if="state.err" class="error">{{ state.err }}</div>
-      <h1>{{ state.event.content("en").name }}</h1>
       <p>{{ state.event.content("en").description }}</p>
     </main>
   </div>

@@ -1,0 +1,144 @@
+@use '../../client/assets/mixins' as *;
+@use '../../client/assets/fonts';
+
+* {
+    font-family: 'Creato Display', 'Helvetica Neue', sans-serif;
+    box-sizing:  border-box;
+    &:focus {
+        outline: none;
+    }
+}
+
+html,body {
+  height: 100%;
+  min-height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+button, a.button {
+  font-size: 10pt;
+  font-weight: $font-medium;
+  background: none;
+  border: 0;
+  border: 1px solid #ccc;
+  text-align: center;
+  text-decoration: none;
+  padding: 8px 20px;
+  border-radius: $form-input-border-radius;
+  color: #ccc;
+}
+button.primary {
+  font-size: 12pt;
+  font-weight: $font-bold;
+  padding: 8px 16px;
+  background: $light-mode-button-background;
+  border: none;
+  color: $light-mode-text;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  min-height: 100vh;
+
+  & > div {
+    padding: 10px;
+    flex: 1 0 auto; /* Grow to fill available space, don't shrink, auto size */
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  @include medium-size-device {
+    padding: 20px;
+  }
+  header {
+    flex: 0 0 auto; /* Don't grow, don't shrink, auto size */
+  }
+  
+  main {
+    flex: 1 0 auto; /* Grow to fill available space, don't shrink, auto size */
+  }
+
+  }
+  
+  footer {
+    padding: 10px;
+    flex: 0 0 auto; /* Don't grow, don't shrink, auto size */
+    
+    div.logo {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12pt;
+      text-align: center;
+    }
+    div.pavillion-logo {
+      display: inline-block;
+      background-color: $light-mode-text;
+      -webkit-mask-size: contain;
+      -webkit-mask-repeat: no-repeat;
+      -webkit-mask-image: url('../../client/assets/pavillion-logo.svg');
+      mask-size: contain;
+      mask-repeat: no-repeat;
+      mask-image: url('../../client/assets/pavillion-logo.svg');
+      width: 24px;
+      height: 24px;
+    }
+    @include dark-mode {
+      div.pavillion-logo {
+        background-color: $dark-mode-text;
+      }
+    }
+  @include medium-size-device {
+    padding: 20px;
+  }
+  }
+}
+// Typography styles
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Creato Display', 'Helvetica Neue', sans-serif;
+  margin-top: 0;
+}
+
+h1 {
+  font-weight: $font-bold;
+  font-size: 28px;
+}
+
+h2 {
+  font-weight: $font-medium;
+  font-size: 24px;
+}
+
+h3 {
+  font-weight: $font-medium;
+  font-size: 20px;
+}
+
+h4 {
+  font-weight: $font-regular;
+  font-size: 18px;
+}
+
+p {
+  font-weight: $font-regular;
+  line-height: 1.5;
+}
+
+@include dark-mode {
+    #app {
+        background-color: #44444a;
+        // background: $dark-mode-background-gradient;
+        color:            $dark-mode-text;
+    }
+    button, a.button {
+      color: $dark-mode-text;
+      border: 1px solid #777;
+    }
+    button.primary {
+        background: $dark-mode-button-background;
+        color: $dark-mode-text;
+    }
+}

@@ -5,6 +5,7 @@ import { useRoute } from 'vue-router';
 import CalendarService from '../service/calendar';
 import { useEventStore } from '../../client/stores/eventStore';
 import NotFound from './notFound.vue';
+import { DateTime } from 'luxon';
 
 const { t } = useTranslation('system');
 const route = useRoute();
@@ -13,7 +14,9 @@ const state = reactive({
   err: '',
   notFound: false,
   calendar: null,
+  events: [],
   isLoading: false,
+  dates: [],
 });
 const calendarService = new CalendarService();
 const eventStore = useEventStore();
@@ -30,7 +33,7 @@ onBeforeMount(async () => {
     }
     else {
       // Load events for this calendar
-      await calendarService.loadCalendarEvents(calendarId);
+      state.events = await calendarService.loadCalendarEventsByDay(calendarId);
     }
   }
   catch (error) {
@@ -56,15 +59,64 @@ onBeforeMount(async () => {
     <main>
       <div v-if="state.err" class="error">{{ state.err }}</div>
       <div v-if="eventStore.events && eventStore.events.length > 0">
-        <ul>
-          <li v-for="event in eventStore.events" :key="event.id">
-            <router-link :to="{ name: 'event', params: { event: event.id } }">{{ event.content("en").name }}</router-link>
-          </li>
-        </ul>
+        <section class="day" v-for="day in Object.keys(state.events).sort()">
+          <h2>{{ DateTime.fromISO(day).toLocaleString({weekday: 'long', month: 'long', day: 'numeric'}) }}</h2>
+          <ul class="events">
+            <li class="event" v-for="instance in state.events[day]">
+              <h3><router-link :to="{ name: 'event', params: { event: instance.event.id } }">{{ instance.event.content("en").name }}</router-link></h3>
+              <div>{{ instance.start.toLocaleString(DateTime.TIME_SIMPLE) }}</div>
+            </li>
+          </ul>
+        </section>
       </div>
     </main>
   </div>
 </template>
 
-<style scoped lang="scss">
+<style lang="scss">
+@use '../../client/assets/mixins' as *;
+h1 {
+  font-size: 200%;
+  font-weight: $font-light;
+}
+section.day {
+  margin: 10px 0;
+  h2 {
+    font-size: 100%;
+    margin: 0;
+    padding: 0;
+    font-weight: $font-medium;
+  }
+  ul.events {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    overflow-x: auto;
+    padding: 20px 0px;
+  li.event {
+    list-style-type: none;
+    padding: 10px;
+    width: 150px;
+    margin-right: 10px;
+    box-shadow: rgba(0,0,0,0.2) 8px 8px 12px;
+    background-color: rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column;
+    h3 {
+      order: 1;
+      font-size: 120%;
+      margin-top: 10px;
+      font-weight: $font-light;
+      a {
+        color: $light-mode-text;
+        text-decoration: none;
+        @include dark-mode {
+          color: $dark-mode-text;
+        }
+      }
+    }
+  }
+  }
+}
 </style>
