@@ -1,5 +1,5 @@
 import config from 'config';
-import AccountApplication from '@/common/model/application';
+import { Account } from '@/common/model/account';
 import { MailData } from '@/server/common/service/mail/types';
 import { EmailMessage, compileTemplate } from '@/server/common/service/mail/message';
 
@@ -7,18 +7,18 @@ const textTemplate = compileTemplate('src/server/accounts', 'application_accepte
 const htmlTemplate = compileTemplate('src/server/accounts', 'application_accepted_email.html.hbs');
 
 class ApplicationAcceptedEmail extends EmailMessage {
-  application: AccountApplication;
+  account: Account;
   passwordResetCode: string;
 
-  constructor(application: AccountApplication, passwordResetCode: string) {
+  constructor(application: Account, passwordResetCode: string) {
     super('application_accepted_email', textTemplate, htmlTemplate);
-    this.application = application;
+    this.account = application;
     this.passwordResetCode = passwordResetCode;
   }
 
   buildMessage(language: string): MailData {
     return {
-      emailAddress: this.application.email,
+      emailAddress: this.account.email,
       subject: this.renderSubject(language, {}),
       textMessage: this.renderPlaintext(language, {
         passwordResetCode: this.passwordResetCode,

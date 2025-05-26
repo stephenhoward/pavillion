@@ -6,13 +6,16 @@ import { WebFingerResponse } from "@/server/activitypub/model/webfinger";
 import { UserProfileResponse } from "@/server/activitypub/model/userprofile";
 import { ActivityPubActivity } from "@/server/activitypub/model/base";
 import { ActivityPubInboxMessageEntity, FollowerCalendarEntity } from "@/server/activitypub/entity/activitypub";
-import CalendarService from "@/server/calendar/service/calendar";
+import CalendarInterface from "@/server/calendar/interface";
 
 
-class ActivityPubService extends EventEmitter {
+export default class ActivityPubService {
+  private eventBus: EventEmitter;
+  public calendarService: CalendarInterface;
 
-  constructor() {
-    super();
+  constructor( eventBus: EventEmitter ) {
+    this.eventBus = eventBus;
+    this.calendarService = new CalendarInterface(eventBus);
   }
 
   /**
@@ -38,7 +41,7 @@ class ActivityPubService extends EventEmitter {
      * @returns WebFingerResponse message
      */
   async lookupWebFinger(urlName: string, domain: string): Promise<WebFingerResponse|null> {
-    let calendar = await CalendarService.getCalendarByName(urlName);
+    let calendar = await this.calendarService.getCalendarByName(urlName);
 
     if ( calendar && domain === config.get('domain') ) {
       return new WebFingerResponse(calendar.urlName, config.get('domain'));
@@ -54,7 +57,7 @@ class ActivityPubService extends EventEmitter {
      * @returns UserProfileResponse message
      */
   async lookupUserProfile(calendarName: string): Promise<UserProfileResponse|null> {
-    let calendar = await CalendarService.getCalendarByName(calendarName);
+    let calendar = await this.calendarService.getCalendarByName(calendarName);
 
     console.log(calendar);
     if ( calendar ) {
@@ -119,7 +122,7 @@ class ActivityPubService extends EventEmitter {
      */
   // TODO permissions? block lists? rate limiting?
   async addToInbox(calendar: Calendar, message: ActivityPubActivity ): Promise<null> {
-    let foundCalendar = await CalendarService.getCalendar(calendar.id);
+    let foundCalendar = await this.calendarService.getCalendar(calendar.id);
 
     if ( foundCalendar === null ) {
       throw new Error('Account not found');
@@ -137,7 +140,7 @@ class ActivityPubService extends EventEmitter {
       await messageEntity.save();
     }
 
-    this.emit('inboxMessageAdded', { calendar_id: calendar.id, id: messageEntity.id });
+    this.eventBus.emit('inboxMessageAdded', { calendar_id: calendar.id, id: messageEntity.id });
 
     return null;
   }
@@ -159,5 +162,3 @@ class ActivityPubService extends EventEmitter {
   }
 
 }
-
-export default ActivityPubService;

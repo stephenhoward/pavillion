@@ -2,31 +2,41 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import request from 'supertest';
 import express from 'express';
+import { EventEmitter } from 'events';
 import { testApp } from '@/server/common/test/lib/express';
-import { handlers as siteHandlers } from '@/server/configuration/api/v1/site';
-import ServiceSettings from '@/server/configuration/service/settings';
+import SiteRouteHandlers from '@/server/configuration/api/v1/site';
+import ConfigurationInterface from '@/server/configuration/interface';
 
 describe('Site API', () => {
   let router: express.Router;
+  let siteHandlers: SiteRouteHandlers;
+  let configurationInterface: ConfigurationInterface;
+  let sandbox: sinon.SinonSandbox = sinon.createSandbox();
 
   beforeEach(() => {
     router = express.Router();
+    const eventBus = new EventEmitter();
+    configurationInterface = new ConfigurationInterface(eventBus);
+    siteHandlers = new SiteRouteHandlers(configurationInterface);
   });
 
   afterEach(() => {
-    sinon.restore();
+    sandbox.restore();
   });
 
   it('site: should succeed', async () => {
-    let getStub = sinon.stub(ServiceSettings.prototype, 'get');
-    let initStub = sinon.stub(ServiceSettings.prototype, 'init');
-    getStub.withArgs('registrationMode').returns('testValue');
-    router.get('/handler', siteHandlers.site);
+    let mockSettings = {
+      get: sinon.stub().withArgs('registrationMode').returns('testValue'),
+    };
+    let getInstanceStub = sandbox.stub(configurationInterface, 'getInstance');
+    getInstanceStub.resolves(mockSettings as any);
+
+    router.get('/handler', siteHandlers.getSettings.bind(siteHandlers));
 
     const response = await request(testApp(router)).get('/handler');
 
     expect(response.status).toBe(200);
     expect(response.body.registrationMode).toBe('testValue');
-    expect(initStub.called).toBe(true);
+    expect(getInstanceStub.called).toBe(true);
   });
 });

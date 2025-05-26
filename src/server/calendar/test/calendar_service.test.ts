@@ -10,6 +10,10 @@ import { UrlNameAlreadyExistsError, InvalidUrlNameError } from '@/common/excepti
 describe('isValidUrlName', () => {
 
   let sandbox = sinon.createSandbox();
+  let service: CalendarService;
+  beforeEach(() => {
+    service = new CalendarService();
+  });
 
   afterEach(() => {
     sandbox.restore();
@@ -26,13 +30,14 @@ describe('isValidUrlName', () => {
       ['alsolegal_', true],
     ];
     for( let test of tests) {
-      expect(CalendarService.isValidUrlName(test[0])).toBe(test[1]);
+      expect(service.isValidUrlName(test[0])).toBe(test[1]);
     }
   });
 });
 
 describe('setUrlName', () => {
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+  let service: CalendarService;
   let editableCalendarsStub: sinon.SinonStub;
   let cal: Calendar;
   let acct: Account;
@@ -40,7 +45,8 @@ describe('setUrlName', () => {
   beforeEach(() => {
     cal = new Calendar('testCalendarId', 'testme');
     acct = new Account('testAccountId', 'testme', 'testme');
-    editableCalendarsStub = sandbox.stub(CalendarService, 'userCanModifyCalendar');
+    service = new CalendarService();
+    editableCalendarsStub = sandbox.stub(service, 'userCanModifyCalendar');
   });
 
   afterEach(() => {
@@ -54,7 +60,7 @@ describe('setUrlName', () => {
     calendarFindStub.resolves(CalendarEntity.fromModel(cal));
 
     acct.roles = ['admin'];
-    await CalendarService.setUrlName(acct, cal, 'validname');
+    await service.setUrlName(acct, cal, 'validname');
 
     expect(editableCalendarsStub.called).toBe(false);
     expect(calendarCheckExistingStub.called).toBe(true);
@@ -63,23 +69,23 @@ describe('setUrlName', () => {
 
   it('should fail if user not allowed to edit calendar', async () => {
     editableCalendarsStub.resolves(false);
-    await expect( () => CalendarService.setUrlName(acct, cal, 'validname') ).rejects.toThrowError('Permission denied');
+    await expect( () => service.setUrlName(acct, cal, 'validname') ).rejects.toThrowError('Permission denied');
     expect(editableCalendarsStub.called).toBe(true);
   });
 
   it('should throw an error if urlName is invalid', async () => {
     editableCalendarsStub.resolves(true);
-    await expect( () => CalendarService.setUrlName(acct, cal, '_noleadunderscore') ).rejects.toThrowError('Invalid Calendar URL name');
+    await expect( () => service.setUrlName(acct, cal, '_noleadunderscore') ).rejects.toThrowError('Invalid Calendar URL name');
   });
 
   it('should throw an error if urlName already exists', async () => {
     const calendarFindStub = sandbox.stub(CalendarEntity, 'findByPk');
     const calendarCheckStub = sandbox.stub(CalendarEntity, 'findOne');
     calendarFindStub.resolves(CalendarEntity.fromModel(cal));
-    calendarCheckStub.resolves({ id: 'otherCalendarId', url_name: 'validname' });
+    calendarCheckStub.resolves(CalendarEntity.build({ id: 'otherCalendarId', url_name: 'validname' }));
     editableCalendarsStub.resolves(true);
 
-    await expect( () => CalendarService.setUrlName(acct, cal, 'validname') ).rejects.toThrowError('Calendar URL name already exists');
+    await expect( () => service.setUrlName(acct, cal, 'validname') ).rejects.toThrowError('Calendar URL name already exists');
   });
 
   it('should throw an error if calendar not found', async () => {
@@ -87,7 +93,7 @@ describe('setUrlName', () => {
     calendarFindStub.resolves(null);
     editableCalendarsStub.resolves(true);
 
-    await expect( () => CalendarService.setUrlName(acct, cal, 'validname') ).rejects.toThrowError('Calendar not found');
+    await expect( () => service.setUrlName(acct, cal, 'validname') ).rejects.toThrowError('Calendar not found');
   });
 
   it('should return without work if name already matches', async () => {
@@ -100,7 +106,7 @@ describe('setUrlName', () => {
     calendarCheckStub.resolves(undefined);
     editableCalendarsStub.resolves(true);
 
-    await CalendarService.setUrlName(acct, cal, 'validname');
+    await service.setUrlName(acct, cal, 'validname');
     expect(calendarUpdateStub.called).toBe(false);
   });
 
@@ -112,7 +118,7 @@ describe('setUrlName', () => {
     calendarCheckStub.resolves(undefined);
     editableCalendarsStub.resolves(true);
 
-    await CalendarService.setUrlName(acct, cal, 'validname');
+    await service.setUrlName(acct, cal, 'validname');
 
     expect(calendarUpdateStub.calledWith({ url_name: 'validname' })).toBe(true);
     expect(cal.urlName).toBe('validname');
@@ -122,9 +128,11 @@ describe('setUrlName', () => {
 
 describe('getCalendar', () => {
   let sandbox: sinon.SinonSandbox;
+  let service: CalendarService;
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
+    service = new CalendarService();
   });
 
   afterEach(() => {
@@ -136,7 +144,7 @@ describe('getCalendar', () => {
     const calendarFindStub = sandbox.stub(CalendarEntity, 'findByPk');
     calendarFindStub.resolves(CalendarEntity.fromModel(cal));
 
-    const result = await CalendarService.getCalendar('testCalendarId');
+    const result = await service.getCalendar('testCalendarId');
 
     expect(result).not.toBeNull();
     expect(result?.id).toBe('testCalendarId');
@@ -148,7 +156,7 @@ describe('getCalendar', () => {
     const calendarFindStub = sandbox.stub(CalendarEntity, 'findByPk');
     calendarFindStub.resolves(null);
 
-    const result = await CalendarService.getCalendar('nonExistentId');
+    const result = await service.getCalendar('nonExistentId');
 
     expect(result).toBeNull();
     expect(calendarFindStub.calledWith('nonExistentId')).toBe(true);
@@ -158,9 +166,11 @@ describe('getCalendar', () => {
 describe('editableCalendarsForUser', () => {
   let sandbox: sinon.SinonSandbox;
   let acct: Account;
+  let service: CalendarService;
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
+    service = new CalendarService();
     acct = new Account('testAccountId', 'testme', 'testme');
   });
 
@@ -178,7 +188,7 @@ describe('editableCalendarsForUser', () => {
       CalendarEntity.fromModel(cal2),
     ]);
 
-    const result = await CalendarService.editableCalendarsForUser(acct);
+    const result = await service.editableCalendarsForUser(acct);
 
     expect(result).toHaveLength(2);
     expect(result[0].id).toBe('cal1');
@@ -189,7 +199,7 @@ describe('editableCalendarsForUser', () => {
     const calendarFindAllStub = sandbox.stub(CalendarEntity, 'findAll');
     calendarFindAllStub.resolves([]);
 
-    const result = await CalendarService.editableCalendarsForUser(acct);
+    const result = await service.editableCalendarsForUser(acct);
 
     expect(result).toHaveLength(0);
   });
@@ -199,9 +209,11 @@ describe('userCanModifyCalendar', () => {
   let sandbox: sinon.SinonSandbox;
   let acct: Account;
   let cal: Calendar;
+  let service: CalendarService;
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
+    service = new CalendarService();
     acct = new Account('testAccountId', 'testme', 'testme');
     cal = new Calendar('testCalendarId', 'testme');
   });
@@ -212,29 +224,29 @@ describe('userCanModifyCalendar', () => {
 
   it('should return true if user is admin', async () => {
     acct.roles = ['admin'];
-    const editableCalendarsStub = sandbox.stub(CalendarService, 'editableCalendarsForUser');
+    const editableCalendarsStub = sandbox.stub(service, 'editableCalendarsForUser');
 
-    const result = await CalendarService.userCanModifyCalendar(acct, cal);
+    const result = await service.userCanModifyCalendar(acct, cal);
 
     expect(result).toBe(true);
     expect(editableCalendarsStub.called).toBe(false);
   });
 
   it('should return true if user owns the calendar', async () => {
-    const editableCalendarsStub = sandbox.stub(CalendarService, 'editableCalendarsForUser');
+    const editableCalendarsStub = sandbox.stub(service, 'editableCalendarsForUser');
     editableCalendarsStub.resolves([cal]);
 
-    const result = await CalendarService.userCanModifyCalendar(acct, cal);
+    const result = await service.userCanModifyCalendar(acct, cal);
 
     expect(result).toBe(true);
     expect(editableCalendarsStub.calledWith(acct)).toBe(true);
   });
 
   it('should return false if user has no calendars', async () => {
-    const editableCalendarsStub = sandbox.stub(CalendarService, 'editableCalendarsForUser');
+    const editableCalendarsStub = sandbox.stub(service, 'editableCalendarsForUser');
     editableCalendarsStub.resolves([]);
 
-    const result = await CalendarService.userCanModifyCalendar(acct, cal);
+    const result = await service.userCanModifyCalendar(acct, cal);
 
     expect(result).toBe(false);
     expect(editableCalendarsStub.calledWith(acct)).toBe(true);
@@ -242,10 +254,10 @@ describe('userCanModifyCalendar', () => {
 
   it('should return false if user does not own the calendar', async () => {
     const otherCal = new Calendar('otherCalendarId', 'othercal');
-    const editableCalendarsStub = sandbox.stub(CalendarService, 'editableCalendarsForUser');
+    const editableCalendarsStub = sandbox.stub(service, 'editableCalendarsForUser');
     editableCalendarsStub.resolves([otherCal]);
 
-    const result = await CalendarService.userCanModifyCalendar(acct, cal);
+    const result = await service.userCanModifyCalendar(acct, cal);
 
     expect(result).toBe(false);
     expect(editableCalendarsStub.calledWith(acct)).toBe(true);
@@ -254,9 +266,11 @@ describe('userCanModifyCalendar', () => {
 
 describe('getCalendarByName', () => {
   let sandbox: sinon.SinonSandbox;
+  let service: CalendarService;
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
+    service = new CalendarService();
   });
 
   afterEach(() => {
@@ -268,7 +282,7 @@ describe('getCalendarByName', () => {
     const calendarFindOneStub = sandbox.stub(CalendarEntity, 'findOne');
     calendarFindOneStub.resolves(CalendarEntity.fromModel(cal));
 
-    const result = await CalendarService.getCalendarByName('testme');
+    const result = await service.getCalendarByName('testme');
 
     expect(result).not.toBeNull();
     expect(result?.id).toBe('testCalendarId');
@@ -279,7 +293,7 @@ describe('getCalendarByName', () => {
     const calendarFindOneStub = sandbox.stub(CalendarEntity, 'findOne');
     calendarFindOneStub.resolves(null);
 
-    const result = await CalendarService.getCalendarByName('nonexistent');
+    const result = await service.getCalendarByName('nonexistent');
 
     expect(result).toBeNull();
   });
@@ -288,9 +302,11 @@ describe('getCalendarByName', () => {
 describe('getPrimaryCalendarForUser', () => {
   let sandbox: sinon.SinonSandbox;
   let acct: Account;
+  let service: CalendarService;
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
+    service = new CalendarService();
     acct = new Account('testAccountId', 'testme', 'testme');
   });
 
@@ -303,7 +319,7 @@ describe('getPrimaryCalendarForUser', () => {
     const calendarFindOneStub = sandbox.stub(CalendarEntity, 'findOne');
     calendarFindOneStub.resolves(CalendarEntity.fromModel(cal));
 
-    const result = await CalendarService.getPrimaryCalendarForUser(acct);
+    const result = await service.getPrimaryCalendarForUser(acct);
 
     expect(result).not.toBeNull();
     expect(result?.id).toBe('testCalendarId');
@@ -316,7 +332,7 @@ describe('getPrimaryCalendarForUser', () => {
     const calendarFindOneStub = sandbox.stub(CalendarEntity, 'findOne');
     calendarFindOneStub.resolves(null);
 
-    const result = await CalendarService.getPrimaryCalendarForUser(acct);
+    const result = await service.getPrimaryCalendarForUser(acct);
 
     expect(result).toBeNull();
     expect(calendarFindOneStub.calledWith({
@@ -328,9 +344,11 @@ describe('getPrimaryCalendarForUser', () => {
 describe('createCalendar', () => {
   let sandbox: sinon.SinonSandbox;
   let acct: Account;
+  let service: CalendarService;
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
+    service = new CalendarService();
     acct = new Account('testAccountId', 'testme', 'testme');
   });
 
@@ -339,23 +357,23 @@ describe('createCalendar', () => {
   });
 
   it('should throw error if URL name is invalid', async () => {
-    const isValidUrlNameStub = sandbox.stub(CalendarService, 'isValidUrlName').returns(false);
+    const isValidUrlNameStub = sandbox.stub(service, 'isValidUrlName').returns(false);
 
-    await expect(() => CalendarService.createCalendar(acct, '_invalid')).rejects.toThrow(InvalidUrlNameError);
+    await expect(() => service.createCalendar(acct, '_invalid')).rejects.toThrow(InvalidUrlNameError);
     expect(isValidUrlNameStub.calledWith('_invalid')).toBe(true);
   });
 
   it('should throw error if URL name already exists', async () => {
-    sandbox.stub(CalendarService, 'isValidUrlName').returns(true);
+    sandbox.stub(service, 'isValidUrlName').returns(true);
     const existingCalendar = CalendarEntity.build({ id: 'existingId', url_name: 'existingname' });
     const calendarFindOneStub = sandbox.stub(CalendarEntity, 'findOne').resolves(existingCalendar);
 
-    await expect(() => CalendarService.createCalendar(acct, 'existingname')).rejects.toThrow(UrlNameAlreadyExistsError);
+    await expect(() => service.createCalendar(acct, 'existingname')).rejects.toThrow(UrlNameAlreadyExistsError);
     expect(calendarFindOneStub.calledWith({ where: { url_name: 'existingname' } })).toBe(true);
   });
 
   it('should create calendar with specified URL name', async () => {
-    sandbox.stub(CalendarService, 'isValidUrlName').returns(true);
+    sandbox.stub(service, 'isValidUrlName').returns(true);
     sandbox.stub(CalendarEntity, 'findOne').resolves(null);
     const calendarCreateStub = sandbox.stub(CalendarEntity, 'create');
     const createdCalendarEntity = CalendarEntity.build({
@@ -366,7 +384,7 @@ describe('createCalendar', () => {
     });
     calendarCreateStub.resolves(createdCalendarEntity);
 
-    const result = await CalendarService.createCalendar(acct, 'newcal');
+    const result = await service.createCalendar(acct, 'newcal');
 
     expect(result).not.toBeNull();
     expect(result.id).toBe('newCalendarId');
@@ -378,7 +396,7 @@ describe('createCalendar', () => {
   });
 
   it('should create calendar with name if provided', async () => {
-    sandbox.stub(CalendarService, 'isValidUrlName').returns(true);
+    sandbox.stub(service, 'isValidUrlName').returns(true);
     sandbox.stub(CalendarEntity, 'findOne').resolves(null);
     const calendarCreateStub = sandbox.stub(CalendarEntity, 'create');
     const createdCalendarEntity = CalendarEntity.build({
@@ -388,9 +406,9 @@ describe('createCalendar', () => {
       languages: 'en',
     });
     calendarCreateStub.resolves(createdCalendarEntity);
-    const createCalendarContentStub = sandbox.stub(CalendarService, 'createCalendarContent').resolves({} as any);
+    const createCalendarContentStub = sandbox.stub(service, 'createCalendarContent').resolves({} as any);
 
-    const result = await CalendarService.createCalendar(acct, 'newcal', 'My Calendar');
+    const result = await service.createCalendar(acct, 'newcal', 'My Calendar');
 
     expect(result).not.toBeNull();
     expect(result.id).toBe('newCalendarId');
@@ -403,9 +421,11 @@ describe('createCalendar', () => {
 describe('createCalendarContent', () => {
   let sandbox: sinon.SinonSandbox;
   let calendarContent: CalendarContent;
+  let service: CalendarService;
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
+    service = new CalendarService();
     calendarContent = new CalendarContent('en', 'Test Calendar', 'A test calendar');
   });
 
@@ -425,7 +445,7 @@ describe('createCalendarContent', () => {
     const contentFindOneStub = sandbox.stub(CalendarContentEntity, 'findOne').resolves(existingContent);
     const contentUpdateStub = sandbox.stub(existingContent, 'update').resolves(existingContent);
 
-    const result = await CalendarService.createCalendarContent('calendarId', calendarContent);
+    const result = await service.createCalendarContent('calendarId', calendarContent);
 
     expect(contentFindOneStub.calledWith({
       where: {
@@ -454,7 +474,7 @@ describe('createCalendarContent', () => {
     });
     contentCreateStub.resolves(newContent);
 
-    await CalendarService.createCalendarContent('calendarId', calendarContent);
+    await service.createCalendarContent('calendarId', calendarContent);
 
     expect(contentFindOneStub.calledWith({
       where: {

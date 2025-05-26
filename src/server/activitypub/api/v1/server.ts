@@ -1,37 +1,39 @@
-import express, { Request, Response } from 'express';
+import express, { Request, Response, Application, RequestHandler } from 'express';
 
-import EventProxy from '@/server/common/helper/event_proxy';
 import CreateActivity from '@/server/activitypub/model/action/create';
 import UpdateActivity from '@/server/activitypub/model/action/update';
 import DeleteActivity from '@/server/activitypub/model/action/delete';
 import FollowActivity from '@/server/activitypub/model/action/follow';
 import AnnounceActivity from '@/server/activitypub/model/action/announce';
 import UndoActivity from '@/server/activitypub/model/action/undo';
-import ActivityPubService from '@/server/activitypub/service/server';
-import CalendarService from '@/server/calendar/service/calendar';
+import ActivityPubInterface from '@/server/activitypub/interface';
+import CalendarInterface from '@/server/calendar/interface';
 import { verifyHttpSignature } from '@/server/activitypub/helper/http_signature';
 
 /**
  * Routes for the ActivityPub Server to Server API
  */
-class ActivityPubServerRoutes extends EventProxy {
-  router: express.Router;
-  service: ActivityPubService;
+export default class ActivityPubServerRoutes {
+  private service: ActivityPubInterface;
+  private calendarService: CalendarInterface;
 
-  constructor() {
-    super();
-    this.router = express.Router();
+  constructor(internalAPI: ActivityPubInterface, calendarAPI: CalendarInterface) {
+    this.calendarService = calendarAPI;
+    this.service = internalAPI;
+  }
+
+  installHandlers(app: Application, routePrefix: string): void {
+    const router = express.Router();
 
     // Public endpoints (no signature verification required)
-    this.router.get('/.well-known/webfinger', async (req,res) => { await this.lookupUser(req,res); });
-    this.router.get('/o/:orgname', async (req,res) => { await this.getUserProfile(req,res); });
-    this.router.get('/o/:orgname/outbox', async (req,res) => { this.readOutbox(req,res); });
+    router.get('/.well-known/webfinger', this.lookupUser.bind(this));
+    router.get('/o/:orgname', this.getUserProfile.bind(this));
+    router.get('/o/:orgname/outbox', this.readOutbox.bind(this));
 
     // Secure endpoints (require signature verification)
-    this.router.post('/o/:orgname/inbox', verifyHttpSignature, async (req,res) => { this.addToInbox(req,res); });
+    router.post('/o/:orgname/inbox', verifyHttpSignature as RequestHandler, this.addToInbox.bind(this));
 
-    this.service = new ActivityPubService();
-    this.proxyEvents(this.service,['inboxMessageAdded']);
+    app.use(routePrefix, router);
   }
 
   /** Find calendar profile location by webfinger resource
@@ -39,7 +41,7 @@ class ActivityPubServerRoutes extends EventProxy {
      * @returns a WebFingerResponse record
      * reference: https://www.w3.org/community/reports/socialcg/CG-FINAL-apwf-20240608/#forward-discovery
      */
-  async lookupUser(req: Request, res: Response) {
+  async lookupUser(req: Request, res: Response): Promise<void> {
     if (typeof req.query.resource === 'string') {
       let { username, domain } = this.service.parseWebFingerResource(req.query.resource);
       let webfingerResponse = await this.service.lookupWebFinger(username, domain);
@@ -61,7 +63,7 @@ class ActivityPubServerRoutes extends EventProxy {
      * @returns a UserProfileResponse record
      * reference: https://www.w3.org/TR/activitypub/#actor-objects
      */
-  async getUserProfile(req: Request, res: Response) {
+  async getUserProfile(req: Request, res: Response): Promise<void> {
     // todo: grab proper domain for this
     let profileResponse = await this.service.lookupUserProfile(req.params.orgname);
     if ( profileResponse === null ) {
@@ -78,8 +80,8 @@ class ActivityPubServerRoutes extends EventProxy {
      * @param req.body - the message to add to the inbox
      * reference: https://www.w3.org/TR/activitypub/#server-to-server-interactions
      */
-  async addToInbox(req: Request, res: Response) {
-    let calendar = await CalendarService.getCalendarByName(req.params.orgname);
+  async addToInbox(req: Request, res: Response): Promise<void> {
+    let calendar = await this.calendarService.getCalendarByName(req.params.orgname);
 
     if ( calendar === null ) {
       res.status(404).send('Calendar not found');
@@ -126,8 +128,8 @@ class ActivityPubServerRoutes extends EventProxy {
      * reference: https://www.w3.org/TR/activitypub/#outbox
      */
   // TODO: paging or other limits to the quantity of messages returned
-  async readOutbox(req: Request, res: Response) {
+  async readOutbox(req: Request, res: Response): Promise<void> {
+    // Implementation needed
+    res.status(501).send('Not implemented');
   }
 }
-
-export default ActivityPubServerRoutes;

@@ -2,20 +2,22 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import request from 'supertest';
 import express from 'express';
+import { EventEmitter } from 'events';
 
 import { CalendarEvent } from '@/common/model/events';
 import { Calendar } from '@/common/model/calendar';
 import { testApp, countRoutes, addRequestUser } from '@/server/common/test/lib/express';
-import MemberAPI from '@/server/calendar/api/v1';
+import CalendarAPI from '@/server/calendar/api/v1';
 import EventRoutes from '@/server/calendar/api/v1/events';
-import CalendarService from '@/server/calendar/service/calendar';
+import CalendarInterface from '@/server/calendar/interface';
 
 describe('API v1', () => {
 
   it('should load routes properly', () => {
     let app = express();
+    let calendarInterface = new CalendarInterface(new EventEmitter());
     expect(countRoutes(app)).toBe(0);
-    new MemberAPI(app);
+    CalendarAPI.install(app, calendarInterface);
     expect(countRoutes(app)).toBeGreaterThan(0);
   });
 });
@@ -23,10 +25,12 @@ describe('API v1', () => {
 describe('Event API', () => {
   let routes: EventRoutes;
   let router: express.Router;
+  let calendarInterface: CalendarInterface;
   let eventSandbox: sinon.SinonSandbox = sinon.createSandbox();
 
   beforeEach(() => {
-    routes = new EventRoutes();
+    calendarInterface = new CalendarInterface(new EventEmitter());
+    routes = new EventRoutes(calendarInterface);
     router = express.Router();
   });
 
@@ -35,7 +39,7 @@ describe('Event API', () => {
   });
 
   it('listEvents: should fail without calendar', async () => {
-    let eventStub = eventSandbox.stub(routes.service, 'listEvents');
+    let eventStub = eventSandbox.stub(calendarInterface, 'listEvents');
     router.get('/handler', addRequestUser, (req, res) => { routes.listEvents(req,res); });
     eventStub.resolves([]);
 
@@ -47,8 +51,8 @@ describe('Event API', () => {
   });
 
   it('listEvents: should succeed', async () => {
-    let eventStub = eventSandbox.stub(routes.service, 'listEvents');
-    let calendarStub = eventSandbox.stub(CalendarService, 'getCalendarByName');
+    let eventStub = eventSandbox.stub(calendarInterface, 'listEvents');
+    let calendarStub = eventSandbox.stub(calendarInterface, 'getCalendarByName');
     calendarStub.resolves(new Calendar('id', 'test'));
     router.get('/handler', addRequestUser, (req, res) => {
       req.params.calendar = 'test';
@@ -64,7 +68,7 @@ describe('Event API', () => {
   });
 
   it('createEvent: should fail without account', async () => {
-    let eventStub = eventSandbox.stub(routes.service, 'createEvent');
+    let eventStub = eventSandbox.stub(calendarInterface, 'createEvent');
     router.post('/handler', (req,res) => { routes.createEvent(req,res); });
 
     const response = await request(testApp(router))
@@ -75,10 +79,10 @@ describe('Event API', () => {
     expect(eventStub.called).toBe(false);
   });
 
-  it('createEvent: should fail without calendar id', async () => {
-    let eventStub = eventSandbox.stub(routes.service, 'createEvent');
+  it('createEvent: should fail without calendar name', async () => {
+    let eventStub = eventSandbox.stub(calendarInterface, 'createEvent');
     router.post('/handler', addRequestUser, (req,res) => { routes.createEvent(req,res); });
-    let calendarStub = eventSandbox.stub(CalendarService, 'getCalendar');
+    let calendarStub = eventSandbox.stub(calendarInterface, 'getCalendarByName');
 
     const response = await request(testApp(router))
       .post('/handler');
@@ -90,14 +94,16 @@ describe('Event API', () => {
   });
 
   it('createEvent: should fail without calendar', async () => {
-    let eventStub = eventSandbox.stub(routes.service, 'createEvent');
-    router.post('/handler', addRequestUser, (req,res) => { routes.createEvent(req,res); });
-    let calendarStub = eventSandbox.stub(CalendarService, 'getCalendar');
+    let eventStub = eventSandbox.stub(calendarInterface, 'createEvent');
+    router.post('/handler', addRequestUser, (req,res) => {
+      req.params.calendar = 'nonexistent';
+      routes.createEvent(req,res);
+    });
+    let calendarStub = eventSandbox.stub(calendarInterface, 'getCalendarByName');
     calendarStub.resolves(null);
 
     const response = await request(testApp(router))
-      .post('/handler')
-      .send({calendarId: 'id'});
+      .post('/handler');
 
     expect(response.status).toBe(404);
     expect(response.body.error).toBeDefined();
@@ -105,15 +111,17 @@ describe('Event API', () => {
   });
 
   it('createEvent: should succeed', async () => {
-    let eventStub = eventSandbox.stub(routes.service, 'createEvent');
-    let calendarStub = eventSandbox.stub(CalendarService, 'getCalendar');
+    let eventStub = eventSandbox.stub(calendarInterface, 'createEvent');
+    let calendarStub = eventSandbox.stub(calendarInterface, 'getCalendarByName');
     calendarStub.resolves(new Calendar('id', 'testme'));
-    router.post('/handler', addRequestUser, (req,res) => { routes.createEvent(req,res); });
+    router.post('/handler', addRequestUser, (req,res) => {
+      req.params.calendar = 'testme';
+      routes.createEvent(req,res);
+    });
     eventStub.resolves(new CalendarEvent('id', 'testme'));
 
     const response = await request(testApp(router))
-      .post('/handler')
-      .send({calendarId: 'id'});
+      .post('/handler');
 
     expect(response.status).toBe(200);
     expect(response.body.error).toBeUndefined();
@@ -121,7 +129,7 @@ describe('Event API', () => {
   });
 
   it('updateEvent: should fail without account', async () => {
-    let eventStub = eventSandbox.stub(routes.service, 'updateEvent');
+    let eventStub = eventSandbox.stub(calendarInterface, 'updateEvent');
     router.post('/handler', (req,res) => { routes.updateEvent(req,res); });
 
     const response = await request(testApp(router))
@@ -133,7 +141,7 @@ describe('Event API', () => {
   });
 
   it('updateEvent: should succeed', async () => {
-    let eventStub = eventSandbox.stub(routes.service, 'updateEvent');
+    let eventStub = eventSandbox.stub(calendarInterface, 'updateEvent');
     router.post('/handler', addRequestUser, (req,res) => { routes.updateEvent(req,res); });
     eventStub.resolves(new CalendarEvent('id', 'testme'));
 

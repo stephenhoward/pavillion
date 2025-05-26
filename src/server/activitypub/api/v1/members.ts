@@ -1,30 +1,24 @@
-import express, { Request, Response } from 'express';
-import { EventEmitter } from 'events';
+import express, { Request, Response, Application } from 'express';
 
 import { Account } from '@/common/model/account';
-import EventProxy from '@/server/common/helper/event_proxy';
 import ExpressHelper from '@/server/common/helper/express';
-import ActivityPubMemberService from '@/server/activitypub/service/members';
 import CalendarService from '@/server/calendar/service/calendar';
+import ActivityPubInterface from '@/server/activitypub/interface';
 
-class ActivityPubMemberRoutes extends EventProxy {
-  router: express.Router;
-  service: ActivityPubMemberService;
+export default class ActivityPubMemberRoutes {
+  private service: ActivityPubInterface;
 
-  constructor() {
-    super();
-    this.router = express.Router();
-    this.router.post('/social/follows', ExpressHelper.loggedInOnly, this.requireCalendarId, this.followCalendar);
-    this.router.delete('/social/follows/:id', ExpressHelper.loggedInOnly, this.requireCalendarId, this.unfollowCalendar);
-    this.router.post('/social/shares', ExpressHelper.loggedInOnly, this.requireCalendarId, this.shareEvent);
-    this.router.delete('/social/shares/:id', ExpressHelper.loggedInOnly,this.requireCalendarId, this.unshareEvent);
-
-    this.service = new ActivityPubMemberService();
-    this.proxyEvents(this.service,['outboxMessageAdded']);
+  constructor(internalAPI: ActivityPubInterface) {
+    this.service = internalAPI;
   }
 
-  registerListeners(source: EventEmitter) {
-    this.service.registerListeners(source);
+  installHandlers(app: Application, routePrefix: string): void {
+    const router = express.Router();
+    router.post('/social/follows', ExpressHelper.loggedInOnly, this.requireCalendarId, this.followCalendar);
+    router.delete('/social/follows/:id', ExpressHelper.loggedInOnly, this.requireCalendarId, this.unfollowCalendar);
+    router.post('/social/shares', ExpressHelper.loggedInOnly, this.requireCalendarId, this.shareEvent);
+    router.delete('/social/shares/:id', ExpressHelper.loggedInOnly,this.requireCalendarId, this.unshareEvent);
+    app.use(routePrefix, router);
   }
 
   async requireCalendarId (req: Request, res: Response, next: express.NextFunction) {
@@ -115,5 +109,3 @@ class ActivityPubMemberRoutes extends EventProxy {
     }
   }
 }
-
-export default ActivityPubMemberRoutes;

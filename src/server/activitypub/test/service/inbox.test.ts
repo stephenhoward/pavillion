@@ -3,7 +3,6 @@ import sinon from 'sinon';
 import { EventEmitter } from 'events';
 
 import { Calendar } from '@/common/model/calendar';
-import CalendarService from '@/server/calendar/service/calendar';
 import ProcessInboxService from '@/server/activitypub/service/inbox';
 import { ActivityPubInboxMessageEntity } from '@/server/activitypub/entity/activitypub';
 
@@ -14,8 +13,9 @@ describe('processInboxMessage', () => {
   let getCalendarStub: sinon.SinonStub;
 
   beforeEach (() => {
-    service = new ProcessInboxService();
-    getCalendarStub = sandbox.stub(CalendarService,'getCalendar');
+    const eventBus = new EventEmitter();
+    service = new ProcessInboxService(eventBus);
+    getCalendarStub = sandbox.stub(service.calendarService,'getCalendar');
     getCalendarStub.resolves(Calendar.fromObject({ id: 'testid' }));
   });
 
@@ -158,53 +158,5 @@ describe('processInboxMessage', () => {
     expect(updateStub.calledOnce).toBe(true);
     expect(updateStub.getCalls()[0].args[0]['processed_time']).toBeDefined();
     expect(updateStub.getCalls()[0].args[0]['processed_status']).toBe('ok');
-  });
-});
-
-describe('event listener', () => {
-  let service: ProcessInboxService;
-  let source: EventEmitter;
-  let sandbox: sinon.SinonSandbox = sinon.createSandbox();
-
-  beforeEach (() => {
-    service = new ProcessInboxService();
-    source = new EventEmitter();
-    service.registerListeners(source);
-  });
-
-  afterEach(() => {
-    sandbox.restore();
-  });
-
-  it('should process message found in database', async () => {
-
-    let processorStub = sandbox.stub(service,'processInboxMessage');
-    let entityStub = sandbox.stub(ActivityPubInboxMessageEntity,'findByPk');
-    entityStub.resolves(
-      ActivityPubInboxMessageEntity.build({
-        calendar_id: 'testid', type: 'Create', message: { object: { id: 'testid' } },
-      }),
-    );
-
-    source.emit('inboxMessageAdded',{ id: 'testid' });
-
-    // wait for event to propogate:
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    expect(processorStub.calledOnce).toBe(true);
-  });
-
-  it('should ignore message not found in database', async () => {
-
-    let processorStub = sandbox.stub(service,'processInboxMessage');
-    let entityStub = sandbox.stub(ActivityPubInboxMessageEntity,'findByPk');
-    entityStub.resolves(undefined);
-
-    source.emit('inboxMessageAdded',{ id: 'testid' });
-
-    // wait for event to propogate:
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    expect(processorStub.calledOnce).toBe(false);
   });
 });

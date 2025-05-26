@@ -1,18 +1,24 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
+import { EventEmitter } from 'events';
 
 import { Calendar } from '@/common/model/calendar';
-import CalendarService from '@/server/calendar/service/calendar';
 import { WebFingerResponse } from '@/server/activitypub/model/webfinger';
 import { UserProfileResponse } from '@/server/activitypub/model/userprofile';
 import ActivityPubServerRoutes from '@/server/activitypub/api/v1/server';
+import ActivityPubInterface from '@/server/activitypub/interface';
+import CalendarInterface from '@/server/calendar/interface';
 
 describe('lookupUser', () => {
   let routes: ActivityPubServerRoutes;
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+  let activityPubInterface: ActivityPubInterface;
 
   beforeEach(() => {
-    routes = new ActivityPubServerRoutes();
+    const eventBus = new EventEmitter();
+    activityPubInterface = new ActivityPubInterface(eventBus);
+    const calendarAPI = new CalendarInterface(eventBus);
+    routes = new ActivityPubServerRoutes(activityPubInterface, calendarAPI);
   });
 
   afterEach(() => {
@@ -35,7 +41,7 @@ describe('lookupUser', () => {
     let res = { status: sinon.stub(), send: sinon.stub() };
     res.status.returns(res);
 
-    let lookupMock = sandbox.stub(routes.service, 'lookupWebFinger');
+    let lookupMock = sandbox.stub(activityPubInterface, 'lookupWebFinger');
     lookupMock.resolves(null);
 
     await routes.lookupUser(req as any, res as any);
@@ -48,7 +54,7 @@ describe('lookupUser', () => {
     let req = { query: { resource: 'acct:testuser@testdomain.com' } };
     let res = { json: sinon.stub() };
 
-    let lookupMock = sandbox.stub(routes.service, 'lookupWebFinger');
+    let lookupMock = sandbox.stub(activityPubInterface, 'lookupWebFinger');
     lookupMock.resolves(new WebFingerResponse('testuser', 'testdomain.com'));
 
     await routes.lookupUser(req as any, res as any);
@@ -60,9 +66,13 @@ describe('lookupUser', () => {
 describe('getUserProfile', () => {
   let routes: ActivityPubServerRoutes;
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+  let activityPubInterface: ActivityPubInterface;
 
   beforeEach(() => {
-    routes = new ActivityPubServerRoutes();
+    const eventBus = new EventEmitter();
+    activityPubInterface = new ActivityPubInterface(eventBus);
+    const calendarAPI = new CalendarInterface(eventBus);
+    routes = new ActivityPubServerRoutes(activityPubInterface, calendarAPI);
   });
 
   afterEach(() => {
@@ -74,7 +84,7 @@ describe('getUserProfile', () => {
     let res = { status: sinon.stub(), send: sinon.stub() };
     res.status.returns(res);
 
-    let lookupMock = sandbox.stub(routes.service, 'lookupUserProfile');
+    let lookupMock = sandbox.stub(activityPubInterface, 'lookupUserProfile');
     lookupMock.resolves(null);
 
     await routes.getUserProfile(req as any, res as any);
@@ -87,7 +97,7 @@ describe('getUserProfile', () => {
     let req = { params: { user: 'testuser' } };
     let res = { json: sinon.stub() };
 
-    let lookupMock = sandbox.stub(routes.service, 'lookupUserProfile');
+    let lookupMock = sandbox.stub(activityPubInterface, 'lookupUserProfile');
     lookupMock.resolves(new UserProfileResponse('testuser','testdomain.com'));
 
     await routes.getUserProfile(req as any, res as any);
@@ -99,9 +109,14 @@ describe('getUserProfile', () => {
 describe('addToInbox', () => {
   let routes: ActivityPubServerRoutes;
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+  let activityPubInterface: ActivityPubInterface;
+  let calendarAPI: CalendarInterface;
 
   beforeEach(() => {
-    routes = new ActivityPubServerRoutes();
+    const eventBus = new EventEmitter();
+    activityPubInterface = new ActivityPubInterface(eventBus);
+    calendarAPI = new CalendarInterface(eventBus);
+    routes = new ActivityPubServerRoutes(activityPubInterface, calendarAPI);
   });
 
   afterEach(() => {
@@ -111,7 +126,7 @@ describe('addToInbox', () => {
   it('should fail without user', async () => {
     let req = { params: {} };
     let res = { status: sinon.stub(), send: sinon.stub() };
-    let calendarFindMock = sandbox.stub(CalendarService, 'getCalendarByName');
+    let calendarFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
     res.status.returns(res);
     calendarFindMock.resolves(null);
 
@@ -124,8 +139,8 @@ describe('addToInbox', () => {
   it('should fail with invalid message type', async () => {
     let req = { params: { orgname: 'testuser' }, body: { type: 'Foobar' } };
     let res = { status: sinon.stub(), send: sinon.stub() };
-    let userFindMock = sandbox.stub(CalendarService, 'getCalendarByName');
-    let inboxMock = sandbox.stub(routes.service, 'addToInbox');
+    let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
+    let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
 
     res.status.returns(res);
     userFindMock.resolves(new Calendar("testId","testuser"));
@@ -140,8 +155,8 @@ describe('addToInbox', () => {
   it('should succeed with valid message type', async () => {
     let req = { params: { orgname: 'testuser' }, body: { type: 'Create', object: { id: 'testObjectId' } } };
     let res = { status: sinon.stub(), send: sinon.stub() };
-    let userFindMock = sandbox.stub(CalendarService, 'getCalendarByName');
-    let inboxMock = sandbox.stub(routes.service, 'addToInbox');
+    let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
+    let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
 
     res.status.returns(res);
     userFindMock.resolves(new Calendar("testId","testuser"));

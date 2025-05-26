@@ -1,20 +1,22 @@
-import express, { Request, Response } from 'express';
+import express, { Request, Response, Application } from 'express';
 
 import { Account } from '@/common/model/account';
 import ExpressHelper from '@/server/common/helper/express';
-import CalendarService from '@/server/calendar/service/calendar';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError } from '@/common/exceptions/calendar';
+import CalendarInterface from '../../interface';
 
 class CalendarRoutes {
-  router: express.Router;
+  private service: CalendarInterface;
 
-  constructor() {
+  constructor(internalAPI: CalendarInterface) {
+    this.service = internalAPI;
+  }
 
-    this.router = express.Router();
-
-    this.router.get('/calendars', ExpressHelper.loggedInOnly, (req, res) => this.listCalendars(req, res));
-    this.router.post('/calendars', ExpressHelper.loggedInOnly, (req, res) => this.createCalendar(req, res));
-
+  installHandlers(app: Application, routePrefix: string): void {
+    const router = express.Router();
+    router.get('/calendars', ExpressHelper.loggedInOnly, this.listCalendars.bind(this));
+    router.post('/calendars', ExpressHelper.loggedInOnly, this.createCalendar.bind(this));
+    app.use(routePrefix, router);
   }
 
   async listCalendars(req: Request, res: Response) {
@@ -27,7 +29,7 @@ class CalendarRoutes {
       return;
     }
 
-    const calendars = await CalendarService.editableCalendarsForUser(account);
+    const calendars = await this.service.editableCalendarsForUser(account);
     res.json(calendars.map((calendar) => calendar.toObject()));
   }
 
@@ -50,7 +52,7 @@ class CalendarRoutes {
 
     try {
       // Create calendar with the specified URL name
-      const calendar = await CalendarService.createCalendar(
+      const calendar = await this.service.createCalendar(
         account,
         req.body.urlName,
         req.body.content?.en?.name || req.body.urlName,

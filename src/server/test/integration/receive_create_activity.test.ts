@@ -4,6 +4,7 @@ import sinon from 'sinon';
 import axios from 'axios';
 import httpSignature from 'http-signature';
 import express from 'express';
+import { EventEmitter } from 'events';
 
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
@@ -11,7 +12,7 @@ import { TestEnvironment } from '@/server/test/lib/test_environment';
 import AccountService from '@/server/accounts/service/account';
 import { EventEntity } from '@/server/calendar/entity/event';
 import { ActivityPubOutboxMessageEntity } from '@/server/activitypub/entity/activitypub';
-import CalendarService from '@/server/calendar/service/calendar';
+import CalendarInterface from '@/server/calendar/interface';
 
 const findInboxForCalendar = async (calendarName: string, app: express.Application): Promise<string> => {
 
@@ -39,9 +40,16 @@ describe('ActivityPub Create Activity', async () => {
   beforeAll(async () => {
     env = new TestEnvironment();
     await env.init();
-    let accountInfo = await AccountService._setupAccount(userEmail,userPassword);
+
+    const eventBus = new EventEmitter();
+    const calendarInterface = new CalendarInterface(eventBus);
+    const accountService = new AccountService(eventBus);
+
+    let accountInfo = await accountService._setupAccount(userEmail,userPassword);
     account = accountInfo.account;
-    calendar = await CalendarService.createCalendar(account,calendarName);
+
+    // Create CalendarService instance
+    calendar = await calendarInterface.createCalendar(account,calendarName);
   });
 
   afterEach(() => {

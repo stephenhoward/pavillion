@@ -4,14 +4,15 @@ import path from "path";
 import handlebars from 'handlebars';
 import i18next from 'i18next';
 import Backend from 'i18next-fs-backend';
+import { EventEmitter } from 'events';
 
 import db, { seedDB } from '@/server/common/entity/db';
 import { router as indexRoutes } from '@/server/app_routes';
-import AccountsAPI from '@/server/accounts/api/v1';
-import AuthenticationAPI from '@/server/authentication/api/v1';
-import MemberAPI from '@/server/calendar/api/v1';
-import ConfigurationAPI from '@/server/configuration/api/v1';
-import ActivityPubAPI from '@/server/activitypub/api/v1';
+import AccountsDomain from '@/server/accounts';
+import ActivityPubDomain from './activitypub';
+import AuthenticationDomain from './authentication';
+import CalendarDomain from '@/server/calendar';
+import ConfigurationDomain from './configuration';
 import PublicAPI from '@/server/public/api/v1';
 
 /**
@@ -20,10 +21,9 @@ import PublicAPI from '@/server/public/api/v1';
  *
  * @param {express.Application} app - The Express application instance to configure
  */
-const initPavillionServer = (app: express.Application) => {
+const initPavillionServer = async (app: express.Application) => {
 
   app.set("views", path.join(path.resolve(), "src/server/templates"));
-
   // Initialize i18next with default configuration
   i18next.use(Backend).init({
     fallbackLng: 'en',
@@ -50,14 +50,14 @@ const initPavillionServer = (app: express.Application) => {
 
   app.use('/', indexRoutes);
 
-  ConfigurationAPI(app);
-  AuthenticationAPI(app);
-  AccountsAPI(app);
-  let memberAPI = new MemberAPI(app);
-  let activitypubAPI = new ActivityPubAPI(app);
-  new PublicAPI(app);
+  const eventBus = new EventEmitter();
 
-  activitypubAPI.registerListeners(memberAPI);
+  new AccountsDomain(eventBus).initialize(app);
+  new ActivityPubDomain(eventBus).initialize(app);
+  new AuthenticationDomain(eventBus).initialize(app);
+  new ConfigurationDomain(eventBus).initialize(app);
+  new CalendarDomain(eventBus).initialize(app);
+  new PublicAPI(app);
 
   app.listen(config.get('host.port'), () => {
     if ( process.env.NODE_ENV == "development" ) {

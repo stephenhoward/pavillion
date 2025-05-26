@@ -3,12 +3,13 @@ import request from 'supertest';
 import sinon from 'sinon';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
+import { EventEmitter } from 'events';
 
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import { TestEnvironment } from '@/server/test/lib/test_environment';
 import AccountService from '@/server/accounts/service/account';
-import CalendarService from '@/server/calendar/service/calendar';
+import CalendarInterface from '@/server/calendar/interface';
 import { EventEntity } from '@/server/calendar/entity/event';
 import { ActivityPubOutboxMessageEntity } from '@/server/activitypub/entity/activitypub';
 import ProcessInboxService from '@/server/activitypub/service/inbox';
@@ -24,12 +25,16 @@ describe('Event API', () => {
   beforeAll(async () => {
     env = new TestEnvironment();
     await env.init();
-    let accountInfo = await AccountService._setupAccount(userEmail,userPassword);
+
+    const eventBus = new EventEmitter();
+    const calendarInterface = new CalendarInterface(eventBus);
+    const accountService = new AccountService(eventBus);
+    let accountInfo = await accountService._setupAccount(userEmail,userPassword);
     account = accountInfo.account;
-    calendar = await CalendarService.createCalendar(account,'testcalendar');
+    calendar = await calendarInterface.createCalendar(account,'testcalendar');
 
     // Create a proper FollowActivity object
-    let inboxService = new ProcessInboxService();
+    let inboxService = new ProcessInboxService(eventBus);
     const followActivity = new FollowActivity('testcalendar@remotedomain', 'testcalendar@pavillion.dev');
     followActivity.id = `https://remotedomain/users/testcalendar/follows/${uuidv4()}`;
     await inboxService.processFollowAccount(calendar, followActivity);
@@ -42,7 +47,7 @@ describe('Event API', () => {
 
   it('createEvent: should fail without user', async () => {
     const response = await request(env.app)
-      .post('/api/v1/calendars/testCalendar/events')
+      .post('/api/v1/calendars/testcalendar/events')
       .send({
         content: {
           en: {
@@ -62,7 +67,7 @@ describe('Event API', () => {
     env.stubRemoteCalendar(getStub, 'remotedomain', 'testcalendar');
 
     let authKey = await env.login(userEmail,userPassword);
-    const response = await env.authPost(authKey, '/api/v1/calendars/testCalendar/events', {
+    const response = await env.authPost(authKey, '/api/v1/calendars/testcalendar/events', {
       calendarId: calendar.id,
       content: {
         en: {

@@ -4,7 +4,6 @@ import sinon from 'sinon';
 import { EventEmitter } from 'events';
 
 import { Calendar } from '@/common/model/calendar';
-import CalendarService from '@/server/calendar/service/calendar';
 import ProcessOutboxService from '@/server/activitypub/service/outbox';
 import { EventActivityEntity, ActivityPubOutboxMessageEntity, FollowerCalendarEntity } from '@/server/activitypub/entity/activitypub';
 
@@ -14,7 +13,8 @@ describe('resolveInbox', () => {
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
 
   beforeEach (() => {
-    service = new ProcessOutboxService();
+    const eventBus = new EventEmitter();
+    service = new ProcessOutboxService(eventBus);
   });
 
   afterEach(() => {
@@ -57,7 +57,8 @@ describe('fetchProfileUrl', () => {
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
 
   beforeEach (() => {
-    service = new ProcessOutboxService();
+    const eventBus = new EventEmitter();
+    service = new ProcessOutboxService(eventBus);
   });
 
   afterEach(() => {
@@ -94,7 +95,8 @@ describe ('getRecipients', () => {
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
 
   beforeEach (() => {
-    service = new ProcessOutboxService();
+    const eventBus = new EventEmitter();
+    service = new ProcessOutboxService(eventBus);
   });
 
   afterEach(() => {
@@ -129,7 +131,8 @@ describe('processOutboxMessage', () => {
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
 
   beforeEach (() => {
-    service = new ProcessOutboxService();
+    const eventBus = new EventEmitter();
+    service = new ProcessOutboxService(eventBus);
   });
 
   afterEach(() => {
@@ -138,7 +141,7 @@ describe('processOutboxMessage', () => {
 
   it('should fail without calendar', async () => {
     let message = ActivityPubOutboxMessageEntity.build({ calendar_id: 'testid', type: 'Create', message: { to: 'remotecalendar@remotedomain' } });
-    let getCalendarStub = sandbox.stub(CalendarService,'getCalendar');
+    let getCalendarStub = sandbox.stub(service.calendarService,'getCalendar');
     getCalendarStub.resolves(null);
     await expect(service.processOutboxMessage(message)).rejects.toThrow('No calendar found for message');
 
@@ -147,7 +150,7 @@ describe('processOutboxMessage', () => {
   it('should skip invalid message type', async () => {
     let message = ActivityPubOutboxMessageEntity.build({ calendar_id: 'testid', type: 'NotAType', message: { to: 'remotecalendar@remotedomain' } });
 
-    let getCalendarStub = sandbox.stub(CalendarService,'getCalendar');
+    let getCalendarStub = sandbox.stub(service.calendarService,'getCalendar');
     let postStub = sandbox.stub(axios,'post');
     let updateStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype,'update');
 
@@ -164,7 +167,7 @@ describe('processOutboxMessage', () => {
   it('should skip message without recipients', async () => {
     let message = ActivityPubOutboxMessageEntity.build({ calendar_id: 'testid', type: 'Create', message: { object: { id: 'testid' } } });
 
-    let getCalendarStub = sandbox.stub(CalendarService,'getCalendar');
+    let getCalendarStub = sandbox.stub(service.calendarService,'getCalendar');
     let postStub = sandbox.stub(axios,'post');
     let updateStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype,'update');
     let getRecipientsStub = sandbox.stub(service,'getRecipients');
@@ -185,7 +188,7 @@ describe('processOutboxMessage', () => {
   it('should skip recipients without inbox', async () => {
     let message = ActivityPubOutboxMessageEntity.build({ calendar_id: 'testid', type: 'Create', message: { object: { id: 'testid' } } });
 
-    let getCalendarStub = sandbox.stub(CalendarService,'getCalendar');
+    let getCalendarStub = sandbox.stub(service.calendarService,'getCalendar');
     let postStub = sandbox.stub(axios,'post');
     let updateStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype,'update');
     let getRecipientsStub = sandbox.stub(service,'getRecipients');
@@ -206,7 +209,7 @@ describe('processOutboxMessage', () => {
   it('should send message to each recipient', async () => {
     let message = ActivityPubOutboxMessageEntity.build({ calendar_id: 'testid', type: 'Create', message: { object: { id: 'testid' } } });
 
-    let getCalendarStub = sandbox.stub(CalendarService,'getCalendar');
+    let getCalendarStub = sandbox.stub(service.calendarService,'getCalendar');
     let postStub = sandbox.stub(axios,'post');
     let updateStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype,'update');
     let getRecipientsStub = sandbox.stub(service,'getRecipients');
@@ -224,60 +227,4 @@ describe('processOutboxMessage', () => {
     expect(updateStub.getCalls()[0].args[0]['processed_status']).toBe('ok');
   });
 
-});
-
-describe('event listener', () => {
-  let service: ProcessOutboxService;
-  let source: EventEmitter;
-  let sandbox: sinon.SinonSandbox = sinon.createSandbox();
-
-  beforeEach (() => {
-    service = new ProcessOutboxService();
-    source = new EventEmitter();
-    service.registerListeners(source);
-  });
-
-  afterEach(() => {
-    sandbox.restore();
-  });
-
-  it('should process message found in database', async () => {
-
-    let processorStub = sandbox.stub(service,'processOutboxMessage');
-    let entityStub = sandbox.stub(ActivityPubOutboxMessageEntity,'findByPk');
-    entityStub.resolves(
-      ActivityPubOutboxMessageEntity.build({
-        calendar_id: 'testid', type: 'Create', message: { object: { id: 'testid' } },
-      }),
-    );
-
-    source.emit('outboxMessageAdded',{
-      calendar_id: 'testid',
-      type: 'Create',
-      message: { object: { id: 'testid' } },
-    });
-
-    // wait for event to propogate:
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    expect(processorStub.calledOnce).toBe(true);
-  });
-
-  it('should ignore message not found in database', async () => {
-
-    let processorStub = sandbox.stub(service,'processOutboxMessage');
-    let entityStub = sandbox.stub(ActivityPubOutboxMessageEntity,'findByPk');
-    entityStub.resolves(undefined);
-
-    source.emit('outboxMessageAdded',{
-      calendar_id: 'testid',
-      type: 'Create',
-      message: { object: { id: 'testid' } },
-    });
-
-    // wait for event to propogate:
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    expect(processorStub.calledOnce).toBe(false);
-  });
 });

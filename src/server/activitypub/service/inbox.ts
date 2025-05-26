@@ -18,30 +18,11 @@ import { Calendar } from "@/common/model/calendar";
  */
 class ProcessInboxService {
   eventService: EventService;
+  calendarService: CalendarService;
 
-  constructor() {
-    this.eventService = new EventService();
-  }
-
-  /**
-   * Registers event listeners for inbox message processing.
-   * Events include:
-   * - 'inboxMessageAdded'
-   *
-   * @param {EventEmitter} source - The event emitter source to listen to for inbox events
-   */
-  registerListeners(source: EventEmitter) {
-    source.on('inboxMessageAdded', async (e) => {
-      let message = await ActivityPubInboxMessageEntity.findByPk(e.id);
-
-      if ( ! message ) {
-        console.error("inbox message not found for processing");
-        return;
-      }
-      if ( ! message.processed_time ) {
-        await this.processInboxMessage(message);
-      }
-    });
+  constructor(eventBus: EventEmitter) {
+    this.eventService = new EventService(eventBus);
+    this.calendarService = new CalendarService(eventBus);
   }
 
   /**
@@ -74,7 +55,7 @@ class ProcessInboxService {
    * @returns {Promise<void>}
    */
   async processInboxMessage(message: ActivityPubInboxMessageEntity ) {
-    const calendar = await CalendarService.getCalendar(message.calendar_id);
+    const calendar = await this.calendarService.getCalendar(message.calendar_id);
 
     try {
       if ( ! calendar ) {

@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
+import { EventEmitter } from 'events';
 
 import { UserProfileResponse } from '@/server/activitypub/model/userprofile';
 import { WebFingerResponse } from '@/server/activitypub/model/webfinger';
 import ActivityPubService from '@/server/activitypub/service/server';
-import CalendarService from '@/server/calendar/service/calendar';
 import { Calendar } from '@/common/model/calendar';
 import { ActivityPubActivity } from '@/server/activitypub/model/base';
 import { ActivityPubInboxMessageEntity } from '@/server/activitypub/entity/activitypub';
@@ -12,7 +12,8 @@ import { ActivityPubInboxMessageEntity } from '@/server/activitypub/entity/activ
 describe('parseWebFingerResource', () => {
 
   it('should succeed', async () => {
-    let service = new ActivityPubService();
+    const eventBus = new EventEmitter();
+    let service = new ActivityPubService(eventBus);
 
     let { username, domain } = service.parseWebFingerResource("acct:testuser@testdomain.com");
 
@@ -21,7 +22,8 @@ describe('parseWebFingerResource', () => {
   });
 
   it('should succeed even missing acct prefix', async () => {
-    let service = new ActivityPubService();
+    const eventBus = new EventEmitter();
+    let service = new ActivityPubService(eventBus);
 
     let { username, domain } = service.parseWebFingerResource("testuser@testdomain.com");
 
@@ -30,7 +32,8 @@ describe('parseWebFingerResource', () => {
   });
 
   it('should not return values if malformed', async () => {
-    let service = new ActivityPubService();
+    const eventBus = new EventEmitter();
+    let service = new ActivityPubService(eventBus);
 
     let badstrings = [
       "acct:@testdomain.com",
@@ -55,7 +58,8 @@ describe('lookupWebFinger', () => {
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
 
   beforeEach(() => {
-    service = new ActivityPubService();
+    const eventBus = new EventEmitter();
+    service = new ActivityPubService(eventBus);
   });
 
   afterEach(() => {
@@ -63,7 +67,7 @@ describe('lookupWebFinger', () => {
   });
 
   it('should return null if no profile', async () => {
-    let profileStub = sandbox.stub(CalendarService, 'getCalendarByName');
+    let profileStub = sandbox.stub(service.calendarService, 'getCalendarByName');
     profileStub.resolves(null);
 
     let response = await service.lookupWebFinger('testuser', 'testdomain.com');
@@ -72,7 +76,7 @@ describe('lookupWebFinger', () => {
   });
 
   it('should return a WebFingerResponse', async () => {
-    let calendarStub = sandbox.stub(CalendarService, 'getCalendarByName');
+    let calendarStub = sandbox.stub(service.calendarService, 'getCalendarByName');
     calendarStub.resolves(Calendar.fromObject({ id: 'testid', urlName: 'testuser' }));
 
     let response = await service.lookupWebFinger('testuser', 'pavillion.dev');
@@ -88,7 +92,8 @@ describe('lookupUserProfile', () => {
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
 
   beforeEach(() => {
-    service = new ActivityPubService();
+    const eventBus = new EventEmitter();
+    service = new ActivityPubService(eventBus);
   });
 
   afterEach(() => {
@@ -96,7 +101,7 @@ describe('lookupUserProfile', () => {
   });
 
   it('should return null if no profile', async () => {
-    let calendarStub = sandbox.stub(CalendarService, 'getCalendarByName');
+    let calendarStub = sandbox.stub(service.calendarService, 'getCalendarByName');
     calendarStub.resolves(null);
 
     let response = await service.lookupUserProfile('testuser');
@@ -105,7 +110,7 @@ describe('lookupUserProfile', () => {
   });
 
   it('should return a UserProfileResponse', async () => {
-    let calendarStub = sandbox.stub(CalendarService, 'getCalendarByName');
+    let calendarStub = sandbox.stub(service.calendarService, 'getCalendarByName');
     calendarStub.resolves(Calendar.fromObject({ id: 'testid', urlName: 'testCalendar' }));
 
     let response = await service.lookupUserProfile('testCalendar');
@@ -121,7 +126,8 @@ describe("addToInbox", () => {
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
 
   beforeEach(() => {
-    service = new ActivityPubService();
+    const eventBus = new EventEmitter();
+    service = new ActivityPubService(eventBus);
   });
 
   afterEach(() => {
@@ -132,7 +138,7 @@ describe("addToInbox", () => {
     let message = ActivityPubActivity.fromObject({ type: 'Create', id: 'testid' });
     let calendar = Calendar.fromObject({ id: 'testid' });
 
-    let getCalendarStub = sandbox.stub(CalendarService, 'getCalendar');
+    let getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
     getCalendarStub.resolves(calendar);
 
     let findMessageStub = sandbox.stub(ActivityPubInboxMessageEntity, 'findByPk');
@@ -151,7 +157,7 @@ describe("addToInbox", () => {
     let message = ActivityPubActivity.fromObject({ type: 'Create', id: 'testid' });
     let calendar = Calendar.fromObject({ id: 'testid' });
 
-    let getCalendarStub = sandbox.stub(CalendarService, 'getCalendar');
+    let getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
     getCalendarStub.resolves(null);
 
     await expect( service.addToInbox(calendar, message) ).rejects.toThrow('Account not found');

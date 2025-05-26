@@ -6,25 +6,25 @@ import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError } from '@/common/exceptions/calendar';
 
 class CalendarService {
-  static async getCalendar(id: string): Promise<Calendar|null> {
+  async getCalendar(id: string): Promise<Calendar|null> {
     const calendar = await CalendarEntity.findByPk(id);
     return calendar ? calendar.toModel() : null;
   }
 
-  static isValidUrlName(username: string): boolean {
+  isValidUrlName(username: string): boolean {
     return username.match(/^[a-z0-9][a-z0-9_]{2,23}$/i) ? true : false;
   }
 
-  static async setUrlName(account: Account, calendar: Calendar, urlName: string): Promise<boolean> {
+  async setUrlName(account: Account, calendar: Calendar, urlName: string): Promise<boolean> {
 
     if ( ! account.hasRole('admin') ) {
-      const canEditCalendar = await CalendarService.userCanModifyCalendar(account, calendar);
+      const canEditCalendar = await this.userCanModifyCalendar(account, calendar);
       if ( ! canEditCalendar ) {
         throw new Error('Permission denied');
       }
     }
 
-    if ( ! CalendarService.isValidUrlName(urlName) ) {
+    if ( ! this.isValidUrlName(urlName) ) {
       throw new InvalidUrlNameError();
     }
 
@@ -49,14 +49,17 @@ class CalendarService {
     return true;
   }
 
-  static async editableCalendarsForUser(account: Account): Promise<Calendar[]> {
+  async editableCalendarsForUser(account: Account): Promise<Calendar[]> {
+    if (!account.id) {
+      return [];
+    }
     let calendars = await CalendarEntity.findAll({ where: { account_id: account.id } });
     return calendars.map((calendar) => calendar.toModel());
   }
 
-  static async userCanModifyCalendar(account: Account, calendar: Calendar): Promise<boolean> {
+  async userCanModifyCalendar(account: Account, calendar: Calendar): Promise<boolean> {
     if ( ! account.hasRole('admin') ) {
-      let calendars = await CalendarService.editableCalendarsForUser(account);
+      let calendars = await this.editableCalendarsForUser(account);
       if ( calendars.length == 0 ) {
         return false;
       }
@@ -66,12 +69,18 @@ class CalendarService {
     return true;
   }
 
-  static async getCalendarByName(name: string): Promise<Calendar|null> {
+  async getCalendarByName(name: string): Promise<Calendar|null> {
+    if (!name) {
+      return null;
+    }
     let calendar = await CalendarEntity.findOne({ where: { url_name: name } });
     return calendar ? calendar.toModel() : null;
   }
 
-  static async getPrimaryCalendarForUser(account: Account): Promise<Calendar|null> {
+  async getPrimaryCalendarForUser(account: Account): Promise<Calendar|null> {
+    if (!account.id) {
+      return null;
+    }
     let calendar = await CalendarEntity.findOne({ where: { account_id: account.id } });
     return calendar ? calendar.toModel() : null;
   }
@@ -86,9 +95,9 @@ class CalendarService {
    * @throws InvalidUrlNameError if the URL name is invalid
    * @throws UrlNameAlreadyExistsError if the URL name is already taken
    */
-  static async createCalendar(account: Account, urlName: string, name?: string): Promise<Calendar> {
+  async createCalendar(account: Account, urlName: string, name?: string): Promise<Calendar> {
     // Validate URL name format
-    if (!CalendarService.isValidUrlName(urlName)) {
+    if (!this.isValidUrlName(urlName)) {
       throw new InvalidUrlNameError();
     }
 
@@ -114,7 +123,7 @@ class CalendarService {
       content.name = name;
 
       // Create content entity and save to database
-      await CalendarService.createCalendarContent(calendar.id, content);
+      await this.createCalendarContent(calendar.id, content);
     }
 
     return calendar;
@@ -127,7 +136,7 @@ class CalendarService {
    * @param content - The content translation to save
    * @returns The saved content entity
    */
-  static async createCalendarContent(calendarId: string, content: import('@/common/model/calendar').CalendarContent): Promise<import('@/server/calendar/entity/calendar').CalendarContentEntity> {
+  async createCalendarContent(calendarId: string, content: import('@/common/model/calendar').CalendarContent): Promise<import('@/server/calendar/entity/calendar').CalendarContentEntity> {
     const { CalendarContentEntity } = await import('@/server/calendar/entity/calendar');
 
     // Create a new content entity from the model

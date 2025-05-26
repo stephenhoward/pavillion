@@ -3,7 +3,6 @@ import { EventEmitter } from "events";
 import axios from "axios";
 
 import { Calendar } from "@/common/model/calendar";
-import CalendarService from "@/server/calendar/service/calendar";
 import { ActivityPubOutboxMessageEntity, EventActivityEntity, FollowerCalendarEntity } from "@/server/activitypub/entity/activitypub";
 import UpdateActivity from "@/server/activitypub/model/action/update";
 import DeleteActivity from "@/server/activitypub/model/action/delete";
@@ -12,32 +11,17 @@ import AnnounceActivity from "@/server/activitypub/model/action/announce";
 import CreateActivity from "@/server/activitypub/model/action/create";
 import UndoActivity from "@/server/activitypub/model/action/undo";
 import { ActivityPubObject } from "@/server/activitypub/model/base";
+import CalendarInterface from "@/server/calendar/interface";
 
 /**
  * Service responsible for processing and distributing outgoing ActivityPub messages.
  * Handles delivery of various activity types to followers and other recipients.
  */
 class ProcessOutboxService {
+  calendarService: CalendarInterface;
 
-  constructor() { }
-
-  /**
-   * Registers event listeners for processing outbox messages.
-   * Events include:
-   * - 'outboxMessageAdded'
-   *
-   * @param {EventEmitter} source - The event emitter source to listen to for outbox events
-   */
-  registerListeners(source: EventEmitter) {
-    source.on('outboxMessageAdded', async (e) => {
-      let message = await ActivityPubOutboxMessageEntity.findByPk(e.id);
-      if ( message ) {
-        await this.processOutboxMessage(message);
-      }
-      else {
-        console.error("outbox message not found for processing");
-      }
-    });
+  constructor(eventBus: EventEmitter) {
+    this.calendarService = new CalendarInterface(eventBus);
   }
 
   /**
@@ -70,7 +54,7 @@ class ProcessOutboxService {
    * @throws {Error} If no calendar is found for the message
    */
   async processOutboxMessage(message: ActivityPubOutboxMessageEntity) {
-    let calendar = await CalendarService.getCalendar(message.calendar_id);
+    let calendar = await this.calendarService.getCalendar(message.calendar_id);
 
     if ( ! calendar ) {
       throw new Error("No calendar found for message");

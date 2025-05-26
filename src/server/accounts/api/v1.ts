@@ -1,14 +1,21 @@
 import express, { Application } from 'express';
-import { router as AccountRoutes } from './v1/accounts';
-import { router as AccountInvitationRoutes } from './v1/invitations';
-import { router as AccountApplicationRoutes } from './v1/applications';
+import AccountRoutes from '@/server/accounts/api/v1/accounts';
+import AccountInvitationRoutes from '@/server/accounts/api/v1/invitations';
+import AccountApplicationRoutes from '@/server/accounts/api/v1/applications';
+import AccountsInterface from '@/server/accounts/interface';
 
-const apiV1 = (app: Application) => {
+export default class AccountApiV1 {
 
-  app.use(express.json());
-  app.use('/api/accounts/v1', AccountRoutes);
-  app.use('/api/accounts/v1', AccountInvitationRoutes);
-  app.use('/api/accounts/v1', AccountApplicationRoutes );
-};
+  static install(app: Application, internalAPI: AccountsInterface) {
+    app.use(express.json());
 
-export default apiV1;
+    const accountRouteHandlers = new AccountRoutes(internalAPI);
+    accountRouteHandlers.installHandlers(app, '/api/accounts/v1');
+
+    const accountApplicationRouteHandlers = new AccountApplicationRoutes(internalAPI);
+    accountApplicationRouteHandlers.installHandlers(app, '/api/accounts/v1');
+
+    const accountInvitationRoutes = new AccountInvitationRoutes(internalAPI);
+    accountInvitationRoutes.installHandlers(app, '/api/accounts/v1');
+  }
+}

@@ -1,15 +1,20 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
+import { EventEmitter } from 'events';
 
 import { Account } from '@/common/model/account';
 import ActivityPubMemberRoutes from '@/server/activitypub/api/v1/members';
+import ActivityPubInterface from '@/server/activitypub/interface';
 
 describe ('followCalendar', () => {
   let routes: ActivityPubMemberRoutes;
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+  let activityPubInterface: ActivityPubInterface;
 
   beforeEach(() => {
-    routes = new ActivityPubMemberRoutes();
+    const eventBus = new EventEmitter();
+    activityPubInterface = new ActivityPubInterface(eventBus);
+    routes = new ActivityPubMemberRoutes(activityPubInterface);
   });
 
   afterEach(() => {
@@ -46,7 +51,7 @@ describe ('followCalendar', () => {
     let res = { status: sinon.stub(), send: sinon.stub() };
     res.status.returns(res);
 
-    let followMock = sandbox.stub(routes.service, 'followCalendar');
+    let followMock = sandbox.stub(activityPubInterface, 'followCalendar');
     followMock.resolves();
 
     await routes.followCalendar(req as any, res as any);
@@ -59,9 +64,12 @@ describe ('followCalendar', () => {
 describe('unfollowCalendar', () => {
   let routes: ActivityPubMemberRoutes;
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+  let activityPubInterface: ActivityPubInterface;
 
   beforeEach(() => {
-    routes = new ActivityPubMemberRoutes();
+    const eventBus = new EventEmitter();
+    activityPubInterface = new ActivityPubInterface(eventBus);
+    routes = new ActivityPubMemberRoutes(activityPubInterface);
   });
 
   afterEach(() => {
@@ -98,7 +106,7 @@ describe('unfollowCalendar', () => {
     let res = { status: sinon.stub(), send: sinon.stub() };
     res.status.returns(res);
 
-    let unfollowMock = sandbox.stub(routes.service, 'unfollowCalendar');
+    let unfollowMock = sandbox.stub(activityPubInterface, 'unfollowCalendar');
     unfollowMock.resolves();
 
     await routes.unfollowCalendar(req as any, res as any);
@@ -111,9 +119,12 @@ describe('unfollowCalendar', () => {
 describe('shareEvent', () => {
   let routes: ActivityPubMemberRoutes;
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+  let activityPubInterface: ActivityPubInterface;
 
   beforeEach(() => {
-    routes = new ActivityPubMemberRoutes();
+    const eventBus = new EventEmitter();
+    activityPubInterface = new ActivityPubInterface(eventBus);
+    routes = new ActivityPubMemberRoutes(activityPubInterface);
   });
 
   afterEach(() => {
@@ -150,7 +161,7 @@ describe('shareEvent', () => {
     let res = { status: sinon.stub(), send: sinon.stub() };
     res.status.returns(res);
 
-    let shareMock = sandbox.stub(routes.service, 'shareEvent');
+    let shareMock = sandbox.stub(activityPubInterface, 'shareEvent');
     shareMock.resolves();
 
     await routes.shareEvent(req as any, res as any);
@@ -163,9 +174,12 @@ describe('shareEvent', () => {
 describe('unshareEvent', () => {
   let routes: ActivityPubMemberRoutes;
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+  let activityPubInterface: ActivityPubInterface;
 
   beforeEach(() => {
-    routes = new ActivityPubMemberRoutes();
+    const eventBus = new EventEmitter();
+    activityPubInterface = new ActivityPubInterface(eventBus);
+    routes = new ActivityPubMemberRoutes(activityPubInterface);
   });
 
   afterEach(() => {
@@ -202,7 +216,7 @@ describe('unshareEvent', () => {
     let res = { status: sinon.stub(), send: sinon.stub() };
     res.status.returns(res);
 
-    let unshareMock = sandbox.stub(routes.service, 'unshareEvent');
+    let unshareMock = sandbox.stub(activityPubInterface, 'unshareEvent');
     unshareMock.resolves();
 
     await routes.unshareEvent(req as any, res as any);

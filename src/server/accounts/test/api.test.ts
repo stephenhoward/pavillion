@@ -2,21 +2,24 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import request from 'supertest';
 import express from 'express';
-import { handlers as accountHandlers } from '../api/v1/accounts';
-import { handlers as inviteHandlers } from '../api/v1/invitations';
-import { handlers as applicationHandlers } from '../api/v1/applications';
-import AccountService from '../service/account';
+import { EventEmitter } from 'events';
+import AccountRouteHandlers from '../api/v1/accounts';
+import AccountInvitationRouteHandlers from '../api/v1/invitations';
+import AccountApplicationRouteHandlers from '../api/v1/applications';
+import AccountsInterface from '../interface';
 import { Account } from '../../../common/model/account';
 import { testApp, countRoutes } from '../../common/test/lib/express';
 import AccountInvitation from '../../../common/model/invitation';
-import apiV1 from '../api/v1';
+import AccountApiV1 from '../api/v1';
 
 describe('API v1', () => {
 
   it('should load routes properly', () => {
     let app = express();
+    const eventBus = new EventEmitter();
+    const accountsInterface = new AccountsInterface(eventBus);
     expect(countRoutes(app)).toBe(0);
-    apiV1(app);
+    AccountApiV1.install(app, accountsInterface);
     expect(countRoutes(app)).toBeGreaterThan(0);
   });
 });
@@ -25,9 +28,14 @@ describe('Account API', () => {
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
   let stub: sinon.SinonStub;
   let router: express.Router;
+  let accountsInterface: AccountsInterface;
+  let accountHandlers: AccountRouteHandlers;
 
   beforeEach(() => {
-    stub = sandbox.stub(AccountService, 'registerNewAccount');
+    const eventBus = new EventEmitter();
+    accountsInterface = new AccountsInterface(eventBus);
+    accountHandlers = new AccountRouteHandlers(accountsInterface);
+    stub = sandbox.stub(accountsInterface, 'registerNewAccount');
     router = express.Router();
   });
 
@@ -37,7 +45,7 @@ describe('Account API', () => {
 
   it('register: should succeed', async () => {
     stub.resolves(new Account('id', 'testme', 'testme'));
-    router.post('/handler', accountHandlers.register);
+    router.post('/handler', accountHandlers.registerHandler.bind(accountHandlers));
 
     const response = await request(testApp(router))
       .post('/handler')
@@ -49,7 +57,7 @@ describe('Account API', () => {
 
   it('register: should fail', async () => {
     stub.resolves(undefined);
-    router.post('/handler', accountHandlers.register);
+    router.post('/handler', accountHandlers.registerHandler.bind(accountHandlers));
 
     const response = await request(testApp(router))
       .post('/handler')
@@ -64,8 +72,13 @@ describe('Account API', () => {
 describe ('Invitations API', () => {
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
   let router: express.Router;
+  let accountsInterface: AccountsInterface;
+  let inviteHandlers: AccountInvitationRouteHandlers;
 
   beforeEach(() => {
+    const eventBus = new EventEmitter();
+    accountsInterface = new AccountsInterface(eventBus);
+    inviteHandlers = new AccountInvitationRouteHandlers(accountsInterface);
     router = express.Router();
   });
 
@@ -74,9 +87,9 @@ describe ('Invitations API', () => {
   });
 
   it('list invitations: should succeed', async () => {
-    let stub2 = sandbox.stub(AccountService,'listInvitations');
+    let stub2 = sandbox.stub(accountsInterface,'listInvitations');
     stub2.resolves([]);
-    router.get('/handler', inviteHandlers.listInvitations);
+    router.get('/handler', inviteHandlers.listInvitations.bind(inviteHandlers));
 
     const response = await request(testApp(router)).get('/handler');
 
@@ -86,9 +99,9 @@ describe ('Invitations API', () => {
   });
 
   it('invite new account: should succeed', async () => {
-    let stub2 = sandbox.stub(AccountService,'inviteNewAccount');
+    let stub2 = sandbox.stub(accountsInterface,'inviteNewAccount');
     stub2.resolves(new AccountInvitation('id', 'testme', 'testme'));
-    router.post('/handler', inviteHandlers.inviteToRegister);
+    router.post('/handler', inviteHandlers.inviteToRegister.bind(inviteHandlers));
 
     const response = await request(testApp(router))
       .post('/handler')
@@ -99,9 +112,9 @@ describe ('Invitations API', () => {
   });
 
   it('invite new account: should fail', async () => {
-    let stub2 = sandbox.stub(AccountService,'inviteNewAccount');
+    let stub2 = sandbox.stub(accountsInterface,'inviteNewAccount');
     stub2.resolves(undefined);
-    router.post('/handler', inviteHandlers.inviteToRegister);
+    router.post('/handler', inviteHandlers.inviteToRegister.bind(inviteHandlers));
 
     const response = await request(testApp(router))
       .post('/handler')
@@ -112,9 +125,9 @@ describe ('Invitations API', () => {
   });
 
   it('check invite code: should succeed', async () => {
-    let stub2 = sandbox.stub(AccountService,'validateInviteCode');
+    let stub2 = sandbox.stub(accountsInterface,'validateInviteCode');
     stub2.resolves(true);
-    router.get('/handler', inviteHandlers.checkInviteCode);
+    router.get('/handler', inviteHandlers.checkInviteCode.bind(inviteHandlers));
 
     const response = await request(testApp(router)).get('/handler');
 
@@ -124,9 +137,9 @@ describe ('Invitations API', () => {
   });
 
   it('check invite code: should fail', async () => {
-    let stub2 = sinon.stub(AccountService,'validateInviteCode');
+    let stub2 = sinon.stub(accountsInterface,'validateInviteCode');
     stub2.resolves(false);
-    router.get('/handler', inviteHandlers.checkInviteCode);
+    router.get('/handler', inviteHandlers.checkInviteCode.bind(inviteHandlers));
 
     const response = await request(testApp(router)).get('/handler');
 
@@ -136,9 +149,9 @@ describe ('Invitations API', () => {
   });
 
   it('accept invite: should succeed', async () => {
-    let stub2 = sandbox.stub(AccountService,'acceptAccountInvite');
+    let stub2 = sandbox.stub(accountsInterface,'acceptAccountInvite');
     stub2.resolves(new Account('id', 'testme', 'testme'));
-    router.post('/handler', inviteHandlers.acceptInvite);
+    router.post('/handler', inviteHandlers.acceptInvite.bind(inviteHandlers));
 
     const response = await request(testApp(router))
       .post('/handler')
@@ -149,9 +162,9 @@ describe ('Invitations API', () => {
   });
 
   it('accept invite: should fail', async () => {
-    let stub2 = sandbox.stub(AccountService,'acceptAccountInvite');
+    let stub2 = sandbox.stub(accountsInterface,'acceptAccountInvite');
     stub2.resolves(undefined);
-    router.post('/handler', inviteHandlers.acceptInvite);
+    router.post('/handler', inviteHandlers.acceptInvite.bind(inviteHandlers));
 
     const response = await request(testApp(router))
       .post('/handler')
@@ -167,8 +180,13 @@ describe ('Invitations API', () => {
 describe('Applications API', () => {
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
   let router: express.Router;
+  let accountsInterface: AccountsInterface;
+  let applicationHandlers: AccountApplicationRouteHandlers;
 
   beforeEach(() => {
+    const eventBus = new EventEmitter();
+    accountsInterface = new AccountsInterface(eventBus);
+    applicationHandlers = new AccountApplicationRouteHandlers(accountsInterface);
     router = express.Router();
   });
 
@@ -177,8 +195,8 @@ describe('Applications API', () => {
   });
 
   it('apply to register: should succeed', async () => {
-    let stub2 = sandbox.stub(AccountService,'applyForNewAccount');
-    router.post('/handler', applicationHandlers.applyToRegister);
+    let stub2 = sandbox.stub(accountsInterface,'applyForNewAccount');
+    router.post('/handler', applicationHandlers.applyToRegister.bind(applicationHandlers));
 
     const response = await request(testApp(router))
       .post('/handler')
@@ -189,9 +207,9 @@ describe('Applications API', () => {
   });
 
   it('list applications: should succeed', async () => {
-    let stub2 = sandbox.stub(AccountService,'listAccountApplications');
+    let stub2 = sandbox.stub(accountsInterface,'listAccountApplications');
     stub2.resolves([]);
-    router.get('/handler', applicationHandlers.listApplications);
+    router.get('/handler', applicationHandlers.listApplications.bind(applicationHandlers));
 
     const response = await request(testApp(router)).get('/handler');
 
@@ -201,9 +219,9 @@ describe('Applications API', () => {
   });
 
   it('process application: should accept', async () => {
-    let stub = sandbox.stub(AccountService,'acceptAccountApplication');
-    let stub2 = sandbox.stub(AccountService,'rejectAccountApplication');
-    router.post('/handler', applicationHandlers.processApplication);
+    let stub = sandbox.stub(accountsInterface,'acceptAccountApplication');
+    let stub2 = sandbox.stub(accountsInterface,'rejectAccountApplication');
+    router.post('/handler', applicationHandlers.processApplication.bind(applicationHandlers));
 
     const response = await request(testApp(router))
       .post('/handler')
@@ -215,9 +233,9 @@ describe('Applications API', () => {
   });
 
   it('process application: should reject', async () => {
-    let stub = sandbox.stub(AccountService,'acceptAccountApplication');
-    let stub2 = sandbox.stub(AccountService,'rejectAccountApplication');
-    router.post('/handler', applicationHandlers.processApplication);
+    let stub = sandbox.stub(accountsInterface,'acceptAccountApplication');
+    let stub2 = sandbox.stub(accountsInterface,'rejectAccountApplication');
+    router.post('/handler', applicationHandlers.processApplication.bind(applicationHandlers));
 
     const response = await request(testApp(router))
       .post('/handler')
@@ -229,9 +247,9 @@ describe('Applications API', () => {
   });
 
   it('process application: should fail', async () => {
-    let stub = sandbox.stub(AccountService,'acceptAccountApplication');
-    let stub2 = sandbox.stub(AccountService,'rejectAccountApplication');
-    router.post('/handler', applicationHandlers.processApplication);
+    let stub = sandbox.stub(accountsInterface,'acceptAccountApplication');
+    let stub2 = sandbox.stub(accountsInterface,'rejectAccountApplication');
+    router.post('/handler', applicationHandlers.processApplication.bind(applicationHandlers));
 
     const response = await request(testApp(router))
       .post('/handler')

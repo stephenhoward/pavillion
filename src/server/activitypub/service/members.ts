@@ -5,61 +5,24 @@ import config from 'config';
 import { Account } from "@/common/model/account";
 import { Calendar } from "@/common/model/calendar";
 import { ActivityPubActivity } from "@/server/activitypub/model/base";
-import CreateActivity from '@/server/activitypub/model/action/create';
-import UpdateActivity from '@/server/activitypub/model/action/update';
-import DeleteActivity from '@/server/activitypub/model/action/delete';
 import FollowActivity from "@/server/activitypub/model/action/follow";
 import AnnounceActivity from "@/server/activitypub/model/action/announce";
-import { EventObject } from '@/server/activitypub/model/object/event';
-import EventService from "@/server/calendar/service/events";
-import CalendarService from "@/server/calendar/service/calendar";
 import { ActivityPubOutboxMessageEntity, FollowingCalendarEntity, SharedEventEntity, AutoRepostPolicy } from "@/server/activitypub/entity/activitypub";
 import UndoActivity from "../model/action/undo";
 import { EventEntity } from "@/server/calendar/entity/event";
+import CalendarInterface from "@/server/calendar/interface";
 
-class ActivityPubService extends EventEmitter {
-  eventService: EventService;
+class ActivityPubService {
+  calendarService: CalendarInterface;
 
-  constructor() {
-    super();
-    this.eventService = new EventService();
+  constructor(
+    private eventBus: EventEmitter,
+  ) {
+    this.calendarService = new CalendarInterface(eventBus);
   }
 
   async actorUrl(calendar: Calendar): Promise<string> {
     return 'https://' + config.get('domain') + '/o/' + calendar.urlName;
-  }
-
-  registerListeners(source: EventEmitter) {
-    source.on('eventCreated', async (e) => {
-      let actorUrl = await this.actorUrl(e.calendar);
-      this.addToOutbox(
-        e.calendar,
-        new CreateActivity(
-          actorUrl,
-          new EventObject(e.calendar, e.event),
-        ),
-      );
-    });
-    source.on('eventUpdated', async (e) => {
-      let actorUrl = await this.actorUrl(e.calendar);
-      this.addToOutbox(
-        e.calendar,
-        new UpdateActivity(
-          actorUrl,
-          new EventObject(e.calendar, e.event),
-        ),
-      );
-    });
-    source.on('eventDeleted', async (e) => {
-      let actorUrl = await this.actorUrl(e.calendar);
-      this.addToOutbox(
-        e.calendar,
-        new DeleteActivity(
-          actorUrl,
-          EventObject.eventUrl(e.calendar, e.event),
-        ),
-      );
-    });
   }
 
   static isValidDomain(domain: string): boolean {
@@ -89,7 +52,7 @@ class ActivityPubService extends EventEmitter {
       throw new Error('Invalid remote calendar identifier: ' + orgIdentifier);
     }
 
-    if (!CalendarService.userCanModifyCalendar(account, calendar)) {
+    if (!this.calendarService.userCanModifyCalendar(account, calendar)) {
       throw new Error('User does not have permission to modify calendar: ' + calendar.id);
     }
 
@@ -126,7 +89,7 @@ class ActivityPubService extends EventEmitter {
   }
 
   async unfollowCalendar(account: Account, calendar: Calendar, orgIdentifier: string) {
-    if (!CalendarService.userCanModifyCalendar(account, calendar)) {
+    if (!this.calendarService.userCanModifyCalendar(account, calendar)) {
       throw new Error('User does not have permission to modify calendar: ' + calendar.id);
     }
 
@@ -152,7 +115,7 @@ class ActivityPubService extends EventEmitter {
      */
   async shareEvent(account: Account, calendar: Calendar, eventUrl: string) {
 
-    if ( ! CalendarService.userCanModifyCalendar(account, calendar) ) {
+    if ( ! this.calendarService.userCanModifyCalendar(account, calendar) ) {
       throw new Error('User does not have permission to modify calendar: ' + calendar.id);
     }
 
@@ -190,7 +153,7 @@ class ActivityPubService extends EventEmitter {
      */
   async unshareEvent(account: Account, calendar: Calendar, eventUrl: string) {
 
-    if (!CalendarService.userCanModifyCalendar(account, calendar)) {
+    if (!this.calendarService.userCanModifyCalendar(account, calendar)) {
       throw new Error('User does not have permission to modify calendar: ' + calendar.id);
     }
 
@@ -220,11 +183,12 @@ class ActivityPubService extends EventEmitter {
       });
       await messageEntity.save();
 
-      this.emit('outboxMessageAdded', message);
+      this.eventBus.emit('outboxMessageAdded', message);
     }
   }
 
   async getFeed(calendar: Calendar, page?: number, pageSize?: number) {
+    const defaultPageSize = pageSize || 20;
 
     return EventEntity.findAll({
       include: [{
@@ -235,8 +199,8 @@ class ActivityPubService extends EventEmitter {
           calendar_id: calendar.id,
         },
       }],
-      limit: pageSize,
-      offset: page ? page * pageSize : 0,
+      limit: defaultPageSize,
+      offset: page ? page * defaultPageSize : 0,
       order: [['start', 'DESC']],
     });
   }

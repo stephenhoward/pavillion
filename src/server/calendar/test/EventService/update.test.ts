@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import { DateTime } from 'luxon';
+import { EventEmitter } from 'events';
 
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
@@ -8,8 +9,6 @@ import { CalendarEventContent, CalendarEventSchedule, language, EventFrequency }
 import { EventLocation } from '@/common/model/location';
 import { EventEntity, EventContentEntity, EventScheduleEntity } from '@/server/calendar/entity/event';
 import EventService from '@/server/calendar/service/events';
-import LocationService from '@/server/calendar/service/locations';
-import CalendarService from '@/server/calendar/service/calendar';
 
 describe('updateEvent with content', () => {
   let service: EventService;
@@ -18,9 +17,10 @@ describe('updateEvent with content', () => {
   let editableCalendarsStub: sinon.SinonStub;
 
   beforeEach(() => {
-    service = new EventService();
-    getCalendarStub = sandbox.stub(CalendarService, 'getCalendar');
-    editableCalendarsStub = sandbox.stub(CalendarService, 'editableCalendarsForUser');
+    service = new EventService(new EventEmitter());
+    // Stub the internal service instances created by EventService
+    getCalendarStub = sandbox.stub(service['calendarService'], 'getCalendar');
+    editableCalendarsStub = sandbox.stub(service['calendarService'], 'editableCalendarsForUser');
   });
   afterEach(() => {
     sandbox.restore();
@@ -189,9 +189,10 @@ describe('updateEvent with location', () => {
   let editableCalendarsStub: sinon.SinonStub;
 
   beforeEach(() => {
-    service = new EventService();
-    getCalendarStub = sandbox.stub(CalendarService, 'getCalendar');
-    editableCalendarsStub = sandbox.stub(CalendarService, 'editableCalendarsForUser');
+    service = new EventService(new EventEmitter());
+    // Stub the internal service instances created by EventService
+    getCalendarStub = sandbox.stub(service['calendarService'], 'getCalendar');
+    editableCalendarsStub = sandbox.stub(service['calendarService'], 'editableCalendarsForUser');
     const cal = new Calendar('testCalendarId', 'testme');
     getCalendarStub.resolves(cal);
     editableCalendarsStub.resolves([cal]);
@@ -204,7 +205,7 @@ describe('updateEvent with location', () => {
   it('should add a location to an event', async () => {
     let findEventStub = sandbox.stub(EventEntity, 'findByPk');
     let saveEventStub = sandbox.stub(EventEntity.prototype, 'save');
-    let findLocationStub = sandbox.stub(LocationService, 'findOrCreateLocation');
+    let findLocationStub = sandbox.stub(service['locationService'], 'findOrCreateLocation');
 
     findEventStub.resolves(EventEntity.build({ account_id: 'testAccountId' }));
     findLocationStub.resolves(new EventLocation('testId','testLocation', 'testAddress'));
@@ -228,7 +229,7 @@ describe('updateEvent with location', () => {
 
     let findEventStub = sandbox.stub(EventEntity, 'findByPk');
     let saveEventStub = sandbox.stub(EventEntity.prototype, 'save');
-    let findLocationStub = sandbox.stub(LocationService, 'findOrCreateLocation');
+    let findLocationStub = sandbox.stub(service['locationService'], 'findOrCreateLocation');
 
     findEventStub.resolves(eventEntity);
     findLocationStub.resolves(new EventLocation('testId','testLocation', 'testAddress'));
@@ -251,9 +252,10 @@ describe('updateEvent with schedules', () => {
   let editableCalendarsStub: sinon.SinonStub;
 
   beforeEach(() => {
-    service = new EventService();
-    getCalendarStub = sandbox.stub(CalendarService, 'getCalendar');
-    editableCalendarsStub = sandbox.stub(CalendarService, 'editableCalendarsForUser');
+    service = new EventService(new EventEmitter());
+    // Stub the internal service instances created by EventService
+    getCalendarStub = sandbox.stub(service['calendarService'], 'getCalendar');
+    editableCalendarsStub = sandbox.stub(service['calendarService'], 'editableCalendarsForUser');
     const cal = new Calendar('testCalendarId', 'testme');
     getCalendarStub.resolves(cal);
     editableCalendarsStub.resolves([cal]);

@@ -4,11 +4,11 @@ import { randomBytes } from 'crypto';
 
 import { Account } from "@/common/model/account";
 import { AccountEntity, AccountSecretsEntity } from "@/server/common/entity/account";
-import CommonAccountService from '@/server/common/service/accounts';
 import { noAccountExistsError } from '@/server/accounts/exceptions';
 import { EmailAlreadyExistsError, InvalidPasswordError } from '@/server/authentication/exceptions';
 import EmailService from '@/server/common/service/mail';
 import PasswordResetEmail from '@/server/authentication/model/password_reset_email';
+import AccountsInterface from '@/server/accounts/interface';
 
 /**
  * Service class for managing accounts
@@ -16,7 +16,11 @@ import PasswordResetEmail from '@/server/authentication/model/password_reset_ema
  * @remarks
  * Use this class to manage the lifecycle of accounts in the system
  */
-class AuthenticationService {
+export default class AuthenticationService {
+  constructor(
+    private eventBus: any,
+    private accountService: AccountsInterface,
+  ) {}
 
   /**
    * Changes the email address for an account after verifying the password
@@ -28,9 +32,9 @@ class AuthenticationService {
    * @throws {InvalidPasswordError} If the provided password is incorrect
    * @throws {EmailAlreadyExistsError} If the new email is already in use by another account
    */
-  static async changeEmail(account: Account, newEmail: string, password: string): Promise<Account> {
+  async changeEmail(account: Account, newEmail: string, password: string): Promise<Account> {
     // Verify the password first
-    const passwordValid = await AuthenticationService.checkPassword(account, password);
+    const passwordValid = await this.checkPassword(account, password);
     if (!passwordValid) {
       throw new InvalidPasswordError();
     }
@@ -44,7 +48,7 @@ class AuthenticationService {
     }
 
     // Check if email is already in use by another account
-    const existingAccount = await CommonAccountService.getAccountByEmail(normalizedNewEmail);
+    const existingAccount = await this.accountService.getAccountByEmail(normalizedNewEmail);
     if (existingAccount && existingAccount.id !== account.id) {
       throw new EmailAlreadyExistsError();
     }
@@ -56,7 +60,7 @@ class AuthenticationService {
       await accountEntity.save();
 
       // Return the updated account
-      return await CommonAccountService.getAccountById(account.id) as Account;
+      return await this.accountService.getAccountById(account.id) as Account;
     }
 
     throw new noAccountExistsError();
@@ -69,7 +73,7 @@ class AuthenticationService {
    * @param {string} password - The new password to set
    * @returns {Promise<Account|undefined>} The account if password was reset successfully, undefined otherwise
    */
-  static async resetPassword(code: string, password: string): Promise<Account| undefined> {
+  async resetPassword(code: string, password: string): Promise<Account| undefined> {
     const secret = await AccountSecretsEntity.findOne({ where: {password_reset_code: code}, include: AccountEntity});
 
     if ( secret ) {
@@ -77,7 +81,7 @@ class AuthenticationService {
       if ( secret.password_reset_expiration && DateTime.now() < DateTime.fromJSDate(secret.password_reset_expiration) ) {
         const account = secret.account.toModel();
 
-        if ( await CommonAccountService.setPassword(account, password) == true ) {
+        if ( await this.accountService.setPassword(account, password) == true ) {
           secret.password_reset_code = '';
           secret.password_reset_expiration = null;
           await secret.save();
@@ -99,8 +103,8 @@ class AuthenticationService {
    * @returns {Promise<void>}
    * @throws {noAccountExistsError} If no account exists with the given email
    */
-  static async generatePasswordResetCode(email: string) {
-    const account = await CommonAccountService.getAccountByEmail(email);
+  async generatePasswordResetCode(email: string) {
+    const account = await this.accountService.getAccountByEmail(email);
     if ( ! account ) {
       throw new noAccountExistsError();
     }
@@ -111,7 +115,7 @@ class AuthenticationService {
         id: account.id,
       });
     }
-    const passwordResetCode = await AuthenticationService.generatePasswordResetCodeForAccount(account);
+    const passwordResetCode = await this.generatePasswordResetCodeForAccount(account);
 
     // Send the email
     const message = new PasswordResetEmail(account, passwordResetCode);
@@ -124,7 +128,7 @@ class AuthenticationService {
    * @param {Account} account - The account to generate a password reset code for
    * @returns {Promise<string>} The generated password reset code
    */
-  static async generatePasswordResetCodeForAccount(account: Account): Promise<string> {
+  async generatePasswordResetCodeForAccount(account: Account): Promise<string> {
     let secret = await AccountSecretsEntity.findByPk(account.id);
     if ( ! secret ) {
       secret = AccountSecretsEntity.build({
@@ -144,7 +148,7 @@ class AuthenticationService {
    * @param {string} code - The password reset code to validate
    * @returns {Promise<boolean>} True if the code is valid and not expired, false otherwise
    */
-  static async validatePasswordResetCode(code: string): Promise<boolean> {
+  async validatePasswordResetCode(code: string): Promise<boolean> {
     const secret = await AccountSecretsEntity.findOne({where: {password_reset_code: code}});
 
     if ( secret ) {
@@ -162,7 +166,7 @@ class AuthenticationService {
    * @param {string} password - The password to verify
    * @returns {Promise<boolean>} True if the password is correct, false otherwise
    */
-  static async checkPassword(account:Account, password:string): Promise<boolean> {
+  async checkPassword(account:Account, password:string): Promise<boolean> {
     const secret = await AccountSecretsEntity.findByPk(account.id);
 
     if ( secret && secret.salt ) {
@@ -174,5 +178,3 @@ class AuthenticationService {
     return false;
   }
 }
-
-export default AuthenticationService;

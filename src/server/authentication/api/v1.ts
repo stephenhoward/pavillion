@@ -4,48 +4,50 @@ import passportJWT from 'passport-jwt';
 import { Strategy as LocalStrategy } from 'passport-local';
 
 import { Account } from '@/common/model/account';
-import CommonAccountService from '@/server/common/service/accounts';
-import { router as AuthRoutes} from '@/server/authentication/api/v1/auth';
-import AuthenticationService from '@/server/authentication/service/auth';
+import AuthenticationRoutes from '@/server/authentication/api/v1/auth';
+import AccountsInterface from '@/server/accounts/interface';
+import AuthenticationInterface from '@/server/authentication/interface';
 
 const jwtSecret = 'secret';  // TODO: add secret here
 
-const apiV1 = (app: Application) => {
+export default class AuthenticationAPI {
 
-  passport.use(new LocalStrategy({
-    usernameField: 'email',
-    passwordField: 'password',
-  },
-  async function(email: string, password: string, done: (error: any, user?: Account | boolean, info?: any) => void) {
-    let account = await CommonAccountService.getAccountByEmail(email);
+  static install(app: Application, internalAPI: AuthenticationInterface, accountAPI: AccountsInterface): void {
+    passport.use(new LocalStrategy({
+      usernameField: 'email',
+      passwordField: 'password',
+    },
+    async function(email: string, password: string, done: (error: any, user?: Account | boolean, info?: any) => void) {
+      let account = await accountAPI.getAccountByEmail(email);
 
-    if ( account ) {
-      let passwordMatch = await AuthenticationService.checkPassword(account, password);
+      if ( account ) {
+        let passwordMatch = await internalAPI.checkPassword(account, password);
 
-      if ( passwordMatch ) {
-        return done(null, account);
+        if ( passwordMatch ) {
+          return done(null, account);
+        }
       }
-    }
 
-    return done(null, false, { message: 'Incorrect email or password.' });
-  }));
-
-  passport.use(new passportJWT.Strategy({
-    jwtFromRequest: passportJWT.ExtractJwt.fromAuthHeaderAsBearerToken(),
-    secretOrKey: jwtSecret,
-  }, async (jwtPayload, done) => {
-
-    const account = await CommonAccountService.getAccountById(jwtPayload.id);
-
-    if ( !account ) {
       return done(null, false, { message: 'Incorrect email or password.' });
-    }
+    }));
 
-    return done(null, account);
-  }));
+    passport.use(new passportJWT.Strategy({
+      jwtFromRequest: passportJWT.ExtractJwt.fromAuthHeaderAsBearerToken(),
+      secretOrKey: jwtSecret,
+    }, async (jwtPayload, done) => {
 
-  app.use(express.json());
-  app.use('/api/auth/v1', AuthRoutes);
-};
+      const account = await accountAPI.getAccountById(jwtPayload.id);
 
-export default apiV1;
+      if ( !account ) {
+        return done(null, false, { message: 'Incorrect email or password.' });
+      }
+
+      return done(null, account);
+    }));
+
+    app.use(express.json());
+
+    const authenticationRoutes = new AuthenticationRoutes(internalAPI, accountAPI);
+    authenticationRoutes.installHandlers(app, '/api/auth/v1');
+  }
+}

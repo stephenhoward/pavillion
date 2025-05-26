@@ -24,7 +24,7 @@ export class TestEnvironment {
 
   async authPost(authKey: string, url: string, data: any): Promise<any> {
     return request(this.app)
-      .post('/api/v1/calendars/testCalendar/events')
+      .post(url)
       .set('Authorization','Bearer ' + authKey)
       .send(data);
   }

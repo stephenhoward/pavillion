@@ -9,9 +9,11 @@ import LocationService from '@/server/calendar/service/locations';
 describe('findLocation', () => {
 
   let sandbox = sinon.createSandbox();
+  let service: LocationService;
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
+    service = new LocationService();
   });
 
   afterEach(() => {
@@ -27,7 +29,7 @@ describe('findLocation', () => {
       name: 'testLocation',
     }));
 
-    let location = await LocationService.findLocation(
+    let location = await service.findLocation(
       calendar,
       new EventLocation('id', 'testLocation'),
     );
@@ -45,7 +47,7 @@ describe('findLocation', () => {
       name: 'testLocation',
     }));
 
-    let location = await LocationService.findLocation(
+    let location = await service.findLocation(
       calendar,
       new EventLocation('id', 'testLocation'),
     );
@@ -58,7 +60,7 @@ describe('findLocation', () => {
     let findLocationStub = sandbox.stub(LocationEntity, 'findByPk');
     findLocationStub.resolves(undefined);
 
-    let location = await LocationService.findLocation(
+    let location = await service.findLocation(
       new Calendar('id', 'testme'),
       new EventLocation('id', 'testLocation'),
     );
@@ -71,7 +73,7 @@ describe('findLocation', () => {
     let findLocationStub = sandbox.stub(LocationEntity, 'findOne');
     findLocationStub.resolves(LocationEntity.build({ name: 'testLocation' }));
 
-    let location = await LocationService.findLocation(
+    let location = await service.findLocation(
       new Calendar('id', 'testme'),
       new EventLocation('', 'testLocation'),
     );
@@ -84,7 +86,7 @@ describe('findLocation', () => {
     let findLocationStub = sandbox.stub(LocationEntity, 'findOne');
     findLocationStub.resolves(undefined);
 
-    let location = await LocationService.findLocation(
+    let location = await service.findLocation(
       new Calendar('id', 'testme'),
       new EventLocation('', 'testLocation'),
     );
@@ -96,6 +98,11 @@ describe('findLocation', () => {
   describe('createLocation', () => {
 
     let sandbox = sinon.createSandbox();
+    let service: LocationService;
+
+    beforeEach(() => {
+      service = new LocationService();
+    });
 
     afterEach(() => {
       sandbox.restore();
@@ -105,7 +112,7 @@ describe('findLocation', () => {
       let saveStub = sandbox.stub(LocationEntity.prototype, 'save');
       let eventSpy = sandbox.spy(LocationEntity, 'fromModel');
 
-      let location = await LocationService.createLocation(
+      let location = await service.createLocation(
         new Calendar('testCalendarId', 'testme'),
         new EventLocation('', 'testName'),
       );

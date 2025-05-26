@@ -1,28 +1,22 @@
-import express, { Request, Response } from 'express';
+import express, { Request, Response, Application } from 'express';
 
 import { Account } from '@/common/model/account';
 import ExpressHelper from '@/server/common/helper/express';
-import EventProxy from '@/server/common/helper/event_proxy';
-import EventService from '@/server/calendar/service/events';
-import CalendarService from '@/server/calendar/service/calendar';
+import CalendarInterface from '@/server/calendar/interface';
 
-class EventRoutes extends EventProxy {
-  router: express.Router;
-  service: EventService;
+export default class EventRoutes {
+  private service: CalendarInterface;
 
-  constructor() {
-    super();
+  constructor(internalAPI: CalendarInterface) {
+    this.service = internalAPI;
+  }
 
-    this.router = express.Router();
-
-    this.router.get('/calendars/:calendar/events', ExpressHelper.loggedInOnly, (req, res) => this.listEvents(req, res));
-
-    this.router.post('/calendars/:calendar/events', ExpressHelper.loggedInOnly, (req, res) => this.createEvent(req, res));
-
-    this.router.post('/calendars/:calendar/events/:id', ExpressHelper.loggedInOnly, (req, res) => this.updateEvent(req,res));
-
-    this.service = new EventService();
-    this.proxyEvents(this.service, ['eventCreated', 'eventUpdated']);
+  installHandlers(app: Application, routePrefix: string): void {
+    const router = express.Router();
+    router.get('/calendars/:calendar/events', ExpressHelper.loggedInOnly, this.listEvents.bind(this));
+    router.post('/calendars/:calendar/events', ExpressHelper.loggedInOnly, this.createEvent.bind(this));
+    router.post('/calendars/:calendar/events/:id', ExpressHelper.loggedInOnly, this.updateEvent.bind(this));
+    app.use(routePrefix, router);
   }
 
   async listEvents(req: Request, res: Response) {
@@ -34,7 +28,7 @@ class EventRoutes extends EventProxy {
       return;
     }
 
-    const calendar = await CalendarService.getCalendarByName(calendarName);
+    const calendar = await this.service.getCalendarByName(calendarName);
     if (!calendar) {
       res.status(404).json({
         "error": "calendar not found",
@@ -55,13 +49,16 @@ class EventRoutes extends EventProxy {
       });
       return;
     }
-    if (!req.body.calendarId) {
+
+    const calendarName = req.params.calendar;
+    if (!calendarName) {
       res.status(400).json({
-        "error": "missing calendar id",
+        "error": "missing calendar name",
       });
       return;
     }
-    const calendar = await CalendarService.getCalendar(req.body.calendarId);
+
+    const calendar = await this.service.getCalendarByName(calendarName);
     if (!calendar) {
       res.status(404).json({
         "error": "calendar not found",
@@ -86,5 +83,3 @@ class EventRoutes extends EventProxy {
     res.json(event.toObject());
   }
 }
-
-export default EventRoutes;

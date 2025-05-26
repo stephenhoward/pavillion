@@ -1,21 +1,16 @@
-import { Model, InferAttributes, InferCreationAttributes, DataTypes } from 'sequelize';
+import { Model, Table, Column, PrimaryKey, DataType } from 'sequelize-typescript';
 import db from '@/server/common/entity/db';
 
-class ServiceSettingEntity extends Model<InferAttributes<ServiceSettingEntity>,InferCreationAttributes<ServiceSettingEntity>> {
-
+@Table({ tableName: 'service_config' })
+class ServiceSettingEntity extends Model {
+  @PrimaryKey
+  @Column({ type: DataType.STRING })
   declare parameter: string;
-  declare value: string;
-};
 
-ServiceSettingEntity.init({
-  parameter: {
-    type: DataTypes.STRING,
-    primaryKey: true,
-  },
-  value: DataTypes.STRING,
-},{
-  sequelize: db,
-  tableName: 'service_config',
-});
+  @Column({ type: DataType.STRING })
+  declare value: string;
+}
+
+db.addModels([ServiceSettingEntity]);
 
 export default ServiceSettingEntity;

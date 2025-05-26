@@ -1,12 +1,24 @@
-import express, { Request, Response } from 'express';
-import AccountService from '../../service/account';
-import ExpressHelper from '../../../common/helper/express';
-import { AccountAlreadyExistsError, AccountRegistrationClosedError } from '../../exceptions';
+import express, { Request, Response, Application } from 'express';
+import ExpressHelper from '@/server/common/helper/express';
+import AccountsInterface from '@/server/accounts/interface';
+import { AccountAlreadyExistsError, AccountRegistrationClosedError } from '@/server/accounts/exceptions';
 
-const handlers = {
-  register: async (req: Request, res: Response) => {
+export default class AccountRouteHandlers {
+  private service: AccountsInterface;
+
+  constructor(internalAPI: AccountsInterface) {
+    this.service = internalAPI;
+  }
+
+  installHandlers(app: Application, routePrefix: string): void {
+    const router = express.Router();
+    router.post('/register', ...ExpressHelper.noUserOnly, this.registerHandler.bind(this));
+    app.use(routePrefix, router);
+  }
+
+  async registerHandler(req: Request, res: Response): Promise<void> {
     try {
-      let account = await AccountService.registerNewAccount(req.body.email);
+      let account = await this.service.registerNewAccount(req.body.email);
       if ( account ) {
         res.json({message: 'email sent'});
       }
@@ -26,18 +38,5 @@ const handlers = {
         res.status(400).json({message: 'error creating account'});
       }
     }
-  },
-
-};
-
-var router = express.Router();
-
-/**
- * Register a new account
- * @route POST /api/accounts/v1/register
- * @param email
- * Sends an email to the provided email address to complete the registration process
- */
-router.post('/register', ...ExpressHelper.noUserOnly, handlers.register );
-
-export { handlers, router };
+  }
+}

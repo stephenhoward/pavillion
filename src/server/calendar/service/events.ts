@@ -1,4 +1,3 @@
-import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
 import config from 'config';
 
@@ -9,6 +8,7 @@ import { EventContentEntity, EventEntity, EventScheduleEntity } from "@/server/c
 import CalendarService from "@/server/calendar/service/calendar";
 import { LocationEntity } from "@/server/calendar/entity/location";
 import LocationService from "@/server/calendar/service/locations";
+import { EventEmitter } from 'events';
 
 /**
  * Service class for managing events
@@ -16,10 +16,15 @@ import LocationService from "@/server/calendar/service/locations";
  * @remarks
  * Use this class to manage the lifecycle of events in the system
  */
-class EventService extends EventEmitter {
+class EventService {
+  private locationService: LocationService;
+  private calendarService: CalendarService;
+  private eventBus: EventEmitter;
 
-  constructor() {
-    super();
+  constructor(eventBus: EventEmitter) {
+    this.locationService = new LocationService();
+    this.calendarService = new CalendarService();
+    this.eventBus = eventBus;
   }
 
   /**
@@ -67,7 +72,7 @@ class EventService extends EventEmitter {
      */
   async createEvent(account: Account, calendar: Calendar, eventParams:Record<string,any>): Promise<CalendarEvent> {
 
-    const calendars = await CalendarService.editableCalendarsForUser(account);
+    const calendars = await this.calendarService.editableCalendarsForUser(account);
     if ( ! calendars.some(c => c.id == calendar.id) ) {
       throw( new Error('account cannot add to calendar') );
     }
@@ -86,12 +91,12 @@ class EventService extends EventEmitter {
 
     if( eventParams.location ) {
 
-      let location = await LocationService.findOrCreateLocation(calendar, eventParams.location);
+      let location = await this.locationService.findOrCreateLocation(calendar, eventParams.location);
       eventEntity.location_id = location.id;
       event.location = location;
     }
 
-    eventEntity.save();
+    await eventEntity.save();
 
     if ( eventParams.content ) {
       for( let [language,content] of Object.entries(eventParams.content) ) {
@@ -106,7 +111,7 @@ class EventService extends EventEmitter {
       }
     }
 
-    this.emit('eventCreated', { calendar, event });
+    this.eventBus.emit('eventCreated', { calendar, event });
     return event;
   }
 
@@ -145,8 +150,8 @@ class EventService extends EventEmitter {
     if ( ! eventEntity ) {
       throw new Error('Event not found');
     }
-    const calendar = await CalendarService.getCalendar(eventEntity.calendar_id);
-    const calendars = await CalendarService.editableCalendarsForUser(account);
+    const calendar = await this.calendarService.getCalendar(eventEntity.calendar_id);
+    const calendars = await this.calendarService.editableCalendarsForUser(account);
     if ( ! calendar ) {
       throw( new Error('calendar for event does not exist') );
     }
@@ -204,7 +209,7 @@ class EventService extends EventEmitter {
     }
     else if( eventParams.location ) {
 
-      let location = await LocationService.findOrCreateLocation(calendar, eventParams.location);
+      let location = await this.locationService.findOrCreateLocation(calendar, eventParams.location);
       eventEntity.location_id = location.id;
       event.location = location;
     }
@@ -247,7 +252,7 @@ class EventService extends EventEmitter {
 
     await eventEntity.save();
 
-    this.emit('eventUpdated', { calendar, event });
+    this.eventBus.emit('eventUpdated', { calendar, event });
     return event;
   }
 
@@ -256,7 +261,7 @@ class EventService extends EventEmitter {
      * @param eventParams - the parameters for the new event
      * @returns a promise that resolves to the created Event
      */
-  async addRemoteEvent(eventParams:Record<string,any>): Promise<CalendarEvent> {
+  async addRemoteEvent(calendar: Calendar, eventParams:Record<string,any>): Promise<CalendarEvent> {
 
     if ( ! eventParams.id ) {
       throw new Error('Event id is required');
@@ -274,7 +279,7 @@ class EventService extends EventEmitter {
     if( eventParams.location ) {
       // Todo: See if we already imported this location
 
-      let location = await LocationService.findOrCreateRemoteLocation(eventParams.location);
+      let location = await this.locationService.findOrCreateLocation(calendar, eventParams.location);
       eventEntity.location_id = location.id;
       event.location = location;
     }

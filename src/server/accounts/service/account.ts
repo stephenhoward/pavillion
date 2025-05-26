@@ -1,4 +1,4 @@
-import { randomBytes } from 'crypto';
+import { scryptSync, randomBytes } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { DateTime } from 'luxon';
 import config from 'config';
@@ -6,9 +6,8 @@ import config from 'config';
 import { Account } from "@/common/model/account";
 import AccountInvitation from '@/common/model/invitation';
 import AccountApplication from '@/common/model/application';
-import CommonAccountService from '@/server/common/service/accounts';
 import EmailService from "@/server/common/service/mail";
-import { AccountEntity, AccountSecretsEntity, AccountInvitationEntity, AccountApplicationEntity } from "@/server/common/entity/account";
+import { AccountEntity, AccountSecretsEntity, AccountRoleEntity, AccountInvitationEntity, AccountApplicationEntity } from "@/server/common/entity/account";
 import ServiceSettings from '@/server/configuration/service/settings';
 import { AccountApplicationAlreadyExistsError, noAccountInviteExistsError, AccountRegistrationClosedError, AccountApplicationsClosedError, AccountAlreadyExistsError, AccountInviteAlreadyExistsError, noAccountApplicationExistsError } from '@/server/accounts/exceptions';
 import AuthenticationService from '@/server/authentication/service/auth';
@@ -29,7 +28,10 @@ type AccountInfo = {
  * @remarks
  * Use this class to manage the lifecycle of accounts in the system
  */
-class AccountService {
+export default class AccountService {
+  constructor(
+    private eventBus: any,
+  ) {}
 
   /**
      * Sends the owner of the provided email a message inviting them to create an account,
@@ -40,9 +42,9 @@ class AccountService {
      * @throws AccountAlreadyExistsError if an account already exists for the provided email
      * @throws AccountInviteAlreadyExistsError if an invitation already exists for the provided email
      */
-  static async inviteNewAccount(email:string, message: string): Promise<AccountInvitation> {
+  async inviteNewAccount(email:string, message: string): Promise<AccountInvitation> {
 
-    if ( await CommonAccountService.getAccountByEmail(email) ) {
+    if ( await this.getAccountByEmail(email) ) {
       throw new AccountAlreadyExistsError();
     }
 
@@ -58,7 +60,7 @@ class AccountService {
     });
 
     await invitation.save();
-    AccountService.sendNewAccountInvite(invitation);
+    this.sendNewAccountInvite(invitation);
 
     return invitation.toModel();
   }
@@ -68,7 +70,7 @@ class AccountService {
      * @param id - The ID of the invitation to resend
      * @returns a promise that resolves to the updated invitation or undefined if not found
      */
-  static async resendInvite(id: string): Promise<AccountInvitation|undefined> {
+  async resendInvite(id: string): Promise<AccountInvitation|undefined> {
     const invitation = await AccountInvitationEntity.findByPk(id);
     if (!invitation) {
       return undefined;
@@ -82,7 +84,7 @@ class AccountService {
     await invitation.save();
 
     // Resend the invitation email
-    await AccountService.sendNewAccountInvite(invitation);
+    await this.sendNewAccountInvite(invitation);
 
     return invitation.toModel();
   }
@@ -92,13 +94,13 @@ class AccountService {
      * @param - email the email address to associate with the new account
      * @returns a promise that resolves to a boolean
      */
-  static async registerNewAccount(email:string): Promise<Account> {
+  async registerNewAccount(email:string): Promise<Account> {
 
     const settings = await ServiceSettings.getInstance();
     if ( settings.get('registrationMode') != 'open' ) {
       throw new AccountRegistrationClosedError();
     }
-    const accountInfo = await AccountService._setupAccount(email);
+    const accountInfo = await this._setupAccount(email);
 
     const message = new AccountRegistrationEmail(accountInfo.account, accountInfo.password_code);
     EmailService.sendEmail(message.buildMessage(accountInfo.account.language));
@@ -114,7 +116,7 @@ class AccountService {
      * @throws AccountApplicationsClosedError if registration mode is not set to 'apply'
      * @throws AccountApplicationAlreadyExistsError if an application already exists for the provided email
      */
-  static async applyForNewAccount(email:string, message: string): Promise<boolean> {
+  async applyForNewAccount(email:string, message: string): Promise<boolean> {
 
     const settings = await ServiceSettings.getInstance();
     if ( settings.get('registrationMode') != 'apply' ) {
@@ -150,8 +152,8 @@ class AccountService {
    * @throws {AccountAlreadyExistsError} If an account with the email already exists
    * @private
    */
-  static async _setupAccount(email: string, password?: string): Promise<AccountInfo> {
-    if ( await CommonAccountService.getAccountByEmail(email) ) {
+  async _setupAccount(email: string, password?: string): Promise<AccountInfo> {
+    if ( await this.getAccountByEmail(email) ) {
       throw new AccountAlreadyExistsError();
     }
 
@@ -172,7 +174,7 @@ class AccountService {
     };
 
     if( password ) {
-      CommonAccountService.setPassword(accountEntity.toModel(), password);
+      this.setPassword(accountEntity.toModel(), password);
     }
     else {
       const passwordResetCode = await AuthenticationService.generatePasswordResetCodeForAccount(accountEntity.toModel());
@@ -187,7 +189,7 @@ class AccountService {
    * @param {string} code - The invitation code to validate
    * @returns {Promise<boolean>} True if the code is valid and not expired, false otherwise
    */
-  static async validateInviteCode(code: string): Promise<boolean> {
+  async validateInviteCode(code: string): Promise<boolean> {
     const invitation = await AccountInvitationEntity.findOne({ where: {invitation_code: code}});
     if (!invitation) {
       return false;
@@ -216,9 +218,9 @@ class AccountService {
    * @throws {Error} If the invitation has expired or does not exist
    * @throws {noAccountInviteExistsError} If no invitation exists with the given code
    */
-  static async acceptAccountInvite(code: string, password: string): Promise<Account> {
+  async acceptAccountInvite(code: string, password: string): Promise<Account> {
     // Check if invitation code is valid (not expired)
-    const isValid = await AccountService.validateInviteCode(code);
+    const isValid = await this.validateInviteCode(code);
     if (!isValid) {
       throw new Error('Invitation has expired or does not exist');
     }
@@ -230,7 +232,7 @@ class AccountService {
       throw new noAccountInviteExistsError();
     }
 
-    const accountInfo = await AccountService._setupAccount(invitation.email, password);
+    const accountInfo = await this._setupAccount(invitation.email, password);
 
     // Remove the invitation after it's been accepted
     await invitation.destroy();
@@ -244,7 +246,7 @@ class AccountService {
    * @param {AccountInvitationEntity} invitation - The invitation entity to send
    * @returns {Promise<boolean>} True if the email was sent successfully
    */
-  static async sendNewAccountInvite(invitation:AccountInvitationEntity): Promise<boolean> {
+  async sendNewAccountInvite(invitation:AccountInvitationEntity): Promise<boolean> {
 
     const message = new AccountInvitationEmail(invitation.toModel(), invitation.invitation_code);
     EmailService.sendEmail(message.buildMessage('en'));
@@ -258,7 +260,7 @@ class AccountService {
      * @returns {Promise<Account>} A promise that resolves to the newly created account
      * @throws {noAccountApplicationExistsError} if no application exists with the given ID
      */
-  static async acceptAccountApplication(id: string): Promise<Account> {
+  async acceptAccountApplication(id: string): Promise<Account> {
 
     const application = await AccountApplicationEntity.findByPk(id);
 
@@ -266,7 +268,7 @@ class AccountService {
       throw new noAccountApplicationExistsError();
     }
 
-    const accountInfo = await AccountService._setupAccount(application.email);
+    const accountInfo = await this._setupAccount(application.email);
 
     // Send email before destroying the application
     const message = new ApplicationAcceptedEmail(accountInfo.account, accountInfo.password_code);
@@ -286,7 +288,7 @@ class AccountService {
      * @returns A promise that resolves to undefined
      * @throws {noAccountApplicationExistsError} if no application exists with the given ID
      */
-  static async rejectAccountApplication(id: string, silent: boolean = false): Promise<undefined> {
+  async rejectAccountApplication(id: string, silent: boolean = false): Promise<undefined> {
     const application = await AccountApplicationEntity.findByPk(id);
 
     if (!application) {
@@ -309,7 +311,7 @@ class AccountService {
    *
    * @returns {Promise<AccountInvitation[]>} Array of account invitations
    */
-  static async listInvitations(): Promise<AccountInvitation[]> {
+  async listInvitations(): Promise<AccountInvitation[]> {
     return (await AccountInvitationEntity.findAll()).map( (invitation) => invitation.toModel() );
   }
 
@@ -318,7 +320,7 @@ class AccountService {
    *
    * @returns {Promise<AccountApplication[]>} Array of account applications
    */
-  static async listAccountApplications(): Promise<AccountApplication[]> {
+  async listAccountApplications(): Promise<AccountApplication[]> {
     return (await AccountApplicationEntity.findAll()).map( (application) => application.toModel() );
   }
 
@@ -327,7 +329,7 @@ class AccountService {
      * @param id - The ID of the invitation to delete
      * @returns a promise that resolves to true if successful, false if not found
      */
-  static async cancelInvite(id: string): Promise<boolean> {
+  async cancelInvite(id: string): Promise<boolean> {
     const invitation = await AccountInvitationEntity.findByPk(id);
     if (!invitation) {
       return false;
@@ -343,7 +345,7 @@ class AccountService {
    * @param {string} id - The ID of the account to retrieve
    * @returns {Promise<Account|null>} The account if found, otherwise null
    */
-  static async getAccount(id: string): Promise<Account|null> {
+  async getAccount(id: string): Promise<Account|null> {
     const account = await AccountEntity.findByPk(id);
     return account ? account.toModel() : null;
   }
@@ -355,7 +357,7 @@ class AccountService {
    * @param {string} [domain] - Optional domain to filter by
    * @returns {Promise<Account|null>} The account if found, otherwise null
    */
-  static async getAccountFromUsername(name: string, domain?: string): Promise<Account|null> {
+  async getAccountFromUsername(name: string, domain?: string): Promise<Account|null> {
 
     let account = !domain || config.get('domain') == domain
       ? await AccountEntity.findOne({ where: {
@@ -378,7 +380,7 @@ class AccountService {
    * @param {Account} account - The account to check
    * @returns {Promise<boolean>} True if the account is still registering, false if already registered
    */
-  static async isRegisteringAccount(account: Account): Promise<boolean> {
+  async isRegisteringAccount(account: Account): Promise<boolean> {
     const secretsEntity = await AccountSecretsEntity.findByPk(account.id);
     if ( secretsEntity ) {
       console.log("secretsEntity", secretsEntity);
@@ -389,6 +391,49 @@ class AccountService {
     return true;
   }
 
-}
+  async loadAccountRoles(account: Account): Promise<Account> {
+    let roles = await AccountRoleEntity.findAll({ where: { account_id: account.id } });
+    if ( roles ) {
+      account.roles = roles.map( (role) => role.role );
+    }
+    else {
+      account.roles = [];
+    }
+    return account;
+  }
 
-export default AccountService;
+  async getAccountByEmail(email: string): Promise<Account|undefined> {
+    const account = await AccountEntity.findOne({ where: {email: email}});
+
+    if ( account ) {
+      return await this.loadAccountRoles(account.toModel());
+    }
+  }
+
+  async getAccountById(id: string): Promise<Account|undefined> {
+    const account = await AccountEntity.findByPk(id);
+
+    if ( account ) {
+      return await this.loadAccountRoles(account.toModel());
+    }
+  }
+
+  async setPassword(account:Account, password:string): Promise<boolean> {
+    const secret = await AccountSecretsEntity.findByPk(account.id);
+
+    if ( secret ) {
+      let salt = randomBytes(16).toString('hex');
+      let hashed_password = scryptSync(password, salt, 64 ).toString('hex');
+
+      secret.salt = salt;
+      secret.password = hashed_password;
+      secret.password_reset_code = null;
+      secret.password_reset_expiration = null;
+
+      await secret.save();
+
+      return true;
+    }
+    return false;
+  }
+}

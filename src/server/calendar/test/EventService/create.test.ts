@@ -1,14 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import { DateTime } from 'luxon';
+import { EventEmitter } from 'events';
 
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import { EventLocation } from '@/common/model/location';
 import { EventEntity, EventContentEntity, EventScheduleEntity } from '@/server/calendar/entity/event';
 import EventService from '@/server/calendar/service/events';
-import CalendarService from '@/server/calendar/service/calendar';
-import LocationService from '@/server/calendar/service/locations';
 
 describe('createEvent', () => {
   let service: EventService;
@@ -18,8 +17,8 @@ describe('createEvent', () => {
   let editableCalendarsStub: sinon.SinonStub;
 
   beforeEach(() => {
-    service = new EventService();
-    editableCalendarsStub = sandbox.stub(CalendarService, 'editableCalendarsForUser');
+    service = new EventService(new EventEmitter());
+    editableCalendarsStub = sandbox.stub(service['calendarService'], 'editableCalendarsForUser');
     editableCalendarsStub.resolves([cal]);
   });
 
@@ -53,7 +52,7 @@ describe('createEvent', () => {
 
   it('should create an event with a location', async () => {
     let saveStub = sandbox.stub(EventEntity.prototype, 'save');
-    let findLocationStub = sandbox.stub(LocationService, 'findOrCreateLocation');
+    let findLocationStub = sandbox.stub(service['locationService'], 'findOrCreateLocation');
     let eventSpy = sandbox.spy(EventEntity, 'fromModel');
 
     findLocationStub.resolves(new EventLocation('testId','testLocation', 'testAddress'));

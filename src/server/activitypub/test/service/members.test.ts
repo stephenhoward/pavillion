@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
+import { EventEmitter } from 'events';
 
 import { Account } from '@/common/model/account';
 import ActivityPubService from '@/server/activitypub/service/members';
 import { Calendar } from '@/common/model/calendar';
 import { FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
-import CalendarService from '@/server/calendar/service/calendar';
 
 describe("followCalendar", () => {
   let service: ActivityPubService;
@@ -15,10 +15,11 @@ describe("followCalendar", () => {
   let account: Account = Account.fromObject({ id: 'testAccountId' });
 
   beforeEach(() => {
-    service = new ActivityPubService();
-    getCalendarStub = sandbox.stub(CalendarService, 'getCalendar');
+    const eventBus = new EventEmitter();
+    service = new ActivityPubService(eventBus);
+    getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
     getCalendarStub.resolves(Calendar.fromObject({ id: 'testid' }));
-    userCanEditCalendarStub = sandbox.stub(CalendarService, 'userCanModifyCalendar');
+    userCanEditCalendarStub = sandbox.stub(service.calendarService, 'userCanModifyCalendar');
     userCanEditCalendarStub.resolves(true);
   });
 
@@ -119,10 +120,11 @@ describe("unfollowCalendar", () => {
   let account: Account = Account.fromObject({ id: 'testAccountId' });
 
   beforeEach(() => {
-    service = new ActivityPubService();
-    getCalendarStub = sandbox.stub(CalendarService, 'getCalendar');
+    const eventBus = new EventEmitter();
+    service = new ActivityPubService(eventBus);
+    getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
     getCalendarStub.resolves(Calendar.fromObject({ id: 'testid' }));
-    userCanEditCalendarStub = sandbox.stub(CalendarService, 'userCanModifyCalendar');
+    userCanEditCalendarStub = sandbox.stub(service.calendarService, 'userCanModifyCalendar');
     userCanEditCalendarStub.resolves(true);
   });
 

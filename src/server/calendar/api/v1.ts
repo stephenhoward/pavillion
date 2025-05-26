@@ -1,23 +1,16 @@
 import express, { Application } from 'express';
 import EventRoutes from '@/server/calendar/api/v1/events';
 import CalendarRoutes from '@/server/calendar/api/v1/calendar';
-import EventProxy from '@/server/common/helper/event_proxy';
+import CalendarInterface from '../interface';
 
-class EventAPI extends EventProxy{
-  app: Application;
+export default class CalendarAPI {
 
-  constructor(app: Application) {
-    super();
-    this.app = app;
-
-    let eventsRoutes = new EventRoutes();
-    let calendarRoutes = new CalendarRoutes();
-    this.proxyEvents(eventsRoutes,['eventCreated', 'eventUpdated']);
-
+  static install(app: Application, internalAPI: CalendarInterface): void {
     app.use(express.json());
-    app.use('/api/v1', eventsRoutes.router );
-    app.use('/api/v1', calendarRoutes.router );
+
+    let eventsRoutes = new EventRoutes(internalAPI);
+    eventsRoutes.installHandlers(app, '/api/v1');
+    let calendarRoutes = new CalendarRoutes(internalAPI);
+    calendarRoutes.installHandlers(app, '/api/v1');
   }
 }
-
-export default EventAPI;

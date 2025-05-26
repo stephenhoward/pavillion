@@ -1,10 +1,12 @@
 import express, { Application } from 'express';
-import { router as ConfigRoutes } from '@/server/configuration/api/v1/site';
+import ConfigRoutes from '@/server/configuration/api/v1/site';
+import SettingsInterface from '@/server/configuration/interface';
 
-const apiV1 = (app: Application) => {
+export default class ConfigApiV1 {
+  static install(app: Application, internalAPI: SettingsInterface): void {
+    app.use(express.json());
 
-  app.use(express.json());
-  app.use('/api/config/v1', ConfigRoutes);
-};
-
-export default apiV1;
+    const configRouteHandlers = new ConfigRoutes(internalAPI);
+    configRouteHandlers.installHandlers(app, '/api/config/v1');
+  }
+}
