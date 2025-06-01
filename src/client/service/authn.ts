@@ -448,15 +448,7 @@ export default class AuthenticationService {
 
       try {
         this._refresh_timer = await this._wait( timer * 1000 );
-        if ( this.jwt() ) {
-          let response = await axios.get( this._authUrl('/token'), {} );
-
-          if ( response.status >= 400 ) {
-            throw(response.statusText);
-          }
-
-          this._set_token(response.data);
-        }
+        this._do_token_refresh();
       }
       catch (error) {
         this._unset_token();
@@ -465,6 +457,20 @@ export default class AuthenticationService {
     }
     else {
       this._unset_token();
+    }
+  }
+
+  async _do_token_refresh() {
+    if ( this.jwt() ) {
+      console.log('Refreshing JWT token');
+      let response = await axios.get( this._authUrl('/token') );
+
+      if ( response.status >= 400 ) {
+        console.log(response);
+        throw(response.statusText);
+      }
+
+      this._set_token(response.data);
     }
   }
 

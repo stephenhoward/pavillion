@@ -1,9 +1,15 @@
 import express from 'express';
 import db from '@/server/common/entity/db';
 import sinon from 'sinon';
+import { v4 as uuidv4 } from 'uuid';
 import request from 'supertest';
 import initPavillionServer from '@/server/server';
 import crypto from 'crypto';
+import { AccountEntity, AccountRoleEntity, AccountSecretsEntity } from'@/server/common/entity/account';
+import AccountsInterface from '@/server/accounts/interface';
+import EventEmtter from 'events';
+import { Account } from '@/common/model/account';
+
 
 export class TestEnvironment {
   app: express.Application;
@@ -36,6 +42,34 @@ export class TestEnvironment {
       .set('Date', new Date().toUTCString())
       .set('Digest', 'SHA-256='+crypto.createHash('sha256').update(JSON.stringify(requestData)).digest('base64'))
       .send(requestData);
+  }
+
+  // Create user account directly in database for tests
+  async createTestUser(email: string, password: string, roles: string[] = []): Promise<Account> {
+
+    const accountEntity = await AccountEntity.create({
+      id: uuidv4(),
+      email: email,
+      language: 'en',
+    });
+
+    // Create account secrets entity (required for password setting)
+    await AccountSecretsEntity.create({
+      account_id: accountEntity.id,
+    });
+
+    // Add roles
+    for (const role of roles) {
+      await AccountRoleEntity.create({
+        account_id: accountEntity.id,
+        role: role,
+      });
+    }
+
+    const account = accountEntity.toModel();
+    await (new AccountsInterface(new EventEmtter())).setPassword(account, password);
+
+    return account;
   }
 
   stubRemoteCalendar(getStub: sinon.SinonStub, remoteDomain: string, calendarName: string) {
