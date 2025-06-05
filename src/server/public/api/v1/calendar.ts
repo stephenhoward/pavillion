@@ -1,27 +1,24 @@
-import express, { Request, Response } from 'express';
+import express, { Request, Response, Application } from 'express';
+import PublicCalendarInterface from '../../interface';
 
-import CalendarService from '@/server/calendar/service/calendar';
-import EventService from '@/server/calendar/service/events';
+export default class CalendarRoutes {
+  service: PublicCalendarInterface;
 
-class CalendarRoutes {
-  router: express.Router;
-  service: EventService;
+  constructor(internalAPI: PublicCalendarInterface) {
+    this.service = internalAPI;
+  }
 
-  constructor() {
-
-    this.router = express.Router();
-
-    this.router.get('/calendars/:urlName', (req, res) => this.getCalendar(req, res));
-    this.router.get('/calendars/:calendar/events', (req, res) => this.listEvents(req, res));
-    this.router.get('/events/:id', (req, res) => this.getEvent(req,res));
-
-    this.service = new EventService();
-
+  installHandlers(app: Application, routePrefix: string): void {
+    const router = express.Router();
+    router.get('/calendars/:urlName', this.getCalendar.bind(this));
+    router.get('/calendars/:calendar/events', this.listInstances.bind(this));
+    router.get('/events/:id', this.getEvent.bind(this));
+    app.use(routePrefix, router);
   }
 
   async getCalendar(req: Request, res: Response) {
 
-    const calendar = await CalendarService.getCalendarByName(req.params.urlName);
+    const calendar = await this.service.getCalendarByName(req.params.urlName);
     if (calendar) {
       res.json(calendar.toObject());
     }
@@ -32,7 +29,7 @@ class CalendarRoutes {
     }
   }
 
-  async listEvents(req: Request, res: Response) {
+  async listInstances(req: Request, res: Response) {
     const calendarName = req.params.calendar;
     if ( !req.params.calendar ) {
       res.status(400).json({
@@ -41,7 +38,7 @@ class CalendarRoutes {
       return;
     }
 
-    const calendar = await CalendarService.getCalendarByName(calendarName);
+    const calendar = await this.service.getCalendarByName(calendarName);
     if (!calendar) {
       res.status(404).json({
         "error": "calendar not found",
@@ -49,8 +46,8 @@ class CalendarRoutes {
       return;
     }
 
-    const events = await this.service.listEvents(calendar);
-    res.json(events.map((event) => event.toObject()));
+    const instances = await this.service.listEventInstances(calendar);
+    res.json(instances.map((instance) => instance.toObject()));
   }
 
   async getEvent(req: Request, res: Response) {
@@ -67,5 +64,3 @@ class CalendarRoutes {
   }
 
 }
-
-export default CalendarRoutes;

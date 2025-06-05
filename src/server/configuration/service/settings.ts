@@ -4,6 +4,7 @@ import ServiceSettingEntity from "@/server/configuration/entity/settings";
 type Config = {
   registrationMode: 'open' | 'apply' | 'invite' | 'closed';
   siteTitle: string;
+  eventInstanceMonths: number;
 };
 class ServiceSettings {
   private static instance: ServiceSettings;
@@ -13,6 +14,7 @@ class ServiceSettings {
     this.config = {
       registrationMode: 'closed',
       siteTitle: config.get('domain'),
+      eventInstanceMonths: 6,
     };
   }
 
@@ -39,7 +41,7 @@ class ServiceSettings {
     return ServiceSettings.instance;
   }
 
-  get(key: string): string | undefined {
+  get(key: string): string | number | undefined {
     if ( key in this.config) {
       return this.config[key as keyof Config];
     }
@@ -51,7 +53,7 @@ class ServiceSettings {
    * @param value: the new value for the setting
    * @returns Promise resolving to true if update was successful
    */
-  async set(parameter: string, value: string): Promise<boolean> {
+  async set(parameter: string, value: string|number): Promise<boolean> {
     if( ! (parameter in this.config) ) {
       console.error('Invalid parameter:', parameter);
       return false;
@@ -59,7 +61,7 @@ class ServiceSettings {
 
     // Validate the mode
     if ( parameter == 'registrationMode' ) {
-      if (!['open', 'apply', 'invite', 'closed'].includes(value)) {
+      if (!['open', 'apply', 'invite', 'closed'].includes(value as string)) {
         console.error('Invalid registration mode:', value);
         return false;
       }
@@ -72,11 +74,36 @@ class ServiceSettings {
     });
 
     if (!created) {
-      entity.value = value;
+      entity.value = value as string;
       await entity.save();
     }
 
-    this.config[parameter as keyof Config] =  value;// as 'open' | 'apply' | 'invite' | 'closed';
+    switch (parameter) {
+      case 'registrationMode':
+        if (['open', 'apply', 'invite', 'closed'].includes(value as string)) {
+          this.config.registrationMode = value as 'open' | 'apply' | 'invite' | 'closed';
+        }
+        else {
+          console.error('Invalid registration mode:', value);
+          return false;
+        }
+        break;
+      case 'siteTitle':
+        this.config.siteTitle = value as string;
+        break;
+      case 'eventInstanceMonths':
+        if (typeof value === 'number' && value > 0) {
+          this.config.eventInstanceMonths = value as number;
+        }
+        else {
+          console.error('Invalid event instance months:', value);
+          return false;
+        }
+        break;
+      default:
+        // For other parameters, just update the config
+        break;
+    }
 
     return true;
   }

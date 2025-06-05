@@ -1,4 +1,3 @@
-import { DateTime } from 'luxon';
 import { Calendar } from '@/common/model/calendar';
 import ModelService from '@/client/service/models';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError } from '@/common/exceptions/calendar';
@@ -6,19 +5,13 @@ import { UnauthenticatedError, UnknownError, EmptyValueError } from '@/common/ex
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { CalendarEvent } from '@/common/model/events';
 import { useEventStore } from '@/client/stores/eventStore';
-import { startAndEndDates } from '@/common/model/events';
+import CalendarEventInstance from '@/common/model/event_instance';
 
 const errorMap = {
   UrlNameAlreadyExistsError,
   InvalidUrlNameError,
   UnauthenticatedError,
   UnknownError,
-};
-
-type EventInstance = {
-  event: CalendarEvent;
-  start: DateTime;
-  end: DateTime|null;
 };
 
 export default class CalendarService {
@@ -58,10 +51,10 @@ export default class CalendarService {
    * @param calendarUrlName The URL name of the calendar
    * @returns Promise<Array<CalendarEvent>> The events in the calendar
    */
-  async loadCalendarEvents(calendarUrlName: string): Promise<Array<CalendarEvent>> {
+  async loadCalendarEvents(calendarUrlName: string): Promise<CalendarEventInstance[]> {
     try {
       const events = await ModelService.listModels(`/api/public/v1/calendars/${calendarUrlName}/events`);
-      const calendarEvents = events.map(event => CalendarEvent.fromObject(event));
+      const calendarEvents = events.map(event => CalendarEventInstance.fromObject(event));
       this.eventStore.setEvents(calendarEvents);
       return calendarEvents;
     }
@@ -72,23 +65,17 @@ export default class CalendarService {
   }
 
 
-  async loadCalendarEventsByDay(calendarUrlName: string): Promise<Record<string, Array<EventInstance>>> {
+  async loadCalendarEventsByDay(calendarUrlName: string): Promise<Record<string, CalendarEventInstance[]>> {
     const events = await this.loadCalendarEvents(calendarUrlName);
-    const eventsByDay: Record<string,Array<EventInstance>> = {};
-    events.forEach((event: CalendarEvent) => {
-      event.instances(10).forEach((datetimes: startAndEndDates) => {
-        const dateKey = datetimes.start.toISODate();
-        if ( dateKey ) {
-          if (!eventsByDay[dateKey]) {
-            eventsByDay[dateKey] = [];
-          }
-          eventsByDay[dateKey].push({
-            event: event,
-            start: datetimes.start,
-            end: datetimes.end,
-          });
+    const eventsByDay: Record<string,CalendarEventInstance[]> = {};
+    events.forEach((instance: CalendarEventInstance) => {
+      const dateKey = instance.start.toISODate();
+      if ( dateKey ) {
+        if (!eventsByDay[dateKey]) {
+          eventsByDay[dateKey] = [];
         }
-      });
+        eventsByDay[dateKey].push(instance);
+      }
     });
     return eventsByDay;
   }

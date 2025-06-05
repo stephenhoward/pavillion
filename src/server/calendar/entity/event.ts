@@ -50,7 +50,16 @@ class EventEntity extends Model {
   declare location: LocationEntity;
 
   toModel(): CalendarEvent {
-    return new CalendarEvent( this.calendar_id, this.id, this.event_source_url );
+    let model = new CalendarEvent( this.calendar_id, this.id, this.event_source_url );
+    if ( this.location ) {
+      model.location = this.location.toModel();
+    }
+    if ( this.content && this.content.length > 0 ) {
+      for ( let content of this.content ) {
+        model.addContent(content.toModel());
+      }
+    }
+    return model;
   };
 
   static fromModel(event: CalendarEvent): EventEntity {

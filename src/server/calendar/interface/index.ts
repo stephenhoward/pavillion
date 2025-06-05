@@ -6,17 +6,19 @@ import CalendarService from '../service/calendar';
 import EventService from '../service/events';
 import LocationService from '../service/locations';
 import { EventEmitter } from 'events';
+import EventInstanceService from '../service/event_instance';
 
 export default class CalendarInterface {
   private calendarService: CalendarService;
   private eventService: EventService;
   private locationService: LocationService;
+  private eventInstanceService: EventInstanceService;
 
   constructor(eventBus: EventEmitter ) {
     this.calendarService = new CalendarService();
     this. eventService = new EventService(eventBus);
     this. locationService = new LocationService();
-
+    this.eventInstanceService = new EventInstanceService(eventBus);
   }
 
   // Calendar operations
@@ -84,5 +86,17 @@ export default class CalendarInterface {
 
   async findOrCreateLocation(calendar: Calendar, locationParams: Record<string, any>): Promise<EventLocation> {
     return this.locationService.findOrCreateLocation(calendar, locationParams);
+  }
+
+  async buildEventInstances(event: CalendarEvent): Promise<void> {
+    return this.eventInstanceService.buildEventInstances(event);
+  }
+
+  async removeEventInstances(event: CalendarEvent): Promise<void> {
+    return this.eventInstanceService.removeEventInstances(event);
+  }
+
+  async refreshAllEventInstances(): Promise<void> {
+    return this.eventInstanceService.refreshAllEventInstances();
   }
 }

@@ -13,7 +13,7 @@ import ActivityPubDomain from './activitypub';
 import AuthenticationDomain from './authentication';
 import CalendarDomain from '@/server/calendar';
 import ConfigurationDomain from './configuration';
-import PublicAPI from '@/server/public/api/v1';
+import PublicCalendarDomain from './public';
 
 /**
  * Initializes the Pavillion server with express application configuration.
@@ -56,13 +56,16 @@ const initPavillionServer = async (app: express.Application) => {
   new ActivityPubDomain(eventBus).initialize(app);
   new AuthenticationDomain(eventBus).initialize(app);
   new ConfigurationDomain(eventBus).initialize(app);
-  new CalendarDomain(eventBus).initialize(app);
-  new PublicAPI(app);
+  const calendarDomain = new CalendarDomain(eventBus);
+  calendarDomain.initialize(app);
+  new PublicCalendarDomain(eventBus).initialize(app);
 
   app.listen(config.get('host.port'), () => {
     if ( process.env.NODE_ENV == "development" ) {
       db.sync({force: true}).then(() => {
-        seedDB();
+        seedDB().then(() => {
+          calendarDomain.interface.refreshAllEventInstances();
+        });
       });
       console.log(`Pavillion listening at http://localhost:${config.get('host.port')}/`);
     }

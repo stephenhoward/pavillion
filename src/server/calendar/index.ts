@@ -23,7 +23,7 @@ export default class CalendarDomain {
   }
 
   public installEventHandlers() {
-    new CalendarEventHandlers().install(this.eventBus);
+    new CalendarEventHandlers(this.interface).install(this.eventBus);
   }
 }
 

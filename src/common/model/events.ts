@@ -1,6 +1,4 @@
 import { DateTime } from 'luxon';
-import * as rruleModule from 'rrule';
-const { RRule, RRuleSet } = rruleModule;
 
 import { Model, TranslatedModel, TranslatedContentModel } from '@/common/model/model';
 import { EventLocation } from '@/common/model/location';
@@ -85,87 +83,6 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
       throw new Error('Invalid schedule index');
     }
     this.schedules.splice(index, 1);
-  }
-
-  rrules(): RRuleSet {
-    const rruleSet = new RRuleSet();
-
-    // Map our EventFrequency enum to RRule's Frequency enum
-    const frequencyMap: Record<EventFrequency, number> = {
-      [EventFrequency.DAILY]: RRule.DAILY,
-      [EventFrequency.WEEKLY]: RRule.WEEKLY,
-      [EventFrequency.MONTHLY]: RRule.MONTHLY,
-      [EventFrequency.YEARLY]: RRule.YEARLY,
-    };
-    for (let schedule of this.schedules) {
-      const frequency = schedule.frequency !== null
-        ? frequencyMap[schedule.frequency]
-        : undefined;
-      if ( frequency ) {
-        let options: Record<string,any> = {
-          freq: frequency,
-          interval: schedule.interval,
-          dtstart: schedule.startDate?.toJSDate(),
-        };
-        if ( schedule.count ) {
-          options.count = schedule.count;
-        }
-        else if ( schedule.endDate ) {
-          options.until = schedule.endDate?.toJSDate();
-        }
-        if ( schedule.byDay?.length ) {
-          options.byweekday = schedule.byDay.map(day => parseInt(day));
-        }
-        const rule = new RRule(options);
-        if ( schedule.isExclusion ) {
-          rruleSet.exrule(rule);
-        }
-        else {
-          rruleSet.rrule(rule);
-        }
-      }
-      else {
-        if ( schedule.isExclusion ) {
-          rruleSet.exdate(schedule.startDate.toJSDate());
-        }
-        else {
-          rruleSet.rdate(schedule.startDate.toJSDate());
-        }
-      }
-    }
-    return rruleSet;
-  }
-
-  instances(count: number): startAndEndDates[] {
-    const rruleSet = this.rrules();
-
-    // Map our EventFrequency enum to RRule's Frequency enum
-    const frequencyMap: Record<EventFrequency, number> = {
-      [EventFrequency.DAILY]: RRule.DAILY,
-      [EventFrequency.WEEKLY]: RRule.WEEKLY,
-      [EventFrequency.MONTHLY]: RRule.MONTHLY,
-      [EventFrequency.YEARLY]: RRule.YEARLY,
-    };
-    let startToEndMatches: Record<string,DateTime> = {};
-    for (let schedule of this.schedules) {
-      if ( schedule.startDate && schedule.endDate ) {
-        startToEndMatches[schedule.startDate.toISO()] = schedule.endDate;
-      }
-    }
-
-    return rruleSet
-      .all((date,i) => { return i < count; })
-      .map((date) => {
-        const startDate = DateTime.fromJSDate(date);
-        const endDate = ( startDate.toISO() in startToEndMatches )
-          ? startToEndMatches[startDate.toISO()]
-          : null;
-
-        return {
-          start: startDate,
-          end: endDate,
-        };
-      });
   }
 
   /**

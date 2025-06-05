@@ -1,10 +1,17 @@
 import { EventEmitter } from 'events';
 import { DomainEventHandlers } from '@/server/common/types/domain';
+import CalendarInterface from '../interface';
 
 export default class CalendarEventHandlers implements DomainEventHandlers {
-  constructor() {}
+  private service: CalendarInterface;
+
+  constructor(service: CalendarInterface) {
+    this.service = service;
+  }
 
   install(eventBus: EventEmitter): void {
-    // No events handlers yet
+    eventBus.on('eventCreated', async (e) => this.service.buildEventInstances(e.event));
+    eventBus.on('eventUpdated', async (e) => this.service.buildEventInstances(e.event));
+    eventBus.on('eventDeleted', async (e) => this.service.removeEventInstances(e.event));
   }
 }

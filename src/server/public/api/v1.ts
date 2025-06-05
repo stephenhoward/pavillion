@@ -1,17 +1,12 @@
 import express, { Application } from 'express';
 import CalendarRoutes from '@/server/public/api/v1/calendar';
+import PublicCalendarInterface from '../interface';
 
-class EventAPI {
-  app: Application;
-
-  constructor(app: Application) {
-    this.app = app;
-
-    let calendarRoutes = new CalendarRoutes();
-
+export default class PublicCalendarAPI {
+  static install(app: Application, internalAPI: PublicCalendarInterface): void {
     app.use(express.json());
-    app.use('/api/public/v1', calendarRoutes.router );
+
+    let eventsRoutes = new CalendarRoutes(internalAPI);
+    eventsRoutes.installHandlers(app, '/api/public/v1');
   }
 }
-
-export default EventAPI;
