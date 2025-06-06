@@ -383,7 +383,6 @@ export default class AccountService {
   async isRegisteringAccount(account: Account): Promise<boolean> {
     const secretsEntity = await AccountSecretsEntity.findByPk(account.id);
     if ( secretsEntity ) {
-      console.log("secretsEntity", secretsEntity);
       if ( secretsEntity.password?.length ) {
         return false;
       }

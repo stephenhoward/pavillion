@@ -59,7 +59,6 @@ export default class ActivityPubService {
   async lookupUserProfile(calendarName: string): Promise<UserProfileResponse|null> {
     let calendar = await this.calendarService.getCalendarByName(calendarName);
 
-    console.log(calendar);
     if ( calendar ) {
       return new UserProfileResponse(calendar.urlName, config.get('domain'));
     }

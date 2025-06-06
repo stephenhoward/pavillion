@@ -93,7 +93,6 @@ const filterLanguages = () => {
   });
 };
 const selectLanguage = (lang) => {
-  console.log(lang);
   emit('select', lang);
   emit('close');
 };

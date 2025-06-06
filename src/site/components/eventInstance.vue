@@ -33,7 +33,6 @@ onBeforeMount(async () => {
     }
 
     state.instance = await calendarService.loadEventInstance(instanceId);
-    console.log('Event instance:', state.instance);
     if (!state.instance) {
       state.notFound = true;
       return;
