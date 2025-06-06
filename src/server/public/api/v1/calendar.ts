@@ -13,6 +13,7 @@ export default class CalendarRoutes {
     router.get('/calendars/:urlName', this.getCalendar.bind(this));
     router.get('/calendars/:calendar/events', this.listInstances.bind(this));
     router.get('/events/:id', this.getEvent.bind(this));
+    router.get('/instances/:id', this.getEventInstance.bind(this));
     app.use(routePrefix, router);
   }
 
@@ -59,6 +60,19 @@ export default class CalendarRoutes {
     else {
       res.status(404).json({
         "error": "event not found",
+      });
+    }
+  }
+
+  async getEventInstance(req: Request, res: Response) {
+    const instanceId = req.params.id;
+    const instance = await this.service.getEventInstanceById(instanceId);
+    if ( instance ) {
+      res.json(instance.toObject());
+    }
+    else {
+      res.status(404).json({
+        "error": "instance not found",
       });
     }
   }

@@ -2,12 +2,14 @@ import { DateTime } from 'luxon';
 import { CalendarEvent } from '@/common/model/events';
 
 export default class CalendarEventInstance {
+  id: string;
   start: DateTime;
   end: DateTime | null;
   event: CalendarEvent;
   calendarId: string = '';
 
-  constructor(event: CalendarEvent, start: DateTime, end: DateTime | null) {
+  constructor(id: string, event: CalendarEvent, start: DateTime, end: DateTime | null) {
+    this.id = id;
     this.event = event;
     this.calendarId = event.calendarId;
     this.start = start;
@@ -15,6 +17,7 @@ export default class CalendarEventInstance {
   }
   static fromObject(obj: Record<string,any>): CalendarEventInstance {
     return new CalendarEventInstance(
+      obj.id,
       CalendarEvent.fromObject(obj.event),
       DateTime.fromISO(obj.start),
       obj.end ? DateTime.fromISO(obj.end) : null,
@@ -22,6 +25,7 @@ export default class CalendarEventInstance {
   }
   toObject(): Record<string, any> {
     return {
+      id: this.id,
       event: this.event.toObject(),
       calendarId: this.calendarId,
       start: this.start.toISO(),

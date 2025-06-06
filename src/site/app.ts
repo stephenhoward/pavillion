@@ -9,6 +9,7 @@ import '@/site/assets/style.scss';
 import AppVue from '@/site/components/app.vue';
 import CalendarView from '@/site/components/calendar.vue';
 import EventView from '@/site/components/event.vue';
+import EventInstanceView from '@/site/components/eventInstance.vue';
 import Authentication from '@/client/service/authn';
 import Config from '@/client/service/config';
 
@@ -20,6 +21,7 @@ Config.init().then( (config) => {
   const routes: RouteRecordRaw[] = [
     { path: '/@:calendar', component: CalendarView, name: 'calendar' },
     { path: '/@:calendar/events/:event', component: EventView, name: 'event' },
+    { path: '/@:calendar/events/:event/:instance', component: EventInstanceView, name: 'instance' },
   ];
 
   const router = createRouter({

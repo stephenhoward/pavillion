@@ -1,4 +1,4 @@
-import { Model, Table, Column, BelongsTo, DataType, ForeignKey } from 'sequelize-typescript';
+import { Model, Table, Column, BelongsTo, DataType, ForeignKey, PrimaryKey } from 'sequelize-typescript';
 import { DateTime } from 'luxon';
 import db from '@/server/common/entity/db';
 import CalendarEventInstance from '@/common/model/event_instance';
@@ -7,6 +7,10 @@ import { CalendarEntity } from './calendar';
 
 @Table({ tableName: 'event_instance' })
 export class EventInstanceEntity extends Model {
+
+  @PrimaryKey
+  @Column({ type: DataType.UUID })
+  declare id: string;
 
   @ForeignKey(() => EventEntity)
   @Column({ type: DataType.UUID })
@@ -27,6 +31,7 @@ export class EventInstanceEntity extends Model {
 
   toModel(): CalendarEventInstance {
     return new CalendarEventInstance(
+      this.id,
       this.event.toModel(),
       DateTime.fromJSDate(this.start_time),
       this.end_time ? DateTime.fromJSDate(this.end_time) : null,
@@ -34,6 +39,7 @@ export class EventInstanceEntity extends Model {
   }
   static fromModel(eventInstance: CalendarEventInstance): EventInstanceEntity {
     return EventInstanceEntity.build({
+      id: eventInstance.id,
       calendar_id: eventInstance.event.calendarId,
       event_id: eventInstance.event.id,
       start_time: eventInstance.start.toJSDate(),

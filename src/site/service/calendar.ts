@@ -3,9 +3,9 @@ import ModelService from '@/client/service/models';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError } from '@/common/exceptions/calendar';
 import { UnauthenticatedError, UnknownError, EmptyValueError } from '@/common/exceptions';
 import { useCalendarStore } from '@/client/stores/calendarStore';
-import { CalendarEvent } from '@/common/model/events';
-import { useEventStore } from '@/client/stores/eventStore';
+import { useEventInstanceStore } from '@/site/stores/eventInstanceStore';
 import CalendarEventInstance from '@/common/model/event_instance';
+import { CalendarEvent } from '@/common/model/events';
 
 const errorMap = {
   UrlNameAlreadyExistsError,
@@ -16,9 +16,9 @@ const errorMap = {
 
 export default class CalendarService {
   store: ReturnType<typeof useCalendarStore>;
-  eventStore: ReturnType<typeof useEventStore>;
+  eventStore: ReturnType<typeof useEventInstanceStore>;
 
-  constructor(store: ReturnType<typeof useCalendarStore> = useCalendarStore(), eventStore: ReturnType<typeof useEventStore> = useEventStore()) {
+  constructor(store: ReturnType<typeof useCalendarStore> = useCalendarStore(), eventStore: ReturnType<typeof useEventInstanceStore> = useEventInstanceStore()) {
     this.store = store;
     this.eventStore = eventStore;
   }
@@ -74,18 +74,35 @@ export default class CalendarService {
         if (!eventsByDay[dateKey]) {
           eventsByDay[dateKey] = [];
         }
+        console.debug('Adding event to day:', dateKey, instance);
         eventsByDay[dateKey].push(instance);
       }
     });
     return eventsByDay;
   }
 
+  async loadEventInstance(instanceId: string): Promise<CalendarEventInstance|null> {
+    try {
+      const instance = await ModelService.getModel(`/api/public/v1/instances/${instanceId}`);
+      if (instance) {
+        const calendarEvent = CalendarEventInstance.fromObject(instance);
+        this.eventStore.addEvent(calendarEvent);
+        return calendarEvent;
+      }
+      return null;
+    }
+    catch (error) {
+      console.error('Error loading instance:', error);
+      throw error;
+    }
+  }
+
+
   async loadEvent(eventId: string): Promise<CalendarEvent|null> {
     try {
       const event = await ModelService.getModel(`/api/public/v1/events/${eventId}`);
       if (event) {
         const calendarEvent = CalendarEvent.fromObject(event);
-        this.eventStore.addEvent(calendarEvent);
         return calendarEvent;
       }
       return null;

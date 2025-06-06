@@ -29,4 +29,8 @@ export default class PublicCalendarInterface {
     return this.eventService.getEventById(eventId);
   }
 
+  async getEventInstanceById(instanceId: string): Promise<CalendarEventInstance> {
+    return this.eventInstanceService.getEventInstanceById(instanceId);
+  }
+
 }

@@ -1,4 +1,5 @@
 import { EventEmitter } from "events";
+import { v4 as uuidv4 } from 'uuid';
 import { CalendarEvent, EventFrequency } from "@/common/model/events";
 import CalendarEventInstance from "@/common/model/event_instance";
 import { EventContentEntity, EventEntity, EventScheduleEntity } from "@/server/calendar/entity/event";
@@ -41,6 +42,22 @@ export default class EventInstanceService {
 
     return eventInstances.map((instance) => instance.toModel());
   };
+
+  async getEventInstanceById(instanceId: string): Promise<CalendarEventInstance> {
+    const eventInstance = await EventInstanceEntity.findOne({
+      where: { id: instanceId },
+      include: [{
+        model: EventEntity,
+        include: [EventContentEntity, LocationEntity, EventScheduleEntity],
+      }],
+    });
+
+    if (!eventInstance) {
+      throw new Error('Event instance not found');
+    }
+
+    return eventInstance.toModel();
+  }
 
   async buildEventInstances(event: CalendarEvent): Promise<void> {
 
@@ -151,6 +168,7 @@ export default class EventInstanceService {
           : null;
 
         return CalendarEventInstance.fromObject({
+          id: uuidv4(),
           event: event,
           start: startDate,
           end: endDate,

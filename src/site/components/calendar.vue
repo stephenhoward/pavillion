@@ -3,7 +3,7 @@ import { reactive, onBeforeMount } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useRoute } from 'vue-router';
 import CalendarService from '../service/calendar';
-import { useEventStore } from '../../client/stores/eventStore';
+import { useEventInstanceStore } from '../stores/eventInstanceStore';
 import NotFound from './notFound.vue';
 import { DateTime } from 'luxon';
 
@@ -19,7 +19,7 @@ const state = reactive({
   dates: [],
 });
 const calendarService = new CalendarService();
-const eventStore = useEventStore();
+const eventStore = useEventInstanceStore();
 
 onBeforeMount(async () => {
   try {
@@ -58,12 +58,12 @@ onBeforeMount(async () => {
     </header>
     <main>
       <div v-if="state.err" class="error">{{ state.err }}</div>
-      <div v-if="eventStore.events && eventStore.events.length > 0">
+      <div v-if="eventStore.instances && eventStore.instances.length > 0">
         <section class="day" v-for="day in Object.keys(state.events).sort()">
           <h2>{{ DateTime.fromISO(day).toLocaleString({weekday: 'long', month: 'long', day: 'numeric'}) }}</h2>
           <ul class="events">
             <li class="event" v-for="instance in state.events[day]">
-              <h3><router-link :to="{ name: 'event', params: { event: instance.event.id } }">{{ instance.event.content("en").name }}</router-link></h3>
+              <h3><router-link :to="{ name: 'instance', params: { event: instance.event.id, instance: instance.id } }">{{ instance.event.content("en").name }}</router-link></h3>
               <div>{{ instance.start.toLocaleString(DateTime.TIME_SIMPLE) }}</div>
             </li>
           </ul>
