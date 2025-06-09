@@ -27,6 +27,8 @@ export default defineConfig({
       // Ensure JSON imports work properly for i18next translation files
       '@/client/locale': '/src/client/locale',
       '@/site/locale': '/src/site/locale',
+      // Fix iso-639-1-dir package exports issue
+      'iso-639-1-dir': '/node_modules/iso-639-1-dir/dist/index.mjs',
     },
   },
 });

@@ -13,6 +13,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': '/src',
+      'iso-639-1-dir': '/node_modules/iso-639-1-dir/dist/index.mjs',
     },
   },
 });
