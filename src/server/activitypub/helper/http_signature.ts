@@ -96,23 +96,6 @@ export async function verifyHttpSignature(req: Request, res: Response, next: Nex
 }
 
 /**
- * Extracts actor URL from a keyId.
- *
- * @param {string} keyId - The key identifier URL
- * @returns {string} The extracted actor URL or empty string if extraction fails
- */
-function extractActorFromKeyId(keyId: string): string {
-  try {
-    const url = new URL(keyId);
-    return `${url.protocol}//${url.host}${url.pathname.split('#')[0]}`;
-  }
-  catch (e) {
-    console.error(e);
-    return '';
-  }
-}
-
-/**
  * Gets a public key with caching support to reduce network requests.
  *
  * @param {string} keyId - The key identifier URL

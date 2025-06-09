@@ -1,5 +1,4 @@
 import { Application } from 'express';
-import { DomainDependencies } from '@/server/common/types/domain';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import ActivityPubEventHandlers from '@/server/activitypub/events';
 import ActivityPubAPI from '@/server/activitypub/api/v1';

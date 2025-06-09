@@ -14,10 +14,11 @@ class Model {
   /**
    * Creates a model instance from a plain JavaScript object.
    *
-   * @param {Record<string,any>} object - Plain object to convert into a model
+   * @param {Record<string,any>} obj - Plain object to convert into a model
    * @returns {Model} A new model instance
    */
-  static fromObject(object: Record<string,any>): Model { return new Model(); }
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  static fromObject(obj: Record<string,any>): Model { return new Model(); }
 };
 
 /**

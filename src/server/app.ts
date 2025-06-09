@@ -1,3 +1,4 @@
+import config from 'config';
 import express from 'express';
 import initPavillionServer from '@/server/server';
 
@@ -11,7 +12,7 @@ import initPavillionServer from '@/server/server';
 const main = (providedApp?: express.Application): express.Application => {
   const app: express.Application = providedApp || express();
 
-  initPavillionServer(app);
+  initPavillionServer(app, config.get('host.port'));
 
   return app;
 };

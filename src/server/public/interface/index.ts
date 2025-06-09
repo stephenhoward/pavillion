@@ -1,36 +1,39 @@
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent } from '@/common/model/events';
-import CalendarService from '@/server/calendar/service/calendar';
-import EventService from '@/server/calendar/service/events';
 import { EventEmitter } from 'events';
-import EventInstanceService from '@/server/calendar/service/event_instance';
 import CalendarEventInstance from '@/common/model/event_instance';
+import CalendarInterface from '@/server/calendar/interface';
 
+/**
+ * Public interface for calendar operations
+ *
+ * This interface provides public access to calendar functionality
+ * while respecting domain boundaries through dependency injection.
+ */
 export default class PublicCalendarInterface {
-  private calendarService: CalendarService;
-  private eventService: EventService;
-  private eventInstanceService: EventInstanceService;
+  private calendarInterface: CalendarInterface; // Should be properly typed CalendarInterface when available
 
-  constructor(eventBus: EventEmitter ) {
-    this.calendarService = new CalendarService();
-    this. eventService = new EventService(eventBus);
-    this.eventInstanceService = new EventInstanceService(eventBus);
+  constructor(
+    private eventBus: EventEmitter,
+    calendarInterface: CalendarInterface,
+  ) {
+    this.calendarInterface = calendarInterface;
   }
 
   async getCalendarByName(name: string): Promise<Calendar|null> {
-    return this.calendarService.getCalendarByName(name);
+    return this.calendarInterface.getCalendarByName(name);
   }
 
   async listEventInstances(calendar: Calendar): Promise<CalendarEventInstance[]> {
-    return this.eventInstanceService.listEventInstancesForCalendar(calendar);
+    return this.calendarInterface.listEventInstancesForCalendar(calendar);
   }
 
   async getEventById(eventId: string): Promise<CalendarEvent> {
-    return this.eventService.getEventById(eventId);
+    return this.calendarInterface.getEventById(eventId);
   }
 
-  async getEventInstanceById(instanceId: string): Promise<CalendarEventInstance> {
-    return this.eventInstanceService.getEventInstanceById(instanceId);
+  async getEventInstanceById(instanceId: string): Promise<CalendarEventInstance|null> {
+    return this.calendarInterface.getEventInstanceById(instanceId);
   }
 
 }

@@ -1,27 +1,27 @@
 import SettingsService from '@/server/configuration/service/settings';
-import { EventEmitter } from 'events';
 /**
  * Implementation of the Configuration Internal API.
  * Aggregates functionality from ServiceSettings.
  */
 export default class ConfigurationInterface {
 
-  constructor(eventBus: EventEmitter ) {}
+  constructor() {}
 
   async getSetting(key: string): Promise<string | undefined> {
-    return ( await SettingsService.getInstance()).get(key);
+    const value = (await SettingsService.getInstance()).get(key);
+    return value?.toString();
   }
 
   async setSetting(parameter: string, value: string): Promise<boolean> {
-    return ( await SettingsService.getInstance()).set(parameter, value);
+    return (await SettingsService.getInstance()).set(parameter, value);
   }
 
   async getAllSettings(): Promise<Record<string, string>> {
     const settings = await SettingsService.getInstance();
     // Return commonly accessed settings
     return {
-      registrationMode: settings.get('registrationMode') || 'closed',
-      siteTitle: settings.get('siteTitle') || '',
+      registrationMode: settings.get('registrationMode')?.toString() || 'closed',
+      siteTitle: settings.get('siteTitle')?.toString() || '',
     };
   }
 

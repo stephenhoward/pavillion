@@ -1,4 +1,3 @@
-import { Sequelize } from 'sequelize-typescript';
 import { EventEmitter } from 'events';
 
 import { Account } from '@/common/model/account';
@@ -11,11 +10,12 @@ import AccountsInterface from '@/server/accounts/interface';
  */
 export default class AuthenticationInterface {
   private authenticationService: AuthenticationService;
-  private accountInterface: AccountsInterface;
 
-  constructor(eventBus: EventEmitter) {
-    this.accountInterface = new AccountsInterface(eventBus);
-    this.authenticationService = new AuthenticationService(eventBus, this.accountInterface);
+  constructor(
+    eventBus: EventEmitter,
+    accountsInterface: AccountsInterface,
+  ) {
+    this.authenticationService = new AuthenticationService(eventBus, accountsInterface);
   }
 
   async checkPassword(account: Account, password: string): Promise<boolean> {

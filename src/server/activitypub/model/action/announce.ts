@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { ActivityPubActivity, ActivityPubActor } from '@/server/activitypub/model/base';
+import { ActivityPubActivity } from '@/server/activitypub/model/base';
 
 class AnnounceActivity extends ActivityPubActivity {
 

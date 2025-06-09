@@ -7,6 +7,7 @@ import EventService from '../service/events';
 import LocationService from '../service/locations';
 import { EventEmitter } from 'events';
 import EventInstanceService from '../service/event_instance';
+import CalendarEventInstance from '@/common/model/event_instance';
 
 export default class CalendarInterface {
   private calendarService: CalendarService;
@@ -98,5 +99,17 @@ export default class CalendarInterface {
 
   async refreshAllEventInstances(): Promise<void> {
     return this.eventInstanceService.refreshAllEventInstances();
+  }
+
+  async listEventInstances(event: CalendarEvent): Promise<CalendarEventInstance[]> {
+    return this.eventInstanceService.listEventInstances(event);
+  }
+
+  async listEventInstancesForCalendar(calendar: Calendar): Promise<CalendarEventInstance[]> {
+    return this.eventInstanceService.listEventInstancesForCalendar(calendar);
+  }
+
+  async getEventInstanceById(instanceId: string): Promise<CalendarEventInstance | null> {
+    return this.eventInstanceService.getEventInstanceById(instanceId);
   }
 }

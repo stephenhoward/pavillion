@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, beforeAll } from 'vitest';
+import { describe, it, expect, afterEach, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import sinon from 'sinon';
 import axios from 'axios';
@@ -39,7 +39,7 @@ describe('ActivityPub Create Activity', async () => {
 
   beforeAll(async () => {
     env = new TestEnvironment();
-    await env.init();
+    await env.init(3002);
 
     const eventBus = new EventEmitter();
     const calendarInterface = new CalendarInterface(eventBus);
@@ -54,6 +54,12 @@ describe('ActivityPub Create Activity', async () => {
 
   afterEach(() => {
     sandbox.restore();
+  });
+
+  afterAll(async () => {
+    if (env) {
+      await env.cleanup();
+    }
   });
 
   it('createEvent: should fail without signature', async () => {

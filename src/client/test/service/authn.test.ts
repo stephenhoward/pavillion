@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import sinon from 'sinon';
 import axios from 'axios';
 
@@ -38,9 +38,13 @@ class LocalStore implements Storage {
   }
 }
 
-let axios_get = sinon.stub(axios,"get");
-let axios_post = sinon.stub(axios,"post");
+const sandbox = sinon.createSandbox();
 let fake_jwt = '1234.'+btoa('{ "exp": "1000"}');
+
+// Global setup for each test
+afterEach(() => {
+  sandbox.restore();
+});
 
 // async function test_basic_axios_roundtrip(stubbed_axios_method: sinon.SinonStub,auth_method: string,params: string[]) {
 
@@ -57,8 +61,9 @@ describe('Login', () => {
   it( 'login fail', async () => {
 
     let authentication = new AuthenticationService( new LocalStore() );
-    let stub1 = sinon.stub(authentication,"_unset_token");
-    let stub2 = sinon.stub(authentication,"_set_token");
+    let stub1 = sandbox.stub(authentication,"_unset_token");
+    let stub2 = sandbox.stub(authentication,"_set_token");
+    const axios_post = sandbox.stub(axios, "post");
     axios_post.returns(Promise.reject({status: 400, data: {}}));
 
     try {
@@ -75,8 +80,9 @@ describe('Login', () => {
 
     let authentication = new AuthenticationService( new LocalStore() );
 
-    let stub1 = sinon.stub(authentication,"_unset_token");
-    let stub2 = sinon.stub(authentication,"_set_token");
+    let stub1 = sandbox.stub(authentication,"_unset_token");
+    let stub2 = sandbox.stub(authentication,"_set_token");
+    const axios_post = sandbox.stub(axios, "post");
     axios_post.returns(Promise.resolve({status: 200, data: {}}));
 
     await authentication.login('user','password');
@@ -100,6 +106,7 @@ describe('Logout', () => {
     let authentication = new AuthenticationService( store );
 
     expect( authentication.isLoggedIn() ).toBe(false);
+    let stub1 = sinon.stub(authentication,"_refresh_login");
 
     authentication._set_token(fake_jwt);
 
@@ -148,7 +155,6 @@ describe('Token Setting', () => {
   it( '_unset_token', () => {
 
     let authentication = new AuthenticationService( new LocalStore() );
-    let sandbox = sinon.createSandbox();
     sandbox.stub(authentication,"_refresh_login");
 
     authentication._set_token(fake_jwt);
@@ -171,7 +177,6 @@ describe('Token Refresh', () => {
   it ( '_refresh_login 0 timer', () => {
 
     let authentication = new AuthenticationService( new LocalStore() );
-    let sandbox = sinon.createSandbox();
 
     let stub1 = sandbox.stub(authentication,"_unset_token");
 
@@ -183,10 +188,10 @@ describe('Token Refresh', () => {
   it ( '_refresh_login valid', async () => {
 
     let authentication = new AuthenticationService( new LocalStore() );
-    let sandbox = sinon.createSandbox();
     sandbox.useFakeTimers();
 
-    let stub1 = sinon.stub(authentication,"_set_token");
+    let stub1 = sandbox.stub(authentication,"_set_token");
+    const axios_get = sandbox.stub(axios, "get");
 
     axios_get.returns(Promise.resolve({status: 200, statusText: "Ok", data: fake_jwt}));
 

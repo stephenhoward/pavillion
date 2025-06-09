@@ -12,9 +12,18 @@ export class TestEnvironment {
     this.app = express();
   }
 
-  async init() {
+  async init(port: number) {
     await db.sync({ force: true });
-    initPavillionServer(this.app);
+    initPavillionServer(this.app, port);
+  }
+
+  async cleanup() {
+    // Close database connections and clean up resources
+    try {
+      await db.close();
+    } catch (error) {
+      console.error('Error cleaning up test environment:', error);
+    }
   }
 
   async login(email: string, password: string): Promise<string> {

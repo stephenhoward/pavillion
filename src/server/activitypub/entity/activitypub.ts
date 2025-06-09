@@ -176,7 +176,9 @@ class EventActivityEntity extends Model {
 
 // A collection of events that have been processed from an calendar's inbox,
 // from calendars they follow
+// TODO: Implement EventFeed functionality for ActivityPub
 @Table({ tableName: 'ap_event_feed' })
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 class EventFeed extends Model {
 
   @Column({ type: DataType.STRING })

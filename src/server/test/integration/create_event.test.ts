@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import request from 'supertest';
 import sinon from 'sinon';
 import axios from 'axios';
@@ -24,7 +24,7 @@ describe('Event API', () => {
 
   beforeAll(async () => {
     env = new TestEnvironment();
-    await env.init();
+    await env.init(3001);
 
     const eventBus = new EventEmitter();
     const calendarInterface = new CalendarInterface(eventBus);
@@ -43,6 +43,12 @@ describe('Event API', () => {
 
   afterEach(() => {
     sinon.restore();
+  });
+
+  afterAll(async () => {
+    if (env) {
+      await env.cleanup();
+    }
   });
 
   it('createEvent: should fail without user', async () => {

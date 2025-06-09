@@ -33,14 +33,14 @@ export default class LocationService {
     return null;
   }
 
-  generateLocationUrl(calendar: Calendar): string {
+  generateLocationUrl(): string {
     const domain = config.get('domain');
     return 'https://' + domain + '/places/' + uuidv4();
   }
 
   async createLocation(calendar: Calendar, location: EventLocation): Promise<EventLocation> {
     const entity = LocationEntity.fromModel(location);
-    entity.id = this.generateLocationUrl(calendar);
+    entity.id = this.generateLocationUrl();
     entity.calendar_id = calendar.id;
     await entity.save();
     return entity.toModel();

@@ -1,6 +1,5 @@
 import { Application } from 'express';
 import { EventEmitter } from 'events';
-import { DomainDependencies } from '@/server/common/types/domain';
 import AuthenticationInterface from './interface';
 import { AuthenticationEventHandlers } from './events';
 import AuthenticationAPI from './api/v1';
@@ -13,13 +12,13 @@ import AccountsInterface from '../accounts/interface';
  */
 export default class AuthenticationDomain {
   public interface: AuthenticationInterface;
-  private accountInterface: AccountsInterface;
   private readonly eventBus: EventEmitter;
+  private readonly accountsInterface: AccountsInterface;
 
-  constructor(eventBus: EventEmitter) {
+  constructor(eventBus: EventEmitter, accountsInterface: AccountsInterface) {
     this.eventBus = eventBus;
-    this.interface = new AuthenticationInterface(eventBus);
-    this.accountInterface = new AccountsInterface(eventBus);
+    this.accountsInterface = accountsInterface;
+    this.interface = new AuthenticationInterface(eventBus, accountsInterface);
   }
 
   public initialize(app: Application): void {
@@ -28,7 +27,7 @@ export default class AuthenticationDomain {
   }
 
   public installAPI(app: Application) {
-    AuthenticationAPI.install(app, this.interface, this.accountInterface);
+    AuthenticationAPI.install(app, this.interface, this.accountsInterface);
   }
 
   public installEventHandlers() {

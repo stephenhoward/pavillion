@@ -1,4 +1,3 @@
-import config from 'config';
 import express from 'express';
 import path from "path";
 import handlebars from 'handlebars';
@@ -21,7 +20,7 @@ import PublicCalendarDomain from './public';
  *
  * @param {express.Application} app - The Express application instance to configure
  */
-const initPavillionServer = async (app: express.Application) => {
+const initPavillionServer = async (app: express.Application, port: number) => {
 
   app.set("views", path.join(path.resolve(), "src/server/templates"));
   // Initialize i18next with default configuration
@@ -52,22 +51,30 @@ const initPavillionServer = async (app: express.Application) => {
 
   const eventBus = new EventEmitter();
 
-  new AccountsDomain(eventBus).initialize(app);
+  const configurationDomain = new ConfigurationDomain(eventBus);
+  configurationDomain.initialize(app);
+
+  const accountsDomain = new AccountsDomain(eventBus,configurationDomain.interface);
+  accountsDomain.initialize(app);
+
+  const authenticationDomain = new AuthenticationDomain(eventBus, accountsDomain.interface);
+  authenticationDomain.initialize(app);
+
   new ActivityPubDomain(eventBus).initialize(app);
-  new AuthenticationDomain(eventBus).initialize(app);
-  new ConfigurationDomain(eventBus).initialize(app);
+
   const calendarDomain = new CalendarDomain(eventBus);
   calendarDomain.initialize(app);
-  new PublicCalendarDomain(eventBus).initialize(app);
 
-  app.listen(config.get('host.port'), () => {
+  new PublicCalendarDomain(eventBus,calendarDomain).initialize(app);
+
+  app.listen(port, () => {
     if ( process.env.NODE_ENV == "development" ) {
       db.sync({force: true}).then(() => {
         seedDB().then(() => {
           calendarDomain.interface.refreshAllEventInstances();
         });
       });
-      console.log(`Pavillion listening at http://localhost:${config.get('host.port')}/`);
+      console.log(`Pavillion listening at http://localhost:${port}/`);
     }
   });
 };

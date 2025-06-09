@@ -5,29 +5,44 @@ import express, { Router } from 'express';
 import passport from 'passport';
 
 import { Account } from '@/common/model/account';
-import CommonAccountService from '@/server/common/service/accounts';
 import ExpressHelper from '@/server/common/helper/express';
 import { addRequestUser, testApp, countRoutes } from '@/server/common/test/lib/express';
 
-import apiV1 from '@/server/authentication/api/v1';
-import { handlers } from '@/server/authentication/api/v1/auth';
+import AuthenticationAPI from '@/server/authentication/api/v1';
 import AuthenticationService from '@/server/authentication/service/auth';
+import AccountsDomain from '@/server/accounts';
+import ConfigurationDomain from '@/server/configuration';
+import AuthenticationDomain from '@/server/authentication';
+import EventEmitter from 'events';
+import AuthenticationRouteHandlers from '../api/v1/auth';
 
 describe('API v1', () => {
 
   it('should load routes properly', () => {
     let app = express();
     expect(countRoutes(app)).toBe(0);
-    apiV1(app);
+
+    const eventBus = new EventEmitter();
+    const configurationDomain = new ConfigurationDomain(eventBus);
+    const accountsDomain = new AccountsDomain(eventBus, configurationDomain.interface);
+    const authenticatetionDomain = new AuthenticationDomain(eventBus, accountsDomain.interface);
+    AuthenticationAPI.install(app, authenticatetionDomain.interface, accountsDomain.interface);
     expect(countRoutes(app)).toBeGreaterThan(0);
   });
 });
 
 describe('getToken', () => {
   let stub: sinon.SinonStub;
+  let service: AuthenticationDomain;
+  let handlers: AuthenticationRouteHandlers;
 
   beforeEach(() => {
-    stub = sinon.stub(CommonAccountService, 'getAccountById');
+    const eventBus = new EventEmitter();
+    const configurationDomain = new ConfigurationDomain(eventBus);
+    const accountsDomain = new AccountsDomain(eventBus, configurationDomain.interface);
+    service = new AuthenticationDomain(eventBus, accountsDomain.interface);
+    handlers = new AuthenticationRouteHandlers(service.interface, accountsDomain.interface);
+    stub = sinon.stub(accountsDomain.interface, 'getAccountById');
   });
 
   afterEach(() => {
@@ -37,7 +52,7 @@ describe('getToken', () => {
   it('getToken: should succeed', async () => {
     let router = express.Router();
     stub.resolves(new Account('id', 'testme', 'testme'));
-    router.get('/handler', addRequestUser, handlers.getToken);
+    router.get('/handler', addRequestUser, handlers.getToken.bind(handlers));
 
     let response = await request(testApp(router)).get('/handler');
 
@@ -48,7 +63,7 @@ describe('getToken', () => {
   it('getToken: bad user in request, should fail', async () => {
     let router = express.Router();
     stub.resolves(undefined);
-    router.get('/handler', addRequestUser, handlers.getToken);
+    router.get('/handler', addRequestUser, handlers.getToken.bind(handlers));
 
     let response = await request(testApp(router)).get('/handler');
 
@@ -58,7 +73,7 @@ describe('getToken', () => {
 
   it('getToken: no user in request, should fail', async () => {
     let router = Router();
-    router.get('/handler', handlers.getToken);
+    router.get('/handler', handlers.getToken.bind(handlers));
 
     let response = await request(testApp(router)).get('/handler');
 
@@ -68,9 +83,16 @@ describe('getToken', () => {
 
 describe('checkPasswordResetCode', () => {
   let stub: sinon.SinonStub;
+  let service: AuthenticationDomain;
+  let handlers: AuthenticationRouteHandlers;
 
   beforeEach(() => {
-    stub = sinon.stub(AuthenticationService, 'validatePasswordResetCode');
+    const eventBus = new EventEmitter();
+    const configurationDomain = new ConfigurationDomain(eventBus);
+    const accountsDomain = new AccountsDomain(eventBus, configurationDomain.interface);
+    service = new AuthenticationDomain(eventBus, accountsDomain.interface);
+    handlers = new AuthenticationRouteHandlers(service.interface, accountsDomain.interface);
+    stub = sinon.stub(AuthenticationService.prototype, 'validatePasswordResetCode');
   });
 
   afterEach(() => {
@@ -80,7 +102,7 @@ describe('checkPasswordResetCode', () => {
   it('checkPasswordResetCode: should succeed', async () => {
     let router = express.Router();
     stub.resolves(true);
-    router.get('/handler/:code', handlers.checkPasswordResetCode);
+    router.get('/handler/:code', handlers.checkPasswordResetCode.bind(handlers));
 
     let response = await request(testApp(router)).get('/handler/1234');
 
@@ -91,7 +113,7 @@ describe('checkPasswordResetCode', () => {
   it('checkPasswordResetCode: should fail', async () => {
     let router = express.Router();
     stub.resolves(false);
-    router.get('/handler/:code', handlers.checkPasswordResetCode);
+    router.get('/handler/:code', handlers.checkPasswordResetCode.bind(handlers));
 
     let response = await request(testApp(router)).get('/handler/1234');
 
@@ -102,9 +124,16 @@ describe('checkPasswordResetCode', () => {
 
 describe('resetPassword', () => {
   let stub: sinon.SinonStub;
+  let service: AuthenticationDomain;
+  let handlers: AuthenticationRouteHandlers;
 
   beforeEach(() => {
-    stub = sinon.stub(AuthenticationService, 'resetPassword');
+    const eventBus = new EventEmitter();
+    const configurationDomain = new ConfigurationDomain(eventBus);
+    const accountsDomain = new AccountsDomain(eventBus, configurationDomain.interface);
+    service = new AuthenticationDomain(eventBus, accountsDomain.interface);
+    handlers = new AuthenticationRouteHandlers(service.interface, accountsDomain.interface);
+    stub = sinon.stub(AuthenticationService.prototype, 'resetPassword');
   });
 
   afterEach(() => {
@@ -115,7 +144,7 @@ describe('resetPassword', () => {
     let router = express.Router();
     stub.resolves(new Account('id', 'testme', 'testme'));
     let jwtSpy = sinon.spy(ExpressHelper, 'generateJWT');
-    router.post('/handler', handlers.setPassword);
+    router.post('/handler', handlers.setPassword.bind(handlers));
 
     let response = await request(testApp(router)).post('/handler').send({code: '1234', password: 'password'});
 
@@ -127,7 +156,7 @@ describe('resetPassword', () => {
   it('resetPassword: should fail', async () => {
     let router = express.Router();
     stub.resolves(undefined);
-    router.post('/handler', handlers.setPassword);
+    router.post('/handler', handlers.setPassword.bind(handlers));
 
     let response = await request(testApp(router)).post('/handler').send({code: '1234', password: 'password'});
 
@@ -138,8 +167,15 @@ describe('resetPassword', () => {
 
 describe('login', () => {
   let passportStub: sinon.SinonStub;
+  let service: AuthenticationDomain;
+  let handlers: AuthenticationRouteHandlers;
 
   beforeEach(() => {
+    const eventBus = new EventEmitter();
+    const configurationDomain = new ConfigurationDomain(eventBus);
+    const accountsDomain = new AccountsDomain(eventBus, configurationDomain.interface);
+    service = new AuthenticationDomain(eventBus, accountsDomain.interface);
+    handlers = new AuthenticationRouteHandlers(service.interface, accountsDomain.interface);
     passportStub = sinon.stub(passport, 'authenticate');
   });
 
@@ -155,7 +191,7 @@ describe('login', () => {
       };
     });
 
-    router.post('/handler', handlers.login);
+    router.post('/handler', handlers.login.bind(handlers));
 
     let response = await request(testApp(router)).post('/handler').send({email: 'testEmail', password: 'testPassword'});
 
@@ -171,7 +207,7 @@ describe('login', () => {
       };
     });
 
-    router.post('/handler', handlers.login);
+    router.post('/handler', handlers.login.bind(handlers));
 
     let response = await request(testApp(router)).post('/handler').send({email: 'testEmail', password: 'testPassword'});
 
@@ -187,7 +223,7 @@ describe('login', () => {
       };
     });
 
-    router.post('/handler', handlers.login);
+    router.post('/handler', handlers.login.bind(handlers));
 
     let response = await request(testApp(router)).post('/handler').send({email: 'testEmail', password: 'testPassword'});
 

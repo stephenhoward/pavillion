@@ -1,6 +1,5 @@
 import { scryptSync } from 'crypto';
 import { DateTime } from 'luxon';
-import { randomBytes } from 'crypto';
 
 import { Account } from "@/common/model/account";
 import { AccountEntity, AccountSecretsEntity } from "@/server/common/entity/account";
@@ -115,31 +114,11 @@ export default class AuthenticationService {
         id: account.id,
       });
     }
-    const passwordResetCode = await this.generatePasswordResetCodeForAccount(account);
+    const passwordResetCode = await this.accountService.generatePasswordResetCodeForAccount(account);
 
     // Send the email
     const message = new PasswordResetEmail(account, passwordResetCode);
     await EmailService.sendEmail(message.buildMessage(account.language));
-  }
-
-  /**
-   * Generates a password reset code for a specific account.
-   *
-   * @param {Account} account - The account to generate a password reset code for
-   * @returns {Promise<string>} The generated password reset code
-   */
-  async generatePasswordResetCodeForAccount(account: Account): Promise<string> {
-    let secret = await AccountSecretsEntity.findByPk(account.id);
-    if ( ! secret ) {
-      secret = AccountSecretsEntity.build({
-        id: account.id,
-      });
-    }
-    secret.password_reset_code = randomBytes(16).toString('hex');
-    secret.password_reset_expiration = DateTime.now().plus({ hours: 1 }).toJSDate();
-    await secret.save();
-
-    return secret.password_reset_code;
   }
 
   /**

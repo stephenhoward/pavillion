@@ -3,12 +3,16 @@ import { Account } from '@/common/model/account';
 import AccountInvitation from '@/common/model/invitation';
 import AccountApplication from '@/common/model/application';
 import AccountService from '@/server/accounts/service/account';
+import ConfigurationInterface from '@/server/configuration/interface';
 
 export default class AccountsInterface {
   private accountService: AccountService;
 
-  constructor(eventBus: EventEmitter) {
-    this.accountService = new AccountService(eventBus);
+  constructor(
+    eventBus: EventEmitter,
+    configurationInterface: ConfigurationInterface,
+  ) {
+    this.accountService = new AccountService(eventBus, configurationInterface);
   }
 
   async getAccountByEmail(email: string): Promise<Account | undefined> {

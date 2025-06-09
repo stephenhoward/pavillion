@@ -8,14 +8,14 @@ import AccountInvitation from '@/common/model/invitation';
 import AccountApplication from '@/common/model/application';
 import EmailService from "@/server/common/service/mail";
 import { AccountEntity, AccountSecretsEntity, AccountRoleEntity, AccountInvitationEntity, AccountApplicationEntity } from "@/server/common/entity/account";
-import ServiceSettings from '@/server/configuration/service/settings';
 import { AccountApplicationAlreadyExistsError, noAccountInviteExistsError, AccountRegistrationClosedError, AccountApplicationsClosedError, AccountAlreadyExistsError, AccountInviteAlreadyExistsError, noAccountApplicationExistsError } from '@/server/accounts/exceptions';
-import AuthenticationService from '@/server/authentication/service/auth';
 import AccountRegistrationEmail from '@/server/accounts/model/registration_email';
 import AccountInvitationEmail from '@/server/accounts/model/invitation_email';
 import ApplicationAcceptedEmail from '@/server/accounts/model/application_accepted_email';
 import ApplicationRejectedEmail from '@/server/accounts/model/application_rejected_email';
 import ApplicationAcknowledgmentEmail from '@/server/accounts/model/application_acknowledgment_email';
+import ConfigurationInterface from '@/server/configuration/interface';
+import { EventEmitter } from 'events';
 
 type AccountInfo = {
   account: Account,
@@ -30,7 +30,8 @@ type AccountInfo = {
  */
 export default class AccountService {
   constructor(
-    private eventBus: any,
+    private eventBus: EventEmitter,
+    private configurationInterface: ConfigurationInterface,
   ) {}
 
   /**
@@ -96,8 +97,8 @@ export default class AccountService {
      */
   async registerNewAccount(email:string): Promise<Account> {
 
-    const settings = await ServiceSettings.getInstance();
-    if ( settings.get('registrationMode') != 'open' ) {
+    const settings = await this.configurationInterface.getAllSettings();
+    if ( settings.registrationMode != 'open' ) {
       throw new AccountRegistrationClosedError();
     }
     const accountInfo = await this._setupAccount(email);
@@ -118,8 +119,8 @@ export default class AccountService {
      */
   async applyForNewAccount(email:string, message: string): Promise<boolean> {
 
-    const settings = await ServiceSettings.getInstance();
-    if ( settings.get('registrationMode') != 'apply' ) {
+    const settings = await this.configurationInterface.getAllSettings();
+    if ( settings.registrationMode != 'apply' ) {
       throw new AccountApplicationsClosedError();
     }
 
@@ -177,10 +178,30 @@ export default class AccountService {
       this.setPassword(accountEntity.toModel(), password);
     }
     else {
-      const passwordResetCode = await AuthenticationService.generatePasswordResetCodeForAccount(accountEntity.toModel());
+      const passwordResetCode = await this.generatePasswordResetCodeForAccount(accountEntity.toModel());
       accountInfo.password_code = passwordResetCode;
     }
     return accountInfo;
+  }
+
+  /**
+   * Generates a password reset code for a specific account.
+   *
+   * @param {Account} account - The account to generate a password reset code for
+   * @returns {Promise<string>} The generated password reset code
+   */
+  async generatePasswordResetCodeForAccount(account: Account): Promise<string> {
+    let secret = await AccountSecretsEntity.findByPk(account.id);
+    if ( ! secret ) {
+      secret = AccountSecretsEntity.build({
+        id: account.id,
+      });
+    }
+    secret.password_reset_code = randomBytes(16).toString('hex');
+    secret.password_reset_expiration = DateTime.now().plus({ hours: 1 }).toJSDate();
+    await secret.save();
+
+    return secret.password_reset_code;
   }
 
   /**

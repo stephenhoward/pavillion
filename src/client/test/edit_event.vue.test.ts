@@ -2,6 +2,7 @@ import{ expect, describe, it, afterEach } from 'vitest';
 import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { RouteRecordRaw } from 'vue-router';
 import sinon from 'sinon';
+import { nextTick } from 'vue';
 
 import { CalendarEvent } from '@/common/model/events';
 import { EventLocation } from '@/common/model/location';
@@ -45,9 +46,16 @@ const mountedEditor = (event: CalendarEvent) => {
 
 describe('Editor Behavior', () => {
   const sandbox = sinon.createSandbox();
+  let currentWrapper: any = null;
 
-  afterEach(() => {
+  afterEach(async () => {
     sandbox.restore();
+    // Properly unmount Vue component and wait for cleanup
+    if (currentWrapper) {
+      currentWrapper.unmount();
+      currentWrapper = null;
+      await nextTick();
+    }
   });
 
   it('new event, no calendar', async () => {
@@ -61,6 +69,7 @@ describe('Editor Behavior', () => {
     createStub.resolves(new CalendarEvent('id', 'testDate'));
 
     const { wrapper } = mountedEditor(event);
+    currentWrapper = wrapper;
 
     wrapper.find('input[name="name"]').setValue('testName');
     wrapper.find('input[name="description"]').setValue('testDescription');
@@ -83,6 +92,7 @@ describe('Editor Behavior', () => {
     createStub.resolves(new CalendarEvent('id', 'testDate'));
 
     const { wrapper } = mountedEditor(event);
+    currentWrapper = wrapper;
 
     wrapper.find('input[name="name"]').setValue('testName');
     wrapper.find('input[name="description"]').setValue('testDescription');
