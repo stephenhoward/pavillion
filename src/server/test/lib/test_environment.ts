@@ -21,7 +21,8 @@ export class TestEnvironment {
     // Close database connections and clean up resources
     try {
       await db.close();
-    } catch (error) {
+    }
+    catch (error) {
       console.error('Error cleaning up test environment:', error);
     }
   }

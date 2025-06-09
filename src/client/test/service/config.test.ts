@@ -100,6 +100,7 @@ describe('Config Service', () => {
 
       // Assert
       expect(settings).toEqual(mockSettings);
+      expect(getStub.calledOnce).toBe(true);
     });
   });
 

@@ -116,6 +116,7 @@ describe('Logout', () => {
     authentication._set_token(good_jwt);
 
     expect( authentication.isLoggedIn() ).toBe(true);
+    expect(stub1.called).toBe(true);
 
   });
 });

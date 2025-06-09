@@ -1,18 +1,9 @@
 import { Calendar } from '@/common/model/calendar';
 import ModelService from '@/client/service/models';
-import { UrlNameAlreadyExistsError, InvalidUrlNameError } from '@/common/exceptions/calendar';
-import { UnauthenticatedError, UnknownError } from '@/common/exceptions';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { useEventInstanceStore } from '@/site/stores/eventInstanceStore';
 import CalendarEventInstance from '@/common/model/event_instance';
 import { CalendarEvent } from '@/common/model/events';
-
-const errorMap = {
-  UrlNameAlreadyExistsError,
-  InvalidUrlNameError,
-  UnauthenticatedError,
-  UnknownError,
-};
 
 export default class CalendarService {
   store: ReturnType<typeof useCalendarStore>;
