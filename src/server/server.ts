@@ -13,6 +13,7 @@ import AuthenticationDomain from './authentication';
 import CalendarDomain from '@/server/calendar';
 import ConfigurationDomain from './configuration';
 import PublicCalendarDomain from './public';
+import MediaDomain from './media';
 
 /**
  * Initializes the Pavillion server with express application configuration.
@@ -66,6 +67,8 @@ const initPavillionServer = async (app: express.Application, port: number) => {
   calendarDomain.initialize(app);
 
   new PublicCalendarDomain(eventBus,calendarDomain).initialize(app);
+
+  new MediaDomain(eventBus).initialize(app);
 
   app.listen(port, () => {
     if ( process.env.NODE_ENV == "development" ) {

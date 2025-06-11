@@ -8,3 +8,17 @@ mail:
   transport: test
   from: noreply@example.com
   settings: {}
+media:
+  maxFileSize: 10485760  # 10MB in bytes
+  allowedTypes:
+    - 'image/png'
+    - 'image/jpeg'
+    - 'image/heic'
+  allowedExtensions:
+    - '.png'
+    - '.jpg'
+    - '.jpeg'
+    - '.heic'
+  storage:
+    driver: 'local'
+    basePath: './storage/media'

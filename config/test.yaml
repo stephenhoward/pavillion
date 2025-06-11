@@ -5,3 +5,17 @@ mail:
   transport: testing
   from: test@pavillion.dev
   settings: {}
+
+media:
+  maxFileSize: 5242880  # 5MB for tests
+  allowedTypes:
+    - 'image/png'
+    - 'image/jpeg'
+    - 'image/heic'
+  allowedExtensions:
+    - '.png'
+    - '.jpg'
+    - '.jpeg'
+    - '.heic'
+  storage:
+    driver: 'memory'
