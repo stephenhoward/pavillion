@@ -21,4 +21,4 @@ media:
     - '.heic'
   storage:
     driver: 'local'
-    basePath: './storage/media'
+    basePath: '/storage/media'

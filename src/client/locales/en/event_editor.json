@@ -1,6 +1,7 @@
 {
   "editor": {
     "edit_event_title": "Edit Event",
+    "image_label": "Image",
     "create_event_title": "Create Event",
     "create_button": "Create Event",
     "update_button": "Update Event",

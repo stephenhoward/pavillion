@@ -1,0 +1,66 @@
+{
+  "upload": {
+    "title": "Upload Images",
+    "title_single": "Upload Image",
+    "drag_drop_text_one": "Drag and drop an image here",
+    "drag_drop_text_other": "Drag and drop images here",
+    "or": "or",
+    "click_to_select_one": "click to select a file",
+    "click_to_select_other": "click to select files",
+    "browse_files": "Browse Files",
+    "uploading": "Uploading...",
+    "processing": "Processing...",
+    "upload_complete": "Upload Complete",
+    "upload_files_one": "Upload File",
+    "upload_files_other": "Upload Files",
+    "upload_failed": "Upload Failed",
+    "retry": "Retry",
+    "remove": "Remove",
+    "replace": "Replace",
+    "cancel": "Cancel"
+  },
+  "validation": {
+    "file_too_large": "File size {{fileSizeFormatted}} exceeds maximum allowed size of {{maxFileSizeFormatted}}",
+    "invalid_file_type": "File type {{fileType}} is not allowed. Allowed types: {{allowedTypes}}",
+    "invalid_extension": "File extension {{extension}} is not allowed. Allowed extensions: {{allowedExtensions}}",
+    "no_files_selected": "No files selected",
+    "max_files_exceeded": "Too many files selected. Maximum allowed: {{maxFiles}}"
+  },
+  "errors": {
+    "FILE_TOO_LARGE": "File size {{fileSizeFormatted}} exceeds maximum allowed size of {{maxFileSizeFormatted}}",
+    "INVALID_MIME_TYPE": "File type {{fileType}} is not allowed. Allowed types: {{allowedTypes}}",
+    "INVALID_EXTENSION": "File extension {{extension}} is not allowed. Allowed extensions: {{allowedExtensions}}",
+    "VALIDATION_FAILED": "File validation failed",
+    "NETWORK_ERROR": "Network error during upload",
+    "SERVER_ERROR": "Server error ({{status}}): {{serverMessage}}",
+    "UPLOAD_ABORTED": "Upload was cancelled",
+    "PREVIEW_GENERATION_FAILED": "Failed to generate image preview",
+    "NOT_AN_IMAGE": "File is not an image",
+    "TOO_MANY_FILES": "Too many files selected. Maximum allowed: {{maxFiles}}",
+    "SINGLE_FILE_ONLY": "Only one file is allowed in single file mode"
+  },
+  "status": {
+    "pending": "Pending",
+    "uploading": "Uploading",
+    "processing": "Processing",
+    "complete": "Complete",
+    "failed": "Failed",
+    "cancelled": "Cancelled"
+  },
+  "accessibility": {
+    "drag_drop_zone": "File upload drag and drop zone",
+    "file_input": "Select files to upload",
+    "file_preview": "Preview of {{filename}}",
+    "upload_progress": "Upload progress for {{filename}}: {{percentage}}%",
+    "remove_file": "Remove {{filename}} from upload queue",
+    "retry_upload": "Retry uploading {{filename}}",
+    "replace_file": "Replace selected file",
+    "dismiss_error": "Dismiss upload error"
+  },
+  "help": {
+    "supported_formats": "Supported formats:",
+    "max_file_size": "Maximum file size: {{maxSize}}",
+    "drag_drop_instructions": "You can drag multiple files at once or click to browse",
+    "drag_drop_instructions_single": "Drag a single file or click to browse"
+  }
+}

@@ -2,7 +2,6 @@ import { Disk } from 'flydrive';
 
 /**
  * Configuration for storage drivers
- * All storage operations use private visibility for security
  */
 export interface StorageConfig {
   driver: 'local' | 's3' | 'gcs' | 'memory';
@@ -28,7 +27,7 @@ export async function createStorageDisk(config: StorageConfig, basePath?: string
     case 'local': {
       const { FSDriver } = await import('flydrive/drivers/fs');
       return new Disk(new FSDriver({
-        location: new URL(`file://${basePath || config.basePath || process.cwd()}`),
+        location: new URL(`file://${process.cwd() + (basePath || config.basePath )}`),
         visibility: 'private',
       }));
     }

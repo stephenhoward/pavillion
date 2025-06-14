@@ -124,6 +124,14 @@ div.schedule {
                v-bind:placeholder="t('postalCode_placeholder')"
                v-model="props.event.location.postalCode"/>
       </section>
+      <section class="images">
+        <label>{{ t('image_label') }}</label>
+        <ImageUpload
+          :calendar-id="props.event.calendarId || 'default'"
+          @upload-complete="(results) => console.log('Upload complete:', results)"
+          @upload-error="(error) => console.log('Upload error:', error)"
+        />
+      </section>
       <section>
         <label>{{ t('dates_label') }}</label>
         <div class="schedule" v-for="(schedule,index) in props.event.schedules">
@@ -158,6 +166,7 @@ import EventService from '../../service/event';
 import EventRecurrenceView from './event_recurrence.vue';
 import languagePicker from '../languagePicker.vue';
 import ModalLayout from '../modal.vue';
+import ImageUpload from '../media/ImageUpload.vue';
 import iso6391 from 'iso-639-1-dir';
 
 const emit = defineEmits(['close']);
