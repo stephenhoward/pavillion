@@ -8,7 +8,8 @@
     "error_calendar_name_taken": "This calendar name is already taken",
     "error_invalid_calendar_name": "Invalid calendar name format",
     "error_create_calendar": "Error creating calendar",
-    "calendar_name_placeholder": "your-calendar-name"
+    "calendar_name_placeholder": "your-calendar-name",
+    "calendar_name_help": "Calendar names must be 3-24 characters long, start with a letter or number, and can only contain letters, numbers, and underscores"
   },
   "selector": {
     "select_calendar_title": "Select Calendar",

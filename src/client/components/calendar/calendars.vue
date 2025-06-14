@@ -142,8 +142,10 @@ async function createCalendar() {
         ref="inputRef"
         :placeholder="calendar_name_placeholder"
         @focus="updateInputWidth"
+        @keydown.enter="createCalendar"
       />@{{ site_domain }}
     </div>
+    <div class="help-text">{{ t('calendar_name_help') }}</div>
     <div v-if="state.errorMessage" class="error-message">{{ state.errorMessage }}</div>
     <button type="button"
             class="primary"
@@ -178,6 +180,14 @@ div.calendar-url {
   font-size: 0.9rem;
 }
 
+.help-text {
+  color: $light-mode-secondary-text;
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+  line-height: 1.4;
+}
+
 @include dark-mode {
     div.calendar-url {
         color: $dark-mode-secondary-text;
@@ -189,6 +199,10 @@ div.calendar-url {
 
     .error-message {
       color: #f44336; // A brighter red for visibility in dark mode
+    }
+
+    .help-text {
+      color: $dark-mode-secondary-text;
     }
 }
 
