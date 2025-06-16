@@ -3,7 +3,9 @@ import sinon from 'sinon';
 
 import { Account } from '@/common/model/account';
 import { Calendar, CalendarContent } from '@/common/model/calendar';
+import { CalendarEditor } from '@/common/model/calendar_editor';
 import { CalendarEntity, CalendarContentEntity } from '@/server/calendar/entity/calendar';
+import { CalendarEditorEntity } from '@/server/calendar/entity/calendar_editor';
 import CalendarService from '@/server/calendar/service/calendar';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError } from '@/common/exceptions/calendar';
 
@@ -188,6 +190,10 @@ describe('editableCalendarsForUser', () => {
       CalendarEntity.fromModel(cal2),
     ]);
 
+    // Stub CalendarEditorEntity to return empty array (no editor relationships)
+    const editorFindAllStub = sandbox.stub(CalendarEditorEntity, 'findAll');
+    editorFindAllStub.resolves([]);
+
     const result = await service.editableCalendarsForUser(acct);
 
     expect(result).toHaveLength(2);
@@ -199,9 +205,40 @@ describe('editableCalendarsForUser', () => {
     const calendarFindAllStub = sandbox.stub(CalendarEntity, 'findAll');
     calendarFindAllStub.resolves([]);
 
+    // Stub CalendarEditorEntity to return empty array (no editor relationships)
+    const editorFindAllStub = sandbox.stub(CalendarEditorEntity, 'findAll');
+    editorFindAllStub.resolves([]);
+
     const result = await service.editableCalendarsForUser(acct);
 
     expect(result).toHaveLength(0);
+  });
+
+  it('should combine owned calendars and editor relationships', async () => {
+    const cal1 = new Calendar('cal1', 'calendar1');
+    const cal2 = new Calendar('cal2', 'calendar2');
+
+    const calendarFindAllStub = sandbox.stub(CalendarEntity, 'findAll');
+    calendarFindAllStub.resolves([
+      CalendarEntity.fromModel(cal1), // Owned calendar
+    ]);
+
+    // Stub CalendarEditorEntity to return one editor relationship
+    const editorFindAllStub = sandbox.stub(CalendarEditorEntity, 'findAll');
+    const editorEntity = CalendarEditorEntity.fromModel(new CalendarEditor(
+      'editorId',
+      'cal2',
+      'testAccountId',
+    ));
+    editorEntity.calendar = CalendarEntity.fromModel(cal2);
+
+    editorFindAllStub.resolves([ editorEntity ]);
+
+    const result = await service.editableCalendarsForUser(acct);
+
+    expect(result).toHaveLength(2);
+    expect(result.map(c => c.id)).toContain('cal1');
+    expect(result.map(c => c.id)).toContain('cal2');
   });
 });
 

@@ -3,6 +3,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { Calendar } from '@/common/model/calendar';
 import { Account } from '@/common/model/account';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
+import { CalendarEditorEntity } from '@/server/calendar/entity/calendar_editor';
+import { CalendarEditor } from '@/common/model/calendar_editor';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError } from '@/common/exceptions/calendar';
 
 class CalendarService {
@@ -53,8 +55,26 @@ class CalendarService {
     if (!account.id) {
       return [];
     }
-    let calendars = await CalendarEntity.findAll({ where: { account_id: account.id } });
-    return calendars.map((calendar) => calendar.toModel());
+
+    // Get calendars owned by the user
+    let ownedCalendars = await CalendarEntity.findAll({ where: { account_id: account.id } });
+
+    // Get calendars where the user has editor access
+    let editorRelationships = await CalendarEditorEntity.findAll({
+      where: { account_id: account.id },
+      include: [CalendarEntity],
+    });
+
+    // Combine owned calendars and editor calendars
+    let allCalendars = [
+      ...ownedCalendars.map(calendar => calendar.toModel()),
+      ...editorRelationships.map(rel => rel.calendar.toModel()),
+    ];
+
+    // Remove duplicates (in case user is both owner and editor)
+    return allCalendars.filter((calendar, index, self) =>
+      index === self.findIndex(c => c.id === calendar.id),
+    );
   }
 
   async userCanModifyCalendar(account: Account, calendar: Calendar): Promise<boolean> {
@@ -75,6 +95,91 @@ class CalendarService {
     }
     let calendar = await CalendarEntity.findOne({ where: { url_name: name } });
     return calendar ? calendar.toModel() : null;
+  }
+
+  /**
+   * Grant edit access to a user for a calendar
+   *
+   * @param grantingAccount - Account granting access (must be calendar owner or admin)
+   * @param calendar - Calendar to grant access to
+   * @param editorAccount - Account to grant edit access to
+   * @returns The created editor relationship
+   * @throws Error if permission denied or editor already exists
+   */
+  async grantEditAccess(grantingAccount: Account, calendar: Calendar, editorAccount: Account): Promise<CalendarEditor> {
+    // Check if granting account has permission
+    if (!grantingAccount.hasRole('admin')) {
+      const canModify = await this.userCanModifyCalendar(grantingAccount, calendar);
+      if (!canModify) {
+        throw new Error('Permission denied: cannot grant edit access');
+      }
+    }
+
+    // Check if editor relationship already exists
+    const existingEditor = await CalendarEditorEntity.findOne({
+      where: {
+        calendar_id: calendar.id,
+        account_id: editorAccount.id,
+      },
+    });
+
+    if (existingEditor) {
+      throw new Error('Editor relationship already exists');
+    }
+
+    // Create editor relationship
+    const editorEntity = await CalendarEditorEntity.create({
+      id: uuidv4(),
+      calendar_id: calendar.id,
+      account_id: editorAccount.id,
+      granted_by: grantingAccount.id,
+      granted_at: new Date(),
+    });
+
+    return editorEntity.toModel();
+  }
+
+  /**
+   * Revoke edit access from a user for a calendar
+   *
+   * @param revokingAccount - Account revoking access (must be calendar owner or admin)
+   * @param calendar - Calendar to revoke access from
+   * @param editorAccount - Account to revoke edit access from
+   * @returns True if access was revoked, false if no access existed
+   * @throws Error if permission denied
+   */
+  async revokeEditAccess(revokingAccount: Account, calendar: Calendar, editorAccount: Account): Promise<boolean> {
+    // Check if revoking account has permission
+    if (!revokingAccount.hasRole('admin')) {
+      const canModify = await this.userCanModifyCalendar(revokingAccount, calendar);
+      if (!canModify) {
+        throw new Error('Permission denied: cannot revoke edit access');
+      }
+    }
+
+    // Find and delete editor relationship
+    const deleted = await CalendarEditorEntity.destroy({
+      where: {
+        calendar_id: calendar.id,
+        account_id: editorAccount.id,
+      },
+    });
+
+    return deleted > 0;
+  }
+
+  /**
+   * Get all editors for a calendar
+   *
+   * @param calendar - Calendar to get editors for
+   * @returns Array of editor relationships
+   */
+  async getCalendarEditors(calendar: Calendar): Promise<CalendarEditor[]> {
+    const editors = await CalendarEditorEntity.findAll({
+      where: { calendar_id: calendar.id },
+    });
+
+    return editors.map(editor => editor.toModel());
   }
 
   async getPrimaryCalendarForUser(account: Account): Promise<Calendar|null> {
