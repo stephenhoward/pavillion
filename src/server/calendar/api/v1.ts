@@ -1,6 +1,7 @@
 import express, { Application } from 'express';
 import EventRoutes from '@/server/calendar/api/v1/events';
 import CalendarRoutes from '@/server/calendar/api/v1/calendar';
+import EditorRoutes from '@/server/calendar/api/v1/editors';
 import CalendarInterface from '../interface';
 
 export default class CalendarAPI {
@@ -12,5 +13,7 @@ export default class CalendarAPI {
     eventsRoutes.installHandlers(app, '/api/v1');
     let calendarRoutes = new CalendarRoutes(internalAPI);
     calendarRoutes.installHandlers(app, '/api/v1');
+    let editorRoutes = new EditorRoutes(internalAPI);
+    editorRoutes.installHandlers(app, '/api/v1');
   }
 }

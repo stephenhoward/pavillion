@@ -5,9 +5,13 @@ import { Account } from '@/common/model/account';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { CalendarEditorEntity } from '@/server/calendar/entity/calendar_editor';
 import { CalendarEditor } from '@/common/model/calendar_editor';
-import { UrlNameAlreadyExistsError, InvalidUrlNameError } from '@/common/exceptions/calendar';
+import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
+import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/server/calendar/exceptions/editors';
+import { noAccountExistsError } from '@/server/accounts/exceptions';
+import AccountsInterface from '@/server/accounts/interface';
 
 class CalendarService {
+  constructor(private accountsInterface?: AccountsInterface) {}
   async getCalendar(id: string): Promise<Calendar|null> {
     const calendar = await CalendarEntity.findByPk(id);
     return calendar ? calendar.toModel() : null;
@@ -32,7 +36,7 @@ class CalendarService {
 
     let calendarEntity = await CalendarEntity.findByPk(calendar.id);
     if ( ! calendarEntity ) {
-      throw new Error('Calendar not found');
+      throw new CalendarNotFoundError();
     }
 
     if ( calendarEntity.url_name == urlName ) {
@@ -98,20 +102,53 @@ class CalendarService {
   }
 
   /**
+   * Check if an account owns a calendar
+   *
+   * @param account - Account to check ownership for
+   * @param calendar - Calendar to check ownership of
+   * @returns True if the account owns the calendar
+   */
+  async isCalendarOwner(account: Account, calendar: Calendar): Promise<boolean> {
+    const calendarEntity = await CalendarEntity.findByPk(calendar.id);
+    if (!calendarEntity) {
+      return false;
+    }
+    return calendarEntity.account_id === account.id;
+  }
+
+  /**
    * Grant edit access to a user for a calendar
    *
    * @param grantingAccount - Account granting access (must be calendar owner or admin)
-   * @param calendar - Calendar to grant access to
-   * @param editorAccount - Account to grant edit access to
+   * @param calendarId - ID of the calendar to grant access to
+   * @param editorAccountId - ID of the account to grant edit access to
    * @returns The created editor relationship
-   * @throws Error if permission denied or editor already exists
+   * @throws CalendarNotFoundError if calendar not found
+   * @throws noAccountExistsError if account not found
+   * @throws CalendarEditorPermissionError if permission denied
+   * @throws EditorAlreadyExistsError if editor already exists
    */
-  async grantEditAccess(grantingAccount: Account, calendar: Calendar, editorAccount: Account): Promise<CalendarEditor> {
-    // Check if granting account has permission
+  async grantEditAccess(grantingAccount: Account, calendarId: string, editorAccountId: string): Promise<CalendarEditor> {
+    // Get and validate calendar exists
+    const calendar = await this.getCalendar(calendarId);
+    if (!calendar) {
+      throw new CalendarNotFoundError();
+    }
+
+    // Get and validate editor account exists
+    if (!this.accountsInterface) {
+      throw new Error('AccountsInterface not available');
+    }
+    const editorAccount = await this.accountsInterface.getAccountById(editorAccountId);
+    if (!editorAccount) {
+      throw new noAccountExistsError();
+    }
+
+    // Check if granting account has permission (must be calendar owner or admin)
     if (!grantingAccount.hasRole('admin')) {
-      const canModify = await this.userCanModifyCalendar(grantingAccount, calendar);
-      if (!canModify) {
-        throw new Error('Permission denied: cannot grant edit access');
+      const isOwner = await this.isCalendarOwner(grantingAccount, calendar);
+      if (!isOwner) {
+        throw new CalendarEditorPermissionError('Permission denied: only calendar owner can grant edit access');
       }
     }
 
@@ -124,7 +161,7 @@ class CalendarService {
     });
 
     if (existingEditor) {
-      throw new Error('Editor relationship already exists');
+      throw new EditorAlreadyExistsError();
     }
 
     // Create editor relationship
@@ -143,17 +180,35 @@ class CalendarService {
    * Revoke edit access from a user for a calendar
    *
    * @param revokingAccount - Account revoking access (must be calendar owner or admin)
-   * @param calendar - Calendar to revoke access from
-   * @param editorAccount - Account to revoke edit access from
-   * @returns True if access was revoked, false if no access existed
-   * @throws Error if permission denied
+   * @param calendarId - ID of the calendar to revoke access from
+   * @param editorAccountId - ID of the account to revoke edit access from
+   * @returns True if access was revoked
+   * @throws CalendarNotFoundError if calendar not found
+   * @throws noAccountExistsError if account not found
+   * @throws CalendarEditorPermissionError if permission denied
+   * @throws EditorNotFoundError if editor relationship doesn't exist
    */
-  async revokeEditAccess(revokingAccount: Account, calendar: Calendar, editorAccount: Account): Promise<boolean> {
-    // Check if revoking account has permission
+  async revokeEditAccess(revokingAccount: Account, calendarId: string, editorAccountId: string): Promise<boolean> {
+    // Get and validate calendar exists
+    const calendar = await this.getCalendar(calendarId);
+    if (!calendar) {
+      throw new CalendarNotFoundError();
+    }
+
+    // Get and validate editor account exists
+    if (!this.accountsInterface) {
+      throw new Error('AccountsInterface not available');
+    }
+    const editorAccount = await this.accountsInterface.getAccountById(editorAccountId);
+    if (!editorAccount) {
+      throw new noAccountExistsError();
+    }
+
+    // Check if revoking account has permission (must be calendar owner or admin)
     if (!revokingAccount.hasRole('admin')) {
-      const canModify = await this.userCanModifyCalendar(revokingAccount, calendar);
-      if (!canModify) {
-        throw new Error('Permission denied: cannot revoke edit access');
+      const isOwner = await this.isCalendarOwner(revokingAccount, calendar);
+      if (!isOwner) {
+        throw new CalendarEditorPermissionError('Permission denied: only calendar owner can revoke edit access');
       }
     }
 
@@ -165,16 +220,48 @@ class CalendarService {
       },
     });
 
-    return deleted > 0;
+    if (deleted === 0) {
+      throw new EditorNotFoundError();
+    }
+
+    return true;
+  }
+
+  /**
+   * Check if a user can view calendar editors (only calendar owners and admins)
+   *
+   * @param account - Account to check permission for
+   * @param calendarId - ID of the calendar to check permission for
+   * @returns True if the account can view editors
+   * @throws CalendarNotFoundError if calendar not found
+   */
+  async canViewCalendarEditors(account: Account, calendarId: string): Promise<boolean> {
+    // Get and validate calendar exists
+    const calendar = await this.getCalendar(calendarId);
+    if (!calendar) {
+      throw new CalendarNotFoundError();
+    }
+
+    if (account.hasRole('admin')) {
+      return true;
+    }
+    return await this.isCalendarOwner(account, calendar);
   }
 
   /**
    * Get all editors for a calendar
    *
-   * @param calendar - Calendar to get editors for
+   * @param calendarId - ID of the calendar to get editors for
    * @returns Array of editor relationships
+   * @throws CalendarNotFoundError if calendar not found
    */
-  async getCalendarEditors(calendar: Calendar): Promise<CalendarEditor[]> {
+  async getCalendarEditors(calendarId: string): Promise<CalendarEditor[]> {
+    // Get and validate calendar exists
+    const calendar = await this.getCalendar(calendarId);
+    if (!calendar) {
+      throw new CalendarNotFoundError();
+    }
+
     const editors = await CalendarEditorEntity.findAll({
       where: { calendar_id: calendar.id },
     });

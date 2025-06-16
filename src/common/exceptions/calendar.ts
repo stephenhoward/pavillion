@@ -21,3 +21,15 @@ export class UrlNameAlreadyExistsError extends Error {
     Object.setPrototypeOf(this, UrlNameAlreadyExistsError.prototype);
   }
 }
+
+/**
+ * Custom error class for calendar not found
+ */
+export class CalendarNotFoundError extends Error {
+  constructor(message: string = 'Calendar not found') {
+    super(message);
+    this.name = 'CalendarNotFoundError';
+    // Maintaining proper prototype chain in ES5+
+    Object.setPrototypeOf(this, CalendarNotFoundError.prototype);
+  }
+}

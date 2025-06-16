@@ -63,7 +63,7 @@ const initPavillionServer = async (app: express.Application, port: number) => {
 
   new ActivityPubDomain(eventBus).initialize(app);
 
-  const calendarDomain = new CalendarDomain(eventBus);
+  const calendarDomain = new CalendarDomain(eventBus, accountsDomain.interface);
   calendarDomain.initialize(app);
 
   new PublicCalendarDomain(eventBus,calendarDomain).initialize(app);

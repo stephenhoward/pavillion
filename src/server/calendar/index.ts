@@ -2,15 +2,18 @@ import { Application } from 'express';
 import CalendarInterface from './interface';
 import CalendarEventHandlers from './events';
 import CalendarAPI from './api/v1';
+import AccountsInterface from '@/server/accounts/interface';
 import { EventEmitter } from 'events';
 
 export default class CalendarDomain {
   public readonly interface: CalendarInterface;
   private readonly eventBus: EventEmitter;
+  private accountsInterface?: AccountsInterface;
 
-  constructor(eventBus: EventEmitter) {
+  constructor(eventBus: EventEmitter, accountsInterface?: AccountsInterface) {
     this.eventBus = eventBus;
-    this.interface = new CalendarInterface(eventBus);
+    this.accountsInterface = accountsInterface;
+    this.interface = new CalendarInterface(eventBus, accountsInterface);
   }
 
   public initialize(app: Application): void {
