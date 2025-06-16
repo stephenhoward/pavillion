@@ -9,6 +9,7 @@ import CalendarService from "@/server/calendar/service/calendar";
 import { LocationEntity } from "@/server/calendar/entity/location";
 import LocationService from "@/server/calendar/service/locations";
 import { EventEmitter } from 'events';
+import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError } from '@/common/exceptions/calendar';
 
 /**
  * Service class for managing events
@@ -74,7 +75,7 @@ class EventService {
 
     const calendars = await this.calendarService.editableCalendarsForUser(account);
     if ( ! calendars.some(c => c.id == calendar.id) ) {
-      throw( new Error('account cannot add to calendar') );
+      throw new InsufficientCalendarPermissionsError('Insufficient permissions to create events in this calendar');
     }
 
     eventParams.id = this.generateEventUrl();
@@ -148,15 +149,15 @@ class EventService {
     const eventEntity = await EventEntity.findByPk(eventId);
 
     if ( ! eventEntity ) {
-      throw new Error('Event not found');
+      throw new EventNotFoundError('Event not found');
     }
     const calendar = await this.calendarService.getCalendar(eventEntity.calendar_id);
     const calendars = await this.calendarService.editableCalendarsForUser(account);
     if ( ! calendar ) {
-      throw( new Error('calendar for event does not exist') );
+      throw new CalendarNotFoundError('Calendar for event does not exist');
     }
     if ( ! calendars.some(c => c.id == calendar.id) ) {
-      throw( new Error('account cannot modify event') );
+      throw new InsufficientCalendarPermissionsError('Insufficient permissions to modify events in this calendar');
     }
 
     let event = eventEntity.toModel();

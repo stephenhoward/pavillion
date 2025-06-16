@@ -33,3 +33,27 @@ export class CalendarNotFoundError extends Error {
     Object.setPrototypeOf(this, CalendarNotFoundError.prototype);
   }
 }
+
+/**
+ * Custom error class for event not found
+ */
+export class EventNotFoundError extends Error {
+  constructor(message: string = 'Event not found') {
+    super(message);
+    this.name = 'EventNotFoundError';
+    // Maintaining proper prototype chain in ES5+
+    Object.setPrototypeOf(this, EventNotFoundError.prototype);
+  }
+}
+
+/**
+ * Custom error class for insufficient permissions to modify calendar/events
+ */
+export class InsufficientCalendarPermissionsError extends Error {
+  constructor(message: string = 'Insufficient permissions to modify this calendar') {
+    super(message);
+    this.name = 'InsufficientCalendarPermissionsError';
+    // Maintaining proper prototype chain in ES5+
+    Object.setPrototypeOf(this, InsufficientCalendarPermissionsError.prototype);
+  }
+}

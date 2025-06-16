@@ -542,14 +542,14 @@ describe('Calendar Ownership and Editor Permissions', () => {
     mockAccountsInterface = {
       getAccountById: sandbox.stub(),
     };
-    
+
     service = new CalendarService(mockAccountsInterface);
     calendar = new Calendar('cal-id', 'test-calendar');
     owner = new Account('owner-id', 'owner', 'owner@test.com');
     nonOwner = new Account('user-id', 'user', 'user@test.com');
     admin = new Account('admin-id', 'admin', 'admin@test.com');
     admin.roles = ['admin'];
-    
+
     // Set up default account lookups
     mockAccountsInterface.getAccountById.withArgs('owner-id').resolves(owner);
     mockAccountsInterface.getAccountById.withArgs('user-id').resolves(nonOwner);
@@ -694,7 +694,7 @@ describe('Calendar Ownership and Editor Permissions', () => {
     it('should succeed for admin even if not owner', async () => {
       const getCalendarStub = sandbox.stub(service, 'getCalendar');
       const destroyStub = sandbox.stub(CalendarEditorEntity, 'destroy');
-      
+
       getCalendarStub.resolves(calendar);
       destroyStub.resolves(1); // One record deleted
 

@@ -9,6 +9,7 @@ import { Calendar } from '@/common/model/calendar';
 import { CalendarEditor } from '@/common/model/calendar_editor';
 import { Account } from '@/common/model/account';
 import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/server/calendar/exceptions/editors';
+import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { testApp, countRoutes, addRequestUser } from '@/server/common/test/lib/express';
 import CalendarAPI from '@/server/calendar/api/v1';
 import EventRoutes from '@/server/calendar/api/v1/events';
@@ -21,9 +22,8 @@ describe('API v1', () => {
   it('should load routes properly', () => {
     let app = express();
     let calendarInterface = new CalendarInterface(new EventEmitter());
-    let accountsInterface = new AccountsInterface(new EventEmitter(), {} as any);
     expect(countRoutes(app)).toBe(0);
-    CalendarAPI.install(app, calendarInterface, accountsInterface);
+    CalendarAPI.install(app, calendarInterface);
     expect(countRoutes(app)).toBeGreaterThan(0);
   });
 });
@@ -119,7 +119,10 @@ describe('Event API', () => {
   it('createEvent: should succeed', async () => {
     let eventStub = eventSandbox.stub(calendarInterface, 'createEvent');
     let calendarStub = eventSandbox.stub(calendarInterface, 'getCalendarByName');
-    calendarStub.resolves(new Calendar('id', 'testme'));
+
+    const calendar = new Calendar('id', 'testme');
+    calendarStub.resolves(calendar);
+
     router.post('/handler', addRequestUser, (req,res) => {
       req.params.calendar = 'testme';
       routes.createEvent(req,res);
@@ -131,6 +134,28 @@ describe('Event API', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.error).toBeUndefined();
+    expect(eventStub.called).toBe(true);
+  });
+
+  it('createEvent: should fail without edit permissions', async () => {
+    let eventStub = eventSandbox.stub(calendarInterface, 'createEvent');
+    let calendarStub = eventSandbox.stub(calendarInterface, 'getCalendarByName');
+
+    const calendar = new Calendar('id', 'testme');
+    calendarStub.resolves(calendar);
+    eventStub.throws(new InsufficientCalendarPermissionsError('Insufficient permissions to create events in this calendar'));
+
+    router.post('/handler', addRequestUser, (req,res) => {
+      req.params.calendar = 'testme';
+      routes.createEvent(req,res);
+    });
+
+    const response = await request(testApp(router))
+      .post('/handler');
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toBe("Insufficient permissions to create events in this calendar");
+    expect(response.body.errorName).toBe("InsufficientCalendarPermissionsError");
     expect(eventStub.called).toBe(true);
   });
 
@@ -146,10 +171,88 @@ describe('Event API', () => {
     expect(eventStub.called).toBe(false);
   });
 
+  it('updateEvent: should fail without event ID', async () => {
+    let eventStub = eventSandbox.stub(calendarInterface, 'updateEvent');
+    router.post('/handler', addRequestUser, (req,res) => {
+      // No event ID in params
+      routes.updateEvent(req,res);
+    });
+
+    const response = await request(testApp(router))
+      .post('/handler');
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe("missing event ID");
+    expect(eventStub.called).toBe(false);
+  });
+
+  it('updateEvent: should fail when event not found', async () => {
+    let eventStub = eventSandbox.stub(calendarInterface, 'updateEvent');
+
+    eventStub.throws(new EventNotFoundError('Event not found'));
+
+    router.post('/handler', addRequestUser, (req,res) => {
+      req.params.id = 'nonexistent-event';
+      routes.updateEvent(req,res);
+    });
+
+    const response = await request(testApp(router))
+      .post('/handler');
+
+    expect(response.status).toBe(404);
+    expect(response.body.error).toBe("Event not found");
+    expect(response.body.errorName).toBe("EventNotFoundError");
+    expect(eventStub.called).toBe(true);
+  });
+
+  it('updateEvent: should fail when calendar for event not found', async () => {
+    let eventStub = eventSandbox.stub(calendarInterface, 'updateEvent');
+
+    eventStub.throws(new CalendarNotFoundError('Calendar for event does not exist'));
+
+    router.post('/handler', addRequestUser, (req,res) => {
+      req.params.id = 'event-id';
+      routes.updateEvent(req,res);
+    });
+
+    const response = await request(testApp(router))
+      .post('/handler');
+
+    expect(response.status).toBe(404);
+    expect(response.body.error).toBe("Calendar for event does not exist");
+    expect(response.body.errorName).toBe("CalendarNotFoundError");
+    expect(eventStub.called).toBe(true);
+  });
+
+  it('updateEvent: should fail without edit permissions', async () => {
+    let eventStub = eventSandbox.stub(calendarInterface, 'updateEvent');
+
+    eventStub.throws(new InsufficientCalendarPermissionsError('Insufficient permissions to modify events in this calendar'));
+
+    router.post('/handler', addRequestUser, (req,res) => {
+      req.params.id = 'event-id';
+      routes.updateEvent(req,res);
+    });
+
+    const response = await request(testApp(router))
+      .post('/handler');
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toBe("Insufficient permissions to modify events in this calendar");
+    expect(response.body.errorName).toBe("InsufficientCalendarPermissionsError");
+    expect(eventStub.called).toBe(true);
+  });
+
   it('updateEvent: should succeed', async () => {
     let eventStub = eventSandbox.stub(calendarInterface, 'updateEvent');
-    router.post('/handler', addRequestUser, (req,res) => { routes.updateEvent(req,res); });
-    eventStub.resolves(new CalendarEvent('id', 'testme'));
+
+    const updatedEvent = new CalendarEvent('event-id', 'calendar-id');
+    eventStub.resolves(updatedEvent);
+
+    router.post('/handler', addRequestUser, (req,res) => {
+      req.params.id = 'event-id';
+      routes.updateEvent(req,res);
+    });
 
     const response = await request(testApp(router))
       .post('/handler');
@@ -170,7 +273,7 @@ describe('Editor API', () => {
   beforeEach(() => {
     calendarInterface = new CalendarInterface(new EventEmitter());
     accountsInterface = new AccountsInterface(new EventEmitter(), {} as any);
-    routes = new EditorRoutes(calendarInterface, accountsInterface);
+    routes = new EditorRoutes(calendarInterface);
     router = express.Router();
   });
 
