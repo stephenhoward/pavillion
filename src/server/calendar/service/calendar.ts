@@ -6,7 +6,7 @@ import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { CalendarEditorEntity } from '@/server/calendar/entity/calendar_editor';
 import { CalendarEditor } from '@/common/model/calendar_editor';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
-import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/server/calendar/exceptions/editors';
+import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/common/exceptions/editor';
 import { noAccountExistsError } from '@/server/accounts/exceptions';
 import AccountsInterface from '@/server/accounts/interface';
 

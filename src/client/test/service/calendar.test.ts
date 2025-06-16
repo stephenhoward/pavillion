@@ -1,12 +1,16 @@
 // filepath: /Users/stephen/dev/pavillion/src/client/test/service/calendar.test.ts
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import sinon from 'sinon';
+import axios from 'axios';
 import CalendarService from '@/client/service/calendar';
 import ModelService from '@/client/service/models';
 import { Calendar } from '@/common/model/calendar';
 import { EmptyValueError, UnknownError } from '@/common/exceptions';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError } from '@/common/exceptions/calendar';
 import { useCalendarStore } from '@/client/stores/calendarStore';
+
+// Mock axios
+vi.mock('axios');
 
 describe('loadCalendars', () => {
   const sandbox = sinon.createSandbox();
@@ -321,5 +325,218 @@ describe('deleteCalendar', () => {
 
     // Act & Assert
     await expect(service.deleteCalendar(new Calendar('cal1', 'delete-me'))).rejects.toThrow('API Error');
+  });
+});
+
+describe('listCalendarEditors', () => {
+  const sandbox = sinon.createSandbox();
+  let mockStore: ReturnType<typeof useCalendarStore>;
+  let service: CalendarService;
+
+  beforeEach(() => {
+    mockStore = {};
+    service = new CalendarService(mockStore);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+    vi.clearAllMocks();
+  });
+
+  it('should list calendar editors successfully', async () => {
+    // Arrange
+    const calendarId = 'cal1';
+    const editorsData = [
+      { id: 'editor1', calendarId, accountId: 'user1' },
+      { id: 'editor2', calendarId, accountId: 'user2' },
+    ];
+    const axiosGet = vi.mocked(axios.get);
+    axiosGet.mockResolvedValue({ data: editorsData });
+
+    // Act
+    const result = await service.listCalendarEditors(calendarId);
+
+    // Assert
+    expect(axiosGet).toHaveBeenCalledWith(`/api/v1/calendars/${calendarId}/editors`);
+    expect(result).toHaveLength(2);
+    expect(result[0].accountId).toBe('user1');
+    expect(result[1].accountId).toBe('user2');
+  });
+
+  it('should handle permission error when listing editors', async () => {
+    // Arrange
+    const calendarId = 'cal1';
+    const axiosGet = vi.mocked(axios.get);
+    axiosGet.mockRejectedValue({
+      response: {
+        data: { errorName: 'CalendarEditorPermissionError' },
+      },
+    });
+
+    // Act & Assert
+    await expect(service.listCalendarEditors(calendarId))
+      .rejects.toThrow('Permission denied: only calendar owner can manage editors');
+  });
+
+  it('should handle calendar not found error when listing editors', async () => {
+    // Arrange
+    const calendarId = 'nonexistent';
+    const axiosGet = vi.mocked(axios.get);
+    axiosGet.mockRejectedValue({
+      response: {
+        data: { errorName: 'CalendarNotFoundError' },
+      },
+    });
+
+    // Act & Assert
+    await expect(service.listCalendarEditors(calendarId))
+      .rejects.toThrow('Calendar not found');
+  });
+});
+
+describe('grantEditAccess', () => {
+  const sandbox = sinon.createSandbox();
+  let mockStore: ReturnType<typeof useCalendarStore>;
+  let service: CalendarService;
+
+  beforeEach(() => {
+    mockStore = {};
+    service = new CalendarService(mockStore);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+    vi.clearAllMocks();
+  });
+
+  it('should grant edit access successfully', async () => {
+    // Arrange
+    const calendarId = 'cal1';
+    const accountId = 'user1';
+    const editorData = { id: 'editor1', calendarId, accountId };
+    const axiosPost = vi.mocked(axios.post);
+    axiosPost.mockResolvedValue({ data: editorData });
+
+    // Act
+    const result = await service.grantEditAccess(calendarId, accountId);
+
+    // Assert
+    expect(axiosPost).toHaveBeenCalledWith(`/api/v1/calendars/${calendarId}/editors`, { accountId });
+    expect(result.accountId).toBe(accountId);
+    expect(result.calendarId).toBe(calendarId);
+  });
+
+  it('should throw EmptyValueError when accountId is empty', async () => {
+    // Act & Assert
+    await expect(service.grantEditAccess('cal1', '')).rejects.toThrow('accountId is empty');
+  });
+
+  it('should throw EmptyValueError when accountId is only whitespace', async () => {
+    // Act & Assert
+    await expect(service.grantEditAccess('cal1', '   ')).rejects.toThrow('accountId is empty');
+  });
+
+  it('should handle editor already exists error', async () => {
+    // Arrange
+    const calendarId = 'cal1';
+    const accountId = 'user1';
+    const axiosPost = vi.mocked(axios.post);
+    axiosPost.mockRejectedValue({
+      response: {
+        data: { errorName: 'EditorAlreadyExistsError' },
+      },
+    });
+
+    // Act & Assert
+    await expect(service.grantEditAccess(calendarId, accountId))
+      .rejects.toThrow('Editor relationship already exists');
+  });
+
+  it('should handle permission error when granting access', async () => {
+    // Arrange
+    const calendarId = 'cal1';
+    const accountId = 'user1';
+    const axiosPost = vi.mocked(axios.post);
+    axiosPost.mockRejectedValue({
+      response: {
+        data: { errorName: 'CalendarEditorPermissionError' },
+      },
+    });
+
+    // Act & Assert
+    await expect(service.grantEditAccess(calendarId, accountId))
+      .rejects.toThrow('Permission denied: only calendar owner can manage editors');
+  });
+});
+
+describe('revokeEditAccess', () => {
+  const sandbox = sinon.createSandbox();
+  let mockStore: ReturnType<typeof useCalendarStore>;
+  let service: CalendarService;
+
+  beforeEach(() => {
+    mockStore = {};
+    service = new CalendarService(mockStore);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+    vi.clearAllMocks();
+  });
+
+  it('should revoke edit access successfully', async () => {
+    // Arrange
+    const calendarId = 'cal1';
+    const accountId = 'user1';
+    const axiosDelete = vi.mocked(axios.delete);
+    axiosDelete.mockResolvedValue({});
+
+    // Act
+    await service.revokeEditAccess(calendarId, accountId);
+
+    // Assert
+    expect(axiosDelete).toHaveBeenCalledWith(`/api/v1/calendars/${calendarId}/editors/${accountId}`);
+  });
+
+  it('should throw EmptyValueError when accountId is empty', async () => {
+    // Act & Assert
+    await expect(service.revokeEditAccess('cal1', '')).rejects.toThrow('accountId is empty');
+  });
+
+  it('should throw EmptyValueError when accountId is only whitespace', async () => {
+    // Act & Assert
+    await expect(service.revokeEditAccess('cal1', '   ')).rejects.toThrow('accountId is empty');
+  });
+
+  it('should handle editor not found error', async () => {
+    // Arrange
+    const calendarId = 'cal1';
+    const accountId = 'user1';
+    const axiosDelete = vi.mocked(axios.delete);
+    axiosDelete.mockRejectedValue({
+      response: {
+        data: { errorName: 'EditorNotFoundError' },
+      },
+    });
+
+    // Act & Assert
+    await expect(service.revokeEditAccess(calendarId, accountId))
+      .rejects.toThrow('Editor relationship not found');
+  });
+
+  it('should handle permission error when revoking access', async () => {
+    // Arrange
+    const calendarId = 'cal1';
+    const accountId = 'user1';
+    const axiosDelete = vi.mocked(axios.delete);
+    axiosDelete.mockRejectedValue({
+      response: {
+        data: { errorName: 'CalendarEditorPermissionError' },
+      },
+    });
+
+    // Act & Assert
+    await expect(service.revokeEditAccess(calendarId, accountId))
+      .rejects.toThrow('Permission denied: only calendar owner can manage editors');
   });
 });

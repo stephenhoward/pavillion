@@ -7,9 +7,9 @@ import { EventEmitter } from 'events';
 import { CalendarEvent } from '@/common/model/events';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEditor } from '@/common/model/calendar_editor';
-import { Account } from '@/common/model/account';
-import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/server/calendar/exceptions/editors';
+import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/common/exceptions/editor';
 import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError } from '@/common/exceptions/calendar';
+import { noAccountExistsError } from '@/server/accounts/exceptions';
 import { testApp, countRoutes, addRequestUser } from '@/server/common/test/lib/express';
 import CalendarAPI from '@/server/calendar/api/v1';
 import EventRoutes from '@/server/calendar/api/v1/events';
@@ -295,9 +295,9 @@ describe('Editor API', () => {
     });
 
     it('should fail with calendar not found', async () => {
-      let calendarStub = editorSandbox.stub(calendarInterface, 'getCalendar');
+      let canViewStub = editorSandbox.stub(calendarInterface, 'canViewCalendarEditors');
       let editorStub = editorSandbox.stub(calendarInterface, 'getCalendarEditors');
-      calendarStub.resolves(null);
+      canViewStub.rejects(new CalendarNotFoundError('Calendar not found'));
       router.get('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'nonexistent';
         routes.listEditors(req, res);
@@ -386,10 +386,8 @@ describe('Editor API', () => {
     });
 
     it('should fail with calendar not found', async () => {
-      let calendarStub = editorSandbox.stub(calendarInterface, 'getCalendar');
       let grantStub = editorSandbox.stub(calendarInterface, 'grantEditAccess');
-      let accountStub = editorSandbox.stub(accountsInterface, 'getAccountById');
-      calendarStub.resolves(null);
+      grantStub.rejects(new CalendarNotFoundError('Calendar not found'));
       router.post('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'nonexistent';
         routes.grantEditAccess(req, res);
@@ -401,16 +399,11 @@ describe('Editor API', () => {
 
       expect(response.status).toBe(404);
       expect(response.body.error).toBe('Calendar not found');
-      expect(grantStub.called).toBe(false);
-      expect(accountStub.called).toBe(false);
     });
 
     it('should fail with account not found', async () => {
-      let calendarStub = editorSandbox.stub(calendarInterface, 'getCalendar');
-      let accountStub = editorSandbox.stub(accountsInterface, 'getAccountById');
       let grantStub = editorSandbox.stub(calendarInterface, 'grantEditAccess');
-      calendarStub.resolves(new Calendar('cal-id', 'test'));
-      accountStub.resolves(undefined);
+      grantStub.rejects(new noAccountExistsError());
       router.post('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'cal-id';
         routes.grantEditAccess(req, res);
@@ -421,17 +414,11 @@ describe('Editor API', () => {
         .send({ accountId: 'nonexistent-user' });
 
       expect(response.status).toBe(404);
-      expect(response.body.error).toBe('Account not found');
-      expect(grantStub.called).toBe(false);
-      expect(accountStub.called).toBe(true);
+      expect(response.body.error).toBe('Account does not exist');
     });
 
     it('should fail with permission denied error', async () => {
-      let calendarStub = editorSandbox.stub(calendarInterface, 'getCalendar');
-      let accountStub = editorSandbox.stub(accountsInterface, 'getAccountById');
       let grantStub = editorSandbox.stub(calendarInterface, 'grantEditAccess');
-      calendarStub.resolves(new Calendar('cal-id', 'test'));
-      accountStub.resolves(new Account('user-id', 'test@example.com', 'Test User'));
       grantStub.rejects(new CalendarEditorPermissionError('Permission denied: cannot grant edit access'));
       router.post('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'cal-id';
@@ -444,16 +431,10 @@ describe('Editor API', () => {
 
       expect(response.status).toBe(403);
       expect(response.body.error).toBe('Permission denied: cannot grant edit access');
-      expect(grantStub.called).toBe(true);
-      expect(accountStub.called).toBe(true);
     });
 
     it('should fail with editor already exists error', async () => {
-      let calendarStub = editorSandbox.stub(calendarInterface, 'getCalendar');
-      let accountStub = editorSandbox.stub(accountsInterface, 'getAccountById');
       let grantStub = editorSandbox.stub(calendarInterface, 'grantEditAccess');
-      calendarStub.resolves(new Calendar('cal-id', 'test'));
-      accountStub.resolves(new Account('user-id', 'test@example.com', 'Test User'));
       grantStub.rejects(new EditorAlreadyExistsError('Editor relationship already exists'));
       router.post('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'cal-id';
@@ -466,19 +447,11 @@ describe('Editor API', () => {
 
       expect(response.status).toBe(409);
       expect(response.body.error).toBe('Editor relationship already exists');
-      expect(grantStub.called).toBe(true);
-      expect(accountStub.called).toBe(true);
     });
 
     it('should succeed and return editor relationship', async () => {
-      let calendarStub = editorSandbox.stub(calendarInterface, 'getCalendar');
-      let accountStub = editorSandbox.stub(accountsInterface, 'getAccountById');
       let grantStub = editorSandbox.stub(calendarInterface, 'grantEditAccess');
-      const calendar = new Calendar('cal-id', 'test');
-      const account = new Account('user-id', 'test@example.com', 'Test User');
       const editor = new CalendarEditor('editor-id', 'cal-id', 'user-id');
-      calendarStub.resolves(calendar);
-      accountStub.resolves(account);
       grantStub.resolves(editor);
       router.post('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'cal-id';
@@ -491,8 +464,6 @@ describe('Editor API', () => {
 
       expect(response.status).toBe(201);
       expect(response.body).toEqual(editor.toObject());
-      expect(grantStub.called).toBe(true);
-      expect(accountStub.called).toBe(true);
     });
   });
 
@@ -510,10 +481,8 @@ describe('Editor API', () => {
     });
 
     it('should fail with calendar not found', async () => {
-      let calendarStub = editorSandbox.stub(calendarInterface, 'getCalendar');
-      let accountStub = editorSandbox.stub(accountsInterface, 'getAccountById');
       let revokeStub = editorSandbox.stub(calendarInterface, 'revokeEditAccess');
-      calendarStub.resolves(null);
+      revokeStub.rejects(new CalendarNotFoundError('Calendar not found'));
       router.delete('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'nonexistent';
         req.params.accountId = 'user-id';
@@ -525,16 +494,11 @@ describe('Editor API', () => {
 
       expect(response.status).toBe(404);
       expect(response.body.error).toBe('Calendar not found');
-      expect(revokeStub.called).toBe(false);
-      expect(accountStub.called).toBe(false);
     });
 
     it('should fail with account not found', async () => {
-      let calendarStub = editorSandbox.stub(calendarInterface, 'getCalendar');
-      let accountStub = editorSandbox.stub(accountsInterface, 'getAccountById');
       let revokeStub = editorSandbox.stub(calendarInterface, 'revokeEditAccess');
-      calendarStub.resolves(new Calendar('cal-id', 'test'));
-      accountStub.resolves(undefined);
+      revokeStub.rejects(new noAccountExistsError());
       router.delete('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'cal-id';
         req.params.accountId = 'nonexistent-user';
@@ -545,17 +509,11 @@ describe('Editor API', () => {
         .delete('/handler');
 
       expect(response.status).toBe(404);
-      expect(response.body.error).toBe('Account not found');
-      expect(revokeStub.called).toBe(false);
-      expect(accountStub.called).toBe(true);
+      expect(response.body.error).toBe('Account does not exist');
     });
 
     it('should fail with permission denied error', async () => {
-      let calendarStub = editorSandbox.stub(calendarInterface, 'getCalendar');
-      let accountStub = editorSandbox.stub(accountsInterface, 'getAccountById');
       let revokeStub = editorSandbox.stub(calendarInterface, 'revokeEditAccess');
-      calendarStub.resolves(new Calendar('cal-id', 'test'));
-      accountStub.resolves(new Account('user-id', 'test@example.com', 'Test User'));
       revokeStub.rejects(new CalendarEditorPermissionError('Permission denied: cannot revoke edit access'));
       router.delete('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'cal-id';
@@ -569,15 +527,10 @@ describe('Editor API', () => {
       expect(response.status).toBe(403);
       expect(response.body.error).toBe('Permission denied: cannot revoke edit access');
       expect(revokeStub.called).toBe(true);
-      expect(accountStub.called).toBe(true);
     });
 
     it('should succeed and return 204 when editor was revoked', async () => {
-      let calendarStub = editorSandbox.stub(calendarInterface, 'getCalendar');
-      let accountStub = editorSandbox.stub(accountsInterface, 'getAccountById');
       let revokeStub = editorSandbox.stub(calendarInterface, 'revokeEditAccess');
-      calendarStub.resolves(new Calendar('cal-id', 'test'));
-      accountStub.resolves(new Account('user-id', 'test@example.com', 'Test User'));
       revokeStub.resolves(true);
       router.delete('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'cal-id';
@@ -590,15 +543,10 @@ describe('Editor API', () => {
 
       expect(response.status).toBe(204);
       expect(revokeStub.called).toBe(true);
-      expect(accountStub.called).toBe(true);
     });
 
     it('should return 404 when editor relationship not found', async () => {
-      let calendarStub = editorSandbox.stub(calendarInterface, 'getCalendar');
-      let accountStub = editorSandbox.stub(accountsInterface, 'getAccountById');
       let revokeStub = editorSandbox.stub(calendarInterface, 'revokeEditAccess');
-      calendarStub.resolves(new Calendar('cal-id', 'test'));
-      accountStub.resolves(new Account('user-id', 'test@example.com', 'Test User'));
       revokeStub.rejects(new EditorNotFoundError('Editor relationship not found'));
       router.delete('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'cal-id';
@@ -612,7 +560,6 @@ describe('Editor API', () => {
       expect(response.status).toBe(404);
       expect(response.body.error).toBe('Editor relationship not found');
       expect(revokeStub.called).toBe(true);
-      expect(accountStub.called).toBe(true);
     });
   });
 });

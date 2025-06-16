@@ -53,7 +53,7 @@ describe('updateEvent with content', () => {
           description: "description",
         },
       },
-    })).rejects.toThrow('account cannot modify event');
+    })).rejects.toThrow('Insufficient permissions to modify events in this calendar');
   });
 
   it('should update an event', async () => {

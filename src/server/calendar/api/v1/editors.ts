@@ -3,7 +3,7 @@ import express, { Request, Response, Application } from 'express';
 import { Account } from '@/common/model/account';
 import ExpressHelper from '@/server/common/helper/express';
 import CalendarInterface from '../../interface';
-import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '../../exceptions/editors';
+import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/common/exceptions/editor';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { noAccountExistsError } from '@/server/accounts/exceptions';
 

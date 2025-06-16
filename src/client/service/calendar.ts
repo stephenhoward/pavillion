@@ -1,12 +1,19 @@
+import axios from 'axios';
 import { Calendar } from '@/common/model/calendar';
+import { CalendarEditor } from '@/common/model/calendar_editor';
 import ModelService from '@/client/service/models';
-import { UrlNameAlreadyExistsError, InvalidUrlNameError } from '@/common/exceptions/calendar';
+import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
+import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/common/exceptions/editor';
 import { UnauthenticatedError, UnknownError, EmptyValueError } from '@/common/exceptions';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 
 const errorMap = {
   UrlNameAlreadyExistsError,
   InvalidUrlNameError,
+  CalendarNotFoundError,
+  CalendarEditorPermissionError,
+  EditorAlreadyExistsError,
+  EditorNotFoundError,
   UnauthenticatedError,
   UnknownError,
 };
@@ -139,6 +146,87 @@ export default class CalendarService {
     catch (error) {
       console.error('Error deleting calendar:', error);
       throw error;
+    }
+  }
+
+  /**
+   * List all editors for a calendar
+   * @param calendarId The ID of the calendar
+   * @returns Promise<Array<CalendarEditor>> List of calendar editors
+   */
+  async listCalendarEditors(calendarId: string): Promise<Array<CalendarEditor>> {
+    try {
+      const response = await axios.get(`/api/v1/calendars/${calendarId}/editors`);
+      return response.data.map((editor: Record<string, any>) => CalendarEditor.fromObject(editor));
+    }
+    catch (error: unknown) {
+      console.error('Error listing calendar editors:', error);
+      this.handleEditorError(error);
+      throw new UnknownError();
+    }
+  }
+
+  /**
+   * Grant edit access to a user for a calendar
+   * @param calendarId The ID of the calendar
+   * @param accountId The ID of the account to grant access
+   * @returns Promise<CalendarEditor> The created editor relationship
+   */
+  async grantEditAccess(calendarId: string, accountId: string): Promise<CalendarEditor> {
+    if (!accountId || accountId.trim() === '') {
+      throw new EmptyValueError('accountId is empty');
+    }
+
+    try {
+      const response = await axios.post(`/api/v1/calendars/${calendarId}/editors`, {
+        accountId: accountId.trim(),
+      });
+      return CalendarEditor.fromObject(response.data);
+    }
+    catch (error: unknown) {
+      console.error('Error granting edit access:', error);
+      this.handleEditorError(error);
+      throw new UnknownError();
+    }
+  }
+
+  /**
+   * Revoke edit access from a user for a calendar
+   * @param calendarId The ID of the calendar
+   * @param accountId The ID of the account to revoke access from
+   * @returns Promise<void>
+   */
+  async revokeEditAccess(calendarId: string, accountId: string): Promise<void> {
+    if (!accountId || accountId.trim() === '') {
+      throw new EmptyValueError('accountId is empty');
+    }
+
+    try {
+      await axios.delete(`/api/v1/calendars/${calendarId}/editors/${accountId.trim()}`);
+    }
+    catch (error: unknown) {
+      console.error('Error revoking edit access:', error);
+      this.handleEditorError(error);
+      throw new UnknownError();
+    }
+  }
+
+  /**
+   * Handle editor-related errors by mapping backend error names to frontend exception classes
+   * @param error The error from the API call
+   */
+  private handleEditorError(error: unknown): void {
+    // Type guard to ensure error is the expected shape
+    if (error && typeof error === 'object' && 'response' in error &&
+        error.response && typeof error.response === 'object' && 'data' in error.response) {
+
+      const responseData = error.response.data as Record<string, unknown>;
+      const errorName = responseData.errorName as string;
+
+      if (errorName && errorName in errorMap) {
+        const ErrorClass = errorMap[errorName as keyof typeof errorMap];
+        throw new ErrorClass();
+      }
     }
   }
 }
