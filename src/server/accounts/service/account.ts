@@ -9,7 +9,7 @@ import AccountApplication from '@/common/model/application';
 import EmailService from "@/server/common/service/mail";
 import { AccountEntity, AccountSecretsEntity, AccountRoleEntity, AccountApplicationEntity } from "@/server/common/entity/account";
 import AccountInvitationEntity from '@/server/accounts/entity/account_invitation';
-import { AccountApplicationAlreadyExistsError, noAccountInviteExistsError, AccountRegistrationClosedError, AccountApplicationsClosedError, AccountAlreadyExistsError, AccountInviteAlreadyExistsError, noAccountApplicationExistsError } from '@/server/accounts/exceptions';
+import { AccountApplicationAlreadyExistsError, noAccountInviteExistsError, AccountRegistrationClosedError, AccountApplicationsClosedError, AccountAlreadyExistsError, AccountInviteAlreadyExistsError, noAccountApplicationExistsError, AccountInvitationPermissionError } from '@/server/accounts/exceptions';
 import AccountRegistrationEmail from '@/server/accounts/model/registration_email';
 import AccountInvitationEmail from '@/server/accounts/model/invitation_email';
 import ApplicationAcceptedEmail from '@/server/accounts/model/application_accepted_email';
@@ -43,8 +43,21 @@ export default class AccountService {
      * @returns a promise that resolves to undefined
      * @throws AccountAlreadyExistsError if an account already exists for the provided email
      * @throws AccountInviteAlreadyExistsError if an invitation already exists for the provided email
+     * @throws AccountInvitationPermissionError if the inviter lacks permission to send invitations
      */
   async inviteNewAccount(inviter: Account, email:string, message: string): Promise<AccountInvitation> {
+
+    // Check if user has permission to send invitations based on registration mode
+    const settings = await this.configurationInterface.getAllSettings();
+    const registrationMode = settings.registrationMode;
+
+    // Allow invitations based on new mode definitions:
+    // - 'open' mode: any authenticated user can invite
+    // - 'invitation' mode: any authenticated user can invite
+    // - 'apply' and 'closed' modes: only admins can invite
+    if (registrationMode !== 'open' && registrationMode !== 'invitation' && !inviter.hasRole('admin')) {
+      throw new AccountInvitationPermissionError();
+    }
 
     if ( await this.getAccountByEmail(email) ) {
       throw new AccountAlreadyExistsError();

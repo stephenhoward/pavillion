@@ -7,7 +7,7 @@ import AccountInvitationEntity from '@/server/accounts/entity/account_invitation
 import EmailService from '@/server/common/service/mail';
 import ServiceSettings from '@/server/configuration/service/settings';
 import AccountService from '@/server/accounts/service/account';
-import { AccountAlreadyExistsError, AccountInviteAlreadyExistsError, AccountRegistrationClosedError, AccountApplicationAlreadyExistsError, AccountApplicationsClosedError, noAccountInviteExistsError, noAccountApplicationExistsError } from '@/server/accounts/exceptions';
+import { AccountAlreadyExistsError, AccountInviteAlreadyExistsError, AccountRegistrationClosedError, AccountApplicationAlreadyExistsError, AccountApplicationsClosedError, noAccountInviteExistsError, noAccountApplicationExistsError, AccountInvitationPermissionError } from '@/server/accounts/exceptions';
 import { initI18Next } from '@/server/common/test/lib/i18next';
 import EventEmitter from 'events';
 import ConfigurationInterface from '@/server/configuration/interface';
@@ -34,7 +34,9 @@ describe('inviteNewAccount', () => {
 
   it('should throw AccountAlreadyExistsError if account already exists', async () => {
     let getAccountStub = sandbox.stub(accountService, 'getAccountByEmail');
+    let getAllSettingsStub = sandbox.stub(ConfigurationInterface.prototype, 'getAllSettings');
 
+    getAllSettingsStub.resolves({ registrationMode: 'invitation' });
     getAccountStub.resolves(new Account('id', 'test_email', 'testme'));
 
     await expect( accountService.inviteNewAccount(adminUser,'test_email','test_message')).rejects
@@ -44,7 +46,9 @@ describe('inviteNewAccount', () => {
   it('should throw AccountInviteAlreadyExistsError if invitation already exists', async () => {
     let getAccountStub = sandbox.stub(accountService, 'getAccountByEmail');
     let findInviteStub = sandbox.stub(AccountInvitationEntity, 'findOne');
+    let getAllSettingsStub = sandbox.stub(ConfigurationInterface.prototype, 'getAllSettings');
 
+    getAllSettingsStub.resolves({ registrationMode: 'invitation' });
     getAccountStub.resolves(undefined);
     findInviteStub.resolves(AccountInvitationEntity.build({ email: 'test_email' }));
     await expect(accountService.inviteNewAccount(adminUser,'test_email','test_message')).rejects
@@ -56,7 +60,9 @@ describe('inviteNewAccount', () => {
     let findInvitationStub = sandbox.stub(AccountInvitationEntity, 'findOne');
     let sendInviteStub = sandbox.stub(accountService,'sendNewAccountInvite');
     let saveInviteStub = sandbox.stub(AccountInvitationEntity.prototype, 'save');
+    let getAllSettingsStub = sandbox.stub(ConfigurationInterface.prototype, 'getAllSettings');
 
+    getAllSettingsStub.resolves({ registrationMode: 'invitation' });
     getAccountStub.resolves(undefined);
     findInvitationStub.resolves(undefined);
 
@@ -64,6 +70,40 @@ describe('inviteNewAccount', () => {
     expect(invitation.email).toBe('test_email');
     expect(sendInviteStub.called).toBe(true);
     expect(saveInviteStub.called).toBe(true);
+  });
+
+  it.each([
+    { mode: 'closed', shouldAllow: false, description: 'should throw AccountInvitationPermissionError if non-admin user tries to invite in closed mode' },
+    { mode: 'apply', shouldAllow: false, description: 'should throw AccountInvitationPermissionError if non-admin user tries to invite in apply mode' },
+    { mode: 'invitation', shouldAllow: true, description: 'should allow non-admin user to invite in invitation mode' },
+    { mode: 'open', shouldAllow: true, description: 'should allow non-admin user to invite in open mode' },
+  ])('$description', async ({ mode, shouldAllow }) => {
+    let getAllSettingsStub = sandbox.stub(ConfigurationInterface.prototype, 'getAllSettings');
+    let regularUser = new Account('user_id', 'regular_user', 'user@pavillion.dev');
+    regularUser.roles = []; // Not an admin
+
+    getAllSettingsStub.resolves({ registrationMode: mode });
+
+    if (shouldAllow) {
+      // For modes that should allow invitations, we need to stub the success path
+      let getAccountStub = sandbox.stub(accountService, 'getAccountByEmail');
+      let findInvitationStub = sandbox.stub(AccountInvitationEntity, 'findOne');
+      let sendInviteStub = sandbox.stub(accountService,'sendNewAccountInvite');
+      let saveInviteStub = sandbox.stub(AccountInvitationEntity.prototype, 'save');
+
+      getAccountStub.resolves(undefined);
+      findInvitationStub.resolves(undefined);
+
+      let invitation = await accountService.inviteNewAccount(regularUser,'test_email','test_message');
+      expect(invitation.email).toBe('test_email');
+      expect(sendInviteStub.called).toBe(true);
+      expect(saveInviteStub.called).toBe(true);
+    }
+    else {
+      // For modes that should deny invitations, expect an error
+      await expect(accountService.inviteNewAccount(regularUser,'test_email','test_message')).rejects
+        .toThrow(AccountInvitationPermissionError);
+    }
   });
 });
 

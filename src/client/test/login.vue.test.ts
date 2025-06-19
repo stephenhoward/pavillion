@@ -129,6 +129,27 @@ describe('Login Screen', () => {
     });
   });
 
+  describe('Invitation Mode', () => {
+    const invitationWrapper = mountComponent(Login, router, {
+      provide: {
+        site_config: {
+          settings: () => {
+            return {
+              registrationMode: 'invitation',
+            };
+          },
+        },
+      },
+    });
+    it('no registration link', () => {
+      expect(invitationWrapper.find('#register').exists()).toBe(false);
+    });
+
+    it('no apply link', () => {
+      expect(invitationWrapper.find('#apply').exists()).toBe(false);
+    });
+  });
+
 });
 
 describe('Login Behavior', () => {

@@ -1,10 +1,11 @@
 import express, { Request, Response } from 'express';
-import { Account } from '@/server/accounts/model/account';
+import { Account } from '@/common/model/account';
 import AccountsInterface from '@/server/accounts/interface';
 import ExpressHelper from '@/server/common/helper/express';
 
 export default class AccountInvitationRouteHandlers {
   private service: AccountsInterface;
+
   constructor(service: AccountsInterface) {
     this.service = service;
   }
@@ -12,7 +13,7 @@ export default class AccountInvitationRouteHandlers {
   installHandlers(app: express.Application, routePrefix: string): void {
     var router = express.Router();
     router.get('/invitations', ExpressHelper.adminOnly, this.listInvitations.bind(this));
-    router.post('/invitations', ExpressHelper.adminOnly, this.inviteToRegister.bind(this));
+    router.post('/invitations', ExpressHelper.loggedInOnly, this.inviteToRegister.bind(this));
     router.get('/invitations/:code', ...ExpressHelper.noUserOnly, this.checkInviteCode.bind(this));
     router.post('/invitations/:code', ...ExpressHelper.noUserOnly, this.acceptInvite.bind(this));
     router.delete('/invitations/:id', ExpressHelper.adminOnly, this.cancelInvite.bind(this));

@@ -21,7 +21,7 @@ const siteTitle = ref(site_config.settings().siteTitle);
 const registrationModes = [
   { value: 'open', label: t('registration_mode_open') },
   { value: 'apply', label: t('registration_mode_apply') },
-  { value: 'invite', label: t('registration_mode_invite') },
+  { value: 'invitation', label: t('registration_mode_invite') },
   { value: 'closed', label: t('registration_mode_closed') },
 ];
 

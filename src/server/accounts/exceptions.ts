@@ -46,10 +46,14 @@ class AccountRegistrationClosedError extends Error {
   }
 }
 
+class AccountInvitationPermissionError extends Error {
+  constructor() {
+    super('Insufficient permissions to send account invitations');
+  }
+}
+
 export {
   AccountAlreadyExistsError,
-  InvalidUsernameError,
-  UsernameAlreadyExistsError,
   AccountInviteAlreadyExistsError,
   AccountApplicationAlreadyExistsError,
   noAccountExistsError,
@@ -57,4 +61,5 @@ export {
   noAccountApplicationExistsError,
   AccountApplicationsClosedError,
   AccountRegistrationClosedError,
+  AccountInvitationPermissionError,
 };

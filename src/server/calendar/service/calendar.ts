@@ -290,15 +290,19 @@ class CalendarService {
       }
 
       const settings = await this.configurationInterface.getAllSettings();
-      const registrationMode = settings.registration_mode;
+      const registrationMode = settings.registrationMode;
 
-      // Only create invitation if registration is open or admin is granting
-      if (registrationMode !== 'open' && !grantingAccount.hasRole('admin')) {
-        throw new CalendarEditorPermissionError('Cannot invite new users: registration is not open');
+      // Allow invitations based on new mode definitions:
+      // - 'open' mode: any authenticated user can invite
+      // - 'invitation' mode: any authenticated user can invite
+      // - 'apply' and 'closed' modes: only admins can invite
+      if (registrationMode !== 'open' && registrationMode !== 'invitation' && !grantingAccount.hasRole('admin')) {
+        throw new CalendarEditorPermissionError('Cannot invite new users: insufficient permissions for current registration mode');
       }
 
       // Create account invitation
       const invitation = await this.accountsInterface.inviteNewAccount(
+        grantingAccount,
         email,
         `You've been invited to edit the calendar "${calendar.content('en').name}".`,
       );

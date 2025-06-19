@@ -39,7 +39,7 @@ onBeforeMount(() => {
   if ( site_config.settings().registrationMode == 'apply' ) {
     router.push({ name: 'register-apply', query: { email: route.query.email }});
   }
-  else if ( site_config.settings().registrationMode == 'closed' ) {
+  else if ( site_config.settings().registrationMode == 'closed' || site_config.settings().registrationMode == 'invitation' ) {
     router.push({ name: 'login', query: { em: route.query.email }});
   }
 

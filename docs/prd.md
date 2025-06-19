@@ -69,6 +69,7 @@ Pavillion addresses these issues by creating a federated network of event calend
    - Perform moderation of federated content
    - Create and maintain categories for organizing and filtering events
    - Maintain and map category systems between federated calendars
+   - May invite others to create organizer/curator accounts in 'open' and 'invitation' modes (admins can always invite)
 
 3. **Instance Administrators**
    - People managing Pavillion servers
@@ -168,9 +169,9 @@ Pavillion addresses these issues by creating a federated network of event calend
 1. **Account Creation Modes**
    - Administrator-configurable setting that can be changed at any time
    - **Open**: Anyone can self-register for an account without approval
+   - **Invitation**: Any account holder can invite another account holder to register
    - **Application**: Users submit applications that administrators must review and approve
-   - **Invitation**: Only administrators can initiate account creation by sending invitations
-   - **Closed**: No new accounts can be created
+   - **Closed**: Only administrators can initiate account creation by sending invitations (they can invite under any mode)
    - Email verification regardless of creation mode
    - Administrator interface for managing mode transitions
 
