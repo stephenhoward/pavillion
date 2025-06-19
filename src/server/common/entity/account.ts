@@ -1,7 +1,6 @@
 import { Model, Column, Table, BelongsTo, ForeignKey, DataType, PrimaryKey, BeforeCreate } from 'sequelize-typescript';
 
 import { Account, Profile } from '@/common/model/account';
-import AccountInvitation from '@/common/model/invitation';
 import AccountApplication from '@/common/model/application';
 import db from '@/server/common/entity/db';
 
@@ -30,6 +29,14 @@ class AccountEntity extends Model {
 
     return account;
   };
+
+  static fromModel(account: Account): AccountEntity {
+    return AccountEntity.build({
+      id: account.id,
+      username: account.username,
+      email: account.email,
+    });
+  }
 };
 
 @Table({ tableName: 'account_role' })
@@ -44,37 +51,6 @@ class AccountRoleEntity extends Model {
   @BelongsTo(() => AccountEntity)
   declare account: AccountEntity;
 }
-
-@Table({ tableName: 'account_invitation' })
-class AccountInvitationEntity extends Model {
-  @PrimaryKey
-  @Column({ type: DataType.UUID })
-  declare id: string;
-
-  @Column({ type: DataType.STRING })
-  declare email: string;
-
-  @Column({ type: DataType.STRING })
-  declare message: string;
-
-  @Column({ type: DataType.STRING })
-  declare invitation_code: string;
-
-  @Column({ type: DataType.DATE })
-  declare expiration_time: Date;
-
-  toModel(): AccountInvitation {
-    return new AccountInvitation(this.id, this.email, this.message, this.expiration_time);
-  }
-
-  @BeforeCreate
-  static setExpirationTime(instance: AccountInvitationEntity) {
-    // Set expiration time to 1 week from now
-    const oneWeekFromNow = new Date();
-    oneWeekFromNow.setDate(oneWeekFromNow.getDate() + 7);
-    instance.expiration_time = oneWeekFromNow;
-  }
-};
 
 @Table({ tableName: 'account_application' })
 class AccountApplicationEntity extends Model {
@@ -159,13 +135,12 @@ class AccountSecretsEntity extends Model {
   declare account: AccountEntity;
 };
 
-db.addModels([AccountEntity, AccountRoleEntity, AccountSecretsEntity, AccountApplicationEntity, AccountInvitationEntity, ProfileEntity]);
+db.addModels([AccountEntity, AccountRoleEntity, AccountSecretsEntity, AccountApplicationEntity, ProfileEntity]);
 
 export {
   AccountEntity,
   AccountRoleEntity,
   AccountSecretsEntity,
   AccountApplicationEntity,
-  AccountInvitationEntity,
   ProfileEntity,
 };

@@ -1,3 +1,5 @@
+import { Account } from '@/common/model/account';
+
 /**
  * Represents an invitation to create an account on the platform.
  * Contains information about the invitation, including recipient email and expiration.
@@ -6,6 +8,7 @@ class AccountInvitation {
   declare id: string;
   declare email: string;
   declare message: string;
+  declare invitedBy: Account;
   declare expirationTime: Date | null;
 
   /**
@@ -16,10 +19,11 @@ class AccountInvitation {
    * @param {string} [message] - Optional message to include with the invitation
    * @param {Date} [expirationTime] - Optional expiration time for the invitation
    */
-  constructor(id: string, email: string, message?: string, expirationTime?: Date) {
+  constructor(id: string, email: string, invitedBy: Account, message?: string, expirationTime?: Date) {
     this.id = id;
     this.email = email;
     this.message = message ?? '';
+    this.invitedBy = invitedBy;
     this.expirationTime = expirationTime ?? null;
   }
 
@@ -32,6 +36,7 @@ class AccountInvitation {
     return {
       id: this.id,
       email: this.email,
+      invitedBy: this.invitedBy.toObject,
       message: this.message,
       expirationTime: this.expirationTime,
     };
@@ -47,6 +52,7 @@ class AccountInvitation {
     return new AccountInvitation(
       obj.id || '',
       obj.email,
+      Account.fromObject(obj.invitedBy),
       obj.message,
       obj.expirationTime ? new Date(obj.expirationTime) : undefined,
     );

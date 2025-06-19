@@ -347,8 +347,8 @@ describe('listCalendarEditors', () => {
     // Arrange
     const calendarId = 'cal1';
     const editorsData = [
-      { id: 'editor1', calendarId, accountId: 'user1' },
-      { id: 'editor2', calendarId, accountId: 'user2' },
+      { id: 'editor1', calendarId, email: 'user1' },
+      { id: 'editor2', calendarId, email: 'user2' },
     ];
     const axiosGet = vi.mocked(axios.get);
     axiosGet.mockResolvedValue({ data: editorsData });
@@ -359,8 +359,8 @@ describe('listCalendarEditors', () => {
     // Assert
     expect(axiosGet).toHaveBeenCalledWith(`/api/v1/calendars/${calendarId}/editors`);
     expect(result).toHaveLength(2);
-    expect(result[0].accountId).toBe('user1');
-    expect(result[1].accountId).toBe('user2');
+    expect(result[0].email).toBe('user1');
+    expect(result[1].email).toBe('user2');
   });
 
   it('should handle permission error when listing editors', async () => {
@@ -412,17 +412,17 @@ describe('grantEditAccess', () => {
   it('should grant edit access successfully', async () => {
     // Arrange
     const calendarId = 'cal1';
-    const accountId = 'user1';
-    const editorData = { id: 'editor1', calendarId, accountId };
+    const email = 'user1';
+    const editorData = { id: 'editor1', calendarId, email };
     const axiosPost = vi.mocked(axios.post);
     axiosPost.mockResolvedValue({ data: editorData });
 
     // Act
-    const result = await service.grantEditAccess(calendarId, accountId);
+    const result = await service.grantEditAccess(calendarId, email);
 
     // Assert
-    expect(axiosPost).toHaveBeenCalledWith(`/api/v1/calendars/${calendarId}/editors`, { accountId });
-    expect(result.accountId).toBe(accountId);
+    expect(axiosPost).toHaveBeenCalledWith(`/api/v1/calendars/${calendarId}/editors`, { email });
+    expect(result.email).toBe(email);
     expect(result.calendarId).toBe(calendarId);
   });
 
@@ -455,7 +455,7 @@ describe('grantEditAccess', () => {
   it('should handle permission error when granting access', async () => {
     // Arrange
     const calendarId = 'cal1';
-    const accountId = 'user1';
+    const email = 'user1';
     const axiosPost = vi.mocked(axios.post);
     axiosPost.mockRejectedValue({
       response: {
@@ -464,7 +464,7 @@ describe('grantEditAccess', () => {
     });
 
     // Act & Assert
-    await expect(service.grantEditAccess(calendarId, accountId))
+    await expect(service.grantEditAccess(calendarId, email))
       .rejects.toThrow('Permission denied: only calendar owner can manage editors');
   });
 });
@@ -487,31 +487,31 @@ describe('revokeEditAccess', () => {
   it('should revoke edit access successfully', async () => {
     // Arrange
     const calendarId = 'cal1';
-    const accountId = 'user1';
+    const editorId = 'editor1';
     const axiosDelete = vi.mocked(axios.delete);
     axiosDelete.mockResolvedValue({});
 
     // Act
-    await service.revokeEditAccess(calendarId, accountId);
+    await service.revokeEditAccess(calendarId, editorId);
 
     // Assert
-    expect(axiosDelete).toHaveBeenCalledWith(`/api/v1/calendars/${calendarId}/editors/${accountId}`);
+    expect(axiosDelete).toHaveBeenCalledWith(`/api/v1/calendars/${calendarId}/editors/${editorId}`);
   });
 
-  it('should throw EmptyValueError when accountId is empty', async () => {
+  it('should throw EmptyValueError when editorId is empty', async () => {
     // Act & Assert
-    await expect(service.revokeEditAccess('cal1', '')).rejects.toThrow('accountId is empty');
+    await expect(service.revokeEditAccess('cal1', '')).rejects.toThrow('editorId is empty');
   });
 
-  it('should throw EmptyValueError when accountId is only whitespace', async () => {
+  it('should throw EmptyValueError when editorId is only whitespace', async () => {
     // Act & Assert
-    await expect(service.revokeEditAccess('cal1', '   ')).rejects.toThrow('accountId is empty');
+    await expect(service.revokeEditAccess('cal1', '   ')).rejects.toThrow('editorId is empty');
   });
 
   it('should handle editor not found error', async () => {
     // Arrange
     const calendarId = 'cal1';
-    const accountId = 'user1';
+    const email = 'user1';
     const axiosDelete = vi.mocked(axios.delete);
     axiosDelete.mockRejectedValue({
       response: {
@@ -520,14 +520,14 @@ describe('revokeEditAccess', () => {
     });
 
     // Act & Assert
-    await expect(service.revokeEditAccess(calendarId, accountId))
+    await expect(service.revokeEditAccess(calendarId, email))
       .rejects.toThrow('Editor relationship not found');
   });
 
   it('should handle permission error when revoking access', async () => {
     // Arrange
     const calendarId = 'cal1';
-    const accountId = 'user1';
+    const editorId = 'user1';
     const axiosDelete = vi.mocked(axios.delete);
     axiosDelete.mockRejectedValue({
       response: {
@@ -536,7 +536,7 @@ describe('revokeEditAccess', () => {
     });
 
     // Act & Assert
-    await expect(service.revokeEditAccess(calendarId, accountId))
+    await expect(service.revokeEditAccess(calendarId, editorId))
       .rejects.toThrow('Permission denied: only calendar owner can manage editors');
   });
 });

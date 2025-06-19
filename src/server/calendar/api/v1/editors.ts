@@ -20,7 +20,7 @@ class EditorRoutes {
     // Editor management routes
     router.get('/calendars/:calendarId/editors', ExpressHelper.loggedInOnly, this.listEditors.bind(this));
     router.post('/calendars/:calendarId/editors', ExpressHelper.loggedInOnly, this.grantEditAccess.bind(this));
-    router.delete('/calendars/:calendarId/editors/:accountId', ExpressHelper.loggedInOnly, this.revokeEditAccess.bind(this));
+    router.delete('/calendars/:calendarId/editors/:editorId', ExpressHelper.loggedInOnly, this.revokeEditAccess.bind(this));
 
     app.use(routePrefix, router);
   }
@@ -70,7 +70,7 @@ class EditorRoutes {
   /**
    * Grant edit access to a user for a calendar
    * POST /api/v1/calendars/:calendarId/editors
-   * Body: { accountId: string }
+   * Body: { accountId: string } OR { email: string }
    */
   async grantEditAccess(req: Request, res: Response) {
     const account = req.user as Account;
@@ -82,16 +82,20 @@ class EditorRoutes {
       return;
     }
 
-    if (!req.body.accountId) {
+    // Accept either accountId or email, and optional message
+    const { email, message } = req.body;
+
+    if (!email) {
       res.status(400).json({
-        "error": "Missing accountId in request body",
+        "error": "Missing email in request body",
       });
       return;
     }
 
     try {
-      const editor = await this.service.grantEditAccess(account, req.params.calendarId, req.body.accountId);
-      res.status(201).json(editor.toObject());
+      // New behavior - grant access by email (handles both existing and new users)
+      const result = await this.service.grantEditAccessByEmail(account, req.params.calendarId, email, message);
+      res.status(201).json(result);
     }
     catch (error) {
       if (error instanceof CalendarEditorPermissionError) {

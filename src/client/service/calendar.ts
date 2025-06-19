@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEditor } from '@/common/model/calendar_editor';
+import { CalendarInfo } from '@/common/model/calendar_info';
 import ModelService from '@/client/service/models';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/common/exceptions/editor';
@@ -48,6 +49,21 @@ export default class CalendarService {
     }
     catch (error) {
       console.error('Error loading calendars:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Load calendars with relationship information (owner vs editor)
+   * @returns Promise<Array<CalendarInfo>> The list of calendars with relationship info
+   */
+  async loadCalendarsWithRelationship(): Promise<Array<CalendarInfo>> {
+    try {
+      const calendarsData = await ModelService.listModels('/api/v1/calendars');
+      return calendarsData.map(calendarData => CalendarInfo.fromObject(calendarData));
+    }
+    catch (error) {
+      console.error('Error loading calendars with relationship:', error);
       throw error;
     }
   }
@@ -172,14 +188,14 @@ export default class CalendarService {
    * @param accountId The ID of the account to grant access
    * @returns Promise<CalendarEditor> The created editor relationship
    */
-  async grantEditAccess(calendarId: string, accountId: string): Promise<CalendarEditor> {
-    if (!accountId || accountId.trim() === '') {
+  async grantEditAccess(calendarId: string, email: string): Promise<CalendarEditor> {
+    if (!email || email.trim() === '') {
       throw new EmptyValueError('accountId is empty');
     }
 
     try {
       const response = await axios.post(`/api/v1/calendars/${calendarId}/editors`, {
-        accountId: accountId.trim(),
+        email: email.trim(),
       });
       return CalendarEditor.fromObject(response.data);
     }
@@ -193,16 +209,16 @@ export default class CalendarService {
   /**
    * Revoke edit access from a user for a calendar
    * @param calendarId The ID of the calendar
-   * @param accountId The ID of the account to revoke access from
+   * @param editorId The ID of the editor record to revoke access from
    * @returns Promise<void>
    */
-  async revokeEditAccess(calendarId: string, accountId: string): Promise<void> {
-    if (!accountId || accountId.trim() === '') {
-      throw new EmptyValueError('accountId is empty');
+  async revokeEditAccess(calendarId: string, editorId: string): Promise<void> {
+    if (!editorId || editorId.trim() === '') {
+      throw new EmptyValueError('editorId is empty');
     }
 
     try {
-      await axios.delete(`/api/v1/calendars/${calendarId}/editors/${accountId.trim()}`);
+      await axios.delete(`/api/v1/calendars/${calendarId}/editors/${editorId.trim()}`);
     }
     catch (error: unknown) {
       console.error('Error revoking edit access:', error);

@@ -7,7 +7,8 @@ import { Account } from "@/common/model/account";
 import AccountInvitation from '@/common/model/invitation';
 import AccountApplication from '@/common/model/application';
 import EmailService from "@/server/common/service/mail";
-import { AccountEntity, AccountSecretsEntity, AccountRoleEntity, AccountInvitationEntity, AccountApplicationEntity } from "@/server/common/entity/account";
+import { AccountEntity, AccountSecretsEntity, AccountRoleEntity, AccountApplicationEntity } from "@/server/common/entity/account";
+import AccountInvitationEntity from '@/server/accounts/entity/account_invitation';
 import { AccountApplicationAlreadyExistsError, noAccountInviteExistsError, AccountRegistrationClosedError, AccountApplicationsClosedError, AccountAlreadyExistsError, AccountInviteAlreadyExistsError, noAccountApplicationExistsError } from '@/server/accounts/exceptions';
 import AccountRegistrationEmail from '@/server/accounts/model/registration_email';
 import AccountInvitationEmail from '@/server/accounts/model/invitation_email';
@@ -43,7 +44,7 @@ export default class AccountService {
      * @throws AccountAlreadyExistsError if an account already exists for the provided email
      * @throws AccountInviteAlreadyExistsError if an invitation already exists for the provided email
      */
-  async inviteNewAccount(email:string, message: string): Promise<AccountInvitation> {
+  async inviteNewAccount(inviter: Account, email:string, message: string): Promise<AccountInvitation> {
 
     if ( await this.getAccountByEmail(email) ) {
       throw new AccountAlreadyExistsError();
@@ -53,17 +54,23 @@ export default class AccountService {
       throw new AccountInviteAlreadyExistsError();
     }
 
-    const invitation = AccountInvitationEntity.build({
+    const invitationEntity = AccountInvitationEntity.build({
       id: uuidv4(),
       email: email,
+      invited_by: inviter.id,
       message: message,
       invitation_code: randomBytes(16).toString('hex'),
     });
+    invitationEntity.inviter = AccountEntity.fromModel(inviter);
 
-    await invitation.save();
-    this.sendNewAccountInvite(invitation);
+    await invitationEntity.save();
 
-    return invitation.toModel();
+    const invitation = invitationEntity.toModel();
+    invitation.invitedBy = inviter;
+
+    this.sendNewAccountInvite(inviter, invitationEntity);
+
+    return invitation;
   }
 
   /**
@@ -72,7 +79,7 @@ export default class AccountService {
      * @returns a promise that resolves to the updated invitation or undefined if not found
      */
   async resendInvite(id: string): Promise<AccountInvitation|undefined> {
-    const invitation = await AccountInvitationEntity.findByPk(id);
+    const invitation = await AccountInvitationEntity.findByPk(id, { include: [ 'inviter' ] });
     if (!invitation) {
       return undefined;
     }
@@ -85,7 +92,7 @@ export default class AccountService {
     await invitation.save();
 
     // Resend the invitation email
-    await this.sendNewAccountInvite(invitation);
+    await this.sendNewAccountInvite(invitation.inviter.toModel(), invitation);
 
     return invitation.toModel();
   }
@@ -267,7 +274,7 @@ export default class AccountService {
    * @param {AccountInvitationEntity} invitation - The invitation entity to send
    * @returns {Promise<boolean>} True if the email was sent successfully
    */
-  async sendNewAccountInvite(invitation:AccountInvitationEntity): Promise<boolean> {
+  async sendNewAccountInvite(inviter: Account, invitation:AccountInvitationEntity): Promise<boolean> {
 
     const message = new AccountInvitationEmail(invitation.toModel(), invitation.invitation_code);
     EmailService.sendEmail(message.buildMessage('en'));

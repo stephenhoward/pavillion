@@ -9,9 +9,16 @@ import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError }
 import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/common/exceptions/editor';
 import { noAccountExistsError } from '@/server/accounts/exceptions';
 import AccountsInterface from '@/server/accounts/interface';
+import ConfigurationInterface from '@/server/configuration/interface';
+import EmailService from '@/server/common/service/mail';
+import EditorInvitationEmail from '@/server/calendar/model/editor_invitation_email';
+import EditorNotificationEmail from '@/server/calendar/model/editor_notification_email';
 
 class CalendarService {
-  constructor(private accountsInterface?: AccountsInterface) {}
+  constructor(
+    private accountsInterface?: AccountsInterface,
+    private configurationInterface?: ConfigurationInterface,
+  ) {}
   async getCalendar(id: string): Promise<Calendar|null> {
     const calendar = await CalendarEntity.findByPk(id);
     return calendar ? calendar.toModel() : null;
@@ -81,6 +88,43 @@ class CalendarService {
     );
   }
 
+  async editableCalendarsWithRoleForUser(account: Account): Promise<Array<{calendar: Calendar, role: 'owner' | 'editor'}>> {
+    if (!account.id) {
+      return [];
+    }
+
+    // Get calendars owned by the user
+    let ownedCalendars = await CalendarEntity.findAll({ where: { account_id: account.id } });
+
+    // Get calendars where the user has editor access
+    let editorRoles = await CalendarEditorEntity.findAll({
+      where: { account_id: account.id },
+      include: [CalendarEntity],
+    });
+
+    // Create result with relationship information
+    let calendarsWithRole = [
+      ...ownedCalendars.map(calendar => ({
+        calendar: calendar.toModel(),
+        role: 'owner' as const,
+      })),
+      ...editorRoles.map(rel => ({
+        calendar: rel.calendar.toModel(),
+        role: 'editor' as const,
+      })),
+    ];
+
+    // Remove duplicates (prioritize owner relationship over editor)
+    return calendarsWithRole.filter((calendarInfo, index, self) => {
+      const duplicateIndex = self.findIndex(c => c.calendar.id === calendarInfo.calendar.id);
+      if (duplicateIndex === index) {
+        return true; // First occurrence, keep it
+      }
+      // If this is a duplicate, only keep it if current is owner and first is editor
+      return calendarInfo.role === 'owner' && self[duplicateIndex].role === 'editor';
+    });
+  }
+
   async userCanModifyCalendar(account: Account, calendar: Calendar): Promise<boolean> {
     if ( ! account.hasRole('admin') ) {
       let calendars = await this.editableCalendarsForUser(account);
@@ -128,7 +172,7 @@ class CalendarService {
    * @throws CalendarEditorPermissionError if permission denied
    * @throws EditorAlreadyExistsError if editor already exists
    */
-  async grantEditAccess(grantingAccount: Account, calendarId: string, editorAccountId: string): Promise<CalendarEditor> {
+  private async grantEditAccess(grantingAccount: Account, calendarId: string, editorAccountId: string): Promise<CalendarEditor> {
     // Get and validate calendar exists
     const calendar = await this.getCalendar(calendarId);
     if (!calendar) {
@@ -169,11 +213,120 @@ class CalendarService {
       id: uuidv4(),
       calendar_id: calendar.id,
       account_id: editorAccount.id,
-      granted_by: grantingAccount.id,
-      granted_at: new Date(),
+      email: editorAccount.email,
     });
 
     return editorEntity.toModel();
+  }
+
+  /**
+   * Grant edit access by email address - handles both existing and new users
+   *
+   * @param grantingAccount - Account granting access (must be calendar owner or admin)
+   * @param calendarId - ID of the calendar to grant access to
+   * @param email - Email address to grant edit access to
+   * @param message - Optional personal message to include in the invitation
+   * @returns The created editor relationship or invitation details
+   * @throws CalendarNotFoundError if calendar not found
+   * @throws CalendarEditorPermissionError if permission denied
+   * @throws EditorAlreadyExistsError if editor already exists
+   */
+  async grantEditAccessByEmail(
+    grantingAccount: Account,
+    calendarId: string,
+    email: string,
+    message?: string,
+  ): Promise<{ type: 'editor' | 'invitation', data: CalendarEditor | any }> {
+    // Get and validate calendar exists
+    const calendar = await this.getCalendar(calendarId);
+    if (!calendar) {
+      throw new CalendarNotFoundError();
+    }
+
+    // Check if granting account has permission (must be calendar owner or admin)
+    if (!grantingAccount.hasRole('admin')) {
+      const isOwner = await this.isCalendarOwner(grantingAccount, calendar);
+      if (!isOwner) {
+        throw new CalendarEditorPermissionError('Permission denied: only calendar owner can grant edit access');
+      }
+    }
+
+    if (!this.accountsInterface) {
+      throw new Error('AccountsInterface not available');
+    }
+
+    // Try to find existing account by email
+    const existingAccount = await this.accountsInterface.getAccountByEmail(email);
+
+    if (existingAccount) {
+      // User exists - grant editor access directly
+      const editorRelationship = await this.grantEditAccess(grantingAccount, calendarId, existingAccount.id);
+
+      // Send email notification about editor access
+      const notificationEmail = new EditorNotificationEmail(
+        calendar,
+        grantingAccount,
+        existingAccount,
+        message,
+      );
+
+      try {
+        await EmailService.sendEmail(notificationEmail.buildMessage(existingAccount.language));
+      }
+      catch (error) {
+        console.error('Failed to send editor notification email:', error);
+        // Don't fail the whole operation if email fails
+      }
+
+      return {
+        type: 'editor',
+        data: editorRelationship,
+      };
+    }
+    else {
+      // User doesn't exist - check if we can create an invitation
+      if (!this.configurationInterface) {
+        throw new Error('ConfigurationInterface not available');
+      }
+
+      const settings = await this.configurationInterface.getAllSettings();
+      const registrationMode = settings.registration_mode;
+
+      // Only create invitation if registration is open or admin is granting
+      if (registrationMode !== 'open' && !grantingAccount.hasRole('admin')) {
+        throw new CalendarEditorPermissionError('Cannot invite new users: registration is not open');
+      }
+
+      // Create account invitation
+      const invitation = await this.accountsInterface.inviteNewAccount(
+        email,
+        `You've been invited to edit the calendar "${calendar.content('en').name}".`,
+      );
+
+      // Send email with invitation and editor access information
+      const invitationEmail = new EditorInvitationEmail(
+        calendar,
+        grantingAccount,
+        email,
+        invitation.id,
+        message,
+      );
+
+      try {
+        await EmailService.sendEmail(invitationEmail.buildMessage('en'));
+      }
+      catch (error) {
+        console.error('Failed to send editor invitation email:', error);
+        // Don't fail the whole operation if email fails
+      }
+
+      // TODO: Store pending editor access grant for when they accept invitation
+
+      return {
+        type: 'invitation',
+        data: invitation,
+      };
+    }
   }
 
   /**

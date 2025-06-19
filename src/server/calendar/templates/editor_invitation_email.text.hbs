@@ -1,0 +1,31 @@
+{{t 'title'}}
+
+{{t 'greeting'}}
+
+{{t 'invitation_message' calendarName=calendarName inviterName=inviterName}}
+
+{{#if message}}
+{{t 'custom_message_label'}}
+{{message}}
+
+{{/if}}
+{{t 'what_this_means'}}
+
+{{#if isNewUser}}
+{{t 'new_user_instructions'}}
+
+{{invitationUrl}}?code={{inviteCode}}
+
+{{t 'new_user_expiry_notice'}}
+{{else}}
+{{t 'existing_user_instructions'}}
+
+{{calendarUrl}}
+
+{{/if}}
+
+{{t 'signature'}}
+{{inviterName}}
+
+----
+{{t 'footer_text'}}

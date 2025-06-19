@@ -1,0 +1,12 @@
+{
+    "subject": "You can now edit {{calendarName}}",
+    "title": "Calendar Editor Access Granted",
+    "greeting": "Hello,",
+    "notification_message": "{{inviterName}} has granted you editor access to the calendar \"{{calendarName}}\".",
+    "custom_message_label": "Personal message from {{inviterName}}:",
+    "access_granted": "You now have full editing privileges for this calendar.",
+    "view_calendar_instructions": "You can start editing this calendar right away. Click the button below to view it:",
+    "view_calendar_button": "View Calendar",
+    "signature": "Best regards,",
+    "footer_text": "This is an automated message, please do not reply to this email."
+}

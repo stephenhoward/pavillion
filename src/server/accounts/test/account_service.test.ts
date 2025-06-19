@@ -2,7 +2,8 @@ import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import sinon from 'sinon';
 
 import { Account } from '@/common/model/account';
-import { AccountEntity, AccountSecretsEntity, AccountInvitationEntity,AccountApplicationEntity } from '@/server/common/entity/account';
+import { AccountEntity, AccountSecretsEntity,AccountApplicationEntity } from '@/server/common/entity/account';
+import AccountInvitationEntity from '@/server/accounts/entity/account_invitation';
 import EmailService from '@/server/common/service/mail';
 import ServiceSettings from '@/server/configuration/service/settings';
 import AccountService from '@/server/accounts/service/account';
@@ -17,11 +18,14 @@ describe('inviteNewAccount', () => {
 
   let sandbox = sinon.createSandbox();
   let accountService: AccountService;
+  let adminUser: Account;
 
   beforeEach(() => {
     const eventBus = new EventEmitter();
     const configurationInterface = new ConfigurationInterface();
     accountService = new AccountService(eventBus,configurationInterface);
+    adminUser = new Account('admin_id', 'admin_user','admin@pavillion.dev');
+    adminUser.roles = ['admin'];
   });
 
   afterEach(() => {
@@ -33,7 +37,7 @@ describe('inviteNewAccount', () => {
 
     getAccountStub.resolves(new Account('id', 'test_email', 'testme'));
 
-    await expect( accountService.inviteNewAccount('test_email','test_message')).rejects
+    await expect( accountService.inviteNewAccount(adminUser,'test_email','test_message')).rejects
       .toThrow(AccountAlreadyExistsError);
   });
 
@@ -43,7 +47,7 @@ describe('inviteNewAccount', () => {
 
     getAccountStub.resolves(undefined);
     findInviteStub.resolves(AccountInvitationEntity.build({ email: 'test_email' }));
-    await expect(accountService.inviteNewAccount('test_email','test_message')).rejects
+    await expect(accountService.inviteNewAccount(adminUser,'test_email','test_message')).rejects
       .toThrow(AccountInviteAlreadyExistsError);
   });
 
@@ -56,7 +60,7 @@ describe('inviteNewAccount', () => {
     getAccountStub.resolves(undefined);
     findInvitationStub.resolves(undefined);
 
-    let invitation = await accountService.inviteNewAccount('test_email','test_message');
+    let invitation = await accountService.inviteNewAccount(adminUser,'test_email','test_message');
     expect(invitation.email).toBe('test_email');
     expect(sendInviteStub.called).toBe(true);
     expect(saveInviteStub.called).toBe(true);

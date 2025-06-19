@@ -353,22 +353,22 @@ describe('Editor API', () => {
     });
   });
 
-  describe('grantEditAccess', () => {
+  describe('grantEditAccessByEmail', () => {
     it('should fail without authentication', async () => {
-      let grantStub = editorSandbox.stub(calendarInterface, 'grantEditAccess');
+      let grantStub = editorSandbox.stub(calendarInterface, 'grantEditAccessByEmail');
       router.post('/handler', (req, res) => { routes.grantEditAccess(req, res); });
 
       const response = await request(testApp(router))
         .post('/handler')
-        .send({ accountId: 'user-id' });
+        .send({ email: 'email@pavillion.dev' });
 
       expect(response.status).toBe(401);
       expect(response.body.error).toBe('Authentication required');
       expect(grantStub.called).toBe(false);
     });
 
-    it('should fail without accountId', async () => {
-      let grantStub = editorSandbox.stub(calendarInterface, 'grantEditAccess');
+    it('should fail without email', async () => {
+      let grantStub = editorSandbox.stub(calendarInterface, 'grantEditAccessByEmail');
       let accountStub = editorSandbox.stub(accountsInterface, 'getAccountById');
       router.post('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'cal-id';
@@ -380,13 +380,13 @@ describe('Editor API', () => {
         .send({});
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Missing accountId in request body');
+      expect(response.body.error).toBe('Missing email in request body');
       expect(grantStub.called).toBe(false);
       expect(accountStub.called).toBe(false);
     });
 
     it('should fail with calendar not found', async () => {
-      let grantStub = editorSandbox.stub(calendarInterface, 'grantEditAccess');
+      let grantStub = editorSandbox.stub(calendarInterface, 'grantEditAccessByEmail');
       grantStub.rejects(new CalendarNotFoundError('Calendar not found'));
       router.post('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'nonexistent';
@@ -395,14 +395,14 @@ describe('Editor API', () => {
 
       const response = await request(testApp(router))
         .post('/handler')
-        .send({ accountId: 'user-id' });
+        .send({ email: 'email@pavillion.dev' });
 
       expect(response.status).toBe(404);
       expect(response.body.error).toBe('Calendar not found');
     });
 
     it('should fail with account not found', async () => {
-      let grantStub = editorSandbox.stub(calendarInterface, 'grantEditAccess');
+      let grantStub = editorSandbox.stub(calendarInterface, 'grantEditAccessByEmail');
       grantStub.rejects(new noAccountExistsError());
       router.post('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'cal-id';
@@ -411,14 +411,14 @@ describe('Editor API', () => {
 
       const response = await request(testApp(router))
         .post('/handler')
-        .send({ accountId: 'nonexistent-user' });
+        .send({ email: 'email@pavillion.dev' });
 
       expect(response.status).toBe(404);
       expect(response.body.error).toBe('Account does not exist');
     });
 
     it('should fail with permission denied error', async () => {
-      let grantStub = editorSandbox.stub(calendarInterface, 'grantEditAccess');
+      let grantStub = editorSandbox.stub(calendarInterface, 'grantEditAccessByEmail');
       grantStub.rejects(new CalendarEditorPermissionError('Permission denied: cannot grant edit access'));
       router.post('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'cal-id';
@@ -427,14 +427,14 @@ describe('Editor API', () => {
 
       const response = await request(testApp(router))
         .post('/handler')
-        .send({ accountId: 'user-id' });
+        .send({ email: 'email@pavillion.dev' });
 
       expect(response.status).toBe(403);
       expect(response.body.error).toBe('Permission denied: cannot grant edit access');
     });
 
     it('should fail with editor already exists error', async () => {
-      let grantStub = editorSandbox.stub(calendarInterface, 'grantEditAccess');
+      let grantStub = editorSandbox.stub(calendarInterface, 'grantEditAccessByEmail');
       grantStub.rejects(new EditorAlreadyExistsError('Editor relationship already exists'));
       router.post('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'cal-id';
@@ -443,16 +443,16 @@ describe('Editor API', () => {
 
       const response = await request(testApp(router))
         .post('/handler')
-        .send({ accountId: 'user-id' });
+        .send({ email: 'email@pavillion.dev' });
 
       expect(response.status).toBe(409);
       expect(response.body.error).toBe('Editor relationship already exists');
     });
 
     it('should succeed and return editor relationship', async () => {
-      let grantStub = editorSandbox.stub(calendarInterface, 'grantEditAccess');
+      let grantStub = editorSandbox.stub(calendarInterface, 'grantEditAccessByEmail');
       const editor = new CalendarEditor('editor-id', 'cal-id', 'user-id');
-      grantStub.resolves(editor);
+      grantStub.resolves({ type: 'editor', data: editor });
       router.post('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'cal-id';
         routes.grantEditAccess(req, res);
@@ -460,10 +460,13 @@ describe('Editor API', () => {
 
       const response = await request(testApp(router))
         .post('/handler')
-        .send({ accountId: 'user-id' });
+        .send({ email: 'email@pavillion.dev' });
 
       expect(response.status).toBe(201);
-      expect(response.body).toEqual(editor.toObject());
+      expect(response.body).toEqual({
+        type: 'editor',
+        data: editor.toObject(),
+      });
     });
   });
 

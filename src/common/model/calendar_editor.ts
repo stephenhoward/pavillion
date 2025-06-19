@@ -7,24 +7,24 @@ import { Model } from './model';
 export class CalendarEditor extends Model {
   declare id: string;
   declare calendarId: string;
-  declare accountId: string;
+  declare email: string;
 
   /**
    * Constructor for CalendarEditor.
    *
    * @param {string} id - Unique identifier for the editor relationship
    * @param {string} calendarId - ID of the calendar
-   * @param {string} accountId - ID of the account with edit access
+   * @param {string} email - Email of the user with edit access
    */
   constructor(
     id: string,
     calendarId: string,
-    accountId: string,
+    email: string,
   ) {
     super();
     this.id = id;
     this.calendarId = calendarId;
-    this.accountId = accountId;
+    this.email = email;
   }
 
   /**
@@ -36,7 +36,7 @@ export class CalendarEditor extends Model {
     return {
       id: this.id,
       calendarId: this.calendarId,
-      accountId: this.accountId,
+      email: this.email,
     };
   }
 
@@ -50,7 +50,7 @@ export class CalendarEditor extends Model {
     const editor = new CalendarEditor(
       obj.id || '',
       obj.calendarId || '',
-      obj.accountId || '',
+      obj.email || '',
     );
 
     return editor;

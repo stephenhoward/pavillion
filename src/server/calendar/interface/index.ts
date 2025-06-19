@@ -10,6 +10,12 @@ import { EventEmitter } from 'events';
 import EventInstanceService from '../service/event_instance';
 import CalendarEventInstance from '@/common/model/event_instance';
 import AccountsInterface from '@/server/accounts/interface';
+import ConfigurationInterface from '@/server/configuration/interface';
+
+export interface CalendarWithRole {
+  calendar: Calendar;
+  role: 'owner' | 'editor';
+}
 
 export default class CalendarInterface {
   private calendarService: CalendarService;
@@ -17,8 +23,12 @@ export default class CalendarInterface {
   private locationService: LocationService;
   private eventInstanceService: EventInstanceService;
 
-  constructor(eventBus: EventEmitter, accountsInterface?: AccountsInterface) {
-    this.calendarService = new CalendarService(accountsInterface);
+  constructor(
+    eventBus: EventEmitter,
+    accountsInterface?: AccountsInterface,
+    configurationInterface?: ConfigurationInterface,
+  ) {
+    this.calendarService = new CalendarService(accountsInterface, configurationInterface);
     this. eventService = new EventService(eventBus);
     this. locationService = new LocationService();
     this.eventInstanceService = new EventInstanceService(eventBus);
@@ -47,6 +57,10 @@ export default class CalendarInterface {
 
   async editableCalendarsForUser(account: Account): Promise<Calendar[]> {
     return this.calendarService.editableCalendarsForUser(account);
+  }
+
+  async editableCalendarsWithRoleForUser(account: Account): Promise<CalendarWithRole[]> {
+    return this.calendarService.editableCalendarsWithRoleForUser(account);
   }
 
   async userCanModifyCalendar(account: Account, calendar: Calendar): Promise<boolean> {
@@ -115,9 +129,8 @@ export default class CalendarInterface {
     return this.eventInstanceService.getEventInstanceById(instanceId);
   }
 
-  // Editor management operations
-  async grantEditAccess(grantingAccount: Account, calendarId: string, editorAccountId: string): Promise<CalendarEditor> {
-    return this.calendarService.grantEditAccess(grantingAccount, calendarId, editorAccountId);
+  async grantEditAccessByEmail(grantingAccount: Account, calendarId: string, email: string, message?: string): Promise<{ type: 'editor' | 'invitation', data: CalendarEditor | any }> {
+    return this.calendarService.grantEditAccessByEmail(grantingAccount, calendarId, email, message);
   }
 
   async revokeEditAccess(revokingAccount: Account, calendarId: string, editorAccountId: string): Promise<boolean> {

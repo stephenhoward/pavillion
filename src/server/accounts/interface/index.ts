@@ -65,8 +65,8 @@ export default class AccountsInterface {
   async resendInvite(id: string): Promise<AccountInvitation | undefined> {
     return this.accountService.resendInvite(id);
   }
-  async inviteNewAccount(email: string, message: string): Promise<AccountInvitation> {
-    return this.accountService.inviteNewAccount(email, message);
+  async inviteNewAccount(inviter: Account, email: string, message: string): Promise<AccountInvitation> {
+    return this.accountService.inviteNewAccount(inviter, email, message);
   }
   async acceptAccountInvite(code: string, password: string): Promise<Account | undefined> {
     return this.accountService.acceptAccountInvite(code, password);

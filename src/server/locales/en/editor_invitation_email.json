@@ -1,0 +1,15 @@
+{
+    "subject": "You've been invited to edit {{calendarName}}",
+    "title": "Calendar Editor Invitation",
+    "greeting": "Hello,",
+    "invitation_message": "{{inviterName}} has invited you to become an editor of the calendar \"{{calendarName}}\".",
+    "custom_message_label": "Personal message from {{inviterName}}:",
+    "what_this_means": "As an editor, you'll be able to create, modify, and delete events on this calendar.",
+    "new_user_instructions": "Since you don't have a Pavillion account yet, you'll need to create one first. Click the button below to get started:",
+    "existing_user_instructions": "You can now start editing this calendar. Click the button below to view it:",
+    "accept_invitation_button": "Accept Invitation & Create Account",
+    "view_calendar_button": "View Calendar",
+    "new_user_expiry_notice": "This invitation link will expire in 7 days.",
+    "signature": "Best regards,",
+    "footer_text": "This is an automated message, please do not reply to this email."
+}

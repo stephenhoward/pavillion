@@ -24,8 +24,11 @@ class CalendarEditorEntity extends Model {
   declare calendar: CalendarEntity;
 
   @ForeignKey(() => AccountEntity)
-  @Column({ type: DataType.UUID, allowNull: false })
+  @Column({ type: DataType.UUID, allowNull: true })
   declare account_id: string;
+
+  @Column({ type: DataType.STRING, allowNull: false })
+  declare email: string;
 
   @BelongsTo(() => AccountEntity)
   declare account: AccountEntity;
@@ -40,10 +43,11 @@ class CalendarEditorEntity extends Model {
    * Convert entity to model
    */
   toModel(): CalendarEditor {
+    // we do not return accountId here, as it should remain private
     return new CalendarEditor(
       this.id,
       this.calendar_id,
-      this.account_id,
+      this.email,
     );
   }
 
@@ -54,7 +58,7 @@ class CalendarEditorEntity extends Model {
     return CalendarEditorEntity.build({
       id: editor.id,
       calendar_id: editor.calendarId,
-      account_id: editor.accountId,
+      email: editor.email,
     });
   }
 }

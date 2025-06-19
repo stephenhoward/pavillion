@@ -2,16 +2,22 @@
   <ModalLayout :title="t('select_calendar_title')" @close="$emit('cancel')">
     <div class="calendar-selector">
       <div v-if="state.error" class="error">{{ state.error }}</div>
-      <p v-if="calendars.length > 0">{{ t('select_calendar_instructions') }}</p>
+      <p v-if="calendarsWithRelationship.length > 0">{{ t('select_calendar_instructions') }}</p>
       <div v-if="state.loading" class="loading">
         {{ t('loading_calendars') }}
       </div>
-      <ul v-else-if="calendars.length > 0" class="calendar-list">
-        <li v-for="calendar in calendars"
-            :key="calendar.id"
-            @click="selectCalendar(calendar)"
-            class="calendar-item">
-          {{ calendar.content('en').name || calendar.urlName }}
+      <ul v-else-if="calendarsWithRelationship.length > 0" class="calendar-list">
+        <li v-for="calendarInfo in calendarsWithRelationship"
+            :key="calendarInfo.calendar.id"
+            @click="selectCalendar(calendarInfo)"
+            class="calendar-item"
+            :class="{ 'editor-calendar': calendarInfo.isEditor }">
+          <div class="calendar-name">
+            {{ calendarInfo.calendar.content('en').name || calendarInfo.calendar.urlName }}
+          </div>
+          <div v-if="calendarInfo.isEditor" class="relationship-badge">
+            {{ t('editor_badge') }}
+          </div>
         </li>
       </ul>
       <div v-else class="no-calendars">
@@ -29,6 +35,7 @@ import { onBeforeMount, reactive, ref } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import ModalLayout from '../modal.vue';
 import CalendarService from '../../service/calendar';
+import { CalendarInfo } from '../../../common/model/calendar_info';
 
 const { t } = useTranslation('calendars', {
   keyPrefix: 'selector',
@@ -36,7 +43,7 @@ const { t } = useTranslation('calendars', {
 
 const emit = defineEmits(['select', 'cancel']);
 
-const calendars = ref([]);
+const calendarsWithRelationship = ref([]);
 const state = reactive({
   loading: true,
   error: '',
@@ -46,7 +53,7 @@ const calendarService = new CalendarService();
 onBeforeMount(async () => {
   try {
     state.loading = true;
-    calendars.value = await calendarService.loadCalendars();
+    calendarsWithRelationship.value = await calendarService.loadCalendarsWithRelationship();
     state.loading = false;
   }
   catch (error) {
@@ -56,8 +63,9 @@ onBeforeMount(async () => {
   }
 });
 
-const selectCalendar = (calendar) => {
-  emit('select', calendar);
+const selectCalendar = (calendarInfo) => {
+  // Emit the calendar object itself, not the CalendarInfo wrapper
+  emit('select', calendarInfo.calendar);
 };
 </script>
 
@@ -86,9 +94,30 @@ const selectCalendar = (calendar) => {
       cursor: pointer;
       margin-bottom: 0.5rem;
       transition: background-color 0.2s;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
 
       &:hover {
         background-color: $light-mode-selected-background;
+      }
+
+      &.editor-calendar {
+        border-left: 3px solid #3b82f6;
+      }
+
+      .calendar-name {
+        flex: 1;
+        font-weight: 500;
+      }
+
+      .relationship-badge {
+        background-color: #3b82f6;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 500;
       }
 
       @include dark-mode {
@@ -96,6 +125,14 @@ const selectCalendar = (calendar) => {
 
         &:hover {
           background-color: $dark-mode-selected-background;
+        }
+
+        &.editor-calendar {
+          border-left-color: #60a5fa;
+        }
+
+        .relationship-badge {
+          background-color: #60a5fa;
         }
       }
     }

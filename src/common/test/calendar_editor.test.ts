@@ -7,19 +7,19 @@ describe('CalendarEditor Model', () => {
     const editor = new CalendarEditor(
       'test-id',
       'calendar-id',
-      'account-id',
+      'email@pavillion.dev',
     );
 
     expect(editor.id).toBe('test-id');
     expect(editor.calendarId).toBe('calendar-id');
-    expect(editor.accountId).toBe('account-id');
+    expect(editor.email).toBe('email@pavillion.dev');
   });
 
   it('toObject: should return proper object with all fields', () => {
     const editor = new CalendarEditor(
       'test-id',
       'calendar-id',
-      'account-id',
+      'email@pavillion.dev',
     );
 
     const obj = editor.toObject();
@@ -27,7 +27,7 @@ describe('CalendarEditor Model', () => {
     expect(obj).toEqual({
       id: 'test-id',
       calendarId: 'calendar-id',
-      accountId: 'account-id',
+      email: 'email@pavillion.dev',
     });
   });
 
@@ -36,21 +36,21 @@ describe('CalendarEditor Model', () => {
     const obj = {
       id: 'test-id',
       calendarId: 'calendar-id',
-      accountId: 'account-id',
+      email: 'email@pavillion.dev',
     };
 
     const editor = CalendarEditor.fromObject(obj);
 
     expect(editor.id).toBe('test-id');
     expect(editor.calendarId).toBe('calendar-id');
-    expect(editor.accountId).toBe('account-id');
+    expect(editor.email).toBe('email@pavillion.dev');
   });
 
   it('should maintain data integrity through toObject-fromObject conversion', () => {
     const original = new CalendarEditor(
       'round-trip-id',
       'calendar-id',
-      'account-id',
+      'email@pavillion.dev',
     );
 
     const obj = original.toObject();
@@ -58,6 +58,6 @@ describe('CalendarEditor Model', () => {
 
     expect(roundTrip.id).toBe(original.id);
     expect(roundTrip.calendarId).toBe(original.calendarId);
-    expect(roundTrip.accountId).toBe(original.accountId);
+    expect(roundTrip.email).toBe(original.email);
   });
 });

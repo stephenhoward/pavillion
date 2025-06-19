@@ -29,8 +29,11 @@ class CalendarRoutes {
       return;
     }
 
-    const calendars = await this.service.editableCalendarsForUser(account);
-    res.json(calendars.map((calendar) => calendar.toObject()));
+    const calendarsWithRelationship = await this.service.editableCalendarsWithRoleForUser(account);
+    res.json(calendarsWithRelationship.map((calendarInfo) => ({
+      ...calendarInfo.calendar.toObject(),
+      userRelationship: calendarInfo.role, // 'owner' or 'editor'
+    })));
   }
 
   async createCalendar(req: Request, res: Response) {

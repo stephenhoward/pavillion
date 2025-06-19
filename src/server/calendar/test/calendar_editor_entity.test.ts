@@ -11,7 +11,7 @@ describe('CalendarEditorEntity', () => {
     calendarEditor = new CalendarEditor(
       'test-editor-id',
       'test-calendar-id',
-      'test-account-id',
+      'email@pavillion.dev',
     );
 
     // Create entity from model
@@ -28,7 +28,7 @@ describe('CalendarEditorEntity', () => {
     expect(model).toBeInstanceOf(CalendarEditor);
     expect(model.id).toBe('test-editor-id');
     expect(model.calendarId).toBe('test-calendar-id');
-    expect(model.accountId).toBe('test-account-id');
+    expect(model.email).toBe('email@pavillion.dev');
   });
 
   it('should create entity from model correctly', () => {
@@ -36,14 +36,14 @@ describe('CalendarEditorEntity', () => {
 
     expect(entity.id).toBe('test-editor-id');
     expect(entity.calendar_id).toBe('test-calendar-id');
-    expect(entity.account_id).toBe('test-account-id');
+    expect(entity.email).toBe('email@pavillion.dev');
   });
 
   it('should maintain data integrity through model-entity-model conversion', () => {
     const originalModel = new CalendarEditor(
       'round-trip-id',
       'calendar-id',
-      'account-id',
+      'email@pavillion.dev',
     );
 
     // Convert to entity and back to model
@@ -52,6 +52,6 @@ describe('CalendarEditorEntity', () => {
 
     expect(roundTripModel.id).toBe(originalModel.id);
     expect(roundTripModel.calendarId).toBe(originalModel.calendarId);
-    expect(roundTripModel.accountId).toBe(originalModel.accountId);
+    expect(roundTripModel.email).toBe(originalModel.email);
   });
 });

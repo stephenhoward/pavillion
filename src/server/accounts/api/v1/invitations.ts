@@ -1,4 +1,5 @@
 import express, { Request, Response } from 'express';
+import { Account } from '@/server/accounts/model/account';
 import AccountsInterface from '@/server/accounts/interface';
 import ExpressHelper from '@/server/common/helper/express';
 
@@ -25,7 +26,7 @@ export default class AccountInvitationRouteHandlers {
   }
 
   async inviteToRegister(req: Request, res: Response) {
-    const invitation = await this.service.inviteNewAccount(req.body.email, req.body.message);
+    const invitation = await this.service.inviteNewAccount(req.user! as Account, req.body.email, req.body.message);
     if( invitation ) {
       res.json(invitation);
     }

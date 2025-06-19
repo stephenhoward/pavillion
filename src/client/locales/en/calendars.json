@@ -17,7 +17,8 @@
     "loading_calendars": "Loading calendars...",
     "no_calendars": "You don't have any calendars. Please create one first.",
     "error_loading_calendars": "Error loading calendars",
-    "cancel_button": "Cancel"
+    "cancel_button": "Cancel",
+    "editor_badge": "Editor"
   },
   "calendar": {
     "create_button": "Create Event",
@@ -28,6 +29,31 @@
     "noEvents": "No events",
     "noEventsDescription": "You don't have any events in this calendar yet.",
     "createEvent": "Create an Event"
+  },
+  "editors": {
+    "title": "Calendar Editors",
+    "add_editor_button": "Add Editor",
+    "loading": "Loading editors...",
+    "no_editors": "No editors have been granted access to this calendar.",
+    "remove_button": "Remove",
+    "removing": "Removing...",
+    "add_editor_title": "Add Editor",
+    "account_id_label": "Account ID",
+    "account_id_placeholder": "user@domain.com or username",
+    "account_id_help": "Enter the account ID or email address of the person you want to grant edit access to.",
+    "add_button": "Add Editor",
+    "adding": "Adding...",
+    "cancel_button": "Cancel",
+    "confirm_remove_title": "Remove Editor",
+    "confirm_remove_message": "Are you sure you want to remove edit access for {{accountId}}?",
+    "confirm_remove_button": "Remove Access",
+    "error_loading_editors": "Failed to load calendar editors",
+    "error_permission_denied": "You don't have permission to manage editors for this calendar",
+    "error_empty_account_id": "Account ID cannot be empty",
+    "error_editor_already_exists": "This person already has edit access to this calendar",
+    "error_adding_editor": "Failed to add editor",
+    "error_editor_not_found": "Editor not found",
+    "error_removing_editor": "Failed to remove editor"
   }
 }
 
