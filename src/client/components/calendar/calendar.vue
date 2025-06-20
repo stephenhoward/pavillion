@@ -5,6 +5,7 @@ import { useTranslation } from 'i18next-vue';
 import { useEventStore } from '../../stores/eventStore';
 import CalendarService from '../../service/calendar';
 import EventService from '../../service/event';
+import EventImage from '../media/EventImage.vue';
 
 const { t } = useTranslation('calendars',{
   keyPrefix: 'calendar',
@@ -62,9 +63,16 @@ const newEvent = async () => {
       <span v-else>{{ calendarId }}@{{ site_domain }}</span>
     </h1>
     <div v-if="store.events && store.events.length > 0">
-      <ul>
-        <li v-for="event in store.events" :key="event.id" @click="$emit('openEvent', event.clone())">
-          {{ event.content("en").name }}
+      <ul class="event-list">
+        <li v-for="event in store.events"
+            :key="event.id"
+            @click="$emit('openEvent', event.clone())"
+            class="event-item">
+          <EventImage :media="event.media" size="small" />
+          <div class="event-content">
+            <h3>{{ event.content("en").name }}</h3>
+            <p v-if="event.content('en').description">{{ event.content("en").description }}</p>
+          </div>
         </li>
       </ul>
     </div>
@@ -86,9 +94,68 @@ h1 {
   font-weight: 200;
   margin: 20px;
 }
+
+.event-list {
+  list-style: none;
+  padding: 0;
+  margin: 20px;
+
+  .event-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 15px;
+    padding: 15px;
+    margin-bottom: 15px;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    &:hover {
+      border-color: #007bff;
+      box-shadow: 0 2px 8px rgba(0, 123, 255, 0.1);
+    }
+
+    @include dark-mode {
+      border-color: #444;
+
+      &:hover {
+        border-color: #007bff;
+        box-shadow: 0 2px 8px rgba(0, 123, 255, 0.2);
+      }
+    }
+  }
+
+  .event-content {
+    flex: 1;
+
+    h3 {
+      margin: 0 0 8px 0;
+      font-size: 18px;
+      color: #333;
+
+      @include dark-mode {
+        color: #fff;
+      }
+    }
+
+    p {
+      margin: 0;
+      color: #666;
+      font-size: 14px;
+      line-height: 1.4;
+
+      @include dark-mode {
+        color: #ccc;
+      }
+    }
+  }
+}
+
 .empty-screen {
   @include empty-screen;
 }
+
 .error {
   color: red;
   padding: 20px;

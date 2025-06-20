@@ -128,8 +128,8 @@ div.schedule {
         <label>{{ t('image_label') }}</label>
         <ImageUpload
           :calendar-id="props.event.calendarId || 'default'"
-          @upload-complete="(results) => console.log('Upload complete:', results)"
-          @upload-error="(error) => console.log('Upload error:', error)"
+          :multiple="false"
+          @upload-complete="handleImageUpload"
         />
       </section>
       <section>
@@ -194,6 +194,8 @@ const state = reactive({
   showLanguagePicker: false,
   lang: defaultLanguage,
   availableCalendars: [],
+  mediaId: null,
+  calendar: null,
 });
 
 const addLanguage = (language) => {
@@ -207,6 +209,12 @@ const removeLanguage = (language) => {
   state.lang = languages.value[0];
 };
 
+const handleImageUpload = (results) => {
+  if (results && results.length > 0 && results[0].success) {
+    state.mediaId = results[0].media.id;
+  }
+};
+
 
 onBeforeMount(async () => {
   try {
@@ -216,6 +224,7 @@ onBeforeMount(async () => {
     if (!props.event.calendarId && state.availableCalendars.length > 0) {
       props.event.calendarId = state.availableCalendars[0].id;
     }
+    state.calendar = state.availableCalendars.filter(c => c.id === props.event.calendarId)[0];
   }
   catch (error) {
     console.error('Error loading calendars:', error);
@@ -235,7 +244,11 @@ const saveModel = async (model) => {
   }
 
   try {
-    await eventService.createEvent(model);
+    if (state.mediaId) {
+      model.mediaId = state.mediaId;
+    }
+
+    await eventService.saveEvent(model);
   }
   catch (error) {
     console.error('Error saving event:', error);

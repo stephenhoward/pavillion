@@ -11,7 +11,7 @@ export default class MediaEventHandlers implements DomainEventHandlers {
 
   install(eventBus: EventEmitter): void {
     eventBus.on('fileUploaded', async (e) => {
-      await this.service.checkFileSafety(e.media.mediaId);
+      await this.service.checkFileSafety(e.media.id);
     });
   }
 }

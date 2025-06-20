@@ -68,7 +68,7 @@ const initPavillionServer = async (app: express.Application, port: number) => {
 
   new PublicCalendarDomain(eventBus,calendarDomain).initialize(app);
 
-  new MediaDomain(eventBus).initialize(app);
+  new MediaDomain(eventBus,calendarDomain.interface).initialize(app);
 
   app.listen(port, () => {
     if ( process.env.NODE_ENV == "development" ) {

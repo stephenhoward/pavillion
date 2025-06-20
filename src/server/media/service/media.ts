@@ -7,6 +7,9 @@ import { Disk } from 'flydrive';
 import { MediaEntity } from '@/server/media/entity/media';
 import { Media, MediaStatus } from '@/common/model/media';
 import { StorageConfig, createStorageDisk } from './storage-factory';
+import CalendarInterface from '@/server/calendar/interface';
+import { Account } from '@/common/model/account';
+import { CalendarNotFoundError, InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
 
 interface MediaConfig {
   maxFileSize: number;
@@ -18,11 +21,13 @@ interface MediaConfig {
 export default class MediaService {
   private eventBus: EventEmitter;
   private config: MediaConfig;
+  private calendarService: CalendarInterface;
   private storageDisk!: Disk;
 
-  constructor(eventBus: EventEmitter) {
+  constructor(eventBus: EventEmitter, calendarService: CalendarInterface) {
     this.eventBus = eventBus;
     this.config = config.get<MediaConfig>('media');
+    this.calendarService = calendarService;
     this.initializeStorage();
   }
 
@@ -88,12 +93,25 @@ export default class MediaService {
    * Uploads a file to the staging storage area
    */
   async uploadFile(
+    account: Account,
     calendarId: string,
     buffer: Buffer,
     originalFilename: string,
     mimeType: string,
     eventId?: string,
   ): Promise<Media> {
+
+    const calendar = await this.calendarService.getCalendar(calendarId);
+    const calendars = await this.calendarService.editableCalendarsForUser(account);
+
+    if ( ! calendar ) {
+      throw new CalendarNotFoundError('Calendar for event does not exist');
+    }
+    if ( ! calendars.some(c => c.id == calendar.id) ) {
+      throw new InsufficientCalendarPermissionsError('Insufficient permissions to modify events in this calendar');
+    }
+
+
     // Validate the file
     this.validateFile(buffer, originalFilename, mimeType);
 
@@ -128,6 +146,8 @@ export default class MediaService {
 
     // Save metadata to database
     const mediaEntity = MediaEntity.fromModel(media);
+    console.log(mediaEntity);
+    console.log(media);
     await mediaEntity.save();
 
     // Emit event for further processing
@@ -176,9 +196,9 @@ export default class MediaService {
     const stagingKey = this.getStagingKey(media.calendarId, media.storageFilename);
     const finalKey = this.getFinalKey(media.calendarId, media.storageFilename);
 
-    // Copy file from staging to final storage
-    const fileBuffer = await this.storageDisk.get(stagingKey);
-    await this.storageDisk.put(finalKey, fileBuffer);
+    // Copy file from staging to final storage (use getBytes for binary data)
+    const fileBytes = await this.storageDisk.getBytes(stagingKey);
+    await this.storageDisk.put(finalKey, fileBytes);
 
     // Delete from staging storage
     await this.storageDisk.delete(stagingKey);
@@ -259,5 +279,34 @@ export default class MediaService {
 
     const finalKey = this.getFinalKey(media.calendarId, media.storageFilename);
     return await this.storageDisk.getSignedUrl(finalKey, { expiresIn: `${expiresInSeconds}s` });
+  }
+
+  /**
+   * Gets file content and metadata for a media ID
+   */
+  async getFileContent(mediaId: string): Promise<{ media: Media; buffer: Buffer } | null> {
+    const media = await this.getMediaById(mediaId);
+    if (!media) {
+      return null;
+    }
+
+    if (media.status !== 'approved') {
+      throw new Error(`Media with ID ${mediaId} is not approved`);
+    }
+
+    // Ensure storage is ready
+    await this.ensureStorageReady();
+
+    const finalKey = this.getFinalKey(media.calendarId, media.storageFilename);
+
+    try {
+      const contentBytes = await this.storageDisk.getBytes(finalKey);
+      const buffer = Buffer.from(contentBytes);
+      return { media, buffer };
+    }
+    catch (error) {
+      console.error(`Error reading file for media ${mediaId}:`, error);
+      return null;
+    }
   }
 }

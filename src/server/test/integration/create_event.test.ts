@@ -14,6 +14,7 @@ import { EventEntity } from '@/server/calendar/entity/event';
 import { ActivityPubOutboxMessageEntity } from '@/server/activitypub/entity/activitypub';
 import ProcessInboxService from '@/server/activitypub/service/inbox';
 import FollowActivity from '@/server/activitypub/model/action/follow';
+import ConfigurationInterface from '@/server/configuration/interface';
 
 describe('Event API', () => {
   let account: Account;
@@ -28,7 +29,8 @@ describe('Event API', () => {
 
     const eventBus = new EventEmitter();
     const calendarInterface = new CalendarInterface(eventBus);
-    const accountService = new AccountService(eventBus);
+    const configurationInterface = new ConfigurationInterface();
+    const accountService = new AccountService(eventBus, configurationInterface);
     let accountInfo = await accountService._setupAccount(userEmail,userPassword);
     account = accountInfo.account;
     calendar = await calendarInterface.createCalendar(account,'testcalendar');
@@ -53,7 +55,7 @@ describe('Event API', () => {
 
   it('createEvent: should fail without user', async () => {
     const response = await request(env.app)
-      .post('/api/v1/calendars/testcalendar/events')
+      .post('/api/v1/events')
       .send({
         content: {
           en: {
@@ -73,7 +75,7 @@ describe('Event API', () => {
     env.stubRemoteCalendar(getStub, 'remotedomain', 'testcalendar');
 
     let authKey = await env.login(userEmail,userPassword);
-    const response = await env.authPost(authKey, '/api/v1/calendars/testcalendar/events', {
+    const response = await env.authPost(authKey, '/api/v1/events', {
       calendarId: calendar.id,
       content: {
         en: {

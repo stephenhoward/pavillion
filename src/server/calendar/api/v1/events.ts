@@ -15,8 +15,8 @@ export default class EventRoutes {
   installHandlers(app: Application, routePrefix: string): void {
     const router = express.Router();
     router.get('/calendars/:calendar/events', ExpressHelper.loggedInOnly, this.listEvents.bind(this));
-    router.post('/calendars/:calendar/events', ExpressHelper.loggedInOnly, this.createEvent.bind(this));
-    router.post('/calendars/:calendar/events/:id', ExpressHelper.loggedInOnly, this.updateEvent.bind(this));
+    router.post('/events', ExpressHelper.loggedInOnly, this.createEvent.bind(this));
+    router.post('/events/:id', ExpressHelper.loggedInOnly, this.updateEvent.bind(this));
     app.use(routePrefix, router);
   }
 
@@ -51,29 +51,19 @@ export default class EventRoutes {
       return;
     }
 
-    const calendarName = req.params.calendar;
-    if (!calendarName) {
-      res.status(400).json({
-        "error": "missing calendar name",
-      });
-      return;
-    }
-
     try {
-      const calendar = await this.service.getCalendarByName(calendarName);
-      if (!calendar) {
-        res.status(404).json({
-          "error": "calendar not found",
-        });
-        return;
-      }
-
-      const event = await this.service.createEvent(account, calendar, req.body);
+      const event = await this.service.createEvent(account, req.body);
       res.json(event.toObject());
     }
     catch (error) {
       if (error instanceof InsufficientCalendarPermissionsError) {
         res.status(403).json({
+          "error": error.message,
+          "errorName": error.name,
+        });
+      }
+      else if (error instanceof CalendarNotFoundError) {
+        res.status(404).json({
           "error": error.message,
           "errorName": error.name,
         });

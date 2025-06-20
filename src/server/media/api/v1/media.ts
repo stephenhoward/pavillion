@@ -1,7 +1,9 @@
 import config from 'config';
 import express, { Request, Response, Application } from 'express';
 import multer from 'multer';
+import ExpressHelper from '@/server/common/helper/express';
 import MediaInterface from '../../interface';
+import { Account } from '@/common/model/account';
 
 // Extend Express Request interface to include file property
 declare global {
@@ -34,7 +36,10 @@ export default class MediaRouteHandlers {
     const router = express.Router();
 
     // File upload endpoint
-    router.post('/:calendarId', upload.single('file'), this.uploadFile.bind(this));
+    router.post('/:calendarId', ...ExpressHelper.loggedInOnly, upload.single('file'), this.uploadFile.bind(this));
+
+    // File serve endpoint
+    router.get('/:mediaId', this.serveFile.bind(this));
 
     app.use(routePrefix, router);
   }
@@ -59,6 +64,7 @@ export default class MediaRouteHandlers {
       }
 
       const media = await this.mediaInterface.uploadFile(
+        req.user as Account,
         calendarId,
         file.buffer,
         file.originalname,
@@ -75,6 +81,45 @@ export default class MediaRouteHandlers {
       console.error('File upload error:', error);
       res.status(400).json({
         error: error instanceof Error ? error.message : 'Upload failed',
+      });
+    }
+  }
+
+  /**
+   * Serve a media file by ID
+   */
+  async serveFile(req: Request, res: Response): Promise<void> {
+    try {
+      const { mediaId } = req.params;
+
+      if (!mediaId) {
+        res.status(400).json({ error: 'Media ID is required' });
+        return;
+      }
+
+      const fileData = await this.mediaInterface.getFile(mediaId);
+
+      if (!fileData) {
+        res.status(404).json({ error: 'Media not found' });
+        return;
+      }
+
+      // Set appropriate headers
+      res.set({
+        'Mime-Type': fileData.media.mimeType,
+        'Content-Type': fileData.media.mimeType,
+        'Content-Length': fileData.media.fileSize.toString(),
+        'Cache-Control': 'public, max-age=31536000', // Cache for 1 year
+        'ETag': fileData.media.sha256,
+      });
+
+      // Send the file buffer
+      res.send(fileData.buffer);
+    }
+    catch (error) {
+      console.error('File serve error:', error);
+      res.status(500).json({
+        error: error instanceof Error ? error.message : 'Failed to serve file',
       });
     }
   }

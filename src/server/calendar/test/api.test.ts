@@ -85,35 +85,20 @@ describe('Event API', () => {
     expect(eventStub.called).toBe(false);
   });
 
-  it('createEvent: should fail without calendar name', async () => {
-    let eventStub = eventSandbox.stub(calendarInterface, 'createEvent');
-    router.post('/handler', addRequestUser, (req,res) => { routes.createEvent(req,res); });
-    let calendarStub = eventSandbox.stub(calendarInterface, 'getCalendarByName');
-
-    const response = await request(testApp(router))
-      .post('/handler');
-
-    expect(response.status).toBe(400);
-    expect(response.body.error).toBeDefined();
-    expect(calendarStub.called).toBe(false);
-    expect(eventStub.called).toBe(false);
-  });
-
   it('createEvent: should fail without calendar', async () => {
     let eventStub = eventSandbox.stub(calendarInterface, 'createEvent');
+    eventStub.throws(new CalendarNotFoundError('Calendar not found'));
+
     router.post('/handler', addRequestUser, (req,res) => {
-      req.params.calendar = 'nonexistent';
       routes.createEvent(req,res);
     });
-    let calendarStub = eventSandbox.stub(calendarInterface, 'getCalendarByName');
-    calendarStub.resolves(null);
 
     const response = await request(testApp(router))
       .post('/handler');
 
     expect(response.status).toBe(404);
     expect(response.body.error).toBeDefined();
-    expect(eventStub.called).toBe(false);
+    expect(eventStub.called).toBe(true);
   });
 
   it('createEvent: should succeed', async () => {

@@ -28,11 +28,15 @@ describe('createEvent', () => {
 
   it('should create an event with content', async () => {
     let saveStub = sandbox.stub(EventEntity.prototype, 'save');
+    let findCalendarStub = sandbox.stub(service['calendarService'], 'getCalendar');
     let saveContentStub = sandbox.stub(EventContentEntity.prototype, 'save');
     let eventSpy = sandbox.spy(EventEntity, 'fromModel');
     let contentSpy = sandbox.spy(EventContentEntity, 'fromModel');
 
-    let event = await service.createEvent(acct, cal, {
+    findCalendarStub.resolves(cal);
+
+    let event = await service.createEvent(acct, {
+      calendarId: cal.id,
       content: {
         en: {
           name: "testName",
@@ -52,12 +56,15 @@ describe('createEvent', () => {
 
   it('should create an event with a location', async () => {
     let saveStub = sandbox.stub(EventEntity.prototype, 'save');
+    let findCalendarStub = sandbox.stub(service['calendarService'], 'getCalendar');
     let findLocationStub = sandbox.stub(service['locationService'], 'findOrCreateLocation');
     let eventSpy = sandbox.spy(EventEntity, 'fromModel');
 
+    findCalendarStub.resolves(cal);
     findLocationStub.resolves(new EventLocation('testId','testLocation', 'testAddress'));
 
-    let event = await service.createEvent(acct, cal, {
+    let event = await service.createEvent(acct, {
+      calendarId: cal.id,
       location: {
         name: "testLocation",
         address: "testAddress",
@@ -72,11 +79,14 @@ describe('createEvent', () => {
 
   it('should create an event with a schedule', async () => {
     let saveStub = sandbox.stub(EventEntity.prototype, 'save');
+    let findCalendarStub = sandbox.stub(service['calendarService'], 'getCalendar');
     let saveScheduleStub = sandbox.stub(EventScheduleEntity.prototype, 'save');
 
+    findCalendarStub.resolves(cal);
     const when = DateTime.now();
 
-    let event = await service.createEvent(acct, cal, {
+    let event = await service.createEvent(acct, {
+      calendarId: cal.id,
       schedules: [{ start: when.toString() }],
     });
 

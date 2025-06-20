@@ -80,8 +80,8 @@ export default class CalendarInterface {
     return this.eventService.getEventById(eventId);
   }
 
-  async createEvent(account: Account, calendar: Calendar, eventParams: Record<string, any>): Promise<CalendarEvent> {
-    return this.eventService.createEvent(account, calendar, eventParams);
+  async createEvent(account: Account, eventParams: Record<string, any>): Promise<CalendarEvent> {
+    return this.eventService.createEvent(account, eventParams);
   }
 
   async updateEvent(account: Account, eventId: string, eventParams: Record<string, any>): Promise<CalendarEvent> {

@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import axios from 'axios';
 import MediaService, { ValidationErrorCode, UploadErrorCode } from '../../service/media';
+
+// Mock axios
+vi.mock('axios');
 
 // Mock the Media class
 vi.mock('@/common/model/media', () => ({
@@ -7,35 +11,6 @@ vi.mock('@/common/model/media', () => ({
     fromObject: vi.fn((obj) => obj),
   },
 }));
-
-// Mock XMLHttpRequest
-const mockXHR = {
-  open: vi.fn(),
-  send: vi.fn(),
-  setRequestHeader: vi.fn(),
-  addEventListener: vi.fn(),
-  upload: {
-    addEventListener: vi.fn(),
-  },
-  status: 200,
-  statusText: 'OK',
-  responseText: JSON.stringify({ media: { id: '1', filename: 'test.jpg' } }),
-};
-
-Object.defineProperty(window, 'XMLHttpRequest', {
-  writable: true,
-  value: vi.fn(() => mockXHR),
-});
-
-// Mock localStorage
-Object.defineProperty(window, 'localStorage', {
-  value: {
-    getItem: vi.fn(() => 'mock-token'),
-    setItem: vi.fn(),
-    removeItem: vi.fn(),
-  },
-  writable: true,
-});
 
 describe('MediaService', () => {
   let mediaService: MediaService;
@@ -169,29 +144,29 @@ describe('MediaService', () => {
         type: 'image/jpeg',
       });
 
-      // Mock XHR to auto-trigger load event
-      const mockXHRInstance = {
-        ...mockXHR,
-        send: vi.fn().mockImplementation(() => {
-          // Simulate immediate success
-          setTimeout(() => {
-            const loadHandler = mockXHRInstance.addEventListener.mock.calls.find(
-              call => call[0] === 'load',
-            )?.[1];
-            if (loadHandler) loadHandler();
-          }, 0);
-        }),
+      // Mock axios.post to return successful response
+      const mockResponse = {
+        status: 200,
+        statusText: 'OK',
+        data: { media: { id: '1', filename: 'test.jpg' } },
       };
-
-      Object.defineProperty(window, 'XMLHttpRequest', {
-        writable: true,
-        value: vi.fn(() => mockXHRInstance),
-      });
+      const axiosPost = vi.mocked(axios.post);
+      axiosPost.mockResolvedValue(mockResponse);
 
       const result = await mediaService.uploadFile(validFile, 'calendar-1');
 
       expect(result.success).toBe(true);
       expect(result.filename).toBe('test.jpg');
+      expect(axiosPost).toHaveBeenCalledWith(
+        '/api/v1/media/calendar-1',
+        expect.any(FormData),
+        expect.objectContaining({
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+          onUploadProgress: expect.any(Function),
+        }),
+      );
     });
 
     it('should handle upload progress', async () => {
@@ -201,35 +176,25 @@ describe('MediaService', () => {
 
       const progressCallback = vi.fn();
 
-      // Mock XHR to trigger progress and load events
-      const mockXHRInstance = {
-        ...mockXHR,
-        send: vi.fn().mockImplementation(() => {
-          setTimeout(() => {
-            // Trigger progress event first
-            const progressHandler = mockXHRInstance.upload.addEventListener.mock.calls.find(
-              call => call[0] === 'progress',
-            )?.[1];
-            if (progressHandler) {
-              progressHandler({
-                lengthComputable: true,
-                loaded: 50,
-                total: 100,
-              });
-            }
-
-            // Then trigger load event
-            const loadHandler = mockXHRInstance.addEventListener.mock.calls.find(
-              call => call[0] === 'load',
-            )?.[1];
-            if (loadHandler) loadHandler();
-          }, 0);
-        }),
+      // Mock axios.post to simulate progress and return successful response
+      const mockResponse = {
+        status: 200,
+        statusText: 'OK',
+        data: { media: { id: '1', filename: 'test.jpg' } },
       };
 
-      Object.defineProperty(window, 'XMLHttpRequest', {
-        writable: true,
-        value: vi.fn(() => mockXHRInstance),
+      const axiosPost = vi.mocked(axios.post);
+      axiosPost.mockImplementation(async (url, data, config) => {
+        // Simulate progress event
+        if (config?.onUploadProgress) {
+          config.onUploadProgress({
+            loaded: 50,
+            total: 100,
+            bytes: 50,
+            lengthComputable: true,
+          });
+        }
+        return mockResponse;
       });
 
       await mediaService.uploadFile(validFile, 'calendar-1', undefined, progressCallback);

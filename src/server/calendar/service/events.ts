@@ -7,6 +7,7 @@ import { CalendarEvent, CalendarEventContent, CalendarEventSchedule } from "@/co
 import { EventContentEntity, EventEntity, EventScheduleEntity } from "@/server/calendar/entity/event";
 import CalendarService from "@/server/calendar/service/calendar";
 import { LocationEntity } from "@/server/calendar/entity/location";
+import { MediaEntity } from "@/server/media/entity/media";
 import LocationService from "@/server/calendar/service/locations";
 import { EventEmitter } from 'events';
 import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError } from '@/common/exceptions/calendar';
@@ -37,7 +38,7 @@ class EventService {
 
     const events = await EventEntity.findAll({
       where: { calendar_id: calendar.id },
-      include: [EventContentEntity, LocationEntity, EventScheduleEntity],
+      include: [EventContentEntity, LocationEntity, EventScheduleEntity, MediaEntity],
     });
 
     return events.map( (event) => {
@@ -71,11 +72,15 @@ class EventService {
      * @param eventParams - the parameters for the new event
      * @returns a promise that resolves to the created Event
      */
-  async createEvent(account: Account, calendar: Calendar, eventParams:Record<string,any>): Promise<CalendarEvent> {
+  async createEvent(account: Account, eventParams:Record<string,any>): Promise<CalendarEvent> {
 
+    const calendar = await this.calendarService.getCalendar(eventParams.calendarId);
     const calendars = await this.calendarService.editableCalendarsForUser(account);
+    if ( ! calendar ) {
+      throw new CalendarNotFoundError('Calendar for event does not exist');
+    }
     if ( ! calendars.some(c => c.id == calendar.id) ) {
-      throw new InsufficientCalendarPermissionsError('Insufficient permissions to create events in this calendar');
+      throw new InsufficientCalendarPermissionsError('Insufficient permissions to modify events in this calendar');
     }
 
     eventParams.id = this.generateEventUrl();
@@ -88,13 +93,28 @@ class EventService {
       event.eventSourceUrl = '';
     }
     const eventEntity = EventEntity.fromModel(event);
-    eventEntity.calendar_id = calendar.id;
 
     if( eventParams.location ) {
 
       let location = await this.locationService.findOrCreateLocation(calendar, eventParams.location);
       eventEntity.location_id = location.id;
       event.location = location;
+    }
+
+    // Handle media attachment
+    if (eventParams.mediaId) {
+      // Verify the media belongs to the same calendar
+      const media = await MediaEntity.findOne({
+        where: {
+          id: eventParams.mediaId,
+          calendar_id: calendar.id,
+        },
+      });
+
+      if (media) {
+        eventEntity.media_id = media.id;
+        event.media = media.toModel();
+      }
     }
 
     await eventEntity.save();
@@ -251,6 +271,29 @@ class EventService {
       }
     }
 
+    // Handle media updates
+    if (eventParams.hasOwnProperty('mediaId')) {
+      if (eventParams.mediaId) {
+        // Verify the media belongs to the same calendar
+        const media = await MediaEntity.findOne({
+          where: {
+            id: eventParams.mediaId,
+            calendar_id: calendar.id,
+          },
+        });
+
+        if (media) {
+          eventEntity.media_id = media.id;
+          event.media = media.toModel();
+        }
+      }
+      else {
+        // Remove media if mediaId is null/empty
+        eventEntity.media_id = '';
+        event.media = null;
+      }
+    }
+
     await eventEntity.save();
 
     this.eventBus.emit('eventUpdated', { calendar, event });
@@ -306,7 +349,7 @@ class EventService {
 
     const event = await EventEntity.findOne({
       where: { id: eventId },
-      include: [EventContentEntity, LocationEntity, EventScheduleEntity],
+      include: [EventContentEntity, LocationEntity, EventScheduleEntity, MediaEntity],
     });
 
     if ( ! event ) {

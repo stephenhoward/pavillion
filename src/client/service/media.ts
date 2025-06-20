@@ -1,4 +1,5 @@
 import { Media } from '@/common/model/media';
+import axios from 'axios';
 
 /**
  * Upload progress information
@@ -315,7 +316,7 @@ export default class MediaService {
   }
 
   /**
-   * Performs upload with progress tracking using fetch API
+   * Performs upload with progress tracking using axios
    */
   private async uploadWithProgress(
     url: string,
@@ -324,53 +325,48 @@ export default class MediaService {
     filename: string,
     onProgress?: (progress: UploadProgress) => void,
   ): Promise<Response> {
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-
-      // Track upload progress
-      if (onProgress) {
-        xhr.upload.addEventListener('progress', (e) => {
-          if (e.lengthComputable) {
+    try {
+      const axiosResponse = await axios.post(url, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        onUploadProgress: (progressEvent) => {
+          if (onProgress && progressEvent.total) {
             const progress: UploadProgress = {
               fileId,
               filename,
-              loaded: e.loaded,
-              total: e.total,
-              percentage: Math.round((e.loaded / e.total) * 100),
+              loaded: progressEvent.loaded,
+              total: progressEvent.total,
+              percentage: Math.round((progressEvent.loaded / progressEvent.total) * 100),
             };
             onProgress(progress);
           }
-        });
-      }
+        },
+      });
 
-      xhr.addEventListener('load', () => {
-        // Create a Response-like object for consistency
-        const response = new Response(xhr.responseText, {
-          status: xhr.status,
-          statusText: xhr.statusText,
+      // Convert axios response to Response-like object for consistency
+      return new Response(JSON.stringify(axiosResponse.data), {
+        status: axiosResponse.status,
+        statusText: axiosResponse.statusText,
+        headers: new Headers(),
+      });
+    }
+    catch (error) {
+      if (axios.isAxiosError(error)) {
+        if (error.code === 'ERR_CANCELED') {
+          throw new Error(UploadErrorCode.UPLOAD_ABORTED);
+        }
+        // For axios errors, create a Response-like object with error details
+        const status = error.response?.status || 500;
+        const errorData = error.response?.data || { error: 'Unknown server error' };
+        return new Response(JSON.stringify(errorData), {
+          status,
+          statusText: error.response?.statusText || 'Unknown Error',
           headers: new Headers(),
         });
-        resolve(response);
-      });
-
-      xhr.addEventListener('error', () => {
-        reject(new Error(UploadErrorCode.NETWORK_ERROR));
-      });
-
-      xhr.addEventListener('abort', () => {
-        reject(new Error(UploadErrorCode.UPLOAD_ABORTED));
-      });
-
-      xhr.open('POST', url);
-
-      // Add authentication header if available
-      const token = localStorage.getItem('auth_token');
-      if (token) {
-        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
       }
-
-      xhr.send(formData);
-    });
+      throw new Error(UploadErrorCode.NETWORK_ERROR);
+    }
   }
 
   /**

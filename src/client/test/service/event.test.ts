@@ -134,10 +134,10 @@ describe('createEvent', () => {
     mockCreateModel.resolves(mockCreatedEvent);
 
     // Act
-    const result = await service.createEvent(event);
+    const result = await service.saveEvent(event);
 
     // Assert
-    expect(mockCreateModel.calledWith(event, '/api/v1/calendars/cal123/events')).toBe(true);
+    expect(mockCreateModel.calledWith(event, '/api/v1/events')).toBe(true);
     expect(result).toBeInstanceOf(CalendarEvent);
     expect(result.id).toBe('evt1');
     expect(mockStore.addEvent.calledWith(result)).toBe(true);
@@ -162,10 +162,10 @@ describe('createEvent', () => {
     mockUpdateModel.resolves(mockUpdatedEvent);
 
     // Act
-    const result = await service.createEvent(event);
+    const result = await service.saveEvent(event);
 
     // Assert
-    expect(mockUpdateModel.calledWith(event, '/api/v1/calendars/cal123/events')).toBe(true);
+    expect(mockUpdateModel.calledWith(event, '/api/v1/events')).toBe(true);
     expect(result).toBeInstanceOf(CalendarEvent);
     expect(result.id).toBe('evt1');
     expect(mockStore.updateEvent.calledWith(result)).toBe(true);
@@ -179,7 +179,7 @@ describe('createEvent', () => {
     content.name = 'New Event';
 
     // Act & Assert
-    await expect(service.createEvent(event))
+    await expect(service.saveEvent(event))
       .rejects.toThrow('Event must have a calendarId');
   });
 
@@ -191,6 +191,6 @@ describe('createEvent', () => {
     mockCreateModel.rejects(new Error('API Error'));
 
     // Act & Assert
-    await expect(service.createEvent(event)).rejects.toThrow('API Error');
+    await expect(service.saveEvent(event)).rejects.toThrow('API Error');
   });
 });

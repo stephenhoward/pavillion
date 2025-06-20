@@ -5,6 +5,7 @@ import { useRoute } from 'vue-router';
 import CalendarService from '../service/calendar';
 import { useEventStore } from '../../client/stores/eventStore';
 import NotFound from './notFound.vue';
+import EventImage from './EventImage.vue';
 
 const { t } = useTranslation('system');
 const route = useRoute();
@@ -62,6 +63,7 @@ onBeforeMount(async () => {
     </header>
     <main>
       <div v-if="state.err" class="error">{{ state.err }}</div>
+      <EventImage :media="state.event.media" size="large" />
       <p>{{ state.event.content("en").description }}</p>
     </main>
   </div>

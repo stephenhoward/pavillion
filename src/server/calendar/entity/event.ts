@@ -5,6 +5,7 @@ import { CalendarEvent, CalendarEventContent, CalendarEventSchedule, language } 
 import db from '@/server/common/entity/db';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { LocationEntity } from '@/server/calendar/entity/location';
+import { MediaEntity } from '@/server/media/entity/media';
 
 @Table({ tableName: 'event' })
 class EventEntity extends Model {
@@ -34,6 +35,10 @@ class EventEntity extends Model {
   @Column({ type: DataType.UUID })
   declare location_id: string;
 
+  @ForeignKey(() => MediaEntity)
+  @Column({ type: DataType.UUID })
+  declare media_id: string;
+
   @BelongsTo(() => EventEntity)
   declare parentEvent: EventEntity;
 
@@ -49,10 +54,16 @@ class EventEntity extends Model {
   @BelongsTo(() => LocationEntity)
   declare location: LocationEntity;
 
+  @BelongsTo(() => MediaEntity)
+  declare media: MediaEntity;
+
   toModel(): CalendarEvent {
     let model = new CalendarEvent( this.calendar_id, this.id, this.event_source_url );
     if ( this.location ) {
       model.location = this.location.toModel();
+    }
+    if ( this.media ) {
+      model.media = this.media.toModel();
     }
     if ( this.content && this.content.length > 0 ) {
       for ( let content of this.content ) {
@@ -66,6 +77,8 @@ class EventEntity extends Model {
     return EventEntity.build({
       id: event.id,
       event_source_url: event.eventSourceUrl,
+      calendar_id: event.calendarId,
+      media_id: event.media?.id,
     });
   }
 };

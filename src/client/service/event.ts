@@ -52,7 +52,7 @@ export default class EventService {
    * @param event The event to save
    * @returns Promise<CalendarEvent> The saved event
    */
-  async createEvent(event: CalendarEvent): Promise<CalendarEvent> {
+  async saveEvent(event: CalendarEvent): Promise<CalendarEvent> {
     const isNew = !event.id;
 
     if (!event.calendarId) {
@@ -61,21 +61,16 @@ export default class EventService {
 
     try {
       let savedEvent: CalendarEvent;
+      const url = `/api/v1/events`;
 
       if (isNew) {
-        const createdEvent = await ModelService.createModel(
-          event,
-          `/api/v1/calendars/${event.calendarId}/events`,
-        );
-        savedEvent = CalendarEvent.fromObject(createdEvent);
+        const responseData = await ModelService.createModel(event, url);
+        savedEvent = CalendarEvent.fromObject(responseData);
         this.store.addEvent(savedEvent);
       }
       else {
-        const updatedEvent = await ModelService.updateModel(
-          event,
-          `/api/v1/calendars/${event.calendarId}/events`,
-        );
-        savedEvent = CalendarEvent.fromObject(updatedEvent);
+        const responseData = await ModelService.updateModel(event, url);
+        savedEvent = CalendarEvent.fromObject(responseData);
         this.store.updateEvent(savedEvent);
       }
 

@@ -2,6 +2,7 @@ import { DateTime } from 'luxon';
 
 import { Model, TranslatedModel, TranslatedContentModel } from '@/common/model/model';
 import { EventLocation } from '@/common/model/location';
+import { Media } from '@/common/model/media';
 
 /**
  * Frequency options for recurring events.
@@ -26,6 +27,8 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
   date: string = '';
   calendarId: string = '';
   location: EventLocation | null = null;
+  media: Media | null = null;
+  mediaId: string | null = null; // Temporary field for API communication
   parentEvent: CalendarEvent | null = null;
   eventSourceUrl: string = '';
   _content: Record<string, CalendarEventContent> = {};
@@ -38,13 +41,17 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
    * @param {string} [date] - Date of the event
    * @param {string} [eventSourceUrl] - URL source of the event
    * @param {EventLocation} [location] - Location where the event takes place
+   * @param {Media} [media] - Media attachment for the event
+   * @param {string} [mediaId] - Media ID for API communication
    */
-  constructor(calendarId?: string, id?: string, date?: string, eventSourceUrl?: string, location?: EventLocation) {
+  constructor(calendarId?: string, id?: string, date?: string, eventSourceUrl?: string, location?: EventLocation, media?: Media, mediaId?: string) {
     super(id);
     this.calendarId = calendarId ?? '';
     this.date = date ?? '';
     this.eventSourceUrl = eventSourceUrl ?? '';
     this.location = location ?? null;
+    this.media = media ?? null;
+    this.mediaId = mediaId ?? null;
   }
 
   /**
@@ -96,6 +103,8 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
 
     event.calendarId = obj.calendarId || '';
     event.location = obj.location ? EventLocation.fromObject(obj.location) : null;
+    event.media = obj.media ? Media.fromObject(obj.media) : null;
+    event.mediaId = obj.mediaId || null;
 
     if ( obj.content ) {
       for( let [language,strings] of Object.entries(obj.content) ) {
@@ -126,11 +135,12 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
    * @returns {Record<string, any>} Plain object representation of the event
    */
   toObject(): Record<string, any> {
-    return {
+    const obj: Record<string, any> = {
       id: this.id,
       date: this.date,
       calendarId: this.calendarId,
       location: this.location?.toObject(),
+      media: this.media?.toObject(),
       eventSourceUrl: this.eventSourceUrl,
       content: Object.fromEntries(
         Object.entries(this._content)
@@ -138,6 +148,13 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
       ),
       schedules: this.schedules.map(schedule => schedule.toObject()),
     };
+
+    // Include mediaId if present (used for API communication)
+    if (this.mediaId) {
+      obj.mediaId = this.mediaId;
+    }
+
+    return obj;
   }
 
   /**

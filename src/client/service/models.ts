@@ -19,7 +19,7 @@ export default class ModelService {
     catch(error) {
       if (axios.isAxiosError(error)) {
         const axiosError = error as AxiosError;
-        if (axiosError.response.status == 404) {
+        if (axiosError.response?.status == 404) {
           return null;
         }
       }
