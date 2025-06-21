@@ -370,6 +370,9 @@ class EventService {
         e.addSchedule( s.toModel() );
       }
     }
+    if ( event.media ) {
+      e.media = event.media.toModel();
+    }
 
     return e;
   }

@@ -5,6 +5,7 @@ import CalendarEventInstance from "@/common/model/event_instance";
 import { EventContentEntity, EventEntity, EventScheduleEntity } from "@/server/calendar/entity/event";
 import { EventInstanceEntity } from "@/server/calendar/entity/event_instance";
 import { CalendarEntity } from "@/server/calendar/entity/calendar";
+import { MediaEntity } from "@/server/media/entity/media";
 import { Calendar } from "@/common/model/calendar";
 import { DateTime } from 'luxon';
 import rrule from 'rrule';
@@ -24,7 +25,7 @@ export default class EventInstanceService {
       where: { event_id: event.id },
       include: [{
         model: EventEntity,
-        include: [EventContentEntity, LocationEntity, EventScheduleEntity],
+        include: [EventContentEntity, LocationEntity, EventScheduleEntity, MediaEntity],
       }],
     });
     return eventInstances.map((instance) => instance.toModel());
@@ -36,7 +37,7 @@ export default class EventInstanceService {
       where: { calendar_id: calendar.id },
       include: [{
         model: EventEntity,
-        include: [EventContentEntity, LocationEntity, EventScheduleEntity],
+        include: [EventContentEntity, LocationEntity, EventScheduleEntity, MediaEntity],
       }],
     });
 
@@ -48,7 +49,7 @@ export default class EventInstanceService {
       where: { id: instanceId },
       include: [{
         model: EventEntity,
-        include: [EventContentEntity, LocationEntity, EventScheduleEntity],
+        include: [EventContentEntity, LocationEntity, EventScheduleEntity, MediaEntity],
       }],
     });
 

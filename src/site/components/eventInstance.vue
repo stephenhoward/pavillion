@@ -6,6 +6,7 @@ import { DateTime } from 'luxon';
 
 import CalendarService from '../service/calendar';
 import NotFound from './notFound.vue';
+import EventImage from './EventImage.vue';
 
 const { t } = useTranslation('system');
 const route = useRoute();
@@ -58,6 +59,7 @@ onBeforeMount(async () => {
     <header v-if="state.calendar">
       <!-- TODO: respect the user's language prefernces instead of using 'en' -->
       <p><router-link :to="{ name: 'calendar', params: { calendar: state.calendar.urlName } }">{{ state.calendar.content("en").name || state.calendar.urlName }}</router-link></p>
+      <EventImage :media="state.instance.event.media" :size="medium" />
       <h1>{{ state.instance.event.content("en").name }}</h1>
       <time :datetime="state.instance.start.toISO()">{{ state.instance.start.toLocaleString(DateTime.DATETIME_MED) }}</time>
     </header>

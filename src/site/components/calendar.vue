@@ -6,6 +6,7 @@ import CalendarService from '../service/calendar';
 import { useEventInstanceStore } from '../stores/eventInstanceStore';
 import NotFound from './notFound.vue';
 import { DateTime } from 'luxon';
+import EventImage from './EventImage.vue';
 
 const { t } = useTranslation('system');
 const route = useRoute();
@@ -63,6 +64,7 @@ onBeforeMount(async () => {
           <h2>{{ DateTime.fromISO(day).toLocaleString({weekday: 'long', month: 'long', day: 'numeric'}) }}</h2>
           <ul class="events">
             <li class="event" v-for="instance in state.events[day]">
+              <EventImage :media="instance.event.media" :size="small" />
               <h3><router-link :to="{ name: 'instance', params: { event: instance.event.id, instance: instance.id } }">{{ instance.event.content("en").name }}</router-link></h3>
               <div>{{ instance.start.toLocaleString(DateTime.TIME_SIMPLE) }}</div>
             </li>

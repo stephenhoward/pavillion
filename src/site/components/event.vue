@@ -59,6 +59,7 @@ onBeforeMount(async () => {
     <header v-if="state.calendar">
       <!-- TODO: respect the user's language prefernces instead of using 'en' -->
       <p><router-link :to="{ name: 'calendar', params: { calendar: state.calendar.urlName } }">{{ state.calendar.content("en").name || state.calendar.urlName }}</router-link></p>
+      <EventImage :media="state.event.media" :size="medium" />
       <h1>{{ state.event.content("en").name }}</h1>
     </header>
     <main>
