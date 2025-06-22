@@ -3,9 +3,11 @@ import { CalendarEvent } from '@/common/model/events';
 import { Account } from '@/common/model/account';
 import { EventLocation } from '@/common/model/location';
 import { CalendarEditor } from '@/common/model/calendar_editor';
+import { EventCategoryModel } from '@/common/model/event_category';
 import CalendarService from '../service/calendar';
 import EventService from '../service/events';
 import LocationService from '../service/locations';
+import CategoryService from '../service/categories';
 import { EventEmitter } from 'events';
 import EventInstanceService from '../service/event_instance';
 import CalendarEventInstance from '@/common/model/event_instance';
@@ -22,6 +24,7 @@ export default class CalendarInterface {
   private eventService: EventService;
   private locationService: LocationService;
   private eventInstanceService: EventInstanceService;
+  private categoryService: CategoryService;
 
   constructor(
     eventBus: EventEmitter,
@@ -32,6 +35,7 @@ export default class CalendarInterface {
     this. eventService = new EventService(eventBus);
     this. locationService = new LocationService();
     this.eventInstanceService = new EventInstanceService(eventBus);
+    this.categoryService = new CategoryService(this.calendarService);
   }
 
   // Calendar operations
@@ -143,5 +147,32 @@ export default class CalendarInterface {
 
   async canViewCalendarEditors(account: Account, calendarId: string): Promise<boolean> {
     return this.calendarService.canViewCalendarEditors(account, calendarId);
+  }
+
+  // Category operations
+  async getCategories(calendarId: string): Promise<EventCategoryModel[]> {
+    return this.categoryService.getCategories(calendarId);
+  }
+
+  async getCategory(categoryId: string): Promise<EventCategoryModel | null> {
+    return this.categoryService.getCategory(categoryId);
+  }
+
+  async createCategory(account: Account, calendarId: string, categoryData: {
+    name: string;
+    language: string;
+  }): Promise<EventCategoryModel> {
+    return this.categoryService.createCategory(account, calendarId, categoryData);
+  }
+
+  async updateCategory(account: Account, categoryId: string, updateData: {
+    name: string;
+    language: string;
+  }): Promise<EventCategoryModel> {
+    return this.categoryService.updateCategory(account, categoryId, updateData);
+  }
+
+  async deleteCategory(account: Account, categoryId: string): Promise<void> {
+    return this.categoryService.deleteCategory(account, categoryId);
   }
 }
