@@ -5,8 +5,18 @@ import CalendarService from '../service/calendar';
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import { EventCategoryModel } from '@/common/model/event_category';
+import { EventCategoryContentModel } from '@/common/model/event_category_content';
 import { EventCategoryEntity } from '../entity/event_category';
 import { EventCategoryContentEntity } from '../entity/event_category_content';
+import { EventCategoryAssignmentEntity } from '../entity/event_category_assignment';
+import { EventEntity } from '../entity/event';
+import { CalendarNotFoundError, EventNotFoundError, InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
+import {
+  CategoryNotFoundError,
+  CategoryAssignmentNotFoundError,
+  CategoryAlreadyAssignedError,
+  CategoryEventCalendarMismatchError,
+} from '@/common/exceptions/category';
 
 describe('CategoryService', () => {
   let sandbox: sinon.SinonSandbox;
@@ -70,7 +80,7 @@ describe('CategoryService', () => {
 
       await expect(
         categoryService.createCategory(testAccount, 'non-existent-calendar', categoryData),
-      ).rejects.toThrow('Calendar not found');
+      ).rejects.toThrow(CalendarNotFoundError);
     });
 
     it('should throw error for unauthorized user', async () => {
@@ -84,7 +94,7 @@ describe('CategoryService', () => {
 
       await expect(
         categoryService.createCategory(testAccount, testCalendar.id, categoryData),
-      ).rejects.toThrow('Permission denied');
+      ).rejects.toThrow(InsufficientCalendarPermissionsError);
     });
   });
 
@@ -230,6 +240,19 @@ describe('CategoryService', () => {
       expect(mockCalendarService.userCanModifyCalendar.called).toBeTruthy();
     });
 
+    it('should throw error for non-existent category', async () => {
+      sandbox.stub(categoryService, 'getCategory').resolves(null);
+
+      const updateData = {
+        name: 'Updated Technology',
+        language: 'en',
+      };
+
+      await expect(
+        categoryService.updateCategory(testAccount, 'category-123', updateData),
+      ).rejects.toThrow(CategoryNotFoundError);
+    });
+
     it('should throw error for unauthorized user', async () => {
       const mockCategory = new EventCategoryModel('category-123', 'calendar-123');
       sandbox.stub(categoryService, 'getCategory').resolves(mockCategory);
@@ -244,7 +267,7 @@ describe('CategoryService', () => {
 
       await expect(
         categoryService.updateCategory(testAccount, 'category-123', updateData),
-      ).rejects.toThrow('Permission denied');
+      ).rejects.toThrow(InsufficientCalendarPermissionsError);
     });
   });
 
@@ -267,6 +290,14 @@ describe('CategoryService', () => {
       expect(mockCalendarService.userCanModifyCalendar.called).toBeTruthy();
     });
 
+    it('should throw error for non-existent category', async () => {
+      sandbox.stub(categoryService, 'getCategory').resolves(null);
+
+      await expect(
+        categoryService.deleteCategory(testAccount, 'category-123'),
+      ).rejects.toThrow(CategoryNotFoundError);
+    });
+
     it('should throw error for unauthorized user', async () => {
       const mockCategory = new EventCategoryModel('category-123', 'calendar-123');
       sandbox.stub(categoryService, 'getCategory').resolves(mockCategory);
@@ -276,7 +307,213 @@ describe('CategoryService', () => {
 
       await expect(
         categoryService.deleteCategory(testAccount, 'category-123'),
-      ).rejects.toThrow('Permission denied');
+      ).rejects.toThrow(InsufficientCalendarPermissionsError);
+    });
+  });
+
+  describe('assignCategoryToEvent', () => {
+    it('should assign a category to an event', async () => {
+      // Setup mocks
+      const mockCategory = new EventCategoryModel('category-123', 'calendar-123');
+      const content = new EventCategoryContentModel('en');
+      content.name = 'Technology';
+      mockCategory.addContent(content);
+
+      sandbox.stub(categoryService, 'getCategory').resolves(mockCategory);
+      mockCalendarService.getCalendar.resolves(testCalendar);
+      mockCalendarService.userCanModifyCalendar.resolves(true);
+
+      // Mock event lookup
+      const mockEventEntity = {
+        calendar_id: 'calendar-123',
+      };
+      sandbox.stub(EventEntity, 'findByPk').resolves(mockEventEntity as any);
+
+      // Mock assignment lookup and creation
+      sandbox.stub(EventCategoryAssignmentEntity, 'findOne').resolves(null);
+      sandbox.stub(EventCategoryAssignmentEntity.prototype, 'save').resolves();
+
+      const assignment = await categoryService.assignCategoryToEvent(
+        testAccount,
+        'event-123',
+        'category-123',
+      );
+
+      expect(assignment).toBeDefined();
+      expect(assignment.eventId).toBe('event-123');
+      expect(assignment.categoryId).toBe('category-123');
+    });
+
+    it('should throw error if category not found', async () => {
+      sandbox.stub(categoryService, 'getCategory').resolves(null);
+
+      await expect(
+        categoryService.assignCategoryToEvent(testAccount, 'event-123', 'category-123'),
+      ).rejects.toThrow(CategoryNotFoundError);
+    });
+
+    it('should throw error if event not found', async () => {
+      const mockCategory = new EventCategoryModel('category-123', 'calendar-123');
+      sandbox.stub(categoryService, 'getCategory').resolves(mockCategory);
+      sandbox.stub(EventEntity, 'findByPk').resolves(null);
+
+      await expect(
+        categoryService.assignCategoryToEvent(testAccount, 'event-123', 'category-123'),
+      ).rejects.toThrow(EventNotFoundError);
+    });
+
+    it('should throw error if event and category belong to different calendars', async () => {
+      const mockCategory = new EventCategoryModel('category-123', 'calendar-123');
+      sandbox.stub(categoryService, 'getCategory').resolves(mockCategory);
+
+      const mockEventEntity = {
+        calendar_id: 'different-calendar',
+      };
+      sandbox.stub(EventEntity, 'findByPk').resolves(mockEventEntity as any);
+
+      await expect(
+        categoryService.assignCategoryToEvent(testAccount, 'event-123', 'category-123'),
+      ).rejects.toThrow(CategoryEventCalendarMismatchError);
+    });
+
+    it('should throw error if user lacks permission', async () => {
+      const mockCategory = new EventCategoryModel('category-123', 'calendar-123');
+      sandbox.stub(categoryService, 'getCategory').resolves(mockCategory);
+
+      const mockEventEntity = {
+        calendar_id: 'calendar-123',
+      };
+      sandbox.stub(EventEntity, 'findByPk').resolves(mockEventEntity as any);
+
+      mockCalendarService.getCalendar.resolves(testCalendar);
+      mockCalendarService.userCanModifyCalendar.resolves(false);
+
+      await expect(
+        categoryService.assignCategoryToEvent(testAccount, 'event-123', 'category-123'),
+      ).rejects.toThrow(InsufficientCalendarPermissionsError);
+    });
+
+    it('should throw error if assignment already exists', async () => {
+      const mockCategory = new EventCategoryModel('category-123', 'calendar-123');
+      sandbox.stub(categoryService, 'getCategory').resolves(mockCategory);
+
+      const mockEventEntity = {
+        calendar_id: 'calendar-123',
+      };
+      sandbox.stub(EventEntity, 'findByPk').resolves(mockEventEntity as any);
+
+      mockCalendarService.getCalendar.resolves(testCalendar);
+      mockCalendarService.userCanModifyCalendar.resolves(true);
+
+      // Mock existing assignment
+      const mockAssignment = {};
+      sandbox.stub(EventCategoryAssignmentEntity, 'findOne').resolves(mockAssignment as any);
+
+      await expect(
+        categoryService.assignCategoryToEvent(testAccount, 'event-123', 'category-123'),
+      ).rejects.toThrow(CategoryAlreadyAssignedError);
+    });
+  });
+
+  describe('unassignCategoryFromEvent', () => {
+    it('should remove a category assignment from an event', async () => {
+      const mockCategory = new EventCategoryModel('category-123', 'calendar-123');
+      sandbox.stub(categoryService, 'getCategory').resolves(mockCategory);
+
+      const mockEventEntity = {
+        calendar_id: 'calendar-123',
+      };
+      sandbox.stub(EventEntity, 'findByPk').resolves(mockEventEntity as any);
+
+      mockCalendarService.getCalendar.resolves(testCalendar);
+      mockCalendarService.userCanModifyCalendar.resolves(true);
+
+      // Mock successful deletion
+      sandbox.stub(EventCategoryAssignmentEntity, 'destroy').resolves(1);
+
+      await categoryService.unassignCategoryFromEvent(testAccount, 'event-123', 'category-123');
+
+      // Should not throw
+      expect(true).toBe(true);
+    });
+
+    it('should throw error if assignment not found', async () => {
+      const mockCategory = new EventCategoryModel('category-123', 'calendar-123');
+      sandbox.stub(categoryService, 'getCategory').resolves(mockCategory);
+
+      const mockEventEntity = {
+        calendar_id: 'calendar-123',
+      };
+      sandbox.stub(EventEntity, 'findByPk').resolves(mockEventEntity as any);
+
+      mockCalendarService.getCalendar.resolves(testCalendar);
+      mockCalendarService.userCanModifyCalendar.resolves(true);
+
+      // Mock no deletion (assignment not found)
+      sandbox.stub(EventCategoryAssignmentEntity, 'destroy').resolves(0);
+
+      await expect(
+        categoryService.unassignCategoryFromEvent(testAccount, 'event-123', 'category-123'),
+      ).rejects.toThrow(CategoryAssignmentNotFoundError);
+    });
+  });
+
+  describe('getEventCategories', () => {
+    it('should return all categories for an event', async () => {
+      const mockCategoryEntity = {
+        toModel: () => {
+          const model = new EventCategoryModel('category-123', 'calendar-123');
+          const content = new EventCategoryContentModel('en');
+          content.name = 'Technology';
+          model.addContent(content);
+          return model;
+        },
+      };
+
+      const mockAssignments = [
+        { category: mockCategoryEntity },
+      ];
+
+      sandbox.stub(EventCategoryAssignmentEntity, 'findAll').resolves(mockAssignments as any);
+
+      const categories = await categoryService.getEventCategories('event-123');
+
+      expect(categories).toHaveLength(1);
+      expect(categories[0].id).toBe('category-123');
+      expect(categories[0].content('en').name).toBe('Technology');
+    });
+
+    it('should return empty array if no categories assigned', async () => {
+      sandbox.stub(EventCategoryAssignmentEntity, 'findAll').resolves([]);
+
+      const categories = await categoryService.getEventCategories('event-123');
+
+      expect(categories).toHaveLength(0);
+    });
+  });
+
+  describe('getCategoryEvents', () => {
+    it('should return all event IDs for a category', async () => {
+      const mockAssignments = [
+        { event_id: 'event-123' },
+        { event_id: 'event-456' },
+      ];
+
+      sandbox.stub(EventCategoryAssignmentEntity, 'findAll').resolves(mockAssignments as any);
+
+      const eventIds = await categoryService.getCategoryEvents('category-123');
+
+      expect(eventIds).toHaveLength(2);
+      expect(eventIds).toContain('event-123');
+      expect(eventIds).toContain('event-456');
+    });
+
+    it('should return empty array if no events assigned', async () => {
+      sandbox.stub(EventCategoryAssignmentEntity, 'findAll').resolves([]);
+
+      const eventIds = await categoryService.getCategoryEvents('category-123');
+
+      expect(eventIds).toHaveLength(0);
     });
   });
 });

@@ -4,6 +4,7 @@ import { Account } from '@/common/model/account';
 import { EventLocation } from '@/common/model/location';
 import { CalendarEditor } from '@/common/model/calendar_editor';
 import { EventCategoryModel } from '@/common/model/event_category';
+import { EventCategoryAssignmentModel } from '@/common/model/event_category_assignment';
 import CalendarService from '../service/calendar';
 import EventService from '../service/events';
 import LocationService from '../service/locations';
@@ -174,5 +175,22 @@ export default class CalendarInterface {
 
   async deleteCategory(account: Account, categoryId: string): Promise<void> {
     return this.categoryService.deleteCategory(account, categoryId);
+  }
+
+  // Category assignment operations
+  async assignCategoryToEvent(account: Account, eventId: string, categoryId: string): Promise<EventCategoryAssignmentModel> {
+    return this.categoryService.assignCategoryToEvent(account, eventId, categoryId);
+  }
+
+  async unassignCategoryFromEvent(account: Account, eventId: string, categoryId: string): Promise<void> {
+    return this.categoryService.unassignCategoryFromEvent(account, eventId, categoryId);
+  }
+
+  async getEventCategories(eventId: string): Promise<EventCategoryModel[]> {
+    return this.categoryService.getEventCategories(eventId);
+  }
+
+  async getCategoryEvents(categoryId: string): Promise<string[]> {
+    return this.categoryService.getCategoryEvents(categoryId);
   }
 }
