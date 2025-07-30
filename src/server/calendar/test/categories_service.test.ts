@@ -4,8 +4,8 @@ import CategoryService from '../service/categories';
 import CalendarService from '../service/calendar';
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
-import { EventCategoryModel } from '@/common/model/event_category';
-import { EventCategoryContentModel } from '@/common/model/event_category_content';
+import { EventCategory } from '@/common/model/event_category';
+import { EventCategoryContent } from '@/common/model/event_category_content';
 import { EventCategoryEntity } from '../entity/event_category';
 import { EventCategoryContentEntity } from '../entity/event_category_content';
 import { EventCategoryAssignmentEntity } from '../entity/event_category_assignment';
@@ -52,13 +52,16 @@ describe('CategoryService', () => {
       const contentSaveStub = sandbox.stub(EventCategoryContentEntity.prototype, 'save');
 
       const categoryData = {
-        name: 'Technology',
-        language: 'en',
+        content: {
+          en: {
+            name: 'Technology',
+          },
+        },
       };
 
       const category = await categoryService.createCategory(testAccount, 'calendar-123', categoryData);
 
-      expect(category).toBeInstanceOf(EventCategoryModel);
+      expect(category).toBeInstanceOf(EventCategory);
       expect(category.calendarId).toBe('calendar-123');
 
       // Verify save was called on both entities
@@ -74,8 +77,11 @@ describe('CategoryService', () => {
       mockCalendarService.getCalendar.resolves(null);
 
       const categoryData = {
-        name: 'Technology',
-        language: 'en',
+        content: {
+          en: {
+            name: 'Technology',
+          },
+        },
       };
 
       await expect(
@@ -88,8 +94,11 @@ describe('CategoryService', () => {
       mockCalendarService.userCanModifyCalendar.resolves(false);
 
       const categoryData = {
-        name: 'Technology',
-        language: 'en',
+        content: {
+          en: {
+            name: 'Technology',
+          },
+        },
       };
 
       await expect(
@@ -130,8 +139,8 @@ describe('CategoryService', () => {
       const categories = await categoryService.getCategories('calendar-123');
 
       expect(categories).toHaveLength(2);
-      expect(categories[0]).toBeInstanceOf(EventCategoryModel);
-      expect(categories[1]).toBeInstanceOf(EventCategoryModel);
+      expect(categories[0]).toBeInstanceOf(EventCategory);
+      expect(categories[1]).toBeInstanceOf(EventCategory);
     });
 
     it('should return empty array for calendar with no categories', async () => {
@@ -161,7 +170,7 @@ describe('CategoryService', () => {
 
       const category = await categoryService.getCategory('category-123');
 
-      expect(category).toBeInstanceOf(EventCategoryModel);
+      expect(category).toBeInstanceOf(EventCategory);
       expect(category?.id).toBe('category-123');
     });
 
@@ -175,7 +184,7 @@ describe('CategoryService', () => {
 
   describe('updateCategory', () => {
     it('should update category content with permission checks', async () => {
-      const mockCategory = new EventCategoryModel('category-123', 'calendar-123');
+      const mockCategory = new EventCategory('category-123', 'calendar-123');
       const getStub = sandbox.stub(categoryService, 'getCategory').resolves(mockCategory);
 
       // Setup permission checking mocks
@@ -192,22 +201,25 @@ describe('CategoryService', () => {
       const saveStub = sandbox.stub(mockContentEntity, 'save').resolves(mockContentEntity);
 
       const updateData = {
-        name: 'Updated Technology',
-        language: 'en',
+        content: {
+          en: {
+            name: 'Updated Technology',
+          },
+        },
       };
 
       // Mock the second getCategory call (after update)
-      getStub.onSecondCall().resolves(new EventCategoryModel('category-123', 'calendar-123'));
+      getStub.onSecondCall().resolves(new EventCategory('category-123', 'calendar-123'));
 
       const result = await categoryService.updateCategory(testAccount, 'category-123', updateData);
 
-      expect(result).toBeInstanceOf(EventCategoryModel);
+      expect(result).toBeInstanceOf(EventCategory);
       expect(saveStub.calledOnce).toBeTruthy();
       // Verify the permission checking was called
       expect(mockCalendarService.getCalendar.called).toBeTruthy();
       expect(mockCalendarService.userCanModifyCalendar.called).toBeTruthy();
     });    it('should create new content when updating category with new language', async () => {
-      const mockCategory = new EventCategoryModel('category-123', 'calendar-123');
+      const mockCategory = new EventCategory('category-123', 'calendar-123');
       const getStub = sandbox.stub(categoryService, 'getCategory').resolves(mockCategory);
 
       // Setup permission checking mocks
@@ -221,16 +233,19 @@ describe('CategoryService', () => {
       const contentSaveStub = sandbox.stub(EventCategoryContentEntity.prototype, 'save');
 
       const updateData = {
-        name: 'Tecnología',
-        language: 'es',
+        content: {
+          es: {
+            name: 'Tecnología',
+          },
+        },
       };
 
       // Mock the second getCategory call (after update)
-      getStub.onSecondCall().resolves(new EventCategoryModel('category-123', 'calendar-123'));
+      getStub.onSecondCall().resolves(new EventCategory('category-123', 'calendar-123'));
 
       const result = await categoryService.updateCategory(testAccount, 'category-123', updateData);
 
-      expect(result).toBeInstanceOf(EventCategoryModel);
+      expect(result).toBeInstanceOf(EventCategory);
 
       // Verify save was called for the new content entity
       expect(contentSaveStub.calledOnce).toBeTruthy();
@@ -244,8 +259,11 @@ describe('CategoryService', () => {
       sandbox.stub(categoryService, 'getCategory').resolves(null);
 
       const updateData = {
-        name: 'Updated Technology',
-        language: 'en',
+        content: {
+          en: {
+            name: 'Updated Technology',
+          },
+        },
       };
 
       await expect(
@@ -254,15 +272,18 @@ describe('CategoryService', () => {
     });
 
     it('should throw error for unauthorized user', async () => {
-      const mockCategory = new EventCategoryModel('category-123', 'calendar-123');
+      const mockCategory = new EventCategory('category-123', 'calendar-123');
       sandbox.stub(categoryService, 'getCategory').resolves(mockCategory);
 
       mockCalendarService.getCalendar.resolves(testCalendar);
       mockCalendarService.userCanModifyCalendar.resolves(false);
 
       const updateData = {
-        name: 'Updated Technology',
-        language: 'en',
+        content: {
+          en: {
+            name: 'Updated Technology',
+          },
+        },
       };
 
       await expect(
@@ -273,7 +294,7 @@ describe('CategoryService', () => {
 
   describe('deleteCategory', () => {
     it('should delete category with permission checks', async () => {
-      const mockCategory = new EventCategoryModel('category-123', 'calendar-123');
+      const mockCategory = new EventCategory('category-123', 'calendar-123');
       sandbox.stub(categoryService, 'getCategory').resolves(mockCategory);
 
       // Setup permission checking mocks
@@ -299,7 +320,7 @@ describe('CategoryService', () => {
     });
 
     it('should throw error for unauthorized user', async () => {
-      const mockCategory = new EventCategoryModel('category-123', 'calendar-123');
+      const mockCategory = new EventCategory('category-123', 'calendar-123');
       sandbox.stub(categoryService, 'getCategory').resolves(mockCategory);
 
       mockCalendarService.getCalendar.resolves(testCalendar);
@@ -314,8 +335,8 @@ describe('CategoryService', () => {
   describe('assignCategoryToEvent', () => {
     it('should assign a category to an event', async () => {
       // Setup mocks
-      const mockCategory = new EventCategoryModel('category-123', 'calendar-123');
-      const content = new EventCategoryContentModel('en');
+      const mockCategory = new EventCategory('category-123', 'calendar-123');
+      const content = new EventCategoryContent('en');
       content.name = 'Technology';
       mockCategory.addContent(content);
 
@@ -353,7 +374,7 @@ describe('CategoryService', () => {
     });
 
     it('should throw error if event not found', async () => {
-      const mockCategory = new EventCategoryModel('category-123', 'calendar-123');
+      const mockCategory = new EventCategory('category-123', 'calendar-123');
       sandbox.stub(categoryService, 'getCategory').resolves(mockCategory);
       sandbox.stub(EventEntity, 'findByPk').resolves(null);
 
@@ -363,7 +384,7 @@ describe('CategoryService', () => {
     });
 
     it('should throw error if event and category belong to different calendars', async () => {
-      const mockCategory = new EventCategoryModel('category-123', 'calendar-123');
+      const mockCategory = new EventCategory('category-123', 'calendar-123');
       sandbox.stub(categoryService, 'getCategory').resolves(mockCategory);
 
       const mockEventEntity = {
@@ -377,7 +398,7 @@ describe('CategoryService', () => {
     });
 
     it('should throw error if user lacks permission', async () => {
-      const mockCategory = new EventCategoryModel('category-123', 'calendar-123');
+      const mockCategory = new EventCategory('category-123', 'calendar-123');
       sandbox.stub(categoryService, 'getCategory').resolves(mockCategory);
 
       const mockEventEntity = {
@@ -394,7 +415,7 @@ describe('CategoryService', () => {
     });
 
     it('should throw error if assignment already exists', async () => {
-      const mockCategory = new EventCategoryModel('category-123', 'calendar-123');
+      const mockCategory = new EventCategory('category-123', 'calendar-123');
       sandbox.stub(categoryService, 'getCategory').resolves(mockCategory);
 
       const mockEventEntity = {
@@ -417,7 +438,7 @@ describe('CategoryService', () => {
 
   describe('unassignCategoryFromEvent', () => {
     it('should remove a category assignment from an event', async () => {
-      const mockCategory = new EventCategoryModel('category-123', 'calendar-123');
+      const mockCategory = new EventCategory('category-123', 'calendar-123');
       sandbox.stub(categoryService, 'getCategory').resolves(mockCategory);
 
       const mockEventEntity = {
@@ -438,7 +459,7 @@ describe('CategoryService', () => {
     });
 
     it('should throw error if assignment not found', async () => {
-      const mockCategory = new EventCategoryModel('category-123', 'calendar-123');
+      const mockCategory = new EventCategory('category-123', 'calendar-123');
       sandbox.stub(categoryService, 'getCategory').resolves(mockCategory);
 
       const mockEventEntity = {
@@ -462,8 +483,8 @@ describe('CategoryService', () => {
     it('should return all categories for an event', async () => {
       const mockCategoryEntity = {
         toModel: () => {
-          const model = new EventCategoryModel('category-123', 'calendar-123');
-          const content = new EventCategoryContentModel('en');
+          const model = new EventCategory('category-123', 'calendar-123');
+          const content = new EventCategoryContent('en');
           content.name = 'Technology';
           model.addContent(content);
           return model;

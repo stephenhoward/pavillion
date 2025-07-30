@@ -263,7 +263,7 @@ describe('Editors Component', () => {
 
       await wrapper.vm.addEditor();
 
-      expect(wrapper.vm.state.addError).toBe('Account ID cannot be empty');
+      expect(wrapper.vm.state.addError).toBe('Account ID is required');
       expect(calendarServiceMock.grantEditAccess).not.toHaveBeenCalled();
     });
 

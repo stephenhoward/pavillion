@@ -1,5 +1,5 @@
 import { Table, Column, Model, DataType, PrimaryKey, BelongsTo, ForeignKey } from 'sequelize-typescript';
-import { EventCategoryContentModel } from '@/common/model/event_category_content';
+import { EventCategoryContent } from '@/common/model/event_category_content';
 import { EventCategoryEntity } from './event_category';
 
 /**
@@ -45,8 +45,8 @@ export class EventCategoryContentEntity extends Model {
   /**
    * Convert entity to domain model.
    */
-  toModel(): EventCategoryContentModel {
-    return new EventCategoryContentModel(
+  toModel(): EventCategoryContent {
+    return new EventCategoryContent(
       this.language,
       this.name,
     );
@@ -55,7 +55,7 @@ export class EventCategoryContentEntity extends Model {
   /**
    * Create entity from domain model.
    */
-  static fromModel(model: EventCategoryContentModel): EventCategoryContentEntity {
+  static fromModel(model: EventCategoryContent): EventCategoryContentEntity {
     return EventCategoryContentEntity.build({
       language: model.language,
       name: model.name,

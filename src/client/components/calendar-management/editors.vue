@@ -1,11 +1,10 @@
 <template>
-  <div class="editors-management">
+  <div class="editors-tab">
     <div class="editors-header">
-      <h3>{{ t('title') }}</h3>
       <button
         type="button"
         class="primary add-editor-btn"
-        @click="state.showAddForm = true"
+        @click="openAddForm"
         :disabled="state.isLoading"
       >
         {{ t('add_editor_button') }}
@@ -46,6 +45,7 @@
     <!-- Empty State -->
     <div v-else class="empty-state">
       <p>{{ t('no_editors') }}</p>
+      <p class="description">{{ t('no_editors_description') }}</p>
     </div>
 
     <!-- Add Editor Form -->
@@ -99,22 +99,21 @@
       :title="t('confirm_remove_title')"
       @close="cancelRemoveEditor"
     >
-      <div class="confirm-remove">
+      <div class="remove-confirmation">
         <p>{{ t('confirm_remove_message', { email: state.editorToRemove.email }) }}</p>
-
         <div class="form-actions">
           <button
             type="button"
             class="danger"
             @click="removeEditor"
-            :disabled="state.isRemoving"
+            :disabled="state.isRemoving === state.editorToRemove?.id"
           >
-            {{ state.isRemoving ? t('removing') : t('confirm_remove_button') }}
+            {{ state.isRemoving === state.editorToRemove?.id ? t('removing') : t('remove_button') }}
           </button>
           <button
             type="button"
             @click="cancelRemoveEditor"
-            :disabled="state.isRemoving"
+            :disabled="state.isRemoving === state.editorToRemove?.id"
           >
             {{ t('cancel_button') }}
           </button>
@@ -139,6 +138,9 @@ const props = defineProps({
     required: true,
   },
 });
+
+// Emit events
+const emit = defineEmits(['editorsUpdated']);
 
 // Translations
 const { t } = useTranslation('calendars', {
@@ -206,15 +208,14 @@ const openAddForm = async () => {
  * Close the add editor form
  */
 const closeAddForm = () => {
-  if (state.isAdding) return; // Don't close if operation in progress
-
   state.showAddForm = false;
   state.newAccountId = '';
   state.addError = '';
+  state.isAdding = false;
 };
 
 /**
- * Add a new editor
+ * Add an editor to the calendar
  */
 const addEditor = async () => {
   if (!state.newAccountId.trim()) {
@@ -226,79 +227,68 @@ const addEditor = async () => {
     state.isAdding = true;
     state.addError = '';
 
-    const editor = await calendarService.grantEditAccess(props.calendarId, state.newAccountId.trim());
-    state.editors.push(editor);
-
-    // Reset state before closing form
-    state.isAdding = false;
+    await calendarService.grantCalendarEditAccess(props.calendarId, state.newAccountId.trim());
+    await loadEditors();
     closeAddForm();
+    emit('editorsUpdated');
   }
   catch (error) {
     console.error('Error adding editor:', error);
 
-    if (error instanceof EmptyValueError) {
-      state.addError = t('account_id_required');
-    }
-    else if (error instanceof EditorAlreadyExistsError) {
+    if (error instanceof EditorAlreadyExistsError) {
       state.addError = t('error_editor_already_exists');
     }
     else if (error instanceof CalendarEditorPermissionError) {
       state.addError = t('error_permission_denied');
     }
+    else if (error instanceof EmptyValueError) {
+      state.addError = t('account_id_required');
+    }
     else {
       state.addError = t('error_adding_editor');
     }
-
+  }
+  finally {
     state.isAdding = false;
   }
 };
 
 /**
- * Show confirmation modal before removing an editor
+ * Confirm removing an editor
  */
 const confirmRemoveEditor = (editor) => {
   state.editorToRemove = editor;
 };
 
 /**
- * Cancel the remove operation
+ * Cancel removing an editor
  */
 const cancelRemoveEditor = () => {
-  if (state.isRemoving) return; // Don't close if operation in progress
-
   state.editorToRemove = null;
+  state.isRemoving = false;
 };
 
 /**
- * Remove an editor
+ * Remove an editor from the calendar
  */
 const removeEditor = async () => {
-  if (!state.editorToRemove) return;
+  if (!state.editorToRemove) {
+    return;
+  }
 
   try {
     state.isRemoving = state.editorToRemove.id;
 
-    await calendarService.revokeEditAccess(props.calendarId, state.editorToRemove.email);
-
-    // Remove from local list
-    const index = state.editors.findIndex(e => e.id === state.editorToRemove.id);
-    if (index >= 0) {
-      state.editors.splice(index, 1);
-    }
-
-    state.editorToRemove = null;
+    await calendarService.revokeCalendarEditAccess(props.calendarId, state.editorToRemove.accountId);
+    await loadEditors();
+    cancelRemoveEditor();
+    emit('editorsUpdated');
   }
   catch (error) {
     console.error('Error removing editor:', error);
 
     if (error instanceof EditorNotFoundError) {
       state.error = t('error_editor_not_found');
-      // Remove from local list anyway since it doesn't exist on server
-      const index = state.editors.findIndex(e => e.id === state.editorToRemove.id);
-      if (index >= 0) {
-        state.editors.splice(index, 1);
-      }
-      state.editorToRemove = null;
     }
     else if (error instanceof CalendarEditorPermissionError) {
       state.error = t('error_permission_denied');
@@ -313,220 +303,196 @@ const removeEditor = async () => {
 };
 
 // Load editors when component mounts
-onMounted(() => {
-  loadEditors();
-});
+onMounted(loadEditors);
 </script>
 
 <style scoped lang="scss">
-@use '../../assets/mixins' as *;
+// @use '../../../assets/mixins' as *;
 
-.editors-management {
-  background: white;
-  border-radius: 8px;
-  padding: 24px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.editors-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  border-bottom: 1px solid #e5e7eb;
-  padding-bottom: 16px;
-
-  h3 {
-    margin: 0;
-    color: #1f2937;
-    font-size: 1.25rem;
-    font-weight: 600;
+.editors-tab {
+  .editors-header {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 24px;
   }
-}
 
-.add-editor-btn {
-  font-size: 14px;
-  padding: 8px 16px;
-}
+  .editors-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
 
-.error {
-  background-color: #fef2f2;
-  border: 1px solid #fecaca;
-  color: #dc2626;
-  padding: 12px;
-  border-radius: 6px;
-  margin-bottom: 16px;
-}
-
-.loading {
-  text-align: center;
-  padding: 40px 20px;
-  color: #6b7280;
-}
-
-.editors-list {
   .editor-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding: 16px;
-    border: 1px solid #e5e7eb;
-    border-radius: 6px;
-    margin-bottom: 8px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    transition: border-color 0.2s ease;
 
-    &:last-child {
-      margin-bottom: 0;
-    }
-
-    .editor-info {
-      .editor-account {
-        font-weight: 500;
-        color: #374151;
-      }
-    }
-
-    .remove-btn {
-      font-size: 14px;
-      padding: 6px 12px;
+    &:hover {
+      border-color: var(--color-border-hover);
     }
   }
-}
 
-.empty-state {
-  text-align: center;
-  padding: 40px 20px;
-  color: #6b7280;
+  .editor-info {
+    flex: 1;
 
-  p {
-    margin: 0;
-    font-style: italic;
-  }
-}
-
-.add-editor-form {
-  .form-group {
-    margin-bottom: 20px;
-
-    label {
-      display: block;
-      margin-bottom: 6px;
+    .editor-account {
       font-weight: 500;
-      color: #374151;
+      color: var(--color-text);
     }
+  }
 
-    input[type="text"] {
-      width: 100%;
-      font-size: 14pt;
-      background-color: rgba(255, 255, 255, 0.5);
-      border: 1px solid #d1d5db;
-      border-radius: $form-input-border-radius;
-      padding: 12px 16px;
-      box-sizing: border-box;
+  .remove-btn {
+    padding: 6px 12px;
+    font-size: 14px;
+  }
 
-      &:focus {
-        outline: none;
-        border-color: #3b82f6;
-        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  .empty-state {
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--color-text-secondary);
+
+    p {
+      margin: 0 0 8px 0;
+
+      &.description {
+        font-size: 14px;
+        color: var(--color-text-tertiary);
+      }
+    }
+  }
+
+  .add-editor-form {
+    .form-group {
+      margin-bottom: 20px;
+
+      label {
+        display: block;
+        margin-bottom: 6px;
+        font-weight: 500;
+        color: var(--color-text);
       }
 
-      &:disabled {
-        background-color: #f9fafb;
-        color: #6b7280;
+      input {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid var(--color-border);
+        border-radius: 6px;
+        font-size: 14px;
+
+        &:focus {
+          outline: none;
+          border-color: var(--color-primary);
+          box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.1);
+        }
+
+        &:disabled {
+          background-color: var(--color-surface-secondary);
+          cursor: not-allowed;
+        }
+      }
+
+      .help-text {
+        margin: 6px 0 0 0;
+        font-size: 12px;
+        color: var(--color-text-tertiary);
       }
     }
 
-    .help-text {
-      font-size: 12px;
-      color: #6b7280;
-      margin: 4px 0 0 0;
+    .form-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+      margin-top: 24px;
     }
   }
 
-  .form-actions {
-    display: flex;
-    gap: 12px;
-    justify-content: flex-end;
-    margin-top: 24px;
-  }
-}
+  .remove-confirmation {
+    p {
+      margin: 0 0 24px 0;
+      color: var(--color-text);
+    }
 
-.confirm-remove {
-  p {
-    margin-bottom: 24px;
-    color: #374151;
-  }
-
-  .form-actions {
-    display: flex;
-    gap: 12px;
-    justify-content: flex-end;
-  }
-}
-
-@include dark-mode {
-  .editors-management {
-    background: $dark-mode-background;
-  }
-
-  .editors-header {
-    border-bottom-color: #374151;
-
-    h3 {
-      color: $dark-mode-text;
+    .form-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
     }
   }
 
   .error {
-    background-color: #7f1d1d;
-    border-color: #991b1b;
-    color: #fca5a5;
+    padding: 12px;
+    margin-bottom: 16px;
+    background-color: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: 6px;
+    color: rgb(153, 27, 27);
+    font-size: 14px;
   }
 
   .loading {
-    color: #9ca3af;
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--color-text-secondary);
   }
+}
 
-  .editors-list .editor-item {
-    border-color: #374151;
-    background: $dark-mode-background;
+/*
+@include dark-mode {
+  .editors-tab {
+    .editor-item {
+      background: $dark-mode-surface;
+      border-color: $dark-mode-border;
+
+      &:hover {
+        border-color: $dark-mode-border-hover;
+      }
+    }
 
     .editor-info .editor-account {
       color: $dark-mode-text;
     }
-  }
 
-  .empty-state {
-    color: #9ca3af;
-  }
+    .empty-state {
+      color: $dark-mode-secondary-text;
 
-  .add-editor-form .form-group {
-    label {
-      color: $dark-mode-text;
-    }
-
-    input[type="text"] {
-      background-color: rgba(100, 100, 100, 0.2);
-      border-color: #4b5563;
-      color: $dark-mode-text;
-
-      &:focus {
-        border-color: #60a5fa;
-        box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.1);
-      }
-
-      &:disabled {
-        background-color: #1f2937;
-        color: #6b7280;
+      p.description {
+        color: $dark-mode-tertiary-text;
       }
     }
 
-    .help-text {
-      color: #9ca3af;
-    }
-  }
+    .form-group {
+      label {
+        color: $dark-mode-text;
+      }
 
-  .confirm-remove p {
-    color: $dark-mode-text;
+      input {
+        background: $dark-mode-surface;
+        border-color: $dark-mode-border;
+        color: $dark-mode-text;
+
+        &:focus {
+          border-color: $dark-mode-primary;
+        }
+
+        &:disabled {
+          background-color: $dark-mode-selected-background;
+        }
+      }
+
+      .help-text {
+        color: $dark-mode-tertiary-text;
+      }
+    }
+
+    .remove-confirmation p {
+      color: $dark-mode-text;
+    }
   }
 }
+*/
 </style>

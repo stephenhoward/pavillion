@@ -1,6 +1,5 @@
 import { Model, Column, Table, BelongsTo, ForeignKey, DataType, PrimaryKey, BeforeCreate } from 'sequelize-typescript';
 
-import { Account } from '@/common/model/account';
 import AccountInvitation from '@/common/model/invitation';
 import { AccountEntity } from '@/server/common/entity/account';
 import db from '@/server/common/entity/db';

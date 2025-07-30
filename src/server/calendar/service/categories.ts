@@ -1,13 +1,13 @@
 import { v4 as uuidv4 } from 'uuid';
 
 import { Account } from '@/common/model/account';
-import { EventCategoryModel } from '@/common/model/event_category';
+import { EventCategory } from '@/common/model/event_category';
+import { EventCategoryContent } from '@/common/model/event_category_content';
 import { EventCategoryAssignmentModel } from '@/common/model/event_category_assignment';
 import { EventCategoryEntity } from '@/server/calendar/entity/event_category';
 import { EventCategoryContentEntity } from '@/server/calendar/entity/event_category_content';
 import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_category_assignment';
 import { EventEntity } from '@/server/calendar/entity/event';
-import CalendarService from './calendar';
 import { CalendarNotFoundError, EventNotFoundError, InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
 import {
   CategoryNotFoundError,
@@ -16,6 +16,7 @@ import {
   CategoryEventCalendarMismatchError,
   CategoryUpdateFailedError,
 } from '@/common/exceptions/category';
+import CalendarService from './calendar';
 
 /**
  * Service for managing event categories within calendars.
@@ -23,25 +24,21 @@ import {
  * and manages category assignments to events.
  */
 class CategoryService {
-  private calendarService: CalendarService;
-  constructor(calendarService: CalendarService) {
-    this.calendarService = calendarService;
+  constructor(private calendarService?: CalendarService) {
+    // calendarService is optional for backward compatibility but recommended for proper dependency injection
   }
 
   /**
    * Create a new category for a calendar
    */
-  async createCategory(account: Account, calendarId: string, categoryData: {
-    name: string;
-    language: string;
-  }): Promise<EventCategoryModel> {
+  async createCategory(account: Account, calendarId: string, categoryData: Record<string,any>): Promise<EventCategory> {
     // Get calendar and verify ownership/editor permissions
-    const calendar = await this.calendarService.getCalendar(calendarId);
+    const calendar = await this.getCalendar(calendarId);
     if (!calendar) {
       throw new CalendarNotFoundError();
     }
 
-    const canModify = await this.calendarService.userCanModifyCalendar(account, calendar);
+    const canModify = await this.userCanModifyCalendar(account, calendar);
     if (!canModify) {
       throw new InsufficientCalendarPermissionsError();
     }
@@ -53,23 +50,37 @@ class CategoryService {
     });
     await categoryEntity.save();
 
+    const category = categoryEntity.toModel();
+
+    if ( categoryData.content ) {
+      for( let [language,content] of Object.entries(categoryData.content) ) {
+        category.addContent(await this.createCategoryContent(category.id, language, content as Record<string,any>));
+      }
+    }
+
+    return category;
+  }
+
+  /**
+   * Create category content for a specific language
+   */
+  private async createCategoryContent(categoryId: string, language: string, content: Record<string, any>): Promise<EventCategoryContent> {
     // Create the category content
     const contentEntity = EventCategoryContentEntity.build({
-      category_id: categoryEntity.id,
-      language: categoryData.language,
-      name: categoryData.name,
+      category_id: categoryId,
+      language: language,
+      name: content.name,
     });
     await contentEntity.save();
 
-    categoryEntity.content = [contentEntity]; // Attach content for toModel conversion
-
-    return categoryEntity.toModel();
+    return contentEntity.toModel();
   }
+
 
   /**
    * Get all categories for a calendar
    */
-  async getCategories(calendarId: string): Promise<EventCategoryModel[]> {
+  async getCategories(calendarId: string): Promise<EventCategory[]> {
     const categories = await EventCategoryEntity.findAll({
       where: { calendar_id: calendarId },
       include: [EventCategoryContentEntity],
@@ -82,7 +93,7 @@ class CategoryService {
   /**
    * Get a specific category by ID
    */
-  async getCategory(categoryId: string): Promise<EventCategoryModel | null> {
+  async getCategory(categoryId: string): Promise<EventCategory | null> {
     const category = await EventCategoryEntity.findByPk(categoryId, {
       include: [EventCategoryContentEntity],
     });
@@ -91,12 +102,9 @@ class CategoryService {
   }
 
   /**
-   * Update a category's content for a specific language
+   * Update a category with new data
    */
-  async updateCategory(account: Account, categoryId: string, updateData: {
-    name: string;
-    language: string;
-  }): Promise<EventCategoryModel> {
+  async updateCategory(account: Account, categoryId: string, categoryData: Record<string,any>): Promise<EventCategory> {
     // Get category to verify it exists
     const category = await this.getCategory(categoryId);
     if (!category) {
@@ -104,37 +112,56 @@ class CategoryService {
     }
 
     // Get calendar and verify ownership/editor permissions
-    const calendar = await this.calendarService.getCalendar(category.calendarId);
+    const calendar = await this.getCalendar(category.calendarId);
     if (!calendar) {
       throw new CalendarNotFoundError();
     }
 
-    const canModify = await this.calendarService.userCanModifyCalendar(account, calendar);
+    const canModify = await this.userCanModifyCalendar(account, calendar);
     if (!canModify) {
       throw new InsufficientCalendarPermissionsError();
     }
 
-    // Find existing content for this language
-    let contentEntity = await EventCategoryContentEntity.findOne({
-      where: {
-        category_id: categoryId,
-        language: updateData.language,
-      },
-    });
+    // Handle content updates
+    if (categoryData.content) {
+      for (let [language, content] of Object.entries(categoryData.content)) {
+        let contentEntity = await EventCategoryContentEntity.findOne({
+          where: { category_id: categoryId, language: language },
+        });
 
-    if (contentEntity) {
-      // Update existing content
-      contentEntity.name = updateData.name;
-      await contentEntity.save();
-    }
-    else {
-      // Create new content for this language
-      const newContentEntity = EventCategoryContentEntity.build({
-        category_id: categoryId,
-        language: updateData.language,
-        name: updateData.name,
-      });
-      await newContentEntity.save();
+        if (contentEntity) {
+          if (!content) {
+            // Delete content if null/undefined is passed
+            await contentEntity.destroy();
+            continue;
+          }
+
+          let c = content as Record<string,any>;
+
+          if (!c.name || Object.keys(c).length === 0) {
+            // Delete content if empty or no name
+            await contentEntity.destroy();
+            continue;
+          }
+
+          // Update existing content
+          contentEntity.name = c.name;
+          await contentEntity.save();
+        }
+        else {
+          if (!content) {
+            // Skip if no content to create
+            continue;
+          }
+
+          let c = content as Record<string,any>;
+
+          if (c.name && Object.keys(c).length > 0) {
+            // Create new content for this language
+            await this.createCategoryContent(categoryId, language, c);
+          }
+        }
+      }
     }
 
     // Return updated category
@@ -157,12 +184,12 @@ class CategoryService {
     }
 
     // Get calendar and verify ownership/editor permissions
-    const calendar = await this.calendarService.getCalendar(category.calendarId);
+    const calendar = await this.getCalendar(category.calendarId);
     if (!calendar) {
       throw new CalendarNotFoundError();
     }
 
-    const canModify = await this.calendarService.userCanModifyCalendar(account, calendar);
+    const canModify = await this.userCanModifyCalendar(account, calendar);
     if (!canModify) {
       throw new InsufficientCalendarPermissionsError();
     }
@@ -200,12 +227,12 @@ class CategoryService {
     }
 
     // Get calendar and verify permissions
-    const calendar = await this.calendarService.getCalendar(category.calendarId);
+    const calendar = await this.getCalendar(category.calendarId);
     if (!calendar) {
       throw new CalendarNotFoundError();
     }
 
-    const canModify = await this.calendarService.userCanModifyCalendar(account, calendar);
+    const canModify = await this.userCanModifyCalendar(account, calendar);
     if (!canModify) {
       throw new InsufficientCalendarPermissionsError();
     }
@@ -255,12 +282,12 @@ class CategoryService {
     }
 
     // Get calendar and verify permissions
-    const calendar = await this.calendarService.getCalendar(category.calendarId);
+    const calendar = await this.getCalendar(category.calendarId);
     if (!calendar) {
       throw new CalendarNotFoundError();
     }
 
-    const canModify = await this.calendarService.userCanModifyCalendar(account, calendar);
+    const canModify = await this.userCanModifyCalendar(account, calendar);
     if (!canModify) {
       throw new InsufficientCalendarPermissionsError();
     }
@@ -281,7 +308,7 @@ class CategoryService {
   /**
    * Get all categories assigned to an event
    */
-  async getEventCategories(eventId: string): Promise<EventCategoryModel[]> {
+  async getEventCategories(eventId: string): Promise<EventCategory[]> {
     const assignments = await EventCategoryAssignmentEntity.findAll({
       where: { event_id: eventId },
       include: [{
@@ -303,6 +330,54 @@ class CategoryService {
     });
 
     return assignments.map(assignment => assignment.event_id);
+  }
+
+  /**
+   * Get a calendar by ID - internal helper method
+   */
+  private async getCalendar(id: string): Promise<import('@/common/model/calendar').Calendar | null> {
+    if (this.calendarService) {
+      return await this.calendarService.getCalendar(id);
+    }
+
+    // Fallback to direct entity access if no service injected
+    const { CalendarEntity } = await import('@/server/calendar/entity/calendar');
+    const calendarEntity = await CalendarEntity.findByPk(id);
+    return calendarEntity ? calendarEntity.toModel() : null;
+  }
+
+  /**
+   * Check if a user can modify a calendar - internal helper method
+   */
+  private async userCanModifyCalendar(account: Account, calendar: import('@/common/model/calendar').Calendar): Promise<boolean> {
+    if (this.calendarService) {
+      return await this.calendarService.userCanModifyCalendar(account, calendar);
+    }
+
+    // Fallback to direct implementation if no service injected
+    if (account.hasRole('admin')) {
+      return true;
+    }
+
+    // Import CalendarEditorEntity dynamically to avoid circular dependency
+    const { CalendarEditorEntity } = await import('@/server/calendar/entity/calendar_editor');
+    const { CalendarEntity } = await import('@/server/calendar/entity/calendar');
+
+    // Check if user owns the calendar
+    const calendarEntity = await CalendarEntity.findByPk(calendar.id);
+    if (calendarEntity && calendarEntity.account_id === account.id) {
+      return true;
+    }
+
+    // Check if user has editor access
+    const editorRelationship = await CalendarEditorEntity.findOne({
+      where: {
+        calendar_id: calendar.id,
+        account_id: account.id,
+      },
+    });
+
+    return editorRelationship !== null;
   }
 }
 

@@ -12,6 +12,7 @@ import enAdmin from '@/client/locales/en/admin.json';
 import enInbox from '@/client/locales/en/inbox.json';
 import enFeed from '@/client/locales/en/feed.json';
 import enMedia from '@/client/locales/en/media.json';
+import enCategories from '@/client/locales/en/categories.json';
 
 /**
  * Initializes the i18next internationalization framework with all translation resources.
@@ -38,6 +39,7 @@ export const initI18Next = () => {
           inbox: enInbox,
           feed: enFeed,
           media: enMedia,
+          categories: enCategories,
         },
       },
       detection: {

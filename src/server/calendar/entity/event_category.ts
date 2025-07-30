@@ -1,5 +1,5 @@
 import { Table, Column, Model, DataType, PrimaryKey, CreatedAt, UpdatedAt, BelongsTo, ForeignKey, HasMany } from 'sequelize-typescript';
-import { EventCategoryModel } from '@/common/model/event_category';
+import { EventCategory } from '@/common/model/event_category';
 import { CalendarEntity } from './calendar';
 import { EventCategoryContentEntity } from './event_category_content';
 import db from '@/server/common/entity/db';
@@ -44,8 +44,8 @@ class EventCategoryEntity extends Model {
   /**
    * Convert entity to domain model.
    */
-  toModel(): EventCategoryModel {
-    const model = new EventCategoryModel(
+  toModel(): EventCategory {
+    const model = new EventCategory(
       this.id,
       this.calendar_id,
     );
@@ -62,7 +62,7 @@ class EventCategoryEntity extends Model {
   /**
    * Create entity from domain model.
    */
-  static fromModel(model: EventCategoryModel): EventCategoryEntity {
+  static fromModel(model: EventCategory): EventCategoryEntity {
     return EventCategoryEntity.build({
       id: model.id,
       calendar_id: model.calendarId,

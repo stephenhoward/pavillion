@@ -9,6 +9,7 @@ import '@/client/assets/style.scss';
 import AppVue from '@/client/components/app.vue';
 import CalendarsView from '@/client/components/calendar/calendars.vue';
 import CalendarView from '@/client/components/calendar/calendar.vue';
+import CalendarManagementView from '@/client/components/calendar-management.vue';
 import FeedView from '@/client/components/feed.vue';
 import ProfileView from '@/client/components/profile.vue';
 import InboxView from '@/client/components/inbox.vue';
@@ -58,6 +59,7 @@ Config.init().then( (config) => {
       children: [
         { path: 'calendar', component: CalendarsView, name: 'calendars', beforeEnter: mustBeLoggedIn },
         { path: 'calendar/:calendar', component: CalendarView, name: 'calendar', beforeEnter: mustBeLoggedIn },
+        { path: 'calendar/:calendar/manage', component: CalendarManagementView, name: 'calendar_management', beforeEnter: mustBeLoggedIn },
         { path: 'inbox', component: InboxView, name: 'inbox', beforeEnter: mustBeLoggedIn },
         { path: 'feed', component: FeedView, name: 'feed', beforeEnter: mustBeLoggedIn },
         { path: 'profile', component: ProfileView, name: 'profile', beforeEnter: mustBeLoggedIn },

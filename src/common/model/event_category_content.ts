@@ -4,7 +4,7 @@ import { Model, TranslatedContentModel } from './model.js';
  * Represents translatable content for an event category.
  * Categories can have names in multiple languages.
  */
-export class EventCategoryContentModel extends Model implements TranslatedContentModel {
+export class EventCategoryContent extends Model implements TranslatedContentModel {
   constructor(
     public language: string,
     public name: string = '',
@@ -43,8 +43,8 @@ export class EventCategoryContentModel extends Model implements TranslatedConten
   /**
    * Create from plain object.
    */
-  static fromObject(obj: Record<string, any>): EventCategoryContentModel {
-    return new EventCategoryContentModel(
+  static fromObject(obj: Record<string, any>): EventCategoryContent {
+    return new EventCategoryContent(
       obj.language,
       obj.name,
     );

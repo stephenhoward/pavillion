@@ -122,6 +122,17 @@ export default class CalendarService {
 
     return this.store.getCalendarByUrlName(urlName);
   }
+  /**
+   * Get a calendar by its ID
+   * @param calendarId The ID of the calendar
+   * @returns Promise<Calendar|null> The calendar or null if not found
+   */
+  async getCalendarById(calendarId: string): Promise<Calendar | null> {
+    // Ensure calendars are loaded
+    await this.loadCalendars();
+
+    return this.store.getCalendarById(calendarId);
+  }
 
   /**
    * Updates a calendar on the server and in the store

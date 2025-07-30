@@ -3,7 +3,7 @@ import { CalendarEvent } from '@/common/model/events';
 import { Account } from '@/common/model/account';
 import { EventLocation } from '@/common/model/location';
 import { CalendarEditor } from '@/common/model/calendar_editor';
-import { EventCategoryModel } from '@/common/model/event_category';
+import { EventCategory } from '@/common/model/event_category';
 import { EventCategoryAssignmentModel } from '@/common/model/event_category_assignment';
 import CalendarService from '../service/calendar';
 import EventService from '../service/events';
@@ -36,7 +36,7 @@ export default class CalendarInterface {
     this. eventService = new EventService(eventBus);
     this. locationService = new LocationService();
     this.eventInstanceService = new EventInstanceService(eventBus);
-    this.categoryService = new CategoryService(this.calendarService);
+    this.categoryService = new CategoryService();
   }
 
   // Calendar operations
@@ -151,25 +151,22 @@ export default class CalendarInterface {
   }
 
   // Category operations
-  async getCategories(calendarId: string): Promise<EventCategoryModel[]> {
+  async getCategories(calendarId: string): Promise<EventCategory[]> {
     return this.categoryService.getCategories(calendarId);
   }
 
-  async getCategory(categoryId: string): Promise<EventCategoryModel | null> {
+  async getCategory(categoryId: string): Promise<EventCategory | null> {
     return this.categoryService.getCategory(categoryId);
   }
 
   async createCategory(account: Account, calendarId: string, categoryData: {
     name: string;
     language: string;
-  }): Promise<EventCategoryModel> {
+  }): Promise<EventCategory> {
     return this.categoryService.createCategory(account, calendarId, categoryData);
   }
 
-  async updateCategory(account: Account, categoryId: string, updateData: {
-    name: string;
-    language: string;
-  }): Promise<EventCategoryModel> {
+  async updateCategory(account: Account, categoryId: string, updateData: Record<string, any>): Promise<EventCategory> {
     return this.categoryService.updateCategory(account, categoryId, updateData);
   }
 
@@ -186,7 +183,7 @@ export default class CalendarInterface {
     return this.categoryService.unassignCategoryFromEvent(account, eventId, categoryId);
   }
 
-  async getEventCategories(eventId: string): Promise<EventCategoryModel[]> {
+  async getEventCategories(eventId: string): Promise<EventCategory[]> {
     return this.categoryService.getEventCategories(eventId);
   }
 

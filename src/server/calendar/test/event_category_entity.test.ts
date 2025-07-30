@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeEach } from 'vitest';
 import { EventCategoryEntity, EventCategoryContentEntity } from '@/server/calendar/entity/event_category';
-import { EventCategoryModel } from '@/common/model/event_category';
-import { EventCategoryContentModel } from '@/common/model/event_category_content';
+import { EventCategory } from '@/common/model/event_category';
+import { EventCategoryContent } from '@/common/model/event_category_content';
 
 describe('EventCategoryEntity', () => {
   let sampleData: any;
@@ -29,7 +29,7 @@ describe('EventCategoryEntity', () => {
 
     const model = entity.toModel();
 
-    expect(model).toBeInstanceOf(EventCategoryModel);
+    expect(model).toBeInstanceOf(EventCategory);
     expect(model.id).toBe(sampleData.id);
     expect(model.calendarId).toBe(sampleData.calendar_id);
     expect(model.getLanguages()).toHaveLength(1);
@@ -38,13 +38,13 @@ describe('EventCategoryEntity', () => {
   });
 
   test('creates entity from model correctly', () => {
-    const model = new EventCategoryModel(
+    const model = new EventCategory(
       'cat-123',
       'cal-456',
     );
 
     // Add content using TranslatedModel API
-    const contentModel = new EventCategoryContentModel('en', 'Meeting');
+    const contentModel = new EventCategoryContent('en', 'Meeting');
     model.addContent(contentModel);
 
     const entity = EventCategoryEntity.fromModel(model);
@@ -54,13 +54,13 @@ describe('EventCategoryEntity', () => {
   });
 
   test('round-trip conversion preserves data integrity', () => {
-    const originalModel = new EventCategoryModel(
+    const originalModel = new EventCategory(
       'cat-123',
       'cal-456',
     );
 
     // Add content using TranslatedModel API
-    const contentModel = new EventCategoryContentModel('en', 'Meeting');
+    const contentModel = new EventCategoryContent('en', 'Meeting');
     originalModel.addContent(contentModel);
 
     // Model -> Entity -> Model

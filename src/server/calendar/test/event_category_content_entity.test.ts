@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach } from 'vitest';
 import { EventCategoryContentEntity } from '@/server/calendar/entity/event_category';
-import { EventCategoryContentModel } from '@/common/model/event_category_content';
+import { EventCategoryContent } from '@/common/model/event_category_content';
 
 describe('EventCategoryContentEntity', () => {
   let sampleData: any;
@@ -18,13 +18,13 @@ describe('EventCategoryContentEntity', () => {
     const entity = EventCategoryContentEntity.build(sampleData);
     const model = entity.toModel();
 
-    expect(model).toBeInstanceOf(EventCategoryContentModel);
+    expect(model).toBeInstanceOf(EventCategoryContent);
     expect(model.language).toBe(sampleData.language);
     expect(model.name).toBe(sampleData.name);
   });
 
   test('creates entity from model correctly', () => {
-    const model = new EventCategoryContentModel('en', 'Meeting');
+    const model = new EventCategoryContent('en', 'Meeting');
     const entity = EventCategoryContentEntity.fromModel(model);
 
     expect(entity.language).toBe(model.language);
@@ -32,7 +32,7 @@ describe('EventCategoryContentEntity', () => {
   });
 
   test('round-trip conversion preserves data integrity', () => {
-    const originalModel = new EventCategoryContentModel('en', 'Meeting');
+    const originalModel = new EventCategoryContent('en', 'Meeting');
 
     // Model -> Entity -> Model
     const entity = EventCategoryContentEntity.fromModel(originalModel);
@@ -43,7 +43,7 @@ describe('EventCategoryContentEntity', () => {
   });
 
   test('handles empty name correctly', () => {
-    const model = new EventCategoryContentModel('en', '');
+    const model = new EventCategoryContent('en', '');
     const entity = EventCategoryContentEntity.fromModel(model);
     const convertedModel = entity.toModel();
 
@@ -52,10 +52,10 @@ describe('EventCategoryContentEntity', () => {
   });
 
   test('validates content is not empty', () => {
-    const model = new EventCategoryContentModel('en', 'Meeting');
+    const model = new EventCategoryContent('en', 'Meeting');
     expect(model.isValid()).toBe(true);
 
-    const emptyModel = new EventCategoryContentModel('en', '');
+    const emptyModel = new EventCategoryContent('en', '');
     expect(emptyModel.isValid()).toBe(false);
   });
 });

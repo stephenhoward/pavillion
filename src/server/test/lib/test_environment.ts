@@ -39,6 +39,25 @@ export class TestEnvironment {
       .send(data);
   }
 
+  async authGet(authKey: string, url: string): Promise<any> {
+    return request(this.app)
+      .get(url)
+      .set('Authorization','Bearer ' + authKey);
+  }
+
+  async authPut(authKey: string, url: string, data: any): Promise<any> {
+    return request(this.app)
+      .put(url)
+      .set('Authorization','Bearer ' + authKey)
+      .send(data);
+  }
+
+  async authDelete(authKey: string, url: string): Promise<any> {
+    return request(this.app)
+      .delete(url)
+      .set('Authorization','Bearer ' + authKey);
+  }
+
   async signedPost(url: string, authKey: string, requestData: any): Promise<any> {
     return await request(this.app)
       .post(url)
