@@ -132,6 +132,13 @@ div.schedule {
           @upload-complete="handleImageUpload"
         />
       </section>
+      <section class="categories">
+        <CategorySelector
+          :calendar-id="props.event.calendarId"
+          :selected-categories="state.selectedCategories"
+          @categories-changed="handleCategoriesChanged"
+        />
+      </section>
       <section>
         <label>{{ t('dates_label') }}</label>
         <div class="schedule" v-for="(schedule,index) in props.event.schedules">
@@ -163,14 +170,17 @@ import { useTranslation } from 'i18next-vue';
 import { CalendarEvent } from '../../../common/model/events';
 import CalendarService from '../../service/calendar';
 import EventService from '../../service/event';
+import CategoryService from '../../service/category';
 import EventRecurrenceView from './event_recurrence.vue';
 import languagePicker from '../languagePicker.vue';
 import ModalLayout from '../modal.vue';
 import ImageUpload from '../media/ImageUpload.vue';
+import CategorySelector from './CategorySelector.vue';
 import iso6391 from 'iso-639-1-dir';
 
 const emit = defineEmits(['close']);
 const eventService = new EventService();
+const categoryService = new CategoryService();
 
 const { t } = useTranslation('event_editor', {
   keyPrefix: 'editor',
@@ -196,6 +206,7 @@ const state = reactive({
   availableCalendars: [],
   mediaId: null,
   calendar: null,
+  selectedCategories: [],
 });
 
 const addLanguage = (language) => {
@@ -215,6 +226,10 @@ const handleImageUpload = (results) => {
   }
 };
 
+const handleCategoriesChanged = (categories) => {
+  state.selectedCategories = categories;
+};
+
 
 onBeforeMount(async () => {
   try {
@@ -225,6 +240,18 @@ onBeforeMount(async () => {
       props.event.calendarId = state.availableCalendars[0].id;
     }
     state.calendar = state.availableCalendars.filter(c => c.id === props.event.calendarId)[0];
+
+    // Load existing categories for the event if it's being edited
+    if (props.event.id) {
+      try {
+        const eventCategories = await categoryService.getEventCategories(props.event.id);
+        state.selectedCategories = eventCategories.map(cat => cat.id);
+      }
+      catch (error) {
+        console.error('Error loading event categories:', error);
+        // Don't set error state for categories as it's not critical
+      }
+    }
   }
   catch (error) {
     console.error('Error loading calendars:', error);
@@ -248,7 +275,21 @@ const saveModel = async (model) => {
       model.mediaId = state.mediaId;
     }
 
+    // Save the event first
     await eventService.saveEvent(model);
+
+    // Save category assignments if any categories are selected
+    if (state.selectedCategories.length > 0) {
+      try {
+        await categoryService.assignCategoriesToEvent(model.id, state.selectedCategories);
+      }
+      catch (categoryError) {
+        console.error('Error saving event categories:', categoryError);
+        // Don't fail the entire save for category errors
+      }
+    }
+
+    emit('close');
   }
   catch (error) {
     console.error('Error saving event:', error);

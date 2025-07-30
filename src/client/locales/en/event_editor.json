@@ -24,6 +24,13 @@
     "error_loading_calendars": "Failed to load calendars",
     "error_saving_event": "Error saving event"
   },
+  "categories": {
+    "categories_label": "Categories",
+    "loading_categories": "Loading categories...",
+    "error_loading_categories": "Error loading categories",
+    "no_categories_available": "No categories available",
+    "no_categories_help": "Create categories in calendar management to organize your events"
+  },
   "recurrence": {
     "dailyTerm": "days",
     "weeklyTerm": "weeks",

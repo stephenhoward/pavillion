@@ -169,6 +169,37 @@ export default class CategoryService {
   }
 
   /**
+   * Assign multiple categories to an event
+   * @param eventId - The ID of the event
+   * @param categoryIds - Array of category IDs to assign
+   * @returns Promise<void>
+   */
+  async assignCategoriesToEvent(eventId: string, categoryIds: string[]): Promise<void> {
+    try {
+      // First, get current categories to compare
+      const currentCategories = await this.getEventCategories(eventId);
+      const currentCategoryIds = currentCategories.map(cat => cat.id);
+
+      // Determine which categories to add and which to remove
+      const categoriesToAdd = categoryIds.filter(id => !currentCategoryIds.includes(id));
+      const categoriesToRemove = currentCategoryIds.filter(id => !categoryIds.includes(id));
+
+      // Add new categories
+      for (const categoryId of categoriesToAdd) {
+        await this.assignCategoryToEvent(eventId, categoryId);
+      }
+
+      // Remove old categories
+      for (const categoryId of categoriesToRemove) {
+        await this.unassignCategoryFromEvent(eventId, categoryId);
+      }
+    }
+    catch (error: unknown) {
+      handleError(error);
+    }
+  }
+
+  /**
    * Unassign a category from an event
    * @param eventId - The ID of the event
    * @param categoryId - The ID of the category
