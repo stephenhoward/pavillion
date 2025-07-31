@@ -11,6 +11,7 @@ export default class CalendarRoutes {
   installHandlers(app: Application, routePrefix: string): void {
     const router = express.Router();
     router.get('/calendars/:urlName', this.getCalendar.bind(this));
+    router.get('/calendars/:urlName/categories', this.listCategories.bind(this));
     router.get('/calendars/:calendar/events', this.listInstances.bind(this));
     router.get('/events/:id', this.getEvent.bind(this));
     router.get('/instances/:id', this.getEventInstance.bind(this));
@@ -26,6 +27,35 @@ export default class CalendarRoutes {
     else {
       res.status(404).json({
         "error": "calendar not found",
+      });
+    }
+  }
+
+  async listCategories(req: Request, res: Response) {
+    const calendarName = req.params.urlName;
+
+    const calendar = await this.service.getCalendarByName(calendarName);
+    if (!calendar) {
+      res.status(404).json({
+        "error": "calendar not found",
+      });
+      return;
+    }
+
+    try {
+      const categoriesWithCounts = await this.service.listCategoriesForCalendar(calendar);
+      res.json(
+        categoriesWithCounts.map(({ category, eventCount }) => {
+          return {
+            ...category.toObject(),
+            eventCount,
+          };
+        }),
+      );
+    }
+    catch {
+      res.status(500).json({
+        "error": "Failed to retrieve categories",
       });
     }
   }
@@ -47,8 +77,32 @@ export default class CalendarRoutes {
       return;
     }
 
-    const instances = await this.service.listEventInstances(calendar);
-    res.json(instances.map((instance) => instance.toObject()));
+    try {
+      let instances;
+
+      // Check if category filtering is requested
+      if (req.query.categories && typeof req.query.categories === 'string') {
+        const categoryIds = req.query.categories.split(',').map(id => id.trim()).filter(id => id.length > 0);
+        instances = await this.service.listEventInstancesWithCategoryFilter(calendar, categoryIds);
+      }
+      else {
+        instances = await this.service.listEventInstances(calendar);
+      }
+
+      res.json(instances.map((instance) => instance.toObject()));
+    }
+    catch (error: any) {
+      if (error.message === 'Invalid category IDs provided') {
+        res.status(400).json({
+          "error": "Invalid category IDs provided",
+        });
+      }
+      else {
+        res.status(500).json({
+          "error": "Failed to retrieve events",
+        });
+      }
+    }
   }
 
   async getEvent(req: Request, res: Response) {

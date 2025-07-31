@@ -1,8 +1,10 @@
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent } from '@/common/model/events';
+import { EventCategory } from '@/common/model/event_category';
 import { EventEmitter } from 'events';
 import CalendarEventInstance from '@/common/model/event_instance';
 import CalendarInterface from '@/server/calendar/interface';
+import PublicCalendarService from '@/server/public/service/calendar';
 
 /**
  * Public interface for calendar operations
@@ -11,13 +13,15 @@ import CalendarInterface from '@/server/calendar/interface';
  * while respecting domain boundaries through dependency injection.
  */
 export default class PublicCalendarInterface {
-  private calendarInterface: CalendarInterface; // Should be properly typed CalendarInterface when available
+  private calendarInterface: CalendarInterface;
+  private publicCalendarService: PublicCalendarService;
 
   constructor(
     private eventBus: EventEmitter,
     calendarInterface: CalendarInterface,
   ) {
     this.calendarInterface = calendarInterface;
+    this.publicCalendarService = new PublicCalendarService(calendarInterface);
   }
 
   async getCalendarByName(name: string): Promise<Calendar|null> {
@@ -34,6 +38,14 @@ export default class PublicCalendarInterface {
 
   async getEventInstanceById(instanceId: string): Promise<CalendarEventInstance|null> {
     return this.calendarInterface.getEventInstanceById(instanceId);
+  }
+
+  async listCategoriesForCalendar(calendar: Calendar): Promise<Array<{category: EventCategory, eventCount: number}>> {
+    return this.publicCalendarService.listCategoriesForCalendar(calendar);
+  }
+
+  async listEventInstancesWithCategoryFilter(calendar: Calendar, categoryIds: string[]): Promise<CalendarEventInstance[]> {
+    return this.publicCalendarService.listEventInstancesWithCategoryFilter(calendar, categoryIds);
   }
 
 }
