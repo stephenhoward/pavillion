@@ -57,3 +57,39 @@ export class InsufficientCalendarPermissionsError extends Error {
     Object.setPrototypeOf(this, InsufficientCalendarPermissionsError.prototype);
   }
 }
+
+/**
+ * Custom error class for events not found during bulk operations
+ */
+export class BulkEventsNotFoundError extends Error {
+  constructor(message: string = 'Some events were not found or you do not have permission to modify them') {
+    super(message);
+    this.name = 'BulkEventsNotFoundError';
+    // Maintaining proper prototype chain in ES5+
+    Object.setPrototypeOf(this, BulkEventsNotFoundError.prototype);
+  }
+}
+
+/**
+ * Custom error class for events belonging to different calendars during bulk operations
+ */
+export class MixedCalendarEventsError extends Error {
+  constructor(message: string = 'All events must belong to the same calendar') {
+    super(message);
+    this.name = 'MixedCalendarEventsError';
+    // Maintaining proper prototype chain in ES5+
+    Object.setPrototypeOf(this, MixedCalendarEventsError.prototype);
+  }
+}
+
+/**
+ * Custom error class for categories not found in calendar during bulk operations
+ */
+export class CategoriesNotFoundError extends Error {
+  constructor(message: string = 'Some categories were not found in the calendar') {
+    super(message);
+    this.name = 'CategoriesNotFoundError';
+    // Maintaining proper prototype chain in ES5+
+    Object.setPrototypeOf(this, CategoriesNotFoundError.prototype);
+  }
+}

@@ -10,8 +10,11 @@ import { LocationEntity } from "@/server/calendar/entity/location";
 import { MediaEntity } from "@/server/media/entity/media";
 import LocationService from "@/server/calendar/service/locations";
 import { EventEmitter } from 'events';
-import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError } from '@/common/exceptions/calendar';
+import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError, BulkEventsNotFoundError, MixedCalendarEventsError, CategoriesNotFoundError } from '@/common/exceptions/calendar';
 import CategoryService from './categories';
+import { EventCategoryEntity } from '@/server/calendar/entity/event_category';
+import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_category_assignment';
+import db from '@/server/common/entity/db';
 
 /**
  * Service class for managing events
@@ -380,6 +383,193 @@ class EventService {
     e.categories = await this.categoryService.getEventCategories(event.id);
 
     return e;
+  }
+
+  /**
+   * Assign categories to multiple events at once
+   * @param account - the account performing the operation
+   * @param eventIds - array of event IDs to assign categories to
+   * @param categoryIds - array of category IDs to assign
+   * @returns promise that resolves to updated events with their categories
+   */
+  async bulkAssignCategories(
+    account: Account,
+    eventIds: string[],
+    categoryIds: string[],
+  ): Promise<CalendarEvent[]> {
+    const transaction = await db.transaction();
+
+    try {
+      // 1. Validate that all events exist and user has permission
+      const events = await EventEntity.findAll({
+        where: { id: eventIds },
+        transaction,
+      });
+
+      if (events.length !== eventIds.length) {
+        throw new BulkEventsNotFoundError('Some events were not found or you do not have permission to modify them');
+      }
+
+      // 2. Check user has permission to modify all events
+      const userCalendars = await this.calendarService.editableCalendarsForUser(account);
+      const userCalendarIds = userCalendars.map(cal => cal.id);
+
+      // Verify all events belong to calendars user can edit
+      const unauthorizedEvents = events.filter(event => !userCalendarIds.includes(event.calendar_id));
+      if (unauthorizedEvents.length > 0) {
+        throw new InsufficientCalendarPermissionsError('Insufficient permissions to modify some events');
+      }
+
+      // 3. Verify all events belong to same calendar (simplifies category validation)
+      const calendarIds = [...new Set(events.map(event => event.calendar_id))];
+      if (calendarIds.length > 1) {
+        throw new MixedCalendarEventsError('All events must belong to the same calendar');
+      }
+
+      const calendarId = calendarIds[0];
+
+      // 4. Validate categories exist and belong to the same calendar
+      const categories = await EventCategoryEntity.findAll({
+        where: {
+          id: categoryIds,
+          calendar_id: calendarId,
+        },
+        transaction,
+      });
+
+      if (categories.length !== categoryIds.length) {
+        throw new CategoriesNotFoundError('Some categories were not found in the calendar');
+      }
+
+      // 5. Get existing assignments to avoid duplicates
+      const existingAssignments = await EventCategoryAssignmentEntity.findAll({
+        where: {
+          event_id: eventIds,
+          category_id: categoryIds,
+        },
+        transaction,
+      });
+
+      // 6. Create assignments, avoiding duplicates
+      const assignmentsToCreate = [];
+
+      for (const eventId of eventIds) {
+        for (const categoryId of categoryIds) {
+          // Check if this assignment already exists
+          const existingAssignment = existingAssignments.find(
+            assignment => assignment.event_id === eventId && assignment.category_id === categoryId,
+          );
+
+          if (!existingAssignment) {
+            assignmentsToCreate.push({
+              id: uuidv4(),
+              event_id: eventId,
+              category_id: categoryId,
+            });
+          }
+        }
+      }
+
+      // 7. Bulk create all new assignments
+      if (assignmentsToCreate.length > 0) {
+        await EventCategoryAssignmentEntity.bulkCreate(assignmentsToCreate, { transaction });
+      }
+
+      await transaction.commit();
+
+      // 8. Return updated events with their categories
+      const updatedEvents = [];
+      for (const eventId of eventIds) {
+        const updatedEvent = await this.getEventById(eventId);
+        updatedEvents.push(updatedEvent);
+      }
+
+      return updatedEvents;
+    }
+    catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  }
+
+  /**
+   * Duplicate an existing event with optional new title
+   * @param account - the account performing the operation
+   * @param eventId - ID of the event to duplicate
+   * @param options - duplication options (title)
+   * @returns promise that resolves to duplication result
+   */
+  async duplicateEvent(
+    account: Account,
+    eventId: string,
+    options: { title?: string } = {},
+  ): Promise<{
+      success: boolean;
+      originalEventId: string;
+      duplicatedEvent: CalendarEvent;
+    }> {
+    // 1. Get the original event with all its data
+    const originalEvent = await EventEntity.findOne({
+      where: { id: eventId },
+      include: [EventContentEntity, LocationEntity, MediaEntity],
+    });
+
+    if (!originalEvent) {
+      throw new EventNotFoundError('Event not found');
+    }
+
+    // 2. Check permissions - user must be able to create events in the same calendar
+    const userCalendars = await this.calendarService.editableCalendarsForUser(account);
+    const userCalendarIds = userCalendars.map(cal => cal.id);
+
+    if (!userCalendarIds.includes(originalEvent.calendar_id)) {
+      throw new InsufficientCalendarPermissionsError('Insufficient permissions to duplicate this event');
+    }
+
+    // 3. Prepare the data for the new event
+    const duplicateEventParams: Record<string, any> = {
+      calendarId: originalEvent.calendar_id,
+      content: {},
+      schedules: [], // Always empty for duplicated events
+    };
+
+    // 4. Copy content with optional title override
+    if (originalEvent.content && originalEvent.content.length > 0) {
+      for (const contentEntity of originalEvent.content) {
+        const content = contentEntity.toModel();
+        duplicateEventParams.content[content.language] = {
+          name: options.title || `Copy of ${content.name}`,
+          description: content.description,
+        };
+      }
+    }
+
+    // 5. Copy location if exists
+    if (originalEvent.location) {
+      const location = originalEvent.location.toModel();
+      duplicateEventParams.location = {
+        name: location.name,
+        address: location.address,
+        city: location.city,
+        state: location.state,
+        postalCode: location.postalCode,
+        country: location.country,
+      };
+    }
+
+    // 6. Copy media reference if exists
+    if (originalEvent.media_id) {
+      duplicateEventParams.mediaId = originalEvent.media_id;
+    }
+
+    // 7. Create the duplicated event
+    const duplicatedEvent = await this.createEvent(account, duplicateEventParams);
+
+    return {
+      success: true,
+      originalEventId: eventId,
+      duplicatedEvent,
+    };
   }
 }
 

@@ -190,4 +190,24 @@ export default class CalendarInterface {
   async getCategoryEvents(categoryId: string): Promise<string[]> {
     return this.categoryService.getCategoryEvents(categoryId);
   }
+
+  async bulkAssignCategories(
+    account: Account,
+    eventIds: string[],
+    categoryIds: string[],
+  ): Promise<CalendarEvent[]> {
+    return this.eventService.bulkAssignCategories(account, eventIds, categoryIds);
+  }
+
+  async duplicateEvent(
+    account: Account,
+    eventId: string,
+    options: { title?: string } = {},
+  ): Promise<{
+      success: boolean;
+      originalEventId: string;
+      duplicatedEvent: CalendarEvent;
+    }> {
+    return this.eventService.duplicateEvent(account, eventId, options);
+  }
 }

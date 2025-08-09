@@ -4,11 +4,11 @@ import request from 'supertest';
 import express from 'express';
 import { EventEmitter } from 'events';
 
-import { CalendarEvent } from '@/common/model/events';
+import { CalendarEvent, CalendarEventContent } from '@/common/model/events';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEditor } from '@/common/model/calendar_editor';
 import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/common/exceptions/editor';
-import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError } from '@/common/exceptions/calendar';
+import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError, MixedCalendarEventsError } from '@/common/exceptions/calendar';
 import { noAccountExistsError } from '@/server/accounts/exceptions';
 import { testApp, countRoutes, addRequestUser } from '@/server/common/test/lib/express';
 import CalendarAPI from '@/server/calendar/api/v1';
@@ -245,6 +245,310 @@ describe('Event API', () => {
     expect(response.status).toBe(200);
     expect(response.body.error).toBeUndefined();
     expect(eventStub.called).toBe(true);
+  });
+
+  it('bulkAssignCategories: should fail without account', async () => {
+    router.post('/handler', (req, res) => { routes.bulkAssignCategories(req, res); });
+
+    const response = await request(testApp(router))
+      .post('/handler')
+      .send({
+        eventIds: ['event1', 'event2'],
+        categoryIds: ['cat1'],
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('missing account for bulk category assignment. Not logged in?');
+  });
+
+  it('bulkAssignCategories: should fail with empty eventIds', async () => {
+    router.post('/handler', addRequestUser, (req, res) => { routes.bulkAssignCategories(req, res); });
+
+    const response = await request(testApp(router))
+      .post('/handler')
+      .send({
+        eventIds: [],
+        categoryIds: ['cat1'],
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('eventIds must be a non-empty array');
+  });
+
+  it('bulkAssignCategories: should fail with empty categoryIds', async () => {
+    router.post('/handler', addRequestUser, (req, res) => { routes.bulkAssignCategories(req, res); });
+
+    const response = await request(testApp(router))
+      .post('/handler')
+      .send({
+        eventIds: ['event1'],
+        categoryIds: [],
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('categoryIds must be a non-empty array');
+  });
+
+  it('bulkAssignCategories: should fail with non-string eventIds', async () => {
+    router.post('/handler', addRequestUser, (req, res) => { routes.bulkAssignCategories(req, res); });
+
+    const response = await request(testApp(router))
+      .post('/handler')
+      .send({
+        eventIds: ['event1', 123],
+        categoryIds: ['cat1'],
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('all eventIds must be strings');
+  });
+
+  it('bulkAssignCategories: should fail with non-string categoryIds', async () => {
+    router.post('/handler', addRequestUser, (req, res) => { routes.bulkAssignCategories(req, res); });
+
+    const response = await request(testApp(router))
+      .post('/handler')
+      .send({
+        eventIds: ['event1'],
+        categoryIds: ['cat1', 456],
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('all categoryIds must be strings');
+  });
+
+  it('bulkAssignCategories: should succeed with valid request', async () => {
+    let bulkAssignStub = eventSandbox.stub(calendarInterface, 'bulkAssignCategories');
+    const mockEvent1 = new CalendarEvent('calendar1', 'event1');
+    const mockEvent2 = new CalendarEvent('calendar1', 'event2');
+    bulkAssignStub.resolves([mockEvent1, mockEvent2]);
+
+    router.post('/handler', addRequestUser, (req, res) => { routes.bulkAssignCategories(req, res); });
+
+    const response = await request(testApp(router))
+      .post('/handler')
+      .send({
+        eventIds: ['event1', 'event2'],
+        categoryIds: ['cat1', 'cat2'],
+      });
+
+    expect(response.status).toBe(200);
+    expect(Array.isArray(response.body)).toBe(true);
+    expect(response.body).toHaveLength(2);
+    expect(response.body[0].id).toBe('event1');
+    expect(response.body[1].id).toBe('event2');
+    expect(bulkAssignStub.called).toBe(true);
+  });
+
+  it('bulkAssignCategories: should handle insufficient permissions error', async () => {
+    let bulkAssignStub = eventSandbox.stub(calendarInterface, 'bulkAssignCategories');
+    bulkAssignStub.throws(new InsufficientCalendarPermissionsError('Insufficient permissions to modify some events'));
+
+    router.post('/handler', addRequestUser, (req, res) => { routes.bulkAssignCategories(req, res); });
+
+    const response = await request(testApp(router))
+      .post('/handler')
+      .send({
+        eventIds: ['event1'],
+        categoryIds: ['cat1'],
+      });
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toBe('Insufficient permissions to modify some events');
+    expect(response.body.errorName).toBe('InsufficientCalendarPermissionsError');
+  });
+
+  it('bulkAssignCategories: should handle validation errors', async () => {
+    let bulkAssignStub = eventSandbox.stub(calendarInterface, 'bulkAssignCategories');
+    bulkAssignStub.throws(new MixedCalendarEventsError('All events must belong to the same calendar'));
+
+    router.post('/handler', addRequestUser, (req, res) => { routes.bulkAssignCategories(req, res); });
+
+    const response = await request(testApp(router))
+      .post('/handler')
+      .send({
+        eventIds: ['event1', 'event2'],
+        categoryIds: ['cat1'],
+      });
+
+    expect(response.status).toBe(422);
+    expect(response.body.error).toBe('All events must belong to the same calendar');
+    expect(response.body.errorName).toBe('MixedCalendarEventsError');
+  });
+
+  it('bulkAssignCategories: should handle unexpected errors', async () => {
+    let bulkAssignStub = eventSandbox.stub(calendarInterface, 'bulkAssignCategories');
+    bulkAssignStub.throws(new Error('Database connection failed'));
+
+    router.post('/handler', addRequestUser, (req, res) => { routes.bulkAssignCategories(req, res); });
+
+    const response = await request(testApp(router))
+      .post('/handler')
+      .send({
+        eventIds: ['event1'],
+        categoryIds: ['cat1'],
+      });
+
+    expect(response.status).toBe(500);
+    expect(response.body.error).toBe('An error occurred while assigning categories');
+  });
+
+  it('duplicateEvent: should fail without account', async () => {
+    router.post('/handler', (req, res) => { routes.duplicateEvent(req, res); });
+
+    const response = await request(testApp(router))
+      .post('/handler')
+      .send({
+        title: 'New Event Title',
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('missing account for event duplication. Not logged in?');
+  });
+
+  it('duplicateEvent: should fail without event ID', async () => {
+    router.post('/handler', addRequestUser, (req, res) => {
+      // Don't set req.params.id
+      routes.duplicateEvent(req, res);
+    });
+
+    const response = await request(testApp(router))
+      .post('/handler')
+      .send({
+        title: 'New Event Title',
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('missing event ID');
+  });
+
+  it('duplicateEvent: should fail with invalid title type', async () => {
+    router.post('/handler', addRequestUser, (req, res) => {
+      req.params.id = 'event-id';
+      routes.duplicateEvent(req, res);
+    });
+
+    const response = await request(testApp(router))
+      .post('/handler')
+      .send({
+        title: 123, // Invalid type
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('title must be a string');
+  });
+
+  it('duplicateEvent: should succeed with valid request', async () => {
+    let duplicateStub = eventSandbox.stub(calendarInterface, 'duplicateEvent');
+    const mockDuplicatedEvent = new CalendarEvent('test-calendar', 'new-event-id');
+    mockDuplicatedEvent.addContent(new CalendarEventContent('en', 'Duplicated Event', 'Event description'));
+
+    duplicateStub.resolves({
+      success: true,
+      originalEventId: 'original-event-id',
+      duplicatedEvent: mockDuplicatedEvent,
+    });
+
+    router.post('/handler', addRequestUser, (req, res) => {
+      req.params.id = 'original-event-id';
+      routes.duplicateEvent(req, res);
+    });
+
+    const response = await request(testApp(router))
+      .post('/handler')
+      .send({
+        title: 'Duplicated Event',
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.originalEventId).toBe('original-event-id');
+    expect(response.body.duplicatedEvent).toBeDefined();
+    expect(response.body.duplicatedEvent.id).toBe('new-event-id');
+    expect(duplicateStub.called).toBe(true);
+  });
+
+  it('duplicateEvent: should succeed without title', async () => {
+    let duplicateStub = eventSandbox.stub(calendarInterface, 'duplicateEvent');
+    const mockDuplicatedEvent = new CalendarEvent('test-calendar', 'new-event-id');
+
+    duplicateStub.resolves({
+      success: true,
+      originalEventId: 'original-event-id',
+      duplicatedEvent: mockDuplicatedEvent,
+    });
+
+    router.post('/handler', addRequestUser, (req, res) => {
+      req.params.id = 'original-event-id';
+      routes.duplicateEvent(req, res);
+    });
+
+    const response = await request(testApp(router))
+      .post('/handler')
+      .send({});
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(duplicateStub.called).toBe(true);
+  });
+
+  it('duplicateEvent: should handle event not found error', async () => {
+    let duplicateStub = eventSandbox.stub(calendarInterface, 'duplicateEvent');
+    duplicateStub.throws(new EventNotFoundError('Event not found'));
+
+    router.post('/handler', addRequestUser, (req, res) => {
+      req.params.id = 'nonexistent-event-id';
+      routes.duplicateEvent(req, res);
+    });
+
+    const response = await request(testApp(router))
+      .post('/handler')
+      .send({
+        title: 'New Title',
+      });
+
+    expect(response.status).toBe(404);
+    expect(response.body.error).toBe('Event not found');
+    expect(response.body.errorName).toBe('EventNotFoundError');
+  });
+
+  it('duplicateEvent: should handle insufficient permissions error', async () => {
+    let duplicateStub = eventSandbox.stub(calendarInterface, 'duplicateEvent');
+    duplicateStub.throws(new InsufficientCalendarPermissionsError('Insufficient permissions to duplicate this event'));
+
+    router.post('/handler', addRequestUser, (req, res) => {
+      req.params.id = 'event-id';
+      routes.duplicateEvent(req, res);
+    });
+
+    const response = await request(testApp(router))
+      .post('/handler')
+      .send({
+        title: 'New Title',
+      });
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toBe('Insufficient permissions to duplicate this event');
+    expect(response.body.errorName).toBe('InsufficientCalendarPermissionsError');
+  });
+
+  it('duplicateEvent: should handle unexpected errors', async () => {
+    let duplicateStub = eventSandbox.stub(calendarInterface, 'duplicateEvent');
+    duplicateStub.throws(new Error('Database connection failed'));
+
+    router.post('/handler', addRequestUser, (req, res) => {
+      req.params.id = 'event-id';
+      routes.duplicateEvent(req, res);
+    });
+
+    const response = await request(testApp(router))
+      .post('/handler')
+      .send({
+        title: 'New Title',
+      });
+
+    expect(response.status).toBe(500);
+    expect(response.body.error).toBe('An error occurred while duplicating the event');
   });
 });
 
