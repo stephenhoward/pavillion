@@ -1,3 +1,9 @@
 {
-    "not_found_error_message": "Not Found"
+    "not_found_error_message": "Not Found",
+    "filter_by_category": "Event Categories",
+    "clear_filters" : "Clear Filters",
+    "no_events_with_filters": "No Events Found",
+    "no_events_available": "No Events Available",
+    "loading_events": "Loading Events...",
+    "loading_categories": "Loading Event Categories..."
 }

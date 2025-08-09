@@ -67,8 +67,33 @@ onBeforeMount(async () => {
       <div v-if="state.err" class="error">{{ state.err }}</div>
       <p>{{ state.instance.event.content("en").description }}</p>
     </main>
+    <footer>
+      <a v-for="category in state.instance.event.categories"
+         class="event-category-badge"
+         :href="'/@'+ state.calendar.urlName + '?category='+category.content('en').name"
+      >
+        {{ category.content("en").name }}
+      </a>
+    </footer>
   </div>
 </template>
 
 <style scoped lang="scss">
+@use '../../client/assets/mixins' as *;
+
+.event-category-badge {
+  display: inline-block;
+  margin-right: 5px;
+  background-color: $light-mode-button-background;
+  text-decoration: none;
+  color: white;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: $font-medium;
+
+  @media (prefers-color-scheme: dark) {
+    background-color: $dark-mode-button-background;
+  }
+}
 </style>

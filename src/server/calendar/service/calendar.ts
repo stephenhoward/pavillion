@@ -138,7 +138,7 @@ class CalendarService {
   }
 
   async getCalendarByName(name: string): Promise<Calendar|null> {
-    if (!name) {
+    if (!name || ! this.isValidUrlName(name)) {
       return null;
     }
     let calendar = await CalendarEntity.findOne({ where: { url_name: name } });

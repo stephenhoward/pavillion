@@ -11,6 +11,7 @@ import { MediaEntity } from "@/server/media/entity/media";
 import LocationService from "@/server/calendar/service/locations";
 import { EventEmitter } from 'events';
 import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError } from '@/common/exceptions/calendar';
+import CategoryService from './categories';
 
 /**
  * Service class for managing events
@@ -21,11 +22,13 @@ import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFo
 class EventService {
   private locationService: LocationService;
   private calendarService: CalendarService;
+  private categoryService: CategoryService;
   private eventBus: EventEmitter;
 
   constructor(eventBus: EventEmitter) {
     this.locationService = new LocationService();
     this.calendarService = new CalendarService();
+    this.categoryService = new CategoryService();
     this.eventBus = eventBus;
   }
 
@@ -373,6 +376,8 @@ class EventService {
     if ( event.media ) {
       e.media = event.media.toModel();
     }
+
+    e.categories = await this.categoryService.getEventCategories(event.id);
 
     return e;
   }

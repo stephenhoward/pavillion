@@ -1,0 +1,109 @@
+{
+    "EventCategoryAssignmentEntity": [
+        {
+            "id": "assign-1-1-community-arts",
+            "event_id": "evt-1-1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+            "category_id": "cat-2-community-2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e"
+        },
+        {
+            "id": "assign-1-2-summer-arts",
+            "event_id": "evt-1-1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+            "category_id": "cat-1-arts-1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+        },
+        {
+            "id": "assign-2-1-book-education",
+            "event_id": "evt-2-2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
+            "category_id": "cat-3-education-3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f"
+        },
+        {
+            "id": "assign-2-2-book-community",
+            "event_id": "evt-2-2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
+            "category_id": "cat-2-community-2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e"
+        },
+        {
+            "id": "assign-3-1-picnic-community",
+            "event_id": "evt-3-3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f",
+            "category_id": "cat-2-community-2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e"
+        },
+        {
+            "id": "assign-3-2-picnic-social",
+            "event_id": "evt-3-3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f",
+            "category_id": "cat-12-social-2f3a4b5c-6d7e-8f9a-0b1c-2d3e4f5a6b7c"
+        },
+        {
+            "id": "assign-3-3-picnic-family",
+            "event_id": "evt-3-3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f",
+            "category_id": "cat-11-family-1e2f3a4b-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+        },
+        {
+            "id": "assign-4-1-yoga-health",
+            "event_id": "evt-4-4d5e6f7a-8b9c-0d1e-2f3a-4b5c6d7e8f9a",
+            "category_id": "cat-4-health-4d5e6f7a-8b9c-0d1e-2f3a-4b5c6d7e8f9a"
+        },
+        {
+            "id": "assign-4-2-yoga-sports",
+            "event_id": "evt-4-4d5e6f7a-8b9c-0d1e-2f3a-4b5c6d7e8f9a",
+            "category_id": "cat-5-sports-5e6f7a8b-9c0d-1e2f-3a4b-5c6d7e8f9a0b"
+        },
+        {
+            "id": "assign-5-1-poetry-arts",
+            "event_id": "evt-5-5e6f7a8b-9c0d-1e2f-3a4b-5c6d7e8f9a0b",
+            "category_id": "cat-1-arts-1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+        },
+        {
+            "id": "assign-5-2-poetry-culture",
+            "event_id": "evt-5-5e6f7a8b-9c0d-1e2f-3a4b-5c6d7e8f9a0b",
+            "category_id": "cat-6-culture-6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c"
+        },
+        {
+            "id": "assign-6-1-garden-environment",
+            "event_id": "evt-6-6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c",
+            "category_id": "cat-7-environment-7a8b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d"
+        },
+        {
+            "id": "assign-6-2-garden-community",
+            "event_id": "evt-6-6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c",
+            "category_id": "cat-2-community-2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e"
+        },
+        {
+            "id": "assign-7-1-market-community",
+            "event_id": "evt-7-7a8b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
+            "category_id": "cat-2-community-2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e"
+        },
+        {
+            "id": "assign-7-2-market-business",
+            "event_id": "evt-7-7a8b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
+            "category_id": "cat-8-business-8b9c0d1e-2f3a-4b5c-6d7e-8f9a0b1c2d3e"
+        },
+        {
+            "id": "assign-8-1-tech-education",
+            "event_id": "evt-8-8b9c0d1e-2f3a-4b5c-6d7e-8f9a0b1c2d3e",
+            "category_id": "cat-3-education-3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f"
+        },
+        {
+            "id": "assign-8-2-tech-technology",
+            "event_id": "evt-8-8b9c0d1e-2f3a-4b5c-6d7e-8f9a0b1c2d3e",
+            "category_id": "cat-9-technology-9c0d1e2f-3a4b-5c6d-7e8f-9a0b1c2d3e4f"
+        },
+        {
+            "id": "assign-9-1-art-arts",
+            "event_id": "evt-9-9c0d1e2f-3a4b-5c6d-7e8f-9a0b1c2d3e4f",
+            "category_id": "cat-1-arts-1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+        },
+        {
+            "id": "assign-9-2-art-culture",
+            "event_id": "evt-9-9c0d1e2f-3a4b-5c6d-7e8f-9a0b1c2d3e4f",
+            "category_id": "cat-6-culture-6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c"
+        },
+        {
+            "id": "assign-10-1-movie-entertainment",
+            "event_id": "evt-10-0d1e2f3a-4b5c-6d7e-8f9a-0b1c2d3e4f5a",
+            "category_id": "cat-10-entertainment-0d1e2f3a-4b5c-6d7e-8f9a-0b1c2d3e4f5a"
+        },
+        {
+            "id": "assign-10-2-movie-family",
+            "event_id": "evt-10-0d1e2f3a-4b5c-6d7e-8f9a-0b1c2d3e4f5a",
+            "category_id": "cat-11-family-1e2f3a4b-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+        }
+    ]
+}

@@ -3,6 +3,7 @@ import { DateTime } from 'luxon';
 import { Model, TranslatedModel, TranslatedContentModel } from '@/common/model/model';
 import { EventLocation } from '@/common/model/location';
 import { Media } from '@/common/model/media';
+import { EventCategory } from '@/common/model/event_category';
 
 /**
  * Frequency options for recurring events.
@@ -33,6 +34,7 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
   eventSourceUrl: string = '';
   _content: Record<string, CalendarEventContent> = {};
   schedules: CalendarEventSchedule[] = [];
+  categories: EventCategory[] = [];
 
   /**
    * Constructor for CalendarEvent.
@@ -117,14 +119,15 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
       }
     }
     if ( obj.schedules ) {
-      for( let scheduleObj of obj.schedules ) {
-        const schedule = CalendarEventSchedule.fromObject(scheduleObj);
-        event.schedules.push(schedule);
-      }
+      event.schedules = obj.schedules.map((s: Object) => CalendarEventSchedule.fromObject(s));
     }
 
     if( obj.location ) {
       event.location = EventLocation.fromObject(obj.location);
+    }
+
+    if( obj.categories ) {
+      event.categories = obj.categories.map((c:Object) => EventCategory.fromObject(c));
     }
     return event;
   }
@@ -147,6 +150,7 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
           .map(([language, strings]: [string, CalendarEventContent]) => [language, strings.toObject()]),
       ),
       schedules: this.schedules.map(schedule => schedule.toObject()),
+      categories: this.categories.map(category => category.toObject() ),
     };
 
     // Include mediaId if present (used for API communication)

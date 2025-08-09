@@ -1,0 +1,148 @@
+{
+    "EventCategoryContentEntity": [
+        {
+            "id": "cat-content-1-en-arts",
+            "category_id": "cat-1-arts-1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+            "language": "en",
+            "name": "Arts"
+        },
+        {
+            "id": "cat-content-1-es-arts",
+            "category_id": "cat-1-arts-1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+            "language": "es",
+            "name": "Artes"
+        },
+        {
+            "id": "cat-content-2-en-community",
+            "category_id": "cat-2-community-2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
+            "language": "en",
+            "name": "Community"
+        },
+        {
+            "id": "cat-content-2-es-community",
+            "category_id": "cat-2-community-2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
+            "language": "es",
+            "name": "Comunidad"
+        },
+        {
+            "id": "cat-content-3-en-education",
+            "category_id": "cat-3-education-3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f",
+            "language": "en",
+            "name": "Education"
+        },
+        {
+            "id": "cat-content-3-es-education",
+            "category_id": "cat-3-education-3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f",
+            "language": "es",
+            "name": "Educación"
+        },
+        {
+            "id": "cat-content-4-en-health",
+            "category_id": "cat-4-health-4d5e6f7a-8b9c-0d1e-2f3a-4b5c6d7e8f9a",
+            "language": "en",
+            "name": "Health"
+        },
+        {
+            "id": "cat-content-4-es-health",
+            "category_id": "cat-4-health-4d5e6f7a-8b9c-0d1e-2f3a-4b5c6d7e8f9a",
+            "language": "es",
+            "name": "Salud"
+        },
+        {
+            "id": "cat-content-5-en-sports",
+            "category_id": "cat-5-sports-5e6f7a8b-9c0d-1e2f-3a4b-5c6d7e8f9a0b",
+            "language": "en",
+            "name": "Sports"
+        },
+        {
+            "id": "cat-content-5-es-sports",
+            "category_id": "cat-5-sports-5e6f7a8b-9c0d-1e2f-3a4b-5c6d7e8f9a0b",
+            "language": "es",
+            "name": "Deportes"
+        },
+        {
+            "id": "cat-content-6-en-culture",
+            "category_id": "cat-6-culture-6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c",
+            "language": "en",
+            "name": "Culture"
+        },
+        {
+            "id": "cat-content-6-es-culture",
+            "category_id": "cat-6-culture-6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c",
+            "language": "es",
+            "name": "Cultura"
+        },
+        {
+            "id": "cat-content-7-en-environment",
+            "category_id": "cat-7-environment-7a8b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
+            "language": "en",
+            "name": "Environment"
+        },
+        {
+            "id": "cat-content-7-es-environment",
+            "category_id": "cat-7-environment-7a8b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
+            "language": "es",
+            "name": "Medio Ambiente"
+        },
+        {
+            "id": "cat-content-8-en-business",
+            "category_id": "cat-8-business-8b9c0d1e-2f3a-4b5c-6d7e-8f9a0b1c2d3e",
+            "language": "en",
+            "name": "Business"
+        },
+        {
+            "id": "cat-content-8-es-business",
+            "category_id": "cat-8-business-8b9c0d1e-2f3a-4b5c-6d7e-8f9a0b1c2d3e",
+            "language": "es",
+            "name": "Negocios"
+        },
+        {
+            "id": "cat-content-9-en-technology",
+            "category_id": "cat-9-technology-9c0d1e2f-3a4b-5c6d-7e8f-9a0b1c2d3e4f",
+            "language": "en",
+            "name": "Technology"
+        },
+        {
+            "id": "cat-content-9-es-technology",
+            "category_id": "cat-9-technology-9c0d1e2f-3a4b-5c6d-7e8f-9a0b1c2d3e4f",
+            "language": "es",
+            "name": "Tecnología"
+        },
+        {
+            "id": "cat-content-10-en-entertainment",
+            "category_id": "cat-10-entertainment-0d1e2f3a-4b5c-6d7e-8f9a-0b1c2d3e4f5a",
+            "language": "en",
+            "name": "Entertainment"
+        },
+        {
+            "id": "cat-content-10-es-entertainment",
+            "category_id": "cat-10-entertainment-0d1e2f3a-4b5c-6d7e-8f9a-0b1c2d3e4f5a",
+            "language": "es",
+            "name": "Entretenimiento"
+        },
+        {
+            "id": "cat-content-11-en-family",
+            "category_id": "cat-11-family-1e2f3a4b-5c6d-7e8f-9a0b-1c2d3e4f5a6b",
+            "language": "en",
+            "name": "Family"
+        },
+        {
+            "id": "cat-content-11-es-family",
+            "category_id": "cat-11-family-1e2f3a4b-5c6d-7e8f-9a0b-1c2d3e4f5a6b",
+            "language": "es",
+            "name": "Familia"
+        },
+        {
+            "id": "cat-content-12-en-social",
+            "category_id": "cat-12-social-2f3a4b5c-6d7e-8f9a-0b1c-2d3e4f5a6b7c",
+            "language": "en",
+            "name": "Social"
+        },
+        {
+            "id": "cat-content-12-es-social",
+            "category_id": "cat-12-social-2f3a4b5c-6d7e-8f9a-0b1c-2d3e4f5a6b7c",
+            "language": "es",
+            "name": "Social"
+        }
+    ]
+}

@@ -81,9 +81,29 @@ export default class CalendarRoutes {
       let instances;
 
       // Check if category filtering is requested
-      if (req.query.categories && typeof req.query.categories === 'string') {
-        const categoryIds = req.query.categories.split(',').map(id => id.trim()).filter(id => id.length > 0);
-        instances = await this.service.listEventInstancesWithCategoryFilter(calendar, categoryIds);
+      if (req.query.category) {
+        let categoryNames: string[];
+
+        if (Array.isArray(req.query.category)) {
+          categoryNames = req.query.category as string[];
+        }
+        else if (typeof req.query.category === 'string') {
+          categoryNames = [req.query.category];
+        }
+        else {
+          categoryNames = [];
+        }
+
+        categoryNames = categoryNames.map(name => name.trim()).filter(name => name.length > 0);
+
+        if (categoryNames.length > 0) {
+          // Get language parameter, default to 'en'
+          const language = (req.query.lang as string) || 'en';
+          instances = await this.service.listEventInstancesWithCategoryFilter(calendar, categoryNames, language);
+        }
+        else {
+          instances = await this.service.listEventInstances(calendar);
+        }
       }
       else {
         instances = await this.service.listEventInstances(calendar);
@@ -92,9 +112,9 @@ export default class CalendarRoutes {
       res.json(instances.map((instance) => instance.toObject()));
     }
     catch (error: any) {
-      if (error.message === 'Invalid category IDs provided') {
+      if (error.message === 'Invalid category names provided') {
         res.status(400).json({
-          "error": "Invalid category IDs provided",
+          "error": "Invalid category names provided",
         });
       }
       else {

@@ -130,7 +130,7 @@ describe('Public Calendar API', () => {
 
       router.get('/handler', (req, res) => {
         req.params.calendar = 'test-calendar';
-        req.query.categories = '1';
+        req.query.category = 'category-1';
         routes.listInstances(req, res);
       });
 
@@ -142,7 +142,7 @@ describe('Public Calendar API', () => {
       }
       expect(response.status).toBe(200);
       expect(response.body).toHaveLength(1);
-      expect(instancesStub.calledWith(sinon.match.any, ['1'])).toBe(true);
+      expect(instancesStub.calledWith(sinon.match.any, ['category-1'])).toBe(true);
     });
 
     it('should filter events by multiple categories', async () => {
@@ -161,7 +161,7 @@ describe('Public Calendar API', () => {
 
       router.get('/handler', (req, res) => {
         req.params.calendar = 'test-calendar';
-        req.query.categories = '1,3,5';
+        req.query.category = ['category-1', 'category-3', 'category-5'];
         routes.listInstances(req, res);
       });
 
@@ -170,21 +170,21 @@ describe('Public Calendar API', () => {
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveLength(2);
-      expect(instancesStub.calledWith(sinon.match.any, ['1', '3', '5'])).toBe(true);
+      expect(instancesStub.calledWith(sinon.match.any, ['category-1', 'category-3', 'category-5'])).toBe(true);
     });
 
-    it('should return 400 for invalid category IDs', async () => {
+    it('should return 400 for invalid category names', async () => {
       // Setup stubs for this specific test
       const calendar = new Calendar('cal-id', 'test-calendar');
       let calendarStub = apiSandbox.stub(publicInterface, 'getCalendarByName');
       let instancesStub = apiSandbox.stub(publicInterface, 'listEventInstancesWithCategoryFilter');
 
       calendarStub.resolves(calendar);
-      instancesStub.throws(new Error('Invalid category IDs provided'));
+      instancesStub.throws(new Error('Invalid category names provided'));
 
       router.get('/handler', (req, res) => {
         req.params.calendar = 'test-calendar';
-        req.query.categories = 'invalid,abc';
+        req.query.category = ['invalid-category', 'non-existent'];
         routes.listInstances(req, res);
       });
 
@@ -192,7 +192,7 @@ describe('Public Calendar API', () => {
         .get('/handler');
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Invalid category IDs provided');
+      expect(response.body.error).toBe('Invalid category names provided');
     });
 
     it('should work without category filtering (existing functionality)', async () => {

@@ -71,4 +71,18 @@ onBeforeMount(async () => {
 </template>
 
 <style scoped lang="scss">
+@use '../../client/assets/mixins' as *;
+
+.event-category-badge {
+  background-color: $light-mode-button-background;
+  color: white;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: $font-medium;
+
+  @media (prefers-color-scheme: dark) {
+    background-color: $dark-mode-button-background;
+  }
+}
 </style>

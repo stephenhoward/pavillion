@@ -10,14 +10,17 @@ import { Calendar } from "@/common/model/calendar";
 import { DateTime } from 'luxon';
 import rrule from 'rrule';
 import { LocationEntity } from "@/server/calendar/entity/location";
+import CategoryService from "./categories";
 
 const { RRule, RRuleSet } = rrule;
 
 export default class EventInstanceService {
   private eventBus: EventEmitter;
+  private categoryService: CategoryService;
 
   constructor(eventBus: EventEmitter) {
     this.eventBus = eventBus;
+    this.categoryService = new CategoryService();
   }
 
   async listEventInstances(event: CalendarEvent): Promise<CalendarEventInstance[]> {
@@ -57,7 +60,9 @@ export default class EventInstanceService {
       throw new Error('Event instance not found');
     }
 
-    return eventInstance.toModel();
+    const instance = eventInstance.toModel();
+    instance.event.categories = await this.categoryService.getEventCategories(instance.event.id);
+    return instance;
   }
 
   async buildEventInstances(event: CalendarEvent): Promise<void> {
