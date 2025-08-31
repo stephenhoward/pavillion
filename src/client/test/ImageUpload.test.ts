@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createMemoryHistory, createRouter, Router } from 'vue-router';
-import ImageUpload from '@/client/components/media/ImageUpload.vue';
+import ImageUpload from '@/client/components/common/media/ImageUpload.vue';
 import { mountComponent } from '@/client/test/lib/vue';
 import { ValidationErrorCode } from '@/client/service/media';
 

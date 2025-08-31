@@ -34,13 +34,11 @@
         </tbody>
       </table>
     </div>
-    <div v-else class="empty-screen">
-      <h2>{{ t('noInvitations') }}</h2>
-      <p>{{ t('noInvitationsDescription') }}</p>
+    <EmptyLayout v-else :title="t('noInvitations')" :description="t('noInvitationsDescription')">
       <button type="button" class="primary" @click="state.addInvite=true">
         {{ t('invite_new_account') }}
       </button>
-    </div>
+    </EmptyLayout>
     <div v-if="state.addInvite">
       <InviteFormView @close="state.addInvite=false" />
     </div>
@@ -51,10 +49,11 @@
 import { onBeforeMount, reactive, inject } from 'vue';
 import { DateTime } from 'luxon';
 import { useTranslation } from 'i18next-vue';
-import ModelService from '../../../service/models';
-import { useInvitationStore } from '../../../stores/invitationStore';
-import AccountInvitation from '../../../../common/model/invitation';
+import ModelService from '@/client/service/models';
+import { useInvitationStore } from '@/client/stores/invitationStore';
+import AccountInvitation from '@/common/model/invitation';
 import InviteFormView from './invite_form.vue';
+import EmptyLayout from '@/client/components/common/empty_state.vue';
 
 const store = useInvitationStore();
 const authn = inject('authn');
@@ -154,19 +153,5 @@ button {
   margin-right: 5px;
 }
 
-section > h3 {
-  margin-top: 0;
-  float: left;
-}
-section > button {
-  float: right;
-}
-table, div.success-message, div.error-message {
-  clear: both;
-}
 
-.empty-screen {
-  @include empty-screen;
-  clear: both;
-}
 </style>

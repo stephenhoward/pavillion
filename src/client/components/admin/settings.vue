@@ -60,8 +60,8 @@ async function updateSettings() {
 </script>
 
 <template>
-  <section class="settings-section" aria-labelledby="settings-heading">
-    <h2 id="settings-heading">{{ t("general_settings") }}</h2>
+  <section class="settings" aria-labelledby="settings-heading">
+    <h1 id="settings-heading">{{ t("general_settings") }}</h1>
 
     <div role="status" aria-live="polite">
       <div v-if="successMessage" class="success-message">{{ successMessage }}</div>
@@ -99,6 +99,7 @@ async function updateSettings() {
 
       <button
         type="button"
+        class="primary"
         :disabled="saving"
         @click="updateSettings"
       >{{  t("save_settings_button") }}</button>
@@ -107,8 +108,6 @@ async function updateSettings() {
 </template>
 
 <style scoped lang="scss">
-@use '../../assets/mixins' as *;
-
 .settings-section {
   margin: 10px;
 }

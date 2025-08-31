@@ -21,14 +21,17 @@ div.root {
       list-style-type: none;
       position: relative;
       font-size: 10pt;
+
       &.selected {
           a {
               color: #fff;
+
               div.icon {
                   background-color: #fff;
               }
           }
       }
+
       &.badged {
         &::after {
             content: "●";
@@ -39,22 +42,25 @@ div.root {
             font-size: 16pt;
           }
       }
+
       a {
         color: $light-mode-text;
         display: flex;
         flex-direction: column;
         align-items: center;
         text-decoration: none;
+
         label {
           display: block;
           text-align: center;
         }
+
         div.icon {
           width: 24px;
           height: 24px;
           background-color: #000;
-          -webkit-mask-size: contain;
-          -webkit-mask-repeat: no-repeat;
+          mask-size: contain;
+          mask-repeat: no-repeat;
           mask-size: contain;
           mask-repeat: no-repeat;
         }
@@ -70,6 +76,7 @@ div.root {
     color: white;
     padding: 10px;
     z-index: 1000;
+
     &:focus {
       top: 0;
     } 
@@ -79,7 +86,7 @@ div.root {
     flex: 1;
     background-color: #fff;
 
-    div.empty-screen {
+    div.empty-state {
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -98,27 +105,33 @@ div.root {
 @include medium-size-device {
     div.root {
         flex-direction: row;
+
       nav {
     order: 0;
     flex-direction: column;
     align-items: flex-start;
     justify-content: flex-start;
+
     li {
         &.badged {
           &::after {
               left: 28px;
             }
         }
+
         a {
             flex-direction: row;
+
             label {
                 text-align: left;
             }
         }
+
         div.icon {
             display: inline-block;
             margin-right: 10px;
         }
+
         padding: 10px;
     }
   }
@@ -141,14 +154,17 @@ div.root {
     nav {
         li {
             color: #999;
+
             a {
                 color: #999;
+
                 div.icon {
                     background-color: #999;
                 }
             }
         }
     }
+
     #main {
       background-color: #22222a;
     }

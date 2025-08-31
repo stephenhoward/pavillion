@@ -5,27 +5,32 @@ import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
 
 import { initI18Next } from '@/client/service/locale';
-import '@/client/assets/style.scss';
-import AppVue from '@/client/components/app.vue';
-import CalendarsView from '@/client/components/calendar/calendars.vue';
-import CalendarView from '@/client/components/calendar/calendar.vue';
-import CalendarManagementView from '@/client/components/calendar-management.vue';
-import FeedView from '@/client/components/feed.vue';
-import ProfileView from '@/client/components/profile.vue';
-import InboxView from '@/client/components/inbox.vue';
-import AppViews from '@/client/components/app_views.vue';
-import AuthViews from '@/client/components/auth_views.vue';
-import AdminViews from '@/client/components/admin/admin_views.vue';
-import LoginView from '@/client/components/authentication/login.vue';
-import LogoutView from '@/client/components/authentication/logout.vue';
-import PasswordForgotView from '@/client/components/authentication/password_forgot.vue';
-import PasswordResetView from '@/client/components/authentication/password_reset.vue';
-import RegisterView from '@/client/components/registration/register.vue';
-import RegisterApplyView from '@/client/components/registration/register_apply.vue';
+import '@/client/assets/style/main.scss';
+
 import Authentication from '@/client/service/authn';
 import Config from '@/client/service/config';
+
+import AppVue from '@/client/components/app.vue';
+
+import AuthViews from '@/client/components/logged_out/root.vue';
+import LoginView from '@/client/components/logged_out/login.vue';
+import LogoutView from '@/client/components/logged_out/logout.vue';
+import PasswordForgotView from '@/client/components/logged_out/password_forgot.vue';
+import PasswordResetView from '@/client/components/logged_out/password_reset.vue';
+import RegisterView from '@/client/components/logged_out/register.vue';
+import RegisterApplyView from '@/client/components/logged_out/register_apply.vue';
+import AcceptInviteView from '@/client/components/logged_out/accept_invite.vue';
+
+import AppViews from '@/client/components/logged_in/root.vue';
+import CalendarsView from '@/client/components/logged_in/calendar/calendars.vue';
+import CalendarView from '@/client/components/logged_in/calendar/calendar.vue';
+import CalendarManagementView from '@/client/components/logged_in/calendar-management/root.vue';
+import FeedView from '@/client/components/logged_in/feed/root.vue';
+import ProfileView from '@/client/components/logged_in/settings/root.vue';
+import InboxView from '@/client/components/logged_in/inbox.vue';
+
+import AdminViews from '@/client/components/admin/root.vue';
 import InvitesListView from '@/client/components/admin/accounts.vue';
-import AcceptInviteView from '@/client/components/registration/accept_invite.vue';
 import AdminSettingsView from '@/client/components/admin/settings.vue';
 import FederationSettingsView from '@/client/components/admin/federation.vue';
 import FundingSettingsView from '@/client/components/admin/funding.vue';

@@ -11,5 +11,4 @@
 </template>
 
 <style lang="scss">
-@use '../../client/assets/mixins' as *;
 </style>

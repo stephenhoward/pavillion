@@ -1,0 +1,197 @@
+/**
+ * Responsive Breakpoint Design Tokens
+ * Mobile-first breakpoint system with CSS custom properties and SCSS mixins
+ */
+
+:root {
+  /* Breakpoint Tokens (CSS Custom Properties for runtime access) */
+  --pav-breakpoint-xs: 320px;   /* Extra small devices */
+  --pav-breakpoint-sm: 640px;   /* Small devices (tablets) */
+  --pav-breakpoint-md: 768px;   /* Medium devices (small laptops) */
+  --pav-breakpoint-lg: 1024px;  /* Large devices (laptops) */
+  --pav-breakpoint-xl: 1280px;  /* Extra large devices (desktops) */
+  --pav-breakpoint-2xl: 1536px; /* 2x extra large devices (large desktops) */
+  
+  /* Container Max Widths */
+  --pav-container-xs: 100%;
+  --pav-container-sm: 640px;
+  --pav-container-md: 768px;
+  --pav-container-lg: 1024px;
+  --pav-container-xl: 1280px;
+  --pav-container-2xl: 1536px;
+  
+  /* Responsive Spacing Multipliers */
+  --pav-responsive-scale-xs: 0.75;  /* 75% scaling on extra small */
+  --pav-responsive-scale-sm: 0.875; /* 87.5% scaling on small */
+  --pav-responsive-scale-md: 1;     /* 100% baseline on medium+ */
+  --pav-responsive-scale-lg: 1.125; /* 112.5% scaling on large+ */
+  --pav-responsive-scale-xl: 1.25;  /* 125% scaling on extra large+ */
+}
+
+/* SCSS Variable Mirrors for Build-Time Logic */
+
+// Breakpoint map for mixins and utilities
+$pav-breakpoints: (
+  xs: 320px,
+  sm: 640px,
+  md: 768px,
+  lg: 1024px,
+  xl: 1280px,
+  '2xl': 1536px
+) !default;
+
+// Container max-width map
+$pav-containers: (
+  xs: 100%,
+  sm: 640px,
+  md: 768px,
+  lg: 1024px,
+  xl: 1280px,
+  '2xl': 1536px
+) !default;
+
+// Responsive scale factors
+$pav-responsive-scales: (
+  xs: 0.75,
+  sm: 0.875,
+  md: 1,
+  lg: 1.125,
+  xl: 1.25
+) !default;
+
+/* Core Responsive Mixins */
+
+// Media query mixin (mobile-first)
+@mixin pav-media($breakpoint) {
+  @if map-has-key($pav-breakpoints, $breakpoint) {
+    @media (min-width: map-get($pav-breakpoints, $breakpoint)) {
+      @content;
+    }
+  } @else {
+    @error "Unknown breakpoint `#{$breakpoint}` in $pav-breakpoints.";
+  }
+}
+
+// Media query mixin (desktop-first, max-width)
+@mixin pav-media-down($breakpoint) {
+  @if map-has-key($pav-breakpoints, $breakpoint) {
+    $breakpoint-value: map-get($pav-breakpoints, $breakpoint);
+
+    @media (width <= calc(#{$breakpoint-value} - 1px)) {
+      @content;
+    }
+  } @else {
+    @error "Unknown breakpoint `#{$breakpoint}` in $pav-breakpoints.";
+  }
+}
+
+// Media query mixin (between two breakpoints)
+@mixin pav-media-between($min-breakpoint, $max-breakpoint) {
+  @if map-has-key($pav-breakpoints, $min-breakpoint) and map-has-key($pav-breakpoints, $max-breakpoint) {
+    $min-value: map-get($pav-breakpoints, $min-breakpoint);
+    $max-value: map-get($pav-breakpoints, $max-breakpoint);
+
+    @media (min-width: #{$min-value}) and (width <= calc(#{$max-value} - 1px)) {
+      @content;
+    }
+  } @else {
+    @error "Unknown breakpoint in range `#{$min-breakpoint}` to `#{$max-breakpoint}`.";
+  }
+}
+
+// Media query mixin (exact breakpoint only)
+@mixin pav-media-only($breakpoint) {
+  $breakpoint-keys: map-keys($pav-breakpoints);
+  $breakpoint-index: index($breakpoint-keys, $breakpoint);
+  
+  @if $breakpoint-index {
+    $min-value: map-get($pav-breakpoints, $breakpoint);
+    
+    // If not the last breakpoint, set max-width
+    @if $breakpoint-index < length($breakpoint-keys) {
+      $next-breakpoint: nth($breakpoint-keys, $breakpoint-index + 1);
+      $max-value: map-get($pav-breakpoints, $next-breakpoint);
+
+      @media (min-width: #{$min-value}) and (width <= calc(#{$max-value} - 1px)) {
+        @content;
+      }
+    } @else {
+      // Last breakpoint, no max-width
+      @media (min-width: #{$min-value}) {
+        @content;
+      }
+    }
+  } @else {
+    @error "Unknown breakpoint `#{$breakpoint}` in $pav-breakpoints.";
+  }
+}
+
+/* Container Mixins */
+
+// Container with responsive max-width
+@mixin pav-container($breakpoint: lg, $padding: var(--pav-space-4)) {
+  width: 100%;
+  margin-inline: auto;
+  padding-inline: $padding;
+  
+  @if map-has-key($pav-containers, $breakpoint) {
+    max-width: map-get($pav-containers, $breakpoint);
+  } @else {
+    @error "Unknown container breakpoint `#{$breakpoint}` in $pav-containers.";
+  }
+}
+
+// Full-width container that respects breakpoints
+@mixin pav-container-fluid($padding: var(--pav-space-4)) {
+  width: 100%;
+  margin-inline: auto;
+  padding-inline: $padding;
+}
+
+/* Responsive Utility Mixins */
+
+// Generate responsive properties across all breakpoints
+@mixin pav-responsive($property, $values) {
+  @each $breakpoint, $value in $values {
+    @if $breakpoint == 'base' {
+      #{$property}: $value;
+    } @else {
+      @include pav-media($breakpoint) {
+        #{$property}: $value;
+      }
+    }
+  }
+}
+
+// Hide element at specific breakpoints
+@mixin pav-hide-at($breakpoints...) {
+  @each $breakpoint in $breakpoints {
+    @include pav-media-only($breakpoint) {
+      display: none !important;
+    }
+  }
+}
+
+// Show element only at specific breakpoints
+@mixin pav-show-at($breakpoints...) {
+  display: none !important;
+  
+  @each $breakpoint in $breakpoints {
+    @include pav-media-only($breakpoint) {
+      display: initial !important;
+    }
+  }
+}
+
+// Responsive typography scaling
+@mixin pav-responsive-scale($base-size: 1rem, $scale-map: $pav-responsive-scales) {
+  font-size: $base-size;
+  
+  @each $breakpoint, $scale in $scale-map {
+    @if $breakpoint != md { // md is the baseline (scale: 1)
+      @include pav-media($breakpoint) {
+        font-size: calc(#{$base-size} * #{$scale});
+      }
+    }
+  }
+}

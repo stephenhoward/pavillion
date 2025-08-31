@@ -7,9 +7,9 @@ const { t } = useTranslation('admin', {
 </script>
 
 <template>
-  <p>{{ t("title") }}</p>
+  <h1>{{ t("title") }}</h1>
   <section>
-    <h3>{{ t("blocked_instances_title") }}</h3>
+    <h2>{{ t("blocked_instances_title") }}</h2>
     <p>{{ t("blocked_instances_description") }}</p>
   </section>
 </template>

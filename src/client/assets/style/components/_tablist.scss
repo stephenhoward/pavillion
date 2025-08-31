@@ -1,0 +1,305 @@
+/**
+ * Semantic Tablist/Tabpanel Component Styles
+ * Direct semantic HTML element styling using tokenized values
+ * Complements the existing BEM-style tabs component
+ */
+
+/* Base tablist styling */
+[role="tablist"],
+.tablist {
+  display: flex;
+  border-bottom: var(--pav-border-width-1) solid var(--pav-color-border-primary);
+  margin-bottom: var(--pav-space-lg);
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  
+  &::-webkit-scrollbar {
+    display: none;
+  }
+  
+  /* Vertical orientation */
+  &[aria-orientation="vertical"] {
+    flex-direction: column;
+    border-bottom: none;
+    border-right: var(--pav-border-width-1) solid var(--pav-color-border-primary);
+    margin-bottom: 0;
+    margin-right: var(--pav-space-lg);
+    min-width: 200px;
+  }
+}
+
+/* Individual tab button styling */
+button[role="tab"],
+button.tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--pav-space-3) var(--pav-space-4);
+  background: none;
+  border: none;
+  font-size: var(--pav-font-size-base);
+  font-weight: var(--pav-font-weight-medium);
+  color: var(--pav-color-text-secondary);
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: all 0.2s ease-in-out;
+  white-space: nowrap;
+  position: relative;
+  border-radius: 0;
+  
+  /* Focus styles for accessibility */
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--pav-shadow-focus);
+    border-radius: 0;
+  }
+  
+  /* Hover state */
+  &:hover:not([aria-selected="true"]) {
+    color: var(--pav-color-text-primary);
+  }
+  
+  /* Active/selected state */
+  &[aria-selected="true"] {
+    color: var(--pav-color-brand-primary);
+    border-bottom-color: var(--pav-color-brand-primary);
+  }
+  
+  /* Disabled state */
+  &:disabled,
+  &[aria-disabled="true"] {
+    color: var(--pav-color-text-disabled);
+    cursor: not-allowed;
+    
+    &:hover {
+      background-color: transparent;
+    }
+  }
+  
+  /* Vertical orientation adjustments */
+  [role="tablist"][aria-orientation="vertical"] & {
+    justify-content: flex-start;
+    text-align: left;
+    border-bottom: none;
+    border-right: 3px solid transparent;
+    
+    &[aria-selected="true"] {
+      border-right-color: var(--pav-color-brand-primary);
+      border-bottom-color: transparent;
+    }
+  }
+}
+
+/* Tab panel styling */
+[role="tabpanel"],
+.tabpanel {
+  outline: none;
+  
+  &[hidden] {
+    display: none;
+  }
+  
+  &:focus {
+    outline: none;
+  }
+}
+
+/* Size variants */
+.tablist--sm [role="tab"],
+.tablist--sm .tab,
+.tab--sm {
+  padding: var(--pav-space-2) var(--pav-space-3);
+  font-size: var(--pav-font-size-sm);
+}
+
+.tablist--lg [role="tab"],
+.tablist--lg .tab,
+.tab--lg {
+  padding: var(--pav-space-4) var(--pav-space-6);
+  font-size: var(--pav-font-size-lg);
+}
+
+/* Tab with icon */
+.tab--with-icon {
+  gap: var(--pav-space-2);
+  
+  .icon {
+    width: 1rem;
+    height: 1rem;
+    flex-shrink: 0;
+  }
+}
+
+/* Tablist variants */
+
+/* Pills variant */
+.tablist--pills {
+  border-bottom: none;
+  gap: var(--pav-space-2);
+  margin-bottom: var(--pav-space-md);
+  
+  [role="tab"],
+  .tab {
+    border-bottom: none;
+    border-radius: var(--pav-border-radius-pill);
+    background-color: var(--pav-color-surface-secondary);
+    
+    &:hover:not([aria-selected="true"]) {
+      background-color: var(--pav-color-interactive-hover);
+    }
+    
+    &[aria-selected="true"] {
+      background-color: var(--pav-color-brand-primary);
+      color: var(--pav-color-text-inverse);
+    }
+  }
+}
+
+/* Cards variant */
+.tablist--cards {
+  border-bottom: none;
+  gap: var(--pav-space-1);
+  margin-bottom: var(--pav-space-md);
+  
+  [role="tab"],
+  .tab {
+    border-bottom: none;
+    border: var(--pav-border-width-1) solid var(--pav-color-border-secondary);
+    border-radius: var(--pav-border-radius-md) var(--pav-border-radius-md) 0 0;
+    background-color: var(--pav-color-surface-secondary);
+    margin-bottom: -1px;
+    
+    &:hover:not([aria-selected="true"]) {
+      background-color: var(--pav-color-interactive-hover);
+    }
+    
+    &[aria-selected="true"] {
+      background-color: var(--pav-color-surface-primary);
+      border-bottom-color: var(--pav-color-surface-primary);
+      z-index: 1;
+      position: relative;
+    }
+  }
+  
+  /* Card panels get border styling */
+  + [role="tabpanel"],
+  + .tabpanel {
+    border: var(--pav-border-width-1) solid var(--pav-color-border-secondary);
+    border-radius: var(--pav-border-radius-md);
+    padding: var(--pav-space-card-padding);
+    background-color: var(--pav-color-surface-primary);
+  }
+}
+
+/* Vertical variant */
+.tablist--vertical {
+  flex-direction: column;
+  border-bottom: none;
+  border-right: var(--pav-border-width-1) solid var(--pav-color-border-primary);
+  margin-bottom: 0;
+  margin-right: var(--pav-space-lg);
+  min-width: 200px;
+  
+  [role="tab"],
+  .tab {
+    justify-content: flex-start;
+    text-align: left;
+    border-bottom: none;
+    border-right: 3px solid transparent;
+    
+    &[aria-selected="true"] {
+      border-right-color: var(--pav-color-brand-primary);
+      border-bottom-color: transparent;
+    }
+  }
+}
+
+/* Container for vertical tabs */
+.tabs-container--vertical {
+  display: flex;
+  gap: var(--pav-space-lg);
+  
+  .tablist {
+    flex-shrink: 0;
+  }
+  
+  .tab-content {
+    flex: 1;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  [role="tab"][aria-selected="true"],
+  .tab[aria-selected="true"] {
+    outline: 2px solid currentcolor;
+    outline-offset: -2px;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  [role="tab"],
+  .tab {
+    transition: none;
+  }
+}
+
+/* Touch device optimizations */
+@media (hover: none) {
+  [role="tab"],
+  .tab {
+    /* Increase touch targets on mobile */
+    min-height: 44px;
+    padding: var(--pav-space-3) var(--pav-space-4);
+  }
+  
+  .tablist--sm [role="tab"],
+  .tablist--sm .tab,
+  .tab--sm {
+    min-height: 40px;
+  }
+  
+  .tablist--lg [role="tab"],
+  .tablist--lg .tab,
+  .tab--lg {
+    min-height: 52px;
+  }
+}
+
+/**
+ * Usage Examples:
+ * 
+ * Basic semantic tablist:
+ * <div role="tablist" aria-label="Account Settings">
+ *   <button role="tab" aria-selected="true" aria-controls="profile-panel">Profile</button>
+ *   <button role="tab" aria-selected="false" aria-controls="security-panel">Security</button>
+ * </div>
+ * <div role="tabpanel" id="profile-panel">...</div>
+ * <div role="tabpanel" id="security-panel" hidden>...</div>
+ * 
+ * Pills variant:
+ * <div role="tablist" class="tablist--pills" aria-label="Navigation">
+ *   <button role="tab" aria-selected="true">Dashboard</button>
+ *   <button role="tab" aria-selected="false">Settings</button>
+ * </div>
+ * 
+ * Vertical layout:
+ * <div class="tabs-container--vertical">
+ *   <div role="tablist" class="tablist--vertical" aria-label="Sidebar Navigation">
+ *     <button role="tab" aria-selected="true">Overview</button>
+ *     <button role="tab" aria-selected="false">Details</button>
+ *   </div>
+ *   <div class="tab-content">
+ *     <div role="tabpanel">Content here</div>
+ *   </div>
+ * </div>
+ * 
+ * Class-based alternative (for when role attributes aren't preferred):
+ * <div class="tablist tablist--cards">
+ *   <button class="tab tab--active">Profile</button>
+ *   <button class="tab">Settings</button>
+ * </div>
+ * <div class="tabpanel">...</div>
+ */

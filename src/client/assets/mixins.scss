@@ -14,38 +14,47 @@ $font-bold: 600;
 $font-extra-bold: 700;
 $font-black: 800;
 
-
 $light-mode-sidebar-background: #3a3a3a;
 $dark-mode-sidebar-background: #222;
-
 $light-mode-text: #000;
 $light-mode-secondary-text: #555;
 $dark-mode-text: #eee;
 $dark-mode-secondary-text: #999;
 $dark-mode-input-text: #fff;
 $dark-mode-filter: brightness(93.3%);
-
-$light-mode-border: rgba(0,0,0,.3);
-$dark-mode-border: rgba(238,238,238,.3);
-
+$light-mode-border: rgb(0 0 0 / 30%);
+$dark-mode-border: rgb(238 238 238 / 30%);
 $light-mode-panel-background: #fff;
-$dark-mode-panel-background: rgba(0,0,0,.2);
-
+$dark-mode-panel-background: rgb(0 0 0 / 20%);
 $light-mode-button-background: #ff9131;
 $light-mode-button-gradient: linear-gradient(0deg, #18671A 0%, #359F37 100%);
-
 $dark-mode-button-background: #C86002;
 $dark-mode-button-gradient: linear-gradient(0deg, #9C4B02 0%, #C86002 100%);
-
 $main-area-menu-gutter: 40px;
-
 $capsule-background: #CCC;
 $dark-mode-capsule-background: #555;
-
 $form-input-border-radius: 20px;
 
-// Empty screen mixin
-@mixin empty-screen {
+// Additional design tokens for new mixins
+$component-border-radius: 8px;
+$component-border-radius-small: 6px;
+$box-shadow-light: 0 2px 8px rgb(0 0 0 / 10%);
+$box-shadow-medium: 0 4px 12px rgb(0 0 0 / 15%);
+$focus-color: #3b82f6;
+$focus-color-dark: #60a5fa;
+
+// Standard spacing scale
+$spacing-xs: 4px;
+$spacing-sm: 8px;
+$spacing-md: 12px;
+$spacing-lg: 16px;
+$spacing-xl: 20px;
+$spacing-2xl: 24px;
+$spacing-3xl: 32px;
+$spacing-4xl: 40px;
+
+// Empty state mixin
+@mixin empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -75,32 +84,96 @@ $form-input-border-radius: 20px;
   }
 }
 
+// Enhanced flexible layout mixins (backwards compatible)
 @mixin flexible-container {
     display: flex;
     justify-content: space-between;
 }
+
 @mixin hstack {
     @include flexible-container;
+
     flex-direction: row;
 }
+
 @mixin vstack {
     @include flexible-container;
+
     flex-direction: column;
 }
+
 @mixin flexible {
     flex: 1 1 auto;
 }
+
 @mixin inflexible {
     flex: 0 0 auto;
 }
 
+// Enhanced versions with more control
+@mixin hstack-enhanced($justify: space-between, $align: center, $gap: 0) {
+    display: flex;
+    flex-direction: row;
+    justify-content: $justify;
+    align-items: $align;
+
+    @if $gap > 0 {
+        gap: $gap;
+    }
+}
+
+@mixin vstack-enhanced($justify: flex-start, $align: stretch, $gap: 0) {
+    display: flex;
+    flex-direction: column;
+    justify-content: $justify;
+    align-items: $align;
+
+    @if $gap > 0 {
+        gap: $gap;
+    }
+}
+
+// Enhanced responsive mixins (backwards compatible)
 @mixin medium-size-device {
-    @media ( min-width: 600px ) {
+    @media ( width >= 600px ) {
         @content;
     }
 }
+
 @mixin large-size-device {
-    @media ( min-width: 1024px ) {
+    @media ( width >= 1024px ) {
+        @content;
+    }
+}
+
+// Additional responsive breakpoints
+@mixin small-size-device {
+    @media ( width >= 480px ) {
+        @content;
+    }
+}
+
+@mixin extra-large-size-device {
+    @media ( width >= 1280px ) {
+        @content;
+    }
+}
+
+// Mobile-first responsive helpers
+@mixin mobile-only {
+    @media ( width <= 599px ) {
+        @content;
+    }
+}
+
+@mixin tablet-only {
+    @media ( width >= 600px ) and ( width <= 1023px ) {
+        @content;
+    }
+}
+
+@mixin desktop-up {
+    @media ( width >= 1024px ) {
         @content;
     }
 }
@@ -121,9 +194,9 @@ $form-input-border-radius: 20px;
 }
 
 @mixin auth-form {
-    background-color: rgba(0,0,0,0.1);
+    background-color: rgb(0 0 0 / 10%);
     background: #eef;
-    box-shadow: rgba(0,0,0,0.2) 8px 8px 12px;
+    box-shadow: rgb(0 0 0 / 20%) 8px 8px 12px;
     display: grid;
     border-radius: $form-input-border-radius;
     grid-template-columns: 1fr 1fr;
@@ -141,35 +214,38 @@ $form-input-border-radius: 20px;
         font-weight: 300;
         text-align: right;
     }
+
     p {
-        grid-column-start: 1;
-        grid-column-end: 3;
+        grid-column: 1 / 3;
     }
 
         input[type="email"], input[type="text"],input[type="password"],textarea {
             font-size: 14pt;
-            background-color: rgba(255,255,255,0.5);
-            margin: 6px 0px;
+            background-color: rgb(255 255 255 / 50%);
+            margin: 6px 0;
             grid-column: 1 / span 2;
             border: 1px solid #ccc;
             border-radius: $form-input-border-radius;
             padding: 8px 18px;
+
             &:focus {
-                border: 1px solid rgb(73, 111, 186);
+                border: 1px solid rgb(73 111 186);
             }
         }
+
         h3 {
             grid-column: 1 / span 2;
             font-weight: 300;
             font-size: 22pt;
         }
+
     button, a.button {
         font-size: 12pt;
-        margin: 6px 0px;
+        margin: 6px 0;
         text-align: center;
-        grid-column-start: 1;
-        grid-column-end: 3;
+        grid-column: 1 / 3;
     }
+
     button.primary {
         font-size: 14pt;
     }
@@ -179,9 +255,10 @@ $form-input-border-radius: 20px;
     background-color: $dark-mode-background;
 
     input[type="email"], input[type="password"],textarea {
-        background-color: rgba(100,100,100,0.2);
+        background-color: rgb(100 100 100 / 20%);
         border: 1px solid #777;
         color: $dark-mode-text;
+
         &:focus {
             border: 1px solid #abd;
         }
@@ -190,4 +267,377 @@ $form-input-border-radius: 20px;
     a {
         color: $dark-mode-text;
     }
+}
+
+// ===== NEW COMPONENT MIXINS =====
+
+// Button system mixins
+@mixin btn-base {
+  border: none;
+  border-radius: $component-border-radius-small;
+  cursor: pointer;
+  font-weight: $font-medium;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  transition: all 0.2s ease;
+  
+  &:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba($focus-color, 0.1);
+  }
+  
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  
+  @include dark-mode {
+    &:focus {
+      box-shadow: 0 0 0 3px rgba($focus-color-dark, 0.1);
+    }
+  }
+}
+
+@mixin btn-primary {
+  @include btn-base;
+
+  background: $light-mode-button-background;
+  color: white;
+  
+  &:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+  
+  @include dark-mode {
+    background: $dark-mode-button-background;
+  }
+}
+
+@mixin btn-secondary {
+  @include btn-base;
+
+  background: #6b7280;
+  color: white;
+  
+  &:hover:not(:disabled) {
+    background: #4b5563;
+  }
+  
+  @include dark-mode {
+    background: #374151;
+    
+    &:hover:not(:disabled) {
+      background: #4b5563;
+    }
+  }
+}
+
+@mixin btn-danger {
+  @include btn-base;
+
+  background: #dc2626;
+  color: white;
+  
+  &:hover:not(:disabled) {
+    background: #b91c1c;
+  }
+}
+
+@mixin btn-ghost {
+  @include btn-base;
+
+  background: transparent;
+  color: $light-mode-text;
+  border: 1px solid $light-mode-border;
+  
+  &:hover:not(:disabled) {
+    background: rgb(0 0 0 / 5%);
+  }
+  
+  @include dark-mode {
+    color: $dark-mode-text;
+    border-color: $dark-mode-border;
+    
+    &:hover:not(:disabled) {
+      background: rgb(255 255 255 / 10%);
+    }
+  }
+}
+
+// Button size variants
+@mixin btn-xs {
+  font-size: 12px;
+  padding: $spacing-xs $spacing-sm;
+}
+
+@mixin btn-sm {
+  font-size: 14px;
+  padding: $spacing-sm $spacing-md;
+}
+
+@mixin btn-md {
+  font-size: 14px;
+  padding: $spacing-md $spacing-lg;
+}
+
+@mixin btn-lg {
+  font-size: 16px;
+  padding: $spacing-lg $spacing-xl;
+}
+
+// Card/Panel system mixins
+@mixin card-base {
+  background: $light-mode-panel-background;
+  border-radius: $component-border-radius;
+  border: 1px solid #e5e7eb;
+  
+  @include dark-mode {
+    background: $dark-mode-panel-background;
+    border-color: #374151;
+  }
+}
+
+@mixin card-elevated {
+  @include card-base;
+
+  box-shadow: $box-shadow-light;
+  
+  @include dark-mode {
+    box-shadow: 0 2px 8px rgb(0 0 0 / 30%);
+  }
+}
+
+@mixin card-padding-sm {
+  padding: $spacing-lg;
+}
+
+@mixin card-padding-md {
+  padding: $spacing-2xl;
+}
+
+@mixin card-padding-lg {
+  padding: $spacing-3xl;
+}
+
+// Complete card mixins combining base + padding
+@mixin card-sm {
+  @include card-elevated;
+  @include card-padding-sm;
+}
+
+@mixin card-md {
+  @include card-elevated;
+  @include card-padding-md;
+}
+
+@mixin card-lg {
+  @include card-elevated;
+  @include card-padding-lg;
+}
+
+// List item mixins
+@mixin list-item-base {
+  display: flex;
+  align-items: center;
+  padding: $spacing-lg;
+  border: 1px solid #e5e7eb;
+  border-radius: $component-border-radius-small;
+  
+  @include dark-mode {
+    border-color: #374151;
+  }
+}
+
+@mixin list-item-spaced {
+  @include list-item-base;
+
+  justify-content: space-between;
+}
+
+@mixin list-item-with-margin {
+  @include list-item-base;
+
+  margin-bottom: $spacing-sm;
+  
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+// Form element mixins
+@mixin form-group-base {
+  margin-bottom: $spacing-xl;
+  
+  label {
+    display: block;
+    margin-bottom: $spacing-sm;
+    font-weight: $font-medium;
+    color: #374151;
+    
+    @include dark-mode {
+      color: $dark-mode-text;
+    }
+  }
+}
+
+@mixin input-base {
+  width: 100%;
+  font-size: 14px;
+  border: 1px solid #d1d5db;
+  border-radius: $component-border-radius-small;
+  padding: $spacing-md $spacing-lg;
+  box-sizing: border-box;
+  background: white;
+  
+  &:focus {
+    outline: none;
+    border-color: $focus-color;
+    box-shadow: 0 0 0 3px rgba($focus-color, 0.1);
+  }
+  
+  &:disabled {
+    background-color: #f9fafb;
+    color: #6b7280;
+    cursor: not-allowed;
+  }
+  
+  @include dark-mode {
+    background-color: rgb(100 100 100 / 20%);
+    border-color: #4b5563;
+    color: $dark-mode-text;
+    
+    &:focus {
+      border-color: $focus-color-dark;
+      box-shadow: 0 0 0 3px rgba($focus-color-dark, 0.1);
+    }
+    
+    &:disabled {
+      background-color: #1f2937;
+      color: #6b7280;
+    }
+  }
+}
+
+@mixin form-group {
+  @include form-group-base;
+  
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  textarea,
+  select {
+    @include input-base;
+  }
+  
+  .help-text {
+    font-size: 12px;
+    color: #6b7280;
+    margin: $spacing-xs 0 0 0;
+    
+    @include dark-mode {
+      color: #9ca3af;
+    }
+  }
+}
+
+@mixin form-actions {
+  display: flex;
+  gap: $spacing-md;
+  justify-content: flex-end;
+  margin-top: $spacing-2xl;
+}
+
+// Enhanced layout mixins
+@mixin flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@mixin flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+@mixin flex-start {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+@mixin flex-column-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+@mixin flex-column-start {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+// Stack layouts with gap
+@mixin vstack-gap($gap: $spacing-md) {
+  display: flex;
+  flex-direction: column;
+  gap: $gap;
+}
+
+@mixin hstack-gap($gap: $spacing-md) {
+  display: flex;
+  flex-direction: row;
+  gap: $gap;
+}
+
+// Error and loading state mixins
+@mixin error-message {
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  padding: $spacing-md;
+  border-radius: $component-border-radius-small;
+  margin-bottom: $spacing-lg;
+  
+  @include dark-mode {
+    background-color: #7f1d1d;
+    border-color: #991b1b;
+    color: #fca5a5;
+  }
+}
+
+@mixin loading-state {
+  text-align: center;
+  padding: $spacing-4xl $spacing-xl;
+  color: #6b7280;
+  
+  @include dark-mode {
+    color: #9ca3af;
+  }
+}
+
+// Header mixins for consistent section headers
+@mixin section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: $spacing-xl;
+  padding-bottom: $spacing-lg;
+  border-bottom: 1px solid #e5e7eb;
+  
+  h1, h2, h3 {
+    margin: 0;
+    color: #1f2937;
+    font-weight: $font-bold;
+  }
+  
+  @include dark-mode {
+    border-bottom-color: #374151;
+    
+    h1, h2, h3 {
+      color: $dark-mode-text;
+    }
+  }
 }

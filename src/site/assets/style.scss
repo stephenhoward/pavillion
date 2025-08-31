@@ -4,6 +4,7 @@
 * {
     font-family: 'Creato Display', 'Helvetica Neue', sans-serif;
     box-sizing:  border-box;
+
     &:focus {
         outline: none;
     }
@@ -29,6 +30,7 @@ button, a.button {
   border-radius: $form-input-border-radius;
   color: #ccc;
 }
+
 button.primary {
   font-size: 12pt;
   font-weight: $font-bold;
@@ -50,9 +52,11 @@ button.primary {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
+
   @include medium-size-device {
     padding: 20px;
   }
+
   header {
     flex: 0 0 auto; /* Don't grow, don't shrink, auto size */
   }
@@ -74,28 +78,32 @@ button.primary {
       font-size: 12pt;
       text-align: center;
     }
+
     div.pavillion-logo {
       display: inline-block;
       background-color: $light-mode-text;
-      -webkit-mask-size: contain;
-      -webkit-mask-repeat: no-repeat;
-      -webkit-mask-image: url('../../client/assets/pavillion-logo.svg');
+      mask-size: contain;
+      mask-repeat: no-repeat;
+      mask-image: url('../../client/assets/pavillion-logo.svg');
       mask-size: contain;
       mask-repeat: no-repeat;
       mask-image: url('../../client/assets/pavillion-logo.svg');
       width: 24px;
       height: 24px;
     }
+
     @include dark-mode {
       div.pavillion-logo {
         background-color: $dark-mode-text;
       }
     }
+
   @include medium-size-device {
     padding: 20px;
   }
   }
 }
+
 // Typography styles
 h1, h2, h3, h4, h5, h6 {
   font-family: 'Creato Display', 'Helvetica Neue', sans-serif;
@@ -130,13 +138,16 @@ p {
 @include dark-mode {
     #app {
         background-color: #44444a;
+
         // background: $dark-mode-background-gradient;
         color:            $dark-mode-text;
     }
+
     button, a.button {
       color: $dark-mode-text;
       border: 1px solid #777;
     }
+
     button.primary {
         background: $dark-mode-button-background;
         color: $dark-mode-text;

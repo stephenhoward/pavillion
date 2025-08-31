@@ -4,7 +4,7 @@ import { RouteRecordRaw } from 'vue-router';
 import sinon from 'sinon';
 
 import { mountComponent } from '@/client/test/lib/vue';
-import Login from '@/client/components/authentication/login.vue';
+import Login from '@/client/components/logged_out/login.vue';
 
 const routes: RouteRecordRaw[] = [
   { path: '/login',  component: {}, name: 'login', props: true },
@@ -159,13 +159,14 @@ describe('Login Behavior', () => {
     let pushStub = sinon.createSandbox().stub(router, 'push');
     let loginStub = sinon.createSandbox().stub(authn, 'login');
 
+    await wrapper.find('input[type="email"]').setValue('');
+    await wrapper.find('input[type="password"]').setValue('password');
 
-    wrapper.find('input[type="email"]').setValue('');
-    wrapper.find('input[type="password"]').setValue('password');
+    // Trigger form submission using the submit event
+    await wrapper.find('form').trigger('submit.prevent');
+    await wrapper.vm.$nextTick();
 
-    await wrapper.find('button[type="submit"]').trigger('click');
-
-    expect(wrapper.find('div.error').exists()).toBe(true);
+    expect(wrapper.find('[role="alert"]').exists()).toBe(true);
     expect(pushStub.called).toBe(false);
     expect(loginStub.called).toBe(false);
   });
@@ -175,13 +176,14 @@ describe('Login Behavior', () => {
     let pushStub = sinon.createSandbox().stub(router, 'push');
     let loginStub = sinon.createSandbox().stub(authn, 'login');
 
+    await wrapper.find('input[type="email"]').setValue('email');
+    await wrapper.find('input[type="password"]').setValue('');
 
-    wrapper.find('input[type="email"]').setValue('email');
-    wrapper.find('input[type="password"]').setValue('');
+    // Trigger form submission using the submit event
+    await wrapper.find('form').trigger('submit.prevent');
+    await wrapper.vm.$nextTick();
 
-    await wrapper.find('button[type="submit"]').trigger('click');
-
-    expect(wrapper.find('div.error').exists()).toBe(true);
+    expect(wrapper.find('[role="alert"]').exists()).toBe(true);
     expect(pushStub.called).toBe(false);
     expect(loginStub.called).toBe(false);
   });
@@ -194,12 +196,14 @@ describe('Login Behavior', () => {
 
     loginStub.resolves(false);
 
-    wrapper.find('input[type="email"]').setValue('email');
-    wrapper.find('input[type="password"]').setValue('password');
+    await wrapper.find('input[type="email"]').setValue('email');
+    await wrapper.find('input[type="password"]').setValue('password');
 
-    await wrapper.find('button[type="submit"]').trigger('click');
+    // Trigger form submission using the submit event
+    await wrapper.find('form').trigger('submit.prevent');
+    await wrapper.vm.$nextTick();
 
-    expect(wrapper.find('div.error').exists()).toBe(true);
+    expect(wrapper.find('[role="alert"]').exists()).toBe(true);
     expect(pushStub.called).toBe(false);
     expect(loginStub.called).toBe(true);
   });
@@ -211,12 +215,14 @@ describe('Login Behavior', () => {
 
     loginStub.throws("ouch");
 
-    wrapper.find('input[type="email"]').setValue('email');
-    wrapper.find('input[type="password"]').setValue('password');
+    await wrapper.find('input[type="email"]').setValue('email');
+    await wrapper.find('input[type="password"]').setValue('password');
 
-    await wrapper.find('button[type="submit"]').trigger('click');
+    // Trigger form submission using the submit event
+    await wrapper.find('form').trigger('submit.prevent');
+    await wrapper.vm.$nextTick();
 
-    expect(wrapper.find('div.error').exists()).toBe(true);
+    expect(wrapper.find('[role="alert"]').exists()).toBe(true);
     expect(pushStub.called).toBe(false);
     expect(loginStub.called).toBe(true);
   });
@@ -228,12 +234,14 @@ describe('Login Behavior', () => {
 
     loginStub.resolves(true);
 
-    wrapper.find('input[type="email"]').setValue('email');
-    wrapper.find('input[type="password"]').setValue('password');
+    await wrapper.find('input[type="email"]').setValue('email');
+    await wrapper.find('input[type="password"]').setValue('password');
 
-    await wrapper.find('button[type="submit"]').trigger('click');
+    // Trigger form submission using the submit event
+    await wrapper.find('form').trigger('submit.prevent');
+    await wrapper.vm.$nextTick();
 
-    expect(wrapper.find('div.error').exists()).toBe(false);
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
     expect(pushStub.called).toBe(true);
     expect(loginStub.called).toBe(true);
   });

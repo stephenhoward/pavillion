@@ -1,0 +1,99 @@
+/**
+ * Shadow Design Tokens
+ * Elevation system with box shadows for depth and layering
+ */
+
+:root {
+  /* Elevation Shadow Scale (progressive depth system) */
+  --pav-shadow-0: none;
+  --pav-shadow-1: 0 1px 2px 0 rgb(0 0 0 / 5%);
+  --pav-shadow-2: 0 1px 3px 0 rgb(0 0 0 / 10%), 0 1px 2px -1px rgb(0 0 0 / 10%);
+  --pav-shadow-3: 0 4px 6px -1px rgb(0 0 0 / 10%), 0 2px 4px -2px rgb(0 0 0 / 10%);
+  --pav-shadow-4: 0 10px 15px -3px rgb(0 0 0 / 10%), 0 4px 6px -4px rgb(0 0 0 / 10%);
+  --pav-shadow-5: 0 20px 25px -5px rgb(0 0 0 / 10%), 0 8px 10px -6px rgb(0 0 0 / 10%);
+  --pav-shadow-6: 0 25px 50px -12px rgb(0 0 0 / 25%);
+  
+  /* Legacy aliases for existing code compatibility */
+  --pav-shadow-none: var(--pav-shadow-0);
+  --pav-shadow-xs: var(--pav-shadow-1);
+  --pav-shadow-sm: var(--pav-shadow-2);
+  --pav-shadow-md: var(--pav-shadow-3);
+  --pav-shadow-lg: var(--pav-shadow-4);
+  --pav-shadow-xl: var(--pav-shadow-5);
+  --pav-shadow-2xl: var(--pav-shadow-6);
+  
+  /* Special shadows */
+  --pav-shadow-inner: inset 0 2px 4px 0 rgb(0 0 0 / 5%);
+  --pav-shadow-outline: 0 0 0 3px rgb(255 112 67 / 30%); /* Focus outline using warmer orange */
+  
+  /* Semantic Shadow Aliases (mapped to elevation levels) */
+  --pav-shadow-button: var(--pav-shadow-2);              /* Level 2 - subtle elevation */
+  --pav-shadow-button-hover: var(--pav-shadow-3);        /* Level 3 - hover state */
+  --pav-shadow-card: var(--pav-shadow-2);                /* Level 2 - cards/panels */
+  --pav-shadow-card-hover: var(--pav-shadow-3);          /* Level 3 - card hover */
+  --pav-shadow-dropdown: var(--pav-shadow-4);            /* Level 4 - floating elements */
+  --pav-shadow-modal: var(--pav-shadow-5);               /* Level 5 - modals */
+  --pav-shadow-tooltip: var(--pav-shadow-3);             /* Level 3 - tooltips */
+  --pav-shadow-navigation: var(--pav-shadow-2);          /* Level 2 - nav elements */
+  --pav-shadow-focus: var(--pav-shadow-outline);         /* Focus indicator */
+}
+
+/* Dark mode shadow adjustments */
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Darker, more pronounced shadows for dark backgrounds */
+    --pav-shadow-1: 0 1px 2px 0 rgb(0 0 0 / 30%);
+    --pav-shadow-2: 0 1px 3px 0 rgb(0 0 0 / 40%), 0 1px 2px -1px rgb(0 0 0 / 40%);
+    --pav-shadow-3: 0 4px 6px -1px rgb(0 0 0 / 40%), 0 2px 4px -2px rgb(0 0 0 / 40%);
+    --pav-shadow-4: 0 10px 15px -3px rgb(0 0 0 / 40%), 0 4px 6px -4px rgb(0 0 0 / 40%);
+    --pav-shadow-5: 0 20px 25px -5px rgb(0 0 0 / 50%), 0 8px 10px -6px rgb(0 0 0 / 50%);
+    --pav-shadow-6: 0 25px 50px -12px rgb(0 0 0 / 60%);
+    
+    /* Adjusted focus outline for dark mode */
+    --pav-shadow-outline: 0 0 0 3px var(--pav-color-brand-secondary);
+  }
+}
+
+/* SCSS Variable Mirrors for Build-Time Logic */
+
+// Shadow elevation scale
+$pav-shadows: (
+  0: none,
+  1: (0 1px 2px 0 rgb(0 0 0 / 5%)),
+  2: (0 1px 3px 0 rgb(0 0 0 / 10%), 0 1px 2px -1px rgb(0 0 0 / 10%)),
+  3: (0 4px 6px -1px rgb(0 0 0 / 10%), 0 2px 4px -2px rgb(0 0 0 / 10%)),
+  4: (0 10px 15px -3px rgb(0 0 0 / 10%), 0 4px 6px -4px rgb(0 0 0 / 10%)),
+  5: (0 20px 25px -5px rgb(0 0 0 / 10%), 0 8px 10px -6px rgb(0 0 0 / 10%)),
+  6: (0 25px 50px -12px rgb(0 0 0 / 25%))
+);
+
+// Semantic shadow mapping
+$pav-shadow-semantic: (
+  button: 2,
+  button-hover: 3,
+  card: 2,
+  card-hover: 3,
+  dropdown: 4,
+  modal: 5,
+  tooltip: 3,
+  navigation: 2
+);
+
+// Shadow utility mixin
+@mixin pav-shadow($level: 2) {
+  @if map-has-key($pav-shadows, $level) {
+    box-shadow: map-get($pav-shadows, $level);
+  } @else {
+    @error "Shadow level #{$level} not found in $pav-shadows map.";
+  }
+}
+
+// Hover shadow transition mixin
+@mixin pav-shadow-transition($base-level: 2, $hover-level: 3) {
+  box-shadow: map-get($pav-shadows, $base-level);
+  transition: box-shadow 0.2s ease-in-out;
+  
+  &:hover {
+    box-shadow: map-get($pav-shadows, $hover-level);
+  }
+}

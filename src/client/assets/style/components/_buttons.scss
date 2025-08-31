@@ -1,0 +1,301 @@
+/**
+ * Button Component Styles
+ * Comprehensive button system with variants and states
+ */
+button {
+  /* Base button styling using semantic defaults */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--pav-space-2);
+  
+  /* Spacing using design tokens */
+  padding: var(--pav-space-button-padding-y) var(--pav-space-button-padding-x);
+  
+  /* Typography */
+  font-family: var(--pav-font-family-primary);
+  font-size: var(--pav-font-size-body);
+  font-weight: var(--pav-font-weight-medium);
+  line-height: var(--pav-line-height-heading);
+  
+  /* Visual styling */
+  background-color: var(--pav-color-interactive-primary);
+  color: var(--pav-text-inverse);
+  border: var(--pav-border-width-1) solid var(--pav-color-interactive-primary);
+  border-radius: var(--pav-border-radius-button);
+  
+  /* Interaction */
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  text-decoration: none;
+  white-space: nowrap;
+  
+  /* Focus management */
+  &:focus-visible {
+    outline: var(--pav-border-width-2) solid var(--pav-border-color-focus);
+    outline-offset: var(--pav-space-0_5);
+    box-shadow: var(--pav-shadow-focus);
+  }
+  
+  /* Interactive states */
+  &:hover:not(:disabled) {
+    background-color: var(--pav-color-interactive-primary-hover);
+    border-color: var(--pav-color-interactive-primary-hover);
+    transform: translateY(-1px);
+  }
+  
+  &:active:not(:disabled) {
+    background-color: var(--pav-color-interactive-primary-hover);
+    transform: translateY(1px);
+  }
+  
+  /* Disabled state */
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+    transform: none;
+  }
+}
+
+[role="button"] {
+  /* Override semantic button styling for elements that aren't button tags */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--pav-space-2);
+  
+  /* Spacing using design tokens */
+  padding: var(--pav-space-button-padding-y) var(--pav-space-button-padding-x);
+  
+  /* Typography */
+  font-family: var(--pav-font-family-primary);
+  font-size: var(--pav-font-size-body);
+  font-weight: var(--pav-font-weight-medium);
+  line-height: var(--pav-line-height-heading);
+  
+  /* Visual styling - secondary variant by default for role="button" */
+  background-color: transparent;
+  color: var(--pav-text-primary);
+  border: var(--pav-border-width-1) solid var(--pav-border-color-medium);
+  border-radius: var(--pav-border-radius-button);
+  
+  /* Interaction */
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  
+  /* Focus management */
+  &:focus-visible {
+    outline: var(--pav-border-width-2) solid var(--pav-border-color-focus);
+    outline-offset: var(--pav-space-0_5);
+    box-shadow: var(--pav-shadow-focus);
+  }
+  
+  /* Interactive states */
+  &:hover:not([aria-disabled="true"]) {
+    background-color: var(--pav-interactive-hover);
+    border-color: var(--pav-border-color-strong);
+    transform: translateY(-1px);
+  }
+  
+  &:active:not([aria-disabled="true"]) {
+    background-color: var(--pav-interactive-active);
+    transform: translateY(1px);
+  }
+  
+  /* Disabled state using ARIA */
+  &[aria-disabled="true"] {
+    cursor: not-allowed;
+    opacity: 0.6;
+    transform: none;
+    pointer-events: none;
+  }
+  
+  /* Primary button role variant */
+  &[data-variant="primary"] {
+    background-color: var(--pav-color-interactive-primary);
+    color: var(--pav-text-inverse);
+    border-color: var(--pav-color-interactive-primary);
+    
+    &:hover:not([aria-disabled="true"]) {
+      background-color: var(--pav-color-interactive-primary-hover);
+      border-color: var(--pav-color-interactive-primary-hover);
+    }
+  }
+  
+  /* Danger button role variant */
+  &[data-variant="danger"] {
+    background-color: var(--pav-color-error);
+    color: var(--pav-text-inverse);
+    border-color: var(--pav-color-error);
+    
+    &:hover:not([aria-disabled="true"]) {
+      background-color: #b91c2c;
+      border-color: #b91c2c;
+    }
+  }
+  
+  /* Ghost button role variant */
+  &[data-variant="ghost"] {
+    background-color: transparent;
+    color: var(--pav-text-secondary);
+    border-color: transparent;
+    
+    &:hover:not([aria-disabled="true"]) {
+      background-color: var(--pav-interactive-hover);
+      color: var(--pav-text-primary);
+    }
+  }
+}
+
+
+.btn {
+  /* Base button styles */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--pav-space-2) var(--pav-space-4);
+  font-size: var(--pav-font-size-sm);
+  font-weight: var(--pav-font-weight-medium);
+  line-height: var(--pav-line-height-tight);
+  border: var(--pav-border-width-1) solid transparent;
+  border-radius: var(--pav-border-radius-button);
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  text-decoration: none;
+  white-space: nowrap;
+  
+  /* Focus styles for accessibility */
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--pav-shadow-focus);
+  }
+  
+  /* Disabled state */
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+  
+  /* Size variants */
+  &--xs {
+    padding: var(--pav-space-1) var(--pav-space-2);
+    font-size: var(--pav-font-size-xs);
+  }
+  
+  &--sm {
+    padding: var(--pav-space-1_5) var(--pav-space-3);
+    font-size: var(--pav-font-size-sm);
+  }
+  
+  &--lg {
+    padding: var(--pav-space-3) var(--pav-space-6);
+    font-size: var(--pav-font-size-base);
+  }
+  
+  &--xl {
+    padding: var(--pav-space-4) var(--pav-space-8);
+    font-size: var(--pav-font-size-lg);
+  }
+  
+  /* Primary variant (brand orange) */
+  &--primary {
+    background-color: var(--pav-color-brand-primary);
+    color: var(--pav-text-inverse);
+    border-color: var(--pav-color-brand-primary);
+    
+    &:hover:not(:disabled) {
+      background-color: var(--pav-color-brand-primary-dark);
+      border-color: var(--pav-color-brand-primary-dark);
+    }
+    
+    &:active:not(:disabled) {
+      background-color: var(--pav-color-brand-primary-dark);
+      transform: translateY(1px);
+    }
+  }
+  
+  /* Secondary variant */
+  &--secondary {
+    background-color: transparent;
+    color: var(--pav-text-primary);
+    border-color: var(--pav-border-secondary);
+    
+    &:hover:not(:disabled) {
+      background-color: var(--pav-interactive-hover);
+      border-color: var(--pav-border-primary);
+    }
+    
+    &:active:not(:disabled) {
+      background-color: var(--pav-interactive-active);
+    }
+  }
+  
+  /* Ghost variant */
+  &--ghost {
+    background-color: transparent;
+    color: var(--pav-text-secondary);
+    border-color: transparent;
+    
+    &:hover:not(:disabled) {
+      background-color: var(--pav-interactive-hover);
+      color: var(--pav-text-primary);
+    }
+  }
+  
+  /* Danger variant */
+  &--danger {
+    background-color: var(--pav-color-error);
+    color: var(--pav-text-inverse);
+    border-color: var(--pav-color-error);
+    
+    &:hover:not(:disabled) {
+      background-color: #b91c2c;
+      border-color: #b91c2c;
+    }
+  }
+  
+  /* Icon button variant */
+  &--icon {
+    padding: var(--pav-space-2);
+    aspect-ratio: 1;
+    
+    &.btn--xs { padding: var(--pav-space-1); }
+    &.btn--sm { padding: var(--pav-space-1_5); }
+    &.btn--lg { padding: var(--pav-space-3); }
+    &.btn--xl { padding: var(--pav-space-4); }
+  }
+  
+  /* Full width variant */
+  &--full {
+    width: 100%;
+  }
+}
+
+/* Legacy class support during migration */
+button.primary {
+  @extend .btn;
+      background-color: var(--pav-color-brand-primary);
+    color: var(--pav-text-inverse);
+    border-color: var(--pav-color-brand-primary);
+    
+    &:hover:not(:disabled) {
+      background-color: var(--pav-color-brand-primary-dark);
+      border-color: var(--pav-color-brand-primary-dark);
+    }
+    
+    &:active:not(:disabled) {
+      background-color: var(--pav-color-brand-primary-dark);
+      transform: translateY(1px);
+    }
+}
+
+button, 
+a.button {
+  /* Apply base button styles to native elements */
+  &:not([class*="btn"]) {
+    @extend .btn, .btn--secondary;
+  }
+}

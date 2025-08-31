@@ -1,0 +1,401 @@
+/**
+ * Accessibility Base Styles
+ * Focus management, screen reader support, and accessibility enhancements
+ * Follows WCAG 2.1 AA guidelines and modern accessibility best practices
+ */
+
+/* ===== FOCUS MANAGEMENT ===== */
+
+/* Enhanced focus indicators for all interactive elements */
+:focus-visible {
+  outline: 2px solid var(--pav-color-brand-primary);
+  outline-offset: 2px;
+  border-radius: var(--pav-border-radius-2xs);
+  transition: outline-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+/* Interactive element focus styles with enhanced visual feedback */
+a:focus-visible,
+button:focus-visible,
+[role="button"]:focus-visible,
+[role="link"]:focus-visible {
+  outline: 2px solid var(--pav-color-brand-primary);
+  outline-offset: 2px;
+  box-shadow: var(--pav-shadow-focus);
+}
+
+/* Form element focus styles */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[contenteditable]:focus-visible {
+  outline: 2px solid var(--pav-color-brand-secondary);
+  outline-offset: 1px; /* Tighter offset for form fields */
+  box-shadow: 
+    var(--pav-shadow-focus),
+    inset 0 0 0 1px var(--pav-color-border-focus);
+}
+
+/* Focus within containers (for composite widgets) */
+.focus-within:focus-within {
+  outline: 2px solid var(--pav-color-brand-primary);
+  outline-offset: 2px;
+}
+
+/* ===== SCREEN READER SUPPORT ===== */
+
+/* Screen reader only content */
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+/* Screen reader only content that becomes visible on focus */
+.sr-only-focusable:focus {
+  position: static !important;
+  width: auto !important;
+  height: auto !important;
+  padding: inherit !important;
+  margin: inherit !important;
+  overflow: visible !important;
+  clip: auto !important;
+  white-space: inherit !important;
+}
+
+/* Skip links for keyboard navigation */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 6px;
+  background: var(--pav-surface-elevated);
+  color: var(--pav-text-primary);
+  padding: var(--pav-space-2xs) var(--pav-space-xs);
+  border-radius: var(--pav-border-radius-xs);
+  text-decoration: none;
+  font-weight: var(--pav-font-weight-medium);
+  z-index: var(--pav-z-index-tooltip);
+  transition: top 0.15s ease-in-out;
+}
+
+.skip-link:focus {
+  top: 6px;
+}
+
+/* ===== KEYBOARD NAVIGATION ===== */
+
+/* Enhanced focus for keyboard users */
+.keyboard-user *:focus {
+  outline: 3px solid var(--pav-color-brand-primary);
+  outline-offset: 2px;
+}
+
+/* Focus trap styling for modals and dialogs */
+.focus-trap {
+  position: relative;
+}
+
+.focus-trap::before,
+.focus-trap::after {
+  content: '';
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ===== INTERACTIVE ELEMENT ENHANCEMENTS ===== */
+
+/* Ensure minimum touch targets (44x44px WCAG guideline) */
+button,
+[role="button"],
+a,
+[role="link"],
+input[type="checkbox"],
+input[type="radio"],
+select {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Exception for inline links */
+p a,
+span a,
+li a {
+  min-height: auto;
+  min-width: auto;
+}
+
+/* Improve button accessibility */
+button:disabled,
+[role="button"][aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* ===== MOTION & ANIMATION PREFERENCES ===== */
+
+/* Respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  
+  /* Keep essential feedback animations */
+  .keep-animation,
+  .keep-animation *,
+  :focus-visible {
+    animation-duration: revert !important;
+    transition-duration: revert !important;
+  }
+}
+
+/* ===== HIGH CONTRAST MODE SUPPORT ===== */
+
+@media (prefers-contrast: high) {
+  /* Enhanced focus indicators for high contrast */
+  :focus-visible {
+    outline: 3px solid currentcolor;
+    outline-offset: 3px;
+    background: var(--pav-surface-elevated);
+  }
+  
+  /* Ensure borders are visible */
+  button,
+  input,
+  select,
+  textarea {
+    border: 2px solid currentcolor;
+  }
+  
+  /* Enhanced button states */
+  button:hover,
+  [role="button"]:hover {
+    background: var(--pav-color-interactive-primary);
+    color: var(--pav-color-text-on-primary);
+  }
+}
+
+/* ===== DARK MODE ACCESSIBILITY ===== */
+
+@media (prefers-color-scheme: dark) {
+  /* Enhanced focus visibility in dark mode */
+  :focus-visible {
+    outline-color: var(--pav-color-brand-primary-light);
+    box-shadow: 0 0 0 4px rgb(255 112 67 / 30%);
+  }
+  
+  /* Improved contrast for form elements */
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    outline-color: var(--pav-color-brand-secondary-light);
+    box-shadow: 
+      0 0 0 4px var(--pav-color-brand-secondary-dark);
+  }
+}
+
+/* ===== ACCESSIBILITY ENHANCEMENTS ===== */
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  button {
+    border-width: var(--pav-border-width-2);
+  }
+  
+  nav a[aria-current="page"] {
+    outline: var(--pav-border-width-2) solid currentcolor;
+    outline-offset: var(--pav-space-0_5);
+  }
+  
+  article, aside, dialog {
+    border-width: var(--pav-border-width-2);
+  }
+  [role="button"] {
+    border-width: var(--pav-border-width-2);
+  }
+  
+  [role="navigation"] a[aria-current="page"] {
+    outline: var(--pav-border-width-2) solid currentcolor;
+    outline-offset: var(--pav-space-0_5);
+  }
+  
+  [role="dialog"], [role="complementary"] {
+    border-width: var(--pav-border-width-2);
+  }
+}
+
+/* Reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  button, nav a {
+    transition: none;
+    transform: none;
+    
+    &:hover, &:active {
+      transform: none;
+    }
+  }
+  
+  dialog::backdrop {
+    backdrop-filter: none;
+  }
+  [role="button"], [role="navigation"] a, [role="link"] {
+    transition: none;
+    transform: none;
+    
+    &:hover, &:active {
+      transform: none;
+    }
+  }
+  
+  [role="dialog"]::before {
+    backdrop-filter: none;
+  }
+}
+
+/* ===== FOCUS TRAP SUPPORT FOR DIALOGS ===== */
+
+[role="dialog"] {
+  /* Ensure dialog is in focus trap */
+  &[aria-modal="true"] {
+    /* Hide background content from screen readers when modal */
+    ~ * {
+      aria-hidden: true;
+    }
+  }
+}
+
+/* ===== ARIA LIVE REGIONS ===== */
+
+/* Polite announcements */
+[aria-live="polite"] {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+/* Assertive announcements */
+[aria-live="assertive"] {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+/* ===== SEMANTIC STRUCTURE ENHANCEMENTS ===== */
+
+/* Improve list semantics */
+ul[role="list"],
+ol[role="list"] {
+  list-style: none;
+  padding: 0;
+}
+
+/* Table accessibility improvements */
+table {
+  border-collapse: collapse;
+}
+
+th[scope] {
+  font-weight: var(--pav-font-weight-semibold);
+}
+
+/* Form accessibility improvements */
+fieldset {
+  border: 1px solid var(--pav-color-border-subtle);
+  border-radius: var(--pav-border-radius-xs);
+  padding: var(--pav-space-xs);
+  margin: 0 0 var(--pav-space-xs) 0;
+}
+
+legend {
+  font-weight: var(--pav-font-weight-semibold);
+  padding: 0 var(--pav-space-2xs);
+}
+
+/* ===== ERROR AND STATUS MESSAGING ===== */
+
+/* Error message styling */
+[role="alert"],
+.error-message {
+  color: var(--pav-color-status-error);
+  font-weight: var(--pav-font-weight-medium);
+  padding: var(--pav-space-2xs) var(--pav-space-xs);
+  border-radius: var(--pav-border-radius-xs);
+  background: var(--pav-color-status-error-surface);
+  border: 1px solid var(--pav-color-status-error);
+}
+
+/* Success message styling */
+[role="status"].success,
+.success-message {
+  color: var(--pav-color-status-success);
+  font-weight: var(--pav-font-weight-medium);
+  padding: var(--pav-space-2xs) var(--pav-space-xs);
+  border-radius: var(--pav-border-radius-xs);
+  background: var(--pav-color-status-success-surface);
+  border: 1px solid var(--pav-color-status-success);
+}
+
+/* Warning message styling */
+[role="status"].warning,
+.warning-message {
+  color: var(--pav-color-status-warning);
+  font-weight: var(--pav-font-weight-medium);
+  padding: var(--pav-space-2xs) var(--pav-space-xs);
+  border-radius: var(--pav-border-radius-xs);
+  background: var(--pav-color-status-warning-surface);
+  border: 1px solid var(--pav-color-status-warning);
+}
+
+/* ===== UTILITY CLASSES ===== */
+
+/* Improve text readability */
+.text-balance {
+  text-wrap: balance;
+}
+
+.text-pretty {
+  text-wrap: pretty;
+}
+
+/* Focus management utilities */
+.focus-lock {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: var(--pav-z-index-modal);
+}
+
+.focus-lock.active {
+  pointer-events: auto;
+}
+
+/* High contrast border utility */
+.hc-border {
+  border: 1px solid transparent;
+}
+
+@media (prefers-contrast: high) {
+  .hc-border {
+    border-color: currentcolor;
+  }
+}

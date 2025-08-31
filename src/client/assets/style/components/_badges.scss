@@ -1,0 +1,347 @@
+/**
+ * Badge/Chip Component System
+ * 
+ * Provides consistent styling for small status indicators, labels, and categorization elements.
+ * Uses semantic color tokens for accessibility and supports multiple sizes and variants.
+ * 
+ * Usage Examples:
+ * 
+ * <!-- Basic Badge -->
+ * <span class="badge">New</span>
+ * 
+ * <!-- Semantic Variants -->
+ * <span class="badge badge--success">Complete</span>
+ * <span class="badge badge--warning">Pending</span>
+ * <span class="badge badge--error">Failed</span>
+ * <span class="badge badge--info">Info</span>
+ * 
+ * <!-- Size Variants -->
+ * <span class="badge badge--sm">Small</span>
+ * <span class="badge badge--lg">Large</span>
+ * 
+ * <!-- Style Variants -->
+ * <span class="badge badge--outline">Outlined</span>
+ * <span class="badge badge--solid">Solid</span>
+ * <span class="badge badge--subtle">Subtle</span>
+ * 
+ * <!-- Notification Badge (with count) -->
+ * <span class="badge badge--notification">5</span>
+ * 
+ * <!-- Interactive Badge -->
+ * <button class="badge badge--interactive">Editor</button>
+ * 
+ * <!-- Category Badge -->
+ * <span class="badge badge--category">Music</span>
+ * 
+ * <!-- Removable Badge -->
+ * <span class="badge badge--removable">
+ *   Tag Name
+ *   <button class="badge__remove" aria-label="Remove tag">×</button>
+ * </span>
+ */
+
+@layer components {
+  /* Base Badge Component */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--pav-spacing-xs);
+    padding: var(--pav-spacing-xs) var(--pav-spacing-sm);
+    font-size: var(--pav-font-size-xs);
+    font-weight: var(--pav-font-weight-medium);
+    line-height: 1;
+    border-radius: var(--pav-border-radius-full);
+    border: 1px solid transparent;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+    
+    /* Default neutral styling */
+    background-color: var(--pav-color-neutral-100);
+    color: var(--pav-color-neutral-700);
+    border-color: var(--pav-color-neutral-200);
+    
+    /* Base font size and spacing */
+    --badge-font-size: var(--pav-font-size-xs);
+    --badge-padding-x: var(--pav-spacing-sm);
+    --badge-padding-y: var(--pav-spacing-xs);
+    --badge-gap: var(--pav-spacing-xs);
+  }
+  
+  /* Size Variants */
+  .badge--sm {
+    --badge-font-size: var(--pav-font-size-2xs);
+    --badge-padding-x: var(--pav-spacing-xs);
+    --badge-padding-y: 2px;
+    --badge-gap: 2px;
+    
+    font-size: var(--badge-font-size);
+    padding: var(--badge-padding-y) var(--badge-padding-x);
+    gap: var(--badge-gap);
+  }
+  
+  .badge--lg {
+    --badge-font-size: var(--pav-font-size-sm);
+    --badge-padding-x: var(--pav-spacing-md);
+    --badge-padding-y: var(--pav-spacing-sm);
+    --badge-gap: var(--pav-spacing-sm);
+    
+    font-size: var(--badge-font-size);
+    padding: var(--badge-padding-y) var(--badge-padding-x);
+    gap: var(--badge-gap);
+  }
+  
+  /* Semantic Color Variants */
+  .badge--success {
+    background-color: var(--pav-color-alert-success-bg);
+    color: var(--pav-color-alert-success-text);
+    border-color: var(--pav-color-success);
+  }
+  
+  .badge--warning {
+    background-color: var(--pav-color-alert-warning-bg);
+    color: var(--pav-color-alert-warning-text);
+    border-color: var(--pav-color-warning);
+  }
+  
+  .badge--error {
+    background-color: var(--pav-color-alert-error-bg);
+    color: var(--pav-color-alert-error-text);
+    border-color: var(--pav-color-error);
+  }
+  
+  .badge--info {
+    background-color: var(--pav-color-alert-info-bg);
+    color: var(--pav-color-alert-info-text);
+    border-color: var(--pav-color-info);
+  }
+  
+  /* Brand/Primary Variant */
+  .badge--primary {
+    background-color: var(--pav-color-brand-primary);
+    color: var(--pav-color-text-inverse);
+    border-color: var(--pav-color-brand-primary-dark);
+  }
+  
+  /* Style Variants */
+  .badge--outline {
+    background-color: transparent;
+    border-width: 1px;
+    border-style: solid;
+  }
+  
+  .badge--outline.badge--success {
+    color: var(--pav-color-success);
+    border-color: var(--pav-color-success);
+  }
+  
+  .badge--outline.badge--warning {
+    color: var(--pav-color-warning);
+    border-color: var(--pav-color-warning);
+  }
+  
+  .badge--outline.badge--error {
+    color: var(--pav-color-error);
+    border-color: var(--pav-color-error);
+  }
+  
+  .badge--outline.badge--info {
+    color: var(--pav-color-info);
+    border-color: var(--pav-color-info);
+  }
+  
+  .badge--outline.badge--primary {
+    color: var(--pav-color-brand-primary);
+    border-color: var(--pav-color-brand-primary);
+  }
+  
+  .badge--solid {
+    border-color: transparent;
+  }
+  
+  .badge--subtle {
+    background-color: var(--pav-color-neutral-50);
+    color: var(--pav-color-neutral-600);
+    border-color: transparent;
+  }
+  
+  /* Notification Badge (for counts) */
+  .badge--notification {
+    min-width: 20px;
+    height: 20px;
+    padding: 0 var(--pav-spacing-xs);
+    background-color: var(--pav-color-error);
+    color: var(--pav-color-text-inverse);
+    border-radius: var(--pav-border-radius-full);
+    font-size: var(--pav-font-size-2xs);
+    font-weight: var(--pav-font-weight-bold);
+    justify-content: center;
+    line-height: 1;
+  }
+  
+  /* Interactive Badge (clickable) */
+  .badge--interactive {
+    cursor: pointer;
+    border: none;
+    background: none;
+    font: inherit;
+    
+    &:hover {
+      transform: translateY(-1px);
+      box-shadow: var(--pav-shadow-sm);
+    }
+    
+    &:focus {
+      outline: 2px solid var(--pav-color-border-focus);
+      outline-offset: 2px;
+    }
+    
+    &:active {
+      transform: translateY(0);
+    }
+  }
+  
+  /* Category Badge */
+  .badge--category {
+    background-color: var(--pav-color-brand-primary-light);
+    color: var(--pav-color-brand-primary-dark);
+    border-color: var(--pav-color-brand-primary);
+    font-weight: var(--pav-font-weight-medium);
+  }
+  
+  /* Status Badges for File Upload/Processing */
+  .badge--pending {
+    background-color: var(--pav-color-neutral-100);
+    color: var(--pav-color-neutral-700);
+    border-color: var(--pav-color-neutral-300);
+  }
+  
+  .badge--uploading {
+    background-color: var(--pav-color-alert-info-bg);
+    color: var(--pav-color-alert-info-text);
+    border-color: var(--pav-color-info);
+  }
+  
+  .badge--complete {
+    background-color: var(--pav-color-alert-success-bg);
+    color: var(--pav-color-alert-success-text);
+    border-color: var(--pav-color-success);
+  }
+  
+  .badge--failed {
+    background-color: var(--pav-color-alert-error-bg);
+    color: var(--pav-color-alert-error-text);
+    border-color: var(--pav-color-error);
+  }
+  
+  /* Removable Badge */
+  .badge--removable {
+    padding-right: var(--pav-spacing-xs);
+  }
+  
+  .badge__remove {
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    padding: 0;
+    margin-left: var(--pav-spacing-xs);
+    line-height: 1;
+    opacity: 0.7;
+    font-size: 14px;
+    
+    &:hover {
+      opacity: 1;
+    }
+    
+    &:focus {
+      outline: 1px solid currentcolor;
+      outline-offset: 1px;
+      border-radius: 2px;
+    }
+  }
+  
+  /* Legacy Support - maintain old class names during migration */
+  .relationship-badge {
+    @extend .badge;
+    @extend .badge--primary;
+    @extend .badge--sm;
+  }
+  
+  .file-status {
+    @extend .badge;
+    @extend .badge--sm;
+    
+    &.status-pending {
+      @extend .badge--pending;
+    }
+    
+    &.status-uploading {
+      @extend .badge--uploading;
+    }
+    
+    &.status-complete {
+      @extend .badge--complete;
+    }
+    
+    &.status-failed {
+      @extend .badge--failed;
+    }
+  }
+  
+  /* Dark Mode Adaptations */
+  @media (prefers-color-scheme: dark) {
+    .badge {
+      background-color: var(--pav-color-neutral-800);
+      color: var(--pav-color-neutral-200);
+      border-color: var(--pav-color-neutral-700);
+    }
+    
+    .badge--subtle {
+      background-color: var(--pav-color-neutral-900);
+      color: var(--pav-color-neutral-400);
+    }
+    
+    .badge--category {
+      background-color: var(--pav-color-brand-primary-dark);
+      color: var(--pav-color-brand-primary-light);
+    }
+  }
+  
+  /* Responsive Adjustments */
+  @media (width <= 480px) {
+    .badge--lg {
+      --badge-font-size: var(--pav-font-size-xs);
+      --badge-padding-x: var(--pav-spacing-sm);
+      --badge-padding-y: var(--pav-spacing-xs);
+    }
+  }
+}
+
+/* Utility Classes for Badge Positioning */
+@layer utilities {
+  .badge-container {
+    position: relative;
+    display: inline-block;
+  }
+  
+  .badge-container .badge--notification {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    z-index: var(--pav-z-index-dropdown);
+  }
+  
+  .badge-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--pav-spacing-xs);
+    align-items: center;
+  }
+  
+  .badge-stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--pav-spacing-xs);
+    align-items: flex-start;
+  }
+}

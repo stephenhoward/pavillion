@@ -10,7 +10,9 @@
   "change_email_form": {
       "title": "Change your email address",
       "email_placeholder": "new email address",
+      "email_help_text": "Enter your new email address",
       "password_placeholder": "your password",
+      "password_help_text": "Enter your current password to confirm this change",
       "change_email_button": "Change Email",
       "close_button": "Cancel",
       "change_email_failed_message": "Failed to change email address"

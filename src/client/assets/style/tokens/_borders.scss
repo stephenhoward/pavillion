@@ -1,0 +1,109 @@
+/**
+ * Border Design Tokens
+ * Border widths, radii, styles, and colors
+ */
+
+:root {
+  /* Border Widths */
+  --pav-border-width-0: 0;
+  --pav-border-width-1: 1px;
+  --pav-border-width-2: 2px;
+  --pav-border-width-4: 4px;
+  --pav-border-width-8: 8px;
+  
+  /* Border Radius Scale (progressive from subtle to current 20px standard) */
+  --pav-border-radius-none: 0;
+  --pav-border-radius-2xs: 0.125rem;   /* 2px - very subtle */
+  --pav-border-radius-xs: 0.25rem;     /* 4px - subtle */
+  --pav-border-radius-sm: 0.375rem;    /* 6px - small elements */
+  --pav-border-radius-md: 0.5rem;      /* 8px - medium elements */
+  --pav-border-radius-lg: 0.75rem;     /* 12px - large elements */
+  --pav-border-radius-xl: 1rem;        /* 16px - extra large */
+  --pav-border-radius-2xl: 1.25rem;    /* 20px - current app standard */
+  --pav-border-radius-3xl: 1.5rem;     /* 24px - very large */
+  --pav-border-radius-full: 9999px;    /* Circular */
+  
+  /* Semantic Border Radius Aliases */
+  --pav-border-radius-button: var(--pav-border-radius-2xl);      /* 20px - current standard */
+  --pav-border-radius-input: var(--pav-border-radius-full);       /* Circular */
+  --pav-border-radius-card: var(--pav-border-radius-lg);         /* 12px - cards/panels */
+  --pav-border-radius-modal: var(--pav-border-radius-xl);        /* 16px - modals */
+  --pav-border-radius-badge: var(--pav-border-radius-full);      /* Pill shape */
+  --pav-border-radius-avatar: var(--pav-border-radius-full);     /* Circular */
+  --pav-border-radius-chip: var(--pav-border-radius-lg);         /* 12px - chips/tags */
+  
+  /* Border Styles */
+  --pav-border-style-solid: solid;
+  --pav-border-style-dashed: dashed;
+  --pav-border-style-dotted: dotted;
+  --pav-border-style-none: none;
+  
+  /* Border Colors (referencing color tokens) */
+  --pav-border-color-subtle: var(--pav-color-neutral-200);
+  --pav-border-color-medium: var(--pav-color-neutral-300);
+  --pav-border-color-strong: var(--pav-color-neutral-400);
+  --pav-border-color-brand: var(--pav-color-brand-primary);
+  --pav-border-color-success: var(--pav-color-success-500);
+  --pav-border-color-warning: var(--pav-color-warning-500);
+  --pav-border-color-error: var(--pav-color-error-500);
+  --pav-border-color-focus: var(--pav-color-brand-secondary);
+}
+
+/* Dark mode border color overrides */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --pav-border-color-subtle: var(--pav-color-neutral-700);
+    --pav-border-color-medium: var(--pav-color-neutral-600);
+    --pav-border-color-strong: var(--pav-color-neutral-500);
+  }
+}
+
+/* SCSS Variable Mirrors for Build-Time Logic */
+
+// Border widths
+$pav-border-widths: (
+  0: 0,
+  1: 1px,
+  2: 2px,
+  4: 4px,
+  8: 8px
+);
+
+// Border radius scale
+$pav-border-radii: (
+  none: 0,
+  '2xs': 0.125rem,
+  xs: 0.25rem,
+  sm: 0.375rem,
+  md: 0.5rem,
+  lg: 0.75rem,
+  xl: 1rem,
+  '2xl': 1.25rem,
+  '3xl': 1.5rem,
+  full: 9999px
+);
+
+// Semantic border radius mapping
+$pav-border-radius-semantic: (
+  button: '2xl',
+  input: '2xl',
+  card: lg,
+  modal: xl,
+  badge: full,
+  avatar: full,
+  chip: lg
+);
+
+// Border utility mixin
+@mixin pav-border($width: 1, $style: solid, $color: medium) {
+  $border-width: map-get($pav-border-widths, $width);
+
+  border: $border-width $style var(--pav-border-color-#{$color});
+}
+
+// Border radius utility mixin
+@mixin pav-border-radius($size: md) {
+  $radius: map-get($pav-border-radii, $size);
+
+  border-radius: $radius;
+}

@@ -1,61 +1,49 @@
-<style scoped lang="scss">
-@use '../../../assets/mixins' as *;
-
-input[type="text"],input[type="password"],textarea {
-    font-size: 14pt;
-    background-color: rgba(255,255,255,0.5);
-    margin: 6px 0px;
-    grid-column: 1 / span 2;
-    border: 1px solid #ccc;
-    border-radius: $form-input-border-radius;
-    padding: 8px 18px;
-    display: block;
-    &:focus {
-        border: 1px solid rgb(73, 111, 186);
-    }
-}
-
-button {
-    display: inline-block;
-    margin-right: 10px;
-}
-
-
-@include dark-mode {
-
-    input[type="text"],textarea {
-        background-color: rgba(100,100,100,0.2);
-        border: 1px solid #777;
-        color: $dark-mode-text;
-        &:focus {
-            border: 1px solid #abd;
-        }
-    }
-}
-
-</style>
-
 <template>
   <ModalLayout :title="t('title')" @close="$emit('close')">
-    <div class="invite">
-      <div class="error" v-if="state.err">{{ state.err }}</div>
-      <input type="text"
-             name="email"
-             v-bind:placeholder="t('email_placeholder')"
-             v-model="state.email"/>
-      <button type="submit" class="primary" @click="sendInvite(state.email)">{{ t("invite_button") }}</button>
-      <button type="button" @click="$emit('close')">{{ t("close_button") }}</button>
-    </div>
+    <form class="invite"
+          @submit.prevent="sendInvite(state.email)"
+          novalidate>
+      <div class="error"
+           v-if="state.err"
+           role="alert"
+           aria-live="polite">
+        <span id="invite-error">{{ state.err }}</span>
+      </div>
+      <fieldset>
+        <legend class="sr-only">{{ t('title') }}</legend>
+        <div class="form-group">
+          <label for="invite-email" class="sr-only">{{ t('email_placeholder') }}</label>
+          <input type="email"
+                 id="invite-email"
+                 name="email"
+                 class="form-control"
+                 :class="{ 'form-control--error': state.err }"
+                 v-bind:placeholder="t('email_placeholder')"
+                 v-model="state.email"
+                 :aria-invalid="state.err ? 'true' : 'false'"
+                 :aria-describedby="state.err ? 'invite-error' : undefined"
+                 required/>
+        </div>
+        <div class="form-actions">
+          <button type="submit"
+                  class="primary"
+                  :aria-describedby="state.err ? 'invite-error' : undefined">
+            {{ t("invite_button") }}
+          </button>
+          <button type="button" @click="$emit('close')">{{ t("close_button") }}</button>
+        </div>
+      </fieldset>
+    </form>
   </ModalLayout>
 </template>
 
 <script setup>
 import { reactive } from 'vue';
 import { useTranslation } from 'i18next-vue';
-import AccountInvitation from '../../../../common/model/invitation';
-import { useInvitationStore } from '../../../stores/invitationStore';
-import ModelService from '../../../service/models';
-import ModalLayout from '../../modal.vue';
+import AccountInvitation from '@/common/model/invitation';
+import { useInvitationStore } from '@/client/stores/invitationStore';
+import ModelService from '@/client/service/models';
+import ModalLayout from '@/client/components/common/modal.vue';
 
 const emit = defineEmits(['close']);
 const invitationStore = useInvitationStore();

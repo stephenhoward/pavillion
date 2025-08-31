@@ -1,0 +1,53 @@
+@import '../components/cards';
+@import '../components/stacks';
+
+/* Logged Out Layout Component */
+.logged-out {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--pav-space-xl);
+  min-height: 100vh;
+
+  footer.logo,header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12pt;
+    text-align: center;
+    h1 {
+          font-size: 12pt;
+    }
+  }
+  div.pavillion-logo {
+    display: inline-block;
+    background-color: var(--pav-color-text-primary);
+    -webkit-mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    -webkit-mask-image: url('@/client/assets/pavillion-logo.svg');
+    mask-size: contain;
+    mask-repeat: no-repeat;
+    mask-image: url('@/client/assets/pavillion-logo.svg');
+    width: 24px;
+    height: 24px;
+    margin-right: 4px;
+  }
+  .welcome-card {
+    @include card;
+    @include vstack;
+    max-width: 400px;
+
+    input[type="text"],
+    input[type="email"],
+    input[type="password"] {
+      width: 100%;
+      border-radius: var(--pav-border-radius-full);
+      border: 1px solid var(--pav-border-color-medium);
+      padding: var(--pav-space-sm) var(--pav-space-md);
+      font-size: var(--pav-font-size-base);
+      background-color: var(--pav-surface-primary);
+    }
+  }
+}
+

@@ -1,0 +1,166 @@
+/**
+ * Spacing Design Tokens
+ * 4/8-based spacing scale for consistent rhythm and visual hierarchy
+ * Base unit: 4px (0.25rem) for fine-grained control with 8px (0.5rem) primary rhythm
+ */
+
+:root {
+  /* Base Spacing Scale - 4px increments for precision */
+  --pav-space-0: 0;
+  --pav-space-px: 1px;        /* For borders and fine details */
+  --pav-space-0_5: 0.125rem;  /* 2px - Half step for micro adjustments */
+  --pav-space-1: 0.25rem;     /* 4px - Base unit */
+  --pav-space-1_5: 0.375rem;  /* 6px - 1.5 base units */
+  --pav-space-2: 0.5rem;      /* 8px - Primary rhythm unit */
+  --pav-space-2_5: 0.625rem;  /* 10px - Between rhythm steps */
+  --pav-space-3: 0.75rem;     /* 12px - 1.5 rhythm units */
+  --pav-space-3_5: 0.875rem;  /* 14px - Text line spacing */
+  --pav-space-4: 1rem;        /* 16px - Standard component spacing */
+  --pav-space-5: 1.25rem;     /* 20px - Text baseline rhythm */
+  --pav-space-6: 1.5rem;      /* 24px - Section spacing */
+  --pav-space-7: 1.75rem;     /* 28px - Extended spacing */
+  --pav-space-8: 2rem;        /* 32px - Card padding, button heights */
+  --pav-space-9: 2.25rem;     /* 36px - Large component spacing */
+  --pav-space-10: 2.5rem;     /* 40px - Form sections */
+  --pav-space-11: 2.75rem;    /* 44px - Extended sections */
+  --pav-space-12: 3rem;       /* 48px - Page sections */
+  --pav-space-14: 3.5rem;     /* 56px - Large content blocks */
+  --pav-space-16: 4rem;       /* 64px - Page headers */
+  --pav-space-20: 5rem;       /* 80px - Major page sections */
+  --pav-space-24: 6rem;       /* 96px - Large layouts */
+  --pav-space-28: 7rem;       /* 112px - Extra large spacing */
+  --pav-space-32: 8rem;       /* 128px - Maximum recommended spacing */
+  
+  /* Semantic Spacing Aliases - Use these for consistent component spacing */
+  --pav-space-xs: var(--pav-space-1);    /* 4px - Tight spacing (badges, chips) */
+  --pav-space-sm: var(--pav-space-2);    /* 8px - Small spacing (button padding) */
+  --pav-space-md: var(--pav-space-4);    /* 16px - Default spacing (cards, forms) */
+  --pav-space-lg: var(--pav-space-6);    /* 24px - Large spacing (sections) */
+  --pav-space-xl: var(--pav-space-8);    /* 32px - Extra large (major components) */
+  --pav-space-2xl: var(--pav-space-12);  /* 48px - Section divisions */
+  --pav-space-3xl: var(--pav-space-16);  /* 64px - Page-level spacing */
+  
+  /* Component-Specific Spacing Tokens */
+  --pav-space-button-padding-y: var(--pav-space-2);      /* 8px vertical button padding */
+  --pav-space-button-padding-x: var(--pav-space-4);      /* 16px horizontal button padding */
+  --pav-space-button-gap: var(--pav-space-2);            /* 8px gap between buttons */
+  --pav-space-input-padding-y: var(--pav-space-2_5);     /* 10px vertical input padding */
+  --pav-space-input-padding-x: var(--pav-space-3);       /* 12px horizontal input padding */
+  --pav-space-form-group-gap: var(--pav-space-4);        /* 16px between form groups */
+  --pav-space-card-padding: var(--pav-space-6);          /* 24px card internal padding */
+  --pav-space-card-gap: var(--pav-space-4);              /* 16px gap between cards */
+  --pav-space-section-padding-y: var(--pav-space-8);     /* 32px vertical section padding */
+  --pav-space-section-padding-x: var(--pav-space-6);     /* 24px horizontal section padding */
+  --pav-space-section-gap: var(--pav-space-12);          /* 48px gap between sections */
+  --pav-space-page-padding-x: var(--pav-space-4);        /* 16px page horizontal padding (mobile) */
+  --pav-space-page-padding-y: var(--pav-space-6);        /* 24px page vertical padding */
+  
+  /* Layout Grid Spacing */
+  --pav-space-grid-gap: var(--pav-space-4);              /* 16px default grid gap */
+  --pav-space-grid-gap-sm: var(--pav-space-2);           /* 8px tight grid gap */
+  --pav-space-grid-gap-lg: var(--pav-space-6);           /* 24px loose grid gap */
+  
+  /* Typography Spacing */
+  --pav-space-text-line-height: 1.5;                     /* 1.5x line height */
+  --pav-space-text-paragraph-gap: var(--pav-space-4);    /* 16px paragraph spacing */
+  --pav-space-text-heading-gap: var(--pav-space-6);      /* 24px heading margins */
+}
+
+/* Responsive Spacing Adjustments */
+@media (width >= 768px) {
+  :root {
+    /* Increase page padding on larger screens */
+    --pav-space-page-padding-x: var(--pav-space-6);      /* 24px page horizontal padding (tablet+) */
+    --pav-space-section-padding-x: var(--pav-space-8);   /* 32px section horizontal padding */
+  }
+}
+
+@media (width >= 1024px) {
+  :root {
+    /* Further increase spacing on desktop */
+    --pav-space-page-padding-x: var(--pav-space-8);      /* 32px page horizontal padding (desktop) */
+    --pav-space-section-padding-x: var(--pav-space-12);  /* 48px section horizontal padding */
+    --pav-space-section-gap: var(--pav-space-16);        /* 64px gap between sections */
+  }
+}
+
+/* SCSS Variable Mirrors for gradual migration */
+
+/* Base Spacing Scale */
+$space-0: var(--pav-space-0);
+$space-px: var(--pav-space-px);
+$space-0_5: var(--pav-space-0_5);
+$space-1: var(--pav-space-1);
+$space-1_5: var(--pav-space-1_5);
+$space-2: var(--pav-space-2);
+$space-2_5: var(--pav-space-2_5);
+$space-3: var(--pav-space-3);
+$space-3_5: var(--pav-space-3_5);
+$space-4: var(--pav-space-4);
+$space-5: var(--pav-space-5);
+$space-6: var(--pav-space-6);
+$space-7: var(--pav-space-7);
+$space-8: var(--pav-space-8);
+$space-9: var(--pav-space-9);
+$space-10: var(--pav-space-10);
+$space-11: var(--pav-space-11);
+$space-12: var(--pav-space-12);
+$space-14: var(--pav-space-14);
+$space-16: var(--pav-space-16);
+$space-20: var(--pav-space-20);
+$space-24: var(--pav-space-24);
+$space-28: var(--pav-space-28);
+$space-32: var(--pav-space-32);
+
+/* Semantic Spacing */
+$space-xs: var(--pav-space-xs);
+$space-sm: var(--pav-space-sm);
+$space-md: var(--pav-space-md);
+$space-lg: var(--pav-space-lg);
+$space-xl: var(--pav-space-xl);
+$space-2xl: var(--pav-space-2xl);
+$space-3xl: var(--pav-space-3xl);
+
+/* Component Spacing */
+$space-button-padding-y: var(--pav-space-button-padding-y);
+$space-button-padding-x: var(--pav-space-button-padding-x);
+$space-input-padding-y: var(--pav-space-input-padding-y);
+$space-input-padding-x: var(--pav-space-input-padding-x);
+$space-card-padding: var(--pav-space-card-padding);
+$space-section-padding-y: var(--pav-space-section-padding-y);
+$space-section-padding-x: var(--pav-space-section-padding-x);
+
+/**
+ * Spacing System Guidelines:
+ * 
+ * 1. Use CSS custom properties (--pav-space-*) for runtime flexibility
+ * 2. Base unit is 4px (0.25rem) with 8px (0.5rem) primary rhythm
+ * 3. Prefer semantic tokens (xs, sm, md, lg, xl) over numeric values
+ * 4. Use component-specific tokens for consistent component spacing
+ * 5. All spacing is rem-based for accessibility and responsive scaling
+ * 
+ * Spacing Philosophy - 4/8 System:
+ * - 4px increments provide fine-grained control for precise alignment
+ * - 8px rhythm creates visual consistency and comfortable reading flow
+ * - Larger jumps (16px, 24px, 32px) establish clear hierarchy
+ * - Component tokens ensure consistency across similar UI elements
+ * 
+ * Common Usage Patterns:
+ * - xs (4px): Tight spacing within components (badge padding, icon gaps)
+ * - sm (8px): Standard internal spacing (button padding, form elements)
+ * - md (16px): Default component spacing (card padding, form groups)
+ * - lg (24px): Section spacing and larger component gaps
+ * - xl (32px): Major layout spacing (page sections, card gaps)
+ * - 2xl+ (48px+): Page-level spacing and major content divisions
+ * 
+ * Responsive Behavior:
+ * - Mobile: Tighter spacing for smaller screens
+ * - Tablet: Moderate increase in page and section padding
+ * - Desktop: Generous spacing for comfortable reading and interaction
+ * 
+ * Best Practices:
+ * - Use component tokens when available (e.g., card-padding vs. manual spacing)
+ * - Maintain consistent spacing within component families
+ * - Test spacing at different screen sizes and zoom levels
+ * - Consider touch targets on mobile (minimum 44px for interactive elements)
+ */

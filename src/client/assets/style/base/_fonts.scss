@@ -1,0 +1,191 @@
+/**
+ * Font Face Declarations
+ * Creato Display font family with complete weight scale (100-800)
+ * Organized with proper fallbacks and performance optimizations
+ */
+
+/* ===== CREATO DISPLAY NORMAL (UPRIGHT) STYLES ===== */
+
+@font-face {
+  font-family: 'Creato Display';
+  src: url('/src/client/assets/fonts/creato_display/CreatoDisplay-Thin.otf') format('opentype');
+  font-weight: 100;
+  font-style: normal;
+  font-display: swap; /* Optimize loading performance */
+  unicode-range: U+0020-007F, U+00A0-00FF, U+0100-017F; /* Latin character support */
+}
+
+@font-face {
+  font-family: 'Creato Display';
+  src: url('/src/client/assets/fonts/creato_display/CreatoDisplay-Light.otf') format('opentype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0020-007F, U+00A0-00FF, U+0100-017F;
+}
+
+@font-face {
+  font-family: 'Creato Display';
+  src: url('/src/client/assets/fonts/creato_display/CreatoDisplay-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0020-007F, U+00A0-00FF, U+0100-017F;
+}
+
+@font-face {
+  font-family: 'Creato Display';
+  src: url('/src/client/assets/fonts/creato_display/CreatoDisplay-Medium.otf') format('opentype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0020-007F, U+00A0-00FF, U+0100-017F;
+}
+
+@font-face {
+  font-family: 'Creato Display';
+  src: url('/src/client/assets/fonts/creato_display/CreatoDisplay-Bold.otf') format('opentype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0020-007F, U+00A0-00FF, U+0100-017F;
+}
+
+@font-face {
+  font-family: 'Creato Display';
+  src: url('/src/client/assets/fonts/creato_display/CreatoDisplay-ExtraBold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0020-007F, U+00A0-00FF, U+0100-017F;
+}
+
+@font-face {
+  font-family: 'Creato Display';
+  src: url('/src/client/assets/fonts/creato_display/CreatoDisplay-Black.otf') format('opentype');
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0020-007F, U+00A0-00FF, U+0100-017F;
+}
+
+/* ===== CREATO DISPLAY ITALIC STYLES ===== */
+
+@font-face {
+  font-family: 'Creato Display';
+  src: url('/src/client/assets/fonts/creato_display/CreatoDisplay-ThinItalic.otf') format('opentype');
+  font-weight: 100;
+  font-style: italic;
+  font-display: swap;
+  unicode-range: U+0020-007F, U+00A0-00FF, U+0100-017F;
+}
+
+@font-face {
+  font-family: 'Creato Display';
+  src: url('/src/client/assets/fonts/creato_display/CreatoDisplay-LightItalic.otf') format('opentype');
+  font-weight: 300;
+  font-style: italic;
+  font-display: swap;
+  unicode-range: U+0020-007F, U+00A0-00FF, U+0100-017F;
+}
+
+@font-face {
+  font-family: 'Creato Display';
+  src: url('/src/client/assets/fonts/creato_display/CreatoDisplay-RegularItalic.otf') format('opentype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+  unicode-range: U+0020-007F, U+00A0-00FF, U+0100-017F;
+}
+
+@font-face {
+  font-family: 'Creato Display';
+  src: url('/src/client/assets/fonts/creato_display/CreatoDisplay-MediumItalic.otf') format('opentype');
+  font-weight: 500;
+  font-style: italic;
+  font-display: swap;
+  unicode-range: U+0020-007F, U+00A0-00FF, U+0100-017F;
+}
+
+@font-face {
+  font-family: 'Creato Display';
+  src: url('/src/client/assets/fonts/creato_display/CreatoDisplay-BoldItalic.otf') format('opentype');
+  font-weight: 600;
+  font-style: italic;
+  font-display: swap;
+  unicode-range: U+0020-007F, U+00A0-00FF, U+0100-017F;
+}
+
+@font-face {
+  font-family: 'Creato Display';
+  src: url('/src/client/assets/fonts/creato_display/CreatoDisplay-ExtraBoldItalic.otf') format('opentype');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+  unicode-range: U+0020-007F, U+00A0-00FF, U+0100-017F;
+}
+
+@font-face {
+  font-family: 'Creato Display';
+  src: url('/src/client/assets/fonts/creato_display/CreatoDisplay-BlackItalic.otf') format('opentype');
+  font-weight: 800;
+  font-style: italic;
+  font-display: swap;
+  unicode-range: U+0020-007F, U+00A0-00FF, U+0100-017F;
+}
+
+/* ===== FONT PERFORMANCE OPTIMIZATIONS ===== */
+
+/* Preload critical font weights for better performance */
+
+/* These should be added to the HTML head for production */
+
+/*
+<link rel="preload" href="/src/client/assets/fonts/creato_display/CreatoDisplay-Regular.otf" as="font" type="font/otf" crossorigin>
+<link rel="preload" href="/src/client/assets/fonts/creato_display/CreatoDisplay-Medium.otf" as="font" type="font/otf" crossorigin>
+<link rel="preload" href="/src/client/assets/fonts/creato_display/CreatoDisplay-Bold.otf" as="font" type="font/otf" crossorigin>
+*/
+
+/* ===== FONT FEATURE SETTINGS ===== */
+
+/* Configure OpenType features for Creato Display */
+.font-features-default {
+  font-feature-settings: 
+    "kern" 1,      /* Enable kerning */
+    "liga" 1,      /* Enable ligatures */
+    "calt" 1;      /* Enable contextual alternates */
+}
+
+.font-features-numeric {
+  font-feature-settings: 
+    "kern" 1,
+    "liga" 1,
+    "tnum" 1,      /* Tabular numbers */
+    "lnum" 1;      /* Lining numbers */
+}
+
+.font-features-small-caps {
+  font-feature-settings: 
+    "kern" 1,
+    "liga" 1,
+    "smcp" 1;      /* Small caps */
+}
+
+/* ===== FONT FALLBACK STRATEGIES ===== */
+
+/* System font fallback stack optimization */
+.font-system-fallback {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* Font loading states */
+.font-loading {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
+}
+
+.font-loaded {
+  font-family: var(--pav-font-family-primary);
+  opacity: 1;
+}

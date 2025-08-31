@@ -13,7 +13,7 @@
         <p><strong>{{ t('message_label') }}:</strong></p>
         <pre>{{ application.message }}</pre>
       </div>
-      <div class="action-buttons">
+      <footer class="action-buttons hstack hstack--end">
         <button
           type="button"
           class="accept"
@@ -43,7 +43,7 @@
           <span v-if="processing === 'silent-reject'">{{ t('processing') }}</span>
           <span v-else>{{ t('silent_reject') }}</span>
         </button>
-      </div>
+      </footer>
     </div>
   </ModalLayout>
 </template>
@@ -52,7 +52,7 @@
 import { ref } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
-import ModalLayout from '../../modal.vue';
+import ModalLayout from '@/client/components/common/modal.vue';
 
 const props = defineProps({
   application: {
@@ -140,32 +140,4 @@ const formatDate = (date) => {
   color: #666;
 }
 
-.action-buttons {
-  margin-top: 20px;
-  display: flex;
-  gap: 10px;
-
-  .accept {
-    background-color: #4CAF50;
-    color: white;
-    &:hover {
-      background-color: darken(#4CAF50, 10%);
-    }
-  }
-
-  .reject, .silent-reject {
-    background-color: #F44336;
-    color: white;
-    &:hover {
-      background-color: darken(#F44336, 10%);
-    }
-  }
-
-  .silent-reject {
-    background-color: #FF9800;
-    &:hover {
-      background-color: darken(#FF9800, 10%);
-    }
-  }
-}
 </style>

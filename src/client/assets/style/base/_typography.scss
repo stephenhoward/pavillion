@@ -1,0 +1,269 @@
+/**
+ * Typography Base Styles
+ * Foundational typography patterns using Creato Display font family
+ * Complete weight scale integration and semantic hierarchy
+ */
+
+/* ===== GLOBAL TYPOGRAPHY DEFAULTS ===== */
+
+/* Apply default font features to all text */
+html {
+  font-feature-settings: 
+    "kern" 1,      /* Enable kerning for better letter spacing */
+    "liga" 1,      /* Enable ligatures */
+    "calt" 1;      /* Enable contextual alternates */
+}
+
+/* Optimize text rendering for Creato Display */
+body {
+  font-family: var(--pav-font-family-primary);
+  font-weight: var(--pav-font-weight-regular);
+  font-size: var(--pav-font-size-body);
+  line-height: var(--pav-line-height-body);
+  color: var(--pav-text-primary);
+  
+  /* Enhance text rendering */
+  text-rendering: optimizelegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ===== SEMANTIC TYPOGRAPHY HIERARCHY ===== */
+
+/* Display text - largest, for hero sections */
+.text-display,
+.display {
+  font-size: var(--pav-font-size-display);
+  font-weight: var(--pav-font-weight-bold);
+  line-height: var(--pav-line-height-display);
+  letter-spacing: var(--pav-letter-spacing-display);
+}
+
+/* Heading hierarchy with semantic weight progression */
+h1 {
+  font-size: var(--pav-font-size-h1);
+  font-weight: var(--pav-font-weight-light);        /* 300 */
+  line-height: var(--pav-line-height-heading);
+  letter-spacing: var(--pav-letter-spacing-heading);
+}
+
+h2 {
+  font-size: var(--pav-font-size-h2);
+  font-weight: var(--pav-font-weight-light);        /* 300 */
+  line-height: var(--pav-line-height-heading);
+  letter-spacing: var(--pav-letter-spacing-heading);
+}
+
+h3 {
+  font-size: var(--pav-font-size-h3);
+  font-weight: var(--pav-font-weight-light);       /* 300 */
+  line-height: var(--pav-line-height-heading);
+  letter-spacing: var(--pav-letter-spacing-heading);
+}
+
+h4 {
+  font-size: var(--pav-font-size-h4);
+  font-weight: var(--pav-font-weight-semibold);    /* 600 */
+  line-height: var(--pav-line-height-heading);
+  letter-spacing: var(--pav-letter-spacing-heading);
+}
+
+h5 {
+  font-size: var(--pav-font-size-h5);
+  font-weight: var(--pav-font-weight-medium);      /* 500 */
+  line-height: var(--pav-line-height-heading);
+  letter-spacing: var(--pav-letter-spacing-heading);
+}
+
+h6 {
+  font-size: var(--pav-font-size-h6);
+  font-weight: var(--pav-font-weight-medium);      /* 500 */
+  line-height: var(--pav-line-height-heading);
+  letter-spacing: var(--pav-letter-spacing-heading);
+}
+
+/* Body text variants */
+.text-subtitle, .subtitle {
+  font-size: var(--pav-font-size-subtitle);
+  font-weight: var(--pav-font-weight-medium);      /* 500 */
+  line-height: var(--pav-line-height-body);
+  letter-spacing: var(--pav-letter-spacing-body);
+}
+
+.text-body-large, .body-large {
+  font-size: var(--pav-font-size-body-large);
+  font-weight: var(--pav-font-weight-regular);     /* 400 */
+  line-height: var(--pav-line-height-body);
+  letter-spacing: var(--pav-letter-spacing-body);
+}
+
+.text-body, .body, p {
+  font-size: var(--pav-font-size-body);
+  font-weight: var(--pav-font-weight-regular);     /* 400 */
+  line-height: var(--pav-line-height-body);
+  letter-spacing: var(--pav-letter-spacing-body);
+}
+
+.text-small, .small {
+  font-size: var(--pav-font-size-small);
+  font-weight: var(--pav-font-weight-regular);     /* 400 */
+  line-height: var(--pav-line-height-caption);
+  letter-spacing: var(--pav-letter-spacing-caption);
+}
+
+.text-caption, .caption {
+  font-size: var(--pav-font-size-caption);
+  font-weight: var(--pav-font-weight-regular);     /* 400 */
+  line-height: var(--pav-line-height-caption);
+  letter-spacing: var(--pav-letter-spacing-caption);
+}
+
+/* ===== FONT WEIGHT UTILITIES ===== */
+
+/* Complete Creato Display weight scale (available weights) */
+.font-thin { 
+  font-weight: var(--pav-font-weight-thin);        /* 100 */
+}
+
+.font-light { 
+  font-weight: var(--pav-font-weight-light);       /* 300 */
+}
+
+.font-normal, .font-regular { 
+  font-weight: var(--pav-font-weight-regular);     /* 400 */
+}
+
+.font-medium { 
+  font-weight: var(--pav-font-weight-medium);      /* 500 */
+}
+
+.font-semibold { 
+  font-weight: var(--pav-font-weight-semibold);    /* 600 */
+}
+
+.font-bold { 
+  font-weight: var(--pav-font-weight-bold);        /* 700 */
+}
+
+.font-extrabold, .font-black { 
+  font-weight: var(--pav-font-weight-extrabold);   /* 800 */
+}
+
+/* Note: ExtraLight (200) weight not available in current Creato Display font files */
+.font-extralight { 
+  font-weight: var(--pav-font-weight-light);       /* Fallback to 300 */
+}
+
+/* ===== TEXT COLOR UTILITIES ===== */
+
+.text-primary { 
+  color: var(--pav-text-primary); 
+}
+
+.text-secondary { 
+  color: var(--pav-text-secondary); 
+}
+
+.text-muted { 
+  color: var(--pav-text-muted); 
+}
+
+.text-inverse { 
+  color: var(--pav-text-inverse); 
+}
+
+.text-brand { 
+  color: var(--pav-color-brand-primary); 
+}
+
+.text-success { 
+  color: var(--pav-color-success-600); 
+}
+
+.text-warning { 
+  color: var(--pav-color-warning-600); 
+}
+
+.text-error { 
+  color: var(--pav-color-error-600); 
+}
+
+/* ===== SPECIALIZED TYPOGRAPHY PATTERNS ===== */
+
+/* Numeric text optimized for tables and data */
+.text-numeric {
+  font-feature-settings: 
+    "kern" 1,
+    "tnum" 1,      /* Tabular numbers */
+    "lnum" 1;      /* Lining numbers */
+
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* All caps text with proper spacing */
+.text-caps {
+  text-transform: uppercase;
+  letter-spacing: var(--pav-letter-spacing-wider);
+  font-weight: var(--pav-font-weight-medium);
+}
+
+/* Code and monospace text */
+.text-mono {
+  font-family: var(--pav-font-family-mono);
+  font-feature-settings: "liga" 0; /* Disable ligatures for code */
+}
+
+/* Truncated text with ellipsis */
+.text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Multi-line truncation */
+.text-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.text-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ===== RESPONSIVE TYPOGRAPHY ADJUSTMENTS ===== */
+
+/* Mobile typography optimizations */
+@media (width <= 767px) {
+  .typography-display {
+    font-size: var(--pav-font-size-h2); /* Further scale down */
+    line-height: var(--pav-line-height-heading);
+  }
+  
+  .typography-page-title {
+    font-size: var(--pav-font-size-h3);
+  }
+  
+  .typography-section-heading {
+    font-size: var(--pav-font-size-h4);
+  }
+  
+  /* Tighter spacing on mobile */
+  .typography-article > * + * {
+    margin-top: var(--pav-space-3);
+  }
+}
+
+/* Large screen typography enhancements */
+@media (width >= 1280px) {
+  .typography-display {
+    /* Allow display text to scale up on very large screens */
+    font-size: calc(var(--pav-font-size-display) * 1.1);
+  }
+}

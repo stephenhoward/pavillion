@@ -1,0 +1,55 @@
+@import '@/client/assets/style/mixins/breakpoints';
+
+div.logged-in {
+  @include pav-flex-responsive;
+  align-items: stretch;
+  height: 100vh;
+
+  & > nav {
+    order: 1;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--pav-space-md);
+    padding: var(--pav-space-sm) var(--pav-space-md);
+    flex-direction: row;
+
+    li {
+      a {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--pav-space-sm);
+      }
+
+      div.icon {
+        width: 24px;
+        height: 24px;
+        background-color: var(--pav-color-text-primary);
+        mask-repeat: no-repeat;
+      }
+    }
+
+    @include pav-media(md) {
+      order: 0;
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: start;
+
+      li {
+        a {
+          display: flex;
+          flex-direction: row;
+          align-items: space-between;
+          gap: var(--pav-space-sm);
+        }
+      }
+    }
+  }
+  & > main {
+    height: auto;
+    flex: 1;
+  }
+}
+

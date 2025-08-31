@@ -2,6 +2,7 @@
   "list": {
     "my_calendars_header": "My Calendars",
     "no_calendars_message": "No calendar found",
+    "create_first_calendar_header": "Create your first calendar",
     "create_calendar_button": "Create Your Calendar",
     "creating_calendar": "Creating calendar...",
     "error_empty_calendar_name": "Calendar name cannot be empty",
@@ -9,7 +10,14 @@
     "error_invalid_calendar_name": "Invalid calendar name format",
     "error_create_calendar": "Error creating calendar",
     "calendar_name_placeholder": "your-calendar-name",
-    "calendar_name_help": "Calendar names must be 3-24 characters long, start with a letter or number, and can only contain letters, numbers, and underscores"
+    "calendar_name_help": "Calendar names must be 3-24 characters long, start with a letter or number, and can only contain letters, numbers, and underscores",
+    "aria_calendar_management": "Calendar Management",
+    "aria_my_calendars_navigation": "My Calendars Navigation",
+    "aria_view_calendar": "View calendar: {{calendarName}}",
+    "aria_create_new_calendar": "Create New Calendar",
+    "aria_new_calendar_form": "New Calendar Form",
+    "legend_calendar_creation": "Calendar Creation",
+    "label_calendar_name": "Calendar Name"
   },
   "selector": {
     "select_calendar_title": "Select Calendar",
@@ -58,7 +66,7 @@
     "error_removing_editor": "Failed to remove editor"
   },
   "management": {
-    "page_title": "Calendar Management",
+    "page_title": "calendar settings",
     "categories_tab": "Categories",
     "editors_tab": "Editors",
     "title": "Category Management",

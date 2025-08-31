@@ -3,7 +3,9 @@ import { reactive, nextTick, onBeforeMount, ref } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import InvitationsView from './accounts/invitations.vue';
 import ApplicationsView from './accounts/applications.vue';
-import ModelService from '../../service/models';
+import ModelService from '@/client/service/models';
+import EmptyLayout from '@/client/components/common/empty_state.vue';
+import LoadingMessage from '@/client/components/common/loading_message.vue';
 
 const { t } = useTranslation('admin', {
   keyPrefix: 'accounts',
@@ -46,8 +48,9 @@ const activateTab = (tab) => {
 </script>
 
 <template>
-  <div id="accounts">
-    <div role="tablist">
+  <section id="accounts" aria-labelledby="accounts-heading">
+    <h2 id="accounts-heading" class="sr-only">{{ t('accounts_title') }}</h2>
+    <div role="tablist" aria-label="Account management sections">
       <button
         type="button"
         role="tab"
@@ -82,19 +85,16 @@ const activateTab = (tab) => {
         {{ t('invitations_tab') }}
       </button>
     </div>
-    <div id="accounts-panel"
-         role="tabpanel"
-         aria-labelledby="accounts-tab"
-         :aria-hidden="state.activeTab == 'accounts' ? 'true' : 'false'"
-         :hidden="state.activeTab !== 'accounts'"
-         class="tab-panel"
-    >
-      <div v-if="state.isLoading" class="loading-indicator">
-        {{ t('loading') }}
-      </div>
+    <section id="accounts-panel"
+             role="tabpanel"
+             aria-labelledby="accounts-tab"
+             :aria-hidden="state.activeTab == 'accounts' ? 'false' : 'true'"
+             :hidden="state.activeTab !== 'accounts'"
+             class="tab-panel">
+      <LoadingMessage v-if="state.isLoading" :description="t('loading')" />
       <div v-else-if="accounts && accounts.length > 0">
         <h3>{{ t('accounts_title') }}</h3>
-        <table>
+        <table role="table" aria-label="User accounts">
           <thead>
             <tr>
               <th scope="col">{{ t('name_column') }}</th>
@@ -115,94 +115,29 @@ const activateTab = (tab) => {
           </tbody>
         </table>
       </div>
-      <div v-else class="empty-screen">
-        <h2>{{ t('noAccounts') }}</h2>
-        <p>{{ t('noAccountsDescription') }}</p>
+      <EmptyLayout v-else :title="t('noAccounts')" :description="t('noAccountsDescription')">
         <button type="button" class="primary" @click="activateTab('invitations')">
           {{ t('inviteNewAccount') }}
         </button>
-      </div>
-    </div>
-    <div
+      </EmptyLayout>
+    </section>
+    <section
       id="applications-panel"
       role="tabpanel"
       aria-labelledby="applications-tab"
-      :aria-hidden="state.activeTab == 'applications' ? 'true' : 'false'"
+      :aria-hidden="state.activeTab == 'applications' ? 'false' : 'true'"
       :hidden="state.activeTab !== 'applications'"
-      class="tab-panel"
-    >
+      class="tab-panel">
       <ApplicationsView />
-    </div>
-    <div
+    </section>
+    <section
       id="invitations-panel"
       role="tabpanel"
       aria-labelledby="invitations-tab"
-      :aria-hidden="state.activeTab == 'invitations' ? 'true' : 'false'"
+      :aria-hidden="state.activeTab == 'invitations' ? 'false' : 'true'"
       :hidden="state.activeTab !== 'invitations'"
-      class="tab-panel"
-    >
+      class="tab-panel">
       <InvitationsView />
-    </div>
-  </div>
+    </section>
+  </section>
 </template>
-
-<style lang="scss">
-@use '../../assets/mixins' as *;
-
-#accounts {
-  margin: 20px;
-  .success-message {
-    color: green;
-    padding: 10px;
-    margin-bottom: 10px;
-    background-color: #e8f5e9;
-    border: 1px solid green;
-    border-radius: 4px;
-  }
-
-  .error-message {
-    color: red;
-    padding: 10px;
-    margin-bottom: 10px;
-    background-color: #ffebee;
-    border: 1px solid red;
-    border-radius: 4px;
-  }
-
-  .empty-screen {
-    @include empty-screen;
-  }
-
-  .loading-indicator {
-    text-align: center;
-    padding: 20px;
-    color: var(--secondary-text-color);
-  }
-
-  section {
-    margin-top: 40px;
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 20px;
-
-      th, td {
-        padding: 12px;
-        text-align: left;
-        border-bottom: 1px solid;
-        border-bottom-color: rgba(200,200,200,.5);
-      }
-    }
-
-    .status-pending {
-      color: #FF9800;
-      font-weight: bold;
-    }
-
-    .status-rejected {
-      color: #F44336;
-      font-weight: bold;
-    }
-  }
-}
-</style>

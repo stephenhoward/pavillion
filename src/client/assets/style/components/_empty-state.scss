@@ -1,0 +1,25 @@
+/* Empty State Component */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--pav-space-8) var(--pav-space-4);
+  min-height: 250px;
+
+  h2 {
+    margin-bottom: var(--pav-space-3);
+    font-weight: var(--pav-font-weight-light);
+    color: var(--pav-color-text-primary);
+  }
+
+  p {
+    margin-bottom: var(--pav-space-4);
+    color: var(--pav-color-text-secondary);
+  }
+
+  button {
+    margin-top: var(--pav-space-3);
+  }
+}

@@ -1,0 +1,73 @@
+/**
+ * Pavillion Unified Style System
+ * Main entry point for all styles
+ */
+
+// Import SCSS mixins and functions (available to all layers)
+@import './mixins/index';
+
+// Establish CSS layer ordering (most important: layers load in the order declared)
+@layer reset, tokens, base, layout, components, utilities;
+
+// Base & Reset Styles (lowest specificity, foundational)
+@layer reset {
+  @import './base/reset';
+}
+
+// Design Tokens (CSS Custom Properties)
+@layer tokens {
+  @import './tokens/colors';
+  @import './tokens/typography';
+  @import './tokens/spacing';
+  @import './tokens/borders';
+  @import './tokens/shadows';
+  @import './tokens/elevation';
+  @import './tokens/breakpoints';
+}
+
+@layer base {
+  @import './themes/light';
+  @import './themes/dark';
+  @import './base/fonts';
+  @import './base/typography';
+  @import './base/accessibility';
+  /* @import './base/semantic-elements'; */
+}
+
+// 4. Layout System (structural utilities)
+@layer layout {
+  @import './layout/containers';
+  @import './layout/grid';
+  @import './layout/flexbox';
+  @import './layout/logical-properties';
+  @import './layout/logged-out';
+  @import './layout/app';
+}
+
+// 5. Component Library (semantic components)
+@layer components {
+  @import './components/buttons';
+  @import './components/forms';
+  @import './components/modals';
+  @import './components/navigation';
+  @import './components/cards';
+  @import './components/tabs';
+  @import './components/tablist';
+  @import './components/alerts';
+  @import './components/badges';
+  @import './components/stacks';
+  @import './components/layout';
+  @import './components/tables';
+  @import './components/dialogs';
+  @import './components/empty-state';
+  @import './components/settings';
+}
+
+// 6. Utility Classes (highest specificity, overrides)
+@layer utilities {
+  @import './utilities/spacing';
+  @import './utilities/typography';
+  @import './utilities/layout';
+  @import './utilities/visibility';
+  @import './utilities/debug';
+}

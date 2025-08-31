@@ -1,0 +1,137 @@
+/**
+ * Card Component Styles
+ * Content containers and card layouts
+ */
+
+@mixin card {
+  /* Base card styles */
+  background-color: var(--pav-surface-secondary);
+  border: var(--pav-border-width-1) solid var(--pav-border-primary);
+  border-radius: var(--pav-border-radius-card);
+  box-shadow: var(--pav-shadow-card);
+  overflow: hidden;
+  transition: all 0.2s ease-in-out;
+  padding: var(--pav-space-6);
+
+  /* Card header */
+  header {
+    padding: 0 0 var(--pav-space-6) 0;
+    border-bottom: var(--pav-border-width-1) solid var(--pav-border-primary);
+    
+    &:last-child {
+      border-bottom: none;
+    }
+  }
+  
+  /* Card actions */
+  .actions {
+    padding: var(--pav-space-4) var(--pav-space-6) var(--pav-space-6);
+    display: flex;
+    align-items: center;
+    gap: var(--pav-space-3);
+    
+    &--between {
+      justify-content: space-between;
+    }
+    
+    &--center {
+      justify-content: center;
+    }
+    
+    &--end {
+      justify-content: flex-end;
+    }
+  }
+  
+  /* Card footer */
+  footer {
+    padding: var(--pav-space-4) var(--pav-space-6);
+    background-color: var(--pav-surface-secondary);
+    border-top: var(--pav-border-width-1) solid var(--pav-border-primary);
+    font-size: var(--pav-font-size-sm);
+    color: var(--pav-text-secondary);
+  }
+}
+
+.card {
+  @include card;  
+}
+
+/* Interactive card */
+.card--interactive {
+  @include card;  
+
+    cursor: pointer;
+    
+    &:hover {
+      box-shadow: var(--pav-shadow-lg);
+      transform: translateY(-1px);
+    }
+    
+    &:focus {
+      outline: none;
+      box-shadow: var(--pav-shadow-focus);
+    }
+  }
+  
+/* Card grid layouts */
+.card-grid {
+  display: grid;
+  gap: var(--pav-space-6);
+  
+  &--cols-1 {
+    grid-template-columns: 1fr;
+  }
+  
+  &--cols-2 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  &--cols-3 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  
+  &--cols-4 {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  
+  /* Responsive grid */
+  &--responsive {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  }
+}
+
+/* Empty state card */
+.empty-state {
+  text-align: center;
+  padding: var(--pav-space-12) var(--pav-space-6);
+  
+  &__icon {
+    width: 4rem;
+    height: 4rem;
+    margin: 0 auto var(--pav-space-4);
+    opacity: 0.5;
+  }
+  
+  h2 {
+    font-size: var(--pav-font-size-xl);
+    font-weight: var(--pav-font-weight-light);
+    color: var(--pav-text-primary);
+    margin: 0 0 var(--pav-space-2) 0;
+  }
+  
+  &__description {
+    font-size: var(--pav-font-size-base);
+    color: var(--pav-text-secondary);
+    margin: 0 0 var(--pav-space-6) 0;
+    max-width: 32rem;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  
+  &__actions {
+    display: flex;
+    justify-content: center;
+    gap: var(--pav-space-3);
+  }
+}

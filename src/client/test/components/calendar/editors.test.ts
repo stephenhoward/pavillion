@@ -5,7 +5,7 @@ import { flushPromises } from '@vue/test-utils';
 
 import { CalendarEditor } from '@/common/model/calendar_editor';
 import { mountComponent } from '@/client/test/lib/vue';
-import Editors from '@/client/components/calendar/editors.vue';
+import Editors from '@/client/components/logged_in/calendar-management/editors.vue';
 import CalendarService from '@/client/service/calendar';
 import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/common/exceptions/editor';
 

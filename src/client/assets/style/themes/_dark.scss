@@ -1,0 +1,31 @@
+/**
+ * Dark Theme
+ * Dark color scheme with improved contrast
+ */
+
+[data-theme="dark"] {
+  /* Surface Colors */
+  --pav-surface-primary: var(--pav-color-neutral-800);
+  --pav-surface-secondary: var(--pav-color-neutral-700);
+  --pav-surface-tertiary: var(--pav-color-neutral-600);
+  
+  /* Text Colors */
+  --pav-text-primary: #fff;
+  --pav-text-secondary: var(--pav-color-neutral-300);
+  --pav-text-muted: var(--pav-color-neutral-400);
+  --pav-text-inverse: var(--pav-color-neutral-900);
+  
+  /* Border Colors */
+  --pav-border-primary: var(--pav-color-neutral-600);
+  --pav-border-secondary: var(--pav-color-neutral-500);
+  
+  /* Interactive States */
+  --pav-interactive-hover: var(--pav-color-neutral-600);
+  --pav-interactive-active: var(--pav-color-neutral-500);
+  --pav-interactive-disabled: var(--pav-color-neutral-700);
+  
+  /* Adjusted shadows for dark theme */
+  --pav-shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 30%), 0 1px 2px -1px rgb(0 0 0 / 30%);
+  --pav-shadow-md: 0 4px 6px -1px rgb(0 0 0 / 30%), 0 2px 4px -2px rgb(0 0 0 / 30%);
+  --pav-shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 30%), 0 4px 6px -4px rgb(0 0 0 / 30%);
+}

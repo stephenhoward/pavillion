@@ -1,0 +1,286 @@
+/**
+ * Layout Stack Components
+ * Utility classes for consistent spacing and layout patterns
+ * Built on the existing spacing token system and flexbox patterns
+ */
+
+@mixin stack {
+  display: flex;
+  gap: var(--pav-space-md);
+}
+
+@mixin hstack {
+  @include stack;
+  flex-direction: row;
+  align-items: center; /* Center items vertically by default */
+}
+
+@mixin vstack {
+  @include stack;
+  flex-direction: column;
+  align-items: stretch; /* Stretch items to full width by default */
+}
+
+@layer components {
+/* Base Stack Component */
+.stack {
+  @include stack;
+}
+
+/* Horizontal Stack (Row Layout) */
+.hstack {
+  @include hstack;
+}
+
+/* Vertical Stack (Column Layout) */
+.vstack {
+  @extend .stack;
+
+  flex-direction: column;
+  align-items: stretch; /* Stretch items to full width by default */
+}
+
+/* Gap Size Modifiers */
+.stack--xs { gap: var(--pav-space-xs); }   /* 4px */
+.stack--sm { gap: var(--pav-space-sm); }   /* 8px */
+.stack--md { gap: var(--pav-space-md); }   /* 16px - default */
+.stack--lg { gap: var(--pav-space-lg); }   /* 24px */
+.stack--xl { gap: var(--pav-space-xl); }   /* 32px */
+.stack--2xl { gap: var(--pav-space-2xl); } /* 48px */
+.stack--3xl { gap: var(--pav-space-3xl); } /* 64px */
+
+/* No gap variant */
+.stack--none { gap: 0; }
+
+/* Alignment Modifiers for Horizontal Stacks */
+.hstack--start { 
+  justify-content: flex-start; 
+  align-items: flex-start;
+}
+
+.hstack--center { 
+  justify-content: center; 
+  align-items: center;
+}
+
+.hstack--end { 
+  justify-content: flex-end; 
+  align-items: flex-end;
+}
+
+.hstack--between { 
+  justify-content: space-between; 
+  align-items: center;
+}
+
+.hstack--around { 
+  justify-content: space-around; 
+  align-items: center;
+}
+
+.hstack--evenly { 
+  justify-content: space-evenly; 
+  align-items: center;
+}
+
+/* Vertical alignment modifiers for horizontal stacks */
+.hstack--top { align-items: flex-start; }
+.hstack--middle { align-items: center; }
+.hstack--bottom { align-items: flex-end; }
+.hstack--baseline { align-items: baseline; }
+.hstack--stretch { align-items: stretch; }
+
+/* Alignment Modifiers for Vertical Stacks */
+.vstack--start { 
+  align-items: flex-start; 
+  justify-content: flex-start;
+}
+
+.vstack--center { 
+  align-items: center; 
+  justify-content: center;
+}
+
+.vstack--end { 
+  align-items: flex-end; 
+  justify-content: flex-end;
+}
+
+.vstack--between { 
+  align-items: stretch; 
+  justify-content: space-between;
+}
+
+.vstack--around { 
+  align-items: stretch; 
+  justify-content: space-around;
+}
+
+.vstack--evenly { 
+  align-items: stretch; 
+  justify-content: space-evenly;
+}
+
+/* Horizontal alignment modifiers for vertical stacks */
+.vstack--left { align-items: flex-start; }
+.vstack--center-h { align-items: center; }
+.vstack--right { align-items: flex-end; }
+.vstack--stretch { align-items: stretch; }
+
+/* Wrap Modifiers */
+.stack--wrap { flex-wrap: wrap; }
+.stack--nowrap { flex-wrap: nowrap; }
+.stack--wrap-reverse { flex-wrap: wrap-reverse; }
+
+/* Responsive Stack Utilities */
+@media (width <= 768px) {
+  .hstack--responsive {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .vstack--responsive {
+    flex-direction: row;
+    align-items: center;
+  }
+}
+
+/* Stack Item Utilities */
+.stack-item {
+  display: flex;
+  flex-direction: inherit;
+}
+
+.stack-item--grow { flex-grow: 1; }
+.stack-item--shrink { flex-shrink: 1; }
+.stack-item--no-grow { flex-grow: 0; }
+.stack-item--no-shrink { flex-shrink: 0; }
+.stack-item--fixed { flex: 0 0 auto; }
+.stack-item--fluid { flex: 1 1 auto; }
+
+/* Self-alignment for stack items */
+.stack-item--self-start { align-self: flex-start; }
+.stack-item--self-center { align-self: center; }
+.stack-item--self-end { align-self: flex-end; }
+.stack-item--self-stretch { align-self: stretch; }
+.stack-item--self-baseline { align-self: baseline; }
+
+/* Common Layout Patterns */
+
+/* Card Stack - for stacking cards with consistent spacing */
+.card-stack {
+  @extend .vstack;
+  @extend .stack--lg;
+}
+
+/* Button Group - for grouping buttons horizontally */
+.button-group {
+  @extend .hstack;
+  @extend .stack--sm;
+  
+  /* Ensure buttons maintain their natural width */
+  .btn {
+    flex: 0 0 auto;
+  }
+}
+
+/* Form Stack - for vertical form layouts */
+.form-stack {
+  @extend .vstack;
+  @extend .stack--md;
+  
+  /* Form groups stretch to full width */
+  .form-group {
+    width: 100%;
+  }
+}
+
+/* Navigation Stack - for navigation items */
+.nav-stack {
+  @extend .hstack;
+  @extend .stack--md;
+  @extend .hstack--between;
+  
+  /* Make nav items flexible but not greedy */
+  .nav-item {
+    flex: 0 1 auto;
+  }
+}
+
+/* Content Stack - for main content sections */
+.content-stack {
+  @extend .vstack;
+  @extend .stack--2xl;
+
+  max-width: 100%;
+}
+
+/* Sidebar Stack - for sidebar layouts */
+.sidebar-stack {
+  @extend .hstack;
+  @extend .stack--lg;
+
+  align-items: flex-start;
+  
+  .sidebar {
+    flex: 0 0 auto;
+    min-width: 200px;
+  }
+  
+  .main-content {
+    flex: 1 1 auto;
+    min-width: 0; /* Prevent flex item overflow */
+  }
+}
+
+/* Media Object Stack - for media + content patterns */
+.media-stack {
+  @extend .hstack;
+  @extend .stack--md;
+
+  align-items: flex-start;
+  
+  .media-object {
+    flex: 0 0 auto;
+  }
+  
+  .media-content {
+    flex: 1 1 auto;
+    min-width: 0; /* Prevent text overflow */
+  }
+}
+
+/* Utility Classes for Common Spacers */
+.spacer {
+  flex: 1 1 auto;
+}
+
+.spacer--xs { min-height: var(--pav-space-xs); min-width: var(--pav-space-xs); }
+.spacer--sm { min-height: var(--pav-space-sm); min-width: var(--pav-space-sm); }
+.spacer--md { min-height: var(--pav-space-md); min-width: var(--pav-space-md); }
+.spacer--lg { min-height: var(--pav-space-lg); min-width: var(--pav-space-lg); }
+.spacer--xl { min-height: var(--pav-space-xl); min-width: var(--pav-space-xl); }
+
+/* Debug utilities for development */
+.stack--debug {
+  outline: 2px dashed rgb(255 0 0 / 30%);
+  
+  > * {
+    outline: 1px solid rgb(0 255 0 / 30%);
+  }
+}
+
+/* Legacy Support - Maintain compatibility with existing mixins */
+.legacy-hstack {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.legacy-vstack {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+} /* End @layer components */

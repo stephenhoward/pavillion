@@ -1,0 +1,156 @@
+/**
+ * Form Component Styles
+ * Input fields, labels, and form layouts
+ */
+
+.form {
+  /* Form container */
+  &__group {
+    margin-bottom: var(--pav-space-4);
+  }
+  
+  &__label {
+    display: block;
+    font-size: var(--pav-font-size-sm);
+    font-weight: var(--pav-font-weight-medium);
+    color: var(--pav-text-primary);
+    margin-bottom: var(--pav-space-1);
+  }
+  
+  &__help {
+    font-size: var(--pav-font-size-xs);
+    color: var(--pav-text-muted);
+    margin-top: var(--pav-space-1);
+  }
+  
+  &__error {
+    font-size: var(--pav-font-size-xs);
+    color: var(--pav-color-error);
+    margin-top: var(--pav-space-1);
+  }
+}
+
+.input {
+  /* Base input styles */
+  width: 100%;
+  padding: var(--pav-space-3) var(--pav-space-4);
+  font-size: var(--pav-font-size-base);
+  line-height: var(--pav-line-height-normal);
+  color: var(--pav-text-primary);
+  background-color: var(--pav-surface-primary);
+  border: var(--pav-border-width-1) solid var(--pav-border-secondary);
+  border-radius: var(--pav-border-radius-input);
+  transition: all 0.2s ease-in-out;
+  
+  &::placeholder {
+    color: var(--pav-text-muted);
+  }
+  
+  &:focus {
+    outline: none;
+    border-color: var(--pav-color-brand-secondary);
+    box-shadow: var(--pav-shadow-focus);
+  }
+  
+  &:disabled {
+    background-color: var(--pav-interactive-disabled);
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+  
+  /* Size variants */
+  &--sm {
+    padding: var(--pav-space-2) var(--pav-space-3);
+    font-size: var(--pav-font-size-sm);
+  }
+  
+  &--lg {
+    padding: var(--pav-space-4) var(--pav-space-5);
+    font-size: var(--pav-font-size-lg);
+  }
+  
+  /* State variants */
+  &--error {
+    border-color: var(--pav-color-error);
+    
+    &:focus {
+      border-color: var(--pav-color-error);
+      box-shadow: 0 0 0 3px rgb(220 53 69 / 0.3);
+    }
+  }
+  
+  &--success {
+    border-color: var(--pav-color-success);
+    
+    &:focus {
+      border-color: var(--pav-color-success);
+      box-shadow: 0 0 0 3px rgb(40 167 69 / 0.3);
+    }
+  }
+}
+
+/* Textarea styles */
+.textarea {
+  @extend .input;
+  min-height: 120px;
+  resize: vertical;
+  border-radius: var(--pav-border-radius-xl);
+}
+
+/* Select styles */
+.select {
+  @extend .input;
+  cursor: pointer;
+  
+  /* Custom dropdown arrow */
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+  background-position: right var(--pav-space-3) center;
+  background-repeat: no-repeat;
+  background-size: 1.5em 1.5em;
+  padding-right: var(--pav-space-10);
+  
+  &:focus {
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%23ff9131' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+  }
+}
+
+/* Checkbox and radio styles */
+.checkbox,
+.radio {
+  appearance: none;
+  width: 1.125rem;
+  height: 1.125rem;
+  border: var(--pav-border-width-2) solid var(--pav-border-secondary);
+  background-color: var(--pav-surface-primary);
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  
+  &:focus {
+    outline: none;
+    box-shadow: var(--pav-shadow-focus);
+  }
+  
+  &:checked {
+    background-color: var(--pav-color-brand-primary);
+    border-color: var(--pav-color-brand-primary);
+  }
+}
+
+.checkbox {
+  border-radius: var(--pav-border-radius-sm);
+  
+  &:checked {
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='white'%3E%3Cpath d='M12.207 4.793a1 1 0 0 1 0 1.414l-5 5a1 1 0 0 1-1.414 0l-2-2a1 1 0 0 1 1.414-1.414L6.5 9.086l4.293-4.293a1 1 0 0 1 1.414 0z'/%3E%3C/svg%3E");
+    background-size: 100% 100%;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+}
+
+.radio {
+  border-radius: var(--pav-border-radius-full);
+  
+  &:checked {
+    background-image: radial-gradient(white 40%, transparent 40%);
+  }
+}

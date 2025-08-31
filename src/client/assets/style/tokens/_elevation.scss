@@ -1,0 +1,86 @@
+/**
+ * Elevation Design Tokens
+ * Z-index scale for proper layering and stacking context
+ */
+
+:root {
+  /* Z-Index Scale (powers of 10 for easy insertion) */
+  --pav-z-index-base: 0;           /* Base layer - normal content */
+  --pav-z-index-docked: 10;        /* Docked elements - sticky headers, footers */
+  --pav-z-index-dropdown: 100;     /* Dropdown menus, selects */
+  --pav-z-index-sticky: 200;       /* Sticky positioned elements */
+  --pav-z-index-fixed: 300;        /* Fixed positioned elements */
+  --pav-z-index-modal-backdrop: 400; /* Modal backdrops, overlays */
+  --pav-z-index-modal: 500;        /* Modal content */
+  --pav-z-index-popover: 600;      /* Popovers, tooltips */
+  --pav-z-index-toast: 700;        /* Toast notifications */
+  --pav-z-index-maximum: 9999;     /* Maximum z-index for critical elements */
+  
+  /* Semantic Z-Index Aliases */
+  --pav-z-index-navigation: var(--pav-z-index-sticky);      /* Navigation bars */
+  --pav-z-index-sidebar: var(--pav-z-index-docked);         /* Sidebar panels */
+  --pav-z-index-card-hover: var(--pav-z-index-base);        /* Card hover states */
+  --pav-z-index-button-focus: var(--pav-z-index-base);      /* Button focus states */
+  --pav-z-index-modal-dialog: var(--pav-z-index-modal);     /* Modal dialogs */
+  --pav-z-index-modal-overlay: var(--pav-z-index-modal-backdrop); /* Modal overlays */
+  --pav-z-index-dropdown-menu: var(--pav-z-index-dropdown); /* Dropdown menus */
+  --pav-z-index-tooltip: var(--pav-z-index-popover);        /* Tooltip content */
+  --pav-z-index-notification: var(--pav-z-index-toast);     /* Notifications */
+  --pav-z-index-loading: var(--pav-z-index-maximum);        /* Loading overlays */
+  --pav-z-index-debug: var(--pav-z-index-maximum);          /* Debug overlays */
+}
+
+/* SCSS Variable Mirrors for Build-Time Logic */
+
+// Z-index scale
+$pav-z-indices: (
+  base: 0,
+  docked: 10,
+  dropdown: 100,
+  sticky: 200,
+  fixed: 300,
+  modal-backdrop: 400,
+  modal: 500,
+  popover: 600,
+  toast: 700,
+  maximum: 9999
+);
+
+// Semantic z-index mapping
+$pav-z-index-semantic: (
+  navigation: sticky,
+  sidebar: docked,
+  card-hover: base,
+  button-focus: base,
+  modal-dialog: modal,
+  modal-overlay: modal-backdrop,
+  dropdown-menu: dropdown,
+  tooltip: popover,
+  notification: toast,
+  loading: maximum,
+  debug: maximum
+);
+
+// Z-index utility mixin
+@mixin pav-z-index($level: base) {
+  @if map-has-key($pav-z-indices, $level) {
+    z-index: map-get($pav-z-indices, $level);
+  } @else {
+    @error "Z-index level #{$level} not found in $pav-z-indices map.";
+  }
+}
+
+// Layer utility mixin (combines z-index with position)
+@mixin pav-layer($z-level: base, $position: relative) {
+  position: $position;
+  z-index: map-get($pav-z-indices, $z-level);
+}
+
+// Stacking context mixin
+@mixin pav-stacking-context($z-level: base) {
+  position: relative;
+  z-index: map-get($pav-z-indices, $z-level);
+  
+  // Create new stacking context
+  transform: translateZ(0);
+}

@@ -1,0 +1,16 @@
+/**
+ * Table Component Styles
+ */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+
+  th, td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid;
+    border-bottom-color: var(--pav-color-border-primary);
+  }
+}

@@ -1,0 +1,168 @@
+/* ===== DIALOG ELEMENTS ===== */
+[role="dialog"] {
+  /* Dialog modal styling for non-dialog elements */
+  padding: var(--pav-space-xl);
+  background-color: var(--pav-surface-primary);
+  border: var(--pav-border-width-1) solid var(--pav-border-primary);
+  border-radius: var(--pav-border-radius-modal);
+  box-shadow: var(--pav-shadow-modal);
+  
+  /* Position for role="dialog" overlays */
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1000;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow: auto;
+  
+  /* Focus management within dialog */
+  &:focus-visible {
+    outline: none;
+  }
+  
+  /* Dialog header */
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--pav-space-lg);
+    
+    h1, h2, h3, h4, h5, h6 {
+      margin: 0;
+      color: var(--pav-text-primary);
+    }
+  }
+  
+  /* Dialog footer with action buttons */
+  footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--pav-space-md);
+    margin-top: var(--pav-space-lg);
+    padding-top: var(--pav-space-lg);
+    border-top: var(--pav-border-width-1) solid var(--pav-border-color-subtle);
+    [role="button"] {
+      min-width: var(--pav-space-20);
+    }
+  }
+  
+  /* Dialog backdrop (for role="dialog" implementations) */
+  &::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-color: rgb(0 0 0 / 50%);
+    backdrop-filter: blur(4px);
+    z-index: -1;
+  }
+}
+
+dialog {
+  /* HTML5 dialog base styling */
+  padding: var(--pav-space-xl);
+  background-color: var(--pav-surface-primary);
+  border: var(--pav-border-width-1) solid var(--pav-border-primary);
+  border-radius: var(--pav-border-radius-modal);
+  box-shadow: var(--pav-shadow-modal);
+  
+  /* Remove default dialog styling */
+  &::backdrop {
+    background-color: rgb(0 0 0 / 50%);
+    backdrop-filter: blur(4px);
+  }
+  
+  /* Focus management within dialog */
+  &:focus-visible {
+    outline: none;
+  }
+  
+  /* Dialog header */
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--pav-space-lg);
+    
+    h1, h2, h3, h4, h5, h6 {
+      margin: 0;
+      color: var(--pav-text-primary);
+    }
+  }
+  
+  /* Dialog footer with action buttons */
+  footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--pav-space-md);
+    margin-top: var(--pav-space-lg);
+    padding-top: var(--pav-space-lg);
+    border-top: var(--pav-border-width-1) solid var(--pav-border-color-subtle);
+  }
+}
+
+/* ===== RESPONSIVE ADJUSTMENTS ===== */
+
+@media (width <= 768px) {
+  /* Mobile-specific adjustments */
+  nav {
+    flex-direction: column;
+    align-items: stretch;
+    
+    a {
+      text-align: center;
+      padding: var(--pav-space-sm);
+    }
+  }
+  
+  main {
+    padding: var(--pav-space-md) var(--pav-space-sm);
+  }
+  
+  dialog {
+    padding: var(--pav-space-md);
+    margin: var(--pav-space-sm);
+    max-width: calc(100vw - var(--pav-space-lg));
+    max-height: calc(100vh - var(--pav-space-lg));
+  }
+  
+  article {
+    padding: var(--pav-space-md);
+  }
+}
+@media (width <= 768px) {
+  /* Mobile-specific ARIA role adjustments */
+  [role="navigation"] {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--pav-space-sm);
+    
+    a, [role="link"] {
+      text-align: center;
+      padding: var(--pav-space-sm);
+    }
+  }
+  
+  [role="banner"] {
+    padding: var(--pav-space-md) var(--pav-space-sm);
+    
+    &:has([role="navigation"]) {
+      flex-direction: column;
+      align-items: stretch;
+      gap: var(--pav-space-md);
+    }
+  }
+  
+  [role="dialog"] {
+    padding: var(--pav-space-md);
+    margin: var(--pav-space-sm);
+    max-width: calc(100vw - var(--pav-space-lg));
+    max-height: calc(100vh - var(--pav-space-lg));
+  }
+  
+  [role="complementary"] {
+    padding: var(--pav-space-md);
+    margin-bottom: var(--pav-space-md);
+  }
+}

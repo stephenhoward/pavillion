@@ -6,7 +6,7 @@
     <div v-if="state.processingError" class="error-message">
       {{ t('processing_error', { email: state.processingError }) }}
     </div>
-    <div v-if="store.applications && store.applications.length > 0">
+    <section v-if="store.applications && store.applications.length > 0">
       <h3>{{ t('title') }}</h3>
       <table>
         <thead>
@@ -30,11 +30,8 @@
           </tr>
         </tbody>
       </table>
-    </div>
-    <div v-else class="empty-screen">
-      <h2>{{ t('noApplications') }}</h2>
-      <p>{{ t('noApplicationsDescription') }}</p>
-    </div>
+    </section>
+    <EmptyLayout v-else :title="t('noApplications')" :description="t('noApplicationsDescription')" />
 
     <!-- Application detail modal using the new component -->
     <ApplicationReviewView
@@ -51,10 +48,11 @@
 import { onBeforeMount, reactive, inject, toRaw } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
-import { useApplicationStore } from '../../../stores/applicationStore';
-import AccountApplication from '../../../../common/model/application';
+import { useApplicationStore } from '@/client/stores/applicationStore';
+import AccountApplication from '@/common/model/application';
 import ApplicationReviewView from './application_review.vue';
-import ModelService from '../../../service/models';
+import ModelService from '@/client/service/models';
+import EmptyLayout from '@/client/components/common/empty_state.vue';
 
 const store = useApplicationStore();
 const authn = inject('authn');
@@ -152,11 +150,3 @@ const rejectApplication = async (application, silent) => {
   }
 };
 </script>
-
-<style scoped lang="scss">
-@use '../../../assets/mixins' as *;
-
-.empty-screen {
-  @include empty-screen;
-}
-</style>

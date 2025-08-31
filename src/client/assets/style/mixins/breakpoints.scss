@@ -1,0 +1,211 @@
+/**
+ * Responsive Breakpoint Mixins
+ * Advanced responsive utilities and breakpoint-specific mixins
+ */
+
+@import '../tokens/breakpoints';
+
+/* Advanced Layout Mixins */
+
+// Responsive grid system
+@mixin pav-grid-responsive($columns-mobile: 1, $columns-tablet: 2, $columns-desktop: 3, $gap: var(--pav-space-4)) {
+  display: grid;
+  gap: $gap;
+  grid-template-columns: repeat($columns-mobile, 1fr);
+  
+  @include pav-media(md) {
+    grid-template-columns: repeat($columns-tablet, 1fr);
+  }
+  
+  @include pav-media(lg) {
+    grid-template-columns: repeat($columns-desktop, 1fr);
+  }
+}
+
+// Responsive flexbox utilities
+@mixin pav-flex-responsive($direction-mobile: column, $direction-desktop: row, $gap: var(--pav-space-3)) {
+  display: flex;
+  gap: $gap;
+  flex-direction: $direction-mobile;
+  
+  @include pav-media(md) {
+    flex-direction: $direction-desktop;
+  }
+}
+
+// Responsive spacing (with different values per breakpoint)
+@mixin pav-spacing-responsive($property, $mobile-value, $tablet-value: null, $desktop-value: null) {
+  #{$property}: $mobile-value;
+  
+  @if $tablet-value {
+    @include pav-media(md) {
+      #{$property}: $tablet-value;
+    }
+  }
+  
+  @if $desktop-value {
+    @include pav-media(lg) {
+      #{$property}: $desktop-value;
+    }
+  }
+}
+
+/* Component-Specific Responsive Mixins */
+
+// Responsive navigation layout
+@mixin pav-nav-responsive() {
+  // Mobile: stacked vertical navigation
+  flex-direction: column;
+  width: 100%;
+  
+  @include pav-media(md) {
+    // Tablet and up: horizontal navigation
+    flex-direction: row;
+    width: auto;
+  }
+}
+
+// Responsive modal sizing
+@mixin pav-modal-responsive() {
+  // Mobile: full-screen modal
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  border-radius: 0;
+  
+  @include pav-media(sm) {
+    // Small screens and up: floating modal
+    width: 90vw;
+    height: auto;
+    max-width: 500px;
+    margin: var(--pav-space-8) auto;
+    border-radius: var(--pav-border-radius-modal);
+  }
+  
+  @include pav-media(lg) {
+    // Large screens: larger modal
+    max-width: 600px;
+  }
+}
+
+// Responsive card grid
+@mixin pav-card-grid-responsive() {
+  @include pav-grid-responsive(
+    $columns-mobile: 1,
+    $columns-tablet: 2,
+    $columns-desktop: 3,
+    $gap: var(--pav-space-4)
+  );
+  
+  @include pav-media(xl) {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+// Responsive sidebar layout
+@mixin pav-sidebar-responsive($sidebar-width: 280px) {
+  // Mobile: sidebar hidden by default, full-width when shown
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100vh;
+    z-index: var(--pav-z-index-modal);
+    transition: left 0.3s ease-in-out;
+    
+    &.is-open {
+      left: 0;
+    }
+  }
+  
+  .main-content {
+    width: 100%;
+    margin-left: 0;
+  }
+  
+  @include pav-media(lg) {
+    // Desktop: permanent sidebar
+    .sidebar {
+      position: static;
+      width: $sidebar-width;
+      height: auto;
+      left: 0;
+      z-index: auto;
+      transition: none;
+    }
+    
+    .main-content {
+      width: calc(100% - #{$sidebar-width});
+      margin-left: $sidebar-width;
+    }
+  }
+}
+
+/* Responsive Typography Mixins */
+
+// Responsive heading sizes
+@mixin pav-heading-responsive($level: 1) {
+  @if $level == 1 {
+    @include pav-responsive-scale(var(--pav-font-size-h3)); // Smaller on mobile
+
+    @include pav-media(md) {
+      font-size: var(--pav-font-size-h1);
+    }
+  } @else if $level == 2 {
+    @include pav-responsive-scale(var(--pav-font-size-h4));
+
+    @include pav-media(md) {
+      font-size: var(--pav-font-size-h2);
+    }
+  } @else if $level == 3 {
+    @include pav-responsive-scale(var(--pav-font-size-h5));
+
+    @include pav-media(md) {
+      font-size: var(--pav-font-size-h3);
+    }
+  }
+}
+
+/* Utility Generator Mixins */
+
+// Generate responsive utility classes
+@mixin pav-generate-responsive-utilities($property, $class-prefix, $values) {
+  @each $name, $value in $values {
+    .#{$class-prefix}-#{$name} {
+      #{$property}: $value;
+    }
+    
+    @each $breakpoint in map-keys($pav-breakpoints) {
+      @include pav-media($breakpoint) {
+        .#{$breakpoint}\:#{$class-prefix}-#{$name} {
+          #{$property}: $value;
+        }
+      }
+    }
+  }
+}
+
+// Generate responsive visibility utilities
+@mixin pav-generate-visibility-utilities() {
+  @each $breakpoint in map-keys($pav-breakpoints) {
+    // Hide at breakpoint and up
+    .hidden-#{$breakpoint}-up {
+      @include pav-media($breakpoint) {
+        display: none !important;
+      }
+    }
+    
+    // Hide at breakpoint and down
+    .hidden-#{$breakpoint}-down {
+      @include pav-media-down($breakpoint) {
+        display: none !important;
+      }
+    }
+    
+    // Show only at breakpoint
+    .visible-#{$breakpoint}-only {
+      @include pav-show-at($breakpoint);
+    }
+  }
+}

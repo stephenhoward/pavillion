@@ -6,6 +6,5 @@
 </template>
 
 <style lang="scss">
-@use '../assets/mixins' as *;
-
+/* Semantic styling - no legacy mixins needed */
 </style>

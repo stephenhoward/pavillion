@@ -1,0 +1,184 @@
+/**
+ * Typography Design Tokens
+ * Modular scale system based on 1.125 ratio with semantic hierarchy
+ * Font families, sizes, weights, and line heights
+ */
+
+:root {
+  /* Font Families */
+  --pav-font-family-primary: 'Creato Display', -apple-system, blinkmacsystemfont, 'Segoe UI', roboto, sans-serif;
+  --pav-font-family-mono: 'SF Mono', consolas, 'Liberation Mono', menlo, monospace;
+  
+  /* Font Weights */
+  --pav-font-weight-thin: 100;
+  --pav-font-weight-extralight: 200;
+  --pav-font-weight-light: 300;
+  --pav-font-weight-regular: 400;
+  --pav-font-weight-medium: 500;
+  --pav-font-weight-semibold: 600;
+  --pav-font-weight-bold: 700;
+  --pav-font-weight-extrabold: 800;
+  
+  /* Modular Scale (1.125 ratio, base 16px) */
+  --pav-font-size-2xs: 0.7901rem;  /* ~12.64px */
+  --pav-font-size-xs: 0.8889rem;   /* ~14.22px */
+  --pav-font-size-sm: 1rem;        /* 16px - base */
+  --pav-font-size-base: 1.125rem;  /* 18px */
+  --pav-font-size-md: 1.2656rem;   /* ~20.25px */
+  --pav-font-size-lg: 1.4238rem;   /* ~22.78px */
+  --pav-font-size-xl: 1.6018rem;   /* ~25.63px */
+  --pav-font-size-2xl: 1.8020rem;  /* ~28.83px */
+  --pav-font-size-3xl: 2.0273rem;  /* ~32.44px */
+  --pav-font-size-4xl: 2.2807rem;  /* ~36.49px */
+  --pav-font-size-5xl: 2.5658rem;  /* ~41.05px */
+  --pav-font-size-6xl: 2.8865rem;  /* ~46.18px */
+  
+  /* Semantic Typography Scale */
+  --pav-font-size-caption: var(--pav-font-size-2xs);     /* Small captions, fine print */
+  --pav-font-size-small: var(--pav-font-size-xs);        /* Secondary text, labels */
+  --pav-font-size-body: var(--pav-font-size-sm);         /* Body text, paragraphs */
+  --pav-font-size-body-large: var(--pav-font-size-base); /* Larger body text */
+  --pav-font-size-subtitle: var(--pav-font-size-md);     /* Subtitles, lead text */
+  --pav-font-size-h6: var(--pav-font-size-lg);           /* Heading 6 */
+  --pav-font-size-h5: var(--pav-font-size-xl);           /* Heading 5 */
+  --pav-font-size-h4: var(--pav-font-size-2xl);          /* Heading 4 */
+  --pav-font-size-h3: var(--pav-font-size-3xl);          /* Heading 3 */
+  --pav-font-size-h2: var(--pav-font-size-4xl);          /* Heading 2 */
+  --pav-font-size-h1: var(--pav-font-size-5xl);          /* Heading 1 */
+  --pav-font-size-display: var(--pav-font-size-6xl);     /* Large display text */
+  
+  /* Line Heights - Optimized for readability */
+  --pav-line-height-tight: 1.2;     /* Display text, large headings */
+  --pav-line-height-snug: 1.3;      /* Headings */
+  --pav-line-height-normal: 1.5;    /* Body text, paragraphs */
+  --pav-line-height-relaxed: 1.6;   /* Long-form content */
+  --pav-line-height-loose: 1.8;     /* Spacious reading */
+  
+  /* Semantic Line Heights */
+  --pav-line-height-display: var(--pav-line-height-tight);
+  --pav-line-height-heading: var(--pav-line-height-snug);
+  --pav-line-height-body: var(--pav-line-height-normal);
+  --pav-line-height-caption: var(--pav-line-height-normal);
+  
+  /* Letter Spacing - Optimized for Creato Display */
+  --pav-letter-spacing-tighter: -0.025em;  /* Large display text */
+  --pav-letter-spacing-tight: -0.01em;     /* Headings */
+  --pav-letter-spacing-normal: 0;          /* Body text */
+  --pav-letter-spacing-wide: 0.015em;      /* Small text, caps */
+  --pav-letter-spacing-wider: 0.05em;      /* Very small text, all caps */
+  
+  /* Semantic Letter Spacing */
+  --pav-letter-spacing-display: var(--pav-letter-spacing-tighter);
+  --pav-letter-spacing-heading: var(--pav-letter-spacing-tight);
+  --pav-letter-spacing-body: var(--pav-letter-spacing-normal);
+  --pav-letter-spacing-caption: var(--pav-letter-spacing-wide);
+}
+
+/* SCSS Variable Mirrors for Build-Time Logic */
+
+// Font families
+$pav-font-family-primary: 'Creato Display', -apple-system, blinkmacsystemfont, 'Segoe UI', roboto, sans-serif;
+$pav-font-family-mono: 'SF Mono', consolas, 'Liberation Mono', menlo, monospace;
+
+// Font weights
+$pav-font-weights: (
+  thin: 100,
+  extralight: 200,
+  light: 300,
+  regular: 400,
+  medium: 500,
+  semibold: 600,
+  bold: 700,
+  extrabold: 800
+);
+
+// Modular scale font sizes (for calculations)
+$pav-modular-scale-ratio: 1.125;
+$pav-modular-scale-base: 1rem;
+$pav-font-sizes: (
+  '2xs': 0.7901rem,
+  xs: 0.8889rem,
+  sm: 1rem,
+  base: 1.125rem,
+  md: 1.2656rem,
+  lg: 1.4238rem,
+  xl: 1.6018rem,
+  '2xl': 1.8020rem,
+  '3xl': 2.0273rem,
+  '4xl': 2.2807rem,
+  '5xl': 2.5658rem,
+  '6xl': 2.8865rem
+);
+
+// Semantic typography map
+$pav-typography-semantic: (
+  caption: '2xs',
+  small: xs,
+  body: sm,
+  body-large: base,
+  subtitle: md,
+  h6: lg,
+  h5: xl,
+  h4: '2xl',
+  h3: '3xl',
+  h2: '4xl',
+  h1: '5xl',
+  display: '6xl'
+);
+
+// Line heights
+$pav-line-heights: (
+  tight: 1.2,
+  snug: 1.3,
+  normal: 1.5,
+  relaxed: 1.6,
+  loose: 1.8
+);
+
+// Letter spacing
+$pav-letter-spacings: (
+  tighter: -0.025em,
+  tight: -0.01em,
+  normal: 0,
+  wide: 0.015em,
+  wider: 0.05em
+);
+
+// Typography mixins for consistent application
+@mixin pav-typography($semantic-level: body, $weight: regular) {
+  $size-key: map-get($pav-typography-semantic, $semantic-level);
+  $font-size: map-get($pav-font-sizes, $size-key);
+  $font-weight: map-get($pav-font-weights, $weight);
+  
+  font-family: $pav-font-family-primary;
+  font-size: $font-size;
+  font-weight: $font-weight;
+  
+  // Apply appropriate line height and letter spacing based on semantic level
+  @if $semantic-level == display or $semantic-level == h1 or $semantic-level == h2 {
+    line-height: map-get($pav-line-heights, tight);
+    letter-spacing: map-get($pav-letter-spacings, tighter);
+  } @else if $semantic-level == h3 or $semantic-level == h4 or $semantic-level == h5 or $semantic-level == h6 {
+    line-height: map-get($pav-line-heights, snug);
+    letter-spacing: map-get($pav-letter-spacings, tight);
+  } @else if $semantic-level == caption or $semantic-level == small {
+    line-height: map-get($pav-line-heights, normal);
+    letter-spacing: map-get($pav-letter-spacings, wide);
+  } @else {
+    line-height: map-get($pav-line-heights, normal);
+    letter-spacing: map-get($pav-letter-spacings, normal);
+  }
+}
+
+// Responsive typography mixin for breakpoint-based scaling
+@mixin pav-responsive-typography($semantic-level: body, $weight: regular, $scale-factor: 1.1) {
+  @include pav-typography($semantic-level, $weight);
+  
+  // Scale up typography at larger breakpoints
+  @media (width >= 768px) {
+    $size-key: map-get($pav-typography-semantic, $semantic-level);
+    $base-size: map-get($pav-font-sizes, $size-key);
+
+    font-size: calc(#{$base-size} * #{$scale-factor});
+  }
+}

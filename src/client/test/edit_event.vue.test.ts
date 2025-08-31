@@ -8,7 +8,7 @@ import { CalendarEvent } from '@/common/model/events';
 import { EventLocation } from '@/common/model/location';
 import { Calendar } from '@/common/model/calendar';
 import { mountComponent } from '@/client/test/lib/vue';
-import EditEvent from '@/client/components/calendar/edit_event.vue';
+import EditEvent from '@/client/components/logged_in/calendar/edit_event.vue';
 import EventService from '@/client/service/event';
 import CalendarService from '@/client/service/calendar';
 
@@ -74,7 +74,11 @@ describe('Editor Behavior', () => {
     wrapper.find('input[name="name"]').setValue('testName');
     wrapper.find('input[name="description"]').setValue('testDescription');
 
+    // Click the button which should trigger form submission
     await wrapper.find('button[type="submit"]').trigger('click');
+    // Also trigger the form submit event to ensure the handler is called
+    await wrapper.find('form').trigger('submit');
+    await wrapper.vm.$nextTick();
 
     expect(createStub.called).toBe(false);
   });
@@ -97,7 +101,11 @@ describe('Editor Behavior', () => {
     wrapper.find('input[name="name"]').setValue('testName');
     wrapper.find('input[name="description"]').setValue('testDescription');
 
+    // Click the button which should trigger form submission
     await wrapper.find('button[type="submit"]').trigger('click');
+    // Also trigger the form submit event to ensure the handler is called
+    await wrapper.find('form').trigger('submit');
+    await wrapper.vm.$nextTick();
 
     expect(createStub.called).toBe(true);
   });

@@ -24,6 +24,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
+      '@': '/src',
       // Ensure JSON imports work properly for i18next translation files
       '@/client/locale': '/src/client/locale',
       '@/site/locale': '/src/site/locale',

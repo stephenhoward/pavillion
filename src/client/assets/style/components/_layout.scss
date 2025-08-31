@@ -1,0 +1,67 @@
+/**
+ * Layout Components
+ * Common layout patterns and utilities
+ */
+
+/* Flexible Container Layouts */
+.flexible-container {
+  display: flex;
+  justify-content: space-between;
+}
+
+.hstack {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.vstack {
+  display: flex;
+  flex-direction: column;
+}
+
+.flexible {
+  flex: 1;
+}
+
+.inflexible {
+  flex: none;
+}
+
+/* Enhanced Layout Utilities */
+.hstack--enhanced {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.vstack--enhanced {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+}
+
+/* Responsive Layout Patterns */
+@media (width <= 640px) {
+  .responsive-stack {
+    flex-direction: column;
+  }
+  
+  .responsive-stack > * + * {
+    margin-top: var(--pav-space-3);
+    margin-left: 0;
+  }
+}
+
+@media (width > 640px) {
+  .responsive-stack {
+    flex-direction: row;
+  }
+  
+  .responsive-stack > * + * {
+    margin-left: var(--pav-space-3);
+    margin-top: 0;
+  }
+}

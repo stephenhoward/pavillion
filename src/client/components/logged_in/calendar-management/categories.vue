@@ -1,0 +1,335 @@
+<template>
+  <div class="vstack stack--lg" :aria-busy="state.isLoading ? 'true': 'false'">
+
+    <!-- Error Display -->
+    <div v-if="state.error" class="alert alert--error">
+      {{ state.error }}
+    </div>
+
+    <LoadingMessage v-if="state.isLoading" :description="t('loading')" />
+
+    <!-- Categories List -->
+    <div v-else-if="state.categories.length > 0" class="vstack stack--md">
+      <div class="hstack hstack--end">
+        <button
+          type="button"
+          class="primary"
+          @click="openCreateEditor"
+        >
+          {{ t('add_category_button') }}
+        </button>
+      </div>
+      <div
+        v-for="category in state.categories"
+        :key="category.id"
+        class="hstack hstack--between stack--md category-item"
+      >
+        <div class="category-info">
+          <span class="category-name">{{ category.content(currentLanguage)?.name || 'Unnamed Category' }}</span>
+        </div>
+        <div class="hstack stack--sm">
+          <button
+            type="button"
+            class="btn btn--sm btn--secondary"
+            @click="openEditEditor(category)"
+            :disabled="state.isDeleting === category.id"
+          >
+            {{ t('edit_button') }}
+          </button>
+          <button
+            type="button"
+            class="btn btn--sm btn--danger"
+            @click="confirmDeleteCategory(category)"
+            :disabled="state.isDeleting === category.id"
+          >
+            {{ state.isDeleting === category.id ? t('deleting') : t('delete_button') }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Empty State -->
+    <EmptyLayout v-else :title="t('no_categories')" :description="t('no_categories_description')">
+      <button
+        type="button"
+        class="primary"
+        @click="openCreateEditor"
+        :disabled="state.isLoading"
+      >
+        {{ t('add_category_button') }}
+      </button>
+    </EmptyLayout>
+
+    <!-- Category Editor Modal -->
+    <CategoryEditor
+      v-if="state.showEditor && state.categoryToEdit"
+      :category="state.categoryToEdit"
+      @close="closeEditor"
+      @saved="onCategorySaved"
+    />
+
+    <!-- Confirm Delete Category Modal -->
+    <ModalLayout
+      v-if="state.categoryToDelete"
+      :title="t('confirm_delete_title')"
+      @close="cancelDeleteCategory"
+    >
+      <div class="confirm-delete">
+        <p>{{ t('confirm_delete_message', { name: state.categoryToDelete.content(currentLanguage)?.name || 'Unnamed Category' }) }}</p>
+        <div class="form-actions">
+          <button
+            type="button"
+            class="danger"
+            @click="deleteCategory"
+            :disabled="state.isDeleting === state.categoryToDelete?.id"
+          >
+            {{ state.isDeleting === state.categoryToDelete?.id ? t('deleting') : t('delete_button') }}
+          </button>
+          <button
+            type="button"
+            @click="cancelDeleteCategory"
+            :disabled="state.isDeleting === state.categoryToDelete?.id"
+          >
+            {{ t('cancel') }}
+          </button>
+        </div>
+      </div>
+    </ModalLayout>
+  </div>
+</template>
+
+<script setup>
+import { reactive, onMounted, ref, nextTick } from 'vue';
+import { useTranslation } from 'i18next-vue';
+import { EventCategory } from '@/common/model/event_category';
+import CategoryService from '@/client/service/category';
+import CategoryEditor from './CategoryEditor.vue';
+import ModalLayout from '@/client/components/common/modal.vue';
+import { EventCategoryContent } from '@/common/model/event_category_content';
+import EmptyLayout from '@/client/components/common/empty_state.vue';
+import LoadingMessage from '@/client/components/common/loading_message.vue';
+
+const props = defineProps({
+  calendarId: {
+    type: String,
+    required: true,
+  },
+});
+
+const emit = defineEmits(['categoriesUpdated']);
+
+const { t } = useTranslation('calendars', {
+  keyPrefix: 'management',
+});
+
+const categoryService = new CategoryService();
+const currentLanguage = 'en'; // TODO: Get from language picker/preference
+
+const state = reactive({
+  categories: [],
+  isLoading: false,
+  error: '',
+
+  // Editor state
+  showEditor: false,
+  categoryToEdit: null,
+  isDeleting: '',
+
+  // Delete state
+  categoryToDelete: null,
+});
+
+const categoryNameInput = ref(null);
+
+/**
+ * Load categories from the server
+ */
+async function loadCategories() {
+  state.isLoading = true;
+  state.error = '';
+
+  try {
+    state.categories = await categoryService.loadCategories(props.calendarId);
+    console.log('Categories loaded:', state.categories[0]);
+  }
+  catch (error) {
+    console.error('Error loading categories:', error);
+    state.error = t('error_loading');
+  }
+  finally {
+    state.isLoading = false;
+  }
+}
+
+/**
+ * Open the category editor for creating a new category
+ */
+function openCreateEditor() {
+  const newCategory = new EventCategory(
+    null, // ID will be generated by the server
+    props.calendarId,
+  );
+  // Initialize with current language
+  newCategory.addContent(EventCategoryContent.fromObject({
+    language: 'en',
+    name: '',
+  }));
+  state.categoryToEdit = newCategory;
+  state.showEditor = true;
+}
+
+/**
+ * Open the category editor for editing an existing category
+ */
+function openEditEditor(category) {
+  // Create a copy of the category for editing
+  const categoryToEdit = new EventCategory(
+    category.id,
+    category.calendarId,
+  );
+
+  // Copy all content from the original category
+  const languages = category.getLanguages();
+  languages.forEach(lang => {
+    const content = category.content(lang);
+    if (content) {
+      categoryToEdit.addContent(EventCategoryContent.fromObject({
+        language: lang,
+        name: content.name,
+      }));
+    }
+  });
+
+  state.categoryToEdit = categoryToEdit;
+  state.showEditor = true;
+}
+
+/**
+ * Close the category editor
+ */
+function closeEditor() {
+  state.showEditor = false;
+  state.categoryToEdit = null;
+}
+
+/**
+ * Handle category saved from editor
+ */
+async function onCategorySaved() {
+  await loadCategories();
+  emit('categoriesUpdated');
+}
+
+/**
+ * Confirm delete category
+ */
+function confirmDeleteCategory(category) {
+  state.categoryToDelete = category;
+}
+
+/**
+ * Cancel delete category
+ */
+function cancelDeleteCategory() {
+  state.categoryToDelete = null;
+  state.isDeleting = '';
+}
+
+/**
+ * Delete a category
+ */
+async function deleteCategory() {
+  if (!state.categoryToDelete) {
+    return;
+  }
+
+  state.isDeleting = state.categoryToDelete.id;
+
+  try {
+    await categoryService.deleteCategory(state.categoryToDelete.id);
+    await loadCategories();
+    cancelDeleteCategory();
+    emit('categoriesUpdated');
+  }
+  catch (error) {
+    console.error('Error deleting category:', error);
+    state.error = t('error_deleting');
+  }
+  finally {
+    state.isDeleting = '';
+  }
+}
+
+// Load categories when component mounts
+onMounted(async () => {
+  await loadCategories();
+});
+</script>
+
+<style scoped lang="scss">
+// @use '../../../assets/mixins' as *;
+
+  .category-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    transition: border-color 0.2s ease;
+
+    &:hover {
+      border-color: var(--color-border-hover);
+    }
+  }
+
+  .category-info {
+    flex: 1;
+
+    .category-name {
+      font-weight: 500;
+      color: var(--color-text);
+    }
+  }
+
+  .category-actions {
+    display: flex;
+    gap: 8px;
+
+    button {
+      padding: 6px 12px;
+      font-size: 14px;
+    }
+  }
+
+  .confirm-delete {
+    p {
+      margin: 0 0 24px 0;
+      color: var(--color-text);
+    }
+
+    .form-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+    }
+  }
+
+  .error {
+    padding: 12px;
+    margin-bottom: 16px;
+    background-color: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: 6px;
+    color: rgb(153, 27, 27);
+    font-size: 14px;
+  }
+
+  .loading {
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--color-text-secondary);
+  }
+
+</style>
