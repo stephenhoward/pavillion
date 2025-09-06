@@ -199,15 +199,4 @@ export default class CalendarInterface {
     return this.eventService.bulkAssignCategories(account, eventIds, categoryIds);
   }
 
-  async duplicateEvent(
-    account: Account,
-    eventId: string,
-    options: { title?: string } = {},
-  ): Promise<{
-      success: boolean;
-      originalEventId: string;
-      duplicatedEvent: CalendarEvent;
-    }> {
-    return this.eventService.duplicateEvent(account, eventId, options);
-  }
 }

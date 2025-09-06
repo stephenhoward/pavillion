@@ -18,7 +18,6 @@ export default class EventRoutes {
     router.post('/events', ExpressHelper.loggedInOnly, this.createEvent.bind(this));
     router.post('/events/:id', ExpressHelper.loggedInOnly, this.updateEvent.bind(this));
     router.post('/events/bulk-assign-categories', ExpressHelper.loggedInOnly, this.bulkAssignCategories.bind(this));
-    router.post('/events/:id/duplicate', ExpressHelper.loggedInOnly, this.duplicateEvent.bind(this));
     app.use(routePrefix, router);
   }
 
@@ -221,67 +220,4 @@ export default class EventRoutes {
     }
   }
 
-  async duplicateEvent(req: Request, res: Response) {
-    const account = req.user as Account;
-
-    if (!account) {
-      res.status(400).json({
-        "error": "missing account for event duplication. Not logged in?",
-      });
-      return;
-    }
-
-    const eventId = req.params.id;
-    if (!eventId) {
-      res.status(400).json({
-        "error": "missing event ID",
-      });
-      return;
-    }
-
-    const { title } = req.body;
-
-    // Validate title if provided
-    if (title !== undefined && typeof title !== 'string') {
-      res.status(400).json({
-        "error": "title must be a string",
-      });
-      return;
-    }
-
-    try {
-      const result = await this.service.duplicateEvent(account, eventId, { title });
-      res.json({
-        success: result.success,
-        originalEventId: result.originalEventId,
-        duplicatedEvent: result.duplicatedEvent.toObject(),
-      });
-    }
-    catch (error) {
-      if (error instanceof EventNotFoundError) {
-        res.status(404).json({
-          "error": error.message,
-          "errorName": error.name,
-        });
-      }
-      else if (error instanceof InsufficientCalendarPermissionsError) {
-        res.status(403).json({
-          "error": error.message,
-          "errorName": error.name,
-        });
-      }
-      else if (error instanceof CalendarNotFoundError) {
-        res.status(404).json({
-          "error": error.message,
-          "errorName": error.name,
-        });
-      }
-      else {
-        console.error("Error duplicating event:", error);
-        res.status(500).json({
-          "error": "An error occurred while duplicating the event",
-        });
-      }
-    }
-  }
 }
