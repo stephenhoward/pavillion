@@ -17,6 +17,7 @@ export default class EventRoutes {
     router.get('/calendars/:calendar/events', ExpressHelper.loggedInOnly, this.listEvents.bind(this));
     router.post('/events', ExpressHelper.loggedInOnly, this.createEvent.bind(this));
     router.post('/events/:id', ExpressHelper.loggedInOnly, this.updateEvent.bind(this));
+    router.delete('/events/:id', ExpressHelper.loggedInOnly, this.deleteEvent.bind(this));
     router.post('/events/bulk-assign-categories', ExpressHelper.loggedInOnly, this.bulkAssignCategories.bind(this));
     app.use(routePrefix, router);
   }
@@ -220,4 +221,47 @@ export default class EventRoutes {
     }
   }
 
+  async deleteEvent(req: Request, res: Response) {
+    const account = req.user as Account;
+
+    if (!account) {
+      res.status(400).json({
+        "error": "missing account for event deletion. Not logged in?",
+      });
+      return;
+    }
+
+    const eventId = req.params.id;
+    if (!eventId) {
+      res.status(400).json({
+        "error": "missing event ID",
+      });
+      return;
+    }
+
+    try {
+      await this.service.deleteEvent(account, eventId);
+      res.status(204).send(); // No content response for successful deletion
+    }
+    catch (error) {
+      if (error instanceof EventNotFoundError) {
+        res.status(404).json({
+          "error": error.message,
+          "errorName": error.name,
+        });
+      }
+      else if (error instanceof InsufficientCalendarPermissionsError) {
+        res.status(403).json({
+          "error": error.message,
+          "errorName": error.name,
+        });
+      }
+      else {
+        console.error("Error deleting event:", error);
+        res.status(500).json({
+          "error": "An error occurred while deleting the event",
+        });
+      }
+    }
+  }
 }

@@ -99,4 +99,19 @@ export default class ModelService {
       throw(error);
     }
   }
+
+  /**
+   * Delete a resource by URL
+   * @param url - The complete URL for the resource to delete
+   * @returns Promise resolving to the server response data
+   */
+  static async delete(url: string): Promise<Record<string,any>> {
+    try {
+      let response = await axios.delete(url);
+      return response.data;
+    }
+    catch(error) {
+      throw(error);
+    }
+  }
 }

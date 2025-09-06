@@ -81,4 +81,20 @@ export default class EventService {
       throw error;
     }
   }
+
+  /**
+   * Delete an event
+   * @param eventId The ID of the event to delete
+   * @returns Promise<void>
+   */
+  async deleteEvent(event: CalendarEvent): Promise<void> {
+    try {
+      await ModelService.deleteModel(event, '/api/v1/events');
+      this.store.removeEvent(event);
+    }
+    catch (error) {
+      console.error('Error deleting event:', error);
+      throw error;
+    }
+  }
 }

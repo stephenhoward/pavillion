@@ -492,6 +492,67 @@ class EventService {
     }
   }
 
+  /**
+   * Delete an event
+   * @param account - The account attempting to delete the event
+   * @param eventId - The ID of the event to delete
+   * @throws EventNotFoundError if the event doesn't exist
+   * @throws InsufficientCalendarPermissionsError if the user can't modify the calendar
+   */
+  async deleteEvent(account: Account, eventId: string): Promise<void> {
+    const eventEntity = await EventEntity.findByPk(eventId, {
+      include: [EventContentEntity, LocationEntity, EventScheduleEntity, MediaEntity],
+    });
+
+    if (!eventEntity) {
+      throw new EventNotFoundError(`Event with ID ${eventId} not found`);
+    }
+
+    const calendar = await this.calendarService.getCalendar(eventEntity.calendar_id);
+    if (!calendar) {
+      throw new CalendarNotFoundError(`Calendar not found for event ${eventId}`);
+    }
+
+    const canModify = await this.calendarService.userCanModifyCalendar(account, calendar);
+    if (!canModify) {
+      throw new InsufficientCalendarPermissionsError(`User does not have permission to delete events in calendar ${calendar.urlName}`);
+    }
+
+    const transaction = await db.transaction();
+    try {
+      // Delete related records
+      await EventContentEntity.destroy({
+        where: { event_id: eventId },
+        transaction,
+      });
+
+      await EventScheduleEntity.destroy({
+        where: { event_id: eventId },
+        transaction,
+      });
+
+      await EventCategoryAssignmentEntity.destroy({
+        where: { event_id: eventId },
+        transaction,
+      });
+
+      // Delete the main event entity
+      await eventEntity.destroy({ transaction });
+
+      await transaction.commit();
+
+      // Emit event for ActivityPub federation
+      this.eventBus.emit('event_deleted', {
+        eventId,
+        calendar,
+        account,
+      });
+    }
+    catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  }
 }
 
 export default EventService;

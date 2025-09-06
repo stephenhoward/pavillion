@@ -118,7 +118,9 @@
     "categories_not_found": "Some categories were not found or are not available",
     "mixed_calendar_events": "All selected events must be from the same calendar",
     "insufficient_permissions": "You don't have permission to modify some of the selected events",
-    "assignment_failed": "Failed to assign categories. Please try again."
+    "assignment_failed": "Failed to assign categories. Please try again.",
+    "delete_events": "Delete Events",
+    "delete_events_label": "Delete selected events"
   }
 }
 

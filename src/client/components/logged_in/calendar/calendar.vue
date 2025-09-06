@@ -103,6 +103,28 @@ const handleAssignmentComplete = (result) => {
   console.log(`Successfully assigned ${result.categoryCount} categories to ${result.eventCount} events`);
   deselectAll(); // Clear selection after successful assignment
 };
+
+const handleDeleteEvents = async () => {
+  if (!selectedEvents.value.length) return;
+
+  const confirmDelete = confirm(`Are you sure you want to delete ${selectedCount.value} event${selectedCount.value > 1 ? 's' : ''}?`);
+
+  if (confirmDelete) {
+    try {
+      for (const eventId of selectedEvents.value) {
+        await eventService.deleteEvent(eventId);
+      }
+
+      // Reload events after deletion
+      await eventService.loadCalendarEvents(calendarId);
+      deselectAll();
+    }
+    catch (error) {
+      console.error('Error deleting events:', error);
+      // TODO: Show user-friendly error message
+    }
+  }
+};
 </script>
 
 <template>
@@ -192,6 +214,7 @@ const handleAssignmentComplete = (result) => {
     <BulkOperationsMenu
       :selected-count="selectedCount"
       @assign-categories="handleAssignCategories"
+      @delete-events="handleDeleteEvents"
       @deselect-all="handleDeselectAll"
     />
 

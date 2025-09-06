@@ -93,6 +93,10 @@ export default class CalendarInterface {
     return this.eventService.updateEvent(account, eventId, eventParams);
   }
 
+  async deleteEvent(account: Account, eventId: string): Promise<void> {
+    return this.eventService.deleteEvent(account, eventId);
+  }
+
   async addRemoteEvent(calendar: Calendar, eventParams: Record<string, any>): Promise<CalendarEvent> {
     return this.eventService.addRemoteEvent(calendar, eventParams);
   }

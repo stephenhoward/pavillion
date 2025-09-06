@@ -38,5 +38,13 @@ export const useEventStore = defineStore('events', {
     setEvents(events: CalendarEvent[]) {
       this.events = events;
     },
+
+    /**
+     * Remove an event from the store
+     * @param event - The event to remove
+     */
+    removeEvent(event: CalendarEvent) {
+      this.events = this.events.filter((e: CalendarEvent) => e.id !== event.id);
+    },
   },
 });

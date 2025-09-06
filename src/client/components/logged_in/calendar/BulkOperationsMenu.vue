@@ -13,7 +13,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['assign-categories', 'deselect-all']);
+const emit = defineEmits(['assign-categories', 'delete-events', 'deselect-all']);
 
 const isVisible = computed(() => props.selectedCount > 0);
 
@@ -33,6 +33,11 @@ const assignCategories = () => {
 const deselectAll = () => {
   emit('deselect-all');
 };
+
+const deleteEvents = () => {
+  emit('delete-events');
+};
+
 </script>
 
 <template>
@@ -60,6 +65,16 @@ const deselectAll = () => {
         :aria-label="t('assign_categories_label')"
       >
         {{ t('assign_categories') }}
+      </button>
+
+      <button
+        type="button"
+        class="danger"
+        data-testid="delete-events-btn"
+        @click="deleteEvents"
+        :aria-label="t('delete_events_label')"
+      >
+        {{ t('delete_events') }}
       </button>
 
       <button
@@ -141,6 +156,17 @@ const deselectAll = () => {
 
         &:hover {
           background: var(--primary-color-dark, #0056b3);
+        }
+
+      }
+
+      &.danger {
+        background: var(--danger-color, #dc3545);
+        color: white;
+        border: none;
+
+        &:hover {
+          background: var(--danger-color-dark, #c82333);
         }
       }
 

@@ -4,7 +4,7 @@ import request from 'supertest';
 import express from 'express';
 import { EventEmitter } from 'events';
 
-import { CalendarEvent, CalendarEventContent } from '@/common/model/events';
+import { CalendarEvent } from '@/common/model/events';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEditor } from '@/common/model/calendar_editor';
 import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/common/exceptions/editor';
