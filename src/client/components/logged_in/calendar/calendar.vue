@@ -7,9 +7,17 @@ import CalendarService from '@/client/service/calendar';
 import EventService from '@/client/service/event';
 import EventImage from '@/client/components/common/media/EventImage.vue';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
+import BulkOperationsMenu from './BulkOperationsMenu.vue';
+import CategorySelectionDialog from './CategorySelectionDialog.vue';
+import { useBulkSelection } from '@/client/composables/useBulkSelection';
 
 const { t } = useTranslation('calendars',{
   keyPrefix: 'calendar',
+});
+
+// For bulk operations translations
+const { t: tBulk } = useTranslation('calendars', {
+  keyPrefix: 'bulk_operations',
 });
 const site_config = inject('site_config');
 const site_domain = site_config.settings().domain;
@@ -26,6 +34,18 @@ const state = reactive({
 const calendarId = route.params.calendar;
 const store = useEventStore();
 const calendarService = new CalendarService();
+
+// Bulk selection functionality
+const {
+  selectedEvents,
+  selectedCount,
+  hasSelection,
+  toggleEventSelection,
+  isEventSelected,
+  selectAllState,
+  toggleSelectAll,
+  deselectAll,
+} = useBulkSelection();
 
 onBeforeMount(async () => {
   try {
@@ -61,6 +81,28 @@ const navigateToManagement = () => {
     params: { calendar: state.calendar.id },
   });
 };
+
+// Category selection dialog state
+const showCategoryDialog = ref(false);
+
+// Handle bulk operations
+const handleAssignCategories = () => {
+  showCategoryDialog.value = true;
+};
+
+const handleDeselectAll = () => {
+  deselectAll();
+};
+
+const handleCategoryDialogClose = () => {
+  showCategoryDialog.value = false;
+};
+
+const handleAssignmentComplete = (result) => {
+  // Show success message or handle completion
+  console.log(`Successfully assigned ${result.categoryCount} categories to ${result.eventCount} events`);
+  deselectAll(); // Clear selection after successful assignment
+};
 </script>
 
 <template>
@@ -93,13 +135,40 @@ const navigateToManagement = () => {
       <!-- Events Display Section -->
       <section v-if="store.events && store.events.length > 0" aria-label="Calendar Events">
         <h2 class="sr-only">Events in this Calendar</h2>
+
+        <!-- Select All Controls -->
+        <div class="event-controls">
+          <label class="select-all-control">
+            <input
+              type="checkbox"
+              :checked="selectAllState(store.events).checked"
+              :indeterminate="selectAllState(store.events).indeterminate"
+              @change="toggleSelectAll(store.events)"
+              :aria-label="tBulk('select_all_events')"
+            />
+            <span>{{ tBulk('select_all') }}</span>
+          </label>
+        </div>
+
         <ul class="event-list" role="list">
           <li v-for="event in store.events"
               :key="event.id"
-              @click="$emit('openEvent', event.clone())"
               class="event-item"
+              :class="{ selected: isEventSelected(event) }"
               role="listitem">
-            <article :aria-labelledby="`event-title-${event.id}`">
+            <div class="event-checkbox">
+              <input
+                type="checkbox"
+                :checked="isEventSelected(event)"
+                @change.stop="toggleEventSelection(event)"
+                :aria-label="`Select event: ${event.content('en').name}`"
+              />
+            </div>
+            <article
+              :aria-labelledby="`event-title-${event.id}`"
+              @click="$emit('openEvent', event.clone())"
+              class="event-article"
+            >
               <EventImage :media="event.media" size="small" />
               <div class="event-content">
                 <h3 :id="`event-title-${event.id}`">{{ event.content("en").name }}</h3>
@@ -118,6 +187,21 @@ const navigateToManagement = () => {
         </button>
       </EmptyLayout>
     </div>
+
+    <!-- Bulk Operations Menu -->
+    <BulkOperationsMenu
+      :selected-count="selectedCount"
+      @assign-categories="handleAssignCategories"
+      @deselect-all="handleDeselectAll"
+    />
+
+    <!-- Category Selection Dialog -->
+    <CategorySelectionDialog
+      :visible="showCategoryDialog"
+      :selected-event-ids="selectedEvents"
+      @close="handleCategoryDialogClose"
+      @assign-complete="handleAssignmentComplete"
+    />
   </div>
 </template>
 
@@ -168,6 +252,43 @@ main[role="main"] {
 section[aria-label="Calendar Events"] {
   margin: var(--pav-space-lg) 0;
 
+  .event-controls {
+    margin: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border-color, #e0e0e0);
+
+    .select-all-control {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      font-weight: 500;
+      color: var(--text-primary, #333);
+
+      @include dark-mode {
+        color: var(--text-primary-dark, #fff);
+      }
+
+      input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+      }
+
+      span {
+        user-select: none;
+      }
+
+      &:hover {
+        color: var(--primary-color, #007bff);
+      }
+    }
+
+    @include dark-mode {
+      border-color: var(--border-color-dark, #4a5568);
+    }
+  }
+
   .event-list {
     list-style: none;
     padding: 0;
@@ -181,8 +302,12 @@ section[aria-label="Calendar Events"] {
       margin-bottom: 15px;
       border: 1px solid #e0e0e0;
       border-radius: 8px;
-      cursor: pointer;
       transition: all 0.2s ease;
+
+      &.selected {
+        border-color: #007bff;
+        background: rgba(0, 123, 255, 0.05);
+      }
 
       &:hover {
         border-color: #007bff;
@@ -192,17 +317,35 @@ section[aria-label="Calendar Events"] {
       @include dark-mode {
         border-color: #444;
 
+        &.selected {
+          border-color: #007bff;
+          background: rgba(0, 123, 255, 0.1);
+        }
+
         &:hover {
           border-color: #007bff;
           box-shadow: 0 2px 8px rgba(0, 123, 255, 0.2);
         }
       }
 
-      article {
+      .event-checkbox {
+        display: flex;
+        align-items: center;
+        padding-top: 2px;
+
+        input[type="checkbox"] {
+          width: 18px;
+          height: 18px;
+          cursor: pointer;
+        }
+      }
+
+      .event-article {
         display: flex;
         align-items: flex-start;
         gap: 15px;
         width: 100%;
+        cursor: pointer;
       }
     }
 

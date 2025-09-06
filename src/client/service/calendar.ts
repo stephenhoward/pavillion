@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { Calendar } from '@/common/model/calendar';
+import { CalendarEvent } from '@/common/model/events';
 import { CalendarEditor } from '@/common/model/calendar_editor';
 import { CalendarInfo } from '@/common/model/calendar_info';
 import ModelService from '@/client/service/models';
@@ -8,6 +9,13 @@ import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFound
 import { UnauthenticatedError, UnknownError, EmptyValueError } from '@/common/exceptions';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 
+import {
+  BulkEventsNotFoundError,
+  CategoriesNotFoundError,
+  MixedCalendarEventsError,
+  InsufficientCalendarPermissionsError,
+} from '@/common/exceptions/calendar';
+
 const errorMap = {
   UrlNameAlreadyExistsError,
   InvalidUrlNameError,
@@ -15,6 +23,10 @@ const errorMap = {
   CalendarEditorPermissionError,
   EditorAlreadyExistsError,
   EditorNotFoundError,
+  BulkEventsNotFoundError,
+  CategoriesNotFoundError,
+  MixedCalendarEventsError,
+  InsufficientCalendarPermissionsError,
   UnauthenticatedError,
   UnknownError,
 };
@@ -235,6 +247,55 @@ export default class CalendarService {
       console.error('Error revoking edit access:', error);
       this.handleEditorError(error);
       throw new UnknownError();
+    }
+  }
+
+  /**
+   * Assign categories to multiple events in bulk
+   * @param eventIds Array of event IDs to assign categories to
+   * @param categoryIds Array of category IDs to assign
+   * @returns Promise<CalendarEvent[]> Array of updated events with their categories
+   */
+  async bulkAssignCategories(eventIds: string[], categoryIds: string[]): Promise<CalendarEvent[]> {
+    if (!Array.isArray(eventIds) || eventIds.length === 0) {
+      throw new EmptyValueError('eventIds must be a non-empty array');
+    }
+
+    if (!Array.isArray(categoryIds) || categoryIds.length === 0) {
+      throw new EmptyValueError('categoryIds must be a non-empty array');
+    }
+
+    try {
+      const response = await axios.post('/api/v1/events/bulk-assign-categories', {
+        eventIds,
+        categoryIds,
+      });
+
+      return response.data.map((eventData: Record<string, any>) => CalendarEvent.fromObject(eventData));
+    }
+    catch (error: unknown) {
+      console.error('Error in bulk category assignment:', error);
+      this.handleBulkOperationError(error);
+      throw new UnknownError();
+    }
+  }
+
+  /**
+   * Handle bulk operation errors by mapping backend error names to frontend exception classes
+   * @param error The error from the API call
+   */
+  private handleBulkOperationError(error: unknown): void {
+    // Type guard to ensure error is the expected shape
+    if (error && typeof error === 'object' && 'response' in error &&
+        error.response && typeof error.response === 'object' && 'data' in error.response) {
+
+      const responseData = error.response.data as Record<string, unknown>;
+      const errorName = responseData.errorName as string;
+
+      if (errorName && errorName in errorMap) {
+        const ErrorClass = errorMap[errorName as keyof typeof errorMap];
+        throw new ErrorClass();
+      }
     }
   }
 

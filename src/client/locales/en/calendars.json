@@ -95,6 +95,30 @@
     "error_updating": "Failed to update category",
     "error_deleting": "Failed to delete category",
     "error_loading": "Failed to load categories"
+  },
+  "bulk_operations": {
+    "menu_label": "Bulk Operations",
+    "event_selected": "{{count}} event selected",
+    "events_selected": "{{count}} events selected",
+    "assign_categories": "Assign Categories",
+    "assign_categories_label": "Assign categories to selected events",
+    "deselect_all": "Deselect All",
+    "deselect_all_label": "Deselect all selected events",
+    "select_all": "Select All",
+    "select_all_events": "Select all events in this view",
+    "assign_categories_dialog_title": "Assign Categories to Events",
+    "assign_categories_summary": "Assigning categories to {{count}} selected events:",
+    "select_categories_label": "Select categories to assign:",
+    "select_categories_required": "Please select at least one category to assign",
+    "no_categories_available": "No categories available. Create categories first to assign them to events.",
+    "close_dialog": "Close dialog",
+    "cancel": "Cancel",
+    "assigning": "Assigning...",
+    "events_not_found": "Some events were not found or could not be accessed",
+    "categories_not_found": "Some categories were not found or are not available",
+    "mixed_calendar_events": "All selected events must be from the same calendar",
+    "insufficient_permissions": "You don't have permission to modify some of the selected events",
+    "assignment_failed": "Failed to assign categories. Please try again."
   }
 }
 
