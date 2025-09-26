@@ -38,21 +38,42 @@ export default class AccountInvitationRouteHandlers {
   }
 
   async checkInviteCode(req: Request, res: Response) {
-    if ( await this.service.validateInviteCode(req.params.code) ) {
+    try {
+      await this.service.validateInviteCode(req.params.code);
       res.json({ message: 'ok' });
     }
-    else {
+    catch {
       res.status(404);
       res.json({message: 'not ok'});
     }
   }
 
   async acceptInvite(req: Request, res: Response) {
-    let account = await this.service.acceptAccountInvite(req.params.code, req.body.password);
-    if ( account ) {
-      res.send(ExpressHelper.generateJWT(account));
+    try {
+      const result = await this.service.acceptAccountInvite(req.params.code, req.body.password);
+
+      if (result && result.account) {
+        const jwt = ExpressHelper.generateJWT(result.account);
+
+        // If there are calendar contexts, include them in the response
+        if (result.calendars && result.calendars.length > 0) {
+          res.json({
+            jwt,
+            calendars: result.calendars,
+          });
+        }
+        else {
+          // Maintain backward compatibility for admin invitations without calendar context
+          res.send(jwt);
+        }
+      }
+      else {
+        res.status(400);
+        res.json({message: 'not ok'});
+      }
     }
-    else {
+    catch (error) {
+      console.error('Error accepting invitation:', error);
       res.status(400);
       res.json({message: 'not ok'});
     }

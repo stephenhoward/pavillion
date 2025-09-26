@@ -3,6 +3,7 @@ import { EventLocation } from '@/common/model/location';
 import { useEventStore } from '@/client/stores/eventStore';
 import ModelService from '@/client/service/models';
 import { Calendar } from '@/common/model/calendar';
+import { validateAndEncodeId } from '@/client/service/utils';
 
 export default class EventService {
   store: ReturnType<typeof useEventStore>;
@@ -62,7 +63,8 @@ export default class EventService {
         url += `?${params.toString()}`;
       }
 
-      const events = await ModelService.listModels(url);
+      const encodedUrlName = validateAndEncodeId(calendarUrlName, 'Calendar URL name');
+      const events = await ModelService.listModels(`/api/v1/calendars/${encodedUrlName}/events`);
       const calendarEvents = events.map(event => CalendarEvent.fromObject(event));
       this.store.events = calendarEvents;
       return calendarEvents;

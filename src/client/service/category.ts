@@ -5,6 +5,7 @@ import { CalendarNotFoundError, InsufficientCalendarPermissionsError } from '@/c
 import { UnauthenticatedError, UnknownError, EmptyValueError } from '@/common/exceptions';
 import { useCategoryStore } from '@/client/stores/categoryStore';
 import ModelService from '@/client/service/models';
+import { validateAndEncodeId } from '@/client/service/utils';
 
 const errorMap = {
   CategoryNotFoundError,
@@ -51,8 +52,10 @@ export default class CategoryService {
    * @returns Promise<Array<EventCategory>> The list of categories
    */
   async loadCategories(calendarId: string): Promise<Array<EventCategory>> {
+    const encodedId = validateAndEncodeId(calendarId, 'Calendar ID');
+
     try {
-      const categories = await ModelService.listModels(`/api/v1/calendars/${calendarId}/categories`);
+      const categories = await ModelService.listModels(`/api/v1/calendars/${encodedId}/categories`);
       const calendarCategories = categories.map(event => EventCategory.fromObject(event));
       this.store.setCategoriesForCalendar(calendarId,calendarCategories);
       return calendarCategories;
@@ -76,9 +79,11 @@ export default class CategoryService {
       throw new Error('Category must have a calendarId');
     }
 
+    const encodedCalendarId = validateAndEncodeId(category.calendarId, 'Calendar ID');
+
     try {
       let savedCategory: EventCategory;
-      const url = `/api/v1/calendars/${category.calendarId}/categories`;
+      const url = `/api/v1/calendars/${encodedCalendarId}/categories`;
 
       if (isNew) {
         const responseData = await ModelService.createModel(category, url);
@@ -105,8 +110,10 @@ export default class CategoryService {
    * @returns Promise<EventCategoryModel> The category
    */
   async getCategory(categoryId: string): Promise<EventCategory> {
+    const encodedId = validateAndEncodeId(categoryId, 'Category ID');
+
     try {
-      const response = await axios.get(`/api/v1/categories/${categoryId}`);
+      const response = await axios.get(`/api/v1/categories/${encodedId}`);
       return EventCategory.fromObject(response.data);
     }
     catch (error: unknown) {
@@ -121,8 +128,10 @@ export default class CategoryService {
    * @returns Promise<void>
    */
   async deleteCategory(categoryId: string, calendarId?: string): Promise<void> {
+    const encodedId = validateAndEncodeId(categoryId, 'Category ID');
+
     try {
-      await axios.delete(`/api/v1/categories/${categoryId}`);
+      await axios.delete(`/api/v1/categories/${encodedId}`);
 
       // If calendarId is provided, remove from store
       if (calendarId) {
@@ -140,8 +149,9 @@ export default class CategoryService {
    * @returns Promise<Array<EventCategoryModel>> The list of categories assigned to the event
    */
   async getEventCategories(eventId: string): Promise<Array<EventCategory>> {
+    const encodedEventId = validateAndEncodeId(eventId, 'Event ID');
+
     try {
-      const encodedEventId = encodeURIComponent(eventId);
       const categories = await ModelService.listModels(`/api/v1/events/${encodedEventId}/categories`);
       const eventCategories = categories.map(event => EventCategory.fromObject(event));
       return eventCategories;
@@ -159,9 +169,11 @@ export default class CategoryService {
    * @returns Promise<void>
    */
   async assignCategoryToEvent(eventId: string, categoryId: string): Promise<void> {
+    const encodedEventId = validateAndEncodeId(eventId, 'Event ID');
+    const encodedCategoryId = validateAndEncodeId(categoryId, 'Category ID');
+
     try {
-      const encodedEventId = encodeURIComponent(eventId);
-      await axios.post(`/api/v1/events/${encodedEventId}/categories/${categoryId}`);
+      await axios.post(`/api/v1/events/${encodedEventId}/categories/${encodedCategoryId}`);
     }
     catch (error: unknown) {
       handleError(error);
@@ -206,9 +218,11 @@ export default class CategoryService {
    * @returns Promise<void>
    */
   async unassignCategoryFromEvent(eventId: string, categoryId: string): Promise<void> {
+    const encodedEventId = validateAndEncodeId(eventId, 'Event ID');
+    const encodedCategoryId = validateAndEncodeId(categoryId, 'Category ID');
+
     try {
-      const encodedEventId = encodeURIComponent(eventId);
-      await axios.delete(`/api/v1/events/${encodedEventId}/categories/${categoryId}`);
+      await axios.delete(`/api/v1/events/${encodedEventId}/categories/${encodedCategoryId}`);
     }
     catch (error: unknown) {
       handleError(error);

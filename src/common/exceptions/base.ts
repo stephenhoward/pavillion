@@ -34,3 +34,15 @@ export class EmptyValueError extends Error {
   }
 }
 
+/**
+ * Custom error class for duplicate account invitations
+ */
+export class AccountInviteAlreadyExistsError extends Error {
+  constructor(message: string = 'An invitation has already been sent to this email address') {
+    super(message);
+    this.name = 'AccountInviteAlreadyExistsError';
+    // Maintaining proper prototype chain in ES5+
+    Object.setPrototypeOf(this, AccountInviteAlreadyExistsError.prototype);
+  }
+}
+

@@ -6,8 +6,9 @@ import { CalendarInfo } from '@/common/model/calendar_info';
 import ModelService from '@/client/service/models';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/common/exceptions/editor';
-import { UnauthenticatedError, UnknownError, EmptyValueError } from '@/common/exceptions';
+import { UnauthenticatedError, UnknownError, EmptyValueError, AccountInviteAlreadyExistsError } from '@/common/exceptions';
 import { useCalendarStore } from '@/client/stores/calendarStore';
+import { validateAndEncodeId } from '@/client/service/utils';
 
 import {
   BulkEventsNotFoundError,
@@ -29,6 +30,7 @@ const errorMap = {
   InsufficientCalendarPermissionsError,
   UnauthenticatedError,
   UnknownError,
+  AccountInviteAlreadyExistsError,
 };
 
 export default class CalendarService {
@@ -189,14 +191,18 @@ export default class CalendarService {
   }
 
   /**
-   * List all editors for a calendar
+   * List all editors and pending invitations for a calendar
    * @param calendarId The ID of the calendar
-   * @returns Promise<Array<CalendarEditor>> List of calendar editors
+   * @returns Promise<{activeEditors: CalendarEditor[], pendingInvitations: any[]}> Enhanced editors data
    */
-  async listCalendarEditors(calendarId: string): Promise<Array<CalendarEditor>> {
+  async listCalendarEditors(calendarId: string): Promise<{activeEditors: CalendarEditor[], pendingInvitations: any[]}> {
     try {
-      const response = await axios.get(`/api/v1/calendars/${calendarId}/editors`);
-      return response.data.map((editor: Record<string, any>) => CalendarEditor.fromObject(editor));
+      const encodedId = validateAndEncodeId(calendarId, 'Calendar ID');
+      const response = await axios.get(`/api/v1/calendars/${encodedId}/editors`);
+      return {
+        activeEditors: response.data.activeEditors.map((editor: Record<string, any>) => CalendarEditor.fromObject(editor)),
+        pendingInvitations: response.data.pendingInvitations || [],
+      };
     }
     catch (error: unknown) {
       console.error('Error listing calendar editors:', error);
@@ -217,7 +223,8 @@ export default class CalendarService {
     }
 
     try {
-      const response = await axios.post(`/api/v1/calendars/${calendarId}/editors`, {
+      const encodedId = validateAndEncodeId(calendarId, 'Calendar ID');
+      const response = await axios.post(`/api/v1/calendars/${encodedId}/editors`, {
         email: email.trim(),
       });
       return CalendarEditor.fromObject(response.data);
@@ -236,12 +243,15 @@ export default class CalendarService {
    * @returns Promise<void>
    */
   async revokeEditAccess(calendarId: string, editorId: string): Promise<void> {
-    if (!editorId || editorId.trim() === '') {
+    // Validate editorId first with the expected error message
+    if (!editorId || !editorId.trim()) {
       throw new EmptyValueError('editorId is empty');
     }
 
     try {
-      await axios.delete(`/api/v1/calendars/${calendarId}/editors/${editorId.trim()}`);
+      const encodedCalendarId = validateAndEncodeId(calendarId, 'Calendar ID');
+      const encodedEditorId = validateAndEncodeId(editorId, 'Editor ID');
+      await axios.delete(`/api/v1/calendars/${encodedCalendarId}/editors/${encodedEditorId}`);
     }
     catch (error: unknown) {
       console.error('Error revoking edit access:', error);
@@ -249,6 +259,45 @@ export default class CalendarService {
       throw new UnknownError();
     }
   }
+
+  /**
+   * Cancel a pending invitation for a calendar
+   * @param calendarId The ID of the calendar
+   * @param invitationId The ID of the invitation to cancel
+   * @returns Promise<void>
+   */
+  async cancelInvitation(calendarId: string, invitationId: string): Promise<void> {
+    try {
+      const encodedCalendarId = validateAndEncodeId(calendarId, 'Calendar ID');
+      const encodedInvitationId = validateAndEncodeId(invitationId, 'Invitation ID');
+      await axios.delete(`/api/v1/calendars/${encodedCalendarId}/invitations/${encodedInvitationId}`);
+    }
+    catch (error: unknown) {
+      console.error('Error canceling invitation:', error);
+      this.handleEditorError(error);
+      throw new UnknownError();
+    }
+  }
+
+  /**
+   * Resend a pending invitation for a calendar
+   * @param calendarId The ID of the calendar
+   * @param invitationId The ID of the invitation to resend
+   * @returns Promise<void>
+   */
+  async resendInvitation(calendarId: string, invitationId: string): Promise<void> {
+    try {
+      const encodedCalendarId = validateAndEncodeId(calendarId, 'Calendar ID');
+      const encodedInvitationId = validateAndEncodeId(invitationId, 'Invitation ID');
+      await axios.post(`/api/v1/calendars/${encodedCalendarId}/invitations/${encodedInvitationId}/resend`);
+    }
+    catch (error: unknown) {
+      console.error('Error resending invitation:', error);
+      this.handleEditorError(error);
+      throw new UnknownError();
+    }
+  }
+
 
   /**
    * Assign categories to multiple events in bulk

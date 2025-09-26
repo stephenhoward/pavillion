@@ -22,6 +22,19 @@
   "accept_invite": {
     "bad_invite_title": "Invitation expired",
     "bad_invite_explanation": "Your invite has expired or is invalid. Please contact the administrator for a new invite.",
-    "go_login": "back to sign in"
+    "go_login": "back to sign in",
+    "new_account_password_title": "Set your password",
+    "registration_new_password": "Choose a password for your new account.",
+    "password_placeholder": "Password",
+    "password2_placeholder": "Confirm password",
+    "set_password_button": "Set Password",
+    "missing_password": "Password is required",
+    "missing_password2": "Password confirmation is required",
+    "bad_password_match": "Passwords do not match",
+    "invitation_accepted_title": "Account created successfully!",
+    "invitation_accepted_description": "Your account has been created and you're ready to get started.",
+    "calendar_access_granted_title": "Calendar access granted:",
+    "invited_by": "Invited by {{email}}",
+    "continue_to_login": "Continue to Sign In"
   }
 }

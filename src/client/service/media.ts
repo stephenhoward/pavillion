@@ -1,5 +1,6 @@
 import { Media } from '@/common/model/media';
 import axios from 'axios';
+import { validateAndEncodeId } from '@/client/service/utils';
 
 /**
  * Upload progress information
@@ -238,8 +239,9 @@ export default class MediaService {
       }
 
       // Create upload request with progress tracking
+      const encodedCalendarId = validateAndEncodeId(calendarId, 'Calendar ID');
       const response = await this.uploadWithProgress(
-        `/api/v1/media/${calendarId}`,
+        `/api/v1/media/${encodedCalendarId}`,
         formData,
         fileId,
         file.name,

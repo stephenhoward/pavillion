@@ -4,6 +4,8 @@ import AccountInvitation from '@/common/model/invitation';
 import AccountApplication from '@/common/model/application';
 import AccountService from '@/server/accounts/service/account';
 import ConfigurationInterface from '@/server/configuration/interface';
+import CalendarInterface from '@/server/calendar/interface';
+import AccountInvitationEntity from '../entity/account_invitation';
 
 export default class AccountsInterface {
   private accountService: AccountService;
@@ -13,6 +15,14 @@ export default class AccountsInterface {
     configurationInterface: ConfigurationInterface,
   ) {
     this.accountService = new AccountService(eventBus, configurationInterface);
+  }
+
+  /**
+   * Set the CalendarInterface for enabling calendar editor invitation acceptance functionality.
+   * This method is called after domain initialization to avoid circular dependencies.
+   */
+  setCalendarInterface(calendarInterface: CalendarInterface): void {
+    this.accountService.setCalendarInterface(calendarInterface);
   }
 
   async getAccountByEmail(email: string): Promise<Account | undefined> {
@@ -31,7 +41,7 @@ export default class AccountsInterface {
     return this.accountService.loadAccountRoles(account);
   }
 
-  async validateInviteCode(code: string): Promise<boolean> {
+  async validateInviteCode(code: string): Promise<AccountInvitationEntity> {
     return this.accountService.validateInviteCode(code);
   }
 
@@ -65,14 +75,19 @@ export default class AccountsInterface {
   async resendInvite(id: string): Promise<AccountInvitation | undefined> {
     return this.accountService.resendInvite(id);
   }
-  async inviteNewAccount(inviter: Account, email: string, message: string): Promise<AccountInvitation> {
-    return this.accountService.inviteNewAccount(inviter, email, message);
+  async inviteNewAccount(inviter: Account, email: string, message: string, calendarId?: string): Promise<AccountInvitation> {
+    return this.accountService.inviteNewAccount(inviter, email, message, calendarId);
   }
-  async acceptAccountInvite(code: string, password: string): Promise<Account | undefined> {
+
+  async acceptAccountInvite(code: string, password: string): Promise<{ account: Account, calendars: string[] }> {
     return this.accountService.acceptAccountInvite(code, password);
   }
   async listInvitations(): Promise<AccountInvitation[]> {
     return this.accountService.listInvitations();
+  }
+
+  async listPendingInvitationsForCalendar(calendarId: string): Promise<AccountInvitation[]> {
+    return this.accountService.listPendingInvitationsForCalendar(calendarId);
   }
 
 }

@@ -415,7 +415,6 @@ describe('Editor API', () => {
 
   describe('listEditors', () => {
     it('should fail without authentication', async () => {
-      let editorStub = editorSandbox.stub(calendarInterface, 'getCalendarEditors');
       router.get('/handler', (req, res) => { routes.listEditors(req, res); });
 
       const response = await request(testApp(router))
@@ -423,13 +422,11 @@ describe('Editor API', () => {
 
       expect(response.status).toBe(401);
       expect(response.body.error).toBe('Authentication required');
-      expect(editorStub.called).toBe(false);
     });
 
     it('should fail with calendar not found', async () => {
-      let canViewStub = editorSandbox.stub(calendarInterface, 'canViewCalendarEditors');
-      let editorStub = editorSandbox.stub(calendarInterface, 'getCalendarEditors');
-      canViewStub.rejects(new CalendarNotFoundError('Calendar not found'));
+      let editorStub = editorSandbox.stub(calendarInterface, 'listCalendarEditorsWithInvitations');
+      editorStub.rejects(new CalendarNotFoundError('Calendar not found'));
       router.get('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'nonexistent';
         routes.listEditors(req, res);
@@ -440,15 +437,11 @@ describe('Editor API', () => {
 
       expect(response.status).toBe(404);
       expect(response.body.error).toBe('Calendar not found');
-      expect(editorStub.called).toBe(false);
     });
 
-    it('should fail without modify permission', async () => {
-      let calendarStub = editorSandbox.stub(calendarInterface, 'getCalendar');
-      let canViewStub = editorSandbox.stub(calendarInterface, 'canViewCalendarEditors');
-      let editorStub = editorSandbox.stub(calendarInterface, 'getCalendarEditors');
-      calendarStub.resolves(new Calendar('cal-id', 'test'));
-      canViewStub.resolves(false);
+    it('should fail without permission', async () => {
+      let editorStub = editorSandbox.stub(calendarInterface, 'listCalendarEditorsWithInvitations');
+      editorStub.rejects(new CalendarEditorPermissionError('Permission denied: only calendar owner can view editors'));
       router.get('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'cal-id';
         routes.listEditors(req, res);
@@ -459,18 +452,15 @@ describe('Editor API', () => {
 
       expect(response.status).toBe(403);
       expect(response.body.error).toBe('Permission denied: only calendar owner can view editors');
-      expect(editorStub.called).toBe(false);
     });
 
     it('should succeed and return editors list', async () => {
-      let calendarStub = editorSandbox.stub(calendarInterface, 'getCalendar');
-      let canViewStub = editorSandbox.stub(calendarInterface, 'canViewCalendarEditors');
-      let editorStub = editorSandbox.stub(calendarInterface, 'getCalendarEditors');
-      const calendar = new Calendar('cal-id', 'test');
+      let editorStub = editorSandbox.stub(calendarInterface, 'listCalendarEditorsWithInvitations');
       const editor = new CalendarEditor('editor-id', 'cal-id', 'user-id');
-      calendarStub.resolves(calendar);
-      canViewStub.resolves(true);
-      editorStub.resolves([editor]);
+      editorStub.resolves({
+        activeEditors: [editor],
+        pendingInvitations: [],
+      });
       router.get('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'cal-id';
         routes.listEditors(req, res);
@@ -480,8 +470,10 @@ describe('Editor API', () => {
         .get('/handler');
 
       expect(response.status).toBe(200);
-      expect(response.body).toEqual([editor.toObject()]);
-      expect(editorStub.called).toBe(true);
+      expect(response.body).toEqual({
+        activeEditors: [editor.toObject()],
+        pendingInvitations: [],
+      });
     });
   });
 
@@ -602,26 +594,26 @@ describe('Editor API', () => {
     });
   });
 
-  describe('revokeEditAccess', () => {
+  describe('removeEditAccess', () => {
     it('should fail without authentication', async () => {
-      let revokeStub = editorSandbox.stub(calendarInterface, 'revokeEditAccess');
-      router.delete('/handler', (req, res) => { routes.revokeEditAccess(req, res); });
+      let removeStub = editorSandbox.stub(calendarInterface, 'removeEditAccess');
+      router.delete('/handler', (req, res) => { routes.removeEditAccess(req, res); });
 
       const response = await request(testApp(router))
         .delete('/handler');
 
       expect(response.status).toBe(401);
       expect(response.body.error).toBe('Authentication required');
-      expect(revokeStub.called).toBe(false);
+      expect(removeStub.called).toBe(false);
     });
 
     it('should fail with calendar not found', async () => {
-      let revokeStub = editorSandbox.stub(calendarInterface, 'revokeEditAccess');
-      revokeStub.rejects(new CalendarNotFoundError('Calendar not found'));
+      let removeStub = editorSandbox.stub(calendarInterface, 'removeEditAccess');
+      removeStub.rejects(new CalendarNotFoundError('Calendar not found'));
       router.delete('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'nonexistent';
-        req.params.accountId = 'user-id';
-        routes.revokeEditAccess(req, res);
+        req.params.editorId = 'user-id';
+        routes.removeEditAccess(req, res);
       });
 
       const response = await request(testApp(router))
@@ -632,12 +624,12 @@ describe('Editor API', () => {
     });
 
     it('should fail with account not found', async () => {
-      let revokeStub = editorSandbox.stub(calendarInterface, 'revokeEditAccess');
-      revokeStub.rejects(new noAccountExistsError());
+      let removeStub = editorSandbox.stub(calendarInterface, 'removeEditAccess');
+      removeStub.rejects(new noAccountExistsError());
       router.delete('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'cal-id';
-        req.params.accountId = 'nonexistent-user';
-        routes.revokeEditAccess(req, res);
+        req.params.editorId = 'nonexistent-user';
+        routes.removeEditAccess(req, res);
       });
 
       const response = await request(testApp(router))
@@ -648,12 +640,12 @@ describe('Editor API', () => {
     });
 
     it('should fail with permission denied error', async () => {
-      let revokeStub = editorSandbox.stub(calendarInterface, 'revokeEditAccess');
-      revokeStub.rejects(new CalendarEditorPermissionError('Permission denied: cannot revoke edit access'));
+      let removeStub = editorSandbox.stub(calendarInterface, 'removeEditAccess');
+      removeStub.rejects(new CalendarEditorPermissionError('Permission denied: cannot revoke edit access'));
       router.delete('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'cal-id';
-        req.params.accountId = 'user-id';
-        routes.revokeEditAccess(req, res);
+        req.params.editorId = 'user-id';
+        routes.removeEditAccess(req, res);
       });
 
       const response = await request(testApp(router))
@@ -661,32 +653,32 @@ describe('Editor API', () => {
 
       expect(response.status).toBe(403);
       expect(response.body.error).toBe('Permission denied: cannot revoke edit access');
-      expect(revokeStub.called).toBe(true);
+      expect(removeStub.called).toBe(true);
     });
 
-    it('should succeed and return 204 when editor was revoked', async () => {
-      let revokeStub = editorSandbox.stub(calendarInterface, 'revokeEditAccess');
-      revokeStub.resolves(true);
+    it('should succeed and return 204 when editor was removed', async () => {
+      let removeStub = editorSandbox.stub(calendarInterface, 'removeEditAccess');
+      removeStub.resolves(true);
       router.delete('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'cal-id';
-        req.params.accountId = 'user-id';
-        routes.revokeEditAccess(req, res);
+        req.params.editorId = 'user-id';
+        routes.removeEditAccess(req, res);
       });
 
       const response = await request(testApp(router))
         .delete('/handler');
 
       expect(response.status).toBe(204);
-      expect(revokeStub.called).toBe(true);
+      expect(removeStub.called).toBe(true);
     });
 
     it('should return 404 when editor relationship not found', async () => {
-      let revokeStub = editorSandbox.stub(calendarInterface, 'revokeEditAccess');
-      revokeStub.rejects(new EditorNotFoundError('Editor relationship not found'));
+      let removeStub = editorSandbox.stub(calendarInterface, 'removeEditAccess');
+      removeStub.rejects(new EditorNotFoundError('Editor relationship not found'));
       router.delete('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'cal-id';
-        req.params.accountId = 'user-id';
-        routes.revokeEditAccess(req, res);
+        req.params.editorId = 'user-id';
+        routes.removeEditAccess(req, res);
       });
 
       const response = await request(testApp(router))
@@ -694,7 +686,202 @@ describe('Editor API', () => {
 
       expect(response.status).toBe(404);
       expect(response.body.error).toBe('Editor relationship not found');
-      expect(revokeStub.called).toBe(true);
+      expect(removeStub.called).toBe(true);
+    });
+  });
+
+  describe('cancelInvitation', () => {
+    it('should fail without authentication', async () => {
+      router.delete('/handler', (req, res) => { routes.cancelInvitation(req, res); });
+
+      const response = await request(testApp(router))
+        .delete('/handler');
+
+      expect(response.status).toBe(401);
+      expect(response.body.error).toBe('Authentication required');
+    });
+
+    it('should fail with calendar not found', async () => {
+      let cancelStub = editorSandbox.stub(calendarInterface, 'cancelCalendarInvitation');
+      cancelStub.rejects(new CalendarNotFoundError('Calendar not found'));
+      router.delete('/handler', addRequestUser, (req, res) => {
+        req.params.calendarId = 'nonexistent';
+        req.params.invitationId = 'invitation-id';
+        routes.cancelInvitation(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .delete('/handler');
+
+      expect(response.status).toBe(404);
+      expect(response.body.error).toBe('Calendar not found');
+    });
+
+    it('should fail without permission', async () => {
+      let cancelStub = editorSandbox.stub(calendarInterface, 'cancelCalendarInvitation');
+      cancelStub.rejects(new CalendarEditorPermissionError('Only calendar owners can cancel invitations'));
+      router.delete('/handler', addRequestUser, (req, res) => {
+        req.params.calendarId = 'cal-id';
+        req.params.invitationId = 'invitation-id';
+        routes.cancelInvitation(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .delete('/handler');
+
+      expect(response.status).toBe(403);
+      expect(response.body.error).toBe('Only calendar owners can cancel invitations');
+    });
+
+    it('should fail with invitation not found', async () => {
+      let cancelStub = editorSandbox.stub(calendarInterface, 'cancelCalendarInvitation');
+      cancelStub.rejects(new Error('Invitation not found or not associated with this calendar'));
+      router.delete('/handler', addRequestUser, (req, res) => {
+        req.params.calendarId = 'cal-id';
+        req.params.invitationId = 'nonexistent-invitation';
+        routes.cancelInvitation(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .delete('/handler');
+
+      expect(response.status).toBe(404);
+      expect(response.body.error).toBe('Invitation not found');
+    });
+
+    it('should succeed and return 204 when invitation is canceled', async () => {
+      let cancelStub = editorSandbox.stub(calendarInterface, 'cancelCalendarInvitation');
+      cancelStub.resolves(true);
+      router.delete('/handler', addRequestUser, (req, res) => {
+        req.params.calendarId = 'cal-id';
+        req.params.invitationId = 'invitation-id';
+        routes.cancelInvitation(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .delete('/handler');
+
+      expect(response.status).toBe(204);
+    });
+
+    it('should handle service returning false', async () => {
+      let cancelStub = editorSandbox.stub(calendarInterface, 'cancelCalendarInvitation');
+      cancelStub.resolves(false);
+      router.delete('/handler', addRequestUser, (req, res) => {
+        req.params.calendarId = 'cal-id';
+        req.params.invitationId = 'invitation-id';
+        routes.cancelInvitation(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .delete('/handler');
+
+      expect(response.status).toBe(500);
+      expect(response.body.error).toBe('Failed to cancel invitation');
+    });
+  });
+
+  describe('resendInvitation', () => {
+    it('should fail without authentication', async () => {
+      router.post('/handler', (req, res) => { routes.resendInvitation(req, res); });
+
+      const response = await request(testApp(router))
+        .post('/handler');
+
+      expect(response.status).toBe(401);
+      expect(response.body.error).toBe('Authentication required');
+    });
+
+    it('should fail with calendar not found', async () => {
+      let resendStub = editorSandbox.stub(calendarInterface, 'resendCalendarInvitation');
+      resendStub.rejects(new CalendarNotFoundError('Calendar not found'));
+      router.post('/handler', addRequestUser, (req, res) => {
+        req.params.calendarId = 'nonexistent';
+        req.params.invitationId = 'invitation-id';
+        routes.resendInvitation(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .post('/handler');
+
+      expect(response.status).toBe(404);
+      expect(response.body.error).toBe('Calendar not found');
+    });
+
+    it('should fail without permission', async () => {
+      let resendStub = editorSandbox.stub(calendarInterface, 'resendCalendarInvitation');
+      resendStub.rejects(new CalendarEditorPermissionError('Only calendar owners can resend invitations'));
+      router.post('/handler', addRequestUser, (req, res) => {
+        req.params.calendarId = 'cal-id';
+        req.params.invitationId = 'invitation-id';
+        routes.resendInvitation(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .post('/handler');
+
+      expect(response.status).toBe(403);
+      expect(response.body.error).toBe('Only calendar owners can resend invitations');
+    });
+
+    it('should fail with invitation not found', async () => {
+      let resendStub = editorSandbox.stub(calendarInterface, 'resendCalendarInvitation');
+      resendStub.rejects(new Error('Invitation not found or not associated with this calendar'));
+      router.post('/handler', addRequestUser, (req, res) => {
+        req.params.calendarId = 'cal-id';
+        req.params.invitationId = 'nonexistent-invitation';
+        routes.resendInvitation(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .post('/handler');
+
+      expect(response.status).toBe(404);
+      expect(response.body.error).toBe('Invitation not found');
+    });
+
+    it('should succeed and return invitation details when resent', async () => {
+      const mockInvitation = {
+        id: 'invitation-id',
+        email: 'test@example.com',
+        expiration_time: new Date('2025-10-01T00:00:00Z'),
+      };
+      let resendStub = editorSandbox.stub(calendarInterface, 'resendCalendarInvitation');
+      resendStub.resolves(mockInvitation as any);
+      router.post('/handler', addRequestUser, (req, res) => {
+        req.params.calendarId = 'cal-id';
+        req.params.invitationId = 'invitation-id';
+        routes.resendInvitation(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .post('/handler');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        message: 'Invitation resent successfully',
+        invitation: {
+          id: 'invitation-id',
+          email: 'test@example.com',
+          expiresAt: '2025-10-01T00:00:00.000Z',
+        },
+      });
+    });
+
+    it('should handle service returning undefined', async () => {
+      let resendStub = editorSandbox.stub(calendarInterface, 'resendCalendarInvitation');
+      resendStub.resolves(undefined);
+      router.post('/handler', addRequestUser, (req, res) => {
+        req.params.calendarId = 'cal-id';
+        req.params.invitationId = 'invitation-id';
+        routes.resendInvitation(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .post('/handler');
+
+      expect(response.status).toBe(500);
+      expect(response.body.error).toBe('Failed to resend invitation');
     });
   });
 });

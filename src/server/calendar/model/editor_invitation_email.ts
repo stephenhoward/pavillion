@@ -1,8 +1,7 @@
-import config from 'config';
-import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import { MailData } from '@/server/common/service/mail/types';
 import { EmailMessage, compileTemplate } from '@/server/common/service/mail/message';
+import AccountInvitation from '@/common/model/invitation';
 
 const textTemplate = compileTemplate('src/server/calendar', 'editor_invitation_email.text.hbs');
 const htmlTemplate = compileTemplate('src/server/calendar', 'editor_invitation_email.html.hbs');
@@ -12,55 +11,40 @@ const htmlTemplate = compileTemplate('src/server/calendar', 'editor_invitation_e
  * Used when the invited email doesn't belong to an existing account.
  */
 class EditorInvitationEmail extends EmailMessage {
+  invitation: AccountInvitation;
   calendar: Calendar;
-  inviter: Account;
-  recipientEmail: string;
   inviteCode: string;
-  message?: string;
 
   constructor(
-    calendar: Calendar,
-    inviter: Account,
-    recipientEmail: string,
+    invitation: AccountInvitation,
     inviteCode: string,
-    message?: string,
+    calendar: Calendar,
   ) {
     super('editor_invitation_email', textTemplate, htmlTemplate);
+    this.invitation = invitation;
     this.calendar = calendar;
-    this.inviter = inviter;
-    this.recipientEmail = recipientEmail;
     this.inviteCode = inviteCode;
-    this.message = message;
   }
 
   buildMessage(language: string): MailData {
-    const domain = config.get('domain');
-    const invitationUrl = `${domain}/auth/register`;
-    const calendarUrl = `${domain}/calendar/${this.calendar.urlName}`;
     const calendarName = this.calendar.content(language).name;
 
     return {
-      emailAddress: this.recipientEmail,
+      emailAddress: this.invitation.email,
       subject: this.renderSubject(language, {
         calendarName,
       }),
       textMessage: this.renderPlaintext(language, {
         calendarName,
-        inviterName: this.inviter.username,
-        message: this.message,
+        inviterName: this.invitation.invitedBy.username,
+        message: this.invitation.message,
         inviteCode: this.inviteCode,
-        invitationUrl,
-        calendarUrl,
-        isNewUser: true,
       }),
       htmlMessage: this.renderHtml(language, {
         calendarName,
-        inviterName: this.inviter.username,
-        message: this.message,
+        inviterName: this.invitation.invitedBy.username,
+        message: this.invitation.message,
         inviteCode: this.inviteCode,
-        invitationUrl,
-        calendarUrl,
-        isNewUser: true,
       }),
     };
   }

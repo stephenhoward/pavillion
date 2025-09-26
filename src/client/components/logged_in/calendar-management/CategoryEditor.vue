@@ -1,6 +1,6 @@
 <template>
   <ModalLayout
-    :title="props.category.id ? t('edit_category_title') : t('add_category_title')"
+    :title="localCategory?.id ? t('edit_category_title') : t('add_category_title')"
     @close="$emit('close')"
   >
     <div class="form-stack">
@@ -9,13 +9,13 @@
       </div>
       <div class="form-group">
         <p class="form-helper">{{ t('category_name_help') }}</p>
-        <label v-for="lang in props.category.getLanguages()" for="categoryName">
+        <label v-for="lang in localCategory?.getLanguages()" for="categoryName">
           <span class="labeltext">{{ iso6391.getNativeName(lang) }}:</span>
           <input
             id="categoryName"
             type="text"
             class="form-control"
-            v-model="props.category.content(lang).name"
+            v-model="localCategory.content(lang).name"
             :dir="iso6391.getDir(lang) == 'rtl' ? 'rtl' : ''"
             :placeholder="t('category_name_placeholder')"
             :disabled="state.isSaving"
@@ -23,7 +23,7 @@
             ref="categoryNameInput"
           />
           <button
-            v-if="props.category && props.category.getLanguages().length > 1"
+            v-if="localCategory && localCategory.getLanguages().length > 1"
             type="button"
             class="btn btn--xs btn--danger btn--icon"
             aria-label="Remove Language"
@@ -50,7 +50,7 @@
           @click="saveCategory"
           :disabled="state.isSaving || !canSaveCategory()"
         >
-          {{ state.isSaving ? (props.category.id ? t('updating') : t('creating')) : (props.category.id ? t('save_button') : t('create_button')) }}
+          {{ state.isSaving ? (localCategory?.id ? t('updating') : t('creating')) : (localCategory?.id ? t('save_button') : t('create_button')) }}
         </button>
         <button
           type="button"
@@ -68,14 +68,14 @@
   <LanguagePicker
     v-if="state.showLanguagePicker"
     :languages="availableLanguages"
-    :selectedLanguages="props.category ? props.category.getLanguages() : []"
+    :selectedLanguages="localCategory ? localCategory.getLanguages() : []"
     @select="addLanguage"
     @close="state.showLanguagePicker = false"
   />
 </template>
 
 <script setup>
-import { reactive, ref, nextTick, onMounted } from 'vue';
+import { reactive, ref, nextTick, onMounted, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import iso6391 from 'iso-639-1-dir';
 import { EventCategoryContent } from '@/common/model/event_category_content';
@@ -109,16 +109,26 @@ const state = reactive({
   error: '',
 });
 
+// Create a local copy of the category to avoid mutating props
+const localCategory = ref(null);
+
+// Initialize the local category when props change
+watch(() => props.category, (newCategory) => {
+  if (newCategory) {
+    localCategory.value = newCategory;
+  }
+}, { immediate: true });
+
 const categoryNameInput = ref(null);
 
 /**
  * Check if the category can be saved (has at least one non-empty name)
  */
 function canSaveCategory() {
-  if (!props.category) return false;
-  const languages = props.category.getLanguages();
+  if (!localCategory.value) return false;
+  const languages = localCategory.value.getLanguages();
   return languages.some(lang => {
-    const content = props.category.content(lang);
+    const content = localCategory.value.content(lang);
     return content && content.name.trim().length > 0;
   });
 }
@@ -137,15 +147,14 @@ async function saveCategory() {
 
   try {
     let savedCategory;
-    console.log('Saving category:', props.category);
-    savedCategory = await categoryService.saveCategory(props.category);
+    savedCategory = await categoryService.saveCategory(localCategory.value);
 
     emit('saved', savedCategory);
     emit('close');
   }
   catch (error) {
     console.error('Error saving category:', error);
-    state.error = props.category.id ? t('error_update_category') : t('error_create_category');
+    state.error = localCategory.value?.id ? t('error_update_category') : t('error_create_category');
   }
   finally {
     state.isSaving = false;
@@ -156,16 +165,16 @@ async function saveCategory() {
  * Add a new language to the category
  */
 function addLanguage(language) {
-  if (!props.category) return;
+  if (!localCategory.value) return;
 
   // Check if language already exists
-  if (props.category.getLanguages().includes(language)) {
+  if (localCategory.value.getLanguages().includes(language)) {
     state.showLanguagePicker = false;
     return;
   }
 
   // Add new language with empty content
-  props.category.addContent(new EventCategoryContent(language, ''));
+  localCategory.value.addContent(new EventCategoryContent(language, ''));
   state.currentLanguage = language;
   state.showLanguagePicker = false;
 }
@@ -174,17 +183,17 @@ function addLanguage(language) {
  * Remove a language from the category
  */
 function removeLanguage(language) {
-  if (!props.category) return;
+  if (!localCategory.value) return;
 
   // Don't allow removing the last language
-  if (props.category.getLanguages().length <= 1) {
+  if (localCategory.value.getLanguages().length <= 1) {
     return;
   }
 
-  props.category.dropContent(language);
+  localCategory.value.dropContent(language);
 
   // Switch to the first available language
-  const remainingLanguages = props.category.getLanguages();
+  const remainingLanguages = localCategory.value.getLanguages();
   if (remainingLanguages.length > 0) {
     state.currentLanguage = remainingLanguages[0];
   }
@@ -193,8 +202,8 @@ function removeLanguage(language) {
 // Focus input when component mounts
 onMounted(() => {
   // Set current language to first available language
-  const languages = props.category.getLanguages();
-  if (languages.length > 0) {
+  const languages = localCategory.value?.getLanguages();
+  if (languages && languages.length > 0) {
     state.currentLanguage = languages[0];
   }
 

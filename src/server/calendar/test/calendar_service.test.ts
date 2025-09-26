@@ -627,6 +627,7 @@ describe('Calendar Ownership and Editor Permissions', () => {
       const findOneStub = sandbox.stub(CalendarEditorEntity, 'findOne');
       const createStub = sandbox.stub(CalendarEditorEntity, 'create');
       const mockEditor = { toModel: () => new CalendarEditor('editor-id', 'cal-id', 'user-id') };
+      const mockSendEmailStub = sandbox.stub(service as any, 'sendEditorNotificationEmail');
 
       getCalendarStub.resolves(calendar);
       isOwnerStub.resolves(true);
@@ -636,6 +637,7 @@ describe('Calendar Ownership and Editor Permissions', () => {
       const result = await service.grantEditAccess(owner, 'cal-id', 'user-id');
       expect(result).toBeInstanceOf(CalendarEditor);
       expect(createStub.called).toBe(true);
+      expect(mockSendEmailStub.called).toBe(true);
     });
 
     it('should fail for non-owner non-admin', async () => {
@@ -654,6 +656,7 @@ describe('Calendar Ownership and Editor Permissions', () => {
       const findOneStub = sandbox.stub(CalendarEditorEntity, 'findOne');
       const createStub = sandbox.stub(CalendarEditorEntity, 'create');
       const mockEditor = { toModel: () => new CalendarEditor('editor-id', 'cal-id', 'user-id') };
+      const mockSendEmailStub = sandbox.stub(service as any, 'sendEditorNotificationEmail');
 
       getCalendarStub.resolves(calendar);
       findOneStub.resolves(null); // No existing editor
@@ -662,45 +665,132 @@ describe('Calendar Ownership and Editor Permissions', () => {
       const result = await service.grantEditAccess(admin, 'cal-id', 'user-id');
       expect(result).toBeInstanceOf(CalendarEditor);
       expect(createStub.called).toBe(true);
+      expect(mockSendEmailStub.called).toBe(true);
     });
   });
 
-  describe('revokeEditAccess', () => {
+  describe('removeEditAccess', () => {
     it('should succeed for calendar owner', async () => {
       const getCalendarStub = sandbox.stub(service, 'getCalendar');
       const isOwnerStub = sandbox.stub(service, 'isCalendarOwner');
       const destroyStub = sandbox.stub(CalendarEditorEntity, 'destroy');
 
       getCalendarStub.resolves(calendar);
-      isOwnerStub.resolves(true);
+      isOwnerStub.withArgs(owner, calendar).resolves(true);
+      isOwnerStub.withArgs(nonOwner, calendar).resolves(false);
       destroyStub.resolves(1); // One record deleted
 
-      const result = await service.revokeEditAccess(owner, 'cal-id', 'user-id');
+      const result = await service.removeEditAccess(owner, 'cal-id', 'user-id');
       expect(result).toBe(true);
       expect(destroyStub.called).toBe(true);
     });
 
-    it('should fail for non-owner non-admin', async () => {
+    it('should fail for non-owner non-admin attempting to revoke another user', async () => {
       const getCalendarStub = sandbox.stub(service, 'getCalendar');
       const isOwnerStub = sandbox.stub(service, 'isCalendarOwner');
 
       getCalendarStub.resolves(calendar);
       isOwnerStub.resolves(false);
 
-      await expect(service.revokeEditAccess(nonOwner, 'cal-id', 'owner-id'))
-        .rejects.toThrow('Permission denied: only calendar owner can revoke edit access');
+      await expect(service.removeEditAccess(nonOwner, 'cal-id', 'owner-id'))
+        .rejects.toThrow('Permission denied: only calendar owner or the editor themselves can revoke edit access');
+    });
+
+    it('should allow self-revocation for non-owner editors', async () => {
+      const getCalendarStub = sandbox.stub(service, 'getCalendar');
+      const isOwnerStub = sandbox.stub(service, 'isCalendarOwner');
+      const destroyStub = sandbox.stub(CalendarEditorEntity, 'destroy');
+
+      getCalendarStub.resolves(calendar);
+      isOwnerStub.resolves(false); // User is not the calendar owner
+      destroyStub.resolves(1); // One record deleted
+
+      // User removing themselves (same account ID)
+      const result = await service.removeEditAccess(nonOwner, 'cal-id', nonOwner.id);
+
+      expect(result).toBe(true);
+      expect(destroyStub.called).toBe(true);
+    });
+
+    it('should prevent self-revocation for calendar owners', async () => {
+      const getCalendarStub = sandbox.stub(service, 'getCalendar');
+      const isOwnerStub = sandbox.stub(service, 'isCalendarOwner');
+
+      getCalendarStub.resolves(calendar);
+      isOwnerStub.withArgs(owner, calendar).resolves(true); // User is owner trying to remove themselves
+
+      // Owner trying to remove themselves
+      await expect(service.removeEditAccess(owner, 'cal-id', owner.id))
+        .rejects.toThrow('Calendar owners cannot remove themselves from their own calendar');
     });
 
     it('should succeed for admin even if not owner', async () => {
       const getCalendarStub = sandbox.stub(service, 'getCalendar');
       const destroyStub = sandbox.stub(CalendarEditorEntity, 'destroy');
+      const isOwnerStub = sandbox.stub(service, 'isCalendarOwner');
 
+      isOwnerStub.resolves(false); // Admin is not the owner
       getCalendarStub.resolves(calendar);
       destroyStub.resolves(1); // One record deleted
 
-      const result = await service.revokeEditAccess(admin, 'cal-id', 'user-id');
+      const result = await service.removeEditAccess(admin, 'cal-id', 'user-id');
       expect(result).toBe(true);
       expect(destroyStub.called).toBe(true);
+    });
+  });
+
+  describe('listCalendarEditors', () => {
+    it('should return active editors and pending invitations for calendar owner', async () => {
+      // Mock the calendar and permission checks
+      const getCalendarStub = sandbox.stub(service, 'getCalendar');
+      const canViewEditorsStub = sandbox.stub(service as any, 'canViewCalendarEditors');
+
+      getCalendarStub.resolves(calendar);
+      canViewEditorsStub.resolves(true);
+
+      // Mock active editors
+      const mockEditor = {
+        toModel: () => new CalendarEditor('editor-id', 'cal-id', 'user-id'),
+      };
+      const findAllStub = sandbox.stub(CalendarEditorEntity, 'findAll');
+      findAllStub.resolves([mockEditor as any]);
+
+      // Mock pending invitations
+      const mockInvitation = {
+        id: 'invite-id',
+        email: 'invitee@example.com',
+        expiration_time: new Date('2025-10-01'),
+        calendar_id: 'cal-id',
+      };
+      mockAccountsInterface.getAccountById.withArgs('owner-id').resolves(owner);
+
+      const result = await service.listCalendarEditors(owner, 'cal-id');
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toBeInstanceOf(CalendarEditor);
+      expect(getCalendarStub.calledWith('cal-id')).toBe(true);
+      expect(canViewEditorsStub.calledWith(owner, 'cal-id')).toBe(true);
+    });
+
+    it('should throw CalendarNotFoundError when calendar does not exist', async () => {
+      const getCalendarStub = sandbox.stub(service, 'getCalendar');
+      getCalendarStub.resolves(null);
+
+      await expect(service.listCalendarEditors(owner, 'non-existent-id'))
+        .rejects.toThrow('Calendar not found');
+    });
+
+    it('should throw CalendarEditorPermissionError for non-owner', async () => {
+      const getCalendarStub = sandbox.stub(service, 'getCalendar');
+      const canViewEditorsStub = sandbox.stub(service as any, 'canViewCalendarEditors');
+      const findAllStub = sandbox.stub(CalendarEditorEntity, 'findAll');
+
+      getCalendarStub.resolves(calendar);
+      canViewEditorsStub.resolves(false);
+      findAllStub.resolves([]); // This shouldn't be called, but stub it anyway
+
+      await expect(service.listCalendarEditors(nonOwner, 'cal-id'))
+        .rejects.toThrow('Permission denied: only calendar owner can view editors');
     });
   });
 });

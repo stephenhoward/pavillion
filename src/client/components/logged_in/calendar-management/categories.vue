@@ -150,7 +150,6 @@ async function loadCategories() {
 
   try {
     state.categories = await categoryService.loadCategories(props.calendarId);
-    console.log('Categories loaded:', state.categories[0]);
   }
   catch (error) {
     console.error('Error loading categories:', error);

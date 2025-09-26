@@ -66,6 +66,10 @@ const initPavillionServer = async (app: express.Application, port: number) => {
   const calendarDomain = new CalendarDomain(eventBus, accountsDomain.interface);
   calendarDomain.initialize(app);
 
+  // Set up CalendarInterface on AccountsInterface to enable calendar editor invitation acceptance
+  // TODO: move invites into a separate domain to avoid circular dependency
+  accountsDomain.interface.setCalendarInterface(calendarDomain.interface);
+
   new PublicCalendarDomain(eventBus,calendarDomain).initialize(app);
 
   new MediaDomain(eventBus,calendarDomain.interface).initialize(app);

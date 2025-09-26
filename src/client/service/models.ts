@@ -1,5 +1,6 @@
 import axios, { AxiosError } from 'axios';
 import { PrimaryModel } from '@/common/model/model';
+import { validateAndEncodeId } from '@/client/service/utils';
 
 export default class ModelService {
 
@@ -92,7 +93,8 @@ export default class ModelService {
      */
   static async deleteModel(model: PrimaryModel, url: string): Promise<Record<string,any>> {
     try {
-      let response = await axios.delete(`${url}/${model.id}`);
+      const encodedId = validateAndEncodeId(model.id, 'Model ID');
+      let response = await axios.delete(`${url}/${encodedId}`);
       return response.data;
     }
     catch(error) {

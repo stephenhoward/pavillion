@@ -105,6 +105,26 @@ describe('inviteNewAccount', () => {
         .toThrow(AccountInvitationPermissionError);
     }
   });
+
+  it('should store calendar_id when creating calendar editor invitation', async () => {
+    let getAccountStub = sandbox.stub(accountService, 'getAccountByEmail');
+    let findInvitationStub = sandbox.stub(AccountInvitationEntity, 'findOne');
+    let sendInviteStub = sandbox.stub(accountService,'sendNewAccountInvite');
+    let saveInviteStub = sandbox.stub(AccountInvitationEntity.prototype, 'save');
+    let getAllSettingsStub = sandbox.stub(ConfigurationInterface.prototype, 'getAllSettings');
+
+    getAllSettingsStub.resolves({ registrationMode: 'invitation' });
+    getAccountStub.resolves(undefined);
+    findInvitationStub.resolves(undefined);
+
+    const calendarId = 'test-calendar-id';
+    const invitation = await accountService.inviteNewAccount(adminUser,'test_email','test_message', calendarId);
+
+    expect(invitation.email).toBe('test_email');
+    expect(invitation.calendarId).toBe(calendarId);
+    expect(sendInviteStub.called).toBe(true);
+    expect(saveInviteStub.called).toBe(true);
+  });
 });
 
 describe('registerNewAccount', () => {
@@ -222,7 +242,7 @@ describe('validateInviteCode', () => {
 
     findInviteStub.resolves(undefined);
 
-    await expect(accountService.validateInviteCode('test_code')).resolves.toBe(false);
+    await expect(accountService.validateInviteCode('test_code')).rejects.toThrow(noAccountInviteExistsError);
   });
 
   it('invite expired with null time', async () => {
@@ -232,10 +252,10 @@ describe('validateInviteCode', () => {
       invitation_code: 'test_code',
       expiration_time: null,
     }));
-    await expect(accountService.validateInviteCode('test_code')).resolves.toBe(false);
+    await expect(accountService.validateInviteCode('test_code')).rejects.toThrow(noAccountInviteExistsError);
   });
 
-  it('invite expired with null time', async () => {
+  it('invite expired with past time', async () => {
     let findInviteStub = validateSandbox.stub(AccountInvitationEntity, 'findOne');
 
     const pastDate = new Date();
@@ -245,7 +265,7 @@ describe('validateInviteCode', () => {
       invitation_code: 'test_code',
       expiration_time: pastDate,
     }));
-    await expect(accountService.validateInviteCode('test_code')).resolves.toBe(false);
+    await expect(accountService.validateInviteCode('test_code')).rejects.toThrow(noAccountInviteExistsError);
   });
 
   it('invite valid', async () => {
@@ -254,12 +274,14 @@ describe('validateInviteCode', () => {
     const futureDate = new Date();
     futureDate.setDate(futureDate.getDate() + 1); // tomorrow
 
-    findInviteStub.resolves(AccountInvitationEntity.build({
+    const mockInvitation = AccountInvitationEntity.build({
       invitation_code: 'test_code',
       expiration_time: futureDate,
-    }));
+    });
 
-    await expect(accountService.validateInviteCode('test_code')).resolves.toBe(true);
+    findInviteStub.resolves(mockInvitation);
+
+    await expect(accountService.validateInviteCode('test_code')).resolves.toBe(mockInvitation);
   });
 });
 
@@ -280,27 +302,9 @@ describe('acceptAccountInvite', () => {
   it('rejects expired invitations', async () => {
     let setupAccountStub = acceptSandbox.stub(accountService, '_setupAccount');
     let destroyStub = acceptSandbox.stub(AccountInvitationEntity, 'destroy').resolves();
-    // Set up validateInviteCode to return false (expired or invalid)
+    // Set up validateInviteCode to throw exception (expired or invalid)
     let validateStub = acceptSandbox.stub(accountService, 'validateInviteCode');
-    validateStub.resolves(false);
-
-    await expect(accountService.acceptAccountInvite('test_code', 'test_password'))
-      .rejects.toThrow('Invitation has expired or does not exist');
-
-    expect(setupAccountStub.called).toBe(false);
-    expect(destroyStub.called).toBe(false);
-  });
-
-  it('rejects when invite not found after validation', async () => {
-    let setupAccountStub = acceptSandbox.stub(accountService, '_setupAccount');
-    let destroyStub = acceptSandbox.stub(AccountInvitationEntity, 'destroy').resolves();
-    let validateStub = acceptSandbox.stub(accountService, 'validateInviteCode');
-
-    // validateInviteCode returns true but invitation is not found
-    validateStub.resolves(true);
-
-    let findInviteStub = acceptSandbox.stub(AccountInvitationEntity, 'findOne');
-    findInviteStub.resolves(undefined);
+    validateStub.rejects(new noAccountInviteExistsError());
 
     await expect(accountService.acceptAccountInvite('test_code', 'test_password'))
       .rejects.toThrow(noAccountInviteExistsError);
@@ -310,33 +314,211 @@ describe('acceptAccountInvite', () => {
   });
 
   it('accepts valid invitation and creates account', async () => {
-    // Set up validateInviteCode to return true (valid)
-    let validateStub = acceptSandbox.stub(accountService, 'validateInviteCode');
-    validateStub.resolves(true);
-
     // Mock the invitation entity
-    let findInviteStub = acceptSandbox.stub(AccountInvitationEntity, 'findOne');
-    const invitation = AccountInvitationEntity.build({
+    const mockInvitation = AccountInvitationEntity.build({
+      email: 'test@example.com',
       invitation_code: 'test_code',
-      email: 'test_email@example.com',
+      calendar_id: null,
     });
-    findInviteStub.resolves(invitation);
 
-    // Mock destroy method
-    let destroyStub = acceptSandbox.stub(invitation, 'destroy').resolves();
+    // Set up validateInviteCode to return the invitation (valid)
+    let validateStub = acceptSandbox.stub(accountService, 'validateInviteCode');
+    validateStub.resolves(mockInvitation);
+
+    // Mock findAll to return this invitation (needed since acceptAccountInvite now retrieves all invitations)
+    let findAllStub = acceptSandbox.stub(AccountInvitationEntity, 'findAll');
+    findAllStub.resolves([mockInvitation]);
+
+    // Mock destroy static method (for cleaning up all invitations)
+    let destroyStub = acceptSandbox.stub(AccountInvitationEntity, 'destroy').resolves(1);
 
     // Mock account creation
     let setupAccountStub = acceptSandbox.stub(accountService, '_setupAccount');
     setupAccountStub.resolves({
-      account: new Account('id', 'test_email@example.com', 'testme'),
+      account: new Account('id', 'test@example.com', 'testme'),
       password_code: '',
     });
 
-    const account = await accountService.acceptAccountInvite('test_code', 'test_password');
+    const result = await accountService.acceptAccountInvite('test_code', 'test_password');
 
     expect(setupAccountStub.called).toBe(true);
     expect(destroyStub.called).toBe(true);
-    expect(account).toBeTruthy();
+    expect(result).toBeTruthy();
+  });
+
+  it('accepts valid invitation with calendar_id and grants editor access', async () => {
+    // Mock the invitation entity with a calendar_id
+    const invitation = AccountInvitationEntity.build({
+      invitation_code: 'test_code',
+      email: 'test_email@example.com',
+      calendar_id: 'test-calendar-id',
+      invited_by: 'inviter-id',
+    });
+
+    // Set up validateInviteCode to return the invitation (valid)
+    let validateStub = acceptSandbox.stub(accountService, 'validateInviteCode');
+    validateStub.resolves(invitation);
+
+    // Mock findAll to return this invitation
+    let findAllStub = acceptSandbox.stub(AccountInvitationEntity, 'findAll');
+    findAllStub.resolves([invitation]);
+
+    // Mock destroy method
+    let destroyStub = acceptSandbox.stub(AccountInvitationEntity, 'destroy').resolves();
+
+    // Mock _setupAccount
+    let setupAccountStub = acceptSandbox.stub(accountService, '_setupAccount');
+    const testAccount = new Account('new-account-id', 'test_email@example.com', 'testme');
+    setupAccountStub.resolves({
+      account: testAccount,
+      password_code: '',
+    });
+
+    // Mock getAccountById for the inviter
+    let getAccountStub = acceptSandbox.stub(accountService, 'getAccountById');
+    const inviterAccount = new Account('inviter-id', 'inviter@example.com', 'inviter');
+    getAccountStub.withArgs('inviter-id').resolves(inviterAccount);
+
+    // Mock CalendarInterface to verify it gets called
+    const mockCalendarInterface = {
+      grantEditAccess: acceptSandbox.stub().resolves(),
+    };
+
+    // Override the accountService to inject our mock CalendarInterface
+    (accountService as any).calendarInterface = mockCalendarInterface;
+
+    const result = await accountService.acceptAccountInvite('test_code', 'test_password');
+
+    expect(setupAccountStub.called).toBe(true);
+    expect(destroyStub.called).toBe(true);
+    expect(result).toBeTruthy();
+    expect(mockCalendarInterface.grantEditAccess.calledOnce).toBe(true);
+    expect(mockCalendarInterface.grantEditAccess.calledWith(
+      inviterAccount,
+      'test-calendar-id',
+      testAccount.id,
+    )).toBe(true);
+  });
+
+  it('accepts valid invitation without calendar_id and does not grant editor access', async () => {
+    // Mock the invitation entity without calendar_id
+    const invitation = AccountInvitationEntity.build({
+      invitation_code: 'test_code',
+      email: 'test_email@example.com',
+      calendar_id: null,
+    });
+
+    // Set up validateInviteCode to return the invitation (valid)
+    let validateStub = acceptSandbox.stub(accountService, 'validateInviteCode');
+    validateStub.resolves(invitation);
+
+    // Mock findAll to return this invitation
+    let findAllStub = acceptSandbox.stub(AccountInvitationEntity, 'findAll');
+    findAllStub.resolves([invitation]);
+
+    // Mock destroy method
+    let destroyStub = acceptSandbox.stub(AccountInvitationEntity, 'destroy').resolves();
+
+    // Mock _setupAccount
+    let setupAccountStub = acceptSandbox.stub(accountService, '_setupAccount');
+    const testAccount = new Account('new-account-id', 'test_email@example.com', 'testme');
+    setupAccountStub.resolves({
+      account: testAccount,
+      password_code: '',
+    });
+
+    // Mock CalendarInterface to verify it does NOT get called
+    const mockCalendarInterface = {
+      grantEditAccess: acceptSandbox.stub().resolves(),
+    };
+
+    // Override the accountService to inject our mock CalendarInterface
+    (accountService as any).calendarInterface = mockCalendarInterface;
+
+    const result = await accountService.acceptAccountInvite('test_code', 'test_password');
+
+    expect(setupAccountStub.called).toBe(true);
+    expect(destroyStub.called).toBe(true);
+    expect(result).toBeTruthy();
+    expect(mockCalendarInterface.grantEditAccess.called).toBe(false);
+  });
+
+  it('accepts invitation and grants access to multiple calendars for same email', async () => {
+    // Mock the primary invitation entity with a calendar_id
+    const primaryInvitation = AccountInvitationEntity.build({
+      invitation_code: 'test_code',
+      email: 'test_email@example.com',
+      calendar_id: 'calendar-1',
+      invited_by: 'inviter-1',
+    });
+
+    // Set up validateInviteCode to return the invitation (valid)
+    let validateStub = acceptSandbox.stub(accountService, 'validateInviteCode');
+    validateStub.resolves(primaryInvitation);
+
+    // Mock findAll to return multiple invitations for the same email
+    let findAllStub = acceptSandbox.stub(AccountInvitationEntity, 'findAll');
+    const invitation2 = AccountInvitationEntity.build({
+      email: 'test_email@example.com',
+      calendar_id: 'calendar-2',
+      invited_by: 'inviter-2',
+    });
+    const invitation3 = AccountInvitationEntity.build({
+      email: 'test_email@example.com',
+      calendar_id: null, // Non-calendar invitation
+      invited_by: 'inviter-1',
+    });
+    findAllStub.resolves([primaryInvitation, invitation2, invitation3]);
+
+    // Mock destroy method
+    let destroyStub = acceptSandbox.stub(AccountInvitationEntity, 'destroy').resolves();
+
+    // Mock _setupAccount
+    let setupAccountStub = acceptSandbox.stub(accountService, '_setupAccount');
+    const testAccount = new Account('new-account-id', 'test_email@example.com', 'testme');
+    setupAccountStub.resolves({
+      account: testAccount,
+      password_code: '',
+    });
+
+    // Mock getAccountById for the inviters
+    let getAccountStub = acceptSandbox.stub(accountService, 'getAccountById');
+    const inviter1 = new Account('inviter-1', 'inviter1@example.com', 'inviter1');
+    const inviter2 = new Account('inviter-2', 'inviter2@example.com', 'inviter2');
+    getAccountStub.withArgs('inviter-1').resolves(inviter1);
+    getAccountStub.withArgs('inviter-2').resolves(inviter2);
+
+    // Mock CalendarInterface to verify it gets called for both calendars
+    const mockCalendarInterface = {
+      grantEditAccess: acceptSandbox.stub().resolves(),
+    };
+
+    // Override the accountService to inject our mock CalendarInterface
+    (accountService as any).calendarInterface = mockCalendarInterface;
+
+    const result = await accountService.acceptAccountInvite('test_code', 'test_password');
+
+    expect(setupAccountStub.called).toBe(true);
+    expect(destroyStub.called).toBe(true);
+    expect(result).toBeTruthy();
+
+    // Should be called twice for the two calendar invitations
+    expect(mockCalendarInterface.grantEditAccess.calledTwice).toBe(true);
+    expect(mockCalendarInterface.grantEditAccess.calledWith(
+      inviter1,
+      'calendar-1',
+      testAccount.id,
+    )).toBe(true);
+    expect(mockCalendarInterface.grantEditAccess.calledWith(
+      inviter2,
+      'calendar-2',
+      testAccount.id,
+    )).toBe(true);
+
+    // Verify all invitations are cleaned up
+    expect(destroyStub.calledWith({
+      where: { email: 'test_email@example.com' },
+    })).toBe(true);
   });
 });
 

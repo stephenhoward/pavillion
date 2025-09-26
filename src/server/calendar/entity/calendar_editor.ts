@@ -9,7 +9,16 @@ import db from '@/server/common/entity/db';
  * Database entity for calendar editor relationships
  * Simple binary access model: either someone has edit access or they don't
  */
-@Table({ tableName: 'calendar_editor' })
+@Table({
+  tableName: 'calendar_editor',
+  indexes: [
+    {
+      unique: true,
+      fields: ['calendar_id', 'account_id'],
+      name: 'unique_calendar_editor',
+    },
+  ],
+})
 class CalendarEditorEntity extends Model {
 
   @PrimaryKey

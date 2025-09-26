@@ -10,21 +10,25 @@ class AccountInvitation {
   declare message: string;
   declare invitedBy: Account;
   declare expirationTime: Date | null;
+  declare calendarId: string | null;
 
   /**
    * Constructor for AccountInvitation.
    *
    * @param {string} id - Unique identifier for the invitation
    * @param {string} email - Email address of the invitation recipient
+   * @param {Account} invitedBy - Account that created the invitation
    * @param {string} [message] - Optional message to include with the invitation
    * @param {Date} [expirationTime] - Optional expiration time for the invitation
+   * @param {string} [calendarId] - Optional calendar ID for editor invitations
    */
-  constructor(id: string, email: string, invitedBy: Account, message?: string, expirationTime?: Date) {
+  constructor(id: string, email: string, invitedBy: Account, message?: string, expirationTime?: Date, calendarId?: string) {
     this.id = id;
     this.email = email;
     this.message = message ?? '';
     this.invitedBy = invitedBy;
     this.expirationTime = expirationTime ?? null;
+    this.calendarId = calendarId ?? null;
   }
 
   /**
@@ -39,6 +43,7 @@ class AccountInvitation {
       invitedBy: this.invitedBy.toObject,
       message: this.message,
       expirationTime: this.expirationTime,
+      calendarId: this.calendarId,
     };
   }
 
@@ -55,6 +60,7 @@ class AccountInvitation {
       Account.fromObject(obj.invitedBy),
       obj.message,
       obj.expirationTime ? new Date(obj.expirationTime) : undefined,
+      obj.calendarId,
     );
   }
 };

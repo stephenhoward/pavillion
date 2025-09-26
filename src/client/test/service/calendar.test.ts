@@ -6,7 +6,8 @@ import CalendarService from '@/client/service/calendar';
 import ModelService from '@/client/service/models';
 import { Calendar } from '@/common/model/calendar';
 import { EmptyValueError, UnknownError } from '@/common/exceptions';
-import { UrlNameAlreadyExistsError, InvalidUrlNameError } from '@/common/exceptions/calendar';
+import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
+import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/common/exceptions/editor';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 
 // Mock axios
@@ -343,24 +344,77 @@ describe('listCalendarEditors', () => {
     vi.clearAllMocks();
   });
 
-  it('should list calendar editors successfully', async () => {
+
+
+  it('should handle enhanced response format with active editors and pending invitations', async () => {
     // Arrange
     const calendarId = 'cal1';
-    const editorsData = [
-      { id: 'editor1', calendarId, email: 'user1' },
-      { id: 'editor2', calendarId, email: 'user2' },
-    ];
+    const enhancedData = {
+      activeEditors: [
+        { id: 'editor1', calendarId, email: 'user1' },
+        { id: 'editor2', calendarId, email: 'user2' },
+      ],
+      pendingInvitations: [
+        { id: 'inv1', accountId: 'user3@example.com', email: 'user3@example.com', status: 'pending' },
+        { id: 'inv2', accountId: 'user4@example.com', email: 'user4@example.com', status: 'pending' },
+      ],
+    };
     const axiosGet = vi.mocked(axios.get);
-    axiosGet.mockResolvedValue({ data: editorsData });
+    axiosGet.mockResolvedValue({ data: enhancedData });
 
     // Act
     const result = await service.listCalendarEditors(calendarId);
 
     // Assert
     expect(axiosGet).toHaveBeenCalledWith(`/api/v1/calendars/${calendarId}/editors`);
-    expect(result).toHaveLength(2);
-    expect(result[0].email).toBe('user1');
-    expect(result[1].email).toBe('user2');
+    expect(result.activeEditors).toHaveLength(2);
+    expect(result.activeEditors[0].email).toBe('user1');
+    expect(result.activeEditors[1].email).toBe('user2');
+    expect(result.pendingInvitations).toHaveLength(2);
+    expect(result.pendingInvitations[0].email).toBe('user3@example.com');
+    expect(result.pendingInvitations[1].email).toBe('user4@example.com');
+  });
+
+  it('should handle enhanced response format with only active editors', async () => {
+    // Arrange
+    const calendarId = 'cal1';
+    const enhancedData = {
+      activeEditors: [
+        { id: 'editor1', calendarId, email: 'user1' },
+      ],
+      pendingInvitations: [],
+    };
+    const axiosGet = vi.mocked(axios.get);
+    axiosGet.mockResolvedValue({ data: enhancedData });
+
+    // Act
+    const result = await service.listCalendarEditors(calendarId);
+
+    // Assert
+    expect(result.activeEditors).toHaveLength(1);
+    expect(result.activeEditors[0].email).toBe('user1');
+    expect(result.pendingInvitations).toEqual([]);
+  });
+
+  it('should handle enhanced response format with only pending invitations', async () => {
+    // Arrange
+    const calendarId = 'cal1';
+    const enhancedData = {
+      activeEditors: [],
+      pendingInvitations: [
+        { id: 'inv1', accountId: 'user3@example.com', email: 'user3@example.com', status: 'pending' },
+      ],
+    };
+    const axiosGet = vi.mocked(axios.get);
+    axiosGet.mockResolvedValue({ data: enhancedData });
+
+    // Act
+    const result = await service.listCalendarEditors(calendarId);
+
+    // Assert
+    expect(result.activeEditors).toEqual([]);
+    expect(result.pendingInvitations).toHaveLength(1);
+    expect(result.pendingInvitations[0].email).toBe('user3@example.com');
   });
 
   it('should handle permission error when listing editors', async () => {
@@ -375,7 +429,7 @@ describe('listCalendarEditors', () => {
 
     // Act & Assert
     await expect(service.listCalendarEditors(calendarId))
-      .rejects.toThrow('Permission denied: only calendar owner can manage editors');
+      .rejects.toThrow(CalendarEditorPermissionError);
   });
 
   it('should handle calendar not found error when listing editors', async () => {
@@ -390,7 +444,7 @@ describe('listCalendarEditors', () => {
 
     // Act & Assert
     await expect(service.listCalendarEditors(calendarId))
-      .rejects.toThrow('Calendar not found');
+      .rejects.toThrow(CalendarNotFoundError);
   });
 });
 
@@ -449,7 +503,7 @@ describe('grantEditAccess', () => {
 
     // Act & Assert
     await expect(service.grantEditAccess(calendarId, accountId))
-      .rejects.toThrow('Editor relationship already exists');
+      .rejects.toThrow(EditorAlreadyExistsError);
   });
 
   it('should handle permission error when granting access', async () => {
@@ -465,7 +519,7 @@ describe('grantEditAccess', () => {
 
     // Act & Assert
     await expect(service.grantEditAccess(calendarId, email))
-      .rejects.toThrow('Permission denied: only calendar owner can manage editors');
+      .rejects.toThrow(CalendarEditorPermissionError);
   });
 });
 
@@ -521,7 +575,7 @@ describe('revokeEditAccess', () => {
 
     // Act & Assert
     await expect(service.revokeEditAccess(calendarId, email))
-      .rejects.toThrow('Editor relationship not found');
+      .rejects.toThrow(EditorNotFoundError);
   });
 
   it('should handle permission error when revoking access', async () => {
@@ -537,6 +591,122 @@ describe('revokeEditAccess', () => {
 
     // Act & Assert
     await expect(service.revokeEditAccess(calendarId, editorId))
-      .rejects.toThrow('Permission denied: only calendar owner can manage editors');
+      .rejects.toThrow(CalendarEditorPermissionError);
+  });
+});
+
+describe('cancelInvitation', () => {
+  const sandbox = sinon.createSandbox();
+  let mockStore: ReturnType<typeof useCalendarStore>;
+  let service: CalendarService;
+
+  beforeEach(() => {
+    mockStore = {};
+    service = new CalendarService(mockStore);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+    vi.clearAllMocks();
+  });
+
+  it('should cancel invitation successfully', async () => {
+    // Arrange
+    const calendarId = 'cal1';
+    const invitationId = 'inv1';
+    const axiosDelete = vi.mocked(axios.delete);
+    axiosDelete.mockResolvedValue({});
+
+    // Act
+    await service.cancelInvitation(calendarId, invitationId);
+
+    // Assert
+    expect(axiosDelete).toHaveBeenCalledWith(`/api/v1/calendars/${calendarId}/invitations/${invitationId}`);
+  });
+
+  it('should handle errors when canceling invitation', async () => {
+    // Arrange
+    const calendarId = 'cal1';
+    const invitationId = 'inv1';
+    const axiosDelete = vi.mocked(axios.delete);
+    axiosDelete.mockRejectedValue({
+      response: {
+        data: { errorName: 'CalendarEditorPermissionError' },
+      },
+    });
+
+    // Act & Assert
+    await expect(service.cancelInvitation(calendarId, invitationId))
+      .rejects.toThrow(CalendarEditorPermissionError);
+  });
+
+  it('should handle network errors when canceling invitation', async () => {
+    // Arrange
+    const calendarId = 'cal1';
+    const invitationId = 'inv1';
+    const axiosDelete = vi.mocked(axios.delete);
+    axiosDelete.mockRejectedValue(new Error('Network error'));
+
+    // Act & Assert
+    await expect(service.cancelInvitation(calendarId, invitationId))
+      .rejects.toThrow(UnknownError);
+  });
+});
+
+describe('resendInvitation', () => {
+  const sandbox = sinon.createSandbox();
+  let mockStore: ReturnType<typeof useCalendarStore>;
+  let service: CalendarService;
+
+  beforeEach(() => {
+    mockStore = {};
+    service = new CalendarService(mockStore);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+    vi.clearAllMocks();
+  });
+
+  it('should resend invitation successfully', async () => {
+    // Arrange
+    const calendarId = 'cal1';
+    const invitationId = 'inv1';
+    const axiosPost = vi.mocked(axios.post);
+    axiosPost.mockResolvedValue({});
+
+    // Act
+    await service.resendInvitation(calendarId, invitationId);
+
+    // Assert
+    expect(axiosPost).toHaveBeenCalledWith(`/api/v1/calendars/${calendarId}/invitations/${invitationId}/resend`);
+  });
+
+  it('should handle errors when resending invitation', async () => {
+    // Arrange
+    const calendarId = 'cal1';
+    const invitationId = 'inv1';
+    const axiosPost = vi.mocked(axios.post);
+    axiosPost.mockRejectedValue({
+      response: {
+        data: { errorName: 'CalendarEditorPermissionError' },
+      },
+    });
+
+    // Act & Assert
+    await expect(service.resendInvitation(calendarId, invitationId))
+      .rejects.toThrow(CalendarEditorPermissionError);
+  });
+
+  it('should handle network errors when resending invitation', async () => {
+    // Arrange
+    const calendarId = 'cal1';
+    const invitationId = 'inv1';
+    const axiosPost = vi.mocked(axios.post);
+    axiosPost.mockRejectedValue(new Error('Network error'));
+
+    // Act & Assert
+    await expect(service.resendInvitation(calendarId, invitationId))
+      .rejects.toThrow(UnknownError);
   });
 });

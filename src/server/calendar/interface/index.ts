@@ -5,6 +5,7 @@ import { EventLocation } from '@/common/model/location';
 import { CalendarEditor } from '@/common/model/calendar_editor';
 import { EventCategory } from '@/common/model/event_category';
 import { EventCategoryAssignmentModel } from '@/common/model/event_category_assignment';
+import AccountInvitation from '@/common/model/invitation';
 import CalendarService from '../service/calendar';
 import EventService from '../service/events';
 import LocationService from '../service/locations';
@@ -18,6 +19,11 @@ import ConfigurationInterface from '@/server/configuration/interface';
 export interface CalendarWithRole {
   calendar: Calendar;
   role: 'owner' | 'editor';
+}
+
+export interface CalendarEditorsResponse {
+  activeEditors: CalendarEditor[];
+  pendingInvitations: AccountInvitation[];
 }
 
 export default class CalendarInterface {
@@ -145,20 +151,28 @@ export default class CalendarInterface {
     return this.calendarService.grantEditAccessByEmail(grantingAccount, calendarId, email, message);
   }
 
-  async revokeEditAccess(revokingAccount: Account, calendarId: string, editorAccountId: string): Promise<boolean> {
-    return this.calendarService.revokeEditAccess(revokingAccount, calendarId, editorAccountId);
+  async grantEditAccess(grantingAccount: Account, calendarId: string, editorAccountId: string): Promise<CalendarEditor> {
+    return this.calendarService.grantEditAccess(grantingAccount, calendarId, editorAccountId);
   }
 
-  async getCalendarEditors(account: Account, calendarId: string): Promise<CalendarEditor[]> {
-    const canView = await this.calendarService.canViewCalendarEditors(account, calendarId);
-    if (!canView) {
-      throw new CalendarEditorPermissionError('Permission denied: only calendar owner can view editors');
-    }
-    return this.calendarService.getCalendarEditors(calendarId);
+  async removeEditAccess(revokingAccount: Account, calendarId: string, editorAccountId: string): Promise<boolean> {
+    return this.calendarService.removeEditAccess(revokingAccount, calendarId, editorAccountId);
   }
 
-  async canViewCalendarEditors(account: Account, calendarId: string): Promise<boolean> {
-    return this.calendarService.canViewCalendarEditors(account, calendarId);
+  async listCalendarEditors(account: Account, calendarId: string): Promise<CalendarEditor[]> {
+    return this.calendarService.listCalendarEditors(account, calendarId);
+  }
+
+  async listCalendarEditorsWithInvitations(account: Account, calendarId: string): Promise<CalendarEditorsResponse> {
+    return this.calendarService.listCalendarEditorsWithInvitations(account, calendarId);
+  }
+
+  async cancelCalendarInvitation(requestingAccount: Account, calendarId: string, invitationId: string): Promise<boolean> {
+    return this.calendarService.cancelCalendarInvitation(requestingAccount, calendarId, invitationId);
+  }
+
+  async resendCalendarInvitation(requestingAccount: Account, calendarId: string, invitationId: string): Promise<AccountInvitation | undefined> {
+    return this.calendarService.resendCalendarInvitation(requestingAccount, calendarId, invitationId);
   }
 
   // Category operations

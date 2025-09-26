@@ -1,23 +1,29 @@
 import { v4 as uuidv4 } from 'uuid';
+import { UniqueConstraintError } from 'sequelize';
 
 import { Calendar } from '@/common/model/calendar';
 import { Account } from '@/common/model/account';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { CalendarEditorEntity } from '@/server/calendar/entity/calendar_editor';
 import { CalendarEditor } from '@/common/model/calendar_editor';
+import AccountInvitation from '@/common/model/invitation';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/common/exceptions/editor';
 import { noAccountExistsError } from '@/server/accounts/exceptions';
 import AccountsInterface from '@/server/accounts/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
 import EmailService from '@/server/common/service/mail';
-import EditorInvitationEmail from '@/server/calendar/model/editor_invitation_email';
 import EditorNotificationEmail from '@/server/calendar/model/editor_notification_email';
+
+// Import the interface type (this avoids circular dependency)
+type CalendarEditorsResponse = {
+  activeEditors: CalendarEditor[];
+  pendingInvitations: AccountInvitation[];
+};
 
 class CalendarService {
   constructor(
     private accountsInterface?: AccountsInterface,
-    private configurationInterface?: ConfigurationInterface,
   ) {}
   async getCalendar(id: string): Promise<Calendar|null> {
     const calendar = await CalendarEntity.findByPk(id);
@@ -161,22 +167,29 @@ class CalendarService {
   }
 
   /**
-   * Grant edit access to a user for a calendar
-   *
+   * Grant edit access to a specific account (internal use for invitation acceptance)
    * @param grantingAccount - Account granting access (must be calendar owner or admin)
    * @param calendarId - ID of the calendar to grant access to
-   * @param editorAccountId - ID of the account to grant edit access to
+   * @param editorAccountId - ID of the account to grant access to
    * @returns The created editor relationship
    * @throws CalendarNotFoundError if calendar not found
    * @throws noAccountExistsError if account not found
    * @throws CalendarEditorPermissionError if permission denied
    * @throws EditorAlreadyExistsError if editor already exists
    */
-  private async grantEditAccess(grantingAccount: Account, calendarId: string, editorAccountId: string): Promise<CalendarEditor> {
+  async grantEditAccess(grantingAccount: Account, calendarId: string, editorAccountId: string, message?: string): Promise<CalendarEditor> {
     // Get and validate calendar exists
     const calendar = await this.getCalendar(calendarId);
     if (!calendar) {
       throw new CalendarNotFoundError();
+    }
+
+    // Check if granting account has permission (must be calendar owner or admin)
+    if (!grantingAccount.hasRole('admin')) {
+      const isOwner = await this.isCalendarOwner(grantingAccount, calendar);
+      if (!isOwner) {
+        throw new CalendarEditorPermissionError('Permission denied: only calendar owner can grant edit access');
+      }
     }
 
     // Get and validate editor account exists
@@ -188,35 +201,45 @@ class CalendarService {
       throw new noAccountExistsError();
     }
 
-    // Check if granting account has permission (must be calendar owner or admin)
-    if (!grantingAccount.hasRole('admin')) {
-      const isOwner = await this.isCalendarOwner(grantingAccount, calendar);
-      if (!isOwner) {
-        throw new CalendarEditorPermissionError('Permission denied: only calendar owner can grant edit access');
-      }
-    }
-
-    // Check if editor relationship already exists
-    const existingEditor = await CalendarEditorEntity.findOne({
-      where: {
+    // Create editor relationship with uniqueness constraint handling
+    // TODO: storing the email seems problematic long term - the inviter needs a way to identify who they invited,
+    // but I don't like the idea of storing potentially outdated email addresses here. I also don't like
+    // the inviter being able to see when the invitee changes their email address. Maybe we need to introduce names/handles?
+    try {
+      const editorEntity = await CalendarEditorEntity.create({
+        id: uuidv4(),
         calendar_id: calendar.id,
         account_id: editorAccount.id,
-      },
-    });
+        email: editorAccount.email,
+      });
 
-    if (existingEditor) {
-      throw new EditorAlreadyExistsError();
+      await this.sendEditorNotificationEmail(calendar, grantingAccount, editorAccount, message);
+      return editorEntity.toModel();
     }
+    catch (error) {
+      if (error instanceof UniqueConstraintError) {
+        throw new EditorAlreadyExistsError();
+      }
+      throw error;
+    }
+  }
 
-    // Create editor relationship
-    const editorEntity = await CalendarEditorEntity.create({
-      id: uuidv4(),
-      calendar_id: calendar.id,
-      account_id: editorAccount.id,
-      email: editorAccount.email,
-    });
+  private async sendEditorNotificationEmail(calendar: Calendar, grantingAccount: Account, editorAccount: Account, message?: string) {
+    // Send email notification about editor access
+    const notificationEmail = new EditorNotificationEmail(
+      calendar,
+      grantingAccount,
+      editorAccount,
+      message,
+    );
 
-    return editorEntity.toModel();
+    try {
+      await EmailService.sendEmail(notificationEmail.buildMessage(editorAccount.language || 'en'));
+    }
+    catch (error) {
+      console.error('Failed to send editor notification email:', error);
+      // Don't fail the whole operation if email fails
+    }
   }
 
   /**
@@ -237,6 +260,24 @@ class CalendarService {
     email: string,
     message?: string,
   ): Promise<{ type: 'editor' | 'invitation', data: CalendarEditor | any }> {
+
+    if (!this.accountsInterface) {
+      throw new Error('AccountsInterface not available');
+    }
+
+    // Try to find existing account by email
+    const existingAccount = await this.accountsInterface.getAccountByEmail(email);
+
+    if (existingAccount) {
+      // User exists - grant editor access directly
+      const editorRelationship = await this.grantEditAccess(grantingAccount, calendarId, existingAccount.id);
+
+      return {
+        type: 'editor',
+        data: editorRelationship,
+      };
+    }
+
     // Get and validate calendar exists
     const calendar = await this.getCalendar(calendarId);
     if (!calendar) {
@@ -251,101 +292,33 @@ class CalendarService {
       }
     }
 
-    if (!this.accountsInterface) {
-      throw new Error('AccountsInterface not available');
-    }
+    // Create account invitation
+    const invitation = await this.accountsInterface.inviteNewAccount(
+      grantingAccount,
+      email,
+      `You've been invited to edit the calendar "${calendar.content('en').name}".\n\n${message || ''}`,
+      calendar.id,
+    );
 
-    // Try to find existing account by email
-    const existingAccount = await this.accountsInterface.getAccountByEmail(email);
-
-    if (existingAccount) {
-      // User exists - grant editor access directly
-      const editorRelationship = await this.grantEditAccess(grantingAccount, calendarId, existingAccount.id);
-
-      // Send email notification about editor access
-      const notificationEmail = new EditorNotificationEmail(
-        calendar,
-        grantingAccount,
-        existingAccount,
-        message,
-      );
-
-      try {
-        await EmailService.sendEmail(notificationEmail.buildMessage(existingAccount.language));
-      }
-      catch (error) {
-        console.error('Failed to send editor notification email:', error);
-        // Don't fail the whole operation if email fails
-      }
-
-      return {
-        type: 'editor',
-        data: editorRelationship,
-      };
-    }
-    else {
-      // User doesn't exist - check if we can create an invitation
-      if (!this.configurationInterface) {
-        throw new Error('ConfigurationInterface not available');
-      }
-
-      const settings = await this.configurationInterface.getAllSettings();
-      const registrationMode = settings.registrationMode;
-
-      // Allow invitations based on new mode definitions:
-      // - 'open' mode: any authenticated user can invite
-      // - 'invitation' mode: any authenticated user can invite
-      // - 'apply' and 'closed' modes: only admins can invite
-      if (registrationMode !== 'open' && registrationMode !== 'invitation' && !grantingAccount.hasRole('admin')) {
-        throw new CalendarEditorPermissionError('Cannot invite new users: insufficient permissions for current registration mode');
-      }
-
-      // Create account invitation
-      const invitation = await this.accountsInterface.inviteNewAccount(
-        grantingAccount,
-        email,
-        `You've been invited to edit the calendar "${calendar.content('en').name}".`,
-      );
-
-      // Send email with invitation and editor access information
-      const invitationEmail = new EditorInvitationEmail(
-        calendar,
-        grantingAccount,
-        email,
-        invitation.id,
-        message,
-      );
-
-      try {
-        await EmailService.sendEmail(invitationEmail.buildMessage('en'));
-      }
-      catch (error) {
-        console.error('Failed to send editor invitation email:', error);
-        // Don't fail the whole operation if email fails
-      }
-
-      // TODO: Store pending editor access grant for when they accept invitation
-
-      return {
-        type: 'invitation',
-        data: invitation,
-      };
-    }
+    return {
+      type: 'invitation',
+      data: invitation,
+    };
   }
 
   /**
-   * Revoke edit access from a user for a calendar
+   * Remove edit access from a user for a calendar
    *
-   * @param revokingAccount - Account revoking access (must be calendar owner or admin)
-   * @param calendarId - ID of the calendar to revoke access from
-   * @param editorAccountId - ID of the account to revoke edit access from
-   * @returns True if access was revoked
+   * @param revokingAccount - Account removing access (must be calendar owner or admin, or the editor who wishes to leave)
+   * @param calendarId - ID of the calendar to remove access from
+   * @param editorAccountId - ID of the account to remove edit access from
+   * @returns True if access was removed
    * @throws CalendarNotFoundError if calendar not found
    * @throws noAccountExistsError if account not found
    * @throws CalendarEditorPermissionError if permission denied
    * @throws EditorNotFoundError if editor relationship doesn't exist
    */
-  async revokeEditAccess(revokingAccount: Account, calendarId: string, editorAccountId: string): Promise<boolean> {
+  async removeEditAccess(revokingAccount: Account, calendarId: string, editorAccountId: string): Promise<boolean> {
     // Get and validate calendar exists
     const calendar = await this.getCalendar(calendarId);
     if (!calendar) {
@@ -361,12 +334,17 @@ class CalendarService {
       throw new noAccountExistsError();
     }
 
-    // Check if revoking account has permission (must be calendar owner or admin)
-    if (!revokingAccount.hasRole('admin')) {
-      const isOwner = await this.isCalendarOwner(revokingAccount, calendar);
-      if (!isOwner) {
-        throw new CalendarEditorPermissionError('Permission denied: only calendar owner can revoke edit access');
-      }
+    const isSelfRemoval = revokingAccount.id === editorAccount.id;
+    const revokerIsOwner = await this.isCalendarOwner(revokingAccount, calendar);
+    const editorIsOwner = await this.isCalendarOwner(editorAccount, calendar);
+
+    // Check if revoking account has permission
+    if (!revokerIsOwner && !revokingAccount.hasRole('admin') && !isSelfRemoval) {
+      throw new CalendarEditorPermissionError('Permission denied: only calendar owner or the editor themselves can revoke edit access');
+    }
+
+    if (editorIsOwner) {
+      throw new CalendarEditorPermissionError('Calendar owners cannot remove themselves from their own calendar');
     }
 
     // Find and delete editor relationship
@@ -412,11 +390,15 @@ class CalendarService {
    * @returns Array of editor relationships
    * @throws CalendarNotFoundError if calendar not found
    */
-  async getCalendarEditors(calendarId: string): Promise<CalendarEditor[]> {
+  async listCalendarEditors(account: Account, calendarId: string): Promise<CalendarEditor[]> {
     // Get and validate calendar exists
     const calendar = await this.getCalendar(calendarId);
     if (!calendar) {
       throw new CalendarNotFoundError();
+    }
+
+    if (!(await this.canViewCalendarEditors(account, calendarId))) {
+      throw new CalendarEditorPermissionError('Permission denied: only calendar owner can view editors');
     }
 
     const editors = await CalendarEditorEntity.findAll({
@@ -424,6 +406,114 @@ class CalendarService {
     });
 
     return editors.map(editor => editor.toModel());
+  }
+
+  /**
+   * Lists calendar editors and pending invitations for a calendar.
+   * This enhanced version includes both active editors and pending invitations.
+   *
+   * @param account - The account requesting the editor list
+   * @param calendarId - The ID of the calendar
+   * @returns Object containing activeEditors and pendingInvitations arrays
+   */
+  async listCalendarEditorsWithInvitations(account: Account, calendarId: string): Promise<CalendarEditorsResponse> {
+    // Get and validate calendar exists
+    const calendar = await this.getCalendar(calendarId);
+    if (!calendar) {
+      throw new CalendarNotFoundError();
+    }
+
+    if (!(await this.canViewCalendarEditors(account, calendarId))) {
+      throw new CalendarEditorPermissionError('Permission denied: only calendar owner can view editors');
+    }
+
+    // Get active editors
+    const editors = await CalendarEditorEntity.findAll({
+      where: { calendar_id: calendar.id },
+    });
+
+    // Get pending invitations for this calendar
+    let pendingInvitations: AccountInvitation[] = [];
+    if (this.accountsInterface) {
+      pendingInvitations = await this.accountsInterface.listPendingInvitationsForCalendar(calendarId);
+    }
+
+    return {
+      activeEditors: editors.map(editor => editor.toModel()),
+      pendingInvitations: pendingInvitations,
+    };
+  }
+
+  /**
+   * Cancel a pending invitation for a calendar
+   * @param requestingAccount - Account requesting the cancellation (must be calendar owner or admin)
+   * @param calendarId - ID of the calendar the invitation is for
+   * @param invitationId - ID of the invitation to cancel
+   * @returns True if cancellation successful
+   * @throws CalendarNotFoundError if calendar not found
+   * @throws CalendarEditorPermissionError if permission denied
+   */
+  async cancelCalendarInvitation(requestingAccount: Account, calendarId: string, invitationId: string): Promise<boolean> {
+    // Get and validate calendar exists
+    const calendar = await this.getCalendar(calendarId);
+    if (!calendar) {
+      throw new CalendarNotFoundError();
+    }
+
+    // Check if requesting account has permission (must be calendar owner or admin)
+    if (!requestingAccount.hasRole('admin')) {
+      const isOwner = await this.isCalendarOwner(requestingAccount, calendar);
+      if (!isOwner) {
+        throw new CalendarEditorPermissionError('Only calendar owners can cancel invitations');
+      }
+    }
+
+    // Verify the invitation belongs to this calendar by checking pending invitations
+    const pendingInvitations = await this.accountsInterface.listPendingInvitationsForCalendar(calendarId);
+    const invitation = pendingInvitations.find(inv => inv.id === invitationId);
+
+    if (!invitation) {
+      throw new Error('Invitation not found or not associated with this calendar');
+    }
+
+    // Cancel the invitation
+    return await this.accountsInterface.cancelInvite(invitationId);
+  }
+
+  /**
+   * Resend a pending invitation for a calendar
+   * @param requestingAccount - Account requesting the resend (must be calendar owner or admin)
+   * @param calendarId - ID of the calendar the invitation is for
+   * @param invitationId - ID of the invitation to resend
+   * @returns The resent invitation or undefined if failed
+   * @throws CalendarNotFoundError if calendar not found
+   * @throws CalendarEditorPermissionError if permission denied
+   */
+  async resendCalendarInvitation(requestingAccount: Account, calendarId: string, invitationId: string): Promise<AccountInvitation | undefined> {
+    // Get and validate calendar exists
+    const calendar = await this.getCalendar(calendarId);
+    if (!calendar) {
+      throw new CalendarNotFoundError();
+    }
+
+    // Check if requesting account has permission (must be calendar owner or admin)
+    if (!requestingAccount.hasRole('admin')) {
+      const isOwner = await this.isCalendarOwner(requestingAccount, calendar);
+      if (!isOwner) {
+        throw new CalendarEditorPermissionError('Only calendar owners can resend invitations');
+      }
+    }
+
+    // Verify the invitation belongs to this calendar by checking pending invitations
+    const pendingInvitations = await this.accountsInterface.listPendingInvitationsForCalendar(calendarId);
+    const invitation = pendingInvitations.find(inv => inv.id === invitationId);
+
+    if (!invitation) {
+      throw new Error('Invitation not found or not associated with this calendar');
+    }
+
+    // Resend the invitation
+    return await this.accountsInterface.resendInvite(invitationId);
   }
 
   async getPrimaryCalendarForUser(account: Account): Promise<Calendar|null> {

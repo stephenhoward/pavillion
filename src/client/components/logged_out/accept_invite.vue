@@ -8,6 +8,37 @@
       {{ t("go_login") }}
     </router-link>
   </div>
+
+  <!-- Success state after password is set -->
+  <div v-else-if="state.invitationAccepted"
+       class="card card--elevated vstack stack--lg card__content">
+    <div class="alert alert--success alert--sm" role="alert" aria-live="polite">
+      <h3>{{ t('invitation_accepted_title') }}</h3>
+      <p>{{ t('invitation_accepted_description') }}</p>
+
+      <!-- Calendar access information -->
+      <div v-if="state.calendarAccess && state.calendarAccess.length"
+           class="calendar-access-info">
+        <h4>{{ t('calendar_access_granted_title') }}</h4>
+        <ul class="calendar-list">
+          <li v-for="calendar in state.calendarAccess"
+              :key="calendar.calendarId"
+              class="calendar-item">
+            <strong>{{ calendar.calendarName }}</strong>
+            <span class="invited-by">{{ t('invited_by', { email: calendar.invitedBy }) }}</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <router-link class="primary"
+                 to="/auth/login"
+                 role="button">
+      {{ t('continue_to_login') }}
+    </router-link>
+  </div>
+
+  <!-- Password setup form -->
   <form v-else
         class="card card--elevated vstack stack--lg card__content"
         @submit.prevent="setPassword"
@@ -72,8 +103,10 @@ const state = reactive({
   form_error: '',
   invite_code: route.query.code || '',
   codeValidated: false,
-  password:    '',
-  password2:   '',
+  password: '',
+  password2: '',
+  invitationAccepted: false,
+  calendarAccess: [],
 });
 
 onBeforeMount(async () => {
@@ -117,11 +150,20 @@ async function setPassword() {
 
   state.form_error = '';
   try {
-    await authn.accept_invitation(state.invite_code, state.password);
-    router.push('/auth/login');
+    const response = await authn.accept_invitation(state.invite_code, state.password);
+
+    // Handle enhanced response with calendar information
+    if (response && response.calendars && response.calendars.length > 0) {
+      state.calendarAccess = response.calendars;
+      state.invitationAccepted = true;
+    }
+    else {
+      // For admin invitations or invitations without calendar context,
+      // go directly to login as before
+      router.push('/auth/login');
+    }
   }
   catch (error) {
-
     let error_text = "unknown_error";
 
     if ( typeof error  == "object" && "message" in error ) {
@@ -138,3 +180,83 @@ async function setPassword() {
   }
 }
 </script>
+
+<style scoped lang="scss">
+@use '../../assets/mixins' as *;
+
+.calendar-access-info {
+  margin-top: 1rem;
+  padding: 1rem;
+  background-color: rgba(0, 0, 0, 0.05);
+  border-radius: 8px;
+
+  @media (prefers-color-scheme: dark) {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+
+  h4 {
+    margin: 0 0 0.75rem 0;
+    font-size: 1rem;
+    font-weight: $font-medium;
+    color: $light-mode-text;
+
+    @media (prefers-color-scheme: dark) {
+      color: $dark-mode-text;
+    }
+  }
+}
+
+.calendar-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.calendar-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.75rem;
+  margin-bottom: 0.5rem;
+  background-color: $light-mode-background;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
+
+  @media (prefers-color-scheme: dark) {
+    background-color: $dark-mode-background;
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  strong {
+    font-weight: $font-medium;
+    color: $light-mode-text;
+
+    @media (prefers-color-scheme: dark) {
+      color: $dark-mode-text;
+    }
+  }
+
+  .invited-by {
+    font-size: 0.875rem;
+    color: rgba(0, 0, 0, 0.7);
+
+    @media (prefers-color-scheme: dark) {
+      color: rgba(255, 255, 255, 0.7);
+    }
+  }
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .calendar-access-info {
+    padding: 0.75rem;
+  }
+
+  .calendar-item {
+    padding: 0.5rem;
+  }
+}
+</style>

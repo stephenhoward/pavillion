@@ -1,7 +1,8 @@
-import { Model, Column, Table, BelongsTo, ForeignKey, DataType, PrimaryKey, BeforeCreate } from 'sequelize-typescript';
+import { Model, Column, Table, BelongsTo, ForeignKey, DataType, PrimaryKey, BeforeCreate, Index } from 'sequelize-typescript';
 
 import AccountInvitation from '@/common/model/invitation';
 import { AccountEntity } from '@/server/common/entity/account';
+import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import db from '@/server/common/entity/db';
 
 
@@ -30,8 +31,13 @@ export default class AccountInvitationEntity extends Model {
   @Column({ type: DataType.DATE })
   declare expiration_time: Date;
 
+  @ForeignKey(() => CalendarEntity)
+  @Index
+  @Column({ type: DataType.UUID, allowNull: true })
+  declare calendar_id: string;
+
   toModel(): AccountInvitation {
-    return new AccountInvitation(this.id, this.email, this.inviter.toModel(), this.message, this.expiration_time);
+    return new AccountInvitation(this.id, this.email, this.inviter.toModel(), this.message, this.expiration_time, this.calendar_id);
   }
 
   @BeforeCreate

@@ -61,9 +61,17 @@
     "error_permission_denied": "You don't have permission to manage editors for this calendar",
     "account_id_required": "Account ID is required",
     "error_editor_already_exists": "This person already has edit access to this calendar",
+    "error_invite_already_exists": "An invitation has already been sent to this email address",
     "error_adding_editor": "Failed to add editor",
     "error_editor_not_found": "Editor not found",
-    "error_removing_editor": "Failed to remove editor"
+    "error_removing_editor": "Failed to remove editor",
+    "editor_added_success": "Successfully added {{email}} as an editor",
+    "editor_removed_success": "Successfully removed {{email}} from editors",
+    "leave_calendar_button": "Leave Calendar",
+    "leaving": "Leaving...",
+    "confirm_leave_title": "Leave Calendar",
+    "confirm_leave_message": "Are you sure you want to leave this calendar? You will no longer have edit access and will need to be re-invited to regain access.",
+    "error_leaving_calendar": "Failed to leave calendar"
   },
   "management": {
     "page_title": "calendar settings",

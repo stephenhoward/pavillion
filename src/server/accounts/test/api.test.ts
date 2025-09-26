@@ -126,7 +126,8 @@ describe ('Invitations API', () => {
 
   it('check invite code: should succeed', async () => {
     let stub2 = sandbox.stub(accountsInterface,'validateInviteCode');
-    stub2.resolves(true);
+    const mockInvitation = { invitation_code: 'test_code' } as any;
+    stub2.resolves(mockInvitation);
     router.get('/handler', inviteHandlers.checkInviteCode.bind(inviteHandlers));
 
     const response = await request(testApp(router)).get('/handler');
@@ -138,7 +139,7 @@ describe ('Invitations API', () => {
 
   it('check invite code: should fail', async () => {
     let stub2 = sinon.stub(accountsInterface,'validateInviteCode');
-    stub2.resolves(false);
+    stub2.rejects(new Error('Invalid invite'));
     router.get('/handler', inviteHandlers.checkInviteCode.bind(inviteHandlers));
 
     const response = await request(testApp(router)).get('/handler');
@@ -150,7 +151,11 @@ describe ('Invitations API', () => {
 
   it('accept invite: should succeed', async () => {
     let stub2 = sandbox.stub(accountsInterface,'acceptAccountInvite');
-    stub2.resolves(new Account('id', 'testme', 'testme'));
+    const mockResult = {
+      account: new Account('id', 'testme', 'testme'),
+      calendars: ['calendar1', 'calendar2'],
+    };
+    stub2.resolves(mockResult);
     router.post('/handler', inviteHandlers.acceptInvite.bind(inviteHandlers));
 
     const response = await request(testApp(router))
