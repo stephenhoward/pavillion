@@ -15,6 +15,7 @@ import CategoryService from './categories';
 import { EventCategoryEntity } from '@/server/calendar/entity/event_category';
 import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_category_assignment';
 import db from '@/server/common/entity/db';
+import { Op } from 'sequelize';
 
 /**
  * Service class for managing events
@@ -38,14 +39,54 @@ class EventService {
   /**
      * retrieves the events for the provided calendar
      * @param calendar - the calendar to retrieve events for
+     * @param options - optional search and filter parameters
      * @returns a promise that resolves to the list of events
      */
-  async listEvents(calendar: Calendar): Promise<CalendarEvent[]> {
+  async listEvents(calendar: Calendar, options?: {
+    search?: string;
+    categories?: string[];
+  }): Promise<CalendarEvent[]> {
 
-    const events = await EventEntity.findAll({
+    // Base query options
+    const queryOptions: any = {
       where: { calendar_id: calendar.id },
-      include: [EventContentEntity, LocationEntity, EventScheduleEntity, MediaEntity],
-    });
+      include: [LocationEntity, EventScheduleEntity, MediaEntity],
+    };
+
+    // Handle search parameter
+    if (options?.search && options.search.trim()) {
+      const searchTerm = `%${options.search.trim()}%`;
+      queryOptions.include.push({
+        model: EventContentEntity,
+        where: {
+          [Op.or]: [
+            { name: { [Op.iLike]: searchTerm } },
+            { description: { [Op.iLike]: searchTerm } },
+          ],
+        },
+        required: true, // INNER JOIN to only include events with matching content
+      });
+    }
+    else {
+      // Always include content, but without search filter
+      queryOptions.include.push(EventContentEntity);
+    }
+
+    // Handle category filter
+    if (options?.categories && options.categories.length > 0) {
+      queryOptions.include.push({
+        model: EventCategoryAssignmentEntity,
+        where: {
+          category_id: {
+            [Op.in]: options.categories,
+          },
+        },
+        required: true, // INNER JOIN to only include events with matching categories
+      });
+    }
+
+
+    const events = await EventEntity.findAll(queryOptions);
 
     return events.map( (event) => {
       let e = event.toModel();

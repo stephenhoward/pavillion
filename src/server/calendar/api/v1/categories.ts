@@ -45,7 +45,14 @@ class CategoryRoutes {
     try {
       const { calendarId } = req.params;
 
-      const categories = await this.service.getCategories(calendarId);
+      // First, get the calendar by name to get its ID
+      const calendar = await this.service.getCalendarByName(calendarId);
+      if (!calendar) {
+        res.status(404).json({ "error": "calendar not found" });
+        return;
+      }
+
+      const categories = await this.service.getCategories(calendar.id);
       res.json(categories.map((category) => category.toObject()));
     }
     catch (error) {

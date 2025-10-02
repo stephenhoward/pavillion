@@ -32,11 +32,37 @@ export default class EventService {
   /**
    * Load events for the specified calendar
    * @param calendarUrlName The URL name of the calendar
+   * @param filters Optional search and filter parameters
    * @returns Promise<Array<CalendarEvent>> The events in the calendar
    */
-  async loadCalendarEvents(calendarUrlName: string): Promise<Array<CalendarEvent>> {
+  async loadCalendarEvents(
+    calendarUrlName: string,
+    filters?: {
+      search?: string;
+      categories?: string[];
+    },
+  ): Promise<Array<CalendarEvent>> {
     try {
-      const events = await ModelService.listModels(`/api/v1/calendars/${calendarUrlName}/events`);
+      let url = `/api/v1/calendars/${calendarUrlName}/events`;
+
+      // Add query parameters if filters are provided
+      if (filters && Object.keys(filters).length > 0) {
+        const params = new URLSearchParams();
+
+        if (filters.search) {
+          params.append('search', filters.search);
+        }
+
+        if (filters.categories && filters.categories.length > 0) {
+          // Send categories as comma-separated string
+          params.append('categories', filters.categories.join(','));
+        }
+
+
+        url += `?${params.toString()}`;
+      }
+
+      const events = await ModelService.listModels(url);
       const calendarEvents = events.map(event => CalendarEvent.fromObject(event));
       this.store.events = calendarEvents;
       return calendarEvents;
@@ -96,5 +122,44 @@ export default class EventService {
       console.error('Error deleting event:', error);
       throw error;
     }
+  }
+
+  /**
+   * Strips IDs and auto-generated fields from an event to prepare for duplication.
+   * Creates a copy of the event with all identifying fields cleared while preserving
+   * content, location data, media data, schedules, and categories.
+   *
+   * @param originalEvent The event to prepare for duplication
+   * @returns CalendarEvent A new event instance ready for duplication
+   */
+  static prepareEventForDuplication(originalEvent: CalendarEvent): CalendarEvent {
+    const duplicatedEvent = originalEvent.clone();
+
+    // Clear primary identifiers
+    duplicatedEvent.id = '';
+    duplicatedEvent.eventSourceUrl = '';
+
+    // Clear location ID if it exists, but preserve location data
+    if (duplicatedEvent.location) {
+      duplicatedEvent.location.id = '';
+    }
+
+    // Clear media ID if it exists, but preserve media data
+    if (duplicatedEvent.media) {
+      duplicatedEvent.media.id = '';
+    }
+    duplicatedEvent.mediaId = null;
+
+    // Clear schedule IDs but preserve schedule data
+    duplicatedEvent.schedules.forEach(schedule => {
+      schedule.id = '';
+    });
+
+    // Clear category IDs but preserve category data and relationships
+    duplicatedEvent.categories.forEach(category => {
+      category.id = '';
+    });
+
+    return duplicatedEvent;
   }
 }

@@ -77,8 +77,11 @@ export default class CalendarInterface {
   }
 
   // Event operations
-  async listEvents(calendar: Calendar): Promise<CalendarEvent[]> {
-    return this.eventService.listEvents(calendar);
+  async listEvents(calendar: Calendar, options?: {
+    search?: string;
+    categories?: string[];
+  }): Promise<CalendarEvent[]> {
+    return this.eventService.listEvents(calendar, options);
   }
 
   async getEventById(eventId: string): Promise<CalendarEvent> {
@@ -146,7 +149,11 @@ export default class CalendarInterface {
     return this.calendarService.revokeEditAccess(revokingAccount, calendarId, editorAccountId);
   }
 
-  async getCalendarEditors(calendarId: string): Promise<CalendarEditor[]> {
+  async getCalendarEditors(account: Account, calendarId: string): Promise<CalendarEditor[]> {
+    const canView = await this.calendarService.canViewCalendarEditors(account, calendarId);
+    if (!canView) {
+      throw new CalendarEditorPermissionError('Permission denied: only calendar owner can view editors');
+    }
     return this.calendarService.getCalendarEditors(calendarId);
   }
 

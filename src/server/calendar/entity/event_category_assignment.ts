@@ -1,4 +1,4 @@
-import { Table, Column, Model, DataType, PrimaryKey, CreatedAt, BelongsTo, ForeignKey } from 'sequelize-typescript';
+import { Table, Column, Model, DataType, PrimaryKey, CreatedAt, BelongsTo, ForeignKey, Index } from 'sequelize-typescript';
 import { EventCategoryAssignmentModel } from '@/common/model/event_category_assignment';
 import { EventEntity } from './event';
 import { EventCategoryEntity } from './event_category';
@@ -22,6 +22,7 @@ export class EventCategoryAssignmentEntity extends Model {
   declare id: string;
 
   @ForeignKey(() => EventEntity)
+  @Index('idx_event_category_assignment_event_id')
   @Column({
     type: DataType.UUID,
     allowNull: false,
@@ -30,6 +31,7 @@ export class EventCategoryAssignmentEntity extends Model {
   declare event_id: string;
 
   @ForeignKey(() => EventCategoryEntity)
+  @Index('idx_event_category_assignment_category_id')
   @Column({
     type: DataType.UUID,
     allowNull: false,

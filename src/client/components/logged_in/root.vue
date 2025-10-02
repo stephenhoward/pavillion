@@ -16,6 +16,7 @@ const calendarService = new CalendarService();
 const eventService = new EventService();
 const state = reactive({
   currentEvent: null,
+  isDuplicationMode: false,
 });
 const newEvent = async () => {
   try {
@@ -95,12 +96,12 @@ const isActive = (path) => {
       </li>
     </nav>
     <main id="main">
-      <RouterView @open-event="(e) => state.currentEvent = e"/>
+      <RouterView @open-event="(e, isDuplicationMode = false) => { state.currentEvent = e; state.isDuplicationMode = isDuplicationMode; }"/>
     </main>
   </div>
 
   <div v-if="state.currentEvent != null">
-    <EditEventView :event="state.currentEvent" @close="state.currentEvent=null" />
+    <EditEventView :event="state.currentEvent" :is-duplication-mode="state.isDuplicationMode" @close="() => { state.currentEvent = null; state.isDuplicationMode = false; }" />
   </div>
   <!-- Calendar Selector Modal -->
   <CalendarSelector v-if="showCalendarSelector" @select="onCalendarSelected" @cancel="onCalendarSelectionCanceled" />

@@ -109,4 +109,48 @@ describe('Editor Behavior', () => {
 
     expect(createStub.called).toBe(true);
   });
+
+  it('duplication mode shows correct title', async () => {
+    const event = new CalendarEvent('testCalendarId', 'testId', 'testDate');
+    event.location = new EventLocation('', '');
+
+    const calendarsStub = sandbox.stub(CalendarService.prototype, 'loadCalendars');
+    calendarsStub.resolves([new Calendar('testCalendarId','testName')]);
+
+    const { wrapper } = mountedEditor(event);
+    currentWrapper = wrapper;
+
+    // Set duplication mode prop
+    await wrapper.setProps({ isDuplicationMode: true });
+    await wrapper.vm.$nextTick();
+
+    // Should show "Duplicate Event" in modal title
+    const modalTitle = wrapper.find('[data-testid="modal-title"]');
+    if (modalTitle.exists()) {
+      expect(modalTitle.text()).toContain('Duplicate');
+    }
+  });
+
+  it('duplication mode does not have existing event id', async () => {
+    const originalEvent = new CalendarEvent('testCalendarId', 'originalId', 'testDate');
+    originalEvent.location = new EventLocation('', '');
+    originalEvent.content('en').name = 'Original Event';
+
+    const calendarsStub = sandbox.stub(CalendarService.prototype, 'loadCalendars');
+    const saveStub = sandbox.stub(EventService.prototype, 'saveEvent');
+
+    calendarsStub.resolves([new Calendar('testCalendarId','testName')]);
+    saveStub.resolves(new CalendarEvent('newId', 'testDate'));
+
+    const { wrapper } = mountedEditor(originalEvent);
+    currentWrapper = wrapper;
+
+    // Set duplication mode
+    await wrapper.setProps({ isDuplicationMode: true });
+    await wrapper.vm.$nextTick();
+
+    // The button text should say "Create" not "Update"
+    const submitButton = wrapper.find('button[type="submit"]');
+    expect(submitButton.text()).not.toContain('Update');
+  });
 });

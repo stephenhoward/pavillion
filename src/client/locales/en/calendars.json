@@ -121,6 +121,14 @@
     "assignment_failed": "Failed to assign categories. Please try again.",
     "delete_events": "Delete Events",
     "delete_events_label": "Delete selected events"
+  },
+  "search_filter": {
+    "search_events": "Search Events",
+    "search_placeholder": "Search by event name or description...",
+    "filter_by_categories": "Filter by Categories",
+    "loading_categories": "Loading categories...",
+    "categories_load_error": "Failed to load categories",
+    "clear_all_filters": "Clear All Filters"
   }
 }
 
