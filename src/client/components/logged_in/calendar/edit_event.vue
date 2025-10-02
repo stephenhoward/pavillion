@@ -238,7 +238,7 @@ button {
 </style>
 
 <template>
-  <ModalLayout :title="props.event.id ? t('edit_event_title') : t('create_event_title')" @close="$emit('close')">
+  <ModalLayout :title="getModalTitle" @close="$emit('close')">
     <main role="main" aria-label="Event Editor">
       <form @submit.prevent="saveModel(props.event)" aria-label="Event Information Form">
         <div v-if="state.err"
@@ -408,7 +408,7 @@ button {
         <!-- Form Actions -->
         <footer class="form-actions">
           <button type="submit" class="primary">
-            {{ props.event.id ? t("update_button") : t("create_button") }}
+            {{ (props.event.id && !props.isDuplicationMode) ? t("update_button") : t("create_button") }}
           </button>
           <button type="button"
                   class="btn btn--secondary"
@@ -441,16 +441,22 @@ import ModalLayout from '@/client/components/common/modal.vue';
 import ImageUpload from '@/client/components/common/media/ImageUpload.vue';
 import CategorySelector from './CategorySelector.vue';
 import iso6391 from 'iso-639-1-dir';
+import { useEventDuplication } from '@/client/composables/useEventDuplication';
 
 const emit = defineEmits(['close']);
 const eventService = new EventService();
 const categoryService = new CategoryService();
+const { stripEventForDuplication } = useEventDuplication();
 
 const { t } = useTranslation('event_editor', {
   keyPrefix: 'editor',
 });
 const props = defineProps({
   event: CalendarEvent,
+  isDuplicationMode: {
+    type: Boolean,
+    default: false,
+  },
 });
 const calendarService = new CalendarService();
 
@@ -471,6 +477,13 @@ const state = reactive({
   mediaId: null,
   calendar: null,
   selectedCategories: [],
+});
+
+const getModalTitle = computed(() => {
+  if (props.isDuplicationMode) {
+    return t('duplicate_event_title');
+  }
+  return props.event.id ? t('edit_event_title') : t('create_event_title');
 });
 
 const addLanguage = (language) => {
@@ -497,6 +510,13 @@ const handleCategoriesChanged = (categories) => {
 
 onBeforeMount(async () => {
   try {
+    // If in duplication mode, strip the event data first
+    if (props.isDuplicationMode) {
+      const strippedEvent = stripEventForDuplication(props.event);
+      // Update the event props in place
+      Object.assign(props.event, strippedEvent);
+    }
+
     // Load available calendars that the user can edit
     state.availableCalendars = await calendarService.loadCalendars();
 
@@ -505,8 +525,9 @@ onBeforeMount(async () => {
     }
     state.calendar = state.availableCalendars.filter(c => c.id === props.event.calendarId)[0];
 
-    // Load existing categories for the event if it's being edited
-    if (props.event.id) {
+    // Load existing categories for the event
+    if (props.event.id && !props.isDuplicationMode) {
+      // For existing events, load categories from the API
       try {
         const eventCategories = await categoryService.getEventCategories(props.event.id);
         state.selectedCategories = eventCategories.map(cat => cat.id);
@@ -515,6 +536,15 @@ onBeforeMount(async () => {
         console.error('Error loading event categories:', error);
         // Don't set error state for categories as it's not critical
       }
+    }
+    else if (props.isDuplicationMode && props.event.categories && props.event.categories.length > 0) {
+      // For duplicated events, use the preserved categories from the event
+      state.selectedCategories = props.event.categories.map(cat => cat.id);
+    }
+
+    // If in duplication mode and event has preserved media, initialize mediaId
+    if (props.isDuplicationMode && props.event.mediaId) {
+      state.mediaId = props.event.mediaId;
     }
   }
   catch (error) {

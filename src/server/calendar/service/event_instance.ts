@@ -106,7 +106,7 @@ export default class EventInstanceService {
     }
   }
 
-  private rrules(event: CalendarEvent): RRuleSet {
+  private rrules(event: CalendarEvent): any {
     const rruleSet = new RRuleSet();
 
     // Map our EventFrequency enum to RRule's Frequency enum
@@ -144,11 +144,13 @@ export default class EventInstanceService {
         }
       }
       else {
-        if ( schedule.isExclusion ) {
-          rruleSet.exdate(schedule.startDate!.toJSDate());
-        }
-        else {
-          rruleSet.rdate(schedule.startDate!.toJSDate());
+        if (schedule.startDate) {
+          if ( schedule.isExclusion ) {
+            rruleSet.exdate(schedule.startDate.toJSDate());
+          }
+          else {
+            rruleSet.rdate(schedule.startDate.toJSDate());
+          }
         }
       }
     }

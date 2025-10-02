@@ -641,3 +641,393 @@ $spacing-4xl: 40px;
     }
   }
 }
+
+// ===== FLOATING ACTIONS COMPONENT LIBRARY =====
+//
+// Usage: Create fixed-positioned floating containers with consistent styling
+// Perfect for: Bulk operations menus, floating toolbars, action bars
+//
+// Example:
+// .my-floating-menu {
+//   @include floating-container-bottom-center;
+//   @include floating-container-horizontal;
+// }
+
+// Base floating container mixin - provides core styling for all floating containers
+@mixin floating-container-base {
+  position: fixed;
+  z-index: 1000;
+  background: var(--background-color, white);
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 12px;
+  box-shadow: $box-shadow-medium;
+  transition: all 0.3s ease;
+  
+  @include dark-mode {
+    background: var(--background-secondary-dark, #2d3748);
+    border-color: var(--border-color-dark, #4a5568);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
+}
+
+// Floating container positioning variants
+@mixin floating-container-bottom-center {
+  @include floating-container-base;
+  
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 90vw;
+  
+  &.hidden {
+    opacity: 0;
+    visibility: hidden;
+    transform: translateX(-50%) translateY(20px);
+  }
+}
+
+@mixin floating-container-top-right {
+  @include floating-container-base;
+  
+  top: 20px;
+  right: 20px;
+  
+  &.hidden {
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-20px);
+  }
+}
+
+@mixin floating-container-bottom-right {
+  @include floating-container-base;
+  
+  bottom: 20px;
+  right: 20px;
+  
+  &.hidden {
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(20px);
+  }
+}
+
+// Floating container content layout
+@mixin floating-container-horizontal {
+  display: flex;
+  align-items: center;
+  gap: $spacing-xl;
+  padding: $spacing-lg $spacing-2xl;
+  
+  // Mobile responsive layout
+  @include mobile-only {
+    flex-direction: column;
+    gap: $spacing-md;
+    padding: $spacing-lg;
+  }
+}
+
+@mixin floating-container-vertical {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-md;
+  padding: $spacing-lg;
+}
+
+// Floating actions button group
+@mixin floating-actions-group {
+  display: flex;
+  gap: $spacing-md;
+  align-items: center;
+  
+  @include mobile-only {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+// Selection info styling for floating containers
+@mixin floating-selection-info {
+  display: flex;
+  align-items: center;
+  
+  .selection-count {
+    font-weight: $font-medium;
+    color: var(--text-primary, #333);
+    
+    @include dark-mode {
+      color: var(--text-primary-dark, #fff);
+    }
+  }
+}
+
+// Enhanced button variants for floating actions (building on existing system)
+@mixin floating-btn-primary {
+  @include btn-base;
+  @include btn-sm;
+  
+  background: var(--primary-color, #007bff);
+  color: white;
+  white-space: nowrap;
+  
+  &:hover:not(:disabled) {
+    background: var(--primary-color-dark, #0056b3);
+  }
+}
+
+@mixin floating-btn-danger {
+  @include btn-base;
+  @include btn-sm;
+  
+  background: var(--danger-color, #dc3545);
+  color: white;
+  white-space: nowrap;
+  
+  &:hover:not(:disabled) {
+    background: var(--danger-color-dark, #c82333);
+  }
+}
+
+@mixin floating-btn-ghost {
+  @include btn-base;
+  @include btn-sm;
+  
+  background: transparent;
+  color: var(--text-secondary, #666);
+  border: 1px solid var(--border-color, #e0e0e0);
+  white-space: nowrap;
+  
+  &:hover:not(:disabled) {
+    background: var(--background-secondary, #f8f9fa);
+    color: var(--text-primary, #333);
+  }
+  
+  @include dark-mode {
+    color: var(--text-secondary-dark, #ccc);
+    border-color: var(--border-color-dark, #4a5568);
+    
+    &:hover:not(:disabled) {
+      background: var(--background-secondary-dark, #2d3748);
+      color: var(--text-primary-dark, #fff);
+    }
+  }
+}
+
+// ===== FILTER CONTROLS COMPONENT LIBRARY =====
+//
+// Usage: Create responsive filter interfaces with search inputs and category chips
+// Perfect for: Event filters, search interfaces, content filtering UI
+//
+// Complete Example:
+// .my-filter {
+//   @include filter-container;
+//   
+//   .search-section {
+//     @include filter-section;
+//     .search-input { @include search-input; }
+//     .clear-btn { @include search-clear-button; }
+//   }
+//   
+//   .category-section {
+//     @include filter-section;
+//     .chips-container { @include category-filter-container; }
+//     .chip { @include category-chip; }
+//   }
+// }
+
+// Base filter container with responsive layout - switches from vertical to horizontal on larger screens
+@mixin filter-container {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-lg;
+  padding: $spacing-lg;
+  background: $light-mode-background;
+  border-radius: $component-border-radius;
+  margin-bottom: $spacing-lg;
+  
+  @include dark-mode {
+    background: $dark-mode-background;
+  }
+  
+  @include medium-size-device {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: $spacing-2xl;
+  }
+}
+
+// Filter section layout
+@mixin filter-section {
+  flex: 1;
+  min-width: 200px;
+}
+
+// Filter section labels
+@mixin filter-label {
+  display: block;
+  font-weight: $font-medium;
+  margin-bottom: $spacing-xs;
+  color: $light-mode-text;
+  
+  @include dark-mode {
+    color: $dark-mode-text;
+  }
+}
+
+// Search input with clear button container
+@mixin search-input-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+// Enhanced search input (building on existing input-base)
+@mixin search-input {
+  @include input-base;
+  
+  padding-right: 32px; // Make room for clear button
+  border-radius: $form-input-border-radius;
+}
+
+// Search clear button
+@mixin search-clear-button {
+  position: absolute;
+  right: $spacing-sm;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: $spacing-xs;
+  color: #666;
+  font-size: 14px;
+  
+  &:hover {
+    color: $light-mode-text;
+  }
+  
+  @include dark-mode {
+    color: #aaa;
+    
+    &:hover {
+      color: $dark-mode-text;
+    }
+  }
+}
+
+// Category filter chips container
+@mixin category-filter-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $spacing-sm;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+// Individual category chip
+@mixin category-chip {
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs;
+  padding: $spacing-xs $spacing-sm;
+  border: 1px solid #ddd;
+  border-radius: $spacing-xs;
+  cursor: pointer;
+  font-size: 12px;
+  background: white;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background: #f5f5f5;
+  }
+  
+  &.selected {
+    background: #e3f2fd;
+    border-color: $focus-color;
+  }
+  
+  @include dark-mode {
+    background: #2a2a2a;
+    border-color: #555;
+    color: $dark-mode-text;
+    
+    &:hover {
+      background: #333;
+    }
+    
+    &.selected {
+      background: #1a3a5a;
+      border-color: $focus-color-dark;
+    }
+  }
+  
+  input[type="checkbox"] {
+    margin: 0;
+  }
+  
+  .category-name {
+    white-space: nowrap;
+  }
+}
+
+// Filter loading and error states
+@mixin filter-loading {
+  @include loading-state;
+  
+  padding: $spacing-sm;
+  font-size: 12px;
+  border-radius: $spacing-xs;
+}
+
+@mixin filter-error {
+  @include error-message;
+  
+  padding: $spacing-sm;
+  font-size: 12px;
+  background: #fee;
+  color: #c33;
+  border: 1px solid #fcc;
+}
+
+// Clear all filters section with responsive positioning
+@mixin clear-filters-section {
+  display: flex;
+  justify-content: center;
+  
+  @include medium-size-device {
+    justify-content: flex-end;
+    align-self: flex-end;
+  }
+}
+
+// Clear all filters button - small destructive action button
+@mixin clear-all-filters-btn {
+  @include btn-base;
+  @include btn-xs;
+  
+  background: #f44336;
+  color: white;
+  
+  &:hover:not(:disabled) {
+    background: #d32f2f;
+  }
+}
+
+// ===== COMPONENT LIBRARY SUMMARY =====
+//
+// This SCSS component library provides two main pattern groups:
+//
+// 1. FLOATING ACTIONS LIBRARY
+//    - floating-container-* mixins for positioning (bottom-center, top-right, etc.)
+//    - floating-container-horizontal/vertical for layout
+//    - floating-btn-* mixins for consistent button styling
+//    - floating-selection-info for status text
+//
+// 2. FILTER CONTROLS LIBRARY  
+//    - filter-container for responsive filter layout
+//    - search-input with integrated clear button
+//    - category-chip for selectable filter chips
+//    - filter-loading/error for state management
+//
+// All mixins build on the existing design system (btn-*, input-base, etc.)
+// and maintain consistency with design tokens and responsive behavior.
+//
+// Updated: 2025-09-12 - SCSS Component Library extraction spec

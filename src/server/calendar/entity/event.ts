@@ -1,4 +1,4 @@
-import { Model, Table, Column, PrimaryKey, BelongsTo, DataType, ForeignKey, HasMany } from 'sequelize-typescript';
+import { Model, Table, Column, PrimaryKey, BelongsTo, DataType, ForeignKey, HasMany, Index } from 'sequelize-typescript';
 import { DateTime } from 'luxon';
 
 import { CalendarEvent, CalendarEventContent, CalendarEventSchedule, language } from '@/common/model/events';
@@ -28,6 +28,7 @@ class EventEntity extends Model {
   declare parent_event_id: string;
 
   @ForeignKey(() => CalendarEntity)
+  @Index('idx_event_calendar_id')
   @Column({ type: DataType.UUID })
   declare calendar_id: string;
 
@@ -90,15 +91,18 @@ class EventContentEntity extends Model {
   declare id: string;
 
   @ForeignKey(() => EventEntity)
+  @Index('idx_event_content_event_id')
   @Column({ type: DataType.UUID })
   declare event_id: string;
 
   @Column({ type: DataType.STRING })
   declare language: string;
 
+  @Index('idx_event_content_name')
   @Column({ type: DataType.STRING })
   declare name: string;
 
+  @Index('idx_event_content_description')
   @Column({ type: DataType.STRING })
   declare description: string;
 

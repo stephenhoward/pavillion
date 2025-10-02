@@ -39,7 +39,29 @@ export default class EventRoutes {
       return;
     }
 
-    const events = await this.service.listEvents(calendar);
+    // Parse query parameters for filtering and searching
+    const options: {
+      search?: string;
+      categories?: string[];
+    } = {};
+
+    // Handle search parameter
+    if (req.query.search && typeof req.query.search === 'string') {
+      options.search = req.query.search.trim();
+    }
+
+    // Handle categories parameter (can be comma-separated or array)
+    if (req.query.categories) {
+      if (typeof req.query.categories === 'string') {
+        options.categories = req.query.categories.split(',').map(c => c.trim()).filter(c => c.length > 0);
+      }
+      else if (Array.isArray(req.query.categories)) {
+        options.categories = req.query.categories.filter(c => typeof c === 'string' && c.trim().length > 0);
+      }
+    }
+
+
+    const events = await this.service.listEvents(calendar, options);
     res.json(events.map((event) => event.toObject()));
   }
 

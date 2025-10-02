@@ -1,5 +1,5 @@
 <script setup>
-import { onBeforeMount, reactive, inject, ref } from 'vue';
+import { onBeforeMount, reactive, inject, ref, watch, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { useEventStore } from '@/client/stores/eventStore';
@@ -9,6 +9,7 @@ import EventImage from '@/client/components/common/media/EventImage.vue';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
 import BulkOperationsMenu from './BulkOperationsMenu.vue';
 import CategorySelectionDialog from './CategorySelectionDialog.vue';
+import SearchFilter from './SearchFilter.vue';
 import { useBulkSelection } from '@/client/composables/useBulkSelection';
 
 const { t } = useTranslation('calendars',{
@@ -31,7 +32,7 @@ const state = reactive({
   calendar: null,
   isLoading: false,
 });
-const calendarId = route.params.calendar;
+const calendarId = computed(() => route.params.calendar);
 const store = useEventStore();
 const calendarService = new CalendarService();
 
@@ -47,14 +48,52 @@ const {
   deselectAll,
 } = useBulkSelection();
 
+// Search and filter functionality
+const currentFilters = reactive({
+  search: '',
+  categories: [],
+});
+
+const handleFiltersChanged = async (filters) => {
+  // Update current filters
+  Object.assign(currentFilters, {
+    search: filters.search || '',
+    categories: filters.categories || [],
+  });
+
+  // Reload events with new filters
+  state.isLoading = true;
+  try {
+    await eventService.loadCalendarEvents(calendarId.value, filters);
+    // Clear selections when filtering changes
+    deselectAll();
+  }
+  catch (error) {
+    console.error('Error loading filtered events:', error);
+    state.err = 'Failed to load events with current filters';
+  }
+  finally {
+    state.isLoading = false;
+  }
+};
+
 onBeforeMount(async () => {
+  await loadCalendarData();
+});
+
+// Function to load calendar data
+const loadCalendarData = async () => {
+  if (!calendarId.value) return;
+
   try {
     state.isLoading = true;
+    state.err = '';
+
     // Load calendar by URL name
-    state.calendar = await calendarService.getCalendarByUrlName(calendarId);
+    state.calendar = await calendarService.getCalendarByUrlName(calendarId.value);
 
     // Load events for this calendar
-    await eventService.loadCalendarEvents(calendarId);
+    await eventService.loadCalendarEvents(calendarId.value);
   }
   catch (error) {
     console.error('Error loading calendar data:', error);
@@ -62,6 +101,13 @@ onBeforeMount(async () => {
   }
   finally {
     state.isLoading = false;
+  }
+};
+
+// Watch for calendar ID changes and reload data
+watch(calendarId, (newCalendarId, oldCalendarId) => {
+  if (newCalendarId && newCalendarId !== oldCalendarId) {
+    loadCalendarData();
   }
 });
 
@@ -111,12 +157,15 @@ const handleDeleteEvents = async () => {
 
   if (confirmDelete) {
     try {
-      for (const eventId of selectedEvents.value) {
-        await eventService.deleteEvent(eventId);
+      // Get the actual event objects from the selected IDs
+      const eventsToDelete = getSelectedEventObjects(store.events || []);
+
+      for (const event of eventsToDelete) {
+        await eventService.deleteEvent(event);
       }
 
-      // Reload events after deletion
-      await eventService.loadCalendarEvents(calendarId);
+      // Reload events after deletion with current filters
+      await eventService.loadCalendarEvents(calendarId.value, currentFilters);
       deselectAll();
     }
     catch (error) {
@@ -124,6 +173,11 @@ const handleDeleteEvents = async () => {
       // TODO: Show user-friendly error message
     }
   }
+};
+
+const handleDuplicateEvent = (event) => {
+  // Open the event editor in duplication mode
+  emit('openEvent', event.clone(), true); // Pass isDuplicationMode as true
 };
 </script>
 
@@ -154,8 +208,21 @@ const handleDeleteEvents = async () => {
         </nav>
       </header>
 
+      <!-- Search and Filter Controls -->
+      <SearchFilter
+        v-if="state.calendar && store.events && store.events.length > 0"
+        :calendar-id="calendarId"
+        :initial-filters="currentFilters"
+        @filters-changed="handleFiltersChanged"
+      />
+
+      <!-- Loading State -->
+      <div v-if="state.isLoading" class="loading-state">
+        Loading events...
+      </div>
+
       <!-- Events Display Section -->
-      <section v-if="store.events && store.events.length > 0" aria-label="Calendar Events">
+      <section v-if="!state.isLoading && store.events && store.events.length > 0" aria-label="Calendar Events">
         <h2 class="sr-only">Events in this Calendar</h2>
 
         <!-- Select All Controls -->
@@ -197,11 +264,22 @@ const handleDeleteEvents = async () => {
                 <p v-if="event.content('en').description">{{ event.content("en").description }}</p>
               </div>
             </article>
+            <div class="event-actions">
+              <button
+                type="button"
+                class="duplicate-btn"
+                @click.stop="handleDuplicateEvent(event)"
+                :aria-label="`Duplicate event: ${event.content('en').name}`"
+                title="Duplicate this event"
+              >
+                📄
+              </button>
+            </div>
           </li>
         </ul>
       </section>
 
-      <EmptyLayout v-else
+      <EmptyLayout v-else-if="!state.isLoading && (!store.events || store.events.length === 0)"
                    :title="t('noEvents')"
                    :description="t('noEventsDescription')">
         <button type="button" class="primary" @click="newEvent()">
@@ -367,8 +445,52 @@ section[aria-label="Calendar Events"] {
         display: flex;
         align-items: flex-start;
         gap: 15px;
-        width: 100%;
+        flex: 1;
         cursor: pointer;
+      }
+
+      .event-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+
+        .duplicate-btn {
+          background: transparent;
+          border: 1px solid #e0e0e0;
+          border-radius: 6px;
+          padding: 8px;
+          font-size: 16px;
+          cursor: pointer;
+          color: var(--text-secondary, #666);
+          transition: all 0.2s ease;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 36px;
+          height: 36px;
+
+          &:hover {
+            background-color: var(--background-secondary, #f5f5f5);
+            border-color: var(--primary-color, #007bff);
+            color: var(--primary-color, #007bff);
+            transform: translateY(-1px);
+          }
+
+          &:active {
+            transform: translateY(0);
+          }
+
+          @include dark-mode {
+            border-color: #4a5568;
+            color: #a0aec0;
+
+            &:hover {
+              background-color: #2d3748;
+              border-color: #007bff;
+              color: #007bff;
+            }
+          }
+        }
       }
     }
 
@@ -422,5 +544,16 @@ section[aria-label="Calendar Events"] {
   color: red;
   padding: 20px;
   text-align: center;
+}
+
+.loading-state {
+  padding: 20px;
+  text-align: center;
+  color: $light-mode-text;
+  font-style: italic;
+
+  @media (prefers-color-scheme: dark) {
+    color: $dark-mode-text;
+  }
 }
 </style>
