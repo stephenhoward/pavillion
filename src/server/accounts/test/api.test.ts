@@ -86,16 +86,215 @@ describe ('Invitations API', () => {
     sandbox.restore();
   });
 
-  it('list invitations: should succeed', async () => {
-    let stub2 = sandbox.stub(accountsInterface,'listInvitations');
+  it('list invitations: admin should receive all invitations', async () => {
+    const adminAccount = new Account('admin-id', 'admin@test.com', 'admin@test.com');
+    adminAccount.roles = ['admin'];
+
+    let stub2 = sandbox.stub(accountsInterface, 'listInvitations');
     stub2.resolves([]);
-    router.get('/handler', inviteHandlers.listInvitations.bind(inviteHandlers));
+    router.get('/handler', (req, res, next) => {
+      req.user = adminAccount;
+      next();
+    }, inviteHandlers.listInvitations.bind(inviteHandlers));
 
     const response = await request(testApp(router)).get('/handler');
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual([]);
     expect(stub2.called).toBe(true);
+    // Verify admin gets all invitations (inviterId = undefined)
+    expect(stub2.firstCall.args[0]).toBeUndefined();
+  });
+
+  it('list invitations: regular user should receive only their own invitations', async () => {
+    const regularAccount = new Account('user-id', 'user@test.com', 'user@test.com');
+    regularAccount.roles = [];
+
+    let stub2 = sandbox.stub(accountsInterface, 'listInvitations');
+    stub2.resolves([]);
+    router.get('/handler', (req, res, next) => {
+      req.user = regularAccount;
+      next();
+    }, inviteHandlers.listInvitations.bind(inviteHandlers));
+
+    const response = await request(testApp(router)).get('/handler');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([]);
+    expect(stub2.called).toBe(true);
+    // Verify regular user gets filtered by their ID
+    expect(stub2.firstCall.args[0]).toBe('user-id');
+  });
+
+  it('list invitations: should return 400 when user not authenticated', async () => {
+    let stub2 = sandbox.stub(accountsInterface, 'listInvitations');
+    stub2.resolves([]);
+    router.get('/handler', (req, res, next) => {
+      req.user = undefined;
+      next();
+    }, inviteHandlers.listInvitations.bind(inviteHandlers));
+
+    const response = await request(testApp(router)).get('/handler');
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('User not authenticated');
+    expect(stub2.called).toBe(false);
+  });
+
+  it('list invitations: should filter by inviterId only', async () => {
+    const mockInviterId = 'inviter-123';
+    const eventBus = new EventEmitter();
+    const testInterface = new AccountsInterface(eventBus);
+    const serviceStub = sandbox.stub(testInterface['accountService'], 'listInvitations');
+    serviceStub.resolves([]);
+
+    const result = await testInterface.listInvitations(mockInviterId);
+
+    expect(result).toEqual([]);
+    expect(serviceStub.calledWith(mockInviterId, undefined)).toBe(true);
+  });
+
+  it('list invitations: should filter by calendarId only', async () => {
+    const mockCalendarId = 'calendar-123';
+    const eventBus = new EventEmitter();
+    const testInterface = new AccountsInterface(eventBus);
+    const serviceStub = sandbox.stub(testInterface['accountService'], 'listInvitations');
+    serviceStub.resolves([]);
+
+    const result = await testInterface.listInvitations(undefined, mockCalendarId);
+
+    expect(result).toEqual([]);
+    expect(serviceStub.calledWith(undefined, mockCalendarId)).toBe(true);
+  });
+
+  it('list invitations: should filter by both inviterId and calendarId', async () => {
+    const mockInviterId = 'inviter-123';
+    const mockCalendarId = 'calendar-123';
+    const eventBus = new EventEmitter();
+    const testInterface = new AccountsInterface(eventBus);
+    const serviceStub = sandbox.stub(testInterface['accountService'], 'listInvitations');
+    serviceStub.resolves([]);
+
+    const result = await testInterface.listInvitations(mockInviterId, mockCalendarId);
+
+    expect(result).toEqual([]);
+    expect(serviceStub.calledWith(mockInviterId, mockCalendarId)).toBe(true);
+  });
+
+  it('cross-user privacy: User A cannot see User B\'s invitations', async () => {
+    const userA = new Account('user-a-id', 'userA@test.com', 'userA@test.com');
+    userA.roles = [];
+
+    let stub2 = sandbox.stub(accountsInterface, 'listInvitations');
+    // When User A requests, return empty (no invitations from User B)
+    stub2.resolves([]);
+
+    router.get('/handler', (req, res, next) => {
+      req.user = userA;
+      next();
+    }, inviteHandlers.listInvitations.bind(inviteHandlers));
+
+    const response = await request(testApp(router)).get('/handler');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([]);
+    // Verify User A's ID was used for filtering, not User B's
+    expect(stub2.firstCall.args[0]).toBe('user-a-id');
+  });
+
+  it('calendar owner privacy: sees only their editor invitations', async () => {
+    const calendarOwner = new Account('owner-id', 'owner@test.com', 'owner@test.com');
+    calendarOwner.roles = [];
+
+    const ownInvitation = new AccountInvitation(
+      'inv-own-1',
+      'editor@test.com',
+      calendarOwner,
+    );
+    ownInvitation.calendarId = 'calendar-123';
+
+    let stub2 = sandbox.stub(accountsInterface, 'listInvitations');
+    stub2.resolves([ownInvitation]);
+
+    router.get('/handler', (req, res, next) => {
+      req.user = calendarOwner;
+      next();
+    }, inviteHandlers.listInvitations.bind(inviteHandlers));
+
+    const response = await request(testApp(router)).get('/handler');
+
+    expect(response.status).toBe(200);
+    expect(response.body.length).toBe(1);
+    expect(response.body[0].invitedBy.id).toBe('owner-id');
+    // Verify only owner's invitations are requested
+    expect(stub2.firstCall.args[0]).toBe('owner-id');
+  });
+
+  it('admin comprehensive view: can see all invitations from all users', async () => {
+    const adminAccount = new Account('admin-id', 'admin@test.com', 'admin@test.com');
+    adminAccount.roles = ['admin'];
+
+    const regularUser = new Account('user-id', 'user@test.com', 'user@test.com');
+
+    const adminInvitation = new AccountInvitation(
+      'inv-admin-1',
+      'admin-invitee@test.com',
+      adminAccount,
+    );
+
+    const userInvitation = new AccountInvitation(
+      'inv-user-1',
+      'user-invitee@test.com',
+      regularUser,
+    );
+
+    let stub2 = sandbox.stub(accountsInterface, 'listInvitations');
+    stub2.resolves([adminInvitation, userInvitation]);
+
+    router.get('/handler', (req, res, next) => {
+      req.user = adminAccount;
+      next();
+    }, inviteHandlers.listInvitations.bind(inviteHandlers));
+
+    const response = await request(testApp(router)).get('/handler');
+
+    expect(response.status).toBe(200);
+    expect(response.body.length).toBe(2);
+    // Verify admin gets all invitations (inviterId = undefined)
+    expect(stub2.firstCall.args[0]).toBeUndefined();
+  });
+
+  it('role-based filtering: admin receives undefined inviterId, regular user receives their ID', async () => {
+    const adminAccount = new Account('admin-id', 'admin@test.com', 'admin@test.com');
+    adminAccount.roles = ['admin'];
+
+    const regularAccount = new Account('user-id', 'user@test.com', 'user@test.com');
+    regularAccount.roles = [];
+
+    let stub2 = sandbox.stub(accountsInterface, 'listInvitations');
+    stub2.resolves([]);
+
+    // Test admin
+    router.get('/admin', (req, res, next) => {
+      req.user = adminAccount;
+      next();
+    }, inviteHandlers.listInvitations.bind(inviteHandlers));
+
+    const adminResponse = await request(testApp(router)).get('/admin');
+    expect(adminResponse.status).toBe(200);
+    expect(stub2.firstCall.args[0]).toBeUndefined();
+
+    stub2.resetHistory();
+
+    // Test regular user
+    router.get('/user', (req, res, next) => {
+      req.user = regularAccount;
+      next();
+    }, inviteHandlers.listInvitations.bind(inviteHandlers));
+
+    const userResponse = await request(testApp(router)).get('/user');
+    expect(userResponse.status).toBe(200);
+    expect(stub2.firstCall.args[0]).toBe('user-id');
   });
 
   it('invite new account: should succeed', async () => {

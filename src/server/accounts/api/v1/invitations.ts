@@ -12,7 +12,7 @@ export default class AccountInvitationRouteHandlers {
 
   installHandlers(app: express.Application, routePrefix: string): void {
     var router = express.Router();
-    router.get('/invitations', ExpressHelper.adminOnly, this.listInvitations.bind(this));
+    router.get('/invitations', ExpressHelper.loggedInOnly, this.listInvitations.bind(this));
     router.post('/invitations', ExpressHelper.loggedInOnly, this.inviteToRegister.bind(this));
     router.get('/invitations/:code', ...ExpressHelper.noUserOnly, this.checkInviteCode.bind(this));
     router.post('/invitations/:code', ...ExpressHelper.noUserOnly, this.acceptInvite.bind(this));
@@ -22,8 +22,18 @@ export default class AccountInvitationRouteHandlers {
   }
 
   async listInvitations(req: Request, res: Response) {
-    const invitations = await this.service.listInvitations();
-    res.json(invitations);
+    const account = req.user as Account;
+
+    if (!account) {
+      res.status(400).json({ error: 'User not authenticated' });
+      return;
+    }
+
+    // Admins see all invitations, regular users see only their own
+    const inviterId = account.hasRole('admin') ? undefined : account.id;
+    const invitations = await this.service.listInvitations(inviterId);
+
+    res.json(invitations.map(inv => inv.toObject()));
   }
 
   async inviteToRegister(req: Request, res: Response) {

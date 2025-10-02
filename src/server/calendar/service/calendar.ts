@@ -11,7 +11,6 @@ import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError }
 import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/common/exceptions/editor';
 import { noAccountExistsError } from '@/server/accounts/exceptions';
 import AccountsInterface from '@/server/accounts/interface';
-import ConfigurationInterface from '@/server/configuration/interface';
 import EmailService from '@/server/common/service/mail';
 import EditorNotificationEmail from '@/server/calendar/model/editor_notification_email';
 
@@ -432,10 +431,10 @@ class CalendarService {
       where: { calendar_id: calendar.id },
     });
 
-    // Get pending invitations for this calendar
+    // Get pending invitations for this calendar using unified method
     let pendingInvitations: AccountInvitation[] = [];
     if (this.accountsInterface) {
-      pendingInvitations = await this.accountsInterface.listPendingInvitationsForCalendar(calendarId);
+      pendingInvitations = await this.accountsInterface.listInvitations(undefined, calendarId);
     }
 
     return {
@@ -468,8 +467,8 @@ class CalendarService {
       }
     }
 
-    // Verify the invitation belongs to this calendar by checking pending invitations
-    const pendingInvitations = await this.accountsInterface.listPendingInvitationsForCalendar(calendarId);
+    // Verify the invitation belongs to this calendar using unified method
+    const pendingInvitations = await this.accountsInterface!.listInvitations(undefined, calendarId);
     const invitation = pendingInvitations.find(inv => inv.id === invitationId);
 
     if (!invitation) {
@@ -477,7 +476,7 @@ class CalendarService {
     }
 
     // Cancel the invitation
-    return await this.accountsInterface.cancelInvite(invitationId);
+    return await this.accountsInterface!.cancelInvite(invitationId);
   }
 
   /**
@@ -504,8 +503,8 @@ class CalendarService {
       }
     }
 
-    // Verify the invitation belongs to this calendar by checking pending invitations
-    const pendingInvitations = await this.accountsInterface.listPendingInvitationsForCalendar(calendarId);
+    // Verify the invitation belongs to this calendar using unified method
+    const pendingInvitations = await this.accountsInterface!.listInvitations(undefined, calendarId);
     const invitation = pendingInvitations.find(inv => inv.id === invitationId);
 
     if (!invitation) {
@@ -513,7 +512,7 @@ class CalendarService {
     }
 
     // Resend the invitation
-    return await this.accountsInterface.resendInvite(invitationId);
+    return await this.accountsInterface!.resendInvite(invitationId);
   }
 
   async getPrimaryCalendarForUser(account: Account): Promise<Calendar|null> {

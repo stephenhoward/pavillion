@@ -11,6 +11,7 @@ class AccountInvitation {
   declare invitedBy: Account;
   declare expirationTime: Date | null;
   declare calendarId: string | null;
+  declare createdAt: Date | null;
 
   /**
    * Constructor for AccountInvitation.
@@ -21,14 +22,16 @@ class AccountInvitation {
    * @param {string} [message] - Optional message to include with the invitation
    * @param {Date} [expirationTime] - Optional expiration time for the invitation
    * @param {string} [calendarId] - Optional calendar ID for editor invitations
+   * @param {Date} [createdAt] - Optional creation timestamp for the invitation
    */
-  constructor(id: string, email: string, invitedBy: Account, message?: string, expirationTime?: Date, calendarId?: string) {
+  constructor(id: string, email: string, invitedBy: Account, message?: string, expirationTime?: Date, calendarId?: string, createdAt?: Date) {
     this.id = id;
     this.email = email;
     this.message = message ?? '';
     this.invitedBy = invitedBy;
     this.expirationTime = expirationTime ?? null;
     this.calendarId = calendarId ?? null;
+    this.createdAt = createdAt ?? null;
   }
 
   /**
@@ -40,10 +43,11 @@ class AccountInvitation {
     return {
       id: this.id,
       email: this.email,
-      invitedBy: this.invitedBy.toObject,
+      invitedBy: this.invitedBy.toObject(),
       message: this.message,
       expirationTime: this.expirationTime,
       calendarId: this.calendarId,
+      createdAt: this.createdAt,
     };
   }
 
@@ -52,6 +56,8 @@ class AccountInvitation {
    *
    * @param {Record<string, any>} obj - Plain object containing invitation data
    * @returns {AccountInvitation} A new AccountInvitation instance
+   *
+   * We do not accept createdAt or expirationTime from outside for security reasons.
    */
   static fromObject(obj: Record<string, any>): AccountInvitation {
     return new AccountInvitation(
@@ -59,7 +65,6 @@ class AccountInvitation {
       obj.email,
       Account.fromObject(obj.invitedBy),
       obj.message,
-      obj.expirationTime ? new Date(obj.expirationTime) : undefined,
       obj.calendarId,
     );
   }

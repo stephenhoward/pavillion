@@ -62,7 +62,7 @@ const { t } = useTranslation('admin', {
 });
 
 onBeforeMount(async () => {
-  let invitations = await ModelService.listModels('/api/accounts/v1/invitations');
+  let invitations = await ModelService.listModels('/api/v1/invitations');
   store.invitations = invitations.map(invitation => AccountInvitation.fromObject(invitation));
 });
 const state = reactive({
@@ -92,7 +92,7 @@ const isExpired = (expTime) => {
 
 const cancelInvitation = async (invitation) => {
   try {
-    await ModelService.deleteModel(invitation, '/api/accounts/v1/invitations');
+    await ModelService.deleteModel(invitation, '/api/v1/invitations');
     store.removeInvitation(invitation);
   }
   catch (error) {

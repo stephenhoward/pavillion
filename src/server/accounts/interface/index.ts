@@ -82,12 +82,8 @@ export default class AccountsInterface {
   async acceptAccountInvite(code: string, password: string): Promise<{ account: Account, calendars: string[] }> {
     return this.accountService.acceptAccountInvite(code, password);
   }
-  async listInvitations(): Promise<AccountInvitation[]> {
-    return this.accountService.listInvitations();
-  }
-
-  async listPendingInvitationsForCalendar(calendarId: string): Promise<AccountInvitation[]> {
-    return this.accountService.listPendingInvitationsForCalendar(calendarId);
+  async listInvitations(inviterId?: string, calendarId?: string): Promise<AccountInvitation[]> {
+    return this.accountService.listInvitations(inviterId, calendarId);
   }
 
 }

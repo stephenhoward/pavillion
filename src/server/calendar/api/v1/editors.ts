@@ -47,13 +47,7 @@ class EditorRoutes {
       const result = await this.service.listCalendarEditorsWithInvitations(account, req.params.calendarId);
       res.json({
         activeEditors: result.activeEditors.map((editor) => editor.toObject()),
-        pendingInvitations: result.pendingInvitations.map((invitation) => ({
-          id: invitation.id,
-          email: invitation.email,
-          invitedDate: invitation.expiration_time ? new Date(invitation.expiration_time.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString() : null, // Calculate invited date from expiration
-          status: 'pending',
-          expiresAt: invitation.expiration_time?.toISOString() || null,
-        })),
+        pendingInvitations: result.pendingInvitations.map((invitation) => invitation.toObject()),
       });
     }
     catch (error) {

@@ -4,6 +4,7 @@ import sinon from 'sinon';
 import { Account } from '@/common/model/account';
 import { Calendar, CalendarContent } from '@/common/model/calendar';
 import { CalendarEditor } from '@/common/model/calendar_editor';
+import AccountInvitation from '@/common/model/invitation';
 import { CalendarEntity, CalendarContentEntity } from '@/server/calendar/entity/calendar';
 import { CalendarEditorEntity } from '@/server/calendar/entity/calendar_editor';
 import CalendarService from '@/server/calendar/service/calendar';
@@ -755,13 +756,6 @@ describe('Calendar Ownership and Editor Permissions', () => {
       const findAllStub = sandbox.stub(CalendarEditorEntity, 'findAll');
       findAllStub.resolves([mockEditor as any]);
 
-      // Mock pending invitations
-      const mockInvitation = {
-        id: 'invite-id',
-        email: 'invitee@example.com',
-        expiration_time: new Date('2025-10-01'),
-        calendar_id: 'cal-id',
-      };
       mockAccountsInterface.getAccountById.withArgs('owner-id').resolves(owner);
 
       const result = await service.listCalendarEditors(owner, 'cal-id');
@@ -791,6 +785,176 @@ describe('Calendar Ownership and Editor Permissions', () => {
 
       await expect(service.listCalendarEditors(nonOwner, 'cal-id'))
         .rejects.toThrow('Permission denied: only calendar owner can view editors');
+    });
+  });
+
+  describe('listCalendarEditorsWithInvitations', () => {
+    it('should call listInvitations with undefined inviterId and defined calendarId', async () => {
+      const getCalendarStub = sandbox.stub(service, 'getCalendar');
+      const canViewEditorsStub = sandbox.stub(service as any, 'canViewCalendarEditors');
+      const findAllStub = sandbox.stub(CalendarEditorEntity, 'findAll');
+
+      getCalendarStub.resolves(calendar);
+      canViewEditorsStub.resolves(true);
+      findAllStub.resolves([]);
+
+      // Spy on the unified listInvitations method
+      const listInvitationsStub = mockAccountsInterface.listInvitations = sandbox.stub();
+      listInvitationsStub.resolves([]);
+
+      await service.listCalendarEditorsWithInvitations(owner, 'cal-id');
+
+      // Verify the unified method was called with correct parameters
+      expect(listInvitationsStub.calledWith(undefined, 'cal-id')).toBe(true);
+    });
+
+    it('should return both active editors and pending invitations', async () => {
+      const getCalendarStub = sandbox.stub(service, 'getCalendar');
+      const canViewEditorsStub = sandbox.stub(service as any, 'canViewCalendarEditors');
+
+      getCalendarStub.resolves(calendar);
+      canViewEditorsStub.resolves(true);
+
+      // Mock active editors
+      const mockEditor = {
+        toModel: () => new CalendarEditor('editor-id', 'cal-id', 'user-id'),
+      };
+      const findAllStub = sandbox.stub(CalendarEditorEntity, 'findAll');
+      findAllStub.resolves([mockEditor as any]);
+
+      // Mock pending invitations using unified method
+      const mockInvitation = new AccountInvitation(
+        'invite-id',
+        'invitee@example.com',
+        owner,
+        '',
+        new Date('2025-10-01'),
+        'cal-id',
+      );
+
+      mockAccountsInterface.listInvitations = sandbox.stub();
+      mockAccountsInterface.listInvitations.resolves([mockInvitation]);
+
+      const result = await service.listCalendarEditorsWithInvitations(owner, 'cal-id');
+
+      expect(result.activeEditors).toHaveLength(1);
+      expect(result.activeEditors[0]).toBeInstanceOf(CalendarEditor);
+      expect(result.pendingInvitations).toHaveLength(1);
+      expect(result.pendingInvitations[0]).toBeInstanceOf(AccountInvitation);
+      expect(result.pendingInvitations[0].id).toBe('invite-id');
+    });
+
+    it('should throw CalendarNotFoundError when calendar does not exist', async () => {
+      const getCalendarStub = sandbox.stub(service, 'getCalendar');
+      getCalendarStub.resolves(null);
+
+      await expect(service.listCalendarEditorsWithInvitations(owner, 'non-existent-id'))
+        .rejects.toThrow('Calendar not found');
+    });
+
+    it('should throw CalendarEditorPermissionError for non-owner', async () => {
+      const getCalendarStub = sandbox.stub(service, 'getCalendar');
+      const canViewEditorsStub = sandbox.stub(service as any, 'canViewCalendarEditors');
+
+      getCalendarStub.resolves(calendar);
+      canViewEditorsStub.resolves(false);
+
+      await expect(service.listCalendarEditorsWithInvitations(nonOwner, 'cal-id'))
+        .rejects.toThrow('Permission denied: only calendar owner can view editors');
+    });
+  });
+
+  describe('cancelCalendarInvitation', () => {
+    it('should use unified listInvitations to verify invitation belongs to calendar', async () => {
+      const getCalendarStub = sandbox.stub(service, 'getCalendar');
+      const isOwnerStub = sandbox.stub(service, 'isCalendarOwner');
+
+      getCalendarStub.resolves(calendar);
+      isOwnerStub.resolves(true);
+
+      // Mock invitation retrieval using unified method
+      const mockInvitation = new AccountInvitation(
+        'invite-id',
+        'invitee@example.com',
+        owner,
+        '',
+        new Date('2025-10-01'),
+        'cal-id',
+      );
+
+      const listInvitationsStub = mockAccountsInterface.listInvitations = sandbox.stub();
+      listInvitationsStub.resolves([mockInvitation]);
+
+      const cancelStub = mockAccountsInterface.cancelInvite = sandbox.stub();
+      cancelStub.resolves(true);
+
+      await service.cancelCalendarInvitation(owner, 'cal-id', 'invite-id');
+
+      // Verify unified method was called with correct parameters
+      expect(listInvitationsStub.calledWith(undefined, 'cal-id')).toBe(true);
+      expect(cancelStub.calledWith('invite-id')).toBe(true);
+    });
+
+    it('should throw error if invitation not found for calendar', async () => {
+      const getCalendarStub = sandbox.stub(service, 'getCalendar');
+      const isOwnerStub = sandbox.stub(service, 'isCalendarOwner');
+
+      getCalendarStub.resolves(calendar);
+      isOwnerStub.resolves(true);
+
+      // Mock empty invitations list
+      const listInvitationsStub = mockAccountsInterface.listInvitations = sandbox.stub();
+      listInvitationsStub.resolves([]);
+
+      await expect(service.cancelCalendarInvitation(owner, 'cal-id', 'wrong-invite-id'))
+        .rejects.toThrow('Invitation not found or not associated with this calendar');
+    });
+  });
+
+  describe('resendCalendarInvitation', () => {
+    it('should use unified listInvitations to verify invitation belongs to calendar', async () => {
+      const getCalendarStub = sandbox.stub(service, 'getCalendar');
+      const isOwnerStub = sandbox.stub(service, 'isCalendarOwner');
+
+      getCalendarStub.resolves(calendar);
+      isOwnerStub.resolves(true);
+
+      // Mock invitation retrieval using unified method
+      const mockInvitation = new AccountInvitation(
+        'invite-id',
+        'invitee@example.com',
+        owner,
+        '',
+        new Date('2025-10-01'),
+        'cal-id',
+      );
+
+      const listInvitationsStub = mockAccountsInterface.listInvitations = sandbox.stub();
+      listInvitationsStub.resolves([mockInvitation]);
+
+      const resendStub = mockAccountsInterface.resendInvite = sandbox.stub();
+      resendStub.resolves(mockInvitation);
+
+      await service.resendCalendarInvitation(owner, 'cal-id', 'invite-id');
+
+      // Verify unified method was called with correct parameters
+      expect(listInvitationsStub.calledWith(undefined, 'cal-id')).toBe(true);
+      expect(resendStub.calledWith('invite-id')).toBe(true);
+    });
+
+    it('should throw error if invitation not found for calendar', async () => {
+      const getCalendarStub = sandbox.stub(service, 'getCalendar');
+      const isOwnerStub = sandbox.stub(service, 'isCalendarOwner');
+
+      getCalendarStub.resolves(calendar);
+      isOwnerStub.resolves(true);
+
+      // Mock empty invitations list
+      const listInvitationsStub = mockAccountsInterface.listInvitations = sandbox.stub();
+      listInvitationsStub.resolves([]);
+
+      await expect(service.resendCalendarInvitation(owner, 'cal-id', 'wrong-invite-id'))
+        .rejects.toThrow('Invitation not found or not associated with this calendar');
     });
   });
 });

@@ -56,7 +56,7 @@ describe('Category Filter Persistence', () => {
       ];
 
       // Test forward navigation
-      navigationHistory.forEach((step, index) => {
+      navigationHistory.forEach((step) => {
         const url = new URL(step.url);
         const categoriesParam = url.searchParams.get('categories');
 

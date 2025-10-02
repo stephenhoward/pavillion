@@ -37,7 +37,7 @@ export default class AccountInvitationEntity extends Model {
   declare calendar_id: string;
 
   toModel(): AccountInvitation {
-    return new AccountInvitation(this.id, this.email, this.inviter.toModel(), this.message, this.expiration_time, this.calendar_id);
+    return new AccountInvitation(this.id, this.email, this.inviter.toModel(), this.message, this.expiration_time, this.calendar_id, this.createdAt);
   }
 
   @BeforeCreate

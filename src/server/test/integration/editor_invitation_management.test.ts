@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
-import request from 'supertest';
 import sinon from 'sinon';
 import { EventEmitter } from 'events';
 
@@ -102,7 +101,7 @@ describe('Editor Invitation Management Integration', () => {
   describe('Invitation Management Operations', () => {
     it('should handle invitation cancellation API endpoint', async () => {
       // Create invitation first
-      const inviteResponse = await env.authPost(ownerAuthKey, `/api/v1/calendars/${calendar.id}/editors`, {
+      await env.authPost(ownerAuthKey, `/api/v1/calendars/${calendar.id}/editors`, {
         accountId: 'cancellation-test@pavillion.dev',
       });
 
@@ -119,7 +118,7 @@ describe('Editor Invitation Management Integration', () => {
 
     it('should handle invitation resend API endpoint', async () => {
       // Create invitation first
-      const inviteResponse = await env.authPost(ownerAuthKey, `/api/v1/calendars/${calendar.id}/editors`, {
+      await env.authPost(ownerAuthKey, `/api/v1/calendars/${calendar.id}/editors`, {
         accountId: 'resend-test@pavillion.dev',
       });
 

@@ -688,3 +688,194 @@ describe('_setupAccount', () => {
   });
 
 });
+
+describe('listInvitations', () => {
+
+  let sandbox = sinon.createSandbox();
+  let accountService: AccountService;
+  let findAllStub: sinon.SinonStub;
+
+  beforeEach(() => {
+    const eventBus = new EventEmitter();
+    const configurationInterface = new ConfigurationInterface();
+    accountService = new AccountService(eventBus, configurationInterface);
+    findAllStub = sandbox.stub(AccountInvitationEntity, 'findAll');
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('should return all invitations when no filters provided', async () => {
+    const mockInvitations = [
+      {
+        id: 'inv1',
+        email: 'user1@test.com',
+        invited_by: 'admin1',
+        calendar_id: null,
+        created_at: new Date('2025-10-01'),
+        toModel: () => ({ id: 'inv1', email: 'user1@test.com' }),
+      },
+      {
+        id: 'inv2',
+        email: 'user2@test.com',
+        invited_by: 'admin1',
+        calendar_id: 'cal1',
+        created_at: new Date('2025-09-30'),
+        toModel: () => ({ id: 'inv2', email: 'user2@test.com' }),
+      },
+    ];
+
+    findAllStub.resolves(mockInvitations);
+
+    const result = await accountService.listInvitations();
+
+    expect(result).toHaveLength(2);
+    expect(findAllStub.calledOnce).toBe(true);
+    expect(findAllStub.firstCall.args[0]).toEqual({
+      where: {},
+      order: [['createdAt', 'DESC']],
+      include: [{
+        model: AccountEntity,
+        as: 'inviter',
+      }],
+    });
+  });
+
+  it('should filter by inviterId when provided', async () => {
+    const mockInvitations = [
+      {
+        id: 'inv1',
+        email: 'user1@test.com',
+        invited_by: 'user123',
+        calendar_id: null,
+        created_at: new Date('2025-10-01'),
+        toModel: () => ({ id: 'inv1', email: 'user1@test.com' }),
+      },
+    ];
+
+    findAllStub.resolves(mockInvitations);
+
+    const result = await accountService.listInvitations('user123');
+
+    expect(result).toHaveLength(1);
+    expect(findAllStub.calledOnce).toBe(true);
+    expect(findAllStub.firstCall.args[0]).toEqual({
+      where: { invited_by: 'user123' },
+      order: [['createdAt', 'DESC']],
+      include: [{
+        model: AccountEntity,
+        as: 'inviter',
+      }],
+    });
+  });
+
+  it('should filter by calendarId when provided', async () => {
+    const mockInvitations = [
+      {
+        id: 'inv1',
+        email: 'editor@test.com',
+        invited_by: 'owner123',
+        calendar_id: 'cal456',
+        created_at: new Date('2025-10-01'),
+        toModel: () => ({ id: 'inv1', email: 'editor@test.com' }),
+      },
+    ];
+
+    findAllStub.resolves(mockInvitations);
+
+    const result = await accountService.listInvitations(undefined, 'cal456');
+
+    expect(result).toHaveLength(1);
+    expect(findAllStub.calledOnce).toBe(true);
+    expect(findAllStub.firstCall.args[0]).toEqual({
+      where: { calendar_id: 'cal456' },
+      order: [['createdAt', 'DESC']],
+      include: [{
+        model: AccountEntity,
+        as: 'inviter',
+      }],
+    });
+  });
+
+  it('should filter by both inviterId and calendarId when both provided', async () => {
+    const mockInvitations = [
+      {
+        id: 'inv1',
+        email: 'editor@test.com',
+        invited_by: 'owner123',
+        calendar_id: 'cal456',
+        created_at: new Date('2025-10-01'),
+        toModel: () => ({ id: 'inv1', email: 'editor@test.com' }),
+      },
+    ];
+
+    findAllStub.resolves(mockInvitations);
+
+    const result = await accountService.listInvitations('owner123', 'cal456');
+
+    expect(result).toHaveLength(1);
+    expect(findAllStub.calledOnce).toBe(true);
+    expect(findAllStub.firstCall.args[0]).toEqual({
+      where: {
+        invited_by: 'owner123',
+        calendar_id: 'cal456',
+      },
+      order: [['createdAt', 'DESC']],
+      include: [{
+        model: AccountEntity,
+        as: 'inviter',
+      }],
+    });
+  });
+
+  it('should order results by created_at DESC', async () => {
+    const mockInvitations = [
+      {
+        id: 'inv1',
+        email: 'user1@test.com',
+        invited_by: 'admin1',
+        calendar_id: null,
+        created_at: new Date('2025-10-01'),
+        toModel: () => ({ id: 'inv1', email: 'user1@test.com' }),
+      },
+      {
+        id: 'inv2',
+        email: 'user2@test.com',
+        invited_by: 'admin1',
+        calendar_id: null,
+        created_at: new Date('2025-09-30'),
+        toModel: () => ({ id: 'inv2', email: 'user2@test.com' }),
+      },
+    ];
+
+    findAllStub.resolves(mockInvitations);
+
+    await accountService.listInvitations();
+
+    const callArgs = findAllStub.firstCall.args[0];
+    expect(callArgs.order).toEqual([['createdAt', 'DESC']]);
+  });
+
+  it('should include inviter relation', async () => {
+    findAllStub.resolves([]);
+
+    await accountService.listInvitations();
+
+    const callArgs = findAllStub.firstCall.args[0];
+    expect(callArgs.include).toEqual([{
+      model: AccountEntity,
+      as: 'inviter',
+    }]);
+  });
+
+  it('should return empty array when no invitations found', async () => {
+    findAllStub.resolves([]);
+
+    const result = await accountService.listInvitations();
+
+    expect(result).toEqual([]);
+    expect(result).toHaveLength(0);
+  });
+
+});

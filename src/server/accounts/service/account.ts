@@ -411,31 +411,33 @@ export default class AccountService {
   }
 
   /**
-   * Lists all account invitations in the system.
+   * Lists account invitations with optional filtering.
    *
+   * @param inviterId - Optional: Filter by the user who sent the invitation
+   * @param calendarId - Optional: Filter by calendar for editor invitations
    * @returns {Promise<AccountInvitation[]>} Array of account invitations
    */
-  async listInvitations(): Promise<AccountInvitation[]> {
-    return (await AccountInvitationEntity.findAll()).map( (invitation) => invitation.toModel() );
-  }
+  async listInvitations(inviterId?: string, calendarId?: string): Promise<AccountInvitation[]> {
+    const whereClause: any = {};
 
-  /**
-   * Lists pending account invitations for a specific calendar.
-   *
-   * @param calendarId - The calendar ID to filter invitations by
-   * @returns {Promise<AccountInvitation[]>} Array of pending calendar invitations
-   */
-  async listPendingInvitationsForCalendar(calendarId: string): Promise<AccountInvitation[]> {
-    const invitations = await AccountInvitationEntity.findAll({
-      where: {
-        calendar_id: calendarId,
-      },
+    if (inviterId) {
+      whereClause.invited_by = inviterId;
+    }
+
+    if (calendarId) {
+      whereClause.calendar_id = calendarId;
+    }
+
+    const entities = await AccountInvitationEntity.findAll({
+      where: whereClause,
+      order: [['createdAt', 'DESC']],
       include: [{
         model: AccountEntity,
         as: 'inviter',
       }],
     });
-    return invitations.map(invitation => invitation.toModel());
+
+    return entities.map(entity => entity.toModel());
   }
 
   /**
