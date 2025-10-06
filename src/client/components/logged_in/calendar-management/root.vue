@@ -7,7 +7,7 @@ import EditorsTab from './editors.vue';
 import CalendarService from '../../../service/calendar';
 
 const route = useRoute();
-const calendarId = route.params.calendar;
+const calendarUrlName = route.params.calendar;
 
 const { t } = useTranslation('calendars', {
   keyPrefix: 'management',
@@ -17,10 +17,11 @@ const calendarService = new CalendarService();
 
 const state = reactive({
   activeTab: 'categories',
+  calendar: null,
 });
 
 onBeforeMount(async () => {
-  state.calendar = await calendarService.getCalendarById(calendarId);
+  state.calendar = await calendarService.getCalendarByUrlName(calendarUrlName);
   console.log('Calendar data loaded:', state.calendar);
 });
 
@@ -74,7 +75,7 @@ const activateTab = (tab) => {
       :hidden="state.activeTab !== 'categories'"
       class="tab-panel"
     >
-      <CategoriesTab :calendar-id="calendarId" />
+      <CategoriesTab v-if="state.calendar" :calendar-id="state.calendar.id" />
     </div>
 
     <div
@@ -85,7 +86,7 @@ const activateTab = (tab) => {
       :hidden="state.activeTab !== 'editors'"
       class="tab-panel"
     >
-      <EditorsTab :calendar-id="calendarId" />
+      <EditorsTab v-if="state.calendar" :calendar-id="state.calendar.id" />
     </div>
   </section>
 </template>

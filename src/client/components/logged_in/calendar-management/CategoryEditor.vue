@@ -208,8 +208,12 @@ onMounted(() => {
   }
 
   nextTick(() => {
-    if (categoryNameInput.value) {
-      categoryNameInput.value.focus();
+    // categoryNameInput.value is an array because the ref is used in a v-for
+    const firstInput = Array.isArray(categoryNameInput.value)
+      ? categoryNameInput.value[0]
+      : categoryNameInput.value;
+    if (firstInput) {
+      firstInput.focus();
     }
   });
 });

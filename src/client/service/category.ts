@@ -107,13 +107,15 @@ export default class CategoryService {
   /**
    * Get a specific category by ID
    * @param categoryId - The ID of the category
+   * @param calendarId - The ID of the calendar (required for route)
    * @returns Promise<EventCategoryModel> The category
    */
-  async getCategory(categoryId: string): Promise<EventCategory> {
-    const encodedId = validateAndEncodeId(categoryId, 'Category ID');
+  async getCategory(categoryId: string, calendarId: string): Promise<EventCategory> {
+    const encodedCategoryId = validateAndEncodeId(categoryId, 'Category ID');
+    const encodedCalendarId = validateAndEncodeId(calendarId, 'Calendar ID');
 
     try {
-      const response = await axios.get(`/api/v1/categories/${encodedId}`);
+      const response = await axios.get(`/api/v1/calendars/${encodedCalendarId}/categories/${encodedCategoryId}`);
       return EventCategory.fromObject(response.data);
     }
     catch (error: unknown) {
@@ -124,19 +126,18 @@ export default class CategoryService {
   /**
    * Delete a category
    * @param categoryId - The ID of the category to delete
-   * @param calendarId - The ID of the calendar (optional, for store cleanup)
+   * @param calendarId - The ID of the calendar (required for route)
    * @returns Promise<void>
    */
-  async deleteCategory(categoryId: string, calendarId?: string): Promise<void> {
-    const encodedId = validateAndEncodeId(categoryId, 'Category ID');
+  async deleteCategory(categoryId: string, calendarId: string): Promise<void> {
+    const encodedCategoryId = validateAndEncodeId(categoryId, 'Category ID');
+    const encodedCalendarId = validateAndEncodeId(calendarId, 'Calendar ID');
 
     try {
-      await axios.delete(`/api/v1/categories/${encodedId}`);
+      await axios.delete(`/api/v1/calendars/${encodedCalendarId}/categories/${encodedCategoryId}`);
 
-      // If calendarId is provided, remove from store
-      if (calendarId) {
-        this.store.removeCategory(calendarId, categoryId);
-      }
+      // Remove from store
+      this.store.removeCategory(calendarId, categoryId);
     }
     catch (error: unknown) {
       handleError(error);

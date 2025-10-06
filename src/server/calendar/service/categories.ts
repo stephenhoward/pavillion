@@ -14,7 +14,6 @@ import {
   CategoryAssignmentNotFoundError,
   CategoryAlreadyAssignedError,
   CategoryEventCalendarMismatchError,
-  CategoryUpdateFailedError,
 } from '@/common/exceptions/category';
 import CalendarService from './calendar';
 
@@ -92,24 +91,38 @@ class CategoryService {
 
   /**
    * Get a specific category by ID
+   * @param categoryId - The ID of the category to retrieve
+   * @param calendarId - Optional calendar ID to verify category belongs to calendar
+   * @throws CategoryNotFoundError if category doesn't exist or doesn't belong to the specified calendar
    */
-  async getCategory(categoryId: string): Promise<EventCategory | null> {
+  async getCategory(categoryId: string, calendarId?: string): Promise<EventCategory> {
     const category = await EventCategoryEntity.findByPk(categoryId, {
       include: [EventCategoryContentEntity],
     });
 
-    return category ? category.toModel() : null;
+    if (!category) {
+      throw new CategoryNotFoundError();
+    }
+
+    // Verify category belongs to the specified calendar if calendarId is provided
+    if (calendarId && category.calendar_id !== calendarId) {
+      throw new CategoryNotFoundError();
+    }
+
+    return category.toModel();
   }
 
   /**
    * Update a category with new data
+   * @param account - The account performing the update
+   * @param categoryId - The ID of the category to update
+   * @param categoryData - The data to update
+   * @param calendarId - Optional calendar ID to verify category belongs to calendar
+   * @throws CategoryNotFoundError if category doesn't exist or doesn't belong to the specified calendar
    */
-  async updateCategory(account: Account, categoryId: string, categoryData: Record<string,any>): Promise<EventCategory> {
-    // Get category to verify it exists
-    const category = await this.getCategory(categoryId);
-    if (!category) {
-      throw new CategoryNotFoundError();
-    }
+  async updateCategory(account: Account, categoryId: string, categoryData: Record<string,any>, calendarId?: string): Promise<EventCategory> {
+    // Get category to verify it exists and optionally verify calendar
+    const category = await this.getCategory(categoryId, calendarId);
 
     // Get calendar and verify ownership/editor permissions
     const calendar = await this.getCalendar(category.calendarId);
@@ -165,23 +178,20 @@ class CategoryService {
     }
 
     // Return updated category
-    const updatedCategory = await this.getCategory(categoryId);
-    if (!updatedCategory) {
-      throw new CategoryUpdateFailedError();
-    }
-
+    const updatedCategory = await this.getCategory(categoryId, calendarId);
     return updatedCategory;
   }
 
   /**
    * Delete a category and all its content
+   * @param account - The account performing the deletion
+   * @param categoryId - The ID of the category to delete
+   * @param calendarId - Optional calendar ID to verify category belongs to calendar
+   * @throws CategoryNotFoundError if category doesn't exist or doesn't belong to the specified calendar
    */
-  async deleteCategory(account: Account, categoryId: string): Promise<void> {
-    // Get category to verify it exists
-    const category = await this.getCategory(categoryId);
-    if (!category) {
-      throw new CategoryNotFoundError();
-    }
+  async deleteCategory(account: Account, categoryId: string, calendarId?: string): Promise<void> {
+    // Get category to verify it exists and optionally verify calendar
+    const category = await this.getCategory(categoryId, calendarId);
 
     // Get calendar and verify ownership/editor permissions
     const calendar = await this.getCalendar(category.calendarId);
@@ -211,9 +221,6 @@ class CategoryService {
   async assignCategoryToEvent(account: Account, eventId: string, categoryId: string): Promise<EventCategoryAssignmentModel> {
     // Get the category to verify it exists and get calendar info
     const category = await this.getCategory(categoryId);
-    if (!category) {
-      throw new CategoryNotFoundError();
-    }
 
     // Get the event to verify it exists and matches the calendar
     const event = await EventEntity.findByPk(eventId);
@@ -266,9 +273,6 @@ class CategoryService {
   async unassignCategoryFromEvent(account: Account, eventId: string, categoryId: string): Promise<void> {
     // Get the category to verify it exists and get calendar info
     const category = await this.getCategory(categoryId);
-    if (!category) {
-      throw new CategoryNotFoundError();
-    }
 
     // Get the event to verify it exists
     const event = await EventEntity.findByPk(eventId);
@@ -321,9 +325,71 @@ class CategoryService {
   }
 
   /**
-   * Get all events assigned to a category
+   * Set categories for an event (replaces all existing assignments)
    */
-  async getCategoryEvents(categoryId: string): Promise<string[]> {
+  async setCategoriesForEvent(account: Account, eventId: string, categoryIds: string[]): Promise<void> {
+    // Get the event to verify it exists
+    const event = await EventEntity.findByPk(eventId);
+    if (!event) {
+      throw new EventNotFoundError();
+    }
+
+    // Get calendar and verify permissions
+    const calendar = await this.getCalendar(event.calendar_id);
+    if (!calendar) {
+      throw new CalendarNotFoundError();
+    }
+
+    const canModify = await this.userCanModifyCalendar(account, calendar);
+    if (!canModify) {
+      throw new InsufficientCalendarPermissionsError();
+    }
+
+    // Verify all categories exist and belong to the same calendar
+    if (categoryIds.length > 0) {
+      const categories = await EventCategoryEntity.findAll({
+        where: { id: categoryIds },
+      });
+
+      if (categories.length !== categoryIds.length) {
+        throw new CategoryNotFoundError();
+      }
+
+      // Verify all categories belong to the event's calendar
+      for (const category of categories) {
+        if (category.calendar_id !== event.calendar_id) {
+          throw new CategoryEventCalendarMismatchError();
+        }
+      }
+    }
+
+    // Remove all existing assignments
+    await EventCategoryAssignmentEntity.destroy({
+      where: { event_id: eventId },
+    });
+
+    // Create new assignments
+    for (const categoryId of categoryIds) {
+      await EventCategoryAssignmentEntity.create({
+        id: uuidv4(),
+        event_id: eventId,
+        category_id: categoryId,
+      });
+    }
+  }
+
+  /**
+   * Get all events assigned to a category
+   * @param categoryId - The ID of the category
+   * @param calendarId - Optional calendar ID to verify category belongs to calendar
+   * @throws CategoryNotFoundError if category doesn't exist or doesn't belong to the specified calendar
+   */
+  async getCategoryEvents(categoryId: string, calendarId?: string): Promise<string[]> {
+    // Verify category exists and belongs to calendar if calendarId provided
+    if (calendarId) {
+      await this.getCategory(categoryId, calendarId);
+    }
+
     const assignments = await EventCategoryAssignmentEntity.findAll({
       where: { category_id: categoryId },
       attributes: ['event_id'],

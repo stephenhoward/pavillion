@@ -245,7 +245,7 @@ async function deleteCategory() {
   state.isDeleting = state.categoryToDelete.id;
 
   try {
-    await categoryService.deleteCategory(state.categoryToDelete.id);
+    await categoryService.deleteCategory(state.categoryToDelete.id, props.calendarId);
     await loadCategories();
     cancelDeleteCategory();
     emit('categoriesUpdated');

@@ -59,7 +59,7 @@ export default class ModelService {
   static async updateModel(model: PrimaryModel,url: string): Promise<Record<string,any>> {
 
     try {
-      let response = await axios.post( url + '/' + model.id, model.toObject() );
+      let response = await axios.put( url + '/' + model.id, model.toObject() );
       return response.data;
     }
     catch(error) {

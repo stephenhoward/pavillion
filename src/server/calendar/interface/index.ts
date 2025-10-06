@@ -180,8 +180,8 @@ export default class CalendarInterface {
     return this.categoryService.getCategories(calendarId);
   }
 
-  async getCategory(categoryId: string): Promise<EventCategory | null> {
-    return this.categoryService.getCategory(categoryId);
+  async getCategory(categoryId: string, calendarId?: string): Promise<EventCategory> {
+    return this.categoryService.getCategory(categoryId, calendarId);
   }
 
   async createCategory(account: Account, calendarId: string, categoryData: {
@@ -191,12 +191,12 @@ export default class CalendarInterface {
     return this.categoryService.createCategory(account, calendarId, categoryData);
   }
 
-  async updateCategory(account: Account, categoryId: string, updateData: Record<string, any>): Promise<EventCategory> {
-    return this.categoryService.updateCategory(account, categoryId, updateData);
+  async updateCategory(account: Account, categoryId: string, updateData: Record<string, any>, calendarId?: string): Promise<EventCategory> {
+    return this.categoryService.updateCategory(account, categoryId, updateData, calendarId);
   }
 
-  async deleteCategory(account: Account, categoryId: string): Promise<void> {
-    return this.categoryService.deleteCategory(account, categoryId);
+  async deleteCategory(account: Account, categoryId: string, calendarId?: string): Promise<void> {
+    return this.categoryService.deleteCategory(account, categoryId, calendarId);
   }
 
   // Category assignment operations
@@ -208,12 +208,17 @@ export default class CalendarInterface {
     return this.categoryService.unassignCategoryFromEvent(account, eventId, categoryId);
   }
 
+  async setCategoriesForEvent(account: Account, eventId: string, categoryIds: string[]): Promise<CalendarEvent> {
+    await this.categoryService.setCategoriesForEvent(account, eventId, categoryIds);
+    return this.getEventById(eventId);
+  }
+
   async getEventCategories(eventId: string): Promise<EventCategory[]> {
     return this.categoryService.getEventCategories(eventId);
   }
 
-  async getCategoryEvents(categoryId: string): Promise<string[]> {
-    return this.categoryService.getCategoryEvents(categoryId);
+  async getCategoryEvents(categoryId: string, calendarId?: string): Promise<string[]> {
+    return this.categoryService.getCategoryEvents(categoryId, calendarId);
   }
 
   async bulkAssignCategories(

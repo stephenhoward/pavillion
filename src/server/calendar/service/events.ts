@@ -88,7 +88,7 @@ class EventService {
 
     const events = await EventEntity.findAll(queryOptions);
 
-    return events.map( (event) => {
+    const mappedEvents = events.map( (event) => {
       let e = event.toModel();
       if ( event.content ) {
         for ( let c of event.content ) {
@@ -106,6 +106,13 @@ class EventService {
 
       return e;
     });
+
+    // Load categories for each event
+    for (const event of mappedEvents) {
+      event.categories = await this.categoryService.getEventCategories(event.id);
+    }
+
+    return mappedEvents;
   }
 
   generateEventUrl(): string {

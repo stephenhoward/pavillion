@@ -174,11 +174,12 @@ describe('CategoryService', () => {
       expect(category?.id).toBe('category-123');
     });
 
-    it('should return null for non-existent category', async () => {
+    it('should throw error for non-existent category', async () => {
       sandbox.stub(EventCategoryEntity, 'findByPk').resolves(null);
 
-      const category = await categoryService.getCategory('non-existent-id');
-      expect(category).toBeNull();
+      await expect(
+        categoryService.getCategory('non-existent-id'),
+      ).rejects.toThrow(CategoryNotFoundError);
     });
   });
 
@@ -256,7 +257,7 @@ describe('CategoryService', () => {
     });
 
     it('should throw error for non-existent category', async () => {
-      sandbox.stub(categoryService, 'getCategory').resolves(null);
+      sandbox.stub(categoryService, 'getCategory').rejects(new CategoryNotFoundError());
 
       const updateData = {
         content: {
@@ -312,7 +313,7 @@ describe('CategoryService', () => {
     });
 
     it('should throw error for non-existent category', async () => {
-      sandbox.stub(categoryService, 'getCategory').resolves(null);
+      sandbox.stub(categoryService, 'getCategory').rejects(new CategoryNotFoundError());
 
       await expect(
         categoryService.deleteCategory(testAccount, 'category-123'),
@@ -366,7 +367,7 @@ describe('CategoryService', () => {
     });
 
     it('should throw error if category not found', async () => {
-      sandbox.stub(categoryService, 'getCategory').resolves(null);
+      sandbox.stub(categoryService, 'getCategory').rejects(new CategoryNotFoundError());
 
       await expect(
         categoryService.assignCategoryToEvent(testAccount, 'event-123', 'category-123'),

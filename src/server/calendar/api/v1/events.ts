@@ -16,7 +16,7 @@ export default class EventRoutes {
     const router = express.Router();
     router.get('/calendars/:calendar/events', ExpressHelper.loggedInOnly, this.listEvents.bind(this));
     router.post('/events', ExpressHelper.loggedInOnly, this.createEvent.bind(this));
-    router.post('/events/:id', ExpressHelper.loggedInOnly, this.updateEvent.bind(this));
+    router.put('/events/:id', ExpressHelper.loggedInOnly, this.updateEvent.bind(this));
     router.delete('/events/:id', ExpressHelper.loggedInOnly, this.deleteEvent.bind(this));
     router.post('/events/bulk-assign-categories', ExpressHelper.loggedInOnly, this.bulkAssignCategories.bind(this));
     app.use(routePrefix, router);
