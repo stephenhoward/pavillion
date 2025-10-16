@@ -77,6 +77,8 @@
     "page_title": "calendar settings",
     "categories_tab": "Categories",
     "editors_tab": "Editors",
+    "loading_calendar": "Loading calendar...",
+    "error_loading_calendar": "Unable to load calendar. Please try again later.",
     "title": "Category Management",
     "add_category_button": "Add Category",
     "no_categories": "No categories",
