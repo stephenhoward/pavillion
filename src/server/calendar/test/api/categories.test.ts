@@ -40,9 +40,11 @@ describe('Category API', () => {
       const mockCalendar = new Calendar('calendar-id', 'test-calendar');
       const mockCategory = new EventCategory('cat-id', 'calendar-id');
 
+      let getCalendarStub = categorySandbox.stub(calendarInterface, 'getCalendar');
       let calendarStub = categorySandbox.stub(calendarInterface, 'getCalendarByName');
       let categoriesStub = categorySandbox.stub(calendarInterface, 'getCategories');
 
+      getCalendarStub.resolves(mockCalendar);
       calendarStub.resolves(mockCalendar);
       categoriesStub.resolves([mockCategory]);
 
@@ -57,12 +59,15 @@ describe('Category API', () => {
       expect(response.status).toBe(200);
       expect(Array.isArray(response.body)).toBe(true);
       expect(response.body).toHaveLength(1);
-      expect(calendarStub.called).toBe(true);
+      expect(getCalendarStub.called).toBe(true);
       expect(categoriesStub.called).toBe(true);
     });
 
     it('should return 404 when calendar not found', async () => {
+      let getCalendarStub = categorySandbox.stub(calendarInterface, 'getCalendar');
       let calendarStub = categorySandbox.stub(calendarInterface, 'getCalendarByName');
+
+      getCalendarStub.resolves(null);
       calendarStub.resolves(null);
 
       router.get('/handler', (req, res) => {

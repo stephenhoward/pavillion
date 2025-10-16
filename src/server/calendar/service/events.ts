@@ -13,6 +13,7 @@ import { EventEmitter } from 'events';
 import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError, BulkEventsNotFoundError, MixedCalendarEventsError, CategoriesNotFoundError } from '@/common/exceptions/calendar';
 import CategoryService from './categories';
 import { EventCategoryEntity } from '@/server/calendar/entity/event_category';
+import { EventCategoryContentEntity } from '@/server/calendar/entity/event_category_content';
 import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_category_assignment';
 import db from '@/server/common/entity/db';
 import { Op } from 'sequelize';
@@ -50,10 +51,19 @@ class EventService {
     // Base query options
     const queryOptions: any = {
       where: { calendar_id: calendar.id },
-      include: [LocationEntity, EventScheduleEntity, MediaEntity],
-    };
-
-    // Handle search parameter
+      include: [
+        LocationEntity,
+        EventScheduleEntity,
+        MediaEntity,
+        {
+          model: EventCategoryAssignmentEntity,
+          include: [{
+            model: EventCategoryEntity,
+            include: [EventCategoryContentEntity],
+          }],
+        },
+      ],
+    };    // Handle search parameter
     if (options?.search && options.search.trim()) {
       const searchTerm = `%${options.search.trim()}%`;
       queryOptions.include.push({
@@ -74,15 +84,20 @@ class EventService {
 
     // Handle category filter
     if (options?.categories && options.categories.length > 0) {
-      queryOptions.include.push({
-        model: EventCategoryAssignmentEntity,
-        where: {
+      // Find the category assignment include that we added above
+      const categoryAssignmentInclude = queryOptions.include.find(
+        (inc: any) => inc.model === EventCategoryAssignmentEntity || inc === EventCategoryAssignmentEntity,
+      );
+
+      if (categoryAssignmentInclude && typeof categoryAssignmentInclude === 'object') {
+        // Add the filter to the existing category assignment include
+        categoryAssignmentInclude.where = {
           category_id: {
             [Op.in]: options.categories,
           },
-        },
-        required: true, // INNER JOIN to only include events with matching categories
-      });
+        };
+        categoryAssignmentInclude.required = true; // INNER JOIN to only include events with matching categories
+      }
     }
 
 
@@ -104,13 +119,15 @@ class EventService {
         }
       }
 
+      // Map categories from eagerly loaded data
+      // Access via getDataValue since we don't have a declared property
+      const categoryAssignments = event.getDataValue('categoryAssignments') as EventCategoryAssignmentEntity[] | undefined;
+      if (categoryAssignments) {
+        e.categories = categoryAssignments.map(assignment => assignment.category.toModel());
+      }
+
       return e;
     });
-
-    // Load categories for each event
-    for (const event of mappedEvents) {
-      event.categories = await this.categoryService.getEventCategories(event.id);
-    }
 
     return mappedEvents;
   }

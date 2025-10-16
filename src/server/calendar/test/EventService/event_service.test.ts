@@ -116,9 +116,11 @@ describe('listEvents', () => {
       expect(findEventsStub.calledOnce).toBe(true);
       const queryOptions = findEventsStub.firstCall.args[0];
 
-      // Empty categories should not add category filtering
+      // With eager loading, category assignments are always included, but no where clause should be added
       const categoryInclude = queryOptions.include?.find((inc: any) => inc.model === EventCategoryAssignmentEntity);
-      expect(categoryInclude).toBeUndefined();
+      expect(categoryInclude).toBeDefined();
+      expect(categoryInclude.where).toBeUndefined();
+      expect(categoryInclude.required).toBeUndefined();
     });
   });
 
