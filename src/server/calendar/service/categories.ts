@@ -16,6 +16,7 @@ import {
   CategoryEventCalendarMismatchError,
 } from '@/common/exceptions/category';
 import CalendarService from './calendar';
+import db from '@/server/common/entity/db';
 
 /**
  * Service for managing event categories within calendars.
@@ -121,7 +122,7 @@ class CategoryService {
    * @throws CategoryNotFoundError if category doesn't exist or doesn't belong to the specified calendar
    */
   async updateCategory(account: Account, categoryId: string, categoryData: Record<string,any>, calendarId?: string): Promise<EventCategory> {
-    // Get category to verify it exists and optionally verify calendar
+    // Get category to verify it exists and verify calendar match
     const category = await this.getCategory(categoryId, calendarId);
 
     // Get calendar and verify ownership/editor permissions
@@ -190,7 +191,7 @@ class CategoryService {
    * @throws CategoryNotFoundError if category doesn't exist or doesn't belong to the specified calendar
    */
   async deleteCategory(account: Account, categoryId: string, calendarId?: string): Promise<void> {
-    // Get category to verify it exists and optionally verify calendar
+    // Get category to verify it exists and verify calendar match
     const category = await this.getCategory(categoryId, calendarId);
 
     // Get calendar and verify ownership/editor permissions
@@ -363,18 +364,30 @@ class CategoryService {
       }
     }
 
-    // Remove all existing assignments
-    await EventCategoryAssignmentEntity.destroy({
-      where: { event_id: eventId },
-    });
+    // Wrap delete-then-create in a transaction to ensure atomicity
+    const transaction = await db.transaction();
 
-    // Create new assignments
-    for (const categoryId of categoryIds) {
-      await EventCategoryAssignmentEntity.create({
-        id: uuidv4(),
-        event_id: eventId,
-        category_id: categoryId,
+    try {
+      // Remove all existing assignments
+      await EventCategoryAssignmentEntity.destroy({
+        where: { event_id: eventId },
+        transaction,
       });
+
+      // Create new assignments
+      for (const categoryId of categoryIds) {
+        await EventCategoryAssignmentEntity.create({
+          id: uuidv4(),
+          event_id: eventId,
+          category_id: categoryId,
+        }, { transaction });
+      }
+
+      await transaction.commit();
+    }
+    catch (error) {
+      await transaction.rollback();
+      throw error;
     }
   }
 
