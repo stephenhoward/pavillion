@@ -31,6 +31,13 @@ describe('isValidUrlName', () => {
       ['legalusername', true],
       ['9alsolegal', true],
       ['alsolegal_', true],
+      // Hyphen tests - allowed in middle but not at start or end
+      ['my-calendar', true],
+      ['test-calendar-name', true],
+      ['my_test-calendar', true],
+      ['-noleadhyphen', false],
+      ['notrailinghyphen-', false],
+      ['-bothinvalid-', false],
     ];
     for( let test of tests) {
       expect(service.isValidUrlName(test[0])).toBe(test[1]);

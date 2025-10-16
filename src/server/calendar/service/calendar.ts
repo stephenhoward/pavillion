@@ -30,7 +30,7 @@ class CalendarService {
   }
 
   isValidUrlName(username: string): boolean {
-    return username.match(/^[a-z0-9][a-z0-9_]{2,23}$/i) ? true : false;
+    return username.match(/^[a-z0-9][a-z0-9_-]{1,22}[a-z0-9_]$/i) ? true : false;
   }
 
   async setUrlName(account: Account, calendar: Calendar, urlName: string): Promise<boolean> {
