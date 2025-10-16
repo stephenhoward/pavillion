@@ -53,6 +53,7 @@
     },
     "invitations": {
         "title": "Account Invitations",
+        "load_error": "Failed to load invitations. Please try refreshing the page.",
         "resend_success": "Successfully resent invitation to {{email}}",
         "resend_error": "Failed to resend invitation to {{email}}",
         "invite_new_account": "Invite New Account",

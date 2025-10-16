@@ -1,5 +1,8 @@
 <template>
   <section>
+    <div v-if="state.loadError" class="error-message">
+      {{ t('load_error') }}
+    </div>
     <div v-if="state.resendSuccess" class="success-message">
       {{ t('resend_success', { email: state.resendSuccess }) }}
     </div>
@@ -61,15 +64,25 @@ const { t } = useTranslation('admin', {
   keyPrefix: 'invitations',
 });
 
-onBeforeMount(async () => {
-  const response = await ModelService.listModels('/api/v1/admin/invitations');
-  store.invitations = response.map(invitation => AccountInvitation.fromObject(invitation));
-});
 const state = reactive({
   addInvite: false,
   resending: null,
   resendSuccess: null,
   resendError: null,
+  loadError: false,
+});
+
+onBeforeMount(async () => {
+  try {
+    const response = await ModelService.listModels('/api/v1/admin/invitations');
+    store.invitations = response.map(invitation => AccountInvitation.fromObject(invitation));
+    state.loadError = false;
+  }
+  catch (error) {
+    console.error('Error loading invitations:', error);
+    store.invitations = [];
+    state.loadError = true;
+  }
 });
 
 const formatExpirationTime = (expTime) => {

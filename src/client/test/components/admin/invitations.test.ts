@@ -103,6 +103,25 @@ describe('Admin Invitations Component', () => {
       // Verify empty state is displayed
       expect(wrapper.text()).toContain('No Invitations');
     });
+
+    it('handles error loading invitations', async () => {
+      axiosGetSpy.mockRejectedValue(new Error('Failed to load invitations'));
+
+      const { wrapper } = mountInvitationsComponent();
+      currentWrapper = wrapper;
+
+      await flushPromises();
+      await wrapper.vm.$nextTick();
+
+      // Verify error state is set
+      expect(wrapper.vm.state.loadError).toBe(true);
+
+      // Verify invitations array is empty
+      expect(wrapper.vm.store.invitations).toEqual([]);
+
+      // Verify error message is displayed
+      expect(wrapper.text()).toContain('Failed to load invitations');
+    });
   });
 
   describe('Invitation Actions', () => {
