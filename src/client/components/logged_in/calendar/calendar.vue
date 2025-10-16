@@ -2,6 +2,7 @@
 import { onBeforeMount, reactive, inject, ref, watch, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
+import { DateTime } from 'luxon';
 import { useEventStore } from '@/client/stores/eventStore';
 import CalendarService from '@/client/service/calendar';
 import EventService from '@/client/service/event';
@@ -179,6 +180,51 @@ const handleDuplicateEvent = (event) => {
   // Open the event editor in duplication mode
   emit('openEvent', event.clone(), true); // Pass isDuplicationMode as true
 };
+
+// Format event date for display
+const formatEventDate = (event) => {
+  if (!event.schedules || event.schedules.length === 0) {
+    return null;
+  }
+
+  const schedule = event.schedules[0];
+  if (!schedule.startDate) {
+    return null;
+  }
+
+  // Use Luxon's built-in locale-aware formatting
+  return schedule.startDate.toLocaleString(DateTime.DATETIME_MED);
+};
+
+// Check if event is recurring
+const isRecurring = (event) => {
+  if (!event.schedules || event.schedules.length === 0) {
+    return false;
+  }
+
+  const schedule = event.schedules[0];
+  return schedule.frequency !== null && schedule.frequency !== undefined;
+};
+
+// Get recurrence description
+const getRecurrenceText = (event) => {
+  if (!isRecurring(event)) {
+    return null;
+  }
+
+  const schedule = event.schedules[0];
+  const frequency = schedule.frequency;
+
+  // Simple recurrence labels
+  const labels = {
+    daily: 'Repeats daily',
+    weekly: 'Repeats weekly',
+    monthly: 'Repeats monthly',
+    yearly: 'Repeats yearly',
+  };
+
+  return labels[frequency] || 'Recurring event';
+};
 </script>
 
 <template>
@@ -261,6 +307,10 @@ const handleDuplicateEvent = (event) => {
               <EventImage :media="event.media" size="small" />
               <div class="event-content">
                 <h3 :id="`event-title-${event.id}`">{{ event.content("en").name }}</h3>
+                <div v-if="formatEventDate(event)" class="event-date">
+                  <span class="date-text">📅 {{ formatEventDate(event) }}</span>
+                  <span v-if="isRecurring(event)" class="recurrence-badge">🔄 {{ getRecurrenceText(event) }}</span>
+                </div>
                 <p v-if="event.content('en').description">{{ event.content("en").description }}</p>
               </div>
             </article>
@@ -507,8 +557,48 @@ section[aria-label="Calendar Events"] {
         }
       }
 
+      .event-date {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 12px;
+        margin: 8px 0;
+        font-size: 14px;
+
+        .date-text {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          color: #555;
+          font-weight: 500;
+
+          @include dark-mode {
+            color: #bbb;
+          }
+        }
+
+        .recurrence-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 2px 8px;
+          background: #e3f2fd;
+          border: 1px solid #2196f3;
+          border-radius: 12px;
+          color: #1976d2;
+          font-size: 12px;
+          font-weight: 500;
+
+          @include dark-mode {
+            background: rgba(33, 150, 243, 0.2);
+            border-color: #2196f3;
+            color: #64b5f6;
+          }
+        }
+      }
+
       p {
-        margin: 0;
+        margin: 8px 0 0 0;
         color: #666;
         font-size: 14px;
         line-height: 1.4;
