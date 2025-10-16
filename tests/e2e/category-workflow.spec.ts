@@ -62,8 +62,8 @@ test.describe('Category Management Workflow', () => {
     await expect(categoriesTab).toBeVisible({ timeout: 5000 });
     await categoriesTab.click();
 
-    // Wait for categories section to load
-    await page.waitForTimeout(1000); // Give UI time to render
+    // Wait for categories section to load - either category list or add button should appear
+    await expect(page.locator('button:has-text("Add Category")').first()).toBeVisible({ timeout: 5000 });
 
     // Verify no 404 errors occurred
     const networkErrors = (page as any).networkErrors || [];
@@ -75,9 +75,6 @@ test.describe('Category Management Workflow', () => {
     await addCategoryButton.click();
 
     // Wait for category editor dialog to appear
-    await page.waitForTimeout(500);
-
-    // Verify dialog/modal opened
     const categoryDialog = page.locator('dialog, .modal, [role="dialog"]').first();
     await expect(categoryDialog).toBeVisible({ timeout: 5000 });
 
@@ -126,8 +123,8 @@ test.describe('Category Management Workflow', () => {
     await expect(categoriesTab).toBeVisible({ timeout: 5000 });
     await categoriesTab.click();
 
-    // Wait for categories to load
-    await page.waitForTimeout(2000);
+    // Wait for categories to load - wait for add button or category list to appear
+    await expect(page.locator('button:has-text("Add Category")').first()).toBeVisible({ timeout: 5000 });
 
     // Verify no 404 errors
     const networkErrors = (page as any).networkErrors || [];
@@ -156,7 +153,9 @@ test.describe('Category Management Workflow', () => {
 
     const categoriesTab = page.locator('a:has-text("Categories"), button:has-text("Categories")').first();
     await categoriesTab.click();
-    await page.waitForTimeout(1000);
+    
+    // Wait for categories section to load
+    await expect(page.locator('button:has-text("Add Category")').first()).toBeVisible({ timeout: 5000 });
 
     // Check if "Arts" category exists (from seed data)
     const hasArtsCategory = await page.locator('text=Arts').count() > 0;
@@ -165,14 +164,20 @@ test.describe('Category Management Workflow', () => {
       const addButton = page.locator('button:has-text("Add Category")').first();
       await addButton.click();
       const dialog = page.locator('dialog, .modal, [role="dialog"]').first();
+      await expect(dialog).toBeVisible({ timeout: 5000 });
       await dialog.locator('input[type="text"]').fill('Test Category');
-      await dialog.locator('button:has-text("Create"), button.primary').first().click();
-      await page.waitForTimeout(1000);
+      const createButton = dialog.locator('button:has-text("Create"), button.primary').first();
+      await createButton.click();
+
+      // Wait for dialog to close after creation
+      await expect(dialog).not.toBeVisible({ timeout: 5000 });
     }
 
     // Navigate to create event page
     await page.goto('/calendar/test_calendar');
-    await page.waitForTimeout(1000);
+    
+    // Wait for calendar page to load
+    await page.waitForLoadState('networkidle');
 
     // Click "Create Event" or "Add Event" button
     const createEventButton = page.locator('button:has-text("Create Event"), button:has-text("Add Event"), a:has-text("Create Event")').first();
@@ -180,11 +185,10 @@ test.describe('Category Management Workflow', () => {
     await createEventButton.click();
 
     // Wait for event creation form
-    await page.waitForTimeout(1000);
-
-    // Fill in event details
     const eventNameInput = page.locator('input[name="name"], input[placeholder*="Event name"], input[placeholder*="event name"]').first();
     await expect(eventNameInput).toBeVisible({ timeout: 5000 });
+
+    // Fill in event details
     await eventNameInput.fill('Test Event with Category');
 
     // Look for category selector (could be checkboxes, multi-select, etc.)
@@ -201,10 +205,14 @@ test.describe('Category Management Workflow', () => {
 
     // Save the event
     const saveButton = page.locator('button:has-text("Create"), button:has-text("Save"), button.primary').first();
-    await saveButton.click();
 
-    // Wait for event to be created and page to update
-    await page.waitForTimeout(2000);
+    // Wait for the save request to complete
+    const responsePromise = page.waitForResponse(
+      response => response.url().includes('/events') && (response.status() === 200 || response.status() === 201),
+      { timeout: 10000 },
+    );
+    await saveButton.click();
+    await responsePromise;
 
     // Verify no errors occurred
     const consoleErrors = (page as any).consoleErrors || [];
@@ -224,19 +232,24 @@ test.describe('Category Management Workflow', () => {
 
     // Navigate to calendar view
     await page.goto('/calendar/test_calendar');
-    await page.waitForTimeout(1000);
+    
+    // Wait for calendar and events to load
+    await page.waitForLoadState('networkidle');
 
     // Find and click on an existing event (should be seeded)
     const firstEvent = page.locator('[data-test="event-card"], .event-card, .event-item').first();
     if (await firstEvent.count() > 0) {
       await firstEvent.click();
-      await page.waitForTimeout(500);
-
-      // Look for edit button
+      
+      // Wait for event details to load
       const editButton = page.locator('button:has-text("Edit"), a:has-text("Edit")').first();
+      await expect(editButton).toBeVisible({ timeout: 5000 });
+
       if (await editButton.isVisible({ timeout: 2000 })) {
         await editButton.click();
-        await page.waitForTimeout(1000);
+        
+        // Wait for edit form to load
+        await page.waitForLoadState('networkidle');
 
         // Look for category selector in edit form
         const categorySelector = page.locator('[data-test="category-selector"], .category-selector, label:has-text("Categor")').first();
@@ -252,8 +265,14 @@ test.describe('Category Management Workflow', () => {
 
         // Save changes
         const saveButton = page.locator('button:has-text("Save"), button.primary').first();
+
+        // Wait for the save request to complete
+        const responsePromise = page.waitForResponse(
+          response => response.url().includes('/events') && (response.status() === 200 || response.status() === 204),
+          { timeout: 10000 },
+        );
         await saveButton.click();
-        await page.waitForTimeout(2000);
+        await responsePromise;
 
         // Verify no errors
         const consoleErrors = (page as any).consoleErrors || [];
@@ -273,20 +292,24 @@ test.describe('Category Management Workflow', () => {
     // After login, navigate to calendar view
     await page.waitForURL('**/calendar/**', { timeout: 10000 });
     await page.goto('/calendar/test_calendar');
-    await page.waitForTimeout(1000);
+    
+    // Wait for calendar page and events to load
+    await page.waitForLoadState('networkidle');
 
     // Look for category filter UI (pills, dropdown, etc.)
     const categoryFilter = page.locator('[data-test="category-filter"], .category-filter, .category-pills').first();
 
     if (await categoryFilter.isVisible({ timeout: 3000 })) {
-      // Get initial event count
-      const initialEventCount = await page.locator('[data-test="event-card"], .event-card, .event-item').count();
-
       // Click on a category pill/filter option
       const firstCategoryPill = categoryFilter.locator('button, .pill, .category-pill').first();
       if (await firstCategoryPill.isVisible({ timeout: 2000 })) {
+        // Wait for filter request to complete
+        const responsePromise = page.waitForResponse(
+          response => response.url().includes('/events') && response.status() === 200,
+          { timeout: 10000 },
+        );
         await firstCategoryPill.click();
-        await page.waitForTimeout(1000);
+        await responsePromise;
 
         // Event list should update (may have fewer events, or same if all have that category)
         const filteredEventCount = await page.locator('[data-test="event-card"], .event-card, .event-item').count();
