@@ -86,4 +86,20 @@ export default class AccountsInterface {
     return this.accountService.listInvitations(inviterId, calendarId);
   }
 
+  async listAccounts(
+    page: number = 1,
+    limit: number = 50,
+    search?: string,
+  ): Promise<{
+      accounts: Account[];
+      pagination: {
+        currentPage: number;
+        totalPages: number;
+        totalCount: number;
+        limit: number;
+      };
+    }> {
+    return this.accountService.listAllAccounts(page, limit, search);
+  }
+
 }

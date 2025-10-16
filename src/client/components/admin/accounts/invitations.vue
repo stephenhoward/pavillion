@@ -62,8 +62,8 @@ const { t } = useTranslation('admin', {
 });
 
 onBeforeMount(async () => {
-  let invitations = await ModelService.listModels('/api/v1/invitations');
-  store.invitations = invitations.map(invitation => AccountInvitation.fromObject(invitation));
+  const response = await ModelService.listModels('/api/v1/admin/invitations');
+  store.invitations = response.map(invitation => AccountInvitation.fromObject(invitation));
 });
 const state = reactive({
   addInvite: false,

@@ -83,7 +83,7 @@ describe('Admin Invitations Component', () => {
       await wrapper.vm.$nextTick();
 
       // Verify the correct endpoint was called
-      expect(axiosGetSpy).toHaveBeenCalledWith('/api/v1/invitations');
+      expect(axiosGetSpy).toHaveBeenCalledWith('/api/v1/admin/invitations');
 
       // Verify invitations were loaded into store
       expect(wrapper.vm.store.invitations).toHaveLength(2);
@@ -269,7 +269,7 @@ describe('Admin Invitations Component', () => {
   });
 
   describe('Unified Endpoint Integration', () => {
-    it('uses /api/v1/invitations for listing invitations', async () => {
+    it('uses /api/v1/admin/invitations for listing invitations', async () => {
       axiosGetSpy.mockResolvedValue({ data: [] });
 
       const { wrapper } = mountInvitationsComponent();
@@ -277,8 +277,8 @@ describe('Admin Invitations Component', () => {
 
       await flushPromises();
 
-      // Verify the unified endpoint is used, not the old /api/accounts/v1/invitations
-      expect(axiosGetSpy).toHaveBeenCalledWith('/api/v1/invitations');
+      // Verify the admin endpoint is used, not the old /api/accounts/v1/invitations
+      expect(axiosGetSpy).toHaveBeenCalledWith('/api/v1/admin/invitations');
       expect(axiosGetSpy).not.toHaveBeenCalledWith('/api/accounts/v1/invitations');
     });
 

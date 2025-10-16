@@ -25,8 +25,8 @@ onBeforeMount(async () => {
 async function loadAccounts() {
   state.isLoading = true;
   try {
-    const fetchedAccounts = await ModelService.listModels('/api/accounts/v1/accounts');
-    accounts.value = fetchedAccounts;
+    const response = await ModelService.listModels('/api/v1/admin/accounts');
+    accounts.value = response;
   }
   catch (error) {
     console.error('Error loading accounts:', error);

@@ -542,6 +542,69 @@ export default class AccountService {
     }
   }
 
+  /**
+   * Lists all accounts with pagination and optional search filtering.
+   * Admin-only operation for account management.
+   *
+   * @param page - Page number (1-indexed)
+   * @param limit - Number of results per page (max 100)
+   * @param search - Optional search term for email or username
+   * @returns Paginated list of accounts with metadata
+   */
+  async listAccounts(
+    page: number = 1,
+    limit: number = 50,
+    search?: string,
+  ): Promise<{
+      accounts: Account[];
+      pagination: {
+        currentPage: number;
+        totalPages: number;
+        totalCount: number;
+        limit: number;
+      };
+    }> {
+    // Validate and constrain pagination parameters
+    const validPage = Math.max(1, page);
+    const validLimit = Math.min(100, Math.max(1, limit));
+    const offset = (validPage - 1) * validLimit;
+
+    // Build where clause for search
+    const whereClause: any = {};
+    if (search) {
+      const { Op } = await import('sequelize');
+      whereClause[Op.or] = [
+        { email: { [Op.like]: `%${search}%` } },
+        { username: { [Op.like]: `%${search}%` } },
+      ];
+    }
+
+    // Get total count and paginated results
+    const { count, rows } = await AccountEntity.findAndCountAll({
+      where: whereClause,
+      limit: validLimit,
+      offset: offset,
+      order: [['createdAt', 'DESC']],
+    });
+
+    // Load roles for each account
+    const accountsWithRoles = await Promise.all(
+      rows.map(entity => this.loadAccountRoles(entity.toModel())),
+    );
+
+    const totalPages = Math.ceil(count / validLimit);
+
+    return {
+      accounts: accountsWithRoles,
+      pagination: {
+        currentPage: validPage,
+        totalPages: totalPages,
+        totalCount: count,
+        limit: validLimit,
+      },
+    };
+  }
+
   async setPassword(account:Account, password:string): Promise<boolean> {
     const secret = await AccountSecretsEntity.findByPk(account.id);
 

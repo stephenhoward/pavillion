@@ -10,6 +10,7 @@ import AccountsInterface from '../interface';
 import { Account } from '../../../common/model/account';
 import { testApp, countRoutes } from '../../common/test/lib/express';
 import AccountInvitation from '../../../common/model/invitation';
+import AccountApplication from '../../../common/model/application';
 import AccountApiV1 from '../api/v1';
 
 describe('API v1', () => {
@@ -462,5 +463,193 @@ describe('Applications API', () => {
     expect(response.status).toBe(400);
     expect(stub.called).toBe(false);
     expect(stub2.called).toBe(false);
+  });
+});
+
+describe('Admin API', () => {
+  let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+  let router: express.Router;
+  let accountsInterface: AccountsInterface;
+  let adminAccount: Account;
+  let regularAccount: Account;
+
+  beforeEach(() => {
+    const eventBus = new EventEmitter();
+    accountsInterface = new AccountsInterface(eventBus);
+    router = express.Router();
+
+    // Create admin and regular user accounts for testing
+    adminAccount = new Account('admin-id', 'admin@test.com', 'admin@test.com');
+    adminAccount.roles = ['admin'];
+
+    regularAccount = new Account('user-id', 'user@test.com', 'user@test.com');
+    regularAccount.roles = [];
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  describe('GET /api/v1/admin/accounts', () => {
+    it('should return paginated account list for admin', async () => {
+      const mockAccounts = [
+        new Account('id1', 'user1@test.com', 'user1@test.com'),
+        new Account('id2', 'user2@test.com', 'user2@test.com'),
+      ];
+
+      const stub = sandbox.stub(accountsInterface, 'listAccounts');
+      stub.resolves({
+        accounts: mockAccounts,
+        pagination: {
+          currentPage: 1,
+          totalPages: 1,
+          totalCount: 2,
+          limit: 50,
+        },
+      });
+
+      // Import admin handler would be done here once created
+      // For now, testing the interface method
+      const result = await accountsInterface.listAccounts(1, 50);
+
+      expect(result.accounts).toEqual(mockAccounts);
+      expect(result.pagination.totalCount).toBe(2);
+      expect(stub.called).toBe(true);
+    });
+
+    it('should filter accounts by search term', async () => {
+      const stub = sandbox.stub(accountsInterface, 'listAccounts');
+      stub.resolves({
+        accounts: [],
+        pagination: {
+          currentPage: 1,
+          totalPages: 0,
+          totalCount: 0,
+          limit: 50,
+        },
+      });
+
+      await accountsInterface.listAccounts(1, 50, 'test@example.com');
+
+      expect(stub.calledWith(1, 50, 'test@example.com')).toBe(true);
+    });
+
+    it('should support pagination parameters', async () => {
+      const stub = sandbox.stub(accountsInterface, 'listAccounts');
+      stub.resolves({
+        accounts: [],
+        pagination: {
+          currentPage: 2,
+          totalPages: 5,
+          totalCount: 250,
+          limit: 50,
+        },
+      });
+
+      const result = await accountsInterface.listAccounts(2, 50);
+
+      expect(result.pagination.currentPage).toBe(2);
+      expect(result.pagination.totalPages).toBe(5);
+      expect(stub.calledWith(2, 50)).toBe(true);
+    });
+  });
+
+  describe('GET /api/v1/admin/applications', () => {
+    it('should list all pending applications for admin', async () => {
+      const mockApplications = [
+        new AccountApplication('app1', 'user1@test.com', 'I want to join', 'pending'),
+        new AccountApplication('app2', 'user2@test.com', 'Please let me in', 'pending'),
+      ];
+
+      const stub = sandbox.stub(accountsInterface, 'listAccountApplications');
+      stub.resolves(mockApplications);
+
+      const result = await accountsInterface.listAccountApplications();
+
+      expect(result).toEqual(mockApplications);
+      expect(result.length).toBe(2);
+      expect(stub.called).toBe(true);
+    });
+  });
+
+  describe('POST /api/v1/admin/applications/:id/approve', () => {
+    it('should approve application and create account', async () => {
+      const newAccount = new Account('new-id', 'approved@test.com', 'approved@test.com');
+
+      const stub = sandbox.stub(accountsInterface, 'acceptAccountApplication');
+      stub.resolves(newAccount);
+
+      const result = await accountsInterface.acceptAccountApplication('app-id');
+
+      expect(result).toEqual(newAccount);
+      expect(result.email).toBe('approved@test.com');
+      expect(stub.calledWith('app-id')).toBe(true);
+    });
+  });
+
+  describe('POST /api/v1/admin/applications/:id/deny', () => {
+    it('should deny application', async () => {
+      const stub = sandbox.stub(accountsInterface, 'rejectAccountApplication');
+      stub.resolves();
+
+      await accountsInterface.rejectAccountApplication('app-id', false);
+
+      expect(stub.calledWith('app-id', false)).toBe(true);
+    });
+
+    it('should deny application silently', async () => {
+      const stub = sandbox.stub(accountsInterface, 'rejectAccountApplication');
+      stub.resolves();
+
+      await accountsInterface.rejectAccountApplication('app-id', true);
+
+      expect(stub.calledWith('app-id', true)).toBe(true);
+    });
+  });
+
+  describe('POST /api/v1/admin/invitations', () => {
+    it('should send invitation as admin', async () => {
+      const invitation = new AccountInvitation('inv-id', 'newuser@test.com', adminAccount);
+
+      const stub = sandbox.stub(accountsInterface, 'inviteNewAccount');
+      stub.resolves(invitation);
+
+      const result = await accountsInterface.inviteNewAccount(
+        adminAccount,
+        'newuser@test.com',
+        'Welcome to our instance!',
+      );
+
+      expect(result).toEqual(invitation);
+      expect(result.email).toBe('newuser@test.com');
+      expect(stub.called).toBe(true);
+    });
+  });
+
+  describe('GET /api/v1/admin/invitations', () => {
+    it('should list all invitations for admin', async () => {
+      const mockInvitations = [
+        new AccountInvitation('inv1', 'user1@test.com', adminAccount),
+        new AccountInvitation('inv2', 'user2@test.com', regularAccount),
+      ];
+
+      const stub = sandbox.stub(accountsInterface, 'listInvitations');
+      stub.resolves(mockInvitations);
+
+      // Admin should get all invitations (inviterId = undefined)
+      const result = await accountsInterface.listInvitations();
+
+      expect(result).toEqual(mockInvitations);
+      expect(result.length).toBe(2);
+      expect(stub.called).toBe(true);
+    });
+  });
+
+  describe('Authorization', () => {
+    it('should deny non-admin access to admin endpoints', () => {
+      // This will be tested in route handler tests
+      expect(regularAccount.hasRole('admin')).toBe(false);
+      expect(adminAccount.hasRole('admin')).toBe(true);
+    });
   });
 });

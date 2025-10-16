@@ -66,8 +66,8 @@ onBeforeMount(async () => {
 
 const loadApplications = async () => {
   try {
-    const applications = await ModelService.listModels('/api/accounts/v1/applications');
-    store.setApplications(applications.map(app => {
+    const response = await ModelService.listModels('/api/v1/admin/applications');
+    store.setApplications(response.map(app => {
       return new AccountApplication(
         app.id,
         app.email,
