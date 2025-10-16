@@ -2,6 +2,7 @@ import { scryptSync, randomBytes } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { DateTime } from 'luxon';
 import config from 'config';
+import { Op } from 'sequelize';
 
 import { Account } from "@/common/model/account";
 import AccountInvitation from '@/common/model/invitation';
@@ -572,7 +573,6 @@ export default class AccountService {
     // Build where clause for search
     const whereClause: any = {};
     if (search) {
-      const { Op } = await import('sequelize');
       whereClause[Op.or] = [
         { email: { [Op.like]: `%${search}%` } },
         { username: { [Op.like]: `%${search}%` } },
