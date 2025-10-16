@@ -5,6 +5,9 @@
         "invite_button": "Send invite",
         "close_button": "Cancel"
     },
+    "navigation": {
+        "skip_to_content": "Skip to main content"
+    },
     "menu": {
         "back": "< back",
         "general_settings": "General",
