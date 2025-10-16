@@ -6,6 +6,7 @@ import db from '@/server/common/entity/db';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { LocationEntity } from '@/server/calendar/entity/location';
 import { MediaEntity } from '@/server/media/entity/media';
+import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_category_assignment';
 
 @Table({ tableName: 'event' })
 class EventEntity extends Model {
@@ -57,6 +58,9 @@ class EventEntity extends Model {
 
   @BelongsTo(() => MediaEntity)
   declare media: MediaEntity;
+
+  @HasMany(() => EventCategoryAssignmentEntity)
+  declare categoryAssignments: EventCategoryAssignmentEntity[];
 
   toModel(): CalendarEvent {
     let model = new CalendarEvent( this.calendar_id, this.id, this.event_source_url );
@@ -192,7 +196,8 @@ class EventScheduleEntity extends Model {
   }
 };
 
-db.addModels([EventEntity, EventContentEntity, EventScheduleEntity]);
+// Register both EventEntity and EventCategoryAssignmentEntity together to establish proper associations
+db.addModels([EventEntity, EventContentEntity, EventScheduleEntity, EventCategoryAssignmentEntity]);
 
 export {
   EventEntity,

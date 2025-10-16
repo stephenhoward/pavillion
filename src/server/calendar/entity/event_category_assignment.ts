@@ -2,7 +2,6 @@ import { Table, Column, Model, DataType, PrimaryKey, CreatedAt, BelongsTo, Forei
 import { EventCategoryAssignmentModel } from '@/common/model/event_category_assignment';
 import { EventEntity } from './event';
 import { EventCategoryEntity } from './event_category';
-import db from '@/server/common/entity/db';
 
 /**
  * Event category assignment database entity.
@@ -74,5 +73,4 @@ export class EventCategoryAssignmentEntity extends Model {
   }
 }
 
-// Register the assignment entity with Sequelize
-db.addModels([EventCategoryAssignmentEntity]);
+// Do not register here - registered together with EventEntity in event.ts to avoid circular dependency
