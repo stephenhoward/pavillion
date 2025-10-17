@@ -53,7 +53,7 @@
             @change="toggleCategory(category.id)"
           />
           <span class="category-name">
-            {{ category.content(currentLanguage)?.name || 'Unnamed Category' }}
+            {{ category.content(i18n.language)?.name || 'Unnamed Category' }}
           </span>
         </div>
       </div>
@@ -70,7 +70,7 @@
 </template>
 
 <script setup>
-import { reactive, onMounted, watch, computed, inject } from 'vue';
+import { reactive, onMounted, watch, computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import CategoryService from '@/client/service/category';
 
@@ -87,11 +87,10 @@ const props = defineProps({
 
 const emit = defineEmits(['filtersChanged']);
 
-const { t } = useTranslation('calendars', {
+const { t, i18n } = useTranslation('calendars', {
   keyPrefix: 'search_filter',
 });
 
-const currentLanguage = inject('currentLanguage') || 'en';
 const categoryService = new CategoryService();
 
 const state = reactive({
