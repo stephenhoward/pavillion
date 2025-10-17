@@ -69,13 +69,13 @@ describe('ModelService', () => {
         data: { id: 'model123', title: 'Updated Model' },
       };
 
-      const postStub = sandbox.stub(axios, 'post').resolves(mockResponse);
+      const putStub = sandbox.stub(axios, 'put').resolves(mockResponse);
 
       // Act
       const result = await ModelService.updateModel(model, '/api/models');
 
       // Assert
-      expect(postStub.calledWith('/api/models/model123', model.toObject())).toBe(true);
+      expect(putStub.calledWith('/api/models/model123', model.toObject())).toBe(true);
       expect(result).toEqual(mockResponse.data);
     });
 
@@ -83,7 +83,7 @@ describe('ModelService', () => {
       // Arrange
       const model = new TestModel('model123', 'Updated Model');
 
-      sandbox.stub(axios, 'post').rejects(new Error('API Error'));
+      sandbox.stub(axios, 'put').rejects(new Error('API Error'));
 
       // Act & Assert
       await expect(ModelService.updateModel(model, '/api/models'))

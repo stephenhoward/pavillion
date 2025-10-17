@@ -155,10 +155,10 @@ describe('CategoryService', () => {
       const axiosGetStub = sandbox.stub(axios, 'get');
       axiosGetStub.resolves({ data: mockCategoryData.category });
 
-      const category = await service.getCategory('cat-123');
+      const category = await service.getCategory('cat-123', 'cal-123');
 
       expect(axiosGetStub.calledOnce).toBe(true);
-      expect(axiosGetStub.calledWith('/api/v1/categories/cat-123')).toBe(true);
+      expect(axiosGetStub.calledWith('/api/v1/calendars/cal-123/categories/cat-123')).toBe(true);
       expect(category).toBeInstanceOf(EventCategory);
     });
 
@@ -174,7 +174,7 @@ describe('CategoryService', () => {
       const axiosGetStub = sandbox.stub(axios, 'get');
       axiosGetStub.rejects(mockError);
 
-      await expect(service.getCategory('cat-123')).rejects.toThrow(CategoryNotFoundError);
+      await expect(service.getCategory('cat-123', 'cal-123')).rejects.toThrow(CategoryNotFoundError);
     });
   });
 
@@ -183,10 +183,10 @@ describe('CategoryService', () => {
       const axiosDeleteStub = sandbox.stub(axios, 'delete');
       axiosDeleteStub.resolves();
 
-      await service.deleteCategory('cat-123');
+      await service.deleteCategory('cat-123', 'cal-123');
 
       expect(axiosDeleteStub.calledOnce).toBe(true);
-      expect(axiosDeleteStub.calledWith('/api/v1/categories/cat-123')).toBe(true);
+      expect(axiosDeleteStub.calledWith('/api/v1/calendars/cal-123/categories/cat-123')).toBe(true);
     });
 
     it('should handle delete errors', async () => {
@@ -201,7 +201,7 @@ describe('CategoryService', () => {
       const axiosDeleteStub = sandbox.stub(axios, 'delete');
       axiosDeleteStub.rejects(mockError);
 
-      await expect(service.deleteCategory('cat-123')).rejects.toThrow(CategoryNotFoundError);
+      await expect(service.deleteCategory('cat-123', 'cal-123')).rejects.toThrow(CategoryNotFoundError);
     });
 
     it('should remove category from store when calendarId provided', async () => {
@@ -211,7 +211,7 @@ describe('CategoryService', () => {
       await service.deleteCategory('cat-123', 'cal-123');
 
       expect(axiosDeleteStub.calledOnce).toBe(true);
-      expect(axiosDeleteStub.calledWith('/api/v1/categories/cat-123')).toBe(true);
+      expect(axiosDeleteStub.calledWith('/api/v1/calendars/cal-123/categories/cat-123')).toBe(true);
       expect(mockStore.removeCategory.calledWith('cal-123', 'cat-123')).toBe(true);
     });
   });
@@ -362,7 +362,7 @@ describe('CategoryService', () => {
       const axiosGetStub = sandbox.stub(axios, 'get');
       axiosGetStub.rejects(mockError);
 
-      await expect(service.getCategory('cat-123')).rejects.toThrow(InsufficientCalendarPermissionsError);
+      await expect(service.getCategory('cat-123', 'cal-123')).rejects.toThrow(InsufficientCalendarPermissionsError);
     });
 
     it('should throw UnknownError for unrecognized errors', async () => {
@@ -370,7 +370,7 @@ describe('CategoryService', () => {
       const axiosGetStub = sandbox.stub(axios, 'get');
       axiosGetStub.rejects(mockError);
 
-      await expect(service.getCategory('cat-123')).rejects.toThrow(UnknownError);
+      await expect(service.getCategory('cat-123', 'cal-123')).rejects.toThrow(UnknownError);
     });
 
     it('should handle malformed error responses', async () => {
@@ -385,7 +385,7 @@ describe('CategoryService', () => {
       const axiosGetStub = sandbox.stub(axios, 'get');
       axiosGetStub.rejects(mockError);
 
-      await expect(service.getCategory('cat-123')).rejects.toThrow(UnknownError);
+      await expect(service.getCategory('cat-123', 'cal-123')).rejects.toThrow(UnknownError);
     });
   });
 });

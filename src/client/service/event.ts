@@ -44,7 +44,8 @@ export default class EventService {
     },
   ): Promise<Array<CalendarEvent>> {
     try {
-      let url = `/api/v1/calendars/${calendarUrlName}/events`;
+      const encodedUrlName = validateAndEncodeId(calendarUrlName, 'Calendar URL name');
+      let url = `/api/v1/calendars/${encodedUrlName}/events`;
 
       // Add query parameters if filters are provided
       if (filters && Object.keys(filters).length > 0) {
@@ -59,12 +60,10 @@ export default class EventService {
           params.append('categories', filters.categories.join(','));
         }
 
-
         url += `?${params.toString()}`;
       }
 
-      const encodedUrlName = validateAndEncodeId(calendarUrlName, 'Calendar URL name');
-      const events = await ModelService.listModels(`/api/v1/calendars/${encodedUrlName}/events`);
+      const events = await ModelService.listModels(url);
       const calendarEvents = events.map(event => CalendarEvent.fromObject(event));
       this.store.events = calendarEvents;
       return calendarEvents;

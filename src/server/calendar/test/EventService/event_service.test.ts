@@ -4,7 +4,6 @@ import { EventEmitter } from 'events';
 
 import { Calendar } from '@/common/model/calendar';
 import { EventEntity, EventContentEntity } from '@/server/calendar/entity/event';
-import { EventCategoryEntity } from '@/server/calendar/entity/event_category';
 import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_category_assignment';
 import EventService from '@/server/calendar/service/events';
 

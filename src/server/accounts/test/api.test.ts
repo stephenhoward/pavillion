@@ -468,7 +468,6 @@ describe('Applications API', () => {
 
 describe('Admin API', () => {
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
-  let router: express.Router;
   let accountsInterface: AccountsInterface;
   let adminAccount: Account;
   let regularAccount: Account;
@@ -476,7 +475,6 @@ describe('Admin API', () => {
   beforeEach(() => {
     const eventBus = new EventEmitter();
     accountsInterface = new AccountsInterface(eventBus);
-    router = express.Router();
 
     // Create admin and regular user accounts for testing
     adminAccount = new Account('admin-id', 'admin@test.com', 'admin@test.com');
