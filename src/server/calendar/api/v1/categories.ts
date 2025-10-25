@@ -21,19 +21,21 @@ class CategoryRoutes {
   installHandlers(app: Application, routePrefix: string): void {
     const router = express.Router();
 
-    // Category management routes
+    // Category management routes (with calendar context)
     router.get('/calendars/:calendarId/categories', this.getCategories.bind(this));
     router.post('/calendars/:calendarId/categories', ExpressHelper.loggedInOnly, this.createCategory.bind(this));
-    router.get('/calendars/:calendarId/categories/:categoryId', this.getCategory.bind(this));
-    router.put('/calendars/:calendarId/categories/:categoryId', ExpressHelper.loggedInOnly, this.updateCategory.bind(this));
-    router.delete('/calendars/:calendarId/categories/:categoryId', ExpressHelper.loggedInOnly, this.deleteCategory.bind(this));
+
+    // Backward-compatible routes (without calendar context - category ID is sufficient)
+    router.get('/categories/:categoryId', this.getCategoryById.bind(this));
+    router.put('/categories/:categoryId', ExpressHelper.loggedInOnly, this.updateCategoryById.bind(this));
+    router.delete('/categories/:categoryId', ExpressHelper.loggedInOnly, this.deleteCategoryById.bind(this));
+    router.get('/categories/:categoryId/events', this.getCategoryEventsById.bind(this));
 
     // Category assignment routes
     router.post('/events/:eventId/categories/:categoryId', ExpressHelper.loggedInOnly, this.assignCategoryToEvent.bind(this));
     router.post('/events/:eventId/categories', ExpressHelper.loggedInOnly, this.setCategoriesForEvent.bind(this));
     router.delete('/events/:eventId/categories/:categoryId', ExpressHelper.loggedInOnly, this.unassignCategoryFromEvent.bind(this));
     router.get('/events/:eventId/categories', this.getEventCategories.bind(this));
-    router.get('/calendars/:calendarId/categories/:categoryId/events', this.getCategoryEvents.bind(this));
 
     app.use(routePrefix, router);
   }
@@ -105,14 +107,15 @@ class CategoryRoutes {
   }
 
   /**
-   * Get a specific category
-   * GET /api/v1/calendars/:calendarId/categories/:categoryId
+   * Get a specific category by ID (backward-compatible route)
+   * GET /api/v1/categories/:categoryId
    */
-  async getCategory(req: Request, res: Response): Promise<void> {
+  async getCategoryById(req: Request, res: Response): Promise<void> {
     try {
-      const { calendarId, categoryId } = req.params;
+      const { categoryId } = req.params;
 
-      const category = await this.service.getCategory(categoryId, calendarId);
+      // Get category without requiring calendarId - the categoryId is unique
+      const category = await this.service.getCategory(categoryId);
       res.json(category.toObject());
     }
     catch (error) {
@@ -128,12 +131,12 @@ class CategoryRoutes {
   }
 
   /**
-   * Update a category's content for a specific language
-   * PUT /api/v1/calendars/:calendarId/categories/:categoryId
+   * Update a category by ID (backward-compatible route)
+   * PUT /api/v1/categories/:categoryId
    */
-  async updateCategory(req: Request, res: Response): Promise<void> {
+  async updateCategoryById(req: Request, res: Response): Promise<void> {
     try {
-      const { calendarId, categoryId } = req.params;
+      const { categoryId } = req.params;
       const account = req.user as Account;
 
       if (!account) {
@@ -143,7 +146,8 @@ class CategoryRoutes {
         return;
       }
 
-      const category = await this.service.updateCategory(account, categoryId, req.body, calendarId);
+      // Update without requiring calendarId - service will look it up
+      const category = await this.service.updateCategory(account, categoryId, req.body);
 
       res.json(category.toObject());
     }
@@ -170,12 +174,12 @@ class CategoryRoutes {
   }
 
   /**
-   * Delete a category
-   * DELETE /api/v1/calendars/:calendarId/categories/:categoryId
+   * Delete a category by ID (backward-compatible route)
+   * DELETE /api/v1/categories/:categoryId
    */
-  async deleteCategory(req: Request, res: Response): Promise<void> {
+  async deleteCategoryById(req: Request, res: Response): Promise<void> {
     try {
-      const { calendarId, categoryId } = req.params;
+      const { categoryId } = req.params;
       const account = req.user as Account;
 
       if (!account) {
@@ -185,8 +189,8 @@ class CategoryRoutes {
         return;
       }
 
-      // Verify category belongs to the specified calendar before deletion
-      await this.service.deleteCategory(account, categoryId, calendarId);
+      // Delete without requiring calendarId - service will look it up
+      await this.service.deleteCategory(account, categoryId);
       res.status(204).send();
     }
     catch (error) {
@@ -420,6 +424,32 @@ class CategoryRoutes {
       }
 
       const eventIds = await this.service.getCategoryEvents(categoryId, calendar.id);
+      res.json(eventIds);
+    }
+    catch (error) {
+      console.error('Error fetching category events:', error);
+
+      if (error instanceof CategoryNotFoundError) {
+        res.status(404).json({ "error": "Category not found", "errorName": "CategoryNotFoundError" });
+        return;
+      }
+
+      res.status(500).json({ "error": "Internal server error" });
+    }
+  }
+
+  /**
+   * Get all events assigned to a category by ID (backward-compatible route)
+   * GET /api/v1/categories/:categoryId/events
+   */
+  async getCategoryEventsById(req: Request, res: Response): Promise<void> {
+    try {
+      const { categoryId } = req.params;
+
+      // Get category first to determine its calendar
+      const category = await this.service.getCategory(categoryId);
+
+      const eventIds = await this.service.getCategoryEvents(categoryId, category.calendarId);
       res.json(eventIds);
     }
     catch (error) {

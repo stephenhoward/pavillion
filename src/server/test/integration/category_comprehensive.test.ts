@@ -189,7 +189,7 @@ describe('Category Management - Comprehensive Integration', () => {
       };
 
       const response = await request(env.app)
-        .post(`/api/v1/calendars/${calendar.id}/categories/${techCategoryId}`)
+        .put(`/api/v1/categories/${techCategoryId}`)
         .set('Authorization', 'Bearer ' + authKey)
         .send(updateData);
 
@@ -391,7 +391,7 @@ describe('Category Management - Comprehensive Integration', () => {
       };
 
       const response = await request(env.app)
-        .post(`/api/v1/calendars/${otherCalendar.id}/categories/${privateCategoryId}`)
+        .put(`/api/v1/categories/${privateCategoryId}`)
         .set('Authorization', 'Bearer ' + authKey)
         .send(updateData);
 

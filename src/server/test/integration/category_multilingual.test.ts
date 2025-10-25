@@ -184,7 +184,7 @@ describe('Category Multilingual Integration', () => {
       };
 
       const response = await request(env.app)
-        .post(`/api/v1/calendars/${calendar.id}/categories/${categoryId}`)
+        .put(`/api/v1/categories/${categoryId}`)
         .set('Authorization', 'Bearer ' + authKey)
         .send(updateData);
 
@@ -212,7 +212,7 @@ describe('Category Multilingual Integration', () => {
       };
 
       const response = await request(env.app)
-        .post(`/api/v1/calendars/${calendar.id}/categories/${categoryId}`)
+        .put(`/api/v1/categories/${categoryId}`)
         .set('Authorization', 'Bearer ' + authKey)
         .send(updateData);
 
@@ -241,7 +241,7 @@ describe('Category Multilingual Integration', () => {
       };
 
       const response = await request(env.app)
-        .post(`/api/v1/calendars/${calendar.id}/categories/${categoryId}`)
+        .put(`/api/v1/categories/${categoryId}`)
         .set('Authorization', 'Bearer ' + authKey)
         .send(updateData);
 

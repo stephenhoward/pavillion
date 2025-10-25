@@ -87,7 +87,7 @@ describe('Category Permissions Integration', () => {
         },
       };
       const updateResponse = await request(env.app)
-        .post(`/api/v1/calendars/${calendar.id}/categories/${categoryId}`)
+        .put(`/api/v1/categories/${categoryId}`)
         .set('Authorization', 'Bearer ' + ownerAuthKey)
         .send(updateData);
 
@@ -151,7 +151,7 @@ describe('Category Permissions Integration', () => {
         },
       };
       const updateResponse = await request(env.app)
-        .post(`/api/v1/calendars/${calendar.id}/categories/${categoryId}`)
+        .put(`/api/v1/categories/${categoryId}`)
         .set('Authorization', 'Bearer ' + editorAuthKey)
         .send(updateData);
 
@@ -216,7 +216,7 @@ describe('Category Permissions Integration', () => {
         },
       };
       const updateResponse = await request(env.app)
-        .post(`/api/v1/calendars/${calendar.id}/categories/${categoryId}`)
+        .put(`/api/v1/categories/${categoryId}`)
         .set('Authorization', 'Bearer ' + unauthorizedAuthKey)
         .send(updateData);
 

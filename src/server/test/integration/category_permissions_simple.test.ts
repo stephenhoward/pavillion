@@ -85,7 +85,7 @@ describe('Category Permissions - Simple Integration', () => {
         },
       };
       const updateResponse = await request(env.app)
-        .post(`/api/v1/calendars/${ownerCalendar.id}/categories/${categoryId}`)
+        .put(`/api/v1/categories/${categoryId}`)
         .set('Authorization', 'Bearer ' + ownerAuthKey)
         .send(updateData);
 
@@ -150,7 +150,7 @@ describe('Category Permissions - Simple Integration', () => {
         },
       };
       const updateResponse = await request(env.app)
-        .post(`/api/v1/calendars/${ownerCalendar.id}/categories/${categoryId}`)
+        .put(`/api/v1/categories/${categoryId}`)
         .set('Authorization', 'Bearer ' + nonOwnerAuthKey)
         .send(updateData);
 
