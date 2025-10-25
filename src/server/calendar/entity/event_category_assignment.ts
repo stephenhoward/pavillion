@@ -1,11 +1,22 @@
-import { Table, Column, Model, DataType, PrimaryKey, CreatedAt, BelongsTo, ForeignKey, Index } from 'sequelize-typescript';
+import { Table, Column, Model, DataType, PrimaryKey, CreatedAt, Index } from 'sequelize-typescript';
 import { EventCategoryAssignmentModel } from '@/common/model/event_category_assignment';
-import { EventEntity } from './event';
-import { EventCategoryEntity } from './event_category';
+import db from '@/server/common/entity/db';
 
 /**
  * Event category assignment database entity.
  * Represents the many-to-many relationship between events and categories.
+ *
+ * CIRCULAR DEPENDENCY RESOLUTION:
+ * To break the circular dependency with EventEntity, this entity defines foreign
+ * keys manually without using @ForeignKey or @BelongsTo decorators. The associations
+ * are established programmatically after model registration in event.ts.
+ *
+ * This avoids the circular import chain:
+ * - event.ts would import event_category_assignment.ts (for @HasMany decorator)
+ * - event_category_assignment.ts would import event.ts (for @BelongsTo decorator)
+ *
+ * Instead, both entities define their schemas independently, and associations
+ * are wired up after both classes are fully loaded.
  */
 @Table({
   tableName: 'event_category_assignments',
@@ -20,7 +31,6 @@ export class EventCategoryAssignmentEntity extends Model {
   })
   declare id: string;
 
-  @ForeignKey(() => EventEntity)
   @Index('idx_event_category_assignment_event_id')
   @Column({
     type: DataType.UUID,
@@ -29,7 +39,6 @@ export class EventCategoryAssignmentEntity extends Model {
   })
   declare event_id: string;
 
-  @ForeignKey(() => EventCategoryEntity)
   @Index('idx_event_category_assignment_category_id')
   @Column({
     type: DataType.UUID,
@@ -41,12 +50,12 @@ export class EventCategoryAssignmentEntity extends Model {
   @CreatedAt
   declare created_at: Date;
 
-  // Associations
-  @BelongsTo(() => EventEntity)
-  declare event: EventEntity;
-
-  @BelongsTo(() => EventCategoryEntity)
-  declare category: EventCategoryEntity;
+  /**
+   * Associations defined programmatically in event.ts
+   * to avoid circular dependencies.
+   */
+  declare event: any;
+  declare category: any;
 
   /**
    * Convert entity to domain model.
@@ -73,4 +82,6 @@ export class EventCategoryAssignmentEntity extends Model {
   }
 }
 
-// Do not register here - registered together with EventEntity in event.ts to avoid circular dependency
+// NOTE: EventCategoryAssignmentEntity is registered in event.ts
+// along with EventEntity to ensure proper initialization order and
+// to establish associations programmatically.

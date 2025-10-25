@@ -57,8 +57,10 @@ class EventService {
         MediaEntity,
         {
           model: EventCategoryAssignmentEntity,
+          as: 'categoryAssignments', // Required because association uses alias (see event.ts line 231)
           include: [{
             model: EventCategoryEntity,
+            as: 'category', // Required because association uses alias (see event.ts line 241)
             include: [EventCategoryContentEntity],
           }],
         },

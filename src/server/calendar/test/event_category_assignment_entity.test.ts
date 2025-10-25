@@ -2,6 +2,10 @@ import { describe, test, expect, beforeEach } from 'vitest';
 import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_category_assignment';
 import { EventCategoryAssignmentModel } from '@/common/model/event_category_assignment';
 
+// Import event.ts to trigger entity registration and association setup.
+// EventCategoryAssignmentEntity is registered in event.ts to avoid circular dependencies.
+import '@/server/calendar/entity/event';
+
 describe('EventCategoryAssignmentEntity', () => {
   let sampleData: any;
 

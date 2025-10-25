@@ -6,7 +6,6 @@ import db from '@/server/common/entity/db';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { LocationEntity } from '@/server/calendar/entity/location';
 import { MediaEntity } from '@/server/media/entity/media';
-import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_category_assignment';
 
 @Table({ tableName: 'event' })
 class EventEntity extends Model {
@@ -59,8 +58,11 @@ class EventEntity extends Model {
   @BelongsTo(() => MediaEntity)
   declare media: MediaEntity;
 
-  @HasMany(() => EventCategoryAssignmentEntity)
-  declare categoryAssignments: EventCategoryAssignmentEntity[];
+  /**
+   * Association with EventCategoryAssignmentEntity defined programmatically
+   * after model registration to avoid circular dependency.
+   */
+  declare categoryAssignments: any[];
 
   toModel(): CalendarEvent {
     let model = new CalendarEvent( this.calendar_id, this.id, this.event_source_url );
@@ -196,8 +198,50 @@ class EventScheduleEntity extends Model {
   }
 };
 
-// Register both EventEntity and EventCategoryAssignmentEntity together to establish proper associations
+/**
+ * Import EventCategoryAssignmentEntity after all class definitions.
+ * This import happens after the EventEntity class is fully defined,
+ * but event_category_assignment.ts doesn't import EventEntity,
+ * so there's no circular dependency at module load time.
+ */
+import { EventCategoryAssignmentEntity } from './event_category_assignment';
+import { EventCategoryEntity } from './event_category';
+
+/**
+ * Register all entities with Sequelize.
+ *
+ * CIRCULAR DEPENDENCY RESOLUTION:
+ * Both EventEntity and EventCategoryAssignmentEntity are registered together
+ * to ensure both classes exist before associations are defined.
+ */
 db.addModels([EventEntity, EventContentEntity, EventScheduleEntity, EventCategoryAssignmentEntity]);
+
+/**
+ * Define associations programmatically after model registration.
+ *
+ * This approach breaks the circular dependency by:
+ * 1. EventEntity class is defined without importing EventCategoryAssignmentEntity
+ * 2. EventCategoryAssignmentEntity class is defined without importing EventEntity
+ * 3. Both entities are registered with Sequelize
+ * 4. Associations are established using direct class references (no decorators)
+ *
+ * This is cleaner than an async IIFE because it executes synchronously during
+ * module initialization, ensuring associations are ready before any code uses them.
+ */
+EventEntity.hasMany(EventCategoryAssignmentEntity, {
+  foreignKey: 'event_id',
+  as: 'categoryAssignments',
+});
+
+EventCategoryAssignmentEntity.belongsTo(EventEntity, {
+  foreignKey: 'event_id',
+  as: 'event',
+});
+
+EventCategoryAssignmentEntity.belongsTo(EventCategoryEntity, {
+  foreignKey: 'category_id',
+  as: 'category',
+});
 
 export {
   EventEntity,

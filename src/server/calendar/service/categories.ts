@@ -318,6 +318,7 @@ class CategoryService {
       where: { event_id: eventId },
       include: [{
         model: EventCategoryEntity,
+        as: 'category', // Required because association uses alias (see event.ts line 241)
         include: [EventCategoryContentEntity],
       }],
     });

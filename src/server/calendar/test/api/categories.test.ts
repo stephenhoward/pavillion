@@ -176,7 +176,7 @@ describe('Category API', () => {
       router.get('/handler', (req, res) => {
         req.params.calendarId = 'calendar-id';
         req.params.categoryId = 'cat-id';
-        routes.getCategory(req, res);
+        routes.getCategoryById(req, res);
       });
 
       const response = await request(testApp(router))
@@ -194,7 +194,7 @@ describe('Category API', () => {
       router.get('/handler', (req, res) => {
         req.params.calendarId = 'calendar-id';
         req.params.categoryId = 'nonexistent';
-        routes.getCategory(req, res);
+        routes.getCategoryById(req, res);
       });
 
       const response = await request(testApp(router))
@@ -211,7 +211,7 @@ describe('Category API', () => {
       router.get('/handler', (req, res) => {
         req.params.calendarId = 'calendar-id';
         req.params.categoryId = 'cat-id';
-        routes.getCategory(req, res);
+        routes.getCategoryById(req, res);
       });
 
       const response = await request(testApp(router))
@@ -224,7 +224,7 @@ describe('Category API', () => {
 
   describe('PUT /calendars/:calendarId/categories/:categoryId', () => {
     it('should fail without authentication', async () => {
-      router.put('/handler', (req, res) => { routes.updateCategory(req, res); });
+      router.put('/handler', (req, res) => { routes.updateCategoryById(req, res); });
 
       const response = await request(testApp(router))
         .put('/handler')
@@ -242,7 +242,7 @@ describe('Category API', () => {
       router.put('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'calendar-id';
         req.params.categoryId = 'cat-id';
-        routes.updateCategory(req, res);
+        routes.updateCategoryById(req, res);
       });
 
       const response = await request(testApp(router))
@@ -261,7 +261,7 @@ describe('Category API', () => {
       router.put('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'calendar-id';
         req.params.categoryId = 'nonexistent';
-        routes.updateCategory(req, res);
+        routes.updateCategoryById(req, res);
       });
 
       const response = await request(testApp(router))
@@ -280,7 +280,7 @@ describe('Category API', () => {
       router.put('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'calendar-id';
         req.params.categoryId = 'cat-id';
-        routes.updateCategory(req, res);
+        routes.updateCategoryById(req, res);
       });
 
       const response = await request(testApp(router))
@@ -299,7 +299,7 @@ describe('Category API', () => {
       router.put('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'calendar-id';
         req.params.categoryId = 'cat-id';
-        routes.updateCategory(req, res);
+        routes.updateCategoryById(req, res);
       });
 
       const response = await request(testApp(router))
@@ -313,7 +313,7 @@ describe('Category API', () => {
 
   describe('DELETE /calendars/:calendarId/categories/:categoryId', () => {
     it('should fail without authentication', async () => {
-      router.delete('/handler', (req, res) => { routes.deleteCategory(req, res); });
+      router.delete('/handler', (req, res) => { routes.deleteCategoryById(req, res); });
 
       const response = await request(testApp(router))
         .delete('/handler');
@@ -333,7 +333,7 @@ describe('Category API', () => {
       router.delete('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'calendar-id';
         req.params.categoryId = 'cat-id';
-        routes.deleteCategory(req, res);
+        routes.deleteCategoryById(req, res);
       });
 
       const response = await request(testApp(router))
@@ -350,7 +350,7 @@ describe('Category API', () => {
       router.delete('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'calendar-id';
         req.params.categoryId = 'nonexistent';
-        routes.deleteCategory(req, res);
+        routes.deleteCategoryById(req, res);
       });
 
       const response = await request(testApp(router))
@@ -367,7 +367,7 @@ describe('Category API', () => {
       router.delete('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'calendar-id';
         req.params.categoryId = 'cat-id';
-        routes.deleteCategory(req, res);
+        routes.deleteCategoryById(req, res);
       });
 
       const response = await request(testApp(router))
@@ -388,7 +388,7 @@ describe('Category API', () => {
       router.delete('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'calendar-id';
         req.params.categoryId = 'cat-id';
-        routes.deleteCategory(req, res);
+        routes.deleteCategoryById(req, res);
       });
 
       const response = await request(testApp(router))
