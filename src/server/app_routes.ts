@@ -72,7 +72,7 @@ const handlers = {
    * @returns {Promise<void>}
    */
   assets: async (req: Request, res: Response) => {
-    res.redirect(303, `http://localhost:5173/${req.path}`);
+    res.redirect(303, `http://localhost:5173${req.path}`);
   },
 
   /**
@@ -83,7 +83,7 @@ const handlers = {
    * @returns {Promise<void>}
    */
   coverage: async (req: Request, res: Response) => {
-    res.redirect(303, `http://localhost:5173/${req.path}`);
+    res.redirect(303, `http://localhost:5173${req.path}`);
   },
 };
 

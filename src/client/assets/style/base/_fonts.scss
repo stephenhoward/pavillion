@@ -150,14 +150,14 @@
 
 /* Configure OpenType features for Creato Display */
 .font-features-default {
-  font-feature-settings: 
+  font-feature-settings:
     "kern" 1,      /* Enable kerning */
     "liga" 1,      /* Enable ligatures */
     "calt" 1;      /* Enable contextual alternates */
 }
 
 .font-features-numeric {
-  font-feature-settings: 
+  font-feature-settings:
     "kern" 1,
     "liga" 1,
     "tnum" 1,      /* Tabular numbers */
@@ -165,7 +165,7 @@
 }
 
 .font-features-small-caps {
-  font-feature-settings: 
+  font-feature-settings:
     "kern" 1,
     "liga" 1,
     "smcp" 1;      /* Small caps */
