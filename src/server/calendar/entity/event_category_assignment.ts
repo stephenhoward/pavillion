@@ -1,6 +1,5 @@
 import { Table, Column, Model, DataType, PrimaryKey, CreatedAt, Index } from 'sequelize-typescript';
 import { EventCategoryAssignmentModel } from '@/common/model/event_category_assignment';
-import db from '@/server/common/entity/db';
 
 /**
  * Event category assignment database entity.

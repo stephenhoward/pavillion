@@ -7,7 +7,9 @@ import EditorsTab from './editors.vue';
 import CalendarService from '../../../service/calendar';
 
 const route = useRoute();
-const calendarUrlName = route.params.calendar;
+const calendarUrlName = Array.isArray(route.params.calendar)
+  ? route.params.calendar[0]
+  : route.params.calendar || '';
 
 const { t } = useTranslation('calendars', {
   keyPrefix: 'management',

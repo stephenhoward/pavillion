@@ -53,7 +53,7 @@
             @change="toggleCategory(category.id)"
           />
           <span class="category-name">
-            {{ category.content(i18n.language)?.name || 'Unnamed Category' }}
+            {{ getCategoryName(category) }}
           </span>
         </div>
       </div>
@@ -109,6 +109,24 @@ const hasActiveFilters = computed(() => {
   return state.searchQuery.trim() !== '' ||
          state.selectedCategoryIds.length > 0;
 });
+
+// Get category name with null safety
+const getCategoryName = (category) => {
+  if (!category) {
+    return 'Unnamed Category';
+  }
+
+  // Safely access category content with the current language
+  const currentLanguage = i18n?.language || 'en';
+
+  if (typeof category.content === 'function') {
+    const content = category.content(currentLanguage);
+    return content?.name || 'Unnamed Category';
+  }
+
+  // Fallback for non-function content
+  return category.name || 'Unnamed Category';
+};
 
 // Search with debouncing
 const onSearchInput = () => {

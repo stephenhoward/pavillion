@@ -125,7 +125,7 @@ const newEvent = async () => {
 const navigateToManagement = () => {
   router.push({
     name: 'calendar_management',
-    params: { calendar: state.calendar.id },
+    params: { calendar: state.calendar.urlName },
   });
 };
 
@@ -247,7 +247,7 @@ const getRecurrenceText = (event) => {
             @click="navigateToManagement"
             v-if="state.calendar"
             :aria-label="`Manage calendar: ${state.calendar.urlName}`"
-            :to="{ name: 'calendar_management', params: { calendar: state.calendar.id } }"
+            :to="{ name: 'calendar_management', params: { calendar: state.calendar.urlName } }"
           >
             {{ t('manage_calendar') }}
           </RouterLink>

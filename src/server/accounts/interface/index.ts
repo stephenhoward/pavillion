@@ -99,7 +99,7 @@ export default class AccountsInterface {
         limit: number;
       };
     }> {
-    return this.accountService.listAllAccounts(page, limit, search);
+    return this.accountService.listAccounts(page, limit, search);
   }
 
 }
