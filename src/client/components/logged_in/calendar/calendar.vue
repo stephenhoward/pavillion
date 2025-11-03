@@ -55,12 +55,72 @@ const currentFilters = reactive({
   categories: [],
 });
 
+// Initial filters from URL parameters
+const initialFilters = reactive({
+  search: '',
+  categories: [],
+});
+
+/**
+ * Reads URL query parameters and initializes filter state.
+ * Called on component mount to restore bookmarked searches.
+ */
+const initializeFiltersFromURL = () => {
+  const searchParam = route.query.search;
+  const categoriesParam = route.query.categories;
+
+  initialFilters.search = typeof searchParam === 'string' ? searchParam : '';
+  initialFilters.categories = categoriesParam
+    ? (typeof categoriesParam === 'string' ? categoriesParam.split(',') : [])
+    : [];
+
+  // Also initialize currentFilters from URL
+  Object.assign(currentFilters, {
+    search: initialFilters.search,
+    categories: [...initialFilters.categories],
+  });
+};
+
+/**
+ * Updates URL query parameters when filters change.
+ * Uses router.replace to avoid polluting browser history.
+ */
+const syncFiltersToURL = () => {
+  const query = { ...route.query };
+
+  // Update or remove search parameter
+  if (currentFilters.search && currentFilters.search.trim() !== '') {
+    query.search = currentFilters.search.trim();
+  }
+  else {
+    delete query.search;
+  }
+
+  // Update or remove categories parameter
+  if (currentFilters.categories && currentFilters.categories.length > 0) {
+    query.categories = currentFilters.categories.join(',');
+  }
+  else {
+    delete query.categories;
+  }
+
+  // Update URL without page reload, preserving current route
+  router.replace({
+    name: route.name,
+    params: route.params,
+    query,
+  });
+};
+
 const handleFiltersChanged = async (filters) => {
   // Update current filters
   Object.assign(currentFilters, {
     search: filters.search || '',
     categories: filters.categories || [],
   });
+
+  // Sync filters to URL
+  syncFiltersToURL();
 
   // Reload events with new filters
   state.isLoading = true;
@@ -79,6 +139,10 @@ const handleFiltersChanged = async (filters) => {
 };
 
 onBeforeMount(async () => {
+  // Initialize filters from URL parameters first
+  initializeFiltersFromURL();
+
+  // Then load calendar data with filters if any
   await loadCalendarData();
 });
 
@@ -93,8 +157,16 @@ const loadCalendarData = async () => {
     // Load calendar by URL name
     state.calendar = await calendarService.getCalendarByUrlName(calendarId.value);
 
-    // Load events for this calendar
-    await eventService.loadCalendarEvents(calendarId.value);
+    // Load events for this calendar with current filters (from URL if present)
+    const filters = {};
+    if (currentFilters.search) {
+      filters.search = currentFilters.search;
+    }
+    if (currentFilters.categories && currentFilters.categories.length > 0) {
+      filters.categories = currentFilters.categories;
+    }
+
+    await eventService.loadCalendarEvents(calendarId.value, Object.keys(filters).length > 0 ? filters : undefined);
   }
   catch (error) {
     console.error('Error loading calendar data:', error);
@@ -258,7 +330,7 @@ const getRecurrenceText = (event) => {
       <SearchFilter
         v-if="state.calendar && store.events && store.events.length > 0"
         :calendar-id="calendarId"
-        :initial-filters="currentFilters"
+        :initial-filters="initialFilters"
         @filters-changed="handleFiltersChanged"
       />
 
