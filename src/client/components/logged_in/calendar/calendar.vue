@@ -62,8 +62,24 @@ const initialFilters = reactive({
 });
 
 /**
- * Reads URL query parameters and initializes filter state.
- * Called on component mount to restore bookmarked searches.
+ * Initializes filter state from URL query parameters.
+ *
+ * Reads search and category filters from the URL to support bookmarkable searches.
+ * This enables users to share or bookmark specific filtered views of their calendar.
+ *
+ * URL Parameter Format:
+ * - search: String query term (e.g., ?search=workshop)
+ * - categories: Comma-separated category IDs (e.g., ?categories=cat1,cat2)
+ * - Combined: ?search=workshop&categories=cat1,cat2
+ *
+ * The parsed filters are stored in both initialFilters (passed to SearchFilter component)
+ * and currentFilters (used for tracking state changes).
+ *
+ * @example
+ * // URL: /calendar/my-calendar?search=conference&categories=tech,business
+ * // Results in:
+ * // initialFilters = { search: 'conference', categories: ['tech', 'business'] }
+ * // currentFilters = { search: 'conference', categories: ['tech', 'business'] }
  */
 const initializeFiltersFromURL = () => {
   const searchParam = route.query.search;
@@ -82,8 +98,27 @@ const initializeFiltersFromURL = () => {
 };
 
 /**
- * Updates URL query parameters when filters change.
- * Uses router.replace to avoid polluting browser history.
+ * Synchronizes current filter state to URL query parameters.
+ *
+ * Updates the browser URL to reflect active filters without triggering a page reload.
+ * Uses router.replace() instead of router.push() to avoid polluting browser history.
+ *
+ * This enables:
+ * - Bookmarking specific search/filter combinations
+ * - Sharing filtered views via URL
+ * - Browser back/forward navigation with filter state
+ *
+ * URL Parameter Behavior:
+ * - Non-empty search: Adds/updates ?search=query parameter
+ * - Empty search: Removes search parameter from URL
+ * - Selected categories: Adds/updates ?categories=id1,id2 parameter
+ * - No categories: Removes categories parameter from URL
+ * - Preserves: All other existing query parameters
+ *
+ * @example
+ * // Current URL: /calendar/my-calendar
+ * // After search for "workshop": /calendar/my-calendar?search=workshop
+ * // After clearing search: /calendar/my-calendar
  */
 const syncFiltersToURL = () => {
   const query = { ...route.query };
@@ -112,6 +147,27 @@ const syncFiltersToURL = () => {
   });
 };
 
+/**
+ * Handles filter changes from SearchFilter component.
+ *
+ * This is the main integration point between SearchFilter component and calendar view.
+ * When users change search terms or category selections, this handler:
+ * 1. Updates local filter state
+ * 2. Syncs filters to URL parameters (for bookmarking)
+ * 3. Reloads events from API with new filters
+ * 4. Clears any bulk selections (filtered view may exclude selected items)
+ *
+ * @param filters - Filter object from SearchFilter component
+ * @param filters.search - Search query string (optional)
+ * @param filters.categories - Array of category IDs (optional)
+ *
+ * @example
+ * // SearchFilter emits: { search: 'workshop', categories: ['cat1', 'cat2'] }
+ * // This function will:
+ * // 1. Update currentFilters
+ * // 2. Update URL to: ?search=workshop&categories=cat1,cat2
+ * // 3. Call API: /api/v1/calendars/:id/events?search=workshop&categories=cat1,cat2
+ */
 const handleFiltersChanged = async (filters) => {
   // Update current filters
   Object.assign(currentFilters, {
@@ -297,6 +353,11 @@ const getRecurrenceText = (event) => {
 
   return labels[frequency] || 'Recurring event';
 };
+
+// Check if any filters are currently active
+const hasActiveFilters = computed(() => {
+  return !!(currentFilters.search?.trim() || currentFilters.categories?.length > 0);
+});
 </script>
 
 <template>
@@ -328,7 +389,7 @@ const getRecurrenceText = (event) => {
 
       <!-- Search and Filter Controls -->
       <SearchFilter
-        v-if="state.calendar && store.events && store.events.length > 0"
+        v-if="state.calendar && (store.events?.length > 0 || hasActiveFilters)"
         :calendar-id="calendarId"
         :initial-filters="initialFilters"
         @filters-changed="handleFiltersChanged"
@@ -401,7 +462,13 @@ const getRecurrenceText = (event) => {
         </ul>
       </section>
 
-      <EmptyLayout v-else-if="!state.isLoading && (!store.events || store.events.length === 0)"
+      <!-- Empty State: No results from filters -->
+      <EmptyLayout v-else-if="!state.isLoading && hasActiveFilters && (!store.events || store.events.length === 0)"
+                   title="No events found"
+                   description="No events match your current search criteria. Try adjusting your filters or clearing them to see all events." />
+
+      <!-- Empty State: No events at all -->
+      <EmptyLayout v-else-if="!state.isLoading && !hasActiveFilters && (!store.events || store.events.length === 0)"
                    :title="t('noEvents')"
                    :description="t('noEventsDescription')">
         <button type="button" class="primary" @click="newEvent()">

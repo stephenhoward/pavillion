@@ -837,22 +837,10 @@ $spacing-4xl: 40px;
 
 // Base filter container with responsive layout - switches from vertical to horizontal on larger screens
 @mixin filter-container {
-  display: flex;
-  flex-direction: column;
-  gap: $spacing-lg;
-  padding: $spacing-lg;
-  background: $light-mode-background;
-  border-radius: $component-border-radius;
   margin-bottom: $spacing-lg;
   
   @include dark-mode {
     background: $dark-mode-background;
-  }
-  
-  @include medium-size-device {
-    flex-direction: row;
-    align-items: flex-start;
-    gap: $spacing-2xl;
   }
 }
 
@@ -929,7 +917,7 @@ $spacing-4xl: 40px;
   gap: $spacing-xs;
   padding: $spacing-xs $spacing-sm;
   border: 1px solid #ddd;
-  border-radius: $spacing-xs;
+  border-radius: $spacing-lg;
   cursor: pointer;
   font-size: 12px;
   background: white;
@@ -942,6 +930,9 @@ $spacing-4xl: 40px;
   &.selected {
     background: #e3f2fd;
     border-color: $focus-color;
+    &:after {
+      content: '✖️';
+    }
   }
   
   @include dark-mode {

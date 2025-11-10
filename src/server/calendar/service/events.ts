@@ -16,7 +16,7 @@ import { EventCategoryEntity } from '@/server/calendar/entity/event_category';
 import { EventCategoryContentEntity } from '@/server/calendar/entity/event_category_content';
 import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_category_assignment';
 import db from '@/server/common/entity/db';
-import { Op } from 'sequelize';
+import { Op, fn, col, where, literal } from 'sequelize';
 
 /**
  * Service class for managing events
@@ -67,15 +67,13 @@ class EventService {
       ],
     };    // Handle search parameter
     if (options?.search && options.search.trim()) {
-      const searchTerm = `%${options.search.trim()}%`;
+      // Use LOWER() for case-insensitive search that works on both PostgreSQL and SQLite
+      // Escape single quotes in search term for SQL literal
+      const searchTerm = options.search.trim().toLowerCase().replace(/'/g, "''");
       queryOptions.include.push({
         model: EventContentEntity,
-        where: {
-          [Op.or]: [
-            { name: { [Op.iLike]: searchTerm } },
-            { description: { [Op.iLike]: searchTerm } },
-          ],
-        },
+        as: 'content',  // Use the association alias
+        where: literal(`(LOWER(\`content\`.\`name\`) LIKE '%${searchTerm}%' OR LOWER(\`content\`.\`description\`) LIKE '%${searchTerm}%')`),
         required: true, // INNER JOIN to only include events with matching content
       });
     }

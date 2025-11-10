@@ -2,7 +2,7 @@
   <div class="search-filter">
     <!-- Search Input -->
     <div class="search-section">
-      <label for="event-search" class="search-label">
+      <label for="event-search" class="search-label sr-only">
         {{ t('search_events') }}
       </label>
       <div class="search-input-container">
@@ -47,11 +47,6 @@
           :class="{ 'selected': state.selectedCategoryIds.includes(category.id) }"
           @click="toggleCategory(category.id)"
         >
-          <input
-            type="checkbox"
-            :checked="state.selectedCategoryIds.includes(category.id)"
-            @change="toggleCategory(category.id)"
-          />
           <span class="category-name">
             {{ getCategoryName(category) }}
           </span>
@@ -248,6 +243,7 @@ onMounted(() => {
 
 .category-filter-section {
   @include filter-section;
+  margin-top: $spacing-md;
 
   .filter-label {
     @include filter-label;
