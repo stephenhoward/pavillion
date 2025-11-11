@@ -17,6 +17,7 @@ import {
   CategoryAlreadyAssignedError,
   CategoryEventCalendarMismatchError,
 } from '@/common/exceptions/category';
+import db from '@/server/common/entity/db';
 
 describe('CategoryService', () => {
   let sandbox: sinon.SinonSandbox;
@@ -302,6 +303,14 @@ describe('CategoryService', () => {
       mockCalendarService.getCalendar.resolves(testCalendar);
       mockCalendarService.userCanModifyCalendar.resolves(true);
 
+      // Stub transaction
+      const mockTransaction = {
+        commit: sandbox.stub(),
+        rollback: sandbox.stub(),
+      };
+      sandbox.stub(db, 'transaction').resolves(mockTransaction as any);
+
+      sandbox.stub(EventCategoryAssignmentEntity, 'destroy').resolves(1);
       sandbox.stub(EventCategoryContentEntity, 'destroy').resolves(1);
       sandbox.stub(EventCategoryEntity, 'destroy').resolves(1);
 

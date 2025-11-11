@@ -85,7 +85,7 @@ describe('Category Permissions - Simple Integration', () => {
         },
       };
       const updateResponse = await request(env.app)
-        .put(`/api/v1/categories/${categoryId}`)
+        .put(`/api/v1/calendars/${ownerCalendar.id}/categories/${categoryId}`)
         .set('Authorization', 'Bearer ' + ownerAuthKey)
         .send(updateData);
 
@@ -107,7 +107,7 @@ describe('Category Permissions - Simple Integration', () => {
 
       // Delete the category
       const deleteResponse = await request(env.app)
-        .delete(`/api/v1/categories/${categoryId}`)
+        .delete(`/api/v1/calendars/${ownerCalendar.id}/categories/${categoryId}`)
         .set('Authorization', 'Bearer ' + ownerAuthKey);
 
       expect(deleteResponse.status).toBe(204);
@@ -150,7 +150,7 @@ describe('Category Permissions - Simple Integration', () => {
         },
       };
       const updateResponse = await request(env.app)
-        .put(`/api/v1/categories/${categoryId}`)
+        .put(`/api/v1/calendars/${ownerCalendar.id}/categories/${categoryId}`)
         .set('Authorization', 'Bearer ' + nonOwnerAuthKey)
         .send(updateData);
 
@@ -173,7 +173,7 @@ describe('Category Permissions - Simple Integration', () => {
 
       // Try to delete as non-owner
       const deleteResponse = await request(env.app)
-        .delete(`/api/v1/categories/${categoryId}`)
+        .delete(`/api/v1/calendars/${ownerCalendar.id}/categories/${categoryId}`)
         .set('Authorization', 'Bearer ' + nonOwnerAuthKey);
 
       expect(deleteResponse.status).toBe(403);
@@ -322,7 +322,7 @@ describe('Category Permissions - Simple Integration', () => {
 
       // Read category as non-owner
       const readResponse = await request(env.app)
-        .get(`/api/v1/categories/${categoryId}`)
+        .get(`/api/v1/calendars/${ownerCalendar.id}/categories/${categoryId}`)
         .set('Authorization', 'Bearer ' + nonOwnerAuthKey);
 
       expect(readResponse.status).toBe(200);

@@ -15,6 +15,7 @@ import CategoryService from './categories';
 import { EventCategoryEntity } from '@/server/calendar/entity/event_category';
 import { EventCategoryContentEntity } from '@/server/calendar/entity/event_category_content';
 import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_category_assignment';
+import { EventInstanceEntity } from '@/server/calendar/entity/event_instance';
 import db from '@/server/common/entity/db';
 import { Op, fn, col, where, literal } from 'sequelize';
 
@@ -585,23 +586,32 @@ class EventService {
 
     const transaction = await db.transaction();
     try {
-      // Delete related records
-      await EventContentEntity.destroy({
+      // Delete related records in correct order to satisfy foreign key constraints
+      // 1. Delete event instances first
+      await EventInstanceEntity.destroy({
         where: { event_id: eventId },
         transaction,
       });
 
-      await EventScheduleEntity.destroy({
-        where: { event_id: eventId },
-        transaction,
-      });
-
+      // 2. Delete category assignments
       await EventCategoryAssignmentEntity.destroy({
         where: { event_id: eventId },
         transaction,
       });
 
-      // Delete the main event entity
+      // 3. Delete event schedules
+      await EventScheduleEntity.destroy({
+        where: { event_id: eventId },
+        transaction,
+      });
+
+      // 4. Delete event content translations
+      await EventContentEntity.destroy({
+        where: { event_id: eventId },
+        transaction,
+      });
+
+      // 5. Finally, delete the main event entity
       await eventEntity.destroy({ transaction });
 
       await transaction.commit();

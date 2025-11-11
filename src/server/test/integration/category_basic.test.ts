@@ -145,9 +145,9 @@ describe('Category Basic Integration', () => {
   it('should handle permission errors correctly', async () => {
     const authKey = await env.login(userEmail, userPassword);
 
-    // Try to get a non-existent category
+    // Try to get a non-existent category (now using calendar-scoped route)
     const response = await request(env.app)
-      .get('/api/v1/categories/non-existent-id')
+      .get(`/api/v1/calendars/${calendar.id}/categories/non-existent-id`)
       .set('Authorization', 'Bearer ' + authKey);
     expect(response.status).toBe(404);
     expect(response.body).toHaveProperty('errorName', 'CategoryNotFoundError');

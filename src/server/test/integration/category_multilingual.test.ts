@@ -184,7 +184,7 @@ describe('Category Multilingual Integration', () => {
       };
 
       const response = await request(env.app)
-        .put(`/api/v1/categories/${categoryId}`)
+        .put(`/api/v1/calendars/${calendar.id}/categories/${categoryId}`)
         .set('Authorization', 'Bearer ' + authKey)
         .send(updateData);
 
@@ -212,7 +212,7 @@ describe('Category Multilingual Integration', () => {
       };
 
       const response = await request(env.app)
-        .put(`/api/v1/categories/${categoryId}`)
+        .put(`/api/v1/calendars/${calendar.id}/categories/${categoryId}`)
         .set('Authorization', 'Bearer ' + authKey)
         .send(updateData);
 
@@ -241,7 +241,7 @@ describe('Category Multilingual Integration', () => {
       };
 
       const response = await request(env.app)
-        .put(`/api/v1/categories/${categoryId}`)
+        .put(`/api/v1/calendars/${calendar.id}/categories/${categoryId}`)
         .set('Authorization', 'Bearer ' + authKey)
         .send(updateData);
 
@@ -300,7 +300,7 @@ describe('Category Multilingual Integration', () => {
       const authKey = await env.login(userEmail, userPassword);
 
       const response = await request(env.app)
-        .get(`/api/v1/categories/${multilingualCategoryId}`)
+        .get(`/api/v1/calendars/${calendar.id}/categories/${multilingualCategoryId}`)
         .set('Authorization', 'Bearer ' + authKey);
 
       expect(response.status).toBe(200);

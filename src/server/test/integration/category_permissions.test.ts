@@ -87,7 +87,7 @@ describe('Category Permissions Integration', () => {
         },
       };
       const updateResponse = await request(env.app)
-        .put(`/api/v1/categories/${categoryId}`)
+        .put(`/api/v1/calendars/${calendar.id}/categories/${categoryId}`)
         .set('Authorization', 'Bearer ' + ownerAuthKey)
         .send(updateData);
 
@@ -109,7 +109,7 @@ describe('Category Permissions Integration', () => {
 
       // Delete the category
       const deleteResponse = await request(env.app)
-        .delete(`/api/v1/categories/${categoryId}`)
+        .delete(`/api/v1/calendars/${calendar.id}/categories/${categoryId}`)
         .set('Authorization', 'Bearer ' + ownerAuthKey);
 
       expect(deleteResponse.status).toBe(204);
@@ -151,7 +151,7 @@ describe('Category Permissions Integration', () => {
         },
       };
       const updateResponse = await request(env.app)
-        .put(`/api/v1/categories/${categoryId}`)
+        .put(`/api/v1/calendars/${calendar.id}/categories/${categoryId}`)
         .set('Authorization', 'Bearer ' + editorAuthKey)
         .send(updateData);
 
@@ -173,7 +173,7 @@ describe('Category Permissions Integration', () => {
 
       // Delete the category
       const deleteResponse = await request(env.app)
-        .delete(`/api/v1/categories/${categoryId}`)
+        .delete(`/api/v1/calendars/${calendar.id}/categories/${categoryId}`)
         .set('Authorization', 'Bearer ' + editorAuthKey);
 
       expect(deleteResponse.status).toBe(204);
@@ -216,7 +216,7 @@ describe('Category Permissions Integration', () => {
         },
       };
       const updateResponse = await request(env.app)
-        .put(`/api/v1/categories/${categoryId}`)
+        .put(`/api/v1/calendars/${calendar.id}/categories/${categoryId}`)
         .set('Authorization', 'Bearer ' + unauthorizedAuthKey)
         .send(updateData);
 
@@ -239,7 +239,7 @@ describe('Category Permissions Integration', () => {
 
       // Try to delete as unauthorized user
       const deleteResponse = await request(env.app)
-        .delete(`/api/v1/categories/${categoryId}`)
+        .delete(`/api/v1/calendars/${calendar.id}/categories/${categoryId}`)
         .set('Authorization', 'Bearer ' + unauthorizedAuthKey);
 
       expect(deleteResponse.status).toBe(403);

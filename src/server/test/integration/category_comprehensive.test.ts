@@ -160,7 +160,7 @@ describe('Category Management - Comprehensive Integration', () => {
       const authKey = await env.login(userEmail, userPassword);
 
       const response = await request(env.app)
-        .get(`/api/v1/categories/${techCategoryId}`)
+        .get(`/api/v1/calendars/${calendar.id}/categories/${techCategoryId}`)
         .set('Authorization', 'Bearer ' + authKey);
 
       expect(response.status).toBe(200);
@@ -189,7 +189,7 @@ describe('Category Management - Comprehensive Integration', () => {
       };
 
       const response = await request(env.app)
-        .put(`/api/v1/categories/${techCategoryId}`)
+        .put(`/api/v1/calendars/${calendar.id}/categories/${techCategoryId}`)
         .set('Authorization', 'Bearer ' + authKey)
         .send(updateData);
 
@@ -205,14 +205,14 @@ describe('Category Management - Comprehensive Integration', () => {
 
       // Delete workshop category
       const deleteResponse = await request(env.app)
-        .delete(`/api/v1/categories/${workshopCategoryId}`)
+        .delete(`/api/v1/calendars/${calendar.id}/categories/${workshopCategoryId}`)
         .set('Authorization', 'Bearer ' + authKey);
 
       expect(deleteResponse.status).toBe(204);
 
       // Verify category is deleted
       const getResponse = await request(env.app)
-        .get(`/api/v1/categories/${workshopCategoryId}`)
+        .get(`/api/v1/calendars/${calendar.id}/categories/${workshopCategoryId}`)
         .set('Authorization', 'Bearer ' + authKey);
 
       expect(getResponse.status).toBe(404);
@@ -274,7 +274,7 @@ describe('Category Management - Comprehensive Integration', () => {
       const authKey = await env.login(userEmail, userPassword);
 
       const response = await request(env.app)
-        .get(`/api/v1/categories/${categoryId}/events`)
+        .get(`/api/v1/calendars/${calendar.id}/categories/${categoryId}/events`)
         .set('Authorization', 'Bearer ' + authKey);
 
       expect(response.status).toBe(200);
@@ -294,7 +294,7 @@ describe('Category Management - Comprehensive Integration', () => {
 
       // Verify category now appears for both events
       const categoryEventsResponse = await request(env.app)
-        .get(`/api/v1/categories/${categoryId}/events`)
+        .get(`/api/v1/calendars/${calendar.id}/categories/${categoryId}/events`)
         .set('Authorization', 'Bearer ' + authKey);
 
       expect(categoryEventsResponse.status).toBe(200);
@@ -335,12 +335,71 @@ describe('Category Management - Comprehensive Integration', () => {
 
       // Verify category is still assigned to event2
       const categoryEventsResponse = await request(env.app)
-        .get(`/api/v1/categories/${categoryId}/events`)
+        .get(`/api/v1/calendars/${calendar.id}/categories/${categoryId}/events`)
         .set('Authorization', 'Bearer ' + authKey);
 
       expect(categoryEventsResponse.status).toBe(200);
       expect(categoryEventsResponse.body.length).toBe(1);
       expect(categoryEventsResponse.body[0]).toBe(event2.id);
+    });
+
+    it('should delete categories that have event assignments', async () => {
+      const authKey = await env.login(userEmail, userPassword);
+
+      // Create a new category for deletion test
+      const categoryResponse = await request(env.app)
+        .post(`/api/v1/calendars/${calendar.id}/categories`)
+        .set('Authorization', 'Bearer ' + authKey)
+        .send({
+          content: {
+            en: { name: 'Category to Delete' },
+          },
+        });
+
+      expect(categoryResponse.status).toBe(201);
+      const categoryToDeleteId = categoryResponse.body.id;
+
+      // Assign the category to event1 (which already exists)
+      const encodedEvent1Id = encodeURIComponent(event1.id);
+      const assignResponse = await request(env.app)
+        .post(`/api/v1/events/${encodedEvent1Id}/categories/${categoryToDeleteId}`)
+        .set('Authorization', 'Bearer ' + authKey);
+
+      expect(assignResponse.status).toBe(201);
+
+      // Verify assignment exists
+      const getAssignmentsResponse = await request(env.app)
+        .get(`/api/v1/events/${encodedEvent1Id}/categories`)
+        .set('Authorization', 'Bearer ' + authKey);
+
+      expect(getAssignmentsResponse.status).toBe(200);
+      const assignedCategories = getAssignmentsResponse.body;
+      const hasOurCategory = assignedCategories.some(cat => cat.id === categoryToDeleteId);
+      expect(hasOurCategory).toBe(true);
+
+      // Delete the category (should succeed and clean up assignments)
+      const deleteResponse = await request(env.app)
+        .delete(`/api/v1/calendars/${calendar.id}/categories/${categoryToDeleteId}`)
+        .set('Authorization', 'Bearer ' + authKey);
+
+      expect(deleteResponse.status).toBe(204);
+
+      // Verify category is deleted
+      const getCategoryResponse = await request(env.app)
+        .get(`/api/v1/calendars/${calendar.id}/categories/${categoryToDeleteId}`)
+        .set('Authorization', 'Bearer ' + authKey);
+
+      expect(getCategoryResponse.status).toBe(404);
+
+      // Verify assignment is also deleted
+      const getAssignmentsAfterResponse = await request(env.app)
+        .get(`/api/v1/events/${encodedEvent1Id}/categories`)
+        .set('Authorization', 'Bearer ' + authKey);
+
+      expect(getAssignmentsAfterResponse.status).toBe(200);
+      const remainingCategories = getAssignmentsAfterResponse.body;
+      const stillHasOurCategory = remainingCategories.some(cat => cat.id === categoryToDeleteId);
+      expect(stillHasOurCategory).toBe(false);
     });
   });
 
@@ -391,7 +450,7 @@ describe('Category Management - Comprehensive Integration', () => {
       };
 
       const response = await request(env.app)
-        .put(`/api/v1/categories/${privateCategoryId}`)
+        .put(`/api/v1/calendars/${otherCalendar.id}/categories/${privateCategoryId}`)
         .set('Authorization', 'Bearer ' + authKey)
         .send(updateData);
 
@@ -403,7 +462,7 @@ describe('Category Management - Comprehensive Integration', () => {
       const authKey = await env.login(userEmail, userPassword);
 
       const response = await request(env.app)
-        .delete(`/api/v1/categories/${privateCategoryId}`)
+        .delete(`/api/v1/calendars/${otherCalendar.id}/categories/${privateCategoryId}`)
         .set('Authorization', 'Bearer ' + authKey);
 
       expect(response.status).toBe(403);
@@ -444,7 +503,7 @@ describe('Category Management - Comprehensive Integration', () => {
       const authKey = await env.login(userEmail, userPassword);
 
       const response = await request(env.app)
-        .get('/api/v1/categories/non-existent-id')
+        .get(`/api/v1/calendars/${calendar.id}/categories/non-existent-id`)
         .set('Authorization', 'Bearer ' + authKey);
 
       expect(response.status).toBe(404);

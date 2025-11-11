@@ -5,6 +5,7 @@ import EventService from '../../service/events';
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import { EventEntity, EventContentEntity, EventScheduleEntity } from '../../entity/event';
+import { EventInstanceEntity } from '../../entity/event_instance';
 import { LocationEntity } from '../../entity/location';
 import { MediaEntity } from '../../../media/entity/media';
 import { EventCategoryAssignmentEntity } from '../../entity/event_category_assignment';
@@ -28,6 +29,7 @@ describe('EventService.deleteEvent', () => {
     sandbox.stub(db, 'transaction').resolves(mockTransaction);
 
     // Stub destroy methods on the prototype to prevent database writes
+    sandbox.stub(EventInstanceEntity, 'destroy').resolves();
     sandbox.stub(EventContentEntity, 'destroy').resolves();
     sandbox.stub(EventScheduleEntity, 'destroy').resolves();
     sandbox.stub(EventCategoryAssignmentEntity, 'destroy').resolves();
@@ -57,7 +59,12 @@ describe('EventService.deleteEvent', () => {
     await eventService.deleteEvent(account, eventId);
 
     // Verify all related data is deleted using sinon assertions
-    expect((EventContentEntity.destroy as sinon.SinonStub).calledWith({
+    expect((EventInstanceEntity.destroy as sinon.SinonStub).calledWith({
+      where: { event_id: eventId },
+      transaction: mockTransaction,
+    })).toBe(true);
+
+    expect((EventCategoryAssignmentEntity.destroy as sinon.SinonStub).calledWith({
       where: { event_id: eventId },
       transaction: mockTransaction,
     })).toBe(true);
@@ -67,7 +74,7 @@ describe('EventService.deleteEvent', () => {
       transaction: mockTransaction,
     })).toBe(true);
 
-    expect((EventCategoryAssignmentEntity.destroy as sinon.SinonStub).calledWith({
+    expect((EventContentEntity.destroy as sinon.SinonStub).calledWith({
       where: { event_id: eventId },
       transaction: mockTransaction,
     })).toBe(true);

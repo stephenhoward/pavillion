@@ -205,15 +205,33 @@ class CategoryService {
       throw new InsufficientCalendarPermissionsError();
     }
 
-    // Delete all content first (due to foreign key constraints)
-    await EventCategoryContentEntity.destroy({
-      where: { category_id: categoryId },
-    });
+    const transaction = await db.transaction();
+    try {
+      // Delete all related records in the correct order to satisfy foreign key constraints
+      // 1. Delete all event-category assignments first
+      await EventCategoryAssignmentEntity.destroy({
+        where: { category_id: categoryId },
+        transaction,
+      });
 
-    // Delete the category
-    await EventCategoryEntity.destroy({
-      where: { id: categoryId },
-    });
+      // 2. Delete all content translations
+      await EventCategoryContentEntity.destroy({
+        where: { category_id: categoryId },
+        transaction,
+      });
+
+      // 3. Finally, delete the category itself
+      await EventCategoryEntity.destroy({
+        where: { id: categoryId },
+        transaction,
+      });
+
+      await transaction.commit();
+    }
+    catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
   }
 
   /**

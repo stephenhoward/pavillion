@@ -169,14 +169,19 @@ describe('Category API', () => {
 
   describe('GET /calendars/:calendarId/categories/:categoryId', () => {
     it('should return category when found', async () => {
+      const mockCalendar = new Calendar('calendar-id', 'test-calendar');
       const mockCategory = new EventCategory('cat-id', 'calendar-id');
+
+      let getCalendarStub = categorySandbox.stub(calendarInterface, 'getCalendar');
       let getCategoryStub = categorySandbox.stub(calendarInterface, 'getCategory');
+
+      getCalendarStub.resolves(mockCalendar);
       getCategoryStub.resolves(mockCategory);
 
       router.get('/handler', (req, res) => {
         req.params.calendarId = 'calendar-id';
         req.params.categoryId = 'cat-id';
-        routes.getCategoryById(req, res);
+        routes.getCategory(req, res);
       });
 
       const response = await request(testApp(router))
@@ -188,13 +193,18 @@ describe('Category API', () => {
     });
 
     it('should return 404 when category not found', async () => {
+      const mockCalendar = new Calendar('calendar-id', 'test-calendar');
+
+      let getCalendarStub = categorySandbox.stub(calendarInterface, 'getCalendar');
       let getCategoryStub = categorySandbox.stub(calendarInterface, 'getCategory');
+
+      getCalendarStub.resolves(mockCalendar);
       getCategoryStub.rejects(new CategoryNotFoundError());
 
       router.get('/handler', (req, res) => {
         req.params.calendarId = 'calendar-id';
         req.params.categoryId = 'nonexistent';
-        routes.getCategoryById(req, res);
+        routes.getCategory(req, res);
       });
 
       const response = await request(testApp(router))
@@ -205,13 +215,18 @@ describe('Category API', () => {
     });
 
     it('should return 404 when category belongs to different calendar', async () => {
+      const mockCalendar = new Calendar('calendar-id', 'test-calendar');
+
+      let getCalendarStub = categorySandbox.stub(calendarInterface, 'getCalendar');
       let getCategoryStub = categorySandbox.stub(calendarInterface, 'getCategory');
+
+      getCalendarStub.resolves(mockCalendar);
       getCategoryStub.rejects(new CategoryNotFoundError());
 
       router.get('/handler', (req, res) => {
         req.params.calendarId = 'calendar-id';
         req.params.categoryId = 'cat-id';
-        routes.getCategoryById(req, res);
+        routes.getCategory(req, res);
       });
 
       const response = await request(testApp(router))
@@ -224,7 +239,7 @@ describe('Category API', () => {
 
   describe('PUT /calendars/:calendarId/categories/:categoryId', () => {
     it('should fail without authentication', async () => {
-      router.put('/handler', (req, res) => { routes.updateCategoryById(req, res); });
+      router.put('/handler', (req, res) => { routes.updateCategory(req, res); });
 
       const response = await request(testApp(router))
         .put('/handler')
@@ -235,14 +250,19 @@ describe('Category API', () => {
     });
 
     it('should update category successfully', async () => {
+      const mockCalendar = new Calendar('calendar-id', 'test-calendar');
       const mockCategory = new EventCategory('cat-id', 'calendar-id');
+
+      let getCalendarStub = categorySandbox.stub(calendarInterface, 'getCalendar');
       let updateStub = categorySandbox.stub(calendarInterface, 'updateCategory');
+
+      getCalendarStub.resolves(mockCalendar);
       updateStub.resolves(mockCategory);
 
       router.put('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'calendar-id';
         req.params.categoryId = 'cat-id';
-        routes.updateCategoryById(req, res);
+        routes.updateCategory(req, res);
       });
 
       const response = await request(testApp(router))
@@ -255,13 +275,18 @@ describe('Category API', () => {
     });
 
     it('should fail when category not found', async () => {
+      const mockCalendar = new Calendar('calendar-id', 'test-calendar');
+
+      let getCalendarStub = categorySandbox.stub(calendarInterface, 'getCalendar');
       let updateStub = categorySandbox.stub(calendarInterface, 'updateCategory');
+
+      getCalendarStub.resolves(mockCalendar);
       updateStub.rejects(new CategoryNotFoundError());
 
       router.put('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'calendar-id';
         req.params.categoryId = 'nonexistent';
-        routes.updateCategoryById(req, res);
+        routes.updateCategory(req, res);
       });
 
       const response = await request(testApp(router))
@@ -274,13 +299,18 @@ describe('Category API', () => {
     });
 
     it('should fail without edit permissions', async () => {
+      const mockCalendar = new Calendar('calendar-id', 'test-calendar');
+
+      let getCalendarStub = categorySandbox.stub(calendarInterface, 'getCalendar');
       let updateStub = categorySandbox.stub(calendarInterface, 'updateCategory');
+
+      getCalendarStub.resolves(mockCalendar);
       updateStub.rejects(new InsufficientCalendarPermissionsError());
 
       router.put('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'calendar-id';
         req.params.categoryId = 'cat-id';
-        routes.updateCategoryById(req, res);
+        routes.updateCategory(req, res);
       });
 
       const response = await request(testApp(router))
@@ -293,13 +323,18 @@ describe('Category API', () => {
     });
 
     it('should return 404 when category belongs to different calendar', async () => {
+      const mockCalendar = new Calendar('calendar-id', 'test-calendar');
+
+      let getCalendarStub = categorySandbox.stub(calendarInterface, 'getCalendar');
       let updateStub = categorySandbox.stub(calendarInterface, 'updateCategory');
+
+      getCalendarStub.resolves(mockCalendar);
       updateStub.rejects(new CategoryNotFoundError());
 
       router.put('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'calendar-id';
         req.params.categoryId = 'cat-id';
-        routes.updateCategoryById(req, res);
+        routes.updateCategory(req, res);
       });
 
       const response = await request(testApp(router))
@@ -313,7 +348,7 @@ describe('Category API', () => {
 
   describe('DELETE /calendars/:calendarId/categories/:categoryId', () => {
     it('should fail without authentication', async () => {
-      router.delete('/handler', (req, res) => { routes.deleteCategoryById(req, res); });
+      router.delete('/handler', (req, res) => { routes.deleteCategory(req, res); });
 
       const response = await request(testApp(router))
         .delete('/handler');
@@ -323,17 +358,21 @@ describe('Category API', () => {
     });
 
     it('should delete category successfully', async () => {
+      const mockCalendar = new Calendar('calendar-id', 'test-calendar');
       const mockCategory = new EventCategory('cat-id', 'calendar-id');
+
+      let getCalendarStub = categorySandbox.stub(calendarInterface, 'getCalendar');
       let getCategoryStub = categorySandbox.stub(calendarInterface, 'getCategory');
       let deleteStub = categorySandbox.stub(calendarInterface, 'deleteCategory');
 
+      getCalendarStub.resolves(mockCalendar);
       getCategoryStub.resolves(mockCategory);
       deleteStub.resolves();
 
       router.delete('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'calendar-id';
         req.params.categoryId = 'cat-id';
-        routes.deleteCategoryById(req, res);
+        routes.deleteCategory(req, res);
       });
 
       const response = await request(testApp(router))
@@ -344,13 +383,18 @@ describe('Category API', () => {
     });
 
     it('should return 404 when category not found', async () => {
+      const mockCalendar = new Calendar('calendar-id', 'test-calendar');
+
+      let getCalendarStub = categorySandbox.stub(calendarInterface, 'getCalendar');
       let deleteStub = categorySandbox.stub(calendarInterface, 'deleteCategory');
+
+      getCalendarStub.resolves(mockCalendar);
       deleteStub.rejects(new CategoryNotFoundError());
 
       router.delete('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'calendar-id';
         req.params.categoryId = 'nonexistent';
-        routes.deleteCategoryById(req, res);
+        routes.deleteCategory(req, res);
       });
 
       const response = await request(testApp(router))
@@ -361,13 +405,18 @@ describe('Category API', () => {
     });
 
     it('should return 404 when category belongs to different calendar', async () => {
+      const mockCalendar = new Calendar('calendar-id', 'test-calendar');
+
+      let getCalendarStub = categorySandbox.stub(calendarInterface, 'getCalendar');
       let deleteStub = categorySandbox.stub(calendarInterface, 'deleteCategory');
+
+      getCalendarStub.resolves(mockCalendar);
       deleteStub.rejects(new CategoryNotFoundError());
 
       router.delete('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'calendar-id';
         req.params.categoryId = 'cat-id';
-        routes.deleteCategoryById(req, res);
+        routes.deleteCategory(req, res);
       });
 
       const response = await request(testApp(router))
@@ -378,17 +427,21 @@ describe('Category API', () => {
     });
 
     it('should fail without edit permissions', async () => {
+      const mockCalendar = new Calendar('calendar-id', 'test-calendar');
       const mockCategory = new EventCategory('cat-id', 'calendar-id');
+
+      let getCalendarStub = categorySandbox.stub(calendarInterface, 'getCalendar');
       let getCategoryStub = categorySandbox.stub(calendarInterface, 'getCategory');
       let deleteStub = categorySandbox.stub(calendarInterface, 'deleteCategory');
 
+      getCalendarStub.resolves(mockCalendar);
       getCategoryStub.resolves(mockCategory);
       deleteStub.rejects(new InsufficientCalendarPermissionsError());
 
       router.delete('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'calendar-id';
         req.params.categoryId = 'cat-id';
-        routes.deleteCategoryById(req, res);
+        routes.deleteCategory(req, res);
       });
 
       const response = await request(testApp(router))
