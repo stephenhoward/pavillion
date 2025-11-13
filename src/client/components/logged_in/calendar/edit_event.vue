@@ -40,6 +40,20 @@ form {
     background-color: rgba(244, 67, 54, 0.1);
     border-color: rgba(244, 67, 54, 0.3);
   }
+
+  ul {
+    margin: 0;
+    padding-left: var(--pav-space-md);
+    list-style-type: disc;
+  }
+
+  li {
+    margin-bottom: var(--pav-space-xs);
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
 }
 
 /* Fieldset styling */
@@ -91,6 +105,15 @@ fieldset {
 
     &:required {
       border-left: 3px solid var(--pav-color-interactive-primary);
+    }
+
+    &.invalid {
+      border-color: #d32f2f;
+      border-width: 2px;
+
+      @media (prefers-color-scheme: dark) {
+        border-color: #f44336;
+      }
     }
 
     @include dark-mode {
@@ -242,10 +265,18 @@ button {
     <main role="main" aria-label="Event Editor">
       <form @submit.prevent="saveModel(props.event)" aria-label="Event Information Form">
         <div v-if="state.err"
+             ref="errorContainer"
              class="error"
              role="alert"
              aria-live="polite">
-          {{ state.err }}
+          <div v-if="Array.isArray(state.err)">
+            <ul>
+              <li v-for="(error, index) in state.err" :key="index">{{ error }}</li>
+            </ul>
+          </div>
+          <div v-else>
+            {{ state.err }}
+          </div>
         </div>
 
         <!-- Calendar Selection -->
@@ -326,6 +357,7 @@ button {
                    type="text"
                    name="address"
                    :placeholder="t('address_placeholder')"
+                   :class="{ invalid: state.invalidFields.includes('address') }"
                    v-model="props.event.location.address" />
           </div>
 
@@ -335,6 +367,7 @@ button {
                    type="text"
                    name="city"
                    :placeholder="t('city_placeholder')"
+                   :class="{ invalid: state.invalidFields.includes('city') }"
                    v-model="props.event.location.city" />
           </div>
 
@@ -344,6 +377,7 @@ button {
                    type="text"
                    name="state"
                    :placeholder="t('state_placeholder')"
+                   :class="{ invalid: state.invalidFields.includes('state') }"
                    v-model="props.event.location.state" />
           </div>
 
@@ -353,6 +387,7 @@ button {
                    type="text"
                    name="postalCode"
                    :placeholder="t('postalCode_placeholder')"
+                   :class="{ invalid: state.invalidFields.includes('postalCode') }"
                    v-model="props.event.location.postalCode" />
           </div>
         </fieldset>
@@ -429,9 +464,10 @@ button {
 </template>
 
 <script setup>
-import { reactive, ref, onBeforeMount, computed } from 'vue';
+import { reactive, ref, onBeforeMount, computed, watch, nextTick } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { CalendarEvent } from '@/common/model/events';
+import { validateLocationHierarchy } from '@/common/model/location';
 import CalendarService from '@/client/service/calendar';
 import EventService from '@/client/service/event';
 import CategoryService from '@/client/service/category';
@@ -469,6 +505,8 @@ let allLanguages = iso6391.getAllCodes();
 allLanguages.unshift(defaultLanguage);
 let availableLanguages = ref([...new Set(allLanguages)]);
 
+const errorContainer = ref(null);
+
 const state = reactive({
   err: '',
   showLanguagePicker: false,
@@ -477,7 +515,28 @@ const state = reactive({
   mediaId: null,
   calendar: null,
   selectedCategories: [],
+  invalidFields: [],
 });
+
+// Watch for error changes and scroll into view
+watch(() => state.err, async (newError) => {
+  if (newError) {
+    // Wait for the error container to be rendered
+    await nextTick();
+    await nextTick(); // Double nextTick to ensure v-if has rendered
+
+    if (errorContainer.value) {
+      // Find the scrollable dialog container and scroll to top
+      const dialog = errorContainer.value.closest('dialog');
+      if (dialog) {
+        dialog.scrollTo({
+          top: 0,
+          behavior: 'smooth',
+        });
+      }
+    }
+  }
+}, { deep: true });
 
 const getModalTitle = computed(() => {
   if (props.isDuplicationMode) {
@@ -554,6 +613,10 @@ onBeforeMount(async () => {
 });
 
 const saveModel = async (model) => {
+  // Clear previous validation errors
+  state.err = '';
+  state.invalidFields = [];
+
   // Ensure we have a calendarId
   if (!model.calendarId && state.availableCalendars.length > 0) {
     model.calendarId = state.availableCalendars[0].id;
@@ -561,6 +624,47 @@ const saveModel = async (model) => {
 
   if (!model.calendarId) {
     state.err = t('error_no_calendar');
+    return;
+  }
+
+  // Validate location hierarchy
+  const locationErrors = validateLocationHierarchy(model.location);
+  if (locationErrors.length > 0) {
+    state.err = locationErrors.map(errorCode => {
+      switch (errorCode) {
+        case 'LOCATION_CITY_REQUIRES_ADDRESS':
+          return t('error_location_city_requires_address');
+        case 'LOCATION_STATE_REQUIRES_CITY':
+          return t('error_location_state_requires_city');
+        case 'LOCATION_STATE_REQUIRES_ADDRESS':
+          return t('error_location_state_requires_address');
+        case 'LOCATION_POSTAL_CODE_REQUIRES_STATE':
+          return t('error_location_postal_code_requires_state');
+        case 'LOCATION_POSTAL_CODE_REQUIRES_CITY':
+          return t('error_location_postal_code_requires_city');
+        case 'LOCATION_POSTAL_CODE_REQUIRES_ADDRESS':
+          return t('error_location_postal_code_requires_address');
+        default:
+          return t('error_invalid_location');
+      }
+    });
+
+    // Determine which fields are invalid based on error messages
+    locationErrors.forEach(error => {
+      if (error.includes('REQUIRES_CITY')) {
+        state.invalidFields.push('city');
+      }
+      if (error.includes('REQUIRES_ADDRESS')) {
+        state.invalidFields.push('address');
+      }
+      if (error.includes('REQUIRES_STATE')) {
+        state.invalidFields.push('state');
+      }
+      if (error.includes('REQUIRES_POSTAL_CODE')) {
+        state.invalidFields.push('postalCode');
+      }
+    });
+
     return;
   }
 

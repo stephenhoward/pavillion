@@ -449,7 +449,7 @@ async function deleteCategory() {
       state.categoryToDelete.id,
       props.calendarId,
       state.deleteAction,
-      state.deleteMigrationTarget || undefined
+      state.deleteMigrationTarget || undefined,
     );
 
     state.successMessage = t('category_deleted_success', { count: affectedEventCount });
@@ -511,17 +511,17 @@ async function mergeCategories() {
   try {
     // Get source categories (all selected except target)
     const sourceCategoryIds = Array.from(state.selectedCategories).filter(
-      id => id !== state.mergeTargetId
+      id => id !== state.mergeTargetId,
     );
 
     const result = await categoryService.mergeCategories(
       props.calendarId,
       state.mergeTargetId,
-      sourceCategoryIds
+      sourceCategoryIds,
     );
 
     state.successMessage = t('categories_merged_success', {
-      count: result.totalAffectedEvents
+      count: result.totalAffectedEvents,
     });
 
     // Clear selection

@@ -264,7 +264,7 @@ class CategoryRoutes {
         categoryId,
         calendar.id,
         action as 'remove' | 'migrate' | undefined,
-        targetCategoryId as string | undefined
+        targetCategoryId as string | undefined,
       );
 
       res.json({ affectedEventCount });
@@ -337,7 +337,7 @@ class CategoryRoutes {
         account,
         calendar.id,
         targetCategoryId,
-        sourceCategoryIds
+        sourceCategoryIds,
       );
 
       res.json(result);

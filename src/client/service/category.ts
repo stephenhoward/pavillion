@@ -139,7 +139,7 @@ export default class CategoryService {
     categoryId: string,
     calendarId: string,
     action?: 'remove' | 'migrate',
-    targetCategoryId?: string
+    targetCategoryId?: string,
   ): Promise<number> {
     const encodedCategoryId = validateAndEncodeId(categoryId, 'Category ID');
     const encodedCalendarId = validateAndEncodeId(calendarId, 'Calendar ID');
@@ -178,7 +178,7 @@ export default class CategoryService {
   async mergeCategories(
     calendarId: string,
     targetCategoryId: string,
-    sourceCategoryIds: string[]
+    sourceCategoryIds: string[],
   ): Promise<{ totalAffectedEvents: number }> {
     const encodedCalendarId = validateAndEncodeId(calendarId, 'Calendar ID');
 
@@ -188,7 +188,7 @@ export default class CategoryService {
         {
           targetCategoryId,
           sourceCategoryIds,
-        }
+        },
       );
 
       // Remove source categories from store

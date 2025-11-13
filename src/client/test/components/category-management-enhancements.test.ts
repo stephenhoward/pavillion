@@ -306,7 +306,7 @@ describe('Category Management Enhancements - Frontend UI', () => {
         'cat-1',
         'calendar-123',
         'migrate',
-        'cat-2'
+        'cat-2',
       );
     });
   });
@@ -421,7 +421,7 @@ describe('Category Management Enhancements - Frontend UI', () => {
       expect(mockCategoryService.mergeCategories).toHaveBeenCalledWith(
         'calendar-123',
         'cat-1',
-        ['cat-2']
+        ['cat-2'],
       );
     });
   });

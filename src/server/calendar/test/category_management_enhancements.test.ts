@@ -68,7 +68,7 @@ describe('CategoryService - Management Enhancements', () => {
         'category-source',
         'calendar-123',
         'migrate',
-        'category-target'
+        'category-target',
       );
 
       expect(affectedCount).toBe(3);
@@ -99,7 +99,7 @@ describe('CategoryService - Management Enhancements', () => {
         testAccount,
         'category-123',
         'calendar-123',
-        'remove'
+        'remove',
       );
 
       expect(affectedCount).toBe(5);
@@ -122,8 +122,8 @@ describe('CategoryService - Management Enhancements', () => {
           'category-source',
           'calendar-123',
           'migrate',
-          'category-invalid'
-        )
+          'category-invalid',
+        ),
       ).rejects.toThrow(CategoryNotFoundError);
     });
 
@@ -145,7 +145,7 @@ describe('CategoryService - Management Enhancements', () => {
       sandbox.stub(EventCategoryAssignmentEntity, 'destroy').rejects(new Error('Database error'));
 
       await expect(
-        categoryService.deleteCategory(testAccount, 'category-123', 'calendar-123', 'remove')
+        categoryService.deleteCategory(testAccount, 'category-123', 'calendar-123', 'remove'),
       ).rejects.toThrow('Database error');
 
       expect(mockTransaction.rollback.calledOnce).toBeTruthy();
@@ -188,7 +188,7 @@ describe('CategoryService - Management Enhancements', () => {
         testAccount,
         'calendar-123',
         'category-target',
-        ['category-source1', 'category-source2']
+        ['category-source1', 'category-source2'],
       );
 
       expect(result.totalAffectedEvents).toBe(5);
@@ -208,8 +208,8 @@ describe('CategoryService - Management Enhancements', () => {
           testAccount,
           'calendar-123',
           'category-target',
-          ['category-source', 'category-target']
-        )
+          ['category-source', 'category-target'],
+        ),
       ).rejects.toThrow('Target category cannot be in source categories list');
     });
 
@@ -229,8 +229,8 @@ describe('CategoryService - Management Enhancements', () => {
           testAccount,
           'calendar-123',
           'category-target',
-          ['category-source']
-        )
+          ['category-source'],
+        ),
       ).rejects.toThrow('All categories must belong to the same calendar');
     });
   });

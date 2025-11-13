@@ -199,7 +199,7 @@ class CategoryService {
     categoryId: string,
     calendarId?: string,
     action?: 'remove' | 'migrate',
-    targetCategoryId?: string
+    targetCategoryId?: string,
   ): Promise<number> {
     // Get category to verify it exists and verify calendar match
     const category = await this.getCategory(categoryId, calendarId);
@@ -235,7 +235,7 @@ class CategoryService {
           {
             where: { category_id: categoryId },
             transaction,
-          }
+          },
         );
         affectedEventCount = updateCount;
 
@@ -251,9 +251,10 @@ class CategoryService {
                AND a1.category_id = a2.category_id
                AND a1.id > a2.id
            )`,
-          { transaction }
+          { transaction },
         );
-      } else {
+      }
+      else {
         // Removal: Delete all event-category assignments
         affectedEventCount = await EventCategoryAssignmentEntity.destroy({
           where: { category_id: categoryId },
@@ -295,7 +296,7 @@ class CategoryService {
     account: Account,
     calendarId: string,
     targetCategoryId: string,
-    sourceCategoryIds: string[]
+    sourceCategoryIds: string[],
   ): Promise<{ totalAffectedEvents: number }> {
     // Validate target is not in source list
     if (sourceCategoryIds.includes(targetCategoryId)) {
@@ -318,7 +319,7 @@ class CategoryService {
 
     // Verify all source categories exist and belong to same calendar
     const sourceCategories = await Promise.all(
-      sourceCategoryIds.map(id => this.getCategory(id))
+      sourceCategoryIds.map(id => this.getCategory(id)),
     );
 
     for (const sourceCategory of sourceCategories) {
@@ -339,7 +340,7 @@ class CategoryService {
           {
             where: { category_id: sourceCategoryId },
             transaction,
-          }
+          },
         );
         totalAffectedEvents += updateCount;
 
@@ -354,7 +355,7 @@ class CategoryService {
                AND a1.category_id = a2.category_id
                AND a1.id > a2.id
            )`,
-          { transaction }
+          { transaction },
         );
 
         // Delete content for source category
@@ -406,7 +407,7 @@ class CategoryService {
       {
         replacements: { categoryIds },
         type: QueryTypes.SELECT,
-      }
+      },
     );
 
     // Build map of category_id -> event_count

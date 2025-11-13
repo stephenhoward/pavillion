@@ -200,7 +200,7 @@ export default class CalendarInterface {
     categoryId: string,
     calendarId?: string,
     action?: 'remove' | 'migrate',
-    targetCategoryId?: string
+    targetCategoryId?: string,
   ): Promise<number> {
     return this.categoryService.deleteCategory(account, categoryId, calendarId, action, targetCategoryId);
   }
@@ -209,7 +209,7 @@ export default class CalendarInterface {
     account: Account,
     calendarId: string,
     targetCategoryId: string,
-    sourceCategoryIds: string[]
+    sourceCategoryIds: string[],
   ): Promise<{ totalAffectedEvents: number }> {
     return this.categoryService.mergeCategories(account, calendarId, targetCategoryId, sourceCategoryIds);
   }

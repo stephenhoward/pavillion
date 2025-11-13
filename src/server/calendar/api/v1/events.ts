@@ -3,7 +3,7 @@ import express, { Request, Response, Application } from 'express';
 import { Account } from '@/common/model/account';
 import ExpressHelper from '@/server/common/helper/express';
 import CalendarInterface from '@/server/calendar/interface';
-import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError, BulkEventsNotFoundError, MixedCalendarEventsError, CategoriesNotFoundError } from '@/common/exceptions/calendar';
+import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError, BulkEventsNotFoundError, MixedCalendarEventsError, CategoriesNotFoundError, LocationValidationError } from '@/common/exceptions/calendar';
 
 export default class EventRoutes {
   private service: CalendarInterface;
@@ -80,7 +80,13 @@ export default class EventRoutes {
       res.json(event.toObject());
     }
     catch (error) {
-      if (error instanceof InsufficientCalendarPermissionsError) {
+      if (error instanceof LocationValidationError) {
+        res.status(400).json({
+          "error": error.message,
+          "errorName": error.name,
+        });
+      }
+      else if (error instanceof InsufficientCalendarPermissionsError) {
         res.status(403).json({
           "error": error.message,
           "errorName": error.name,
@@ -124,7 +130,13 @@ export default class EventRoutes {
       res.json(updatedEvent.toObject());
     }
     catch (error) {
-      if (error instanceof EventNotFoundError) {
+      if (error instanceof LocationValidationError) {
+        res.status(400).json({
+          "error": error.message,
+          "errorName": error.name,
+        });
+      }
+      else if (error instanceof EventNotFoundError) {
         res.status(404).json({
           "error": error.message,
           "errorName": error.name,

@@ -4,13 +4,14 @@ import config from 'config';
 import { Account } from "@/common/model/account";
 import { Calendar } from "@/common/model/calendar";
 import { CalendarEvent, CalendarEventContent, CalendarEventSchedule } from "@/common/model/events";
+import { EventLocation, validateLocationHierarchy } from "@/common/model/location";
 import { EventContentEntity, EventEntity, EventScheduleEntity } from "@/server/calendar/entity/event";
 import CalendarService from "@/server/calendar/service/calendar";
 import { LocationEntity } from "@/server/calendar/entity/location";
 import { MediaEntity } from "@/server/media/entity/media";
 import LocationService from "@/server/calendar/service/locations";
 import { EventEmitter } from 'events';
-import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError, BulkEventsNotFoundError, MixedCalendarEventsError, CategoriesNotFoundError } from '@/common/exceptions/calendar';
+import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError, BulkEventsNotFoundError, MixedCalendarEventsError, CategoriesNotFoundError, LocationValidationError } from '@/common/exceptions/calendar';
 import CategoryService from './categories';
 import { EventCategoryEntity } from '@/server/calendar/entity/event_category';
 import { EventCategoryContentEntity } from '@/server/calendar/entity/event_category_content';
@@ -167,10 +168,16 @@ class EventService {
     const eventEntity = EventEntity.fromModel(event);
 
     if( eventParams.location ) {
+      // Validate location hierarchy before processing
+      const location = EventLocation.fromObject(eventParams.location);
+      const validationErrors = validateLocationHierarchy(location);
+      if (validationErrors.length > 0) {
+        throw new LocationValidationError(validationErrors);
+      }
 
-      let location = await this.locationService.findOrCreateLocation(calendar, eventParams.location);
-      eventEntity.location_id = location.id;
-      event.location = location;
+      let locationEntity = await this.locationService.findOrCreateLocation(calendar, eventParams.location);
+      eventEntity.location_id = locationEntity.id;
+      event.location = locationEntity;
     }
 
     // Handle media attachment
@@ -301,10 +308,16 @@ class EventService {
       event.location = null;
     }
     else if( eventParams.location ) {
+      // Validate location hierarchy before processing
+      const location = EventLocation.fromObject(eventParams.location);
+      const validationErrors = validateLocationHierarchy(location);
+      if (validationErrors.length > 0) {
+        throw new LocationValidationError(validationErrors);
+      }
 
-      let location = await this.locationService.findOrCreateLocation(calendar, eventParams.location);
-      eventEntity.location_id = location.id;
-      event.location = location;
+      let locationEntity = await this.locationService.findOrCreateLocation(calendar, eventParams.location);
+      eventEntity.location_id = locationEntity.id;
+      event.location = locationEntity;
     }
 
     if ( eventParams.schedules ) {

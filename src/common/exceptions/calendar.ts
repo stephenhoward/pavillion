@@ -93,3 +93,19 @@ export class CategoriesNotFoundError extends Error {
     Object.setPrototypeOf(this, CategoriesNotFoundError.prototype);
   }
 }
+
+/**
+ * Custom error class for invalid location data
+ * Contains an array of validation error messages
+ */
+export class LocationValidationError extends Error {
+  public errors: string[];
+
+  constructor(errors: string[]) {
+    super(errors.join('; '));
+    this.name = 'LocationValidationError';
+    this.errors = errors;
+    // Maintaining proper prototype chain in ES5+
+    Object.setPrototypeOf(this, LocationValidationError.prototype);
+  }
+}

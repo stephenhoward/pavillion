@@ -23,7 +23,13 @@
     "calendar_label": "Calendar",
     "error_no_calendar": "Please select a calendar",
     "error_loading_calendars": "Failed to load calendars",
-    "error_saving_event": "Error saving event"
+    "error_saving_event": "Error saving event",
+    "error_location_city_requires_address": "City requires Address to be filled in",
+    "error_location_state_requires_city": "State requires City to be filled in",
+    "error_location_state_requires_address": "State requires Address to be filled in",
+    "error_location_postal_code_requires_state": "Postal Code requires State to be filled in",
+    "error_location_postal_code_requires_city": "Postal Code requires City to be filled in",
+    "error_location_postal_code_requires_address": "Postal Code requires Address to be filled in"
   },
   "categories": {
     "categories_label": "Categories",

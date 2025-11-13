@@ -125,7 +125,7 @@ describe('Category Management Integration Tests', () => {
       // Delete category1 and migrate to category2
       const response = await env.authDelete(
         authToken,
-        `/api/v1/calendars/${testCalendar.urlName}/categories/${testCategory1.id}?action=migrate&targetCategoryId=${testCategory2.id}`
+        `/api/v1/calendars/${testCalendar.urlName}/categories/${testCategory1.id}?action=migrate&targetCategoryId=${testCategory2.id}`,
       );
 
       expect(response.status).toBe(200);
@@ -134,7 +134,7 @@ describe('Category Management Integration Tests', () => {
       // Verify category1 is deleted
       const categoriesResponse = await env.authGet(
         authToken,
-        `/api/v1/calendars/${testCalendar.urlName}/categories`
+        `/api/v1/calendars/${testCalendar.urlName}/categories`,
       );
 
       expect(categoriesResponse.status).toBe(200);
@@ -195,7 +195,7 @@ describe('Category Management Integration Tests', () => {
         {
           targetCategoryId: cat1.id,
           sourceCategoryIds: [cat2.id, cat3.id],
-        }
+        },
       );
 
       expect(response.status).toBe(200);
@@ -204,7 +204,7 @@ describe('Category Management Integration Tests', () => {
       // Verify source categories are deleted
       const categoriesResponse = await env.authGet(
         authToken,
-        `/api/v1/calendars/${cal2.urlName}/categories`
+        `/api/v1/calendars/${cal2.urlName}/categories`,
       );
 
       expect(categoriesResponse.status).toBe(200);
@@ -305,7 +305,7 @@ describe('Category Management Integration Tests', () => {
       // Unauthorized user attempts to delete category
       const response = await env.authDelete(
         unauthorizedToken,
-        `/api/v1/calendars/${testCalendar.urlName}/categories/${testCategory2.id}?action=remove`
+        `/api/v1/calendars/${testCalendar.urlName}/categories/${testCategory2.id}?action=remove`,
       );
 
       expect(response.status).toBe(403);
@@ -313,7 +313,7 @@ describe('Category Management Integration Tests', () => {
       // Verify category still exists
       const categoriesResponse = await env.authGet(
         authToken,
-        `/api/v1/calendars/${testCalendar.urlName}/categories`
+        `/api/v1/calendars/${testCalendar.urlName}/categories`,
       );
 
       expect(categoriesResponse.status).toBe(200);
@@ -329,7 +329,7 @@ describe('Category Management Integration Tests', () => {
         {
           targetCategoryId: testCategory2.id,
           sourceCategoryIds: [testCategory3.id],
-        }
+        },
       );
 
       expect(response.status).toBe(403);
@@ -337,7 +337,7 @@ describe('Category Management Integration Tests', () => {
       // Verify categories still exist
       const categoriesResponse = await env.authGet(
         authToken,
-        `/api/v1/calendars/${testCalendar.urlName}/categories`
+        `/api/v1/calendars/${testCalendar.urlName}/categories`,
       );
 
       expect(categoriesResponse.status).toBe(200);
@@ -351,7 +351,7 @@ describe('Category Management Integration Tests', () => {
     it('should reject deletion with migration to non-existent target', async () => {
       const response = await env.authDelete(
         authToken,
-        `/api/v1/calendars/${testCalendar.urlName}/categories/${testCategory2.id}?action=migrate&targetCategoryId=non-existent-id`
+        `/api/v1/calendars/${testCalendar.urlName}/categories/${testCategory2.id}?action=migrate&targetCategoryId=non-existent-id`,
       );
 
       expect(response.status).toBe(404);
@@ -359,7 +359,7 @@ describe('Category Management Integration Tests', () => {
       // Verify category2 still exists
       const categoriesResponse = await env.authGet(
         authToken,
-        `/api/v1/calendars/${testCalendar.urlName}/categories`
+        `/api/v1/calendars/${testCalendar.urlName}/categories`,
       );
 
       const categoryIds = categoriesResponse.body.map((c: any) => c.id);
@@ -373,7 +373,7 @@ describe('Category Management Integration Tests', () => {
         {
           targetCategoryId: testCategory2.id,
           sourceCategoryIds: [testCategory2.id, testCategory3.id],
-        }
+        },
       );
 
       expect(response.status).toBe(400);
@@ -381,7 +381,7 @@ describe('Category Management Integration Tests', () => {
       // Verify both categories still exist
       const categoriesResponse = await env.authGet(
         authToken,
-        `/api/v1/calendars/${testCalendar.urlName}/categories`
+        `/api/v1/calendars/${testCalendar.urlName}/categories`,
       );
 
       const categoryIds = categoriesResponse.body.map((c: any) => c.id);
@@ -396,7 +396,7 @@ describe('Category Management Integration Tests', () => {
         {
           targetCategoryId: testCategory2.id,
           sourceCategoryIds: ['non-existent-id'],
-        }
+        },
       );
 
       expect(response.status).toBe(404);

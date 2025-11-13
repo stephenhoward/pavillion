@@ -64,4 +64,58 @@ class EventLocation extends PrimaryModel {
   }
 };
 
-export { EventLocation };
+/**
+ * Validates location field hierarchy.
+ * Enforces bottom-up validation rules where more general location information
+ * requires more specific information to be filled in first.
+ *
+ * Validation Rules:
+ * - Name only: Valid
+ * - City requires Address
+ * - State requires City AND Address
+ * - Postal Code requires State AND City AND Address
+ *
+ * @param {EventLocation} location - The location to validate
+ * @returns {string[]} Array of error messages (empty if valid)
+ */
+function validateLocationHierarchy(location: EventLocation): string[] {
+  const errors: string[] = [];
+
+  // Check if fields have actual content (not empty strings)
+  const hasAddress = location.address.trim().length > 0;
+  const hasCity = location.city.trim().length > 0;
+  const hasState = location.state.trim().length > 0;
+  const hasPostalCode = location.postalCode.trim().length > 0;
+
+  // City requires Address
+  if (hasCity && !hasAddress) {
+    errors.push('LOCATION_CITY_REQUIRES_ADDRESS');
+  }
+
+  // State requires City AND Address
+  if (hasState) {
+    if (!hasCity) {
+      errors.push('LOCATION_STATE_REQUIRES_CITY');
+    }
+    if (!hasAddress) {
+      errors.push('LOCATION_STATE_REQUIRES_ADDRESS');
+    }
+  }
+
+  // Postal Code requires State AND City AND Address
+  if (hasPostalCode) {
+    if (!hasState) {
+      errors.push('LOCATION_POSTAL_CODE_REQUIRES_STATE');
+    }
+    if (!hasCity) {
+      errors.push('LOCATION_POSTAL_CODE_REQUIRES_CITY');
+    }
+    if (!hasAddress) {
+      errors.push('LOCATION_POSTAL_CODE_REQUIRES_ADDRESS');
+    }
+  }
+
+  return errors;
+}
+
+export { EventLocation, validateLocationHierarchy };
