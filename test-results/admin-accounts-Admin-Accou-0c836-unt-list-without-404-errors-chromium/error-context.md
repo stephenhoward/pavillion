@@ -1,0 +1,51 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - link "menu.navigation.skip_to_content" [ref=e4] [cursor=pointer]:
+    - /url: "#main"
+  - navigation [ref=e5]:
+    - listitem [ref=e6]:
+      - link "< back" [ref=e7] [cursor=pointer]:
+        - /url: /profile
+    - listitem [ref=e8]:
+      - link "General" [ref=e9] [cursor=pointer]:
+        - /url: /admin/settings
+    - listitem [ref=e10]:
+      - link "Accounts" [ref=e11] [cursor=pointer]:
+        - /url: /admin/accounts
+    - listitem [ref=e12]:
+      - link "Federation" [ref=e13] [cursor=pointer]:
+        - /url: /admin/federation
+    - listitem [ref=e14]:
+      - link "Funding" [ref=e15] [cursor=pointer]:
+        - /url: /admin/funding
+  - main [ref=e16]:
+    - region "Accounts" [ref=e17]:
+      - heading "Accounts" [level=2] [ref=e18]
+      - tablist "Account management sections" [ref=e19]:
+        - tab "Accounts" [selected] [ref=e20] [cursor=pointer]
+        - tab "Applications" [ref=e21] [cursor=pointer]
+        - tab "Invitations" [ref=e22] [cursor=pointer]
+      - tabpanel [ref=e23]:
+        - generic [ref=e24]:
+          - heading "Accounts" [level=3] [ref=e25]
+          - table "User accounts" [ref=e26]:
+            - rowgroup [ref=e27]:
+              - row "Name Email Role Actions" [ref=e28]:
+                - columnheader "Name" [ref=e29]
+                - columnheader "Email" [ref=e30]
+                - columnheader "Role" [ref=e31]
+                - columnheader "Actions" [ref=e32]
+            - rowgroup [ref=e33]:
+              - row "Admin admin@pavillion.dev" [ref=e34]:
+                - cell "Admin" [ref=e35]
+                - cell "admin@pavillion.dev" [ref=e36]
+                - cell [ref=e37]
+                - cell [ref=e38]
+              - row "TestUser test@example.com" [ref=e39]:
+                - cell "TestUser" [ref=e40]
+                - cell "test@example.com" [ref=e41]
+                - cell [ref=e42]
+                - cell [ref=e43]
+```

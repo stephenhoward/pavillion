@@ -47,11 +47,13 @@ class EventLocation extends PrimaryModel {
 
   /**
    * Converts the location to a plain JavaScript object.
+   * Includes id field to ensure existing locations can be properly identified during updates.
    *
    * @returns {Record<string, any>} Plain object representation of the location
    */
   toObject(): Record<string, any> {
     return {
+      id: this.id,  // Include id field to preserve location identity during event updates (LOC-003)
       name: this.name,
       address: this.address,
       city: this.city,
