@@ -42,7 +42,7 @@ class EventLocation extends PrimaryModel {
    * @returns {EventLocation} A new EventLocation instance
    */
   static fromObject(obj: Record<string, any>): EventLocation {
-    return new EventLocation(obj.id, obj.name, obj.address, obj.city, obj.state, obj.postalCode);
+    return new EventLocation(obj.id, obj.name, obj.address, obj.city, obj.state, obj.postalCode, obj.country);
   }
 
   /**
