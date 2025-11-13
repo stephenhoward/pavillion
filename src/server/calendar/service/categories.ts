@@ -17,6 +17,7 @@ import {
 } from '@/common/exceptions/category';
 import CalendarService from './calendar';
 import db from '@/server/common/entity/db';
+import { QueryTypes } from 'sequelize';
 
 /**
  * Service for managing event categories within calendars.
@@ -184,13 +185,22 @@ class CategoryService {
   }
 
   /**
-   * Delete a category and all its content
+   * Delete a category with optional migration or removal of event assignments
    * @param account - The account performing the deletion
    * @param categoryId - The ID of the category to delete
    * @param calendarId - Optional calendar ID to verify category belongs to calendar
+   * @param action - "remove" to remove assignments, "migrate" to migrate to target category
+   * @param targetCategoryId - Required when action is "migrate"
+   * @returns Number of affected events
    * @throws CategoryNotFoundError if category doesn't exist or doesn't belong to the specified calendar
    */
-  async deleteCategory(account: Account, categoryId: string, calendarId?: string): Promise<void> {
+  async deleteCategory(
+    account: Account,
+    categoryId: string,
+    calendarId?: string,
+    action?: 'remove' | 'migrate',
+    targetCategoryId?: string
+  ): Promise<number> {
     // Get category to verify it exists and verify calendar match
     const category = await this.getCategory(categoryId, calendarId);
 
@@ -205,33 +215,214 @@ class CategoryService {
       throw new InsufficientCalendarPermissionsError();
     }
 
-    const transaction = await db.transaction();
-    try {
-      // Delete all related records in the correct order to satisfy foreign key constraints
-      // 1. Delete all event-category assignments first
-      await EventCategoryAssignmentEntity.destroy({
-        where: { category_id: categoryId },
-        transaction,
-      });
+    // If migrate action, validate target category exists
+    if (action === 'migrate') {
+      if (!targetCategoryId) {
+        throw new Error('Target category ID is required for migrate action');
+      }
+      // Verify target category exists and belongs to same calendar
+      await this.getCategory(targetCategoryId, category.calendarId);
+    }
 
-      // 2. Delete all content translations
+    const transaction = await db.transaction();
+    let affectedEventCount = 0;
+
+    try {
+      if (action === 'migrate' && targetCategoryId) {
+        // Migration: Update all assignments to point to target category
+        const [updateCount] = await EventCategoryAssignmentEntity.update(
+          { category_id: targetCategoryId },
+          {
+            where: { category_id: categoryId },
+            transaction,
+          }
+        );
+        affectedEventCount = updateCount;
+
+        // Remove any duplicate assignments (events that now have both old and new category)
+        // This can happen if an event was already assigned to the target category
+        await db.query(
+          `DELETE FROM event_category_assignments
+           WHERE id IN (
+             SELECT a1.id
+             FROM event_category_assignments a1
+             INNER JOIN event_category_assignments a2
+               ON a1.event_id = a2.event_id
+               AND a1.category_id = a2.category_id
+               AND a1.id > a2.id
+           )`,
+          { transaction }
+        );
+      } else {
+        // Removal: Delete all event-category assignments
+        affectedEventCount = await EventCategoryAssignmentEntity.destroy({
+          where: { category_id: categoryId },
+          transaction,
+        });
+      }
+
+      // Delete all content translations
       await EventCategoryContentEntity.destroy({
         where: { category_id: categoryId },
         transaction,
       });
 
-      // 3. Finally, delete the category itself
+      // Finally, delete the category itself
       await EventCategoryEntity.destroy({
         where: { id: categoryId },
         transaction,
       });
 
       await transaction.commit();
+      return affectedEventCount;
     }
     catch (error) {
       await transaction.rollback();
       throw error;
     }
+  }
+
+  /**
+   * Merge multiple source categories into a target category
+   * @param account - The account performing the merge
+   * @param calendarId - The calendar ID containing the categories
+   * @param targetCategoryId - The category to merge into
+   * @param sourceCategoryIds - Array of category IDs to merge from
+   * @returns Object with totalAffectedEvents count
+   * @throws Error if target is in source list or categories belong to different calendars
+   */
+  async mergeCategories(
+    account: Account,
+    calendarId: string,
+    targetCategoryId: string,
+    sourceCategoryIds: string[]
+  ): Promise<{ totalAffectedEvents: number }> {
+    // Validate target is not in source list
+    if (sourceCategoryIds.includes(targetCategoryId)) {
+      throw new Error('Target category cannot be in source categories list');
+    }
+
+    // Get calendar and verify permissions
+    const calendar = await this.getCalendar(calendarId);
+    if (!calendar) {
+      throw new CalendarNotFoundError();
+    }
+
+    const canModify = await this.userCanModifyCalendar(account, calendar);
+    if (!canModify) {
+      throw new InsufficientCalendarPermissionsError();
+    }
+
+    // Verify target category exists and belongs to calendar
+    const targetCategory = await this.getCategory(targetCategoryId, calendarId);
+
+    // Verify all source categories exist and belong to same calendar
+    const sourceCategories = await Promise.all(
+      sourceCategoryIds.map(id => this.getCategory(id))
+    );
+
+    for (const sourceCategory of sourceCategories) {
+      if (sourceCategory.calendarId !== targetCategory.calendarId) {
+        throw new Error('All categories must belong to the same calendar');
+      }
+    }
+
+    const transaction = await db.transaction();
+    let totalAffectedEvents = 0;
+
+    try {
+      // For each source category, migrate assignments and delete
+      for (const sourceCategoryId of sourceCategoryIds) {
+        // Update assignments to target category
+        const [updateCount] = await EventCategoryAssignmentEntity.update(
+          { category_id: targetCategoryId },
+          {
+            where: { category_id: sourceCategoryId },
+            transaction,
+          }
+        );
+        totalAffectedEvents += updateCount;
+
+        // Remove duplicate assignments (events that already had target category)
+        await db.query(
+          `DELETE FROM event_category_assignments
+           WHERE id IN (
+             SELECT a1.id
+             FROM event_category_assignments a1
+             INNER JOIN event_category_assignments a2
+               ON a1.event_id = a2.event_id
+               AND a1.category_id = a2.category_id
+               AND a1.id > a2.id
+           )`,
+          { transaction }
+        );
+
+        // Delete content for source category
+        await EventCategoryContentEntity.destroy({
+          where: { category_id: sourceCategoryId },
+          transaction,
+        });
+
+        // Delete source category
+        await EventCategoryEntity.destroy({
+          where: { id: sourceCategoryId },
+          transaction,
+        });
+      }
+
+      await transaction.commit();
+      return { totalAffectedEvents };
+    }
+    catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  }
+
+  /**
+   * Get event counts for all categories in a calendar
+   * @param calendarId - The calendar ID
+   * @returns Map of category ID to event count
+   */
+  async getCategoryStats(calendarId: string): Promise<Map<string, number>> {
+    // Get all category IDs for this calendar
+    const categories = await EventCategoryEntity.findAll({
+      where: { calendar_id: calendarId },
+      attributes: ['id'],
+    });
+
+    const categoryIds = categories.map(cat => cat.id);
+
+    if (categoryIds.length === 0) {
+      return new Map();
+    }
+
+    // Query to get event counts per category
+    const results = await db.query<{ category_id: string; event_count: string }>(
+      `SELECT category_id, COUNT(event_id) as event_count
+       FROM event_category_assignments
+       WHERE category_id IN (:categoryIds)
+       GROUP BY category_id`,
+      {
+        replacements: { categoryIds },
+        type: QueryTypes.SELECT,
+      }
+    );
+
+    // Build map of category_id -> event_count
+    const statsMap = new Map<string, number>();
+
+    // Initialize all categories with 0 count
+    for (const categoryId of categoryIds) {
+      statsMap.set(categoryId, 0);
+    }
+
+    // Update with actual counts
+    for (const result of results) {
+      statsMap.set(result.category_id, parseInt(result.event_count, 10));
+    }
+
+    return statsMap;
   }
 
   /**

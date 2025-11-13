@@ -43,10 +43,12 @@ describe('Category API', () => {
       let getCalendarStub = categorySandbox.stub(calendarInterface, 'getCalendar');
       let calendarStub = categorySandbox.stub(calendarInterface, 'getCalendarByName');
       let categoriesStub = categorySandbox.stub(calendarInterface, 'getCategories');
+      let categoryStatsStub = categorySandbox.stub(calendarInterface, 'getCategoryStats');
 
       getCalendarStub.resolves(mockCalendar);
       calendarStub.resolves(mockCalendar);
       categoriesStub.resolves([mockCategory]);
+      categoryStatsStub.resolves(new Map([['cat-id', 5]]));
 
       router.get('/handler', (req, res) => {
         req.params.calendarId = 'test-calendar';
@@ -367,7 +369,7 @@ describe('Category API', () => {
 
       getCalendarStub.resolves(mockCalendar);
       getCategoryStub.resolves(mockCategory);
-      deleteStub.resolves();
+      deleteStub.resolves(5);
 
       router.delete('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = 'calendar-id';
@@ -378,7 +380,8 @@ describe('Category API', () => {
       const response = await request(testApp(router))
         .delete('/handler');
 
-      expect(response.status).toBe(204);
+      expect(response.status).toBe(200);
+      expect(response.body.affectedEventCount).toBe(5);
       expect(deleteStub.called).toBe(true);
     });
 

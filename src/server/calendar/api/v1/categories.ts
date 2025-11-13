@@ -24,6 +24,7 @@ class CategoryRoutes {
     // Category management routes (with calendar context)
     router.get('/calendars/:calendarId/categories', this.getCategories.bind(this));
     router.post('/calendars/:calendarId/categories', ExpressHelper.loggedInOnly, this.createCategory.bind(this));
+    router.post('/calendars/:calendarId/categories/merge', ExpressHelper.loggedInOnly, this.mergeCategories.bind(this));
     router.get('/calendars/:calendarId/categories/:categoryId', this.getCategory.bind(this));
     router.put('/calendars/:calendarId/categories/:categoryId', ExpressHelper.loggedInOnly, this.updateCategory.bind(this));
     router.delete('/calendars/:calendarId/categories/:categoryId', ExpressHelper.loggedInOnly, this.deleteCategory.bind(this));
@@ -39,7 +40,7 @@ class CategoryRoutes {
   }
 
   /**
-   * Get all categories for a calendar
+   * Get all categories for a calendar with event counts
    * GET /api/v1/calendars/:calendarId/categories
    */
   async getCategories(req: Request, res: Response): Promise<void> {
@@ -58,8 +59,20 @@ class CategoryRoutes {
         return;
       }
 
+      // Get categories and their event counts
       const categories = await this.service.getCategories(calendar.id);
-      res.json(categories.map((category) => category.toObject()));
+      const stats = await this.service.getCategoryStats(calendar.id);
+
+      // Attach event counts to category objects
+      const categoriesWithCounts = categories.map((category) => {
+        const categoryObj = category.toObject();
+        return {
+          ...categoryObj,
+          eventCount: stats.get(category.id) || 0,
+        };
+      });
+
+      res.json(categoriesWithCounts);
     }
     catch (error) {
       console.error('Error fetching categories:', error);
@@ -201,17 +214,34 @@ class CategoryRoutes {
   }
 
   /**
-   * Delete a category with calendar context
-   * DELETE /api/v1/calendars/:calendarId/categories/:categoryId
+   * Delete a category with optional migration
+   * DELETE /api/v1/calendars/:calendarId/categories/:categoryId?action=remove|migrate&targetCategoryId=:id
    */
   async deleteCategory(req: Request, res: Response): Promise<void> {
     try {
       const { calendarId, categoryId } = req.params;
+      const { action, targetCategoryId } = req.query;
       const account = req.user as Account;
 
       if (!account) {
         res.status(400).json({
           "error": "missing account for category deletion. Not logged in?",
+        });
+        return;
+      }
+
+      // Validate action parameter
+      if (action && action !== 'remove' && action !== 'migrate') {
+        res.status(400).json({
+          "error": "Invalid action parameter. Must be 'remove' or 'migrate'",
+        });
+        return;
+      }
+
+      // Validate targetCategoryId when action is migrate
+      if (action === 'migrate' && !targetCategoryId) {
+        res.status(400).json({
+          "error": "targetCategoryId is required when action is 'migrate'",
         });
         return;
       }
@@ -228,9 +258,16 @@ class CategoryRoutes {
         return;
       }
 
-      // Delete with calendar context for validation
-      await this.service.deleteCategory(account, categoryId, calendar.id);
-      res.status(204).send();
+      // Delete with calendar context and migration options
+      const affectedEventCount = await this.service.deleteCategory(
+        account,
+        categoryId,
+        calendar.id,
+        action as 'remove' | 'migrate' | undefined,
+        targetCategoryId as string | undefined
+      );
+
+      res.json({ affectedEventCount });
     }
     catch (error) {
       console.error('Error deleting category:', error);
@@ -248,6 +285,91 @@ class CategoryRoutes {
       if (error instanceof InsufficientCalendarPermissionsError) {
         res.status(403).json({ "error": "Permission denied", "errorName": "InsufficientCalendarPermissionsError" });
         return;
+      }
+
+      res.status(500).json({ "error": "Internal server error" });
+    }
+  }
+
+  /**
+   * Merge multiple categories into a target category
+   * POST /api/v1/calendars/:calendarId/categories/merge
+   * Body: { targetCategoryId, sourceCategoryIds[] }
+   */
+  async mergeCategories(req: Request, res: Response): Promise<void> {
+    try {
+      const { calendarId } = req.params;
+      const { targetCategoryId, sourceCategoryIds } = req.body;
+      const account = req.user as Account;
+
+      if (!account) {
+        res.status(400).json({
+          "error": "missing account for category merge. Not logged in?",
+        });
+        return;
+      }
+
+      // Validate request body
+      if (!targetCategoryId) {
+        res.status(400).json({ "error": "targetCategoryId is required" });
+        return;
+      }
+
+      if (!Array.isArray(sourceCategoryIds) || sourceCategoryIds.length === 0) {
+        res.status(400).json({ "error": "sourceCategoryIds must be a non-empty array" });
+        return;
+      }
+
+      // Get the calendar by ID or URL name
+      let calendar = await this.service.getCalendar(calendarId);
+      if (!calendar) {
+        // Try getting by URL name if ID lookup failed
+        calendar = await this.service.getCalendarByName(calendarId);
+      }
+
+      if (!calendar) {
+        res.status(404).json({ "error": "calendar not found" });
+        return;
+      }
+
+      // Perform the merge
+      const result = await this.service.mergeCategories(
+        account,
+        calendar.id,
+        targetCategoryId,
+        sourceCategoryIds
+      );
+
+      res.json(result);
+    }
+    catch (error) {
+      console.error('Error merging categories:', error);
+
+      if (error instanceof CategoryNotFoundError) {
+        res.status(404).json({ "error": "One or more categories not found", "errorName": "CategoryNotFoundError" });
+        return;
+      }
+
+      if (error instanceof CalendarNotFoundError) {
+        res.status(404).json({ "error": "Calendar not found", "errorName": "CalendarNotFoundError" });
+        return;
+      }
+
+      if (error instanceof InsufficientCalendarPermissionsError) {
+        res.status(403).json({ "error": "Permission denied", "errorName": "InsufficientCalendarPermissionsError" });
+        return;
+      }
+
+      // Handle validation errors from service
+      if (error instanceof Error) {
+        if (error.message.includes('Target category cannot be in source categories')) {
+          res.status(400).json({ "error": error.message });
+          return;
+        }
+        if (error.message.includes('All categories must belong to the same calendar')) {
+          res.status(400).json({ "error": error.message });
+          return;
+        }
       }
 
       res.status(500).json({ "error": "Internal server error" });

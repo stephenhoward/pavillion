@@ -47,18 +47,22 @@ export default class CategoryService {
   }
 
   /**
-   * Load all categories for a specific calendar
+   * Load all categories for a specific calendar with event counts
    * @param calendarId - The ID of the calendar
-   * @returns Promise<Array<EventCategory>> The list of categories
+   * @returns Promise<Array<EventCategory & { eventCount: number }>> The list of categories with event counts
    */
-  async loadCategories(calendarId: string): Promise<Array<EventCategory>> {
+  async loadCategories(calendarId: string): Promise<Array<EventCategory & { eventCount: number }>> {
     const encodedId = validateAndEncodeId(calendarId, 'Calendar ID');
 
     try {
-      const categories = await ModelService.listModels(`/api/v1/calendars/${encodedId}/categories`);
-      const calendarCategories = categories.map(event => EventCategory.fromObject(event));
-      this.store.setCategoriesForCalendar(calendarId,calendarCategories);
-      return calendarCategories;
+      const response = await axios.get(`/api/v1/calendars/${encodedId}/categories`);
+      const categoriesWithCounts = response.data.map((categoryData: any) => {
+        const category = EventCategory.fromObject(categoryData);
+        // Attach event count to category object
+        return Object.assign(category, { eventCount: categoryData.eventCount || 0 });
+      });
+      this.store.setCategoriesForCalendar(calendarId, categoriesWithCounts);
+      return categoriesWithCounts;
     }
     catch (error) {
       console.error('Error loading calendar categories:', error);
@@ -124,20 +128,75 @@ export default class CategoryService {
   }
 
   /**
-   * Delete a category
+   * Delete a category with optional migration
    * @param categoryId - The ID of the category to delete
    * @param calendarId - The ID of the calendar (required for route)
-   * @returns Promise<void>
+   * @param action - Optional: 'remove' or 'migrate'
+   * @param targetCategoryId - Optional: target category ID when action is 'migrate'
+   * @returns Promise<number> Number of affected events
    */
-  async deleteCategory(categoryId: string, calendarId: string): Promise<void> {
+  async deleteCategory(
+    categoryId: string,
+    calendarId: string,
+    action?: 'remove' | 'migrate',
+    targetCategoryId?: string
+  ): Promise<number> {
     const encodedCategoryId = validateAndEncodeId(categoryId, 'Category ID');
     const encodedCalendarId = validateAndEncodeId(calendarId, 'Calendar ID');
 
     try {
-      await axios.delete(`/api/v1/calendars/${encodedCalendarId}/categories/${encodedCategoryId}`);
+      let url = `/api/v1/calendars/${encodedCalendarId}/categories/${encodedCategoryId}`;
+
+      // Add query parameters if action is specified
+      if (action) {
+        const params = new URLSearchParams({ action });
+        if (action === 'migrate' && targetCategoryId) {
+          params.append('targetCategoryId', targetCategoryId);
+        }
+        url += `?${params.toString()}`;
+      }
+
+      const response = await axios.delete(url);
 
       // Remove from store
       this.store.removeCategory(calendarId, categoryId);
+
+      return response.data.affectedEventCount || 0;
+    }
+    catch (error: unknown) {
+      handleError(error);
+    }
+  }
+
+  /**
+   * Merge multiple categories into a target category
+   * @param calendarId - The ID of the calendar
+   * @param targetCategoryId - The ID of the target category
+   * @param sourceCategoryIds - Array of source category IDs to merge
+   * @returns Promise<{ totalAffectedEvents: number }> Result with total affected events
+   */
+  async mergeCategories(
+    calendarId: string,
+    targetCategoryId: string,
+    sourceCategoryIds: string[]
+  ): Promise<{ totalAffectedEvents: number }> {
+    const encodedCalendarId = validateAndEncodeId(calendarId, 'Calendar ID');
+
+    try {
+      const response = await axios.post(
+        `/api/v1/calendars/${encodedCalendarId}/categories/merge`,
+        {
+          targetCategoryId,
+          sourceCategoryIds,
+        }
+      );
+
+      // Remove source categories from store
+      for (const sourceId of sourceCategoryIds) {
+        this.store.removeCategory(calendarId, sourceId);
+      }
+
+      return response.data;
     }
     catch (error: unknown) {
       handleError(error);

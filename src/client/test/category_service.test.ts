@@ -39,29 +39,30 @@ describe('CategoryService', () => {
       const mockCategoryData = {
         id: 'cat-123',
         calendarId: 'cal-123',
+        eventCount: 5,
         content: {
           en: { language: 'en', name: 'Test Category' },
         },
       };
 
-      const mockListModels = sandbox.stub(ModelService, 'listModels');
-      mockListModels.resolves([mockCategoryData]);
+      const axiosGetStub = sandbox.stub(axios, 'get');
+      axiosGetStub.resolves({ data: [mockCategoryData] });
 
       const categories = await service.loadCategories('cal-123');
 
-      expect(mockListModels.calledOnce).toBe(true);
-      expect(mockListModels.calledWith('/api/v1/calendars/cal-123/categories')).toBe(true);
+      expect(axiosGetStub.calledOnce).toBe(true);
+      expect(axiosGetStub.calledWith('/api/v1/calendars/cal-123/categories')).toBe(true);
       expect(categories).toHaveLength(1);
       expect(categories[0]).toBeInstanceOf(EventCategory);
       expect(mockStore.setCategoriesForCalendar.calledWith('cal-123', categories)).toBe(true);
     });
 
     it('should handle errors and log them', async () => {
-      const mockListModels = sandbox.stub(ModelService, 'listModels');
+      const axiosGetStub = sandbox.stub(axios, 'get');
       const consoleErrorStub = sandbox.stub(console, 'error');
       const testError = new Error('API Error');
 
-      mockListModels.rejects(testError);
+      axiosGetStub.rejects(testError);
 
       await expect(service.loadCategories('cal-123')).rejects.toThrow('API Error');
       expect(consoleErrorStub.calledWith('Error loading calendar categories:', testError)).toBe(true);
@@ -181,7 +182,7 @@ describe('CategoryService', () => {
   describe('deleteCategory', () => {
     it('should delete a category', async () => {
       const axiosDeleteStub = sandbox.stub(axios, 'delete');
-      axiosDeleteStub.resolves();
+      axiosDeleteStub.resolves({ data: { affectedEventCount: 0 } });
 
       await service.deleteCategory('cat-123', 'cal-123');
 
@@ -206,7 +207,7 @@ describe('CategoryService', () => {
 
     it('should remove category from store when calendarId provided', async () => {
       const axiosDeleteStub = sandbox.stub(axios, 'delete');
-      axiosDeleteStub.resolves();
+      axiosDeleteStub.resolves({ data: { affectedEventCount: 5 } });
 
       await service.deleteCategory('cat-123', 'cal-123');
 

@@ -98,13 +98,27 @@
     "creating": "Creating...",
     "updating": "Updating...",
     "confirm_delete_title": "Delete Category",
-    "confirm_delete_message": "Are you sure you want to delete \"{{name}}\"? This action cannot be undone.",
+    "confirm_delete_message": "Are you sure you want to delete \"{{name}}\"? This category is assigned to {{count}} events.",
     "confirm_delete_button": "Delete Category",
+    "delete_option_remove": "Remove category from all events",
+    "delete_option_migrate": "Migrate events to another category",
+    "migrate_to_label": "Migrate to:",
+    "select_category": "Select a category",
+    "category_deleted_success": "Category deleted successfully. {{count}} events were affected.",
     "category_name_required": "Category name is required",
     "error_creating": "Failed to create category",
     "error_updating": "Failed to update category",
     "error_deleting": "Failed to delete category",
-    "error_loading": "Failed to load categories"
+    "error_loading": "Failed to load categories",
+    "merge_categories_button": "Merge Categories",
+    "merge_categories_title": "Merge Categories",
+    "merge_categories_description": "Select which category should be kept. All events from the other selected categories will be moved to the target category.",
+    "total_affected_events": "Total affected events",
+    "events": "events",
+    "merge_button": "Merge",
+    "merging": "Merging...",
+    "categories_merged_success": "Categories merged successfully. {{count}} events were affected.",
+    "error_merging": "Failed to merge categories"
   },
   "bulk_operations": {
     "menu_label": "Bulk Operations",
@@ -139,6 +153,14 @@
     "loading_categories": "Loading categories...",
     "categories_load_error": "Failed to load categories",
     "clear_all_filters": "Clear All Filters"
+  },
+  "bulk_category_operations": {
+    "menu_label": "Bulk Category Operations",
+    "category_selected": "{{count}} category selected",
+    "categories_selected": "{{count}} categories selected",
+    "merge_categories": "Merge Categories",
+    "merge_categories_label": "Merge selected categories into one",
+    "deselect_all": "Deselect All",
+    "deselect_all_label": "Deselect all selected categories"
   }
 }
-

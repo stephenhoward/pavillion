@@ -195,8 +195,27 @@ export default class CalendarInterface {
     return this.categoryService.updateCategory(account, categoryId, updateData, calendarId);
   }
 
-  async deleteCategory(account: Account, categoryId: string, calendarId?: string): Promise<void> {
-    return this.categoryService.deleteCategory(account, categoryId, calendarId);
+  async deleteCategory(
+    account: Account,
+    categoryId: string,
+    calendarId?: string,
+    action?: 'remove' | 'migrate',
+    targetCategoryId?: string
+  ): Promise<number> {
+    return this.categoryService.deleteCategory(account, categoryId, calendarId, action, targetCategoryId);
+  }
+
+  async mergeCategories(
+    account: Account,
+    calendarId: string,
+    targetCategoryId: string,
+    sourceCategoryIds: string[]
+  ): Promise<{ totalAffectedEvents: number }> {
+    return this.categoryService.mergeCategories(account, calendarId, targetCategoryId, sourceCategoryIds);
+  }
+
+  async getCategoryStats(calendarId: string): Promise<Map<string, number>> {
+    return this.categoryService.getCategoryStats(calendarId);
   }
 
   // Category assignment operations
