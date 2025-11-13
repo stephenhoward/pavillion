@@ -95,7 +95,7 @@ button {
   
   /* Interactive states */
   &:hover:not([aria-disabled="true"]) {
-    background-color: var(--pav-interactive-hover);
+    background-color: var(--pav-color-interactive-primary-hover);
     border-color: var(--pav-border-color-strong);
     transform: translateY(-1px);
   }
@@ -144,7 +144,7 @@ button {
     border-color: transparent;
     
     &:hover:not([aria-disabled="true"]) {
-      background-color: var(--pav-interactive-hover);
+      background-color: var(--pav-color-interactive-primary-hover);
       color: var(--pav-text-primary);
     }
   }
@@ -240,8 +240,8 @@ button {
     border-color: transparent;
     
     &:hover:not(:disabled) {
-      background-color: var(--pav-interactive-hover);
-      color: var(--pav-text-primary);
+      background-color: var(--pav-color-interactive-primary-hover);
+      color: var(--pav-text-inverse);
     }
   }
   

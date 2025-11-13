@@ -8,7 +8,7 @@
 
 /* Enhanced focus indicators for all interactive elements */
 :focus-visible {
-  outline: 2px solid var(--pav-color-brand-primary);
+  outline: 2px solid var(--pav-color-brand-secondary);
   outline-offset: 2px;
   border-radius: var(--pav-border-radius-2xs);
   transition: outline-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
@@ -29,17 +29,12 @@ input:focus-visible,
 textarea:focus-visible,
 select:focus-visible,
 [contenteditable]:focus-visible {
-  outline: 2px solid var(--pav-color-brand-secondary);
-  outline-offset: 1px; /* Tighter offset for form fields */
-  box-shadow: 
-    var(--pav-shadow-focus),
-    inset 0 0 0 1px var(--pav-color-border-focus);
+  border: 2px solid var(--pav-color-border-focus);
 }
 
 /* Focus within containers (for composite widgets) */
 .focus-within:focus-within {
-  outline: 2px solid var(--pav-color-brand-primary);
-  outline-offset: 2px;
+  border: 2px solid var(--pav-color-border-focus);
 }
 
 /* ===== SCREEN READER SUPPORT ===== */
@@ -193,17 +188,14 @@ button:disabled,
 @media (prefers-color-scheme: dark) {
   /* Enhanced focus visibility in dark mode */
   :focus-visible {
-    outline-color: var(--pav-color-brand-primary-light);
-    box-shadow: 0 0 0 4px rgb(255 112 67 / 30%);
+    border-color: var(--pav-color-brand-primary-light);
   }
   
   /* Improved contrast for form elements */
   input:focus-visible,
   textarea:focus-visible,
   select:focus-visible {
-    outline-color: var(--pav-color-brand-secondary-light);
-    box-shadow: 
-      0 0 0 4px var(--pav-color-brand-secondary-dark);
+    border-color: var(--pav-color-brand-secondary-light);
   }
 }
 

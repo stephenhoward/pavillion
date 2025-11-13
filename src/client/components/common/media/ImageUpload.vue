@@ -765,7 +765,7 @@ const handleKeyDown = (event: KeyboardEvent) => {
 
 .browse-button {
   padding: 0.75rem 1.5rem;
-  background: #007acc;
+  background: var(--pav-color-interactive-primary);
   color: white;
   border: none;
   border-radius: 6px;

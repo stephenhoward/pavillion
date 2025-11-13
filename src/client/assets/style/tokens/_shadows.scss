@@ -24,7 +24,7 @@
   
   /* Special shadows */
   --pav-shadow-inner: inset 0 2px 4px 0 rgb(0 0 0 / 5%);
-  --pav-shadow-outline: 0 0 0 3px rgb(255 112 67 / 30%); /* Focus outline using warmer orange */
+  --pav-shadow-outline: 0 0 0 3px var(--pav-color-border-focus)
   
   /* Semantic Shadow Aliases (mapped to elevation levels) */
   --pav-shadow-button: var(--pav-shadow-2);              /* Level 2 - subtle elevation */

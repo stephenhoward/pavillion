@@ -352,7 +352,7 @@ $spacing-4xl: 40px;
   border: 1px solid $light-mode-border;
   
   &:hover:not(:disabled) {
-    background: rgb(0 0 0 / 5%);
+    background: $light-mode-button-background;
   }
   
   @include dark-mode {
@@ -360,7 +360,7 @@ $spacing-4xl: 40px;
     border-color: $dark-mode-border;
     
     &:hover:not(:disabled) {
-      background: rgb(255 255 255 / 10%);
+      background: $dark-mode-button-background;
     }
   }
 }

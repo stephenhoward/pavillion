@@ -99,12 +99,12 @@ fieldset {
 
     &:focus {
       outline: none;
-      border-color: var(--pav-color-interactive-primary);
+      border-color: var(--pav-color-border-focus);
       box-shadow: 0 0 0 2px rgba(var(--pav-color-interactive-primary-rgb), 0.2);
     }
 
     &:required {
-      border-left: 3px solid var(--pav-color-interactive-primary);
+      border-left: 3px solid var(--pav-color-border-focus);
     }
 
     &.invalid {
