@@ -590,18 +590,18 @@ section[aria-label="Calendar Events"] {
       gap: 15px;
       padding: 15px;
       margin-bottom: 15px;
-      border: 1px solid #e0e0e0;
+      border: 1px var(--pav-color-surface-primary);
       border-radius: 8px;
       transition: all 0.2s ease;
 
       &.selected {
-        border-color: #007bff;
+        border-color: var(--pav-color-interactive-primary);
         background: rgba(0, 123, 255, 0.05);
       }
 
       &:hover {
-        border-color: #007bff;
-        box-shadow: 0 2px 8px rgba(0, 123, 255, 0.1);
+        border-color: #e0e0e0;
+        box-shadow: 0 2px 8px rgba(0, 123, 255, 0.2);
       }
 
       @include dark-mode {

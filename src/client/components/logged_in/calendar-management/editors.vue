@@ -48,7 +48,6 @@
         >
           <div class="editor-info">
             <span class="editor-account">{{ editor.email }}</span>
-            <span class="editor-status active">{{ t('status_active') }}</span>
           </div>
           <button
             type="button"
@@ -73,7 +72,6 @@
         >
           <div class="editor-info">
             <span class="editor-account">{{ invitation.email }}</span>
-            <span class="editor-status pending">{{ t('status_pending') }}</span>
           </div>
           <div class="invitation-actions">
             <button
@@ -631,8 +629,6 @@ onMounted(loadEditors);
     align-items: center;
     padding: $spacing-lg;
     background: $light-mode-panel-background;
-    border: 1px solid $light-mode-border;
-    border-radius: $component-border-radius;
     transition: all 0.2s ease;
     position: relative;
     overflow: hidden;
@@ -640,11 +636,6 @@ onMounted(loadEditors);
     @include dark-mode {
       background: $dark-mode-panel-background;
       border-color: $dark-mode-border;
-    }
-
-    &:hover {
-      box-shadow: $box-shadow-light;
-      transform: translateY(-1px);
     }
 
     // Add loading overlay when removing
@@ -1029,7 +1020,6 @@ onMounted(loadEditors);
 
   // Invitation-specific styling
   .invitation-item {
-    border-left: 4px solid #f59e0b; // Orange left border for pending invitations
 
     &.is-processing {
       opacity: 0.7;
@@ -1117,13 +1107,6 @@ onMounted(loadEditors);
       .cancel-btn {
         min-width: 70px;
       }
-    }
-  }
-
-  // Enhanced editor item for better distinction
-  .editor-item {
-    &:not(.invitation-item) {
-      border-left: 4px solid rgba(34, 197, 94, 0.5); // Green left border for active editors
     }
   }
 }

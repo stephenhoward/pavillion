@@ -71,7 +71,10 @@
     "leaving": "Leaving...",
     "confirm_leave_title": "Leave Calendar",
     "confirm_leave_message": "Are you sure you want to leave this calendar? You will no longer have edit access and will need to be re-invited to regain access.",
-    "error_leaving_calendar": "Failed to leave calendar"
+    "error_leaving_calendar": "Failed to leave calendar",
+    "resend_button": "Resend",
+    "active_editors_title": "Current Editors",
+    "pending_invitations_title": "Pending Invitations"
   },
   "management": {
     "page_title": "calendar settings",
