@@ -2,9 +2,8 @@ import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import request from 'supertest';
 import app from '@/server/app';
 import db from '@/server/common/entity/db';
-import { AccountEntity } from '@/server/accounts/entity/account';
-import { CalendarEntity } from '@/server/calendar/entity/calendar';
-import { CalendarContentEntity } from '@/server/calendar/entity/calendar_content';
+import { AccountEntity } from '@/server/common/entity/account';
+import { CalendarEntity, CalendarContentEntity } from '@/server/calendar/entity/calendar';
 
 describe('Location Validation - API Integration', () => {
   let authToken: string;
