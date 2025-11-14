@@ -208,7 +208,8 @@ describe('Category Management - Comprehensive Integration', () => {
         .delete(`/api/v1/calendars/${calendar.id}/categories/${workshopCategoryId}`)
         .set('Authorization', 'Bearer ' + authKey);
 
-      expect(deleteResponse.status).toBe(204);
+      expect(deleteResponse.status).toBe(200);
+      expect(deleteResponse.body).toHaveProperty('affectedEventCount');
 
       // Verify category is deleted
       const getResponse = await request(env.app)
@@ -382,7 +383,8 @@ describe('Category Management - Comprehensive Integration', () => {
         .delete(`/api/v1/calendars/${calendar.id}/categories/${categoryToDeleteId}`)
         .set('Authorization', 'Bearer ' + authKey);
 
-      expect(deleteResponse.status).toBe(204);
+      expect(deleteResponse.status).toBe(200);
+      expect(deleteResponse.body).toHaveProperty('affectedEventCount');
 
       // Verify category is deleted
       const getCategoryResponse = await request(env.app)

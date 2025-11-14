@@ -144,23 +144,27 @@ describe('Category Management Enhancements - Frontend UI', () => {
         return wrapper.vm.state.categories.length > 0;
       }, { timeout: 1000 });
 
-      // Initially no merge button
-      let mergeButton = wrapper.find('.btn-merge-categories');
-      expect(mergeButton.exists()).toBe(false);
+      // Initially bulk menu should be hidden
+      let bulkMenu = wrapper.find('.bulk-categories-menu');
+      expect(bulkMenu.classes()).toContain('hidden');
 
-      // Select one category - still no merge button
+      // Select one category - still hidden
       const checkboxes = wrapper.findAll('input[type="checkbox"]');
       await checkboxes[0].setValue(true);
       await nextTick();
 
-      mergeButton = wrapper.find('.btn-merge-categories');
-      expect(mergeButton.exists()).toBe(false);
+      bulkMenu = wrapper.find('.bulk-categories-menu');
+      expect(bulkMenu.classes()).toContain('hidden');
 
-      // Select second category - merge button should appear
+      // Select second category - menu should be visible
       await checkboxes[1].setValue(true);
       await nextTick();
 
-      mergeButton = wrapper.find('.btn-merge-categories');
+      bulkMenu = wrapper.find('.bulk-categories-menu');
+      expect(bulkMenu.classes()).not.toContain('hidden');
+
+      // Merge button should be present
+      const mergeButton = wrapper.find('[data-testid="merge-categories-btn"]');
       expect(mergeButton.exists()).toBe(true);
     });
   });
@@ -334,8 +338,8 @@ describe('Category Management Enhancements - Frontend UI', () => {
       await checkboxes[1].setValue(true);
       await nextTick();
 
-      // Click merge button
-      const mergeButton = wrapper.find('.btn-merge-categories');
+      // Click merge button using data-testid
+      const mergeButton = wrapper.find('[data-testid="merge-categories-btn"]');
       await mergeButton.trigger('click');
       await nextTick();
 
@@ -370,8 +374,8 @@ describe('Category Management Enhancements - Frontend UI', () => {
       await checkboxes[1].setValue(true);
       await nextTick();
 
-      // Click merge button
-      const mergeButton = wrapper.find('.btn-merge-categories');
+      // Click merge button using data-testid
+      const mergeButton = wrapper.find('[data-testid="merge-categories-btn"]');
       await mergeButton.trigger('click');
       await nextTick();
 
@@ -402,8 +406,8 @@ describe('Category Management Enhancements - Frontend UI', () => {
       await checkboxes[1].setValue(true);
       await nextTick();
 
-      // Click merge button
-      const mergeButton = wrapper.find('.btn-merge-categories');
+      // Click merge button using data-testid
+      const mergeButton = wrapper.find('[data-testid="merge-categories-btn"]');
       await mergeButton.trigger('click');
       await nextTick();
 

@@ -39,7 +39,7 @@ describe('ActivityPub Create Activity', async () => {
 
   beforeAll(async () => {
     env = new TestEnvironment();
-    await env.init(3002);
+    await env.init(3014); // Use unique port
 
     const eventBus = new EventEmitter();
     const calendarInterface = new CalendarInterface(eventBus);

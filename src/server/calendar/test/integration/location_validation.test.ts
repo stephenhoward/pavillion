@@ -1,69 +1,53 @@
-import { describe, it, expect, beforeAll, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { EventEmitter } from 'events';
 import request from 'supertest';
-import app from '@/server/app';
-import db from '@/server/common/entity/db';
-import { AccountEntity } from '@/server/common/entity/account';
-import { CalendarEntity, CalendarContentEntity } from '@/server/calendar/entity/calendar';
+import { TestEnvironment } from '@/server/test/lib/test_environment';
+import AccountService from '@/server/accounts/service/account';
+import CalendarService from '@/server/calendar/service/calendar';
+import ConfigurationInterface from '@/server/configuration/interface';
+import AccountsInterface from '@/server/accounts/interface';
+import { Account } from '@/common/model/account';
+import { Calendar } from '@/common/model/calendar';
 
 describe('Location Validation - API Integration', () => {
+  let env: TestEnvironment;
   let authToken: string;
-  let accountId: string;
-  let calendarId: string;
+  let account: Account;
+  let calendar: Calendar;
 
   beforeAll(async () => {
-    // Sync database
-    await db.sync();
+    env = new TestEnvironment();
+    await env.init(3011); // Use unique port
 
-    // Create test account
-    const account = await AccountEntity.create({
-      id: 'test-account-loc-validation',
-      email: 'loc-validation@test.com',
-      password: 'hashedpassword',
-      name: 'Location Validation Test',
-      status: 'active',
-    });
-    accountId = account.id;
+    const eventBus = new EventEmitter();
+    const configurationInterface = new ConfigurationInterface();
+    const accountService = new AccountService(eventBus, configurationInterface);
+    const accountsInterface = new AccountsInterface(eventBus, configurationInterface);
+    const calendarService = new CalendarService(accountsInterface, configurationInterface);
 
-    // Create test calendar
-    const calendar = await CalendarEntity.create({
-      id: 'test-calendar-loc-validation',
-      account_id: accountId,
-      url_name: 'loc-validation-calendar',
-      languages: 'en',
-    });
-    calendarId = calendar.id;
-
-    await CalendarContentEntity.create({
-      calendar_id: calendarId,
-      language: 'en',
-      name: 'Location Validation Test Calendar',
-      description: 'Test calendar for location validation',
-    });
+    // Create test account and calendar
+    const accountInfo = await accountService._setupAccount('loc-validation@test.com', 'testpassword');
+    account = accountInfo.account;
+    calendar = await calendarService.createCalendar(account, 'loc-validation-calendar');
 
     // Login to get auth token
-    const loginResponse = await request(app)
-      .post('/api/v1/accounts/login')
-      .send({
-        email: 'loc-validation@test.com',
-        password: 'hashedpassword',
-      });
-
-    authToken = loginResponse.body.token;
+    authToken = await env.login('loc-validation@test.com', 'testpassword');
   });
 
-  afterEach(async () => {
-    // Clean up events after each test
-    await db.query('DELETE FROM event WHERE calendar_id = ?', {
-      replacements: [calendarId],
-    });
+  afterAll(async () => {
+    if (env) {
+      // Wait for async event instance operations to complete before cleanup
+      await new Promise(resolve => setTimeout(resolve, 500));
+      await env.cleanup();
+    }
   });
 
   it('should reject event with city but no address (400 status)', async () => {
-    const response = await request(app)
+    const response = await request(env.app)
       .post('/api/v1/events')
       .set('Authorization', `Bearer ${authToken}`)
       .send({
-        calendarId: calendarId,
+        calendarId: calendar.id,
         content: {
           en: {
             name: 'Test Event',
@@ -87,15 +71,15 @@ describe('Location Validation - API Integration', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error).toBeDefined();
-    expect(response.body.error).toContain('City requires Address');
+    expect(response.body.error).toContain('LOCATION_CITY_REQUIRES_ADDRESS');
   });
 
   it('should reject event with state but no city and address (400 status)', async () => {
-    const response = await request(app)
+    const response = await request(env.app)
       .post('/api/v1/events')
       .set('Authorization', `Bearer ${authToken}`)
       .send({
-        calendarId: calendarId,
+        calendarId: calendar.id,
         content: {
           en: {
             name: 'Test Event',
@@ -125,11 +109,11 @@ describe('Location Validation - API Integration', () => {
 
   it('should accept event with valid location hierarchy', async () => {
     // Test name-only location
-    const response1 = await request(app)
+    const response1 = await request(env.app)
       .post('/api/v1/events')
       .set('Authorization', `Bearer ${authToken}`)
       .send({
-        calendarId: calendarId,
+        calendarId: calendar.id,
         content: {
           en: {
             name: 'Test Event 1',
@@ -155,11 +139,11 @@ describe('Location Validation - API Integration', () => {
     expect(response1.body.id).toBeDefined();
 
     // Test full valid location
-    const response2 = await request(app)
+    const response2 = await request(env.app)
       .post('/api/v1/events')
       .set('Authorization', `Bearer ${authToken}`)
       .send({
-        calendarId: calendarId,
+        calendarId: calendar.id,
         content: {
           en: {
             name: 'Test Event 2',
@@ -186,11 +170,11 @@ describe('Location Validation - API Integration', () => {
   });
 
   it('should return clear error messages for invalid location combinations', async () => {
-    const response = await request(app)
+    const response = await request(env.app)
       .post('/api/v1/events')
       .set('Authorization', `Bearer ${authToken}`)
       .send({
-        calendarId: calendarId,
+        calendarId: calendar.id,
         content: {
           en: {
             name: 'Test Event',

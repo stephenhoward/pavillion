@@ -27,7 +27,7 @@ describe('CalendarInterface.bulkAssignCategories', () => {
 
   beforeAll(async () => {
     env = new TestEnvironment();
-    await env.init(3007); // Use unique port
+    await env.init(3012); // Use unique port
 
     eventBus = new EventEmitter();
     calendarInterface = new CalendarInterface(eventBus);

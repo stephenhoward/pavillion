@@ -110,7 +110,8 @@ describe('Category Permissions - Simple Integration', () => {
         .delete(`/api/v1/calendars/${ownerCalendar.id}/categories/${categoryId}`)
         .set('Authorization', 'Bearer ' + ownerAuthKey);
 
-      expect(deleteResponse.status).toBe(204);
+      expect(deleteResponse.status).toBe(200);
+      expect(deleteResponse.body).toHaveProperty('affectedEventCount');
     });
   });
 

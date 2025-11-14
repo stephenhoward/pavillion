@@ -23,7 +23,7 @@ describe('Category Permissions Integration', () => {
 
   beforeAll(async () => {
     env = new TestEnvironment();
-    await env.init(3009); // Use unique port
+    await env.init(3013); // Use unique port
 
     const eventBus = new EventEmitter();
     const configurationInterface = new ConfigurationInterface();
@@ -112,7 +112,8 @@ describe('Category Permissions Integration', () => {
         .delete(`/api/v1/calendars/${calendar.id}/categories/${categoryId}`)
         .set('Authorization', 'Bearer ' + ownerAuthKey);
 
-      expect(deleteResponse.status).toBe(204);
+      expect(deleteResponse.status).toBe(200);
+      expect(deleteResponse.body).toHaveProperty('affectedEventCount');
     });
   });
 
@@ -176,7 +177,8 @@ describe('Category Permissions Integration', () => {
         .delete(`/api/v1/calendars/${calendar.id}/categories/${categoryId}`)
         .set('Authorization', 'Bearer ' + editorAuthKey);
 
-      expect(deleteResponse.status).toBe(204);
+      expect(deleteResponse.status).toBe(200);
+      expect(deleteResponse.body).toHaveProperty('affectedEventCount');
     });
   });
 
