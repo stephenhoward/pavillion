@@ -29,6 +29,20 @@
       </div>
     </div>
 
+    <!-- Category Filter Section (full width) -->
+    <div v-if="publicStore.availableCategories.length > 0" class="category-filter-section">
+      <label class="filter-label">
+        {{ t('filter_by_categories') }}
+      </label>
+
+      <CategoryPillSelector
+        :categories="publicStore.availableCategories"
+        :selected-categories="publicStore.selectedCategoryNames"
+        :disabled="publicStore.isLoadingCategories"
+        @update:selected-categories="handleCategoryChange"
+      />
+    </div>
+
     <!-- Filter Accordion (mobile) / Horizontal Layout (desktop) -->
     <div class="filter-accordion-wrapper">
       <!-- Accordion toggle button (mobile only) -->
@@ -47,20 +61,6 @@
         class="filter-accordion"
         :class="{ open: state.isAccordionOpen }"
       >
-        <!-- Category Filter Section -->
-        <div v-if="publicStore.availableCategories.length > 0" class="category-filter-section">
-          <label class="filter-label">
-            {{ t('filter_by_categories') }}
-          </label>
-
-          <CategoryPillSelector
-            :categories="publicStore.availableCategories"
-            :selected-categories="publicStore.selectedCategoryNames"
-            :disabled="publicStore.isLoadingCategories"
-            @update:selected-categories="handleCategoryChange"
-          />
-        </div>
-
         <!-- Date Range Filter Section -->
         <div class="date-range-section">
           <label class="filter-label">
@@ -484,19 +484,26 @@ onMounted(() => {
   // Always visible on desktop
   @include medium-size-device {
     display: flex;
-    flex-direction: row;
+    flex-direction: column;
     gap: $spacing-2xl;
   }
 }
 
-// Category Filter Section
+// Category Filter Section (full width, outside accordion)
 .category-filter-section {
   @include filter-section;
+
+  width: 100%;
 
   .filter-label {
     @include filter-label;
 
-    margin-bottom: $spacing-md;
+    margin-bottom: $spacing-sm;
+    font-size: 12px;
+    font-weight: $font-medium;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    opacity: 0.6;
   }
 }
 
