@@ -1,17 +1,16 @@
 <script setup lang="ts">
-import { reactive, onBeforeMount, computed, watch } from 'vue';
+import { reactive, onBeforeMount, computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 import CalendarService from '../service/calendar';
 import { usePublicCalendarStore } from '../stores/publicCalendarStore';
 import NotFound from './notFound.vue';
-import CategoryPillSelector from './CategoryPillSelector.vue';
+import SearchFilterPublic from './SearchFilterPublic.vue';
 import { DateTime } from 'luxon';
 import EventImage from './EventImage.vue';
 
 const { t } = useTranslation('system');
 const route = useRoute();
-const router = useRouter();
 const calendarUrlName = route.params.calendar as string;
 
 const state = reactive({
@@ -26,44 +25,8 @@ const publicCalendarStore = usePublicCalendarStore();
 
 // Computed properties for store data
 const availableCategories = computed(() => publicCalendarStore.availableCategories);
-const selectedCategoryNames = computed({
-  get: () => publicCalendarStore.selectedCategoryNames,
-  set: (value) => publicCalendarStore.setSelectedCategories(value),
-});
 const filteredEventsByDay = computed(() => publicCalendarStore.getFilteredEventsByDay);
 const hasActiveFilters = computed(() => publicCalendarStore.hasActiveFilters);
-const isLoadingCategories = computed(() => publicCalendarStore.isLoadingCategories);
-
-// Parse category filters from URL parameters
-const parseCategoryFiltersFromUrl = () => {
-  const categoryParam = route.query.category;
-  if (Array.isArray(categoryParam)) {
-    return categoryParam as string[];
-  }
-  else if (typeof categoryParam === 'string') {
-    return [categoryParam];
-  }
-  return [];
-};
-
-// Update URL with current category filters
-const updateUrlWithFilters = (categoryNames: string[]): void => {
-  const query = { ...route.query };
-
-  if (categoryNames.length > 0) {
-    query.category = categoryNames;
-  }
-  else {
-    delete query.category;
-  }
-
-  router.replace({ query });
-};
-
-// Watch for changes in selected categories to update URL
-watch(selectedCategoryNames, (newNames) => {
-  updateUrlWithFilters(newNames);
-}, { deep: true });
 
 onBeforeMount(async () => {
   try {
@@ -80,15 +43,8 @@ onBeforeMount(async () => {
     // Set current calendar in store
     publicCalendarStore.setCurrentCalendar(calendarUrlName);
 
-    // Parse initial filters from URL
-    const initialFilters = parseCategoryFiltersFromUrl();
-    publicCalendarStore.setSelectedCategories(initialFilters);
-
-    // Load categories and events concurrently
-    await Promise.all([
-      publicCalendarStore.loadCategories(calendarUrlName),
-      publicCalendarStore.loadEvents(calendarUrlName, initialFilters.length > 0 ? initialFilters : undefined),
-    ]);
+    // Load categories - SearchFilterPublic will handle URL params and event loading
+    await publicCalendarStore.loadCategories(calendarUrlName);
   }
   catch (error) {
     console.error('Error loading calendar data:', error);
@@ -98,13 +54,6 @@ onBeforeMount(async () => {
     state.isLoading = false;
   }
 });
-
-// Handle category filter changes
-const handleCategoryFilterChange = async (categoryNames: string[]) => {
-  publicCalendarStore.setSelectedCategories(categoryNames);
-  // Reload events with new filters
-  await publicCalendarStore.reloadWithFilters();
-};
 
 </script>
 
@@ -117,32 +66,8 @@ const handleCategoryFilterChange = async (categoryNames: string[]) => {
       <!-- TODO: respect the user's language preferences instead of using 'en' -->
       <h1>{{ state.calendar.content("en").name || state.calendar.urlName }}</h1>
 
-      <!-- Category Filter Section -->
-      <div v-if="availableCategories.length > 0" class="category-filter-section">
-        <h2 class="filter-title">{{ t('filter_by_category') }}</h2>
-        <CategoryPillSelector
-          :categories="availableCategories"
-          v-model:selectedCategories="selectedCategoryNames"
-          :disabled="isLoadingCategories"
-          @update:selectedCategories="handleCategoryFilterChange"
-        />
-
-        <!-- Filter Status -->
-        <div v-if="hasActiveFilters" class="filter-status">
-          <button
-            type="button"
-            class="clear-filters-btn"
-            @click="handleCategoryFilterChange([])"
-          >
-            {{ t('clear_filters') }}
-          </button>
-        </div>
-      </div>
-
-      <!-- Loading State for Categories -->
-      <div v-if="isLoadingCategories" class="loading-categories">
-        {{ t('loading_categories') }}
-      </div>
+      <!-- Search and Filter Component -->
+      <SearchFilterPublic />
     </header>
 
     <main>
@@ -176,6 +101,14 @@ const handleCategoryFilterChange = async (categoryNames: string[]) => {
         <p v-else>
           {{ t('no_events_available') }}
         </p>
+        <button
+          v-if="hasActiveFilters"
+          type="button"
+          class="clear-filters-btn"
+          @click="publicCalendarStore.clearAllFilters(); publicCalendarStore.reloadWithFilters();"
+        >
+          {{ t('public_search_filter.clear_all_filters') }}
+        </button>
       </div>
 
       <!-- Loading State -->
@@ -192,80 +125,6 @@ const handleCategoryFilterChange = async (categoryNames: string[]) => {
 h1 {
   font-size: 200%;
   font-weight: $font-light;
-}
-
-// Category filter section
-.category-filter-section {
-  margin: 20px 0;
-  padding: 15px 0;
-  border-bottom: 1px solid $light-mode-border;
-
-  @media (prefers-color-scheme: dark) {
-    border-bottom-color: $dark-mode-border;
-  }
-
-  .filter-title {
-    font-size: 16px;
-    font-weight: $font-medium;
-    margin: 0 0 10px 0;
-    color: $light-mode-text;
-
-    @media (prefers-color-scheme: dark) {
-      color: $dark-mode-text;
-    }
-  }
-
-  .filter-status {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-top: 12px;
-    flex-wrap: wrap;
-    gap: 10px;
-
-    .filter-count {
-      font-size: 14px;
-      color: $light-mode-secondary-text;
-
-      @media (prefers-color-scheme: dark) {
-        color: $dark-mode-secondary-text;
-      }
-    }
-
-    .clear-filters-btn {
-      background: none;
-      border: 1px solid $light-mode-border;
-      color: $light-mode-text;
-      padding: 4px 12px;
-      border-radius: 15px;
-      font-size: 12px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-
-      &:hover {
-        background-color: $light-mode-selected-background;
-      }
-
-      @media (prefers-color-scheme: dark) {
-        border-color: $dark-mode-border;
-        color: $dark-mode-text;
-
-        &:hover {
-          background-color: $dark-mode-selected-background;
-        }
-      }
-    }
-  }
-}
-
-.loading-categories {
-  color: $light-mode-secondary-text;
-  font-style: italic;
-  margin: 10px 0;
-
-  @media (prefers-color-scheme: dark) {
-    color: $dark-mode-secondary-text;
-  }
 }
 
 // Events display
@@ -349,7 +208,7 @@ section.day {
 }
 
 // Loading and error states
-.loading, .loading-categories {
+.loading {
   text-align: center;
   padding: 20px;
   color: $light-mode-secondary-text;
@@ -385,24 +244,21 @@ section.day {
   }
 
   p {
-    margin: 0;
+    margin: 0 0 20px 0;
     font-size: 16px;
+  }
+
+  .clear-filters-btn {
+    @include btn-base;
+    @include btn-ghost;
+
+    padding: $spacing-sm $spacing-lg;
+    font-size: 14px;
   }
 }
 
 // Responsive design
 @media (max-width: 768px) {
-  .category-filter-section {
-    .filter-status {
-      flex-direction: column;
-      align-items: stretch;
-
-      .clear-filters-btn {
-        align-self: flex-start;
-      }
-    }
-  }
-
   section.day ul.events {
     li.event {
       width: 120px;

@@ -10,6 +10,13 @@ export interface PublicCalendarState {
   availableCategories: EventCategory[];
   selectedCategoryNames: string[]; // Changed from IDs to names
 
+  // Search filtering
+  searchQuery: string;
+
+  // Date range filtering
+  startDate: string | null;
+  endDate: string | null;
+
   // Event data
   allEvents: CalendarEventInstance[];
   filteredEvents: CalendarEventInstance[];
@@ -21,11 +28,21 @@ export interface PublicCalendarState {
   eventError: string | null;
 }
 
+export interface FilterOptions {
+  search?: string;
+  categories?: string[];
+  startDate?: string | null;
+  endDate?: string | null;
+}
+
 export const usePublicCalendarStore = defineStore('publicCalendar', {
   state: (): PublicCalendarState => ({
     currentCalendarUrlName: null,
     availableCategories: [],
     selectedCategoryNames: [],
+    searchQuery: '',
+    startDate: null,
+    endDate: null,
     allEvents: [],
     filteredEvents: [],
     isLoadingCategories: false,
@@ -84,10 +101,15 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
     },
 
     /**
-     * Check if any category filters are active
+     * Check if any filters are active (categories, search, or date range)
      */
     hasActiveFilters(): boolean {
-      return this.selectedCategoryNames.length > 0;
+      return (
+        this.selectedCategoryNames.length > 0 ||
+        this.searchQuery.trim().length > 0 ||
+        this.startDate !== null ||
+        this.endDate !== null
+      );
     },
 
     /**
@@ -144,9 +166,9 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
     },
 
     /**
-     * Load events for the current calendar
+     * Load events for the current calendar with optional filters
      */
-    async loadEvents(calendarUrlName: string, categoryNames?: string[]) {
+    async loadEvents(calendarUrlName: string, filters?: FilterOptions) {
       if (this.currentCalendarUrlName !== calendarUrlName) {
         this.setCurrentCalendar(calendarUrlName);
       }
@@ -158,13 +180,30 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
         const { default: ModelService } = await import('@/client/service/models');
 
         let url = `/api/public/v1/calendars/${calendarUrlName}/events`;
+        const params = new URLSearchParams();
+
+        // Add search parameter if provided (minimum 3 characters)
+        if (filters?.search && filters.search.trim().length >= 3) {
+          params.append('search', filters.search.trim());
+        }
 
         // Add category filter parameters if provided
-        if (categoryNames && categoryNames.length > 0) {
-          const params = new URLSearchParams();
-          categoryNames.forEach(name => params.append('category', name));
+        if (filters?.categories && filters.categories.length > 0) {
+          filters.categories.forEach(name => params.append('category', name));
           // Add language parameter so backend knows which language to use for category name matching
           params.append('lang', 'en');
+        }
+
+        // Add date range parameters if provided
+        if (filters?.startDate) {
+          params.append('startDate', filters.startDate);
+        }
+        if (filters?.endDate) {
+          params.append('endDate', filters.endDate);
+        }
+
+        // Append query parameters if any were added
+        if (params.toString()) {
           url += `?${params.toString()}`;
         }
 
@@ -205,7 +244,32 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
     },
 
     /**
-     * Clear all category filters
+     * Set search query (with trimming)
+     */
+    setSearchQuery(query: string) {
+      this.searchQuery = query.trim();
+    },
+
+    /**
+     * Set date range for filtering
+     */
+    setDateRange(start: string | null, end: string | null) {
+      this.startDate = start;
+      this.endDate = end;
+    },
+
+    /**
+     * Clear all filters (search, categories, and date range)
+     */
+    clearAllFilters() {
+      this.searchQuery = '';
+      this.selectedCategoryNames = [];
+      this.startDate = null;
+      this.endDate = null;
+    },
+
+    /**
+     * Clear all category filters only
      */
     clearFilters() {
       this.selectedCategoryNames = [];
@@ -217,6 +281,9 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
     clearAll() {
       this.availableCategories = [];
       this.selectedCategoryNames = [];
+      this.searchQuery = '';
+      this.startDate = null;
+      this.endDate = null;
       this.allEvents = [];
       this.filteredEvents = [];
       this.categoryError = null;
@@ -230,10 +297,23 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
      */
     async reloadWithFilters() {
       if (this.currentCalendarUrlName) {
-        await this.loadEvents(
-          this.currentCalendarUrlName,
-          this.selectedCategoryNames.length > 0 ? this.selectedCategoryNames : undefined,
-        );
+        const filters: FilterOptions = {};
+
+        // Only include search filter if it has at least 3 characters
+        if (this.searchQuery.trim().length >= 3) {
+          filters.search = this.searchQuery;
+        }
+        if (this.selectedCategoryNames.length > 0) {
+          filters.categories = this.selectedCategoryNames;
+        }
+        if (this.startDate) {
+          filters.startDate = this.startDate;
+        }
+        if (this.endDate) {
+          filters.endDate = this.endDate;
+        }
+
+        await this.loadEvents(this.currentCalendarUrlName, filters);
       }
     },
   },

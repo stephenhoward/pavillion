@@ -29,7 +29,7 @@ export default class PublicCalendarInterface {
   }
 
   async listEventInstances(calendar: Calendar): Promise<CalendarEventInstance[]> {
-    return this.calendarInterface.listEventInstancesForCalendar(calendar);
+    return this.publicCalendarService.listEventInstances(calendar);
   }
 
   async getEventById(eventId: string): Promise<CalendarEvent> {
@@ -46,6 +46,15 @@ export default class PublicCalendarInterface {
 
   async listEventInstancesWithCategoryFilter(calendar: Calendar, categoryIds: string[]): Promise<CalendarEventInstance[]> {
     return this.publicCalendarService.listEventInstancesWithCategoryFilter(calendar, categoryIds);
+  }
+
+  async listEventInstancesWithFilters(calendar: Calendar, options: {
+    search?: string;
+    categories?: string[];
+    startDate?: string;
+    endDate?: string;
+  }): Promise<CalendarEventInstance[]> {
+    return this.publicCalendarService.listEventInstancesWithFilters(calendar, options);
   }
 
 }

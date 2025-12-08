@@ -78,32 +78,58 @@ export default class CalendarRoutes {
     }
 
     try {
-      let instances;
+      // Parse query parameters for filtering
+      const options: {
+        search?: string;
+        categories?: string[];
+        startDate?: string;
+        endDate?: string;
+      } = {};
 
-      // Check if category filtering is requested
+      // Handle search parameter
+      if (req.query.search && typeof req.query.search === 'string') {
+        const searchTerm = req.query.search.trim();
+        if (searchTerm.length > 0) {
+          options.search = searchTerm;
+        }
+      }
+
+      // Handle category parameter (can be array or single value)
+      // Note: Store sends 'category' (singular) via params.append('category', name)
       if (req.query.category) {
-        let categoryNames: string[];
-
         if (Array.isArray(req.query.category)) {
-          categoryNames = req.query.category as string[];
+          options.categories = req.query.category
+            .filter(c => typeof c === 'string' && c.trim().length > 0)
+            .map(c => (c as string).trim());
         }
         else if (typeof req.query.category === 'string') {
-          categoryNames = [req.query.category];
+          const categoryName = req.query.category.trim();
+          if (categoryName.length > 0) {
+            options.categories = [categoryName];
+          }
         }
-        else {
-          categoryNames = [];
-        }
+      }
 
-        categoryNames = categoryNames.map(name => name.trim()).filter(name => name.length > 0);
+      // Handle date range parameters
+      if (req.query.startDate && typeof req.query.startDate === 'string') {
+        const startDate = req.query.startDate.trim();
+        if (startDate.length > 0) {
+          options.startDate = startDate;
+        }
+      }
 
-        if (categoryNames.length > 0) {
-          // Get language parameter, default to 'en'
-          const language = (req.query.lang as string) || 'en';
-          instances = await this.service.listEventInstancesWithCategoryFilter(calendar, categoryNames, language);
+      if (req.query.endDate && typeof req.query.endDate === 'string') {
+        const endDate = req.query.endDate.trim();
+        if (endDate.length > 0) {
+          options.endDate = endDate;
         }
-        else {
-          instances = await this.service.listEventInstances(calendar);
-        }
+      }
+
+      let instances;
+
+      // Check if any filters are provided
+      if (options.search || options.categories || options.startDate || options.endDate) {
+        instances = await this.service.listEventInstancesWithFilters(calendar, options);
       }
       else {
         instances = await this.service.listEventInstances(calendar);
@@ -112,14 +138,24 @@ export default class CalendarRoutes {
       res.json(instances.map((instance) => instance.toObject()));
     }
     catch (error: any) {
-      if (error.message === 'Invalid category names provided') {
+      // Log the full error for debugging
+      console.error('Error in listInstances:', error);
+
+      // Handle specific error types
+      if (error.message === 'Invalid date format') {
         res.status(400).json({
-          "error": "Invalid category names provided",
+          "error": "Invalid date format. Please use YYYY-MM-DD format.",
+        });
+      }
+      else if (error.message === 'Invalid category IDs provided') {
+        res.status(400).json({
+          "error": "Invalid category IDs provided",
         });
       }
       else {
         res.status(500).json({
           "error": "Failed to retrieve events",
+          "details": error.message,
         });
       }
     }

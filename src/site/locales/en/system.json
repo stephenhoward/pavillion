@@ -1,9 +1,27 @@
 {
     "not_found_error_message": "Not Found",
     "filter_by_category": "Event Categories",
-    "clear_filters" : "Clear Filters",
+    "clear_filters": "Clear Filters",
     "no_events_with_filters": "No Events Found",
     "no_events_available": "No Events Available",
     "loading_events": "Loading Events...",
-    "loading_categories": "Loading Event Categories..."
+    "loading_categories": "Loading Event Categories...",
+    "public_search_filter": {
+        "search_events": "Search Events",
+        "search_placeholder": "Search events...",
+        "search_min_chars": "Enter at least 3 characters to search",
+        "clear_search": "Clear search",
+        "filter_by_categories": "Filter by Categories",
+        "filter_by_date_range": "Filter by Date Range",
+        "this_week": "This Week",
+        "next_week": "Next Week",
+        "custom": "Select Dates",
+        "start_date": "Start Date",
+        "end_date": "End Date",
+        "clear_all_filters": "Clear All Filters",
+        "toggle_filters": "Toggle filters",
+        "more_filters": "More Filters",
+        "hide_filters": "Hide Filters",
+        "show_filters": "Show Filters"
+    }
 }
