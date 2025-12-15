@@ -22,6 +22,10 @@ export default class MediaInterface {
     return this.mediaService.uploadFile(account, calendarId, buffer, originalFilename, mimeType, eventId);
   }
 
+  async getMediaById(mediaId: string): Promise<Media | null> {
+    return this.mediaService.getMediaById(mediaId);
+  }
+
   async checkFileSafety(mediaId: string): Promise<boolean> {
     return this.mediaService.checkFileSafety(mediaId);
   }

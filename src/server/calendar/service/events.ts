@@ -198,6 +198,14 @@ class EventService {
 
     await eventEntity.save();
 
+    // Notify media domain that media has been attached to an event
+    if (eventEntity.media_id) {
+      this.eventBus.emit('mediaAttachedToEvent', {
+        mediaId: eventEntity.media_id,
+        eventId: event.id,
+      });
+    }
+
     if ( eventParams.content ) {
       for( let [language,content] of Object.entries(eventParams.content) ) {
         event.addContent(await this.createEventContent(event.id, language, content as Record<string,any>));
@@ -335,13 +343,18 @@ class EventService {
 
           existingScheduleIds = existingScheduleIds.filter( id => id !== schedule.id );
           // TODO: validate schedule data so we don't store junk
+          // Convert byDay array to comma-separated string for database storage
+          const byDayValue = schedule.byDay !== undefined
+            ? (Array.isArray(schedule.byDay) ? schedule.byDay.join(',') : (schedule.byDay || ''))
+            : scheduleEntity.by_day;
+
           await scheduleEntity.update({
             start_date: schedule.startDate ?? scheduleEntity.start_date,
             end_date: schedule.endDate ?? scheduleEntity.end_date,
             frequency: schedule.frequency ?? scheduleEntity.frequency,
             interval: schedule.interval ?? scheduleEntity.interval,
             count: schedule.count ?? scheduleEntity.count,
-            by_day: schedule.byDay ?? scheduleEntity.by_day,
+            by_day: byDayValue,
             is_exclusion: schedule.isExclusion ?? scheduleEntity.is_exclusion,
           });
           event.addSchedule(scheduleEntity.toModel());
@@ -357,6 +370,7 @@ class EventService {
     }
 
     // Handle media updates
+    let newMediaAttached = false;
     if (eventParams.hasOwnProperty('mediaId')) {
       if (eventParams.mediaId) {
         // Verify the media belongs to the same calendar
@@ -368,6 +382,7 @@ class EventService {
         });
 
         if (media) {
+          newMediaAttached = eventEntity.media_id !== media.id;
           eventEntity.media_id = media.id;
           event.media = media.toModel();
         }
@@ -380,6 +395,14 @@ class EventService {
     }
 
     await eventEntity.save();
+
+    // Notify media domain that media has been attached to an event
+    if (newMediaAttached && eventEntity.media_id) {
+      this.eventBus.emit('mediaAttachedToEvent', {
+        mediaId: eventEntity.media_id,
+        eventId: event.id,
+      });
+    }
 
     this.eventBus.emit('eventUpdated', { calendar, event });
     return event;

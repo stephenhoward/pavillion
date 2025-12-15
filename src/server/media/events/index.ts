@@ -10,8 +10,18 @@ export default class MediaEventHandlers implements DomainEventHandlers {
   }
 
   install(eventBus: EventEmitter): void {
-    eventBus.on('fileUploaded', async (e) => {
-      await this.service.checkFileSafety(e.media.id);
+    // When media is attached to an event, approve it and move to final storage
+    // Only process new uploads (status: 'pending'), not already-approved media
+    eventBus.on('mediaAttachedToEvent', async (e: { mediaId: string; eventId: string }) => {
+      try {
+        const media = await this.service.getMediaById(e.mediaId);
+        if (media && media.status === 'pending') {
+          await this.service.checkFileSafety(e.mediaId);
+        }
+      }
+      catch (error) {
+        console.error('Error in mediaAttachedToEvent handler:', error);
+      }
     });
   }
 }

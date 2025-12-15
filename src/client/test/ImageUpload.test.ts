@@ -32,20 +32,20 @@ describe('ImageUpload Integration', () => {
   });
 
   it('should render single file upload mode correctly', () => {
-    expect(wrapper.find('.primary-text').text()).toBe('Drag and drop an image here');
+    expect(wrapper.find('.upload-text .primary').text()).toBe('Drag and drop an image here');
   });
 
   it('should render multiple file upload mode correctly', async () => {
     const multiWrapper = mountedUploader(true).wrapper;
 
-    expect(multiWrapper.find('.primary-text').text()).toBe('Drag and drop images here');
+    expect(multiWrapper.find('.upload-text .primary').text()).toBe('Drag and drop images here');
   });
 
-  it('should show help text with correct configuration', () => {
-    const helpTexts = wrapper.findAll('.help-text');
-    expect(helpTexts.length).toBeGreaterThan(0);
-    expect(helpTexts[0].text()).toContain('Supported formats');
-    expect(helpTexts[1].text()).toContain('Maximum file size');
+  it('should show format hints with correct configuration', () => {
+    const formatHint = wrapper.find('.format-hint');
+    expect(formatHint.exists()).toBe(true);
+    expect(formatHint.text()).toContain('.jpg');
+    expect(formatHint.text()).toContain('Maximum file size');
   });
 
   it('should have proper accessibility attributes', () => {
@@ -62,14 +62,11 @@ describe('ImageUpload Integration', () => {
     await wrapper.setProps({
       multiple: true,
       maxFiles: 5,
-      maxFileSize: 5 * 1024 * 1024,
-      allowedTypes: ['image/png'],
-      allowedExtensions: ['.png'],
     });
 
     // Component should still render correctly with new props
-    expect(wrapper.vm.multiple).toBe(true);
-    expect(wrapper.vm.maxFiles).toBe(5);
+    expect(wrapper.vm.props.multiple).toBe(true);
+    expect(wrapper.vm.props.maxFiles).toBe(5);
   });
 
   // UI Error Handling Tests
@@ -92,11 +89,9 @@ describe('ImageUpload Integration', () => {
     await wrapper.vm.$nextTick();
 
     // Check that error is displayed in UI
-    const errorElement = wrapper.find('.upload-error');
+    const errorElement = wrapper.find('.validation-error');
     expect(errorElement.exists()).toBe(true);
-
-    const errorMessage = errorElement.find('.error-message');
-    expect(errorMessage.text()).toContain('Only one file is allowed in single file mode');
+    expect(errorElement.text()).toContain('Only one file is allowed in single file mode');
   });
 
   it('should display error message when too many files are selected', async () => {
@@ -119,11 +114,9 @@ describe('ImageUpload Integration', () => {
     await multiWrapper.vm.$nextTick();
 
     // Check that error is displayed in UI
-    const errorElement = multiWrapper.find('.upload-error');
+    const errorElement = multiWrapper.find('.validation-error');
     expect(errorElement.exists()).toBe(true);
-
-    const errorMessage = errorElement.find('.error-message');
-    expect(errorMessage.text()).toContain('Too many files selected. Maximum allowed: 2');
+    expect(errorElement.text()).toContain('Too many files selected. Maximum allowed: 2');
   });
 
   it('should clear error when dismiss button is clicked', async () => {
@@ -137,54 +130,21 @@ describe('ImageUpload Integration', () => {
     await wrapper.vm.$nextTick();
 
     // Verify error is displayed
-    let errorElement = wrapper.find('.upload-error');
+    let errorElement = wrapper.find('.validation-error');
     expect(errorElement.exists()).toBe(true);
 
     // Click dismiss button
-    const dismissButton = errorElement.find('.error-dismiss');
+    const dismissButton = errorElement.find('.dismiss');
     await dismissButton.trigger('click');
     await wrapper.vm.$nextTick();
 
     // Verify error is cleared
-    errorElement = wrapper.find('.upload-error');
+    errorElement = wrapper.find('.validation-error');
     expect(errorElement.exists()).toBe(false);
     expect(vm.state.uploadError).toBeNull();
   });
 
-  it('should clear error when files are removed to resolve the issue', async () => {
-    const multiWrapper = mountedUploader(true, 2).wrapper;
-
-    // Add files that exceed the limit
-    const mockFiles = [
-      new File(['test1'], 'test1.jpg', { type: 'image/jpeg' }),
-      new File(['test2'], 'test2.jpg', { type: 'image/jpeg' }),
-      new File(['test3'], 'test3.jpg', { type: 'image/jpeg' }),
-    ];
-
-    const vm = multiWrapper.vm;
-    await vm.preprocessAddedFiles(mockFiles);
-
-    // Manually set files since preprocessAddedFiles returns early on error
-    vm.state.files = [
-      { file: mockFiles[0], id: '1', status: 'pending', progress: 0 },
-      { file: mockFiles[1], id: '2', status: 'pending', progress: 0 },
-      { file: mockFiles[2], id: '3', status: 'pending', progress: 0 },
-    ];
-
-    await multiWrapper.vm.$nextTick();
-
-    // Verify error is displayed
-    expect(vm.state.uploadError).toBeDefined();
-
-    // Remove a file to get within the limit
-    vm.removeFile('3');
-    await multiWrapper.vm.$nextTick();
-
-    // Error should be cleared since we're now within the limit
-    expect(vm.state.uploadError).toBeNull();
-  });
-
-  it('should clear error when new files are processed', async () => {
+  it('should clear error when new valid file is processed', async () => {
     const mockFiles = [
       new File(['test1'], 'test1.jpg', { type: 'image/jpeg' }),
       new File(['test2'], 'test2.jpg', { type: 'image/jpeg' }),
@@ -204,36 +164,49 @@ describe('ImageUpload Integration', () => {
     expect(vm.state.uploadError).toBeNull();
   });
 
-  it('should handle drag events on single file preview in error state', async () => {
-    // Add a valid file first to enter single file preview mode
+  it('should show preview state when file is added', async () => {
     const validFile = new File(['valid'], 'valid.jpg', { type: 'image/jpeg' });
     const vm = wrapper.vm;
 
     await vm.preprocessAddedFiles([validFile]);
     await wrapper.vm.$nextTick();
 
-    expect(vm.singleFilePreview).toBeTruthy();
+    // Check that we have a file in state
+    expect(vm.hasFiles).toBe(true);
+    expect(vm.currentFile).toBeTruthy();
 
-    const singlePreview = wrapper.find('.single-file-preview');
-    expect(singlePreview.exists()).toBe(true);
+    // Check preview state is rendered
+    const previewState = wrapper.find('.preview-state');
+    expect(previewState.exists()).toBe(true);
+  });
 
-    // Verify drag handlers are present on single file preview
-    expect(singlePreview.element.getAttribute('@dragover')).toBeDefined;
-    expect(singlePreview.element.getAttribute('@drop')).toBeDefined;
+  it('should clear file when clear button is clicked', async () => {
+    const validFile = new File(['valid'], 'valid.jpg', { type: 'image/jpeg' });
+    const vm = wrapper.vm;
 
-    // Test that drag events are handled correctly with separate state
-    await singlePreview.trigger('dragover');
-    expect(vm.state.isSinglePreviewDragOver).toBe(true);
+    await vm.preprocessAddedFiles([validFile]);
+    await wrapper.vm.$nextTick();
 
-    await singlePreview.trigger('dragleave');
-    expect(vm.state.isSinglePreviewDragOver).toBe(false);
+    expect(vm.hasFiles).toBe(true);
 
-    // Test that drop event clears the drag state
-    const newFile = new File(['replacement'], 'replacement.jpg', { type: 'image/jpeg' });
-    await singlePreview.trigger('drop', {
-      dataTransfer: { files: [newFile] },
-    });
+    // Call clearFile method
+    vm.clearFile();
+    await wrapper.vm.$nextTick();
 
-    expect(vm.state.isSinglePreviewDragOver).toBe(false);
+    expect(vm.hasFiles).toBe(false);
+    expect(vm.state.files.length).toBe(0);
+  });
+
+  it('should handle drag over state on upload zone', async () => {
+    const vm = wrapper.vm;
+    const dropZone = wrapper.find('.upload-zone');
+
+    // Trigger dragover
+    await dropZone.trigger('dragover');
+    expect(vm.state.isDragOver).toBe(true);
+
+    // Trigger dragleave
+    await dropZone.trigger('dragleave');
+    expect(vm.state.isDragOver).toBe(false);
   });
 });

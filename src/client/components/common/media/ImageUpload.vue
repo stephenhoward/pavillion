@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { defineProps, reactive, ref, computed, onMounted, onUnmounted } from 'vue';
+import { defineProps, reactive, ref, computed, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import MediaService, {
   UploadProgress,
@@ -34,9 +34,8 @@ const props = defineProps({
 });
 
 const state = reactive({
-  files: [],
+  files: [] as FileWithState[],
   isDragOver: false,
-  isSinglePreviewDragOver: false,
   isUploading: false,
   uploadError: null as { code: ValidationErrorCode | UploadErrorCode; parameters?: Record<string, any> } | null,
   allowedTypes: mediaService.config.allowedTypes,
@@ -46,15 +45,13 @@ const state = reactive({
 
 const fileInput = ref<HTMLInputElement | null>(null);
 
-
 // Computed properties
 const hasFiles = computed(() => state.files.length > 0);
-const singleFilePreview = computed(() => {
-  if (!props.multiple && state.files.length === 1) {
-    return state.files[0];
-  }
-  return null;
-});
+const currentFile = computed(() => state.files[0] || null);
+const uploadProgress = computed(() => currentFile.value?.progress || 0);
+const isComplete = computed(() => currentFile.value?.status === 'complete');
+const isFailed = computed(() => currentFile.value?.status === 'failed');
+const isUploading = computed(() => currentFile.value?.status === 'uploading');
 
 /**
  * Formats file size for display
@@ -66,6 +63,16 @@ const formatFileSize = (bytes: number): string => {
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
+
+/**
+ * Auto-upload when files change
+ */
+watch(() => state.files, async (newFiles) => {
+  const pendingFiles = newFiles.filter((f: FileWithState) => f.status === 'pending');
+  if (pendingFiles.length > 0 && !state.isUploading) {
+    await uploadFiles();
+  }
+}, { deep: true });
 
 /**
  * Handles file selection from input or drop
@@ -100,7 +107,6 @@ const preprocessAddedFiles = async (files: FileList | File[]) => {
 
   for (const file of fileArray) {
     const fileWithState: FileWithState = await mediaService.prepareFile(file);
-
     state.files.push(fileWithState);
   }
 
@@ -115,6 +121,8 @@ const handleFileInputChange = (event: Event) => {
   if (target.files && target.files.length > 0) {
     preprocessAddedFiles(target.files);
   }
+  // Reset input so same file can be selected again
+  target.value = '';
 };
 
 /**
@@ -123,62 +131,22 @@ const handleFileInputChange = (event: Event) => {
 const handleDragOver = (event: DragEvent) => {
   event.preventDefault();
   event.stopPropagation();
-
-  // If we have a single file preview, don't set the outer drag state
-  // The inner preview handlers will manage the drag state
-  if (!singleFilePreview.value) {
-    state.isDragOver = true;
-  }
+  state.isDragOver = true;
 };
 
 const handleDragLeave = (event: DragEvent) => {
   event.preventDefault();
   event.stopPropagation();
-
-  // Only clear outer drag state if we don't have single file preview
-  if (!singleFilePreview.value) {
-    state.isDragOver = false;
-  }
+  state.isDragOver = false;
 };
 
 const handleDrop = async (event: DragEvent) => {
   event.preventDefault();
   event.stopPropagation();
-
-  // Only clear outer drag state if we don't have single file preview
-  if (!singleFilePreview.value) {
-    state.isDragOver = false;
-  }
+  state.isDragOver = false;
 
   const files = event.dataTransfer?.files;
   if (files && files.length > 0) {
-    await preprocessAddedFiles(files);
-  }
-};
-
-/**
- * Handles drag and drop events specifically for single file preview
- */
-const handleSinglePreviewDragOver = (event: DragEvent) => {
-  event.preventDefault();
-  event.stopPropagation();
-  state.isSinglePreviewDragOver = true;
-};
-
-const handleSinglePreviewDragLeave = (event: DragEvent) => {
-  event.preventDefault();
-  event.stopPropagation();
-  state.isSinglePreviewDragOver = false;
-};
-
-const handleSinglePreviewDrop = async (event: DragEvent) => {
-  event.preventDefault();
-  event.stopPropagation();
-  state.isSinglePreviewDragOver = false;
-
-  const files = event.dataTransfer?.files;
-  if (files && files.length > 0) {
-    // In single file mode, replace the existing file
     await preprocessAddedFiles(files);
   }
 };
@@ -191,26 +159,16 @@ const triggerFileBrowser = () => {
 };
 
 /**
- * Removes a file from the upload queue
+ * Removes a file / clears the upload
  */
-const removeFile = (fileId: string) => {
-  const index = state.files.findIndex((f: FileWithState) => f.id === fileId);
-  if (index !== -1) {
-    state.files.splice(index, 1);
-
-    // Clear upload error if removing files resolves the issue
-    if (state.uploadError &&
-        (state.uploadError.code === ValidationErrorCode.TOO_MANY_FILES ||
-         state.uploadError.code === ValidationErrorCode.SINGLE_FILE_ONLY)) {
-      state.uploadError = null;
-    }
-
-    emit('filesChanged', state.files);
-  }
+const clearFile = () => {
+  state.files = [];
+  state.uploadError = null;
+  emit('filesChanged', state.files);
 };
 
 /**
- * Uploads all pending files
+ * Uploads all pending files (auto-triggered)
  */
 const uploadFiles = async () => {
   if (state.isUploading) return;
@@ -256,17 +214,16 @@ const uploadFiles = async () => {
 };
 
 /**
- * Retries upload for a failed file
+ * Retries upload for failed file
  */
-const retryFile = async (fileId: string) => {
-  const fileWithState = state.files.find((f: FileWithState) => f.id === fileId);
-  if (!fileWithState || fileWithState.status !== 'failed') return;
+const retryUpload = async () => {
+  if (!currentFile.value || currentFile.value.status !== 'failed') return;
 
-  fileWithState.status = 'pending';
-  fileWithState.progress = 0;
-  fileWithState.error = undefined;
+  currentFile.value.status = 'pending';
+  currentFile.value.progress = 0;
+  currentFile.value.error = undefined;
 
-  uploadFiles();
+  await uploadFiles();
 };
 
 /**
@@ -278,7 +235,6 @@ const handleKeyDown = (event: KeyboardEvent) => {
     triggerFileBrowser();
   }
 };
-
 </script>
 
 <template>
@@ -288,162 +244,141 @@ const handleKeyDown = (event: KeyboardEvent) => {
       class="upload-zone"
       :class="{
         'drag-over': state.isDragOver,
-        'has-files': hasFiles,
-        'single-mode': !props.multiple,
-        'single-with-preview': singleFilePreview
+        'has-preview': hasFiles,
+        'uploading': isUploading,
+        'complete': isComplete,
+        'failed': isFailed
       }"
       :aria-label="t('accessibility.drag_drop_zone')"
       role="button"
       tabindex="0"
-      @click="triggerFileBrowser"
+      @click="!hasFiles && triggerFileBrowser()"
       @keydown="handleKeyDown"
       @dragover="handleDragOver"
       @dragleave="handleDragLeave"
       @drop="handleDrop"
     >
-      <!-- Single file preview mode -->
-      <div
-        v-if="singleFilePreview"
-        class="single-file-preview"
-        :class="{ 'drag-over': state.isSinglePreviewDragOver }"
-        @dragover="handleSinglePreviewDragOver"
-        @dragleave="handleSinglePreviewDragLeave"
-        @drop="handleSinglePreviewDrop"
-      >
-        <div class="preview-container">
+      <!-- Preview state with image -->
+      <div v-if="hasFiles && currentFile" class="preview-state">
+        <!-- Image preview -->
+        <div class="preview-image-wrapper">
           <img
-            v-if="singleFilePreview.preview"
-            :src="singleFilePreview.preview"
-            :alt="t('accessibility.file_preview', { filename: singleFilePreview.file.name })"
+            v-if="currentFile.preview"
+            :src="currentFile.preview"
+            :alt="currentFile.file.name"
             class="preview-image"
           />
           <div v-else class="preview-placeholder">
-            <svg
-              width="48"
-              height="48"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <rect x="3"
-                    y="3"
-                    width="18"
-                    height="18"
-                    rx="2"
-                    ry="2"/>
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
               <circle cx="8.5" cy="8.5" r="1.5"/>
               <polyline points="21,15 16,10 5,21"/>
             </svg>
           </div>
+
+          <!-- Upload progress overlay -->
+          <div v-if="isUploading" class="upload-progress-overlay">
+            <svg class="progress-ring" viewBox="0 0 100 100">
+              <circle class="progress-ring-bg" cx="50" cy="50" r="42"/>
+              <circle
+                class="progress-ring-fill"
+                cx="50"
+                cy="50"
+                r="42"
+                :style="{ strokeDashoffset: 264 - (264 * uploadProgress / 100) }"
+              />
+            </svg>
+            <span class="progress-percentage">{{ Math.round(uploadProgress) }}%</span>
+          </div>
+
+          <!-- Success overlay -->
+          <div v-if="isComplete" class="success-overlay">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+          </div>
+
+          <!-- Failed overlay -->
+          <div v-if="isFailed" class="failed-overlay">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="15" y1="9" x2="9" y2="15"/>
+              <line x1="9" y1="9" x2="15" y2="15"/>
+            </svg>
+          </div>
         </div>
 
-        <div class="file-overlay">
-          <div class="file-info">
-            <div class="file-name">{{ singleFilePreview.file.name }}</div>
-            <div class="file-size">{{ formatFileSize(singleFilePreview.file.size) }}</div>
-            <div class="file-status" :class="`status-${singleFilePreview.status}`">
-              {{ t(`status.${singleFilePreview.status}`) }}
-            </div>
+        <!-- File info bar -->
+        <div class="file-info-bar">
+          <div class="file-details">
+            <span class="file-name">{{ currentFile.file.name }}</span>
+            <span class="file-size">{{ formatFileSize(currentFile.file.size) }}</span>
           </div>
-
-          <!-- Progress Bar for single file -->
-          <div
-            v-if="singleFilePreview.status === 'uploading'"
-            class="progress-container"
-          >
-            <div
-              class="progress-bar"
-              :style="{ width: `${singleFilePreview.progress}%` }"
-              :aria-label="t('accessibility.upload_progress', {
-                filename: singleFilePreview.file.name,
-                percentage: singleFilePreview.progress
-              })"
-              role="progressbar"
-              :aria-valuenow="singleFilePreview.progress"
-              aria-valuemin="0"
-              aria-valuemax="100"
-            />
-            <span class="progress-text">{{ singleFilePreview.progress }}%</span>
-          </div>
-
-          <!-- Error Message for single file -->
-          <div v-if="singleFilePreview.error" class="error-message">
-            {{ t(`errors.${singleFilePreview.error.code}`, singleFilePreview.error.parameters || {}) }}
-          </div>
-
           <div class="file-actions">
             <button
-              v-if="singleFilePreview.status === 'failed'"
+              v-if="isFailed"
               type="button"
-              class="action-button retry-button"
-              :aria-label="t('accessibility.retry_upload', { filename: singleFilePreview.file.name })"
-              @click.stop="retryFile(singleFilePreview.id)"
+              class="action-btn retry"
+              @click.stop="retryUpload"
+              :aria-label="t('accessibility.retry_upload', { filename: currentFile.file.name })"
             >
-              {{ t('retry') }}
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="23 4 23 10 17 10"/>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+              </svg>
+              <span>{{ t('retry') }}</span>
             </button>
-
-            <button
-              v-if="singleFilePreview.status !== 'uploading'"
-              type="button"
-              class="action-button remove-button"
-              :aria-label="t('accessibility.remove_file', { filename: singleFilePreview.file.name })"
-              @click.stop="removeFile(singleFilePreview.id)"
-            >
-              {{ t('remove') }}
-            </button>
-
             <button
               type="button"
-              class="action-button replace-button"
-              :aria-label="t('accessibility.replace_file')"
+              class="action-btn change"
               @click.stop="triggerFileBrowser"
+              :aria-label="t('accessibility.replace_file')"
             >
-              {{ t('replace') }}
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              <span>{{ t('replace') }}</span>
+            </button>
+            <button
+              type="button"
+              class="action-btn remove"
+              @click.stop="clearFile"
+              :aria-label="t('accessibility.remove_file', { filename: currentFile.file.name })"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
             </button>
           </div>
+        </div>
+
+        <!-- Error message -->
+        <div v-if="currentFile.error" class="error-banner" role="alert">
+          {{ t(`errors.${currentFile.error.code}`, currentFile.error.parameters || {}) }}
         </div>
       </div>
 
-      <!-- Default upload content -->
-      <div v-else class="upload-content">
+      <!-- Empty state -->
+      <div v-else class="empty-state">
         <div class="upload-icon">
-          <svg
-            width="48"
-            height="48"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <rect x="3"
-                  y="3"
-                  width="18"
-                  height="18"
-                  rx="2"
-                  ry="2"/>
-            <circle cx="8.5" cy="8.5" r="1.5"/>
-            <polyline points="21,15 16,10 5,21"/>
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
           </svg>
         </div>
-
         <div class="upload-text">
-          <p class="primary-text">{{ t('upload.drag_drop_text', { count: props.multiple ? 2 : 1 }) }}</p>
-          <p class="secondary-text">
-            {{ t('upload.or') }}
-            <span class="browse-link">{{ t('upload.click_to_select', { count: props.multiple ? 2 : 1 }) }}</span>
-          </p>
+          <p class="primary">{{ t('upload.drag_drop_text', { count: props.multiple ? 2 : 1 }) }}</p>
+          <p class="secondary">{{ t('upload.or') }} <span class="browse-link">{{ t('upload.click_to_select', { count: props.multiple ? 2 : 1 }) }}</span></p>
         </div>
-
-        <button
-          type="button"
-          class="browse-button"
-          @click.stop="triggerFileBrowser"
-        >
-          {{ t('upload.browse_files') }}
-        </button>
+        <div class="format-hint">
+          <span>{{ state.allowedExtensions.join(' · ') }}</span>
+          <span class="separator">•</span>
+          <span>{{ t('help.max_file_size', { maxSize: formatFileSize(state.maxFileSize) }) }}</span>
+        </div>
       </div>
     </div>
 
@@ -458,192 +393,23 @@ const handleKeyDown = (event: KeyboardEvent) => {
       @change="handleFileInputChange"
     />
 
-    <!-- Upload Error Display -->
+    <!-- Validation Error Display -->
     <div v-if="state.uploadError"
-         class="upload-error"
+         class="validation-error"
          role="alert"
-         aria-live="polite"
-         :id="`upload-error-${props.calendarId}`">
-      <div class="error-icon" aria-hidden="true">
-        <svg
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <circle cx="12" cy="12" r="10"/>
-          <line
-            x1="15"
-            y1="9"
-            x2="9"
-            y2="15"
-          />
-          <line
-            x1="9"
-            y1="9"
-            x2="15"
-            y2="15"
-          />
-        </svg>
-      </div>
-      <div class="error-message">
-        {{ t(`errors.${state.uploadError.code}`, state.uploadError.parameters || {}) }}
-      </div>
-      <button
-        type="button"
-        class="error-dismiss"
-        :aria-label="t('accessibility.dismiss_error')"
-        @click="state.uploadError = null"
-      >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <line
-            x1="18"
-            y1="6"
-            x2="6"
-            y2="18"
-          />
-          <line
-            x1="6"
-            y1="6"
-            x2="18"
-            y2="18"
-          />
+         aria-live="polite">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <span>{{ t(`errors.${state.uploadError.code}`, state.uploadError.parameters || {}) }}</span>
+      <button type="button" class="dismiss" @click="state.uploadError = null">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
         </svg>
       </button>
-    </div>
-
-    <!-- File List (Multiple mode only) -->
-    <div v-if="hasFiles && props.multiple" class="file-list">
-      <div
-        v-for="fileWithState in state.files"
-        :key="fileWithState.id"
-        class="file-item"
-        :class="`status-${fileWithState.status}`"
-      >
-        <!-- File Preview -->
-        <div class="file-preview">
-          <img
-            v-if="fileWithState.preview"
-            :src="fileWithState.preview"
-            :alt="t('accessibility.file_preview', { filename: fileWithState.file.name })"
-            class="preview-image"
-          />
-          <div v-else class="preview-placeholder">
-            <svg
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <rect x="3"
-                    y="3"
-                    width="18"
-                    height="18"
-                    rx="2"
-                    ry="2"/>
-              <circle cx="8.5" cy="8.5" r="1.5"/>
-              <polyline points="21,15 16,10 5,21"/>
-            </svg>
-          </div>
-        </div>
-
-        <!-- File Info -->
-        <div class="file-info">
-          <div class="file-name">{{ fileWithState.file.name }}</div>
-          <div class="file-details">
-            <span class="file-size">{{ formatFileSize(fileWithState.file.size) }}</span>
-            <span class="file-status">{{ t(`status.${fileWithState.status}`) }}</span>
-          </div>
-
-          <!-- Progress Bar -->
-          <div
-            v-if="fileWithState.status === 'uploading'"
-            class="progress-container"
-          >
-            <div
-              class="progress-bar"
-              :style="{ width: `${fileWithState.progress}%` }"
-              :aria-label="t('accessibility.upload_progress', {
-                filename: fileWithState.file.name,
-                percentage: fileWithState.progress
-              })"
-              role="progressbar"
-              :aria-valuenow="fileWithState.progress"
-              aria-valuemin="0"
-              aria-valuemax="100"
-            />
-            <span class="progress-text">{{ fileWithState.progress }}%</span>
-          </div>
-
-          <!-- Error Message -->
-          <div v-if="fileWithState.error"
-               class="error-message"
-               role="alert"
-               aria-live="polite"
-               :id="`file-error-${fileWithState.id}`">
-            {{ t(`errors.${fileWithState.error.code}`, fileWithState.error.parameters || {}) }}
-          </div>
-        </div>
-
-        <!-- File Actions -->
-        <div class="file-actions">
-          <button
-            v-if="fileWithState.status === 'failed'"
-            type="button"
-            class="action-button retry-button"
-            :aria-label="t('accessibility.retry_upload', { filename: fileWithState.file.name })"
-            @click="retryFile(fileWithState.id)"
-          >
-            {{ t('retry') }}
-          </button>
-
-          <button
-            v-if="fileWithState.status !== 'uploading'"
-            type="button"
-            class="action-button remove-button"
-            :aria-label="t('accessibility.remove_file', { filename: fileWithState.file.name })"
-            @click="removeFile(fileWithState.id)"
-          >
-            {{ t('remove') }}
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Upload Controls -->
-    <div v-if="hasFiles && (props.multiple || (!props.multiple && singleFilePreview && singleFilePreview.status !== 'complete'))" class="upload-controls">
-      <button
-        type="button"
-        class="upload-button primary"
-        :disabled="state.isUploading || !state.files.some((f: FileWithState) => f.status === 'pending' || f.status === 'failed')"
-        @click="uploadFiles"
-      >
-        <span v-if="state.isUploading">{{ t('uploading') }}</span>
-        <span v-else>{{ t('upload.upload_files', { count: props.multiple ? 2 : 1 }) }}</span>
-      </button>
-    </div>
-
-    <!-- Help Text -->
-    <div class="upload-help">
-      <p class="help-text">{{ t('help.supported_formats') }}: {{ state.allowedExtensions.join(', ') }}</p>
-      <p class="help-text">{{ t('help.max_file_size', { maxSize: formatFileSize(state.maxFileSize) }) }}</p>
-      <p v-if="props.multiple" class="help-text">{{ t('help.drag_drop_instructions') }}</p>
-      <p v-else class="help-text">{{ t('help.drag_drop_instructions_single') }}</p>
     </div>
   </div>
 </template>
@@ -651,638 +417,473 @@ const handleKeyDown = (event: KeyboardEvent) => {
 <style scoped lang="scss">
 @use '@/client/assets/mixins' as *;
 
+// Design tokens
+$accent-color: #e67e22;
+$accent-color-light: #f39c12;
+$success-color: #27ae60;
+$error-color: #e74c3c;
+$border-radius: 16px;
+$transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
 .image-upload {
   width: 100%;
-  max-width: 600px;
-}
-
-.upload-zone {
-  border: 2px dashed #ccc;
-  border-radius: 12px;
-  padding: 2rem;
-  text-align: center;
-  background: $light-mode-panel-background;
-  cursor: pointer;
-  transition: all 0.2s ease-in-out;
-
-  @media (prefers-color-scheme: dark) {
-    border-color: $dark-mode-border;
-    background: $dark-mode-background;
-  }
-
-  &:hover {
-    border-color: #007acc;
-    background: rgba(0, 122, 204, 0.05);
-  }
-
-  &:focus {
-    outline: 2px solid #007acc;
-    outline-offset: 2px;
-  }
-
-  &.drag-over {
-    border-color: #007acc;
-    background: rgba(0, 122, 204, 0.1);
-    transform: scale(1.02);
-  }
-
-  &.has-files {
-    margin-bottom: 1.5rem;
-  }
-
-  &.single-with-preview {
-    padding: 0;
-    border: 2px solid $light-mode-border;
-    min-height: 200px;
-    position: relative;
-    overflow: hidden;
-
-    @media (prefers-color-scheme: dark) {
-      border-color: $dark-mode-border;
-    }
-
-    &:hover {
-      border-color: #007acc;
-    }
-
-    &.drag-over {
-      border-color: #007acc;
-      &::after {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 122, 204, 0.1);
-        z-index: 2;
-      }
-    }
-  }
-}
-
-.upload-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-}
-
-.upload-icon {
-  color: $light-mode-secondary-text;
-
-  @media (prefers-color-scheme: dark) {
-    color: $dark-mode-secondary-text;
-  }
-}
-
-.upload-text {
-  .primary-text {
-    margin: 0 0 0.5rem 0;
-    font-size: 1.1rem;
-    font-weight: $font-medium;
-    color: $light-mode-text;
-
-    @media (prefers-color-scheme: dark) {
-      color: $dark-mode-text;
-    }
-  }
-
-  .secondary-text {
-    margin: 0;
-    color: $light-mode-secondary-text;
-
-    @media (prefers-color-scheme: dark) {
-      color: $dark-mode-secondary-text;
-    }
-  }
-
-  .browse-link {
-    color: #007acc;
-    text-decoration: underline;
-  }
-}
-
-.browse-button {
-  padding: 0.75rem 1.5rem;
-  background: var(--pav-color-interactive-primary);
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-weight: $font-medium;
-  cursor: pointer;
-  transition: background-color 0.2s ease-in-out;
-
-  &:hover {
-    background: #005a9e;
-  }
-
-  &:focus {
-    outline: 2px solid #007acc;
-    outline-offset: 2px;
-  }
 }
 
 .file-input {
   display: none;
 }
 
-.single-file-preview {
+.upload-zone {
   position: relative;
-  width: 100%;
-  height: 100%;
-  min-height: 200px;
-  display: flex;
-  flex-direction: column;
+  border: 2px dashed rgba(0, 0, 0, 0.15);
+  border-radius: $border-radius;
+  background: linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%);
   cursor: pointer;
+  transition: $transition-smooth;
+  overflow: hidden;
+
+  @include dark-mode {
+    border-color: rgba(255, 255, 255, 0.15);
+    background: linear-gradient(135deg, #2a2a2a 0%, #1f1f1f 100%);
+  }
+
+  &:hover:not(.has-preview) {
+    border-color: $accent-color;
+    background: linear-gradient(135deg, #fff8f0 0%, #fef5ed 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(230, 126, 34, 0.15);
+
+    @include dark-mode {
+      background: linear-gradient(135deg, #2d2520 0%, #1f1a15 100%);
+    }
+
+    .upload-icon svg {
+      transform: translateY(-4px);
+      color: $accent-color;
+    }
+  }
+
+  &:focus {
+    outline: none;
+    border-color: $accent-color;
+    box-shadow: 0 0 0 4px rgba(230, 126, 34, 0.2);
+  }
 
   &.drag-over {
-    &::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 122, 204, 0.1);
-      border: 2px solid #007acc;
-      border-radius: 8px;
-      z-index: 3;
+    border-color: $accent-color;
+    border-style: solid;
+    background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
+    transform: scale(1.02);
+    box-shadow: 0 12px 32px rgba(230, 126, 34, 0.25);
+
+    @include dark-mode {
+      background: linear-gradient(135deg, #3d2d20 0%, #2d2015 100%);
+    }
+
+    .upload-icon svg {
+      animation: bounce 0.5s ease infinite;
     }
   }
 
-  .preview-container {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: $light-mode-panel-background;
-
-    @media (prefers-color-scheme: dark) {
-      background: $dark-mode-background;
-    }
-
-    .preview-image {
-      max-width: 100%;
-      max-height: 100%;
-      object-fit: contain;
-    }
-
-    .preview-placeholder {
-      width: 80px;
-      height: 80px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: $light-mode-secondary-text;
-
-      @media (prefers-color-scheme: dark) {
-        color: $dark-mode-secondary-text;
-      }
-    }
+  &.has-preview {
+    border: none;
+    cursor: default;
+    background: #1a1a1a;
   }
 
-  .file-overlay {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
-    color: white;
-    padding: 1rem;
-
-    .file-info {
-      margin-bottom: 0.75rem;
-
-      .file-name {
-        font-weight: $font-medium;
-        font-size: 0.95rem;
-        margin-bottom: 0.25rem;
-        word-break: break-word;
-      }
-
-      .file-size {
-        font-size: 0.875rem;
-        opacity: 0.9;
-        margin-right: 1rem;
-      }
-
-      .file-status {
-        font-size: 0.875rem;
-        opacity: 0.9;
-
-        &.status-complete {
-          color: #28a745;
-        }
-
-        &.status-failed {
-          color: #dc3545;
-        }
-
-        &.status-uploading {
-          color: #007acc;
-        }
-      }
-    }
-
-    .progress-container {
-      margin-bottom: 0.75rem;
-      position: relative;
-      height: 4px;
-      background: rgba(255, 255, 255, 0.3);
-      border-radius: 2px;
-      overflow: hidden;
-
-      .progress-bar {
-        height: 100%;
-        background: #007acc;
-        transition: width 0.2s ease-in-out;
-      }
-
-      .progress-text {
+  &.complete {
+    .preview-image-wrapper {
+      &::after {
+        content: '';
         position: absolute;
-        top: -1.5rem;
-        right: 0;
-        font-size: 0.75rem;
-        color: white;
+        inset: 0;
+        border: 3px solid $success-color;
+        border-radius: $border-radius $border-radius 0 0;
+        pointer-events: none;
       }
     }
+  }
 
-    .error-message {
-      margin-bottom: 0.75rem;
-      font-size: 0.875rem;
-      color: #dc3545;
-      background: rgba(220, 53, 69, 0.2);
-      padding: 0.5rem;
-      border-radius: 4px;
-    }
-
-    .file-actions {
-      display: flex;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-
-      .action-button {
-        padding: 0.5rem 1rem;
-        border: 1px solid rgba(255, 255, 255, 0.3);
-        border-radius: 4px;
-        font-size: 0.875rem;
-        cursor: pointer;
-        transition: all 0.2s ease-in-out;
-        background: rgba(255, 255, 255, 0.1);
-        color: white;
-
-        &:hover {
-          background: rgba(255, 255, 255, 0.2);
-          border-color: rgba(255, 255, 255, 0.5);
-        }
-
-        &.retry-button {
-          border-color: #007acc;
-          background: rgba(0, 122, 204, 0.2);
-
-          &:hover {
-            background: #007acc;
-          }
-        }
-
-        &.remove-button {
-          border-color: #dc3545;
-          background: rgba(220, 53, 69, 0.2);
-
-          &:hover {
-            background: #dc3545;
-          }
-        }
-
-        &.replace-button {
-          border-color: #28a745;
-          background: rgba(40, 167, 69, 0.2);
-
-          &:hover {
-            background: #28a745;
-          }
-        }
+  &.failed {
+    .preview-image-wrapper {
+      &::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border: 3px solid $error-color;
+        border-radius: $border-radius $border-radius 0 0;
+        pointer-events: none;
       }
     }
   }
 }
 
-.file-list {
-  margin-top: 1.5rem;
+// Empty state styling
+.empty-state {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  gap: 16px;
 }
 
-.file-item {
+.upload-icon {
+  color: #999;
+  transition: $transition-smooth;
+
+  @include dark-mode {
+    color: #666;
+  }
+
+  svg {
+    transition: $transition-smooth;
+  }
+}
+
+.upload-text {
+  text-align: center;
+
+  .primary {
+    margin: 0 0 4px 0;
+    font-size: 16px;
+    font-weight: $font-medium;
+    color: #333;
+
+    @include dark-mode {
+      color: #ddd;
+    }
+  }
+
+  .secondary {
+    margin: 0;
+    font-size: 14px;
+    color: #777;
+
+    @include dark-mode {
+      color: #888;
+    }
+  }
+
+  .browse-link {
+    color: $accent-color;
+    font-weight: $font-medium;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+
+    &:hover {
+      color: $accent-color-light;
+    }
+  }
+}
+
+.format-hint {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  padding: 1rem;
-  border: 1px solid $light-mode-border;
-  border-radius: 8px;
-  background: $light-mode-panel-background;
+  gap: 8px;
+  font-size: 12px;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 
-  @media (prefers-color-scheme: dark) {
-    border-color: $dark-mode-border;
-    background: $dark-mode-background;
+  @include dark-mode {
+    color: #666;
   }
 
-  &.status-complete {
-    border-color: #28a745;
-  }
-
-  &.status-failed {
-    border-color: #dc3545;
-  }
-
-  &.status-uploading {
-    border-color: #007acc;
+  .separator {
+    opacity: 0.5;
   }
 }
 
-.file-preview {
-  flex-shrink: 0;
-  width: 48px;
-  height: 48px;
-  border-radius: 4px;
-  overflow: hidden;
-
-  .preview-image {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  .preview-placeholder {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: $light-mode-selected-background;
-    color: $light-mode-secondary-text;
-
-    @media (prefers-color-scheme: dark) {
-      background: $dark-mode-selected-background;
-      color: $dark-mode-secondary-text;
-    }
-  }
+// Preview state styling
+.preview-state {
+  display: flex;
+  flex-direction: column;
 }
 
-.file-info {
-  flex: 1;
-  min-width: 0;
-
-  .file-name {
-    font-weight: $font-medium;
-    color: $light-mode-text;
-    word-break: break-word;
-
-    @media (prefers-color-scheme: dark) {
-      color: $dark-mode-text;
-    }
-  }
-
-  .file-details {
-    display: flex;
-    gap: 1rem;
-    margin-top: 0.25rem;
-    font-size: 0.875rem;
-    color: $light-mode-secondary-text;
-
-    @media (prefers-color-scheme: dark) {
-      color: $dark-mode-secondary-text;
-    }
-  }
-}
-
-.progress-container {
-  margin-top: 0.5rem;
+.preview-image-wrapper {
   position: relative;
-  height: 4px;
-  background: $light-mode-selected-background;
-  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  max-height: 300px;
+  background: #0a0a0a;
+  border-radius: $border-radius $border-radius 0 0;
   overflow: hidden;
+}
 
-  @media (prefers-color-scheme: dark) {
-    background: $dark-mode-selected-background;
-  }
+.preview-image {
+  width: 100%;
+  height: 100%;
+  max-height: 300px;
+  object-fit: contain;
+}
 
-  .progress-bar {
-    height: 100%;
-    background: #007acc;
-    transition: width 0.2s ease-in-out;
-  }
+.preview-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 200px;
+  color: #555;
+}
 
-  .progress-text {
-    position: absolute;
-    top: -1.5rem;
-    right: 0;
-    font-size: 0.75rem;
-    color: $light-mode-secondary-text;
+// Progress overlay
+.upload-progress-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+}
 
-    @media (prefers-color-scheme: dark) {
-      color: $dark-mode-secondary-text;
-    }
+.progress-ring {
+  width: 80px;
+  height: 80px;
+  transform: rotate(-90deg);
+}
+
+.progress-ring-bg {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.2);
+  stroke-width: 6;
+}
+
+.progress-ring-fill {
+  fill: none;
+  stroke: $accent-color;
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-dasharray: 264;
+  transition: stroke-dashoffset 0.3s ease;
+}
+
+.progress-percentage {
+  position: absolute;
+  font-size: 18px;
+  font-weight: $font-bold;
+  color: white;
+}
+
+// Success overlay
+.success-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(39, 174, 96, 0.85);
+  color: white;
+  animation: fadeIn 0.3s ease;
+
+  svg {
+    animation: checkmark 0.4s ease 0.1s both;
   }
 }
 
-.error-message {
-  margin-top: 0.5rem;
-  font-size: 0.875rem;
-  color: #dc3545;
+// Failed overlay
+.failed-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(231, 76, 60, 0.85);
+  color: white;
+  animation: fadeIn 0.3s ease;
+}
+
+// File info bar
+.file-info-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #1a1a1a;
+  border-radius: 0 0 $border-radius $border-radius;
+
+  @include dark-mode {
+    background: #1a1a1a;
+  }
+}
+
+.file-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.file-name {
+  font-size: 13px;
+  font-weight: $font-medium;
+  color: white;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-size {
+  font-size: 11px;
+  color: #888;
 }
 
 .file-actions {
   display: flex;
-  gap: 0.5rem;
-  flex-shrink: 0;
+  gap: 8px;
 }
 
-.action-button {
-  padding: 0.5rem 1rem;
-  border: 1px solid;
-  border-radius: 4px;
-  font-size: 0.875rem;
+.action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: $font-medium;
   cursor: pointer;
-  transition: all 0.2s ease-in-out;
+  transition: $transition-smooth;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ccc;
 
-  &.retry-button {
-    border-color: #007acc;
-    color: #007acc;
-    background: transparent;
+  &:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+  }
+
+  &.retry {
+    background: rgba(230, 126, 34, 0.2);
+    color: $accent-color;
 
     &:hover {
-      background: #007acc;
+      background: $accent-color;
       color: white;
     }
   }
 
-  &.remove-button {
-    border-color: $light-mode-border;
-    color: $light-mode-secondary-text;
-    background: transparent;
-
-    @media (prefers-color-scheme: dark) {
-      border-color: $dark-mode-border;
-      color: $dark-mode-secondary-text;
-    }
+  &.change {
+    background: rgba(255, 255, 255, 0.1);
 
     &:hover {
-      border-color: #dc3545;
-      color: #dc3545;
+      background: rgba(255, 255, 255, 0.2);
+    }
+  }
+
+  &.remove {
+    padding: 8px;
+
+    &:hover {
+      background: rgba(231, 76, 60, 0.3);
+      color: $error-color;
+    }
+  }
+
+  span {
+    @media (max-width: 500px) {
+      display: none;
     }
   }
 }
 
-.upload-controls {
-  margin-top: 1.5rem;
+// Error banner
+.error-banner {
+  padding: 12px 16px;
+  background: rgba(231, 76, 60, 0.15);
+  color: $error-color;
+  font-size: 13px;
   text-align: center;
 }
 
-.upload-button {
-  padding: 0.75rem 2rem;
-  border: none;
-  border-radius: 6px;
-  font-weight: $font-medium;
-  cursor: pointer;
-  transition: all 0.2s ease-in-out;
-
-  &.primary {
-    background: #28a745;
-    color: white;
-
-    &:hover:not(:disabled) {
-      background: #218838;
-    }
-
-    &:disabled {
-      background: $light-mode-selected-background;
-      color: $light-mode-secondary-text;
-      cursor: not-allowed;
-
-      @media (prefers-color-scheme: dark) {
-        background: $dark-mode-selected-background;
-        color: $dark-mode-secondary-text;
-      }
-    }
-  }
-}
-
-.upload-help {
-  margin-top: 1rem;
-
-  .help-text {
-    margin: 0.25rem 0;
-    font-size: 0.875rem;
-    color: $light-mode-secondary-text;
-
-    @media (prefers-color-scheme: dark) {
-      color: $dark-mode-secondary-text;
-    }
-  }
-}
-
-.upload-error {
-  margin-top: 1rem;
-  padding: 1rem;
-  background: rgba(220, 53, 69, 0.1);
-  border: 1px solid #dc3545;
-  border-radius: 6px;
+// Validation error
+.validation-error {
   display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px 16px;
+  background: rgba(231, 76, 60, 0.1);
+  border: 1px solid rgba(231, 76, 60, 0.3);
+  border-radius: 10px;
+  font-size: 13px;
+  color: $error-color;
 
-  @media (prefers-color-scheme: dark) {
-    background: rgba(220, 53, 69, 0.15);
+  @include dark-mode {
+    background: rgba(231, 76, 60, 0.15);
   }
 
-  .error-icon {
+  svg {
     flex-shrink: 0;
-    color: #dc3545;
-    margin-top: 0.125rem;
   }
 
-  .error-message {
+  span {
     flex: 1;
-    color: #dc3545;
-    font-weight: $font-medium;
-    line-height: 1.4;
   }
 
-  .error-dismiss {
+  .dismiss {
     flex-shrink: 0;
-    background: transparent;
+    padding: 4px;
     border: none;
-    color: #dc3545;
+    border-radius: 4px;
+    background: transparent;
+    color: $error-color;
     cursor: pointer;
-    padding: 0.25rem;
-    border-radius: 3px;
-    transition: background-color 0.2s ease-in-out;
+    transition: background 0.2s;
 
     &:hover {
-      background: rgba(220, 53, 69, 0.2);
+      background: rgba(231, 76, 60, 0.2);
     }
+  }
+}
 
-    &:focus {
-      outline: 2px solid #dc3545;
-      outline-offset: 2px;
-    }
+// Animations
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes checkmark {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
   }
 }
 
 // Mobile responsiveness
-@media (max-width: 768px) {
-  .upload-zone {
-    padding: 1.5rem 1rem;
-
-    &.single-with-preview {
-      min-height: 150px;
-
-      .file-overlay {
-        position: static;
-        background: rgba(0, 0, 0, 0.85);
-        border-radius: 0 0 8px 8px;
-
-        .file-actions {
-          flex-direction: column;
-
-          .action-button {
-            text-align: center;
-          }
-        }
-      }
-
-      .preview-container {
-        min-height: 120px;
-
-        .preview-placeholder {
-          width: 60px;
-          height: 60px;
-        }
-      }
-    }
+@media (max-width: 500px) {
+  .empty-state {
+    padding: 32px 16px;
   }
 
-  .file-item {
+  .file-info-bar {
     flex-direction: column;
-    align-items: flex-start;
-    gap: 0.75rem;
-
-    .file-preview {
-      align-self: center;
-    }
-
-    .file-actions {
-      align-self: stretch;
-      justify-content: center;
-    }
+    gap: 12px;
+    align-items: stretch;
   }
 
-  .upload-button {
-    width: 100%;
+  .file-actions {
+    justify-content: center;
+  }
+
+  .action-btn {
+    flex: 1;
+    justify-content: center;
   }
 }
 </style>
