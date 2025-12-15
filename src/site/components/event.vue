@@ -55,23 +55,107 @@ onBeforeMount(async () => {
   <div v-if="state.notFound">
     <NotFound />
   </div>
-  <div v-else-if="state.event">
-    <header v-if="state.calendar">
+  <div v-else-if="state.event" class="event-detail">
+    <header v-if="state.calendar" class="event-header">
       <!-- TODO: respect the user's language prefernces instead of using 'en' -->
-      <p><router-link :to="{ name: 'calendar', params: { calendar: state.calendar.urlName } }">{{ state.calendar.content("en").name || state.calendar.urlName }}</router-link></p>
-      <EventImage :media="state.event.media" :size="medium" />
+      <p class="breadcrumb">
+        <router-link :to="{ name: 'calendar', params: { calendar: state.calendar.urlName } }">
+          {{ state.calendar.content("en").name || state.calendar.urlName }}
+        </router-link>
+      </p>
+      <EventImage :media="state.event.media" context="feature" />
       <h1>{{ state.event.content("en").name }}</h1>
     </header>
-    <main>
+    <main class="event-content">
       <div v-if="state.err" class="error">{{ state.err }}</div>
-      <EventImage :media="state.event.media" size="large" />
-      <p>{{ state.event.content("en").description }}</p>
+      <div class="description">
+        <p>{{ state.event.content("en").description }}</p>
+      </div>
     </main>
   </div>
 </template>
 
 <style scoped lang="scss">
 @use '../assets/mixins' as *;
+
+// ================================================================
+// EVENT DETAIL PAGE
+// ================================================================
+// Displays the full event details with a dramatic feature image.
+// This page shows the event template, not a specific instance.
+// ================================================================
+
+.event-detail {
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.event-header {
+  display: flex;
+  flex-direction: column;
+  gap: $public-space-lg;
+  margin-bottom: $public-space-2xl;
+
+  .breadcrumb {
+    margin: 0;
+    font-size: $public-font-size-sm;
+
+    a {
+      color: $public-text-secondary-light;
+      text-decoration: none;
+      transition: $public-transition-fast;
+
+      &:hover {
+        color: $public-accent-light;
+      }
+
+      @include public-dark-mode {
+        color: $public-text-secondary-dark;
+
+        &:hover {
+          color: $public-accent-dark;
+        }
+      }
+    }
+  }
+
+  h1 {
+    margin: 0;
+    font-size: $public-font-size-2xl;
+    font-weight: $public-font-weight-semibold;
+    line-height: $public-line-height-tight;
+    color: $public-text-primary-light;
+
+    @include public-dark-mode {
+      color: $public-text-primary-dark;
+    }
+
+    @include public-mobile-only {
+      font-size: $public-font-size-xl;
+    }
+  }
+}
+
+.event-content {
+  .description {
+    p {
+      font-size: $public-font-size-md;
+      line-height: $public-line-height-relaxed;
+      color: $public-text-primary-light;
+      margin: 0 0 $public-space-lg 0;
+      white-space: pre-wrap;
+
+      @include public-dark-mode {
+        color: $public-text-primary-dark;
+      }
+    }
+  }
+
+  .error {
+    @include public-error-state;
+    margin-bottom: $public-space-lg;
+  }
+}
 
 .event-category-badge {
   @include public-category-badge;

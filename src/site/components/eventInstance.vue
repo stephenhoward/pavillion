@@ -56,12 +56,20 @@ onBeforeMount(async () => {
     <NotFound />
   </div>
   <div v-else-if="state.instance">
-    <header v-if="state.calendar">
+    <header v-if="state.calendar" class="instance-header">
       <!-- TODO: respect the user's language prefernces instead of using 'en' -->
-      <p><router-link :to="{ name: 'calendar', params: { calendar: state.calendar.urlName } }">{{ state.calendar.content("en").name || state.calendar.urlName }}</router-link></p>
-      <EventImage :media="state.instance.event.media" size="medium" />
-      <h1>{{ state.instance.event.content("en").name }}</h1>
-      <time :datetime="state.instance.start.toISO()">{{ state.instance.start.toLocaleString(DateTime.DATETIME_MED) }}</time>
+      <p class="breadcrumb">
+        <router-link :to="{ name: 'calendar', params: { calendar: state.calendar.urlName } }">
+          {{ state.calendar.content("en").name || state.calendar.urlName }}
+        </router-link>
+      </p>
+      <EventImage :media="state.instance.event.media" context="hero" />
+      <div class="instance-meta">
+        <h1>{{ state.instance.event.content("en").name }}</h1>
+        <time :datetime="state.instance.start.toISO()" class="event-datetime">
+          {{ state.instance.start.toLocaleString(DateTime.DATETIME_MED) }}
+        </time>
+      </div>
     </header>
     <main>
       <div v-if="state.err" class="error">{{ state.err }}</div>
@@ -79,21 +87,119 @@ onBeforeMount(async () => {
 </template>
 
 <style scoped lang="scss">
-@use '../../client/assets/mixins' as *;
+@use '../assets/mixins' as *;
+
+// ================================================================
+// EVENT INSTANCE PAGE
+// ================================================================
+// Displays a specific occurrence of an event with hero image,
+// date/time, and full event details.
+// ================================================================
+
+.instance-header {
+  display: flex;
+  flex-direction: column;
+  gap: $public-space-lg;
+  margin-bottom: $public-space-2xl;
+
+  .breadcrumb {
+    margin: 0;
+    font-size: $public-font-size-sm;
+
+    a {
+      color: $public-text-secondary-light;
+      text-decoration: none;
+      transition: $public-transition-fast;
+
+      &:hover {
+        color: $public-accent-light;
+      }
+
+      @include public-dark-mode {
+        color: $public-text-secondary-dark;
+
+        &:hover {
+          color: $public-accent-dark;
+        }
+      }
+    }
+  }
+
+  .instance-meta {
+    display: flex;
+    flex-direction: column;
+    gap: $public-space-sm;
+
+    h1 {
+      margin: 0;
+      font-size: $public-font-size-2xl;
+      font-weight: $public-font-weight-semibold;
+      line-height: $public-line-height-tight;
+      color: $public-text-primary-light;
+
+      @include public-dark-mode {
+        color: $public-text-primary-dark;
+      }
+
+      @include public-mobile-only {
+        font-size: $public-font-size-xl;
+      }
+    }
+
+    .event-datetime {
+      display: inline-flex;
+      align-items: center;
+      gap: $public-space-sm;
+      font-size: $public-font-size-md;
+      font-weight: $public-font-weight-medium;
+      color: $public-accent-light;
+
+      @include public-dark-mode {
+        color: $public-accent-dark;
+      }
+    }
+  }
+}
+
+main {
+  p {
+    font-size: $public-font-size-md;
+    line-height: $public-line-height-relaxed;
+    color: $public-text-primary-light;
+    margin: 0 0 $public-space-lg 0;
+
+    @include public-dark-mode {
+      color: $public-text-primary-dark;
+    }
+  }
+}
+
+footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $public-space-sm;
+  margin-top: $public-space-xl;
+  padding-top: $public-space-lg;
+  border-top: 1px solid $public-border-subtle-light;
+
+  @include public-dark-mode {
+    border-top-color: $public-border-subtle-dark;
+  }
+}
 
 .event-category-badge {
-  display: inline-block;
-  margin-right: 5px;
-  background-color: $light-mode-button-background;
-  text-decoration: none;
-  color: white;
-  font-size: 10px;
-  padding: 2px 6px;
-  border-radius: 10px;
-  font-weight: $font-medium;
+  @include public-category-badge;
 
-  @media (prefers-color-scheme: dark) {
-    background-color: $dark-mode-button-background;
+  text-decoration: none;
+  transition: $public-transition-fast;
+
+  &:hover {
+    background-color: $public-accent-hover-light;
+    transform: translateY(-1px);
+
+    @include public-dark-mode {
+      background-color: $public-accent-hover-dark;
+    }
   }
 }
 </style>

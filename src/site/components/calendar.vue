@@ -81,7 +81,7 @@ onBeforeMount(async () => {
           <h2>{{ DateTime.fromISO(day).toLocaleString({weekday: 'long', month: 'long', day: 'numeric'}) }}</h2>
           <ul class="events">
             <li class="event" v-for="instance in filteredEventsByDay[day]" :key="instance.id">
-              <EventImage :media="instance.event.media" :size="'small'" />
+              <EventImage :media="instance.event.media" context="card" :lazy="true" />
               <h3>
                 <router-link :to="{ name: 'instance', params: { event: instance.event.id, instance: instance.id } }">
                   {{ instance.event.content("en").name }}
