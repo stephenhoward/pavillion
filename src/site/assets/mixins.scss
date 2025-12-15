@@ -1,0 +1,750 @@
+// ================================================================
+// PAVILLION PUBLIC SITE DESIGN SYSTEM
+// ================================================================
+//
+// This file contains the design tokens and component mixins for
+// the public-facing calendar viewing site. The design emphasizes
+// welcoming accessibility, refined minimalism, and smooth interactions.
+//
+// Philosophy:
+// - Welcoming over administrative
+// - Content first (events are the focus)
+// - Smooth, delightful micro-interactions
+// - Refined minimalism with personality
+//
+// Created: 2025-12-14
+// ================================================================
+
+// ===== COLOR TOKENS =====
+
+// Primary brand accent (warmer, more welcoming)
+$public-accent-light: #ff9131;
+$public-accent-dark: #C86002;
+$public-accent-hover-light: darken(#ff9131, 5%);
+$public-accent-hover-dark: lighten(#C86002, 5%);
+
+// Background layers (lighter, airier than client)
+$public-bg-primary-light: #ffffff;
+$public-bg-primary-dark: #1a1a1e;
+$public-bg-secondary-light: rgba(0, 0, 0, 0.02);
+$public-bg-secondary-dark: rgba(255, 255, 255, 0.05);
+$public-bg-tertiary-light: rgba(0, 0, 0, 0.04);
+$public-bg-tertiary-dark: rgba(255, 255, 255, 0.08);
+
+// Text hierarchy (refined opacity levels)
+$public-text-primary-light: rgba(0, 0, 0, 0.9);
+$public-text-primary-dark: rgba(255, 255, 255, 0.95);
+$public-text-secondary-light: rgba(0, 0, 0, 0.6);
+$public-text-secondary-dark: rgba(255, 255, 255, 0.65);
+$public-text-tertiary-light: rgba(0, 0, 0, 0.4);
+$public-text-tertiary-dark: rgba(255, 255, 255, 0.45);
+
+// Border system (subtle, refined)
+$public-border-subtle-light: rgba(0, 0, 0, 0.08);
+$public-border-subtle-dark: rgba(255, 255, 255, 0.12);
+$public-border-medium-light: rgba(0, 0, 0, 0.15);
+$public-border-medium-dark: rgba(255, 255, 255, 0.20);
+$public-border-strong-light: rgba(0, 0, 0, 0.25);
+$public-border-strong-dark: rgba(255, 255, 255, 0.30);
+
+// State colors (semantic)
+$public-error-light: #dc2626;
+$public-error-dark: #fca5a5;
+$public-error-bg-light: #fef2f2;
+$public-error-bg-dark: #7f1d1d;
+
+$public-success-light: #16a34a;
+$public-success-dark: #86efac;
+$public-success-bg-light: #f0fdf4;
+$public-success-bg-dark: #14532d;
+
+// Interactive states
+$public-hover-overlay-light: rgba(0, 0, 0, 0.04);
+$public-hover-overlay-dark: rgba(255, 255, 255, 0.08);
+$public-active-overlay-light: rgba(0, 0, 0, 0.08);
+$public-active-overlay-dark: rgba(255, 255, 255, 0.12);
+
+// ===== TYPOGRAPHY TOKENS =====
+
+// Font family (shared with client)
+$public-font-family: 'Creato Display', 'Helvetica Neue', -apple-system, sans-serif;
+
+// Font weights (semantic naming for public context)
+$public-font-weight-light: 300;
+$public-font-weight-regular: 400;
+$public-font-weight-medium: 500;
+$public-font-weight-semibold: 600;
+$public-font-weight-bold: 700;
+
+// Font sizes (public-optimized scale)
+$public-font-size-xs: 11px;
+$public-font-size-sm: 13px;
+$public-font-size-base: 14px;
+$public-font-size-md: 16px;
+$public-font-size-lg: 20px;
+$public-font-size-xl: 24px;
+$public-font-size-2xl: 32px;
+
+// Line heights (optimized for readability)
+$public-line-height-tight: 1.25;
+$public-line-height-normal: 1.5;
+$public-line-height-relaxed: 1.75;
+
+// Letter spacing (subtle refinement)
+$public-letter-spacing-tight: -0.01em;
+$public-letter-spacing-normal: 0;
+$public-letter-spacing-wide: 0.02em;
+
+// ===== SPACING TOKENS =====
+
+// Base scale (4px increments)
+$public-space-0: 0;
+$public-space-1: 4px;
+$public-space-2: 8px;
+$public-space-3: 12px;
+$public-space-4: 16px;
+$public-space-5: 20px;
+$public-space-6: 24px;
+$public-space-8: 32px;
+$public-space-10: 40px;
+$public-space-12: 48px;
+$public-space-16: 64px;
+
+// Semantic spacing (use these in components)
+$public-space-xs: $public-space-1;
+$public-space-sm: $public-space-2;
+$public-space-md: $public-space-3;
+$public-space-lg: $public-space-4;
+$public-space-xl: $public-space-6;
+$public-space-2xl: $public-space-8;
+$public-space-3xl: $public-space-12;
+
+// ===== BORDER RADIUS TOKENS =====
+
+$public-radius-sm: 8px;
+$public-radius-md: 12px;
+$public-radius-lg: 16px;
+$public-radius-xl: 20px;
+$public-radius-2xl: 24px;
+$public-radius-full: 9999px;
+
+// ===== SHADOW TOKENS =====
+
+// Light mode shadows
+$public-shadow-xs-light: 0 1px 2px rgba(0, 0, 0, 0.04);
+$public-shadow-sm-light: 0 1px 3px rgba(0, 0, 0, 0.08);
+$public-shadow-md-light: 0 2px 4px rgba(0, 0, 0, 0.12), 0 4px 8px rgba(0, 0, 0, 0.04);
+$public-shadow-lg-light: 0 4px 6px rgba(0, 0, 0, 0.05), 0 10px 24px rgba(0, 0, 0, 0.10), 0 0 0 1px rgba(0, 0, 0, 0.04);
+$public-shadow-xl-light: 0 8px 12px rgba(0, 0, 0, 0.08), 0 20px 40px rgba(0, 0, 0, 0.15);
+
+// Dark mode shadows (deeper, higher contrast)
+$public-shadow-xs-dark: 0 1px 2px rgba(0, 0, 0, 0.2);
+$public-shadow-sm-dark: 0 1px 3px rgba(0, 0, 0, 0.3);
+$public-shadow-md-dark: 0 2px 4px rgba(0, 0, 0, 0.3), 0 4px 8px rgba(0, 0, 0, 0.2);
+$public-shadow-lg-dark: 0 4px 6px rgba(0, 0, 0, 0.3), 0 10px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08);
+$public-shadow-xl-dark: 0 8px 12px rgba(0, 0, 0, 0.4), 0 20px 40px rgba(0, 0, 0, 0.6);
+
+// ===== ANIMATION TOKENS =====
+
+// Durations
+$public-duration-instant: 100ms;
+$public-duration-fast: 150ms;
+$public-duration-normal: 200ms;
+$public-duration-slow: 300ms;
+$public-duration-slower: 500ms;
+
+// Easing functions (cubic-bezier curves)
+$public-ease-out: cubic-bezier(0.4, 0, 0.2, 1);
+$public-ease-in: cubic-bezier(0.4, 0, 1, 1);
+$public-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+$public-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+$public-ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+
+// Transitions (combined properties)
+$public-transition-fast: all $public-duration-fast $public-ease-out;
+$public-transition-normal: all $public-duration-normal $public-ease-out;
+$public-transition-slow: all $public-duration-slow $public-ease-in-out;
+
+// ================================================================
+// COMPONENT MIXINS
+// ================================================================
+
+// ===== EVENT CARD COMPONENT =====
+
+@mixin public-event-card {
+  display: flex;
+  flex-direction: column;
+  padding: $public-space-md;
+  background: $public-bg-primary-light;
+  border-radius: $public-radius-md;
+  box-shadow: $public-shadow-md-light;
+  transition: $public-transition-normal;
+  cursor: pointer;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: $public-shadow-lg-light;
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    background: $public-bg-primary-dark;
+    box-shadow: $public-shadow-md-dark;
+
+    &:hover {
+      box-shadow: $public-shadow-lg-dark;
+    }
+  }
+}
+
+@mixin public-event-card-compact {
+  @include public-event-card;
+
+  padding: $public-space-sm;
+  width: 150px;
+  flex-shrink: 0;
+}
+
+@mixin public-event-card-featured {
+  @include public-event-card;
+
+  padding: $public-space-xl;
+  border-radius: $public-radius-2xl;
+}
+
+// ===== FILTER PILL COMPONENT =====
+
+@mixin public-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: $public-space-1;
+  padding: 6px 14px;
+  min-height: 32px;
+  border: none;
+  border-radius: $public-radius-lg;
+  font-family: $public-font-family;
+  font-size: $public-font-size-sm;
+  font-weight: $public-font-weight-regular;
+  letter-spacing: $public-letter-spacing-wide;
+  cursor: pointer;
+  transition: $public-transition-fast;
+  white-space: nowrap;
+  user-select: none;
+
+  // Unselected state
+  background-color: $public-bg-tertiary-light;
+  color: $public-text-secondary-light;
+  box-shadow: $public-shadow-xs-light;
+
+  &:hover {
+    background-color: rgba(0, 0, 0, 0.08);
+    color: rgba(0, 0, 0, 0.75);
+    box-shadow: $public-shadow-sm-light;
+  }
+
+  &:active {
+    transform: scale(0.97);
+  }
+
+  &.selected {
+    background-color: $public-accent-light;
+    color: white;
+    font-weight: $public-font-weight-medium;
+    box-shadow: $public-shadow-md-light;
+
+    &:hover {
+      background-color: $public-accent-hover-light;
+    }
+  }
+
+  @media (prefers-color-scheme: dark) {
+    background-color: $public-bg-tertiary-dark;
+    color: $public-text-secondary-dark;
+    box-shadow: $public-shadow-xs-dark;
+
+    &:hover {
+      background-color: rgba(255, 255, 255, 0.1);
+      color: rgba(255, 255, 255, 0.8);
+      box-shadow: $public-shadow-sm-dark;
+    }
+
+    &.selected {
+      background-color: $public-accent-dark;
+      box-shadow: $public-shadow-md-dark;
+
+      &:hover {
+        background-color: $public-accent-hover-dark;
+      }
+    }
+  }
+}
+
+// ===== DROPDOWN COMPONENT =====
+
+@mixin public-dropdown-container {
+  position: absolute;
+  z-index: 20;
+  min-width: 320px;
+  padding: $public-space-md;
+  background: $public-bg-primary-light;
+  border-radius: $public-radius-md;
+  box-shadow: $public-shadow-lg-light;
+
+  @media (prefers-color-scheme: dark) {
+    background: rgba(30, 30, 35, 0.98);
+    box-shadow: $public-shadow-lg-dark;
+    backdrop-filter: blur(20px);
+  }
+}
+
+// Dropdown animation mixins
+@mixin public-dropdown-enter-animation {
+  transition: all $public-duration-slow $public-ease-spring;
+}
+
+@mixin public-dropdown-leave-animation {
+  transition: all $public-duration-normal $public-ease-in;
+}
+
+@mixin public-dropdown-enter-from {
+  opacity: 0;
+  transform: translateY(-12px) scale(0.95);
+}
+
+@mixin public-dropdown-enter-to {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+@mixin public-dropdown-leave-to {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.96);
+}
+
+// ===== INPUT COMPONENT =====
+
+@mixin public-input-base {
+  width: 100%;
+  padding: $public-space-sm $public-space-md;
+  font-family: $public-font-family;
+  font-size: $public-font-size-base;
+  font-weight: $public-font-weight-regular;
+  color: $public-text-primary-light;
+  background: $public-bg-primary-light;
+  border: 1px solid $public-border-subtle-light;
+  border-radius: $public-radius-xl;
+  transition: $public-transition-fast;
+
+  &::placeholder {
+    color: $public-text-tertiary-light;
+  }
+
+  &:hover {
+    border-color: $public-border-medium-light;
+    background: $public-bg-secondary-light;
+  }
+
+  &:focus {
+    outline: 2px solid $public-accent-light;
+    outline-offset: 0;
+    border-color: transparent;
+    background: $public-bg-primary-light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    color: $public-text-primary-dark;
+    background: $public-bg-secondary-dark;
+    border-color: $public-border-subtle-dark;
+
+    &::placeholder {
+      color: $public-text-tertiary-dark;
+    }
+
+    &:hover {
+      border-color: $public-border-medium-dark;
+      background: $public-bg-tertiary-dark;
+    }
+
+    &:focus {
+      outline-color: $public-accent-dark;
+      background: rgba(255, 255, 255, 0.1);
+    }
+  }
+}
+
+@mixin public-input-with-clear {
+  @include public-input-base;
+
+  padding-right: 32px; // Space for clear button
+}
+
+@mixin public-input-clear-button {
+  position: absolute;
+  right: $public-space-sm;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: $public-space-1;
+  color: $public-text-secondary-light;
+  font-size: $public-font-size-base;
+  transition: $public-transition-fast;
+
+  &:hover {
+    color: $public-text-primary-light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    color: $public-text-secondary-dark;
+
+    &:hover {
+      color: $public-text-primary-dark;
+    }
+  }
+}
+
+// ===== BUTTON COMPONENT =====
+
+@mixin public-button-base {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: $public-space-1;
+  padding: $public-space-sm $public-space-lg;
+  border: none;
+  border-radius: $public-radius-sm;
+  font-family: $public-font-family;
+  font-size: $public-font-size-base;
+  font-weight: $public-font-weight-medium;
+  cursor: pointer;
+  transition: $public-transition-fast;
+  user-select: none;
+
+  &:active {
+    transform: scale(0.98);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none !important;
+  }
+}
+
+@mixin public-button-primary {
+  @include public-button-base;
+
+  background-color: $public-accent-light;
+  color: white;
+  box-shadow: $public-shadow-sm-light;
+
+  &:hover:not(:disabled) {
+    background-color: $public-accent-hover-light;
+    box-shadow: $public-shadow-md-light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    background-color: $public-accent-dark;
+    box-shadow: $public-shadow-sm-dark;
+
+    &:hover:not(:disabled) {
+      background-color: $public-accent-hover-dark;
+      box-shadow: $public-shadow-md-dark;
+    }
+  }
+}
+
+@mixin public-button-ghost {
+  @include public-button-base;
+
+  background-color: transparent;
+  color: $public-text-primary-light;
+  border: 1px solid $public-border-medium-light;
+
+  &:hover:not(:disabled) {
+    background-color: $public-hover-overlay-light;
+    border-color: $public-border-strong-light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    color: $public-text-primary-dark;
+    border-color: $public-border-medium-dark;
+
+    &:hover:not(:disabled) {
+      background-color: $public-hover-overlay-dark;
+      border-color: $public-border-strong-dark;
+    }
+  }
+}
+
+// ===== STATE DISPLAY COMPONENTS =====
+
+@mixin public-loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: $public-space-2xl $public-space-xl;
+  color: $public-text-secondary-light;
+  font-size: $public-font-size-base;
+  font-style: italic;
+
+  @media (prefers-color-scheme: dark) {
+    color: $public-text-secondary-dark;
+  }
+}
+
+@mixin public-error-state {
+  padding: $public-space-md;
+  background: $public-error-bg-light;
+  border: 1px solid rgba($public-error-light, 0.3);
+  border-radius: $public-radius-sm;
+  color: $public-error-light;
+  font-size: $public-font-size-base;
+
+  @media (prefers-color-scheme: dark) {
+    background: $public-error-bg-dark;
+    border-color: rgba($public-error-dark, 0.3);
+    color: $public-error-dark;
+  }
+}
+
+@mixin public-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: $public-space-3xl $public-space-xl;
+  color: $public-text-secondary-light;
+
+  p {
+    margin: 0 0 $public-space-lg 0;
+    font-size: $public-font-size-md;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    color: $public-text-secondary-dark;
+  }
+}
+
+// ===== SCROLL CONTAINER COMPONENT =====
+
+@mixin public-horizontal-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; // Firefox
+
+  &::-webkit-scrollbar {
+    display: none; // Chrome, Safari, Edge
+  }
+}
+
+@mixin public-scroll-fade-left {
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 20px, black 100%);
+  mask-image: linear-gradient(to right, transparent 0%, black 20px, black 100%);
+}
+
+@mixin public-scroll-fade-right {
+  -webkit-mask-image: linear-gradient(to right, black 0%, black calc(100% - 20px), transparent 100%);
+  mask-image: linear-gradient(to right, black 0%, black calc(100% - 20px), transparent 100%);
+}
+
+@mixin public-scroll-fade-both {
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 20px, black calc(100% - 20px), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0%, black 20px, black calc(100% - 20px), transparent 100%);
+}
+
+// ===== FILTER CONTAINER COMPONENT =====
+
+@mixin public-filter-container {
+  display: flex;
+  flex-direction: column;
+  gap: $public-space-lg;
+  margin-bottom: $public-space-xl;
+}
+
+@mixin public-filter-section {
+  flex: 1;
+  min-width: 200px;
+}
+
+@mixin public-filter-label {
+  display: block;
+  font-size: $public-font-size-xs;
+  font-weight: $public-font-weight-medium;
+  text-transform: uppercase;
+  letter-spacing: $public-letter-spacing-wide;
+  color: $public-text-secondary-light;
+  margin-bottom: $public-space-sm;
+
+  @media (prefers-color-scheme: dark) {
+    color: $public-text-secondary-dark;
+  }
+}
+
+// ===== RESPONSIVE BREAKPOINTS =====
+
+@mixin public-mobile-only {
+  @media (max-width: 599px) {
+    @content;
+  }
+}
+
+@mixin public-tablet-up {
+  @media (min-width: 600px) {
+    @content;
+  }
+}
+
+@mixin public-desktop-up {
+  @media (min-width: 1024px) {
+    @content;
+  }
+}
+
+@mixin public-wide-up {
+  @media (min-width: 1280px) {
+    @content;
+  }
+}
+
+@mixin public-dark-mode {
+  @media (prefers-color-scheme: dark) {
+    @content;
+  }
+}
+
+// ===== CATEGORY BADGE COMPONENT =====
+
+@mixin public-category-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: $public-radius-lg;
+  font-size: $public-font-size-xs;
+  font-weight: $public-font-weight-medium;
+  background-color: $public-accent-light;
+  color: white;
+
+  @media (prefers-color-scheme: dark) {
+    background-color: $public-accent-dark;
+  }
+}
+
+// ===== SEARCH INPUT COMPONENT =====
+
+@mixin public-search-input-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+@mixin public-search-input {
+  @include public-input-with-clear;
+}
+
+@mixin public-search-clear-button {
+  @include public-input-clear-button;
+}
+
+// ================================================================
+// UNPREFIXED ALIASES FOR BACKWARD COMPATIBILITY
+// ================================================================
+// These aliases allow components to use shorter, unprefixed names
+// while still using the public design system
+
+@mixin filter-container {
+  @include public-filter-container;
+}
+
+@mixin filter-section {
+  @include public-filter-section;
+}
+
+@mixin filter-label {
+  @include public-filter-label;
+}
+
+@mixin search-input-container {
+  @include public-search-input-container;
+}
+
+@mixin search-input {
+  @include public-search-input;
+}
+
+@mixin search-clear-button {
+  @include public-search-clear-button;
+}
+
+@mixin input-base {
+  @include public-input-base;
+}
+
+// Import shared spacing and responsive mixins from client
+// These are shared across client and site apps
+$spacing-xs: 4px;
+$spacing-sm: 8px;
+$spacing-md: 12px;
+$spacing-lg: 16px;
+$spacing-xl: 20px;
+$spacing-2xl: 24px;
+$spacing-3xl: 32px;
+
+@mixin mobile-only {
+  @include public-mobile-only {
+    @content;
+  }
+}
+
+@mixin medium-size-device {
+  @media (min-width: 600px) {
+    @content;
+  }
+}
+
+@mixin dark-mode {
+  @include public-dark-mode {
+    @content;
+  }
+}
+
+// Import button background colors from public design tokens
+$light-mode-button-background: $public-accent-light;
+$dark-mode-button-background: $public-accent-dark;
+
+// Secondary text color tokens
+$light-mode-secondary-text: $public-text-secondary-light;
+$dark-mode-secondary-text: $public-text-secondary-dark;
+
+// Font weight tokens
+$font-regular: $public-font-weight-regular;
+$font-medium: $public-font-weight-medium;
+
+// ================================================================
+// UTILITY MIXINS
+// ================================================================
+
+@mixin public-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@mixin public-focus-visible {
+  outline: 2px solid $public-accent-light;
+  outline-offset: 2px;
+
+  @media (prefers-color-scheme: dark) {
+    outline-color: $public-accent-dark;
+  }
+}

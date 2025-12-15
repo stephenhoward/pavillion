@@ -1,16 +1,29 @@
-@use '../../client/assets/mixins' as *;
+// ================================================================
+// PAVILLION PUBLIC SITE GLOBAL STYLES
+// ================================================================
+//
+// This file contains global styles for the public-facing calendar
+// viewing site. Imports the public site design system.
+//
+// Created: 2025-12-14
+// ================================================================
+
+@use './mixins' as *;
 @use '../../client/assets/fonts';
 
-* {
-    font-family: 'Creato Display', 'Helvetica Neue', sans-serif;
-    box-sizing:  border-box;
+// ===== GLOBAL RESETS =====
 
-    &:focus {
-        outline: none;
-    }
+* {
+  font-family: $public-font-family;
+  box-sizing: border-box;
+
+  &:focus-visible {
+    @include public-focus-visible;
+  }
 }
 
-html,body {
+html,
+body {
   height: 100%;
   min-height: 100%;
   width: 100%;
@@ -18,138 +31,173 @@ html,body {
   padding: 0;
 }
 
-button, a.button {
-  font-size: 10pt;
-  font-weight: $font-medium;
-  background: none;
-  border: 0;
-  border: 1px solid #ccc;
-  text-align: center;
-  text-decoration: none;
-  padding: 8px 20px;
-  border-radius: $form-input-border-radius;
-  color: #ccc;
+// ===== GLOBAL BUTTON STYLES =====
+
+button,
+a.button {
+  @include public-button-ghost;
+
+  font-size: $public-font-size-sm;
 }
 
 button.primary {
-  font-size: 12pt;
-  font-weight: $font-bold;
-  padding: 8px 16px;
-  background: $light-mode-button-background;
-  border: none;
-  color: $light-mode-text;
+  @include public-button-primary;
+
+  font-size: $public-font-size-base;
 }
+
+// ===== APP LAYOUT =====
 
 #app {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
   min-height: 100vh;
+  background: $public-bg-primary-light;
+  color: $public-text-primary-light;
+
+  @media (prefers-color-scheme: dark) {
+    background: $public-bg-primary-dark;
+    color: $public-text-primary-dark;
+  }
 
   & > div {
-    padding: 10px;
-    flex: 1 0 auto; /* Grow to fill available space, don't shrink, auto size */
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
+    padding: $public-space-md;
+    flex: 1 0 auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
 
-  @include medium-size-device {
-    padding: 20px;
+    @include public-tablet-up {
+      padding: $public-space-xl;
+    }
+
+    header {
+      flex: 0 0 auto;
+      margin-bottom: $public-space-xl;
+    }
+
+    main {
+      flex: 1 0 auto;
+    }
   }
 
-  header {
-    flex: 0 0 auto; /* Don't grow, don't shrink, auto size */
-  }
-  
-  main {
-    flex: 1 0 auto; /* Grow to fill available space, don't shrink, auto size */
-  }
-
-  }
-  
   footer {
-    padding: 10px;
-    flex: 0 0 auto; /* Don't grow, don't shrink, auto size */
-    
+    padding: $public-space-md;
+    flex: 0 0 auto;
+    border-top: 1px solid $public-border-subtle-light;
+
+    @media (prefers-color-scheme: dark) {
+      border-top-color: $public-border-subtle-dark;
+    }
+
     div.logo {
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 12pt;
+      font-size: $public-font-size-sm;
       text-align: center;
+      color: $public-text-secondary-light;
+
+      @media (prefers-color-scheme: dark) {
+        color: $public-text-secondary-dark;
+      }
     }
 
     div.pavillion-logo {
       display: inline-block;
-      background-color: $light-mode-text;
-      mask-size: contain;
-      mask-repeat: no-repeat;
-      mask-image: url('../../client/assets/pavillion-logo.svg');
+      background-color: $public-text-primary-light;
       mask-size: contain;
       mask-repeat: no-repeat;
       mask-image: url('../../client/assets/pavillion-logo.svg');
       width: 24px;
       height: 24px;
-    }
 
-    @include dark-mode {
-      div.pavillion-logo {
-        background-color: $dark-mode-text;
+      @media (prefers-color-scheme: dark) {
+        background-color: $public-text-primary-dark;
       }
     }
 
-  @include medium-size-device {
-    padding: 20px;
-  }
+    @include public-tablet-up {
+      padding: $public-space-xl;
+    }
   }
 }
 
-// Typography styles
-h1, h2, h3, h4, h5, h6 {
-  font-family: 'Creato Display', 'Helvetica Neue', sans-serif;
+// ===== TYPOGRAPHY STYLES =====
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: $public-font-family;
   margin-top: 0;
+  color: $public-text-primary-light;
+
+  @media (prefers-color-scheme: dark) {
+    color: $public-text-primary-dark;
+  }
 }
 
 h1 {
-  font-weight: $font-bold;
-  font-size: 28px;
+  font-weight: $public-font-weight-semibold;
+  font-size: $public-font-size-xl;
+  line-height: $public-line-height-tight;
+  letter-spacing: $public-letter-spacing-tight;
+
+  @include public-tablet-up {
+    font-size: $public-font-size-2xl;
+  }
 }
 
 h2 {
-  font-weight: $font-medium;
-  font-size: 24px;
+  font-weight: $public-font-weight-medium;
+  font-size: $public-font-size-lg;
+  line-height: $public-line-height-tight;
 }
 
 h3 {
-  font-weight: $font-medium;
-  font-size: 20px;
+  font-weight: $public-font-weight-medium;
+  font-size: $public-font-size-md;
+  line-height: $public-line-height-normal;
 }
 
 h4 {
-  font-weight: $font-regular;
-  font-size: 18px;
+  font-weight: $public-font-weight-regular;
+  font-size: $public-font-size-base;
+  line-height: $public-line-height-normal;
 }
 
 p {
-  font-weight: $font-regular;
-  line-height: 1.5;
+  font-weight: $public-font-weight-regular;
+  font-size: $public-font-size-base;
+  line-height: $public-line-height-relaxed;
+  color: $public-text-primary-light;
+
+  @media (prefers-color-scheme: dark) {
+    color: $public-text-primary-dark;
+  }
 }
 
-@include dark-mode {
-    #app {
-        background-color: #44444a;
+// ===== LINK STYLES =====
 
-        // background: $dark-mode-background-gradient;
-        color:            $dark-mode-text;
-    }
+a {
+  color: $public-accent-light;
+  text-decoration: none;
+  transition: $public-transition-fast;
 
-    button, a.button {
-      color: $dark-mode-text;
-      border: 1px solid #777;
-    }
+  &:hover {
+    color: $public-accent-hover-light;
+    text-decoration: underline;
+  }
 
-    button.primary {
-        background: $dark-mode-button-background;
-        color: $dark-mode-text;
+  @media (prefers-color-scheme: dark) {
+    color: $public-accent-dark;
+
+    &:hover {
+      color: $public-accent-hover-dark;
     }
+  }
 }

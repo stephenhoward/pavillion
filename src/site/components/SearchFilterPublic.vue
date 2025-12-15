@@ -1,5 +1,111 @@
 <template>
   <div class="search-filter-public">
+    <!-- Date Range Filter Section (Collapsible Button) -->
+    <div class="date-range-section" role="group" :aria-label="t('filter_by_date_range')">
+      <div class="date-filter-wrapper" ref="dateFilterRef">
+        <!-- Date Filter Button -->
+        <button
+          type="button"
+          class="date-filter-button"
+          :class="{
+            active: state.isDateFilterOpen,
+            'has-filter': state.dateFilterMode !== null
+          }"
+          :aria-expanded="state.isDateFilterOpen"
+          :aria-label="t('filter_by_date_range')"
+          @click="toggleDateFilter"
+        >
+          <span class="button-text">{{ dateFilterButtonText }}</span>
+          <svg
+            class="dropdown-icon"
+            :class="{ rotated: state.isDateFilterOpen }"
+            width="12"
+            height="12"
+            viewBox="0 0 12 12"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path d="M2 4L6 8L10 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+
+        <!-- Dropdown with Filter Options -->
+        <transition name="dropdown-fade">
+          <div v-if="state.isDateFilterOpen" class="date-dropdown">
+            <!-- Date Filter Pills -->
+            <div class="date-mode-pills" role="radiogroup" :aria-label="t('date_range_options')">
+              <button
+                type="button"
+                role="radio"
+                :aria-checked="state.dateFilterMode === 'thisWeek'"
+                :aria-label="t('this_week_filter')"
+                :class="['date-pill', { active: state.dateFilterMode === 'thisWeek' }]"
+                @click="setThisWeek"
+              >
+                {{ t('this_week') }}
+              </button>
+              <button
+                type="button"
+                role="radio"
+                :aria-checked="state.dateFilterMode === 'nextWeek'"
+                :aria-label="t('next_week_filter')"
+                :class="['date-pill', { active: state.dateFilterMode === 'nextWeek' }]"
+                @click="setNextWeek"
+              >
+                {{ t('next_week') }}
+              </button>
+              <button
+                type="button"
+                role="radio"
+                :aria-checked="state.dateFilterMode === 'custom'"
+                :aria-label="t('choose_custom_dates')"
+                :class="['date-pill calendar-pill', { active: state.dateFilterMode === 'custom' }]"
+                @click="setCustomMode"
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <rect x="2" y="3" width="12" height="11" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
+                  <path d="M2 6H14" stroke="currentColor" stroke-width="1.2"/>
+                  <path d="M5 1.5V4.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                  <path d="M11 1.5V4.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                </svg>
+                <span class="sr-only">{{ t('choose_custom_dates') }}</span>
+              </button>
+            </div>
+
+            <!-- Custom Date Inputs (shown when custom mode active) -->
+            <transition name="slide-fade">
+              <div v-if="state.dateFilterMode === 'custom'" class="custom-dates-section">
+                <div class="date-inputs-grid">
+                  <div class="date-input-group">
+                    <label for="start-date" class="date-input-label">{{ t('start_date') }}</label>
+                    <input
+                      id="start-date"
+                      v-model="state.startDate"
+                      type="date"
+                      class="date-input"
+                      :aria-label="t('start_date')"
+                      @change="onDateChange"
+                    />
+                  </div>
+                  <div class="date-input-group">
+                    <label for="end-date" class="date-input-label">{{ t('end_date') }}</label>
+                    <input
+                      id="end-date"
+                      v-model="state.endDate"
+                      type="date"
+                      class="date-input"
+                      :aria-label="t('end_date')"
+                      @change="onDateChange"
+                    />
+                  </div>
+                </div>
+              </div>
+            </transition>
+          </div>
+        </transition>
+      </div>
+    </div>
+
     <!-- Search Input (always visible, outside accordion on mobile) -->
     <div class="search-section">
       <label for="public-event-search" class="search-label sr-only">
@@ -42,106 +148,11 @@
         @update:selected-categories="handleCategoryChange"
       />
     </div>
-
-    <!-- Filter Accordion (mobile) / Horizontal Layout (desktop) -->
-    <div class="filter-accordion-wrapper">
-      <!-- Accordion toggle button (mobile only) -->
-      <button
-        class="accordion-toggle"
-        @click="toggleAccordion"
-        :aria-expanded="state.isAccordionOpen"
-        :aria-label="t('toggle_filters')"
-      >
-        <span>{{ t('more_filters') }}</span>
-        <span class="accordion-icon" :class="{ open: state.isAccordionOpen }">▼</span>
-      </button>
-
-      <!-- Filter content (collapsible on mobile, always visible on desktop) -->
-      <div
-        class="filter-accordion"
-        :class="{ open: state.isAccordionOpen }"
-      >
-        <!-- Date Range Filter Section -->
-        <div class="date-range-section">
-          <label class="filter-label">
-            {{ t('filter_by_date_range') }}
-          </label>
-
-          <!-- Date Filter Mode Selector (Segmented Control) -->
-          <div class="date-mode-selector" role="radiogroup" aria-label="Date range options">
-            <button
-              type="button"
-              role="radio"
-              :aria-checked="state.dateFilterMode === 'thisWeek'"
-              :class="['mode-btn', { active: state.dateFilterMode === 'thisWeek' }]"
-              @click="setThisWeek"
-            >
-              {{ t('this_week') }}
-            </button>
-            <button
-              type="button"
-              role="radio"
-              :aria-checked="state.dateFilterMode === 'nextWeek'"
-              :class="['mode-btn', { active: state.dateFilterMode === 'nextWeek' }]"
-              @click="setNextWeek"
-            >
-              {{ t('next_week') }}
-            </button>
-            <button
-              type="button"
-              role="radio"
-              :aria-checked="state.dateFilterMode === 'custom'"
-              :class="['mode-btn', { active: state.dateFilterMode === 'custom' }]"
-              @click="setCustomMode"
-            >
-              {{ t('custom') }}
-            </button>
-          </div>
-
-          <!-- Custom Date Inputs (only visible when Custom is selected) -->
-          <transition name="date-inputs-slide">
-            <div v-if="state.dateFilterMode === 'custom'" class="date-inputs">
-              <div class="date-input-group">
-                <label for="start-date" class="date-label">{{ t('start_date') }}</label>
-                <input
-                  id="start-date"
-                  v-model="state.startDate"
-                  type="date"
-                  class="date-input"
-                  @change="onDateChange"
-                />
-              </div>
-              <div class="date-input-group">
-                <label for="end-date" class="date-label">{{ t('end_date') }}</label>
-                <input
-                  id="end-date"
-                  v-model="state.endDate"
-                  type="date"
-                  class="date-input"
-                  @change="onDateChange"
-                />
-              </div>
-            </div>
-          </transition>
-        </div>
-      </div>
-    </div>
-
-    <!-- Clear All Filters Button -->
-    <div v-if="publicStore.hasActiveFilters" class="clear-filters-section">
-      <button
-        type="button"
-        class="clear-all-filters"
-        @click="clearAllFilters"
-      >
-        {{ t('clear_all_filters') }}
-      </button>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive, onMounted, watch } from 'vue';
+import { reactive, computed, ref, onMounted, onUnmounted, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useRoute, useRouter } from 'vue-router';
 import { usePublicCalendarStore } from '../stores/publicCalendarStore';
@@ -155,19 +166,82 @@ const { t } = useTranslation('system', {
 const route = useRoute();
 const router = useRouter();
 const publicStore = usePublicCalendarStore();
+const dateFilterRef = ref<HTMLElement | null>(null);
 
 const state = reactive({
   searchQuery: '',
   startDate: null as string | null,
   endDate: null as string | null,
   isAccordionOpen: false,
+  isDateFilterOpen: false,
   searchTimeout: null as ReturnType<typeof setTimeout> | null,
   dateFilterMode: null as 'thisWeek' | 'nextWeek' | 'custom' | null,
 });
 
+// Computed property for button text
+const dateFilterButtonText = computed(() => {
+  if (state.dateFilterMode === 'thisWeek') {
+    return t('this_week');
+  } else if (state.dateFilterMode === 'nextWeek') {
+    return t('next_week');
+  } else if (state.dateFilterMode === 'custom' && state.startDate && state.endDate) {
+    return formatDateRange(state.startDate, state.endDate);
+  } else if (state.dateFilterMode === 'custom' && (state.startDate || state.endDate)) {
+    // Partial date selection
+    if (state.startDate) return `From ${formatDate(state.startDate)}`;
+    if (state.endDate) return `Until ${formatDate(state.endDate)}`;
+  }
+  return t('custom'); // "Select Dates"
+});
+
+// Format a date nicely
+const formatDate = (dateStr: string): string => {
+  const date = new Date(dateStr + 'T00:00:00'); // Prevent timezone issues
+  const month = date.toLocaleDateString('en-US', { month: 'short' });
+  const day = date.getDate();
+  return `${month} ${day}`;
+};
+
+// Format date range
+const formatDateRange = (start: string, end: string): string => {
+  const startDate = new Date(start + 'T00:00:00');
+  const endDate = new Date(end + 'T00:00:00');
+
+  const startMonth = startDate.toLocaleDateString('en-US', { month: 'short' });
+  const endMonth = endDate.toLocaleDateString('en-US', { month: 'short' });
+  const startDay = startDate.getDate();
+  const endDay = endDate.getDate();
+
+  // Same month: "Jan 5-12"
+  if (startMonth === endMonth) {
+    return `${startMonth} ${startDay}-${endDay}`;
+  }
+
+  // Different months: "Jan 28 - Feb 3"
+  return `${startMonth} ${startDay} - ${endMonth} ${endDay}`;
+};
+
+// Toggle date filter dropdown
+const toggleDateFilter = () => {
+  state.isDateFilterOpen = !state.isDateFilterOpen;
+};
+
+// Close date filter dropdown
+const closeDateFilter = () => {
+  state.isDateFilterOpen = false;
+};
+
+// Handle click outside to close dropdown
+const handleClickOutside = (event: MouseEvent) => {
+  if (dateFilterRef.value && !dateFilterRef.value.contains(event.target as Node)) {
+    closeDateFilter();
+  }
+};
+
 // Expose isAccordionOpen for testing
 defineExpose({
   isAccordionOpen: state.isAccordionOpen,
+  isDateFilterOpen: state.isDateFilterOpen,
 });
 
 // Toggle accordion (mobile)
@@ -220,6 +294,7 @@ const setThisWeek = () => {
     publicStore.setDateRange(null, null);
     publicStore.reloadWithFilters();
     updateURL();
+    closeDateFilter();
   } else {
     // Activate This Week
     state.dateFilterMode = 'thisWeek';
@@ -229,6 +304,7 @@ const setThisWeek = () => {
     publicStore.setDateRange(startDate, endDate);
     publicStore.reloadWithFilters();
     updateURL();
+    closeDateFilter();
   }
 };
 
@@ -242,6 +318,7 @@ const setNextWeek = () => {
     publicStore.setDateRange(null, null);
     publicStore.reloadWithFilters();
     updateURL();
+    closeDateFilter();
   } else {
     // Activate Next Week
     state.dateFilterMode = 'nextWeek';
@@ -251,6 +328,7 @@ const setNextWeek = () => {
     publicStore.setDateRange(startDate, endDate);
     publicStore.reloadWithFilters();
     updateURL();
+    closeDateFilter();
   }
 };
 
@@ -264,9 +342,11 @@ const setCustomMode = () => {
     publicStore.setDateRange(null, null);
     publicStore.reloadWithFilters();
     updateURL();
+    closeDateFilter();
   } else {
     // Activate Custom mode - show date inputs
     state.dateFilterMode = 'custom';
+    // Don't close dropdown - let user pick dates
     // Don't automatically apply filters - wait for user to select dates
     // If dates are already set, keep them; otherwise they remain null
   }
@@ -378,22 +458,37 @@ watch(() => route.query, () => {
   publicStore.reloadWithFilters();
 }, { deep: true });
 
+// Watch for store date range changes to sync local state
+// This handles external clearAllFilters() calls from calendar.vue
+watch(() => [publicStore.startDate, publicStore.endDate], ([newStart, newEnd]) => {
+  // If store dates are cleared, reset local dateFilterMode
+  if (newStart === null && newEnd === null) {
+    state.dateFilterMode = null;
+    state.startDate = null;
+    state.endDate = null;
+  }
+});
+
 onMounted(() => {
   initializeFromURL();
   // Load events with current filter state (including no filters for initial load)
   publicStore.reloadWithFilters();
+  // Add click outside listener for date filter dropdown
+  document.addEventListener('click', handleClickOutside);
+});
+
+onUnmounted(() => {
+  // Remove click outside listener
+  document.removeEventListener('click', handleClickOutside);
 });
 </script>
 
 <style scoped lang="scss">
-@use '../../client/assets/mixins' as *;
+@use '../assets/mixins' as *;
 
 .search-filter-public {
   @include filter-container;
-
-  display: flex;
-  flex-direction: column;
-  gap: $spacing-lg;
+  // All layout styles provided by mixin
 }
 
 // Search Section
@@ -440,56 +535,7 @@ onMounted(() => {
   }
 }
 
-// Filter Accordion Wrapper
-.filter-accordion-wrapper {
-  @include filter-section;
-}
-
-// Accordion Toggle Button (mobile only)
-.accordion-toggle {
-  @include btn-base;
-  @include btn-ghost;
-
-  width: 100%;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: $spacing-md $spacing-lg;
-  margin-bottom: $spacing-md;
-
-  .accordion-icon {
-    transition: transform 0.2s ease;
-
-    &.open {
-      transform: rotate(180deg);
-    }
-  }
-
-  // Hide on desktop
-  @include medium-size-device {
-    display: none;
-  }
-}
-
-// Filter Accordion Content
-.filter-accordion {
-  display: none; // Hidden by default on mobile
-  flex-direction: column;
-  gap: $spacing-2xl;
-
-  &.open {
-    display: flex; // Show when accordion is open
-  }
-
-  // Always visible on desktop
-  @include medium-size-device {
-    display: flex;
-    flex-direction: column;
-    gap: $spacing-2xl;
-  }
-}
-
-// Category Filter Section (full width, outside accordion)
+// Category Filter Section (full width)
 .category-filter-section {
   @include filter-section;
 
@@ -497,160 +543,432 @@ onMounted(() => {
 
   .filter-label {
     @include filter-label;
-
-    margin-bottom: $spacing-sm;
+    // Override font-size for better readability
     font-size: 12px;
-    font-weight: $font-medium;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
     opacity: 0.6;
   }
 }
 
-// Date Range Section
+// Date Range Section - Collapsible Button
 .date-range-section {
-  @include filter-section;
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
 
-  .filter-label {
-    @include filter-label;
-
-    margin-bottom: $spacing-md;
+  .date-filter-wrapper {
+    position: relative;
+    display: inline-flex;
+    flex-direction: column;
   }
 
-  // Segmented Control (Date Mode Selector)
-  .date-mode-selector {
+  // Date Filter Button (Main Collapsible Button)
+  .date-filter-button {
     display: inline-flex;
-    background: rgba(0, 0, 0, 0.05);
-    border-radius: 10px;
-    padding: 3px;
-    gap: 2px;
-    margin-bottom: $spacing-md;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    min-height: 38px;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    border-radius: 20px;
+    background: white;
+    font-family: 'Creato Display', 'Helvetica Neue', sans-serif;
+    font-size: 14px;
+    font-weight: $font-regular;
+    color: rgba(0, 0, 0, 0.85);
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    user-select: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 
-    @include dark-mode {
-      background: rgba(255, 255, 255, 0.08);
+    &:hover {
+      border-color: rgba(0, 0, 0, 0.2);
+      background: rgba(0, 0, 0, 0.02);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
     }
 
-    .mode-btn {
-      @include btn-base;
+    &:focus-visible {
+      outline: 2px solid $light-mode-button-background;
+      outline-offset: 1px;
+      box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
+    }
 
-      flex: 1;
-      min-width: 90px;
-      padding: $spacing-sm $spacing-md;
-      font-size: 14px;
-      font-weight: $font-medium;
-      border-radius: 8px;
-      background: transparent;
-      color: $light-mode-secondary-text;
-      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-      position: relative;
+    &.active {
+      border-color: $light-mode-button-background;
+      background: rgba(0, 0, 0, 0.02);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
 
       @include dark-mode {
-        color: $dark-mode-secondary-text;
+        border-color: $dark-mode-button-background;
+        background: rgba(255, 255, 255, 0.05);
+      }
+    }
+
+    // Active filter state - match category pill styling
+    &.has-filter {
+      background-color: $light-mode-button-background;
+      color: white;
+      font-weight: $font-medium;
+      border-color: $light-mode-button-background;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+
+      &:hover {
+        background-color: darken($light-mode-button-background, 5%);
+        border-color: darken($light-mode-button-background, 5%);
       }
 
-      &:hover:not(.active) {
-        background: rgba(0, 0, 0, 0.03);
-        color: $light-mode-text;
+      @include dark-mode {
+        background-color: $dark-mode-button-background;
+        border-color: $dark-mode-button-background;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 
-        @include dark-mode {
-          background: rgba(255, 255, 255, 0.05);
-          color: $dark-mode-text;
+        &:hover {
+          background-color: lighten($dark-mode-button-background, 5%);
+          border-color: lighten($dark-mode-button-background, 5%);
         }
       }
 
-      &.active {
-        background: white;
-        color: $light-mode-text;
-        box-shadow:
-          0 1px 3px rgba(0, 0, 0, 0.1),
-          0 1px 2px rgba(0, 0, 0, 0.06);
-        font-weight: $font-bold;
+      .dropdown-icon {
+        color: white;
+      }
+    }
 
-        @include dark-mode {
-          background: rgba(255, 255, 255, 0.12);
-          color: $dark-mode-text;
-          box-shadow:
-            0 1px 3px rgba(0, 0, 0, 0.3),
-            0 1px 2px rgba(0, 0, 0, 0.2);
-        }
+    @include dark-mode {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(255, 255, 255, 0.15);
+      color: rgba(255, 255, 255, 0.9);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+
+      &:hover {
+        border-color: rgba(255, 255, 255, 0.25);
+        background: rgba(255, 255, 255, 0.08);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      }
+
+      &:focus-visible {
+        outline-color: $dark-mode-button-background;
+        box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08);
+      }
+    }
+
+    .button-text {
+      flex: 1;
+      white-space: nowrap;
+    }
+
+    .dropdown-icon {
+      flex-shrink: 0;
+      transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+
+      &.rotated {
+        transform: rotate(180deg);
       }
     }
   }
 
-  // Custom Date Inputs with Slide Transition
-  .date-inputs {
+  // Dropdown Container
+  .date-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 20;
+    min-width: 320px;
+    padding: $spacing-md;
+    background: white;
+    border-radius: 16px;
+    box-shadow:
+      0 4px 6px rgba(0, 0, 0, 0.05),
+      0 10px 24px rgba(0, 0, 0, 0.1),
+      0 0 0 1px rgba(0, 0, 0, 0.04);
+
+    @include dark-mode {
+      background: rgba(30, 30, 35, 0.98);
+      box-shadow:
+        0 4px 6px rgba(0, 0, 0, 0.3),
+        0 10px 24px rgba(0, 0, 0, 0.5),
+        0 0 0 1px rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(20px);
+    }
+
+    @include mobile-only {
+      left: 0;
+      right: 0;
+      min-width: auto;
+    }
+  }
+
+  // Date Mode Pills (inside dropdown)
+  .date-mode-pills {
     display: flex;
-    gap: $spacing-md;
-    flex-direction: column;
-    overflow: hidden;
+    gap: 8px;
+    flex-wrap: wrap;
 
     @include medium-size-device {
-      flex-direction: row;
+      flex-wrap: nowrap;
     }
 
-    .date-input-group {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: $spacing-xs;
+    .date-pill {
+      // Match category pill styling exactly
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      flex-shrink: 0;
+      padding: 6px 14px;
+      min-height: 32px;
+      border: none;
+      border-radius: 16px;
+      font-family: 'Creato Display', 'Helvetica Neue', sans-serif;
+      font-size: 13px;
+      font-weight: $font-regular;
+      letter-spacing: 0.01em;
+      cursor: pointer;
+      transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+      white-space: nowrap;
+      user-select: none;
 
-      .date-label {
-        font-size: 12px;
+      // Unselected state - subtle and refined
+      background-color: rgba(0, 0, 0, 0.04);
+      color: rgba(0, 0, 0, 0.6);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+
+      &:hover:not(.active) {
+        background-color: rgba(0, 0, 0, 0.08);
+        color: rgba(0, 0, 0, 0.75);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+      }
+
+      &:focus-visible {
+        outline: 2px solid rgba(0, 0, 0, 0.5);
+        outline-offset: 1px;
+        box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.08);
+      }
+
+      &:active:not(.active) {
+        transform: scale(0.97);
+      }
+
+      // Selected state - uses design system tokens
+      &.active {
+        background-color: $light-mode-button-background;
+        color: white;
         font-weight: $font-medium;
-        color: $light-mode-text;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+
+        &:hover {
+          background-color: darken($light-mode-button-background, 5%);
+        }
 
         @include dark-mode {
-          color: $dark-mode-text;
+          background-color: $dark-mode-button-background;
+          color: white;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+
+          &:hover {
+            background-color: lighten($dark-mode-button-background, 5%);
+          }
         }
       }
 
-      .date-input {
-        @include input-base;
+      // Dark mode unselected state
+      @include dark-mode {
+        background-color: rgba(255, 255, 255, 0.06);
+        color: rgba(255, 255, 255, 0.6);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 
-        padding: $spacing-sm $spacing-md;
-        font-size: 14px;
+        &:hover:not(.active) {
+          background-color: rgba(255, 255, 255, 0.1);
+          color: rgba(255, 255, 255, 0.8);
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        }
+
+        &:focus-visible {
+          outline-color: rgba(255, 255, 255, 0.5);
+          box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08);
+        }
+      }
+
+      // Calendar icon pill
+      &.calendar-pill {
+        padding: 6px 10px;
+
+        svg {
+          display: block;
+        }
+
+        .sr-only {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          padding: 0;
+          margin: -1px;
+          overflow: hidden;
+          clip: rect(0, 0, 0, 0);
+          white-space: nowrap;
+          border: 0;
+        }
       }
     }
   }
 
-  // Slide transition for date inputs
-  .date-inputs-slide-enter-active,
-  .date-inputs-slide-leave-active {
+  // Custom Dates Section (shown when custom mode is active)
+  .custom-dates-section {
+    margin-top: $spacing-md;
+    padding-top: $spacing-md;
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+
+    @include dark-mode {
+      border-top-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .date-inputs-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: $spacing-md;
+
+      @include mobile-only {
+        grid-template-columns: 1fr;
+        gap: $spacing-sm;
+      }
+
+      .date-input-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+
+        .date-input-label {
+          font-size: 11px;
+          font-weight: $font-medium;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          color: rgba(0, 0, 0, 0.5);
+
+          @include dark-mode {
+            color: rgba(255, 255, 255, 0.5);
+          }
+        }
+
+        .date-input {
+          @include input-base;
+
+          width: 100%;
+          padding: 8px 10px;
+          font-size: 13px;
+          min-height: 36px;
+          border-radius: 8px;
+          border: 1px solid rgba(0, 0, 0, 0.12);
+          background-color: rgba(0, 0, 0, 0.02);
+          color: rgba(0, 0, 0, 0.85);
+          font-family: 'Creato Display', 'Helvetica Neue', sans-serif;
+          font-weight: $font-regular;
+          transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+
+          &:hover {
+            border-color: rgba(0, 0, 0, 0.2);
+            background-color: rgba(0, 0, 0, 0.04);
+          }
+
+          &:focus {
+            outline: 2px solid $light-mode-button-background;
+            outline-offset: 0;
+            border-color: transparent;
+            background-color: white;
+          }
+
+          @include dark-mode {
+            border-color: rgba(255, 255, 255, 0.15);
+            background-color: rgba(255, 255, 255, 0.05);
+            color: rgba(255, 255, 255, 0.9);
+
+            &:hover {
+              border-color: rgba(255, 255, 255, 0.25);
+              background-color: rgba(255, 255, 255, 0.08);
+            }
+
+            &:focus {
+              outline-color: $dark-mode-button-background;
+              background-color: rgba(255, 255, 255, 0.1);
+            }
+          }
+
+          // Style the calendar picker icon
+          &::-webkit-calendar-picker-indicator {
+            cursor: pointer;
+            opacity: 0.5;
+            transition: opacity 0.15s ease;
+
+            &:hover {
+              opacity: 0.8;
+            }
+
+            @include dark-mode {
+              filter: invert(1);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Smooth dropdown animation with spring easing
+  .dropdown-fade-enter-active {
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .dropdown-fade-leave-active {
+    transition: all 0.2s cubic-bezier(0.4, 0, 1, 1);
+  }
+
+  .dropdown-fade-enter-from {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.95);
+  }
+
+  .dropdown-fade-enter-to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  .dropdown-fade-leave-from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  .dropdown-fade-leave-to {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+
+  // Slide fade animation for custom dates section
+  .slide-fade-enter-active {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    transform-origin: top;
   }
 
-  .date-inputs-slide-enter-from {
+  .slide-fade-leave-active {
+    transition: all 0.2s cubic-bezier(0.4, 0, 1, 1);
+  }
+
+  .slide-fade-enter-from {
     opacity: 0;
-    transform: translateY(-10px) scaleY(0.95);
     max-height: 0;
+    transform: translateY(-8px);
   }
 
-  .date-inputs-slide-enter-to {
+  .slide-fade-enter-to {
     opacity: 1;
-    transform: translateY(0) scaleY(1);
     max-height: 200px;
+    transform: translateY(0);
   }
 
-  .date-inputs-slide-leave-from {
+  .slide-fade-leave-from {
     opacity: 1;
-    transform: translateY(0) scaleY(1);
     max-height: 200px;
+    transform: translateY(0);
   }
 
-  .date-inputs-slide-leave-to {
+  .slide-fade-leave-to {
     opacity: 0;
-    transform: translateY(-10px) scaleY(0.95);
     max-height: 0;
-  }
-}
-
-// Clear All Filters Section
-.clear-filters-section {
-  @include clear-filters-section;
-
-  .clear-all-filters {
-    @include clear-all-filters-btn;
+    transform: translateY(-4px);
   }
 }
 
@@ -661,13 +979,25 @@ onMounted(() => {
   }
 
   .date-range-section {
-    .date-mode-selector {
+    .date-mode-pills {
       width: 100%;
 
-      .mode-btn {
-        min-width: auto;
-        font-size: 13px;
-        padding: $spacing-xs $spacing-sm;
+      .date-pill {
+        flex: 1;
+        font-size: 12px;
+        padding: 5px 10px;
+        min-height: 34px;
+        justify-content: center;
+      }
+    }
+
+    .date-inputs-inline {
+      .date-input-compact {
+        .date-input {
+          font-size: 12px;
+          padding: 5px 10px;
+          min-height: 34px;
+        }
       }
     }
   }

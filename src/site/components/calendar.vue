@@ -120,87 +120,91 @@ onBeforeMount(async () => {
 </template>
 
 <style lang="scss">
-@use '../../client/assets/mixins' as *;
+@use '../assets/mixins' as *;
 
 h1 {
   font-size: 200%;
-  font-weight: $font-light;
+  font-weight: $public-font-weight-light;
 }
 
 // Events display
 section.day {
-  margin: 10px 0;
+  margin: $public-space-md 0;
 
   h2 {
-    font-size: 100%;
+    font-size: $public-font-size-base;
     margin: 0;
     padding: 0;
-    font-weight: $font-medium;
+    font-weight: $public-font-weight-medium;
+    color: $public-text-primary-light;
+
+    @media (prefers-color-scheme: dark) {
+      color: $public-text-primary-dark;
+    }
   }
 
   ul.events {
+    @include public-horizontal-scroll;
+
     display: flex;
     flex-direction: row;
     flex-wrap: nowrap;
     align-items: stretch;
-    overflow-x: auto;
-    padding: 20px 0px;
+    padding: $public-space-xl 0;
+    gap: $public-space-md;
 
     li.event {
+      @include public-event-card-compact;
+
       list-style-type: none;
-      padding: 10px;
-      width: 150px;
-      margin-right: 10px;
-      box-shadow: rgba(0,0,0,0.2) 8px 8px 12px;
-      background-color: rgba(0,0,0,0.1);
-      display: flex;
-      flex-direction: column;
+      margin-right: 0;
 
       h3 {
         order: 1;
-        font-size: 120%;
-        margin-top: 10px;
-        font-weight: $font-light;
+        font-size: $public-font-size-md;
+        margin-top: $public-space-sm;
+        font-weight: $public-font-weight-light;
+        line-height: $public-line-height-tight;
 
         a {
-          color: $light-mode-text;
+          color: $public-text-primary-light;
           text-decoration: none;
+          transition: $public-transition-fast;
+
+          &:hover {
+            color: $public-accent-light;
+          }
 
           @media (prefers-color-scheme: dark) {
-            color: $dark-mode-text;
+            color: $public-text-primary-dark;
+
+            &:hover {
+              color: $public-accent-dark;
+            }
           }
         }
       }
 
       .event-time {
         order: 2;
-        font-size: 14px;
-        color: $light-mode-secondary-text;
-        margin-top: 5px;
+        font-size: $public-font-size-sm;
+        color: $public-text-secondary-light;
+        margin-top: $public-space-xs;
 
         @media (prefers-color-scheme: dark) {
-          color: $dark-mode-secondary-text;
+          color: $public-text-secondary-dark;
         }
       }
 
       .event-categories {
         order: 3;
-        margin-top: 8px;
+        margin-top: $public-space-sm;
         display: flex;
         flex-wrap: wrap;
-        gap: 4px;
+        gap: $public-space-xs;
 
         .event-category-badge {
-          background-color: $light-mode-button-background;
-          color: white;
-          font-size: 10px;
-          padding: 2px 6px;
-          border-radius: 10px;
-          font-weight: $font-medium;
-
-          @media (prefers-color-scheme: dark) {
-            background-color: $dark-mode-button-background;
-          }
+          @include public-category-badge;
         }
       }
     }
@@ -209,56 +213,28 @@ section.day {
 
 // Loading and error states
 .loading {
-  text-align: center;
-  padding: 20px;
-  color: $light-mode-secondary-text;
-  font-style: italic;
-
-  @media (prefers-color-scheme: dark) {
-    color: $dark-mode-secondary-text;
-  }
+  @include public-loading-state;
 }
 
 .error {
-  background-color: #fee;
-  border: 1px solid #fcc;
-  color: #c33;
-  padding: 10px;
-  border-radius: 5px;
-  margin: 10px 0;
+  @include public-error-state;
 
-  @media (prefers-color-scheme: dark) {
-    background-color: #400;
-    border-color: #600;
-    color: #fcc;
-  }
+  margin: $public-space-md 0;
 }
 
 .empty-state {
-  text-align: center;
-  padding: 40px 20px;
-  color: $light-mode-secondary-text;
-
-  @media (prefers-color-scheme: dark) {
-    color: $dark-mode-secondary-text;
-  }
-
-  p {
-    margin: 0 0 20px 0;
-    font-size: 16px;
-  }
+  @include public-empty-state;
 
   .clear-filters-btn {
-    @include btn-base;
-    @include btn-ghost;
+    @include public-button-ghost;
 
-    padding: $spacing-sm $spacing-lg;
-    font-size: 14px;
+    padding: $public-space-sm $public-space-lg;
+    font-size: $public-font-size-base;
   }
 }
 
 // Responsive design
-@media (max-width: 768px) {
+@include public-mobile-only {
   section.day ul.events {
     li.event {
       width: 120px;

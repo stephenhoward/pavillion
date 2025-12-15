@@ -6,6 +6,14 @@ export default defineConfig({
   test: {
     environment: 'happy-dom',
     globals: true,
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/cypress/**',
+      '**/.{idea,git,cache,output,temp}/**',
+      '**/tests/e2e/**',
+      '**/*.e2e.test.ts',
+    ],
     coverage: {
       reportOnFailure: true,
     },

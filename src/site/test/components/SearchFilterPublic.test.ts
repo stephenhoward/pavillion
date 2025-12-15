@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { createRouter, createMemoryHistory } from 'vue-router';
+import I18NextVue from 'i18next-vue';
+import i18next from 'i18next';
 import SearchFilterPublic from '@/site/components/SearchFilterPublic.vue';
 import { usePublicCalendarStore } from '@/site/stores/publicCalendarStore';
 import { EventCategory } from '@/common/model/event_category';
@@ -28,13 +30,17 @@ describe('SearchFilterPublic Component', () => {
   describe('Search Input', () => {
     it('should update store on search input with debounce', async () => {
       const store = usePublicCalendarStore();
-      const reloadSpy = vi.spyOn(store, 'reloadWithFilters');
 
       const wrapper = mount(SearchFilterPublic, {
         global: {
-          plugins: [pinia, router],
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
       });
+
+      await flushPromises();
+
+      // Set up spy after mount to avoid catching initialization calls
+      const reloadSpy = vi.spyOn(store, 'reloadWithFilters');
 
       const searchInput = wrapper.find('input[type="text"]');
       expect(searchInput.exists()).toBe(true);
@@ -54,35 +60,45 @@ describe('SearchFilterPublic Component', () => {
     });
 
     it('should show clear button when search has value', async () => {
-      const store = usePublicCalendarStore();
-      store.searchQuery = 'test query';
-
       const wrapper = mount(SearchFilterPublic, {
         global: {
-          plugins: [pinia, router],
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
       });
 
       await flushPromises();
 
+      // Initially no clear button
+      expect(wrapper.find('.clear-search').exists()).toBe(false);
+
+      // Type in search input
+      const searchInput = wrapper.find('.search-input');
+      await searchInput.setValue('test query');
+      await flushPromises();
+
+      // Clear button should now appear
       const clearButton = wrapper.find('.clear-search');
       expect(clearButton.exists()).toBe(true);
     });
 
     it('should clear search when clear button clicked', async () => {
       const store = usePublicCalendarStore();
-      store.searchQuery = 'test query';
 
       const wrapper = mount(SearchFilterPublic, {
         global: {
-          plugins: [pinia, router],
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
       });
 
+      // Type in search input to show clear button
+      const searchInput = wrapper.find('.search-input');
+      await searchInput.setValue('test query');
       await flushPromises();
 
+      // Click clear button
       const clearButton = wrapper.find('.clear-search');
       await clearButton.trigger('click');
+      await flushPromises();
 
       expect(store.searchQuery).toBe('');
     });
@@ -103,7 +119,7 @@ describe('SearchFilterPublic Component', () => {
 
       const wrapper = mount(SearchFilterPublic, {
         global: {
-          plugins: [pinia, router],
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
       });
 
@@ -127,7 +143,7 @@ describe('SearchFilterPublic Component', () => {
 
       const wrapper = mount(SearchFilterPublic, {
         global: {
-          plugins: [pinia, router],
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
       });
 
@@ -143,30 +159,50 @@ describe('SearchFilterPublic Component', () => {
   });
 
   describe('Date Range Filtering', () => {
-    it('should render date picker inputs', async () => {
+    it('should open date filter dropdown when button clicked', async () => {
       const wrapper = mount(SearchFilterPublic, {
         global: {
-          plugins: [pinia, router],
-        },
-      });
-
-      const dateInputs = wrapper.findAll('input[type="date"]');
-      expect(dateInputs.length).toBe(2); // Start and end date inputs
-    });
-
-    it('should set correct date range when "This Week" button clicked', async () => {
-      const store = usePublicCalendarStore();
-
-      const wrapper = mount(SearchFilterPublic, {
-        global: {
-          plugins: [pinia, router],
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
       });
 
       await flushPromises();
 
-      const thisWeekButton = wrapper.find('button.preset-this-week');
-      await thisWeekButton.trigger('click');
+      const dateFilterButton = wrapper.find('.date-filter-button');
+      expect(dateFilterButton.exists()).toBe(true);
+
+      // Initially closed
+      expect(wrapper.find('.date-dropdown').exists()).toBe(false);
+
+      // Click to open
+      await dateFilterButton.trigger('click');
+      await flushPromises();
+
+      // Should show dropdown
+      expect(wrapper.find('.date-dropdown').exists()).toBe(true);
+    });
+
+    it('should set correct date range when "This Week" pill clicked', async () => {
+      const store = usePublicCalendarStore();
+
+      const wrapper = mount(SearchFilterPublic, {
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+
+      // Open date filter dropdown
+      const dateFilterButton = wrapper.find('.date-filter-button');
+      await dateFilterButton.trigger('click');
+      await flushPromises();
+
+      // Find and click "This Week" pill
+      const pills = wrapper.findAll('.date-pill');
+      const thisWeekPill = pills[0]; // First pill is "This Week"
+      await thisWeekPill.trigger('click');
+      await flushPromises();
 
       // Should have set start and end dates
       expect(store.startDate).toBeTruthy();
@@ -180,17 +216,27 @@ describe('SearchFilterPublic Component', () => {
       expect(end.weekday).toBe(6); // Saturday
     });
 
-    it('should set correct date range when "Next Week" button clicked', async () => {
+    it('should set correct date range when "Next Week" pill clicked', async () => {
       const store = usePublicCalendarStore();
 
       const wrapper = mount(SearchFilterPublic, {
         global: {
-          plugins: [pinia, router],
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
       });
 
-      const nextWeekButton = wrapper.find('button.preset-next-week');
-      await nextWeekButton.trigger('click');
+      await flushPromises();
+
+      // Open date filter dropdown
+      const dateFilterButton = wrapper.find('.date-filter-button');
+      await dateFilterButton.trigger('click');
+      await flushPromises();
+
+      // Find and click "Next Week" pill
+      const pills = wrapper.findAll('.date-pill');
+      const nextWeekPill = pills[1]; // Second pill is "Next Week"
+      await nextWeekPill.trigger('click');
+      await flushPromises();
 
       expect(store.startDate).toBeTruthy();
       expect(store.endDate).toBeTruthy();
@@ -202,122 +248,64 @@ describe('SearchFilterPublic Component', () => {
       expect(end.weekday).toBe(6); // Saturday
     });
 
+    it('should show custom date inputs when calendar pill clicked', async () => {
+      const wrapper = mount(SearchFilterPublic, {
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+
+      // Open date filter dropdown
+      const dateFilterButton = wrapper.find('.date-filter-button');
+      await dateFilterButton.trigger('click');
+      await flushPromises();
+
+      // Initially no date inputs visible
+      expect(wrapper.findAll('input[type="date"]').length).toBe(0);
+
+      // Click calendar pill (third pill)
+      const pills = wrapper.findAll('.date-pill');
+      const customPill = pills[2];
+      await customPill.trigger('click');
+      await flushPromises();
+
+      // Should show date inputs
+      const dateInputs = wrapper.findAll('input[type="date"]');
+      expect(dateInputs.length).toBe(2);
+    });
+
     it('should update store when manual date input changed', async () => {
       const store = usePublicCalendarStore();
 
       const wrapper = mount(SearchFilterPublic, {
         global: {
-          plugins: [pinia, router],
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
       });
 
+      await flushPromises();
+
+      // Open date filter and activate custom mode
+      const dateFilterButton = wrapper.find('.date-filter-button');
+      await dateFilterButton.trigger('click');
+      await flushPromises();
+
+      const pills = wrapper.findAll('.date-pill');
+      await pills[2].trigger('click'); // Click custom pill
+      await flushPromises();
+
+      // Change date input
       const dateInputs = wrapper.findAll('input[type="date"]');
       const startDateInput = dateInputs[0];
-
       await startDateInput.setValue('2025-01-15');
+      await flushPromises();
+
       expect(store.startDate).toBe('2025-01-15');
     });
   });
 
-  describe('Clear All Filters', () => {
-    it('should show "Clear all filters" button when any filter active', async () => {
-      const store = usePublicCalendarStore();
-      store.searchQuery = 'test';
-
-      const wrapper = mount(SearchFilterPublic, {
-        global: {
-          plugins: [pinia, router],
-        },
-      });
-
-      await flushPromises();
-
-      const clearAllButton = wrapper.find('.clear-all-filters');
-      expect(clearAllButton.exists()).toBe(true);
-    });
-
-    it('should hide "Clear all filters" button when no filters active', async () => {
-      const store = usePublicCalendarStore();
-      store.searchQuery = '';
-      store.selectedCategoryNames = [];
-      store.startDate = null;
-      store.endDate = null;
-
-      const wrapper = mount(SearchFilterPublic, {
-        global: {
-          plugins: [pinia, router],
-        },
-      });
-
-      await flushPromises();
-
-      const clearAllButton = wrapper.find('.clear-all-filters');
-      expect(clearAllButton.exists()).toBe(false);
-    });
-
-    it('should reset all filters when clear all button clicked', async () => {
-      const store = usePublicCalendarStore();
-      store.searchQuery = 'yoga';
-      store.selectedCategoryNames = ['Sports'];
-      store.startDate = '2025-01-01';
-      store.endDate = '2025-01-07';
-
-      const wrapper = mount(SearchFilterPublic, {
-        global: {
-          plugins: [pinia, router],
-        },
-      });
-
-      await flushPromises();
-
-      const clearAllButton = wrapper.find('.clear-all-filters');
-      await clearAllButton.trigger('click');
-
-      expect(store.searchQuery).toBe('');
-      expect(store.selectedCategoryNames).toEqual([]);
-      expect(store.startDate).toBeNull();
-      expect(store.endDate).toBeNull();
-    });
-  });
-
-  describe('Mobile Accordion', () => {
-    it('should render accordion for category and date filters on mobile', async () => {
-      const wrapper = mount(SearchFilterPublic, {
-        global: {
-          plugins: [pinia, router],
-        },
-      });
-
-      await flushPromises();
-
-      const accordion = wrapper.find('.filter-accordion');
-      expect(accordion.exists()).toBe(true);
-    });
-
-    it('should toggle accordion when clicked', async () => {
-      const wrapper = mount(SearchFilterPublic, {
-        global: {
-          plugins: [pinia, router],
-        },
-      });
-
-      await flushPromises();
-
-      const accordionButton = wrapper.find('.accordion-toggle');
-      expect(accordionButton.exists()).toBe(true);
-
-      // Initially closed
-      expect(wrapper.vm.isAccordionOpen).toBe(false);
-
-      // Click to open
-      await accordionButton.trigger('click');
-      expect(wrapper.vm.isAccordionOpen).toBe(true);
-
-      // Click to close
-      await accordionButton.trigger('click');
-      expect(wrapper.vm.isAccordionOpen).toBe(false);
-    });
-  });
 
   describe('URL Parameter Synchronization', () => {
     it('should initialize filters from URL parameters on mount', async () => {
@@ -336,7 +324,7 @@ describe('SearchFilterPublic Component', () => {
 
       mount(SearchFilterPublic, {
         global: {
-          plugins: [pinia, router],
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
       });
 
@@ -356,7 +344,7 @@ describe('SearchFilterPublic Component', () => {
 
       const wrapper = mount(SearchFilterPublic, {
         global: {
-          plugins: [pinia, router],
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
       });
 
@@ -375,21 +363,26 @@ describe('SearchFilterPublic Component', () => {
   });
 
   describe('Real-time Filter Application', () => {
-    it('should reload events when any filter changes', async () => {
+    it('should reload events when date filter changes', async () => {
       const store = usePublicCalendarStore();
       const reloadSpy = vi.spyOn(store, 'reloadWithFilters');
 
       const wrapper = mount(SearchFilterPublic, {
         global: {
-          plugins: [pinia, router],
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
         },
       });
 
       await flushPromises();
 
-      // Click preset button
-      const thisWeekButton = wrapper.find('button.preset-this-week');
-      await thisWeekButton.trigger('click');
+      // Open date filter and click "This Week" pill
+      const dateFilterButton = wrapper.find('.date-filter-button');
+      await dateFilterButton.trigger('click');
+      await flushPromises();
+
+      const pills = wrapper.findAll('.date-pill');
+      await pills[0].trigger('click'); // Click "This Week" pill
+      await flushPromises();
 
       // Should have triggered reload
       expect(reloadSpy).toHaveBeenCalled();

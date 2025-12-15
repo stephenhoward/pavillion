@@ -101,7 +101,7 @@ describe('Public Events API - Search and Filtering', () => {
 
       router.get('/handler', (req, res) => {
         req.params.calendar = 'test-calendar';
-        req.query.categories = ['cat-id-1', 'cat-id-2'];
+        req.query.category = ['cat-id-1', 'cat-id-2'];
         routes.listInstances(req, res);
       });
 
@@ -184,7 +184,7 @@ describe('Public Events API - Search and Filtering', () => {
       router.get('/handler', (req, res) => {
         req.params.calendar = 'test-calendar';
         req.query.search = 'yoga';
-        req.query.categories = ['cat-id-1', 'cat-id-2'];
+        req.query.category = ['cat-id-1', 'cat-id-2'];
         req.query.startDate = '2025-11-15';
         req.query.endDate = '2025-11-21';
         routes.listInstances(req, res);

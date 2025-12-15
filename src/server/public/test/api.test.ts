@@ -120,7 +120,7 @@ describe('Public Calendar API', () => {
       // Setup stubs for this specific test
       const calendar = new Calendar('cal-id', 'test-calendar');
       let calendarStub = apiSandbox.stub(publicInterface, 'getCalendarByName');
-      let instancesStub = apiSandbox.stub(publicInterface, 'listEventInstancesWithCategoryFilter');
+      let instancesStub = apiSandbox.stub(publicInterface, 'listEventInstancesWithFilters');
 
       const event1 = new CalendarEvent('event-1', 'cal-id');
       const instance1 = new CalendarEventInstance('inst-1', event1, DateTime.now(), null);
@@ -142,14 +142,17 @@ describe('Public Calendar API', () => {
       }
       expect(response.status).toBe(200);
       expect(response.body).toHaveLength(1);
-      expect(instancesStub.calledWith(sinon.match.any, ['category-1'])).toBe(true);
+      expect(instancesStub.calledWith(
+        calendar,
+        sinon.match({ categories: ['category-1'] }),
+      )).toBe(true);
     });
 
     it('should filter events by multiple categories', async () => {
       // Setup stubs for this specific test
       const calendar = new Calendar('cal-id', 'test-calendar');
       let calendarStub = apiSandbox.stub(publicInterface, 'getCalendarByName');
-      let instancesStub = apiSandbox.stub(publicInterface, 'listEventInstancesWithCategoryFilter');
+      let instancesStub = apiSandbox.stub(publicInterface, 'listEventInstancesWithFilters');
 
       const event1 = new CalendarEvent('event-1', 'cal-id');
       const event2 = new CalendarEvent('event-2', 'cal-id');
@@ -170,17 +173,20 @@ describe('Public Calendar API', () => {
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveLength(2);
-      expect(instancesStub.calledWith(sinon.match.any, ['category-1', 'category-3', 'category-5'])).toBe(true);
+      expect(instancesStub.calledWith(
+        calendar,
+        sinon.match({ categories: ['category-1', 'category-3', 'category-5'] }),
+      )).toBe(true);
     });
 
     it('should return 400 for invalid category names', async () => {
       // Setup stubs for this specific test
       const calendar = new Calendar('cal-id', 'test-calendar');
       let calendarStub = apiSandbox.stub(publicInterface, 'getCalendarByName');
-      let instancesStub = apiSandbox.stub(publicInterface, 'listEventInstancesWithCategoryFilter');
+      let instancesStub = apiSandbox.stub(publicInterface, 'listEventInstancesWithFilters');
 
       calendarStub.resolves(calendar);
-      instancesStub.throws(new Error('Invalid category names provided'));
+      instancesStub.throws(new Error('Invalid category IDs provided'));
 
       router.get('/handler', (req, res) => {
         req.params.calendar = 'test-calendar';
@@ -192,7 +198,7 @@ describe('Public Calendar API', () => {
         .get('/handler');
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Invalid category names provided');
+      expect(response.body.error).toBe('Invalid category IDs provided');
     });
 
     it('should work without category filtering (existing functionality)', async () => {
