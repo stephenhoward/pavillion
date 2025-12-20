@@ -81,8 +81,8 @@ onBeforeMount(async () => {
 // ================================================================
 // EVENT DETAIL PAGE
 // ================================================================
-// Displays the full event details with a dramatic feature image.
-// This page shows the event template, not a specific instance.
+// Displays the full event details with an optional dramatic feature image.
+// The layout adapts gracefully whether there's an image or not.
 // ================================================================
 
 .event-detail {
@@ -119,19 +119,55 @@ onBeforeMount(async () => {
     }
   }
 
-  h1 {
-    margin: 0;
+  // ============================================================
+  // HEADER WITHOUT IMAGE
+  // ============================================================
+  // When no image is present, the title becomes the hero element.
+  // Add visual weight through typography and subtle accent.
+  // ============================================================
+
+  &:not(:has(.event-image)) {
+    h1 {
+      font-size: 40px;
+      font-weight: $public-font-weight-bold;
+      letter-spacing: $public-letter-spacing-tight;
+      padding-top: $public-space-lg;
+      border-top: 4px solid $public-accent-light;
+      max-width: 80%;
+
+      @include public-dark-mode {
+        border-top-color: $public-accent-dark;
+      }
+
+      @include public-mobile-only {
+        font-size: $public-font-size-2xl;
+        max-width: 100%;
+      }
+    }
+  }
+
+  // ============================================================
+  // HEADER WITH IMAGE
+  // ============================================================
+  // Standard layout with feature image taking visual priority.
+  // ============================================================
+
+  &:has(.event-image) h1 {
     font-size: $public-font-size-2xl;
     font-weight: $public-font-weight-semibold;
+
+    @include public-mobile-only {
+      font-size: $public-font-size-xl;
+    }
+  }
+
+  h1 {
+    margin: 0;
     line-height: $public-line-height-tight;
     color: $public-text-primary-light;
 
     @include public-dark-mode {
       color: $public-text-primary-dark;
-    }
-
-    @include public-mobile-only {
-      font-size: $public-font-size-xl;
     }
   }
 }

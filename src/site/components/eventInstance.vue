@@ -92,8 +92,8 @@ onBeforeMount(async () => {
 // ================================================================
 // EVENT INSTANCE PAGE
 // ================================================================
-// Displays a specific occurrence of an event with hero image,
-// date/time, and full event details.
+// Displays a specific occurrence of an event with optional hero image,
+// date/time, and full event details. Adapts gracefully without images.
 // ================================================================
 
 .instance-header {
@@ -125,6 +125,58 @@ onBeforeMount(async () => {
     }
   }
 
+  // ============================================================
+  // HEADER WITHOUT IMAGE
+  // ============================================================
+  // When no image is present, elevate the title and datetime
+  // to create a strong typographic header.
+  // ============================================================
+
+  &:not(:has(.event-image)) .instance-meta {
+    padding-top: $public-space-lg;
+    border-top: 4px solid $public-accent-light;
+    max-width: 80%;
+
+    @include public-dark-mode {
+      border-top-color: $public-accent-dark;
+    }
+
+    @include public-mobile-only {
+      max-width: 100%;
+    }
+
+    h1 {
+      font-size: 40px;
+      font-weight: $public-font-weight-bold;
+      letter-spacing: $public-letter-spacing-tight;
+
+      @include public-mobile-only {
+        font-size: $public-font-size-2xl;
+      }
+    }
+
+    .event-datetime {
+      font-size: $public-font-size-lg;
+    }
+  }
+
+  // ============================================================
+  // HEADER WITH IMAGE
+  // ============================================================
+  // Standard layout with hero image taking visual priority.
+  // ============================================================
+
+  &:has(.event-image) .instance-meta {
+    h1 {
+      font-size: $public-font-size-2xl;
+      font-weight: $public-font-weight-semibold;
+
+      @include public-mobile-only {
+        font-size: $public-font-size-xl;
+      }
+    }
+  }
+
   .instance-meta {
     display: flex;
     flex-direction: column;
@@ -132,17 +184,11 @@ onBeforeMount(async () => {
 
     h1 {
       margin: 0;
-      font-size: $public-font-size-2xl;
-      font-weight: $public-font-weight-semibold;
       line-height: $public-line-height-tight;
       color: $public-text-primary-light;
 
       @include public-dark-mode {
         color: $public-text-primary-dark;
-      }
-
-      @include public-mobile-only {
-        font-size: $public-font-size-xl;
       }
     }
 

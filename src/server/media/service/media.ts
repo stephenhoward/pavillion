@@ -10,6 +10,7 @@ import { StorageConfig, createStorageDisk } from './storage-factory';
 import CalendarInterface from '@/server/calendar/interface';
 import { Account } from '@/common/model/account';
 import { CalendarNotFoundError, InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
+import { MediaNotApprovedError, MediaNotFoundError } from '@/common/exceptions/media';
 
 interface MediaConfig {
   maxFileSize: number;
@@ -146,8 +147,6 @@ export default class MediaService {
 
     // Save metadata to database
     const mediaEntity = MediaEntity.fromModel(media);
-    console.log(mediaEntity);
-    console.log(media);
     await mediaEntity.save();
 
     // Emit event for further processing
@@ -171,20 +170,24 @@ export default class MediaService {
   /**
    * Updates media status
    */
-  async updateMediaStatus(mediaId: string, status: MediaStatus): Promise<void> {
-    await MediaEntity.update(
+  async updateMediaStatus(mediaId: string, status: MediaStatus): Promise<boolean> {
+    const [affectedRows] = await MediaEntity.update(
       {
         status,
         processed_at: new Date(),
       },
       { where: { id: mediaId } },
     );
+    if (affectedRows === 0) {
+      return false;
+    }
+    return true;
   }
 
   /**
    * Moves a file from staging to final storage after safety check
    */
-  async moveToFinalStorage(mediaId: string): Promise<void> {
+  async moveToFinalStorage(mediaId: string): Promise<boolean> {
     const media = await this.getMediaById(mediaId);
     if (!media) {
       throw new Error(`Media with ID ${mediaId} not found`);
@@ -200,11 +203,16 @@ export default class MediaService {
     const fileBytes = await this.storageDisk.getBytes(stagingKey);
     await this.storageDisk.put(finalKey, fileBytes);
 
-    // Delete from staging storage
-    await this.storageDisk.delete(stagingKey);
+    // Delete from staging storage (non-critical, don't fail if this errors)
+    try {
+      await this.storageDisk.delete(stagingKey);
+    }
+    catch {
+      // Staging file cleanup failed - non-critical
+    }
 
     // Update status
-    await this.updateMediaStatus(mediaId, 'approved');
+    return await this.updateMediaStatus(mediaId, 'approved');
   }
 
   /**
@@ -254,8 +262,7 @@ export default class MediaService {
     }
 
     if (media.status === 'pending') {
-      await this.moveToFinalStorage(mediaId);
-      return true;
+      return await this.moveToFinalStorage(mediaId);
     }
 
     return media.status === 'approved';
@@ -267,11 +274,11 @@ export default class MediaService {
   async getSignedUrl(mediaId: string, expiresInSeconds: number = 3600): Promise<string> {
     const media = await this.getMediaById(mediaId);
     if (!media) {
-      throw new Error(`Media with ID ${mediaId} not found`);
+      throw new MediaNotFoundError(mediaId);
     }
 
     if (media.status !== 'approved') {
-      throw new Error(`Media with ID ${mediaId} is not approved`);
+      throw new MediaNotApprovedError(mediaId, media.status);
     }
 
     // Ensure storage is ready
@@ -291,7 +298,7 @@ export default class MediaService {
     }
 
     if (media.status !== 'approved') {
-      throw new Error(`Media with ID ${mediaId} is not approved`);
+      throw new MediaNotApprovedError(mediaId, media.status);
     }
 
     // Ensure storage is ready

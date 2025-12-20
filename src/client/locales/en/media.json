@@ -57,6 +57,11 @@
     "replace_file": "Replace selected file",
     "dismiss_error": "Dismiss upload error"
   },
+  "display": {
+    "processing_image": "Image is being processed",
+    "image_load_error": "Image failed to load",
+    "image_unavailable": "Image unavailable"
+  },
   "help": {
     "supported_formats": "Supported formats:",
     "max_file_size": "Maximum file size: {{maxSize}}",

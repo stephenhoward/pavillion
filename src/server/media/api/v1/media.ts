@@ -4,6 +4,7 @@ import multer from 'multer';
 import ExpressHelper from '@/server/common/helper/express';
 import MediaInterface from '../../interface';
 import { Account } from '@/common/model/account';
+import { MediaNotApprovedError, MediaNotFoundError } from '@/common/exceptions/media';
 
 // Extend Express Request interface to include file property
 declare global {
@@ -117,6 +118,24 @@ export default class MediaRouteHandlers {
       res.send(fileData.buffer);
     }
     catch (error) {
+      if (error instanceof MediaNotApprovedError) {
+        // Return 202 Accepted to indicate media is still being processed
+        res.status(202).json({
+          error: 'Media is still being processed',
+          status: error.status,
+          mediaId: error.mediaId,
+        });
+        return;
+      }
+
+      if (error instanceof MediaNotFoundError) {
+        res.status(404).json({
+          error: error.message,
+          mediaId: error.mediaId,
+        });
+        return;
+      }
+
       console.error('File serve error:', error);
       res.status(500).json({
         error: error instanceof Error ? error.message : 'Failed to serve file',

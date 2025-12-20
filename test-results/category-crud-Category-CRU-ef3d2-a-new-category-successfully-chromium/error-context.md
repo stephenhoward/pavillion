@@ -31,103 +31,119 @@
           - generic [ref=e31]: test_calendar@pavillion.dev
         - navigation "Calendar Management" [ref=e32]:
           - 'link "Manage calendar: test_calendar" [ref=e33] [cursor=pointer]':
-            - /url: /calendar/c71f5c9e-7a3d-4e5f-8e1a-66c3612a05f3/manage
+            - /url: /calendar/test_calendar/manage
             - text: Manage Calendar
-      - generic [ref=e35]:
-        - generic [ref=e36]: Search Events
-        - textbox "Search Events" [ref=e38]
-      - region "Calendar Events" [ref=e39]:
-        - heading "Events in this Calendar" [level=2] [ref=e40]
-        - generic [ref=e42] [cursor=pointer]:
-          - checkbox "Select all events in this view" [ref=e43] [cursor=pointer]
-          - generic [ref=e44] [cursor=pointer]: Select All
-        - list [ref=e45]:
-          - listitem [ref=e46]:
-            - 'checkbox "Select event: Summer Festival" [ref=e48] [cursor=pointer]'
-            - article "Summer Festival" [ref=e49] [cursor=pointer]:
-              - generic [ref=e50] [cursor=pointer]:
-                - heading "Summer Festival" [level=3] [ref=e51] [cursor=pointer]
-                - generic [ref=e53] [cursor=pointer]: 📅 Jun 15, 2025, 10:00 AM
-                - paragraph [ref=e54] [cursor=pointer]: Annual summer festival with music, food vendors, and activities for all ages.
-            - 'button "Duplicate event: Summer Festival" [ref=e56] [cursor=pointer]': 📄
-          - listitem [ref=e57]:
-            - 'checkbox "Select event: Book Club Meeting" [ref=e59] [cursor=pointer]'
-            - article "Book Club Meeting" [ref=e60] [cursor=pointer]:
-              - generic [ref=e61] [cursor=pointer]:
-                - heading "Book Club Meeting" [level=3] [ref=e62] [cursor=pointer]
-                - generic [ref=e63] [cursor=pointer]:
-                  - generic [ref=e64] [cursor=pointer]: 📅 May 22, 2025, 6:30 PM
-                  - generic [ref=e65] [cursor=pointer]: 🔄 Repeats monthly
-                - paragraph [ref=e66] [cursor=pointer]: Monthly book club meeting to discuss 'The Great Gatsby'. Open to new members.
-            - 'button "Duplicate event: Book Club Meeting" [ref=e68] [cursor=pointer]': 📄
-          - listitem [ref=e69]:
-            - 'checkbox "Select event: Community Picnic" [ref=e71] [cursor=pointer]'
-            - article "Community Picnic" [ref=e72] [cursor=pointer]:
-              - generic [ref=e73] [cursor=pointer]:
-                - heading "Community Picnic" [level=3] [ref=e74] [cursor=pointer]
-                - generic [ref=e76] [cursor=pointer]: 📅 Jul 4, 2025, 12:00 PM
-                - paragraph [ref=e77] [cursor=pointer]: A family-friendly community picnic. Bring your own food or purchase from vendors.
-            - 'button "Duplicate event: Community Picnic" [ref=e79] [cursor=pointer]': 📄
-          - listitem [ref=e80]:
-            - 'checkbox "Select event: Outdoor Yoga Class" [ref=e82] [cursor=pointer]'
-            - article "Outdoor Yoga Class" [ref=e83] [cursor=pointer]:
-              - generic [ref=e84] [cursor=pointer]:
-                - heading "Outdoor Yoga Class" [level=3] [ref=e85] [cursor=pointer]
-                - generic [ref=e86] [cursor=pointer]:
-                  - generic [ref=e87] [cursor=pointer]: 📅 May 25, 2025, 9:00 AM
-                  - generic [ref=e88] [cursor=pointer]: 🔄 Repeats weekly
-                - paragraph [ref=e89] [cursor=pointer]: Outdoor yoga class suitable for all levels. Please bring your own mat and water.
-            - 'button "Duplicate event: Outdoor Yoga Class" [ref=e91] [cursor=pointer]': 📄
-          - listitem [ref=e92]:
-            - 'checkbox "Select event: Poetry Reading" [ref=e94] [cursor=pointer]'
-            - article "Poetry Reading" [ref=e95] [cursor=pointer]:
-              - generic [ref=e96] [cursor=pointer]:
-                - heading "Poetry Reading" [level=3] [ref=e97] [cursor=pointer]
-                - generic [ref=e99] [cursor=pointer]: 📅 Jun 2, 2025, 7:00 PM
-                - paragraph [ref=e100] [cursor=pointer]: An evening of poetry with local poets sharing their work. Open mic segment available.
-            - 'button "Duplicate event: Poetry Reading" [ref=e102] [cursor=pointer]': 📄
-          - listitem [ref=e103]:
-            - 'checkbox "Select event: Community Garden Workday" [ref=e105] [cursor=pointer]'
-            - article "Community Garden Workday" [ref=e106] [cursor=pointer]:
-              - generic [ref=e107] [cursor=pointer]:
-                - heading "Community Garden Workday" [level=3] [ref=e108] [cursor=pointer]
-                - generic [ref=e109] [cursor=pointer]:
-                  - generic [ref=e110] [cursor=pointer]: 📅 May 28, 2025, 9:00 AM
-                  - generic [ref=e111] [cursor=pointer]: 🔄 Repeats monthly
-                - paragraph [ref=e112] [cursor=pointer]: Help maintain our community garden. Tools provided, but please wear appropriate clothing.
-            - 'button "Duplicate event: Community Garden Workday" [ref=e114] [cursor=pointer]': 📄
-          - listitem [ref=e115]:
-            - 'checkbox "Select event: Farmers Market" [ref=e117] [cursor=pointer]'
-            - article "Farmers Market" [ref=e118] [cursor=pointer]:
-              - generic [ref=e119] [cursor=pointer]:
-                - heading "Farmers Market" [level=3] [ref=e120] [cursor=pointer]
-                - generic [ref=e121] [cursor=pointer]:
-                  - generic [ref=e122] [cursor=pointer]: 📅 May 24, 2025, 8:00 AM
-                  - generic [ref=e123] [cursor=pointer]: 🔄 Repeats weekly
-                - paragraph [ref=e124] [cursor=pointer]: Weekly farmers market featuring local produce, crafts, and prepared foods.
-            - 'button "Duplicate event: Farmers Market" [ref=e126] [cursor=pointer]': 📄
-          - listitem [ref=e127]:
-            - 'checkbox "Select event: Tech Talk: Future of AI" [ref=e129] [cursor=pointer]'
-            - 'article "Tech Talk: Future of AI" [ref=e130] [cursor=pointer]':
-              - generic [ref=e131] [cursor=pointer]:
-                - 'heading "Tech Talk: Future of AI" [level=3] [ref=e132] [cursor=pointer]'
-                - generic [ref=e134] [cursor=pointer]: 📅 Jun 10, 2025, 6:00 PM
-                - paragraph [ref=e135] [cursor=pointer]: Expert panel discussion on the future of artificial intelligence and its impact on society.
-            - 'button "Duplicate event: Tech Talk: Future of AI" [ref=e137] [cursor=pointer]': 📄
-          - listitem [ref=e138]:
-            - 'checkbox "Select event: Art in the Park" [ref=e140] [cursor=pointer]'
-            - article "Art in the Park" [ref=e141] [cursor=pointer]:
-              - generic [ref=e142] [cursor=pointer]:
-                - heading "Art in the Park" [level=3] [ref=e143] [cursor=pointer]
-                - generic [ref=e145] [cursor=pointer]: 📅 Jul 15, 2025, 11:00 AM
-                - paragraph [ref=e146] [cursor=pointer]: Outdoor art exhibition featuring works from local artists. Live music and refreshments.
-            - 'button "Duplicate event: Art in the Park" [ref=e148] [cursor=pointer]': 📄
-          - listitem [ref=e149]:
-            - 'checkbox "Select event: Family Movie Night" [ref=e151] [cursor=pointer]'
-            - article "Family Movie Night" [ref=e152] [cursor=pointer]:
-              - generic [ref=e153] [cursor=pointer]:
-                - heading "Family Movie Night" [level=3] [ref=e154] [cursor=pointer]
-                - generic [ref=e156] [cursor=pointer]: 📅 Jun 20, 2025, 8:00 PM
-                - paragraph [ref=e157] [cursor=pointer]: Free outdoor movie screening. Popcorn provided, bring your own seating and blankets.
-            - 'button "Duplicate event: Family Movie Night" [ref=e159] [cursor=pointer]': 📄
+      - generic [ref=e34]:
+        - generic [ref=e35]:
+          - generic [ref=e36]: Search Events
+          - textbox "Search Events" [ref=e38]
+        - generic [ref=e39]:
+          - generic [ref=e40]: Filter by Categories
+          - generic [ref=e41]:
+            - generic [ref=e43] [cursor=pointer]: Arts
+            - generic [ref=e45] [cursor=pointer]: Community
+            - generic [ref=e47] [cursor=pointer]: Education
+            - generic [ref=e49] [cursor=pointer]: Health
+            - generic [ref=e51] [cursor=pointer]: Sports
+            - generic [ref=e53] [cursor=pointer]: Culture
+            - generic [ref=e55] [cursor=pointer]: Environment
+            - generic [ref=e57] [cursor=pointer]: Business
+            - generic [ref=e59] [cursor=pointer]: Technology
+            - generic [ref=e61] [cursor=pointer]: Entertainment
+            - generic [ref=e63] [cursor=pointer]: Family
+            - generic [ref=e65] [cursor=pointer]: Social
+      - region "Calendar Events" [ref=e66]:
+        - heading "Events in this Calendar" [level=2] [ref=e67]
+        - generic [ref=e69] [cursor=pointer]:
+          - checkbox "Select all events in this view" [ref=e70] [cursor=pointer]
+          - generic [ref=e71] [cursor=pointer]: Select All
+        - list [ref=e72]:
+          - listitem [ref=e73]:
+            - 'checkbox "Select event: Summer Festival" [ref=e75] [cursor=pointer]'
+            - article "Summer Festival" [ref=e76] [cursor=pointer]:
+              - generic [ref=e77] [cursor=pointer]:
+                - heading "Summer Festival" [level=3] [ref=e78] [cursor=pointer]
+                - generic [ref=e80] [cursor=pointer]: 📅 Jun 15, 2025, 10:00 AM
+                - paragraph [ref=e81] [cursor=pointer]: Annual summer festival with music, food vendors, and activities for all ages.
+            - 'button "Duplicate event: Summer Festival" [ref=e83] [cursor=pointer]': 📄
+          - listitem [ref=e84]:
+            - 'checkbox "Select event: Book Club Meeting" [ref=e86] [cursor=pointer]'
+            - article "Book Club Meeting" [ref=e87] [cursor=pointer]:
+              - generic [ref=e88] [cursor=pointer]:
+                - heading "Book Club Meeting" [level=3] [ref=e89] [cursor=pointer]
+                - generic [ref=e90] [cursor=pointer]:
+                  - generic [ref=e91] [cursor=pointer]: 📅 May 22, 2025, 6:30 PM
+                  - generic [ref=e92] [cursor=pointer]: 🔄 Repeats monthly
+                - paragraph [ref=e93] [cursor=pointer]: Monthly book club meeting to discuss 'The Great Gatsby'. Open to new members.
+            - 'button "Duplicate event: Book Club Meeting" [ref=e95] [cursor=pointer]': 📄
+          - listitem [ref=e96]:
+            - 'checkbox "Select event: Community Picnic" [ref=e98] [cursor=pointer]'
+            - article "Community Picnic" [ref=e99] [cursor=pointer]:
+              - generic [ref=e100] [cursor=pointer]:
+                - heading "Community Picnic" [level=3] [ref=e101] [cursor=pointer]
+                - generic [ref=e103] [cursor=pointer]: 📅 Jul 4, 2025, 12:00 PM
+                - paragraph [ref=e104] [cursor=pointer]: A family-friendly community picnic. Bring your own food or purchase from vendors.
+            - 'button "Duplicate event: Community Picnic" [ref=e106] [cursor=pointer]': 📄
+          - listitem [ref=e107]:
+            - 'checkbox "Select event: Outdoor Yoga Class" [ref=e109] [cursor=pointer]'
+            - article "Outdoor Yoga Class" [ref=e110] [cursor=pointer]:
+              - generic [ref=e111] [cursor=pointer]:
+                - heading "Outdoor Yoga Class" [level=3] [ref=e112] [cursor=pointer]
+                - generic [ref=e113] [cursor=pointer]:
+                  - generic [ref=e114] [cursor=pointer]: 📅 May 25, 2025, 9:00 AM
+                  - generic [ref=e115] [cursor=pointer]: 🔄 Repeats weekly
+                - paragraph [ref=e116] [cursor=pointer]: Outdoor yoga class suitable for all levels. Please bring your own mat and water.
+            - 'button "Duplicate event: Outdoor Yoga Class" [ref=e118] [cursor=pointer]': 📄
+          - listitem [ref=e119]:
+            - 'checkbox "Select event: Poetry Reading" [ref=e121] [cursor=pointer]'
+            - article "Poetry Reading" [ref=e122] [cursor=pointer]:
+              - generic [ref=e123] [cursor=pointer]:
+                - heading "Poetry Reading" [level=3] [ref=e124] [cursor=pointer]
+                - generic [ref=e126] [cursor=pointer]: 📅 Jun 2, 2025, 7:00 PM
+                - paragraph [ref=e127] [cursor=pointer]: An evening of poetry with local poets sharing their work. Open mic segment available.
+            - 'button "Duplicate event: Poetry Reading" [ref=e129] [cursor=pointer]': 📄
+          - listitem [ref=e130]:
+            - 'checkbox "Select event: Community Garden Workday" [ref=e132] [cursor=pointer]'
+            - article "Community Garden Workday" [ref=e133] [cursor=pointer]:
+              - generic [ref=e134] [cursor=pointer]:
+                - heading "Community Garden Workday" [level=3] [ref=e135] [cursor=pointer]
+                - generic [ref=e136] [cursor=pointer]:
+                  - generic [ref=e137] [cursor=pointer]: 📅 May 28, 2025, 9:00 AM
+                  - generic [ref=e138] [cursor=pointer]: 🔄 Repeats monthly
+                - paragraph [ref=e139] [cursor=pointer]: Help maintain our community garden. Tools provided, but please wear appropriate clothing.
+            - 'button "Duplicate event: Community Garden Workday" [ref=e141] [cursor=pointer]': 📄
+          - listitem [ref=e142]:
+            - 'checkbox "Select event: Farmers Market" [ref=e144] [cursor=pointer]'
+            - article "Farmers Market" [ref=e145] [cursor=pointer]:
+              - generic [ref=e146] [cursor=pointer]:
+                - heading "Farmers Market" [level=3] [ref=e147] [cursor=pointer]
+                - generic [ref=e148] [cursor=pointer]:
+                  - generic [ref=e149] [cursor=pointer]: 📅 May 24, 2025, 8:00 AM
+                  - generic [ref=e150] [cursor=pointer]: 🔄 Repeats weekly
+                - paragraph [ref=e151] [cursor=pointer]: Weekly farmers market featuring local produce, crafts, and prepared foods.
+            - 'button "Duplicate event: Farmers Market" [ref=e153] [cursor=pointer]': 📄
+          - listitem [ref=e154]:
+            - 'checkbox "Select event: Tech Talk: Future of AI" [ref=e156] [cursor=pointer]'
+            - 'article "Tech Talk: Future of AI" [ref=e157] [cursor=pointer]':
+              - generic [ref=e158] [cursor=pointer]:
+                - 'heading "Tech Talk: Future of AI" [level=3] [ref=e159] [cursor=pointer]'
+                - generic [ref=e161] [cursor=pointer]: 📅 Jun 10, 2025, 6:00 PM
+                - paragraph [ref=e162] [cursor=pointer]: Expert panel discussion on the future of artificial intelligence and its impact on society.
+            - 'button "Duplicate event: Tech Talk: Future of AI" [ref=e164] [cursor=pointer]': 📄
+          - listitem [ref=e165]:
+            - 'checkbox "Select event: Art in the Park" [ref=e167] [cursor=pointer]'
+            - article "Art in the Park" [ref=e168] [cursor=pointer]:
+              - generic [ref=e169] [cursor=pointer]:
+                - heading "Art in the Park" [level=3] [ref=e170] [cursor=pointer]
+                - generic [ref=e172] [cursor=pointer]: 📅 Jul 15, 2025, 11:00 AM
+                - paragraph [ref=e173] [cursor=pointer]: Outdoor art exhibition featuring works from local artists. Live music and refreshments.
+            - 'button "Duplicate event: Art in the Park" [ref=e175] [cursor=pointer]': 📄
+          - listitem [ref=e176]:
+            - 'checkbox "Select event: Family Movie Night" [ref=e178] [cursor=pointer]'
+            - article "Family Movie Night" [ref=e179] [cursor=pointer]:
+              - generic [ref=e180] [cursor=pointer]:
+                - heading "Family Movie Night" [level=3] [ref=e181] [cursor=pointer]
+                - generic [ref=e183] [cursor=pointer]: 📅 Jun 20, 2025, 8:00 PM
+                - paragraph [ref=e184] [cursor=pointer]: Free outdoor movie screening. Popcorn provided, bring your own seating and blankets.
+            - 'button "Duplicate event: Family Movie Night" [ref=e186] [cursor=pointer]': 📄
 ```

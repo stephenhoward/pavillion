@@ -1,76 +1,38 @@
 <template>
+  <!--
+    Graceful Image Component
+    ========================
+    If image loads successfully, display it.
+    If image fails or doesn't exist, render nothing.
+    No placeholders. No broken experiences. Just content.
+  -->
   <div
+    v-if="shouldShow"
     class="event-image"
-    :class="[
-      `context-${context}`,
-      { 'is-loading': isLoading, 'has-error': imageError, 'no-image': !media }
-    ]"
+    :class="[`context-${context}`, { 'is-loading': isLoading }]"
   >
-    <!-- Loading skeleton -->
-    <div
-      v-if="isLoading && media"
-      class="image-skeleton"
-    >
-      <div class="skeleton-shimmer" />
+    <!-- Elegant loading state - subtle, unobtrusive -->
+    <div v-if="isLoading" class="image-loading">
+      <div class="loading-pulse" />
     </div>
 
-    <!-- Actual image -->
+    <!-- The image itself -->
     <img
-      v-if="media && !imageError"
-      :src="imageUrl"
-      :alt="media.originalFilename || 'Event image'"
-      :loading="lazy ? 'lazy' : 'eager'"
+      v-show="imageLoaded"
+      :src="imageBlobUrl"
+      :alt="media?.originalFilename || ''"
       @load="handleImageLoad"
       @error="handleImageError"
       class="image-content"
     />
 
-    <!-- Placeholder for missing/failed images -->
-    <div
-      v-if="!media || imageError"
-      class="image-placeholder"
-    >
-      <svg
-        class="placeholder-icon"
-        viewBox="0 0 48 48"
-        fill="none"
-      >
-        <rect
-          x="6"
-          y="10"
-          width="36"
-          height="28"
-          rx="4"
-          stroke="currentColor"
-          stroke-width="2"
-        />
-        <circle
-          cx="16"
-          cy="20"
-          r="4"
-          stroke="currentColor"
-          stroke-width="2"
-        />
-        <path
-          d="M6 32L16 24L24 30L36 20L42 26"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        />
-      </svg>
-    </div>
-
-    <!-- Optional overlay gradient for text readability (card context) -->
-    <div
-      v-if="context === 'card' && showOverlay"
-      class="image-overlay"
-    />
+    <!-- Subtle vignette overlay for depth -->
+    <div class="image-vignette" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 
 interface MediaObject {
   id: string;
@@ -81,40 +43,103 @@ const props = defineProps<{
   media: MediaObject | null;
   context?: 'card' | 'hero' | 'feature';
   lazy?: boolean;
-  showOverlay?: boolean;
 }>();
 
 const isLoading = ref(true);
-const imageError = ref(false);
+const imageLoaded = ref(false);
+const imageFailed = ref(false);
+const imageBlobUrl = ref<string | null>(null);
+
+// Component only shows if media exists AND image hasn't failed
+const shouldShow = computed(() => {
+  return props.media && !imageFailed.value;
+});
 
 const imageUrl = computed(() => {
   if (!props.media) return '';
   return `/api/v1/media/${props.media.id}`;
 });
 
+/**
+ * Fetch image once. No retries.
+ * If the image is still processing (202) or fails, we simply don't show it.
+ */
+const fetchImage = async () => {
+  if (!props.media) return;
+
+  try {
+    const response = await fetch(imageUrl.value);
+
+    // Only show image if it's immediately available
+    if (response.ok) {
+      const blob = await response.blob();
+      imageBlobUrl.value = URL.createObjectURL(blob);
+      // Keep loading true until img onload fires
+    }
+    else {
+      // 202 (processing) or any error - gracefully hide
+      imageFailed.value = true;
+      isLoading.value = false;
+    }
+  }
+  catch {
+    // Network error - gracefully hide
+    imageFailed.value = true;
+    isLoading.value = false;
+  }
+};
+
 const handleImageLoad = () => {
   isLoading.value = false;
+  imageLoaded.value = true;
 };
 
 const handleImageError = () => {
+  imageFailed.value = true;
   isLoading.value = false;
-  imageError.value = true;
 };
+
+const cleanup = () => {
+  if (imageBlobUrl.value) {
+    URL.revokeObjectURL(imageBlobUrl.value);
+    imageBlobUrl.value = null;
+  }
+};
+
+// Watch for media changes
+watch(() => props.media?.id, (newId, oldId) => {
+  if (newId !== oldId) {
+    cleanup();
+    imageFailed.value = false;
+    imageLoaded.value = false;
+    isLoading.value = true;
+    if (newId) {
+      fetchImage();
+    }
+  }
+}, { immediate: false });
+
+onMounted(() => {
+  if (props.media) {
+    fetchImage();
+  }
+  else {
+    isLoading.value = false;
+  }
+});
+
+onUnmounted(() => {
+  cleanup();
+});
 </script>
 
 <style scoped lang="scss">
 @use '../assets/mixins' as *;
 
 // ================================================================
-// EVENT IMAGE COMPONENT
+// IMAGE COMPONENT
 // ================================================================
-// A sophisticated image container with fixed aspect ratios,
-// loading states, and context-aware styling.
-//
-// Contexts:
-//   - card: Compact thumbnail for event list cards (4:3)
-//   - hero: Standard hero image for instance pages (16:9)
-//   - feature: Dramatic cinematic image for detail pages (2:1)
+// A minimal image display. No placeholders.
 // ================================================================
 
 .event-image {
@@ -123,13 +148,11 @@ const handleImageError = () => {
   overflow: hidden;
   background-color: $public-bg-tertiary-light;
   border-radius: $public-radius-md;
-  transition: $public-transition-normal;
 
   @include public-dark-mode {
     background-color: $public-bg-tertiary-dark;
   }
 
-  // Shared image styling
   .image-content {
     position: absolute;
     inset: 0;
@@ -137,24 +160,36 @@ const handleImageError = () => {
     height: 100%;
     object-fit: cover;
     object-position: center;
-    transition: opacity $public-duration-slow $public-ease-out,
-                transform $public-duration-slow $public-ease-out;
+    opacity: 0;
+    transition: opacity $public-duration-slow $public-ease-out;
   }
 
-  // Hide image while loading
-  &.is-loading .image-content {
-    opacity: 0;
+  // Fade in when loaded
+  &:not(.is-loading) .image-content {
+    opacity: 1;
+  }
+
+  // Vignette for subtle depth
+  .image-vignette {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.06);
+
+    @include public-dark-mode {
+      box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.15);
+    }
   }
 }
 
 // ================================================================
 // CONTEXT: CARD THUMBNAIL
 // ================================================================
-// Compact 4:3 aspect ratio for event list cards.
-// Optimized for ~150px card width.
+// Compact display for event list cards.
+// Slightly shorter aspect ratio to leave room for text below.
 
 .context-card {
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 16 / 10;
   border-radius: $public-radius-sm;
   box-shadow: $public-shadow-xs-light;
 
@@ -166,30 +201,21 @@ const handleImageError = () => {
     border-radius: $public-radius-sm;
   }
 
-  // Subtle hover effect on parent card
-  &:hover .image-content {
-    transform: scale(1.03);
+  .image-vignette {
+    border-radius: $public-radius-sm;
   }
 
-  // Gradient overlay for potential text overlay
-  .image-overlay {
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(
-      to top,
-      rgba(0, 0, 0, 0.4) 0%,
-      rgba(0, 0, 0, 0) 50%
-    );
-    pointer-events: none;
-    border-radius: $public-radius-sm;
+  // Gentle scale on card hover (parent applies hover)
+  &:hover .image-content {
+    transform: scale(1.03);
+    transition: transform $public-duration-slow $public-ease-out;
   }
 }
 
 // ================================================================
 // CONTEXT: HERO IMAGE
 // ================================================================
-// Standard 16:9 hero format for event instance pages.
-// Creates atmosphere without overwhelming content.
+// Standard hero for event instance pages.
 
 .context-hero {
   aspect-ratio: 16 / 9;
@@ -205,21 +231,15 @@ const handleImageError = () => {
     border-radius: $public-radius-lg;
   }
 
-  // Subtle vignette for depth
-  &::after {
-    content: '';
-    position: absolute;
-    inset: 0;
+  .image-vignette {
     border-radius: $public-radius-lg;
     box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.08);
-    pointer-events: none;
 
     @include public-dark-mode {
       box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.2);
     }
   }
 
-  // On mobile, reduce max height
   @include public-mobile-only {
     max-height: 240px;
   }
@@ -228,8 +248,7 @@ const handleImageError = () => {
 // ================================================================
 // CONTEXT: FEATURE IMAGE
 // ================================================================
-// Dramatic 2:1 ultrawide for event detail pages.
-// Most prominent presentation, creates immersion.
+// Dramatic ultrawide for event detail pages.
 
 .context-feature {
   aspect-ratio: 2 / 1;
@@ -245,146 +264,68 @@ const handleImageError = () => {
     border-radius: $public-radius-xl;
   }
 
-  // More dramatic vignette
-  &::after {
-    content: '';
-    position: absolute;
-    inset: 0;
+  .image-vignette {
     border-radius: $public-radius-xl;
     box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.1);
-    pointer-events: none;
 
     @include public-dark-mode {
       box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.25);
     }
   }
 
-  // On mobile, adjust to 16:9 for better proportions
   @include public-mobile-only {
     aspect-ratio: 16 / 9;
     max-height: 280px;
     border-radius: $public-radius-lg;
 
     .image-content,
-    &::after {
+    .image-vignette {
       border-radius: $public-radius-lg;
     }
   }
 }
 
 // ================================================================
-// LOADING SKELETON
+// LOADING STATE
 // ================================================================
+// Minimal, subtle pulse instead of a skeleton
 
-.image-skeleton {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    135deg,
-    $public-bg-tertiary-light 0%,
-    rgba(0, 0, 0, 0.06) 50%,
-    $public-bg-tertiary-light 100%
-  );
-  overflow: hidden;
-
-  @include public-dark-mode {
-    background: linear-gradient(
-      135deg,
-      $public-bg-tertiary-dark 0%,
-      rgba(255, 255, 255, 0.06) 50%,
-      $public-bg-tertiary-dark 100%
-    );
-  }
-
-  .skeleton-shimmer {
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(
-      90deg,
-      transparent 0%,
-      rgba(255, 255, 255, 0.3) 50%,
-      transparent 100%
-    );
-    animation: shimmer 1.5s infinite;
-
-    @include public-dark-mode {
-      background: linear-gradient(
-        90deg,
-        transparent 0%,
-        rgba(255, 255, 255, 0.08) 50%,
-        transparent 100%
-      );
-    }
-  }
-}
-
-@keyframes shimmer {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(100%);
-  }
-}
-
-// ================================================================
-// PLACEHOLDER (No image / Error state)
-// ================================================================
-
-.image-placeholder {
+.image-loading {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(
-    135deg,
-    $public-bg-secondary-light 0%,
-    $public-bg-tertiary-light 100%
-  );
 
-  @include public-dark-mode {
+  .loading-pulse {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
     background: linear-gradient(
       135deg,
-      $public-bg-secondary-dark 0%,
-      $public-bg-tertiary-dark 100%
+      rgba(0, 0, 0, 0.06) 0%,
+      rgba(0, 0, 0, 0.02) 100%
     );
-  }
-
-  .placeholder-icon {
-    width: 32%;
-    max-width: 64px;
-    height: auto;
-    color: $public-text-tertiary-light;
-    opacity: 0.6;
+    animation: gentle-pulse 1.8s ease-in-out infinite;
 
     @include public-dark-mode {
-      color: $public-text-tertiary-dark;
+      background: linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.08) 0%,
+        rgba(255, 255, 255, 0.03) 100%
+      );
     }
   }
 }
 
-// Context-specific placeholder sizing
-.context-card .placeholder-icon {
-  max-width: 40px;
-}
-
-.context-hero .placeholder-icon {
-  max-width: 72px;
-}
-
-.context-feature .placeholder-icon {
-  max-width: 96px;
-}
-
-// ================================================================
-// NO IMAGE STATE
-// ================================================================
-// When no media is provided, show placeholder without skeleton
-
-.no-image {
-  .image-skeleton {
-    display: none;
+@keyframes gentle-pulse {
+  0%, 100% {
+    opacity: 0.4;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1);
   }
 }
 </style>

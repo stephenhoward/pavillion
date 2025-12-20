@@ -42,7 +42,7 @@
                 - generic [ref=e37]: Invite a new user
                 - generic [ref=e38]:
                   - generic [ref=e39]: email address
-                  - textbox "email address" [active] [ref=e40]: test-1761433276729@example.com
+                  - textbox "email address" [active] [ref=e40]: test-1765760974258@example.com
                 - generic [ref=e41]:
                   - button "Send invite" [ref=e42] [cursor=pointer]
                   - button "Cancel" [ref=e43] [cursor=pointer]

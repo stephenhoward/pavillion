@@ -127,19 +127,27 @@ h1 {
   font-weight: $public-font-weight-light;
 }
 
-// Events display
+// ================================================================
+// EVENTS DISPLAY
+// ================================================================
+// A horizontally scrollable list of event cards.
+// Cards adapt gracefully whether they have images or not.
+// ================================================================
+
 section.day {
-  margin: $public-space-md 0;
+  margin: $public-space-lg 0;
 
   h2 {
-    font-size: $public-font-size-base;
+    font-size: $public-font-size-sm;
     margin: 0;
     padding: 0;
-    font-weight: $public-font-weight-medium;
-    color: $public-text-primary-light;
+    font-weight: $public-font-weight-semibold;
+    text-transform: uppercase;
+    letter-spacing: $public-letter-spacing-wide;
+    color: $public-text-secondary-light;
 
     @media (prefers-color-scheme: dark) {
-      color: $public-text-primary-dark;
+      color: $public-text-secondary-dark;
     }
   }
 
@@ -150,7 +158,7 @@ section.day {
     flex-direction: row;
     flex-wrap: nowrap;
     align-items: stretch;
-    padding: $public-space-xl 0;
+    padding: $public-space-md 0 $public-space-xl 0;
     gap: $public-space-md;
 
     li.event {
@@ -158,13 +166,71 @@ section.day {
 
       list-style-type: none;
       margin-right: 0;
+      position: relative;
+
+      // ============================================================
+      // CONTENT-FIRST CARD DESIGN
+      // ============================================================
+      // When no image is present, the card becomes a refined
+      // text-focused card with a subtle accent treatment.
+      // ============================================================
+
+      // Check if card has no image (EventImage renders nothing)
+      &:not(:has(.event-image)) {
+        // Add a warm accent bar at top for visual weight
+        &::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: $public-space-md;
+          right: $public-space-md;
+          height: 3px;
+          background: linear-gradient(
+            90deg,
+            $public-accent-light 0%,
+            rgba($public-accent-light, 0.4) 100%
+          );
+          border-radius: 0 0 2px 2px;
+          opacity: 0.7;
+
+          @media (prefers-color-scheme: dark) {
+            background: linear-gradient(
+              90deg,
+              $public-accent-dark 0%,
+              rgba($public-accent-dark, 0.4) 100%
+            );
+          }
+        }
+
+        // Adjust padding to account for accent bar
+        padding-top: $public-space-lg;
+
+        // Title gets more visual prominence
+        h3 {
+          font-size: $public-font-size-lg;
+          font-weight: $public-font-weight-medium;
+          margin-top: 0;
+        }
+      }
+
+      // ============================================================
+      // CARD WITH IMAGE
+      // ============================================================
+      // Standard card with image thumbnail above text.
+      // ============================================================
+
+      &:has(.event-image) {
+        h3 {
+          margin-top: $public-space-sm;
+        }
+      }
 
       h3 {
         order: 1;
         font-size: $public-font-size-md;
-        margin-top: $public-space-sm;
-        font-weight: $public-font-weight-light;
+        font-weight: $public-font-weight-regular;
         line-height: $public-line-height-tight;
+        margin: 0;
 
         a {
           color: $public-text-primary-light;
@@ -188,6 +254,7 @@ section.day {
       .event-time {
         order: 2;
         font-size: $public-font-size-sm;
+        font-weight: $public-font-weight-medium;
         color: $public-text-secondary-light;
         margin-top: $public-space-xs;
 

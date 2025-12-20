@@ -1,7 +1,7 @@
 # Product Roadmap
 
-> Last Updated: 2025-11-09
-> Version: 2.1.0
+> Last Updated: 2025-11-14
+> Version: 2.2.0
 > Status: Active Development
 
 ## Table of Contents
@@ -53,11 +53,6 @@ The following features have been implemented and are functional:
   - Category deletion with event migration options
   - Category merging functionality (consolidate multiple categories)
   - Category usage statistics and event counts
-- [ ] **Calendar Organization Tools** - Better calendar navigation and management `M`
-  - Calendar archive/active status management
-  - Calendar templates for quick setup
-  - Calendar duplication with event templates
-  - Enhanced calendar settings and configuration options
 
 ### Should-Have Features
 
@@ -65,10 +60,6 @@ The following features have been implemented and are functional:
   - Location autocomplete from previously used venues
   - Location validation and standardization
   - Bulk location updates across events
-- [ ] **Event Import/Export** - Data portability features `M`
-  - Import events from iCal, CSV formats
-  - Export calendar data to standard formats
-  - Backup and restore functionality
 
 ### Dependencies
 
@@ -82,17 +73,18 @@ The following features have been implemented and are functional:
 
 ### Must-Have Features
 
+- [x] **Public Event Search & Filtering** - Discovery tools for public users `L`
+  - Text-based event search (by title, description)
+  - Category-based filtering with multi-select interface
+  - Date range filtering and navigation with presets
+  - Combined filter interface with URL parameter support
+  - Server-side filtering at API/service layer
+  - Mobile-responsive accordion UI for filters
 - [ ] **Enhanced Public Calendar Views** - Better layout and presentation for public viewing `M`
   - Improved month/week/day view layouts with responsive design
   - Event density management for days with many events
   - Event preview popups and enhanced event detail pages
   - Mobile-optimized navigation and viewing experience
-- [ ] **Public Event Search & Filtering** - Discovery tools for public users `L`
-  - Text-based event search (by title, description, location)
-  - Category-based filtering with multi-select interface
-  - Date range filtering and navigation
-  - Location-based filtering options
-  - Combined filter interface with URL parameter support
 - [ ] **Calendar Discovery & Navigation** - Help users find and explore calendars `M`
   - Public calendar directory/listing page
   - Calendar metadata display (descriptions, categories, stats)
@@ -102,10 +94,6 @@ The following features have been implemented and are functional:
 
 ### Should-Have Features
 
-- [ ] **Event Sorting Options** - Sortable event lists for better organization `S`
-  - Sort by date (ascending/descending)
-  - Sort by title (alphabetical)
-  - Sort by category
 - [ ] **Enhanced Event Detail Views** - Rich public event presentation `M`
   - Dedicated event detail pages with social sharing
   - Event image galleries and enhanced media display
@@ -298,6 +286,7 @@ The following features have been implemented and are functional:
 - Event search with URL parameter persistence (title, description, category)
 - Bulk event selection and operations (delete, category assignment)
 - Event duplication functionality for template-based creation
+- **Public event search and filtering** (text search, category filtering, date range filtering with URL parameters)
 
 **⚠️ Needs Completion for Phase 1:**
 - Calendar template and duplication features (Calendar Organization Tools)
@@ -307,7 +296,7 @@ The following features have been implemented and are functional:
 - Event categories system has complete backend API with frontend filtering UI
 - Event search functionality complete with URL bookmarking support
 - Bulk operations framework in place and extensible for future operations
-- Public site app exists but needs enhanced search and filtering capabilities
+- **Public site search and filtering complete** with server-side filtering, mobile-responsive UI, and URL synchronization
 - Widget system needs to be built from scratch for Phase 3
 - Content moderation system needs implementation for Phase 4
 

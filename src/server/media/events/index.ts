@@ -20,7 +20,7 @@ export default class MediaEventHandlers implements DomainEventHandlers {
         }
       }
       catch (error) {
-        console.error('Error in mediaAttachedToEvent handler:', error);
+        console.error('[MediaEvents] Error processing media approval:', error);
       }
     });
   }
