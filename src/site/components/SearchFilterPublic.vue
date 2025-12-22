@@ -471,10 +471,21 @@ watch(() => [publicStore.startDate, publicStore.endDate], ([newStart, newEnd]) =
 
 onMounted(() => {
   initializeFromURL();
-  // Load events with current filter state (including no filters for initial load)
-  publicStore.reloadWithFilters();
   // Add click outside listener for date filter dropdown
   document.addEventListener('click', handleClickOutside);
+
+  // Only load events if calendar settings are already loaded
+  // Otherwise, the watcher below will trigger when settings load
+  if (publicStore.isCalendarSettingsLoaded) {
+    publicStore.reloadWithFilters();
+  }
+});
+
+// Watch for calendar settings to be loaded, then load events
+watch(() => publicStore.isCalendarSettingsLoaded, (isLoaded) => {
+  if (isLoaded) {
+    publicStore.reloadWithFilters();
+  }
 });
 
 onUnmounted(() => {

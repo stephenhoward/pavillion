@@ -1,4 +1,5 @@
 import { DateTime } from 'luxon';
+import type { DefaultDateRange } from '@/common/model/calendar';
 
 /**
  * Interface for date range with ISO date strings
@@ -7,6 +8,15 @@ export interface DateRange {
   startDate: string;
   endDate: string;
 }
+
+/**
+ * Map of range type to number of days
+ */
+const rangeDaysMap: Record<DefaultDateRange, number> = {
+  '1week': 7,
+  '2weeks': 14,
+  '1month': 30,
+};
 
 /**
  * Get the start of the week (Sunday) for a given date
@@ -75,5 +85,24 @@ export function getNextWeek(referenceDate?: DateTime): DateRange {
   return {
     startDate: nextWeekStart.toISODate() as string,
     endDate: nextWeekEnd.toISODate() as string,
+  };
+}
+
+/**
+ * Get the default date range for public calendar view
+ * This is used when no explicit date filter is specified.
+ *
+ * @param rangeType - The range type ('1week', '2weeks', '1month'), defaults to '2weeks'
+ * @param referenceDate - Optional reference date (defaults to now)
+ * @returns DateRange with startDate (today) and endDate based on range type
+ */
+export function getDefaultDateRange(rangeType: DefaultDateRange = '2weeks', referenceDate?: DateTime): DateRange {
+  const today = (referenceDate || DateTime.now()).startOf('day');
+  const days = rangeDaysMap[rangeType] || 14;
+  const endDate = today.plus({ days }).endOf('day');
+
+  return {
+    startDate: today.toISODate() as string,
+    endDate: endDate.toISODate() as string,
   };
 }

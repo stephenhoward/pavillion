@@ -1,6 +1,11 @@
 import { Model, TranslatedContentModel, TranslatedModel } from '@/common/model/model';
 
 /**
+ * Valid options for default date range on public calendar views.
+ */
+export type DefaultDateRange = '1week' | '2weeks' | '1month';
+
+/**
  * Represents a calendar with multilingual content support.
  * Extends TranslatedModel to manage calendar content in different languages.
  */
@@ -8,6 +13,7 @@ class Calendar extends TranslatedModel<CalendarContent> {
   urlName: string = '';
   languages: string[] = ['en'];
   description: string = '';
+  defaultDateRange: DefaultDateRange | null = null;
   _content: Record<string, CalendarContent> = {};
 
   /**
@@ -43,6 +49,7 @@ class Calendar extends TranslatedModel<CalendarContent> {
       urlName: this.urlName,
       description: this.description,
       languages: this.languages,
+      defaultDateRange: this.defaultDateRange,
     };
   };
 
@@ -56,6 +63,7 @@ class Calendar extends TranslatedModel<CalendarContent> {
     let calendar = new Calendar(obj.id, obj.urlName);
     calendar.languages = obj.languages;
     calendar.description = obj.description;
+    calendar.defaultDateRange = obj.defaultDateRange || null;
     return calendar;
   }
 

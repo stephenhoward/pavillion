@@ -1,7 +1,9 @@
 import axios from 'axios';
+import type { DefaultDateRange } from '@/common/model/calendar';
 
 type Settings = {
-  registrationMode: string
+  registrationMode: string;
+  defaultDateRange: DefaultDateRange;
 };
 
 /**

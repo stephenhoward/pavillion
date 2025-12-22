@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Calendar } from '@/common/model/calendar';
+import { Calendar, DefaultDateRange } from '@/common/model/calendar';
 import { CalendarEvent } from '@/common/model/events';
 import { CalendarEditor } from '@/common/model/calendar_editor';
 import { CalendarInfo } from '@/common/model/calendar_info';
@@ -325,6 +325,33 @@ export default class CalendarService {
     catch (error: unknown) {
       console.error('Error in bulk category assignment:', error);
       this.handleBulkOperationError(error);
+      throw new UnknownError();
+    }
+  }
+
+  /**
+   * Update calendar settings
+   * @param calendarId The ID of the calendar
+   * @param settings The settings to update
+   * @returns Promise<Calendar> The updated calendar
+   */
+  async updateCalendarSettings(
+    calendarId: string,
+    settings: { defaultDateRange?: DefaultDateRange },
+  ): Promise<Calendar> {
+    try {
+      const encodedId = validateAndEncodeId(calendarId, 'Calendar ID');
+      const response = await axios.patch(`/api/v1/calendars/${encodedId}/settings`, settings);
+      const updatedCalendar = Calendar.fromObject(response.data);
+
+      // Update the store
+      this.store.updateCalendar(updatedCalendar);
+
+      return updatedCalendar;
+    }
+    catch (error: unknown) {
+      console.error('Error updating calendar settings:', error);
+      this.handleEditorError(error);
       throw new UnknownError();
     }
   }

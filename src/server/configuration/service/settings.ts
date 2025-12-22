@@ -1,10 +1,12 @@
 import config from 'config';
 import ServiceSettingEntity from "@/server/configuration/entity/settings";
+import type { DefaultDateRange } from '@/common/model/calendar';
 
 type Config = {
   registrationMode: 'open' | 'apply' | 'invite' | 'closed';
   siteTitle: string;
   eventInstanceMonths: number;
+  defaultDateRange: DefaultDateRange;
 };
 class ServiceSettings {
   private static instance: ServiceSettings;
@@ -15,6 +17,7 @@ class ServiceSettings {
       registrationMode: 'closed',
       siteTitle: config.get('domain'),
       eventInstanceMonths: 6,
+      defaultDateRange: '2weeks',
     };
   }
 
@@ -29,6 +32,11 @@ class ServiceSettings {
       }
       if( entity.parameter == 'siteTitle' ) {
         this.config.siteTitle = entity.value;
+      }
+      if ( entity.parameter == 'defaultDateRange' ) {
+        if ( ['1week', '2weeks', '1month'].includes(entity.value) ) {
+          this.config.defaultDateRange = entity.value as DefaultDateRange;
+        }
       }
     });
   }
@@ -67,6 +75,14 @@ class ServiceSettings {
       }
     }
 
+    // Validate the defaultDateRange
+    if ( parameter == 'defaultDateRange' ) {
+      if (!['1week', '2weeks', '1month'].includes(value as string)) {
+        console.error('Invalid default date range:', value);
+        return false;
+      }
+    }
+
     // Update or create the setting in the database
     const [entity, created] = await ServiceSettingEntity.findOrCreate({
       where: { parameter },
@@ -97,6 +113,15 @@ class ServiceSettings {
         }
         else {
           console.error('Invalid event instance months:', value);
+          return false;
+        }
+        break;
+      case 'defaultDateRange':
+        if (['1week', '2weeks', '1month'].includes(value as string)) {
+          this.config.defaultDateRange = value as DefaultDateRange;
+        }
+        else {
+          console.error('Invalid default date range:', value);
           return false;
         }
         break;

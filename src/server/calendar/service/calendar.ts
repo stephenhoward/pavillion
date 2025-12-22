@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { UniqueConstraintError } from 'sequelize';
 
-import { Calendar } from '@/common/model/calendar';
+import { Calendar, DefaultDateRange } from '@/common/model/calendar';
 import { Account } from '@/common/model/account';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { CalendarEditorEntity } from '@/server/calendar/entity/calendar_editor';
@@ -604,6 +604,47 @@ class CalendarService {
       // Create new content
       return await CalendarContentEntity.create(contentEntity.toJSON());
     }
+  }
+
+  /**
+   * Update calendar settings
+   *
+   * @param account - Account making the update (must be calendar owner or admin)
+   * @param calendarId - ID of the calendar to update
+   * @param settings - Settings to update
+   * @returns The updated calendar
+   * @throws CalendarNotFoundError if calendar not found
+   * @throws CalendarEditorPermissionError if permission denied
+   */
+  async updateCalendarSettings(
+    account: Account,
+    calendarId: string,
+    settings: { defaultDateRange?: DefaultDateRange },
+  ): Promise<Calendar> {
+    const calendar = await this.getCalendar(calendarId);
+    if (!calendar) {
+      throw new CalendarNotFoundError();
+    }
+
+    // Only calendar owner or admin can update settings
+    if (!account.hasRole('admin')) {
+      const isOwner = await this.isCalendarOwner(account, calendar);
+      if (!isOwner) {
+        throw new CalendarEditorPermissionError('Permission denied: only calendar owner can update settings');
+      }
+    }
+
+    const calendarEntity = await CalendarEntity.findByPk(calendarId);
+    if (!calendarEntity) {
+      throw new CalendarNotFoundError();
+    }
+
+    // Update the settings
+    if (settings.defaultDateRange) {
+      await calendarEntity.update({ default_date_range: settings.defaultDateRange });
+    }
+
+    return calendarEntity.toModel();
   }
 }
 

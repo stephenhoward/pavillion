@@ -1,4 +1,4 @@
-import { Calendar } from '@/common/model/calendar';
+import { Calendar, DefaultDateRange } from '@/common/model/calendar';
 import { CalendarEvent } from '@/common/model/events';
 import { Account } from '@/common/model/account';
 import { EventLocation } from '@/common/model/location';
@@ -246,6 +246,15 @@ export default class CalendarInterface {
     categoryIds: string[],
   ): Promise<CalendarEvent[]> {
     return this.eventService.bulkAssignCategories(account, eventIds, categoryIds);
+  }
+
+  // Calendar settings operations
+  async updateCalendarSettings(
+    account: Account,
+    calendarId: string,
+    settings: { defaultDateRange?: DefaultDateRange },
+  ): Promise<Calendar> {
+    return this.calendarService.updateCalendarSettings(account, calendarId, settings);
   }
 
 }

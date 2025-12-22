@@ -151,6 +151,33 @@ describe('ServiceSettings', () => {
       expect(result).toBe(false);
     });
 
+    it('should update the default date range', async () => {
+      const mockSettingEntity = { parameter: 'defaultDateRange', value: '2weeks', save: sandbox.stub().resolves() };
+      sandbox.stub(ServiceSettingEntity, 'findOrCreate').resolves([
+        mockSettingEntity as unknown as ServiceSettingEntity,
+        false,
+      ]);
+
+      sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+      const settings = await ServiceSettings.getInstance();
+      const result = await settings.set('defaultDateRange', '1month');
+
+      expect(result).toBe(true);
+      expect(settings.get('defaultDateRange')).toBe('1month');
+      expect(mockSettingEntity.save.calledOnce).toBe(true);
+    });
+
+    it('should reject invalid default date range values', async () => {
+      sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+      const settings = await ServiceSettings.getInstance();
+      const result = await settings.set('defaultDateRange', 'invalid');
+
+      expect(result).toBe(false);
+      expect(settings.get('defaultDateRange')).toBe('2weeks');
+    });
+
     it('change should be reflected in all instances', async () => {
       sandbox.stub(ServiceSettingEntity, 'findOrCreate').resolves([
         { parameter: 'registrationMode', value: 'invite', save: sandbox.stub().resolves() } as unknown as ServiceSettingEntity,

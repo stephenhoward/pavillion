@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, onBeforeMount, computed } from 'vue';
+import { reactive, onBeforeMount, computed, inject } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useRoute } from 'vue-router';
 import CalendarService from '../service/calendar';
@@ -8,10 +8,12 @@ import NotFound from './notFound.vue';
 import SearchFilterPublic from './SearchFilterPublic.vue';
 import { DateTime } from 'luxon';
 import EventImage from './EventImage.vue';
+import type Config from '@/client/service/config';
 
 const { t } = useTranslation('system');
 const route = useRoute();
 const calendarUrlName = route.params.calendar as string;
+const siteConfig = inject<Config>('site_config');
 
 const state = reactive({
   err: '',
@@ -40,8 +42,19 @@ onBeforeMount(async () => {
       return;
     }
 
+    // Set server-level default date range from site config before loading calendar
+    if (siteConfig) {
+      const serverDefault = siteConfig.settings().defaultDateRange;
+      if (serverDefault) {
+        publicCalendarStore.setServerDefaultDateRange(serverDefault);
+      }
+    }
+
     // Set current calendar in store
     publicCalendarStore.setCurrentCalendar(calendarUrlName);
+
+    // Load calendar settings (including defaultDateRange) before loading events
+    await publicCalendarStore.loadCalendar(calendarUrlName);
 
     // Load categories - SearchFilterPublic will handle URL params and event loading
     await publicCalendarStore.loadCategories(calendarUrlName);

@@ -1,7 +1,7 @@
 import { Model, Column, Table, BelongsTo, ForeignKey, DataType, PrimaryKey } from 'sequelize-typescript';
 
 import { AccountEntity } from '@/server/common/entity/account';
-import { Calendar, CalendarContent } from '@/common/model/calendar';
+import { Calendar, CalendarContent, DefaultDateRange } from '@/common/model/calendar';
 import db from '@/server/common/entity/db';
 
 @Table({ tableName: 'calendar' })
@@ -21,6 +21,9 @@ class CalendarEntity extends Model {
   @Column({ type: DataType.STRING })
   declare languages: string;
 
+  @Column({ type: DataType.STRING })
+  declare default_date_range: string;
+
   toModel(): Calendar {
     let calendar = new Calendar( this.id, this.url_name );
     if ( ! this.languages ) {
@@ -29,6 +32,7 @@ class CalendarEntity extends Model {
     else {
       calendar.languages = this.languages.split(',');
     }
+    calendar.defaultDateRange = this.default_date_range as DefaultDateRange || null;
 
     return calendar;
   };
@@ -38,6 +42,7 @@ class CalendarEntity extends Model {
       id: calendar.id,
       url_name: calendar.urlName,
       languages: calendar.languages.join(','),
+      default_date_range: calendar.defaultDateRange,
     });
   }
 };

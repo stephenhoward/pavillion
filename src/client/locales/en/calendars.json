@@ -80,6 +80,7 @@
     "page_title": "calendar settings",
     "categories_tab": "Categories",
     "editors_tab": "Editors",
+    "settings_tab": "Settings",
     "loading_calendar": "Loading calendar...",
     "error_loading_calendar": "Unable to load calendar. Please try again later.",
     "title": "Category Management",
@@ -165,5 +166,16 @@
     "merge_categories_label": "Merge selected categories into one",
     "deselect_all": "Deselect All",
     "deselect_all_label": "Deselect all selected categories"
+  },
+  "settings": {
+    "loading": "Loading settings...",
+    "default_date_range_label": "Default Date Filter",
+    "default_date_range_help": "When visitors view your public calendar without specifying a date range, events will be filtered to show this time period starting from today.",
+    "date_range_1week": "1 week",
+    "date_range_2weeks": "2 weeks",
+    "date_range_1month": "1 month",
+    "save_success": "Settings saved successfully",
+    "error_loading": "Failed to load settings",
+    "error_saving": "Failed to save settings"
   }
 }

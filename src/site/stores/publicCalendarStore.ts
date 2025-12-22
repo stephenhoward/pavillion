@@ -1,10 +1,16 @@
 import { defineStore } from 'pinia';
 import { EventCategory } from '@/common/model/event_category';
 import CalendarEventInstance from '@/common/model/event_instance';
+import { getDefaultDateRange } from '@/common/utils/datePresets';
+import type { DefaultDateRange } from '@/common/model/calendar';
+import ModelService from '@/client/service/models';
 
 export interface PublicCalendarState {
   // Calendar data
   currentCalendarUrlName: string | null;
+  serverDefaultDateRange: DefaultDateRange;
+  calendarDefaultDateRange: DefaultDateRange;
+  isCalendarSettingsLoaded: boolean;
 
   // Category filtering
   availableCategories: EventCategory[];
@@ -38,6 +44,9 @@ export interface FilterOptions {
 export const usePublicCalendarStore = defineStore('publicCalendar', {
   state: (): PublicCalendarState => ({
     currentCalendarUrlName: null,
+    serverDefaultDateRange: '2weeks',
+    calendarDefaultDateRange: '2weeks',
+    isCalendarSettingsLoaded: false,
     availableCategories: [],
     selectedCategoryNames: [],
     searchQuery: '',
@@ -133,6 +142,45 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
     },
 
     /**
+     * Set the server-level default date range (from site config)
+     */
+    setServerDefaultDateRange(defaultRange: DefaultDateRange) {
+      this.serverDefaultDateRange = defaultRange;
+      // Also update calendar default if no calendar-specific setting has been loaded yet
+      if (!this.isCalendarSettingsLoaded) {
+        this.calendarDefaultDateRange = defaultRange;
+      }
+    },
+
+    /**
+     * Load calendar data to get settings like defaultDateRange
+     */
+    async loadCalendar(calendarUrlName: string) {
+      try {
+        const calendarData = await ModelService.getModel(
+          `/api/public/v1/calendars/${calendarUrlName}`,
+        );
+
+        if (calendarData && calendarData.defaultDateRange) {
+          // Use the calendar's specific setting
+          this.calendarDefaultDateRange = calendarData.defaultDateRange;
+        }
+        else {
+          // Fall back to the server-level default
+          this.calendarDefaultDateRange = this.serverDefaultDateRange;
+        }
+      }
+      catch (error) {
+        console.error('Error loading calendar:', error);
+        // Fall back to server default if we can't load the calendar
+        this.calendarDefaultDateRange = this.serverDefaultDateRange;
+      }
+      finally {
+        this.isCalendarSettingsLoaded = true;
+      }
+    },
+
+    /**
      * Load categories for the current calendar
      */
     async loadCategories(calendarUrlName: string) {
@@ -144,9 +192,6 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
       this.categoryError = null;
 
       try {
-        // Import ModelService dynamically to avoid circular dependencies
-        const { default: ModelService } = await import('@/client/service/models');
-
         const categoriesData = await ModelService.listModels(
           `/api/public/v1/calendars/${calendarUrlName}/categories`,
         );
@@ -177,8 +222,6 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
       this.eventError = null;
 
       try {
-        const { default: ModelService } = await import('@/client/service/models');
-
         let url = `/api/public/v1/calendars/${calendarUrlName}/events`;
         const params = new URLSearchParams();
 
@@ -194,13 +237,13 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
           params.append('lang', 'en');
         }
 
-        // Add date range parameters if provided
-        if (filters?.startDate) {
-          params.append('startDate', filters.startDate);
-        }
-        if (filters?.endDate) {
-          params.append('endDate', filters.endDate);
-        }
+        // Add date range parameters - use calendar's default if none specified
+        const defaultRange = getDefaultDateRange(this.calendarDefaultDateRange);
+        const effectiveStartDate = filters?.startDate ?? defaultRange.startDate;
+        const effectiveEndDate = filters?.endDate ?? defaultRange.endDate;
+
+        params.append('startDate', effectiveStartDate);
+        params.append('endDate', effectiveEndDate);
 
         // Append query parameters if any were added
         if (params.toString()) {
@@ -279,6 +322,8 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
      * Clear all state
      */
     clearAll() {
+      this.calendarDefaultDateRange = this.serverDefaultDateRange;
+      this.isCalendarSettingsLoaded = false;
       this.availableCategories = [];
       this.selectedCategoryNames = [];
       this.searchQuery = '';

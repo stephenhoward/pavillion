@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { DateTime } from 'luxon';
-import { getThisWeek, getNextWeek } from '@/common/utils/datePresets';
+import { getThisWeek, getNextWeek, getDefaultDateRange } from '@/common/utils/datePresets';
 
 describe('Date Preset Utilities', () => {
   describe('getThisWeek', () => {
@@ -116,6 +116,79 @@ describe('Date Preset Utilities', () => {
       const start = DateTime.fromISO(startDate);
 
       expect(start.isValid).toBe(true);
+    });
+  });
+
+  describe('getDefaultDateRange', () => {
+    it('should return today as start date', () => {
+      const testDate = DateTime.fromISO('2025-01-15');
+      const { startDate } = getDefaultDateRange('2weeks', testDate);
+
+      expect(startDate).toBe('2025-01-15');
+    });
+
+    it('should return 14 days from today as end date by default', () => {
+      const testDate = DateTime.fromISO('2025-01-15');
+      const { endDate } = getDefaultDateRange('2weeks', testDate);
+
+      expect(endDate).toBe('2025-01-29');
+    });
+
+    it('should return dates in ISO format (YYYY-MM-DD)', () => {
+      const { startDate, endDate } = getDefaultDateRange();
+
+      expect(startDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(endDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
+
+    it('should handle year boundary correctly', () => {
+      const testDate = DateTime.fromISO('2024-12-25');
+      const { startDate, endDate } = getDefaultDateRange('2weeks', testDate);
+
+      expect(startDate).toBe('2024-12-25');
+      expect(endDate).toBe('2025-01-08');
+    });
+
+    it('should span exactly 14 days for 2weeks range', () => {
+      const { startDate, endDate } = getDefaultDateRange('2weeks');
+
+      const start = DateTime.fromISO(startDate);
+      const end = DateTime.fromISO(endDate);
+
+      expect(end.diff(start, 'days').days).toBe(14);
+    });
+
+    it('should span exactly 7 days for 1week range', () => {
+      const testDate = DateTime.fromISO('2025-01-15');
+      const { startDate, endDate } = getDefaultDateRange('1week', testDate);
+
+      expect(startDate).toBe('2025-01-15');
+      expect(endDate).toBe('2025-01-22');
+
+      const start = DateTime.fromISO(startDate);
+      const end = DateTime.fromISO(endDate);
+      expect(end.diff(start, 'days').days).toBe(7);
+    });
+
+    it('should span exactly 30 days for 1month range', () => {
+      const testDate = DateTime.fromISO('2025-01-15');
+      const { startDate, endDate } = getDefaultDateRange('1month', testDate);
+
+      expect(startDate).toBe('2025-01-15');
+      expect(endDate).toBe('2025-02-14');
+
+      const start = DateTime.fromISO(startDate);
+      const end = DateTime.fromISO(endDate);
+      expect(end.diff(start, 'days').days).toBe(30);
+    });
+
+    it('should default to 2weeks if no range type specified', () => {
+      const testDate = DateTime.fromISO('2025-01-15');
+      const defaultResult = getDefaultDateRange(undefined, testDate);
+      const explicitResult = getDefaultDateRange('2weeks', testDate);
+
+      expect(defaultResult.startDate).toBe(explicitResult.startDate);
+      expect(defaultResult.endDate).toBe(explicitResult.endDate);
     });
   });
 });

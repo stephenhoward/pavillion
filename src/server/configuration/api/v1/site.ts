@@ -20,6 +20,7 @@ export default class SiteRouteHandlers {
     res.json({
       registrationMode: settings.get('registrationMode'),
       siteTitle: settings.get('siteTitle'),
+      defaultDateRange: settings.get('defaultDateRange'),
       domain: config.get('domain'),
     });
   }

@@ -4,6 +4,7 @@ import { useTranslation } from 'i18next-vue';
 import { useRoute } from 'vue-router';
 import CategoriesTab from './categories.vue';
 import EditorsTab from './editors.vue';
+import SettingsTab from './settings.vue';
 import CalendarService from '../../../service/calendar';
 
 const route = useRoute();
@@ -88,6 +89,16 @@ const activateTab = (tab) => {
         >
           {{ t('editors_tab') }}
         </button>
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="state.activeTab === 'settings' ? 'true' : 'false'"
+          aria-controls="settings-panel"
+          class="tab"
+          @click="activateTab('settings')"
+        >
+          {{ t('settings_tab') }}
+        </button>
       </nav>
 
       <div
@@ -110,6 +121,17 @@ const activateTab = (tab) => {
         class="tab-panel"
       >
         <EditorsTab :calendar-id="state.calendar.id" />
+      </div>
+
+      <div
+        id="settings-panel"
+        role="tabpanel"
+        aria-labelledby="settings-tab"
+        :aria-hidden="state.activeTab !== 'settings'"
+        :hidden="state.activeTab !== 'settings'"
+        class="tab-panel"
+      >
+        <SettingsTab :calendar-id="state.calendar.id" />
       </div>
     </template>
   </section>

@@ -13,9 +13,10 @@ const saving = ref(false);
 const successMessage = ref('');
 const errorMessage = ref('');
 
-// Initialize with current registration mode
+// Initialize with current settings
 const selectedRegistrationMode = ref(site_config.settings().registrationMode || 'closed');
 const siteTitle = ref(site_config.settings().siteTitle);
+const selectedDateRange = ref(site_config.settings().defaultDateRange || '2weeks');
 
 // Registration mode options
 const registrationModes = [
@@ -25,8 +26,15 @@ const registrationModes = [
   { value: 'closed', label: t('registration_mode_closed') },
 ];
 
+// Default date range options
+const dateRangeOptions = [
+  { value: '1week', label: t('date_range_1week') },
+  { value: '2weeks', label: t('date_range_2weeks') },
+  { value: '1month', label: t('date_range_1month') },
+];
+
 /**
- * Updates the registration mode setting
+ * Updates the site settings
  */
 async function updateSettings() {
   saving.value = true;
@@ -38,6 +46,7 @@ async function updateSettings() {
     const success = await configService.updateSettings({
       registrationMode: selectedRegistrationMode.value,
       siteTitle: siteTitle.value,
+      defaultDateRange: selectedDateRange.value,
     });
 
     if (success) {
@@ -94,6 +103,22 @@ async function updateSettings() {
             </option>
           </select>
           <div id="reg-mode-description" class="description">{{ t("registration_mode_description") }}</div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="defaultDateRange" class="form-label">{{ t("default_date_range") }}</label>
+        <div class="form-field">
+          <select
+            id="defaultDateRange"
+            v-model="selectedDateRange"
+            :disabled="saving"
+            aria-describedby="date-range-description">
+            <option v-for="range in dateRangeOptions" :key="range.value" :value="range.value">
+              {{ range.label }}
+            </option>
+          </select>
+          <div id="date-range-description" class="description">{{ t("default_date_range_description") }}</div>
         </div>
       </div>
 
