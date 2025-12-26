@@ -1,0 +1,10 @@
+{
+    "CalendarEditorEntity": [
+        {
+            "id": "ce-1-6e87d5ca-4d89-42c1-aa9d-5ef437fe5555",
+            "calendar_id": "cal-tu-6e87d5ca-4d89-42c1-aa9d-5ef437fe3333",
+            "account_id": "6e87d5ca-4d89-42c1-aa9d-5ef437fe2222",
+            "email": "multicalendar@example.com"
+        }
+    ]
+}

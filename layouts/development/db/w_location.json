@@ -29,6 +29,46 @@
             "state": "OR",
             "postal_code": "97214",
             "country": "USA"
+        },
+        {
+            "id": "loc-tu-1-6e87d5ca-4d89-42c1-aa9d-5ef437fe6611",
+            "calendar_id": "cal-tu-6e87d5ca-4d89-42c1-aa9d-5ef437fe3333",
+            "name": "Community Recreation Center",
+            "address": "123 Main Street",
+            "city": "Portland",
+            "state": "OR",
+            "postal_code": "97203",
+            "country": "USA"
+        },
+        {
+            "id": "loc-tu-2-6e87d5ca-4d89-42c1-aa9d-5ef437fe6622",
+            "calendar_id": "cal-tu-6e87d5ca-4d89-42c1-aa9d-5ef437fe3333",
+            "name": "Central Park",
+            "address": "456 Oak Avenue",
+            "city": "Portland",
+            "state": "OR",
+            "postal_code": "97204",
+            "country": "USA"
+        },
+        {
+            "id": "loc-mc-1-6e87d5ca-4d89-42c1-aa9d-5ef437fe6633",
+            "calendar_id": "cal-mc-6e87d5ca-4d89-42c1-aa9d-5ef437fe4444",
+            "name": "Downtown Convention Center",
+            "address": "789 Broadway",
+            "city": "Portland",
+            "state": "OR",
+            "postal_code": "97201",
+            "country": "USA"
+        },
+        {
+            "id": "loc-mc-2-6e87d5ca-4d89-42c1-aa9d-5ef437fe6644",
+            "calendar_id": "cal-mc-6e87d5ca-4d89-42c1-aa9d-5ef437fe4444",
+            "name": "Riverside Amphitheater",
+            "address": "321 River Road",
+            "city": "Portland",
+            "state": "OR",
+            "postal_code": "97202",
+            "country": "USA"
         }
     ]
 }

@@ -10,6 +10,12 @@
             "username": "TestUser",
             "email": "test@example.com",
             "language": "en"
+        },
+        {
+            "id": "6e87d5ca-4d89-42c1-aa9d-5ef437fe2222",
+            "username": "MultiCalendarTestUser",
+            "email": "multicalendar@example.com",
+            "language": "en"
         }
     ]
 }
