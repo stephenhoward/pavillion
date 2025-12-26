@@ -15,6 +15,7 @@ export default class EventRoutes {
   installHandlers(app: Application, routePrefix: string): void {
     const router = express.Router();
     router.get('/calendars/:calendar/events', ExpressHelper.loggedInOnly, this.listEvents.bind(this));
+    router.get('/events/:id', ExpressHelper.loggedInOnly, this.getEvent.bind(this));
     router.post('/events', ExpressHelper.loggedInOnly, this.createEvent.bind(this));
     router.put('/events/:id', ExpressHelper.loggedInOnly, this.updateEvent.bind(this));
     router.delete('/events/:id', ExpressHelper.loggedInOnly, this.deleteEvent.bind(this));
@@ -63,6 +64,59 @@ export default class EventRoutes {
 
     const events = await this.service.listEvents(calendar, options);
     res.json(events.map((event) => event.toObject()));
+  }
+
+  async getEvent(req: Request, res: Response) {
+    const account = req.user as Account;
+
+    if (!account) {
+      res.status(401).json({
+        "error": "not authenticated",
+      });
+      return;
+    }
+
+    const eventId = req.params.id;
+    if (!eventId) {
+      res.status(400).json({
+        "error": "missing event ID",
+      });
+      return;
+    }
+
+    try {
+      const event = await this.service.getEventById(eventId);
+
+      // Check if user has permission to edit this event (is editor or owner of calendar)
+      const editableCalendars = await this.service.editableCalendarsForUser(account);
+      const hasPermission = editableCalendars.some(c => c.id === event.calendarId);
+
+      if (!hasPermission) {
+        throw new InsufficientCalendarPermissionsError(event.calendarId);
+      }
+
+      res.json(event.toObject());
+    }
+    catch (error) {
+      if (error instanceof EventNotFoundError) {
+        res.status(404).json({
+          "error": error.message,
+          "errorName": error.name,
+        });
+      }
+      else if (error instanceof InsufficientCalendarPermissionsError) {
+        res.status(403).json({
+          "error": error.message,
+          "errorName": error.name,
+        });
+      }
+      else {
+        console.error("Error getting event:", error);
+        res.status(500).json({
+          "error": "An error occurred while getting the event",
+        });
+      }
+    }
   }
 
   async createEvent(req: Request, res: Response) {

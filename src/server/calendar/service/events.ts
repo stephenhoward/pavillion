@@ -461,7 +461,7 @@ class EventService {
     });
 
     if ( ! event ) {
-      throw new Error('Event not found');
+      throw new EventNotFoundError(eventId);
     }
 
     let e = event.toModel();

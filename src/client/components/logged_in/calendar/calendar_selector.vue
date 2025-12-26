@@ -11,12 +11,20 @@
             :key="calendarInfo.calendar.id"
             @click="selectCalendar(calendarInfo)"
             class="calendar-item"
-            :class="{ 'editor-calendar': calendarInfo.isEditor }">
+            :class="{
+              'editor-calendar': calendarInfo.isEditor,
+              'last-interacted': isLastInteracted(calendarInfo.calendar.id)
+            }">
           <div class="calendar-name">
             {{ calendarInfo.calendar.content('en').name || calendarInfo.calendar.urlName }}
           </div>
-          <div v-if="calendarInfo.isEditor" class="relationship-badge">
-            {{ t('editor_badge') }}
+          <div class="badges">
+            <div v-if="isLastInteracted(calendarInfo.calendar.id)" class="relationship-badge last-used">
+              {{ t('last_used_badge') }}
+            </div>
+            <div v-if="calendarInfo.isEditor" class="relationship-badge">
+              {{ t('editor_badge') }}
+            </div>
           </div>
         </li>
       </ul>
@@ -31,10 +39,11 @@
 </template>
 
 <script setup>
-import { onBeforeMount, reactive, ref } from 'vue';
+import { onBeforeMount, reactive, ref, computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import ModalLayout from '@/client/components/common/modal.vue';
 import CalendarService from '@/client/service/calendar';
+import { useCalendarStore } from '@/client/stores/calendarStore';
 
 const { t } = useTranslation('calendars', {
   keyPrefix: 'selector',
@@ -42,12 +51,15 @@ const { t } = useTranslation('calendars', {
 
 const emit = defineEmits(['select', 'cancel']);
 
+const calendarStore = useCalendarStore();
 const calendarsWithRelationship = ref([]);
 const state = reactive({
   loading: true,
   error: '',
 });
 const calendarService = new CalendarService();
+
+const lastInteractedCalendar = computed(() => calendarStore.getLastInteractedCalendar);
 
 onBeforeMount(async () => {
   try {
@@ -62,7 +74,14 @@ onBeforeMount(async () => {
   }
 });
 
+const isLastInteracted = (calendarId) => {
+  return lastInteractedCalendar.value?.id === calendarId;
+};
+
 const selectCalendar = (calendarInfo) => {
+  // Update the last interacted calendar in the store
+  calendarStore.setLastInteractedCalendar(calendarInfo.calendar.id);
+
   // Emit the calendar object itself, not the CalendarInfo wrapper
   emit('select', calendarInfo.calendar);
 };
@@ -105,9 +124,19 @@ const selectCalendar = (calendarInfo) => {
         border-left: 3px solid #3b82f6;
       }
 
+      &.last-interacted {
+        background-color: rgba(59, 130, 246, 0.1);
+        border-color: #3b82f6;
+      }
+
       .calendar-name {
         flex: 1;
         font-weight: 500;
+      }
+
+      .badges {
+        display: flex;
+        gap: 0.5rem;
       }
 
       .relationship-badge {
@@ -117,6 +146,10 @@ const selectCalendar = (calendarInfo) => {
         border-radius: 12px;
         font-size: 12px;
         font-weight: 500;
+
+        &.last-used {
+          background-color: #10b981;
+        }
       }
 
       @media (prefers-color-scheme: dark) {
@@ -130,8 +163,17 @@ const selectCalendar = (calendarInfo) => {
           border-left-color: #60a5fa;
         }
 
+        &.last-interacted {
+          background-color: rgba(96, 165, 250, 0.15);
+          border-color: #60a5fa;
+        }
+
         .relationship-badge {
           background-color: #60a5fa;
+
+          &.last-used {
+            background-color: #34d399;
+          }
         }
       }
     }

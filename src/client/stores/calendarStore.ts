@@ -6,6 +6,7 @@ export const useCalendarStore = defineStore('calendars', {
     return {
       calendars: [] as Calendar[],
       loaded: false,
+      lastInteractedCalendarId: null as string | null,
     };
   },
   getters: {
@@ -26,6 +27,16 @@ export const useCalendarStore = defineStore('calendars', {
      */
     getCalendarByUrlName: (state) => (urlName: string) => {
       return state.calendars.find((calendar: Calendar) => calendar.urlName === urlName) || null;
+    },
+
+    /**
+     * Get the most recently interacted calendar
+     */
+    getLastInteractedCalendar: (state) => {
+      if (!state.lastInteractedCalendarId) {
+        return null;
+      }
+      return state.calendars.find((calendar: Calendar) => calendar.id === state.lastInteractedCalendarId) || null;
     },
   },
   actions: {
@@ -72,6 +83,16 @@ export const useCalendarStore = defineStore('calendars', {
       if (index >= 0) {
         this.calendars.splice(index, 1);
       }
+    },
+
+    /**
+     * Set the most recently interacted calendar ID.
+     * This is used to pre-select the calendar in the calendar selector modal.
+     * Note: This is session-based only and will not persist across page refreshes.
+     * @param {string} calendarId - The ID of the calendar that was interacted with
+     */
+    setLastInteractedCalendar(calendarId: string) {
+      this.lastInteractedCalendarId = calendarId;
     },
   },
 });

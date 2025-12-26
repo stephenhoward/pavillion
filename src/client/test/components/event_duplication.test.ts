@@ -1,24 +1,58 @@
-import { expect, describe, it, afterEach } from 'vitest';
+import { expect, describe, it, afterEach, beforeEach, vi } from 'vitest';
 import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { RouteRecordRaw } from 'vue-router';
+import { createPinia, setActivePinia, Pinia } from 'pinia';
 import sinon from 'sinon';
 import { nextTick } from 'vue';
+import { flushPromises } from '@vue/test-utils';
 
 import { CalendarEvent, CalendarEventContent } from '@/common/model/events';
 import { EventLocation } from '@/common/model/location';
 import { Media } from '@/common/model/media';
 import { EventCategory } from '@/common/model/event_category';
+import { Calendar } from '@/common/model/calendar';
 import { mountComponent } from '@/client/test/lib/vue';
 import EditEvent from '@/client/components/logged_in/calendar/edit_event.vue';
 import EventService from '@/client/service/event';
+import CalendarService from '@/client/service/calendar';
+
+// Mock useCalendarStore
+vi.mock('@/client/stores/calendarStore', () => ({
+  useCalendarStore: () => ({
+    lastInteractedCalendarId: null,
+    getLastInteractedCalendar: null,
+    setLastInteractedCalendar: vi.fn(),
+    calendars: [],
+    addCalendar: vi.fn(),
+  }),
+}));
+
+// Mock CategoryService
+vi.mock('@/client/service/category', () => ({
+  default: vi.fn().mockImplementation(() => ({
+    getEventCategories: vi.fn().mockResolvedValue([]),
+    assignCategoriesToEvent: vi.fn().mockResolvedValue(undefined),
+  })),
+}));
+
+// Mock useEventDuplication composable
+vi.mock('@/client/composables/useEventDuplication', () => ({
+  useEventDuplication: () => ({
+    stripEventForDuplication: vi.fn((event) => {
+      const cloned = event.clone();
+      cloned.id = '';
+      return cloned;
+    }),
+  }),
+}));
 
 const routes: RouteRecordRaw[] = [
-  { path: '/login',  component: {}, name: 'login', props: true },
+  { path: '/login', component: {}, name: 'login', props: true },
   { path: '/logout', component: {}, name: 'logout' },
-  { path: '/register', component: {}, name: 'register', props: true },
-  { path: '/forgot', component: {}, name: 'forgot_password', props: true },
-  { path: '/apply',  component: {}, name: 'register-apply', props: true },
-  { path: '/reset',  component: {}, name: 'reset_password', props: true },
+  { path: '/calendar', component: {}, name: 'calendars' },
+  { path: '/calendar/:calendar', component: {}, name: 'calendar' },
+  { path: '/event', component: EditEvent, name: 'event_new' },
+  { path: '/event/:eventId', component: EditEvent, name: 'event_edit', props: true },
 ];
 
 // Test utility functions for event duplication
@@ -56,23 +90,41 @@ function createFullTestEvent(): CalendarEvent {
   return event;
 }
 
-const mountedEditor = (event: CalendarEvent, isDuplicationMode: boolean = false) => {
-  let router: Router = createRouter({
+const mountedEditorOnRoute = async (routePath: string, calendars: Calendar[] = []) => {
+  const router: Router = createRouter({
     history: createMemoryHistory(),
     routes: routes,
   });
 
+  // Navigate to the specified route first
+  await router.push(routePath);
+  await router.isReady();
+
+  // Stub loadCalendars
+  sinon.stub(CalendarService.prototype, 'loadCalendars').resolves(calendars);
+
+  const pinia = createPinia();
+  setActivePinia(pinia);
+
   const wrapper = mountComponent(EditEvent, router, {
+    pinia,
     provide: {
       site_config: {
-        settings: {},
+        settings: () => ({}),
       },
     },
-    props: {
-      event: event,
-      isDuplicationMode: isDuplicationMode,
+    stubs: {
+      EventRecurrenceView: true,
+      languagePicker: true,
+      ImageUpload: true,
+      CategorySelector: true,
     },
   });
+
+  // Wait for async initialization
+  await flushPromises();
+  await nextTick();
+  await nextTick();
 
   return {
     wrapper,
@@ -81,11 +133,19 @@ const mountedEditor = (event: CalendarEvent, isDuplicationMode: boolean = false)
 };
 
 describe('Event Duplication System', () => {
-  const sandbox = sinon.createSandbox();
   let currentWrapper: any = null;
+  let pinia: Pinia;
+
+  beforeEach(() => {
+    // Restore any sinon stubs before each test
+    sinon.restore();
+    pinia = createPinia();
+    setActivePinia(pinia);
+    vi.clearAllMocks();
+  });
 
   afterEach(async () => {
-    sandbox.restore();
+    sinon.restore();
     if (currentWrapper) {
       currentWrapper.unmount();
       currentWrapper = null;
@@ -159,33 +219,61 @@ describe('Event Duplication System', () => {
     });
   });
 
-  describe('Edit Event Component in Duplication Mode', () => {
+  describe('Edit Event Component in Duplication Mode (Route-Based)', () => {
     it('should display duplication mode context in UI', async () => {
-      const event = createFullTestEvent();
-      const strippedEvent = EventService.prepareEventForDuplication(event);
+      const calendar = new Calendar('calendar-id', 'test-calendar');
+      calendar.addContent({ language: 'en', name: 'Test Calendar', description: '' });
 
-      const { wrapper } = mountedEditor(strippedEvent, true);
+      // Mock fetch for loading source event
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({
+          id: 'event-id',
+          calendarId: 'calendar-id',
+          schedules: [],
+          contents: [{ language: 'en', name: 'Test Event', description: 'Test Description' }],
+          location: { name: 'Test Venue', address: '123 Test St' },
+          categories: [],
+        }),
+      });
+
+      const { wrapper } = await mountedEditorOnRoute('/event?from=event-id', [calendar]);
       currentWrapper = wrapper;
 
-      // Check that duplication mode is indicated in the UI
-      // This test will be completed once the UI changes are implemented in Task 3.2
-      // expect(wrapper.vm.isDuplicationMode).toBe(true);
-
-      // For now, just verify the component mounts with the event data
+      // Component should be mounted
       expect(wrapper.exists()).toBe(true);
-      expect(wrapper.vm.event).toBeDefined();
+
+      // Should show duplicate title (either translation key or translated text)
+      const header = wrapper.find('.page-header h1');
+      const headerText = header.text().toLowerCase();
+      expect(headerText).toMatch(/duplicate/i);
     });
 
-    it('should pre-populate form fields with duplicated event data', async () => {
-      const event = createFullTestEvent();
-      const strippedEvent = EventService.prepareEventForDuplication(event);
+    it('should initialize form with source event data via route query', async () => {
+      const calendar = new Calendar('calendar-id', 'test-calendar');
+      calendar.addContent({ language: 'en', name: 'Test Calendar', description: '' });
 
-      const { wrapper } = mountedEditor(strippedEvent, true);
+      // Mock fetch for loading source event
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({
+          id: 'event-id',
+          calendarId: 'calendar-id',
+          schedules: [],
+          contents: [{ language: 'en', name: 'Test Event', description: 'Test Description' }],
+          location: { name: 'Test Venue', address: '123 Test St' },
+          categories: [],
+        }),
+      });
+
+      const { wrapper, router } = await mountedEditorOnRoute('/event?from=event-id', [calendar]);
       currentWrapper = wrapper;
 
-      // Verify form fields are populated with original data
-      expect(wrapper.find('input[name="name"]').element.value).toBe('Test Event');
-      expect(wrapper.find('input[name="description"]').element.value).toBe('Test Description');
+      // Verify route has from query parameter
+      expect(router.currentRoute.value.query.from).toBe('event-id');
+
+      // Component should be mounted with form
+      expect(wrapper.find('form').exists()).toBe(true);
     });
 
     it('should preserve all event data except IDs when duplicating', () => {

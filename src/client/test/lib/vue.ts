@@ -3,24 +3,31 @@ import { Router } from 'vue-router';
 import I18NextVue from 'i18next-vue';
 import i18next from 'i18next';
 import { initI18Next } from '@/client/service/locale';
-import { createPinia } from 'pinia';
+import { createPinia, Pinia } from 'pinia';
 
-const mountComponent = (component: any, router: Router, config: Record<string, any> ) => {
+interface MountConfig {
+  provide?: Record<string, any>;
+  props?: Record<string, any>;
+  stubs?: Record<string, any>;
+  pinia?: Pinia;
+}
 
-  let pinia = createPinia();
+const mountComponent = (component: any, router: Router, config: MountConfig = {}) => {
+
+  let pinia = config.pinia || createPinia();
 
   let defaultProvide: Record<string, any> = {
     authn: {},
     site_config: {},
   };
 
-  if ( config.provide ) {
-    for ( let key in config.provide ) {
+  if (config.provide) {
+    for (let key in config.provide) {
       defaultProvide[key] = config.provide[key];
     }
   }
 
-  if (! config.props ) {
+  if (!config.props) {
     config.props = {};
   }
 
@@ -33,6 +40,7 @@ const mountComponent = (component: any, router: Router, config: Record<string, a
         pinia,
       ],
       provide: defaultProvide,
+      stubs: config.stubs || {},
     },
     props: config.props,
   });

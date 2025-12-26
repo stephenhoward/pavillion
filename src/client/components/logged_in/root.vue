@@ -1,23 +1,23 @@
 <script setup>
-import { reactive, ref } from 'vue';
+import { ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
-import EditEventView from '@/client/components/logged_in/calendar/edit_event.vue';
 import CalendarService from '@/client/service/calendar';
-import EventService from '@/client/service/event';
+import { useCalendarStore } from '@/client/stores/calendarStore';
 import CalendarSelector from '@/client/components/logged_in/calendar/calendar_selector.vue';
 
 const route = useRoute();
 const router = useRouter();
 const showCalendarSelector = ref(false);
-const selectedCalendar = ref(null);
 const { t } = useTranslation('system');
 const calendarService = new CalendarService();
-const eventService = new EventService();
-const state = reactive({
-  currentEvent: null,
-  isDuplicationMode: false,
-});
+const calendarStore = useCalendarStore();
+
+/**
+ * Handle new event creation via route-based navigation.
+ * If user has one calendar, navigate directly to /event.
+ * If user has multiple calendars, show calendar selector first.
+ */
 const newEvent = async () => {
   try {
     // Check if the user has any calendars
@@ -25,14 +25,13 @@ const newEvent = async () => {
 
     if (calendars.length === 0) {
       // User has no calendars, redirect to calendar creation page
-      router.push('/calendar');
-      return null;
+      router.push({ name: 'calendars' });
+      return;
     }
     else if (calendars.length === 1) {
-      // User has one calendar, use it directly
-      selectedCalendar.value = calendars[0];
-      const event = eventService.initEvent(selectedCalendar.value);
-      state.currentEvent = event;
+      // User has one calendar - set it as last interacted and navigate
+      calendarStore.setLastInteractedCalendar(calendars[0].id);
+      router.push({ name: 'event_new' });
     }
     else {
       // User has multiple calendars, show selector
@@ -44,11 +43,16 @@ const newEvent = async () => {
   }
 };
 
+/**
+ * Handle calendar selection from selector modal.
+ * Updates last interacted calendar and navigates to event creation.
+ */
 const onCalendarSelected = (calendar) => {
-  selectedCalendar.value = calendar;
   showCalendarSelector.value = false;
-  const event = eventService.initEvent(calendar);
-  state.currentEvent = event;
+  // Update the last interacted calendar for pre-selection
+  calendarStore.setLastInteractedCalendar(calendar.id);
+  // Navigate to event creation route
+  router.push({ name: 'event_new' });
 };
 
 const onCalendarSelectionCanceled = () => {
@@ -96,14 +100,11 @@ const isActive = (path) => {
       </li>
     </nav>
     <main id="main">
-      <RouterView @open-event="(e, isDuplicationMode = false) => { state.currentEvent = e; state.isDuplicationMode = isDuplicationMode; }"/>
+      <RouterView />
     </main>
   </div>
 
-  <div v-if="state.currentEvent != null">
-    <EditEventView :event="state.currentEvent" :is-duplication-mode="state.isDuplicationMode" @close="() => { state.currentEvent = null; state.isDuplicationMode = false; }" />
-  </div>
-  <!-- Calendar Selector Modal -->
+  <!-- Calendar Selector Modal for New Event creation -->
   <CalendarSelector v-if="showCalendarSelector" @select="onCalendarSelected" @cancel="onCalendarSelectionCanceled" />
 </template>
 

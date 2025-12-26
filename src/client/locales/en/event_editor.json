@@ -29,7 +29,11 @@
     "error_location_state_requires_address": "State requires Address to be filled in",
     "error_location_postal_code_requires_state": "Postal Code requires State to be filled in",
     "error_location_postal_code_requires_city": "Postal Code requires City to be filled in",
-    "error_location_postal_code_requires_address": "Postal Code requires Address to be filled in"
+    "error_location_postal_code_requires_address": "Postal Code requires Address to be filled in",
+    "unsaved_changes_title": "Unsaved Changes",
+    "unsaved_changes_message": "You have unsaved changes. Are you sure you want to leave?",
+    "unsaved_changes_confirm": "Leave",
+    "unsaved_changes_cancel": "Stay"
   },
   "categories": {
     "categories_label": "Categories",

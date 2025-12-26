@@ -26,7 +26,8 @@
     "no_calendars": "You don't have any calendars. Please create one first.",
     "error_loading_calendars": "Error loading calendars",
     "cancel_button": "Cancel",
-    "editor_badge": "Editor"
+    "editor_badge": "Editor",
+    "last_used_badge": "Last Used"
   },
   "calendar": {
     "create_button": "Create Event",

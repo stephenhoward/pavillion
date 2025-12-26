@@ -12,6 +12,7 @@ import BulkOperationsMenu from './BulkOperationsMenu.vue';
 import CategorySelectionDialog from './CategorySelectionDialog.vue';
 import SearchFilter from './SearchFilter.vue';
 import { useBulkSelection } from '@/client/composables/useBulkSelection';
+import { useCalendarStore } from '@/client/stores/calendarStore';
 
 const { t } = useTranslation('calendars',{
   keyPrefix: 'calendar',
@@ -24,7 +25,7 @@ const { t: tBulk } = useTranslation('calendars', {
 const site_config = inject('site_config');
 const site_domain = site_config.settings().domain;
 const eventService = new EventService();
-const emit = defineEmits(['openEvent']);
+const calendarStore = useCalendarStore();
 
 const route = useRoute();
 const router = useRouter();
@@ -240,14 +241,25 @@ watch(calendarId, (newCalendarId, oldCalendarId) => {
   }
 });
 
+/**
+ * Navigate to new event creation for this calendar.
+ * Sets the current calendar as lastInteractedCalendar for pre-selection.
+ */
 const newEvent = async () => {
-  try {
-    const event = eventService.initEvent(state.calendar);
-    emit('openEvent', event);
+  if (state.calendar) {
+    calendarStore.setLastInteractedCalendar(state.calendar.id);
+    router.push({ name: 'event_new' });
   }
-  catch (error) {
-    console.error('Error checking calendars:', error);
-  }
+};
+
+/**
+ * Navigate to edit an existing event.
+ */
+const handleEditEvent = (event) => {
+  router.push({
+    name: 'event_edit',
+    params: { eventId: event.id },
+  });
 };
 
 const navigateToManagement = () => {
@@ -304,9 +316,15 @@ const handleDeleteEvents = async () => {
   }
 };
 
+/**
+ * Navigate to duplicate an event.
+ * Uses the ?from= query parameter to indicate duplication mode.
+ */
 const handleDuplicateEvent = (event) => {
-  // Open the event editor in duplication mode
-  emit('openEvent', event.clone(), true); // Pass isDuplicationMode as true
+  router.push({
+    name: 'event_new',
+    query: { from: event.id },
+  });
 };
 
 // Format event date for display
@@ -434,7 +452,7 @@ const hasActiveFilters = computed(() => {
             </div>
             <article
               :aria-labelledby="`event-title-${event.id}`"
-              @click="$emit('openEvent', event.clone())"
+              @click="handleEditEvent(event)"
               class="event-article"
             >
               <EventImage :media="event.media" size="small" />
@@ -448,6 +466,15 @@ const hasActiveFilters = computed(() => {
               </div>
             </article>
             <div class="event-actions">
+              <button
+                type="button"
+                class="edit-btn"
+                @click.stop="handleEditEvent(event)"
+                :aria-label="`Edit event: ${event.content('en').name}`"
+                title="Edit this event"
+              >
+                ✏️
+              </button>
               <button
                 type="button"
                 class="duplicate-btn"
@@ -643,6 +670,7 @@ section[aria-label="Calendar Events"] {
         align-items: center;
         gap: 8px;
 
+        .edit-btn,
         .duplicate-btn {
           background: transparent;
           border: 1px solid #e0e0e0;
