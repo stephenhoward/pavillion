@@ -62,7 +62,7 @@ describe('Feed Workflow Integration Tests', () => {
       });
 
       // Mock feed events from the followed calendar
-      const mockEvent = CalendarEvent.fromObject({
+      const mockEventData = {
         id: 'remote-event-1',
         calendarId: 'remote-cal-id',
         date: '2025-12-27',
@@ -73,11 +73,12 @@ describe('Feed Workflow Integration Tests', () => {
             description: 'Event from followed calendar',
           },
         },
-      });
+        repostStatus: 'none',
+      };
 
       axiosGetStub.withArgs(sinon.match(/\/api\/v1\/social\/feed/)).resolves({
         data: {
-          events: [Object.assign(mockEvent, { repostStatus: 'none' })],
+          events: [mockEventData],
           hasMore: false,
         },
       });
@@ -121,8 +122,8 @@ describe('Feed Workflow Integration Tests', () => {
       feedStore.events = [Object.assign(mockEvent, { repostStatus: 'none' as const })];
 
       // Mock share event API call
-      axiosPostStub.withArgs('/api/v1/social/share').resolves({
-        data: { success: true },
+      axiosPostStub.withArgs('/api/v1/social/shares').resolves({
+        data: { id: 'share-1', calendarId: 'local-cal-1', eventId: 'event-1' },
       });
 
       // Action: Repost the event
@@ -176,17 +177,18 @@ describe('Feed Workflow Integration Tests', () => {
 
       // Setup: First page of events
       const firstPageEvents = [
-        CalendarEvent.fromObject({
+        {
           id: 'event-1',
           calendarId: 'remote-cal',
           date: '2025-12-27',
           content: { en: { language: 'en', name: 'Event 1', description: 'Desc 1' } },
-        }),
+          repostStatus: 'none',
+        },
       ];
 
       axiosGetStub.withArgs(sinon.match(/page=0/)).resolves({
         data: {
-          events: firstPageEvents.map(e => Object.assign(e, { repostStatus: 'none' })),
+          events: firstPageEvents,
           hasMore: true,
         },
       });
@@ -199,17 +201,18 @@ describe('Feed Workflow Integration Tests', () => {
 
       // Setup: Second page of events
       const secondPageEvents = [
-        CalendarEvent.fromObject({
+        {
           id: 'event-2',
           calendarId: 'remote-cal',
           date: '2025-12-28',
           content: { en: { language: 'en', name: 'Event 2', description: 'Desc 2' } },
-        }),
+          repostStatus: 'none',
+        },
       ];
 
       axiosGetStub.withArgs(sinon.match(/page=1/)).resolves({
         data: {
-          events: secondPageEvents.map(e => Object.assign(e, { repostStatus: 'none' })),
+          events: secondPageEvents,
           hasMore: false,
         },
       });
@@ -299,7 +302,7 @@ describe('Feed Workflow Integration Tests', () => {
       feedStore.events = [Object.assign(mockEvent, { repostStatus: 'none' as const })];
 
       // Mock API error
-      axiosPostStub.withArgs('/api/v1/social/share').rejects(
+      axiosPostStub.withArgs('/api/v1/social/shares').rejects(
         new Error('Failed to repost')
       );
 
@@ -341,8 +344,8 @@ describe('Feed Workflow Integration Tests', () => {
       expect(feedStore.events[0].repostStatus).toBe('none');
 
       // Mock share (manual repost) API call
-      axiosPostStub.withArgs('/api/v1/social/share').resolves({
-        data: { success: true },
+      axiosPostStub.withArgs('/api/v1/social/shares').resolves({
+        data: { id: 'share-2', calendarId: 'local-cal-1', eventId: 'event-1' },
       });
 
       // Action 2: Manually repost the event
@@ -366,9 +369,9 @@ describe('Feed Workflow Integration Tests', () => {
         },
       ];
 
-      // Mock update policy API
-      const axiosPatchStub = sandbox.stub(axios, 'patch');
-      axiosPatchStub.withArgs('/api/v1/social/follows/follow-1').resolves({
+      // Mock update policy API (ModelService.updateModel uses PUT)
+      const axiosPutStub = sandbox.stub(axios, 'put');
+      axiosPutStub.withArgs('/api/v1/social/follows/follow-1').resolves({
         data: {
           id: 'follow-1',
           remoteCalendarId: 'remote@example.com',

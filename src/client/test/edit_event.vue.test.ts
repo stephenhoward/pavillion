@@ -5,6 +5,7 @@ import { createPinia, setActivePinia, Pinia } from 'pinia';
 import sinon from 'sinon';
 import { nextTick } from 'vue';
 import { flushPromises } from '@vue/test-utils';
+import axios from 'axios';
 
 import { CalendarEvent } from '@/common/model/events';
 import { EventLocation } from '@/common/model/location';
@@ -98,17 +99,19 @@ const mountedEditorOnRoute = async (routePath: string, calendars: Calendar[] = [
 describe('Editor Behavior - Route-Based', () => {
   let currentWrapper: any = null;
   let pinia: Pinia;
+  let sandbox: sinon.SinonSandbox;
 
   beforeEach(() => {
     // Restore any sinon stubs before each test
     sinon.restore();
+    sandbox = sinon.createSandbox();
     pinia = createPinia();
     setActivePinia(pinia);
     vi.clearAllMocks();
   });
 
   afterEach(async () => {
-    sinon.restore();
+    sandbox.restore();
     // Properly unmount Vue component and wait for cleanup
     if (currentWrapper) {
       currentWrapper.unmount();
@@ -160,17 +163,16 @@ describe('Editor Behavior - Route-Based', () => {
     const calendar = new Calendar('testCalendarId', 'testName');
     calendar.addContent({ language: 'en', name: 'Test Calendar', description: '' });
 
-    // Mock fetch for loading source event
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({
+    // Mock axios.get for loading source event
+    sandbox.stub(axios, 'get').resolves({
+      data: {
         id: 'originalId',
         calendarId: 'testCalendarId',
         schedules: [],
-        contents: [{ language: 'en', name: 'Original Event', description: 'Test' }],
+        content: { en: { language: 'en', name: 'Original Event', description: 'Test' } },
         location: {},
         categories: [],
-      }),
+      },
     });
 
     const { wrapper } = await mountedEditorOnRoute('/event?from=originalId', [calendar]);
@@ -185,17 +187,16 @@ describe('Editor Behavior - Route-Based', () => {
     const calendar = new Calendar('testCalendarId', 'testName');
     calendar.addContent({ language: 'en', name: 'Test Calendar', description: '' });
 
-    // Mock fetch for loading source event
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({
+    // Mock axios.get for loading source event
+    sandbox.stub(axios, 'get').resolves({
+      data: {
         id: 'originalId',
         calendarId: 'testCalendarId',
         schedules: [],
-        contents: [{ language: 'en', name: 'Original Event', description: 'Test' }],
+        content: { en: { language: 'en', name: 'Original Event', description: 'Test' } },
         location: {},
         categories: [],
-      }),
+      },
     });
 
     const { wrapper } = await mountedEditorOnRoute('/event?from=originalId', [calendar]);

@@ -21,18 +21,23 @@ test.describe('Category CRUD Workflow', () => {
   });
 
   test('should load category list without 404 errors', async ({ page }) => {
-    // Navigate to calendar management
+    // Navigate to calendar - this will redirect to the user's calendar
     await page.goto('/calendar');
 
-    // Wait for calendar list or redirect
+    // Wait for calendar view to load
     await page.waitForTimeout(2000);
 
-    // If on calendar management page, look for categories link/button
-    // Categories might be in navigation or tabs
-    const categoriesLink = page.locator('a:has-text("Categories"), button:has-text("Categories"), [href*="categories"]');
+    // Click "Manage" link to access calendar management
+    const manageLink = page.locator('a:has-text("Manage"), a[href*="/manage"]');
+    await manageLink.click();
 
-    if (await categoriesLink.count() > 0) {
-      await categoriesLink.first().click();
+    // Wait for management page to load
+    await page.waitForTimeout(1000);
+
+    // Categories tab should be active by default, but click it to be sure
+    const categoriesTab = page.locator('button[role="tab"]:has-text("Categories")');
+    if (await categoriesTab.count() > 0) {
+      await categoriesTab.click();
     }
 
     // Listen for network requests to detect 404 errors
@@ -55,10 +60,15 @@ test.describe('Category CRUD Workflow', () => {
     await page.goto('/calendar');
     await page.waitForTimeout(2000);
 
-    // Navigate to categories (implementation-specific)
-    const categoriesLink = page.locator('a:has-text("Categories"), button:has-text("Categories")');
-    if (await categoriesLink.count() > 0) {
-      await categoriesLink.first().click();
+    // Click "Manage" link to access calendar management
+    const manageLink = page.locator('a:has-text("Manage"), a[href*="/manage"]');
+    await manageLink.click();
+    await page.waitForTimeout(1000);
+
+    // Click Categories tab
+    const categoriesTab = page.locator('button[role="tab"]:has-text("Categories")');
+    if (await categoriesTab.count() > 0) {
+      await categoriesTab.click();
     }
 
     // Click "Add Category" button (uses .primary class)
@@ -107,10 +117,15 @@ test.describe('Category CRUD Workflow', () => {
     await page.goto('/calendar');
     await page.waitForTimeout(2000);
 
-    // Navigate to categories
-    const categoriesLink = page.locator('a:has-text("Categories"), button:has-text("Categories")');
-    if (await categoriesLink.count() > 0) {
-      await categoriesLink.first().click();
+    // Click "Manage" link to access calendar management
+    const manageLink = page.locator('a:has-text("Manage"), a[href*="/manage"]');
+    await manageLink.click();
+    await page.waitForTimeout(1000);
+
+    // Click Categories tab
+    const categoriesTab = page.locator('button[role="tab"]:has-text("Categories")');
+    if (await categoriesTab.count() > 0) {
+      await categoriesTab.click();
     }
 
     // Look for first category edit button (uses .btn--secondary class within .category-item)
@@ -176,10 +191,15 @@ test.describe('Category CRUD Workflow', () => {
     await page.goto('/calendar');
     await page.waitForTimeout(2000);
 
-    // Navigate to categories
-    const categoriesLink = page.locator('a:has-text("Categories"), button:has-text("Categories")');
-    if (await categoriesLink.count() > 0) {
-      await categoriesLink.first().click();
+    // Click "Manage" link to access calendar management
+    const manageLink = page.locator('a:has-text("Manage"), a[href*="/manage"]');
+    await manageLink.click();
+    await page.waitForTimeout(1000);
+
+    // Click Categories tab
+    const categoriesTab = page.locator('button[role="tab"]:has-text("Categories")');
+    if (await categoriesTab.count() > 0) {
+      await categoriesTab.click();
     }
 
     // Create a category to delete
@@ -207,6 +227,10 @@ test.describe('Category CRUD Workflow', () => {
 
     // Wait for confirmation dialog (ModalLayout wraps a dialog)
     await page.waitForSelector('dialog.modal-dialog[open]', { timeout: 5000 });
+
+    // Select "remove" option (required to enable delete button)
+    const removeOption = page.locator('dialog[open] input[type="radio"][value="remove"]');
+    await removeOption.click();
 
     // Click confirm delete button (danger button in modal)
     const confirmButton = page.locator('dialog[open] button.danger').filter({ hasText: /delete/i });

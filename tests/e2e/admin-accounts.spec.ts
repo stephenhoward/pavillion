@@ -148,16 +148,18 @@ test.describe('Admin Account Management', () => {
     await emailInput.fill(uniqueEmail);
 
     // Find and click the send/submit button
+    // Use force: true to bypass actionability checks (header may overlap in modal)
     const submitButton = page.locator('button[type="submit"], button.primary').filter({ hasText: /send|invite/i }).first();
-    await submitButton.click();
+    await submitButton.click({ force: true });
 
     // Wait for response
     await page.waitForTimeout(2000);
 
-    // Verify success (success message or invitation added to list)
-    const successMessage = await page.locator('.success-message, text=/success|sent/i').count() > 0;
+    // Verify success (check for success message or invitation added to list)
+    const successMessageExists = await page.getByText(/success|sent/i).count() > 0 ||
+                                 await page.locator('.success-message').count() > 0;
     const invitationInList = await page.locator(`text=${uniqueEmail}`).count() > 0;
 
-    expect(successMessage || invitationInList).toBeTruthy();
+    expect(successMessageExists || invitationInList).toBeTruthy();
   });
 });

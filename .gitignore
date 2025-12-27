@@ -17,4 +17,5 @@ CLAUDE.md
 
 # Test artifacts
 .playwright-mcp
+playwright-report
 test-results
