@@ -119,6 +119,126 @@
             "count": 0,
             "by_day": "",
             "is_exclusion": false
+        },
+        {
+            "id": "es-tu-1-6e87d5ca-4d89-42c1-aa9d-5ef437fe7711",
+            "event_id": "evt-tu-1-6e87d5ca-4d89-42c1-aa9d-5ef437fe7711",
+            "timezone": "America/Los_Angeles",
+            "start_date": "2025-05-20T07:00:00.000",
+            "end_date": "2025-05-20T08:30:00.000",
+            "frequency": "",
+            "interval": 0,
+            "count": 0,
+            "by_day": "",
+            "is_exclusion": false
+        },
+        {
+            "id": "es-tu-2-6e87d5ca-4d89-42c1-aa9d-5ef437fe7722",
+            "event_id": "evt-tu-2-6e87d5ca-4d89-42c1-aa9d-5ef437fe7722",
+            "timezone": "America/Los_Angeles",
+            "start_date": "2025-05-21T17:30:00.000",
+            "end_date": "2025-05-21T18:30:00.000",
+            "frequency": "weekly",
+            "interval": 1,
+            "count": 10,
+            "by_day": "3",
+            "is_exclusion": false
+        },
+        {
+            "id": "es-tu-3-6e87d5ca-4d89-42c1-aa9d-5ef437fe7733",
+            "event_id": "evt-tu-3-6e87d5ca-4d89-42c1-aa9d-5ef437fe7733",
+            "timezone": "America/Los_Angeles",
+            "start_date": "2025-06-08T19:00:00.000",
+            "end_date": "2025-06-08T22:00:00.000",
+            "frequency": "",
+            "interval": 0,
+            "count": 0,
+            "by_day": "",
+            "is_exclusion": false
+        },
+        {
+            "id": "es-tu-4-6e87d5ca-4d89-42c1-aa9d-5ef437fe7744",
+            "event_id": "evt-tu-4-6e87d5ca-4d89-42c1-aa9d-5ef437fe7744",
+            "timezone": "America/Los_Angeles",
+            "start_date": "2025-05-15T14:00:00.000",
+            "end_date": "2025-05-15T17:00:00.000",
+            "frequency": "monthly",
+            "interval": 1,
+            "count": 5,
+            "by_day": "",
+            "is_exclusion": false
+        },
+        {
+            "id": "es-tu-5-6e87d5ca-4d89-42c1-aa9d-5ef437fe7755",
+            "event_id": "evt-tu-5-6e87d5ca-4d89-42c1-aa9d-5ef437fe7755",
+            "timezone": "America/Los_Angeles",
+            "start_date": "2025-07-12T18:00:00.000",
+            "end_date": "2025-07-12T21:00:00.000",
+            "frequency": "",
+            "interval": 0,
+            "count": 0,
+            "by_day": "",
+            "is_exclusion": false
+        },
+        {
+            "id": "es-mc-1-6e87d5ca-4d89-42c1-aa9d-5ef437fe8811",
+            "event_id": "evt-mc-1-6e87d5ca-4d89-42c1-aa9d-5ef437fe8811",
+            "timezone": "America/Los_Angeles",
+            "start_date": "2025-06-25T18:00:00.000",
+            "end_date": "2025-06-25T20:30:00.000",
+            "frequency": "",
+            "interval": 0,
+            "count": 0,
+            "by_day": "",
+            "is_exclusion": false
+        },
+        {
+            "id": "es-mc-2-6e87d5ca-4d89-42c1-aa9d-5ef437fe8822",
+            "event_id": "evt-mc-2-6e87d5ca-4d89-42c1-aa9d-5ef437fe8822",
+            "timezone": "America/Los_Angeles",
+            "start_date": "2025-05-29T06:00:00.000",
+            "end_date": "2025-05-29T07:00:00.000",
+            "frequency": "weekly",
+            "interval": 1,
+            "count": 12,
+            "by_day": "4",
+            "is_exclusion": false
+        },
+        {
+            "id": "es-mc-3-6e87d5ca-4d89-42c1-aa9d-5ef437fe8833",
+            "event_id": "evt-mc-3-6e87d5ca-4d89-42c1-aa9d-5ef437fe8833",
+            "timezone": "America/Los_Angeles",
+            "start_date": "2025-07-18T19:30:00.000",
+            "end_date": "2025-07-18T22:00:00.000",
+            "frequency": "",
+            "interval": 0,
+            "count": 0,
+            "by_day": "",
+            "is_exclusion": false
+        },
+        {
+            "id": "es-mc-4-6e87d5ca-4d89-42c1-aa9d-5ef437fe8844",
+            "event_id": "evt-mc-4-6e87d5ca-4d89-42c1-aa9d-5ef437fe8844",
+            "timezone": "America/Los_Angeles",
+            "start_date": "2025-06-05T10:00:00.000",
+            "end_date": "2025-06-05T13:00:00.000",
+            "frequency": "monthly",
+            "interval": 1,
+            "count": 4,
+            "by_day": "",
+            "is_exclusion": false
+        },
+        {
+            "id": "es-mc-5-6e87d5ca-4d89-42c1-aa9d-5ef437fe8855",
+            "event_id": "evt-mc-5-6e87d5ca-4d89-42c1-aa9d-5ef437fe8855",
+            "timezone": "America/Los_Angeles",
+            "start_date": "2025-06-14T09:00:00.000",
+            "end_date": "2025-06-14T12:00:00.000",
+            "frequency": "",
+            "interval": 0,
+            "count": 0,
+            "by_day": "",
+            "is_exclusion": false
         }
     ]
 }

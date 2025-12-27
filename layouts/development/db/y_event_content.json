@@ -139,6 +139,146 @@
             "language": "es",
             "name": "Noche de Película Familiar",
             "description": "Proyección gratuita de películas al aire libre. Palomitas proporcionadas, traiga sus propios asientos y mantas."
+        },
+        {
+            "id": "ec-tu-1-en-6e87d5ca-4d89-42c1-aa9d-5ef437fe7711",
+            "event_id": "evt-tu-1-6e87d5ca-4d89-42c1-aa9d-5ef437fe7711",
+            "language": "en",
+            "name": "Morning Fitness Bootcamp",
+            "description": "High-energy fitness bootcamp for all fitness levels. Bring water and enthusiasm!"
+        },
+        {
+            "id": "ec-tu-1-es-6e87d5ca-4d89-42c1-aa9d-5ef437fe7711",
+            "event_id": "evt-tu-1-6e87d5ca-4d89-42c1-aa9d-5ef437fe7711",
+            "language": "es",
+            "name": "Campamento de Acondicionamiento Físico Matutino",
+            "description": "Campamento de acondicionamiento físico de alta energía para todos los niveles. Traiga agua y entusiasmo!"
+        },
+        {
+            "id": "ec-tu-2-en-6e87d5ca-4d89-42c1-aa9d-5ef437fe7722",
+            "event_id": "evt-tu-2-6e87d5ca-4d89-42c1-aa9d-5ef437fe7722",
+            "language": "en",
+            "name": "Wednesday Meditation Circle",
+            "description": "Weekly guided meditation session in the park. Beginners welcome."
+        },
+        {
+            "id": "ec-tu-2-es-6e87d5ca-4d89-42c1-aa9d-5ef437fe7722",
+            "event_id": "evt-tu-2-6e87d5ca-4d89-42c1-aa9d-5ef437fe7722",
+            "language": "es",
+            "name": "Círculo de Meditación del Miércoles",
+            "description": "Sesión de meditación guiada semanal en el parque. Principiantes bienvenidos."
+        },
+        {
+            "id": "ec-tu-3-en-6e87d5ca-4d89-42c1-aa9d-5ef437fe7733",
+            "event_id": "evt-tu-3-6e87d5ca-4d89-42c1-aa9d-5ef437fe7733",
+            "language": "en",
+            "name": "Virtual Game Night",
+            "description": "Online multiplayer game night. Link will be shared with registered participants."
+        },
+        {
+            "id": "ec-tu-3-es-6e87d5ca-4d89-42c1-aa9d-5ef437fe7733",
+            "event_id": "evt-tu-3-6e87d5ca-4d89-42c1-aa9d-5ef437fe7733",
+            "language": "es",
+            "name": "Noche de Juegos Virtual",
+            "description": "Noche de juegos multijugador en línea. El enlace se compartirá con los participantes registrados."
+        },
+        {
+            "id": "ec-tu-4-en-6e87d5ca-4d89-42c1-aa9d-5ef437fe7744",
+            "event_id": "evt-tu-4-6e87d5ca-4d89-42c1-aa9d-5ef437fe7744",
+            "language": "en",
+            "name": "Monthly Crafts Workshop",
+            "description": "Learn new crafting skills each month. Materials provided, just bring creativity!"
+        },
+        {
+            "id": "ec-tu-4-es-6e87d5ca-4d89-42c1-aa9d-5ef437fe7744",
+            "event_id": "evt-tu-4-6e87d5ca-4d89-42c1-aa9d-5ef437fe7744",
+            "language": "es",
+            "name": "Taller de Manualidades Mensual",
+            "description": "Aprenda nuevas habilidades de manualidades cada mes. Materiales proporcionados, solo traiga creatividad!"
+        },
+        {
+            "id": "ec-tu-5-en-6e87d5ca-4d89-42c1-aa9d-5ef437fe7755",
+            "event_id": "evt-tu-5-6e87d5ca-4d89-42c1-aa9d-5ef437fe7755",
+            "language": "en",
+            "name": "Cooking Class: Italian Cuisine",
+            "description": "Learn to prepare authentic Italian dishes from a professional chef."
+        },
+        {
+            "id": "ec-tu-5-es-6e87d5ca-4d89-42c1-aa9d-5ef437fe7755",
+            "event_id": "evt-tu-5-6e87d5ca-4d89-42c1-aa9d-5ef437fe7755",
+            "language": "es",
+            "name": "Clase de Cocina: Cocina Italiana",
+            "description": "Aprenda a preparar platos italianos auténticos de un chef profesional."
+        },
+        {
+            "id": "ec-mc-1-en-6e87d5ca-4d89-42c1-aa9d-5ef437fe8811",
+            "event_id": "evt-mc-1-6e87d5ca-4d89-42c1-aa9d-5ef437fe8811",
+            "language": "en",
+            "name": "Business Networking Mixer",
+            "description": "Connect with local entrepreneurs and business professionals over appetizers and drinks."
+        },
+        {
+            "id": "ec-mc-1-es-6e87d5ca-4d89-42c1-aa9d-5ef437fe8811",
+            "event_id": "evt-mc-1-6e87d5ca-4d89-42c1-aa9d-5ef437fe8811",
+            "language": "es",
+            "name": "Evento de Networking Empresarial",
+            "description": "Conéctese con emprendedores locales y profesionales de negocios con aperitivos y bebidas."
+        },
+        {
+            "id": "ec-mc-2-en-6e87d5ca-4d89-42c1-aa9d-5ef437fe8822",
+            "event_id": "evt-mc-2-6e87d5ca-4d89-42c1-aa9d-5ef437fe8822",
+            "language": "en",
+            "name": "Thursday Morning Run Club",
+            "description": "Weekly 5K run through the neighborhood. All paces welcome!"
+        },
+        {
+            "id": "ec-mc-2-es-6e87d5ca-4d89-42c1-aa9d-5ef437fe8822",
+            "event_id": "evt-mc-2-6e87d5ca-4d89-42c1-aa9d-5ef437fe8822",
+            "language": "es",
+            "name": "Club de Carrera del Jueves por la Mañana",
+            "description": "Carrera semanal de 5K por el vecindario. Todos los ritmos son bienvenidos!"
+        },
+        {
+            "id": "ec-mc-3-en-6e87d5ca-4d89-42c1-aa9d-5ef437fe8833",
+            "event_id": "evt-mc-3-6e87d5ca-4d89-42c1-aa9d-5ef437fe8833",
+            "language": "en",
+            "name": "Live Jazz Performance",
+            "description": "Evening of live jazz music at the amphitheater. Free admission, donations appreciated."
+        },
+        {
+            "id": "ec-mc-3-es-6e87d5ca-4d89-42c1-aa9d-5ef437fe8833",
+            "event_id": "evt-mc-3-6e87d5ca-4d89-42c1-aa9d-5ef437fe8833",
+            "language": "es",
+            "name": "Presentación de Jazz en Vivo",
+            "description": "Noche de música de jazz en vivo en el anfiteatro. Entrada gratuita, se agradecen donaciones."
+        },
+        {
+            "id": "ec-mc-4-en-6e87d5ca-4d89-42c1-aa9d-5ef437fe8844",
+            "event_id": "evt-mc-4-6e87d5ca-4d89-42c1-aa9d-5ef437fe8844",
+            "language": "en",
+            "name": "Photography Workshop",
+            "description": "Monthly workshop covering different photography techniques. Bring your camera!"
+        },
+        {
+            "id": "ec-mc-4-es-6e87d5ca-4d89-42c1-aa9d-5ef437fe8844",
+            "event_id": "evt-mc-4-6e87d5ca-4d89-42c1-aa9d-5ef437fe8844",
+            "language": "es",
+            "name": "Taller de Fotografía",
+            "description": "Taller mensual que cubre diferentes técnicas de fotografía. Traiga su cámara!"
+        },
+        {
+            "id": "ec-mc-5-en-6e87d5ca-4d89-42c1-aa9d-5ef437fe8855",
+            "event_id": "evt-mc-5-6e87d5ca-4d89-42c1-aa9d-5ef437fe8855",
+            "language": "en",
+            "name": "Environmental Cleanup Day",
+            "description": "Help clean up local parks and waterways. Gloves and bags provided."
+        },
+        {
+            "id": "ec-mc-5-es-6e87d5ca-4d89-42c1-aa9d-5ef437fe8855",
+            "event_id": "evt-mc-5-6e87d5ca-4d89-42c1-aa9d-5ef437fe8855",
+            "language": "es",
+            "name": "Día de Limpieza Ambiental",
+            "description": "Ayude a limpiar los parques locales y vías fluviales. Se proporcionan guantes y bolsas."
         }
     ]
 }

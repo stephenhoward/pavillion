@@ -104,6 +104,46 @@
             "id": "assign-10-2-movie-family",
             "event_id": "evt-10-0d1e2f3a-4b5c-6d7e-8f9a-0b1c2d3e4f5a",
             "category_id": "cat-11-family-1e2f3a4b-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+        },
+        {
+            "id": "assign-tu-1-fitness-health",
+            "event_id": "evt-tu-1-6e87d5ca-4d89-42c1-aa9d-5ef437fe7711",
+            "category_id": "cat-4-health-4d5e6f7a-8b9c-0d1e-2f3a-4b5c6d7e8f9a"
+        },
+        {
+            "id": "assign-tu-1-fitness-sports",
+            "event_id": "evt-tu-1-6e87d5ca-4d89-42c1-aa9d-5ef437fe7711",
+            "category_id": "cat-5-sports-5e6f7a8b-9c0d-1e2f-3a4b-5c6d7e8f9a0b"
+        },
+        {
+            "id": "assign-tu-2-meditation-health",
+            "event_id": "evt-tu-2-6e87d5ca-4d89-42c1-aa9d-5ef437fe7722",
+            "category_id": "cat-4-health-4d5e6f7a-8b9c-0d1e-2f3a-4b5c6d7e8f9a"
+        },
+        {
+            "id": "assign-tu-5-cooking-education",
+            "event_id": "evt-tu-5-6e87d5ca-4d89-42c1-aa9d-5ef437fe7755",
+            "category_id": "cat-3-education-3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f"
+        },
+        {
+            "id": "assign-mc-1-networking-business",
+            "event_id": "evt-mc-1-6e87d5ca-4d89-42c1-aa9d-5ef437fe8811",
+            "category_id": "cat-8-business-8b9c0d1e-2f3a-4b5c-6d7e-8f9a0b1c2d3e"
+        },
+        {
+            "id": "assign-mc-2-running-health",
+            "event_id": "evt-mc-2-6e87d5ca-4d89-42c1-aa9d-5ef437fe8822",
+            "category_id": "cat-4-health-4d5e6f7a-8b9c-0d1e-2f3a-4b5c6d7e8f9a"
+        },
+        {
+            "id": "assign-mc-2-running-sports",
+            "event_id": "evt-mc-2-6e87d5ca-4d89-42c1-aa9d-5ef437fe8822",
+            "category_id": "cat-5-sports-5e6f7a8b-9c0d-1e2f-3a4b-5c6d7e8f9a0b"
+        },
+        {
+            "id": "assign-mc-4-photography-arts",
+            "event_id": "evt-mc-4-6e87d5ca-4d89-42c1-aa9d-5ef437fe8844",
+            "category_id": "cat-1-arts-1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
         }
     ]
 }
