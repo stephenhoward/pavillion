@@ -1,6 +1,7 @@
 import { Model, Table, Column, PrimaryKey, BelongsTo, DataType, ForeignKey } from 'sequelize-typescript';
 
 import { event_activity } from '@/common/model/events';
+import { FollowingCalendar, FollowerCalendar, AutoRepostPolicy } from '@/common/model/follow';
 import db from '@/server/common/entity/db';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { ActivityPubActivity } from '@/server/activitypub/model/base';
@@ -10,13 +11,6 @@ import DeleteActivity from '@/server/activitypub/model/action/delete';
 import AnnounceActivity from '@/server/activitypub/model/action/announce';
 import FollowActivity from '@/server/activitypub/model/action/follow';
 import UndoActivity from '@/server/activitypub/model/action/undo';
-
-// Define enum for auto-repost policy
-enum AutoRepostPolicy {
-  MANUAL = 'manual',         // No auto-repost, manual sharing only
-  ORIGINAL = 'original',     // Auto-repost only events that originate from the followed calendar
-  ALL = 'all',                // Auto-repost all events including those the followed calendar has reposted
-}
 
 class ActivityPubMessageEntity extends Model {
 
@@ -129,6 +123,15 @@ class FollowingCalendarEntity extends BaseFollowEntity {
     },
   })
   declare repost_policy: AutoRepostPolicy;
+
+  toModel(): FollowingCalendar {
+    return new FollowingCalendar(
+      this.id,
+      this.remote_calendar_id,
+      this.calendar_id,
+      this.repost_policy,
+    );
+  }
 }
 
 /**
@@ -137,7 +140,13 @@ class FollowingCalendarEntity extends BaseFollowEntity {
  */
 @Table({ tableName: 'ap_follower'})
 class FollowerCalendarEntity extends BaseFollowEntity {
-  // Any follower-specific fields can be added here
+  toModel(): FollowerCalendar {
+    return new FollowerCalendar(
+      this.id,
+      this.remote_calendar_id,
+      this.calendar_id,
+    );
+  }
 }
 
 // a list of remote events the calendar has chosen to repost (share)
@@ -156,6 +165,13 @@ class SharedEventEntity extends Model {
 
   @Column({ type: DataType.STRING })
   declare calendar_id: string;
+
+  @Column({
+    type: DataType.BOOLEAN,
+    defaultValue: false,
+    allowNull: false,
+  })
+  declare auto_posted: boolean;
 }
 
 // a list of activities (shares, etc) that other calendars have done to a calendar's

@@ -3,52 +3,62 @@ import { createPinia, setActivePinia } from 'pinia';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { Calendar } from '@/common/model/calendar';
 
-describe('CalendarStore - Last Interacted Calendar', () => {
+describe('CalendarStore - Selected Calendar', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
   });
 
-  describe('lastInteractedCalendarId state', () => {
-    it('should initialize lastInteractedCalendarId as null', () => {
+  describe('selectedCalendarId state', () => {
+    it('should initialize selectedCalendarId as null', () => {
       const store = useCalendarStore();
 
-      expect(store.lastInteractedCalendarId).toBeNull();
+      expect(store.selectedCalendarId).toBeNull();
     });
   });
 
-  describe('setLastInteractedCalendar action', () => {
-    it('should set lastInteractedCalendarId when called with calendar ID', () => {
+  describe('setSelectedCalendar action', () => {
+    it('should set selectedCalendarId when called with calendar ID', () => {
       const store = useCalendarStore();
       const calendarId = 'calendar-123';
 
-      store.setLastInteractedCalendar(calendarId);
+      store.setSelectedCalendar(calendarId);
 
-      expect(store.lastInteractedCalendarId).toBe(calendarId);
+      expect(store.selectedCalendarId).toBe(calendarId);
     });
 
-    it('should update lastInteractedCalendarId when called multiple times', () => {
+    it('should update selectedCalendarId when called multiple times', () => {
       const store = useCalendarStore();
       const firstCalendarId = 'calendar-123';
       const secondCalendarId = 'calendar-456';
 
-      store.setLastInteractedCalendar(firstCalendarId);
-      expect(store.lastInteractedCalendarId).toBe(firstCalendarId);
+      store.setSelectedCalendar(firstCalendarId);
+      expect(store.selectedCalendarId).toBe(firstCalendarId);
 
-      store.setLastInteractedCalendar(secondCalendarId);
-      expect(store.lastInteractedCalendarId).toBe(secondCalendarId);
+      store.setSelectedCalendar(secondCalendarId);
+      expect(store.selectedCalendarId).toBe(secondCalendarId);
+    });
+
+    it('should allow clearing selection with null', () => {
+      const store = useCalendarStore();
+
+      store.setSelectedCalendar('calendar-123');
+      expect(store.selectedCalendarId).toBe('calendar-123');
+
+      store.setSelectedCalendar(null);
+      expect(store.selectedCalendarId).toBeNull();
     });
   });
 
-  describe('getLastInteractedCalendar getter', () => {
-    it('should return null when no calendar has been interacted with', () => {
+  describe('selectedCalendar getter', () => {
+    it('should return null when no calendar is selected', () => {
       const store = useCalendarStore();
 
-      const result = store.getLastInteractedCalendar;
+      const result = store.selectedCalendar;
 
       expect(result).toBeNull();
     });
 
-    it('should return the calendar object when lastInteractedCalendarId is set', () => {
+    it('should return the calendar object when selectedCalendarId is set', () => {
       const store = useCalendarStore();
       const calendar = new Calendar('calendar-123', 'test-calendar');
       calendar.addContent({
@@ -58,26 +68,26 @@ describe('CalendarStore - Last Interacted Calendar', () => {
       });
 
       store.addCalendar(calendar);
-      store.setLastInteractedCalendar('calendar-123');
+      store.setSelectedCalendar('calendar-123');
 
-      const result = store.getLastInteractedCalendar;
+      const result = store.selectedCalendar;
 
       expect(result).not.toBeNull();
       expect(result?.id).toBe('calendar-123');
       expect(result?.urlName).toBe('test-calendar');
     });
 
-    it('should return null when lastInteractedCalendarId is set but calendar not in store', () => {
+    it('should return null when selectedCalendarId is set but calendar not in store', () => {
       const store = useCalendarStore();
 
-      store.setLastInteractedCalendar('non-existent-calendar');
+      store.setSelectedCalendar('non-existent-calendar');
 
-      const result = store.getLastInteractedCalendar;
+      const result = store.selectedCalendar;
 
       expect(result).toBeNull();
     });
 
-    it('should return updated calendar after interaction changes', () => {
+    it('should return updated calendar after selection changes', () => {
       const store = useCalendarStore();
       const calendar1 = new Calendar('calendar-123', 'calendar-one');
       const calendar2 = new Calendar('calendar-456', 'calendar-two');
@@ -85,26 +95,26 @@ describe('CalendarStore - Last Interacted Calendar', () => {
       store.addCalendar(calendar1);
       store.addCalendar(calendar2);
 
-      store.setLastInteractedCalendar('calendar-123');
-      expect(store.getLastInteractedCalendar?.id).toBe('calendar-123');
+      store.setSelectedCalendar('calendar-123');
+      expect(store.selectedCalendar?.id).toBe('calendar-123');
 
-      store.setLastInteractedCalendar('calendar-456');
-      expect(store.getLastInteractedCalendar?.id).toBe('calendar-456');
+      store.setSelectedCalendar('calendar-456');
+      expect(store.selectedCalendar?.id).toBe('calendar-456');
     });
   });
 
   describe('persistence behavior (store-only)', () => {
     it('should not persist across store instances', () => {
       const store1 = useCalendarStore();
-      store1.setLastInteractedCalendar('calendar-123');
+      store1.setSelectedCalendar('calendar-123');
 
-      expect(store1.lastInteractedCalendarId).toBe('calendar-123');
+      expect(store1.selectedCalendarId).toBe('calendar-123');
 
       // Create new Pinia instance (simulates page refresh)
       setActivePinia(createPinia());
       const store2 = useCalendarStore();
 
-      expect(store2.lastInteractedCalendarId).toBeNull();
+      expect(store2.selectedCalendarId).toBeNull();
     });
   });
 });

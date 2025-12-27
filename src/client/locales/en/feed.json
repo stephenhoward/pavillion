@@ -7,21 +7,52 @@
     "events_tab": "Events",
     "follows_tab": "Following",
     "followers_tab": "Followers",
+    "select_calendar_prompt": "Please select a calendar to view its feed",
+    "loading": "Loading...",
     "followers": {
         "title": "Followers",
         "description": "People who follow you",
-        "no_followers": "You have no followers"
+        "no_followers": "You have no followers",
+        "loading": "Loading followers..."
     },
     "follows": {
         "title": "Follows",
         "description": "Calendars you follow",
         "no_follows": "You are not following any calendars",
-        "follow_button": "Add a Calendar"
+        "follow_button": "Add a Calendar",
+        "loading": "Loading follows...",
+        "policy_label": "Auto-repost:",
+        "policy_manual": "Manual",
+        "policy_original": "Original",
+        "policy_all": "All",
+        "unfollow_button": "Unfollow"
     },
     "events": {
         "title": "Events",
         "description": "Events from calendars you follow",
         "no_events": "No events",
         "follow_button": "Follow a Calendar"
+    },
+    "add_calendar_modal": {
+        "title": "Add a Calendar",
+        "identifier_label": "Calendar Identifier",
+        "identifier_placeholder": "calendar@domain.com",
+        "identifier_help": "Enter the ActivityPub identifier of the calendar you want to follow",
+        "looking_up": "Looking up calendar...",
+        "lookup_error": "Could not find calendar. Please check the identifier and try again.",
+        "self_follow_error": "A calendar cannot follow itself.",
+        "follow_error": "Failed to follow calendar. Please try again.",
+        "preview_title": "Calendar Preview",
+        "preview_name": "Name",
+        "preview_description": "Description",
+        "preview_domain": "Domain",
+        "policy_label": "Auto-repost Policy",
+        "policy_help": "Choose how events from this calendar should be reposted to your calendar",
+        "policy_manual": "Manual - I will choose which events to repost",
+        "policy_original": "Original - Only repost original events (not reposts)",
+        "policy_all": "All - Automatically repost all events",
+        "cancel_button": "Cancel",
+        "follow_button": "Follow",
+        "following_button": "Following..."
     }
 }

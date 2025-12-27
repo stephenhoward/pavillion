@@ -64,12 +64,12 @@ vi.mock('@/client/service/event', () => ({
 }));
 
 // Mock useCalendarStore
-const mockSetLastInteractedCalendar = vi.fn();
+const mockSetSelectedCalendar = vi.fn();
 vi.mock('@/client/stores/calendarStore', () => ({
   useCalendarStore: () => ({
-    lastInteractedCalendarId: null,
-    getLastInteractedCalendar: null,
-    setLastInteractedCalendar: mockSetLastInteractedCalendar,
+    selectedCalendarId: null,
+    selectedCalendar: null,
+    setSelectedCalendar: mockSetSelectedCalendar,
     calendars: [],
     addCalendar: vi.fn(),
   }),
@@ -309,7 +309,7 @@ describe('Navigation Integration - Task Group 4', () => {
       expect(eventRoute.path).toBe('/event');
     });
 
-    it('should update lastInteractedCalendar when calendar is selected', async () => {
+    it('should update selectedCalendar when calendar is selected', async () => {
       router = createTestRouter();
       await router.push('/calendar');
       await router.isReady();
@@ -317,9 +317,9 @@ describe('Navigation Integration - Task Group 4', () => {
       const mockCalendar = createMockCalendar('cal-1', 'test-calendar');
 
       // Mock calendar selection - this would be called when calendar is selected
-      mockSetLastInteractedCalendar('cal-1');
+      mockSetSelectedCalendar('cal-1');
 
-      expect(mockSetLastInteractedCalendar).toHaveBeenCalledWith('cal-1');
+      expect(mockSetSelectedCalendar).toHaveBeenCalledWith('cal-1');
     });
   });
 

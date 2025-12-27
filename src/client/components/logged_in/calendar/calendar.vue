@@ -243,11 +243,11 @@ watch(calendarId, (newCalendarId, oldCalendarId) => {
 
 /**
  * Navigate to new event creation for this calendar.
- * Sets the current calendar as lastInteractedCalendar for pre-selection.
+ * Sets the current calendar as selectedCalendar for pre-selection.
  */
 const newEvent = async () => {
   if (state.calendar) {
-    calendarStore.setLastInteractedCalendar(state.calendar.id);
+    calendarStore.setSelectedCalendar(state.calendar.id);
     router.push({ name: 'event_new' });
   }
 };

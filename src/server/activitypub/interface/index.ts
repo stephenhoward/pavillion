@@ -4,7 +4,7 @@ import { EventEntity } from '@/server/calendar/entity/event';
 import { ActivityPubActivity } from '@/server/activitypub/model/base';
 import { WebFingerResponse } from '@/server/activitypub/model/webfinger';
 import { UserProfileResponse } from '@/server/activitypub/model/userprofile';
-import { AutoRepostPolicy } from '@/server/activitypub/entity/activitypub';
+import { FollowingCalendar, FollowerCalendar, AutoRepostPolicy } from '@/common/model/follow';
 import ActivityPubMemberService from '@/server/activitypub/service/members';
 import ActivityPubServerService from '@/server/activitypub/service/server';
 import ProcessInboxService from '../service/inbox';
@@ -82,6 +82,28 @@ export default class ActivityPubInterface {
 
   async getFeed(calendar: Calendar, page?: number, pageSize?: number): Promise<EventEntity[]> {
     return this.memberService.getFeed(calendar, page, pageSize);
+  }
+
+  async getFollowing(calendar: Calendar): Promise<FollowingCalendar[]> {
+    return this.memberService.getFollowing(calendar);
+  }
+
+  async getFollowers(calendar: Calendar): Promise<FollowerCalendar[]> {
+    return this.memberService.getFollowers(calendar);
+  }
+
+  async updateFollowPolicy(calendar: Calendar, followId: string, policy: AutoRepostPolicy): Promise<void> {
+    return this.memberService.updateFollowPolicy(calendar, followId, policy);
+  }
+
+  async lookupRemoteCalendar(identifier: string): Promise<{
+    name: string;
+    description?: string;
+    domain: string;
+    actorUrl: string;
+    calendarId?: string;
+  }> {
+    return this.memberService.lookupRemoteCalendar(identifier);
   }
 
   isValidDomain(domain: string): boolean {

@@ -6,7 +6,7 @@ export const useCalendarStore = defineStore('calendars', {
     return {
       calendars: [] as Calendar[],
       loaded: false,
-      lastInteractedCalendarId: null as string | null,
+      selectedCalendarId: null as string | null,
     };
   },
   getters: {
@@ -14,6 +14,11 @@ export const useCalendarStore = defineStore('calendars', {
      * Check if the user has any calendars
      */
     hasCalendars: (state) => state.calendars.length > 0,
+
+    /**
+     * Check if the user has multiple calendars
+     */
+    hasMultipleCalendars: (state) => state.calendars.length > 1,
 
     /**
      * Get calendar by ID
@@ -30,14 +35,15 @@ export const useCalendarStore = defineStore('calendars', {
     },
 
     /**
-     * Get the most recently interacted calendar
+     * Get the currently selected calendar
      */
-    getLastInteractedCalendar: (state) => {
-      if (!state.lastInteractedCalendarId) {
+    selectedCalendar: (state) => {
+      if (!state.selectedCalendarId) {
         return null;
       }
-      return state.calendars.find((calendar: Calendar) => calendar.id === state.lastInteractedCalendarId) || null;
+      return state.calendars.find((calendar: Calendar) => calendar.id === state.selectedCalendarId) || null;
     },
+
   },
   actions: {
     /**
@@ -86,13 +92,13 @@ export const useCalendarStore = defineStore('calendars', {
     },
 
     /**
-     * Set the most recently interacted calendar ID.
-     * This is used to pre-select the calendar in the calendar selector modal.
+     * Set the currently selected calendar ID.
+     * This represents the calendar context the user is currently working in.
      * Note: This is session-based only and will not persist across page refreshes.
-     * @param {string} calendarId - The ID of the calendar that was interacted with
+     * @param {string | null} calendarId - The ID of the calendar to select, or null to clear
      */
-    setLastInteractedCalendar(calendarId: string) {
-      this.lastInteractedCalendarId = calendarId;
+    setSelectedCalendar(calendarId: string | null) {
+      this.selectedCalendarId = calendarId;
     },
   },
 });

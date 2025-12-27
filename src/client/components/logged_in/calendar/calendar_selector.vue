@@ -13,13 +13,13 @@
             class="calendar-item"
             :class="{
               'editor-calendar': calendarInfo.isEditor,
-              'last-interacted': isLastInteracted(calendarInfo.calendar.id)
+              'selected': isSelected(calendarInfo.calendar.id)
             }">
           <div class="calendar-name">
             {{ calendarInfo.calendar.content('en').name || calendarInfo.calendar.urlName }}
           </div>
           <div class="badges">
-            <div v-if="isLastInteracted(calendarInfo.calendar.id)" class="relationship-badge last-used">
+            <div v-if="isSelected(calendarInfo.calendar.id)" class="relationship-badge last-used">
               {{ t('last_used_badge') }}
             </div>
             <div v-if="calendarInfo.isEditor" class="relationship-badge">
@@ -59,7 +59,7 @@ const state = reactive({
 });
 const calendarService = new CalendarService();
 
-const lastInteractedCalendar = computed(() => calendarStore.getLastInteractedCalendar);
+const selectedCalendar = computed(() => calendarStore.selectedCalendar);
 
 onBeforeMount(async () => {
   try {
@@ -74,13 +74,13 @@ onBeforeMount(async () => {
   }
 });
 
-const isLastInteracted = (calendarId) => {
-  return lastInteractedCalendar.value?.id === calendarId;
+const isSelected = (calendarId) => {
+  return selectedCalendar.value?.id === calendarId;
 };
 
 const selectCalendar = (calendarInfo) => {
-  // Update the last interacted calendar in the store
-  calendarStore.setLastInteractedCalendar(calendarInfo.calendar.id);
+  // Update the selected calendar in the store
+  calendarStore.setSelectedCalendar(calendarInfo.calendar.id);
 
   // Emit the calendar object itself, not the CalendarInfo wrapper
   emit('select', calendarInfo.calendar);
@@ -124,7 +124,7 @@ const selectCalendar = (calendarInfo) => {
         border-left: 3px solid #3b82f6;
       }
 
-      &.last-interacted {
+      &.selected {
         background-color: rgba(59, 130, 246, 0.1);
         border-color: #3b82f6;
       }
@@ -163,7 +163,7 @@ const selectCalendar = (calendarInfo) => {
           border-left-color: #60a5fa;
         }
 
-        &.last-interacted {
+        &.selected {
           background-color: rgba(96, 165, 250, 0.15);
           border-color: #60a5fa;
         }
