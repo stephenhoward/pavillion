@@ -1,3 +1,4 @@
+import path from 'path';
 import { Disk } from 'flydrive';
 
 /**
@@ -9,6 +10,7 @@ export interface StorageConfig {
   // S3 driver configuration
   bucket?: string;
   region?: string;
+  endpoint?: string;
   credentials?: {
     accessKeyId: string;
     secretAccessKey: string;
@@ -19,6 +21,21 @@ export interface StorageConfig {
 }
 
 /**
+ * Resolves the storage path, handling both absolute and relative paths.
+ *
+ * @param storagePath - The path from configuration
+ * @returns Absolute path for storage location
+ */
+function resolveStoragePath(storagePath: string): string {
+  // If path is absolute (starts with /), use it directly
+  if (path.isAbsolute(storagePath)) {
+    return storagePath;
+  }
+  // Otherwise, resolve relative to current working directory
+  return path.join(process.cwd(), storagePath);
+}
+
+/**
  * Creates a Flydrive Disk instance based on configuration
  * All storage uses private visibility for security
  */
@@ -26,8 +43,9 @@ export async function createStorageDisk(config: StorageConfig, basePath?: string
   switch (config.driver) {
     case 'local': {
       const { FSDriver } = await import('flydrive/drivers/fs');
+      const storagePath = resolveStoragePath(basePath || config.basePath || '/storage/media');
       return new Disk(new FSDriver({
-        location: new URL(`file://${process.cwd() + (basePath || config.basePath )}`),
+        location: new URL(`file://${storagePath}`),
         visibility: 'private',
       }));
     }
@@ -38,12 +56,27 @@ export async function createStorageDisk(config: StorageConfig, basePath?: string
       }
 
       const { S3Driver } = await import('flydrive/drivers/s3');
-      return new Disk(new S3Driver({
+
+      // Build S3 driver options
+      const s3Options: {
+        credentials: { accessKeyId: string; secretAccessKey: string };
+        bucket: string;
+        region: string;
+        visibility: 'private';
+        endpoint?: string;
+      } = {
         credentials: config.credentials,
         bucket: config.bucket,
         region: config.region,
         visibility: 'private',
-      }));
+      };
+
+      // Add custom endpoint if configured (for S3-compatible services)
+      if (config.endpoint) {
+        s3Options.endpoint = config.endpoint;
+      }
+
+      return new Disk(new S3Driver(s3Options));
     }
 
     case 'memory': {

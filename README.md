@@ -2,6 +2,63 @@
 
 Pavillion is a federated events calendar. Using federation it aims to provide an easy way for organizatioins to share their own events with the public, and also make it simple to share and aggregate events from across multiple sources to make community calendars that can be curated by cities, chambers of commerce, tourism boards, or other community-oriented organizations.
 
+## Quick Start with Docker
+
+Deploy Pavillion in minutes using Docker Compose:
+
+```bash
+# Clone the repository
+git clone https://github.com/pavillion/pavillion.git
+cd pavillion
+
+# Create configuration files
+cp .env.example .env
+cp config/local.yaml.example config/local.yaml
+
+# Set your database password in .env
+# Set your domain in config/local.yaml
+
+# Start the application
+docker compose up -d
+```
+
+For detailed deployment instructions, see the [Deployment Guide](docs/deployment.md).
+
+## Development
+
+### Standard Development (SQLite)
+
+For rapid development with hot-reload and in-memory SQLite database:
+
+```bash
+npm install
+npm run dev
+```
+
+This starts the frontend (Vite) and backend (Express) with hot-reload enabled. The database resets on each restart.
+
+### Development with PostgreSQL
+
+To test against a production-like PostgreSQL environment:
+
+```bash
+# Start the PostgreSQL container
+docker compose -f docker-compose.dev.yml up -d
+
+# Run the application
+npm run dev
+```
+
+See [docs/configuration.md](docs/configuration.md) for connecting your local app to PostgreSQL.
+
+## Documentation
+
+- [Deployment Guide](docs/deployment.md) - Docker deployment instructions
+- [Configuration Reference](docs/configuration.md) - All configuration options
+- [Upgrading Guide](docs/upgrading.md) - Upgrade procedures and migration handling
+- [Contributing](docs/CONTRIBUTING.md) - How to contribute to Pavillion
+- [Code of Conduct](docs/CODE_OF_CONDUCT.md) - Community guidelines
+
 ## Project Principles
 
 ### Accessibility

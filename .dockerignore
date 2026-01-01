@@ -1,0 +1,64 @@
+# Dependencies - will be installed fresh in Docker
+node_modules
+
+# Git
+.git
+.gitignore
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+
+# Test files and directories
+**/*.test.ts
+**/*.spec.ts
+**/test/
+**/tests/
+**/fixtures/
+coverage
+.nyc_output
+
+# Development configuration
+config/development.yaml
+config/test.yaml
+.env
+.env.*
+
+# Build artifacts (will be created in Docker)
+dist
+build
+
+# Local storage and logs
+storage
+logs
+*.log
+
+# Documentation and misc
+*.md
+!README.md
+docs
+agent-os
+
+# Development tooling
+.eslintrc*
+eslint.config.*
+.prettierrc*
+vitest.config.*
+playwright.config.*
+playwright-report
+test-results
+
+# Docker files (not needed inside the container)
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Mac OS files
+.DS_Store
+
+# Temporary files
+tmp
+temp
+*.tmp

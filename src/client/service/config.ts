@@ -4,6 +4,7 @@ import type { DefaultDateRange } from '@/common/model/calendar';
 type Settings = {
   registrationMode: string;
   defaultDateRange: DefaultDateRange;
+  defaultLanguage: string;
 };
 
 /**

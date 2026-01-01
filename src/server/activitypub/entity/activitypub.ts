@@ -37,7 +37,7 @@ class ActivityPubMessageEntity extends Model {
   declare message: object;
 
   @ForeignKey(() => CalendarEntity)
-  @Column({ type: DataType.STRING })
+  @Column({ type: DataType.UUID })
   declare calendar_id: string;
 
   @Column({ type: DataType.DATE })
@@ -106,7 +106,7 @@ abstract class BaseFollowEntity extends Model {
   declare remote_calendar_id: string;
 
   @ForeignKey(() => CalendarEntity)
-  @Column({ type: DataType.STRING })
+  @Column({ type: DataType.UUID })
   declare calendar_id: string;
 
   @BelongsTo(() => CalendarEntity)

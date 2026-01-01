@@ -22,3 +22,14 @@ media:
   storage:
     driver: 'local'
     basePath: '/storage/media'
+
+# JWT configuration for authentication tokens
+# In production, JWT_SECRET must be set via environment variable
+jwt:
+  secret: 'development-only-jwt-secret-do-not-use-in-production'
+  expiresIn: '7d'
+
+# Session configuration
+# In production, SESSION_SECRET must be set via environment variable
+session:
+  secret: 'development-only-session-secret-do-not-use-in-production'

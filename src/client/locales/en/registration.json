@@ -35,6 +35,8 @@
     "invitation_accepted_description": "Your account has been created and you're ready to get started.",
     "calendar_access_granted_title": "Calendar access granted:",
     "invited_by": "Invited by {{email}}",
-    "continue_to_login": "Continue to Sign In"
+    "continue_to_login": "Continue to Sign In",
+    "password_too_short": "Password must be at least 8 characters",
+    "password_needs_variety": "Password must include at least two of: letters, numbers, special characters"
   }
 }

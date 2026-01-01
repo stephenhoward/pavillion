@@ -779,10 +779,10 @@ const createEventSnapshot = () => {
   // Get content from _content Record and convert to a sorted array for consistent comparison
   const contentEntries = state.event._content
     ? Object.entries(state.event._content).sort(([a], [b]) => a.localeCompare(b)).map(([lang, c]) => ({
-        language: lang,
-        name: c.name || '',
-        description: c.description || '',
-      }))
+      language: lang,
+      name: c.name || '',
+      description: c.description || '',
+    }))
     : [];
 
   // Create a serializable snapshot of the event data

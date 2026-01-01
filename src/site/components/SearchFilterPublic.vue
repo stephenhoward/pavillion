@@ -25,7 +25,11 @@
             fill="none"
             aria-hidden="true"
           >
-            <path d="M2 4L6 8L10 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M2 4L6 8L10 4"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"/>
           </svg>
         </button>
 
@@ -62,11 +66,27 @@
                 :class="['date-pill calendar-pill', { active: state.dateFilterMode === 'custom' }]"
                 @click="setCustomMode"
               >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                  <rect x="2" y="3" width="12" height="11" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
+                <svg width="16"
+                     height="16"
+                     viewBox="0 0 16 16"
+                     fill="none"
+                     aria-hidden="true">
+                  <rect x="2"
+                        y="3"
+                        width="12"
+                        height="11"
+                        rx="1.5"
+                        stroke="currentColor"
+                        stroke-width="1.2"/>
                   <path d="M2 6H14" stroke="currentColor" stroke-width="1.2"/>
-                  <path d="M5 1.5V4.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-                  <path d="M11 1.5V4.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                  <path d="M5 1.5V4.5"
+                        stroke="currentColor"
+                        stroke-width="1.2"
+                        stroke-linecap="round"/>
+                  <path d="M11 1.5V4.5"
+                        stroke="currentColor"
+                        stroke-width="1.2"
+                        stroke-linecap="round"/>
                 </svg>
                 <span class="sr-only">{{ t('choose_custom_dates') }}</span>
               </button>
@@ -182,11 +202,14 @@ const state = reactive({
 const dateFilterButtonText = computed(() => {
   if (state.dateFilterMode === 'thisWeek') {
     return t('this_week');
-  } else if (state.dateFilterMode === 'nextWeek') {
+  }
+  else if (state.dateFilterMode === 'nextWeek') {
     return t('next_week');
-  } else if (state.dateFilterMode === 'custom' && state.startDate && state.endDate) {
+  }
+  else if (state.dateFilterMode === 'custom' && state.startDate && state.endDate) {
     return formatDateRange(state.startDate, state.endDate);
-  } else if (state.dateFilterMode === 'custom' && (state.startDate || state.endDate)) {
+  }
+  else if (state.dateFilterMode === 'custom' && (state.startDate || state.endDate)) {
     // Partial date selection
     if (state.startDate) return `From ${formatDate(state.startDate)}`;
     if (state.endDate) return `Until ${formatDate(state.endDate)}`;
@@ -295,7 +318,8 @@ const setThisWeek = () => {
     publicStore.reloadWithFilters();
     updateURL();
     closeDateFilter();
-  } else {
+  }
+  else {
     // Activate This Week
     state.dateFilterMode = 'thisWeek';
     const { startDate, endDate } = getThisWeek();
@@ -319,7 +343,8 @@ const setNextWeek = () => {
     publicStore.reloadWithFilters();
     updateURL();
     closeDateFilter();
-  } else {
+  }
+  else {
     // Activate Next Week
     state.dateFilterMode = 'nextWeek';
     const { startDate, endDate } = getNextWeek();
@@ -343,7 +368,8 @@ const setCustomMode = () => {
     publicStore.reloadWithFilters();
     updateURL();
     closeDateFilter();
-  } else {
+  }
+  else {
     // Activate Custom mode - show date inputs
     state.dateFilterMode = 'custom';
     // Don't close dropdown - let user pick dates
@@ -447,7 +473,8 @@ const initializeFromURL = () => {
   // This prevents the mode from being overridden when preset buttons update the URL
   if ((query.startDate || query.endDate) && !state.dateFilterMode) {
     state.dateFilterMode = 'custom';
-  } else if (!query.startDate && !query.endDate) {
+  }
+  else if (!query.startDate && !query.endDate) {
     state.dateFilterMode = null;
   }
 };

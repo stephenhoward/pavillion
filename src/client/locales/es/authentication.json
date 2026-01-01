@@ -1,0 +1,50 @@
+{
+  "login": {
+    "title": "Iniciar sesión en tu cuenta",
+    "login_button": "Iniciar sesión",
+    "email": "correo electrónico",
+    "password": "contraseña",
+    "forgot_password": "¿Olvidaste tu Contraseña?",
+    "register_button": "Crear una Cuenta",
+    "apply_button": "Solicitar una Cuenta",
+    "UnknownLogin": "correo o contraseña desconocidos",
+    "MissingLogin": "falta correo o contraseña",
+    "400": "error al iniciar sesión",
+    "unknown_error": "Ocurrió un error desconocido"
+  },
+  "forgot_password": {
+    "title": "¿Olvidaste tu contraseña?",
+    "instructions": "No hay problema. Ingresa tu correo electrónico y te enviaremos un enlace para restablecer tu contraseña.",
+    "email": "tu correo electrónico",
+    "go_button": "Enviar Restablecimiento de Contraseña",
+    "login_link": "volver a iniciar sesión",
+    "error_400": "Hay un problema con el correo que enviaste",
+    "error_404": "No pudimos encontrar una cuenta con ese correo electrónico",
+    "error_500": "Ups. El servidor tuvo un error. Por favor contacta a soporte",
+    "no_email_provided": "Por favor ingresa tu correo electrónico"
+  },
+  "reset_password": {
+    "check_email_title": "Restablecimiento de Contraseña Enviado",
+    "new_account_password_title": "Bienvenido a tu nueva cuenta",
+    "check_email": "Hemos enviado un código para restablecer tu contraseña a",
+    "code_validated_title": "Código Válido",
+    "set_password_prompt": "Por favor establece una nueva contraseña",
+    "registration_new_password": "Por favor establece una contraseña",
+    "login_link": "volver a iniciar sesión",
+    "reset_code": "código de restablecimiento",
+    "reset_button": "enviar código",
+    "password_placeholder": "contraseña",
+    "password2_placeholder": "confirmar contraseña",
+    "next": "Siguiente",
+
+    "bad_token": "token inválido o expirado",
+    "missing_password": "por favor ingresa una contraseña",
+    "missing_password2": "por favor vuelve a escribir tu contraseña para confirmar",
+    "bad_password_match": "Las contraseñas no coinciden",
+    "no_token_provided": "Debes proporcionar un token de restablecimiento de contraseña",
+    "no_password_provided": "Debes proporcionar una contraseña",
+    "unknown_error": "Ocurrió un error desconocido",
+    "password_too_short": "La contraseña debe tener al menos 8 caracteres",
+    "password_needs_variety": "La contraseña debe incluir al menos dos de: letras, números, caracteres especiales"
+  }
+}

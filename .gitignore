@@ -1,5 +1,6 @@
 node_modules
 dist
+build
 .DS_Store
 coverage
 logs
@@ -18,3 +19,13 @@ CLAUDE.md
 # Test artifacts
 .playwright-mcp
 test-results
+
+# Docker secrets directory (contains sensitive data)
+# Keep .gitkeep but ignore all secret files
+secrets/*
+!secrets/.gitkeep
+
+# Local configuration (use local.yaml.example as template)
+.env
+config/local.yaml
+config/production.yaml

@@ -1,3 +1,4 @@
+import config from 'config';
 import express, { Application } from 'express';
 import passport from 'passport';
 import passportJWT from 'passport-jwt';
@@ -8,7 +9,7 @@ import AuthenticationRoutes from '@/server/authentication/api/v1/auth';
 import AccountsInterface from '@/server/accounts/interface';
 import AuthenticationInterface from '@/server/authentication/interface';
 
-const jwtSecret = 'secret';  // TODO: add secret here
+const jwtSecret = config.get<string>('jwt.secret');
 
 export default class AuthenticationAPI {
 
