@@ -4,10 +4,17 @@ import { useTranslation } from 'i18next-vue';
 import Modal from '@/client/components/common/modal.vue';
 import { useFeedStore } from '@/client/stores/feedStore';
 import FeedService, { type RemoteCalendarPreview, AutoRepostPolicy } from '@/client/service/feed';
+import {
+  InvalidRemoteCalendarIdentifierError,
+  RemoteCalendarNotFoundError,
+  RemoteDomainUnreachableError,
+  ActivityPubNotSupportedError,
+  RemoteProfileFetchError,
+  SelfFollowError,
+} from '@/common/exceptions/activitypub';
+import { InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
 
-const { t } = useTranslation('feed', {
-  keyPrefix: 'add_calendar_modal',
-});
+const { t } = useTranslation('feed');
 
 const emit = defineEmits<{
   (e: 'close'): void;
@@ -23,9 +30,9 @@ const lookupError = ref('');
 const isFollowing = ref(false);
 
 const policyOptions = computed(() => [
-  { value: AutoRepostPolicy.MANUAL, label: t('policy_manual') },
-  { value: AutoRepostPolicy.ORIGINAL, label: t('policy_original') },
-  { value: AutoRepostPolicy.ALL, label: t('policy_all') },
+  { value: AutoRepostPolicy.MANUAL, label: t('add_calendar_modal.policy_manual') },
+  { value: AutoRepostPolicy.ORIGINAL, label: t('add_calendar_modal.policy_original') },
+  { value: AutoRepostPolicy.ALL, label: t('add_calendar_modal.policy_all') },
 ]);
 
 const isValidIdentifier = computed(() => {
@@ -74,7 +81,7 @@ const lookupRemoteCalendar = async () => {
 
     // Check for self-follow (local calendar matching selected calendar)
     if (result.calendarId && result.calendarId === feedStore.selectedCalendarId) {
-      lookupError.value = t('self_follow_error');
+      lookupError.value = t('add_calendar_modal.self_follow_error');
       return;
     }
 
@@ -82,8 +89,26 @@ const lookupRemoteCalendar = async () => {
   }
   catch (error: any) {
     console.error('Error looking up remote calendar:', error);
-    // Show specific error message from backend, or fallback to generic message
-    lookupError.value = error.message || t('lookup_error');
+    // Map exception types to translated error messages
+    switch (error.constructor) {
+      case InvalidRemoteCalendarIdentifierError:
+        lookupError.value = t('errors.InvalidRemoteCalendarIdentifierError');
+        break;
+      case RemoteCalendarNotFoundError:
+        lookupError.value = t('errors.RemoteCalendarNotFoundError');
+        break;
+      case RemoteDomainUnreachableError:
+        lookupError.value = t('errors.RemoteDomainUnreachableError');
+        break;
+      case ActivityPubNotSupportedError:
+        lookupError.value = t('errors.ActivityPubNotSupportedError');
+        break;
+      case RemoteProfileFetchError:
+        lookupError.value = t('errors.RemoteProfileFetchError');
+        break;
+      default:
+        lookupError.value = t('add_calendar_modal.lookup_error');
+    }
   }
   finally {
     isLookingUp.value = false;
@@ -102,9 +127,22 @@ const handleFollow = async () => {
     emit('follow-success');
     handleClose();
   }
-  catch (error) {
+  catch (error: any) {
     console.error('Error following calendar:', error);
-    lookupError.value = t('follow_error');
+    // Map exception types to translated error messages
+    switch (error.constructor) {
+      case InvalidRemoteCalendarIdentifierError:
+        lookupError.value = t('errors.InvalidRemoteCalendarIdentifierError');
+        break;
+      case InsufficientCalendarPermissionsError:
+        lookupError.value = t('errors.InsufficientCalendarPermissionsError');
+        break;
+      case SelfFollowError:
+        lookupError.value = t('errors.SelfFollowError');
+        break;
+      default:
+        lookupError.value = t('add_calendar_modal.follow_error');
+    }
   }
   finally {
     isFollowing.value = false;
@@ -131,29 +169,29 @@ const handleClose = () => {
 
 <template>
   <Modal
-    :title="t('title')"
+    :title="t('add_calendar_modal.title')"
     @close="handleClose"
   >
     <div class="add-calendar-modal">
       <div class="form-group">
         <label for="calendar-identifier">
-          {{ t('identifier_label') }}
+          {{ t('add_calendar_modal.identifier_label') }}
         </label>
         <input
           id="calendar-identifier"
           v-model="identifier"
           type="text"
-          :placeholder="t('identifier_placeholder')"
+          :placeholder="t('add_calendar_modal.identifier_placeholder')"
           @input="handleIdentifierInput"
           class="identifier-input"
         />
         <p class="help-text">
-          {{ t('identifier_help') }}
+          {{ t('add_calendar_modal.identifier_help') }}
         </p>
       </div>
 
       <div v-if="isLookingUp" class="loading-state">
-        {{ t('looking_up') }}
+        {{ t('add_calendar_modal.looking_up') }}
       </div>
 
       <div v-if="lookupError" class="error-state">
@@ -161,22 +199,22 @@ const handleClose = () => {
       </div>
 
       <div v-if="preview" class="preview-section">
-        <h3>{{ t('preview_title') }}</h3>
+        <h3>{{ t('add_calendar_modal.preview_title') }}</h3>
         <div class="preview-content">
           <div class="preview-item">
-            <strong>{{ t('preview_name') }}:</strong> {{ preview.name }}
+            <strong>{{ t('add_calendar_modal.preview_name') }}:</strong> {{ preview.name }}
           </div>
           <div v-if="preview.description" class="preview-item">
-            <strong>{{ t('preview_description') }}:</strong> {{ preview.description }}
+            <strong>{{ t('add_calendar_modal.preview_description') }}:</strong> {{ preview.description }}
           </div>
           <div class="preview-item">
-            <strong>{{ t('preview_domain') }}:</strong> {{ preview.domain }}
+            <strong>{{ t('add_calendar_modal.preview_domain') }}:</strong> {{ preview.domain }}
           </div>
         </div>
 
         <div class="form-group">
           <label for="repost-policy">
-            {{ t('policy_label') }}
+            {{ t('add_calendar_modal.policy_label') }}
           </label>
           <select
             id="repost-policy"
@@ -192,7 +230,7 @@ const handleClose = () => {
             </option>
           </select>
           <p class="help-text">
-            {{ t('policy_help') }}
+            {{ t('add_calendar_modal.policy_help') }}
           </p>
         </div>
       </div>
@@ -203,7 +241,7 @@ const handleClose = () => {
           class="secondary"
           @click="handleClose"
         >
-          {{ t('cancel_button') }}
+          {{ t('add_calendar_modal.cancel_button') }}
         </button>
         <button
           type="button"
@@ -211,7 +249,7 @@ const handleClose = () => {
           :disabled="!canFollow"
           @click="handleFollow"
         >
-          {{ isFollowing ? t('following_button') : t('follow_button') }}
+          {{ isFollowing ? t('add_calendar_modal.following_button') : t('add_calendar_modal.follow_button') }}
         </button>
       </div>
     </div>

@@ -20,7 +20,7 @@ const state = reactive({
 const hasMultipleCalendars = computed(() => calendarStore.hasMultipleCalendars);
 const selectedCalendarId = computed(() => calendarStore.selectedCalendarId);
 const isLoadingAny = computed(() =>
-  feedStore.isLoadingEvents || feedStore.isLoadingFollows || feedStore.isLoadingFollowers
+  feedStore.isLoadingEvents || feedStore.isLoadingFollows || feedStore.isLoadingFollowers,
 );
 
 const activateTab = (tab) => {

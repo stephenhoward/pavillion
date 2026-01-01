@@ -341,7 +341,7 @@ describe('Public Event Search & Filtering - End-to-End Tests', () => {
           `instance-${i}`,
           event,
           DateTime.now().plus({ days: i }),
-          null
+          null,
         );
         largeEventSet.push(instance);
       }

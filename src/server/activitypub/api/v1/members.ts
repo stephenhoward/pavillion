@@ -5,6 +5,18 @@ import ExpressHelper from '@/server/common/helper/express';
 import CalendarService from '@/server/calendar/service/calendar';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import { AutoRepostPolicy } from '@/common/model/follow';
+import {
+  InvalidRemoteCalendarIdentifierError,
+  InvalidRepostPolicyError,
+  InvalidSharedEventUrlError,
+  FollowRelationshipNotFoundError,
+  RemoteCalendarNotFoundError,
+  RemoteDomainUnreachableError,
+  ActivityPubNotSupportedError,
+  RemoteProfileFetchError,
+  SelfFollowError,
+} from '@/common/exceptions/activitypub';
+import { InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
 
 export default class ActivityPubMemberRoutes {
   private service: ActivityPubInterface;
@@ -81,7 +93,42 @@ export default class ActivityPubMemberRoutes {
       res.json(preview);
     }
     catch (error: any) {
-      res.status(400).json({ error: error.message });
+      if (error instanceof InvalidRemoteCalendarIdentifierError) {
+        res.status(400).json({
+          error: error.message,
+          errorName: 'InvalidRemoteCalendarIdentifierError',
+        });
+      }
+      else if (error instanceof RemoteCalendarNotFoundError) {
+        res.status(404).json({
+          error: error.message,
+          errorName: 'RemoteCalendarNotFoundError',
+        });
+      }
+      else if (error instanceof RemoteDomainUnreachableError) {
+        res.status(502).json({
+          error: error.message,
+          errorName: 'RemoteDomainUnreachableError',
+        });
+      }
+      else if (error instanceof ActivityPubNotSupportedError) {
+        res.status(502).json({
+          error: error.message,
+          errorName: 'ActivityPubNotSupportedError',
+        });
+      }
+      else if (error instanceof RemoteProfileFetchError) {
+        res.status(500).json({
+          error: error.message,
+          errorName: 'RemoteProfileFetchError',
+        });
+      }
+      else {
+        console.error('Unexpected error in lookupRemoteCalendar:', error);
+        res.status(500).json({
+          error: 'An unexpected error occurred',
+        });
+      }
     }
   }
 
@@ -171,7 +218,24 @@ export default class ActivityPubMemberRoutes {
       }
     }
     catch (error: any) {
-      res.status(400).send(error.message);
+      if (error instanceof InvalidRepostPolicyError) {
+        res.status(400).json({
+          error: error.message,
+          errorName: 'InvalidRepostPolicyError',
+        });
+      }
+      else if (error instanceof FollowRelationshipNotFoundError) {
+        res.status(404).json({
+          error: error.message,
+          errorName: 'FollowRelationshipNotFoundError',
+        });
+      }
+      else {
+        console.error('Unexpected error in updateFollowPolicy:', error);
+        res.status(500).json({
+          error: 'An unexpected error occurred',
+        });
+      }
     }
   }
 
@@ -212,7 +276,6 @@ export default class ActivityPubMemberRoutes {
     }
   }
 
-  // TODO: Catch error if service throws because target does not exist
   async followCalendar(req: Request, res: Response) {
     const account = req.user as Account;
 
@@ -222,16 +285,43 @@ export default class ActivityPubMemberRoutes {
     }
 
     if (typeof req.body.remoteCalendar === 'string') {
-      const repostPolicy = req.body.repostPolicy || AutoRepostPolicy.MANUAL;
-      await this.service.followCalendar(account, req.body.calendar, req.body.remoteCalendar, repostPolicy);
-      res.status(200).send('Followed');
+      try {
+        const repostPolicy = req.body.repostPolicy || AutoRepostPolicy.MANUAL;
+        await this.service.followCalendar(account, req.body.calendar, req.body.remoteCalendar, repostPolicy);
+        res.status(200).send('Followed');
+      }
+      catch (error: any) {
+        if (error instanceof InvalidRemoteCalendarIdentifierError) {
+          res.status(400).json({
+            error: error.message,
+            errorName: 'InvalidRemoteCalendarIdentifierError',
+          });
+        }
+        else if (error instanceof InsufficientCalendarPermissionsError) {
+          res.status(403).json({
+            error: error.message,
+            errorName: 'InsufficientCalendarPermissionsError',
+          });
+        }
+        else if (error instanceof SelfFollowError) {
+          res.status(400).json({
+            error: error.message,
+            errorName: 'SelfFollowError',
+          });
+        }
+        else {
+          console.error('Unexpected error in followCalendar:', error);
+          res.status(500).json({
+            error: 'An unexpected error occurred',
+          });
+        }
+      }
     }
     else {
       res.status(400).send('Invalid request');
     }
   }
 
-  // TODO: Catch error if service throws because target does not exist
   async unfollowCalendar(req: Request, res: Response) {
     const account = req.user as Account;
 
@@ -241,15 +331,30 @@ export default class ActivityPubMemberRoutes {
     }
 
     if (typeof req.body.remoteCalendar === 'string') {
-      await this.service.unfollowCalendar(account, req.body.calendar, req.body.remoteCalendar);
-      res.status(200).send('Unfollowed');
+      try {
+        await this.service.unfollowCalendar(account, req.body.calendar, req.body.remoteCalendar);
+        res.status(200).send('Unfollowed');
+      }
+      catch (error: any) {
+        if (error instanceof InsufficientCalendarPermissionsError) {
+          res.status(403).json({
+            error: error.message,
+            errorName: 'InsufficientCalendarPermissionsError',
+          });
+        }
+        else {
+          console.error('Unexpected error in unfollowCalendar:', error);
+          res.status(500).json({
+            error: 'An unexpected error occurred',
+          });
+        }
+      }
     }
     else {
       res.status(400).send('Invalid request');
     }
   }
 
-  // TODO: Catch error if service throws because target does not exist
   async shareEvent(req: Request, res: Response) {
     const account = req.user as Account;
 
@@ -259,15 +364,36 @@ export default class ActivityPubMemberRoutes {
     }
 
     if (typeof req.body.eventId === 'string') {
-      await this.service.shareEvent(account, req.body.calendar, req.body.eventId);
-      res.status(200).send('Shared');
+      try {
+        await this.service.shareEvent(account, req.body.calendar, req.body.eventId);
+        res.status(200).send('Shared');
+      }
+      catch (error: any) {
+        if (error instanceof InvalidSharedEventUrlError) {
+          res.status(400).json({
+            error: error.message,
+            errorName: 'InvalidSharedEventUrlError',
+          });
+        }
+        else if (error instanceof InsufficientCalendarPermissionsError) {
+          res.status(403).json({
+            error: error.message,
+            errorName: 'InsufficientCalendarPermissionsError',
+          });
+        }
+        else {
+          console.error('Unexpected error in shareEvent:', error);
+          res.status(500).json({
+            error: 'An unexpected error occurred',
+          });
+        }
+      }
     }
     else {
       res.status(400).send('Invalid request');
     }
   }
 
-  // TODO: Catch error if service throws because target does not exist
   async unshareEvent(req: Request, res: Response) {
     const account = req.user as Account;
 
@@ -277,8 +403,24 @@ export default class ActivityPubMemberRoutes {
     }
 
     if (typeof req.body.eventId === 'string') {
-      await this.service.unshareEvent(account, req.body.calendar, req.body.eventId);
-      res.status(200).send('Unshared');
+      try {
+        await this.service.unshareEvent(account, req.body.calendar, req.body.eventId);
+        res.status(200).send('Unshared');
+      }
+      catch (error: any) {
+        if (error instanceof InsufficientCalendarPermissionsError) {
+          res.status(403).json({
+            error: error.message,
+            errorName: 'InsufficientCalendarPermissionsError',
+          });
+        }
+        else {
+          console.error('Unexpected error in unshareEvent:', error);
+          res.status(500).json({
+            error: 'An unexpected error occurred',
+          });
+        }
+      }
     }
     else {
       res.status(400).send('Invalid request');

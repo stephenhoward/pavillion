@@ -20,7 +20,7 @@ import CalendarService from '@/client/service/calendar';
 // Mock useCalendarStore
 vi.mock('@/client/stores/calendarStore', () => ({
   useCalendarStore: () => ({
-    
+
     getLastInteractedCalendar: null,
     setLastInteractedCalendar: vi.fn(),
     calendars: [],

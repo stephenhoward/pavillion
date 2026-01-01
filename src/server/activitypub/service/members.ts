@@ -13,6 +13,18 @@ import { ActivityPubOutboxMessageEntity, FollowingCalendarEntity, FollowerCalend
 import UndoActivity from "../model/action/undo";
 import { EventEntity } from "@/server/calendar/entity/event";
 import CalendarInterface from "@/server/calendar/interface";
+import {
+  InvalidRemoteCalendarIdentifierError,
+  InvalidRepostPolicyError,
+  InvalidSharedEventUrlError,
+  FollowRelationshipNotFoundError,
+  RemoteCalendarNotFoundError,
+  RemoteDomainUnreachableError,
+  ActivityPubNotSupportedError,
+  RemoteProfileFetchError,
+  SelfFollowError,
+} from '@/common/exceptions/activitypub';
+import { InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
 
 class ActivityPubService {
   calendarService: CalendarInterface;
@@ -51,18 +63,18 @@ class ActivityPubService {
      */
   async followCalendar(account: Account, calendar: Calendar, orgIdentifier: string, repostPolicy = AutoRepostPolicy.MANUAL) {
     if (!ActivityPubService.isValidOrgIdentifier(orgIdentifier)) {
-      throw new Error('Invalid remote calendar identifier: ' + orgIdentifier);
+      throw new InvalidRemoteCalendarIdentifierError('Invalid remote calendar identifier: ' + orgIdentifier);
     }
 
     if (!this.calendarService.userCanModifyCalendar(account, calendar)) {
-      throw new Error('User does not have permission to modify calendar: ' + calendar.id);
+      throw new InsufficientCalendarPermissionsError('User does not have permission to modify calendar: ' + calendar.id);
     }
 
     // Prevent self-follows
     const localDomain = config.get('domain') as string;
     const selfIdentifier = `${calendar.urlName}@${localDomain}`;
     if (orgIdentifier === selfIdentifier) {
-      throw new Error('A calendar cannot follow itself');
+      throw new SelfFollowError('A calendar cannot follow itself');
     }
 
     // Check if we're already following this calendar
@@ -99,7 +111,7 @@ class ActivityPubService {
 
   async unfollowCalendar(account: Account, calendar: Calendar, orgIdentifier: string) {
     if (!this.calendarService.userCanModifyCalendar(account, calendar)) {
-      throw new Error('User does not have permission to modify calendar: ' + calendar.id);
+      throw new InsufficientCalendarPermissionsError('User does not have permission to modify calendar: ' + calendar.id);
     }
 
     let followings = await FollowingCalendarEntity.findAll({
@@ -126,11 +138,11 @@ class ActivityPubService {
   async shareEvent(account: Account, calendar: Calendar, eventUrl: string, autoPosted = false) {
 
     if ( ! this.calendarService.userCanModifyCalendar(account, calendar) ) {
-      throw new Error('User does not have permission to modify calendar: ' + calendar.id);
+      throw new InsufficientCalendarPermissionsError('User does not have permission to modify calendar: ' + calendar.id);
     }
 
     if (!eventUrl.match("^https:\/\/")) {
-      throw new Error('Invalid shared event url: ' + eventUrl);
+      throw new InvalidSharedEventUrlError('Invalid shared event url: ' + eventUrl);
     }
 
     let existingShareEntity = await SharedEventEntity.findOne({
@@ -165,7 +177,7 @@ class ActivityPubService {
   async unshareEvent(account: Account, calendar: Calendar, eventUrl: string) {
 
     if (!this.calendarService.userCanModifyCalendar(account, calendar)) {
-      throw new Error('User does not have permission to modify calendar: ' + calendar.id);
+      throw new InsufficientCalendarPermissionsError('User does not have permission to modify calendar: ' + calendar.id);
     }
 
     let shares = await SharedEventEntity.findAll({
@@ -219,7 +231,7 @@ class ActivityPubService {
     // Validate policy is a valid AutoRepostPolicy value
     const validPolicies = [AutoRepostPolicy.MANUAL, AutoRepostPolicy.ORIGINAL, AutoRepostPolicy.ALL];
     if (!validPolicies.includes(policy)) {
-      throw new Error('Invalid repost policy: ' + policy);
+      throw new InvalidRepostPolicyError('Invalid repost policy: ' + policy);
     }
 
     const followEntity = await FollowingCalendarEntity.findOne({
@@ -230,14 +242,14 @@ class ActivityPubService {
     });
 
     if (!followEntity) {
-      throw new Error('Follow relationship not found: ' + followId);
+      throw new FollowRelationshipNotFoundError('Follow relationship not found: ' + followId);
     }
 
     followEntity.repost_policy = policy;
     await followEntity.save();
   }
 
-/**
+  /**
    * Lookup a remote calendar by identifier using WebFinger protocol
    * @param identifier The remote calendar identifier (username@domain)
    * @returns Preview information for the remote calendar
@@ -250,7 +262,7 @@ class ActivityPubService {
     calendarId?: string;
   }> {
     if (!ActivityPubService.isValidOrgIdentifier(identifier)) {
-      throw new Error('Invalid calendar identifier format');
+      throw new InvalidRemoteCalendarIdentifierError('Invalid calendar identifier format');
     }
 
     const [username, domain] = identifier.split('@');
@@ -260,7 +272,7 @@ class ActivityPubService {
     if (domain === localDomain) {
       const calendar = await this.calendarService.getCalendarByName(username);
       if (!calendar) {
-        throw new Error(`Calendar "${username}" not found`);
+        throw new RemoteCalendarNotFoundError(`Calendar "${username}" not found`);
       }
 
       return {
@@ -281,12 +293,12 @@ class ActivityPubService {
     }
     catch (error: any) {
       if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
-        throw new Error(`Could not connect to ${domain}`);
+        throw new RemoteDomainUnreachableError(`Could not connect to ${domain}`);
       }
       if (error.response?.status === 404) {
-        throw new Error(`Calendar "${username}" not found on ${domain}`);
+        throw new RemoteCalendarNotFoundError(`Calendar "${username}" not found on ${domain}`);
       }
-      throw new Error(`Failed to lookup calendar: ${error.message}`);
+      throw new RemoteProfileFetchError(`Failed to lookup calendar: ${error.message}`);
     }
 
     // Find the ActivityPub actor URL from WebFinger links
@@ -295,7 +307,7 @@ class ActivityPubService {
     );
 
     if (!actorLink || !actorLink.href) {
-      throw new Error('Calendar does not support ActivityPub federation');
+      throw new ActivityPubNotSupportedError('Calendar does not support ActivityPub federation');
     }
 
     const actorUrl = actorLink.href;
@@ -311,7 +323,7 @@ class ActivityPubService {
       });
     }
     catch (error: any) {
-      throw new Error(`Failed to fetch calendar profile: ${error.message}`);
+      throw new RemoteProfileFetchError(`Failed to fetch calendar profile: ${error.message}`);
     }
 
     const profile = profileResponse.data;
@@ -360,7 +372,7 @@ class ActivityPubService {
 
     // Batch fetch all shared events for these events in a single query
     const eventUrls = events.map(event =>
-      event.event_url || `https://${config.get('domain')}/events/${event.id}`
+      event.event_url || `https://${config.get('domain')}/events/${event.id}`,
     );
 
     const sharedEvents = await SharedEventEntity.findAll({
@@ -372,7 +384,7 @@ class ActivityPubService {
 
     // Build a lookup map for O(1) access
     const sharedEventMap = new Map(
-      sharedEvents.map(shared => [shared.event_id, shared])
+      sharedEvents.map(shared => [shared.event_id, shared]),
     );
 
     // Map events with repost status using the lookup map

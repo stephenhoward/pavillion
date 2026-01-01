@@ -54,5 +54,18 @@
         "cancel_button": "Cancel",
         "follow_button": "Follow",
         "following_button": "Following..."
+    },
+    "errors": {
+        "InvalidRemoteCalendarIdentifierError": "Invalid calendar identifier format. Please use the format: calendar@domain.com",
+        "InvalidRepostPolicyError": "Invalid auto-repost policy selected. Please choose a valid option.",
+        "InvalidSharedEventUrlError": "Invalid event URL. Please check the event URL and try again.",
+        "SelfFollowError": "A calendar cannot follow itself.",
+        "InsufficientCalendarPermissionsError": "You don't have permission to perform this action on this calendar.",
+        "FollowRelationshipNotFoundError": "Follow relationship not found. The calendar may have already been unfollowed.",
+        "RemoteCalendarNotFoundError": "Calendar not found. Please check the identifier and try again.",
+        "RemoteDomainUnreachableError": "Unable to connect to the remote server. The domain may be offline or unreachable.",
+        "ActivityPubNotSupportedError": "This server does not support ActivityPub federation.",
+        "RemoteProfileFetchError": "Failed to fetch calendar information from the remote server. Please try again later.",
+        "UnknownError": "An unexpected error occurred. Please try again."
     }
 }

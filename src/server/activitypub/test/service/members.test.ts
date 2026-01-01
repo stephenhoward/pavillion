@@ -6,6 +6,7 @@ import { Account } from '@/common/model/account';
 import ActivityPubService from '@/server/activitypub/service/members';
 import { Calendar } from '@/common/model/calendar';
 import { FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
+import { InvalidRemoteCalendarIdentifierError } from '@/common/exceptions/activitypub';
 
 describe("followCalendar", () => {
   let service: ActivityPubService;
@@ -104,7 +105,7 @@ describe("followCalendar", () => {
     let addToOutboxStub = sandbox.stub(service, 'addToOutbox');
     addToOutboxStub.resolves();
 
-    await expect( service.followCalendar(account, calendar,'invalidUserIdentifier') ).rejects.toThrow('Invalid remote calendar identifier: invalidUserIdentifier');
+    await expect( service.followCalendar(account, calendar,'invalidUserIdentifier') ).rejects.toThrow(InvalidRemoteCalendarIdentifierError);
     expect( buildFollowStub.called ).toBe(false);
     expect( saveFollowStub.called ).toBe(false);
     expect( addToOutboxStub.called ).toBe(false);

@@ -169,7 +169,7 @@ describe("ActivityPub Feed Service Methods", () => {
       sandbox.stub(FollowingCalendarEntity, 'findOne').resolves(null);
 
       await expect(
-        service.updateFollowPolicy(calendar, 'non-existent', AutoRepostPolicy.ALL)
+        service.updateFollowPolicy(calendar, 'non-existent', AutoRepostPolicy.ALL),
       ).rejects.toThrow('Follow relationship not found');
     });
 
@@ -184,7 +184,7 @@ describe("ActivityPub Feed Service Methods", () => {
       sandbox.stub(FollowingCalendarEntity, 'findOne').resolves(mockFollow);
 
       await expect(
-        service.updateFollowPolicy(calendar, 'follow-1', 'invalid-policy' as any)
+        service.updateFollowPolicy(calendar, 'follow-1', 'invalid-policy' as any),
       ).rejects.toThrow('Invalid repost policy');
     });
   });

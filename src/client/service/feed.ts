@@ -1,6 +1,32 @@
 import { CalendarEvent } from '@/common/model/events';
 import { FollowingCalendar, FollowerCalendar, AutoRepostPolicy } from '@/common/model/follow';
 import ModelService from '@/client/service/models';
+import {
+  InvalidRemoteCalendarIdentifierError,
+  InvalidRepostPolicyError,
+  InvalidSharedEventUrlError,
+  FollowRelationshipNotFoundError,
+  RemoteCalendarNotFoundError,
+  RemoteDomainUnreachableError,
+  ActivityPubNotSupportedError,
+  RemoteProfileFetchError,
+  SelfFollowError,
+} from '@/common/exceptions/activitypub';
+import { InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
+import { UnknownError } from '@/common/exceptions';
+
+const errorMap = {
+  InvalidRemoteCalendarIdentifierError,
+  InvalidRepostPolicyError,
+  InvalidSharedEventUrlError,
+  FollowRelationshipNotFoundError,
+  RemoteCalendarNotFoundError,
+  RemoteDomainUnreachableError,
+  ActivityPubNotSupportedError,
+  RemoteProfileFetchError,
+  SelfFollowError,
+  InsufficientCalendarPermissionsError,
+};
 
 /**
  * Feed event extends CalendarEvent with repost status
@@ -30,6 +56,25 @@ export interface RemoteCalendarPreview {
 
 // Re-export for convenience
 export { AutoRepostPolicy };
+
+/**
+ * Handle ActivityPub errors by mapping backend error names to frontend exception classes
+ * @param error The error from the API call
+ */
+function handleActivityPubError(error: unknown): void {
+  // Type guard to ensure error is the expected shape
+  if (error && typeof error === 'object' && 'response' in error &&
+      error.response && typeof error.response === 'object' && 'data' in error.response) {
+
+    const responseData = error.response.data as Record<string, unknown>;
+    const errorName = responseData.errorName as string;
+
+    if (errorName && errorName in errorMap) {
+      const ErrorClass = errorMap[errorName as keyof typeof errorMap];
+      throw new ErrorClass();
+    }
+  }
+}
 
 /**
  * Client service for feed and social operations
@@ -118,9 +163,10 @@ export default class FeedService {
       const follow = new FollowingCalendar('', remoteIdentifier, calendarId, repostPolicy);
       await ModelService.createModel(follow, '/api/v1/social/follows');
     }
-    catch (error) {
+    catch (error: unknown) {
       console.error('Error following calendar:', error);
-      throw error;
+      handleActivityPubError(error);
+      throw new UnknownError();
     }
   }
 
@@ -134,9 +180,10 @@ export default class FeedService {
     try {
       await ModelService.delete(`/api/v1/social/follows/${encodeURIComponent(remoteCalendarId)}?calendarId=${calendarId}`);
     }
-    catch (error) {
+    catch (error: unknown) {
       console.error('Error unfollowing calendar:', error);
-      throw error;
+      handleActivityPubError(error);
+      throw new UnknownError();
     }
   }
 
@@ -154,9 +201,10 @@ export default class FeedService {
         '/api/v1/social/shares',
       );
     }
-    catch (error) {
+    catch (error: unknown) {
       console.error('Error sharing event:', error);
-      throw error;
+      handleActivityPubError(error);
+      throw new UnknownError();
     }
   }
 
@@ -170,9 +218,10 @@ export default class FeedService {
     try {
       await ModelService.delete(`/api/v1/social/shares/${encodeURIComponent(eventId)}?calendarId=${calendarId}`);
     }
-    catch (error) {
+    catch (error: unknown) {
       console.error('Error unsharing event:', error);
-      throw error;
+      handleActivityPubError(error);
+      throw new UnknownError();
     }
   }
 
@@ -189,9 +238,10 @@ export default class FeedService {
       const data = await ModelService.updateModel(follow, '/api/v1/social/follows');
       return FollowingCalendar.fromObject(data);
     }
-    catch (error) {
+    catch (error: unknown) {
       console.error('Error updating follow policy:', error);
-      throw error;
+      handleActivityPubError(error);
+      throw new UnknownError();
     }
   }
 
@@ -204,15 +254,14 @@ export default class FeedService {
     try {
       const data = await ModelService.getModel(`/api/v1/social/lookup?identifier=${encodeURIComponent(identifier)}`);
       if (!data) {
-        throw new Error('Calendar not found');
+        throw new RemoteCalendarNotFoundError();
       }
       return data as RemoteCalendarPreview;
     }
-    catch (error: any) {
-      // Extract error message from backend response if available
-      const errorMessage = error.response?.data?.error || error.message;
-      console.error('Error looking up remote calendar:', errorMessage);
-      throw new Error(errorMessage);
+    catch (error: unknown) {
+      console.error('Error looking up remote calendar:', error);
+      handleActivityPubError(error);
+      throw new UnknownError();
     }
   }
 }
