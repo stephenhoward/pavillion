@@ -1,0 +1,119 @@
+# Pavillion Production Docker Compose Configuration
+#
+# This file defines the production deployment for Pavillion using Docker Compose.
+#
+# Usage:
+#   1. Run ./bin/setup.sh to generate secrets automatically, OR
+#   2. Copy .env.example to .env and configure your secrets manually
+#   3. Copy config/local.yaml.example to config/local.yaml and customize
+#   4. Run: docker compose up -d
+#
+# For upgrades:
+#   docker compose pull && docker compose up -d
+#
+# The app container will automatically:
+#   - Process Docker secrets from _FILE environment variables
+#   - Wait for the database to be healthy
+#   - Run any pending database migrations
+#   - Start the application
+#
+# Security Notes:
+#   - When using Docker secrets (_FILE pattern), secret values are not visible
+#     in `docker inspect` output
+#   - Secrets are mounted as tmpfs inside the container at /run/secrets/
+#   - Backward compatible: direct environment variables still work
+#
+
+services:
+  # Pavillion application server
+  app:
+    image: pavillion/pavillion:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pavillion-app
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-pavillion}
+      - DB_USER=${DB_USER:-pavillion}
+      # Direct environment variables (backward compatible)
+      # These can be overridden by _FILE variants for enhanced security
+      - DB_PASSWORD=${DB_PASSWORD:-}
+      - JWT_SECRET=${JWT_SECRET:-}
+      - SESSION_SECRET=${SESSION_SECRET:-}
+      - S3_SECRET_KEY=${S3_SECRET_KEY:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      # Docker secrets via _FILE pattern (recommended for production)
+      # When set, the entrypoint reads secret from file and unsets _FILE variable
+      - DB_PASSWORD_FILE=${DB_PASSWORD_FILE:-}
+      - JWT_SECRET_FILE=${JWT_SECRET_FILE:-}
+      - SESSION_SECRET_FILE=${SESSION_SECRET_FILE:-}
+      - S3_SECRET_KEY_FILE=${S3_SECRET_KEY_FILE:-}
+      - SMTP_PASSWORD_FILE=${SMTP_PASSWORD_FILE:-}
+      # Optional S3 storage configuration
+      - S3_BUCKET=${S3_BUCKET:-}
+      - S3_REGION=${S3_REGION:-}
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-}
+    volumes:
+      # Mount local configuration for customization
+      - ./config/local.yaml:/app/config/local.yaml:ro
+      # Media storage volume (used if not using S3)
+      - pavillion-media:/app/storage/media
+    secrets:
+      - db_password
+      - jwt_secret
+      - session_secret
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+
+  # PostgreSQL database
+  db:
+    image: postgres:17
+    container_name: pavillion-db
+    environment:
+      - POSTGRES_DB=${DB_NAME:-pavillion}
+      - POSTGRES_USER=${DB_USER:-pavillion}
+      - POSTGRES_PASSWORD_FILE=/run/secrets/db_password
+    volumes:
+      - pavillion-db:/var/lib/postgresql/data
+    secrets:
+      - db_password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-pavillion} -d ${DB_NAME:-pavillion}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    # Uncomment to expose PostgreSQL port for external access (not recommended in production)
+    # ports:
+    #   - "5432:5432"
+
+# Named volumes for persistent data
+volumes:
+  pavillion-db:
+    name: pavillion-db
+  pavillion-media:
+    name: pavillion-media
+
+# Docker secrets configuration
+# These secrets are mounted as tmpfs at /run/secrets/ inside containers
+# Secret files should be created by running ./bin/setup.sh
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
+  jwt_secret:
+    file: ./secrets/jwt_secret.txt
+  session_secret:
+    file: ./secrets/session_secret.txt

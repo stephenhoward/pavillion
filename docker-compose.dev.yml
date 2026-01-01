@@ -1,0 +1,110 @@
+# Pavillion Development Docker Compose Configuration
+#
+# This file provides a complete containerized development environment with:
+# - PostgreSQL database
+# - Application with hot-reload
+# - Automatic code sync via volume mounts
+#
+# Usage:
+#   # Start development environment
+#   docker compose -f docker-compose.dev.yml up
+#
+#   # Rebuild after package.json changes
+#   docker compose -f docker-compose.dev.yml up --build
+#
+#   # View logs
+#   docker compose -f docker-compose.dev.yml logs -f app
+#
+#   # Stop and remove containers
+#   docker compose -f docker-compose.dev.yml down
+#
+#   # Stop and remove containers AND volumes (reset database)
+#   docker compose -f docker-compose.dev.yml down -v
+#
+# Access:
+#   - Application: http://localhost:3000
+#   - Vite HMR: ws://localhost:5173
+#
+# Notes:
+#   - Source code changes are reflected immediately via hot-reload
+#   - Database data persists between restarts (DB_RESET=false by default)
+#   - After changing package.json, rebuild with `up --build`
+#
+# Database Reset Options:
+#   - First run or fresh seed: Set DB_RESET=true in environment
+#   - Complete reset: docker compose -f docker-compose.dev.yml down -v && docker compose -f docker-compose.dev.yml up
+#   - Normal development: DB_RESET=false (default) preserves your data
+
+services:
+  # Pavillion application with hot-reload
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: pavillion-dev-app
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      # Backend Express server
+      - "3000:3000"
+      # Vite dev server for HMR (uses default port 5173)
+      - "5173:5173"
+    environment:
+      - NODE_ENV=development
+      # Database connection
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=pavillion_dev
+      - DB_USER=pavillion
+      - DB_PASSWORD=devpassword
+      # Database reset behavior:
+      #   - DB_RESET=true  (or unset): Reset and seed on every restart (fresh data)
+      #   - DB_RESET=false: Preserve data between restarts
+      # Default: false (persistent data). Set to true for initial setup.
+      - DB_RESET=${DB_RESET:-false}
+      # Vite HMR settings for container
+      - VITE_HMR_HOST=localhost
+      # File watching in Docker (required for hot-reload)
+      - CHOKIDAR_USEPOLLING=true
+    volumes:
+      # Mount source code for hot-reload
+      - ./src:/app/src:cached
+      - ./config:/app/config:cached
+      - ./migrations:/app/migrations:cached
+      # Mount seed data for development (required when DB_RESET=true)
+      - ./layouts:/app/layouts:cached
+      # Mount config files
+      - ./tsconfig.json:/app/tsconfig.json:cached
+      - ./vite.config.ts:/app/vite.config.ts:cached
+      # Anonymous volume for node_modules
+      # Prevents host node_modules from overriding container's Linux binaries
+      - /app/node_modules
+    restart: unless-stopped
+
+  # PostgreSQL database for development
+  db:
+    image: postgres:17
+    container_name: pavillion-dev-db
+    environment:
+      - POSTGRES_DB=pavillion_dev
+      - POSTGRES_USER=pavillion
+      - POSTGRES_PASSWORD=devpassword
+    volumes:
+      # Persistent volume for development data
+      - pavillion-dev-db:/var/lib/postgresql/data
+    ports:
+      # Expose PostgreSQL for external tools (pgAdmin, etc.)
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pavillion -d pavillion_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+# Named volume for persistent development data
+volumes:
+  pavillion-dev-db:
+    name: pavillion-dev-db

@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import { Account } from '@/common/model/account';
+import { validatePassword } from '@/common/validation/password';
 import AccountsInterface from '@/server/accounts/interface';
 import ExpressHelper from '@/server/common/helper/express';
 
@@ -59,6 +60,13 @@ export default class AccountInvitationRouteHandlers {
   }
 
   async acceptInvite(req: Request, res: Response) {
+    // Validate password before processing
+    const passwordValidation = validatePassword(req.body.password || '');
+    if (!passwordValidation.valid) {
+      res.status(400).json({ message: passwordValidation.errors[0] });
+      return;
+    }
+
     try {
       const result = await this.service.acceptAccountInvite(req.params.code, req.body.password);
 

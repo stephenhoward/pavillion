@@ -1,3 +1,4 @@
+import config from 'config';
 import express, { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import passport from 'passport';
@@ -17,7 +18,7 @@ declare module 'express-serve-static-core' {
   }
 }
 
-const jwtSecret = 'secret';  // TODO: add secret here
+const jwtSecret = config.get<string>('jwt.secret');
 const expirationMinutes = 5;
 
 export default {

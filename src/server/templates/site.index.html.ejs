@@ -4,14 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pavillion</title>
-    <% if (environment === 'production') { %>
-    <link rel="stylesheet" href="<%= manifest['src/main.css'].file %>" />
+    <% if (environment === 'production' && manifest['src/site/app.ts']?.css) { %>
+    <% manifest['src/site/app.ts'].css.forEach(function(cssFile) { %>
+    <link rel="stylesheet" href="/<%= cssFile %>" />
+    <% }); %>
     <% } %>
   </head>
   <body>
     <div id="app"></div>
     <% if (environment === 'production') { %>
-    <script type="module" src="<%= manifest['src/site/app.ts'].file %>"></script>
+    <script type="module" src="/<%= manifest['src/site/app.ts'].file %>"></script>
     <% } else { %>
     <script type="module" src="http://localhost:5173/@vite/site"></script>
     <script type="module" src="http://localhost:5173/src/site/app.ts"></script>

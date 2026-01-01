@@ -1,0 +1,55 @@
+# Pavillion Environment Variable Mappings
+#
+# This file maps environment variables to configuration paths.
+# The 'config' npm package automatically applies these overrides.
+#
+# How it works:
+#   1. The config package loads YAML configuration files in order
+#   2. Environment variables listed here override corresponding config values
+#   3. This allows secrets to be passed via environment without editing config files
+#
+# Usage:
+#   Set environment variables in your .env file or docker-compose.yml:
+#     DB_PASSWORD=your_secure_password
+#     S3_ACCESS_KEY=AKIAIOSFODNN7EXAMPLE
+#
+# For Docker Compose, these are automatically loaded from .env file
+# For other deployments, set them in your environment before starting the app
+#
+
+# Database configuration overrides
+database:
+  host: DB_HOST
+  port: DB_PORT
+  database: DB_NAME
+  username: DB_USER
+  password: DB_PASSWORD
+
+# JWT authentication configuration overrides
+# JWT_SECRET is required in production - generate using: openssl rand -base64 32
+jwt:
+  secret: JWT_SECRET
+
+# Session configuration overrides
+# SESSION_SECRET is required in production - generate using: openssl rand -base64 32
+session:
+  secret: SESSION_SECRET
+
+# Media storage configuration overrides
+# Used for S3-compatible storage (AWS S3, DigitalOcean Spaces, MinIO, etc.)
+media:
+  storage:
+    bucket: S3_BUCKET
+    region: S3_REGION
+    endpoint: S3_ENDPOINT
+    credentials:
+      accessKeyId: S3_ACCESS_KEY
+      secretAccessKey: S3_SECRET_KEY
+
+# SMTP configuration overrides
+mail:
+  settings:
+    host: SMTP_HOST
+    port: SMTP_PORT
+    user: SMTP_USER
+    pass: SMTP_PASSWORD

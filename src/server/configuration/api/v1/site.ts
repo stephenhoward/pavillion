@@ -21,6 +21,7 @@ export default class SiteRouteHandlers {
       registrationMode: settings.get('registrationMode'),
       siteTitle: settings.get('siteTitle'),
       defaultDateRange: settings.get('defaultDateRange'),
+      defaultLanguage: settings.get('defaultLanguage'),
       domain: config.get('domain'),
     });
   }

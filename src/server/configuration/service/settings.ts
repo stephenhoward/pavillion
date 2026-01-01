@@ -1,12 +1,14 @@
 import config from 'config';
 import ServiceSettingEntity from "@/server/configuration/entity/settings";
 import type { DefaultDateRange } from '@/common/model/calendar';
+import { isValidLanguageCode, DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 
 type Config = {
-  registrationMode: 'open' | 'apply' | 'invite' | 'closed';
+  registrationMode: 'open' | 'apply' | 'invitation' | 'closed';
   siteTitle: string;
   eventInstanceMonths: number;
   defaultDateRange: DefaultDateRange;
+  defaultLanguage: string;
 };
 class ServiceSettings {
   private static instance: ServiceSettings;
@@ -14,10 +16,11 @@ class ServiceSettings {
 
   private constructor() {
     this.config = {
-      registrationMode: 'closed',
+      registrationMode: 'invitation',
       siteTitle: config.get('domain'),
       eventInstanceMonths: 6,
       defaultDateRange: '2weeks',
+      defaultLanguage: DEFAULT_LANGUAGE_CODE,
     };
   }
 
@@ -26,8 +29,8 @@ class ServiceSettings {
 
     settings.forEach(entity => {
       if ( entity.parameter == 'registrationMode' ) {
-        if ( ['open', 'apply', 'invite', 'closed'].includes(entity.value) ) {
-          this.config[entity.parameter] = entity.value as 'open' | 'apply' | 'invite' | 'closed';
+        if ( ['open', 'apply', 'invitation', 'closed'].includes(entity.value) ) {
+          this.config[entity.parameter] = entity.value as 'open' | 'apply' | 'invitation' | 'closed';
         }
       }
       if( entity.parameter == 'siteTitle' ) {
@@ -36,6 +39,11 @@ class ServiceSettings {
       if ( entity.parameter == 'defaultDateRange' ) {
         if ( ['1week', '2weeks', '1month'].includes(entity.value) ) {
           this.config.defaultDateRange = entity.value as DefaultDateRange;
+        }
+      }
+      if ( entity.parameter == 'defaultLanguage' ) {
+        if ( isValidLanguageCode(entity.value) ) {
+          this.config.defaultLanguage = entity.value;
         }
       }
     });
@@ -69,7 +77,7 @@ class ServiceSettings {
 
     // Validate the mode
     if ( parameter == 'registrationMode' ) {
-      if (!['open', 'apply', 'invite', 'closed'].includes(value as string)) {
+      if (!['open', 'apply', 'invitation', 'closed'].includes(value as string)) {
         console.error('Invalid registration mode:', value);
         return false;
       }
@@ -79,6 +87,14 @@ class ServiceSettings {
     if ( parameter == 'defaultDateRange' ) {
       if (!['1week', '2weeks', '1month'].includes(value as string)) {
         console.error('Invalid default date range:', value);
+        return false;
+      }
+    }
+
+    // Validate the defaultLanguage
+    if ( parameter == 'defaultLanguage' ) {
+      if (!isValidLanguageCode(value as string)) {
+        console.error('Invalid default language:', value);
         return false;
       }
     }
@@ -96,8 +112,8 @@ class ServiceSettings {
 
     switch (parameter) {
       case 'registrationMode':
-        if (['open', 'apply', 'invite', 'closed'].includes(value as string)) {
-          this.config.registrationMode = value as 'open' | 'apply' | 'invite' | 'closed';
+        if (['open', 'apply', 'invitation', 'closed'].includes(value as string)) {
+          this.config.registrationMode = value as 'open' | 'apply' | 'invitation' | 'closed';
         }
         else {
           console.error('Invalid registration mode:', value);
@@ -122,6 +138,15 @@ class ServiceSettings {
         }
         else {
           console.error('Invalid default date range:', value);
+          return false;
+        }
+        break;
+      case 'defaultLanguage':
+        if (isValidLanguageCode(value as string)) {
+          this.config.defaultLanguage = value as string;
+        }
+        else {
+          console.error('Invalid default language:', value);
           return false;
         }
         break;

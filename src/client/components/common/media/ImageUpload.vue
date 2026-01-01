@@ -269,8 +269,18 @@ const handleKeyDown = (event: KeyboardEvent) => {
             class="preview-image"
           />
           <div v-else class="preview-placeholder">
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <svg width="40"
+                 height="40"
+                 viewBox="0 0 24 24"
+                 fill="none"
+                 stroke="currentColor"
+                 stroke-width="1.5">
+              <rect x="3"
+                    y="3"
+                    width="18"
+                    height="18"
+                    rx="2"
+                    ry="2"/>
               <circle cx="8.5" cy="8.5" r="1.5"/>
               <polyline points="21,15 16,10 5,21"/>
             </svg>
@@ -279,7 +289,10 @@ const handleKeyDown = (event: KeyboardEvent) => {
           <!-- Upload progress overlay -->
           <div v-if="isUploading" class="upload-progress-overlay">
             <svg class="progress-ring" viewBox="0 0 100 100">
-              <circle class="progress-ring-bg" cx="50" cy="50" r="42"/>
+              <circle class="progress-ring-bg"
+                      cx="50"
+                      cy="50"
+                      r="42"/>
               <circle
                 class="progress-ring-fill"
                 cx="50"
@@ -293,17 +306,33 @@ const handleKeyDown = (event: KeyboardEvent) => {
 
           <!-- Success overlay -->
           <div v-if="isComplete" class="success-overlay">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <svg width="32"
+                 height="32"
+                 viewBox="0 0 24 24"
+                 fill="none"
+                 stroke="currentColor"
+                 stroke-width="2.5">
               <polyline points="20 6 9 17 4 12"/>
             </svg>
           </div>
 
           <!-- Failed overlay -->
           <div v-if="isFailed" class="failed-overlay">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg width="32"
+                 height="32"
+                 viewBox="0 0 24 24"
+                 fill="none"
+                 stroke="currentColor"
+                 stroke-width="2">
               <circle cx="12" cy="12" r="10"/>
-              <line x1="15" y1="9" x2="9" y2="15"/>
-              <line x1="9" y1="9" x2="15" y2="15"/>
+              <line x1="15"
+                    y1="9"
+                    x2="9"
+                    y2="15"/>
+              <line x1="9"
+                    y1="9"
+                    x2="15"
+                    y2="15"/>
             </svg>
           </div>
         </div>
@@ -322,7 +351,12 @@ const handleKeyDown = (event: KeyboardEvent) => {
               @click.stop="retryUpload"
               :aria-label="t('accessibility.retry_upload', { filename: currentFile.file.name })"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <svg width="16"
+                   height="16"
+                   viewBox="0 0 24 24"
+                   fill="none"
+                   stroke="currentColor"
+                   stroke-width="2">
                 <polyline points="23 4 23 10 17 10"/>
                 <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
               </svg>
@@ -334,10 +368,18 @@ const handleKeyDown = (event: KeyboardEvent) => {
               @click.stop="triggerFileBrowser"
               :aria-label="t('accessibility.replace_file')"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <svg width="16"
+                   height="16"
+                   viewBox="0 0 24 24"
+                   fill="none"
+                   stroke="currentColor"
+                   stroke-width="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                 <polyline points="17 8 12 3 7 8"/>
-                <line x1="12" y1="3" x2="12" y2="15"/>
+                <line x1="12"
+                      y1="3"
+                      x2="12"
+                      y2="15"/>
               </svg>
               <span>{{ t('replace') }}</span>
             </button>
@@ -347,7 +389,12 @@ const handleKeyDown = (event: KeyboardEvent) => {
               @click.stop="clearFile"
               :aria-label="t('accessibility.remove_file', { filename: currentFile.file.name })"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <svg width="16"
+                   height="16"
+                   viewBox="0 0 24 24"
+                   fill="none"
+                   stroke="currentColor"
+                   stroke-width="2">
                 <polyline points="3 6 5 6 21 6"/>
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
               </svg>
@@ -364,10 +411,18 @@ const handleKeyDown = (event: KeyboardEvent) => {
       <!-- Empty state -->
       <div v-else class="empty-state">
         <div class="upload-icon">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <svg width="48"
+               height="48"
+               viewBox="0 0 24 24"
+               fill="none"
+               stroke="currentColor"
+               stroke-width="1.5">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
             <polyline points="17 8 12 3 7 8"/>
-            <line x1="12" y1="3" x2="12" y2="15"/>
+            <line x1="12"
+                  y1="3"
+                  x2="12"
+                  y2="15"/>
           </svg>
         </div>
         <div class="upload-text">
@@ -398,16 +453,38 @@ const handleKeyDown = (event: KeyboardEvent) => {
          class="validation-error"
          role="alert"
          aria-live="polite">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <svg width="16"
+           height="16"
+           viewBox="0 0 24 24"
+           fill="none"
+           stroke="currentColor"
+           stroke-width="2">
         <circle cx="12" cy="12" r="10"/>
-        <line x1="12" y1="8" x2="12" y2="12"/>
-        <line x1="12" y1="16" x2="12.01" y2="16"/>
+        <line x1="12"
+              y1="8"
+              x2="12"
+              y2="12"/>
+        <line x1="12"
+              y1="16"
+              x2="12.01"
+              y2="16"/>
       </svg>
       <span>{{ t(`errors.${state.uploadError.code}`, state.uploadError.parameters || {}) }}</span>
       <button type="button" class="dismiss" @click="state.uploadError = null">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="18" y1="6" x2="6" y2="18"/>
-          <line x1="6" y1="6" x2="18" y2="18"/>
+        <svg width="14"
+             height="14"
+             viewBox="0 0 24 24"
+             fill="none"
+             stroke="currentColor"
+             stroke-width="2">
+          <line x1="18"
+                y1="6"
+                x2="6"
+                y2="18"/>
+          <line x1="6"
+                y1="6"
+                x2="18"
+                y2="18"/>
         </svg>
       </button>
     </div>

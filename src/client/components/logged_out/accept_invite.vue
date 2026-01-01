@@ -50,19 +50,25 @@
          role="alert"
          aria-live="polite"
          :aria-describedby="state.form_error ? 'invite-error' : undefined">
-      <span id="invite-error">{{ t(state.form_error) }}</span>
+      <span id="invite-error">{{ translateError(state.form_error) }}</span>
     </div>
     <fieldset class="form-stack">
       <label for="invite-password" class="sr-only">{{ t('password_placeholder') }}</label>
       <input type="password"
              id="invite-password"
              class="form-control"
-             :class="{ 'form-control--error': state.form_error }"
+             :class="{ 'form-control--error': state.form_error || state.passwordError }"
              :placeholder="t('password_placeholder')"
              v-model="state.password"
+             @blur="validatePasswordField"
              :aria-invalid="state.form_error ? 'true' : 'false'"
              :aria-describedby="state.form_error ? 'invite-error' : undefined"
              required/>
+      <div v-if="state.passwordError"
+           class="password-validation-error"
+           role="alert">
+        {{ translateError(state.passwordError) }}
+      </div>
       <label for="invite-password2" class="sr-only">{{ t('password2_placeholder') }}</label>
       <input type="password"
              id="invite-password2"
@@ -89,6 +95,7 @@
 import { inject, onBeforeMount, reactive } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
+import { validatePassword } from '@/common/validation/password';
 
 const router = useRouter();
 const route = useRoute();
@@ -101,6 +108,7 @@ const { t } = useTranslation('registration', {
 
 const state = reactive({
   form_error: '',
+  passwordError: '',
   invite_code: route.query.code || '',
   codeValidated: false,
   password: '',
@@ -134,6 +142,41 @@ async function checkInvitationCode() {
   }
 }
 
+/**
+ * Validates the password field and sets appropriate error state.
+ */
+function validatePasswordField() {
+  if (!state.password) {
+    state.passwordError = '';
+    return;
+  }
+
+  const validation = validatePassword(state.password);
+  if (!validation.valid) {
+    state.passwordError = validation.errors[0];
+  }
+  else {
+    state.passwordError = '';
+  }
+}
+
+/**
+ * Translates error keys to user-facing messages.
+ */
+function translateError(errorKey) {
+  // Map known error keys to translation keys
+  const errorMap = {
+    'password_too_short': 'password_too_short',
+    'password_needs_variety': 'password_needs_variety',
+  };
+
+  const translationKey = errorMap[errorKey] || errorKey;
+
+  // Try to translate, fall back to error key
+  const translated = t(translationKey);
+  return translated !== translationKey ? translated : errorKey;
+}
+
 async function setPassword() {
   if ( ! state.password.length ) {
     state.form_error = 'missing_password';
@@ -145,6 +188,13 @@ async function setPassword() {
   }
   if ( state.password != state.password2 ) {
     state.form_error = 'bad_password_match';
+    return;
+  }
+
+  // Validate password strength
+  const passwordValidation = validatePassword(state.password);
+  if (!passwordValidation.valid) {
+    state.form_error = passwordValidation.errors[0];
     return;
   }
 
@@ -247,6 +297,16 @@ async function setPassword() {
 
   &:last-child {
     margin-bottom: 0;
+  }
+}
+
+.password-validation-error {
+  margin-top: 0.25rem;
+  font-size: 0.8rem;
+  color: #c62828;
+
+  @media (prefers-color-scheme: dark) {
+    color: #ef5350;
   }
 }
 

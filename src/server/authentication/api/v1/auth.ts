@@ -2,6 +2,7 @@ import express, { Request, Response, Application } from 'express';
 import passport from 'passport';
 
 import { Account } from '@/common/model/account';
+import { validatePassword } from '@/common/validation/password';
 import ExpressHelper from '@/server/common/helper/express';
 import { noAccountExistsError } from '@/server/accounts/exceptions';
 import AccountsInterface from '@/server/accounts/interface';
@@ -87,6 +88,13 @@ export default class AuthenticationRouteHandlers {
   }
 
   async setPassword(req: Request, res: Response) {
+    // Validate password before processing
+    const passwordValidation = validatePassword(req.body.password || '');
+    if (!passwordValidation.valid) {
+      res.status(400).json({ message: passwordValidation.errors[0] });
+      return;
+    }
+
     let account = await this.service.resetPassword(req.params.code, req.body.password);
     if ( account ) {
       res.send(ExpressHelper.generateJWT(account));

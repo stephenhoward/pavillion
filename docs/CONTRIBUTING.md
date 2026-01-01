@@ -66,7 +66,7 @@ There are multiple ways you can be involved with the project
 - Translate documentation
 
 ### Translations
-- Add new language support
+- Add new language support (see [Internationalization Guide](internationalization.md))
 - Improve existing translations
 - Help test multilingual features
 

@@ -9,6 +9,7 @@ import '@/client/assets/style/main.scss';
 
 import Authentication from '@/client/service/authn';
 import Config from '@/client/service/config';
+import SetupService from '@/client/service/setup';
 
 import AppVue from '@/client/components/app.vue';
 
@@ -20,6 +21,7 @@ import PasswordResetView from '@/client/components/logged_out/password_reset.vue
 import RegisterView from '@/client/components/logged_out/register.vue';
 import RegisterApplyView from '@/client/components/logged_out/register_apply.vue';
 import AcceptInviteView from '@/client/components/logged_out/accept_invite.vue';
+import SetupView from '@/client/components/logged_out/setup.vue';
 
 import AppViews from '@/client/components/logged_in/root.vue';
 import CalendarsView from '@/client/components/logged_in/calendar/calendars.vue';
@@ -36,79 +38,163 @@ import AdminSettingsView from '@/client/components/admin/settings.vue';
 import FederationSettingsView from '@/client/components/admin/federation.vue';
 import FundingSettingsView from '@/client/components/admin/funding.vue';
 
-Config.init().then( (config) => {
+// Track setup mode status globally
+let isSetupMode = false;
 
-  const app: App = createApp(AppVue);
-  const authentication = new Authentication(localStorage);
+/**
+ * Check if setup mode is active by calling the setup status API.
+ * Updates the global isSetupMode flag.
+ */
+async function checkSetupMode(): Promise<boolean> {
+  try {
+    const setupService = new SetupService();
+    const status = await setupService.checkSetupStatus();
+    isSetupMode = status.setupRequired;
+    return isSetupMode;
+  }
+  catch {
+    // If we can't check status, assume setup is not required
+    isSetupMode = false;
+    return false;
+  }
+}
 
-  const mustBeLoggedIn = (to, from, next) => {
-    if (!authentication.isLoggedIn()) {
-      next({ name: 'login'});
+// Check setup status before initializing the app
+checkSetupMode().then((setupRequired) => {
+
+  Config.init().then((config) => {
+
+    const app: App = createApp(AppVue);
+    const authentication = new Authentication(localStorage);
+
+    const mustBeLoggedIn = (to, from, next) => {
+      // If in setup mode, redirect to setup
+      if (isSetupMode && to.name !== 'setup') {
+        next({ name: 'setup' });
+        return;
+      }
+      if (!authentication.isLoggedIn()) {
+        next({ name: 'login' });
+      }
+      else {
+        next();
+      }
+    };
+
+    const mustBeAdmin = (to, from, next) => {
+      // If in setup mode, redirect to setup
+      if (isSetupMode && to.name !== 'setup') {
+        next({ name: 'setup' });
+        return;
+      }
+      if (!authentication.isAdmin()) {
+        next({ name: 'login' });
+      }
+      else {
+        next();
+      }
+    };
+
+    /**
+     * Route guard for the setup route.
+     * Only allow access when setup mode is active.
+     */
+    const setupGuard = (to, from, next) => {
+      if (!isSetupMode) {
+        // Setup already completed, redirect to login
+        next({ name: 'login' });
+      }
+      else {
+        next();
+      }
+    };
+
+    /**
+     * Route guard for auth routes during setup mode.
+     * Redirect to setup if setup mode is active.
+     */
+    const authRouteGuard = (to, from, next) => {
+      if (isSetupMode && to.name !== 'setup') {
+        next({ name: 'setup' });
+      }
+      else {
+        next();
+      }
+    };
+
+    const routes: RouteRecordRaw[] = [
+      { path: '/', component: AppViews, name: 'app', beforeEnter: mustBeLoggedIn,
+
+        children: [
+          { path: 'calendar', component: CalendarsView, name: 'calendars', beforeEnter: mustBeLoggedIn },
+          { path: 'calendar/:calendar', component: CalendarView, name: 'calendar', beforeEnter: mustBeLoggedIn },
+          { path: 'calendar/:calendar/manage', component: CalendarManagementView, name: 'calendar_management', beforeEnter: mustBeLoggedIn },
+          { path: 'inbox', component: InboxView, name: 'inbox', beforeEnter: mustBeLoggedIn },
+          { path: 'feed', component: FeedView, name: 'feed', beforeEnter: mustBeLoggedIn },
+          { path: 'profile', component: ProfileView, name: 'profile', beforeEnter: mustBeLoggedIn },
+        ],
+      },
+      // Event routes are top-level to render fullscreen without navigation
+      { path: '/event', component: EditEventView, name: 'event_new', beforeEnter: mustBeLoggedIn },
+      { path: '/event/:eventId', component: EditEventView, name: 'event_edit', beforeEnter: mustBeLoggedIn, props: true },
+      { path: '/admin', component: AdminViews, name: 'admin', beforeEnter: mustBeAdmin,
+        children: [
+          { path: 'settings', component: AdminSettingsView, name: 'admin_settings', beforeEnter: mustBeAdmin },
+          { path: 'accounts', component: InvitesListView, name: 'accounts', beforeEnter: mustBeAdmin },
+          { path: 'federation', component: FederationSettingsView, name: 'federation', beforeEnter: mustBeAdmin },
+          { path: 'funding', component: FundingSettingsView, name: 'funding', beforeEnter: mustBeAdmin },
+        ],
+      },
+      // Setup route - uses AuthViews layout but has its own guard
+      { path: '/setup', component: AuthViews, beforeEnter: setupGuard,
+        children: [
+          { path: '', component: SetupView, name: 'setup' },
+        ],
+      },
+      { path: '/auth', component: AuthViews, name: 'auth', beforeEnter: authRouteGuard,
+        children: [
+          { path: 'login', component: LoginView, name: 'login', props: true, beforeEnter: authRouteGuard },
+          { path: 'logout', component: LogoutView, name: 'logout' },
+          { path: 'register', component: RegisterView, name: 'register', props: true, beforeEnter: authRouteGuard },
+          { path: 'invitation', component: AcceptInviteView, name: 'accept_invite', props: true, beforeEnter: authRouteGuard },
+          { path: 'apply', component: RegisterApplyView, name: 'register-apply', props: true, beforeEnter: authRouteGuard },
+          { path: 'forgot', component: PasswordForgotView, name: 'forgot_password', props: true, beforeEnter: authRouteGuard },
+          { path: 'password', component: PasswordResetView, name: 'reset_password', props: true, beforeEnter: authRouteGuard },
+        ],
+      },
+    ];
+
+    const router = createRouter({
+      history: createWebHistory(),
+      routes,
+    });
+
+    // Global navigation guard to enforce setup mode
+    router.beforeEach((to, from, next) => {
+      if (isSetupMode && to.name !== 'setup') {
+        next({ name: 'setup' });
+      }
+      else {
+        next();
+      }
+    });
+
+    const pinia = createPinia();
+    initI18Next(config.settings().defaultLanguage);
+    app.use(pinia);
+    app.use(router);
+    app.use(I18NextVue, { i18next });
+    app.provide('authn', authentication);
+    app.provide('site_config', config);
+
+    // If setup mode is active, navigate to setup after mount
+    if (setupRequired) {
+      router.isReady().then(() => {
+        router.push({ name: 'setup' });
+      });
     }
-    else {
-      next();
-    }
-  };
 
-  const mustBeAdmin = (to, from, next) => {
-    if (!authentication.isAdmin()) {
-      next({ name: 'login'});
-    }
-    else {
-      next();
-    }
-  };
+    app.mount('#app');
 
-  const routes: RouteRecordRaw[] = [
-    { path: '/', component: AppViews, name: 'app', beforeEnter: mustBeLoggedIn,
-
-      children: [
-        { path: 'calendar', component: CalendarsView, name: 'calendars', beforeEnter: mustBeLoggedIn },
-        { path: 'calendar/:calendar', component: CalendarView, name: 'calendar', beforeEnter: mustBeLoggedIn },
-        { path: 'calendar/:calendar/manage', component: CalendarManagementView, name: 'calendar_management', beforeEnter: mustBeLoggedIn },
-        { path: 'inbox', component: InboxView, name: 'inbox', beforeEnter: mustBeLoggedIn },
-        { path: 'feed', component: FeedView, name: 'feed', beforeEnter: mustBeLoggedIn },
-        { path: 'profile', component: ProfileView, name: 'profile', beforeEnter: mustBeLoggedIn },
-      ],
-    },
-    // Event routes are top-level to render fullscreen without navigation
-    { path: '/event', component: EditEventView, name: 'event_new', beforeEnter: mustBeLoggedIn },
-    { path: '/event/:eventId', component: EditEventView, name: 'event_edit', beforeEnter: mustBeLoggedIn, props: true },
-    { path: '/admin', component: AdminViews, name: 'admin', beforeEnter: mustBeAdmin,
-      children: [
-        { path: 'settings', component: AdminSettingsView, name: 'admin_settings', beforeEnter: mustBeAdmin },
-        { path: 'accounts', component: InvitesListView, name: 'accounts', beforeEnter: mustBeAdmin },
-        { path: 'federation', component: FederationSettingsView, name: 'federation', beforeEnter: mustBeAdmin },
-        { path: 'funding', component: FundingSettingsView, name: 'funding', beforeEnter: mustBeAdmin },
-      ],
-    },
-    { path: '/auth', component: AuthViews, name: 'auth',
-      children: [
-        { path: 'login',  component: LoginView, name: 'login', props: true },
-        { path: 'logout', component: LogoutView, name: 'logout' },
-        { path: 'register',  component: RegisterView, name: 'register', props: true },
-        { path: 'invitation', component: AcceptInviteView, name: 'accept_invite', props: true },
-        { path: 'apply',  component: RegisterApplyView, name: 'register-apply', props: true },
-        { path: 'forgot', component: PasswordForgotView, name: 'forgot_password', props: true },
-        { path: 'password',  component: PasswordResetView, name: 'reset_password', props: true },
-      ],
-    },
-  ];
-
-  const router = createRouter({
-    history: createWebHistory(),
-    routes,
   });
-
-
-
-  const pinia = createPinia();
-  initI18Next();
-  app.use(pinia);
-  app.use(router);
-  app.use(I18NextVue, { i18next });
-  app.provide('authn', authentication);
-  app.provide('site_config', config);
-  app.mount('#app');
-
 });

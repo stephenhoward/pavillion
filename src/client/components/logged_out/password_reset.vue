@@ -42,12 +42,18 @@
       <input type="password"
              id="new-password"
              class="form-control"
-             :class="{ 'form-control--error': state.form_error }"
+             :class="{ 'form-control--error': state.form_error || state.passwordError }"
              :placeholder="t('password_placeholder')"
              v-model="state.password"
+             @blur="validatePasswordField"
              :aria-invalid="state.form_error ? 'true' : 'false'"
              :aria-describedby="state.form_error ? 'password-error' : undefined"
              required/>
+      <div v-if="state.passwordError"
+           class="password-validation-error"
+           role="alert">
+        {{ translateError(state.passwordError) }}
+      </div>
       <label for="confirm-password" class="sr-only">{{ t('password2_placeholder') }}</label>
       <input type="password"
              id="confirm-password"
@@ -70,18 +76,28 @@
          class="alert alert--error alert--sm"
          role="alert"
          aria-live="polite">
-      <span id="password-error">{{ t(state.form_error) }}</span>
+      <span id="password-error">{{ translateError(state.form_error) }}</span>
     </div>
   </form>
 </template>
 
-<style lang="scss">
+<style scoped lang="scss">
+.password-validation-error {
+  margin-top: 0.25rem;
+  font-size: 0.8rem;
+  color: #c62828;
+
+  @media (prefers-color-scheme: dark) {
+    color: #ef5350;
+  }
+}
 </style>
 
 <script setup>
 import { reactive, onBeforeMount, inject } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
+import { validatePassword } from '@/common/validation/password';
 
 const router = useRouter();
 const route = useRoute();
@@ -97,6 +113,7 @@ const state = reactive({
   password:    '',
   password2:   '',
   form_error: '',
+  passwordError: '',
 });
 
 onBeforeMount(async () => {
@@ -119,6 +136,41 @@ async function submitResetCode() {
   }
 }
 
+/**
+ * Validates the password field and sets appropriate error state.
+ */
+function validatePasswordField() {
+  if (!state.password) {
+    state.passwordError = '';
+    return;
+  }
+
+  const validation = validatePassword(state.password);
+  if (!validation.valid) {
+    state.passwordError = validation.errors[0];
+  }
+  else {
+    state.passwordError = '';
+  }
+}
+
+/**
+ * Translates error keys to user-facing messages.
+ */
+function translateError(errorKey) {
+  // Map known error keys to translation keys
+  const errorMap = {
+    'password_too_short': 'password_too_short',
+    'password_needs_variety': 'password_needs_variety',
+  };
+
+  const translationKey = errorMap[errorKey] || errorKey;
+
+  // Try to translate, fall back to the t() function result
+  const translated = t(translationKey);
+  return translated !== translationKey ? translated : t(errorKey);
+}
+
 async function setPassword() {
   if ( ! state.password.length ) {
     state.form_error = 'missing_password';
@@ -130,6 +182,13 @@ async function setPassword() {
     state.form_error = 'bad_password_match';
   }
   else {
+    // Validate password strength
+    const passwordValidation = validatePassword(state.password);
+    if (!passwordValidation.valid) {
+      state.form_error = passwordValidation.errors[0];
+      return;
+    }
+
     state.form_error = '';
     try {
       await authn.use_password_reset_token(state.reset_code, state.password);
@@ -154,4 +213,3 @@ async function setPassword() {
 }
 
 </script>
-

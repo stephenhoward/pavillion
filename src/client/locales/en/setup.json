@@ -1,0 +1,51 @@
+{
+  "language_select_title": "Choose Your Language",
+  "language_select_description": "Select a default language for your Pavillion server.",
+  "continue_button": "Continue",
+  "back_button": "Back",
+
+  "title": "Welcome to Pavillion",
+  "subtitle": "Let's set up your instance",
+  "description": "Create your administrator account and set up your Pavillion server.",
+
+  "email_label": "Admin Email",
+  "email_placeholder": "admin@example.com",
+
+  "password_label": "Password",
+  "password_placeholder": "Choose a secure password",
+
+  "password_confirm_label": "Confirm Password",
+  "password_confirm_placeholder": "Re-enter your password",
+
+  "site_title_label": "Site Title",
+  "site_title_placeholder": "My Pavillion Server",
+  "site_title_description": "This name will appear in the header and browser title",
+
+  "registration_mode_label": "Registration Mode",
+  "registration_mode_description": "How can new users join your instance?",
+  "registration_mode_open": "Open - Anyone can register",
+  "registration_mode_apply": "Apply - Users submit applications",
+  "registration_mode_invitation": "Invitation - Any user can invite others",
+  "registration_mode_closed": "Administrator Only - Only admins can send invitations",
+
+  "default_language_label": "Default Language",
+  "default_language_description": "The default language for the user interface",
+
+  "submit_button": "Complete Setup",
+  "submitting_button": "Setting up...",
+
+  "success_title": "Setup Complete!",
+  "success_message": "Your admin account has been created. You can now sign in.",
+  "continue_to_login": "Continue to Sign In",
+
+  "error_missing_email": "Email address is required",
+  "error_missing_password": "Password is required",
+  "error_missing_password_confirm": "Please confirm your password",
+  "error_missing_site_title": "Site title is required",
+  "error_passwords_mismatch": "Passwords do not match",
+  "error_setup_already_completed": "Setup has already been completed",
+  "error_unknown": "An unexpected error occurred. Please try again.",
+
+  "password_too_short": "Password must be at least 8 characters",
+  "password_needs_variety": "Password must include at least two of: letters, numbers, special characters"
+}

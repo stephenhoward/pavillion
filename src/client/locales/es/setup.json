@@ -1,0 +1,51 @@
+{
+  "language_select_title": "Elige Tu Idioma",
+  "language_select_description": "Selecciona un idioma predeterminado para tu servidor de Pavillion.",
+  "continue_button": "Continuar",
+  "back_button": "Atrás",
+
+  "title": "Bienvenido a Pavillion",
+  "subtitle": "Vamos a configurar tu instancia",
+  "description": "Crea tu cuenta de administrador y configura tu servidor de Pavillion.",
+
+  "email_label": "Correo del Administrador",
+  "email_placeholder": "admin@ejemplo.com",
+
+  "password_label": "Contraseña",
+  "password_placeholder": "Elige una contraseña segura",
+
+  "password_confirm_label": "Confirmar Contraseña",
+  "password_confirm_placeholder": "Vuelve a escribir tu contraseña",
+
+  "site_title_label": "Título del Sitio",
+  "site_title_placeholder": "Mi Calendario Comunitario",
+  "site_title_description": "Este nombre aparecerá en el encabezado y en el título del navegador",
+
+  "registration_mode_label": "Modo de Registro",
+  "registration_mode_description": "¿Cómo pueden unirse nuevos usuarios a tu instancia?",
+  "registration_mode_open": "Abierto - Cualquiera puede registrarse",
+  "registration_mode_apply": "Solicitud - Los usuarios envían solicitudes",
+  "registration_mode_invitation": "Invitación - Cualquier usuario puede invitar a otros",
+  "registration_mode_closed": "Solo Administradores - Solo los administradores pueden enviar invitaciones",
+
+  "default_language_label": "Idioma Predeterminado",
+  "default_language_description": "El idioma predeterminado para la interfaz de usuario",
+
+  "submit_button": "Completar Configuración",
+  "submitting_button": "Configurando...",
+
+  "success_title": "¡Configuración Completa!",
+  "success_message": "Tu cuenta de administrador ha sido creada. Ahora puedes iniciar sesión.",
+  "continue_to_login": "Continuar al Inicio de Sesión",
+
+  "error_missing_email": "Se requiere una dirección de correo electrónico",
+  "error_missing_password": "Se requiere una contraseña",
+  "error_missing_password_confirm": "Por favor confirma tu contraseña",
+  "error_missing_site_title": "Se requiere un título del sitio",
+  "error_passwords_mismatch": "Las contraseñas no coinciden",
+  "error_setup_already_completed": "La configuración ya ha sido completada",
+  "error_unknown": "Ocurrió un error inesperado. Por favor intenta de nuevo.",
+
+  "password_too_short": "La contraseña debe tener al menos 8 caracteres",
+  "password_needs_variety": "La contraseña debe incluir al menos dos de: letras, números, caracteres especiales"
+}

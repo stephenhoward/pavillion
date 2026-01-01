@@ -1,0 +1,16 @@
+{
+  "main_navigation": {
+    "calendar_button": "Calendario",
+    "inbox_button": "Bandeja de entrada",
+    "new_event": "Nuevo Evento",
+    "profile_button": "Configuración",
+    "feed_button": "Noticias"
+  },
+  "language_picker": {
+    "search_language": "Buscar un idioma",
+    "select_language": "Seleccionar un Idioma"
+  },
+  "navigation": {
+    "skip_to_content": "Saltar al contenido principal"
+  }
+}

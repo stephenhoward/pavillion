@@ -6,6 +6,23 @@ import { fileURLToPath } from 'node:url';
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [tsconfigPaths(), vue()],
+  server: {
+    // Listen on all interfaces for container development
+    host: '0.0.0.0',
+    // Use default Vite port (5173) to match hardcoded template URLs
+    port: 5173,
+    // HMR configuration for containerized development
+    hmr: {
+      // Use environment variable or default to localhost for browser connection
+      host: process.env.VITE_HMR_HOST || 'localhost',
+      port: 5173,
+    },
+    // File watching configuration
+    watch: {
+      // Use polling in Docker environments where filesystem events aren't reliable
+      usePolling: process.env.CHOKIDAR_USEPOLLING === 'true',
+    },
+  },
   build: {
     manifest: true,
     sourcemap: true,

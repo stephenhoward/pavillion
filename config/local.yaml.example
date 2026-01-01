@@ -1,0 +1,89 @@
+# Pavillion Local Configuration
+#
+# Copy this file to config/local.yaml and customize for your instance.
+# This file overrides settings from default.yaml and production.yaml.
+#
+# Configuration priority (highest to lowest):
+#   1. Environment variables (for secrets)
+#   2. config/local.yaml (this file)
+#   3. config/production.yaml
+#   4. config/default.yaml
+#
+
+# Your instance domain (required)
+# This should be the public URL where your Pavillion instance is accessible
+domain: "pavillion.example.org"
+
+# Database configuration
+# Note: In Docker Compose deployment, these are typically set via
+# environment variables (DB_HOST, DB_USER, DB_PASSWORD, etc.)
+# Only uncomment if you need to override the Docker Compose defaults
+#
+# database:
+#   dialect: postgres
+#   host: db
+#   port: 5432
+#   database: pavillion
+#   username: pavillion
+#   password: your_secure_password
+#   logging: false
+
+# Email configuration
+# Configure SMTP settings for sending emails (password reset, invitations, etc.)
+mail:
+  transport: smtp
+  from: noreply@pavillion.example.org
+  settings:
+    host: smtp.example.org
+    port: 587
+    secure: false
+    # SMTP authentication
+    # For security, consider using environment variables for credentials
+    # user: ${SMTP_USER}
+    # pass: ${SMTP_PASSWORD}
+
+# Media storage configuration
+# Option 1: Local filesystem storage (default)
+# Files are stored in the pavillion-media Docker volume
+#
+# Option 2: S3-compatible storage (recommended for production)
+# Uncomment and configure for AWS S3, DigitalOcean Spaces, MinIO, etc.
+#
+media:
+  uploadPath: '/app/storage/media/inbound'
+  finalPath: '/app/storage/media/public'
+  maxFileSize: 10485760  # 10MB in bytes
+  allowedTypes:
+    - 'image/png'
+    - 'image/jpeg'
+    - 'image/heic'
+  allowedExtensions:
+    - '.png'
+    - '.jpg'
+    - '.jpeg'
+    - '.heic'
+  storage:
+    # Local storage (default) - files stored in Docker volume
+    driver: 'local'
+    basePath: '/app/storage/media'
+
+    # S3-compatible storage configuration
+    # Uncomment and configure to use S3, DigitalOcean Spaces, etc.
+    # driver: 's3'
+    # bucket: 'your-bucket-name'
+    # region: 'us-east-1'
+    # endpoint: 'https://s3.amazonaws.com'  # Optional: custom endpoint for S3-compatible services
+    # forcePathStyle: false                  # Set to true for MinIO and some S3-compatible services
+    #
+    # S3 credentials should be set via environment variables:
+    #   S3_ACCESS_KEY - Your AWS/S3 access key
+    #   S3_SECRET_KEY - Your AWS/S3 secret key
+
+# Host configuration
+# host:
+#   port: 3000  # Application port (default: 3000)
+
+# ActivityPub federation settings
+# federation:
+#   enabled: true
+#   autoRepost: false  # Automatically repost events from trusted instances
