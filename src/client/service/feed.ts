@@ -272,7 +272,7 @@ export default class FeedService {
     calendarId: string,
   ): Promise<FollowRelationship> {
     try {
-      const response = await axios.patch(`/api/v1/social/follows/${followId}`, {
+      const response = await axios.patch(`/api/v1/social/follows/${encodeURIComponent(followId)}`, {
         calendarId,
         autoRepostOriginals,
         autoRepostReposts,
