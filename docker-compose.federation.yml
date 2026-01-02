@@ -1,0 +1,214 @@
+# Pavillion Federation Testing - Docker Compose Configuration
+#
+# This file creates a multi-instance environment for testing ActivityPub
+# federation between two Pavillion instances:
+#   - alpha.federation.local (Instance A)
+#   - beta.federation.local (Instance B)
+#
+# Architecture:
+#   +------------------+     +------------------+
+#   |  Browser/Tests   |     |                  |
+#   +--------+---------+     |                  |
+#            |               |                  |
+#            v               |                  |
+#   +------------------+     |                  |
+#   |      nginx       |---->| Routes by Host   |
+#   |    (port 80)     |     |                  |
+#   +--------+---------+     +------------------+
+#            |
+#     +------+------+
+#     |             |
+#     v             v
+# +--------+   +--------+
+# | alpha  |   |  beta  |
+# | :3000  |   | :3000  |
+# +---+----+   +---+----+
+#     |            |
+#     v            v
+# +--------+   +--------+
+# |db_alpha|   | db_beta|
+# +--------+   +--------+
+#
+# Usage:
+#   npm run federation:start   # Start the environment
+#   npm run federation:stop    # Stop and clean up
+#   npm run federation:logs    # View logs
+#
+# Prerequisites:
+#   Add to /etc/hosts:
+#     127.0.0.1 alpha.federation.local
+#     127.0.0.1 beta.federation.local
+#
+
+services:
+  # nginx reverse proxy
+  # Routes requests based on Host header to the correct Pavillion instance
+  nginx:
+    image: nginx:alpine
+    container_name: pavillion-federation-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/federation/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      instance_alpha:
+        condition: service_healthy
+      instance_beta:
+        condition: service_healthy
+    networks:
+      federation_net:
+        aliases:
+          - alpha.federation.local
+          - beta.federation.local
+    restart: unless-stopped
+
+  # Instance Alpha - First Pavillion instance
+  # Configured for alpha.federation.local domain
+  instance_alpha:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: pavillion-federation-alpha
+    depends_on:
+      db_alpha:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=federation
+      - LOCAL_DOMAIN=alpha.federation.local
+      # Database configuration
+      - DB_HOST=db_alpha
+      - DB_PORT=5432
+      - DB_NAME=alpha_db
+      - DB_USER=pavillion
+      - DB_PASSWORD=devpassword
+      # Reset database on each start for clean testing
+      - DB_RESET=true
+      # Disable HTTP signature verification for local testing
+      - SKIP_SIGNATURES=true
+      # Development settings
+      - CHOKIDAR_USEPOLLING=true
+    volumes:
+      # Mount source code for hot-reload
+      - ./src:/app/src:cached
+      - ./config:/app/config:cached
+      - ./migrations:/app/migrations:cached
+      - ./layouts:/app/layouts:cached
+      # Mount config files
+      - ./tsconfig.json:/app/tsconfig.json:cached
+      - ./vite.config.ts:/app/vite.config.ts:cached
+      # Anonymous volume for node_modules
+      - /app/node_modules
+    networks:
+      federation_net:
+        aliases:
+          - instance_alpha
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 10s
+      start_period: 60s
+      retries: 5
+    restart: unless-stopped
+
+  # Instance Beta - Second Pavillion instance
+  # Configured for beta.federation.local domain
+  instance_beta:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: pavillion-federation-beta
+    depends_on:
+      db_beta:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=federation
+      - LOCAL_DOMAIN=beta.federation.local
+      # Database configuration
+      - DB_HOST=db_beta
+      - DB_PORT=5432
+      - DB_NAME=beta_db
+      - DB_USER=pavillion
+      - DB_PASSWORD=devpassword
+      # Reset database on each start for clean testing
+      - DB_RESET=true
+      # Disable HTTP signature verification for local testing
+      - SKIP_SIGNATURES=true
+      # Development settings
+      - CHOKIDAR_USEPOLLING=true
+    volumes:
+      # Mount source code for hot-reload
+      - ./src:/app/src:cached
+      - ./config:/app/config:cached
+      - ./migrations:/app/migrations:cached
+      - ./layouts:/app/layouts:cached
+      # Mount config files
+      - ./tsconfig.json:/app/tsconfig.json:cached
+      - ./vite.config.ts:/app/vite.config.ts:cached
+      # Anonymous volume for node_modules
+      - /app/node_modules
+    networks:
+      federation_net:
+        aliases:
+          - instance_beta
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 10s
+      start_period: 60s
+      retries: 5
+    restart: unless-stopped
+
+  # PostgreSQL database for alpha instance
+  db_alpha:
+    image: postgres:17
+    container_name: pavillion-federation-db-alpha
+    environment:
+      - POSTGRES_DB=alpha_db
+      - POSTGRES_USER=pavillion
+      - POSTGRES_PASSWORD=devpassword
+    volumes:
+      - alpha-db-data:/var/lib/postgresql/data
+    networks:
+      - federation_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pavillion -d alpha_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # PostgreSQL database for beta instance
+  db_beta:
+    image: postgres:17
+    container_name: pavillion-federation-db-beta
+    environment:
+      - POSTGRES_DB=beta_db
+      - POSTGRES_USER=pavillion
+      - POSTGRES_PASSWORD=devpassword
+    volumes:
+      - beta-db-data:/var/lib/postgresql/data
+    networks:
+      - federation_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pavillion -d beta_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+# Named volumes for database persistence
+# Use `docker compose -f docker-compose.federation.yml down -v` to reset
+volumes:
+  alpha-db-data:
+    name: pavillion-federation-alpha-db
+  beta-db-data:
+    name: pavillion-federation-beta-db
+
+# Custom bridge network for federation testing
+# Enables DNS resolution between containers using service names
+networks:
+  federation_net:
+    name: pavillion-federation-net
+    driver: bridge

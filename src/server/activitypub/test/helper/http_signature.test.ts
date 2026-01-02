@@ -20,7 +20,15 @@ describe('HTTP Signature Verification', () => {
   let cacheGetStub: sinon.SinonStub;
   let cacheSetStub: sinon.SinonStub;
 
+  // Store original environment variables
+  let originalNodeEnv: string | undefined;
+  let originalSkipSignatures: string | undefined;
+
   beforeEach(() => {
+    // Store original environment variables
+    originalNodeEnv = process.env.NODE_ENV;
+    originalSkipSignatures = process.env.SKIP_SIGNATURES;
+
     // Set up request and response objects
     req = {
       headers: {
@@ -50,6 +58,19 @@ describe('HTTP Signature Verification', () => {
   afterEach(() => {
     // Restore all stubs and spies
     sandbox.restore();
+
+    // Restore original environment variables
+    if (originalNodeEnv !== undefined) {
+      process.env.NODE_ENV = originalNodeEnv;
+    } else {
+      delete process.env.NODE_ENV;
+    }
+
+    if (originalSkipSignatures !== undefined) {
+      process.env.SKIP_SIGNATURES = originalSkipSignatures;
+    } else {
+      delete process.env.SKIP_SIGNATURES;
+    }
   });
 
   it('should reject requests without a signature', async () => {
@@ -358,5 +379,86 @@ describe('HTTP Signature Verification', () => {
     expect(res.status.calledWith(500)).toBe(true);
     expect(res.json.calledWith({ error: 'Error verifying HTTP signature' })).toBe(true);
     expect(next.called).toBe(false);
+  });
+
+  describe('Production Environment Security Checks', () => {
+    it('should throw error when SKIP_SIGNATURES is true in production', async () => {
+      // Set production environment
+      process.env.NODE_ENV = 'production';
+      process.env.SKIP_SIGNATURES = 'true';
+
+      // Verify that calling verifyHttpSignature throws an error
+      await expect(async () => {
+        await verifyHttpSignature(req as Request, res as Response, next as any);
+      }).rejects.toThrow('CRITICAL SECURITY ERROR: HTTP signature verification cannot be disabled in production');
+
+      // Verify next was never called
+      expect(next.called).toBe(false);
+    });
+
+    it('should allow SKIP_SIGNATURES in non-production environments', async () => {
+      // Set development environment
+      process.env.NODE_ENV = 'development';
+      process.env.SKIP_SIGNATURES = 'true';
+
+      // Should not throw and should call next()
+      await verifyHttpSignature(req as Request, res as Response, next as any);
+
+      expect(next.called).toBe(true);
+      expect(res.status.called).toBe(false);
+    });
+
+    it('should allow signature verification in production when skip is false', async () => {
+      // Set production environment without skip
+      process.env.NODE_ENV = 'production';
+      delete process.env.SKIP_SIGNATURES;
+
+      parseRequestStub.returns({
+        params: {
+          keyId: 'https://example.com/users/someactor#main-key',
+          signature: 'validSignature',
+          headers: ['(request-target)', 'host', 'date'],
+        },
+      } as any);
+
+      // Configure successful public key retrieval
+      axiosGetStub.resolves({
+        status: 200,
+        data: {
+          publicKey: {
+            publicKeyPem: '-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0Rdj53hR\n-----END PUBLIC KEY-----',
+          },
+        },
+      });
+
+      // Configure successful signature verification
+      verifySignatureStub.returns(true);
+
+      // Should work normally in production when skip is false
+      await verifyHttpSignature(req as Request, res as Response, next as any);
+
+      expect(next.called).toBe(true);
+      expect(res.status.called).toBe(false);
+    });
+
+    it('should throw error when SKIP_SIGNATURES is false but config skipSignatures is true in production', async () => {
+      // Set production environment
+      process.env.NODE_ENV = 'production';
+      delete process.env.SKIP_SIGNATURES;
+
+      // Mock config to return true for skipSignatures
+      const configHasStub = sandbox.stub(require('config'), 'has');
+      const configGetStub = sandbox.stub(require('config'), 'get');
+      configHasStub.withArgs('federation.skipSignatures').returns(true);
+      configGetStub.withArgs('federation.skipSignatures').returns('true');
+
+      // Verify that calling verifyHttpSignature throws an error
+      await expect(async () => {
+        await verifyHttpSignature(req as Request, res as Response, next as any);
+      }).rejects.toThrow('CRITICAL SECURITY ERROR: HTTP signature verification cannot be disabled in production');
+
+      // Verify next was never called
+      expect(next.called).toBe(false);
+    });
   });
 });

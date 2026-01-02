@@ -51,10 +51,24 @@ npm run dev
 
 See [docs/configuration.md](docs/configuration.md) for connecting your local app to PostgreSQL.
 
+## Federation Testing
+
+Pavillion includes a comprehensive federation testing infrastructure that allows you to test ActivityPub federation between multiple instances on your local machine. The setup creates two isolated instances with Docker, nginx routing, and Playwright E2E tests.
+
+Quick start:
+```bash
+npm run federation:start    # Start the environment
+npm run test:federation     # Run federation tests
+npm run federation:stop     # Stop when done
+```
+
+For detailed setup instructions, troubleshooting, and architecture documentation, see the [Federation Testing Guide](docs/federation-testing.md).
+
 ## Documentation
 
 - [Deployment Guide](docs/deployment.md) - Docker deployment instructions
 - [Configuration Reference](docs/configuration.md) - All configuration options
+- [Federation Testing Guide](docs/federation-testing.md) - Multi-instance testing setup and troubleshooting
 - [Upgrading Guide](docs/upgrading.md) - Upgrade procedures and migration handling
 - [Contributing](docs/CONTRIBUTING.md) - How to contribute to Pavillion
 - [Code of Conduct](docs/CODE_OF_CONDUCT.md) - Community guidelines

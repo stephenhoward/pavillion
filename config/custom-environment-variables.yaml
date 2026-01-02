@@ -17,6 +17,10 @@
 # For other deployments, set them in your environment before starting the app
 #
 
+# Instance domain configuration
+# Used in federation testing to set unique domain per instance
+domain: LOCAL_DOMAIN
+
 # Database configuration overrides
 database:
   host: DB_HOST
@@ -53,3 +57,8 @@ mail:
     port: SMTP_PORT
     user: SMTP_USER
     pass: SMTP_PASSWORD
+
+# Federation testing configuration overrides
+# SKIP_SIGNATURES=true disables HTTP signature verification for local testing
+federation:
+  skipSignatures: SKIP_SIGNATURES

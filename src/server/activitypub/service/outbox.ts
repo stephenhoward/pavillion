@@ -12,6 +12,7 @@ import CreateActivity from "@/server/activitypub/model/action/create";
 import UndoActivity from "@/server/activitypub/model/action/undo";
 import { ActivityPubObject } from "@/server/activitypub/model/base";
 import CalendarInterface from "@/server/calendar/interface";
+import { FEDERATION_HTTP_TIMEOUT_MS } from "@/server/activitypub/constants";
 
 /**
  * Service responsible for processing and distributing outgoing ActivityPub messages.
@@ -90,7 +91,7 @@ class ProcessOutboxService {
         const inboxUrl = await this.resolveInboxUrl(recipient);
 
         if ( inboxUrl ) {
-          axios.post(inboxUrl, activity);
+          axios.post(inboxUrl, activity, { timeout: FEDERATION_HTTP_TIMEOUT_MS });
         }
         else {
           console.log("skipping message to " + recipient + " because no inbox found");
@@ -144,7 +145,7 @@ class ProcessOutboxService {
 
     const profileUrl = await this.fetchProfileUrl(remote_user);
     if ( profileUrl ) {
-      let response = await axios.get(profileUrl);
+      let response = await axios.get(profileUrl, { timeout: FEDERATION_HTTP_TIMEOUT_MS });
 
       if ( response && response.data ) {
         return response.data.inbox;
@@ -163,7 +164,7 @@ class ProcessOutboxService {
   async fetchProfileUrl(remote_user: string): Promise<string|null> {
     const [username, domain] = remote_user.split('@');
     if ( username && domain ) {
-      let response = await axios.get('https://' + domain + '/.well-known/webfinger?resource=acct:' + username);
+      let response = await axios.get('https://' + domain + '/.well-known/webfinger?resource=acct:' + username, { timeout: FEDERATION_HTTP_TIMEOUT_MS });
 
       if ( response && response.data && response.data.links ) {
         const profileLink = (await response).data.links.filter((link: any) => link.rel === 'self');

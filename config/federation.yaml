@@ -1,0 +1,65 @@
+# Pavillion Federation Testing Configuration
+#
+# This configuration file is used when running Pavillion in the Docker-based
+# federation testing environment. It overrides default settings with values
+# appropriate for multi-instance testing.
+#
+# Key differences from development.yaml:
+# - Database uses PostgreSQL (not SQLite)
+# - Domain is configurable via LOCAL_DOMAIN environment variable
+# - HTTP signature verification can be disabled for testing
+#
+# Environment variables override these settings via custom-environment-variables.yaml:
+# - LOCAL_DOMAIN: Sets the domain for this instance
+# - DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD: Database connection
+# - SKIP_SIGNATURES: When 'true', disables HTTP signature verification
+#
+
+# Domain is set via LOCAL_DOMAIN environment variable
+# This allows each instance to have its own domain (e.g., alpha.federation.local)
+# See custom-environment-variables.yaml for the mapping
+domain: "federation.local"
+
+# Database configuration
+# Uses PostgreSQL for federation testing (each instance has its own database)
+# Connection details are set via environment variables in docker-compose.federation.yml
+database:
+  dialect: postgres
+  host: localhost
+  port: 5432
+  database: pavillion_federation
+  username: pavillion
+  password: devpassword
+  logging: false
+
+# Federation-specific settings
+federation:
+  # When true, skip HTTP signature verification
+  # This simplifies testing by avoiding certificate management
+  # WARNING: Never set this in production!
+  skipSignatures: false
+
+# Development mail configuration
+# Writes emails to files for debugging
+mail:
+  transport: development
+  from: noreply@federation.local
+  settings:
+    outputDir: logs/mail
+    console: true
+
+# Media storage configuration
+# Uses local filesystem for federation testing
+media:
+  uploadPath: './storage/media/inbound'
+  finalPath: './storage/media/public'
+  maxFileSize: 10485760  # 10MB in bytes
+  allowedTypes:
+    - 'image/png'
+    - 'image/jpeg'
+    - 'image/heic'
+  allowedExtensions:
+    - '.png'
+    - '.jpg'
+    - '.jpeg'
+    - '.heic'

@@ -263,6 +263,7 @@ describe('Feed Workflow Integration Tests', () => {
       // Mock network error
       axiosGetStub.withArgs(sinon.match(/\/api\/v1\/social\/feed/)).rejects(
         new Error('Network error'),
+        new Error('Network error'),
       );
 
       // Action: Try to load feed
@@ -282,10 +283,12 @@ describe('Feed Workflow Integration Tests', () => {
       // Mock API error
       axiosPostStub.withArgs('/api/v1/social/follows').rejects(
         new Error('Failed to follow calendar'),
+        new Error('Failed to follow calendar'),
       );
 
       // Mock the getFollows call that happens during followCalendar
       axiosGetStub.withArgs(sinon.match(/\/api\/v1\/social\/follows/)).rejects(
+        new Error('Failed to follow calendar'),
         new Error('Failed to follow calendar'),
       );
 
@@ -310,6 +313,7 @@ describe('Feed Workflow Integration Tests', () => {
 
       // Mock API error
       axiosPostStub.withArgs('/api/v1/social/shares').rejects(
+        new Error('Failed to repost'),
         new Error('Failed to repost'),
       );
 

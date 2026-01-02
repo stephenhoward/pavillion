@@ -4,14 +4,81 @@ import axios from 'axios';
 import { URL } from 'url';
 import { ClientRequest } from 'http';
 import crypto from 'crypto';
+import config from 'config';
 import { Cache } from '@/server/activitypub/helper/cache';
+import { PUBLIC_KEY_FETCH_TIMEOUT_MS } from '@/server/activitypub/constants';
 
 // A key cache to prevent frequent key fetching
 const keyCache = new Cache<string>(60 * 60 * 1000); // 1 hour expiration
 
+// Flag to track if we've already logged the bypass warning
+let bypassWarningLogged = false;
+
+/**
+ * Checks if HTTP signature verification should be skipped.
+ * This is used for local federation testing where managing certificates is complex.
+ *
+ * WARNING: Never enable this in production environments!
+ *
+ * @returns {boolean} True if signature verification should be skipped
+ * @throws {Error} If skip signatures is enabled in production environment
+ */
+function shouldSkipSignatures(): boolean {
+  const isProduction = process.env.NODE_ENV === 'production';
+  let shouldSkip = false;
+
+  // Check environment variable first (highest priority)
+  if (process.env.SKIP_SIGNATURES === 'true') {
+    shouldSkip = true;
+  }
+
+  // Check config file setting
+  if (!shouldSkip) {
+    try {
+      if (config.has('federation.skipSignatures') && config.get('federation.skipSignatures') === 'true') {
+        shouldSkip = true;
+      }
+    }
+    catch {
+      // Config key doesn't exist, that's fine
+    }
+  }
+
+  // CRITICAL SECURITY CHECK: Never allow skipping signatures in production
+  if (shouldSkip && isProduction) {
+    throw new Error(
+      'CRITICAL SECURITY ERROR: HTTP signature verification cannot be disabled in production. ' +
+      'Remove SKIP_SIGNATURES environment variable or federation.skipSignatures config setting.'
+    );
+  }
+
+  return shouldSkip;
+}
+
+/**
+ * Logs a warning when HTTP signature bypass is active.
+ * Only logs once per process to avoid spamming the logs.
+ */
+function logBypassWarning(): void {
+  if (!bypassWarningLogged) {
+    console.warn('');
+    console.warn('========================================');
+    console.warn('WARNING: HTTP Signature verification DISABLED');
+    console.warn('This should ONLY be used for local testing!');
+    console.warn('Never deploy to production with SKIP_SIGNATURES=true');
+    console.warn('========================================');
+    console.warn('');
+    bypassWarningLogged = true;
+  }
+}
+
 /**
  * Express middleware for verifying HTTP signatures in ActivityPub requests.
  * Implements the HTTP Signature verification spec for securing ActivityPub interactions.
+ *
+ * If SKIP_SIGNATURES environment variable is set to 'true', signature verification
+ * is bypassed entirely. This is useful for local federation testing but should
+ * NEVER be used in production.
  *
  * @param {Request} req - Express request object
  * @param {Response} res - Express response object
@@ -19,6 +86,12 @@ const keyCache = new Cache<string>(60 * 60 * 1000); // 1 hour expiration
  * @returns {Promise<void>}
  */
 export async function verifyHttpSignature(req: Request, res: Response, next: NextFunction) {
+  // Check if signature verification should be bypassed for testing
+  if (shouldSkipSignatures()) {
+    logBypassWarning();
+    return next();
+  }
+
   try {
     // Parse the signature header
     const parsedSignature = httpSignature.parseRequest(req as unknown as ClientRequest);
@@ -141,7 +214,7 @@ async function fetchPublicKey(keyId: string): Promise<string | null> {
         'Accept': 'application/activity+json, application/ld+json',
         'User-Agent': 'Pavillion ActivityPub Server',
       },
-      timeout: 10000, // 10 second timeout
+      timeout: PUBLIC_KEY_FETCH_TIMEOUT_MS,
     });
 
     if (response.status !== 200) {
@@ -163,7 +236,7 @@ async function fetchPublicKey(keyId: string): Promise<string | null> {
           'Accept': 'application/activity+json, application/ld+json',
           'User-Agent': 'Pavillion ActivityPub Server',
         },
-        timeout: 10000,
+        timeout: PUBLIC_KEY_FETCH_TIMEOUT_MS,
       });
 
       if (keyResponse.status === 200 && keyResponse.data.publicKeyPem) {

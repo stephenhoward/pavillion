@@ -1,3 +1,21 @@
+/**
+ * Tests for ProcessInboxService
+ *
+ * These tests verify inbox message processing for various ActivityPub activity types.
+ * Uses Fedify mock utilities for creating well-formed ActivityPub activities,
+ * and Sinon for mocking database entities and services.
+ *
+ * The Fedify mock helpers provide:
+ * - Properly formatted ActivityPub activities with @context
+ * - Consistent activity structure matching the ActivityStreams spec
+ * - Type-safe activity creation for tests
+ *
+ * Sinon is still used for:
+ * - Mocking database entity methods (update, findOne)
+ * - Stubbing service methods (calendarService.getCalendar)
+ * - Tracking method calls and arguments
+ */
+
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import { EventEmitter } from 'events';
@@ -6,17 +24,33 @@ import { Calendar } from '@/common/model/calendar';
 import ProcessInboxService from '@/server/activitypub/service/inbox';
 import { ActivityPubInboxMessageEntity } from '@/server/activitypub/entity/activitypub';
 
+// Import Fedify mock helpers for creating well-formed ActivityPub activities
+import {
+  createMockFollowActivity,
+  createMockCreateActivity,
+  createMockUpdateActivity,
+  createMockDeleteActivity,
+  createMockAnnounceActivity,
+  createMockUndoActivity,
+} from '@/server/activitypub/test/helpers/fedify-mock';
+
 
 describe('processInboxMessage', () => {
   let service: ProcessInboxService;
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
   let getCalendarStub: sinon.SinonStub;
 
+  // Test constants for consistent actor/object IDs
+  const TEST_CALENDAR_ID = 'testid';
+  const LOCAL_CALENDAR_URL = 'https://local.federation.test/calendars/events';
+  const REMOTE_ACTOR_URL = 'https://remote.federation.test/users/alice';
+  const REMOTE_EVENT_URL = 'https://remote.federation.test/events/123';
+
   beforeEach (() => {
     const eventBus = new EventEmitter();
     service = new ProcessInboxService(eventBus);
-    getCalendarStub = sandbox.stub(service.calendarService,'getCalendar');
-    getCalendarStub.resolves(Calendar.fromObject({ id: 'testid' }));
+    getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
+    getCalendarStub.resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID }));
   });
 
   afterEach(() => {
@@ -24,8 +58,19 @@ describe('processInboxMessage', () => {
   });
 
   it('should fail without calendar', async () => {
-    let message = ActivityPubInboxMessageEntity.build({ calendar_id: 'testid', type: 'Create', message: { to: 'remoteaccount@remotedomain' } });
-    let updateStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype,'update');
+    // Use Fedify helper to create a proper Create activity
+    const activityMessage = createMockCreateActivity(REMOTE_ACTOR_URL, {
+      type: 'Event',
+      id: REMOTE_EVENT_URL,
+      name: 'Test Event',
+    });
+
+    const message = ActivityPubInboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Create',
+      message: activityMessage,
+    });
+    const updateStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype, 'update');
 
     getCalendarStub.resolves(null);
 
@@ -37,8 +82,12 @@ describe('processInboxMessage', () => {
   });
 
   it('should skip invalid message type', async () => {
-    let message = ActivityPubInboxMessageEntity.build({ calendar_id: 'testid', type: 'NotAType', message: { to: 'remoteaccount@remotedomain' } });
-    let updateStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype,'update');
+    const message = ActivityPubInboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'NotAType',
+      message: { to: 'remoteaccount@remotedomain' },
+    });
+    const updateStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype, 'update');
 
     await service.processInboxMessage(message);
 
@@ -48,9 +97,21 @@ describe('processInboxMessage', () => {
   });
 
   it('should process a create activity', async () => {
-    let message = ActivityPubInboxMessageEntity.build({ calendar_id: 'testid', type: 'Create', message: { object: { id: 'testid' } } });
-    let processStub = sandbox.stub(service,'processCreateEvent');
-    let updateStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype,'update');
+    // Use Fedify helper to create a proper Create activity with Event object
+    const activityMessage = createMockCreateActivity(REMOTE_ACTOR_URL, {
+      type: 'Event',
+      id: REMOTE_EVENT_URL,
+      name: 'Test Event',
+      startTime: '2025-01-15T10:00:00Z',
+    });
+
+    const message = ActivityPubInboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Create',
+      message: activityMessage,
+    });
+    const processStub = sandbox.stub(service, 'processCreateEvent');
+    const updateStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype, 'update');
 
     await service.processInboxMessage(message);
 
@@ -61,9 +122,20 @@ describe('processInboxMessage', () => {
   });
 
   it('should process an update activity', async () => {
-    let message = ActivityPubInboxMessageEntity.build({ calendar_id: 'testid', type: 'Update', message: { object: { id: 'testid' } } });
-    let processStub = sandbox.stub(service,'processUpdateEvent');
-    let updateStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype,'update');
+    // Use Fedify helper to create a proper Update activity
+    const activityMessage = createMockUpdateActivity(REMOTE_ACTOR_URL, {
+      type: 'Event',
+      id: REMOTE_EVENT_URL,
+      name: 'Updated Event Name',
+    });
+
+    const message = ActivityPubInboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Update',
+      message: activityMessage,
+    });
+    const processStub = sandbox.stub(service, 'processUpdateEvent');
+    const updateStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype, 'update');
 
     await service.processInboxMessage(message);
 
@@ -74,9 +146,16 @@ describe('processInboxMessage', () => {
   });
 
   it('should process a delete activity', async () => {
-    let message = ActivityPubInboxMessageEntity.build({ calendar_id: 'testid', type: 'Delete', message: { object: { id: 'testid' } } });
-    let processStub = sandbox.stub(service,'processDeleteEvent');
-    let updateStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype,'update');
+    // Use Fedify helper to create a proper Delete activity
+    const activityMessage = createMockDeleteActivity(REMOTE_ACTOR_URL, REMOTE_EVENT_URL);
+
+    const message = ActivityPubInboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Delete',
+      message: activityMessage,
+    });
+    const processStub = sandbox.stub(service, 'processDeleteEvent');
+    const updateStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype, 'update');
 
     await service.processInboxMessage(message);
 
@@ -87,9 +166,16 @@ describe('processInboxMessage', () => {
   });
 
   it('should process a follow activity', async () => {
-    let message = ActivityPubInboxMessageEntity.build({ calendar_id: 'testid', type: 'Follow', message: { object: { id: 'testid' } } });
-    let processStub = sandbox.stub(service,'processFollowAccount');
-    let updateStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype,'update');
+    // Use Fedify helper to create a proper Follow activity
+    const activityMessage = createMockFollowActivity(REMOTE_ACTOR_URL, LOCAL_CALENDAR_URL);
+
+    const message = ActivityPubInboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Follow',
+      message: activityMessage,
+    });
+    const processStub = sandbox.stub(service, 'processFollowAccount');
+    const updateStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype, 'update');
 
     await service.processInboxMessage(message);
 
@@ -100,9 +186,16 @@ describe('processInboxMessage', () => {
   });
 
   it('should process an announce activity', async () => {
-    let message = ActivityPubInboxMessageEntity.build({ calendar_id: 'testid', type: 'Announce', message: { object: { id: 'testid' } } });
-    let processStub = sandbox.stub(service,'processShareEvent');
-    let updateStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype,'update');
+    // Use Fedify helper to create a proper Announce (share) activity
+    const activityMessage = createMockAnnounceActivity(REMOTE_ACTOR_URL, REMOTE_EVENT_URL);
+
+    const message = ActivityPubInboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Announce',
+      message: activityMessage,
+    });
+    const processStub = sandbox.stub(service, 'processShareEvent');
+    const updateStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype, 'update');
 
     await service.processInboxMessage(message);
 
@@ -113,10 +206,18 @@ describe('processInboxMessage', () => {
   });
 
   it('should error an undo activity with no target', async () => {
-    let message = ActivityPubInboxMessageEntity.build({ calendar_id: 'testid', type: 'Undo', message: { object: { type: 'Follow' } } });
-    let processStub = sandbox.stub(service,'processUnfollowAccount');
-    let targetStub = sandbox.stub(ActivityPubInboxMessageEntity,'findOne');
-    let updateStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype,'update');
+    // Use Fedify helper to create an Undo wrapping a Follow activity
+    const originalFollow = createMockFollowActivity(REMOTE_ACTOR_URL, LOCAL_CALENDAR_URL);
+    const activityMessage = createMockUndoActivity(REMOTE_ACTOR_URL, originalFollow);
+
+    const message = ActivityPubInboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Undo',
+      message: activityMessage,
+    });
+    const processStub = sandbox.stub(service, 'processUnfollowAccount');
+    const targetStub = sandbox.stub(ActivityPubInboxMessageEntity, 'findOne');
+    const updateStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype, 'update');
 
     targetStub.resolves(undefined);
 
@@ -129,12 +230,23 @@ describe('processInboxMessage', () => {
   });
 
   it('should process an undo follow activity', async () => {
-    let message = ActivityPubInboxMessageEntity.build({ calendar_id: 'testid', type: 'Undo', message: { object: { type: 'Follow' } } });
-    let processStub = sandbox.stub(service,'processUnfollowAccount');
-    let targetStub = sandbox.stub(ActivityPubInboxMessageEntity,'findOne');
-    let updateStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype,'update');
+    // Use Fedify helper to create an Undo wrapping a Follow activity
+    const originalFollow = createMockFollowActivity(REMOTE_ACTOR_URL, LOCAL_CALENDAR_URL);
+    const activityMessage = createMockUndoActivity(REMOTE_ACTOR_URL, originalFollow);
 
-    targetStub.resolves(ActivityPubInboxMessageEntity.build({ calendar_id: 'testid', type: 'Follow' }));
+    const message = ActivityPubInboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Undo',
+      message: activityMessage,
+    });
+    const processStub = sandbox.stub(service, 'processUnfollowAccount');
+    const targetStub = sandbox.stub(ActivityPubInboxMessageEntity, 'findOne');
+    const updateStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype, 'update');
+
+    targetStub.resolves(ActivityPubInboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Follow',
+    }));
 
     await service.processInboxMessage(message);
 
@@ -145,12 +257,23 @@ describe('processInboxMessage', () => {
   });
 
   it('should process an undo announce activity', async () => {
-    let message = ActivityPubInboxMessageEntity.build({ calendar_id: 'testid', type: 'Undo', message: { object: { type: 'Announce' } } });
-    let processStub = sandbox.stub(service,'processUnshareEvent');
-    let targetStub = sandbox.stub(ActivityPubInboxMessageEntity,'findOne');
-    let updateStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype,'update');
+    // Use Fedify helper to create an Undo wrapping an Announce activity
+    const originalAnnounce = createMockAnnounceActivity(REMOTE_ACTOR_URL, REMOTE_EVENT_URL);
+    const activityMessage = createMockUndoActivity(REMOTE_ACTOR_URL, originalAnnounce);
 
-    targetStub.resolves(ActivityPubInboxMessageEntity.build({ calendar_id: 'testid', type: 'Announce' }));
+    const message = ActivityPubInboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Undo',
+      message: activityMessage,
+    });
+    const processStub = sandbox.stub(service, 'processUnshareEvent');
+    const targetStub = sandbox.stub(ActivityPubInboxMessageEntity, 'findOne');
+    const updateStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype, 'update');
+
+    targetStub.resolves(ActivityPubInboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Announce',
+    }));
 
     await service.processInboxMessage(message);
 
