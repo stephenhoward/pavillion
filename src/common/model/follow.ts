@@ -1,27 +1,26 @@
 import { PrimaryModel } from './model';
 
 /**
- * Enum for auto-repost policy options
- */
-enum AutoRepostPolicy {
-  MANUAL = 'manual',
-  ORIGINAL = 'original',
-  ALL = 'all',
-}
-
-/**
  * Model representing a calendar that the user is following
  */
 class FollowingCalendar extends PrimaryModel {
   remoteCalendarId: string;
   calendarId: string;
-  repostPolicy: AutoRepostPolicy;
+  autoRepostOriginals: boolean;
+  autoRepostReposts: boolean;
 
-  constructor(id: string, remoteCalendarId: string, calendarId: string, repostPolicy: AutoRepostPolicy = AutoRepostPolicy.MANUAL) {
+  constructor(
+    id: string,
+    remoteCalendarId: string,
+    calendarId: string,
+    autoRepostOriginals: boolean = false,
+    autoRepostReposts: boolean = false,
+  ) {
     super(id);
     this.remoteCalendarId = remoteCalendarId;
     this.calendarId = calendarId;
-    this.repostPolicy = repostPolicy;
+    this.autoRepostOriginals = autoRepostOriginals;
+    this.autoRepostReposts = autoRepostReposts;
   }
 
   toObject(): Record<string, any> {
@@ -29,7 +28,8 @@ class FollowingCalendar extends PrimaryModel {
       id: this.id,
       remoteCalendarId: this.remoteCalendarId,
       calendarId: this.calendarId,
-      repostPolicy: this.repostPolicy,
+      autoRepostOriginals: this.autoRepostOriginals,
+      autoRepostReposts: this.autoRepostReposts,
     };
   }
 
@@ -38,7 +38,8 @@ class FollowingCalendar extends PrimaryModel {
       obj.id,
       obj.remoteCalendarId,
       obj.calendarId,
-      obj.repostPolicy || AutoRepostPolicy.MANUAL,
+      obj.autoRepostOriginals ?? false,
+      obj.autoRepostReposts ?? false,
     );
   }
 }
@@ -73,4 +74,4 @@ class FollowerCalendar extends PrimaryModel {
   }
 }
 
-export { FollowingCalendar, FollowerCalendar, AutoRepostPolicy };
+export { FollowingCalendar, FollowerCalendar };

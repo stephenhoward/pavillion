@@ -6,11 +6,10 @@ import axios from 'axios';
 import { Account } from '@/common/model/account';
 import ActivityPubService from '@/server/activitypub/service/members';
 import { Calendar } from '@/common/model/calendar';
-import { AutoRepostPolicy } from '@/common/model/follow';
 import { FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
 import {
   InvalidRemoteCalendarIdentifierError,
-  InvalidRepostPolicyError,
+  InvalidRepostPolicySettingsError,
   InvalidSharedEventUrlError,
   FollowRelationshipNotFoundError,
   RemoteCalendarNotFoundError,
@@ -116,10 +115,11 @@ describe('ActivityPubService Exception Handling', () => {
   });
 
   describe('updateFollowPolicy', () => {
-    it('throws InvalidRepostPolicyError for invalid policy', async () => {
+    it('throws InvalidRepostPolicySettingsError for invalid policy combination', async () => {
+      // autoRepostReposts=true with autoRepostOriginals=false should throw
       await expect(
-        service.updateFollowPolicy(calendar, 'follow-id-123', 'INVALID_POLICY' as AutoRepostPolicy),
-      ).rejects.toThrow(InvalidRepostPolicyError);
+        service.updateFollowPolicy(calendar, 'follow-id-123', false, true),
+      ).rejects.toThrow(InvalidRepostPolicySettingsError);
     });
 
     it('throws FollowRelationshipNotFoundError when follow relationship does not exist', async () => {
@@ -127,7 +127,7 @@ describe('ActivityPubService Exception Handling', () => {
       findOneStub.resolves(null);
 
       await expect(
-        service.updateFollowPolicy(calendar, 'nonexistent-follow-id', AutoRepostPolicy.MANUAL),
+        service.updateFollowPolicy(calendar, 'nonexistent-follow-id', true, false),
       ).rejects.toThrow(FollowRelationshipNotFoundError);
     });
   });

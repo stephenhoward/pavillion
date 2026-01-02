@@ -9,7 +9,6 @@ import {
   FollowingCalendarEntity,
   FollowerCalendarEntity,
   SharedEventEntity,
-  AutoRepostPolicy,
 } from '@/server/activitypub/entity/activitypub';
 
 describe("ActivityPub Feed Service Methods", () => {
@@ -77,19 +76,21 @@ describe("ActivityPub Feed Service Methods", () => {
   });
 
   describe('getFollowing', () => {
-    it('should return list of followed calendars with policies', async () => {
+    it('should return list of followed calendars with new boolean fields', async () => {
       const mockFollowings = [
         FollowingCalendarEntity.build({
           id: 'follow-1',
           calendar_id: calendar.id,
           remote_calendar_id: 'remote1@example.com',
-          repost_policy: AutoRepostPolicy.MANUAL,
+          auto_repost_originals: false,
+          auto_repost_reposts: false,
         }),
         FollowingCalendarEntity.build({
           id: 'follow-2',
           calendar_id: calendar.id,
           remote_calendar_id: 'remote2@example.com',
-          repost_policy: AutoRepostPolicy.ALL,
+          auto_repost_originals: true,
+          auto_repost_reposts: true,
         }),
       ];
 
@@ -100,8 +101,10 @@ describe("ActivityPub Feed Service Methods", () => {
       expect(result).toHaveLength(2);
       expect(result[0].id).toBe('follow-1');
       expect(result[0].remoteCalendarId).toBe('remote1@example.com');
-      expect(result[0].repostPolicy).toBe(AutoRepostPolicy.MANUAL);
-      expect(result[1].repostPolicy).toBe(AutoRepostPolicy.ALL);
+      expect(result[0].autoRepostOriginals).toBe(false);
+      expect(result[0].autoRepostReposts).toBe(false);
+      expect(result[1].autoRepostOriginals).toBe(true);
+      expect(result[1].autoRepostReposts).toBe(true);
     });
 
     it('should return empty array when not following any calendars', async () => {
@@ -148,20 +151,22 @@ describe("ActivityPub Feed Service Methods", () => {
   });
 
   describe('updateFollowPolicy', () => {
-    it('should update repost policy on existing follow relationship', async () => {
+    it('should update repost policy with new boolean fields on existing follow relationship', async () => {
       const mockFollow = FollowingCalendarEntity.build({
         id: 'follow-1',
         calendar_id: calendar.id,
         remote_calendar_id: 'remote@example.com',
-        repost_policy: AutoRepostPolicy.MANUAL,
+        auto_repost_originals: false,
+        auto_repost_reposts: false,
       }) as any;
 
       const saveStub = sandbox.stub(mockFollow, 'save').resolves();
       sandbox.stub(FollowingCalendarEntity, 'findOne').resolves(mockFollow);
 
-      await service.updateFollowPolicy(calendar, 'follow-1', AutoRepostPolicy.ALL);
+      await service.updateFollowPolicy(calendar, 'follow-1', true, true);
 
-      expect(mockFollow.repost_policy).toBe(AutoRepostPolicy.ALL);
+      expect(mockFollow.auto_repost_originals).toBe(true);
+      expect(mockFollow.auto_repost_reposts).toBe(true);
       expect(saveStub.calledOnce).toBe(true);
     });
 
@@ -169,23 +174,24 @@ describe("ActivityPub Feed Service Methods", () => {
       sandbox.stub(FollowingCalendarEntity, 'findOne').resolves(null);
 
       await expect(
-        service.updateFollowPolicy(calendar, 'non-existent', AutoRepostPolicy.ALL),
+        service.updateFollowPolicy(calendar, 'non-existent', true, false),
       ).rejects.toThrow('Follow relationship not found');
     });
 
-    it('should validate policy is a valid AutoRepostPolicy value', async () => {
+    it('should validate that autoRepostReposts cannot be true when autoRepostOriginals is false', async () => {
       const mockFollow = FollowingCalendarEntity.build({
         id: 'follow-1',
         calendar_id: calendar.id,
         remote_calendar_id: 'remote@example.com',
-        repost_policy: AutoRepostPolicy.MANUAL,
+        auto_repost_originals: false,
+        auto_repost_reposts: false,
       }) as any;
 
       sandbox.stub(FollowingCalendarEntity, 'findOne').resolves(mockFollow);
 
       await expect(
-        service.updateFollowPolicy(calendar, 'follow-1', 'invalid-policy' as any),
-      ).rejects.toThrow('Invalid repost policy');
+        service.updateFollowPolicy(calendar, 'follow-1', false, true),
+      ).rejects.toThrow('Invalid auto-repost policy settings');
     });
   });
 
@@ -228,7 +234,7 @@ describe("ActivityPub Feed Service Methods", () => {
       ];
 
       sandbox.stub(service, 'getFeed').callsFake(async () => {
-        return mockEvents.map((event, index) => {
+        return mockEvents.map((event) => {
           const share = mockShares.find(s => s.event_id === event.event_url);
           let repostStatus: 'none' | 'manual' | 'auto' = 'none';
 

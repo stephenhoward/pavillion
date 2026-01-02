@@ -1,9 +1,11 @@
+import axios from 'axios';
 import { CalendarEvent } from '@/common/model/events';
-import { FollowingCalendar, FollowerCalendar, AutoRepostPolicy } from '@/common/model/follow';
+import { FollowerCalendar } from '@/common/model/follow';
 import ModelService from '@/client/service/models';
 import {
   InvalidRemoteCalendarIdentifierError,
   InvalidRepostPolicyError,
+  InvalidRepostPolicySettingsError,
   InvalidSharedEventUrlError,
   FollowRelationshipNotFoundError,
   RemoteCalendarNotFoundError,
@@ -18,6 +20,7 @@ import { UnknownError } from '@/common/exceptions';
 const errorMap = {
   InvalidRemoteCalendarIdentifierError,
   InvalidRepostPolicyError,
+  InvalidRepostPolicySettingsError,
   InvalidSharedEventUrlError,
   FollowRelationshipNotFoundError,
   RemoteCalendarNotFoundError,
@@ -27,6 +30,26 @@ const errorMap = {
   SelfFollowError,
   InsufficientCalendarPermissionsError,
 };
+
+/**
+ * Follow relationship returned from API with new boolean fields
+ */
+export interface FollowRelationship {
+  id: string;
+  remoteCalendarId: string;
+  calendarId: string;
+  autoRepostOriginals: boolean;
+  autoRepostReposts: boolean;
+}
+
+/**
+ * Follower relationship returned from API
+ */
+export interface FollowerRelationship {
+  id: string;
+  remoteCalendarId: string;
+  calendarId: string;
+}
 
 /**
  * Feed event extends CalendarEvent with repost status
@@ -53,9 +76,6 @@ export interface RemoteCalendarPreview {
   actorUrl: string;
   calendarId?: string;
 }
-
-// Re-export for convenience
-export { AutoRepostPolicy };
 
 /**
  * Handle ActivityPub errors by mapping backend error names to frontend exception classes
@@ -84,12 +104,18 @@ export default class FeedService {
   /**
    * Get list of calendars the user follows
    * @param calendarId The calendar ID to get follows for
-   * @returns Promise<FollowingCalendar[]> Array of follow relationships
+   * @returns Promise<FollowRelationship[]> Array of follow relationships
    */
-  async getFollows(calendarId: string): Promise<FollowingCalendar[]> {
+  async getFollows(calendarId: string): Promise<FollowRelationship[]> {
     try {
       const data = await ModelService.listModels(`/api/v1/social/follows?calendarId=${calendarId}`);
-      return data.map(item => FollowingCalendar.fromObject(item));
+      return data.map(item => ({
+        id: item.id,
+        remoteCalendarId: item.remoteCalendarId,
+        calendarId: item.calendarId,
+        autoRepostOriginals: item.autoRepostOriginals ?? false,
+        autoRepostReposts: item.autoRepostReposts ?? false,
+      }));
     }
     catch (error) {
       console.error('Error fetching follows:', error);
@@ -100,9 +126,9 @@ export default class FeedService {
   /**
    * Get list of calendars following the user
    * @param calendarId The calendar ID to get followers for
-   * @returns Promise<FollowerCalendar[]> Array of follower relationships
+   * @returns Promise<FollowerRelationship[]> Array of follower relationships
    */
-  async getFollowers(calendarId: string): Promise<FollowerCalendar[]> {
+  async getFollowers(calendarId: string): Promise<FollowerRelationship[]> {
     try {
       const data = await ModelService.listModels(`/api/v1/social/followers?calendarId=${calendarId}`);
       return data.map(item => FollowerCalendar.fromObject(item));
@@ -151,17 +177,23 @@ export default class FeedService {
    * Follow a remote calendar
    * @param calendarId The local calendar ID
    * @param remoteIdentifier The remote calendar identifier (e.g., calendar@domain.com)
-   * @param repostPolicy The auto-repost policy to use
+   * @param autoRepostOriginals Whether to auto-repost original events (default: false)
+   * @param autoRepostReposts Whether to auto-repost shared events (default: false)
    * @returns Promise<void>
    */
   async followCalendar(
     calendarId: string,
     remoteIdentifier: string,
-    repostPolicy: AutoRepostPolicy = AutoRepostPolicy.MANUAL,
+    autoRepostOriginals: boolean = false,
+    autoRepostReposts: boolean = false,
   ): Promise<void> {
     try {
-      const follow = new FollowingCalendar('', remoteIdentifier, calendarId, repostPolicy);
-      await ModelService.createModel(follow, '/api/v1/social/follows');
+      await axios.post('/api/v1/social/follows', {
+        calendarId,
+        remoteCalendar: remoteIdentifier,
+        autoRepostOriginals,
+        autoRepostReposts,
+      });
     }
     catch (error: unknown) {
       console.error('Error following calendar:', error);
@@ -228,15 +260,24 @@ export default class FeedService {
   /**
    * Update the repost policy for a follow relationship
    * @param followId The follow relationship ID
-   * @param policy The new repost policy
+   * @param autoRepostOriginals Whether to auto-repost original events
+   * @param autoRepostReposts Whether to auto-repost shared events
    * @param calendarId The calendar ID that owns the follow relationship
-   * @returns Promise<FollowingCalendar> The updated relationship
+   * @returns Promise<FollowRelationship> The updated relationship
    */
-  async updateFollowPolicy(followId: string, policy: AutoRepostPolicy, calendarId?: string): Promise<FollowingCalendar> {
+  async updateFollowPolicy(
+    followId: string,
+    autoRepostOriginals: boolean,
+    autoRepostReposts: boolean,
+    calendarId: string,
+  ): Promise<FollowRelationship> {
     try {
-      const follow = new FollowingCalendar(followId, '', calendarId || '', policy);
-      const data = await ModelService.updateModel(follow, '/api/v1/social/follows');
-      return FollowingCalendar.fromObject(data);
+      const response = await axios.patch(`/api/v1/social/follows/${followId}`, {
+        calendarId,
+        autoRepostOriginals,
+        autoRepostReposts,
+      });
+      return response.data;
     }
     catch (error: unknown) {
       console.error('Error updating follow policy:', error);

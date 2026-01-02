@@ -4,7 +4,7 @@ import { EventEntity } from '@/server/calendar/entity/event';
 import { ActivityPubActivity } from '@/server/activitypub/model/base';
 import { WebFingerResponse } from '@/server/activitypub/model/webfinger';
 import { UserProfileResponse } from '@/server/activitypub/model/userprofile';
-import { FollowingCalendar, FollowerCalendar, AutoRepostPolicy } from '@/common/model/follow';
+import { FollowingCalendar, FollowerCalendar } from '@/common/model/follow';
 import ActivityPubMemberService from '@/server/activitypub/service/members';
 import ActivityPubServerService from '@/server/activitypub/service/server';
 import ProcessInboxService from '../service/inbox';
@@ -32,8 +32,14 @@ export default class ActivityPubInterface {
     return this.memberService.actorUrl(calendar);
   }
 
-  async followCalendar(account: Account, calendar: Calendar, orgIdentifier: string, repostPolicy = AutoRepostPolicy.MANUAL): Promise<void> {
-    return this.memberService.followCalendar(account, calendar, orgIdentifier, repostPolicy);
+  async followCalendar(
+    account: Account,
+    calendar: Calendar,
+    orgIdentifier: string,
+    autoRepostOriginals: boolean = false,
+    autoRepostReposts: boolean = false,
+  ): Promise<void> {
+    return this.memberService.followCalendar(account, calendar, orgIdentifier, autoRepostOriginals, autoRepostReposts);
   }
 
   async unfollowCalendar(account: Account, calendar: Calendar, orgIdentifier: string): Promise<void> {
@@ -92,8 +98,13 @@ export default class ActivityPubInterface {
     return this.memberService.getFollowers(calendar);
   }
 
-  async updateFollowPolicy(calendar: Calendar, followId: string, policy: AutoRepostPolicy): Promise<void> {
-    return this.memberService.updateFollowPolicy(calendar, followId, policy);
+  async updateFollowPolicy(
+    calendar: Calendar,
+    followId: string,
+    autoRepostOriginals: boolean,
+    autoRepostReposts: boolean,
+  ): Promise<void> {
+    return this.memberService.updateFollowPolicy(calendar, followId, autoRepostOriginals, autoRepostReposts);
   }
 
   async lookupRemoteCalendar(identifier: string): Promise<{

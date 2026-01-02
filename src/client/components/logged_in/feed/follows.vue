@@ -5,7 +5,6 @@ import { useFeedStore } from '@/client/stores/feedStore';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
 import FollowListItem from './follow_list_item.vue';
 import AddCalendarModal from './add_calendar_modal.vue';
-import type { AutoRepostPolicy } from '@/client/service/feed';
 
 const { t } = useTranslation('feed', {
   keyPrefix: 'follows',
@@ -17,9 +16,9 @@ const showAddModal = ref(false);
 const follows = computed(() => feedStore.follows);
 const isLoading = computed(() => feedStore.isLoadingFollows);
 
-const handlePolicyChange = async (followId: string, policy: AutoRepostPolicy) => {
+const handlePolicyChange = async (followId: string, autoRepostOriginals: boolean, autoRepostReposts: boolean) => {
   try {
-    await feedStore.updateFollowPolicy(followId, policy);
+    await feedStore.updateFollowPolicy(followId, autoRepostOriginals, autoRepostReposts);
   }
   catch (error) {
     console.error('Error updating follow policy:', error);

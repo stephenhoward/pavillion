@@ -4,7 +4,6 @@ import FeedService, {
   type FollowRelationship,
   type FollowerRelationship,
   type FeedEvent,
-  AutoRepostPolicy,
 } from '@/client/service/feed';
 
 /**
@@ -196,15 +195,20 @@ export const useFeedStore = defineStore('feed', {
      * Follow a remote calendar
      *
      * @param identifier - The remote calendar identifier (e.g., calendar@domain.com)
-     * @param policy - The auto-repost policy to use
+     * @param autoRepostOriginals - Whether to auto-repost original events (default: false)
+     * @param autoRepostReposts - Whether to auto-repost shared events (default: false)
      */
-    async followCalendar(identifier: string, policy: AutoRepostPolicy = AutoRepostPolicy.MANUAL) {
+    async followCalendar(
+      identifier: string,
+      autoRepostOriginals: boolean = false,
+      autoRepostReposts: boolean = false,
+    ) {
       if (!this.selectedCalendarId) {
         return;
       }
 
       const feedService = new FeedService();
-      await feedService.followCalendar(this.selectedCalendarId, identifier, policy);
+      await feedService.followCalendar(this.selectedCalendarId, identifier, autoRepostOriginals, autoRepostReposts);
 
       // Refresh follows list
       await this.loadFollows();
@@ -239,26 +243,43 @@ export const useFeedStore = defineStore('feed', {
      * Update the auto-repost policy for a follow relationship
      *
      * @param followId - The follow relationship ID
-     * @param policy - The new policy to set
+     * @param autoRepostOriginals - Whether to auto-repost original events
+     * @param autoRepostReposts - Whether to auto-repost shared events
      */
-    async updateFollowPolicy(followId: string, policy: AutoRepostPolicy) {
+    async updateFollowPolicy(
+      followId: string,
+      autoRepostOriginals: boolean,
+      autoRepostReposts: boolean,
+    ) {
+      if (!this.selectedCalendarId) {
+        return;
+      }
+
       const followIndex = this.follows.findIndex((f) => f.id === followId);
       if (followIndex === -1) {
         return;
       }
 
       // Optimistic update
-      const previousPolicy = this.follows[followIndex].repostPolicy;
-      this.follows[followIndex].repostPolicy = policy;
+      const previousOriginals = this.follows[followIndex].autoRepostOriginals;
+      const previousReposts = this.follows[followIndex].autoRepostReposts;
+      this.follows[followIndex].autoRepostOriginals = autoRepostOriginals;
+      this.follows[followIndex].autoRepostReposts = autoRepostReposts;
 
       try {
         const feedService = new FeedService();
-        const updated = await feedService.updateFollowPolicy(followId, policy);
+        const updated = await feedService.updateFollowPolicy(
+          followId,
+          autoRepostOriginals,
+          autoRepostReposts,
+          this.selectedCalendarId,
+        );
         this.follows[followIndex] = updated;
       }
       catch (error) {
         // Rollback on error
-        this.follows[followIndex].repostPolicy = previousPolicy;
+        this.follows[followIndex].autoRepostOriginals = previousOriginals;
+        this.follows[followIndex].autoRepostReposts = previousReposts;
         throw error;
       }
     },

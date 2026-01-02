@@ -1,15 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import axios from 'axios';
 import sinon from 'sinon';
-import FeedService from '@/client/service/feed';
-import { AutoRepostPolicy, FollowingCalendar, FollowerCalendar } from '@/common/model/follow';
+import FeedService, { FollowRelationship } from '@/client/service/feed';
+import { FollowerCalendar } from '@/common/model/follow';
 
 describe('FeedService', () => {
   let sandbox: sinon.SinonSandbox;
   let service: FeedService;
   let axiosGetStub: sinon.SinonStub;
   let axiosPostStub: sinon.SinonStub;
-  let axiosPutStub: sinon.SinonStub;
+  let axiosPatchStub: sinon.SinonStub;
   let axiosDeleteStub: sinon.SinonStub;
 
   const testCalendarId = 'test-calendar-id';
@@ -20,7 +20,7 @@ describe('FeedService', () => {
 
     axiosGetStub = sandbox.stub(axios, 'get');
     axiosPostStub = sandbox.stub(axios, 'post');
-    axiosPutStub = sandbox.stub(axios, 'put');
+    axiosPatchStub = sandbox.stub(axios, 'patch');
     axiosDeleteStub = sandbox.stub(axios, 'delete');
   });
 
@@ -29,19 +29,21 @@ describe('FeedService', () => {
   });
 
   describe('getFollows', () => {
-    it('should fetch follows for a calendar', async () => {
+    it('should fetch follows for a calendar with boolean fields', async () => {
       const mockFollows = [
         {
           id: 'follow-1',
           remoteCalendarId: 'remote@example.com',
           calendarId: testCalendarId,
-          repostPolicy: AutoRepostPolicy.MANUAL,
+          autoRepostOriginals: false,
+          autoRepostReposts: false,
         },
         {
           id: 'follow-2',
           remoteCalendarId: 'another@example.org',
           calendarId: testCalendarId,
-          repostPolicy: AutoRepostPolicy.ORIGINAL,
+          autoRepostOriginals: true,
+          autoRepostReposts: true,
         },
       ];
 
@@ -52,15 +54,15 @@ describe('FeedService', () => {
       expect(axiosGetStub.calledOnce).toBe(true);
       expect(axiosGetStub.firstCall.args[0]).toBe(`/api/v1/social/follows?calendarId=${testCalendarId}`);
 
-      // Result should be FollowingCalendar model instances
+      // Result should be FollowRelationship objects with boolean fields
       expect(result).toHaveLength(2);
-      expect(result[0]).toBeInstanceOf(FollowingCalendar);
       expect(result[0].id).toBe('follow-1');
       expect(result[0].remoteCalendarId).toBe('remote@example.com');
-      expect(result[0].repostPolicy).toBe(AutoRepostPolicy.MANUAL);
-      expect(result[1]).toBeInstanceOf(FollowingCalendar);
+      expect(result[0].autoRepostOriginals).toBe(false);
+      expect(result[0].autoRepostReposts).toBe(false);
       expect(result[1].id).toBe('follow-2');
-      expect(result[1].repostPolicy).toBe(AutoRepostPolicy.ORIGINAL);
+      expect(result[1].autoRepostOriginals).toBe(true);
+      expect(result[1].autoRepostReposts).toBe(true);
     });
   });
 
@@ -144,35 +146,33 @@ describe('FeedService', () => {
   });
 
   describe('updateFollowPolicy', () => {
-    it('should update follow policy', async () => {
+    it('should update follow policy with boolean fields', async () => {
       const followId = 'follow-1';
-      const newPolicy = AutoRepostPolicy.ALL;
-      const mockUpdated = {
+      const mockUpdated: FollowRelationship = {
         id: followId,
         remoteCalendarId: 'remote@example.com',
         calendarId: testCalendarId,
-        repostPolicy: newPolicy,
+        autoRepostOriginals: true,
+        autoRepostReposts: true,
       };
 
-      axiosPutStub.resolves({ data: mockUpdated });
+      axiosPatchStub.resolves({ data: mockUpdated });
 
-      const result = await service.updateFollowPolicy(followId, newPolicy, testCalendarId);
+      const result = await service.updateFollowPolicy(followId, true, true, testCalendarId);
 
-      expect(axiosPutStub.calledOnce).toBe(true);
-      expect(axiosPutStub.firstCall.args[0]).toBe(`/api/v1/social/follows/${followId}`);
-      // ModelService.updateModel sends the model's toObject() as request body
-      expect(axiosPutStub.firstCall.args[1]).toEqual({
-        id: followId,
-        remoteCalendarId: '',
+      expect(axiosPatchStub.calledOnce).toBe(true);
+      expect(axiosPatchStub.firstCall.args[0]).toBe(`/api/v1/social/follows/${followId}`);
+      expect(axiosPatchStub.firstCall.args[1]).toEqual({
         calendarId: testCalendarId,
-        repostPolicy: newPolicy,
+        autoRepostOriginals: true,
+        autoRepostReposts: true,
       });
 
-      // Result should be a FollowingCalendar model instance
-      expect(result).toBeInstanceOf(FollowingCalendar);
+      // Result should be a FollowRelationship object
       expect(result.id).toBe(followId);
       expect(result.remoteCalendarId).toBe('remote@example.com');
-      expect(result.repostPolicy).toBe(newPolicy);
+      expect(result.autoRepostOriginals).toBe(true);
+      expect(result.autoRepostReposts).toBe(true);
     });
   });
 

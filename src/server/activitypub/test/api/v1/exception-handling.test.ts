@@ -9,7 +9,7 @@ import ActivityPubInterface from '@/server/activitypub/interface';
 import CalendarService from '@/server/calendar/service/calendar';
 import {
   InvalidRemoteCalendarIdentifierError,
-  InvalidRepostPolicyError,
+  InvalidRepostPolicySettingsError,
   FollowRelationshipNotFoundError,
   RemoteCalendarNotFoundError,
   RemoteDomainUnreachableError,
@@ -243,16 +243,18 @@ describe('ActivityPub API Exception Handling', () => {
   });
 
   describe('updateFollowPolicy exception handling', () => {
-    it('should return 400 for InvalidRepostPolicyError', async () => {
+    it('should return 400 for InvalidRepostPolicySettingsError', async () => {
       sandbox.stub(activityPubInterface, 'updateFollowPolicy')
-        .rejects(new InvalidRepostPolicyError('Invalid policy'));
+        .rejects(new InvalidRepostPolicySettingsError('Invalid policy settings'));
 
       const req = {
         user: testAccount,
         params: { id: 'follow-1' },
         body: {
+          calendarId: testCalendar.id,
           calendar: testCalendar,
-          repostPolicy: 'manual',
+          autoRepostOriginals: true,
+          autoRepostReposts: true,
         },
       };
       const res = {
@@ -268,7 +270,7 @@ describe('ActivityPub API Exception Handling', () => {
       expect(res.json.calledOnce).toBe(true);
       const response = res.json.firstCall.args[0];
       expect(response.error).toBeDefined();
-      expect(response.errorName).toBe('InvalidRepostPolicyError');
+      expect(response.errorName).toBe('InvalidRepostPolicySettingsError');
     });
 
     it('should return 404 for FollowRelationshipNotFoundError', async () => {
@@ -280,8 +282,10 @@ describe('ActivityPub API Exception Handling', () => {
         user: testAccount,
         params: { id: 'nonexistent-follow' },
         body: {
+          calendarId: testCalendar.id,
           calendar: testCalendar,
-          repostPolicy: 'manual',
+          autoRepostOriginals: false,
+          autoRepostReposts: false,
         },
       };
       const res = {

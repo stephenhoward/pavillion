@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import sinon from 'sinon';
@@ -6,7 +6,6 @@ import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
 import Follows from '../follows.vue';
 import { useFeedStore } from '@/client/stores/feedStore';
-import { AutoRepostPolicy } from '@/client/service/feed';
 
 describe('Following Tab', () => {
   let pinia: ReturnType<typeof createPinia>;
@@ -30,10 +29,10 @@ describe('Following Tab', () => {
               no_follows: 'You are not following any calendars',
               follow_button: 'Add a Calendar',
               loading: 'Loading follows...',
-              policy_label: 'Auto-repost:',
-              policy_manual: 'Manual',
-              policy_original: 'Original',
-              policy_all: 'All',
+              auto_repost_originals: 'Auto-repost original events',
+              auto_repost_originals_help: 'Automatically share events posted by this calendar',
+              auto_repost_reposts: 'Also auto-repost shared events',
+              auto_repost_reposts_help: 'Also share events this calendar has reposted from others',
               unfollow_button: 'Unfollow',
             },
           },
@@ -66,18 +65,22 @@ describe('Following Tab', () => {
     expect(wrapper.find('button').text()).toBe('Add a Calendar');
   });
 
-  it('displays following list with calendar info and policy dropdown', async () => {
+  it('displays following list with calendar info and toggle switches', async () => {
     const feedStore = useFeedStore();
     feedStore.follows = [
       {
         id: 'follow-1',
         remoteCalendarId: 'calendar@remote.com',
-        repostPolicy: AutoRepostPolicy.MANUAL,
+        calendarId: 'test-calendar',
+        autoRepostOriginals: false,
+        autoRepostReposts: false,
       },
       {
         id: 'follow-2',
         remoteCalendarId: 'events@other.com',
-        repostPolicy: AutoRepostPolicy.ALL,
+        calendarId: 'test-calendar',
+        autoRepostOriginals: true,
+        autoRepostReposts: true,
       },
     ];
 
@@ -96,13 +99,15 @@ describe('Following Tab', () => {
     expect(wrapper.text()).toContain('events@other.com');
   });
 
-  it('triggers updateFollowPolicy action when policy changes', async () => {
+  it('triggers updateFollowPolicy action when toggle switches change', async () => {
     const feedStore = useFeedStore();
     feedStore.follows = [
       {
         id: 'follow-1',
         remoteCalendarId: 'calendar@remote.com',
-        repostPolicy: AutoRepostPolicy.MANUAL,
+        calendarId: 'test-calendar',
+        autoRepostOriginals: false,
+        autoRepostReposts: false,
       },
     ];
 
@@ -117,11 +122,13 @@ describe('Following Tab', () => {
       },
     });
 
-    const select = wrapper.find('select.policy-dropdown');
-    await select.setValue(AutoRepostPolicy.ALL);
+    // Find the toggle switch button and click it to toggle autoRepostOriginals
+    const toggleButton = wrapper.find('button[role="switch"]');
+    await toggleButton.trigger('click');
 
     expect(updatePolicySpy.calledOnce).toBe(true);
-    expect(updatePolicySpy.calledWith('follow-1', AutoRepostPolicy.ALL)).toBe(true);
+    // Should be called with followId, autoRepostOriginals=true, autoRepostReposts=false
+    expect(updatePolicySpy.calledWith('follow-1', true, false)).toBe(true);
   });
 
   it('removes calendar from list when unfollow button is clicked', async () => {
@@ -130,7 +137,9 @@ describe('Following Tab', () => {
       {
         id: 'follow-1',
         remoteCalendarId: 'calendar@remote.com',
-        repostPolicy: AutoRepostPolicy.MANUAL,
+        calendarId: 'test-calendar',
+        autoRepostOriginals: false,
+        autoRepostReposts: false,
       },
     ];
 
@@ -184,5 +193,74 @@ describe('Following Tab', () => {
 
     // After clicking, showAddModal should be true
     expect(wrapper.vm.showAddModal).toBe(true);
+  });
+
+  it('shows second toggle only when first toggle is enabled', async () => {
+    const feedStore = useFeedStore();
+    feedStore.follows = [
+      {
+        id: 'follow-1',
+        remoteCalendarId: 'calendar@remote.com',
+        calendarId: 'test-calendar',
+        autoRepostOriginals: false,
+        autoRepostReposts: false,
+      },
+    ];
+
+    const wrapper = mount(Follows, {
+      global: {
+        plugins: [pinia, [I18NextVue, { i18next }]],
+        stubs: {
+          AddCalendarModal: true,
+        },
+      },
+    });
+
+    // Initially, only one toggle switch should be visible (autoRepostOriginals is false)
+    let toggleSwitches = wrapper.findAll('button[role="switch"]');
+    expect(toggleSwitches).toHaveLength(1);
+
+    // Update the store to have autoRepostOriginals enabled
+    feedStore.follows[0].autoRepostOriginals = true;
+    await wrapper.vm.$nextTick();
+
+    // Now both toggle switches should be visible
+    toggleSwitches = wrapper.findAll('button[role="switch"]');
+    expect(toggleSwitches).toHaveLength(2);
+  });
+
+  it('auto-disables second toggle when first toggle is turned off', async () => {
+    const feedStore = useFeedStore();
+    feedStore.follows = [
+      {
+        id: 'follow-1',
+        remoteCalendarId: 'calendar@remote.com',
+        calendarId: 'test-calendar',
+        autoRepostOriginals: true,
+        autoRepostReposts: true,
+      },
+    ];
+
+    const updatePolicySpy = sandbox.stub(feedStore, 'updateFollowPolicy').resolves();
+
+    const wrapper = mount(Follows, {
+      global: {
+        plugins: [pinia, [I18NextVue, { i18next }]],
+        stubs: {
+          AddCalendarModal: true,
+        },
+      },
+    });
+
+    // Both toggles should be visible initially
+    let toggleSwitches = wrapper.findAll('button[role="switch"]');
+    expect(toggleSwitches).toHaveLength(2);
+
+    // Click the first toggle to turn it off
+    await toggleSwitches[0].trigger('click');
+
+    // Should update with both values set to false (turning off originals also turns off reposts)
+    expect(updatePolicySpy.calledOnce).toBe(true);
+    expect(updatePolicySpy.calledWith('follow-1', false, false)).toBe(true);
   });
 });

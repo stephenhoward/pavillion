@@ -12,6 +12,12 @@ class InvalidRepostPolicyError extends Error {
   }
 }
 
+class InvalidRepostPolicySettingsError extends Error {
+  constructor(message?: string) {
+    super(message || 'Invalid auto-repost policy settings: auto-repost reposts cannot be enabled without enabling auto-repost originals');
+  }
+}
+
 class InvalidSharedEventUrlError extends Error {
   constructor(message?: string) {
     super(message || 'Invalid event URL for sharing');
@@ -63,6 +69,7 @@ class SelfFollowError extends Error {
 export {
   InvalidRemoteCalendarIdentifierError,
   InvalidRepostPolicyError,
+  InvalidRepostPolicySettingsError,
   InvalidSharedEventUrlError,
   FollowRelationshipNotFoundError,
   RemoteCalendarNotFoundError,

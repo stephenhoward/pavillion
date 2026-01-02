@@ -5,7 +5,7 @@ import axios from 'axios';
 
 import { Account } from "@/common/model/account";
 import { Calendar } from "@/common/model/calendar";
-import { FollowingCalendar, FollowerCalendar, AutoRepostPolicy } from "@/common/model/follow";
+import { FollowingCalendar, FollowerCalendar } from "@/common/model/follow";
 import { ActivityPubActivity } from "@/server/activitypub/model/base";
 import FollowActivity from "@/server/activitypub/model/action/follow";
 import AnnounceActivity from "@/server/activitypub/model/action/announce";
@@ -15,7 +15,7 @@ import { EventEntity } from "@/server/calendar/entity/event";
 import CalendarInterface from "@/server/calendar/interface";
 import {
   InvalidRemoteCalendarIdentifierError,
-  InvalidRepostPolicyError,
+  InvalidRepostPolicySettingsError,
   InvalidSharedEventUrlError,
   FollowRelationshipNotFoundError,
   RemoteCalendarNotFoundError,
@@ -44,7 +44,7 @@ class ActivityPubService {
   }
 
   static isValidUsername(username: string): boolean {
-    return username.match(/^[a-z0-9_]{3,16}$/) !== null;
+    return username.match(/^[a-z0-9_]{3,24}$/) !== null;
   }
 
   static isValidOrgIdentifier(identifier: string): boolean {
@@ -55,13 +55,30 @@ class ActivityPubService {
   }
 
   /**
+   * Validate that repost policy settings are consistent
+   * autoRepostReposts cannot be true if autoRepostOriginals is false
+   */
+  static validateRepostPolicySettings(autoRepostOriginals: boolean, autoRepostReposts: boolean): void {
+    if (autoRepostReposts && !autoRepostOriginals) {
+      throw new InvalidRepostPolicySettingsError();
+    }
+  }
+
+  /**
      * Follow a calendar from another server
      * @param account The local account requesting to follow
      * @param calendar The local calendar that will follow the remote calendar
      * @param orgIdentifier The remote calendar identifier to follow
-     * @param repostPolicy The auto-repost policy to use for this follow relationship
+     * @param autoRepostOriginals Whether to auto-repost original events from the followed calendar
+     * @param autoRepostReposts Whether to auto-repost shared events from the followed calendar
      */
-  async followCalendar(account: Account, calendar: Calendar, orgIdentifier: string, repostPolicy = AutoRepostPolicy.MANUAL) {
+  async followCalendar(
+    account: Account,
+    calendar: Calendar,
+    orgIdentifier: string,
+    autoRepostOriginals: boolean = false,
+    autoRepostReposts: boolean = false,
+  ) {
     if (!ActivityPubService.isValidOrgIdentifier(orgIdentifier)) {
       throw new InvalidRemoteCalendarIdentifierError('Invalid remote calendar identifier: ' + orgIdentifier);
     }
@@ -69,6 +86,9 @@ class ActivityPubService {
     if (!this.calendarService.userCanModifyCalendar(account, calendar)) {
       throw new InsufficientCalendarPermissionsError('User does not have permission to modify calendar: ' + calendar.id);
     }
+
+    // Validate repost policy settings
+    ActivityPubService.validateRepostPolicySettings(autoRepostOriginals, autoRepostReposts);
 
     // Prevent self-follows
     const localDomain = config.get('domain') as string;
@@ -87,8 +107,10 @@ class ActivityPubService {
 
     // Update the repost policy if follow already exists
     if (existingFollowEntity) {
-      if ( existingFollowEntity.repost_policy !== repostPolicy ) {
-        existingFollowEntity.repost_policy = repostPolicy;
+      if (existingFollowEntity.auto_repost_originals !== autoRepostOriginals ||
+          existingFollowEntity.auto_repost_reposts !== autoRepostReposts) {
+        existingFollowEntity.auto_repost_originals = autoRepostOriginals;
+        existingFollowEntity.auto_repost_reposts = autoRepostReposts;
         await existingFollowEntity.save();
       }
       return;
@@ -102,7 +124,8 @@ class ActivityPubService {
       id: followActivity.id,
       remote_calendar_id: orgIdentifier,
       calendar_id: calendar.id,
-      repost_policy: repostPolicy,
+      auto_repost_originals: autoRepostOriginals,
+      auto_repost_reposts: autoRepostReposts,
     });
     await followEntity.save();
 
@@ -225,14 +248,17 @@ class ActivityPubService {
    * Update the auto-repost policy for a follow relationship
    * @param calendar The local calendar that owns the follow relationship
    * @param followId The ID of the follow relationship to update
-   * @param policy The new auto-repost policy
+   * @param autoRepostOriginals Whether to auto-repost original events
+   * @param autoRepostReposts Whether to auto-repost shared events
    */
-  async updateFollowPolicy(calendar: Calendar, followId: string, policy: AutoRepostPolicy): Promise<void> {
-    // Validate policy is a valid AutoRepostPolicy value
-    const validPolicies = [AutoRepostPolicy.MANUAL, AutoRepostPolicy.ORIGINAL, AutoRepostPolicy.ALL];
-    if (!validPolicies.includes(policy)) {
-      throw new InvalidRepostPolicyError('Invalid repost policy: ' + policy);
-    }
+  async updateFollowPolicy(
+    calendar: Calendar,
+    followId: string,
+    autoRepostOriginals: boolean,
+    autoRepostReposts: boolean,
+  ): Promise<void> {
+    // Validate policy settings
+    ActivityPubService.validateRepostPolicySettings(autoRepostOriginals, autoRepostReposts);
 
     const followEntity = await FollowingCalendarEntity.findOne({
       where: {
@@ -245,7 +271,8 @@ class ActivityPubService {
       throw new FollowRelationshipNotFoundError('Follow relationship not found: ' + followId);
     }
 
-    followEntity.repost_policy = policy;
+    followEntity.auto_repost_originals = autoRepostOriginals;
+    followEntity.auto_repost_reposts = autoRepostReposts;
     await followEntity.save();
   }
 

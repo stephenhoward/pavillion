@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
-import { type FollowRelationship, AutoRepostPolicy } from '@/client/service/feed';
+import { type FollowRelationship } from '@/client/service/feed';
+import ToggleSwitch from '@/client/components/common/toggle_switch.vue';
 
 const { t } = useTranslation('feed', {
   keyPrefix: 'follows',
@@ -12,20 +12,18 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'policy-change', followId: string, policy: AutoRepostPolicy): void;
+  (e: 'policy-change', followId: string, autoRepostOriginals: boolean, autoRepostReposts: boolean): void;
   (e: 'unfollow', followId: string): void;
 }>();
 
-const policyOptions = computed(() => [
-  { value: AutoRepostPolicy.MANUAL, label: t('policy_manual') },
-  { value: AutoRepostPolicy.ORIGINAL, label: t('policy_original') },
-  { value: AutoRepostPolicy.ALL, label: t('policy_all') },
-]);
+const handleOriginalsToggle = (value: boolean) => {
+  // If turning off originals, also turn off reposts
+  const newReposts = value ? props.follow.autoRepostReposts : false;
+  emit('policy-change', props.follow.id, value, newReposts);
+};
 
-const handlePolicyChange = (event: Event) => {
-  const target = event.target as HTMLSelectElement;
-  const newPolicy = target.value as AutoRepostPolicy;
-  emit('policy-change', props.follow.id, newPolicy);
+const handleRepostsToggle = (value: boolean) => {
+  emit('policy-change', props.follow.id, props.follow.autoRepostOriginals, value);
 };
 
 const handleUnfollow = () => {
@@ -42,24 +40,23 @@ const handleUnfollow = () => {
     </div>
 
     <div class="follow-actions">
-      <div class="policy-selector">
-        <label :for="`policy-${follow.id}`" class="policy-label">
-          {{ t('policy_label') }}
-        </label>
-        <select
-          :id="`policy-${follow.id}`"
-          :value="follow.repostPolicy"
-          @change="handlePolicyChange"
-          class="policy-dropdown"
-        >
-          <option
-            v-for="option in policyOptions"
-            :key="option.value"
-            :value="option.value"
-          >
-            {{ option.label }}
-          </option>
-        </select>
+      <div class="policy-toggles">
+        <ToggleSwitch
+          :id="`auto-repost-originals-${follow.id}`"
+          :model-value="follow.autoRepostOriginals"
+          :label="t('auto_repost_originals')"
+          :help-text="t('auto_repost_originals_help')"
+          @update:model-value="handleOriginalsToggle"
+        />
+
+        <ToggleSwitch
+          v-if="follow.autoRepostOriginals"
+          :id="`auto-repost-reposts-${follow.id}`"
+          :model-value="follow.autoRepostReposts"
+          :label="t('auto_repost_reposts')"
+          :help-text="t('auto_repost_reposts_help')"
+          @update:model-value="handleRepostsToggle"
+        />
       </div>
 
       <button
@@ -92,7 +89,7 @@ div.follow-list-item {
 
   @media (min-width: 768px) {
     flex-direction: row;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
   }
 
@@ -113,57 +110,20 @@ div.follow-list-item {
   div.follow-actions {
     display: flex;
     flex-direction: column;
-    gap: $spacing-sm;
+    gap: $spacing-md;
     align-items: stretch;
 
     @media (min-width: 768px) {
-      flex-direction: row;
-      align-items: center;
+      flex-direction: column;
+      align-items: flex-end;
       gap: $spacing-md;
     }
 
-    div.policy-selector {
+    div.policy-toggles {
       display: flex;
       flex-direction: column;
-      gap: $spacing-xs;
-
-      @media (min-width: 768px) {
-        flex-direction: row;
-        align-items: center;
-        gap: $spacing-sm;
-      }
-
-      label.policy-label {
-        font-size: 0.875rem;
-        font-weight: $font-medium;
-        color: $light-mode-text;
-        white-space: nowrap;
-
-        @media (prefers-color-scheme: dark) {
-          color: $dark-mode-text;
-        }
-      }
-
-      select.policy-dropdown {
-        padding: $spacing-sm $spacing-md;
-        border-radius: $form-input-border-radius;
-        border: 1px solid rgba(0, 0, 0, 0.2);
-        background: white;
-        color: $light-mode-text;
-        font-size: 0.875rem;
-        cursor: pointer;
-
-        @media (prefers-color-scheme: dark) {
-          background: $dark-mode-background;
-          color: $dark-mode-text;
-          border-color: rgba(255, 255, 255, 0.2);
-        }
-
-        &:focus {
-          outline: 2px solid $light-mode-button-background;
-          outline-offset: 2px;
-        }
-      }
+      gap: $spacing-md;
+      min-width: 240px;
     }
 
     button.unfollow-button {
@@ -177,6 +137,11 @@ div.follow-list-item {
       cursor: pointer;
       white-space: nowrap;
       transition: background-color 0.2s ease;
+      align-self: flex-start;
+
+      @media (min-width: 768px) {
+        align-self: flex-end;
+      }
 
       @media (prefers-color-scheme: dark) {
         background: $dark-mode-background;

@@ -1,7 +1,7 @@
 import { Model, Table, Column, PrimaryKey, BelongsTo, DataType, ForeignKey } from 'sequelize-typescript';
 
 import { event_activity } from '@/common/model/events';
-import { FollowingCalendar, FollowerCalendar, AutoRepostPolicy } from '@/common/model/follow';
+import { FollowingCalendar, FollowerCalendar } from '@/common/model/follow';
 import db from '@/server/common/entity/db';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { ActivityPubActivity } from '@/server/activitypub/model/base';
@@ -115,21 +115,26 @@ abstract class BaseFollowEntity extends Model {
 @Table({ tableName: 'ap_following'})
 class FollowingCalendarEntity extends BaseFollowEntity {
   @Column({
-    type: DataType.STRING,
-    defaultValue: AutoRepostPolicy.MANUAL,
+    type: DataType.BOOLEAN,
+    defaultValue: false,
     allowNull: false,
-    validate: {
-      isIn: [[AutoRepostPolicy.MANUAL, AutoRepostPolicy.ORIGINAL, AutoRepostPolicy.ALL]],
-    },
   })
-  declare repost_policy: AutoRepostPolicy;
+  declare auto_repost_originals: boolean;
+
+  @Column({
+    type: DataType.BOOLEAN,
+    defaultValue: false,
+    allowNull: false,
+  })
+  declare auto_repost_reposts: boolean;
 
   toModel(): FollowingCalendar {
     return new FollowingCalendar(
       this.id,
       this.remote_calendar_id,
       this.calendar_id,
-      this.repost_policy,
+      this.auto_repost_originals,
+      this.auto_repost_reposts,
     );
   }
 }
@@ -221,5 +226,4 @@ export {
   FollowerCalendarEntity,
   SharedEventEntity,
   EventActivityEntity,
-  AutoRepostPolicy,
 };

@@ -7,7 +7,7 @@ import { Calendar } from '@/common/model/calendar';
 import ActivityPubMemberRoutes from '@/server/activitypub/api/v1/members';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import CalendarService from '@/server/calendar/service/calendar';
-import { AutoRepostPolicy, FollowingCalendar, FollowerCalendar } from '@/common/model/follow';
+import { FollowingCalendar, FollowerCalendar } from '@/common/model/follow';
 
 describe('ActivityPub Social API Routes', () => {
   let routes: ActivityPubMemberRoutes;
@@ -33,10 +33,10 @@ describe('ActivityPub Social API Routes', () => {
   });
 
   describe('getFollows', () => {
-    it('should return list of followed calendars', async () => {
+    it('should return list of followed calendars with new boolean fields', async () => {
       const mockFollows = [
-        new FollowingCalendar('follow-1', 'remote@example.com', testCalendar.id, AutoRepostPolicy.MANUAL),
-        new FollowingCalendar('follow-2', 'another@example.org', testCalendar.id, AutoRepostPolicy.ORIGINAL),
+        new FollowingCalendar('follow-1', 'remote@example.com', testCalendar.id, false, false),
+        new FollowingCalendar('follow-2', 'another@example.org', testCalendar.id, true, false),
       ];
 
       sandbox.stub(activityPubInterface, 'getFollowing').resolves(mockFollows);
@@ -60,7 +60,10 @@ describe('ActivityPub Social API Routes', () => {
       expect(response).toHaveLength(2);
       expect(response[0].id).toBe('follow-1');
       expect(response[0].remoteCalendarId).toBe('remote@example.com');
-      expect(response[0].repostPolicy).toBe(AutoRepostPolicy.MANUAL);
+      expect(response[0].autoRepostOriginals).toBe(false);
+      expect(response[0].autoRepostReposts).toBe(false);
+      expect(response[1].autoRepostOriginals).toBe(true);
+      expect(response[1].autoRepostReposts).toBe(false);
     });
 
     it('should require authenticated user', async () => {
@@ -151,8 +154,8 @@ describe('ActivityPub Social API Routes', () => {
   });
 
   describe('updateFollowPolicy', () => {
-    it('should update repost policy', async () => {
-      const mockUpdatedFollow = new FollowingCalendar('follow-1', 'remote@example.com', testCalendar.id, AutoRepostPolicy.ALL);
+    it('should update repost policy with new boolean fields', async () => {
+      const mockUpdatedFollow = new FollowingCalendar('follow-1', 'remote@example.com', testCalendar.id, true, true);
 
       sandbox.stub(activityPubInterface, 'updateFollowPolicy').resolves();
       sandbox.stub(activityPubInterface, 'getFollowing').resolves([mockUpdatedFollow]);
@@ -163,7 +166,8 @@ describe('ActivityPub Social API Routes', () => {
         body: {
           calendarId: testCalendar.id,
           calendar: testCalendar,
-          repostPolicy: AutoRepostPolicy.ALL,
+          autoRepostOriginals: true,
+          autoRepostReposts: true,
         },
       };
       const res = {
@@ -178,29 +182,34 @@ describe('ActivityPub Social API Routes', () => {
       expect(res.json.calledOnce).toBe(true);
       const response = res.json.firstCall.args[0];
       expect(response.id).toBe('follow-1');
-      expect(response.repostPolicy).toBe(AutoRepostPolicy.ALL);
+      expect(response.autoRepostOriginals).toBe(true);
+      expect(response.autoRepostReposts).toBe(true);
     });
 
-    it('should validate policy is valid AutoRepostPolicy', async () => {
+    it('should reject when autoRepostReposts is true but autoRepostOriginals is false', async () => {
       const req = {
         user: testAccount,
         params: { id: 'follow-1' },
         body: {
           calendarId: testCalendar.id,
           calendar: testCalendar,
-          repostPolicy: 'INVALID_POLICY',
+          autoRepostOriginals: false,
+          autoRepostReposts: true,
         },
       };
       const res = {
         status: sinon.stub(),
         send: sinon.stub(),
+        json: sinon.stub(),
       };
       res.status.returns(res);
 
       await routes.updateFollowPolicy(req as any, res as any);
 
       expect(res.status.calledWith(400)).toBe(true);
-      expect(res.send.calledWith('Invalid repost policy')).toBe(true);
+      expect(res.json.calledOnce).toBe(true);
+      const response = res.json.firstCall.args[0];
+      expect(response.errorName).toBe('InvalidRepostPolicySettingsError');
     });
 
     it('should require authenticated user', async () => {
@@ -209,7 +218,8 @@ describe('ActivityPub Social API Routes', () => {
         body: {
           calendarId: testCalendar.id,
           calendar: testCalendar,
-          repostPolicy: AutoRepostPolicy.ALL,
+          autoRepostOriginals: true,
+          autoRepostReposts: false,
         },
       };
       const res = {
@@ -324,7 +334,7 @@ describe('ActivityPub Social API Routes', () => {
   });
 
   describe('followCalendar', () => {
-    it('should accept initial repostPolicy parameter', async () => {
+    it('should accept autoRepostOriginals and autoRepostReposts parameters', async () => {
       const followStub = sandbox.stub(activityPubInterface, 'followCalendar').resolves();
 
       const req = {
@@ -333,7 +343,8 @@ describe('ActivityPub Social API Routes', () => {
           calendarId: testCalendar.id,
           calendar: testCalendar,
           remoteCalendar: 'remote@example.com',
-          repostPolicy: AutoRepostPolicy.ORIGINAL,
+          autoRepostOriginals: true,
+          autoRepostReposts: false,
         },
       };
       const res = {
@@ -347,11 +358,12 @@ describe('ActivityPub Social API Routes', () => {
       expect(res.status.calledWith(200)).toBe(true);
       expect(res.send.calledWith('Followed')).toBe(true);
       expect(followStub.calledOnce).toBe(true);
-      const [account, calendar, remoteId, policy] = followStub.firstCall.args;
-      expect(policy).toBe(AutoRepostPolicy.ORIGINAL);
+      const [account, calendar, remoteId, originals, reposts] = followStub.firstCall.args;
+      expect(originals).toBe(true);
+      expect(reposts).toBe(false);
     });
 
-    it('should default to MANUAL policy if not specified', async () => {
+    it('should default to false for both boolean fields if not specified', async () => {
       const followStub = sandbox.stub(activityPubInterface, 'followCalendar').resolves();
 
       const req = {
@@ -373,8 +385,9 @@ describe('ActivityPub Social API Routes', () => {
       expect(res.status.calledWith(200)).toBe(true);
       expect(res.send.calledWith('Followed')).toBe(true);
       expect(followStub.calledOnce).toBe(true);
-      const [account, calendar, remoteId, policy] = followStub.firstCall.args;
-      expect(policy).toBe(AutoRepostPolicy.MANUAL);
+      const [account, calendar, remoteId, originals, reposts] = followStub.firstCall.args;
+      expect(originals).toBe(false);
+      expect(reposts).toBe(false);
     });
 
     it('should require authenticated user', async () => {

@@ -6,7 +6,6 @@ import { useFeedStore } from '@/client/stores/feedStore';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent } from '@/common/model/events';
-import { AutoRepostPolicy } from '@/client/service/feed';
 
 /**
  * Integration tests for critical feed workflows
@@ -50,13 +49,15 @@ describe('Feed Workflow Integration Tests', () => {
         data: { success: true },
       });
 
-      // Mock getting follows (after follow completes)
+      // Mock getting follows (after follow completes) with boolean fields
       axiosGetStub.withArgs(sinon.match(/\/api\/v1\/social\/follows/)).resolves({
         data: [
           {
             id: 'follow-1',
             remoteCalendarId: 'remote@example.com',
-            repostPolicy: AutoRepostPolicy.MANUAL,
+            calendarId: 'local-cal-1',
+            autoRepostOriginals: false,
+            autoRepostReposts: false,
           },
         ],
       });
@@ -83,8 +84,8 @@ describe('Feed Workflow Integration Tests', () => {
         },
       });
 
-      // Action: Follow a calendar
-      await feedStore.followCalendar('remote@example.com', AutoRepostPolicy.MANUAL);
+      // Action: Follow a calendar with boolean fields (defaults to false, false)
+      await feedStore.followCalendar('remote@example.com');
 
       // Verify: Calendar is in follows list
       expect(feedStore.follows).toHaveLength(1);
@@ -146,12 +147,18 @@ describe('Feed Workflow Integration Tests', () => {
 
       feedStore.setSelectedCalendar('cal-1');
 
-      // Populate feed data for calendar 1
+      // Populate feed data for calendar 1 with boolean fields
       feedStore.events = [
         { id: 'event-1', title: 'Event 1', repostStatus: 'none' },
       ];
       feedStore.follows = [
-        { id: 'follow-1', remoteCalendarId: 'remote@example.com', repostPolicy: AutoRepostPolicy.MANUAL },
+        {
+          id: 'follow-1',
+          remoteCalendarId: 'remote@example.com',
+          calendarId: 'cal-1',
+          autoRepostOriginals: false,
+          autoRepostReposts: false,
+        },
       ];
       feedStore.eventsPage = 2;
 
@@ -282,9 +289,9 @@ describe('Feed Workflow Integration Tests', () => {
         new Error('Failed to follow calendar'),
       );
 
-      // Action: Try to follow calendar
+      // Action: Try to follow calendar with boolean fields (defaults)
       await expect(
-        feedStore.followCalendar('remote@example.com', AutoRepostPolicy.MANUAL),
+        feedStore.followCalendar('remote@example.com'),
       ).rejects.toThrow();
     });
 
@@ -306,8 +313,8 @@ describe('Feed Workflow Integration Tests', () => {
         new Error('Failed to repost'),
       );
 
-      // Action: Try to repost
-      await expect(feedStore.repostEvent('event-1')).rejects.toThrow('Failed to repost');
+      // Action: Try to repost - FeedService wraps errors in UnknownError
+      await expect(feedStore.repostEvent('event-1')).rejects.toThrow();
 
       // Verify: Status was rolled back to original
       expect(feedStore.events[0].repostStatus).toBe('none');
@@ -357,33 +364,39 @@ describe('Feed Workflow Integration Tests', () => {
   });
 
   describe('Integration: Follow policy update affects auto-repost behavior', () => {
-    it('should update follow policy and persist change', async () => {
+    it('should update follow policy with boolean fields and persist change', async () => {
       const feedStore = useFeedStore();
       feedStore.setSelectedCalendar('cal-1');
 
+      // Setup with boolean fields (both false initially)
       feedStore.follows = [
         {
           id: 'follow-1',
           remoteCalendarId: 'remote@example.com',
-          repostPolicy: AutoRepostPolicy.MANUAL,
+          calendarId: 'cal-1',
+          autoRepostOriginals: false,
+          autoRepostReposts: false,
         },
       ];
 
-      // Mock update policy API (ModelService.updateModel uses PUT)
-      const axiosPutStub = sandbox.stub(axios, 'put');
-      axiosPutStub.withArgs('/api/v1/social/follows/follow-1').resolves({
+      // Mock update policy API (uses PATCH with boolean fields)
+      const axiosPatchStub = sandbox.stub(axios, 'patch');
+      axiosPatchStub.withArgs('/api/v1/social/follows/follow-1').resolves({
         data: {
           id: 'follow-1',
           remoteCalendarId: 'remote@example.com',
-          repostPolicy: AutoRepostPolicy.ALL,
+          calendarId: 'cal-1',
+          autoRepostOriginals: true,
+          autoRepostReposts: true,
         },
       });
 
-      // Action: Update policy
-      await feedStore.updateFollowPolicy('follow-1', AutoRepostPolicy.ALL);
+      // Action: Update policy to enable both auto-repost settings
+      await feedStore.updateFollowPolicy('follow-1', true, true);
 
-      // Verify: Policy was updated in store
-      expect(feedStore.follows[0].repostPolicy).toBe(AutoRepostPolicy.ALL);
+      // Verify: Policy was updated in store with boolean fields
+      expect(feedStore.follows[0].autoRepostOriginals).toBe(true);
+      expect(feedStore.follows[0].autoRepostReposts).toBe(true);
     });
   });
 
@@ -392,12 +405,14 @@ describe('Feed Workflow Integration Tests', () => {
       const feedStore = useFeedStore();
       feedStore.setSelectedCalendar('cal-1');
 
-      // Setup: Following one calendar with events in feed
+      // Setup: Following one calendar with events in feed (using boolean fields)
       feedStore.follows = [
         {
           id: 'follow-1',
           remoteCalendarId: 'remote@example.com',
-          repostPolicy: AutoRepostPolicy.MANUAL,
+          calendarId: 'cal-1',
+          autoRepostOriginals: false,
+          autoRepostReposts: false,
         },
       ];
 

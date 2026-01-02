@@ -2,8 +2,9 @@
 import { ref, computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import Modal from '@/client/components/common/modal.vue';
+import ToggleSwitch from '@/client/components/common/toggle_switch.vue';
 import { useFeedStore } from '@/client/stores/feedStore';
-import FeedService, { type RemoteCalendarPreview, AutoRepostPolicy } from '@/client/service/feed';
+import FeedService, { type RemoteCalendarPreview } from '@/client/service/feed';
 import {
   InvalidRemoteCalendarIdentifierError,
   RemoteCalendarNotFoundError,
@@ -23,17 +24,12 @@ const emit = defineEmits<{
 
 const feedStore = useFeedStore();
 const identifier = ref('');
-const selectedPolicy = ref<AutoRepostPolicy>(AutoRepostPolicy.MANUAL);
+const autoRepostOriginals = ref(false);
+const autoRepostReposts = ref(false);
 const preview = ref<RemoteCalendarPreview | null>(null);
 const isLookingUp = ref(false);
 const lookupError = ref('');
 const isFollowing = ref(false);
-
-const policyOptions = computed(() => [
-  { value: AutoRepostPolicy.MANUAL, label: t('add_calendar_modal.policy_manual') },
-  { value: AutoRepostPolicy.ORIGINAL, label: t('add_calendar_modal.policy_original') },
-  { value: AutoRepostPolicy.ALL, label: t('add_calendar_modal.policy_all') },
-]);
 
 const isValidIdentifier = computed(() => {
   return identifier.value.includes('@') && identifier.value.split('@').length === 2;
@@ -115,6 +111,18 @@ const lookupRemoteCalendar = async () => {
   }
 };
 
+const handleOriginalsToggle = (value: boolean) => {
+  autoRepostOriginals.value = value;
+  // If turning off originals, also turn off reposts
+  if (!value) {
+    autoRepostReposts.value = false;
+  }
+};
+
+const handleRepostsToggle = (value: boolean) => {
+  autoRepostReposts.value = value;
+};
+
 const handleFollow = async () => {
   if (!canFollow.value) {
     return;
@@ -123,7 +131,7 @@ const handleFollow = async () => {
   isFollowing.value = true;
 
   try {
-    await feedStore.followCalendar(identifier.value, selectedPolicy.value);
+    await feedStore.followCalendar(identifier.value, autoRepostOriginals.value, autoRepostReposts.value);
     emit('follow-success');
     handleClose();
   }
@@ -152,7 +160,8 @@ const handleFollow = async () => {
 const handleClose = () => {
   // Reset form
   identifier.value = '';
-  selectedPolicy.value = AutoRepostPolicy.MANUAL;
+  autoRepostOriginals.value = false;
+  autoRepostReposts.value = false;
   preview.value = null;
   lookupError.value = '';
   isLookingUp.value = false;
@@ -212,26 +221,28 @@ const handleClose = () => {
           </div>
         </div>
 
-        <div class="form-group">
-          <label for="repost-policy">
-            {{ t('add_calendar_modal.policy_label') }}
-          </label>
-          <select
-            id="repost-policy"
-            v-model="selectedPolicy"
-            class="policy-select"
-          >
-            <option
-              v-for="option in policyOptions"
-              :key="option.value"
-              :value="option.value"
-            >
-              {{ option.label }}
-            </option>
-          </select>
-          <p class="help-text">
-            {{ t('add_calendar_modal.policy_help') }}
-          </p>
+        <div class="policy-section">
+          <h4>{{ t('add_calendar_modal.policy_title') }}</h4>
+          <p class="policy-description">{{ t('add_calendar_modal.policy_description') }}</p>
+
+          <div class="policy-toggles">
+            <ToggleSwitch
+              id="auto-repost-originals"
+              :model-value="autoRepostOriginals"
+              :label="t('add_calendar_modal.auto_repost_originals')"
+              :help-text="t('add_calendar_modal.auto_repost_originals_help')"
+              @update:model-value="handleOriginalsToggle"
+            />
+
+            <ToggleSwitch
+              v-if="autoRepostOriginals"
+              id="auto-repost-reposts"
+              :model-value="autoRepostReposts"
+              :label="t('add_calendar_modal.auto_repost_reposts')"
+              :help-text="t('add_calendar_modal.auto_repost_reposts_help')"
+              @update:model-value="handleRepostsToggle"
+            />
+          </div>
         </div>
       </div>
 
@@ -283,8 +294,7 @@ div.add-calendar-modal {
       }
     }
 
-    input.identifier-input,
-    select.policy-select {
+    input.identifier-input {
       padding: $spacing-md;
       border-radius: $form-input-border-radius;
       border: 1px solid rgba(0, 0, 0, 0.2);
@@ -371,6 +381,42 @@ div.add-calendar-modal {
         strong {
           font-weight: $font-medium;
         }
+      }
+    }
+
+    div.policy-section {
+      border-top: 1px solid rgba(0, 0, 0, 0.1);
+      padding-top: $spacing-lg;
+
+      @media (prefers-color-scheme: dark) {
+        border-color: rgba(255, 255, 255, 0.1);
+      }
+
+      h4 {
+        margin: 0 0 $spacing-sm 0;
+        font-size: 1rem;
+        font-weight: $font-medium;
+        color: $light-mode-text;
+
+        @media (prefers-color-scheme: dark) {
+          color: $dark-mode-text;
+        }
+      }
+
+      p.policy-description {
+        font-size: 0.875rem;
+        color: rgba(0, 0, 0, 0.6);
+        margin: 0 0 $spacing-md 0;
+
+        @media (prefers-color-scheme: dark) {
+          color: rgba(255, 255, 255, 0.6);
+        }
+      }
+
+      div.policy-toggles {
+        display: flex;
+        flex-direction: column;
+        gap: $spacing-md;
       }
     }
   }

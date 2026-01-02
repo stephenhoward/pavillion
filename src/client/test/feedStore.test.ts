@@ -3,7 +3,6 @@ import { createPinia, setActivePinia } from 'pinia';
 import { useFeedStore } from '@/client/stores/feedStore';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { Calendar } from '@/common/model/calendar';
-import { AutoRepostPolicy } from '@/client/service/feed';
 
 // Create mock service instance
 const mockFeedService = {
@@ -67,7 +66,7 @@ describe('FeedStore', () => {
 
     it('should clear cached data when calendar selection changes', () => {
       feedStore.follows = [
-        { id: 'follow-1', remoteCalendarId: 'remote@example.com', repostPolicy: AutoRepostPolicy.MANUAL },
+        { id: 'follow-1', remoteCalendarId: 'remote@example.com', calendarId: 'cal-1', autoRepostOriginals: false, autoRepostReposts: false },
       ];
       feedStore.events = [
         { id: 'event-1', title: 'Test Event', repostStatus: 'none' },
@@ -83,10 +82,10 @@ describe('FeedStore', () => {
   });
 
   describe('follows/followers/events state management', () => {
-    it('should store follows list', () => {
+    it('should store follows list with new boolean fields', () => {
       const follows = [
-        { id: 'follow-1', remoteCalendarId: 'remote1@example.com', repostPolicy: AutoRepostPolicy.MANUAL },
-        { id: 'follow-2', remoteCalendarId: 'remote2@example.com', repostPolicy: AutoRepostPolicy.ALL },
+        { id: 'follow-1', remoteCalendarId: 'remote1@example.com', calendarId: 'cal-1', autoRepostOriginals: false, autoRepostReposts: false },
+        { id: 'follow-2', remoteCalendarId: 'remote2@example.com', calendarId: 'cal-1', autoRepostOriginals: true, autoRepostReposts: true },
       ];
 
       feedStore.follows = follows;

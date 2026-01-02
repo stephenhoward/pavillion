@@ -4,10 +4,9 @@ import { Account } from '@/common/model/account';
 import ExpressHelper from '@/server/common/helper/express';
 import CalendarService from '@/server/calendar/service/calendar';
 import ActivityPubInterface from '@/server/activitypub/interface';
-import { AutoRepostPolicy } from '@/common/model/follow';
 import {
   InvalidRemoteCalendarIdentifierError,
-  InvalidRepostPolicyError,
+  InvalidRepostPolicySettingsError,
   InvalidSharedEventUrlError,
   FollowRelationshipNotFoundError,
   RemoteCalendarNotFoundError,
@@ -186,12 +185,21 @@ export default class ActivityPubMemberRoutes {
 
     const calendar = req.body.calendar;
     const followId = req.params.id;
-    const repostPolicy = req.body.repostPolicy;
+    const autoRepostOriginals = req.body.autoRepostOriginals ?? false;
+    const autoRepostReposts = req.body.autoRepostReposts ?? false;
 
-    // Validate repost policy
-    const validPolicies = [AutoRepostPolicy.MANUAL, AutoRepostPolicy.ORIGINAL, AutoRepostPolicy.ALL];
-    if (!validPolicies.includes(repostPolicy)) {
-      res.status(400).send('Invalid repost policy');
+    // Validate types
+    if (typeof autoRepostOriginals !== 'boolean' || typeof autoRepostReposts !== 'boolean') {
+      res.status(400).send('Invalid repost policy settings: expected boolean values');
+      return;
+    }
+
+    // Validate dependency rule
+    if (autoRepostReposts && !autoRepostOriginals) {
+      res.status(400).json({
+        error: 'Invalid auto-repost policy settings: auto-repost reposts cannot be enabled without enabling auto-repost originals',
+        errorName: 'InvalidRepostPolicySettingsError',
+      });
       return;
     }
 
@@ -204,7 +212,7 @@ export default class ActivityPubMemberRoutes {
     }
 
     try {
-      await this.service.updateFollowPolicy(calendar, followId, repostPolicy);
+      await this.service.updateFollowPolicy(calendar, followId, autoRepostOriginals, autoRepostReposts);
 
       // Fetch and return updated relationship
       const follows = await this.service.getFollowing(calendar);
@@ -218,10 +226,10 @@ export default class ActivityPubMemberRoutes {
       }
     }
     catch (error: any) {
-      if (error instanceof InvalidRepostPolicyError) {
+      if (error instanceof InvalidRepostPolicySettingsError) {
         res.status(400).json({
           error: error.message,
-          errorName: 'InvalidRepostPolicyError',
+          errorName: 'InvalidRepostPolicySettingsError',
         });
       }
       else if (error instanceof FollowRelationshipNotFoundError) {
@@ -286,8 +294,9 @@ export default class ActivityPubMemberRoutes {
 
     if (typeof req.body.remoteCalendar === 'string') {
       try {
-        const repostPolicy = req.body.repostPolicy || AutoRepostPolicy.MANUAL;
-        await this.service.followCalendar(account, req.body.calendar, req.body.remoteCalendar, repostPolicy);
+        const autoRepostOriginals = req.body.autoRepostOriginals ?? false;
+        const autoRepostReposts = req.body.autoRepostReposts ?? false;
+        await this.service.followCalendar(account, req.body.calendar, req.body.remoteCalendar, autoRepostOriginals, autoRepostReposts);
         res.status(200).send('Followed');
       }
       catch (error: any) {
@@ -307,6 +316,12 @@ export default class ActivityPubMemberRoutes {
           res.status(400).json({
             error: error.message,
             errorName: 'SelfFollowError',
+          });
+        }
+        else if (error instanceof InvalidRepostPolicySettingsError) {
+          res.status(400).json({
+            error: error.message,
+            errorName: 'InvalidRepostPolicySettingsError',
           });
         }
         else {
