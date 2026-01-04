@@ -62,13 +62,15 @@ describe('HTTP Signature Verification', () => {
     // Restore original environment variables
     if (originalNodeEnv !== undefined) {
       process.env.NODE_ENV = originalNodeEnv;
-    } else {
+    }
+    else {
       delete process.env.NODE_ENV;
     }
 
     if (originalSkipSignatures !== undefined) {
       process.env.SKIP_SIGNATURES = originalSkipSignatures;
-    } else {
+    }
+    else {
       delete process.env.SKIP_SIGNATURES;
     }
   });

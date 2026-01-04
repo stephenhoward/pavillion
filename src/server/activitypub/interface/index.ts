@@ -10,6 +10,7 @@ import ActivityPubServerService from '@/server/activitypub/service/server';
 import ProcessInboxService from '../service/inbox';
 import ProcessOutboxService from '../service/outbox';
 import { ActivityPubOutboxMessageEntity, ActivityPubInboxMessageEntity } from '@/server/activitypub/entity/activitypub';
+import CalendarInterface from '@/server/calendar/interface';
 
 /**
  * Implementation of the ActivityPub internal API interface
@@ -20,11 +21,13 @@ export default class ActivityPubInterface {
   private serverService: ActivityPubServerService;
   private inboxSerivce: ProcessInboxService;
   private outboxService: ProcessOutboxService;
+  private calendarInterface: CalendarInterface;
 
   constructor(eventBus: EventEmitter ) {
+    this.calendarInterface = new CalendarInterface(eventBus);
     this.memberService = new ActivityPubMemberService(eventBus);
     this.serverService = new ActivityPubServerService(eventBus);
-    this.inboxSerivce = new ProcessInboxService(eventBus);
+    this.inboxSerivce = new ProcessInboxService(eventBus, this.calendarInterface);
     this.outboxService = new ProcessOutboxService(eventBus);
   }
 

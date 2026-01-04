@@ -16,6 +16,10 @@ class UndoActivity extends ActivityPubActivity {
     if ( object.id ) {
       activity.id = object.id;
     }
+    // Preserve the 'to' field if it exists
+    if ( object.to && Array.isArray(object.to) ) {
+      activity.to = object.to;
+    }
 
     return activity;
   }

@@ -24,6 +24,12 @@ class CalendarEntity extends Model {
   @Column({ type: DataType.STRING })
   declare default_date_range: string;
 
+  /**
+   * Association with EventEntity defined programmatically in event.ts
+   * to avoid circular dependency.
+   */
+  declare events: any[];
+
   toModel(): Calendar {
     let calendar = new Calendar( this.id, this.url_name );
     if ( ! this.languages ) {

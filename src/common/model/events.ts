@@ -217,7 +217,9 @@ class CalendarEventContent extends Model implements TranslatedContentModel {
    * @returns {CalendarEventContent} A new CalendarEventContent instance
    */
   static fromObject(obj: Record<string, any>): CalendarEventContent {
-    return new CalendarEventContent(obj.language, obj.name, obj.description);
+    // Support both 'name' and 'title' field names for API compatibility
+    const name = obj.name || obj.title || '';
+    return new CalendarEventContent(obj.language, name, obj.description);
   }
 
   /**

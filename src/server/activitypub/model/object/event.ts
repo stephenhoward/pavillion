@@ -4,6 +4,7 @@ import { CalendarEvent } from '@/common/model/events';
 import { ActivityPubObject } from '@/server/activitypub/model/base';
 
 class EventObject extends ActivityPubObject {
+  attributedTo: string;
   date: Date;
   location: LocationObject|string;
   parentEvent: string = '';
@@ -25,6 +26,10 @@ class EventObject extends ActivityPubObject {
   constructor( calendar: Calendar, event: CalendarEvent ) {
     super();
     this.id = EventObject.eventUrl(calendar,event);
+
+    // Set attributedTo to the calendar's actor URL
+    const domain = config.get('domain');
+    this.attributedTo = 'https://'+domain+'/o/'+calendar.urlName;
 
     this.date = event.date;
     this.content = event.toObject().content;

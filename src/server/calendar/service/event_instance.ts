@@ -11,6 +11,8 @@ import { DateTime } from 'luxon';
 import rrule from 'rrule';
 import { LocationEntity } from "@/server/calendar/entity/location";
 import CategoryService from "./categories";
+import { ActivityPubActor } from "@/server/activitypub/model/base";
+import { Op } from 'sequelize';
 
 const { RRule, RRuleSet } = rrule;
 
@@ -95,14 +97,36 @@ export default class EventInstanceService {
 
   // TODO: retrieving all events won't scale. Need a paging/incremental strategy
   async refreshAllEventInstances() {
+    // Get all local calendars and build a map of AP identifier -> Calendar
+    const localCalendars = await CalendarEntity.findAll();
+    const calendarMap = new Map<string, Calendar>();
+    const localCalendarApIds: string[] = [];
+
+    for (const calendarEntity of localCalendars) {
+      const calendar = calendarEntity.toModel();
+      const apId = ActivityPubActor.actorUrl(calendar);
+      calendarMap.set(apId, calendar);
+      localCalendarApIds.push(apId);
+    }
+
+    // Only get events for local calendars (not remote federated events)
     const events = await EventEntity.findAll({
-      include: [CalendarEntity],
+      where: {
+        calendar_id: {
+          [Op.in]: localCalendarApIds,
+        },
+      },
     });
-    for( let event of events ) {
-      this.eventBus.emit('eventUpdated',{
-        calendar: event.calendar.toModel(),
-        event: event.toModel(),
-      });
+
+    // Emit eventUpdated for each local event to rebuild instances
+    for (const event of events) {
+      const calendar = calendarMap.get(event.calendar_id);
+      if (calendar) {
+        this.eventBus.emit('eventUpdated', {
+          calendar: calendar,
+          event: event.toModel(),
+        });
+      }
     }
   }
 

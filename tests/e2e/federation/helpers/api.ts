@@ -290,7 +290,7 @@ export async function unfollowCalendar(
   localCalendarId: string,
   remoteCalendarId: string
 ): Promise<void> {
-  const response = await fetch(`${instance.baseUrl}/api/v1/social/follows/${followId}`, {
+  const response = await fetch(`${instance.baseUrl}/api/v1/social/follows/${encodeURIComponent(followId)}`, {
     method: 'DELETE',
     headers: {
       'Content-Type': 'application/json',
@@ -420,7 +420,7 @@ export async function updateEvent(
   eventId: string,
   eventData: Partial<EventData>
 ): Promise<EventResponse> {
-  const response = await fetch(`${instance.baseUrl}/api/v1/events/${eventId}`, {
+  const response = await fetch(`${instance.baseUrl}/api/v1/events/${encodeURIComponent(eventId)}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',

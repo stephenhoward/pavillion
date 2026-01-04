@@ -1,18 +1,19 @@
-import { DateTime } from "luxon";
 import { EventEmitter } from "events";
 import config from 'config';
 import axios from 'axios';
 
+import { Op } from 'sequelize';
 import { Account } from "@/common/model/account";
 import { Calendar } from "@/common/model/calendar";
 import { FollowingCalendar, FollowerCalendar } from "@/common/model/follow";
 import { ActivityPubActivity } from "@/server/activitypub/model/base";
 import FollowActivity from "@/server/activitypub/model/action/follow";
 import AnnounceActivity from "@/server/activitypub/model/action/announce";
-import { ActivityPubOutboxMessageEntity, FollowingCalendarEntity, FollowerCalendarEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
+import { FollowingCalendarEntity, FollowerCalendarEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
 import UndoActivity from "../model/action/undo";
 import { EventEntity } from "@/server/calendar/entity/event";
 import CalendarInterface from "@/server/calendar/interface";
+import { addToOutbox as addToOutboxHelper } from "@/server/activitypub/helper/outbox";
 import {
   InvalidRemoteCalendarIdentifierError,
   InvalidRepostPolicySettingsError,
@@ -97,10 +98,15 @@ class ActivityPubService {
       throw new SelfFollowError('A calendar cannot follow itself');
     }
 
-    // Check if we're already following this calendar
+    // Resolve the ActivityPub actor URL from the WebFinger identifier first
+    // This is necessary because we need to check if we're already following using the AP URL
+    const remoteProfile = await this.lookupRemoteCalendar(orgIdentifier);
+    const remoteActorUrl = remoteProfile.actorUrl;
+
+    // Check if we're already following this calendar (using the AP URL)
     let existingFollowEntity = await FollowingCalendarEntity.findOne({
       where: {
-        remote_calendar_id: orgIdentifier,
+        remote_calendar_id: remoteActorUrl,
         calendar_id: calendar.id,
       },
     });
@@ -117,12 +123,15 @@ class ActivityPubService {
     }
 
     let actor = await this.actorUrl(calendar);
-    // TODO: transform accountIdentifier into a URL (via webfinger?)
-    let followActivity = new FollowActivity(actor, orgIdentifier);
+
+    console.log(`[MemberService] Following ${orgIdentifier} with ActivityPub URL: ${remoteActorUrl}`);
+
+    // Create Follow activity targeting the remote calendar's actor URL
+    let followActivity = new FollowActivity(actor, remoteActorUrl);
 
     let followEntity = FollowingCalendarEntity.build({
       id: followActivity.id,
-      remote_calendar_id: orgIdentifier,
+      remote_calendar_id: remoteActorUrl,  // Store the AP URL, not the WebFinger identifier
       calendar_id: calendar.id,
       auto_repost_originals: autoRepostOriginals,
       auto_repost_reposts: autoRepostReposts,
@@ -146,7 +155,13 @@ class ActivityPubService {
 
     let actor = await this.actorUrl(calendar);
     for (let following of followings) {
-      this.addToOutbox(calendar, new UndoActivity(actor, following.id));
+      // Create Undo activity and explicitly set the recipient
+      // This is necessary because we're about to destroy the follow relationship,
+      // so the outbox processor won't be able to look it up later
+      const undoActivity = new UndoActivity(actor, following.id);
+      undoActivity.to = [following.remote_calendar_id];
+
+      this.addToOutbox(calendar, undoActivity);
       await following.destroy();
     }
   }
@@ -364,42 +379,54 @@ class ActivityPubService {
   }
 
   async addToOutbox(calendar: Calendar, message: ActivityPubActivity) {
-    let calendarUrl = await this.actorUrl(calendar);
-
-    if (calendarUrl == message.actor) {
-      let messageEntity = ActivityPubOutboxMessageEntity.build({
-        id: message.id,
-        type: message.type,
-        calendar_id: calendar.id,
-        message_time: DateTime.utc(),
-        message: message,
-      });
-      await messageEntity.save();
-
-      this.eventBus.emit('outboxMessageAdded', message);
-    }
+    await addToOutboxHelper(this.eventBus, calendar, message);
   }
 
   async getFeed(calendar: Calendar, page?: number, pageSize?: number) {
     const defaultPageSize = pageSize || 20;
 
+    console.log(`[MemberService] getFeed called for calendar ID: ${calendar.id}`);
+
+    // First, let's see what we're following
+    const following = await FollowingCalendarEntity.findAll({
+      where: { calendar_id: calendar.id },
+    });
+    console.log(`[MemberService] This calendar is following ${following.length} remote calendars:`);
+    following.forEach(f => {
+      console.log(`[MemberService]   - ${f.remote_calendar_id}`);
+    });
+
+    // Use raw SQL to join EventEntity with FollowingCalendarEntity via AP identifiers
+    // Join condition: EventEntity.calendar_id = FollowingCalendarEntity.remote_calendar_id
+    // Filter: FollowingCalendarEntity.calendar_id = local calendar UUID
     const events = await EventEntity.findAll({
-      include: [{
-        model: FollowingCalendarEntity,
-        as: 'follows',
-        required: true,
-        where: {
-          calendar_id: calendar.id,
+      where: {
+        calendar_id: {
+          [Op.in]: EventEntity.sequelize!.literal(
+            `(SELECT remote_calendar_id FROM ap_following WHERE calendar_id = '${calendar.id}')`,
+          ),
         },
-      }],
+      },
+      include: [
+        {
+          association: 'content',
+          required: false,
+        },
+        {
+          association: 'schedules',
+          required: false,
+        },
+      ],
       limit: defaultPageSize,
       offset: page ? page * defaultPageSize : 0,
-      order: [['start', 'DESC']],
+      order: [['createdAt', 'DESC']],
     });
+
+    console.log(`[MemberService] Found ${events.length} events in feed`);
 
     // Batch fetch all shared events for these events in a single query
     const eventUrls = events.map(event =>
-      event.event_url || `https://${config.get('domain')}/events/${event.id}`,
+      event.event_source_url || `https://${config.get('domain')}/events/${event.id}`,
     );
 
     const sharedEvents = await SharedEventEntity.findAll({
@@ -416,7 +443,7 @@ class ActivityPubService {
 
     // Map events with repost status using the lookup map
     const eventsWithRepostStatus = events.map((event) => {
-      const eventUrl = event.event_url || `https://${config.get('domain')}/events/${event.id}`;
+      const eventUrl = event.event_source_url || `https://${config.get('domain')}/events/${event.id}`;
       const sharedEvent = sharedEventMap.get(eventUrl);
 
       let repostStatus: 'none' | 'manual' | 'auto' = 'none';
@@ -424,12 +451,32 @@ class ActivityPubService {
         repostStatus = sharedEvent.auto_posted ? 'auto' : 'manual';
       }
 
-      return {
-        ...event.get({ plain: true }),
+      // Transform content array to object keyed by language
+      const plainEvent = event.get({ plain: true }) as any;
+      const contentByLanguage: Record<string, any> = {};
+
+      if (plainEvent.content && Array.isArray(plainEvent.content)) {
+        plainEvent.content.forEach((c: any) => {
+          contentByLanguage[c.language] = {
+            title: c.name || c.title || '',  // Support both field names for API compatibility
+            name: c.name || c.title || '',   // Include both for compatibility
+            description: c.description,
+          };
+        });
+      }
+
+      const transformedEvent = {
+        ...plainEvent,
+        content: contentByLanguage,
         repostStatus,
       };
+
+      console.log(`[MemberService] Transformed event:`, JSON.stringify(transformedEvent, null, 2));
+
+      return transformedEvent;
     });
 
+    console.log(`[MemberService] Returning ${eventsWithRepostStatus.length} events with content`);
     return eventsWithRepostStatus;
   }
 }

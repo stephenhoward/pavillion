@@ -25,6 +25,9 @@ export default class ActivityPubServerRoutes {
   installHandlers(app: Application, routePrefix: string): void {
     const router = express.Router();
 
+    // Enable JSON body parsing for ActivityPub endpoints
+    router.use(express.json({ type: ['application/json', 'application/activity+json'] }));
+
     // Public endpoints (no signature verification required)
     router.get('/.well-known/webfinger', this.lookupUser.bind(this));
     router.get('/o/:orgname', this.getUserProfile.bind(this));
@@ -87,6 +90,9 @@ export default class ActivityPubServerRoutes {
       res.status(404).send('Calendar not found');
       return;
     }
+
+    console.log(`[INBOX] Received activity type: ${req.body.type} for calendar ${req.params.orgname}`);
+    console.log(`[INBOX] Activity body:`, JSON.stringify(req.body, null, 2));
 
     // TODO: validate message sender is allowed to send this message
     let message;

@@ -10,6 +10,7 @@ import UpdateActivity from '@/server/activitypub/model/action/update';
 import DeleteActivity from '@/server/activitypub/model/action/delete';
 import AnnounceActivity from '@/server/activitypub/model/action/announce';
 import FollowActivity from '@/server/activitypub/model/action/follow';
+import AcceptActivity from '@/server/activitypub/model/action/accept';
 import UndoActivity from '@/server/activitypub/model/action/undo';
 
 class ActivityPubMessageEntity extends Model {
@@ -58,6 +59,9 @@ class ActivityPubMessageEntity extends Model {
         break;
       case 'Follow':
         builder = (object: any) => FollowActivity.fromObject(object);
+        break;
+      case 'Accept':
+        builder = (object: any) => AcceptActivity.fromObject(object);
         break;
       case 'Announce':
         builder = (object: any) => AnnounceActivity.fromObject(object);
@@ -193,20 +197,6 @@ class EventActivityEntity extends Model {
 
   @Column({ type: DataType.STRING })
   declare remote_calendar_id: string;
-}
-
-// A collection of events that have been processed from an calendar's inbox,
-// from calendars they follow
-// TODO: Implement EventFeed functionality for ActivityPub
-@Table({ tableName: 'ap_event_feed' })
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-class EventFeed extends Model {
-
-  @Column({ type: DataType.STRING })
-  declare event_id: string;
-
-  @Column({ type: DataType.STRING })
-  declare calendar_id: string;
 }
 
 db.addModels([

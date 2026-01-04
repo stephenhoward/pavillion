@@ -15,6 +15,30 @@ class ActivityPubActivity {
     this.actor = actorUrl;
   }
 
+  toObject(): Record<string, any> {
+    const result: Record<string, any> = {
+      '@context': this.context,
+      id: this.id,
+      type: this.type,
+      actor: this.actor,
+      object: this.object,
+    };
+
+    if (this.published) {
+      result.published = this.published;
+    }
+
+    if (this.to && this.to.length > 0) {
+      result.to = this.to;
+    }
+
+    if (this.cc && this.cc.length > 0) {
+      result.cc = this.cc;
+    }
+
+    return result;
+  }
+
   static fromObject( json: Record<string, any> ): ActivityPubActivity {
     let object = json.object;
     let actor = json.actor;

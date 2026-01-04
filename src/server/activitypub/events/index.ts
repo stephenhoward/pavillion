@@ -63,7 +63,17 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
   private async processOutboxMessage(e) {
     let message = await ActivityPubOutboxMessageEntity.findByPk(e.id);
     if ( message ) {
-      await this.service.processOutboxMessage(message);
+      try {
+        await this.service.processOutboxMessage(message);
+      }
+      catch (error) {
+        console.error(`[OUTBOX] Error processing outbox message ${message.id}:`, error.message);
+        // Mark message as processed with error status to prevent retry loop
+        await message.update({
+          processed_time: new Date(),
+          processed_status: `error: ${error.message}`,
+        });
+      }
     }
     else {
       console.error("outbox message not found for processing");

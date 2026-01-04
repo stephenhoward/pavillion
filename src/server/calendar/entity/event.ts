@@ -3,7 +3,6 @@ import { DateTime } from 'luxon';
 
 import { CalendarEvent, CalendarEventContent, CalendarEventSchedule, language } from '@/common/model/events';
 import db from '@/server/common/entity/db';
-import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { LocationEntity } from '@/server/calendar/entity/location';
 import { MediaEntity } from '@/server/media/entity/media';
 
@@ -27,9 +26,8 @@ class EventEntity extends Model {
   @Column({ type: DataType.UUID })
   declare parent_event_id: string;
 
-  @ForeignKey(() => CalendarEntity)
   @Index('idx_event_calendar_id')
-  @Column({ type: DataType.UUID })
+  @Column({ type: DataType.STRING })
   declare calendar_id: string;
 
   @ForeignKey(() => LocationEntity)
@@ -42,9 +40,6 @@ class EventEntity extends Model {
 
   @BelongsTo(() => EventEntity)
   declare parentEvent: EventEntity;
-
-  @BelongsTo(() => CalendarEntity)
-  declare calendar: CalendarEntity;
 
   @HasMany(() => EventContentEntity)
   declare content: EventContentEntity[];

@@ -18,6 +18,7 @@ class UserProfileResponse {
 
   toObject(): Record<string, any> {
     return {
+      '@context': ['https://www.w3.org/ns/activitystreams'],
       id: this.id,
       type: this.type,
       preferredUsername: this.preferredUsername,

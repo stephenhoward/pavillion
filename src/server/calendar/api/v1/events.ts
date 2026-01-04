@@ -171,7 +171,8 @@ export default class EventRoutes {
       return;
     }
 
-    const eventId = req.params.id;
+    // Decode the URL-encoded event ID from the path parameter
+    const eventId = decodeURIComponent(req.params.id);
     if (!eventId) {
       res.status(400).json({
         "error": "missing event ID",

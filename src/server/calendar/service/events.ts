@@ -19,6 +19,7 @@ import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_ca
 import { EventInstanceEntity } from '@/server/calendar/entity/event_instance';
 import db from '@/server/common/entity/db';
 import { Op, fn, col, where, literal } from 'sequelize';
+import { ActivityPubActor } from '@/server/activitypub/model/base';
 
 /**
  * Service class for managing events
@@ -52,7 +53,7 @@ class EventService {
 
     // Base query options
     const queryOptions: any = {
-      where: { calendar_id: calendar.id },
+      where: { calendar_id: ActivityPubActor.actorUrl(calendar) },
       include: [
         LocationEntity,
         EventScheduleEntity,
@@ -165,6 +166,11 @@ class EventService {
     else {
       event.eventSourceUrl = '';
     }
+
+    // Generate AP identifier for the calendar
+    const calendarApIdentifier = ActivityPubActor.actorUrl(calendar);
+    event.calendarId = calendarApIdentifier;
+
     const eventEntity = EventEntity.fromModel(event);
 
     if( eventParams.location ) {
@@ -258,7 +264,22 @@ class EventService {
     if ( ! eventEntity ) {
       throw new EventNotFoundError('Event not found');
     }
-    const calendar = await this.calendarService.getCalendar(eventEntity.calendar_id);
+
+    // Calendar ID is now stored as an ActivityPub URL (https://domain/o/urlName)
+    // Extract the urlName from the URL and look up by that
+    let calendar: Calendar | null = null;
+    if (eventEntity.calendar_id.startsWith('https://')) {
+      // Extract urlName from ActivityPub URL format: https://domain/o/urlName
+      const match = eventEntity.calendar_id.match(/\/o\/([^\/]+)$/);
+      if (match) {
+        const urlName = match[1];
+        calendar = await this.calendarService.getCalendarByName(urlName);
+      }
+    } else {
+      // Legacy support: if it's a UUID, look up by primary key
+      calendar = await this.calendarService.getCalendar(eventEntity.calendar_id);
+    }
+
     const calendars = await this.calendarService.editableCalendarsForUser(account);
     if ( ! calendar ) {
       throw new CalendarNotFoundError('Calendar for event does not exist');
@@ -290,8 +311,10 @@ class EventService {
             continue;
           }
 
+          // Support both 'name' and 'title' field names for API compatibility
+          const name = c.name || c.title;
           await contentEntity.update({
-            name: c.name,
+            name: name,
             description: c.description,
           });
           event.addContent(contentEntity.toModel());
@@ -414,6 +437,7 @@ class EventService {
      * @returns a promise that resolves to the created Event
      */
   async addRemoteEvent(calendar: Calendar, eventParams:Record<string,any>): Promise<CalendarEvent> {
+    console.log(`[EventService] addRemoteEvent called with eventParams:`, JSON.stringify(eventParams, null, 2));
 
     if ( ! eventParams.id ) {
       throw new Error('Event id is required');
@@ -424,7 +448,10 @@ class EventService {
     }
 
     const event = CalendarEvent.fromObject(eventParams);
+    console.log(`[EventService] Created CalendarEvent model with calendarId: ${event.calendarId}`);
+
     const eventEntity = EventEntity.fromModel(event);
+    console.log(`[EventService] Created EventEntity with calendar_id: ${eventEntity.calendar_id}`);
 
     //TODO: check and validate the calendar id
 
@@ -436,7 +463,9 @@ class EventService {
       event.location = location;
     }
 
-    eventEntity.save();
+    console.log(`[EventService] Saving event entity to database...`);
+    await eventEntity.save();
+    console.log(`[EventService] Event entity saved with ID: ${eventEntity.id}, calendar_id: ${eventEntity.calendar_id}`);
 
     if ( eventParams.content ) {
       for( let [language,content] of Object.entries(eventParams.content) ) {
@@ -451,6 +480,175 @@ class EventService {
     }
 
     return event;
+  }
+
+  /**
+   * Update a remote event with new data from a federated Update activity
+   * @param calendar - the local calendar receiving this update (for location context)
+   * @param eventParams - the updated event parameters
+   * @returns a promise that resolves to the updated Event
+   */
+  async updateRemoteEvent(calendar: Calendar, eventParams: Record<string,any>): Promise<CalendarEvent> {
+    console.log(`[EventService] Updating remote event ${eventParams.id}`);
+
+    const eventEntity = await EventEntity.findByPk(eventParams.id);
+
+    if (!eventEntity) {
+      throw new EventNotFoundError(`Remote event ${eventParams.id} not found for update`);
+    }
+
+    // Use the local calendar that is receiving this update (same pattern as addRemoteEvent)
+
+    let event = eventEntity.toModel();
+
+    // Update content translations
+    if (eventParams.content) {
+      for (let [language, content] of Object.entries(eventParams.content)) {
+        let contentEntity = await EventContentEntity.findOne({
+          where: { event_id: eventParams.id, language: language },
+        });
+
+        if (contentEntity) {
+          if (!content) {
+            await contentEntity.destroy();
+            continue;
+          }
+
+          let c = content as Record<string,any>;
+          delete c.language;
+
+          if (Object.keys(c).length === 0) {
+            await contentEntity.destroy();
+            continue;
+          }
+
+          await contentEntity.update({
+            name: c.name,
+            description: c.description,
+          });
+          event.addContent(contentEntity.toModel());
+        }
+        else {
+          if (!content) {
+            continue;
+          }
+
+          let c = content as Record<string,any>;
+          delete c.language;
+
+          if (Object.keys(c).length > 0) {
+            event.addContent(await this.createEventContent(eventParams.id, language, c));
+          }
+        }
+      }
+    }
+
+    // Update location
+    if (eventEntity.location_id && !eventParams.location) {
+      eventEntity.location_id = '';
+      event.location = null;
+    }
+    else if (eventParams.location) {
+      let locationEntity = await this.locationService.findOrCreateLocation(calendar, eventParams.location);
+      eventEntity.location_id = locationEntity.id;
+      event.location = locationEntity;
+    }
+
+    // Update schedules
+    if (eventParams.schedules) {
+      let existingSchedules = await EventScheduleEntity.findAll({ where: { event_id: eventParams.id } });
+      let existingScheduleIds = existingSchedules.map(s => s.id);
+
+      for (let schedule of eventParams.schedules) {
+        if (schedule.id) {
+          let scheduleEntity = existingSchedules.find(s => s.id === schedule.id);
+
+          if (!scheduleEntity) {
+            throw Error('Schedule not found for event');
+          }
+
+          existingScheduleIds = existingScheduleIds.filter(id => id !== schedule.id);
+
+          const byDayValue = schedule.byDay !== undefined
+            ? (Array.isArray(schedule.byDay) ? schedule.byDay.join(',') : (schedule.byDay || ''))
+            : scheduleEntity.by_day;
+
+          await scheduleEntity.update({
+            start_date: schedule.startDate ?? scheduleEntity.start_date,
+            end_date: schedule.endDate ?? scheduleEntity.end_date,
+            frequency: schedule.frequency ?? scheduleEntity.frequency,
+            interval: schedule.interval ?? scheduleEntity.interval,
+            count: schedule.count ?? scheduleEntity.count,
+            by_day: byDayValue,
+            is_exclusion: schedule.isExclusion ?? scheduleEntity.is_exclusion,
+          });
+          event.addSchedule(scheduleEntity.toModel());
+        }
+        else {
+          event.addSchedule(await this.createEventSchedule(eventParams.id, schedule));
+        }
+      }
+
+      if (existingScheduleIds.length > 0) {
+        await EventScheduleEntity.destroy({ where: { id: existingScheduleIds } });
+      }
+    }
+
+    await eventEntity.save();
+
+    console.log(`[EventService] Successfully updated remote event ${eventParams.id}`);
+    return event;
+  }
+
+  /**
+   * Delete a remote event
+   * @param eventId - the ID of the event to delete
+   * @returns a promise that resolves when the event is deleted
+   */
+  async deleteRemoteEvent(eventId: string): Promise<void> {
+    console.log(`[EventService] Deleting remote event ${eventId}`);
+
+    const eventEntity = await EventEntity.findByPk(eventId, {
+      include: [EventContentEntity, LocationEntity, EventScheduleEntity, MediaEntity],
+    });
+
+    if (!eventEntity) {
+      throw new EventNotFoundError(`Remote event ${eventId} not found for deletion`);
+    }
+
+    const transaction = await db.transaction();
+    try {
+      // Delete related records in correct order to satisfy foreign key constraints
+      await EventInstanceEntity.destroy({
+        where: { event_id: eventId },
+        transaction,
+      });
+
+      await EventCategoryAssignmentEntity.destroy({
+        where: { event_id: eventId },
+        transaction,
+      });
+
+      await EventScheduleEntity.destroy({
+        where: { event_id: eventId },
+        transaction,
+      });
+
+      await EventContentEntity.destroy({
+        where: { event_id: eventId },
+        transaction,
+      });
+
+      await eventEntity.destroy({ transaction });
+
+      await transaction.commit();
+
+      console.log(`[EventService] Successfully deleted remote event ${eventId}`);
+    }
+    catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
   }
 
   async getEventById(eventId: string): Promise<CalendarEvent> {

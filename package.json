@@ -22,7 +22,7 @@
     "test:e2e": "npx playwright test",
     "test:e2e:ui": "npx playwright test --ui",
     "test:e2e:debug": "npx playwright test --debug",
-    "test:federation": "npx playwright test --config=playwright.federation.config.ts",
+    "test:federation": "NODE_TLS_REJECT_UNAUTHORIZED=0 npx playwright test --config=playwright.federation.config.ts",
     "lint": "eslint --ext .ts,.js,.vue src",
     "lint:fix": "eslint --ext .ts,.js,.vue src --fix",
     "federation:start": "docker compose -f docker-compose.federation.yml up -d",

@@ -48,7 +48,7 @@ function shouldSkipSignatures(): boolean {
   if (shouldSkip && isProduction) {
     throw new Error(
       'CRITICAL SECURITY ERROR: HTTP signature verification cannot be disabled in production. ' +
-      'Remove SKIP_SIGNATURES environment variable or federation.skipSignatures config setting.'
+      'Remove SKIP_SIGNATURES environment variable or federation.skipSignatures config setting.',
     );
   }
 

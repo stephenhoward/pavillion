@@ -3,10 +3,11 @@ import { EventEmitter } from "events";
 import axios from "axios";
 
 import { Calendar } from "@/common/model/calendar";
-import { ActivityPubOutboxMessageEntity, EventActivityEntity, FollowerCalendarEntity } from "@/server/activitypub/entity/activitypub";
+import { ActivityPubOutboxMessageEntity, EventActivityEntity, FollowerCalendarEntity, FollowingCalendarEntity } from "@/server/activitypub/entity/activitypub";
 import UpdateActivity from "@/server/activitypub/model/action/update";
 import DeleteActivity from "@/server/activitypub/model/action/delete";
 import FollowActivity from "@/server/activitypub/model/action/follow";
+import AcceptActivity from "@/server/activitypub/model/action/accept";
 import AnnounceActivity from "@/server/activitypub/model/action/announce";
 import CreateActivity from "@/server/activitypub/model/action/create";
 import UndoActivity from "@/server/activitypub/model/action/undo";
@@ -62,47 +63,96 @@ class ProcessOutboxService {
     }
 
     let activity = null;
+    let recipients: string[] = [];
+
+    console.log(`[OUTBOX] Processing ${message.type} activity for calendar ${calendar.urlName}`);
 
     switch( message.type ) {
       case 'Create':
         activity = CreateActivity.fromObject(message.message);
+        recipients = await this.getRecipients(calendar, activity.object);
         break;
       case 'Update':
         activity = UpdateActivity.fromObject(message.message);
+        recipients = await this.getRecipients(calendar, activity.object);
         break;
       case 'Delete':
         activity = DeleteActivity.fromObject(message.message);
+        recipients = await this.getRecipients(calendar, activity.object);
         break;
       case 'Follow':
         activity = FollowActivity.fromObject(message.message);
+        // For Follow activities, send to the calendar being followed (the object)
+        if (typeof activity.object === 'string') {
+          recipients = [activity.object];
+        }
+        break;
+      case 'Accept':
+        activity = AcceptActivity.fromObject(message.message);
+        // For Accept activities, send to the actor of the original Follow
+        if (activity.object && typeof activity.object === 'object' && activity.object.actor) {
+          recipients = [activity.object.actor];
+        }
         break;
       case 'Announce':
         activity = AnnounceActivity.fromObject(message.message);
+        recipients = await this.getRecipients(calendar, activity.object);
         break;
       case 'Undo':
         activity = UndoActivity.fromObject(message.message);
+        // Check if the activity has explicit recipients in the 'to' field
+        if (activity.to && activity.to.length > 0) {
+          recipients = activity.to;
+          console.log(`[OUTBOX] Using explicit recipients from 'to' field for Undo activity: ${recipients.join(', ')}`);
+        } else {
+          recipients = await this.getRecipients(calendar, activity.object);
+        }
         break;
     }
 
     if ( activity ) {
-      const recipients = await this.getRecipients(calendar, activity.object);
+      console.log(`[OUTBOX] Found ${recipients.length} recipients for ${message.type} activity`);
+
+      let deliveryErrors: string[] = [];
 
       for( const recipient of recipients ) {
         const inboxUrl = await this.resolveInboxUrl(recipient);
 
         if ( inboxUrl ) {
-          axios.post(inboxUrl, activity, { timeout: FEDERATION_HTTP_TIMEOUT_MS });
+          try {
+            console.log(`[OUTBOX] Delivering ${message.type} to ${inboxUrl}`);
+
+            const activityData = activity.toObject();
+            console.log(`[OUTBOX] Activity data:`, JSON.stringify(activityData, null, 2));
+
+            await axios.post(inboxUrl, activityData, {
+              timeout: FEDERATION_HTTP_TIMEOUT_MS,
+              headers: {
+                'Content-Type': 'application/activity+json',
+              },
+            });
+            console.log(`[OUTBOX] Successfully delivered ${message.type} to ${recipient}`);
+          }
+          catch (error: any) {
+            const errorMsg = `Failed to deliver to ${recipient}: ${error.message}`;
+            console.error(`[OUTBOX] ${errorMsg}`);
+            deliveryErrors.push(errorMsg);
+          }
         }
         else {
-          console.log("skipping message to " + recipient + " because no inbox found");
+          console.log(`[OUTBOX] Skipping message to ${recipient} because no inbox found`);
         }
       }
+
       await message.update({
         processed_time: DateTime.now().toJSDate(),
-        processed_status: 'ok',
+        processed_status: deliveryErrors.length > 0
+          ? `partial: ${deliveryErrors.join('; ')}`
+          : 'ok',
       });
     }
     else {
+      console.error(`[OUTBOX] Bad message type: ${message.type}`);
       await message.update({
         processed_time: DateTime.now().toJSDate(),
         processed_status: 'bad message type',
@@ -127,6 +177,20 @@ class ProcessOutboxService {
     }
 
     const object_id = typeof object === 'string' ? object : object.id;
+
+    // Check if the object is a Follow ID (for Undo(Follow) activities)
+    // Follow IDs have the format: https://domain/o/calendar/follows/uuid
+    if (object_id.includes('/follows/')) {
+      console.log(`[OUTBOX] Detected Follow ID in object, looking up follow relationship: ${object_id}`);
+      const followEntity = await FollowingCalendarEntity.findOne({ where: { id: object_id } });
+      if (followEntity) {
+        console.log(`[OUTBOX] Found follow relationship, adding recipient: ${followEntity.remote_calendar_id}`);
+        recipients.push(followEntity.remote_calendar_id);
+      } else {
+        console.log(`[OUTBOX] No follow relationship found for ID: ${object_id}`);
+      }
+    }
+
     const observers = await EventActivityEntity.findAll({ where: { event_id: object_id } });
     for( const observer of observers ) {
       recipients.push(observer.remote_calendar_id);
@@ -138,20 +202,37 @@ class ProcessOutboxService {
   /**
    * Resolves the inbox URL for a remote user by fetching their profile.
    *
-   * @param {string} remote_user - The remote user identifier
+   * @param {string} remote_user - The remote user identifier (username@domain or full actor URL)
    * @returns {Promise<string|null>} The inbox URL if found, otherwise null
    */
   async resolveInboxUrl(remote_user: string): Promise<string|null> {
+    let profileUrl: string | null = null;
 
-    const profileUrl = await this.fetchProfileUrl(remote_user);
+    console.log(`[OUTBOX] Resolving inbox for recipient: ${remote_user}`);
+
+    // Check if remote_user is a full URL (starts with http:// or https://)
+    if (remote_user.startsWith('http://') || remote_user.startsWith('https://')) {
+      // It's a full actor URL, use it directly as the profile URL
+      profileUrl = remote_user;
+      console.log(`[OUTBOX] Using full URL as profile URL: ${profileUrl}`);
+    }
+    else {
+      // It's a username@domain format, resolve via WebFinger
+      profileUrl = await this.fetchProfileUrl(remote_user);
+      console.log(`[OUTBOX] Resolved WebFinger profile URL: ${profileUrl}`);
+    }
+
     if ( profileUrl ) {
+      console.log(`[OUTBOX] Fetching actor document from: ${profileUrl}`);
       let response = await axios.get(profileUrl, { timeout: FEDERATION_HTTP_TIMEOUT_MS });
 
       if ( response && response.data ) {
+        console.log(`[OUTBOX] Resolved inbox URL: ${response.data.inbox}`);
         return response.data.inbox;
       }
     }
 
+    console.log(`[OUTBOX] Failed to resolve inbox for ${remote_user}`);
     return null;
   }
 
@@ -163,16 +244,26 @@ class ProcessOutboxService {
    */
   async fetchProfileUrl(remote_user: string): Promise<string|null> {
     const [username, domain] = remote_user.split('@');
-    if ( username && domain ) {
-      let response = await axios.get('https://' + domain + '/.well-known/webfinger?resource=acct:' + username, { timeout: FEDERATION_HTTP_TIMEOUT_MS });
+    console.log(`[OUTBOX] WebFinger lookup for ${remote_user}: username=${username}, domain=${domain}`);
 
-      if ( response && response.data && response.data.links ) {
-        const profileLink = (await response).data.links.filter((link: any) => link.rel === 'self');
-        if ( profileLink.length > 0 ) {
-          return profileLink[0].href;
+    if ( username && domain ) {
+      const webfingerUrl = 'https://' + domain + '/.well-known/webfinger?resource=acct:' + username + '@' + domain;
+      console.log(`[OUTBOX] Fetching WebFinger from: ${webfingerUrl}`);
+
+      try {
+        let response = await axios.get(webfingerUrl, { timeout: FEDERATION_HTTP_TIMEOUT_MS });
+
+        if ( response && response.data && response.data.links ) {
+          const profileLink = (await response).data.links.filter((link: any) => link.rel === 'self');
+          if ( profileLink.length > 0 ) {
+            console.log(`[OUTBOX] WebFinger resolved to: ${profileLink[0].href}`);
+            return profileLink[0].href;
+          }
         }
       }
-
+      catch (error: any) {
+        console.error(`[OUTBOX] WebFinger lookup failed: ${error.message}`);
+      }
     }
     return null;
   }

@@ -1,46 +1,7 @@
-import { Sequelize, DataTypes } from 'sequelize';
+import { QueryInterface, DataTypes } from 'sequelize';
 
-/**
- * Initial database schema migration.
- *
- * This migration creates all tables for Pavillion's initial schema,
- * derived from the 14+ Sequelize entity models.
- *
- * Tables created:
- * - account (user accounts)
- * - account_role (user roles)
- * - account_secrets (passwords and verification codes)
- * - account_application (account applications)
- * - profile (user profiles)
- * - account_invitation (invitations)
- * - calendar (calendars)
- * - calendar_content (calendar translations)
- * - calendar_editor (calendar editor permissions)
- * - event (events)
- * - event_content (event translations)
- * - event_schedule (event scheduling/recurrence)
- * - event_categories (event categories)
- * - event_category_content (category translations)
- * - event_category_assignments (event-category relationships)
- * - event_instance (generated event instances)
- * - location (event locations)
- * - media (uploaded media files)
- * - service_config (service configuration)
- * - ap_inbox (ActivityPub inbox messages)
- * - ap_outbox (ActivityPub outbox messages)
- * - ap_following (calendars we follow)
- * - ap_follower (calendars following us)
- * - ap_shared_event (shared/reposted events)
- * - ap_event_activity (event activities from other calendars)
- */
 export default {
-  async up({ context: sequelize }: { context: Sequelize }) {
-    const queryInterface = sequelize.getQueryInterface();
-
-    // =========================================
-    // Core Account Tables
-    // =========================================
-
+  async up(queryInterface: QueryInterface) {
     // account - User accounts
     await queryInterface.createTable('account', {
       id: {
@@ -48,52 +9,30 @@ export default {
         primaryKey: true,
         allowNull: false,
       },
-      username: {
-        type: DataTypes.STRING,
-        allowNull: true,
-      },
-      domain: {
-        type: DataTypes.STRING,
-        allowNull: true,
-      },
       email: {
         type: DataTypes.STRING,
         allowNull: true,
+        unique: true,
       },
-      language: {
-        type: DataTypes.STRING,
-        allowNull: true,
+      created_from_invite: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
       },
-      createdAt: {
+      created_from_application: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+      },
+      is_activated: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+      },
+      activation_timestamp: {
         type: DataTypes.DATE,
-        allowNull: false,
-      },
-      updatedAt: {
-        type: DataTypes.DATE,
-        allowNull: false,
-      },
-    });
-
-    // account_role - User roles
-    await queryInterface.createTable('account_role', {
-      id: {
-        type: DataTypes.INTEGER,
-        primaryKey: true,
-        autoIncrement: true,
-      },
-      account_id: {
-        type: DataTypes.UUID,
         allowNull: true,
-        references: {
-          model: 'account',
-          key: 'id',
-        },
-        onUpdate: 'CASCADE',
-        onDelete: 'CASCADE',
       },
-      role: {
-        type: DataTypes.STRING,
-        allowNull: true,
+      is_admin: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
       },
       createdAt: {
         type: DataTypes.DATE,
@@ -199,8 +138,47 @@ export default {
         type: DataTypes.STRING,
         allowNull: true,
       },
-      url: {
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+      },
+      updatedAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+      },
+    });
+
+    // account_invitation - Account invitations
+    await queryInterface.createTable('account_invitation', {
+      id: {
+        type: DataTypes.UUID,
+        primaryKey: true,
+        allowNull: false,
+      },
+      email: {
         type: DataTypes.STRING,
+        allowNull: true,
+      },
+      code: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      created_by: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        references: {
+          model: 'account',
+          key: 'id',
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'CASCADE',
+      },
+      status: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      status_timestamp: {
+        type: DataTypes.DATE,
         allowNull: true,
       },
       createdAt: {
@@ -213,11 +191,7 @@ export default {
       },
     });
 
-    // =========================================
-    // Calendar Tables
-    // =========================================
-
-    // calendar - Calendars
+    // calendar - User calendars
     await queryInterface.createTable('calendar', {
       id: {
         type: DataTypes.UUID,
@@ -232,17 +206,13 @@ export default {
           key: 'id',
         },
         onUpdate: 'CASCADE',
-        onDelete: 'SET NULL',
+        onDelete: 'CASCADE',
       },
       url_name: {
         type: DataTypes.STRING,
         allowNull: true,
       },
       languages: {
-        type: DataTypes.STRING,
-        allowNull: true,
-      },
-      default_date_range: {
         type: DataTypes.STRING,
         allowNull: true,
       },
@@ -256,7 +226,7 @@ export default {
       },
     });
 
-    // calendar_content - Calendar translations
+    // calendar_content - Calendar content translations
     await queryInterface.createTable('calendar_content', {
       id: {
         type: DataTypes.UUID,
@@ -277,7 +247,7 @@ export default {
         type: DataTypes.STRING,
         allowNull: true,
       },
-      name: {
+      title: {
         type: DataTypes.STRING,
         allowNull: true,
       },
@@ -295,17 +265,21 @@ export default {
       },
     });
 
-    // calendar_editor - Calendar editor permissions
+    // Add index on calendar_id for calendar_content
+    await queryInterface.addIndex('calendar_content', ['calendar_id'], {
+      name: 'idx_calendar_content_calendar_id',
+    });
+
+    // calendar_editor - Calendar editors/collaborators
     await queryInterface.createTable('calendar_editor', {
       id: {
         type: DataTypes.UUID,
         primaryKey: true,
         allowNull: false,
-        defaultValue: DataTypes.UUIDV4,
       },
       calendar_id: {
         type: DataTypes.UUID,
-        allowNull: false,
+        allowNull: true,
         references: {
           model: 'calendar',
           key: 'id',
@@ -313,19 +287,9 @@ export default {
         onUpdate: 'CASCADE',
         onDelete: 'CASCADE',
       },
-      account_id: {
-        type: DataTypes.UUID,
-        allowNull: true,
-        references: {
-          model: 'account',
-          key: 'id',
-        },
-        onUpdate: 'CASCADE',
-        onDelete: 'SET NULL',
-      },
       email: {
         type: DataTypes.STRING,
-        allowNull: false,
+        allowNull: true,
       },
       createdAt: {
         type: DataTypes.DATE,
@@ -337,45 +301,23 @@ export default {
       },
     });
 
-    // Add unique constraint for calendar_editor
-    await queryInterface.addIndex('calendar_editor', ['calendar_id', 'account_id'], {
-      unique: true,
-      name: 'unique_calendar_editor',
+    // Add index on calendar_id for calendar_editor
+    await queryInterface.addIndex('calendar_editor', ['calendar_id'], {
+      name: 'idx_calendar_editor_calendar_id',
     });
 
-    // account_invitation - Account and editor invitations
-    await queryInterface.createTable('account_invitation', {
+    // Add index on email for calendar_editor
+    await queryInterface.addIndex('calendar_editor', ['email'], {
+      name: 'idx_calendar_editor_email',
+    });
+
+    // event_category - Event categories
+    await queryInterface.createTable('event_category', {
       id: {
         type: DataTypes.UUID,
         primaryKey: true,
         allowNull: false,
       },
-      invited_by: {
-        type: DataTypes.UUID,
-        allowNull: false,
-        references: {
-          model: 'account',
-          key: 'id',
-        },
-        onUpdate: 'CASCADE',
-        onDelete: 'CASCADE',
-      },
-      email: {
-        type: DataTypes.STRING,
-        allowNull: true,
-      },
-      message: {
-        type: DataTypes.STRING,
-        allowNull: true,
-      },
-      invitation_code: {
-        type: DataTypes.STRING,
-        allowNull: true,
-      },
-      expiration_time: {
-        type: DataTypes.DATE,
-        allowNull: true,
-      },
       calendar_id: {
         type: DataTypes.UUID,
         allowNull: true,
@@ -396,14 +338,50 @@ export default {
       },
     });
 
-    // Add index on calendar_id for invitations
-    await queryInterface.addIndex('account_invitation', ['calendar_id'], {
-      name: 'idx_account_invitation_calendar_id',
+    // Add index on calendar_id for event_category
+    await queryInterface.addIndex('event_category', ['calendar_id'], {
+      name: 'idx_event_category_calendar_id',
     });
 
-    // =========================================
-    // Location Table
-    // =========================================
+    // event_category_content - Event category content translations
+    await queryInterface.createTable('event_category_content', {
+      id: {
+        type: DataTypes.UUID,
+        primaryKey: true,
+        allowNull: false,
+      },
+      category_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        references: {
+          model: 'event_category',
+          key: 'id',
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'CASCADE',
+      },
+      language: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      name: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+      },
+      updatedAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+      },
+    });
+
+    // Add index on category_id for event_category_content
+    await queryInterface.addIndex('event_category_content', ['category_id'], {
+      name: 'idx_event_category_content_category_id',
+    });
 
     // location - Event locations
     await queryInterface.createTable('location', {
@@ -420,21 +398,21 @@ export default {
           key: 'id',
         },
         onUpdate: 'CASCADE',
-        onDelete: 'SET NULL',
+        onDelete: 'CASCADE',
       },
       name: {
         type: DataTypes.STRING,
         allowNull: true,
       },
-      address: {
+      street_address: {
         type: DataTypes.STRING,
         allowNull: true,
       },
-      city: {
+      locality: {
         type: DataTypes.STRING,
         allowNull: true,
       },
-      state: {
+      region: {
         type: DataTypes.STRING,
         allowNull: true,
       },
@@ -456,21 +434,21 @@ export default {
       },
     });
 
-    // =========================================
-    // Media Table
-    // =========================================
+    // Add index on calendar_id for location
+    await queryInterface.addIndex('location', ['calendar_id'], {
+      name: 'idx_location_calendar_id',
+    });
 
-    // media - Uploaded media files
+    // media - Media files
     await queryInterface.createTable('media', {
       id: {
         type: DataTypes.UUID,
         primaryKey: true,
         allowNull: false,
-        defaultValue: DataTypes.UUIDV4,
       },
       calendar_id: {
         type: DataTypes.UUID,
-        allowNull: false,
+        allowNull: true,
         references: {
           model: 'calendar',
           key: 'id',
@@ -478,43 +456,46 @@ export default {
         onUpdate: 'CASCADE',
         onDelete: 'CASCADE',
       },
-      sha256: {
-        type: DataTypes.STRING(64),
-        allowNull: false,
-        unique: true,
-      },
-      original_filename: {
+      filename: {
         type: DataTypes.STRING,
-        allowNull: false,
+        allowNull: true,
       },
       mime_type: {
         type: DataTypes.STRING,
-        allowNull: false,
-      },
-      file_size: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
-      },
-      status: {
-        type: DataTypes.ENUM('pending', 'approved', 'failed', 'deleted'),
-        allowNull: false,
-        defaultValue: 'pending',
-      },
-      uploaded_at: {
-        type: DataTypes.DATE,
-        allowNull: false,
-      },
-      processed_at: {
-        type: DataTypes.DATE,
         allowNull: true,
+      },
+      size: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+      },
+      storage_key: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      alt_text: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      is_attached_to_event: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+      },
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+      },
+      updatedAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
       },
     });
 
-    // =========================================
-    // Event Tables
-    // =========================================
+    // Add index on calendar_id for media
+    await queryInterface.addIndex('media', ['calendar_id'], {
+      name: 'idx_media_calendar_id',
+    });
 
-    // event - Events
+    // event - Calendar events
     await queryInterface.createTable('event', {
       id: {
         type: DataTypes.UUID,
@@ -537,14 +518,8 @@ export default {
         onDelete: 'SET NULL',
       },
       calendar_id: {
-        type: DataTypes.UUID,
+        type: DataTypes.STRING,
         allowNull: true,
-        references: {
-          model: 'calendar',
-          key: 'id',
-        },
-        onUpdate: 'CASCADE',
-        onDelete: 'CASCADE',
       },
       location_id: {
         type: DataTypes.STRING,
@@ -620,18 +595,22 @@ export default {
       },
     });
 
-    // Add indexes for event_content
+    // Add index on event_id for event_content
     await queryInterface.addIndex('event_content', ['event_id'], {
       name: 'idx_event_content_event_id',
     });
+
+    // Add index on name for event_content (for search)
     await queryInterface.addIndex('event_content', ['name'], {
       name: 'idx_event_content_name',
     });
+
+    // Add index on description for event_content (for search)
     await queryInterface.addIndex('event_content', ['description'], {
       name: 'idx_event_content_description',
     });
 
-    // event_schedule - Event scheduling/recurrence
+    // event_schedule - Event schedules
     await queryInterface.createTable('event_schedule', {
       id: {
         type: DataTypes.UUID,
@@ -678,7 +657,7 @@ export default {
       },
       is_exclusion: {
         type: DataTypes.BOOLEAN,
-        allowNull: true,
+        defaultValue: false,
       },
       createdAt: {
         type: DataTypes.DATE,
@@ -690,7 +669,50 @@ export default {
       },
     });
 
-    // event_instance - Generated event instances
+    // event_category_assignment - Event category assignments
+    await queryInterface.createTable('event_category_assignment', {
+      id: {
+        type: DataTypes.UUID,
+        primaryKey: true,
+        allowNull: false,
+      },
+      event_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        references: {
+          model: 'event',
+          key: 'id',
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'CASCADE',
+      },
+      category_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        references: {
+          model: 'event_category',
+          key: 'id',
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'CASCADE',
+      },
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+      },
+      updatedAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+      },
+    });
+
+    // Add composite index on event_id and category_id
+    await queryInterface.addIndex('event_category_assignment', ['event_id', 'category_id'], {
+      name: 'idx_event_category_assignment_event_category',
+      unique: true,
+    });
+
+    // event_instance - Event instances (for recurring events)
     await queryInterface.createTable('event_instance', {
       id: {
         type: DataTypes.UUID,
@@ -707,21 +729,11 @@ export default {
         onUpdate: 'CASCADE',
         onDelete: 'CASCADE',
       },
-      calendar_id: {
-        type: DataTypes.UUID,
-        allowNull: true,
-        references: {
-          model: 'calendar',
-          key: 'id',
-        },
-        onUpdate: 'CASCADE',
-        onDelete: 'CASCADE',
-      },
-      start_time: {
+      start: {
         type: DataTypes.DATE,
         allowNull: true,
       },
-      end_time: {
+      end: {
         type: DataTypes.DATE,
         allowNull: true,
       },
@@ -735,122 +747,30 @@ export default {
       },
     });
 
-    // =========================================
-    // Event Category Tables
-    // =========================================
+    // Add index on event_id for event_instance
+    await queryInterface.addIndex('event_instance', ['event_id'], {
+      name: 'idx_event_instance_event_id',
+    });
 
-    // event_categories - Event categories
-    await queryInterface.createTable('event_categories', {
+    // Add index on start date for event_instance (for date range queries)
+    await queryInterface.addIndex('event_instance', ['start'], {
+      name: 'idx_event_instance_start',
+    });
+
+    // configuration - System configuration
+    await queryInterface.createTable('configuration', {
       id: {
         type: DataTypes.UUID,
         primaryKey: true,
         allowNull: false,
-        defaultValue: DataTypes.UUIDV4,
       },
-      calendar_id: {
-        type: DataTypes.UUID,
-        allowNull: false,
-        references: {
-          model: 'calendar',
-          key: 'id',
-        },
-        onUpdate: 'CASCADE',
-        onDelete: 'CASCADE',
+      signups_open: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
       },
-      created_at: {
-        type: DataTypes.DATE,
-        allowNull: false,
-      },
-      updated_at: {
-        type: DataTypes.DATE,
-        allowNull: false,
-      },
-    });
-
-    // event_category_content - Category translations
-    await queryInterface.createTable('event_category_content', {
-      id: {
-        type: DataTypes.UUID,
-        primaryKey: true,
-        allowNull: false,
-        defaultValue: DataTypes.UUIDV4,
-      },
-      category_id: {
-        type: DataTypes.UUID,
-        allowNull: false,
-        references: {
-          model: 'event_categories',
-          key: 'id',
-        },
-        onUpdate: 'CASCADE',
-        onDelete: 'CASCADE',
-      },
-      language: {
-        type: DataTypes.STRING(5),
-        allowNull: false,
-      },
-      name: {
-        type: DataTypes.STRING(100),
-        allowNull: false,
-      },
-    });
-
-    // event_category_assignments - Event-category relationships
-    await queryInterface.createTable('event_category_assignments', {
-      id: {
-        type: DataTypes.UUID,
-        primaryKey: true,
-        allowNull: false,
-        defaultValue: DataTypes.UUIDV4,
-      },
-      event_id: {
-        type: DataTypes.UUID,
-        allowNull: false,
-        references: {
-          model: 'event',
-          key: 'id',
-        },
-        onUpdate: 'CASCADE',
-        onDelete: 'CASCADE',
-      },
-      category_id: {
-        type: DataTypes.UUID,
-        allowNull: false,
-        references: {
-          model: 'event_categories',
-          key: 'id',
-        },
-        onUpdate: 'CASCADE',
-        onDelete: 'CASCADE',
-      },
-      created_at: {
-        type: DataTypes.DATE,
-        allowNull: false,
-      },
-    });
-
-    // Add indexes for event_category_assignments
-    await queryInterface.addIndex('event_category_assignments', ['event_id'], {
-      name: 'idx_event_category_assignment_event_id',
-    });
-    await queryInterface.addIndex('event_category_assignments', ['category_id'], {
-      name: 'idx_event_category_assignment_category_id',
-    });
-
-    // =========================================
-    // Service Configuration Table
-    // =========================================
-
-    // service_config - Service configuration
-    await queryInterface.createTable('service_config', {
-      parameter: {
-        type: DataTypes.STRING,
-        primaryKey: true,
-        allowNull: false,
-      },
-      value: {
-        type: DataTypes.STRING,
-        allowNull: true,
+      applications_open: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
       },
       createdAt: {
         type: DataTypes.DATE,
@@ -861,10 +781,6 @@ export default {
         allowNull: false,
       },
     });
-
-    // =========================================
-    // ActivityPub Tables
-    // =========================================
 
     // ap_inbox - ActivityPub inbox messages
     await queryInterface.createTable('ap_inbox', {
@@ -893,7 +809,7 @@ export default {
           key: 'id',
         },
         onUpdate: 'CASCADE',
-        onDelete: 'SET NULL',
+        onDelete: 'CASCADE',
       },
       processed_time: {
         type: DataTypes.DATE,
@@ -940,7 +856,7 @@ export default {
           key: 'id',
         },
         onUpdate: 'CASCADE',
-        onDelete: 'SET NULL',
+        onDelete: 'CASCADE',
       },
       processed_time: {
         type: DataTypes.DATE,
@@ -960,7 +876,7 @@ export default {
       },
     });
 
-    // ap_following - Calendars we follow
+    // ap_following - Calendars this instance is following
     await queryInterface.createTable('ap_following', {
       id: {
         type: DataTypes.STRING,
@@ -979,12 +895,17 @@ export default {
           key: 'id',
         },
         onUpdate: 'CASCADE',
-        onDelete: 'SET NULL',
+        onDelete: 'CASCADE',
       },
-      repost_policy: {
-        type: DataTypes.STRING,
+      auto_repost_originals: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
         allowNull: false,
-        defaultValue: 'manual',
+      },
+      auto_repost_reposts: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+        allowNull: false,
       },
       createdAt: {
         type: DataTypes.DATE,
@@ -996,7 +917,7 @@ export default {
       },
     });
 
-    // ap_follower - Calendars following us
+    // ap_follower - Calendars following this instance
     await queryInterface.createTable('ap_follower', {
       id: {
         type: DataTypes.STRING,
@@ -1015,7 +936,7 @@ export default {
           key: 'id',
         },
         onUpdate: 'CASCADE',
-        onDelete: 'SET NULL',
+        onDelete: 'CASCADE',
       },
       createdAt: {
         type: DataTypes.DATE,
@@ -1027,7 +948,7 @@ export default {
       },
     });
 
-    // ap_shared_event - Shared/reposted events
+    // ap_shared_event - Events that have been shared/reposted
     await queryInterface.createTable('ap_shared_event', {
       id: {
         type: DataTypes.STRING,
@@ -1042,6 +963,11 @@ export default {
         type: DataTypes.STRING,
         allowNull: true,
       },
+      auto_posted: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+        allowNull: false,
+      },
       createdAt: {
         type: DataTypes.DATE,
         allowNull: false,
@@ -1052,12 +978,12 @@ export default {
       },
     });
 
-    // ap_event_activity - Event activities from other calendars
+    // ap_event_activity - Activity on events
     await queryInterface.createTable('ap_event_activity', {
       id: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.UUID,
         primaryKey: true,
-        autoIncrement: true,
+        allowNull: false,
       },
       event_id: {
         type: DataTypes.STRING,
@@ -1082,34 +1008,31 @@ export default {
     });
   },
 
-  async down({ context: sequelize }: { context: Sequelize }) {
-    const queryInterface = sequelize.getQueryInterface();
-
-    // Drop tables in reverse order of creation (respecting foreign key dependencies)
+  async down(queryInterface: QueryInterface) {
+    // Drop tables in reverse order of creation to handle foreign key constraints
     await queryInterface.dropTable('ap_event_activity');
     await queryInterface.dropTable('ap_shared_event');
     await queryInterface.dropTable('ap_follower');
     await queryInterface.dropTable('ap_following');
     await queryInterface.dropTable('ap_outbox');
     await queryInterface.dropTable('ap_inbox');
-    await queryInterface.dropTable('service_config');
-    await queryInterface.dropTable('event_category_assignments');
-    await queryInterface.dropTable('event_category_content');
-    await queryInterface.dropTable('event_categories');
+    await queryInterface.dropTable('configuration');
     await queryInterface.dropTable('event_instance');
+    await queryInterface.dropTable('event_category_assignment');
     await queryInterface.dropTable('event_schedule');
     await queryInterface.dropTable('event_content');
     await queryInterface.dropTable('event');
     await queryInterface.dropTable('media');
     await queryInterface.dropTable('location');
-    await queryInterface.dropTable('account_invitation');
+    await queryInterface.dropTable('event_category_content');
+    await queryInterface.dropTable('event_category');
     await queryInterface.dropTable('calendar_editor');
     await queryInterface.dropTable('calendar_content');
     await queryInterface.dropTable('calendar');
+    await queryInterface.dropTable('account_invitation');
     await queryInterface.dropTable('profile');
     await queryInterface.dropTable('account_application');
     await queryInterface.dropTable('account_secrets');
-    await queryInterface.dropTable('account_role');
     await queryInterface.dropTable('account');
   },
 };

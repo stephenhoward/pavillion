@@ -36,7 +36,7 @@ describe('Event API', () => {
     calendar = await calendarInterface.createCalendar(account,'testcalendar');
 
     // Create a proper FollowActivity object
-    let inboxService = new ProcessInboxService(eventBus);
+    let inboxService = new ProcessInboxService(eventBus, calendarInterface);
     const followActivity = new FollowActivity('testcalendar@remotedomain', 'testcalendar@pavillion.dev');
     followActivity.id = `https://remotedomain/users/testcalendar/follows/${uuidv4()}`;
     await inboxService.processFollowAccount(calendar, followActivity);

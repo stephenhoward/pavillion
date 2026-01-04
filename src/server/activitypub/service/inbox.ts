@@ -6,23 +6,25 @@ import CreateActivity from "@/server/activitypub/model/action/create";
 import UpdateActivity from "@/server/activitypub/model/action/update";
 import DeleteActivity from "@/server/activitypub/model/action/delete";
 import FollowActivity from "@/server/activitypub/model/action/follow";
+import AcceptActivity from "@/server/activitypub/model/action/accept";
 import AnnounceActivity from "@/server/activitypub/model/action/announce";
-import { ActivityPubInboxMessageEntity, EventActivityEntity, FollowerCalendarEntity } from "@/server/activitypub/entity/activitypub";
-import CalendarService from "@/server/calendar/service/calendar";
-import EventService from "@/server/calendar/service/events";
+import { ActivityPubInboxMessageEntity, EventActivityEntity, FollowerCalendarEntity, FollowingCalendarEntity } from "@/server/activitypub/entity/activitypub";
+import { ActivityPubActor } from "@/server/activitypub/model/base";
+import CalendarInterface from "@/server/calendar/interface";
 import { CalendarEvent } from "@/common/model/events";
 import { Calendar } from "@/common/model/calendar";
+import { addToOutbox } from "@/server/activitypub/helper/outbox";
 
 /**
  * Service responsible for processing incoming ActivityPub messages in the inbox.
  */
 class ProcessInboxService {
-  eventService: EventService;
-  calendarService: CalendarService;
+  calendarInterface: CalendarInterface;
+  eventBus: EventEmitter;
 
-  constructor(eventBus: EventEmitter) {
-    this.eventService = new EventService(eventBus);
-    this.calendarService = new CalendarService(eventBus);
+  constructor(eventBus: EventEmitter, calendarInterface: CalendarInterface) {
+    this.eventBus = eventBus;
+    this.calendarInterface = calendarInterface;
   }
 
   /**
@@ -55,7 +57,7 @@ class ProcessInboxService {
    * @returns {Promise<void>}
    */
   async processInboxMessage(message: ActivityPubInboxMessageEntity ) {
-    const calendar = await this.calendarService.getCalendar(message.calendar_id);
+    const calendar = await this.calendarInterface.getCalendar(message.calendar_id);
 
     try {
       if ( ! calendar ) {
@@ -72,14 +74,17 @@ class ProcessInboxService {
           this.processDeleteEvent(calendar, DeleteActivity.fromObject(message.message) );
           break;
         case 'Follow':
-          this.processFollowAccount(calendar, FollowActivity.fromObject(message.message) );
+          await this.processFollowAccount(calendar, FollowActivity.fromObject(message.message) );
+          break;
+        case 'Accept':
+          await this.processAcceptActivity(calendar, AcceptActivity.fromObject(message.message) );
           break;
         case 'Announce':
           this.processShareEvent(calendar, AnnounceActivity.fromObject(message.message) );
           break;
         case 'Undo':
           let targetEntity = await ActivityPubInboxMessageEntity.findOne({
-            where: { calendarId: message.calendar_id, id: message.message.object },
+            where: { calendar_id: message.calendar_id, id: message.message.object },
           });
 
           if ( targetEntity ) {
@@ -123,6 +128,11 @@ class ProcessInboxService {
   async actorOwnsObject(message: any): Promise<boolean> {
     // TODO: implement a remote verification of the actor's ownership of the object
     // by retrieving the object from its server and checking that attributedTo.
+    console.log(`[INBOX] Verifying actor ownership:`);
+    console.log(`[INBOX]   message.actor: ${message.actor}`);
+    console.log(`[INBOX]   message.object.attributedTo: ${message.object.attributedTo}`);
+    console.log(`[INBOX]   message.object:`, JSON.stringify(message.object, null, 2));
+
     if ( message.actor == message.object.attributedTo ) {
       return true;
     }
@@ -137,12 +147,37 @@ class ProcessInboxService {
    * @returns {Promise<void>}
    */
   async processCreateEvent(calendar: Calendar, message: CreateActivity) {
-    let existingEvent = await this.eventService.getEventById(message.object.id);
+    console.log(`[INBOX] Processing Create activity for event ${message.object.id}`);
+    console.log(`[INBOX] Event from actor: ${message.actor}`);
+
+    let existingEvent = null;
+    try {
+      existingEvent = await this.calendarInterface.getEventById(message.object.id);
+    }
+    catch {
+      // Event not found - this is expected for new events
+    }
+
     if ( ! existingEvent ) {
+      console.log(`[INBOX] Event ${message.object.id} does not exist locally, creating...`);
+
       let ok = await this.actorOwnsObject(message);
       if ( ok ) {
-        await this.eventService.addRemoteEvent(message.object);
+        // Set calendarId to the remote calendar's AP identifier (from message.actor)
+        const eventParams = {
+          ...message.object,
+          calendarId: message.actor,
+        };
+        console.log(`[INBOX] Calling addRemoteEvent with calendarId: ${message.actor}`);
+        await this.calendarInterface.addRemoteEvent(calendar, eventParams);
+        console.log(`[INBOX] Successfully created remote event ${message.object.id}`);
       }
+      else {
+        console.warn(`[INBOX] Actor ownership verification failed for event ${message.object.id}`);
+      }
+    }
+    else {
+      console.log(`[INBOX] Event ${message.object.id} already exists, skipping create`);
     }
   }
 
@@ -165,11 +200,11 @@ class ProcessInboxService {
    * @returns {Promise<void>}
    */
   async processUpdateEvent(calendar: Calendar, message: UpdateActivity) {
-    let existingEvent = await this.eventService.getEventById(message.object.id);
+    let existingEvent = await this.calendarInterface.getEventById(message.object.id);
     if ( existingEvent && ! this.isLocalEvent(existingEvent) ) {
       let ok = await this.actorOwnsObject(message);
       if ( ok ) {
-        await this.eventService.updateRemoteEvent(message.object);
+        await this.calendarInterface.updateRemoteEvent(calendar, message.object);
       }
     }
   }
@@ -182,23 +217,26 @@ class ProcessInboxService {
    * @returns {Promise<void>}
    */
   async processDeleteEvent(calendar: Calendar, message: DeleteActivity) {
-    let existingEvent = await this.eventService.getEventById(message.object.id);
+    let existingEvent = await this.calendarInterface.getEventById(message.object.id);
     if ( existingEvent && ! this.isLocalEvent(existingEvent) ) {
       let ok = await this.actorOwnsObject(message);
       if ( ok ) {
-        await this.eventService.deleteRemoteEvent(message.object.id);
+        await this.calendarInterface.deleteRemoteEvent(message.object.id);
       }
     }
   }
 
   /**
-   * Processes a Follow activity by creating a new follower relationship.
+   * Processes a Follow activity by creating a new follower relationship
+   * and queuing an Accept activity for asynchronous delivery.
    *
    * @param {Calendar} calendar - The calendar being followed
    * @param {FollowActivity} message - The Follow activity message
    * @returns {Promise<void>}
    */
   async processFollowAccount(calendar: Calendar, message: FollowActivity) {
+    console.log(`[INBOX] Processing Follow activity from ${message.actor} for calendar ${calendar.urlName}`);
+
     let existingFollow = await FollowerCalendarEntity.findOne({
       where: {
         remote_calendar_id: message.actor,
@@ -207,11 +245,73 @@ class ProcessInboxService {
     });
 
     if (!existingFollow) {
+      console.log(`[INBOX] Creating new follower relationship for ${message.actor}`);
+
+      // Create the follower relationship
       await FollowerCalendarEntity.create({
         id: uuidv4(),
         remote_calendar_id: message.actor,
         calendar_id: calendar.id,
       });
+
+      console.log(`[INBOX] Follower relationship created successfully`);
+
+      // Queue Accept activity for asynchronous delivery
+      const actorUrl = ActivityPubActor.actorUrl(calendar);
+      const acceptActivity = new AcceptActivity(actorUrl, message);
+
+      console.log(`[INBOX] Queueing Accept activity to ${message.actor}`);
+
+      await addToOutbox(this.eventBus, calendar, acceptActivity);
+
+      console.log(`[INBOX] Accept activity queued for delivery`);
+    }
+    else {
+      console.log(`[INBOX] Follow relationship already exists for ${message.actor}, skipping`);
+    }
+  }
+
+  /**
+   * Processes an Accept activity received in response to a Follow request.
+   * Confirms the follow relationship on the initiating side.
+   *
+   * @param {Calendar} calendar - The calendar that initiated the Follow
+   * @param {AcceptActivity} message - The Accept activity message
+   * @returns {Promise<void>}
+   */
+  async processAcceptActivity(calendar: Calendar, message: AcceptActivity) {
+    console.log(`[INBOX] Processing Accept activity from ${message.actor} for calendar ${calendar.urlName}`);
+
+    // The Accept activity's object should be the original Follow activity
+    const followObject = message.object;
+
+    // Verify this Accept corresponds to a Follow we sent
+    if (followObject && typeof followObject === 'object' && followObject.type === 'Follow') {
+      const followActivity = followObject as FollowActivity;
+
+      console.log(`[INBOX] Accept confirms Follow of ${followActivity.object}`);
+
+      // Find the corresponding FollowingCalendarEntity record
+      // The follow.object is the remote calendar we're following
+      const followingRecord = await FollowingCalendarEntity.findOne({
+        where: {
+          remote_calendar_id: followActivity.object as string,
+          calendar_id: calendar.id,
+        },
+      });
+
+      if (followingRecord) {
+        // The follow relationship is now confirmed
+        // In the future, we could add a "confirmed" status field
+        // For now, the existence of the record means it's active
+        console.log(`[INBOX] Follow relationship confirmed for calendar ${calendar.id} following ${followActivity.object}`);
+      }
+      else {
+        console.warn(`[INBOX] No FollowingCalendarEntity found for ${followActivity.object}, Accept may be for unknown follow`);
+      }
+    }
+    else {
+      console.warn(`[INBOX] Accept activity does not contain valid Follow object`);
     }
   }
 
@@ -224,9 +324,12 @@ class ProcessInboxService {
    */
   // TODO: proper message type
   async processUnfollowAccount(calendar: Calendar, message: any) {
+    // Extract the actor from the original Follow activity message
+    const actor = typeof message.message === 'object' ? message.message.actor : message.actor;
+
     await FollowerCalendarEntity.destroy({
       where: {
-        remote_calendar_id: message.actor,
+        remote_calendar_id: actor,
         calendar_id: calendar.id,
       },
     });

@@ -4,6 +4,7 @@ import { Account } from '@/common/model/account';
 import ExpressHelper from '@/server/common/helper/express';
 import CalendarService from '@/server/calendar/service/calendar';
 import ActivityPubInterface from '@/server/activitypub/interface';
+import { FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
 import {
   InvalidRemoteCalendarIdentifierError,
   InvalidRepostPolicySettingsError,
@@ -345,28 +346,54 @@ export default class ActivityPubMemberRoutes {
       return;
     }
 
-    if (typeof req.body.remoteCalendar === 'string') {
-      try {
-        await this.service.unfollowCalendar(account, req.body.calendar, req.body.remoteCalendar);
-        res.status(200).send('Unfollowed');
-      }
-      catch (error: any) {
-        if (error instanceof InsufficientCalendarPermissionsError) {
-          res.status(403).json({
-            error: error.message,
-            errorName: 'InsufficientCalendarPermissionsError',
-          });
-        }
-        else {
-          console.error('Unexpected error in unfollowCalendar:', error);
-          res.status(500).json({
-            error: 'An unexpected error occurred',
-          });
-        }
-      }
+    const calendar = req.body.calendar;
+    // Decode the URL-encoded follow ID from the path parameter
+    const followId = decodeURIComponent(req.params.id);
+
+    // Validate required parameters
+    if (typeof followId !== 'string') {
+      res.status(400).send('Invalid follow ID');
+      return;
     }
-    else {
-      res.status(400).send('Invalid request');
+
+    // Verify user has access to this calendar
+    const hasAccess = await this.calendarService.userCanModifyCalendar(account, calendar);
+
+    if (!hasAccess) {
+      res.status(403).send("Permission denied");
+      return;
+    }
+
+    try {
+      // Look up the follow relationship by ID to get the remote calendar ID
+      const followEntity = await FollowingCalendarEntity.findOne({
+        where: {
+          id: followId,
+          calendar_id: calendar.id,
+        },
+      });
+
+      if (!followEntity) {
+        res.status(404).send('Follow relationship not found');
+        return;
+      }
+
+      await this.service.unfollowCalendar(account, calendar, followEntity.remote_calendar_id);
+      res.status(200).send('Unfollowed');
+    }
+    catch (error: any) {
+      if (error instanceof InsufficientCalendarPermissionsError) {
+        res.status(403).json({
+          error: error.message,
+          errorName: 'InsufficientCalendarPermissionsError',
+        });
+      }
+      else {
+        console.error('Unexpected error in unfollowCalendar:', error);
+        res.status(500).json({
+          error: 'An unexpected error occurred',
+        });
+      }
     }
   }
 

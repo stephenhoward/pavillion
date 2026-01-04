@@ -24,7 +24,7 @@
  * Configuration for a test instance
  */
 export interface InstanceConfig {
-  /** Base URL for the instance (e.g., http://alpha.federation.local) */
+  /** Base URL for the instance (e.g., https://alpha.federation.local) */
   baseUrl: string;
   /** Email address for the admin account */
   adminEmail: string;
@@ -46,7 +46,7 @@ export interface InstanceConfig {
  * The seed data creates admin@pavillion.dev with password 'admin'.
  */
 export const INSTANCE_ALPHA: InstanceConfig = {
-  baseUrl: 'http://alpha.federation.local',
+  baseUrl: 'https://alpha.federation.local',
   // Admin credentials from seed data (layouts/development/db/b_account.json)
   // The email is admin@pavillion.dev, not admin@alpha.federation.local
   adminEmail: 'admin@pavillion.dev',
@@ -66,7 +66,7 @@ export const INSTANCE_ALPHA: InstanceConfig = {
  * The seed data creates admin@pavillion.dev with password 'admin'.
  */
 export const INSTANCE_BETA: InstanceConfig = {
-  baseUrl: 'http://beta.federation.local',
+  baseUrl: 'https://beta.federation.local',
   // Admin credentials from seed data (layouts/development/db/b_account.json)
   // The email is admin@pavillion.dev, not admin@beta.federation.local
   adminEmail: 'admin@pavillion.dev',
@@ -90,7 +90,7 @@ export function formatWebFingerResource(calendarUrlName: string, instance: Insta
  *
  * @param calendarUrlName - The calendar's URL name
  * @param instance - The instance configuration
- * @returns The full actor URL (e.g., 'http://alpha.federation.local/o/community_events')
+ * @returns The full actor URL (e.g., 'https://alpha.federation.local/o/community_events')
  */
 export function formatActorUrl(calendarUrlName: string, instance: InstanceConfig): string {
   return `${instance.baseUrl}/o/${calendarUrlName}`;
