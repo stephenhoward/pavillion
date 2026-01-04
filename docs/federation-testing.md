@@ -4,9 +4,10 @@ Pavillion includes a comprehensive federation testing infrastructure that allows
 
 ## Overview
 
-The federation testing setup creates two Pavillion instances (`alice.federation.local` and `bob.federation.local`) running in Docker containers with:
+The federation testing setup creates two Pavillion instances (`alpha.federation.local` and `beta.federation.local`) running in Docker containers with:
 - Separate PostgreSQL databases for complete isolation
-- nginx reverse proxy for hostname-based routing
+- nginx reverse proxy with HTTPS for hostname-based routing
+- Auto-generated self-signed SSL certificates for local HTTPS testing
 - HTTP signature verification bypass for simplified local testing
 - Playwright E2E tests to verify federation scenarios
 
@@ -27,8 +28,8 @@ docker compose version
 
 ```bash
 # Add these lines to /etc/hosts
-127.0.0.1 alice.federation.local
-127.0.0.1 bob.federation.local
+127.0.0.1 alpha.federation.local
+127.0.0.1 beta.federation.local
 ```
 
 **On macOS/Linux:**
@@ -53,6 +54,7 @@ Once prerequisites are met, testing federation is straightforward:
 
 ```bash
 # 1. Start the federation environment (both instances + nginx)
+# SSL certificates will be automatically generated on first run
 npm run federation:start
 
 # 2. Wait for instances to be healthy (about 60 seconds)
@@ -70,11 +72,39 @@ npm run federation:stop
 
 | Command | Description |
 |---------|-------------|
-| `npm run federation:start` | Start both Pavillion instances with nginx reverse proxy |
+| `npm run federation:start` | Start both Pavillion instances with nginx reverse proxy (auto-generates SSL certificates if missing) |
 | `npm run federation:stop` | Stop all federation containers |
 | `npm run federation:logs` | View real-time logs from all containers |
 | `npm run federation:reset` | Stop containers, delete volumes, and start fresh |
 | `npm run test:federation` | Run Playwright federation E2E tests |
+
+## SSL Certificate Generation
+
+The federation environment uses HTTPS with self-signed SSL certificates for secure communication between instances. These certificates are **automatically generated** when you run `npm run federation:start` for the first time.
+
+**How it works:**
+1. When you run `npm run federation:start`, the script checks for existing SSL certificates
+2. If certificates are missing, it automatically runs `docker/federation/ssl/generate-certs.sh`
+3. The script generates self-signed certificates for both `alpha.federation.local` and `beta.federation.local`
+4. Certificates are valid for 365 days and use RSA 2048-bit encryption
+5. The Docker containers are configured to trust these certificates via `NODE_TLS_REJECT_UNAUTHORIZED=0`
+
+**Manual regeneration:**
+If you need to regenerate the certificates (e.g., after they expire), you can:
+```bash
+# Delete existing certificates
+rm docker/federation/ssl/*.crt docker/federation/ssl/*.key
+
+# Restart federation (will auto-generate new certificates)
+npm run federation:start
+```
+
+Or run the generation script directly:
+```bash
+./docker/federation/ssl/generate-certs.sh
+```
+
+**Security Note:** These self-signed certificates are for local testing only and should never be used in production.
 
 ## Federation Test Scenarios
 
@@ -102,14 +132,14 @@ The federation test suite covers the following scenarios:
 
 Once the federation environment is running, you can access both instances in your browser:
 
-- Alice (Instance A): http://alice.federation.local
-- Bob (Instance B): http://bob.federation.local
+- Alpha (Instance A): https://alpha.federation.local
+- Beta (Instance B): https://beta.federation.local
 
 **Login Credentials:**
 - Email: `admin@pavillion.dev`
 - Password: `admin`
 
-Note: Both instances use the same seed data, so the admin credentials are identical.
+**Note:** Both instances use HTTPS with self-signed certificates. Your browser will show a security warning - this is expected for local development. Click "Advanced" and "Proceed" to continue. Both instances use the same seed data, so the admin credentials are identical.
 
 ## Example Federation Testing Workflow
 
@@ -126,12 +156,12 @@ npm run federation:logs
 npm run test:federation
 
 # 4. Or manually test in browser:
-# - Open http://alice.federation.local
+# - Open https://alpha.federation.local (accept the security warning)
 # - Log in with admin@pavillion.dev / admin
 # - Create a calendar and event
-# - Open http://bob.federation.local in another tab
-# - Log in and follow Alice's calendar
-# - Verify the event appears in Bob's feed
+# - Open https://beta.federation.local in another tab (accept the security warning)
+# - Log in and follow Alpha's calendar
+# - Verify the event appears in Beta's feed
 
 # 5. When done, stop the environment
 npm run federation:stop
@@ -157,7 +187,7 @@ npm run federation:stop
    npm run federation:reset
    ```
 
-### Cannot access alice.federation.local or bob.federation.local in browser
+### Cannot access alpha.federation.local or beta.federation.local in browser
 
 **Problem:** Browser shows "This site can't be reached" or similar error.
 
@@ -168,8 +198,8 @@ npm run federation:stop
    ```
    Should show:
    ```
-   127.0.0.1 alice.federation.local
-   127.0.0.1 bob.federation.local
+   127.0.0.1 alpha.federation.local
+   127.0.0.1 beta.federation.local
    ```
 2. Verify nginx container is running:
    ```bash
@@ -178,7 +208,7 @@ npm run federation:stop
 3. Check that instances are healthy:
    ```bash
    docker ps
-   # Look for "healthy" status on instance_alice and instance_bob
+   # Look for "healthy" status on pavillion-federation-alpha and pavillion-federation-beta
    ```
 
 ### Federation tests fail with network errors
@@ -196,9 +226,10 @@ npm run federation:stop
    ```
 3. Check that nginx is routing correctly:
    ```bash
-   curl -H "Host: alice.federation.local" http://localhost/health
-   curl -H "Host: bob.federation.local" http://localhost/health
+   curl -k -H "Host: alpha.federation.local" https://localhost/health
+   curl -k -H "Host: beta.federation.local" https://localhost/health
    ```
+   Note: The `-k` flag tells curl to accept the self-signed SSL certificate.
 
 ### Database state is causing test failures
 
@@ -226,18 +257,18 @@ npm run federation:reset
 
 To view logs for a specific container:
 ```bash
-# Alice instance logs
-docker logs pavillion-federation-alice -f
+# Alpha instance logs
+docker logs pavillion-federation-alpha -f
 
-# Bob instance logs
-docker logs pavillion-federation-bob -f
+# Beta instance logs
+docker logs pavillion-federation-beta -f
 
 # nginx logs
 docker logs pavillion-federation-nginx -f
 
 # Database logs
-docker logs pavillion-federation-db-alice -f
-docker logs pavillion-federation-db-bob -f
+docker logs pavillion-federation-db-alpha -f
+docker logs pavillion-federation-db-beta -f
 ```
 
 ## Architecture Overview

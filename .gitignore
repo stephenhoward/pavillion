@@ -26,6 +26,10 @@ test-results
 secrets/*
 !secrets/.gitkeep
 
+# Federation SSL certificates (generated on-demand)
+docker/federation/ssl/*.crt
+docker/federation/ssl/*.key
+
 # Local configuration (use local.yaml.example as template)
 .env
 config/local.yaml
