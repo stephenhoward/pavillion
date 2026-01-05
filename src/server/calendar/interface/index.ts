@@ -10,6 +10,7 @@ import CalendarService from '../service/calendar';
 import EventService from '../service/events';
 import LocationService from '../service/locations';
 import CategoryService from '../service/categories';
+import WidgetDomainService from '../service/widget_domain';
 import { EventEmitter } from 'events';
 import EventInstanceService from '../service/event_instance';
 import CalendarEventInstance from '@/common/model/event_instance';
@@ -32,6 +33,7 @@ export default class CalendarInterface {
   private locationService: LocationService;
   private eventInstanceService: EventInstanceService;
   private categoryService: CategoryService;
+  private widgetDomainService: WidgetDomainService;
 
   constructor(
     eventBus: EventEmitter,
@@ -43,6 +45,7 @@ export default class CalendarInterface {
     this. locationService = new LocationService();
     this.eventInstanceService = new EventInstanceService(eventBus);
     this.categoryService = new CategoryService();
+    this.widgetDomainService = new WidgetDomainService();
   }
 
   // Calendar operations
@@ -255,6 +258,49 @@ export default class CalendarInterface {
     settings: { defaultDateRange?: DefaultDateRange },
   ): Promise<Calendar> {
     return this.calendarService.updateCalendarSettings(account, calendarId, settings);
+  }
+
+  // Widget domain operations
+  async getWidgetDomain(account: Account, calendarId: string): Promise<string | null> {
+    const calendar = await this.calendarService.getCalendar(calendarId);
+    if (!calendar) {
+      throw new Error('Calendar not found');
+    }
+
+    const canModify = await this.calendarService.userCanModifyCalendar(account, calendar);
+    if (!canModify) {
+      throw new Error('Permission denied');
+    }
+
+    return this.widgetDomainService.getAllowedDomain(calendar);
+  }
+
+  async setWidgetDomain(account: Account, calendarId: string, domain: string): Promise<void> {
+    const calendar = await this.calendarService.getCalendar(calendarId);
+    if (!calendar) {
+      throw new Error('Calendar not found');
+    }
+
+    const canModify = await this.calendarService.userCanModifyCalendar(account, calendar);
+    if (!canModify) {
+      throw new Error('Permission denied');
+    }
+
+    return this.widgetDomainService.setAllowedDomain(calendar, domain);
+  }
+
+  async clearWidgetDomain(account: Account, calendarId: string): Promise<void> {
+    const calendar = await this.calendarService.getCalendar(calendarId);
+    if (!calendar) {
+      throw new Error('Calendar not found');
+    }
+
+    const canModify = await this.calendarService.userCanModifyCalendar(account, calendar);
+    if (!canModify) {
+      throw new Error('Permission denied');
+    }
+
+    return this.widgetDomainService.clearAllowedDomain(calendar);
   }
 
 }

@@ -30,6 +30,7 @@ export default defineConfig({
       input: {
         client: "./src/client/app.ts",
         site: "./src/site/app.ts",
+        widget: "./src/widget/app.ts",
       },
     },
   },

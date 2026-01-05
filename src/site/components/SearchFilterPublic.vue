@@ -1,7 +1,10 @@
 <template>
   <div class="search-filter-public">
     <!-- Date Range Filter Section (Collapsible Button) -->
-    <div class="date-range-section" role="group" :aria-label="t('filter_by_date_range')">
+    <div v-if="shouldShowDateFilter"
+         class="date-range-section"
+         role="group"
+         :aria-label="t('filter_by_date_range')">
       <div class="date-filter-wrapper" ref="dateFilterRef">
         <!-- Date Filter Button -->
         <button
@@ -178,6 +181,12 @@ import { useRoute, useRouter } from 'vue-router';
 import { usePublicCalendarStore } from '../stores/publicCalendarStore';
 import CategoryPillSelector from './CategoryPillSelector.vue';
 import { getThisWeek, getNextWeek } from '@/common/utils/datePresets';
+import type { ViewMode } from '@/widget/stores/widgetStore';
+
+// Accept optional widget view mode prop
+const props = defineProps<{
+  widgetViewMode?: ViewMode;
+}>();
 
 const { t } = useTranslation('system', {
   keyPrefix: 'public_search_filter',
@@ -187,6 +196,17 @@ const route = useRoute();
 const router = useRouter();
 const publicStore = usePublicCalendarStore();
 const dateFilterRef = ref<HTMLElement | null>(null);
+
+// Check if we're in widget context and determine if date filter should show
+const isInWidget = computed(() => route.path.startsWith('/widget/'));
+const shouldShowDateFilter = computed(() => {
+  if (!isInWidget.value) {
+    return true; // Always show in regular site
+  }
+
+  // In widget context, only show date filter for list view
+  return props.widgetViewMode === 'list';
+});
 
 const state = reactive({
   searchQuery: '',

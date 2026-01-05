@@ -612,7 +612,15 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
 }
 
 @mixin public-dark-mode {
+  // Apply dark mode when system preference is dark (but not when forced to light mode)
   @media (prefers-color-scheme: dark) {
+    :global(html:not(.widget-theme-light)) & {
+      @content;
+    }
+  }
+
+  // Apply dark mode when widget is explicitly set to dark mode
+  :global(.widget-theme-dark) & {
     @content;
   }
 }

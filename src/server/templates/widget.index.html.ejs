@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pavillion Widget</title>
+    <% if (environment === 'production' && manifest['src/widget/app.ts']?.css) { %>
+    <% manifest['src/widget/app.ts'].css.forEach(function(cssFile) { %>
+    <link rel="stylesheet" href="/<%= cssFile %>" />
+    <% }); %>
+    <% } %>
+  </head>
+  <body>
+    <div id="app"></div>
+    <% if (environment === 'production') { %>
+    <script type="module" src="/<%= manifest['src/widget/app.ts'].file %>"></script>
+    <% } else { %>
+    <script type="module" src="http://localhost:5173/@vite/widget"></script>
+    <script type="module" src="http://localhost:5173/src/widget/app.ts"></script>
+    <% } %>
+  </body>
+</html>

@@ -24,6 +24,9 @@ class CalendarEntity extends Model {
   @Column({ type: DataType.STRING })
   declare default_date_range: string;
 
+  @Column({ type: DataType.STRING, allowNull: true })
+  declare widget_allowed_domain: string | null;
+
   toModel(): Calendar {
     let calendar = new Calendar( this.id, this.url_name );
     if ( ! this.languages ) {
@@ -33,6 +36,7 @@ class CalendarEntity extends Model {
       calendar.languages = this.languages.split(',');
     }
     calendar.defaultDateRange = this.default_date_range as DefaultDateRange || null;
+    calendar.widgetAllowedDomain = this.widget_allowed_domain || null;
 
     return calendar;
   };
@@ -43,6 +47,7 @@ class CalendarEntity extends Model {
       url_name: calendar.urlName,
       languages: calendar.languages.join(','),
       default_date_range: calendar.defaultDateRange,
+      widget_allowed_domain: calendar.widgetAllowedDomain,
     });
   }
 };
