@@ -45,7 +45,8 @@ function validateProductionEnvironment(): void {
  * @returns Promise that resolves when database is ready
  */
 async function initializeDatabase(): Promise<void> {
-  if (process.env.NODE_ENV === 'development') {
+  // Development and test environments use sync, production uses migrations
+  if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') {
     // Check if database reset is disabled (for containerized development with persistent data)
     const skipReset = process.env.DB_RESET === 'false';
 
@@ -54,6 +55,10 @@ async function initializeDatabase(): Promise<void> {
       console.log('Development mode: Syncing database schema (preserving existing data)...');
       await db.sync({ force: false });
       console.log('Database schema synced (data preserved).');
+    }
+    else if (process.env.NODE_ENV === 'test') {
+      // Test mode: schema is managed by test environment, skip sync
+      console.log('Test mode: Skipping database sync (managed by test environment).');
     }
     else {
       // Default development behavior: reset and re-seed database

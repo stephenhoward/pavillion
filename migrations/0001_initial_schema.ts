@@ -1,7 +1,9 @@
-import { QueryInterface, DataTypes } from 'sequelize';
+import { Sequelize, DataTypes } from 'sequelize';
 
 export default {
-  async up(queryInterface: QueryInterface) {
+  async up({ context: sequelize }: { context: Sequelize }) {
+    const queryInterface = sequelize.getQueryInterface();
+
     // account - User accounts
     await queryInterface.createTable('account', {
       id: {
@@ -1016,7 +1018,9 @@ export default {
     });
   },
 
-  async down(queryInterface: QueryInterface) {
+  async down({ context: sequelize }: { context: Sequelize }) {
+    const queryInterface = sequelize.getQueryInterface();
+
     // Drop tables in reverse order of creation to handle foreign key constraints
     await queryInterface.dropTable('ap_event_activity');
     await queryInterface.dropTable('ap_shared_event');
