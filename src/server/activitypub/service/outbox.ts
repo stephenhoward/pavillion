@@ -104,7 +104,8 @@ class ProcessOutboxService {
         if (activity.to && activity.to.length > 0) {
           recipients = activity.to;
           console.log(`[OUTBOX] Using explicit recipients from 'to' field for Undo activity: ${recipients.join(', ')}`);
-        } else {
+        }
+        else {
           recipients = await this.getRecipients(calendar, activity.object);
         }
         break;
@@ -186,7 +187,8 @@ class ProcessOutboxService {
       if (followEntity) {
         console.log(`[OUTBOX] Found follow relationship, adding recipient: ${followEntity.remote_calendar_id}`);
         recipients.push(followEntity.remote_calendar_id);
-      } else {
+      }
+      else {
         console.log(`[OUTBOX] No follow relationship found for ID: ${object_id}`);
       }
     }

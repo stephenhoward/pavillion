@@ -275,7 +275,8 @@ class EventService {
         const urlName = match[1];
         calendar = await this.calendarService.getCalendarByName(urlName);
       }
-    } else {
+    }
+    else {
       // Legacy support: if it's a UUID, look up by primary key
       calendar = await this.calendarService.getCalendar(eventEntity.calendar_id);
     }
