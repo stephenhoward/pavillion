@@ -171,14 +171,16 @@ export default class EventRoutes {
       return;
     }
 
-    // Decode the URL-encoded event ID from the path parameter
-    const eventId = decodeURIComponent(req.params.id);
-    if (!eventId) {
+    // Check for event ID before decoding
+    if (!req.params.id) {
       res.status(400).json({
         "error": "missing event ID",
       });
       return;
     }
+
+    // Decode the URL-encoded event ID from the path parameter
+    const eventId = decodeURIComponent(req.params.id);
 
     try {
       const updatedEvent = await this.service.updateEvent(account, eventId, req.body);

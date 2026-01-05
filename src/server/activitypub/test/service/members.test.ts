@@ -32,6 +32,16 @@ describe("followCalendar", () => {
 
     let calendar = Calendar.fromObject({ id: 'testid' });
 
+    // Mock the WebFinger/ActivityPub lookup to avoid real HTTP calls
+    let lookupRemoteCalendarStub = sandbox.stub(service, 'lookupRemoteCalendar');
+    lookupRemoteCalendarStub.resolves({
+      name: 'Test Calendar',
+      description: undefined,
+      domain: 'testdomain.com',
+      actorUrl: 'https://testdomain.com/o/testcalendar',
+      calendarId: undefined,
+    });
+
     let getExistingFollowStub = sandbox.stub(FollowingCalendarEntity, 'findOne');
     getExistingFollowStub.resolves(null);
 
@@ -57,7 +67,8 @@ describe("followCalendar", () => {
     if ( callargs ) {
       expect( callargs.id ).toMatch(/https:\/\/testdomain.com\/o\/testcalendar\/follows\/[a-z0-9-]+/);
       expect( callargs.calendar_id ).toBe('testid');
-      expect( callargs.remote_calendar_id ).toBe('testcalendar@testdomain.com');
+      // The remote_calendar_id should now be the ActivityPub actor URL, not the WebFinger identifier
+      expect( callargs.remote_calendar_id ).toBe('https://testdomain.com/o/testcalendar');
 
       let outboxCall = addToOutboxStub.getCall(0);
       if ( outboxCall ) {
@@ -72,8 +83,21 @@ describe("followCalendar", () => {
 
     let calendar = Calendar.fromObject({ id: 'testid' });
 
+    // Mock the WebFinger/ActivityPub lookup to avoid real HTTP calls
+    let lookupRemoteCalendarStub = sandbox.stub(service, 'lookupRemoteCalendar');
+    lookupRemoteCalendarStub.resolves({
+      name: 'Test Calendar',
+      description: undefined,
+      domain: 'testdomain.com',
+      actorUrl: 'https://testdomain.com/o/testcalendar',
+      calendarId: undefined,
+    });
+
     let getExistingFollowStub = sandbox.stub(FollowingCalendarEntity, 'findOne');
-    getExistingFollowStub.resolves(FollowingCalendarEntity.build({}));
+    getExistingFollowStub.resolves(FollowingCalendarEntity.build({
+      auto_repost_originals: false,
+      auto_repost_reposts: false,
+    }));
 
     let getActorUrlStub = sandbox.stub(service, 'actorUrl');
     getActorUrlStub.resolves('https://testdomain.com/o/testcalendar');

@@ -348,10 +348,10 @@ export default class ActivityPubMemberRoutes {
 
     const calendar = req.body.calendar;
     // Decode the URL-encoded follow ID from the path parameter
-    const followId = decodeURIComponent(req.params.id);
+    const followId = req.params.id ? decodeURIComponent(req.params.id) : undefined;
 
     // Validate required parameters
-    if (typeof followId !== 'string') {
+    if (!followId || typeof followId !== 'string') {
       res.status(400).send('Invalid follow ID');
       return;
     }

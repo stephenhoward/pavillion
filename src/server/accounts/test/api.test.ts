@@ -356,11 +356,11 @@ describe ('Invitations API', () => {
       calendars: ['calendar1', 'calendar2'],
     };
     stub2.resolves(mockResult);
-    router.post('/handler', inviteHandlers.acceptInvite.bind(inviteHandlers));
+    router.post('/handler/:code', inviteHandlers.acceptInvite.bind(inviteHandlers));
 
     const response = await request(testApp(router))
-      .post('/handler')
-      .send({password: 'testme'});
+      .post('/handler/invite123')
+      .send({password: 'password123'});
 
     expect(response.status).toBe(200);
     expect(stub2.called).toBe(true);
@@ -369,11 +369,11 @@ describe ('Invitations API', () => {
   it('accept invite: should fail', async () => {
     let stub2 = sandbox.stub(accountsInterface,'acceptAccountInvite');
     stub2.resolves(undefined);
-    router.post('/handler', inviteHandlers.acceptInvite.bind(inviteHandlers));
+    router.post('/handler/:code', inviteHandlers.acceptInvite.bind(inviteHandlers));
 
     const response = await request(testApp(router))
-      .post('/handler')
-      .send({password: 'testme'});
+      .post('/handler/invite123')
+      .send({password: 'password123'});
 
     expect(response.status).toBe(400);
     expect(stub2.called).toBe(true);

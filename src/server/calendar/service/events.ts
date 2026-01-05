@@ -268,7 +268,7 @@ class EventService {
     // Calendar ID is now stored as an ActivityPub URL (https://domain/o/urlName)
     // Extract the urlName from the URL and look up by that
     let calendar: Calendar | null = null;
-    if (eventEntity.calendar_id.startsWith('https://')) {
+    if (eventEntity.calendar_id && eventEntity.calendar_id.startsWith('https://')) {
       // Extract urlName from ActivityPub URL format: https://domain/o/urlName
       const match = eventEntity.calendar_id.match(/\/o\/([^\/]+)$/);
       if (match) {
@@ -276,7 +276,7 @@ class EventService {
         calendar = await this.calendarService.getCalendarByName(urlName);
       }
     }
-    else {
+    else if (eventEntity.calendar_id) {
       // Legacy support: if it's a UUID, look up by primary key
       calendar = await this.calendarService.getCalendar(eventEntity.calendar_id);
     }

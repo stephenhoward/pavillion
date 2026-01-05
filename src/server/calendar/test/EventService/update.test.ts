@@ -207,7 +207,7 @@ describe('updateEvent with location', () => {
     let saveEventStub = sandbox.stub(EventEntity.prototype, 'save');
     let findLocationStub = sandbox.stub(service['locationService'], 'findOrCreateLocation');
 
-    findEventStub.resolves(EventEntity.build({ account_id: 'testAccountId' }));
+    findEventStub.resolves(EventEntity.build({ account_id: 'testAccountId', calendar_id: 'testCalendarId' }));
     findLocationStub.resolves(new EventLocation('testId','testLocation', 'testAddress'));
 
     let updatedEvent = await service.updateEvent(new Account('testAccountId', 'testme', 'testme'), 'testEventId', {
@@ -225,7 +225,7 @@ describe('updateEvent with location', () => {
 
   it('should clear location from an event', async () => {
 
-    let eventEntity = EventEntity.build({ account_id: 'testAccountId', location_id: 'testLocationId' });
+    let eventEntity = EventEntity.build({ account_id: 'testAccountId', calendar_id: 'testCalendarId', location_id: 'testLocationId' });
 
     let findEventStub = sandbox.stub(EventEntity, 'findByPk');
     let saveEventStub = sandbox.stub(EventEntity.prototype, 'save');
@@ -270,7 +270,7 @@ describe('updateEvent with schedules', () => {
     let createScheduleStub = sandbox.stub(service, 'createEventSchedule');
     let findSchedulesStub = sandbox.stub(EventScheduleEntity, 'findAll');
 
-    findEventStub.resolves(EventEntity.build({ account_id: 'testAccountId', id: 'testEventId' }));
+    findEventStub.resolves(EventEntity.build({ account_id: 'testAccountId', id: 'testEventId', calendar_id: 'testCalendarId' }));
     createScheduleStub.resolves(new CalendarEventSchedule('testScheduleId', DateTime.now(), DateTime.now().plus({days: 12})));
     findSchedulesStub.resolves([]);
 
@@ -295,7 +295,7 @@ describe('updateEvent with schedules', () => {
     let findSchedulesStub = sandbox.stub(EventScheduleEntity, 'findAll');
     let destroySchedulesStub = sandbox.stub(EventScheduleEntity, 'destroy');
 
-    findEventStub.resolves(EventEntity.build({ account_id: 'testAccountId', id: 'testEventId' }));
+    findEventStub.resolves(EventEntity.build({ account_id: 'testAccountId', id: 'testEventId', calendar_id: 'testCalendarId' }));
     findSchedulesStub.resolves([ EventScheduleEntity.build({ event_id: 'testEventId', id: 'testScheduleId' }) ]);
 
     let updatedEvent = await service.updateEvent(new Account('testAccountId', 'testme', 'testme'), 'testEventId', {
@@ -319,7 +319,7 @@ describe('updateEvent with schedules', () => {
     let findSchedulesStub = sandbox.stub(EventScheduleEntity, 'findAll');
     let updateScheduleStub = sandbox.stub(EventScheduleEntity.prototype, 'update');
 
-    findEventStub.resolves(EventEntity.build({ account_id: 'testAccountId', id: 'testEventId' }));
+    findEventStub.resolves(EventEntity.build({ account_id: 'testAccountId', id: 'testEventId', calendar_id: 'testCalendarId' }));
     findSchedulesStub.resolves([ scheduleEntity ]);
     updateScheduleStub.callsFake(async (params) => {
       for (let key in params) {
@@ -359,7 +359,7 @@ describe('updateEvent with schedules', () => {
     let findSchedulesStub = sandbox.stub(EventScheduleEntity, 'findAll');
     let destroySchedulesStub = sandbox.stub(EventScheduleEntity, 'destroy');
 
-    findEventStub.resolves(EventEntity.build({ account_id: 'testAccountId', id: 'testEventId' }));
+    findEventStub.resolves(EventEntity.build({ account_id: 'testAccountId', id: 'testEventId', calendar_id: 'testCalendarId' }));
     findSchedulesStub.resolves([ scheduleEntity ]);
     createScheduleStub.resolves(new CalendarEventSchedule('otherTestScheduleId', DateTime.now(), DateTime.now().plus({days: 12})));
 

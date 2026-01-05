@@ -1,16 +1,30 @@
-import main from '../app';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { countRoutes } from '../common/test/lib/express';
 import sinon from 'sinon';
 import express from 'express';
 
-describe('Main App', () => {
-  it('should start', () => {
-    let app = express();
-    let listenStub = sinon.stub(app, 'listen');
-    main(app);
+// Mock the server initialization module before importing main
+vi.mock('../server', () => ({
+  default: vi.fn().mockResolvedValue(undefined),
+}));
 
-    expect(countRoutes(app)).toBeGreaterThan(0);
-    expect(listenStub.called).toBe(true);
+describe('Main App', () => {
+  let app: express.Application;
+
+  beforeEach(() => {
+    app = express();
+  });
+
+  afterEach(() => {
+    sinon.restore();
+  });
+
+  it('should start', async () => {
+    const main = (await import('../app')).default;
+    const initPavillionServer = (await import('../server')).default;
+
+    await main(app);
+
+    expect(vi.mocked(initPavillionServer)).toHaveBeenCalledWith(app, expect.any(Number));
   });
 });

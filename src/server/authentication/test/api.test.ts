@@ -144,9 +144,9 @@ describe('resetPassword', () => {
     let router = express.Router();
     stub.resolves(new Account('id', 'testme', 'testme'));
     let jwtSpy = sinon.spy(ExpressHelper, 'generateJWT');
-    router.post('/handler', handlers.setPassword.bind(handlers));
+    router.post('/handler/:code', handlers.setPassword.bind(handlers));
 
-    let response = await request(testApp(router)).post('/handler').send({code: '1234', password: 'password'});
+    let response = await request(testApp(router)).post('/handler/1234').send({password: 'password123'});
 
     expect(response.status).toBe(200);
     expect(response.text).toBe(jwtSpy.returnValues[0]);
@@ -156,9 +156,9 @@ describe('resetPassword', () => {
   it('resetPassword: should fail', async () => {
     let router = express.Router();
     stub.resolves(undefined);
-    router.post('/handler', handlers.setPassword.bind(handlers));
+    router.post('/handler/:code', handlers.setPassword.bind(handlers));
 
-    let response = await request(testApp(router)).post('/handler').send({code: '1234', password: 'password'});
+    let response = await request(testApp(router)).post('/handler/1234').send({password: 'password123'});
 
     expect(response.status).toBe(400);
     expect(stub.called).toBe(true);
