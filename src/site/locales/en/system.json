@@ -6,6 +6,10 @@
     "no_events_available": "No Events Available",
     "loading_events": "Loading Events...",
     "loading_categories": "Loading Event Categories...",
+    "previous_week": "Previous Week",
+    "next_week": "Next Week",
+    "previous_month": "Previous Month",
+    "next_month": "Next Month",
     "public_search_filter": {
         "search_events": "Search Events",
         "search_placeholder": "Search events...",

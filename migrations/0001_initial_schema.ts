@@ -216,6 +216,14 @@ export default {
         type: DataTypes.STRING,
         allowNull: true,
       },
+      default_date_range: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      widget_allowed_domain: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
       createdAt: {
         type: DataTypes.DATE,
         allowNull: false,

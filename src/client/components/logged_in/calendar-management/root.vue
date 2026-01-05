@@ -1,10 +1,11 @@
 <script setup>
-import { reactive, nextTick, onBeforeMount } from 'vue';
+import { reactive, nextTick, onBeforeMount, ref } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useRoute } from 'vue-router';
 import CategoriesTab from './categories.vue';
 import EditorsTab from './editors.vue';
 import SettingsTab from './settings.vue';
+import WidgetTab from './widget-tab.vue';
 import CalendarService from '../../../service/calendar';
 
 const route = useRoute();
@@ -99,6 +100,16 @@ const activateTab = (tab) => {
         >
           {{ t('settings_tab') }}
         </button>
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="state.activeTab === 'widget' ? 'true' : 'false'"
+          aria-controls="widget-panel"
+          class="tab"
+          @click="activateTab('widget')"
+        >
+          {{ t('widget_tab') }}
+        </button>
       </nav>
 
       <div
@@ -132,6 +143,20 @@ const activateTab = (tab) => {
         class="tab-panel"
       >
         <SettingsTab :calendar-id="state.calendar.id" />
+      </div>
+
+      <div
+        id="widget-panel"
+        role="tabpanel"
+        aria-labelledby="widget-tab"
+        :aria-hidden="state.activeTab !== 'widget'"
+        :hidden="state.activeTab !== 'widget'"
+        class="tab-panel"
+      >
+        <WidgetTab
+          :calendar-id="state.calendar.id"
+          :calendar-url-name="state.calendar.urlName"
+        />
       </div>
     </template>
   </section>

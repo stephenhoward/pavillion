@@ -91,13 +91,14 @@ export const seedDB = async () => {
       }
     }
 
-    // Calculate offset: shift earliest date to 7 days from today
+    // Calculate offset: shift earliest date to 7 days before today
+    // This ensures events are immediately visible in the default 2-week view
     let offsetDays = 0;
     if (globalEarliest) {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const targetDate = new Date(today);
-      targetDate.setDate(targetDate.getDate() + 7);
+      targetDate.setDate(targetDate.getDate() - 7);
 
       const earliestTime = new Date(globalEarliest);
       earliestTime.setHours(0, 0, 0, 0);

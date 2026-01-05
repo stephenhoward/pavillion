@@ -65,6 +65,22 @@ const handlers = {
   },
 
   /**
+   * Handles requests for the widget app index page.
+   * Renders the widget single-page-application template.
+   *
+   * @param {Request} req - Express request object
+   * @param {Response} res - Express response object
+   * @returns {Promise<void>}
+   */
+  widget_index: async (req: Request, res: Response) => {
+    const data = {
+      environment,
+      manifest: await parseManifest(),
+    };
+    res.render("widget.index.html.ejs", data);
+  },
+
+  /**
    * Handles asset requests in development mode by redirecting to the dev server.
    *
    * @param {Request} req - Express request object
@@ -98,11 +114,13 @@ if (environment !== "production") {
   router.get("/coverage/*", handlers.coverage);
 };
 
-// This goes last:
+// Widget routes (before site routes to ensure they match first)
+router.get(/^\/widget\/.*/i, handlers.widget_index);
+
+// Public site routes
 router.get(/^\/@.*/i, handlers.site_index);
 
-
-// This goes last:
-router.get(/^\/(?!(api|assets|\.well-known|o)\/).*/i, handlers.client_index);
+// Client app catch-all (goes last)
+router.get(/^\/(?!(api|assets|\.well-known|o|widget)\/).*/i, handlers.client_index);
 
 export { handlers, router };

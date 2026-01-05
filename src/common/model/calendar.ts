@@ -14,6 +14,7 @@ class Calendar extends TranslatedModel<CalendarContent> {
   languages: string[] = ['en'];
   description: string = '';
   defaultDateRange: DefaultDateRange | null = null;
+  widgetAllowedDomain: string | null = null;
   _content: Record<string, CalendarContent> = {};
 
   /**
@@ -50,6 +51,7 @@ class Calendar extends TranslatedModel<CalendarContent> {
       description: this.description,
       languages: this.languages,
       defaultDateRange: this.defaultDateRange,
+      widgetAllowedDomain: this.widgetAllowedDomain,
     };
   };
 
@@ -64,6 +66,7 @@ class Calendar extends TranslatedModel<CalendarContent> {
     calendar.languages = obj.languages;
     calendar.description = obj.description;
     calendar.defaultDateRange = obj.defaultDateRange || null;
+    calendar.widgetAllowedDomain = obj.widgetAllowedDomain || null;
     return calendar;
   }
 
