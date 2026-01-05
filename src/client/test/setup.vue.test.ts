@@ -14,8 +14,9 @@ const routes: RouteRecordRaw[] = [
 
 /**
  * Helper to create a mounted setup component with mocked dependencies
+ * By default, proceeds past the language selection screen to show the setup form
  */
-const mountSetup = (setupService?: any) => {
+const mountSetup = async (setupService?: any, skipLanguageSelection = true) => {
   const router: Router = createRouter({
     history: createMemoryHistory(),
     routes: routes,
@@ -31,6 +32,19 @@ const mountSetup = (setupService?: any) => {
       setupService: mockSetupService,
     },
   });
+
+  // Click through language selection to reach the actual setup form
+  if (skipLanguageSelection) {
+    // Wait for component to mount
+    await wrapper.vm.$nextTick();
+
+    // Find and click the Continue button on language selection screen
+    const continueButton = wrapper.find('button.primary');
+    if (continueButton.exists()) {
+      await continueButton.trigger('click');
+      await wrapper.vm.$nextTick();
+    }
+  }
 
   return {
     wrapper,
@@ -62,8 +76,8 @@ describe('Setup Component', () => {
   });
 
   describe('Form Rendering', () => {
-    it('should render form with all required fields', () => {
-      const { wrapper } = mountSetup();
+    it('should render form with all required fields', async () => {
+      const { wrapper } = await mountSetup();
 
       // Check for email field
       expect(wrapper.find('input[type="email"]').exists()).toBe(true);
@@ -87,7 +101,7 @@ describe('Setup Component', () => {
 
   describe('Password Validation', () => {
     it('should show error for passwords that are too short', async () => {
-      const { wrapper } = mountSetup();
+      const { wrapper } = await mountSetup();
 
       // Enter a short password
       await wrapper.find('input#setup-password').setValue('short1');
@@ -100,7 +114,7 @@ describe('Setup Component', () => {
     });
 
     it('should show error for passwords lacking variety', async () => {
-      const { wrapper } = mountSetup();
+      const { wrapper } = await mountSetup();
 
       // Enter a password with only letters (no numbers or special chars)
       await wrapper.find('input#setup-password').setValue('onlyletters');
@@ -115,7 +129,7 @@ describe('Setup Component', () => {
 
   describe('Password Confirmation', () => {
     it('should show error when passwords do not match', async () => {
-      const { wrapper } = mountSetup();
+      const { wrapper } = await mountSetup();
 
       // Enter valid password
       await wrapper.find('input#setup-password').setValue('password123');
@@ -144,7 +158,7 @@ describe('Setup Component', () => {
         completeSetup: vi.fn().mockReturnValue(setupPromise),
         checkSetupStatus: vi.fn().mockResolvedValue({ setupRequired: true }),
       };
-      const { wrapper } = mountSetup(mockSetupService);
+      const { wrapper } = await mountSetup(mockSetupService);
 
       // Fill in all fields
       await fillValidForm(wrapper);
@@ -155,6 +169,7 @@ describe('Setup Component', () => {
 
       // Verify API was called with correct data before resolving
       expect(mockSetupService.completeSetup).toHaveBeenCalledWith({
+        defaultLanguage: 'en',
         email: 'admin@example.com',
         password: 'password123',
         siteTitle: 'My Calendar',
@@ -175,7 +190,7 @@ describe('Setup Component', () => {
         completeSetup: vi.fn().mockReturnValue(setupPromise),
         checkSetupStatus: vi.fn().mockResolvedValue({ setupRequired: true }),
       };
-      const { wrapper } = mountSetup(mockSetupService);
+      const { wrapper } = await mountSetup(mockSetupService);
 
       // Fill in all fields
       await fillValidForm(wrapper);
@@ -202,7 +217,7 @@ describe('Setup Component', () => {
         completeSetup: vi.fn(),
         checkSetupStatus: vi.fn().mockResolvedValue({ setupRequired: true }),
       };
-      const { wrapper } = mountSetup(mockSetupService);
+      const { wrapper } = await mountSetup(mockSetupService);
 
       // Fill form with missing email
       await wrapper.find('input#setup-password').setValue('password123');

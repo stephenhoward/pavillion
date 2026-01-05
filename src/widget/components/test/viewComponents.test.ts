@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { createRouter, createMemoryHistory } from 'vue-router';
@@ -83,7 +83,8 @@ describe('Widget View Components', () => {
       const publicStore = usePublicCalendarStore();
 
       // Mock events with more than 3 events on one day
-      publicStore.events = [
+      // FIXED: Component uses publicStore.allEvents, not publicStore.events
+      publicStore.allEvents = [
         { id: '1', start: { toISODate: () => '2026-01-06', toLocaleString: () => '10:00 AM' }, event: { id: 'e1', content: () => ({ name: 'Event 1' }), media: null, categories: [] } },
         { id: '2', start: { toISODate: () => '2026-01-06', toLocaleString: () => '11:00 AM' }, event: { id: 'e2', content: () => ({ name: 'Event 2' }), media: null, categories: [] } },
         { id: '3', start: { toISODate: () => '2026-01-06', toLocaleString: () => '12:00 PM' }, event: { id: 'e3', content: () => ({ name: 'Event 3' }), media: null, categories: [] } },
@@ -137,8 +138,12 @@ describe('Widget View Components', () => {
     });
 
     it('displays condensed list view on mobile', async () => {
-      // Mock mobile viewport
-      global.innerWidth = 400;
+      // FIXED: Mock window.innerWidth properly using vi.stubGlobal
+      vi.stubGlobal('innerWidth', 400);
+
+      // Mock window.addEventListener for resize listener
+      const mockAddEventListener = vi.fn();
+      vi.stubGlobal('addEventListener', mockAddEventListener);
 
       const wrapper = mount(MonthView, {
         global: {
@@ -146,9 +151,15 @@ describe('Widget View Components', () => {
         },
       });
 
+      // Wait for component to mount and check mobile state
+      await wrapper.vm.$nextTick();
+
       // Should show condensed list instead of grid
       const condensedList = wrapper.find('.month-condensed-list');
       expect(condensedList.exists()).toBe(true);
+
+      // Clean up mocks
+      vi.unstubAllGlobals();
     });
   });
 
@@ -156,8 +167,8 @@ describe('Widget View Components', () => {
     it('adapts calendar.vue pattern for widget', async () => {
       const publicStore = usePublicCalendarStore();
 
-      // Mock some events
-      publicStore.events = [
+      // FIXED: Component uses publicStore.allEvents and getFilteredEventsByDay getter
+      publicStore.allEvents = [
         { id: '1', start: { toISODate: () => '2026-01-06', toLocaleString: () => '10:00 AM' }, event: { id: 'e1', content: () => ({ name: 'Event 1' }), media: null, categories: [] } },
       ] as any;
 
@@ -173,6 +184,13 @@ describe('Widget View Components', () => {
     });
 
     it('shows horizontal-scroll day groups', async () => {
+      const publicStore = usePublicCalendarStore();
+
+      // FIXED: Set allEvents so getFilteredEventsByDay has data
+      publicStore.allEvents = [
+        { id: '1', start: { toISODate: () => '2026-01-06', toLocaleString: () => '10:00 AM' }, event: { id: 'e1', content: () => ({ name: 'Event 1' }), media: null, categories: [] } },
+      ] as any;
+
       const wrapper = mount(ListView, {
         global: {
           plugins: [[I18NextVue, { i18next }], router],

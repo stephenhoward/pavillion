@@ -5,20 +5,27 @@ import ActivityPubService from '@/server/activitypub/service/members';
 import { Calendar } from '@/common/model/calendar';
 import { EventEntity } from '@/server/calendar/entity/event';
 import { FollowingCalendarEntity, SharedEventEntity } from '@/server/activitypub/entity/activitypub';
+import { setupActivityPubSchema, teardownActivityPubSchema } from './helpers/database';
 
 describe('ActivityPubService - getFeed with AP Identifier Join', () => {
   let sandbox: sinon.SinonSandbox;
   let service: ActivityPubService;
   let calendar: Calendar;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    // Setup ephemeral ActivityPub database schema
+    await setupActivityPubSchema();
+
     sandbox = sinon.createSandbox();
     service = new ActivityPubService();
     calendar = new Calendar('local-calendar-id', 'localcalendar');
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     sandbox.restore();
+
+    // Teardown ephemeral database schema
+    await teardownActivityPubSchema();
   });
 
   it('should return events from followed calendars only', async () => {

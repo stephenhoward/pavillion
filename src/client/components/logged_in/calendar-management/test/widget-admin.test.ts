@@ -12,12 +12,14 @@ describe('Widget Admin UI Components', () => {
   let sandbox: sinon.SinonSandbox;
   let axiosGetStub: sinon.SinonStub;
   let axiosPostStub: sinon.SinonStub;
+  let axiosPutStub: sinon.SinonStub;
   let axiosDeleteStub: sinon.SinonStub;
 
   beforeEach(async () => {
     sandbox = sinon.createSandbox();
     axiosGetStub = sandbox.stub(axios, 'get');
     axiosPostStub = sandbox.stub(axios, 'post');
+    axiosPutStub = sandbox.stub(axios, 'put');
     axiosDeleteStub = sandbox.stub(axios, 'delete');
 
     // Initialize i18next for testing
@@ -36,8 +38,10 @@ describe('Widget Admin UI Components', () => {
                 add_button: 'Add',
                 adding: 'Adding...',
                 allowed_domains_title: 'Allowed Domains',
+                current_domain_title: 'Current Domain',
                 no_domains: 'No domains yet',
                 remove_button: 'Remove',
+                change_button: 'Change',
                 removing: 'Removing...',
                 confirm_remove: 'Remove {{domain}}?',
                 add_success: 'Added successfully',
@@ -87,12 +91,10 @@ describe('Widget Admin UI Components', () => {
 
   describe('WidgetDomains Component', () => {
     it('should load and display allowed domains', async () => {
-      const mockDomains = [
-        { id: '1', domain: 'example.com', createdAt: new Date().toISOString() },
-        { id: '2', domain: 'test.org', createdAt: new Date().toISOString() },
-      ];
+      // API now returns a single domain object, not an array
+      const mockDomain = { domain: 'example.com' };
 
-      axiosGetStub.resolves({ data: mockDomains });
+      axiosGetStub.resolves({ data: mockDomain });
 
       const wrapper = mount(WidgetDomains, {
         props: {
@@ -108,13 +110,12 @@ describe('Widget Admin UI Components', () => {
 
       expect(axiosGetStub.calledOnce).toBe(true);
       expect(wrapper.html()).toContain('example.com');
-      expect(wrapper.html()).toContain('test.org');
     });
 
     it('should add valid domain to allowlist', async () => {
-      const mockNewDomain = { id: '3', domain: 'newsite.com', createdAt: new Date().toISOString() };
-      axiosGetStub.resolves({ data: [] });
-      axiosPostStub.resolves({ data: mockNewDomain });
+      const mockNewDomain = { domain: 'newsite.com' };
+      axiosGetStub.resolves({ data: { domain: null } }); // No domain initially
+      axiosPutStub.resolves({ data: mockNewDomain });
 
       const wrapper = mount(WidgetDomains, {
         props: {
@@ -134,8 +135,8 @@ describe('Widget Admin UI Components', () => {
       await addButton.trigger('click');
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      expect(axiosPostStub.calledOnce).toBe(true);
-      const callArgs = axiosPostStub.getCall(0).args;
+      expect(axiosPutStub.calledOnce).toBe(true);
+      const callArgs = axiosPutStub.getCall(0).args;
       expect(callArgs[1]).toEqual({ domain: 'newsite.com' });
     });
   });
@@ -152,17 +153,21 @@ describe('Widget Admin UI Components', () => {
         },
       });
 
-      // Check for view mode selector
-      const viewModeRadios = wrapper.findAll('input[name="viewMode"]');
-      expect(viewModeRadios.length).toBe(3); // week, month, list
+      // Check for view mode selector (select dropdown, not radio buttons)
+      const viewModeSelect = wrapper.find('select#viewMode');
+      expect(viewModeSelect.exists()).toBe(true);
+      const viewModeOptions = viewModeSelect.findAll('option');
+      expect(viewModeOptions.length).toBe(3); // week, month, list
 
       // Check for accent color input
       const colorInput = wrapper.find('input[type="color"]');
       expect(colorInput.exists()).toBe(true);
 
-      // Check for color mode selector
-      const colorModeRadios = wrapper.findAll('input[name="colorMode"]');
-      expect(colorModeRadios.length).toBe(3); // auto, light, dark
+      // Check for color mode selector (select dropdown, not radio buttons)
+      const colorModeSelect = wrapper.find('select#colorMode');
+      expect(colorModeSelect.exists()).toBe(true);
+      const colorModeOptions = colorModeSelect.findAll('option');
+      expect(colorModeOptions.length).toBe(3); // auto, light, dark
     });
 
     it('should update configuration state when options change', async () => {
@@ -176,9 +181,9 @@ describe('Widget Admin UI Components', () => {
         },
       });
 
-      // Change view mode
-      const weekViewRadio = wrapper.find('input[value="week"]');
-      await weekViewRadio.setValue(true);
+      // Change view mode using select dropdown
+      const viewModeSelect = wrapper.find('select#viewMode');
+      await viewModeSelect.setValue('week');
 
       // Change accent color
       const colorInput = wrapper.find('input[type="color"]');
