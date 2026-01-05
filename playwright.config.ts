@@ -1,11 +1,30 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Playwright configuration for E2E testing
+ * Playwright configuration for single-instance E2E testing
+ *
+ * This config runs tests for a single Pavillion instance against localhost:3000.
+ * Federation tests are in a separate config (playwright.federation.config.ts).
+ *
+ * Key features:
+ * - testDir: ./tests/e2e (excludes ./tests/e2e/federation via testIgnore)
+ * - Starts local dev server automatically
+ * - Tests basic calendar, event, and admin functionality
+ * - No Docker infrastructure required
+ *
+ * Usage:
+ *   npm run test:e2e
+ *
+ * For federation tests (requires Docker):
+ *   npm run test:federation
+ *
  * See https://playwright.dev/docs/test-configuration
  */
 export default defineConfig({
   testDir: './tests/e2e',
+
+  // Exclude federation tests - they have their own config
+  testIgnore: '**/federation/**',
 
   // Run tests in files in parallel
   fullyParallel: true,
