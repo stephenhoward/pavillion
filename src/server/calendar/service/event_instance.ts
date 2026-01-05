@@ -97,23 +97,30 @@ export default class EventInstanceService {
 
   // TODO: retrieving all events won't scale. Need a paging/incremental strategy
   async refreshAllEventInstances() {
-    // Get all local calendars and build a map of AP identifier -> Calendar
+    // Get all local calendars and build a map of calendar ID -> Calendar
     const localCalendars = await CalendarEntity.findAll();
     const calendarMap = new Map<string, Calendar>();
-    const localCalendarApIds: string[] = [];
+    const calendarIdConditions: string[] = [];
 
     for (const calendarEntity of localCalendars) {
       const calendar = calendarEntity.toModel();
+      const uuid = calendar.id;
       const apId = ActivityPubActor.actorUrl(calendar);
+
+      // Map both UUID and AP identifier to the calendar for lookup
+      calendarMap.set(uuid, calendar);
       calendarMap.set(apId, calendar);
-      localCalendarApIds.push(apId);
+
+      // Support both UUID and AP identifier during transition
+      calendarIdConditions.push(uuid, apId);
     }
 
     // Only get events for local calendars (not remote federated events)
+    // Query supports both UUID and AP identifier calendar IDs during transition
     const events = await EventEntity.findAll({
       where: {
         calendar_id: {
-          [Op.in]: localCalendarApIds,
+          [Op.in]: calendarIdConditions,
         },
       },
     });

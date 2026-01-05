@@ -51,9 +51,17 @@ class EventService {
     categories?: string[];
   }): Promise<CalendarEvent[]> {
 
+    // Support both UUID and AP identifier calendar IDs during transition
+    const uuid = calendar.id;
+    const apId = ActivityPubActor.actorUrl(calendar);
+
     // Base query options
     const queryOptions: any = {
-      where: { calendar_id: ActivityPubActor.actorUrl(calendar) },
+      where: {
+        calendar_id: {
+          [Op.in]: [uuid, apId],
+        },
+      },
       include: [
         LocationEntity,
         EventScheduleEntity,
