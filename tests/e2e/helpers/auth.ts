@@ -10,6 +10,15 @@ export const TEST_ADMIN = {
 };
 
 /**
+ * Test credentials for fresh user (no calendars)
+ * This user has no calendars and is used for calendar creation tests
+ */
+export const TEST_FRESH_USER = {
+  email: 'fresh@example.com',
+  password: 'test',
+};
+
+/**
  * Log in as admin user
  * Navigates to login page and performs login
  */
@@ -19,6 +28,25 @@ export async function loginAsAdmin(page: Page) {
   // Fill in login form using accessible name selectors
   await page.getByRole('textbox', { name: 'email' }).fill(TEST_ADMIN.email);
   await page.getByRole('textbox', { name: 'password' }).fill(TEST_ADMIN.password);
+
+  // Click login button
+  await page.getByRole('button', { name: 'Sign in' }).click();
+
+  // Wait for navigation to complete
+  await page.waitForURL('**/calendar', { timeout: 10000 });
+}
+
+/**
+ * Log in as fresh user (no calendars)
+ * Navigates to login page and performs login
+ * This user has no calendars, perfect for calendar creation tests
+ */
+export async function loginAsFreshUser(page: Page) {
+  await page.goto('/auth/login');
+
+  // Fill in login form using accessible name selectors
+  await page.getByRole('textbox', { name: 'email' }).fill(TEST_FRESH_USER.email);
+  await page.getByRole('textbox', { name: 'password' }).fill(TEST_FRESH_USER.password);
 
   // Click login button
   await page.getByRole('button', { name: 'Sign in' }).click();

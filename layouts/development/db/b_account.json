@@ -16,6 +16,12 @@
             "username": "MultiCalendarTestUser",
             "email": "multicalendar@example.com",
             "language": "en"
+        },
+        {
+            "id": "fresh-user-0000-0000-0000-000000000000",
+            "username": "FreshUser",
+            "email": "fresh@example.com",
+            "language": "en"
         }
     ]
 }
