@@ -7,6 +7,7 @@ import { CalendarEvent } from '@/common/model/events';
 import { EventCategory } from '@/common/model/event_category';
 import CalendarInterface from '@/server/calendar/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
+import SetupInterface from '@/server/setup/interface';
 import AccountService from '@/server/accounts/service/account';
 import { TestEnvironment } from '@/server/test/lib/test_environment';
 import {
@@ -32,7 +33,8 @@ describe('CalendarInterface.bulkAssignCategories', () => {
     eventBus = new EventEmitter();
     calendarInterface = new CalendarInterface(eventBus);
     const configurationInterface = new ConfigurationInterface();
-    const accountService = new AccountService(eventBus, configurationInterface);
+    const setupInterface = new SetupInterface();
+    const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
 
     // Create test account and calendar
     let accountInfo = await accountService._setupAccount('bulktest@pavillion.dev', 'testpassword');
@@ -179,7 +181,8 @@ describe('CalendarInterface.bulkAssignCategories', () => {
     it('should throw InsufficientCalendarPermissionsError for unauthorized user', async () => {
       // Create another account that doesn't have permissions on the test calendar
       const configurationInterface = new ConfigurationInterface();
-      const accountService = new AccountService(eventBus, configurationInterface);
+      const setupInterface = new SetupInterface();
+      const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
       const unauthorizedAccountInfo = await accountService._setupAccount('unauthorized@pavillion.dev', 'testpassword');
       const unauthorizedAccount = unauthorizedAccountInfo.account;
 

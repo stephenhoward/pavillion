@@ -10,7 +10,9 @@ import { Calendar } from '@/common/model/calendar';
 import CalendarInterface from '@/server/calendar/interface';
 import AccountService from '@/server/accounts/service/account';
 import ConfigurationInterface from '@/server/configuration/interface';
+import SetupInterface from '@/server/setup/interface';
 import { TestEnvironment } from '@/server/test/lib/test_environment';
+import { ActivityPubActor } from '@/server/activitypub/model/base';
 
 describe('FollowingCalendarEntity associations', () => {
   let env: TestEnvironment;
@@ -28,7 +30,8 @@ describe('FollowingCalendarEntity associations', () => {
     const eventBus = new EventEmitter();
     calendarInterface = new CalendarInterface(eventBus);
     const configurationInterface = new ConfigurationInterface();
-    const accountService = new AccountService(eventBus, configurationInterface);
+    const setupInterface = new SetupInterface();
+    const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
 
     // Create test account and calendar
     const accountInfo = await accountService._setupAccount('assoc-test@pavillion.dev', 'testpassword');
@@ -80,28 +83,33 @@ describe('FollowingCalendarEntity associations', () => {
   });
 
   it('should traverse from FollowingCalendar to Calendar to Events', async () => {
+    // First, get the following with calendar
     const following = await FollowingCalendarEntity.findOne({
       where: { id: testFollowingId },
       include: [{
         model: CalendarEntity,
         as: 'calendar',
-        include: [{
-          model: EventEntity,
-          as: 'events',
-          include: [{
-            model: EventContentEntity,
-            as: 'content',
-          }],
-        }],
       }],
     });
 
     expect(following).toBeDefined();
     expect(following?.calendar).toBeDefined();
-    expect(following?.calendar.events).toBeDefined();
-    expect(following?.calendar.events.length).toBeGreaterThan(0);
 
-    const event = following?.calendar.events[0];
+    // Events store calendar_id as ActivityPub URL (https://domain/o/urlName), not UUID
+    // So we need to query events using the calendar's AP identifier
+    const calendarApUrl = ActivityPubActor.actorUrl(testCalendar);
+    const events = await EventEntity.findAll({
+      where: { calendar_id: calendarApUrl },
+      include: [{
+        model: EventContentEntity,
+        as: 'content',
+      }],
+    });
+
+    expect(events).toBeDefined();
+    expect(events.length).toBeGreaterThan(0);
+
+    const event = events[0];
     expect(event.id).toBe(testEventId);
     expect(event.content).toBeDefined();
     expect(event.content.length).toBeGreaterThan(0);

@@ -8,6 +8,7 @@ import { createRouter, createMemoryHistory } from 'vue-router';
 import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
 import axios from 'axios';
+import { DateTime } from 'luxon';
 
 import { Calendar } from '@/common/model/calendar';
 import CalendarInterface from '@/server/calendar/interface';
@@ -106,9 +107,9 @@ describe('Widget Integration Tests', () => {
         },
       });
 
-      // Select week view
-      const weekRadio = configWrapper.find('input[value="week"]');
-      await weekRadio.setValue(true);
+      // Select week view using the select dropdown (not radio inputs)
+      const viewModeSelect = configWrapper.find('select#viewMode');
+      await viewModeSelect.setValue('week');
 
       // Set accent color
       const colorInput = configWrapper.find('input[type="color"]');
@@ -247,8 +248,8 @@ describe('Widget Integration Tests', () => {
       const router = createMockRouter();
       const publicStore = usePublicCalendarStore();
 
-      // Mock an event
-      publicStore.events = [
+      // Mock an event - use allEvents property (not events)
+      publicStore.allEvents = [
         {
           id: '1',
           start: { toISODate: () => '2026-01-06', toLocaleString: () => '10:00 AM' },
@@ -262,7 +263,8 @@ describe('Widget Integration Tests', () => {
         },
       });
 
-      const eventsList = wrapper.find('.events');
+      // The events are in a ul.events element inside a conditional block
+      const eventsList = wrapper.find('ul.events');
       expect(eventsList.exists()).toBe(true);
     });
   });
@@ -376,13 +378,18 @@ describe('Widget Integration Tests', () => {
         ],
       });
 
-      // Create 100+ mock events
+      // Create 100+ mock events spread across the current week
+      // WeekView only shows events for the current week, so we need dates that match
       const events = [];
+      const baseDate = DateTime.now().startOf('week');
       for (let i = 0; i < 120; i++) {
+        // Spread events across 7 days of the week (ensures some days have > 3 events for overflow)
+        const dayOffset = i % 7;
+        const eventDate = baseDate.plus({ days: dayOffset });
         events.push({
           id: `event-${i}`,
           start: {
-            toISODate: () => `2026-01-${String((i % 28) + 1).padStart(2, '0')}`,
+            toISODate: () => eventDate.toISODate(),
             toLocaleString: () => `${i % 12}:00 ${i % 12 >= 12 ? 'PM' : 'AM'}`,
           },
           event: {
@@ -394,7 +401,8 @@ describe('Widget Integration Tests', () => {
         });
       }
 
-      publicStore.events = events as any;
+      // Use allEvents property (not events)
+      publicStore.allEvents = events as any;
 
       // Mount WeekView and verify it renders without issues
       const startTime = performance.now();
@@ -414,7 +422,8 @@ describe('Widget Integration Tests', () => {
       // Performance check: should render in under 1 second
       expect(renderTime).toBeLessThan(1000);
 
-      // Verify overflow indicators work with large datasets
+      // With 120 events spread across 7 days (~17 events/day), overflow indicators should appear
+      // since MAX_VISIBLE_EVENTS is 3. Each day will show "+14 more" or similar.
       const overflowIndicators = wrapper.findAll('.event-overflow');
       expect(overflowIndicators.length).toBeGreaterThan(0);
     });

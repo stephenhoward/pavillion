@@ -6,8 +6,10 @@ import ProcessInboxService from '@/server/activitypub/service/inbox';
 import { FollowerCalendarEntity, FollowingCalendarEntity, ActivityPubOutboxMessageEntity } from '@/server/activitypub/entity/activitypub';
 import FollowActivity from '@/server/activitypub/model/action/follow';
 import { Calendar, CalendarContent } from '@/common/model/calendar';
+import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { EventEmitter } from 'events';
 import CalendarInterface from '@/server/calendar/interface';
+import { setupActivityPubSchema, teardownActivityPubSchema } from './helpers/database';
 
 describe('ProcessInboxService - Follow Activity Processing', () => {
   let sandbox: sinon.SinonSandbox;
@@ -16,7 +18,8 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
   let testCalendar: Calendar;
   let calendarInterface: CalendarInterface;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await setupActivityPubSchema();
     sandbox = sinon.createSandbox();
     eventBus = new EventEmitter();
     calendarInterface = new CalendarInterface(eventBus);
@@ -26,10 +29,19 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
     testCalendar = new Calendar('test-calendar-id', 'test-calendar');
     testCalendar.addContent('en', new CalendarContent('en'));
     testCalendar.content('en').title = 'Test Calendar';
+
+    // Create calendar in database to satisfy foreign key constraints
+    await CalendarEntity.create({
+      id: testCalendar.id,
+      url_name: testCalendar.urlName,
+      account_id: uuidv4(), // Dummy account ID
+      languages: 'en',
+    });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     sandbox.restore();
+    await teardownActivityPubSchema();
   });
 
   describe('processFollowAccount', () => {
@@ -38,27 +50,28 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
       const remoteActorUrl = 'https://remote.instance/o/remote-calendar';
       const followActivity = new FollowActivity(remoteActorUrl, testCalendar.id);
 
-      const createFollowerStub = sandbox.stub(FollowerCalendarEntity, 'create').resolves({
-        id: uuidv4(),
-        remote_calendar_id: remoteActorUrl,
-        calendar_id: testCalendar.id,
-      } as any);
-
-      const createOutboxStub = sandbox.stub(ActivityPubOutboxMessageEntity, 'create').resolves({} as any);
-
-      const findOneStub = sandbox.stub(FollowerCalendarEntity, 'findOne').resolves(null);
-
       // Act
       await inboxService.processFollowAccount(testCalendar, followActivity);
 
-      // Assert
-      expect(findOneStub.calledOnce).toBe(true);
-      expect(createFollowerStub.calledOnce).toBe(true);
-      expect(createFollowerStub.firstCall.args[0]).toMatchObject({
-        remote_calendar_id: remoteActorUrl,
-        calendar_id: testCalendar.id,
+      // Assert - Check that FollowerCalendarEntity was created
+      const follower = await FollowerCalendarEntity.findOne({
+        where: {
+          remote_calendar_id: remoteActorUrl,
+          calendar_id: testCalendar.id,
+        },
       });
-      expect(createOutboxStub.calledOnce).toBe(true); // Also verify Accept was queued
+
+      expect(follower).not.toBeNull();
+      expect(follower?.remote_calendar_id).toBe(remoteActorUrl);
+      expect(follower?.calendar_id).toBe(testCalendar.id);
+
+      // Assert - Check that Accept activity was queued in outbox
+      const outboxMessage = await ActivityPubOutboxMessageEntity.findOne({
+        where: { calendar_id: testCalendar.id },
+      });
+
+      expect(outboxMessage).not.toBeNull();
+      expect(outboxMessage?.type).toBe('Accept');
     });
 
     it('should queue Accept activity for delivery after Follow processing', async () => {
@@ -67,25 +80,18 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
       const followActivity = new FollowActivity(remoteActorUrl, testCalendar.id);
       followActivity.id = 'https://remote.instance/o/remote-calendar/follows/123';
 
-      sandbox.stub(FollowerCalendarEntity, 'findOne').resolves(null);
-      sandbox.stub(FollowerCalendarEntity, 'create').resolves({
-        id: uuidv4(),
-        remote_calendar_id: remoteActorUrl,
-        calendar_id: testCalendar.id,
-      } as any);
-
-      const createOutboxStub = sandbox.stub(ActivityPubOutboxMessageEntity, 'create').resolves({} as any);
-
       // Act
       await inboxService.processFollowAccount(testCalendar, followActivity);
 
-      // Assert
-      expect(createOutboxStub.calledOnce).toBe(true);
+      // Assert - Check outbox message was created
+      const outboxMessage = await ActivityPubOutboxMessageEntity.findOne({
+        where: { calendar_id: testCalendar.id },
+      });
 
-      const outboxMessage = createOutboxStub.firstCall.args[0];
-      expect(outboxMessage.type).toBe('Accept');
-      expect(outboxMessage.calendar_id).toBe(testCalendar.id);
-      expect(outboxMessage.message).toBeDefined();
+      expect(outboxMessage).not.toBeNull();
+      expect(outboxMessage?.type).toBe('Accept');
+      expect(outboxMessage?.calendar_id).toBe(testCalendar.id);
+      expect(outboxMessage?.message).toBeDefined();
     });
 
     it('should include the original Follow activity in the Accept object', async () => {
@@ -94,22 +100,17 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
       const followActivity = new FollowActivity(remoteActorUrl, testCalendar.id);
       followActivity.id = 'https://remote.instance/o/remote-calendar/follows/123';
 
-      sandbox.stub(FollowerCalendarEntity, 'findOne').resolves(null);
-      sandbox.stub(FollowerCalendarEntity, 'create').resolves({
-        id: uuidv4(),
-        remote_calendar_id: remoteActorUrl,
-        calendar_id: testCalendar.id,
-      } as any);
-
-      const createOutboxStub = sandbox.stub(ActivityPubOutboxMessageEntity, 'create').resolves({} as any);
-
       // Act
       await inboxService.processFollowAccount(testCalendar, followActivity);
 
-      // Assert
-      const outboxMessage = createOutboxStub.firstCall.args[0];
-      expect(outboxMessage.message.type).toBe('Accept');
-      expect(outboxMessage.message.object).toEqual(followActivity);
+      // Assert - Check that the Accept message includes the Follow activity
+      const outboxMessage = await ActivityPubOutboxMessageEntity.findOne({
+        where: { calendar_id: testCalendar.id },
+      });
+
+      expect(outboxMessage?.message).toBeDefined();
+      expect((outboxMessage?.message as any).type).toBe('Accept');
+      expect((outboxMessage?.message as any).object).toEqual(followActivity);
     });
 
     it('should not create duplicate follower record if already exists', async () => {

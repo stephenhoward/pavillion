@@ -9,6 +9,8 @@ import { TestEnvironment } from '@/server/test/lib/test_environment';
 import AccountService from '@/server/accounts/service/account';
 import CalendarInterface from '@/server/calendar/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
+import SetupInterface from '@/server/setup/interface';
+import { AccountRoleEntity } from '@/server/common/entity/account';
 
 /**
  * Comprehensive integration tests for category management functionality.
@@ -35,7 +37,8 @@ describe('Category Management - Comprehensive Integration', () => {
     const eventBus = new EventEmitter();
     const calendarInterface = new CalendarInterface(eventBus);
     const configurationInterface = new ConfigurationInterface();
-    const accountService = new AccountService(eventBus, configurationInterface);
+    const setupInterface = new SetupInterface();
+    const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
 
     // Set up primary test account and calendar
     let accountInfo = await accountService._setupAccount(userEmail, userPassword);
@@ -409,6 +412,15 @@ describe('Category Management - Comprehensive Integration', () => {
     let privateCategoryId: string;
 
     beforeAll(async () => {
+      // Remove admin role from first account to test permission checks
+      // (First account gets admin role from _setupAccount)
+      await AccountRoleEntity.destroy({
+        where: {
+          account_id: account.id,
+          role: 'admin',
+        },
+      });
+
       // Create a category in the other calendar
       const otherAuthKey = await env.login(otherEmail, otherPassword);
       const categoryData = {

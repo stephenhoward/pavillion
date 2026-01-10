@@ -4,6 +4,7 @@ import AccountsInterface from './interface';
 import AccountsEventHandlers from './events';
 import AccountAPI from './api/v1';
 import ConfigurationInterface from '../configuration/interface';
+import SetupInterface from '../setup/interface';
 
 export default class AccountsDomain {
   public readonly interface: AccountsInterface;
@@ -12,9 +13,10 @@ export default class AccountsDomain {
   constructor(
     eventBus: EventEmitter,
     configurationInterface: ConfigurationInterface,
+    setupInterface: SetupInterface,
   ) {
     this.eventBus = eventBus;
-    this.interface = new AccountsInterface(eventBus,configurationInterface);
+    this.interface = new AccountsInterface(eventBus, configurationInterface, setupInterface);
   }
 
   public initialize(app: Application): void {

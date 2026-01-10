@@ -44,7 +44,7 @@ export default class CalendarInterface {
     this. eventService = new EventService(eventBus);
     this. locationService = new LocationService();
     this.eventInstanceService = new EventInstanceService(eventBus);
-    this.categoryService = new CategoryService();
+    this.categoryService = new CategoryService(this.calendarService);
     this.widgetDomainService = new WidgetDomainService();
   }
 

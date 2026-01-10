@@ -5,6 +5,7 @@ import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import CalendarInterface from '@/server/calendar/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
+import SetupInterface from '@/server/setup/interface';
 import AccountService from '@/server/accounts/service/account';
 import { TestEnvironment } from '@/server/test/lib/test_environment';
 
@@ -32,7 +33,8 @@ describe('Location Validation API Integration Tests', () => {
     eventBus = new EventEmitter();
     calendarInterface = new CalendarInterface(eventBus);
     const configurationInterface = new ConfigurationInterface();
-    const accountService = new AccountService(eventBus, configurationInterface);
+    const setupInterface = new SetupInterface();
+    const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
 
     // Create test account
     let accountInfo = await accountService._setupAccount(testEmail, password);

@@ -40,4 +40,12 @@ export default class SetupInterface {
   ): Promise<boolean> {
     return this.setupService.completeSetup(email, password, siteTitle, registrationMode, defaultLanguage);
   }
+
+  /**
+   * Clears the setup mode cache, forcing a fresh database query.
+   * Used primarily in test environments to ensure setup state is re-evaluated.
+   */
+  clearCache(): void {
+    SetupService.clearCache();
+  }
 }

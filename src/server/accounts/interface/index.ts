@@ -4,6 +4,7 @@ import AccountInvitation from '@/common/model/invitation';
 import AccountApplication from '@/common/model/application';
 import AccountService from '@/server/accounts/service/account';
 import ConfigurationInterface from '@/server/configuration/interface';
+import SetupInterface from '@/server/setup/interface';
 import CalendarInterface from '@/server/calendar/interface';
 import AccountInvitationEntity from '../entity/account_invitation';
 
@@ -13,8 +14,9 @@ export default class AccountsInterface {
   constructor(
     eventBus: EventEmitter,
     configurationInterface: ConfigurationInterface,
+    setupInterface: SetupInterface,
   ) {
-    this.accountService = new AccountService(eventBus, configurationInterface);
+    this.accountService = new AccountService(eventBus, configurationInterface, setupInterface);
   }
 
   /**

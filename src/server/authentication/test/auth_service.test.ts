@@ -8,6 +8,7 @@ import AuthenticationService from '@/server/authentication/service/auth';
 import AccountsDomain from '@/server/accounts';
 import { EventEmitter } from 'events';
 import ConfigurationDomain from '@/server/configuration';
+import SetupDomain from '@/server/setup';
 
 
 describe( 'checkPassword', async () => {
@@ -18,7 +19,8 @@ describe( 'checkPassword', async () => {
   beforeEach( () => {
     const eventBus = new EventEmitter();
     const configurationDomain = new ConfigurationDomain(eventBus);
-    accountDomain = new AccountsDomain(eventBus,configurationDomain.interface);
+    const setupDomain = new SetupDomain();
+    accountDomain = new AccountsDomain(eventBus, configurationDomain.interface, setupDomain.interface);
     service = new AuthenticationService(eventBus,accountDomain.interface);
   });
 
@@ -74,7 +76,8 @@ describe('resetPassword', async () => {
   beforeEach( () => {
     const eventBus = new EventEmitter();
     const configurationDomain = new ConfigurationDomain(eventBus);
-    accountDomain = new AccountsDomain(eventBus,configurationDomain.interface);
+    const setupDomain = new SetupDomain();
+    accountDomain = new AccountsDomain(eventBus, configurationDomain.interface, setupDomain.interface);
     service = new AuthenticationService(eventBus,accountDomain.interface);
   });
 

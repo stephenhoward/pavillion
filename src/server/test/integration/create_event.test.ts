@@ -15,6 +15,7 @@ import { ActivityPubOutboxMessageEntity } from '@/server/activitypub/entity/acti
 import ProcessInboxService from '@/server/activitypub/service/inbox';
 import FollowActivity from '@/server/activitypub/model/action/follow';
 import ConfigurationInterface from '@/server/configuration/interface';
+import SetupInterface from '@/server/setup/interface';
 
 describe('Event API', () => {
   let account: Account;
@@ -30,7 +31,8 @@ describe('Event API', () => {
     const eventBus = new EventEmitter();
     const calendarInterface = new CalendarInterface(eventBus);
     const configurationInterface = new ConfigurationInterface();
-    const accountService = new AccountService(eventBus, configurationInterface);
+    const setupInterface = new SetupInterface();
+    const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
     let accountInfo = await accountService._setupAccount(userEmail,userPassword);
     account = accountInfo.account;
     calendar = await calendarInterface.createCalendar(account,'testcalendar');
@@ -89,7 +91,11 @@ describe('Event API', () => {
     // wait for create event to propagate to activitypub service:
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    let message = await ActivityPubOutboxMessageEntity.findOne({ where: { calendar_id: calendar.id } });
+    // Get the most recent outbox message (the Create activity, not the earlier Accept from follow setup)
+    let message = await ActivityPubOutboxMessageEntity.findOne({
+      where: { calendar_id: calendar.id },
+      order: [['message_time', 'DESC']],
+    });
 
     expect(response.status,"api call succeeded").toBe(200);
     expect(response.body.id,"got back an object with an id").toBeDefined();

@@ -7,8 +7,10 @@ import { CalendarEvent } from '@/common/model/events';
 import { EventCategory } from '@/common/model/event_category';
 import CalendarInterface from '@/server/calendar/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
+import SetupInterface from '@/server/setup/interface';
 import AccountService from '@/server/accounts/service/account';
 import { TestEnvironment } from '@/server/test/lib/test_environment';
+import { AccountRoleEntity } from '@/server/common/entity/account';
 
 /**
  * Integration tests for Category Management Enhancements
@@ -42,7 +44,8 @@ describe('Category Management Integration Tests', () => {
     eventBus = new EventEmitter();
     calendarInterface = new CalendarInterface(eventBus);
     const configurationInterface = new ConfigurationInterface();
-    const accountService = new AccountService(eventBus, configurationInterface);
+    const setupInterface = new SetupInterface();
+    const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
 
     // Create test accounts
     let accountInfo = await accountService._setupAccount(testEmail, password);
@@ -50,6 +53,15 @@ describe('Category Management Integration Tests', () => {
 
     let unauthorizedInfo = await accountService._setupAccount(unauthorizedEmail, password);
     unauthorizedAccount = unauthorizedInfo.account;
+
+    // Remove admin role from unauthorized account to test permission checks
+    // (_setupAccount grants admin role in test mode, but we need a non-admin for permission tests)
+    await AccountRoleEntity.destroy({
+      where: {
+        account_id: unauthorizedAccount.id,
+        role: 'admin',
+      },
+    });
 
     // Login both users to get proper auth tokens
     authToken = await env.login(testEmail, password);
@@ -120,40 +132,86 @@ describe('Category Management Integration Tests', () => {
 
   describe('End-to-end delete with migration workflow', () => {
     it('should successfully delete category and migrate events to target category', async () => {
-      // Initial state: category1 has 2 events, category2 has 1 event
+      // Create fresh test data for this destructive test
+      const delCal = await calendarInterface.createCalendar(testAccount, 'delete-test-cal');
+      const delCat1 = await calendarInterface.createCategory(testAccount, delCal.id, {
+        name: 'Music',
+        language: 'en',
+      });
+      const delCat2 = await calendarInterface.createCategory(testAccount, delCal.id, {
+        name: 'Sports',
+        language: 'en',
+      });
 
-      // Delete category1 and migrate to category2
+      const delEvt1 = await calendarInterface.createEvent(testAccount, {
+        calendarId: delCal.id,
+        content: {
+          en: {
+            name: 'Delete Test Event 1',
+            description: 'First test event',
+          },
+        },
+        start_date: '2025-12-01',
+        start_time: '10:00',
+        end_date: '2025-12-01',
+        end_time: '12:00',
+      });
+
+      const delEvt2 = await calendarInterface.createEvent(testAccount, {
+        calendarId: delCal.id,
+        content: {
+          en: {
+            name: 'Delete Test Event 2',
+            description: 'Second test event',
+          },
+        },
+        start_date: '2025-12-02',
+        start_time: '14:00',
+        end_date: '2025-12-02',
+        end_time: '16:00',
+      });
+
+      // Assign event1 to category1 and category2
+      await calendarInterface.assignCategoryToEvent(testAccount, delEvt1.id, delCat1.id);
+      await calendarInterface.assignCategoryToEvent(testAccount, delEvt1.id, delCat2.id);
+
+      // Assign event2 to category1 only
+      await calendarInterface.assignCategoryToEvent(testAccount, delEvt2.id, delCat1.id);
+
+      // Initial state: delCat1 has 2 events, delCat2 has 1 event
+
+      // Delete delCat1 and migrate to delCat2
       const response = await env.authDelete(
         authToken,
-        `/api/v1/calendars/${testCalendar.urlName}/categories/${testCategory1.id}?action=migrate&targetCategoryId=${testCategory2.id}`,
+        `/api/v1/calendars/${delCal.urlName}/categories/${delCat1.id}?action=migrate&targetCategoryId=${delCat2.id}`,
       );
 
       expect(response.status).toBe(200);
       expect(response.body.affectedEventCount).toBe(2);
 
-      // Verify category1 is deleted
+      // Verify delCat1 is deleted
       const categoriesResponse = await env.authGet(
         authToken,
-        `/api/v1/calendars/${testCalendar.urlName}/categories`,
+        `/api/v1/calendars/${delCal.urlName}/categories`,
       );
 
       expect(categoriesResponse.status).toBe(200);
       const remainingCategories = categoriesResponse.body.map((c: any) => c.id);
-      expect(remainingCategories).not.toContain(testCategory1.id);
-      expect(remainingCategories).toContain(testCategory2.id);
+      expect(remainingCategories).not.toContain(delCat1.id);
+      expect(remainingCategories).toContain(delCat2.id);
 
-      // Verify category2 now has 2 events
-      const category2Data = categoriesResponse.body.find((c: any) => c.id === testCategory2.id);
+      // Verify delCat2 now has 2 events
+      const category2Data = categoriesResponse.body.find((c: any) => c.id === delCat2.id);
       expect(category2Data.eventCount).toBe(2);
 
       // Verify events are correctly assigned
-      const event1Categories = await calendarInterface.getEventCategories(testEvent1.id);
-      expect(event1Categories.map(c => c.id)).toContain(testCategory2.id);
-      expect(event1Categories.map(c => c.id)).not.toContain(testCategory1.id);
+      const event1Categories = await calendarInterface.getEventCategories(delEvt1.id);
+      expect(event1Categories.map(c => c.id)).toContain(delCat2.id);
+      expect(event1Categories.map(c => c.id)).not.toContain(delCat1.id);
 
-      const event2Categories = await calendarInterface.getEventCategories(testEvent2.id);
-      expect(event2Categories.map(c => c.id)).toContain(testCategory2.id);
-      expect(event2Categories.map(c => c.id)).not.toContain(testCategory1.id);
+      const event2Categories = await calendarInterface.getEventCategories(delEvt2.id);
+      expect(event2Categories.map(c => c.id)).toContain(delCat2.id);
+      expect(event2Categories.map(c => c.id)).not.toContain(delCat1.id);
     });
   });
 
@@ -302,10 +360,17 @@ describe('Category Management Integration Tests', () => {
 
   describe('Permission validation', () => {
     it('should reject unauthorized user from deleting category', async () => {
+      // Create fresh test data for permission test
+      const permCal = await calendarInterface.createCalendar(testAccount, 'perm-test-cal');
+      const permCat = await calendarInterface.createCategory(testAccount, permCal.id, {
+        name: 'Permission Test',
+        language: 'en',
+      });
+
       // Unauthorized user attempts to delete category
       const response = await env.authDelete(
         unauthorizedToken,
-        `/api/v1/calendars/${testCalendar.urlName}/categories/${testCategory2.id}?action=remove`,
+        `/api/v1/calendars/${permCal.urlName}/categories/${permCat.id}?action=remove`,
       );
 
       expect(response.status).toBe(403);
@@ -313,22 +378,33 @@ describe('Category Management Integration Tests', () => {
       // Verify category still exists
       const categoriesResponse = await env.authGet(
         authToken,
-        `/api/v1/calendars/${testCalendar.urlName}/categories`,
+        `/api/v1/calendars/${permCal.urlName}/categories`,
       );
 
       expect(categoriesResponse.status).toBe(200);
       const categoryIds = categoriesResponse.body.map((c: any) => c.id);
-      expect(categoryIds).toContain(testCategory2.id);
+      expect(categoryIds).toContain(permCat.id);
     });
 
     it('should reject unauthorized user from merging categories', async () => {
+      // Create fresh test data for permission test
+      const permCal2 = await calendarInterface.createCalendar(testAccount, 'perm-test-cal2');
+      const permCat1 = await calendarInterface.createCategory(testAccount, permCal2.id, {
+        name: 'Permission Test 1',
+        language: 'en',
+      });
+      const permCat2 = await calendarInterface.createCategory(testAccount, permCal2.id, {
+        name: 'Permission Test 2',
+        language: 'en',
+      });
+
       // Unauthorized user attempts to merge categories
       const response = await env.authPost(
         unauthorizedToken,
-        `/api/v1/calendars/${testCalendar.urlName}/categories/merge`,
+        `/api/v1/calendars/${permCal2.urlName}/categories/merge`,
         {
-          targetCategoryId: testCategory2.id,
-          sourceCategoryIds: [testCategory3.id],
+          targetCategoryId: permCat1.id,
+          sourceCategoryIds: [permCat2.id],
         },
       );
 
@@ -337,42 +413,60 @@ describe('Category Management Integration Tests', () => {
       // Verify categories still exist
       const categoriesResponse = await env.authGet(
         authToken,
-        `/api/v1/calendars/${testCalendar.urlName}/categories`,
+        `/api/v1/calendars/${permCal2.urlName}/categories`,
       );
 
       expect(categoriesResponse.status).toBe(200);
       const categoryIds = categoriesResponse.body.map((c: any) => c.id);
-      expect(categoryIds).toContain(testCategory2.id);
-      expect(categoryIds).toContain(testCategory3.id);
+      expect(categoryIds).toContain(permCat1.id);
+      expect(categoryIds).toContain(permCat2.id);
     });
   });
 
   describe('Error handling for edge cases', () => {
     it('should reject deletion with migration to non-existent target', async () => {
+      // Create fresh test data for error handling test
+      const errCal = await calendarInterface.createCalendar(testAccount, 'err-test-cal');
+      const errCat = await calendarInterface.createCategory(testAccount, errCal.id, {
+        name: 'Error Test',
+        language: 'en',
+      });
+
       const response = await env.authDelete(
         authToken,
-        `/api/v1/calendars/${testCalendar.urlName}/categories/${testCategory2.id}?action=migrate&targetCategoryId=non-existent-id`,
+        `/api/v1/calendars/${errCal.urlName}/categories/${errCat.id}?action=migrate&targetCategoryId=non-existent-id`,
       );
 
       expect(response.status).toBe(404);
 
-      // Verify category2 still exists
+      // Verify category still exists
       const categoriesResponse = await env.authGet(
         authToken,
-        `/api/v1/calendars/${testCalendar.urlName}/categories`,
+        `/api/v1/calendars/${errCal.urlName}/categories`,
       );
 
       const categoryIds = categoriesResponse.body.map((c: any) => c.id);
-      expect(categoryIds).toContain(testCategory2.id);
+      expect(categoryIds).toContain(errCat.id);
     });
 
     it('should reject merge with target in source list', async () => {
+      // Create fresh test data for error handling test
+      const errCal2 = await calendarInterface.createCalendar(testAccount, 'err-test-cal2');
+      const errCat1 = await calendarInterface.createCategory(testAccount, errCal2.id, {
+        name: 'Error Test 1',
+        language: 'en',
+      });
+      const errCat2 = await calendarInterface.createCategory(testAccount, errCal2.id, {
+        name: 'Error Test 2',
+        language: 'en',
+      });
+
       const response = await env.authPost(
         authToken,
-        `/api/v1/calendars/${testCalendar.urlName}/categories/merge`,
+        `/api/v1/calendars/${errCal2.urlName}/categories/merge`,
         {
-          targetCategoryId: testCategory2.id,
-          sourceCategoryIds: [testCategory2.id, testCategory3.id],
+          targetCategoryId: errCat1.id,
+          sourceCategoryIds: [errCat1.id, errCat2.id],
         },
       );
 
@@ -381,20 +475,27 @@ describe('Category Management Integration Tests', () => {
       // Verify both categories still exist
       const categoriesResponse = await env.authGet(
         authToken,
-        `/api/v1/calendars/${testCalendar.urlName}/categories`,
+        `/api/v1/calendars/${errCal2.urlName}/categories`,
       );
 
       const categoryIds = categoriesResponse.body.map((c: any) => c.id);
-      expect(categoryIds).toContain(testCategory2.id);
-      expect(categoryIds).toContain(testCategory3.id);
+      expect(categoryIds).toContain(errCat1.id);
+      expect(categoryIds).toContain(errCat2.id);
     });
 
     it('should reject merge with non-existent source category', async () => {
+      // Create fresh test data for error handling test
+      const errCal3 = await calendarInterface.createCalendar(testAccount, 'err-test-cal3');
+      const errCat3 = await calendarInterface.createCategory(testAccount, errCal3.id, {
+        name: 'Error Test 3',
+        language: 'en',
+      });
+
       const response = await env.authPost(
         authToken,
-        `/api/v1/calendars/${testCalendar.urlName}/categories/merge`,
+        `/api/v1/calendars/${errCal3.urlName}/categories/merge`,
         {
-          targetCategoryId: testCategory2.id,
+          targetCategoryId: errCat3.id,
           sourceCategoryIds: ['non-existent-id'],
         },
       );

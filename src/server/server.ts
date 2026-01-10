@@ -181,7 +181,7 @@ const initPavillionServer = async (app: express.Application, port: number) => {
   const configurationDomain = new ConfigurationDomain(eventBus);
   configurationDomain.initialize(app);
 
-  const accountsDomain = new AccountsDomain(eventBus,configurationDomain.interface);
+  const accountsDomain = new AccountsDomain(eventBus, configurationDomain.interface, setupDomain.interface);
   accountsDomain.initialize(app);
 
   const authenticationDomain = new AuthenticationDomain(eventBus, accountsDomain.interface);

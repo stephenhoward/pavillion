@@ -8,6 +8,7 @@ import { TestEnvironment } from '@/server/test/lib/test_environment';
 import AccountService from '@/server/accounts/service/account';
 import CalendarService from '@/server/calendar/service/calendar';
 import ConfigurationInterface from '@/server/configuration/interface';
+import SetupInterface from '@/server/setup/interface';
 import AccountsInterface from '@/server/accounts/interface';
 
 /**
@@ -27,8 +28,9 @@ describe('Category Permissions Integration', () => {
 
     const eventBus = new EventEmitter();
     const configurationInterface = new ConfigurationInterface();
-    const accountService = new AccountService(eventBus, configurationInterface);
-    const accountsInterface = new AccountsInterface(eventBus, configurationInterface);
+    const setupInterface = new SetupInterface();
+    const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
+    const accountsInterface = new AccountsInterface(eventBus, configurationInterface, setupInterface);
     const calendarService = new CalendarService(accountsInterface, configurationInterface);
 
     // Set up owner account and calendar

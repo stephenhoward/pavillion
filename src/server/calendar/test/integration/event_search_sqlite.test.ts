@@ -41,7 +41,8 @@ describe('Event Search Integration (SQLite)', () => {
   });
 
   afterAll(async () => {
-    await db.close();
+    // No-op: Don't close the database connection
+    // SQLite :memory: is automatically cleaned up when the process exits
   });
 
   it('should perform case-insensitive search using LOWER() function', async () => {

@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import sinon from 'sinon';
 
 import { Account } from '@/common/model/account';
-import { AccountEntity, AccountSecretsEntity,AccountApplicationEntity } from '@/server/common/entity/account';
+import { AccountEntity, AccountSecretsEntity, AccountApplicationEntity, AccountRoleEntity } from '@/server/common/entity/account';
 import AccountInvitationEntity from '@/server/accounts/entity/account_invitation';
 import EmailService from '@/server/common/service/mail';
 import ServiceSettings from '@/server/configuration/service/settings';
@@ -11,6 +11,7 @@ import { AccountAlreadyExistsError, AccountInviteAlreadyExistsError, AccountRegi
 import { initI18Next } from '@/server/common/test/lib/i18next';
 import EventEmitter from 'events';
 import ConfigurationInterface from '@/server/configuration/interface';
+import SetupInterface from '@/server/setup/interface';
 
 initI18Next();
 
@@ -23,7 +24,8 @@ describe('inviteNewAccount', () => {
   beforeEach(() => {
     const eventBus = new EventEmitter();
     const configurationInterface = new ConfigurationInterface();
-    accountService = new AccountService(eventBus,configurationInterface);
+    const setupInterface = new SetupInterface();
+    accountService = new AccountService(eventBus, configurationInterface, setupInterface);
     adminUser = new Account('admin_id', 'admin_user','admin@pavillion.dev');
     adminUser.roles = ['admin'];
   });
@@ -135,7 +137,8 @@ describe('registerNewAccount', () => {
   beforeEach(() => {
     const eventBus = new EventEmitter();
     const configurationInterface = new ConfigurationInterface();
-    accountService = new AccountService(eventBus,configurationInterface);
+    const setupInterface = new SetupInterface();
+    accountService = new AccountService(eventBus, configurationInterface, setupInterface);
   });
 
   afterEach(() => {
@@ -178,7 +181,8 @@ describe('applyForNewAccount', () => {
   beforeEach(() => {
     const eventBus = new EventEmitter();
     const configurationInterface = new ConfigurationInterface();
-    accountService = new AccountService(eventBus,configurationInterface);
+    const setupInterface = new SetupInterface();
+    accountService = new AccountService(eventBus, configurationInterface, setupInterface);
   });
 
   afterEach(() => {
@@ -196,23 +200,27 @@ describe('applyForNewAccount', () => {
   });
 
   it('application already exists', async () => {
-    let getSettingStub = applySandbox.stub(ServiceSettings.prototype, 'get');
-    let buildAccountStub = applySandbox.stub(AccountApplicationEntity, 'findOne');
+    let getAllSettingsStub = applySandbox.stub(ConfigurationInterface.prototype, 'getAllSettings');
+    let getAccountByEmailStub = applySandbox.stub(accountService, 'getAccountByEmail');
+    let findApplicationStub = applySandbox.stub(AccountApplicationEntity, 'findOne');
 
-    getSettingStub.withArgs('registrationMode').returns('apply');
-    buildAccountStub.resolves(AccountApplicationEntity.build({ email: 'test_email' }));
+    getAllSettingsStub.resolves({ registrationMode: 'apply' });
+    getAccountByEmailStub.resolves(undefined);
+    findApplicationStub.resolves(AccountApplicationEntity.build({ email: 'test_email' }));
 
     await expect(accountService.applyForNewAccount('test_email','test_message')).rejects
       .toThrow(AccountApplicationAlreadyExistsError);
   });
 
   it('application succeeds', async () => {
-    let getSettingStub = applySandbox.stub(ServiceSettings.prototype, 'get');
+    let getAllSettingsStub = applySandbox.stub(ConfigurationInterface.prototype, 'getAllSettings');
+    let getAccountByEmailStub = applySandbox.stub(accountService, 'getAccountByEmail');
     let findApplicationStub = applySandbox.stub(AccountApplicationEntity, 'findOne');
     let saveApplicationStub = applySandbox.stub(AccountApplicationEntity.prototype, 'save');
     let emailStub = applySandbox.stub(EmailService, 'sendEmail');
 
-    getSettingStub.withArgs('registrationMode').returns('apply');
+    getAllSettingsStub.resolves({ registrationMode: 'apply' });
+    getAccountByEmailStub.resolves(undefined);
     findApplicationStub.resolves(undefined);
 
     let result = await accountService.applyForNewAccount('test_email','test_message');
@@ -230,7 +238,8 @@ describe('validateInviteCode', () => {
   beforeEach(() => {
     const eventBus = new EventEmitter();
     const configurationInterface = new ConfigurationInterface();
-    accountService = new AccountService(eventBus,configurationInterface);
+    const setupInterface = new SetupInterface();
+    accountService = new AccountService(eventBus, configurationInterface, setupInterface);
   });
 
   afterEach(() => {
@@ -292,7 +301,8 @@ describe('acceptAccountInvite', () => {
   beforeEach(() => {
     const eventBus = new EventEmitter();
     const configurationInterface = new ConfigurationInterface();
-    accountService = new AccountService(eventBus,configurationInterface);
+    const setupInterface = new SetupInterface();
+    accountService = new AccountService(eventBus, configurationInterface, setupInterface);
   });
 
   afterEach(() => {
@@ -529,7 +539,8 @@ describe('acceptAccountApplication', () => {
   beforeEach(() => {
     const eventBus = new EventEmitter();
     const configurationInterface = new ConfigurationInterface();
-    accountService = new AccountService(eventBus,configurationInterface);
+    const setupInterface = new SetupInterface();
+    accountService = new AccountService(eventBus, configurationInterface, setupInterface);
   });
 
   afterEach(() => {
@@ -571,7 +582,8 @@ describe('rejectAccountApplication', () => {
   beforeEach(() => {
     const eventBus = new EventEmitter();
     const configurationInterface = new ConfigurationInterface();
-    accountService = new AccountService(eventBus,configurationInterface);
+    const setupInterface = new SetupInterface();
+    accountService = new AccountService(eventBus, configurationInterface, setupInterface);
   });
 
   afterEach(() => {
@@ -633,7 +645,8 @@ describe('_setupAccount', () => {
   beforeEach(() => {
     const eventBus = new EventEmitter();
     const configurationInterface = new ConfigurationInterface();
-    accountService = new AccountService(eventBus,configurationInterface);
+    const setupInterface = new SetupInterface();
+    accountService = new AccountService(eventBus, configurationInterface, setupInterface);
   });
 
   afterEach(() => {
@@ -654,10 +667,13 @@ describe('_setupAccount', () => {
     let accountServiceStub = setupSandbox.stub(accountService, 'getAccountByEmail');
     let accountSaveStub = setupSandbox.stub(AccountEntity.prototype, 'save');
     let accountSecretsSaveStub = setupSandbox.stub(AccountSecretsEntity.prototype, 'save');
+    let accountRoleSaveStub = setupSandbox.stub(AccountRoleEntity.prototype, 'save');
+    let accountRoleFindAllStub = setupSandbox.stub(AccountRoleEntity, 'findAll');
     let passwordCodeStub = setupSandbox.stub(accountService, 'generatePasswordResetCodeForAccount');
 
     passwordCodeStub.resolves('test_code');
     accountServiceStub.resolves(undefined);
+    accountRoleFindAllStub.resolves([]); // No existing admins
 
     let accountInfo = await accountService._setupAccount('test_email');
 
@@ -673,10 +689,13 @@ describe('_setupAccount', () => {
     let accountSaveStub = setupSandbox.stub(AccountEntity.prototype, 'save');
     let setPasswordStub = sinon.stub(accountService, 'setPassword');
     let accountSecretsSaveStub = setupSandbox.stub(AccountSecretsEntity.prototype, 'save');
+    let accountRoleSaveStub = setupSandbox.stub(AccountRoleEntity.prototype, 'save');
+    let accountRoleFindAllStub = setupSandbox.stub(AccountRoleEntity, 'findAll');
     let passwordCodeStub = setupSandbox.stub(accountService, 'generatePasswordResetCodeForAccount');
 
     accountServiceStub.resolves(undefined);
     setPasswordStub.resolves(true);
+    accountRoleFindAllStub.resolves([]); // No existing admins
 
     let accountInfo = await accountService._setupAccount('test_email','test_password');
 
@@ -698,7 +717,8 @@ describe('listInvitations', () => {
   beforeEach(() => {
     const eventBus = new EventEmitter();
     const configurationInterface = new ConfigurationInterface();
-    accountService = new AccountService(eventBus, configurationInterface);
+    const setupInterface = new SetupInterface();
+    accountService = new AccountService(eventBus, configurationInterface, setupInterface);
     findAllStub = sandbox.stub(AccountInvitationEntity, 'findAll');
   });
 
@@ -714,6 +734,9 @@ describe('listInvitations', () => {
         invited_by: 'admin1',
         calendar_id: null,
         created_at: new Date('2025-10-01'),
+        inviter: {
+          toModel: () => ({ id: 'admin1', username: 'admin' }),
+        },
         toModel: () => ({ id: 'inv1', email: 'user1@test.com' }),
       },
       {
@@ -722,6 +745,9 @@ describe('listInvitations', () => {
         invited_by: 'admin1',
         calendar_id: 'cal1',
         created_at: new Date('2025-09-30'),
+        inviter: {
+          toModel: () => ({ id: 'admin1', username: 'admin' }),
+        },
         toModel: () => ({ id: 'inv2', email: 'user2@test.com' }),
       },
     ];
@@ -750,6 +776,9 @@ describe('listInvitations', () => {
         invited_by: 'user123',
         calendar_id: null,
         created_at: new Date('2025-10-01'),
+        inviter: {
+          toModel: () => ({ id: 'user123', username: 'user123' }),
+        },
         toModel: () => ({ id: 'inv1', email: 'user1@test.com' }),
       },
     ];
@@ -778,6 +807,9 @@ describe('listInvitations', () => {
         invited_by: 'owner123',
         calendar_id: 'cal456',
         created_at: new Date('2025-10-01'),
+        inviter: {
+          toModel: () => ({ id: 'owner123', username: 'owner123' }),
+        },
         toModel: () => ({ id: 'inv1', email: 'editor@test.com' }),
       },
     ];
@@ -806,6 +838,9 @@ describe('listInvitations', () => {
         invited_by: 'owner123',
         calendar_id: 'cal456',
         created_at: new Date('2025-10-01'),
+        inviter: {
+          toModel: () => ({ id: 'owner123', username: 'owner123' }),
+        },
         toModel: () => ({ id: 'inv1', email: 'editor@test.com' }),
       },
     ];
@@ -837,6 +872,9 @@ describe('listInvitations', () => {
         invited_by: 'admin1',
         calendar_id: null,
         created_at: new Date('2025-10-01'),
+        inviter: {
+          toModel: () => ({ id: 'admin1', username: 'admin' }),
+        },
         toModel: () => ({ id: 'inv1', email: 'user1@test.com' }),
       },
       {
@@ -845,6 +883,9 @@ describe('listInvitations', () => {
         invited_by: 'admin1',
         calendar_id: null,
         created_at: new Date('2025-09-30'),
+        inviter: {
+          toModel: () => ({ id: 'admin1', username: 'admin' }),
+        },
         toModel: () => ({ id: 'inv2', email: 'user2@test.com' }),
       },
     ];

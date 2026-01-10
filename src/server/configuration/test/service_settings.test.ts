@@ -60,12 +60,12 @@ describe('ServiceSettings', () => {
     it('should return the value for an existing key', async () => {
 
       sandbox.stub(ServiceSettingEntity, 'findAll').resolves([
-        { parameter: 'registrationMode', value: 'invite' } as unknown as ServiceSettingEntity,
+        { parameter: 'registrationMode', value: 'invitation' } as unknown as ServiceSettingEntity,
       ]);
 
       const settings = await ServiceSettings.getInstance();
 
-      expect(settings.get('registrationMode')).toBe('invite');
+      expect(settings.get('registrationMode')).toBe('invitation');
     });
 
     it('should return undefined for a non-existent key', async () => {
@@ -96,7 +96,7 @@ describe('ServiceSettings', () => {
     });
 
     it('should create a new setting if none exists', async () => {
-      const mockSettingEntity = { parameter: 'registrationMode', value: 'invite', save: sandbox.stub().resolves() };
+      const mockSettingEntity = { parameter: 'registrationMode', value: 'invitation', save: sandbox.stub().resolves() };
       sandbox.stub(ServiceSettingEntity, 'findOrCreate').resolves([
         mockSettingEntity as unknown as ServiceSettingEntity, // Return a mock entity with a save method
         true, // Created, indicates entity did not exist before
@@ -139,7 +139,7 @@ describe('ServiceSettings', () => {
       const result = await settings.set('registrationMode', 'invalid');
 
       expect(result).toBe(false);
-      expect(settings.get('registrationMode')).toBe('closed');
+      expect(settings.get('registrationMode')).toBe('invitation'); // Default value
     });
 
     it('should reject invalid parameter names', async () => {
@@ -180,7 +180,7 @@ describe('ServiceSettings', () => {
 
     it('change should be reflected in all instances', async () => {
       sandbox.stub(ServiceSettingEntity, 'findOrCreate').resolves([
-        { parameter: 'registrationMode', value: 'invite', save: sandbox.stub().resolves() } as unknown as ServiceSettingEntity,
+        { parameter: 'registrationMode', value: 'invitation', save: sandbox.stub().resolves() } as unknown as ServiceSettingEntity,
         false,
       ]);
 

@@ -1,9 +1,24 @@
 import express from 'express';
-import db from '@/server/common/entity/db';
 import sinon from 'sinon';
 import request from 'supertest';
 import initPavillionServer from '@/server/server';
 import crypto from 'crypto';
+import db from '@/server/common/entity/db';
+
+// Import entity modules to trigger registration with global db
+import '@/server/common/entity/account';
+import '@/server/accounts/entity/account_invitation';
+import '@/server/calendar/entity/calendar';
+import '@/server/calendar/entity/calendar_editor';
+import '@/server/calendar/entity/event_category';
+import '@/server/calendar/entity/event_category_content';
+import '@/server/calendar/entity/event';
+import '@/server/calendar/entity/event_category_assignment';
+import '@/server/calendar/entity/event_instance';
+import '@/server/calendar/entity/location';
+import '@/server/activitypub/entity/activitypub';
+import '@/server/media/entity/media';
+import '@/server/configuration/entity/settings';
 
 export class TestEnvironment {
   app: express.Application;
@@ -13,18 +28,25 @@ export class TestEnvironment {
   }
 
   async init(port: number) {
+    // Entities are now registered with global db (imported above)
+    // Sync the database first
     await db.sync({ force: true });
-    initPavillionServer(this.app, port);
+
+    // Now initialize the server - this will skip db sync in test mode
+    // IMPORTANT: Must await this so server is fully initialized before tests run
+    await initPavillionServer(this.app, port);
+
+    // Note: Setup mode middleware is active and will initially cache "setup mode active"
+    // When tests create accounts via _setupAccount(), the cache is automatically cleared
+    // This allows the middleware to query the database fresh and find the admin account
   }
 
   async cleanup() {
-    // Close database connections and clean up resources
-    try {
-      await db.close();
-    }
-    catch (error) {
-      console.error('Error cleaning up test environment:', error);
-    }
+    // No-op: Don't close the database connection
+    // With SQLite :memory:, the database is automatically destroyed when the process exits.
+    // Explicitly closing causes race conditions with pending async operations.
+    // When fileParallelism is enabled, each worker process gets its own isolated
+    // in-memory database via vitest's module isolation, so no cleanup is needed.
   }
 
   async login(email: string, password: string): Promise<string> {
@@ -68,7 +90,8 @@ export class TestEnvironment {
   }
 
   stubRemoteCalendar(getStub: sinon.SinonStub, remoteDomain: string, calendarName: string) {
-    const webfingerStub = getStub.withArgs(`https://${remoteDomain}/.well-known/webfinger?resource=acct:${calendarName}`);
+    // WebFinger uses the full acct:username@domain format
+    const webfingerStub = getStub.withArgs(`https://${remoteDomain}/.well-known/webfinger?resource=acct:${calendarName}@${remoteDomain}`);
     webfingerStub.resolves({
       data: {
         links: [

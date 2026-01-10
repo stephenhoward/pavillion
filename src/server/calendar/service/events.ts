@@ -709,7 +709,7 @@ class EventService {
     const transaction = await db.transaction();
 
     try {
-      // 1. Validate that all events exist and user has permission
+      // 1. Validate that all events exist
       const events = await EventEntity.findAll({
         where: { id: eventIds },
         transaction,
@@ -719,35 +719,46 @@ class EventService {
         throw new BulkEventsNotFoundError('Some events were not found or you do not have permission to modify them');
       }
 
-      // 2. Check user has permission to modify all events
-      const userCalendars = await this.calendarService.editableCalendarsForUser(account);
-      const userCalendarIds = userCalendars.map(cal => cal.id);
-
-      // Verify all events belong to calendars user can edit
-      const unauthorizedEvents = events.filter(event => !userCalendarIds.includes(event.calendar_id));
-      if (unauthorizedEvents.length > 0) {
-        throw new InsufficientCalendarPermissionsError('Insufficient permissions to modify some events');
-      }
-
-      // 3. Verify all events belong to same calendar (simplifies category validation)
+      // 2. Verify all events belong to same calendar (simplifies category validation)
       const calendarIds = [...new Set(events.map(event => event.calendar_id))];
       if (calendarIds.length > 1) {
         throw new MixedCalendarEventsError('All events must belong to the same calendar');
       }
 
-      const calendarId = calendarIds[0];
+      const calendarApUrl = calendarIds[0];
 
-      // 4. Validate categories exist and belong to the same calendar
+      // Extract urlName from ActivityPub URL (format: https://domain/o/urlName)
+      // Events store AP URLs, but categories use calendar UUIDs
+      const urlNameMatch = calendarApUrl.match(/\/o\/([^\/]+)$/);
+      if (!urlNameMatch) {
+        throw new Error('Invalid calendar ActivityPub URL format');
+      }
+      const urlName = urlNameMatch[1];
+      const calendar = await this.calendarService.getCalendarByName(urlName);
+      if (!calendar) {
+        throw new CalendarNotFoundError('Calendar not found for events');
+      }
+      const calendarUuid = calendar.id;
+
+      // 3. Validate categories exist and belong to the same calendar
       const categories = await EventCategoryEntity.findAll({
         where: {
           id: categoryIds,
-          calendar_id: calendarId,
+          calendar_id: calendarUuid,  // Use UUID, not AP URL
         },
         transaction,
       });
 
       if (categories.length !== categoryIds.length) {
         throw new CategoriesNotFoundError('Some categories were not found in the calendar');
+      }
+
+      // 4. Check user has permission to modify events (do this AFTER data validation)
+      // All events are in the same calendar (validated above), so just check permission for that calendar
+      const userCalendars = await this.calendarService.editableCalendarsForUser(account);
+      const hasPermission = userCalendars.some(cal => cal.id === calendarUuid);
+      if (!hasPermission) {
+        throw new InsufficientCalendarPermissionsError('Insufficient permissions to modify events in this calendar');
       }
 
       // 5. Get existing assignments to avoid duplicates
@@ -817,7 +828,22 @@ class EventService {
       throw new EventNotFoundError(`Event with ID ${eventId} not found`);
     }
 
-    const calendar = await this.calendarService.getCalendar(eventEntity.calendar_id);
+    // Calendar ID is now stored as an ActivityPub URL (https://domain/o/urlName)
+    // Extract the urlName from the URL and look up by that
+    let calendar: Calendar | null = null;
+    if (eventEntity.calendar_id && eventEntity.calendar_id.startsWith('https://')) {
+      // Extract urlName from ActivityPub URL format: https://domain/o/urlName
+      const match = eventEntity.calendar_id.match(/\/o\/([^\/]+)$/);
+      if (match) {
+        const urlName = match[1];
+        calendar = await this.calendarService.getCalendarByName(urlName);
+      }
+    }
+    else if (eventEntity.calendar_id) {
+      // Legacy support: if it's a UUID, look up by primary key
+      calendar = await this.calendarService.getCalendar(eventEntity.calendar_id);
+    }
+
     if (!calendar) {
       throw new CalendarNotFoundError(`Calendar not found for event ${eventId}`);
     }

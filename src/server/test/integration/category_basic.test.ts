@@ -9,6 +9,7 @@ import { TestEnvironment } from '@/server/test/lib/test_environment';
 import AccountService from '@/server/accounts/service/account';
 import CalendarInterface from '@/server/calendar/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
+import SetupInterface from '@/server/setup/interface';
 
 /**
  * Basic integration tests for category functionality.
@@ -29,7 +30,8 @@ describe('Category Basic Integration', () => {
     const eventBus = new EventEmitter();
     const calendarInterface = new CalendarInterface(eventBus);
     const configurationInterface = new ConfigurationInterface();
-    const accountService = new AccountService(eventBus, configurationInterface);
+    const setupInterface = new SetupInterface();
+    const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
 
     // Set up test account and calendar
     let accountInfo = await accountService._setupAccount(userEmail, userPassword);

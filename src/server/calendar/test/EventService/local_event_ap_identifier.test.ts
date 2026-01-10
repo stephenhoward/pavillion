@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import config from 'config';
+import { Op } from 'sequelize';
 import EventService from '@/server/calendar/service/events';
 import CalendarService from '@/server/calendar/service/calendar';
 import CategoryService from '@/server/calendar/service/categories';
@@ -120,7 +121,10 @@ describe('EventService - AP Identifier Storage', () => {
 
     expect(findAllStub.calledOnce).toBe(true);
     const queryOptions = findAllStub.firstCall.args[0] as any;
-    expect(queryOptions.where.calendar_id).toBe(expectedCalendarId);
+    // Verify that both UUID and AP identifier are included in the query
+    expect(queryOptions.where.calendar_id).toEqual({
+      [Op.in]: [calendar.id, expectedCalendarId]
+    });
   });
 
   it('should retrieve event with AP identifier calendar_id via getEventById', async () => {

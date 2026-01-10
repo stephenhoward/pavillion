@@ -32,15 +32,16 @@ describe('EventService.bulkAssignCategories', () => {
     const eventIds = ['event1', 'event2', 'event3'];
     const categoryIds = ['cat1', 'cat2'];
     const calendarId = 'calendar1';
+    const calendarApUrl = 'https://example.com/o/testcalendar';
 
-    // Mock events
+    // Mock events - use AP URL format for calendar_id
     const mockEvents = eventIds.map(id => EventEntity.build({
       id,
-      calendar_id: calendarId,
+      calendar_id: calendarApUrl,
       account_id: 'test-account-id',
     }));
 
-    // Mock categories
+    // Mock categories - use UUID for calendar_id
     const mockCategories = categoryIds.map(id => EventCategoryEntity.build({
       id,
       calendar_id: calendarId,
@@ -55,6 +56,10 @@ describe('EventService.bulkAssignCategories', () => {
 
     const calendarServiceStub = sandbox.stub(CalendarService.prototype, 'editableCalendarsForUser');
     calendarServiceStub.resolves([new Calendar(calendarId, 'test-calendar')]);
+
+    // Stub getCalendarByName to return calendar with matching ID
+    const getCalendarByNameStub = sandbox.stub(CalendarService.prototype, 'getCalendarByName');
+    getCalendarByNameStub.resolves(new Calendar(calendarId, 'testcalendar'));
 
     // Mock existing assignments check
     const findExistingStub = sandbox.stub(EventCategoryAssignmentEntity, 'findAll');
@@ -115,10 +120,11 @@ describe('EventService.bulkAssignCategories', () => {
     const eventIds = ['event1'];
     const categoryIds = ['nonexistent-cat'];
     const calendarId = 'calendar1';
+    const calendarApUrl = 'https://example.com/o/testcalendar';
 
     const mockEvents = [EventEntity.build({
       id: 'event1',
-      calendar_id: calendarId,
+      calendar_id: calendarApUrl,
       account_id: 'test-account-id',
     })];
 
@@ -131,6 +137,10 @@ describe('EventService.bulkAssignCategories', () => {
     const calendarServiceStub = sandbox.stub(CalendarService.prototype, 'editableCalendarsForUser');
     calendarServiceStub.resolves([new Calendar(calendarId, 'test-calendar')]);
 
+    // Stub getCalendarByName to return calendar with matching ID
+    const getCalendarByNameStub = sandbox.stub(CalendarService.prototype, 'getCalendarByName');
+    getCalendarByNameStub.resolves(new Calendar(calendarId, 'testcalendar'));
+
     // Act & Assert
     await expect(service.bulkAssignCategories(mockAccount, eventIds, categoryIds))
       .rejects.toThrow(CategoriesNotFoundError);
@@ -141,9 +151,10 @@ describe('EventService.bulkAssignCategories', () => {
     const eventIds = ['event1', 'event2'];
     const categoryIds = ['cat1'];
 
+    // Events with DIFFERENT AP URLs to trigger mixed calendar error
     const mockEvents = [
-      EventEntity.build({ id: 'event1', calendar_id: 'calendar1', account_id: 'test-account-id' }),
-      EventEntity.build({ id: 'event2', calendar_id: 'calendar2', account_id: 'test-account-id' }),
+      EventEntity.build({ id: 'event1', calendar_id: 'https://example.com/o/calendar1', account_id: 'test-account-id' }),
+      EventEntity.build({ id: 'event2', calendar_id: 'https://example.com/o/calendar2', account_id: 'test-account-id' }),
     ];
 
     const findEventsStub = sandbox.stub(EventEntity, 'findAll');
@@ -165,10 +176,11 @@ describe('EventService.bulkAssignCategories', () => {
     const eventIds = ['event1'];
     const categoryIds = ['cat1', 'cat2'];
     const calendarId = 'calendar1';
+    const calendarApUrl = 'https://example.com/o/testcalendar';
 
     const mockEvents = [EventEntity.build({
       id: 'event1',
-      calendar_id: calendarId,
+      calendar_id: calendarApUrl,
       account_id: 'test-account-id',
     })];
 
@@ -194,6 +206,10 @@ describe('EventService.bulkAssignCategories', () => {
 
     const calendarServiceStub = sandbox.stub(CalendarService.prototype, 'editableCalendarsForUser');
     calendarServiceStub.resolves([new Calendar(calendarId, 'test-calendar')]);
+
+    // Stub getCalendarByName to return calendar with matching ID
+    const getCalendarByNameStub = sandbox.stub(CalendarService.prototype, 'getCalendarByName');
+    getCalendarByNameStub.resolves(new Calendar(calendarId, 'testcalendar'));
 
     const findExistingStub = sandbox.stub(EventCategoryAssignmentEntity, 'findAll');
     findExistingStub.resolves(existingAssignments);
@@ -234,10 +250,11 @@ describe('EventService.bulkAssignCategories', () => {
     const eventIds = ['event1'];
     const categoryIds = ['cat1'];
     const calendarId = 'calendar1';
+    const calendarApUrl = 'https://example.com/o/testcalendar';
 
     const mockEvents = [EventEntity.build({
       id: 'event1',
-      calendar_id: calendarId,
+      calendar_id: calendarApUrl,
       account_id: 'test-account-id',
     })];
 
@@ -254,6 +271,10 @@ describe('EventService.bulkAssignCategories', () => {
 
     const calendarServiceStub = sandbox.stub(CalendarService.prototype, 'editableCalendarsForUser');
     calendarServiceStub.resolves([new Calendar(calendarId, 'test-calendar')]);
+
+    // Stub getCalendarByName to return calendar with matching ID
+    const getCalendarByNameStub = sandbox.stub(CalendarService.prototype, 'getCalendarByName');
+    getCalendarByNameStub.resolves(new Calendar(calendarId, 'testcalendar'));
 
     const findExistingStub = sandbox.stub(EventCategoryAssignmentEntity, 'findAll');
     findExistingStub.resolves([]);

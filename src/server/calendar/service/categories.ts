@@ -439,8 +439,20 @@ class CategoryService {
       throw new EventNotFoundError();
     }
 
+    // Extract urlName from event's ActivityPub calendar URL
+    // Events store AP URLs (https://domain/o/urlName), categories use UUIDs
+    const urlNameMatch = event.calendar_id.match(/\/o\/([^\/]+)$/);
+    if (!urlNameMatch) {
+      throw new Error('Invalid calendar ActivityPub URL format');
+    }
+    const urlName = urlNameMatch[1];
+    const eventCalendar = await this.calendarService?.getCalendarByName(urlName);
+    if (!eventCalendar) {
+      throw new CalendarNotFoundError('Calendar not found for event');
+    }
+
     // Verify the event belongs to the same calendar as the category
-    if (event.calendar_id !== category.calendarId) {
+    if (eventCalendar.id !== category.calendarId) {
       throw new CategoryEventCalendarMismatchError();
     }
 
@@ -491,8 +503,20 @@ class CategoryService {
       throw new EventNotFoundError();
     }
 
+    // Extract urlName from event's ActivityPub calendar URL
+    // Events store AP URLs (https://domain/o/urlName), categories use UUIDs
+    const urlNameMatch = event.calendar_id.match(/\/o\/([^\/]+)$/);
+    if (!urlNameMatch) {
+      throw new Error('Invalid calendar ActivityPub URL format');
+    }
+    const urlName = urlNameMatch[1];
+    const eventCalendar = await this.calendarService?.getCalendarByName(urlName);
+    if (!eventCalendar) {
+      throw new CalendarNotFoundError('Calendar not found for event');
+    }
+
     // Verify the event belongs to the same calendar as the category
-    if (event.calendar_id !== category.calendarId) {
+    if (eventCalendar.id !== category.calendarId) {
       throw new CategoryEventCalendarMismatchError();
     }
 

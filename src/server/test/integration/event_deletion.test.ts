@@ -10,6 +10,7 @@ import { CalendarEvent } from '@/common/model/events';
 import AccountService from '@/server/accounts/service/account';
 import CalendarInterface from '@/server/calendar/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
+import SetupInterface from '@/server/setup/interface';
 import { EventEntity } from '@/server/calendar/entity/event';
 import { EventContentEntity } from '@/server/calendar/entity/event';
 import { EventScheduleEntity } from '@/server/calendar/entity/event';
@@ -33,7 +34,8 @@ describe('Event Deletion - Related Entities Cleanup', () => {
     const eventBus = new EventEmitter();
     calendarInterface = new CalendarInterface(eventBus);
     const configurationInterface = new ConfigurationInterface();
-    const accountService = new AccountService(eventBus, configurationInterface);
+    const setupInterface = new SetupInterface();
+    const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
 
     // Set up test account and calendar
     let accountInfo = await accountService._setupAccount(userEmail, userPassword);

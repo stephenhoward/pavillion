@@ -13,6 +13,8 @@ import AccountService from '@/server/accounts/service/account';
 import { EventEntity } from '@/server/calendar/entity/event';
 import { ActivityPubOutboxMessageEntity } from '@/server/activitypub/entity/activitypub';
 import CalendarInterface from '@/server/calendar/interface';
+import ConfigurationInterface from '@/server/configuration/interface';
+import SetupInterface from '@/server/setup/interface';
 
 const findInboxForCalendar = async (calendarName: string, app: express.Application): Promise<string> => {
 
@@ -43,7 +45,9 @@ describe('ActivityPub Create Activity', async () => {
 
     const eventBus = new EventEmitter();
     const calendarInterface = new CalendarInterface(eventBus);
-    const accountService = new AccountService(eventBus);
+    const configurationInterface = new ConfigurationInterface();
+    const setupInterface = new SetupInterface();
+    const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
 
     let accountInfo = await accountService._setupAccount(userEmail,userPassword);
     account = accountInfo.account;

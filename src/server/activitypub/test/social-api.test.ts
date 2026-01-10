@@ -2,11 +2,15 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import express, { Application, Request, Response, NextFunction } from 'express';
 import request from 'supertest';
+import { v4 as uuidv4 } from 'uuid';
 
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import ActivityPubMemberRoutes from '@/server/activitypub/api/v1/members';
 import ActivityPubInterface from '@/server/activitypub/interface';
+import { CalendarEntity } from '@/server/calendar/entity/calendar';
+import { FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
+import { setupActivityPubSchema, teardownActivityPubSchema } from './helpers/database';
 
 describe('ActivityPub Social API - Unfollow Endpoint', () => {
   let sandbox: sinon.SinonSandbox;
@@ -20,7 +24,8 @@ describe('ActivityPub Social API - Unfollow Endpoint', () => {
   const remoteCalendarId = 'remotecal@remote.example.com';
   const followId = 'https://beta.federation.local/o/testcal/follows/follow-abc-123';
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await setupActivityPubSchema();
     sandbox = sinon.createSandbox();
 
     // Create Express app
@@ -57,10 +62,26 @@ describe('ActivityPub Social API - Unfollow Endpoint', () => {
     router.get('/social/follows', testAuthMiddleware, memberRoutes['requireCalendarIdQuery'].bind(memberRoutes), memberRoutes.getFollows.bind(memberRoutes));
 
     app.use('/api/v1', router);
+
+    // Create calendar in database to satisfy foreign key constraints
+    await CalendarEntity.create({
+      id: testCalendar.id,
+      url_name: testCalendar.urlName,
+      account_id: uuidv4(), // Dummy account ID
+      languages: 'en',
+    });
+
+    // Create following relationship in database for unfollow tests
+    await FollowingCalendarEntity.create({
+      id: followId,
+      calendar_id: testCalendar.id,
+      remote_calendar_id: remoteCalendarId,
+    });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     sandbox.restore();
+    await teardownActivityPubSchema();
   });
 
   describe('DELETE /api/v1/social/follows/:id', () => {
@@ -158,8 +179,11 @@ describe('ActivityPub Social API - Unfollow Endpoint', () => {
       expect(response.text).toBe('Invalid request');
     });
 
-    it('should return 400 if remoteCalendar is missing', async () => {
-      // Execute: Call without remoteCalendar
+    it('should succeed without remoteCalendar in request body', async () => {
+      // Setup: Mock unfollow service call
+      activityPubInterface.unfollowCalendar.resolves();
+
+      // Execute: Call without remoteCalendar (route gets it from database entity)
       const encodedFollowId = encodeURIComponent(followId);
       const response = await request(app)
         .delete(`/api/v1/social/follows/${encodedFollowId}`)
@@ -168,9 +192,13 @@ describe('ActivityPub Social API - Unfollow Endpoint', () => {
           calendarId: testCalendar.id,
         });
 
-      // Verify: Bad request
-      expect(response.status).toBe(400);
-      expect(response.text).toBe('Invalid request');
+      // Verify: Request succeeded (remoteCalendar not needed in body)
+      expect(response.status).toBe(200);
+      expect(response.text).toBe('Unfollowed');
+
+      // Verify: Service was called with remote_calendar_id from database
+      expect(activityPubInterface.unfollowCalendar.calledOnce).toBe(true);
+      expect(activityPubInterface.unfollowCalendar.firstCall.args[2]).toBe(remoteCalendarId);
     });
   });
 });

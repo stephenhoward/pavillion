@@ -12,13 +12,17 @@ import { testApp, countRoutes } from '../../common/test/lib/express';
 import AccountInvitation from '../../../common/model/invitation';
 import AccountApplication from '../../../common/model/application';
 import AccountApiV1 from '../api/v1';
+import ConfigurationInterface from '../../configuration/interface';
+import SetupInterface from '../../setup/interface';
 
 describe('API v1', () => {
 
   it('should load routes properly', () => {
     let app = express();
     const eventBus = new EventEmitter();
-    const accountsInterface = new AccountsInterface(eventBus);
+    const configurationInterface = new ConfigurationInterface();
+    const setupInterface = new SetupInterface();
+    const accountsInterface = new AccountsInterface(eventBus, configurationInterface, setupInterface);
     expect(countRoutes(app)).toBe(0);
     AccountApiV1.install(app, accountsInterface);
     expect(countRoutes(app)).toBeGreaterThan(0);
@@ -34,7 +38,9 @@ describe('Account API', () => {
 
   beforeEach(() => {
     const eventBus = new EventEmitter();
-    accountsInterface = new AccountsInterface(eventBus);
+    const configurationInterface = new ConfigurationInterface();
+    const setupInterface = new SetupInterface();
+    accountsInterface = new AccountsInterface(eventBus, configurationInterface, setupInterface);
     accountHandlers = new AccountRouteHandlers(accountsInterface);
     stub = sandbox.stub(accountsInterface, 'registerNewAccount');
     router = express.Router();
@@ -78,7 +84,9 @@ describe ('Invitations API', () => {
 
   beforeEach(() => {
     const eventBus = new EventEmitter();
-    accountsInterface = new AccountsInterface(eventBus);
+    const configurationInterface = new ConfigurationInterface();
+    const setupInterface = new SetupInterface();
+    accountsInterface = new AccountsInterface(eventBus, configurationInterface, setupInterface);
     inviteHandlers = new AccountInvitationRouteHandlers(accountsInterface);
     router = express.Router();
   });
@@ -145,7 +153,9 @@ describe ('Invitations API', () => {
   it('list invitations: should filter by inviterId only', async () => {
     const mockInviterId = 'inviter-123';
     const eventBus = new EventEmitter();
-    const testInterface = new AccountsInterface(eventBus);
+    const configurationInterface = new ConfigurationInterface();
+    const setupInterface = new SetupInterface();
+    const testInterface = new AccountsInterface(eventBus, configurationInterface, setupInterface);
     const serviceStub = sandbox.stub(testInterface['accountService'], 'listInvitations');
     serviceStub.resolves([]);
 
@@ -158,7 +168,9 @@ describe ('Invitations API', () => {
   it('list invitations: should filter by calendarId only', async () => {
     const mockCalendarId = 'calendar-123';
     const eventBus = new EventEmitter();
-    const testInterface = new AccountsInterface(eventBus);
+    const configurationInterface = new ConfigurationInterface();
+    const setupInterface = new SetupInterface();
+    const testInterface = new AccountsInterface(eventBus, configurationInterface, setupInterface);
     const serviceStub = sandbox.stub(testInterface['accountService'], 'listInvitations');
     serviceStub.resolves([]);
 
@@ -172,7 +184,9 @@ describe ('Invitations API', () => {
     const mockInviterId = 'inviter-123';
     const mockCalendarId = 'calendar-123';
     const eventBus = new EventEmitter();
-    const testInterface = new AccountsInterface(eventBus);
+    const configurationInterface = new ConfigurationInterface();
+    const setupInterface = new SetupInterface();
+    const testInterface = new AccountsInterface(eventBus, configurationInterface, setupInterface);
     const serviceStub = sandbox.stub(testInterface['accountService'], 'listInvitations');
     serviceStub.resolves([]);
 
@@ -390,7 +404,9 @@ describe('Applications API', () => {
 
   beforeEach(() => {
     const eventBus = new EventEmitter();
-    accountsInterface = new AccountsInterface(eventBus);
+    const configurationInterface = new ConfigurationInterface();
+    const setupInterface = new SetupInterface();
+    accountsInterface = new AccountsInterface(eventBus, configurationInterface, setupInterface);
     applicationHandlers = new AccountApplicationRouteHandlers(accountsInterface);
     router = express.Router();
   });
@@ -474,7 +490,9 @@ describe('Admin API', () => {
 
   beforeEach(() => {
     const eventBus = new EventEmitter();
-    accountsInterface = new AccountsInterface(eventBus);
+    const configurationInterface = new ConfigurationInterface();
+    const setupInterface = new SetupInterface();
+    accountsInterface = new AccountsInterface(eventBus, configurationInterface, setupInterface);
 
     // Create admin and regular user accounts for testing
     adminAccount = new Account('admin-id', 'admin@test.com', 'admin@test.com');

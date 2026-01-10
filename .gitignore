@@ -20,6 +20,7 @@ CLAUDE.md
 .playwright-mcp
 playwright-report
 test-results
+.tmp
 
 # Docker secrets directory (contains sensitive data)
 # Keep .gitkeep but ignore all secret files

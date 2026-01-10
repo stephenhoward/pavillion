@@ -201,6 +201,7 @@ class EventScheduleEntity extends Model {
  */
 import { EventCategoryAssignmentEntity } from './event_category_assignment';
 import { EventCategoryEntity } from './event_category';
+import { CalendarEntity } from './calendar';
 
 /**
  * Register all entities with Sequelize.
@@ -236,6 +237,24 @@ EventCategoryAssignmentEntity.belongsTo(EventEntity, {
 EventCategoryAssignmentEntity.belongsTo(EventCategoryEntity, {
   foreignKey: 'category_id',
   as: 'category',
+});
+
+/**
+ * Define Calendar <-> Event associations.
+ *
+ * Note: calendar_id is a STRING field that can contain either a UUID or an AP identifier,
+ * so we use constraints: false to allow eager loading without database-level FK constraints.
+ */
+CalendarEntity.hasMany(EventEntity, {
+  foreignKey: 'calendar_id',
+  as: 'events',
+  constraints: false,
+});
+
+EventEntity.belongsTo(CalendarEntity, {
+  foreignKey: 'calendar_id',
+  as: 'calendar',
+  constraints: false,
 });
 
 export {

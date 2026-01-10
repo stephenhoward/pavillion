@@ -12,6 +12,7 @@ import AuthenticationAPI from '@/server/authentication/api/v1';
 import AuthenticationService from '@/server/authentication/service/auth';
 import AccountsDomain from '@/server/accounts';
 import ConfigurationDomain from '@/server/configuration';
+import SetupDomain from '@/server/setup';
 import AuthenticationDomain from '@/server/authentication';
 import EventEmitter from 'events';
 import AuthenticationRouteHandlers from '../api/v1/auth';
@@ -24,7 +25,8 @@ describe('API v1', () => {
 
     const eventBus = new EventEmitter();
     const configurationDomain = new ConfigurationDomain(eventBus);
-    const accountsDomain = new AccountsDomain(eventBus, configurationDomain.interface);
+    const setupDomain = new SetupDomain();
+    const accountsDomain = new AccountsDomain(eventBus, configurationDomain.interface, setupDomain.interface);
     const authenticatetionDomain = new AuthenticationDomain(eventBus, accountsDomain.interface);
     AuthenticationAPI.install(app, authenticatetionDomain.interface, accountsDomain.interface);
     expect(countRoutes(app)).toBeGreaterThan(0);
@@ -39,7 +41,8 @@ describe('getToken', () => {
   beforeEach(() => {
     const eventBus = new EventEmitter();
     const configurationDomain = new ConfigurationDomain(eventBus);
-    const accountsDomain = new AccountsDomain(eventBus, configurationDomain.interface);
+    const setupDomain = new SetupDomain();
+    const accountsDomain = new AccountsDomain(eventBus, configurationDomain.interface, setupDomain.interface);
     service = new AuthenticationDomain(eventBus, accountsDomain.interface);
     handlers = new AuthenticationRouteHandlers(service.interface, accountsDomain.interface);
     stub = sinon.stub(accountsDomain.interface, 'getAccountById');
@@ -89,7 +92,8 @@ describe('checkPasswordResetCode', () => {
   beforeEach(() => {
     const eventBus = new EventEmitter();
     const configurationDomain = new ConfigurationDomain(eventBus);
-    const accountsDomain = new AccountsDomain(eventBus, configurationDomain.interface);
+    const setupDomain = new SetupDomain();
+    const accountsDomain = new AccountsDomain(eventBus, configurationDomain.interface, setupDomain.interface);
     service = new AuthenticationDomain(eventBus, accountsDomain.interface);
     handlers = new AuthenticationRouteHandlers(service.interface, accountsDomain.interface);
     stub = sinon.stub(AuthenticationService.prototype, 'validatePasswordResetCode');
@@ -130,7 +134,8 @@ describe('resetPassword', () => {
   beforeEach(() => {
     const eventBus = new EventEmitter();
     const configurationDomain = new ConfigurationDomain(eventBus);
-    const accountsDomain = new AccountsDomain(eventBus, configurationDomain.interface);
+    const setupDomain = new SetupDomain();
+    const accountsDomain = new AccountsDomain(eventBus, configurationDomain.interface, setupDomain.interface);
     service = new AuthenticationDomain(eventBus, accountsDomain.interface);
     handlers = new AuthenticationRouteHandlers(service.interface, accountsDomain.interface);
     stub = sinon.stub(AuthenticationService.prototype, 'resetPassword');
@@ -173,7 +178,8 @@ describe('login', () => {
   beforeEach(() => {
     const eventBus = new EventEmitter();
     const configurationDomain = new ConfigurationDomain(eventBus);
-    const accountsDomain = new AccountsDomain(eventBus, configurationDomain.interface);
+    const setupDomain = new SetupDomain();
+    const accountsDomain = new AccountsDomain(eventBus, configurationDomain.interface, setupDomain.interface);
     service = new AuthenticationDomain(eventBus, accountsDomain.interface);
     handlers = new AuthenticationRouteHandlers(service.interface, accountsDomain.interface);
     passportStub = sinon.stub(passport, 'authenticate');
