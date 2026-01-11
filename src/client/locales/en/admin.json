@@ -103,7 +103,172 @@
         "blocked_instances_description": "This instance will not send or receive messages from these instances:"
     },
     "funding": {
-        "title": "Funding settings",
-        "tmp_note": "settings for pay-what-you-can feature"
+        "title": "Funding Settings",
+        "loading": "Loading...",
+        "load_settings_error": "Failed to load subscription settings.",
+
+        "settings_section_title": "Subscription Configuration",
+        "enabled_label": "Enable Subscriptions",
+        "enabled_description": "Allow users to subscribe to support this instance.",
+        "setup_provider_message": "Please set up at least one payment provider below before configuring subscription pricing.",
+        "currency_label": "Currency",
+        "currency_description": "The currency for subscription pricing.",
+        "monthly_price_label": "Monthly Price",
+        "monthly_price_description": "Monthly subscription price (also serves as suggested amount for pay-what-you-can).",
+        "yearly_price_label": "Yearly Price",
+        "yearly_price_description": "Yearly subscription price (also serves as suggested amount for pay-what-you-can).",
+        "pwyc_label": "Enable Pay What You Can",
+        "pwyc_description": "Allow users to set their own subscription amount (using monthly/yearly prices as suggestions).",
+        "grace_period_label": "Grace Period (days)",
+        "grace_period_description": "Number of days before suspending a subscription after payment failure.",
+        "save_settings_button": "Save Settings",
+        "settings_update_success": "Subscription settings updated successfully.",
+        "settings_update_failed": "Failed to update subscription settings.",
+
+        "providers_section_title": "Connected Payment Providers",
+        "add_provider_button": "Add Provider",
+        "add_provider_tooltip_disabled": "All available providers are already connected",
+        "loading_providers": "Loading payment providers...",
+        "provider_enabled_label": "Enabled",
+        "connected_badge": "Connected",
+        "connect_button": "Connect {{provider}}",
+        "connecting_button": "Connecting...",
+        "disconnect_button": "Disconnect",
+        "no_providers": "No payment providers available.",
+        "provider_connect_success": "{{provider}} connected successfully.",
+        "provider_connect_error": "Failed to connect {{provider}}. Please try again.",
+        "provider_not_supported": "{{provider}} connection is not yet supported.",
+        "provider_update_success": "Provider updated successfully.",
+        "provider_update_failed": "Failed to update provider.",
+        "provider_disconnect_confirm": "Are you sure you want to disconnect {{provider}}? This will affect all subscriptions using this provider.",
+        "provider_disconnect_success": "Provider disconnected successfully.",
+        "provider_disconnect_failed": "Failed to disconnect provider.",
+
+        "wizard": {
+            "title": "Add Payment Provider",
+            "step_indicator": "Step {{current}} of {{total}}",
+            "cancel_button": "Cancel",
+            "back_button": "Back",
+            "continue_button": "Continue",
+            "done_button": "Done",
+            "step1": {
+                "title": "Select a Payment Provider",
+                "description": "Choose a payment provider to connect to your instance"
+            },
+            "providers": {
+                "stripe_name": "Stripe",
+                "stripe_description": "Credit card payments",
+                "paypal_name": "PayPal",
+                "paypal_description": "Credit cards or PayPal payments"
+            },
+            "step2": {
+                "stripe_title": "Connect Stripe",
+                "stripe_description": "Click the button below to connect your Stripe account using OAuth. You will be redirected to Stripe to authorize the connection.",
+                "stripe_connect_button": "Connect with Stripe",
+                "paypal_title": "Configure PayPal",
+                "paypal_description": "Enter your PayPal REST API credentials to enable PayPal payments.",
+                "paypal_configure_button": "Configure PayPal",
+                "paypal_client_id_label": "Client ID",
+                "paypal_client_id_placeholder": "Enter PayPal Client ID",
+                "paypal_client_secret_label": "Client Secret",
+                "paypal_client_secret_placeholder": "Enter PayPal Client Secret",
+                "paypal_environment_label": "Environment",
+                "paypal_environment_sandbox": "Sandbox (Testing)",
+                "paypal_environment_production": "Production (Live)"
+            },
+            "step3": {
+                "title": "Provider Connected!",
+                "success_message": "{{provider}} has been successfully connected.",
+                "ready_message": "You can now accept payments through this provider."
+            },
+            "errors": {
+                "connection_failed": "Failed to connect {{provider}}. Please try again.",
+                "retry_button": "Try Again"
+            }
+        },
+
+        "subscriptions_section_title": "Active Subscriptions",
+        "no_subscriptions": "No active subscriptions.",
+        "subscription_user_column": "User",
+        "subscription_provider_column": "Provider",
+        "subscription_amount_column": "Amount",
+        "subscription_cycle_column": "Cycle",
+        "subscription_status_column": "Status",
+        "subscription_period_column": "Period End",
+        "subscription_actions_column": "Actions",
+        "billing_cycle_monthly": "Monthly",
+        "billing_cycle_yearly": "Yearly",
+        "status_active": "Active",
+        "status_past_due": "Past Due",
+        "status_suspended": "Suspended",
+        "status_cancelled": "Cancelled",
+        "force_cancel_button": "Cancel",
+        "force_cancel_confirm": "Are you sure you want to force-cancel this subscription? This action cannot be undone.",
+        "force_cancel_success": "Subscription cancelled successfully.",
+        "force_cancel_failed": "Failed to cancel subscription.",
+        "previous_page": "Previous",
+        "next_page": "Next",
+        "page_indicator": "Page {{page}} of {{total}}",
+
+        "paypal_modal": {
+            "title": "Configure PayPal",
+            "description": "Enter your PayPal REST API credentials to enable PayPal subscriptions. You can obtain these from the PayPal Developer Dashboard.",
+            "client_id_label": "Client ID",
+            "client_id_placeholder": "Enter PayPal Client ID",
+            "client_id_required": "Client ID is required",
+            "client_id_help": "Your PayPal REST API Client ID",
+            "client_secret_label": "Client Secret",
+            "client_secret_placeholder": "Enter PayPal Client Secret",
+            "client_secret_required": "Client Secret is required",
+            "client_secret_help": "Your PayPal REST API Client Secret (kept encrypted)",
+            "environment_label": "Environment",
+            "environment_required": "Environment is required",
+            "environment_sandbox": "Sandbox (Testing)",
+            "environment_production": "Production (Live)",
+            "environment_help": "Use Sandbox for testing, Production for live payments",
+            "cancel_button": "Cancel",
+            "submit_button": "Configure PayPal",
+            "submitting_button": "Configuring...",
+            "close_button": "Close"
+        },
+
+        "disconnect_modal": {
+            "title": "Disconnect {{provider}}?",
+            "message": "This provider has {{count}} active subscription(s). Disconnecting will cancel all active subscriptions and cannot be undone.",
+            "consequence": "All subscribers will lose access immediately and will be notified of the cancellation.",
+            "checkbox_label": "I understand and want to proceed with disconnecting this provider",
+            "cancel_button": "Cancel",
+            "disconnect_button": "Disconnect Provider",
+            "disconnecting_button": "Disconnecting...",
+            "close_button": "Close"
+        },
+
+        "platform_config": {
+            "section_title": "Platform OAuth Configuration",
+            "section_description": "Configure OAuth credentials for connecting providers to your platform. Required for Stripe OAuth flow.",
+            "stripe_section_title": "Stripe Connect Credentials",
+            "client_id_label": "Client ID",
+            "client_id_placeholder": "Enter Stripe Connect Client ID",
+            "client_secret_label": "Client Secret",
+            "client_secret_placeholder": "Enter Stripe Connect Client Secret",
+            "save_button": "Save Platform Configuration",
+            "saving_button": "Saving...",
+            "status_configured": "Platform OAuth credentials configured",
+            "status_not_configured": "Platform OAuth credentials not configured",
+            "validation_error": "Both Client ID and Client Secret are required",
+            "save_success": "Platform OAuth configuration saved successfully",
+            "save_failed": "Failed to save platform OAuth configuration"
+        },
+
+        "query_error": {
+            "access_denied": "Connection cancelled. Please try again if you want to connect {{provider}}.",
+            "invalid_state": "Invalid connection request. Please try again.",
+            "connection_failed": "Failed to connect to {{provider}}. Please check your platform credentials and try again.",
+            "unknown": "An error occurred during provider connection. Please try again."
+        },
+
+        "query_success": {
+            "stripe_connected": "Stripe connected successfully!"
+        }
     }
 }

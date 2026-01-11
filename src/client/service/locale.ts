@@ -14,6 +14,7 @@ import enFeed from '@/client/locales/en/feed.json';
 import enMedia from '@/client/locales/en/media.json';
 import enCategories from '@/client/locales/en/categories.json';
 import enSetup from '@/client/locales/en/setup.json';
+import enSubscription from '@/client/locales/en/subscription.json';
 
 // Import Spanish translation resources
 import esSystem from '@/client/locales/es/system.json';
@@ -54,6 +55,7 @@ export const initI18Next = (serverLanguage?: string) => {
           media: enMedia,
           categories: enCategories,
           setup: enSetup,
+          subscription: enSubscription,
         },
         es: {
           system: esSystem,

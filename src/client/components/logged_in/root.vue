@@ -92,8 +92,8 @@ const isActive = (path) => {
           <label>{{ t("main_navigation.inbox_button") }}</label>
         </RouterLink>
       </li>
-      <li id="profile-button" :class="{ selected: isActive('/profile') || isActive('/admin'), badged: true }">
-        <RouterLink to="/profile" :aria-current="(isActive('/profile') || isActive('/admin')) ? 'page' : undefined">
+      <li id="profile-button" :class="{ selected: isActive('/profile') || isActive('/admin') || isActive('/subscription'), badged: true }">
+        <RouterLink to="/profile" :aria-current="(isActive('/profile') || isActive('/admin') || isActive('/subscription')) ? 'page' : undefined">
           <div class="icon"/>
           <label>{{ t("main_navigation.profile_button") }}</label>
         </RouterLink>

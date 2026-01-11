@@ -17,6 +17,7 @@ import ConfigurationDomain from './configuration';
 import PublicCalendarDomain from './public';
 import MediaDomain from './media';
 import SetupDomain from './setup';
+import SubscriptionDomain from './subscription';
 import { createSetupModeMiddleware } from './setup/middleware/setup-mode';
 
 /**
@@ -199,6 +200,10 @@ const initPavillionServer = async (app: express.Application, port: number) => {
   new PublicCalendarDomain(eventBus,calendarDomain).initialize(app);
 
   new MediaDomain(eventBus,calendarDomain.interface).initialize(app);
+
+  // Initialize subscription domain (after accounts domain)
+  const subscriptionDomain = new SubscriptionDomain(eventBus);
+  subscriptionDomain.initialize(app);
 
   // Initialize database before starting the server
   try {

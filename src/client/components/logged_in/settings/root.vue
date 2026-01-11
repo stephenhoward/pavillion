@@ -1,8 +1,9 @@
 <script setup>
-import { reactive, inject } from 'vue';
+import { reactive, inject, onMounted, ref } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import EmailForm from '@/client/components/logged_in/settings/email_modal.vue';
 import PasswordForm from '@/client/components/logged_in/settings/password_modal.vue';
+import SubscriptionService from '@/client/service/subscription';
 
 const authn = inject('authn');
 
@@ -16,6 +17,26 @@ const state = reactive({
 });
 
 const { t } = useTranslation('profile');
+
+const subscriptionsEnabled = ref(false);
+const subscriptionService = new SubscriptionService();
+
+/**
+ * Check if subscriptions are enabled on this instance
+ */
+async function checkSubscriptionsEnabled() {
+  try {
+    const options = await subscriptionService.getOptions();
+    subscriptionsEnabled.value = options.enabled;
+  } catch (error) {
+    // Silently fail - subscriptions are not enabled if we can't fetch options
+    subscriptionsEnabled.value = false;
+  }
+}
+
+onMounted(async () => {
+  await checkSubscriptionsEnabled();
+});
 
 </script>
 
@@ -43,6 +64,9 @@ const { t } = useTranslation('profile');
         <div class="form-field" aria-lablledby="email-label">
           <button type="button" @click="state.changePassword=true">{{ t("change_password_button") }}</button>
         </div>
+      </div>
+      <div v-if="subscriptionsEnabled" class="form_group">
+        <router-link class="subscription-link" to="/subscription">{{ t("subscription_link") }}</router-link>
       </div>
       <div v-if="state.userInfo.isAdmin" class="form_group">
         <router-link class="admin-link" to="/admin/settings">{{ t("admin_link") }}</router-link>

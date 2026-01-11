@@ -31,6 +31,7 @@ import EditEventView from '@/client/components/logged_in/calendar/edit_event.vue
 import FeedView from '@/client/components/logged_in/feed/root.vue';
 import ProfileView from '@/client/components/logged_in/settings/root.vue';
 import InboxView from '@/client/components/logged_in/inbox.vue';
+import SubscriptionView from '@/client/components/account/subscription.vue';
 
 import AdminViews from '@/client/components/admin/root.vue';
 import InvitesListView from '@/client/components/admin/accounts.vue';
@@ -132,6 +133,7 @@ checkSetupMode().then((setupRequired) => {
           { path: 'inbox', component: InboxView, name: 'inbox', beforeEnter: mustBeLoggedIn },
           { path: 'feed', component: FeedView, name: 'feed', beforeEnter: mustBeLoggedIn },
           { path: 'profile', component: ProfileView, name: 'profile', beforeEnter: mustBeLoggedIn },
+          { path: 'subscription', component: SubscriptionView, name: 'subscription', beforeEnter: mustBeLoggedIn },
         ],
       },
       // Event routes are top-level to render fullscreen without navigation

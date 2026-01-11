@@ -1,0 +1,52 @@
+{
+  "title": "Subscription",
+  "back_to_settings": "← Back to Settings",
+  "loading": "Loading subscription information...",
+  "load_error": "Failed to load subscription information. Please try again.",
+
+  "no_subscription": "No Active Subscription",
+  "no_subscription_description": "Subscribe to support this instance and access premium features.",
+  "monthly_option": "Monthly",
+  "yearly_option": "Yearly",
+  "subscribe_button": "Subscribe Now",
+
+  "subscribe_title": "Choose Your Subscription",
+  "select_provider": "Payment Method",
+  "select_cycle": "Billing Cycle",
+  "billing_cycle_monthly": "Monthly",
+  "billing_cycle_yearly": "Yearly",
+  "custom_amount_label": "Custom Amount (Optional)",
+  "custom_amount_description": "Enter a custom amount to support this instance (pay what you can).",
+  "select_provider_error": "Please select a payment method.",
+  "confirm_subscribe_button": "Confirm & Subscribe",
+  "cancel_button": "Cancel",
+
+  "subscribe_success": "Subscription created successfully!",
+  "subscribe_error": "Failed to create subscription. Please try again.",
+
+  "current_subscription": "Current Subscription",
+  "status_label": "Status",
+  "billing_cycle_label": "Billing Cycle",
+  "amount_label": "Amount",
+  "current_period_label": "Current Period",
+  "cancelled_at_label": "Cancelled At",
+
+  "status_active": "Active",
+  "status_past_due": "Past Due",
+  "status_suspended": "Suspended",
+  "status_cancelled": "Cancelled",
+
+  "cancellation_info": "Your subscription will remain active until {{date}}",
+  "past_due_warning": "Your payment failed. Please update your payment method to keep your subscription active.",
+  "suspended_message": "Your subscription has been suspended due to payment failure. Please contact support.",
+
+  "manage_payment_button": "Manage Payment Method",
+  "cancel_subscription_button": "Cancel Subscription",
+  "cancel_confirm": "Are you sure you want to cancel your subscription? You will retain access until the end of your billing period.",
+  "cancel_success": "Subscription cancelled successfully. You will retain access until the end of your billing period.",
+  "cancel_error": "Failed to cancel subscription. Please try again.",
+
+  "portal_error": "Failed to access billing portal. Please try again.",
+
+  "subscriptions_disabled": "Subscriptions are not currently enabled on this instance."
+}

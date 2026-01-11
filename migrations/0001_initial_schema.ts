@@ -1,8 +1,23 @@
 import { Sequelize, DataTypes } from 'sequelize';
 
+/**
+ * Base Schema Migration
+ *
+ * This migration creates the complete Pavillion database schema including:
+ * - Account management (accounts, profiles, invitations, applications)
+ * - Calendar management (calendars, events, schedules, categories, locations)
+ * - Media management
+ * - ActivityPub federation (inbox, outbox, following, followers)
+ * - Subscription management (OAuth provider connections)
+ * - System configuration
+ */
 export default {
   async up({ context: sequelize }: { context: Sequelize }) {
     const queryInterface = sequelize.getQueryInterface();
+
+    // =========================================
+    // ACCOUNT MANAGEMENT
+    // =========================================
 
     // account - User accounts
     await queryInterface.createTable('account', {
@@ -192,6 +207,10 @@ export default {
         allowNull: false,
       },
     });
+
+    // =========================================
+    // CALENDAR MANAGEMENT
+    // =========================================
 
     // calendar - User calendars
     await queryInterface.createTable('calendar', {
@@ -449,6 +468,10 @@ export default {
       name: 'idx_location_calendar_id',
     });
 
+    // =========================================
+    // MEDIA MANAGEMENT
+    // =========================================
+
     // media - Media files
     await queryInterface.createTable('media', {
       id: {
@@ -504,6 +527,10 @@ export default {
     await queryInterface.addIndex('media', ['calendar_id'], {
       name: 'idx_media_calendar_id',
     });
+
+    // =========================================
+    // EVENT MANAGEMENT
+    // =========================================
 
     // event - Calendar events
     await queryInterface.createTable('event', {
@@ -767,6 +794,10 @@ export default {
       name: 'idx_event_instance_start',
     });
 
+    // =========================================
+    // SYSTEM CONFIGURATION
+    // =========================================
+
     // configuration - System configuration
     await queryInterface.createTable('configuration', {
       id: {
@@ -791,6 +822,10 @@ export default {
         allowNull: false,
       },
     });
+
+    // =========================================
+    // ACTIVITYPUB FEDERATION
+    // =========================================
 
     // ap_inbox - ActivityPub inbox messages
     await queryInterface.createTable('ap_inbox', {
@@ -1016,31 +1051,130 @@ export default {
         allowNull: false,
       },
     });
+
+    // =========================================
+    // SUBSCRIPTION MANAGEMENT (OAuth)
+    // =========================================
+
+    // platform_oauth_config - Platform-level OAuth app credentials
+    await queryInterface.createTable('platform_oauth_config', {
+      id: {
+        type: DataTypes.UUID,
+        primaryKey: true,
+        allowNull: false,
+      },
+      provider_type: {
+        type: DataTypes.ENUM('stripe', 'paypal'),
+        allowNull: false,
+      },
+      client_id: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        comment: 'Encrypted OAuth client ID',
+      },
+      client_secret: {
+        type: DataTypes.TEXT,
+        allowNull: false,
+        comment: 'Encrypted OAuth client secret',
+      },
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+      },
+      updatedAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+      },
+    });
+
+    // Add index for provider_type lookup
+    await queryInterface.addIndex('platform_oauth_config', ['provider_type'], {
+      name: 'platform_oauth_config_provider_type_idx',
+    });
+
+    // oauth_state_tokens - Temporary CSRF protection tokens
+    await queryInterface.createTable('oauth_state_tokens', {
+      id: {
+        type: DataTypes.UUID,
+        primaryKey: true,
+        allowNull: false,
+      },
+      token: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        unique: true,
+        comment: '64-character hex string (32 bytes)',
+      },
+      provider_type: {
+        type: DataTypes.ENUM('stripe', 'paypal'),
+        allowNull: false,
+      },
+      expires_at: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        comment: 'Token expiration timestamp (15 minutes from creation)',
+      },
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+      },
+      updatedAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+      },
+    });
+
+    // Add unique index on token for fast lookup and uniqueness constraint
+    await queryInterface.addIndex('oauth_state_tokens', ['token'], {
+      name: 'oauth_state_tokens_token_idx',
+      unique: true,
+    });
+
+    // Add index on expires_at for efficient cleanup queries
+    await queryInterface.addIndex('oauth_state_tokens', ['expires_at'], {
+      name: 'oauth_state_tokens_expires_at_idx',
+    });
   },
 
   async down({ context: sequelize }: { context: Sequelize }) {
     const queryInterface = sequelize.getQueryInterface();
 
     // Drop tables in reverse order of creation to handle foreign key constraints
+
+    // Subscription management
+    await queryInterface.dropTable('oauth_state_tokens');
+    await queryInterface.dropTable('platform_oauth_config');
+
+    // ActivityPub federation
     await queryInterface.dropTable('ap_event_activity');
     await queryInterface.dropTable('ap_shared_event');
     await queryInterface.dropTable('ap_follower');
     await queryInterface.dropTable('ap_following');
     await queryInterface.dropTable('ap_outbox');
     await queryInterface.dropTable('ap_inbox');
+
+    // System configuration
     await queryInterface.dropTable('configuration');
+
+    // Event management
     await queryInterface.dropTable('event_instance');
     await queryInterface.dropTable('event_category_assignment');
     await queryInterface.dropTable('event_schedule');
     await queryInterface.dropTable('event_content');
     await queryInterface.dropTable('event');
+
+    // Media management
     await queryInterface.dropTable('media');
+
+    // Calendar management
     await queryInterface.dropTable('location');
     await queryInterface.dropTable('event_category_content');
     await queryInterface.dropTable('event_category');
     await queryInterface.dropTable('calendar_editor');
     await queryInterface.dropTable('calendar_content');
     await queryInterface.dropTable('calendar');
+
+    // Account management
     await queryInterface.dropTable('account_invitation');
     await queryInterface.dropTable('profile');
     await queryInterface.dropTable('account_application');
