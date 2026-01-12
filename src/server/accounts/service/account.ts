@@ -7,7 +7,7 @@ import { Op } from 'sequelize';
 import { Account } from "@/common/model/account";
 import AccountInvitation from '@/common/model/invitation';
 import AccountApplication from '@/common/model/application';
-import EmailService from "@/server/common/service/mail";
+import EmailInterface from "@/server/email/interface";
 import { AccountEntity, AccountSecretsEntity, AccountRoleEntity, AccountApplicationEntity } from "@/server/common/entity/account";
 import AccountInvitationEntity from '@/server/accounts/entity/account_invitation';
 import { AccountApplicationAlreadyExistsError, noAccountInviteExistsError, AccountRegistrationClosedError, AccountApplicationsClosedError, AccountAlreadyExistsError, AccountInviteAlreadyExistsError, noAccountApplicationExistsError, AccountInvitationPermissionError } from '@/server/accounts/exceptions';
@@ -38,6 +38,7 @@ export default class AccountService {
     private eventBus: EventEmitter,
     private configurationInterface: ConfigurationInterface,
     private setupInterface: SetupInterface,
+    private emailInterface: EmailInterface,
     private calendarInterface?: CalendarInterface,
   ) {}
 
@@ -156,7 +157,7 @@ export default class AccountService {
     const accountInfo = await this._setupAccount(email);
 
     const message = new AccountRegistrationEmail(accountInfo.account, accountInfo.password_code);
-    EmailService.sendEmail(message.buildMessage(accountInfo.account.language));
+    this.emailInterface.sendEmail(message.buildMessage(accountInfo.account.language));
     return accountInfo.account;
   }
 
@@ -204,7 +205,7 @@ export default class AccountService {
 
     // Send acknowledgment email to applicant
     const emailMessage = new ApplicationAcknowledgmentEmail(application);
-    EmailService.sendEmail(emailMessage.buildMessage('en'));
+    this.emailInterface.sendEmail(emailMessage.buildMessage('en'));
 
     return true;
   }
@@ -410,7 +411,7 @@ export default class AccountService {
       ? new EditorInvitationEmail(invitation.toModel(), invitation.invitation_code, calendar)
       : new AccountInvitationEmail(invitation.toModel(), invitation.invitation_code);
 
-    EmailService.sendEmail(message.buildMessage('en'));
+    this.emailInterface.sendEmail(message.buildMessage('en'));
     return true;
   }
 
@@ -433,7 +434,7 @@ export default class AccountService {
 
     // Send email before destroying the application
     const message = new ApplicationAcceptedEmail(accountInfo.account, accountInfo.password_code);
-    EmailService.sendEmail(message.buildMessage(accountInfo.account.language));
+    this.emailInterface.sendEmail(message.buildMessage(accountInfo.account.language));
 
     // Delete the application now that it's been accepted and account created
     await application.destroy();
@@ -463,7 +464,7 @@ export default class AccountService {
 
     if (!silent) {
       const message = new ApplicationRejectedEmail(application.toModel());
-      await EmailService.sendEmail(message.buildMessage('en'));
+      await this.emailInterface.sendEmail(message.buildMessage('en'));
     }
   }
 

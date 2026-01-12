@@ -15,7 +15,7 @@ import { EventEmitter } from 'events';
 import EventInstanceService from '../service/event_instance';
 import CalendarEventInstance from '@/common/model/event_instance';
 import AccountsInterface from '@/server/accounts/interface';
-import ConfigurationInterface from '@/server/configuration/interface';
+import EmailInterface from '@/server/email/interface';
 
 export interface CalendarWithRole {
   calendar: Calendar;
@@ -38,11 +38,11 @@ export default class CalendarInterface {
   constructor(
     eventBus: EventEmitter,
     accountsInterface?: AccountsInterface,
-    configurationInterface?: ConfigurationInterface,
+    emailInterface?: EmailInterface,
   ) {
-    this.calendarService = new CalendarService(accountsInterface, configurationInterface);
-    this. eventService = new EventService(eventBus);
-    this. locationService = new LocationService();
+    this.calendarService = new CalendarService(accountsInterface, emailInterface);
+    this.eventService = new EventService(eventBus);
+    this.locationService = new LocationService();
     this.eventInstanceService = new EventInstanceService(eventBus);
     this.categoryService = new CategoryService(this.calendarService);
     this.widgetDomainService = new WidgetDomainService();

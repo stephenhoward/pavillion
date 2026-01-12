@@ -11,7 +11,7 @@ import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError }
 import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/common/exceptions/editor';
 import { noAccountExistsError } from '@/server/accounts/exceptions';
 import AccountsInterface from '@/server/accounts/interface';
-import EmailService from '@/server/common/service/mail';
+import EmailInterface from '@/server/email/interface';
 import EditorNotificationEmail from '@/server/calendar/model/editor_notification_email';
 
 // Import the interface type (this avoids circular dependency)
@@ -23,6 +23,7 @@ type CalendarEditorsResponse = {
 class CalendarService {
   constructor(
     private accountsInterface?: AccountsInterface,
+    private emailInterface?: EmailInterface,
   ) {}
   async getCalendar(id: string): Promise<Calendar|null> {
     const calendar = await CalendarEntity.findByPk(id);
@@ -233,7 +234,9 @@ class CalendarService {
     );
 
     try {
-      await EmailService.sendEmail(notificationEmail.buildMessage(editorAccount.language || 'en'));
+      if (this.emailInterface) {
+        await this.emailInterface.sendEmail(notificationEmail.buildMessage(editorAccount.language || 'en'));
+      }
     }
     catch (error) {
       console.error('Failed to send editor notification email:', error);

@@ -1,7 +1,12 @@
 import nodemailer from 'nodemailer';
-import { MailConfig } from '@/server/common/service/mail/types';
-import { MailTransport } from '@/server/common/service/mail/mail-transport';
+import { MailConfig } from '@/server/email/model/types';
+import { MailTransport } from '@/server/email/transport/mail-transport';
 
+/**
+ * Sendmail transport for systems with local sendmail installed.
+ *
+ * Uses the system's sendmail binary to send emails.
+ */
 export class SendmailTransport extends MailTransport {
 
   constructor(private mailConfig: MailConfig) {

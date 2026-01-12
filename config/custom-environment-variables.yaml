@@ -51,12 +51,18 @@ media:
       secretAccessKey: S3_SECRET_KEY
 
 # SMTP configuration overrides
+# SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD: SMTP server credentials
+# MAIL_TRANSPORT: Override transport type (smtp, development, testing, mailpit, sendmail)
+# MAIL_FROM: Override sender email address
 mail:
+  transport: MAIL_TRANSPORT
+  from: MAIL_FROM
   settings:
     host: SMTP_HOST
     port: SMTP_PORT
     user: SMTP_USER
     pass: SMTP_PASSWORD
+    secure: SMTP_SECURE
 
 # Federation testing configuration overrides
 # SKIP_SIGNATURES=true disables HTTP signature verification for local testing

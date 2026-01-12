@@ -1,11 +1,14 @@
 import nodemailer from 'nodemailer';
 import path from 'path';
 import fs from 'fs/promises';
-import { MailConfig } from '@/server/common/service/mail/types';
-import { MailTransport } from '@/server/common/service/mail/mail-transport';
+import { MailConfig } from '@/server/email/model/types';
+import { MailTransport } from '@/server/email/transport/mail-transport';
 
 /**
- * Create a file system transport for development
+ * Development transport that writes emails to the file system.
+ *
+ * Used for local npm development without Docker. Saves email content
+ * to .eml files in a configurable output directory and logs to console.
  */
 export class DevelopmentTransport extends MailTransport {
 
@@ -20,7 +23,7 @@ export class DevelopmentTransport extends MailTransport {
                 path.join(process.cwd(), 'logs', 'mail');
 
     // Whether to log to console (defaults to true)
-    const consoleOutput = true; //settings.console !== false && process.env.MAIL_CONSOLE !== 'false';
+    const consoleOutput = true;
 
     this.transport = nodemailer.createTransport({
       name: 'development',
@@ -82,8 +85,3 @@ export class DevelopmentTransport extends MailTransport {
     });
   }
 }
-
-
-
-
-

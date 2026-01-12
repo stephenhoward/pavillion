@@ -1,6 +1,6 @@
 import { Calendar } from '@/common/model/calendar';
-import { MailData } from '@/server/common/service/mail/types';
-import { EmailMessage, compileTemplate } from '@/server/common/service/mail/message';
+import { MailData } from '@/server/email/model/types';
+import { EmailMessage, compileTemplate } from '@/server/email/model/message';
 import AccountInvitation from '@/common/model/invitation';
 
 const textTemplate = compileTemplate('src/server/calendar', 'editor_invitation_email.text.hbs');

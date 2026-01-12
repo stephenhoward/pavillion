@@ -6,6 +6,7 @@ import AccountService from '@/server/accounts/service/account';
 import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
 import CalendarInterface from '@/server/calendar/interface';
+import EmailInterface from '@/server/email/interface';
 import AccountInvitationEntity from '../entity/account_invitation';
 
 export default class AccountsInterface {
@@ -15,8 +16,9 @@ export default class AccountsInterface {
     eventBus: EventEmitter,
     configurationInterface: ConfigurationInterface,
     setupInterface: SetupInterface,
+    emailInterface: EmailInterface,
   ) {
-    this.accountService = new AccountService(eventBus, configurationInterface, setupInterface);
+    this.accountService = new AccountService(eventBus, configurationInterface, setupInterface, emailInterface);
   }
 
   /**

@@ -4,8 +4,8 @@ import fs from 'fs';
 import path from 'path';
 import i18next from 'i18next';
 import handlebars from 'handlebars';
-import { EmailMessage, compileTemplate } from '@/server/common/service/mail/message';
-import { MailData } from '@/server/common/service/mail/types';
+import { EmailMessage, compileTemplate } from '@/server/email/model/message';
+import { MailData } from '@/server/email/model/types';
 import { initI18Next } from '@/server/common/test/lib/i18next';
 
 initI18Next();
