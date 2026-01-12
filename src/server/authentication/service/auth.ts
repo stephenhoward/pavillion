@@ -5,7 +5,7 @@ import { Account } from "@/common/model/account";
 import { AccountEntity, AccountSecretsEntity } from "@/server/common/entity/account";
 import { noAccountExistsError } from '@/server/accounts/exceptions';
 import { EmailAlreadyExistsError, InvalidPasswordError } from '@/server/authentication/exceptions';
-import EmailService from '@/server/common/service/mail';
+import EmailInterface from '@/server/email/interface';
 import PasswordResetEmail from '@/server/authentication/model/password_reset_email';
 import AccountsInterface from '@/server/accounts/interface';
 
@@ -19,6 +19,7 @@ export default class AuthenticationService {
   constructor(
     private eventBus: any,
     private accountService: AccountsInterface,
+    private emailInterface: EmailInterface,
   ) {}
 
   /**
@@ -118,7 +119,7 @@ export default class AuthenticationService {
 
     // Send the email
     const message = new PasswordResetEmail(account, passwordResetCode);
-    await EmailService.sendEmail(message.buildMessage(account.language));
+    await this.emailInterface.sendEmail(message.buildMessage(account.language));
   }
 
   /**

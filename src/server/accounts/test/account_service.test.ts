@@ -4,7 +4,7 @@ import sinon from 'sinon';
 import { Account } from '@/common/model/account';
 import { AccountEntity, AccountSecretsEntity, AccountApplicationEntity, AccountRoleEntity } from '@/server/common/entity/account';
 import AccountInvitationEntity from '@/server/accounts/entity/account_invitation';
-import EmailService from '@/server/common/service/mail';
+import EmailInterface from '@/server/email/interface';
 import ServiceSettings from '@/server/configuration/service/settings';
 import AccountService from '@/server/accounts/service/account';
 import { AccountAlreadyExistsError, AccountInviteAlreadyExistsError, AccountRegistrationClosedError, AccountApplicationAlreadyExistsError, AccountApplicationsClosedError, noAccountInviteExistsError, noAccountApplicationExistsError, AccountInvitationPermissionError } from '@/server/accounts/exceptions';
@@ -20,12 +20,14 @@ describe('inviteNewAccount', () => {
   let sandbox = sinon.createSandbox();
   let accountService: AccountService;
   let adminUser: Account;
+  let emailInterface: EmailInterface;
 
   beforeEach(() => {
     const eventBus = new EventEmitter();
     const configurationInterface = new ConfigurationInterface();
     const setupInterface = new SetupInterface();
-    accountService = new AccountService(eventBus, configurationInterface, setupInterface);
+    emailInterface = new EmailInterface();
+    accountService = new AccountService(eventBus, configurationInterface, setupInterface, emailInterface);
     adminUser = new Account('admin_id', 'admin_user','admin@pavillion.dev');
     adminUser.roles = ['admin'];
   });
@@ -133,12 +135,14 @@ describe('registerNewAccount', () => {
 
   let sandbox = sinon.createSandbox();
   let accountService: AccountService;
+  let emailInterface: EmailInterface;
 
   beforeEach(() => {
     const eventBus = new EventEmitter();
     const configurationInterface = new ConfigurationInterface();
     const setupInterface = new SetupInterface();
-    accountService = new AccountService(eventBus, configurationInterface, setupInterface);
+    emailInterface = new EmailInterface();
+    accountService = new AccountService(eventBus, configurationInterface, setupInterface, emailInterface);
   });
 
   afterEach(() => {
@@ -148,7 +152,7 @@ describe('registerNewAccount', () => {
   it('no registration allowed', async () => {
     let getSettingStub = sandbox.stub(ServiceSettings.prototype, 'get');
     let initSettingsStub = sandbox.stub(ServiceSettings.prototype, 'init');
-    let emailStub = sandbox.stub(EmailService, 'sendEmail');
+    let emailStub = sandbox.stub(emailInterface, 'sendEmail');
 
     for (let mode of ['closed', 'apply', 'invite']) {
       getSettingStub.withArgs('registrationMode').returns(mode);
@@ -162,7 +166,7 @@ describe('registerNewAccount', () => {
   it('open registration', async () => {
     let getSettingStub = sandbox.stub(ServiceSettings.prototype, 'get');
     let setupAccountStub = sandbox.stub(accountService, '_setupAccount');
-    let emailStub = sandbox.stub(EmailService, 'sendEmail');
+    let emailStub = sandbox.stub(emailInterface, 'sendEmail');
 
     getSettingStub.withArgs('registrationMode').returns('open');
     setupAccountStub.resolves({ account: new Account('id', 'testme', 'test_email'), password_code: 'test_code' });
@@ -177,12 +181,14 @@ describe('registerNewAccount', () => {
 describe('applyForNewAccount', () => {
   let applySandbox = sinon.createSandbox();
   let accountService: AccountService;
+  let emailInterface: EmailInterface;
 
   beforeEach(() => {
     const eventBus = new EventEmitter();
     const configurationInterface = new ConfigurationInterface();
     const setupInterface = new SetupInterface();
-    accountService = new AccountService(eventBus, configurationInterface, setupInterface);
+    emailInterface = new EmailInterface();
+    accountService = new AccountService(eventBus, configurationInterface, setupInterface, emailInterface);
   });
 
   afterEach(() => {
@@ -217,7 +223,7 @@ describe('applyForNewAccount', () => {
     let getAccountByEmailStub = applySandbox.stub(accountService, 'getAccountByEmail');
     let findApplicationStub = applySandbox.stub(AccountApplicationEntity, 'findOne');
     let saveApplicationStub = applySandbox.stub(AccountApplicationEntity.prototype, 'save');
-    let emailStub = applySandbox.stub(EmailService, 'sendEmail');
+    let emailStub = applySandbox.stub(emailInterface, 'sendEmail');
 
     getAllSettingsStub.resolves({ registrationMode: 'apply' });
     getAccountByEmailStub.resolves(undefined);
@@ -234,12 +240,14 @@ describe('applyForNewAccount', () => {
 describe('validateInviteCode', () => {
   let validateSandbox = sinon.createSandbox();
   let accountService: AccountService;
+  let emailInterface: EmailInterface;
 
   beforeEach(() => {
     const eventBus = new EventEmitter();
     const configurationInterface = new ConfigurationInterface();
     const setupInterface = new SetupInterface();
-    accountService = new AccountService(eventBus, configurationInterface, setupInterface);
+    emailInterface = new EmailInterface();
+    accountService = new AccountService(eventBus, configurationInterface, setupInterface, emailInterface);
   });
 
   afterEach(() => {
@@ -297,12 +305,14 @@ describe('validateInviteCode', () => {
 describe('acceptAccountInvite', () => {
   let acceptSandbox = sinon.createSandbox();
   let accountService: AccountService;
+  let emailInterface: EmailInterface;
 
   beforeEach(() => {
     const eventBus = new EventEmitter();
     const configurationInterface = new ConfigurationInterface();
     const setupInterface = new SetupInterface();
-    accountService = new AccountService(eventBus, configurationInterface, setupInterface);
+    emailInterface = new EmailInterface();
+    accountService = new AccountService(eventBus, configurationInterface, setupInterface, emailInterface);
   });
 
   afterEach(() => {
@@ -535,12 +545,14 @@ describe('acceptAccountInvite', () => {
 describe('acceptAccountApplication', () => {
   let acceptSandbox = sinon.createSandbox();
   let accountService: AccountService;
+  let emailInterface: EmailInterface;
 
   beforeEach(() => {
     const eventBus = new EventEmitter();
     const configurationInterface = new ConfigurationInterface();
     const setupInterface = new SetupInterface();
-    accountService = new AccountService(eventBus, configurationInterface, setupInterface);
+    emailInterface = new EmailInterface();
+    accountService = new AccountService(eventBus, configurationInterface, setupInterface, emailInterface);
   });
 
   afterEach(() => {
@@ -559,7 +571,7 @@ describe('acceptAccountApplication', () => {
   it('application found', async () => {
     let findApplicationStub = acceptSandbox.stub(AccountApplicationEntity, 'findByPk');
     let setupAccountStub = acceptSandbox.stub(accountService, '_setupAccount');
-    let sendEmailStub = acceptSandbox.stub(EmailService, 'sendEmail');
+    let sendEmailStub = acceptSandbox.stub(emailInterface, 'sendEmail');
 
     const application = AccountApplicationEntity.build({ email: 'test_email' });
     const destroyStub = acceptSandbox.stub(application, 'destroy').resolves();
@@ -578,12 +590,14 @@ describe('acceptAccountApplication', () => {
 describe('rejectAccountApplication', () => {
   let rejectSandbox = sinon.createSandbox();
   let accountService: AccountService;
+  let emailInterface: EmailInterface;
 
   beforeEach(() => {
     const eventBus = new EventEmitter();
     const configurationInterface = new ConfigurationInterface();
     const setupInterface = new SetupInterface();
-    accountService = new AccountService(eventBus, configurationInterface, setupInterface);
+    emailInterface = new EmailInterface();
+    accountService = new AccountService(eventBus, configurationInterface, setupInterface, emailInterface);
   });
 
   afterEach(() => {
@@ -601,7 +615,7 @@ describe('rejectAccountApplication', () => {
 
   it('application rejected with notification', async () => {
     let findApplicationStub = rejectSandbox.stub(AccountApplicationEntity, 'findByPk');
-    let sendEmailStub = rejectSandbox.stub(EmailService, 'sendEmail');
+    let sendEmailStub = rejectSandbox.stub(emailInterface, 'sendEmail');
 
     const application = AccountApplicationEntity.build({
       email: 'test_email',
@@ -620,7 +634,7 @@ describe('rejectAccountApplication', () => {
 
   it('application rejected silently (no email)', async () => {
     let findApplicationStub = rejectSandbox.stub(AccountApplicationEntity, 'findByPk');
-    let sendEmailStub = rejectSandbox.stub(EmailService, 'sendEmail');
+    let sendEmailStub = rejectSandbox.stub(emailInterface, 'sendEmail');
 
     const application = AccountApplicationEntity.build({
       email: 'test_email',
@@ -641,12 +655,14 @@ describe('rejectAccountApplication', () => {
 describe('_setupAccount', () => {
   let setupSandbox = sinon.createSandbox();
   let accountService: AccountService;
+  let emailInterface: EmailInterface;
 
   beforeEach(() => {
     const eventBus = new EventEmitter();
     const configurationInterface = new ConfigurationInterface();
     const setupInterface = new SetupInterface();
-    accountService = new AccountService(eventBus, configurationInterface, setupInterface);
+    emailInterface = new EmailInterface();
+    accountService = new AccountService(eventBus, configurationInterface, setupInterface, emailInterface);
   });
 
   afterEach(() => {
@@ -712,13 +728,15 @@ describe('listInvitations', () => {
 
   let sandbox = sinon.createSandbox();
   let accountService: AccountService;
+  let emailInterface: EmailInterface;
   let findAllStub: sinon.SinonStub;
 
   beforeEach(() => {
     const eventBus = new EventEmitter();
     const configurationInterface = new ConfigurationInterface();
     const setupInterface = new SetupInterface();
-    accountService = new AccountService(eventBus, configurationInterface, setupInterface);
+    emailInterface = new EmailInterface();
+    accountService = new AccountService(eventBus, configurationInterface, setupInterface, emailInterface);
     findAllStub = sandbox.stub(AccountInvitationEntity, 'findAll');
   });
 

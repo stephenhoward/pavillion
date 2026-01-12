@@ -123,7 +123,7 @@ describe('EventService - AP Identifier Storage', () => {
     const queryOptions = findAllStub.firstCall.args[0] as any;
     // Verify that both UUID and AP identifier are included in the query
     expect(queryOptions.where.calendar_id).toEqual({
-      [Op.in]: [calendar.id, expectedCalendarId]
+      [Op.in]: [calendar.id, expectedCalendarId],
     });
   });
 

@@ -1,7 +1,7 @@
 import config from 'config';
 import AccountApplication from '@/common/model/application';
-import { MailData } from '@/server/common/service/mail/types';
-import { EmailMessage, compileTemplate } from '@/server/common/service/mail/message';
+import { MailData } from '@/server/email/model/types';
+import { EmailMessage, compileTemplate } from '@/server/email/model/message';
 
 const textTemplate = compileTemplate('src/server/accounts', 'application_acknowledgment_email.text.hbs');
 const htmlTemplate = compileTemplate('src/server/accounts', 'application_acknowledgment_email.html.hbs');

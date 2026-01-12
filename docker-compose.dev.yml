@@ -3,6 +3,7 @@
 # This file provides a complete containerized development environment with:
 # - PostgreSQL database
 # - Application with hot-reload
+# - Mailpit for email testing
 # - Automatic code sync via volume mounts
 #
 # Usage:
@@ -24,11 +25,20 @@
 # Access:
 #   - Application: http://localhost:3000
 #   - Vite HMR: ws://localhost:5173
+#   - Mailpit Web UI: http://localhost:8025
+#
+# Email Testing Workflow:
+#   1. Start containers: docker compose -f docker-compose.dev.yml up
+#   2. Open Mailpit UI at http://localhost:8025
+#   3. Trigger an email action in the app (password reset, invitation, etc.)
+#   4. View the captured email in Mailpit web interface
+#   5. Mailpit displays HTML preview, plain text, headers, and attachments
 #
 # Notes:
 #   - Source code changes are reflected immediately via hot-reload
 #   - Database data persists between restarts (DB_RESET=false by default)
 #   - After changing package.json, rebuild with `up --build`
+#   - All emails sent by the app are captured by Mailpit (not delivered externally)
 #
 # Database Reset Options:
 #   - First run or fresh seed: Set DB_RESET=true in environment
@@ -46,6 +56,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      mailpit:
+        condition: service_started
     ports:
       # Backend Express server
       - "3000:3000"
@@ -68,6 +80,11 @@ services:
       - VITE_HMR_HOST=localhost
       # File watching in Docker (required for hot-reload)
       - CHOKIDAR_USEPOLLING=true
+      # Email configuration for Mailpit
+      # When SMTP_HOST=mailpit, the app automatically selects the Mailpit transport
+      - SMTP_HOST=mailpit
+      - SMTP_PORT=1025
+      - MAIL_FROM=pavillion-dev@localhost
     volumes:
       # Mount source code for hot-reload
       - ./src:/app/src:cached
@@ -102,6 +119,18 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
+
+  # Mailpit for development email testing
+  # Captures all emails sent by the application for inspection
+  mailpit:
+    image: axllent/mailpit
+    container_name: pavillion-dev-mailpit
+    ports:
+      # Web UI for viewing captured emails
+      - "8025:8025"
+      # SMTP server (internal, also exposed for debugging)
+      - "1025:1025"
     restart: unless-stopped
 
 # Named volume for persistent development data

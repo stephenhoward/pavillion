@@ -1,7 +1,7 @@
 import config from 'config';
 import { Account } from '@/common/model/account';
-import { MailData } from '@/server/common/service/mail/types';
-import { EmailMessage, compileTemplate } from '@/server/common/service/mail/message';
+import { MailData } from '@/server/email/model/types';
+import { EmailMessage, compileTemplate } from '@/server/email/model/message';
 
 const textTemplate = compileTemplate('src/server/authentication', 'password_reset_email.text.hbs');
 const htmlTemplate = compileTemplate('src/server/authentication', 'password_reset_email.html.hbs');

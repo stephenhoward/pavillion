@@ -1,7 +1,13 @@
 import nodemailer from 'nodemailer';
-import { MailConfig } from '@/server/common/service/mail/types';
-import { MailTransport } from '@/server/common/service/mail/mail-transport';
+import { MailConfig } from '@/server/email/model/types';
+import { MailTransport } from '@/server/email/transport/mail-transport';
 
+/**
+ * SMTP transport for production email delivery.
+ *
+ * Configures nodemailer with SMTP settings from environment variables
+ * or configuration files. Supports TLS/SSL and authentication.
+ */
 export class SmtpTransport extends MailTransport {
 
   constructor(private mailConfig: MailConfig) {

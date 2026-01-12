@@ -14,6 +14,7 @@ import ActivityPubDomain from './activitypub';
 import AuthenticationDomain from './authentication';
 import CalendarDomain from '@/server/calendar';
 import ConfigurationDomain from './configuration';
+import EmailDomain from './email';
 import PublicCalendarDomain from './public';
 import MediaDomain from './media';
 import SetupDomain from './setup';
@@ -182,15 +183,18 @@ const initPavillionServer = async (app: express.Application, port: number) => {
   const configurationDomain = new ConfigurationDomain(eventBus);
   configurationDomain.initialize(app);
 
-  const accountsDomain = new AccountsDomain(eventBus, configurationDomain.interface, setupDomain.interface);
+  // Initialize Email domain (no API routes, provides interface for cross-domain email sending)
+  const emailDomain = new EmailDomain();
+
+  const accountsDomain = new AccountsDomain(eventBus, configurationDomain.interface, setupDomain.interface, emailDomain.interface);
   accountsDomain.initialize(app);
 
-  const authenticationDomain = new AuthenticationDomain(eventBus, accountsDomain.interface);
+  const authenticationDomain = new AuthenticationDomain(eventBus, accountsDomain.interface, emailDomain.interface);
   authenticationDomain.initialize(app);
 
   new ActivityPubDomain(eventBus).initialize(app);
 
-  const calendarDomain = new CalendarDomain(eventBus, accountsDomain.interface);
+  const calendarDomain = new CalendarDomain(eventBus, accountsDomain.interface, emailDomain.interface);
   calendarDomain.initialize(app);
 
   // Set up CalendarInterface on AccountsInterface to enable calendar editor invitation acceptance

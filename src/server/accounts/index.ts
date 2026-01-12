@@ -5,6 +5,7 @@ import AccountsEventHandlers from './events';
 import AccountAPI from './api/v1';
 import ConfigurationInterface from '../configuration/interface';
 import SetupInterface from '../setup/interface';
+import EmailInterface from '../email/interface';
 
 export default class AccountsDomain {
   public readonly interface: AccountsInterface;
@@ -14,9 +15,10 @@ export default class AccountsDomain {
     eventBus: EventEmitter,
     configurationInterface: ConfigurationInterface,
     setupInterface: SetupInterface,
+    emailInterface: EmailInterface,
   ) {
     this.eventBus = eventBus;
-    this.interface = new AccountsInterface(eventBus, configurationInterface, setupInterface);
+    this.interface = new AccountsInterface(eventBus, configurationInterface, setupInterface, emailInterface);
   }
 
   public initialize(app: Application): void {

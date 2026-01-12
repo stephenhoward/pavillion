@@ -1,8 +1,8 @@
 import config from 'config';
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
-import { MailData } from '@/server/common/service/mail/types';
-import { EmailMessage, compileTemplate } from '@/server/common/service/mail/message';
+import { MailData } from '@/server/email/model/types';
+import { EmailMessage, compileTemplate } from '@/server/email/model/message';
 
 const textTemplate = compileTemplate('src/server/calendar', 'editor_notification_email.text.hbs');
 const htmlTemplate = compileTemplate('src/server/calendar', 'editor_notification_email.html.hbs');
