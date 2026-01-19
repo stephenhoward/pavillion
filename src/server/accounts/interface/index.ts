@@ -13,12 +13,17 @@ export default class AccountsInterface {
   private accountService: AccountService;
 
   constructor(
-    eventBus: EventEmitter,
-    configurationInterface: ConfigurationInterface,
-    setupInterface: SetupInterface,
-    emailInterface: EmailInterface,
+    eventBus?: EventEmitter,
+    configurationInterface?: ConfigurationInterface,
+    setupInterface?: SetupInterface,
+    emailInterface?: EmailInterface,
   ) {
-    this.accountService = new AccountService(eventBus, configurationInterface, setupInterface, emailInterface);
+    this.accountService = new AccountService(
+      eventBus || new EventEmitter(),
+      configurationInterface as ConfigurationInterface,
+      setupInterface as SetupInterface,
+      emailInterface as EmailInterface,
+    );
   }
 
   /**
@@ -104,6 +109,10 @@ export default class AccountsInterface {
       };
     }> {
     return this.accountService.listAccounts(page, limit, search);
+  }
+
+  async getAdmins(): Promise<Account[]> {
+    return this.accountService.getAdmins();
   }
 
 }

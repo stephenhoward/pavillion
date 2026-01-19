@@ -1,7 +1,7 @@
 {
     "LocationEntity": [
         {
-            "id": "loc-1-1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+            "id": "87a80792-a75b-559b-a6a4-390e2b08e7f1",
             "calendar_id": "c71f5c9e-7a3d-4e5f-8e1a-66c3612a05f3",
             "name": "Washington Park",
             "address": "4033 SW Canyon Rd",
@@ -11,7 +11,7 @@
             "country": "USA"
         },
         {
-            "id": "loc-2-2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
+            "id": "ccbd9e3f-1e5e-54cd-8c1e-30fb3012b26f",
             "calendar_id": "c71f5c9e-7a3d-4e5f-8e1a-66c3612a05f3",
             "name": "Multnomah County Library",
             "address": "801 SW 10th Ave",
@@ -21,7 +21,7 @@
             "country": "USA"
         },
         {
-            "id": "loc-3-3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f",
+            "id": "3ee7d8f9-0523-5b89-bb12-1279e50d8157",
             "calendar_id": "c71f5c9e-7a3d-4e5f-8e1a-66c3612a05f3",
             "name": "Laurelhurst Park",
             "address": "SE Cesar E Chavez Blvd & Stark St",
@@ -31,8 +31,8 @@
             "country": "USA"
         },
         {
-            "id": "loc-tu-1-6e87d5ca-4d89-42c1-aa9d-5ef437fe6611",
-            "calendar_id": "cal-tu-6e87d5ca-4d89-42c1-aa9d-5ef437fe3333",
+            "id": "665b369a-81c3-5f61-a9ce-df4cc87bb1f6",
+            "calendar_id": "ca17e000-6e87-4d89-aa9d-5ef437fe3333",
             "name": "Community Recreation Center",
             "address": "123 Main Street",
             "city": "Portland",
@@ -41,8 +41,8 @@
             "country": "USA"
         },
         {
-            "id": "loc-tu-2-6e87d5ca-4d89-42c1-aa9d-5ef437fe6622",
-            "calendar_id": "cal-tu-6e87d5ca-4d89-42c1-aa9d-5ef437fe3333",
+            "id": "56d62d17-5418-5dd1-a9ba-2368310723a0",
+            "calendar_id": "ca17e000-6e87-4d89-aa9d-5ef437fe3333",
             "name": "Central Park",
             "address": "456 Oak Avenue",
             "city": "Portland",
@@ -51,8 +51,8 @@
             "country": "USA"
         },
         {
-            "id": "loc-mc-1-6e87d5ca-4d89-42c1-aa9d-5ef437fe6633",
-            "calendar_id": "cal-mc-6e87d5ca-4d89-42c1-aa9d-5ef437fe4444",
+            "id": "36471dc0-de8d-5cea-be7e-99709e9707a2",
+            "calendar_id": "ca17e000-6e87-4d89-aa9d-5ef437fe4444",
             "name": "Downtown Convention Center",
             "address": "789 Broadway",
             "city": "Portland",
@@ -61,8 +61,8 @@
             "country": "USA"
         },
         {
-            "id": "loc-mc-2-6e87d5ca-4d89-42c1-aa9d-5ef437fe6644",
-            "calendar_id": "cal-mc-6e87d5ca-4d89-42c1-aa9d-5ef437fe4444",
+            "id": "30b18244-766f-5b37-ba37-160ab201e32d",
+            "calendar_id": "ca17e000-6e87-4d89-aa9d-5ef437fe4444",
             "name": "Riverside Amphitheater",
             "address": "321 River Road",
             "city": "Portland",

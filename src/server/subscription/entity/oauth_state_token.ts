@@ -60,7 +60,7 @@ class OAuthStateTokenEntity extends Model {
     id: string,
     token: string,
     providerType: ProviderType,
-    expiresAt: Date
+    expiresAt: Date,
   ): OAuthStateTokenEntity {
     return OAuthStateTokenEntity.build({
       id,

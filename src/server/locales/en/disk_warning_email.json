@@ -1,0 +1,17 @@
+{
+  "subject": "⚠️ Disk Space Warning: {{usagePercent}}% used",
+  "title": "Disk Space Warning",
+  "greeting": "Hello Administrator,",
+  "alert_message": "Your Pavillion instance has reached the disk space warning threshold.",
+  "current_usage": "Current disk usage: {{usagePercent}}% ({{usedSpace}} of {{totalSpace}})",
+  "threshold": "Warning threshold: {{threshold}}%",
+  "path": "Monitored path: {{path}}",
+  "recommendations": "Recommended actions:",
+  "action_1": "Review and delete old backup files if no longer needed",
+  "action_2": "Check backup retention policy settings",
+  "action_3": "Consider expanding storage capacity",
+  "action_4": "Monitor disk space usage closely",
+  "footer_note": "This alert was triggered because disk usage exceeded {{threshold}}%. You will receive a critical alert at 90% usage.",
+  "signature": "Pavillion Housekeeping System",
+  "footer_text": "This is an automated alert. Disk space is monitored hourly."
+}

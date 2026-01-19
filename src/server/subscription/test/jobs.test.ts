@@ -96,7 +96,7 @@ describe('Subscription Scheduled Jobs', () => {
         'UPDATE subscription SET updatedAt = ? WHERE id = ?',
         {
           replacements: [eightDaysAgo.toISOString(), expiredSubscription.id],
-        }
+        },
       );
 
       // Run the job
@@ -167,7 +167,7 @@ describe('Subscription Scheduled Jobs', () => {
         'UPDATE subscription SET updatedAt = ? WHERE id = ?',
         {
           replacements: [tenDaysAgo.toISOString(), subscription.id],
-        }
+        },
       );
 
       // Verify initial status
@@ -239,7 +239,7 @@ describe('Subscription Scheduled Jobs', () => {
         'UPDATE subscription SET updatedAt = ? WHERE id = ?',
         {
           replacements: [nineDaysAgo.toISOString(), subscription.id],
-        }
+        },
       );
 
       // Verify no suspended_at initially
@@ -316,7 +316,7 @@ describe('Subscription Scheduled Jobs', () => {
         'UPDATE subscription SET updatedAt = ? WHERE id = ?',
         {
           replacements: [fiveDaysAgo.toISOString(), recentSubscription.id],
-        }
+        },
       );
 
       // Create subscription that went past_due 1 day ago (well within grace period)
@@ -343,7 +343,7 @@ describe('Subscription Scheduled Jobs', () => {
         'UPDATE subscription SET updatedAt = ? WHERE id = ?',
         {
           replacements: [oneDayAgo.toISOString(), veryRecentSubscription.id],
-        }
+        },
       );
 
       // Run the job

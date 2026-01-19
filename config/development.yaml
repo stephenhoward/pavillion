@@ -1,5 +1,10 @@
 domain: "pavillion.dev"
 
+# Database configuration:
+# - Local development (npm run dev): Uses SQLite in-memory from default.yaml
+# - Docker development: Uses PostgreSQL via environment variables (DB_DIALECT, DB_HOST, etc.)
+# No overrides needed here - env vars handle Docker PostgreSQL connection
+
 # Example mail configurations - uncomment and adjust as needed
 # mail:
 #   transport: smtp

@@ -23,6 +23,7 @@ domain: LOCAL_DOMAIN
 
 # Database configuration overrides
 database:
+  dialect: DB_DIALECT
   host: DB_HOST
   port: DB_PORT
   database: DB_NAME

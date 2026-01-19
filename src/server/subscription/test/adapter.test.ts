@@ -45,7 +45,7 @@ describe('Payment Provider Adapters', () => {
 
       const stripeAdapter = new StripeAdapter(
         JSON.parse(stripeConfig.credentials),
-        stripeConfig.webhookSecret
+        stripeConfig.webhookSecret,
       );
 
       expect(stripeAdapter.providerType).toBe('stripe');
@@ -58,13 +58,13 @@ describe('Payment Provider Adapters', () => {
       paypalConfig.credentials = JSON.stringify({
         clientId: 'test_client',
         secret: 'test_secret',
-        mode: 'sandbox'
+        mode: 'sandbox',
       });
       paypalConfig.webhookSecret = 'paypal_webhook_secret';
 
       const paypalAdapter = new PayPalAdapter(
         JSON.parse(paypalConfig.credentials),
-        paypalConfig.webhookSecret
+        paypalConfig.webhookSecret,
       );
 
       expect(paypalAdapter.providerType).toBe('paypal');
@@ -285,7 +285,7 @@ describe('Payment Provider Adapters', () => {
       paypalConfig.credentials = JSON.stringify({
         clientId: 'test_client',
         secret: 'test_secret',
-        mode: 'sandbox'
+        mode: 'sandbox',
       });
       paypalConfig.webhookSecret = 'paypal_webhook_secret';
 

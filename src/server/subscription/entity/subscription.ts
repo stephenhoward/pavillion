@@ -4,7 +4,7 @@ import { AccountEntity } from '@/server/common/entity/account';
 import { ProviderConfigEntity } from './provider_config';
 import db from '@/server/common/entity/db';
 
-@Table({ tableName: 'subscription' })
+@Table({ tableName: 'user_subscription' })
 class SubscriptionEntity extends Model {
   @PrimaryKey
   @Column({ type: DataType.UUID })

@@ -241,14 +241,14 @@ describe('Provider Adapter Webhook Management', () => {
       const credentials = { stripeUserId: 'acct_test' };
 
       await expect(adapter.registerWebhook(webhookUrl, credentials)).rejects.toThrow(
-        'Network error'
+        'Network error',
       );
     });
 
     it('should handle invalid responses in PayPal adapter', async () => {
       const adapter = new PayPalAdapter(
         { clientId: 'test', secret: 'test', mode: 'sandbox' },
-        'webhook_secret'
+        'webhook_secret',
       );
 
       const fetchStub = vi.spyOn(global, 'fetch');
@@ -342,11 +342,11 @@ describe('Provider Adapter Webhook Management', () => {
 
       const stripeWebhook = await mockStripe.registerWebhook(
         'https://test.com/webhook',
-        {}
+        {},
       );
       const paypalWebhook = await mockPayPal.registerWebhook(
         'https://test.com/webhook',
-        {}
+        {},
       );
 
       // Mock webhooks should return predictable IDs

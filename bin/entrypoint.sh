@@ -1,22 +1,23 @@
 #!/bin/bash
 #
-# Pavillion Container Entrypoint Script
+# Pavillion Container Entrypoint Script (Unified)
 #
-# This script handles the startup sequence for the Pavillion container:
-# 1. Process Docker secrets from _FILE environment variables
-# 2. Wait for PostgreSQL database to be ready
-# 3. Run pending database migrations
-# 4. Start the Node.js application
+# This script handles the startup sequence for all Pavillion container modes:
+# - Development web: Hot-reload with Vite frontend + backend
+# - Development worker: Hot-reload worker with tsx watch
+# - Production web: Run migrations, then start Node.js server
+# - Production worker: Start worker for background job processing
 #
 # Environment Variables:
+#   NODE_ENV        - "development" or "production" (required)
 #   DB_HOST         - PostgreSQL host (required)
 #   DB_PORT         - PostgreSQL port (default: 5432)
 #   DB_USER         - PostgreSQL user (required)
-#   DB_PASSWORD     - PostgreSQL password (required, or DB_PASSWORD_FILE)
+#   DB_PASSWORD     - PostgreSQL password (required, or DB_PASSWORD_FILE in production)
 #   DB_NAME         - PostgreSQL database name (default: pavillion)
 #   DB_WAIT_TIMEOUT - Seconds to wait for database (default: 30)
 #
-# Docker Secrets Support:
+# Docker Secrets Support (Production only):
 #   The following environment variables support the _FILE suffix pattern
 #   for Docker secrets integration:
 #   - DB_PASSWORD_FILE      -> DB_PASSWORD
@@ -24,6 +25,17 @@
 #   - SESSION_SECRET_FILE   -> SESSION_SECRET
 #   - S3_SECRET_KEY_FILE    -> S3_SECRET_KEY
 #   - SMTP_PASSWORD_FILE    -> SMTP_PASSWORD
+#
+# Worker Mode:
+#   When the --worker flag is present in the command, the container runs in
+#   worker mode and does not start the HTTP server. Worker mode is used for
+#   processing background jobs including database backups and monitoring.
+#
+# Usage:
+#   Development web:    NODE_ENV=development ./entrypoint.sh
+#   Development worker: NODE_ENV=development ./entrypoint.sh --worker
+#   Production web:     NODE_ENV=production ./entrypoint.sh
+#   Production worker:  NODE_ENV=production ./entrypoint.sh --worker
 #
 
 set -e
@@ -39,20 +51,59 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# Detect if running in development mode
+is_development() {
+  [ "$NODE_ENV" = "development" ]
+}
+
+# Detect if running in worker mode
+is_worker_mode() {
+  # Check if --worker flag is present in arguments
+  for arg in "$@"; do
+    if [ "$arg" = "--worker" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Get log prefix based on mode
+get_log_prefix() {
+  if is_development; then
+    if is_worker_mode "$@"; then
+      echo "WORKER"
+    else
+      echo "DEV"
+    fi
+  else
+    if is_worker_mode "$@"; then
+      echo "Worker"
+    else
+      echo "INFO"
+    fi
+  fi
+}
+
 # Logging functions
 log_info() {
-  echo -e "${GREEN}[INFO]${NC} $1"
+  local prefix
+  prefix=$(get_log_prefix "$@")
+  echo -e "${GREEN}[${prefix}]${NC} $1"
 }
 
 log_warn() {
-  echo -e "${YELLOW}[WARN]${NC} $1"
+  local prefix
+  prefix=$(get_log_prefix "$@")
+  echo -e "${YELLOW}[${prefix}]${NC} $1"
 }
 
 log_error() {
-  echo -e "${RED}[ERROR]${NC} $1"
+  local prefix
+  prefix=$(get_log_prefix "$@")
+  echo -e "${RED}[${prefix}]${NC} $1"
 }
 
-# Function to read secrets from Docker secrets files
+# Function to read secrets from Docker secrets files (production only)
 # Usage: file_env 'VAR_NAME'
 # If VAR_NAME_FILE is set, reads the file contents into VAR_NAME
 # Then unsets VAR_NAME_FILE for security
@@ -116,7 +167,7 @@ wait_for_db() {
   return 1
 }
 
-# Function to run database migrations
+# Function to run database migrations (production only)
 run_migrations() {
   log_info "Running database migrations..."
 
@@ -163,23 +214,64 @@ run_migrations() {
 
 # Function to start the application
 start_app() {
-  log_info "Starting Pavillion application..."
-  exec npm start
+  if is_development; then
+    # Development mode
+    if is_worker_mode "$@"; then
+      log_info "Starting worker process with hot-reload..."
+      log_info "  Processing jobs from pg-boss queue"
+      log_info "  Scheduled jobs:"
+      log_info "    - backup:daily (2:00 AM)"
+      log_info "    - disk:check (hourly)"
+      log_info "========================================"
+      # Use unified app.ts entry point with --worker flag
+      exec npx tsx watch src/server/app.ts -- --worker
+    else
+      log_info "Starting development servers..."
+      log_info "  Backend:  http://localhost:3000"
+      log_info "  Vite HMR: http://localhost:5173"
+      log_info "========================================"
+      exec npm run dev
+    fi
+  else
+    # Production mode
+    if is_worker_mode "$@"; then
+      log_info "[Worker] Starting Pavillion worker..."
+      log_info "[Worker] HTTP server disabled in worker mode"
+      exec npm start -- --worker
+    else
+      log_info "Starting Pavillion application (web mode)..."
+      exec npm start
+    fi
+  fi
 }
 
 # Main entrypoint logic
 main() {
   log_info "========================================"
-  log_info "Pavillion Container Startup"
+  if is_development; then
+    if is_worker_mode "$@"; then
+      log_info "Pavillion Worker Container (Development)"
+    else
+      log_info "Pavillion Development Container"
+    fi
+  else
+    if is_worker_mode "$@"; then
+      log_info "Pavillion Worker Container Startup"
+    else
+      log_info "Pavillion Container Startup"
+    fi
+  fi
   log_info "========================================"
 
-  # Process Docker secrets from _FILE environment variables
+  # Process Docker secrets from _FILE environment variables (production only)
   # This must happen before validation and database connection
-  file_env 'DB_PASSWORD'
-  file_env 'JWT_SECRET'
-  file_env 'SESSION_SECRET'
-  file_env 'S3_SECRET_KEY'
-  file_env 'SMTP_PASSWORD'
+  if ! is_development; then
+    file_env 'DB_PASSWORD'
+    file_env 'JWT_SECRET'
+    file_env 'SESSION_SECRET'
+    file_env 'S3_SECRET_KEY'
+    file_env 'SMTP_PASSWORD'
+  fi
 
   # Validate required environment variables
   if [ -z "$DB_HOST" ]; then
@@ -202,13 +294,19 @@ main() {
     exit 1
   fi
 
-  # Step 2: Run migrations
-  if ! run_migrations; then
-    exit 1
+  # Step 2: Run migrations (production web mode only)
+  # - Development: app.ts handles database reset/seed
+  # - Production worker: Skips migrations (web container handles them)
+  if ! is_development && ! is_worker_mode "$@"; then
+    if ! run_migrations; then
+      exit 1
+    fi
+  elif ! is_development && is_worker_mode "$@"; then
+    log_info "[Worker] Skipping migrations (handled by web container)"
   fi
 
   # Step 3: Start application
-  start_app
+  start_app "$@"
 }
 
 # Allow sourcing for testing individual functions

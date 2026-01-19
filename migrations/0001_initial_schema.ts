@@ -824,6 +824,69 @@ export default {
     });
 
     // =========================================
+    // HOUSEKEEPING
+    // =========================================
+
+    // backup_metadata - Database backup tracking
+    await queryInterface.createTable('backup_metadata', {
+      id: {
+        type: DataTypes.UUID,
+        primaryKey: true,
+        allowNull: false,
+      },
+      filename: {
+        type: DataTypes.STRING,
+        allowNull: false,
+      },
+      size_bytes: {
+        type: DataTypes.BIGINT,
+        allowNull: false,
+      },
+      created_at: {
+        type: DataTypes.DATE,
+        allowNull: false,
+      },
+      type: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        comment: 'manual or scheduled',
+      },
+      category: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        comment: 'daily, weekly, or monthly',
+      },
+      verified: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      storage_location: {
+        type: DataTypes.STRING,
+        allowNull: false,
+      },
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+      },
+      updatedAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+      },
+    });
+
+    // Add index on created_at for backup_metadata (for retention queries)
+    await queryInterface.addIndex('backup_metadata', ['created_at'], {
+      name: 'idx_backup_metadata_created_at',
+    });
+
+    // Add index on category for backup_metadata (for retention queries)
+    await queryInterface.addIndex('backup_metadata', ['category'], {
+      name: 'idx_backup_metadata_category',
+    });
+
+
+    // =========================================
     // ACTIVITYPUB FEDERATION
     // =========================================
 
@@ -1155,6 +1218,9 @@ export default {
 
     // System configuration
     await queryInterface.dropTable('configuration');
+
+    // Housekeeping
+    await queryInterface.dropTable('backup_metadata');
 
     // Event management
     await queryInterface.dropTable('event_instance');

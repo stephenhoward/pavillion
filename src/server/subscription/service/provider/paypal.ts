@@ -160,7 +160,7 @@ export class PayPalAdapter implements PaymentProviderAdapter {
    */
   async registerWebhook(
     webhookUrl: string,
-    credentials: ProviderCredentials
+    credentials: ProviderCredentials,
   ): Promise<WebhookRegistration> {
     const mode = (credentials.mode as string) || 'sandbox';
     const baseUrl =
@@ -399,7 +399,8 @@ export class PayPalAdapter implements PaymentProviderAdapter {
       // 2. Calling PayPal's webhook verification API
       // For now, we'll do basic validation
       return signature.length > 0 && payload.length > 0;
-    } catch (err) {
+    }
+    catch (err) {
       return false;
     }
   }
@@ -540,7 +541,7 @@ export class PayPalAdapter implements PaymentProviderAdapter {
    * @private
    */
   private mapPayPalStatus(
-    paypalStatus: string
+    paypalStatus: string,
   ): 'active' | 'past_due' | 'suspended' | 'cancelled' {
     switch (paypalStatus?.toUpperCase()) {
       case 'ACTIVE':

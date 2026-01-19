@@ -6,6 +6,9 @@
   "type": "module",
   "private": true,
   "main": "src/server/app.ts",
+  "bin": {
+    "pavillion": "./bin/pavillion"
+  },
   "scripts": {
     "dev:frontend": "vite",
     "dev:backend": "NODE_ENV=development tsx watch src/server/app.ts",
@@ -39,6 +42,9 @@
     "@types/passport": "^1.0.17",
     "activitypub-express": "^4.4.2",
     "axios": "^1.7.7",
+    "chalk": "^5.6.2",
+    "cli-table3": "^0.6.5",
+    "commander": "^14.0.2",
     "config": "^3.3.12",
     "debug": "^4.3.7",
     "ejs": "^3.1.10",
@@ -61,6 +67,7 @@
     "passport-jwt": "^4.0.1",
     "passport-local": "^1.0.0",
     "pg": "^8.13.1",
+    "pg-boss": "^11.1.2",
     "pg-hstore": "^2.3.4",
     "pinia": "^3.0.2",
     "rrule": "^2.8.1",

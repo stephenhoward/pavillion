@@ -50,7 +50,8 @@ const selectedProviderConfig = computed(() => {
 const selectedProviderName = computed(() => {
   if (selectedProvider.value === 'stripe') {
     return t('providers.stripe_name');
-  } else if (selectedProvider.value === 'paypal') {
+  }
+  else if (selectedProvider.value === 'paypal') {
     return t('providers.paypal_name');
   }
   return selectedProvider.value || '';
@@ -132,9 +133,11 @@ function resetPayPalForm() {
 function validatePayPalField(field: 'clientId' | 'clientSecret' | 'environment') {
   if (field === 'clientId') {
     paypalErrors.value.clientId = paypalClientId.value.trim() ? '' : 'Client ID is required';
-  } else if (field === 'clientSecret') {
+  }
+  else if (field === 'clientSecret') {
     paypalErrors.value.clientSecret = paypalClientSecret.value.trim() ? '' : 'Client Secret is required';
-  } else if (field === 'environment') {
+  }
+  else if (field === 'environment') {
     paypalErrors.value.environment = paypalEnvironment.value ? '' : 'Environment is required';
   }
 }
@@ -152,7 +155,8 @@ async function connectStripe() {
     const result = await subscriptionService.connectStripe(returnUrl);
     // Redirect to Stripe OAuth - the user will come back via OAuth redirect
     window.location.href = result;
-  } catch (err) {
+  }
+  catch (err) {
     console.error('Failed to connect Stripe:', err);
     error.value = t('errors.connection_failed', { provider: selectedProviderName.value });
     connecting.value = false;
@@ -187,11 +191,13 @@ async function configurePayPal() {
       // Move to success step
       currentStep.value = 3;
       connecting.value = false;
-    } else {
+    }
+    else {
       error.value = t('errors.connection_failed', { provider: selectedProviderName.value });
       connecting.value = false;
     }
-  } catch (err) {
+  }
+  catch (err) {
     console.error('Failed to configure PayPal:', err);
     error.value = t('errors.connection_failed', { provider: selectedProviderName.value });
     connecting.value = false;
@@ -222,195 +228,195 @@ function handleSuccess() {
 
     <!-- Wizard Content -->
     <div class="wizard-content">
-        <!-- Error Message -->
-        <div v-if="error" class="error-message">
-          {{ error }}
-        </div>
+      <!-- Error Message -->
+      <div v-if="error" class="error-message">
+        {{ error }}
+      </div>
 
-        <!-- Step 1: Provider Selection -->
-        <div v-if="currentStep === 1" class="step-content">
-          <h3 class="step-title">{{ t('step1.title') }}</h3>
-          <p class="step-description">{{ t('step1.description') }}</p>
+      <!-- Step 1: Provider Selection -->
+      <div v-if="currentStep === 1" class="step-content">
+        <h3 class="step-title">{{ t('step1.title') }}</h3>
+        <p class="step-description">{{ t('step1.description') }}</p>
 
-          <div class="provider-grid">
-            <div
-              v-for="provider in unconfiguredProviders"
-              :key="provider.provider_type"
-              class="provider-card"
-              :class="{ selected: selectedProvider === provider.provider_type }"
-              @click="selectProvider(provider.provider_type)"
-            >
-              <div class="provider-icon">
-                {{ provider.provider_type === 'stripe' ? '💳' : '🅿️' }}
-              </div>
-              <h4 class="provider-name">
-                {{ t(`providers.${provider.provider_type}_name`) }}
-              </h4>
-              <p class="provider-description">
-                {{ t(`providers.${provider.provider_type}_description`) }}
-              </p>
+        <div class="provider-grid">
+          <div
+            v-for="provider in unconfiguredProviders"
+            :key="provider.provider_type"
+            class="provider-card"
+            :class="{ selected: selectedProvider === provider.provider_type }"
+            @click="selectProvider(provider.provider_type)"
+          >
+            <div class="provider-icon">
+              {{ provider.provider_type === 'stripe' ? '💳' : '🅿️' }}
             </div>
+            <h4 class="provider-name">
+              {{ t(`providers.${provider.provider_type}_name`) }}
+            </h4>
+            <p class="provider-description">
+              {{ t(`providers.${provider.provider_type}_description`) }}
+            </p>
           </div>
         </div>
+      </div>
 
-        <!-- Step 2: Provider Configuration -->
-        <div v-if="currentStep === 2" class="step-content">
-          <!-- Stripe Configuration -->
-          <div v-if="selectedProvider === 'stripe'" class="provider-config">
-            <h3 class="step-title">{{ t('step2.stripe_title') }}</h3>
-            <p class="step-description">{{ t('step2.stripe_description') }}</p>
+      <!-- Step 2: Provider Configuration -->
+      <div v-if="currentStep === 2" class="step-content">
+        <!-- Stripe Configuration -->
+        <div v-if="selectedProvider === 'stripe'" class="provider-config">
+          <h3 class="step-title">{{ t('step2.stripe_title') }}</h3>
+          <p class="step-description">{{ t('step2.stripe_description') }}</p>
+
+          <button
+            type="button"
+            class="primary connect-button"
+            @click="connectStripe"
+            :disabled="connecting"
+          >
+            {{ connecting ? t('connecting_button', { defaultValue: 'Connecting...' }) : t('step2.stripe_connect_button') }}
+          </button>
+        </div>
+
+        <!-- PayPal Configuration -->
+        <div v-if="selectedProvider === 'paypal'" class="provider-config">
+          <h3 class="step-title">{{ t('step2.paypal_title') }}</h3>
+          <p class="step-description">{{ t('step2.paypal_description') }}</p>
+
+          <form @submit.prevent="configurePayPal">
+            <div class="form-group">
+              <label for="paypal-client-id" class="form-label">
+                {{ t('step2.paypal_client_id_label') }}
+                <span class="required">*</span>
+              </label>
+              <input
+                id="paypal-client-id"
+                v-model="paypalClientId"
+                type="text"
+                class="form-input"
+                :class="{ 'has-error': paypalErrors.clientId }"
+                :placeholder="t('step2.paypal_client_id_placeholder')"
+                :disabled="connecting"
+                @blur="validatePayPalField('clientId')"
+              />
+              <div v-if="paypalErrors.clientId" class="error-message-inline">
+                {{ paypalErrors.clientId }}
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="paypal-client-secret" class="form-label">
+                {{ t('step2.paypal_client_secret_label') }}
+                <span class="required">*</span>
+              </label>
+              <input
+                id="paypal-client-secret"
+                v-model="paypalClientSecret"
+                type="password"
+                class="form-input"
+                :class="{ 'has-error': paypalErrors.clientSecret }"
+                :placeholder="t('step2.paypal_client_secret_placeholder')"
+                :disabled="connecting"
+                @blur="validatePayPalField('clientSecret')"
+              />
+              <div v-if="paypalErrors.clientSecret" class="error-message-inline">
+                {{ paypalErrors.clientSecret }}
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="paypal-environment" class="form-label">
+                {{ t('step2.paypal_environment_label') }}
+                <span class="required">*</span>
+              </label>
+              <select
+                id="paypal-environment"
+                v-model="paypalEnvironment"
+                class="form-input"
+                :class="{ 'has-error': paypalErrors.environment }"
+                :disabled="connecting"
+                @blur="validatePayPalField('environment')"
+              >
+                <option value="sandbox">{{ t('step2.paypal_environment_sandbox') }}</option>
+                <option value="production">{{ t('step2.paypal_environment_production') }}</option>
+              </select>
+              <div v-if="paypalErrors.environment" class="error-message-inline">
+                {{ paypalErrors.environment }}
+              </div>
+            </div>
 
             <button
-              type="button"
+              type="submit"
               class="primary connect-button"
-              @click="connectStripe"
-              :disabled="connecting"
+              :disabled="!isPayPalFormValid || connecting"
             >
-              {{ connecting ? t('connecting_button', { defaultValue: 'Connecting...' }) : t('step2.stripe_connect_button') }}
+              {{ connecting ? t('connecting_button', { defaultValue: 'Connecting...' }) : t('step2.paypal_configure_button', { defaultValue: 'Configure PayPal' }) }}
             </button>
-          </div>
-
-          <!-- PayPal Configuration -->
-          <div v-if="selectedProvider === 'paypal'" class="provider-config">
-            <h3 class="step-title">{{ t('step2.paypal_title') }}</h3>
-            <p class="step-description">{{ t('step2.paypal_description') }}</p>
-
-            <form @submit.prevent="configurePayPal">
-              <div class="form-group">
-                <label for="paypal-client-id" class="form-label">
-                  {{ t('step2.paypal_client_id_label') }}
-                  <span class="required">*</span>
-                </label>
-                <input
-                  id="paypal-client-id"
-                  v-model="paypalClientId"
-                  type="text"
-                  class="form-input"
-                  :class="{ 'has-error': paypalErrors.clientId }"
-                  :placeholder="t('step2.paypal_client_id_placeholder')"
-                  :disabled="connecting"
-                  @blur="validatePayPalField('clientId')"
-                />
-                <div v-if="paypalErrors.clientId" class="error-message-inline">
-                  {{ paypalErrors.clientId }}
-                </div>
-              </div>
-
-              <div class="form-group">
-                <label for="paypal-client-secret" class="form-label">
-                  {{ t('step2.paypal_client_secret_label') }}
-                  <span class="required">*</span>
-                </label>
-                <input
-                  id="paypal-client-secret"
-                  v-model="paypalClientSecret"
-                  type="password"
-                  class="form-input"
-                  :class="{ 'has-error': paypalErrors.clientSecret }"
-                  :placeholder="t('step2.paypal_client_secret_placeholder')"
-                  :disabled="connecting"
-                  @blur="validatePayPalField('clientSecret')"
-                />
-                <div v-if="paypalErrors.clientSecret" class="error-message-inline">
-                  {{ paypalErrors.clientSecret }}
-                </div>
-              </div>
-
-              <div class="form-group">
-                <label for="paypal-environment" class="form-label">
-                  {{ t('step2.paypal_environment_label') }}
-                  <span class="required">*</span>
-                </label>
-                <select
-                  id="paypal-environment"
-                  v-model="paypalEnvironment"
-                  class="form-input"
-                  :class="{ 'has-error': paypalErrors.environment }"
-                  :disabled="connecting"
-                  @blur="validatePayPalField('environment')"
-                >
-                  <option value="sandbox">{{ t('step2.paypal_environment_sandbox') }}</option>
-                  <option value="production">{{ t('step2.paypal_environment_production') }}</option>
-                </select>
-                <div v-if="paypalErrors.environment" class="error-message-inline">
-                  {{ paypalErrors.environment }}
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                class="primary connect-button"
-                :disabled="!isPayPalFormValid || connecting"
-              >
-                {{ connecting ? t('connecting_button', { defaultValue: 'Connecting...' }) : t('step2.paypal_configure_button', { defaultValue: 'Configure PayPal' }) }}
-              </button>
-            </form>
-          </div>
+          </form>
         </div>
+      </div>
 
-        <!-- Step 3: Success -->
-        <div v-if="currentStep === 3" class="step-content success-content">
-          <div class="success-icon">✓</div>
-          <h3 class="step-title">{{ t('step3.title') }}</h3>
-          <p class="success-message">
-            {{ t('step3.success_message', { provider: selectedProviderName }) }}
-          </p>
-          <p class="ready-message">{{ t('step3.ready_message') }}</p>
-        </div>
+      <!-- Step 3: Success -->
+      <div v-if="currentStep === 3" class="step-content success-content">
+        <div class="success-icon">✓</div>
+        <h3 class="step-title">{{ t('step3.title') }}</h3>
+        <p class="success-message">
+          {{ t('step3.success_message', { provider: selectedProviderName }) }}
+        </p>
+        <p class="ready-message">{{ t('step3.ready_message') }}</p>
+      </div>
     </div>
 
     <!-- Modal Actions -->
     <div class="modal-actions">
-        <!-- Step 1 Actions -->
-        <template v-if="currentStep === 1">
-          <button
-            type="button"
-            class="secondary cancel-button"
-            @click="closeWizard"
-            :disabled="connecting"
-          >
-            {{ t('cancel_button') }}
-          </button>
-          <button
-            type="button"
-            class="primary continue-button"
-            @click="goToNextStep"
-            :disabled="!selectedProvider || connecting"
-          >
-            {{ t('continue_button') }}
-          </button>
-        </template>
+      <!-- Step 1 Actions -->
+      <template v-if="currentStep === 1">
+        <button
+          type="button"
+          class="secondary cancel-button"
+          @click="closeWizard"
+          :disabled="connecting"
+        >
+          {{ t('cancel_button') }}
+        </button>
+        <button
+          type="button"
+          class="primary continue-button"
+          @click="goToNextStep"
+          :disabled="!selectedProvider || connecting"
+        >
+          {{ t('continue_button') }}
+        </button>
+      </template>
 
-        <!-- Step 2 Actions -->
-        <template v-if="currentStep === 2">
-          <button
-            type="button"
-            class="secondary back-button"
-            @click="goToPreviousStep"
-            :disabled="connecting"
-          >
-            {{ t('back_button') }}
-          </button>
-          <button
-            type="button"
-            class="secondary cancel-button"
-            @click="closeWizard"
-            :disabled="connecting"
-          >
-            {{ t('cancel_button') }}
-          </button>
-        </template>
+      <!-- Step 2 Actions -->
+      <template v-if="currentStep === 2">
+        <button
+          type="button"
+          class="secondary back-button"
+          @click="goToPreviousStep"
+          :disabled="connecting"
+        >
+          {{ t('back_button') }}
+        </button>
+        <button
+          type="button"
+          class="secondary cancel-button"
+          @click="closeWizard"
+          :disabled="connecting"
+        >
+          {{ t('cancel_button') }}
+        </button>
+      </template>
 
-        <!-- Step 3 Actions -->
-        <template v-if="currentStep === 3">
-          <button
-            type="button"
-            class="primary done-button"
-            @click="handleSuccess"
-          >
-            {{ t('done_button') }}
-          </button>
-        </template>
+      <!-- Step 3 Actions -->
+      <template v-if="currentStep === 3">
+        <button
+          type="button"
+          class="primary done-button"
+          @click="handleSuccess"
+        >
+          {{ t('done_button') }}
+        </button>
+      </template>
     </div>
   </Modal>
 </template>

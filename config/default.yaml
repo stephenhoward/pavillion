@@ -33,3 +33,28 @@ jwt:
 # In production, SESSION_SECRET must be set via environment variable
 session:
   secret: 'development-only-session-secret-do-not-use-in-production'
+
+# Housekeeping configuration for automated server maintenance
+housekeeping:
+  enabled: true
+  backup:
+    schedule: '0 2 * * *'  # Daily at 2 AM
+    retention:
+      daily: 7
+      weekly: 4
+      monthly: 6
+    path: '/backups'
+    # Optional S3 upload configuration (future enhancement)
+    # s3:
+    #   enabled: false
+    #   bucket: 'my-backups'
+    #   endpoint: 'https://s3.amazonaws.com'
+    #   region: 'us-east-1'
+    #   accessKeyId: ''
+    #   secretAccessKey: ''
+  monitoring:
+    disk:
+      enabled: true
+      warning_threshold: 80
+      critical_threshold: 90
+      check_interval: '0 * * * *'  # Hourly

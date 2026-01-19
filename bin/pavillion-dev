@@ -1,0 +1,19 @@
+#!/usr/bin/env node
+/**
+ * Pavillion CLI Tool (Development)
+ *
+ * Development version that works with TypeScript source files.
+ * Run inside Docker container with: docker exec pavillion-dev-app node /app/bin/pavillion-dev
+ */
+
+import { register } from 'node:module';
+import { pathToFileURL } from 'node:url';
+
+// Register tsx loader for TypeScript support
+register('tsx', pathToFileURL('./'));
+
+// Import and run CLI from TypeScript source
+import('../src/server/cli/index.ts').catch((err) => {
+  console.error('Failed to load CLI:', err);
+  process.exit(1);
+});

@@ -15,6 +15,7 @@ import AuthenticationDomain from './authentication';
 import CalendarDomain from '@/server/calendar';
 import ConfigurationDomain from './configuration';
 import EmailDomain from './email';
+import HousekeepingDomain from './housekeeping';
 import PublicCalendarDomain from './public';
 import MediaDomain from './media';
 import SetupDomain from './setup';
@@ -208,6 +209,10 @@ const initPavillionServer = async (app: express.Application, port: number) => {
   // Initialize subscription domain (after accounts domain)
   const subscriptionDomain = new SubscriptionDomain(eventBus);
   subscriptionDomain.initialize(app);
+
+  // Initialize housekeeping domain (for automated server maintenance)
+  const housekeepingDomain = new HousekeepingDomain(eventBus, emailDomain.interface, accountsDomain.interface);
+  housekeepingDomain.initialize(app);
 
   // Initialize database before starting the server
   try {

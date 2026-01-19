@@ -1,0 +1,12 @@
+#!/usr/bin/env node
+/**
+ * Pavillion CLI Tool
+ *
+ * Management interface for backup operations and housekeeping status.
+ * Designed to be run inside Docker container via docker exec or wrapper scripts.
+ */
+
+import('../dist/server/cli/index.js').catch((err) => {
+  console.error('Failed to load CLI:', err);
+  process.exit(1);
+});

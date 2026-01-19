@@ -275,11 +275,13 @@ async function disconnectProvider(providerType) {
         activeSubscriptionCount: result.activeSubscriptionCount || 0,
       };
       showDisconnectModal.value = true;
-    } else if (result.success) {
+    }
+    else if (result.success) {
       // No confirmation needed, disconnect was successful
       successMessage.value = t('provider_disconnect_success');
       await loadProviders();
-    } else {
+    }
+    else {
       errorMessage.value = t('provider_disconnect_failed');
     }
   }
@@ -299,14 +301,15 @@ async function confirmDisconnect() {
     // Second call with confirmation=true to actually disconnect
     const result = await subscriptionService.disconnectProvider(
       disconnectModalData.value.providerType,
-      true
+      true,
     );
 
     if (result.success) {
       showDisconnectModal.value = false;
       successMessage.value = t('provider_disconnect_success');
       await loadProviders();
-    } else {
+    }
+    else {
       errorMessage.value = t('provider_disconnect_failed');
     }
   }
@@ -441,7 +444,10 @@ onMounted(async () => {
 
         <div class="form-group">
           <label class="form-label">
-            <input type="checkbox" v-model="enabled" :disabled="saving" @change="toggleEnabled" />
+            <input type="checkbox"
+                   v-model="enabled"
+                   :disabled="saving"
+                   @change="toggleEnabled" />
             {{ t("enabled_label") }}
           </label>
           <div class="description">{{ t("enabled_description") }}</div>

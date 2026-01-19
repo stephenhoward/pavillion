@@ -13,17 +13,26 @@ FROM node:22-bookworm AS development
 
 WORKDIR /app
 
-# Install dumb-init for proper signal handling
-RUN apt-get update && apt-get install -y --no-install-recommends dumb-init \
+# Install dumb-init for proper signal handling and postgresql-client for backups
+# Add PostgreSQL APT repository to get version 17 client tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    gnupg \
+    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/postgresql-archive-keyring.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/postgresql-archive-keyring.gpg] http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update && apt-get install -y --no-install-recommends \
+    dumb-init \
+    postgresql-client-17 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy package files and install ALL dependencies (including devDependencies)
 COPY package*.json ./
 RUN npm ci
 
-# Copy development entrypoint script
-COPY bin/entrypoint-dev.sh ./entrypoint-dev.sh
-RUN chmod +x /app/entrypoint-dev.sh
+# Copy unified entrypoint script
+COPY bin/entrypoint.sh ./entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
 # Source code will be mounted as volume - no COPY needed
 # Config files mounted separately for flexibility
@@ -33,8 +42,8 @@ ENV NODE_ENV=development
 # Backend (3000) and Vite dev server (5173)
 EXPOSE 3000 5173
 
-# Use dumb-init for proper signal handling, then development entrypoint
-ENTRYPOINT ["dumb-init", "--", "/app/entrypoint-dev.sh"]
+# Use dumb-init for proper signal handling, then unified entrypoint
+ENTRYPOINT ["dumb-init", "--", "/app/entrypoint.sh"]
 
 # ==============================================================================
 # Stage 1: Build stage

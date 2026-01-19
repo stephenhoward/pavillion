@@ -29,14 +29,14 @@ export default class WebhookRouteHandlers {
     router.post(
       '/webhooks/stripe',
       express.raw({ type: 'application/json' }),
-      this.handleStripeWebhook.bind(this)
+      this.handleStripeWebhook.bind(this),
     );
 
     // PayPal webhook endpoint - needs raw body for signature verification
     router.post(
       '/webhooks/paypal',
       express.raw({ type: 'application/json' }),
-      this.handlePayPalWebhook.bind(this)
+      this.handlePayPalWebhook.bind(this),
     );
 
     app.use(routePrefix, router);
@@ -78,7 +78,8 @@ export default class WebhookRouteHandlers {
       let event: Stripe.Event;
       try {
         event = Stripe.Webhook.constructEvent(rawBody, signature, webhookSecret);
-      } catch (err) {
+      }
+      catch (err) {
         res.status(400).json({ error: `Invalid signature: ${err instanceof Error ? err.message : 'Unknown error'}` });
         return;
       }
@@ -91,7 +92,8 @@ export default class WebhookRouteHandlers {
 
       // Acknowledge receipt immediately
       res.status(200).json({ received: true });
-    } catch (error) {
+    }
+    catch (error) {
       console.error('Error processing Stripe webhook:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
@@ -146,7 +148,8 @@ export default class WebhookRouteHandlers {
 
       // Acknowledge receipt immediately
       res.status(200).json({ received: true });
-    } catch (error) {
+    }
+    catch (error) {
       console.error('Error processing PayPal webhook:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
@@ -287,7 +290,7 @@ export default class WebhookRouteHandlers {
    * @private
    */
   private mapStripeStatus(
-    stripeStatus: Stripe.Subscription.Status
+    stripeStatus: Stripe.Subscription.Status,
   ): 'active' | 'past_due' | 'suspended' | 'cancelled' {
     switch (stripeStatus) {
       case 'active':

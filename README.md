@@ -59,7 +59,111 @@ cp config/local.yaml.example config/local.yaml
 docker compose up -d
 ```
 
+This will start three containers:
+- **app** - Web server handling HTTP requests (port 3000)
+- **worker** - Background job processor for backups and monitoring
+- **db** - PostgreSQL database
+
 For detailed deployment instructions, see the [Deployment Guide](docs/deployment.md).
+
+## Container Architecture
+
+Pavillion uses a **Sidekiq-style worker architecture** with separate web and worker containers:
+
+### Web Container (`app`)
+- Serves HTTP requests
+- Queues background jobs
+- Runs database migrations on startup
+- Exposes admin dashboard with system status
+
+### Worker Container (`worker`)
+- Processes background jobs from the queue
+- Runs scheduled database backups (daily at 2 AM)
+- Monitors disk space and sends email alerts
+- Does not serve HTTP requests
+
+Both containers use the same Docker image with different command arguments. The worker container runs with the `--worker` flag to enable job processing mode.
+
+### Log Rotation
+
+Both containers are configured with automatic log rotation:
+- Maximum log file size: 10 MB
+- Maximum number of log files: 5
+- Total maximum disk usage per container: 50 MB
+
+To adjust log rotation settings, modify the `logging` configuration in `docker-compose.yml`:
+
+```yaml
+logging:
+  driver: "json-file"
+  options:
+    max-size: "10m"  # Adjust size as needed
+    max-file: "5"    # Adjust file count as needed
+```
+
+### Backup Volume
+
+The worker container uses a dedicated volume for database backups:
+
+```yaml
+volumes:
+  pavillion-backups:
+    name: pavillion-backups
+```
+
+By default, this creates a named Docker volume. For production deployments, you can configure this volume to use different backing storage:
+
+**Option 1: Local directory bind mount**
+```yaml
+volumes:
+  pavillion-backups:
+    name: pavillion-backups
+    driver: local
+    driver_opts:
+      type: none
+      device: /path/to/backup/storage
+      o: bind
+```
+
+**Option 2: NFS mount**
+```yaml
+volumes:
+  pavillion-backups:
+    name: pavillion-backups
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=nfs.example.com,nolock,soft,rw
+      device: ":/path/to/nfs/share"
+```
+
+**Option 3: Cloud-backed filesystem**
+
+Use your cloud provider's Docker volume driver (e.g., AWS EFS, Google Cloud Filestore).
+
+### Troubleshooting
+
+**Worker container not processing jobs:**
+- Check worker logs: `docker logs pavillion-worker`
+- Verify database connection in worker container
+- Ensure pg-boss tables exist in database
+
+**Backups not running:**
+- Check worker container is running: `docker ps | grep worker`
+- Verify backup volume is mounted: `docker inspect pavillion-worker`
+- Check worker logs for scheduled job registration messages
+
+**Disk space alerts not sending:**
+- Verify SMTP configuration in `config/local.yaml`
+- Check worker logs for email sending errors
+- Test email configuration using CLI: `docker exec pavillion-worker pavillion backup status`
+
+**Log files growing too large:**
+- Adjust `max-size` in docker-compose.yml logging configuration
+- Reduce `max-file` count if disk space is limited
+- Consider external log aggregation for production
+
+For more troubleshooting help, see the [Deployment Guide](docs/deployment.md).
 
 ## Development
 

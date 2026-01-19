@@ -133,7 +133,7 @@ export class StripeAdapter implements PaymentProviderAdapter {
    */
   async registerWebhook(
     webhookUrl: string,
-    credentials: ProviderCredentials
+    credentials: ProviderCredentials,
   ): Promise<WebhookRegistration> {
     const stripeUserId = credentials.stripeUserId as string;
 
@@ -154,7 +154,7 @@ export class StripeAdapter implements PaymentProviderAdapter {
       },
       {
         stripeAccount: stripeUserId,
-      }
+      },
     );
 
     return {
@@ -212,7 +212,8 @@ export class StripeAdapter implements PaymentProviderAdapter {
 
     if (existingCustomers.data.length > 0) {
       customer = existingCustomers.data[0];
-    } else {
+    }
+    else {
       // Create new customer
       customer = await this.stripe.customers.create({
         email: params.accountEmail,
@@ -262,7 +263,8 @@ export class StripeAdapter implements PaymentProviderAdapter {
     if (immediate) {
       // Cancel immediately
       await this.stripe.subscriptions.cancel(subscriptionId);
-    } else {
+    }
+    else {
       // Cancel at period end
       await this.stripe.subscriptions.update(subscriptionId, {
         cancel_at_period_end: true,
@@ -308,7 +310,8 @@ export class StripeAdapter implements PaymentProviderAdapter {
     try {
       this.stripe.webhooks.constructEvent(payload, signature, this.webhookSecret);
       return true;
-    } catch (err) {
+    }
+    catch (err) {
       return false;
     }
   }
@@ -425,7 +428,7 @@ export class StripeAdapter implements PaymentProviderAdapter {
    * @private
    */
   private mapStripeStatus(
-    stripeStatus: Stripe.Subscription.Status
+    stripeStatus: Stripe.Subscription.Status,
   ): 'active' | 'past_due' | 'suspended' | 'cancelled' {
     switch (stripeStatus) {
       case 'active':

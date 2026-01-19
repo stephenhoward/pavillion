@@ -100,7 +100,8 @@ export default class AdminRouteHandlers {
         payWhatYouCan: settings.payWhatYouCan,
         gracePeriodDays: settings.gracePeriodDays,
       });
-    } catch (error) {
+    }
+    catch (error) {
       console.error('Error fetching subscription settings:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
@@ -149,7 +150,8 @@ export default class AdminRouteHandlers {
       await this.interface.updateSettings(settings);
 
       res.json({ success: true });
-    } catch (error) {
+    }
+    catch (error) {
       console.error('Error updating subscription settings:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
@@ -182,7 +184,8 @@ export default class AdminRouteHandlers {
       );
 
       res.json(sanitizedProviders);
-    } catch (error) {
+    }
+    catch (error) {
       console.error('Error listing providers:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
@@ -215,7 +218,8 @@ export default class AdminRouteHandlers {
       res.json({
         redirectUrl: mockOAuthUrl,
       });
-    } catch (error) {
+    }
+    catch (error) {
       console.error('Error initiating provider connection:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
@@ -245,7 +249,8 @@ export default class AdminRouteHandlers {
       // This will exchange the code for credentials and store them
 
       res.json({ success: true });
-    } catch (error) {
+    }
+    catch (error) {
       console.error('Error handling OAuth callback:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
@@ -274,11 +279,13 @@ export default class AdminRouteHandlers {
       await this.interface.updateProvider(providerType, displayName, enabled);
 
       res.json({ success: true });
-    } catch (error) {
+    }
+    catch (error) {
       console.error('Error updating provider:', error);
       if (error instanceof Error && error.message.includes('not found')) {
         res.status(404).json({ error: error.message });
-      } else {
+      }
+      else {
         res.status(500).json({ error: 'Internal server error' });
       }
     }
@@ -301,11 +308,13 @@ export default class AdminRouteHandlers {
       await this.interface.disconnectProvider(providerType);
 
       res.json({ success: true });
-    } catch (error) {
+    }
+    catch (error) {
       console.error('Error disconnecting provider:', error);
       if (error instanceof Error && error.message.includes('active subscription')) {
         res.status(400).json({ error: error.message });
-      } else {
+      }
+      else {
         res.status(500).json({ error: 'Internal server error' });
       }
     }
@@ -323,7 +332,8 @@ export default class AdminRouteHandlers {
       const result = await this.interface.listSubscriptions(page, limit);
 
       res.json(result);
-    } catch (error) {
+    }
+    catch (error) {
       console.error('Error listing subscriptions:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
@@ -340,11 +350,13 @@ export default class AdminRouteHandlers {
       await this.interface.forceCancel(id);
 
       res.json({ success: true });
-    } catch (error) {
+    }
+    catch (error) {
       console.error('Error force canceling subscription:', error);
       if (error instanceof Error && error.message.includes('not found')) {
         res.status(404).json({ error: error.message });
-      } else {
+      }
+      else {
         res.status(500).json({ error: 'Internal server error' });
       }
     }
@@ -359,7 +371,8 @@ export default class AdminRouteHandlers {
       const configured = await this.interface.isPlatformOAuthConfigured();
 
       res.json({ configured });
-    } catch (error) {
+    }
+    catch (error) {
       console.error('Error getting platform OAuth status:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
@@ -387,7 +400,8 @@ export default class AdminRouteHandlers {
       });
 
       res.json({ success: true });
-    } catch (error) {
+    }
+    catch (error) {
       console.error('Error configuring platform OAuth:', error);
       res.status(500).json({ error: 'Internal server error' });
     }

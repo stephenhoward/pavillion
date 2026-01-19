@@ -158,8 +158,8 @@ describe('OAuthStateManager Service', () => {
       const expiredTokens = await OAuthStateTokenEntity.findAll({
         where: {
           expires_at: {
-            [Op.lt]: new Date()
-          }
+            [Op.lt]: new Date(),
+          },
         },
       });
 
@@ -169,8 +169,8 @@ describe('OAuthStateManager Service', () => {
       const validTokens = await OAuthStateTokenEntity.findAll({
         where: {
           expires_at: {
-            [Op.gt]: new Date()
-          }
+            [Op.gt]: new Date(),
+          },
         },
       });
 

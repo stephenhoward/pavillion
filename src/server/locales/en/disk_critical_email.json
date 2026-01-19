@@ -1,0 +1,17 @@
+{
+  "subject": "🚨 CRITICAL: Disk Space at {{usagePercent}}%",
+  "title": "CRITICAL Disk Space Alert",
+  "greeting": "Hello Administrator,",
+  "alert_message": "URGENT: Your Pavillion instance has reached the CRITICAL disk space threshold. Immediate action is required to prevent system failures.",
+  "current_usage": "Current disk usage: {{usagePercent}}% ({{usedSpace}} of {{totalSpace}})",
+  "threshold": "Critical threshold: {{threshold}}%",
+  "path": "Monitored path: {{path}}",
+  "urgent_actions": "IMMEDIATE actions required:",
+  "action_1": "Delete old backup files immediately",
+  "action_2": "Expand storage capacity as soon as possible",
+  "action_3": "Review all disk space consumers",
+  "action_4": "Consider temporarily disabling automated backups until space is freed",
+  "warning_message": "System may become unstable or fail at disk capacities above 95%. Backup operations will likely fail without sufficient free space.",
+  "signature": "Pavillion Housekeeping System",
+  "footer_text": "This is a CRITICAL automated alert. Immediate administrator intervention is required."
+}

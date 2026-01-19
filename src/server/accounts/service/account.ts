@@ -1,8 +1,6 @@
 import { scryptSync, randomBytes } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { DateTime } from 'luxon';
-import config from 'config';
-import { Op } from 'sequelize';
 
 import { Account } from "@/common/model/account";
 import AccountInvitation from '@/common/model/invitation';
@@ -562,6 +560,41 @@ export default class AccountService {
   async getAllAccounts(): Promise<Account[]> {
     let accounts = await AccountEntity.findAll({
       order: [['createdAt', 'DESC']],
+    });
+
+    // Load roles for each account
+    const accountsWithRoles = await Promise.all(
+      accounts.map(async (account) => {
+        let roles = await AccountRoleEntity.findAll({ where: { account_id: account.id } });
+        let accountModel = account.toModel();
+        accountModel.roles = roles.map(role => role.role);
+        return accountModel;
+      }),
+    );
+
+    return accountsWithRoles;
+  }
+
+  /**
+   * Returns all admin accounts in the system
+   * @returns {Promise<Account[]>} a promise that resolves to an array of admin accounts
+   */
+  async getAdmins(): Promise<Account[]> {
+    // Find all admin roles
+    const adminRoles = await AccountRoleEntity.findAll({
+      where: { role: 'admin' },
+    });
+
+    // Get account IDs from roles
+    const adminAccountIds = adminRoles.map(role => role.account_id);
+
+    if (adminAccountIds.length === 0) {
+      return [];
+    }
+
+    // Load accounts
+    const accounts = await AccountEntity.findAll({
+      where: { id: adminAccountIds },
     });
 
     // Load roles for each account

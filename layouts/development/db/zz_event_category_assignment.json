@@ -1,149 +1,149 @@
 {
     "EventCategoryAssignmentEntity": [
         {
-            "id": "assign-1-1-community-arts",
-            "event_id": "evt-1-1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
-            "category_id": "cat-2-community-2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e"
+            "id": "243a6dac-c6ef-5bb5-bdc0-add7cad233bd",
+            "event_id": "c87a9e6b-76e9-5a3a-85dc-f58406636358",
+            "category_id": "7ac07333-afe9-5bcf-a99c-f7434cd9554f"
         },
         {
-            "id": "assign-1-2-summer-arts",
-            "event_id": "evt-1-1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
-            "category_id": "cat-1-arts-1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+            "id": "ec008941-c16c-5280-a674-03e2a4b6d7de",
+            "event_id": "c87a9e6b-76e9-5a3a-85dc-f58406636358",
+            "category_id": "49e2acda-abcb-5660-b8a9-e21b64681af9"
         },
         {
-            "id": "assign-2-1-book-education",
-            "event_id": "evt-2-2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
-            "category_id": "cat-3-education-3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f"
+            "id": "84ad38a4-60ca-58d7-a478-ba188df61544",
+            "event_id": "c0f581ed-3138-5018-8339-37461ac830cd",
+            "category_id": "9a5c1a1c-1fad-5731-a22c-a81c57743ad8"
         },
         {
-            "id": "assign-2-2-book-community",
-            "event_id": "evt-2-2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
-            "category_id": "cat-2-community-2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e"
+            "id": "a0f4213f-707a-5cd2-802c-4734166f5c38",
+            "event_id": "c0f581ed-3138-5018-8339-37461ac830cd",
+            "category_id": "7ac07333-afe9-5bcf-a99c-f7434cd9554f"
         },
         {
-            "id": "assign-3-1-picnic-community",
-            "event_id": "evt-3-3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f",
-            "category_id": "cat-2-community-2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e"
+            "id": "583e1b8c-a254-5e18-b515-0a859837f932",
+            "event_id": "b136325c-22fe-5b32-bdcb-a87226205a90",
+            "category_id": "7ac07333-afe9-5bcf-a99c-f7434cd9554f"
         },
         {
-            "id": "assign-3-2-picnic-social",
-            "event_id": "evt-3-3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f",
-            "category_id": "cat-12-social-2f3a4b5c-6d7e-8f9a-0b1c-2d3e4f5a6b7c"
+            "id": "93d1f0fe-12e1-5f0d-aff3-4a40ad641558",
+            "event_id": "b136325c-22fe-5b32-bdcb-a87226205a90",
+            "category_id": "8d650412-b0b8-59d4-9513-673c50c508f3"
         },
         {
-            "id": "assign-3-3-picnic-family",
-            "event_id": "evt-3-3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f",
-            "category_id": "cat-11-family-1e2f3a4b-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+            "id": "7a00677d-f68e-5627-a744-66370415ff17",
+            "event_id": "b136325c-22fe-5b32-bdcb-a87226205a90",
+            "category_id": "9be733e1-72cf-52c5-96b0-62601d39f98b"
         },
         {
-            "id": "assign-4-1-yoga-health",
-            "event_id": "evt-4-4d5e6f7a-8b9c-0d1e-2f3a-4b5c6d7e8f9a",
-            "category_id": "cat-4-health-4d5e6f7a-8b9c-0d1e-2f3a-4b5c6d7e8f9a"
+            "id": "9e73921c-3a14-56e3-b4e0-fc903525ebff",
+            "event_id": "fa9aa65a-21f4-594b-9793-22254e44ad60",
+            "category_id": "798f4ca3-e79e-5993-8e86-f6529ee40dad"
         },
         {
-            "id": "assign-4-2-yoga-sports",
-            "event_id": "evt-4-4d5e6f7a-8b9c-0d1e-2f3a-4b5c6d7e8f9a",
-            "category_id": "cat-5-sports-5e6f7a8b-9c0d-1e2f-3a4b-5c6d7e8f9a0b"
+            "id": "060d5058-6410-5fc1-b0f4-8b40ecdb35e3",
+            "event_id": "fa9aa65a-21f4-594b-9793-22254e44ad60",
+            "category_id": "138a3be6-81ef-53f1-82c3-314f8396f906"
         },
         {
-            "id": "assign-5-1-poetry-arts",
-            "event_id": "evt-5-5e6f7a8b-9c0d-1e2f-3a4b-5c6d7e8f9a0b",
-            "category_id": "cat-1-arts-1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+            "id": "666e74a9-58c2-5a59-9909-9ee65bce6e73",
+            "event_id": "55356b83-c2ef-5ef1-9b24-a53415a8f862",
+            "category_id": "49e2acda-abcb-5660-b8a9-e21b64681af9"
         },
         {
-            "id": "assign-5-2-poetry-culture",
-            "event_id": "evt-5-5e6f7a8b-9c0d-1e2f-3a4b-5c6d7e8f9a0b",
-            "category_id": "cat-6-culture-6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c"
+            "id": "7c21b895-a2e4-5689-90d2-2d4eb9570b01",
+            "event_id": "55356b83-c2ef-5ef1-9b24-a53415a8f862",
+            "category_id": "d9e77a19-0828-5af1-8f81-27079b6f1ec0"
         },
         {
-            "id": "assign-6-1-garden-environment",
-            "event_id": "evt-6-6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c",
-            "category_id": "cat-7-environment-7a8b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d"
+            "id": "e89992cb-b76e-5479-bc4c-64e76eab3126",
+            "event_id": "734796aa-e227-513d-9e00-9c99940e9ae3",
+            "category_id": "e51b2ab6-774e-55f2-b07c-817ea556f3a4"
         },
         {
-            "id": "assign-6-2-garden-community",
-            "event_id": "evt-6-6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c",
-            "category_id": "cat-2-community-2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e"
+            "id": "601fb9a8-b7c8-585f-84a5-e540a3882f92",
+            "event_id": "734796aa-e227-513d-9e00-9c99940e9ae3",
+            "category_id": "7ac07333-afe9-5bcf-a99c-f7434cd9554f"
         },
         {
-            "id": "assign-7-1-market-community",
-            "event_id": "evt-7-7a8b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
-            "category_id": "cat-2-community-2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e"
+            "id": "a1badccf-db7e-524c-a15a-4f8ec1bf49ac",
+            "event_id": "87349736-2294-5e30-9a17-235ef709f717",
+            "category_id": "7ac07333-afe9-5bcf-a99c-f7434cd9554f"
         },
         {
-            "id": "assign-7-2-market-business",
-            "event_id": "evt-7-7a8b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
-            "category_id": "cat-8-business-8b9c0d1e-2f3a-4b5c-6d7e-8f9a0b1c2d3e"
+            "id": "d81200f7-3258-58e5-9240-6fb2586cb544",
+            "event_id": "87349736-2294-5e30-9a17-235ef709f717",
+            "category_id": "e50866cb-9fff-58b7-a0c4-84f97485c95f"
         },
         {
-            "id": "assign-8-1-tech-education",
-            "event_id": "evt-8-8b9c0d1e-2f3a-4b5c-6d7e-8f9a0b1c2d3e",
-            "category_id": "cat-3-education-3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f"
+            "id": "ad4f409c-5b60-5bb8-a6b7-6231498d4ffb",
+            "event_id": "10680e1a-cad5-5882-9446-f90c63879136",
+            "category_id": "9a5c1a1c-1fad-5731-a22c-a81c57743ad8"
         },
         {
-            "id": "assign-8-2-tech-technology",
-            "event_id": "evt-8-8b9c0d1e-2f3a-4b5c-6d7e-8f9a0b1c2d3e",
-            "category_id": "cat-9-technology-9c0d1e2f-3a4b-5c6d-7e8f-9a0b1c2d3e4f"
+            "id": "438e78e3-03c5-5c8e-bd0c-05eb44cbb584",
+            "event_id": "10680e1a-cad5-5882-9446-f90c63879136",
+            "category_id": "6d9e72c4-cb73-58bc-94d8-3f57ccf08ab8"
         },
         {
-            "id": "assign-9-1-art-arts",
-            "event_id": "evt-9-9c0d1e2f-3a4b-5c6d-7e8f-9a0b1c2d3e4f",
-            "category_id": "cat-1-arts-1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+            "id": "d4d7719b-d489-5f29-b59c-63d35b49e212",
+            "event_id": "a09733ad-dcf0-5eee-ba3b-96526aa0ffb2",
+            "category_id": "49e2acda-abcb-5660-b8a9-e21b64681af9"
         },
         {
-            "id": "assign-9-2-art-culture",
-            "event_id": "evt-9-9c0d1e2f-3a4b-5c6d-7e8f-9a0b1c2d3e4f",
-            "category_id": "cat-6-culture-6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c"
+            "id": "7788ba79-b2b8-5269-b15a-ad437868977e",
+            "event_id": "a09733ad-dcf0-5eee-ba3b-96526aa0ffb2",
+            "category_id": "d9e77a19-0828-5af1-8f81-27079b6f1ec0"
         },
         {
-            "id": "assign-10-1-movie-entertainment",
-            "event_id": "evt-10-0d1e2f3a-4b5c-6d7e-8f9a-0b1c2d3e4f5a",
-            "category_id": "cat-10-entertainment-0d1e2f3a-4b5c-6d7e-8f9a-0b1c2d3e4f5a"
+            "id": "be63b3d8-f4a9-50f3-8a56-31df8bb34848",
+            "event_id": "ca8cbeff-2c20-5553-a6ea-617327c49d38",
+            "category_id": "2c0c7337-fe28-5ac5-8b1f-41faf8314eb7"
         },
         {
-            "id": "assign-10-2-movie-family",
-            "event_id": "evt-10-0d1e2f3a-4b5c-6d7e-8f9a-0b1c2d3e4f5a",
-            "category_id": "cat-11-family-1e2f3a4b-5c6d-7e8f-9a0b-1c2d3e4f5a6b"
+            "id": "36d2454a-0f37-5b8e-9734-b1f40b61c623",
+            "event_id": "ca8cbeff-2c20-5553-a6ea-617327c49d38",
+            "category_id": "9be733e1-72cf-52c5-96b0-62601d39f98b"
         },
         {
-            "id": "assign-tu-1-fitness-health",
-            "event_id": "evt-tu-1-6e87d5ca-4d89-42c1-aa9d-5ef437fe7711",
-            "category_id": "cat-4-health-4d5e6f7a-8b9c-0d1e-2f3a-4b5c6d7e8f9a"
+            "id": "b5c71aac-1157-5108-b224-58361520e37c",
+            "event_id": "afce2cf4-83cf-59d3-86ba-49f6419ac03f",
+            "category_id": "798f4ca3-e79e-5993-8e86-f6529ee40dad"
         },
         {
-            "id": "assign-tu-1-fitness-sports",
-            "event_id": "evt-tu-1-6e87d5ca-4d89-42c1-aa9d-5ef437fe7711",
-            "category_id": "cat-5-sports-5e6f7a8b-9c0d-1e2f-3a4b-5c6d7e8f9a0b"
+            "id": "98feaee9-1d1f-5a1d-8740-2b85cdc95293",
+            "event_id": "afce2cf4-83cf-59d3-86ba-49f6419ac03f",
+            "category_id": "138a3be6-81ef-53f1-82c3-314f8396f906"
         },
         {
-            "id": "assign-tu-2-meditation-health",
-            "event_id": "evt-tu-2-6e87d5ca-4d89-42c1-aa9d-5ef437fe7722",
-            "category_id": "cat-4-health-4d5e6f7a-8b9c-0d1e-2f3a-4b5c6d7e8f9a"
+            "id": "b67cc3b0-a680-5460-97ab-251d68fa151a",
+            "event_id": "7d2ac4bd-71f9-5162-b939-11bb36b6adba",
+            "category_id": "798f4ca3-e79e-5993-8e86-f6529ee40dad"
         },
         {
-            "id": "assign-tu-5-cooking-education",
-            "event_id": "evt-tu-5-6e87d5ca-4d89-42c1-aa9d-5ef437fe7755",
-            "category_id": "cat-3-education-3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f"
+            "id": "c115d28a-4d6d-5d40-ae3c-1ba57aed5fd9",
+            "event_id": "e0bda77d-76dc-5ae2-9272-58ec1faac32d",
+            "category_id": "9a5c1a1c-1fad-5731-a22c-a81c57743ad8"
         },
         {
-            "id": "assign-mc-1-networking-business",
-            "event_id": "evt-mc-1-6e87d5ca-4d89-42c1-aa9d-5ef437fe8811",
-            "category_id": "cat-8-business-8b9c0d1e-2f3a-4b5c-6d7e-8f9a0b1c2d3e"
+            "id": "7986db92-c2b5-5895-aeb5-8aed53ece866",
+            "event_id": "4dc8e677-ae44-57e6-8a1a-cb8eb9b5c726",
+            "category_id": "e50866cb-9fff-58b7-a0c4-84f97485c95f"
         },
         {
-            "id": "assign-mc-2-running-health",
-            "event_id": "evt-mc-2-6e87d5ca-4d89-42c1-aa9d-5ef437fe8822",
-            "category_id": "cat-4-health-4d5e6f7a-8b9c-0d1e-2f3a-4b5c6d7e8f9a"
+            "id": "09e2ccb7-8f81-5acc-8ffe-bbe44234c231",
+            "event_id": "cb39dea7-4d8a-54e8-8b83-c6392acd1fea",
+            "category_id": "798f4ca3-e79e-5993-8e86-f6529ee40dad"
         },
         {
-            "id": "assign-mc-2-running-sports",
-            "event_id": "evt-mc-2-6e87d5ca-4d89-42c1-aa9d-5ef437fe8822",
-            "category_id": "cat-5-sports-5e6f7a8b-9c0d-1e2f-3a4b-5c6d7e8f9a0b"
+            "id": "8764ff93-e7db-50d3-a004-daa8bb1368c6",
+            "event_id": "cb39dea7-4d8a-54e8-8b83-c6392acd1fea",
+            "category_id": "138a3be6-81ef-53f1-82c3-314f8396f906"
         },
         {
-            "id": "assign-mc-4-photography-arts",
-            "event_id": "evt-mc-4-6e87d5ca-4d89-42c1-aa9d-5ef437fe8844",
-            "category_id": "cat-1-arts-1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+            "id": "443fdad3-5ef0-5296-a994-c5263cfd2fd3",
+            "event_id": "ed343f2c-86e9-5c04-86d8-790b0d5e58fe",
+            "category_id": "49e2acda-abcb-5660-b8a9-e21b64681af9"
         }
     ]
 }

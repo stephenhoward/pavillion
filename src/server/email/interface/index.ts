@@ -70,7 +70,3 @@ export default class EmailInterface {
     return EmailService.getTransportType();
   }
 }
-
-// Export types for convenience
-export { MailData } from '@/server/email/model/types';
-export { StoredEmail } from '@/server/email/transport/testing-transport';

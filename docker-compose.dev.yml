@@ -66,6 +66,7 @@ services:
     environment:
       - NODE_ENV=development
       # Database connection
+      - DB_DIALECT=postgres
       - DB_HOST=db
       - DB_PORT=5432
       - DB_NAME=pavillion_dev
@@ -92,12 +93,58 @@ services:
       - ./migrations:/app/migrations:cached
       # Mount seed data for development (required when DB_RESET=true)
       - ./layouts:/app/layouts:cached
+      # Mount CLI scripts
+      - ./bin:/app/bin:cached
       # Mount config files
       - ./tsconfig.json:/app/tsconfig.json:cached
       - ./vite.config.ts:/app/vite.config.ts:cached
+      # Mount backups directory for database backups
+      - pavillion-dev-backups:/backups
       # Anonymous volume for node_modules
       # Prevents host node_modules from overriding container's Linux binaries
       - /app/node_modules
+    restart: unless-stopped
+
+  # Pavillion worker for background job processing
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: pavillion-dev-worker
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=development
+      # Database connection
+      - DB_DIALECT=postgres
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=pavillion_dev
+      - DB_USER=pavillion
+      - DB_PASSWORD=devpassword
+      # File watching in Docker (required for hot-reload)
+      - CHOKIDAR_USEPOLLING=true
+      # Email configuration for Mailpit (for disk alert emails)
+      - SMTP_HOST=mailpit
+      - SMTP_PORT=1025
+      - MAIL_FROM=pavillion-dev@localhost
+    volumes:
+      # Mount source code for hot-reload
+      - ./src:/app/src:cached
+      - ./config:/app/config:cached
+      - ./migrations:/app/migrations:cached
+      # Mount CLI scripts
+      - ./bin:/app/bin:cached
+      # Mount config files
+      - ./tsconfig.json:/app/tsconfig.json:cached
+      # Mount backups directory for database backups
+      - pavillion-dev-backups:/backups
+      # Anonymous volume for node_modules
+      - /app/node_modules
+    # Pass --worker flag to unified entrypoint
+    command: ["--worker"]
     restart: unless-stopped
 
   # PostgreSQL database for development
@@ -133,7 +180,9 @@ services:
       - "1025:1025"
     restart: unless-stopped
 
-# Named volume for persistent development data
+# Named volumes for persistent development data
 volumes:
   pavillion-dev-db:
     name: pavillion-dev-db
+  pavillion-dev-backups:
+    name: pavillion-dev-backups

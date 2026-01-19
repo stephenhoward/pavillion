@@ -15,7 +15,12 @@
 #   - Process Docker secrets from _FILE environment variables
 #   - Wait for the database to be healthy
 #   - Run any pending database migrations
-#   - Start the application
+#   - Start the application (web mode)
+#
+# The worker container will automatically:
+#   - Process Docker secrets from _FILE environment variables
+#   - Wait for the database and app to be healthy
+#   - Start the background job processor (worker mode)
 #
 # Security Notes:
 #   - When using Docker secrets (_FILE pattern), secret values are not visible
@@ -25,7 +30,7 @@
 #
 
 services:
-  # Pavillion application server
+  # Pavillion application server (web mode)
   app:
     image: pavillion/pavillion:latest
     build:
@@ -39,6 +44,7 @@ services:
       - "${APP_PORT:-3000}:3000"
     environment:
       - NODE_ENV=production
+      - DB_DIALECT=postgres
       - DB_HOST=db
       - DB_PORT=5432
       - DB_NAME=${DB_NAME:-pavillion}
@@ -71,12 +77,66 @@ services:
       - jwt_secret
       - session_secret
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
       interval: 30s
       timeout: 10s
       start_period: 60s
       retries: 3
+
+  # Pavillion worker container (worker mode)
+  # Processes background jobs including database backups and monitoring
+  worker:
+    image: pavillion/pavillion:latest
+    container_name: pavillion-worker
+    # Pass --worker flag to unified entrypoint
+    command: ["--worker"]
+    depends_on:
+      db:
+        condition: service_healthy
+      app:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=production
+      - DB_DIALECT=postgres
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-pavillion}
+      - DB_USER=${DB_USER:-pavillion}
+      # Direct environment variables (backward compatible)
+      - DB_PASSWORD=${DB_PASSWORD:-}
+      - JWT_SECRET=${JWT_SECRET:-}
+      - SESSION_SECRET=${SESSION_SECRET:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      # Docker secrets via _FILE pattern (recommended for production)
+      - DB_PASSWORD_FILE=${DB_PASSWORD_FILE:-}
+      - JWT_SECRET_FILE=${JWT_SECRET_FILE:-}
+      - SESSION_SECRET_FILE=${SESSION_SECRET_FILE:-}
+      - SMTP_PASSWORD_FILE=${SMTP_PASSWORD_FILE:-}
+      # Optional SMTP configuration for email alerts
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-}
+      - SMTP_USER=${SMTP_USER:-}
+    volumes:
+      # Mount local configuration for customization
+      - ./config/local.yaml:/app/config/local.yaml:ro
+      # Mount backup volume for database backups
+      - pavillion-backups:/backups
+    secrets:
+      - db_password
+      - jwt_secret
+      - session_secret
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
 
   # PostgreSQL database
   db:
@@ -106,6 +166,18 @@ volumes:
     name: pavillion-db
   pavillion-media:
     name: pavillion-media
+  pavillion-backups:
+    name: pavillion-backups
+    # Operators can configure this volume to use different backing storage:
+    # - Local directory: Add driver_opts with device and o: bind
+    # - NFS share: Use driver: local with type: nfs
+    # - Cloud-backed filesystem: Use appropriate volume driver
+    # Example for local bind mount:
+    # driver: local
+    # driver_opts:
+    #   type: none
+    #   device: /path/to/backup/storage
+    #   o: bind
 
 # Docker secrets configuration
 # These secrets are mounted as tmpfs at /run/secrets/ inside containers
