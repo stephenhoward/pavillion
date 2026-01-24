@@ -63,8 +63,8 @@ const routes: RouteRecordRaw[] = [
  * Creates a test event with full data for duplication testing
  */
 function createFullTestEvent(): CalendarEvent {
-  const event = new CalendarEvent('calendar-id', 'event-id', '2025-09-15');
-  event.eventSourceUrl = 'https://example.com/event';
+  const event = new CalendarEvent('event-id', 'calendar-id', 'https://example.com/event');
+  event.date = '2025-09-15';
 
   // Add content in English
   const content = new CalendarEventContent('en', 'Test Event', 'Test Description');
@@ -210,7 +210,7 @@ describe('Event Duplication System', () => {
     });
 
     it('should handle event with minimal data', () => {
-      const originalEvent = new CalendarEvent('calendar-id', 'event-id');
+      const originalEvent = new CalendarEvent('event-id', 'calendar-id');
       const duplicatedEvent = EventService.prepareEventForDuplication(originalEvent);
 
       expect(duplicatedEvent.id).toBe('');

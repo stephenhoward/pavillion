@@ -23,10 +23,18 @@ export type startAndEndDates = {
 /**
  * Represents a calendar event with multilingual content support.
  * Extends TranslatedModel to manage event content in different languages.
+ *
+ * Events are associated with a local calendar via calendarId (UUID).
+ * For remote-origin events (copied from federation), calendarId is null
+ * and the AP origin is tracked separately in the ActivityPub domain.
  */
 class CalendarEvent extends TranslatedModel<CalendarEventContent> {
   date: string = '';
-  calendarId: string = '';
+  /**
+   * UUID of the local CalendarEntity that owns this event.
+   * Null for remote-origin events (events copied from federation).
+   */
+  calendarId: string | null = null;
   location: EventLocation | null = null;
   media: Media | null = null;
   mediaId: string | null = null; // Temporary field for API communication
@@ -40,20 +48,28 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
    * Constructor for CalendarEvent.
    *
    * @param {string} [id] - Unique identifier for the event
-   * @param {string} [date] - Date of the event
+   * @param {string} [calendarId] - UUID of the owning calendar (null for remote-origin events)
    * @param {string} [eventSourceUrl] - URL source of the event
-   * @param {EventLocation} [location] - Location where the event takes place
-   * @param {Media} [media] - Media attachment for the event
-   * @param {string} [mediaId] - Media ID for API communication
    */
-  constructor(calendarId?: string, id?: string, date?: string, eventSourceUrl?: string, location?: EventLocation, media?: Media, mediaId?: string) {
+  constructor(id?: string, calendarId?: string | null, eventSourceUrl?: string) {
     super(id);
-    this.calendarId = calendarId ?? '';
-    this.date = date ?? '';
+    this.calendarId = calendarId ?? null;
     this.eventSourceUrl = eventSourceUrl ?? '';
-    this.location = location ?? null;
-    this.media = media ?? null;
-    this.mediaId = mediaId ?? null;
+  }
+
+  /**
+   * Returns true if this event originated from a remote federated calendar.
+   * Remote events have no local calendar owner (calendarId is null).
+   */
+  isRemote(): boolean {
+    return this.calendarId === null;
+  }
+
+  /**
+   * Returns true if this event is owned by a local calendar on this instance.
+   */
+  isLocal(): boolean {
+    return this.calendarId !== null;
   }
 
   /**
@@ -101,9 +117,9 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
    * @returns {CalendarEvent} A new CalendarEvent instance
    */
   static fromObject(obj: Record<string, any>): CalendarEvent {
-    let event = new CalendarEvent(obj.calendarId, obj.id, obj.date, obj.eventSourceUrl);
+    let event = new CalendarEvent(obj.id, obj.calendarId ?? null, obj.eventSourceUrl);
 
-    event.calendarId = obj.calendarId || '';
+    event.date = obj.date || '';
     event.location = obj.location ? EventLocation.fromObject(obj.location) : null;
     event.media = obj.media ? Media.fromObject(obj.media) : null;
     event.mediaId = obj.mediaId || null;

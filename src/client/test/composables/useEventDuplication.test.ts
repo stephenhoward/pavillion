@@ -10,7 +10,7 @@ describe('useEventDuplication', () => {
   const { stripEventForDuplication } = useEventDuplication();
 
   it('strips event ID for duplication', () => {
-    const sourceEvent = new CalendarEvent('calendarId', 'originalEventId');
+    const sourceEvent = new CalendarEvent('originalEventId', 'calendarId');
     sourceEvent.content('en').name = 'Original Event';
 
     const duplicatedEvent = stripEventForDuplication(sourceEvent);
@@ -20,7 +20,7 @@ describe('useEventDuplication', () => {
   });
 
   it('strips schedule IDs', () => {
-    const sourceEvent = new CalendarEvent('calendarId', 'eventId');
+    const sourceEvent = new CalendarEvent('eventId', 'calendarId');
     const schedule = new CalendarEventSchedule('scheduleId', DateTime.now(), DateTime.now().plus({ hours: 2 }));
     sourceEvent.schedules = [schedule];
 
@@ -32,7 +32,7 @@ describe('useEventDuplication', () => {
   });
 
   it('preserves media references', () => {
-    const sourceEvent = new CalendarEvent('calendarId', 'eventId');
+    const sourceEvent = new CalendarEvent('eventId', 'calendarId');
     sourceEvent.media = new Media('mediaId', 'image.jpg', 'image/jpeg', 1024);
     sourceEvent.mediaId = 'mediaId';
 
@@ -43,7 +43,7 @@ describe('useEventDuplication', () => {
   });
 
   it('clears event source URL', () => {
-    const sourceEvent = new CalendarEvent('calendarId', 'eventId', 'testDate', 'http://example.com/event');
+    const sourceEvent = new CalendarEvent('eventId', 'calendarId', 'http://example.com/event');
 
     const duplicatedEvent = stripEventForDuplication(sourceEvent);
 
@@ -51,7 +51,7 @@ describe('useEventDuplication', () => {
   });
 
   it('preserves categories', () => {
-    const sourceEvent = new CalendarEvent('calendarId', 'eventId');
+    const sourceEvent = new CalendarEvent('eventId', 'calendarId');
     sourceEvent.categories = [new EventCategory('categoryId', 'calendarId')];
 
     const duplicatedEvent = stripEventForDuplication(sourceEvent);
@@ -61,7 +61,7 @@ describe('useEventDuplication', () => {
   });
 
   it('preserves event content and location', () => {
-    const sourceEvent = new CalendarEvent('calendarId', 'eventId');
+    const sourceEvent = new CalendarEvent('eventId', 'calendarId');
     sourceEvent.content('en').name = 'Test Event';
     sourceEvent.content('en').description = 'Test Description';
     sourceEvent.location = new EventLocation('locationId', 'Test Location');
@@ -76,7 +76,7 @@ describe('useEventDuplication', () => {
   });
 
   it('preserves calendar ID', () => {
-    const sourceEvent = new CalendarEvent('originalCalendarId', 'eventId');
+    const sourceEvent = new CalendarEvent('eventId', 'originalCalendarId');
 
     const duplicatedEvent = stripEventForDuplication(sourceEvent);
 
@@ -84,7 +84,7 @@ describe('useEventDuplication', () => {
   });
 
   it('does not modify original event', () => {
-    const sourceEvent = new CalendarEvent('calendarId', 'originalEventId');
+    const sourceEvent = new CalendarEvent('originalEventId', 'calendarId');
     sourceEvent.content('en').name = 'Original Event';
     sourceEvent.mediaId = 'mediaId';
 
