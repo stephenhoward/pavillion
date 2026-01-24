@@ -33,6 +33,13 @@ export default defineConfig({
   // Run tests in files in parallel
   fullyParallel: true,
 
+  // Set environment variable to accept self-signed certificates
+  use: {
+    ...devices['Desktop Chrome'],
+    // Allow self-signed certificates for federation testing
+    ignoreHTTPSErrors: true,
+  },
+
   // Fail the build on CI if you accidentally left test.only in the source code
   forbidOnly: !!process.env.CI,
 
@@ -42,8 +49,8 @@ export default defineConfig({
   // Opt out of parallel tests on CI
   workers: process.env.CI ? 1 : undefined,
 
-  // Reporter to use
-  reporter: 'html',
+  // Reporter to use - open: 'never' prevents auto-launching browser after tests
+  reporter: [['html', { open: 'never' }]],
 
   // Shared settings for all the projects below
   use: {
