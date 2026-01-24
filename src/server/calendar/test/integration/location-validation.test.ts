@@ -28,7 +28,7 @@ describe('Location Validation API Integration Tests', () => {
 
   beforeAll(async () => {
     env = new TestEnvironment();
-    await env.init(3098); // Use unique port
+    await env.init();
 
     eventBus = new EventEmitter();
     calendarInterface = new CalendarInterface(eventBus);
@@ -134,7 +134,7 @@ describe('Location Validation API Integration Tests', () => {
 
     const response = await env.authPost(authToken, '/api/v1/events', eventData);
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(201);
     expect(response.body.location.name).toBe('Venue Name');
   });
 
@@ -163,7 +163,7 @@ describe('Location Validation API Integration Tests', () => {
 
     const response = await env.authPost(authToken, '/api/v1/events', eventData);
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(201);
     expect(response.body.location.city).toBe('San Francisco');
     expect(response.body.location.state).toBe('California');
   });

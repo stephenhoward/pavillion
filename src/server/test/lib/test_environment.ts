@@ -30,14 +30,16 @@ export class TestEnvironment {
     this.app = express();
   }
 
-  async init(port: number) {
+  async init() {
     // Entities are now registered with global db (imported above)
     // Sync the database first
     await db.sync({ force: true });
 
     // Now initialize the server - this will skip db sync in test mode
+    // In test mode, supertest works directly with the Express app object
+    // without needing the server to actually listen on a port (port is ignored)
     // IMPORTANT: Must await this so server is fully initialized before tests run
-    await initPavillionServer(this.app, port);
+    await initPavillionServer(this.app, 0);
 
     // Note: Setup mode middleware is active and will initially cache "setup mode active"
     // When tests create accounts via _setupAccount(), the cache is automatically cleared

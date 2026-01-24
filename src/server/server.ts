@@ -229,9 +229,13 @@ const initPavillionServer = async (app: express.Application, port: number) => {
       await calendarDomain.interface.refreshAllEventInstances();
     }
 
-    app.listen(port, () => {
-      console.log(`Pavillion listening at http://localhost:${port}/`);
-    });
+    // In test mode, supertest works directly with the Express app object
+    // without needing the server to actually listen on a port
+    if (process.env.NODE_ENV !== 'test') {
+      app.listen(port, () => {
+        console.log(`Pavillion listening at http://localhost:${port}/`);
+      });
+    }
   }
   catch (error) {
     console.error('Failed to initialize database:', error);

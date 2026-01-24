@@ -27,7 +27,7 @@ describe('Editor Invitation Management Integration', () => {
 
   beforeAll(async () => {
     env = new TestEnvironment();
-    await env.init(3002);
+    await env.init();
 
     eventBus = new EventEmitter();
     const configurationInterface = new ConfigurationInterface();

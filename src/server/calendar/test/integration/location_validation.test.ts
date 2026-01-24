@@ -18,7 +18,7 @@ describe('Location Validation - API Integration', () => {
 
   beforeAll(async () => {
     env = new TestEnvironment();
-    await env.init(3011); // Use unique port
+    await env.init();
 
     const eventBus = new EventEmitter();
     const configurationInterface = new ConfigurationInterface();
@@ -137,7 +137,7 @@ describe('Location Validation - API Integration', () => {
         }],
       });
 
-    expect(response1.status).toBe(200);
+    expect(response1.status).toBe(201);
     expect(response1.body.id).toBeDefined();
 
     // Test full valid location
@@ -167,7 +167,7 @@ describe('Location Validation - API Integration', () => {
         }],
       });
 
-    expect(response2.status).toBe(200);
+    expect(response2.status).toBe(201);
     expect(response2.body.id).toBeDefined();
   });
 

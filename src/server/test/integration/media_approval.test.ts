@@ -50,7 +50,7 @@ describe('Media Approval Workflow', () => {
 
   beforeAll(async () => {
     env = new TestEnvironment();
-    await env.init(3002);
+    await env.init();
 
     const eventBus = new EventEmitter();
     const calendarInterface = new CalendarInterface(eventBus);
@@ -101,7 +101,7 @@ describe('Media Approval Workflow', () => {
         },
       });
 
-      expect(eventResponse.status, 'event creation should succeed').toBe(200);
+      expect(eventResponse.status, 'event creation should succeed').toBe(201);
       expect(eventResponse.body.id, 'event should have an id').toBeDefined();
 
       // Step 3: Wait for async media approval to complete
@@ -139,7 +139,7 @@ describe('Media Approval Workflow', () => {
           en: { name: 'Event 1', description: 'First event' },
         },
       });
-      expect(event1Response.status).toBe(200);
+      expect(event1Response.status).toBe(201);
 
       // Wait for approval
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -156,7 +156,7 @@ describe('Media Approval Workflow', () => {
           en: { name: 'Event 2', description: 'Second event' },
         },
       });
-      expect(event2Response.status).toBe(200);
+      expect(event2Response.status).toBe(201);
 
       // Media should still be approved (no errors from re-approving)
       await new Promise(resolve => setTimeout(resolve, 200));

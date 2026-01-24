@@ -25,7 +25,7 @@ describe('Category Basic Integration', () => {
 
   beforeAll(async () => {
     env = new TestEnvironment();
-    await env.init(3006); // Use different port
+    await env.init();
 
     const eventBus = new EventEmitter();
     const calendarInterface = new CalendarInterface(eventBus);

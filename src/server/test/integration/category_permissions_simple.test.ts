@@ -25,7 +25,7 @@ describe('Category Permissions - Simple Integration', () => {
 
   beforeAll(async () => {
     env = new TestEnvironment();
-    await env.init(3010); // Use unique port
+    await env.init();
 
     const eventBus = new EventEmitter();
     const configurationInterface = new ConfigurationInterface();

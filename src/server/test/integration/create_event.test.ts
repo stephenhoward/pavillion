@@ -26,7 +26,7 @@ describe('Event API', () => {
 
   beforeAll(async () => {
     env = new TestEnvironment();
-    await env.init(3001);
+    await env.init();
 
     const eventBus = new EventEmitter();
     const calendarInterface = new CalendarInterface(eventBus);
@@ -97,7 +97,7 @@ describe('Event API', () => {
       order: [['message_time', 'DESC']],
     });
 
-    expect(response.status,"api call succeeded").toBe(200);
+    expect(response.status,"api call succeeded").toBe(201);
     expect(response.body.id,"got back an object with an id").toBeDefined();
     expect(response.body.error,"no error in the response").toBeUndefined();
     expect(entity,"found the event in the database").toBeDefined();

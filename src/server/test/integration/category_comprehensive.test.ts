@@ -32,7 +32,7 @@ describe('Category Management - Comprehensive Integration', () => {
 
   beforeAll(async () => {
     env = new TestEnvironment();
-    await env.init(3007); // Use unique port
+    await env.init();
 
     const eventBus = new EventEmitter();
     const calendarInterface = new CalendarInterface(eventBus);

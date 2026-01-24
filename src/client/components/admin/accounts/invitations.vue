@@ -1,7 +1,7 @@
 <template>
   <section>
     <div v-if="state.loadError" class="error-message">
-      {{ t('load_error') }}
+      {{ t('error') }}
     </div>
     <div v-if="state.resendSuccess" class="success-message">
       {{ t('resend_success', { email: state.resendSuccess }) }}
@@ -16,7 +16,7 @@
         <thead>
           <tr>
             <th scope="col">{{ t('email_column') }}</th>
-            <th scope="col">{{ t('expires_column') }}</th>
+            <th scope="col">{{ t('expiry_column') }}</th>
             <th scope="col">{{ t('actions_column') }}</th>
           </tr>
         </thead>
@@ -37,7 +37,7 @@
         </tbody>
       </table>
     </div>
-    <EmptyLayout v-else :title="t('noInvitations')" :description="t('noInvitationsDescription')">
+    <EmptyLayout v-else :title="t('no_invitations')" :description="t('no_invitations_description')">
       <button type="button" class="primary" @click="state.addInvite=true">
         {{ t('invite_new_account') }}
       </button>
@@ -91,7 +91,7 @@ const formatExpirationTime = (expTime) => {
   const expirationDateTime = DateTime.fromJSDate(new Date(expTime));
   const now = DateTime.now();
 
-  return expirationDateTime < now ? t('expired') : expirationDateTime.toLocaleString(DateTime.DATETIME_SHORT);
+  return expirationDateTime < now ? t('status_expired') : expirationDateTime.toLocaleString(DateTime.DATETIME_SHORT);
 };
 
 const isExpired = (expTime) => {

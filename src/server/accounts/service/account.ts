@@ -2,6 +2,7 @@ import { scryptSync, randomBytes } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { DateTime } from 'luxon';
 import config from 'config';
+import { Op } from 'sequelize';
 
 import { Account } from "@/common/model/account";
 import AccountInvitation from '@/common/model/invitation';
@@ -610,6 +611,67 @@ export default class AccountService {
     );
 
     return accountsWithRoles;
+  }
+
+  /**
+   * Lists accounts with pagination and optional search filtering.
+   *
+   * @param page - Page number (1-indexed)
+   * @param limit - Number of results per page
+   * @param search - Optional search string to filter by email
+   * @returns Promise with accounts and pagination info
+   */
+  async listAccounts(
+    page: number = 1,
+    limit: number = 50,
+    search?: string,
+  ): Promise<{
+      accounts: Account[];
+      pagination: {
+        currentPage: number;
+        totalPages: number;
+        totalCount: number;
+        limit: number;
+      };
+    }> {
+    const offset = (page - 1) * limit;
+
+    // Build where clause for search
+    const whereClause: any = {};
+    if (search) {
+      whereClause.email = { [Op.like]: `%${search}%` };
+    }
+
+    // Get total count for pagination
+    const totalCount = await AccountEntity.count({ where: whereClause });
+
+    // Fetch accounts with pagination
+    const accounts = await AccountEntity.findAll({
+      where: whereClause,
+      order: [['createdAt', 'DESC']],
+      limit,
+      offset,
+    });
+
+    // Load roles for each account
+    const accountsWithRoles = await Promise.all(
+      accounts.map(async (account) => {
+        const roles = await AccountRoleEntity.findAll({ where: { account_id: account.id } });
+        const accountModel = account.toModel();
+        accountModel.roles = roles.map(role => role.role);
+        return accountModel;
+      }),
+    );
+
+    return {
+      accounts: accountsWithRoles,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(totalCount / limit),
+        totalCount,
+        limit,
+      },
+    };
   }
 
   /**

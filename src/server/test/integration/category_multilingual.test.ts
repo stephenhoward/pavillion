@@ -25,7 +25,7 @@ describe('Category Multilingual Integration', () => {
 
   beforeAll(async () => {
     env = new TestEnvironment();
-    await env.init(3008); // Use unique port
+    await env.init();
 
     const eventBus = new EventEmitter();
     const calendarInterface = new CalendarInterface(eventBus);

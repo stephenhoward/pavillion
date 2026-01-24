@@ -39,7 +39,7 @@ describe('Category Management Integration Tests', () => {
 
   beforeAll(async () => {
     env = new TestEnvironment();
-    await env.init(3099); // Use unique port
+    await env.init();
 
     eventBus = new EventEmitter();
     calendarInterface = new CalendarInterface(eventBus);

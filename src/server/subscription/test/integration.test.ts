@@ -219,7 +219,7 @@ describe('Subscription System Integration Tests', () => {
     // Step 2: Advance time beyond grace period (8 days)
     const eightDaysAgo = new Date('2026-01-07T12:00:00Z');
     await db.query(
-      'UPDATE subscription SET updatedAt = ? WHERE id = ?',
+      'UPDATE user_subscription SET updatedAt = ? WHERE id = ?',
       {
         replacements: [eightDaysAgo.toISOString(), subscription.id],
       },
@@ -668,7 +668,7 @@ describe('Subscription System Integration Tests', () => {
     // Set updatedAt to 9 days ago (clearly past grace period)
     const nineDaysAgo = new Date('2026-01-06T12:00:00Z');
     await db.query(
-      'UPDATE subscription SET updatedAt = ? WHERE id = ?',
+      'UPDATE user_subscription SET updatedAt = ? WHERE id = ?',
       {
         replacements: [nineDaysAgo.toISOString(), subscription.id],
       },

@@ -93,7 +93,7 @@ describe('Subscription Scheduled Jobs', () => {
       // Manually update updatedAt to 8 days ago using raw query
       const eightDaysAgo = new Date('2026-01-07T12:00:00Z');
       await db.query(
-        'UPDATE subscription SET updatedAt = ? WHERE id = ?',
+        'UPDATE user_subscription SET updatedAt = ? WHERE id = ?',
         {
           replacements: [eightDaysAgo.toISOString(), expiredSubscription.id],
         },
@@ -164,7 +164,7 @@ describe('Subscription Scheduled Jobs', () => {
       // Manually update updatedAt to 10 days ago
       const tenDaysAgo = new Date('2026-01-05T12:00:00Z');
       await db.query(
-        'UPDATE subscription SET updatedAt = ? WHERE id = ?',
+        'UPDATE user_subscription SET updatedAt = ? WHERE id = ?',
         {
           replacements: [tenDaysAgo.toISOString(), subscription.id],
         },
@@ -236,7 +236,7 @@ describe('Subscription Scheduled Jobs', () => {
       // Manually update updatedAt to 9 days ago
       const nineDaysAgo = new Date('2026-01-06T12:00:00Z');
       await db.query(
-        'UPDATE subscription SET updatedAt = ? WHERE id = ?',
+        'UPDATE user_subscription SET updatedAt = ? WHERE id = ?',
         {
           replacements: [nineDaysAgo.toISOString(), subscription.id],
         },
@@ -313,7 +313,7 @@ describe('Subscription Scheduled Jobs', () => {
       // Manually update updatedAt to 5 days ago
       const fiveDaysAgo = new Date('2026-01-10T12:00:00Z');
       await db.query(
-        'UPDATE subscription SET updatedAt = ? WHERE id = ?',
+        'UPDATE user_subscription SET updatedAt = ? WHERE id = ?',
         {
           replacements: [fiveDaysAgo.toISOString(), recentSubscription.id],
         },
@@ -340,7 +340,7 @@ describe('Subscription Scheduled Jobs', () => {
       // Manually update updatedAt to 1 day ago
       const oneDayAgo = new Date('2026-01-14T12:00:00Z');
       await db.query(
-        'UPDATE subscription SET updatedAt = ? WHERE id = ?',
+        'UPDATE user_subscription SET updatedAt = ? WHERE id = ?',
         {
           replacements: [oneDayAgo.toISOString(), veryRecentSubscription.id],
         },

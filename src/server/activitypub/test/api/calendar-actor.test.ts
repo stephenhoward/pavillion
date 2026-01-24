@@ -17,7 +17,7 @@ describe('Calendar Actor Endpoints', () => {
 
   beforeAll(async () => {
     env = new TestEnvironment();
-    await env.init(3099); // Use different port
+    await env.init();
 
     const eventBus = new EventEmitter();
     const calendarInterface = new CalendarInterface(eventBus);

@@ -26,7 +26,7 @@ describe('Local Person Editor Workflow - Integration', () => {
 
   beforeAll(async () => {
     env = new TestEnvironment();
-    await env.init(3013); // Use unique port
+    await env.init();
 
     eventBus = new EventEmitter();
     const configurationInterface = new ConfigurationInterface();

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import request from 'supertest';
 import express from 'express';
@@ -19,11 +19,32 @@ import { testApp, addRequestUser } from '@/server/common/test/lib/express';
 import CategoryRoutes from '@/server/calendar/api/v1/categories';
 import CalendarInterface from '@/server/calendar/interface';
 
+// Import entities to register with Sequelize before CalendarInterface initialization
+import db from '@/server/common/entity/db';
+import '@/server/common/entity/account';
+import '@/server/calendar/entity/calendar';
+import '@/server/calendar/entity/calendar_editor';
+import '@/server/calendar/entity/calendar_editor_person';
+import '@/server/calendar/entity/event_category';
+import '@/server/calendar/entity/event_category_content';
+import '@/server/calendar/entity/event';
+import '@/server/calendar/entity/event_category_assignment';
+import '@/server/calendar/entity/event_instance';
+import '@/server/calendar/entity/location';
+import '@/server/activitypub/entity/activitypub';
+import '@/server/media/entity/media';
+import '@/server/configuration/entity/settings';
+
 describe('Category API', () => {
   let routes: CategoryRoutes;
   let router: express.Router;
   let calendarInterface: CalendarInterface;
   let categorySandbox: sinon.SinonSandbox = sinon.createSandbox();
+
+  // Sync database schema before any tests run (required for CalendarInterface to work)
+  beforeAll(async () => {
+    await db.sync({ force: true });
+  });
 
   beforeEach(() => {
     calendarInterface = new CalendarInterface(new EventEmitter());

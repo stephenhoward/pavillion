@@ -25,7 +25,7 @@ describe('FollowingCalendarEntity associations', () => {
   beforeAll(async () => {
     // Initialize test environment with database
     env = new TestEnvironment();
-    await env.init(3199); // Use unique port
+    await env.init();
 
     const eventBus = new EventEmitter();
     calendarInterface = new CalendarInterface(eventBus);

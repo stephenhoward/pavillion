@@ -38,13 +38,16 @@ export default defineConfig({
   // Opt out of parallel tests on CI
   workers: process.env.CI ? 1 : undefined,
 
-  // Reporter to use
-  reporter: 'html',
+  // Reporter to use - prevent browser from opening after tests
+  reporter: [['html', { open: 'never' }]],
 
   // Shared settings for all the projects below
   use: {
     // Base URL to use in actions like `await page.goto('/')`
     baseURL: 'http://localhost:3000',
+
+    // Run in headless mode to prevent browser windows staying open
+    headless: true,
 
     // Collect trace when retrying the failed test
     trace: 'on-first-retry',

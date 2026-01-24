@@ -94,10 +94,17 @@
         "status_accepted": "Accepted",
         "status_expired": "Expired",
         "status_revoked": "Revoked",
-        "no_invitations": "No invitations",
+        "no_invitations": "No Invitations",
         "no_invitations_description": "No invitations have been sent yet",
         "revoke_success": "Invitation revoked successfully",
-        "revoke_error": "Failed to revoke invitation"
+        "revoke_error": "Failed to revoke invitation",
+        "invite_new_account": "Invite New Account",
+        "resend_success": "Invitation resent to {{email}}",
+        "resend_error": "Failed to resend invitation to {{email}}",
+        "sending": "Sending...",
+        "resend": "Resend",
+        "cancel": "Cancel",
+        "unknown_expiration": "Unknown"
     },
     "settings": {
         "general_settings": "General Settings",

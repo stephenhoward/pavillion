@@ -29,7 +29,7 @@ describe('Event Deletion - Related Entities Cleanup', () => {
 
   beforeAll(async () => {
     env = new TestEnvironment();
-    await env.init(3009); // Use unique port
+    await env.init();
 
     const eventBus = new EventEmitter();
     calendarInterface = new CalendarInterface(eventBus);
@@ -80,7 +80,7 @@ describe('Event Deletion - Related Entities Cleanup', () => {
           },
         });
 
-      expect(eventResponse.status).toBe(200);
+      expect(eventResponse.status).toBe(201);
       const eventId = eventResponse.body.id;
 
       // Assign category to event
@@ -149,7 +149,7 @@ describe('Event Deletion - Related Entities Cleanup', () => {
           },
         });
 
-      expect(eventResponse.status).toBe(200);
+      expect(eventResponse.status).toBe(201);
       const eventId = eventResponse.body.id;
 
       // Verify content exists for all languages
@@ -326,7 +326,7 @@ describe('Event Deletion - Related Entities Cleanup', () => {
           },
         });
 
-      expect(eventResponse.status).toBe(200);
+      expect(eventResponse.status).toBe(201);
       const eventId = eventResponse.body.id;
 
       // Manually associate media with event (simulating what would happen via API)
@@ -387,7 +387,7 @@ describe('Event Deletion - Related Entities Cleanup', () => {
           },
         });
 
-      expect(eventResponse.status).toBe(200);
+      expect(eventResponse.status).toBe(201);
       const eventId = eventResponse.body.id;
 
       // Manually associate location with event
