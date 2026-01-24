@@ -37,7 +37,8 @@ export class WebhookManager {
           return domain.startsWith('http') ? domain : `https://${domain}`;
         }
       }
-    } catch (e) {
+    }
+    catch (e) {
       // Config doesn't have server.domain, continue to fallback
     }
 

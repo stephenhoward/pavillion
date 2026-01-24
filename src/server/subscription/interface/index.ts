@@ -75,7 +75,7 @@ export default class SubscriptionInterface {
     accountId: string,
     providerType: 'stripe' | 'paypal',
     billingCycle: 'monthly' | 'yearly',
-    amount?: number
+    amount?: number,
   ): Promise<ProviderSubscription> {
     return this.subscriptionService.subscribe(accountId, providerType, billingCycle, amount);
   }

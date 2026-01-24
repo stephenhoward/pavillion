@@ -125,7 +125,8 @@ export class ProviderConnectionService {
       const webhookRegistration = await adapter.registerWebhook(webhookUrl, credentials);
       webhookId = webhookRegistration.webhookId;
       webhookSecret = webhookRegistration.webhookSecret;
-    } catch (error) {
+    }
+    catch (error) {
       // Log warning but don't block connection
       console.warn('Failed to register Stripe webhook:', error);
     }
@@ -149,7 +150,8 @@ export class ProviderConnectionService {
         entity._decryptedWebhookSecret = webhookSecret;
       }
       await entity.save();
-    } else {
+    }
+    else {
       // Create new configuration
       entity = await ProviderConfigEntity.create({
         id: uuidv4(),
@@ -206,7 +208,8 @@ export class ProviderConnectionService {
       const webhookRegistration = await adapter.registerWebhook(webhookUrl, credentials);
       webhookId = webhookRegistration.webhookId;
       webhookSecret = webhookRegistration.webhookSecret;
-    } catch (error) {
+    }
+    catch (error) {
       // Log warning but don't block configuration
       console.warn('Failed to register PayPal webhook:', error);
     }
@@ -230,7 +233,8 @@ export class ProviderConnectionService {
         entity._decryptedWebhookSecret = webhookSecret;
       }
       await entity.save();
-    } else {
+    }
+    else {
       // Create new configuration
       entity = await ProviderConfigEntity.create({
         id: uuidv4(),
@@ -283,10 +287,12 @@ export class ProviderConnectionService {
 
       if (providerType === 'stripe') {
         hasRequiredFields = !!credentials.stripe_user_id;
-      } else if (providerType === 'paypal') {
+      }
+      else if (providerType === 'paypal') {
         hasRequiredFields = !!credentials.client_id && !!credentials.client_secret;
       }
-    } catch (e) {
+    }
+    catch (e) {
       hasRequiredFields = false;
     }
 
@@ -367,7 +373,8 @@ export class ProviderConnectionService {
         const adapter = this.getAdapter(providerType, credentials);
         await adapter.deleteWebhook(webhookId, credentials);
       }
-    } catch (error) {
+    }
+    catch (error) {
       // Log warning but proceed with disconnection
       console.warn('Failed to delete webhook:', error);
     }

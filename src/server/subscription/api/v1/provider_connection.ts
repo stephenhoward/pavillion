@@ -75,7 +75,8 @@ export default class ProviderConnectionRoutes {
       res.json({
         oauthUrl: result.oauthUrl,
       });
-    } catch (error) {
+    }
+    catch (error) {
       console.error('Error initiating Stripe OAuth:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
@@ -111,7 +112,8 @@ export default class ProviderConnectionRoutes {
 
       // Success - redirect to funding page
       res.redirect('/admin/funding?success=stripe_connected');
-    } catch (error) {
+    }
+    catch (error) {
       console.error('Error handling Stripe OAuth callback:', error);
       res.redirect('/admin/funding?error=connection_failed');
     }
@@ -160,12 +162,14 @@ export default class ProviderConnectionRoutes {
       });
 
       res.json({ success: true });
-    } catch (error) {
+    }
+    catch (error) {
       console.error('Error configuring PayPal:', error);
 
       if (error instanceof Error && error.message.includes('Invalid')) {
         res.status(400).json({ error: error.message });
-      } else {
+      }
+      else {
         res.status(500).json({ error: 'Internal server error' });
       }
     }
@@ -201,12 +205,14 @@ export default class ProviderConnectionRoutes {
 
       // Disconnection successful
       res.json({ success: true });
-    } catch (error) {
+    }
+    catch (error) {
       console.error('Error disconnecting provider:', error);
 
       if (error instanceof Error && error.message.includes('not found')) {
         res.status(404).json({ error: error.message });
-      } else {
+      }
+      else {
         res.status(500).json({ error: 'Internal server error' });
       }
     }

@@ -101,7 +101,7 @@ class PlatformOAuthConfigEntity extends Model {
     id: string,
     providerType: ProviderType,
     clientId: string,
-    clientSecret: string
+    clientSecret: string,
   ): PlatformOAuthConfigEntity {
     const entity = PlatformOAuthConfigEntity.build({
       id,

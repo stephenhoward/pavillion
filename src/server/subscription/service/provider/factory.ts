@@ -29,7 +29,8 @@ export class ProviderFactory {
     let credentials: ProviderCredentials;
     try {
       credentials = JSON.parse(config.credentials);
-    } catch (err) {
+    }
+    catch (err) {
       throw new Error(`Invalid credentials format for provider ${config.id}`);
     }
 

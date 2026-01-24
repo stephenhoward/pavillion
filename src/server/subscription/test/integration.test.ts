@@ -62,7 +62,7 @@ describe('Subscription System Integration Tests', () => {
     providerModel.credentials = JSON.stringify(
       providerType === 'stripe'
         ? { apiKey: 'sk_test_123' }
-        : { clientId: 'test_client', secret: 'test_secret', mode: 'sandbox' }
+        : { clientId: 'test_client', secret: 'test_secret', mode: 'sandbox' },
     );
     providerModel.webhookSecret = 'whsec_test_secret';
 
@@ -222,7 +222,7 @@ describe('Subscription System Integration Tests', () => {
       'UPDATE subscription SET updatedAt = ? WHERE id = ?',
       {
         replacements: [eightDaysAgo.toISOString(), subscription.id],
-      }
+      },
     );
 
     // Step 3: Run grace period check job
@@ -671,7 +671,7 @@ describe('Subscription System Integration Tests', () => {
       'UPDATE subscription SET updatedAt = ? WHERE id = ?',
       {
         replacements: [nineDaysAgo.toISOString(), subscription.id],
-      }
+      },
     );
 
     // Run grace period check

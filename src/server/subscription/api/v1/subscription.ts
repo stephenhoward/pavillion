@@ -57,7 +57,8 @@ export default class SubscriptionRouteHandlers {
         currency: options.currency,
         payWhatYouCan: options.payWhatYouCan,
       });
-    } catch (error) {
+    }
+    catch (error) {
       console.error('Error fetching subscription options:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
@@ -105,15 +106,18 @@ export default class SubscriptionRouteHandlers {
       );
 
       res.json(subscription.toObject());
-    } catch (error) {
+    }
+    catch (error) {
       console.error('Error creating subscription:', error);
       if (error instanceof Error) {
         if (error.message.includes('not found') || error.message.includes('not enabled')) {
           res.status(400).json({ error: error.message });
-        } else {
+        }
+        else {
           res.status(500).json({ error: 'Internal server error' });
         }
-      } else {
+      }
+      else {
         res.status(500).json({ error: 'Internal server error' });
       }
     }
@@ -140,7 +144,8 @@ export default class SubscriptionRouteHandlers {
       }
 
       res.json(subscription.toObject());
-    } catch (error) {
+    }
+    catch (error) {
       console.error('Error fetching subscription status:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
@@ -171,11 +176,13 @@ export default class SubscriptionRouteHandlers {
       await this.interface.cancel(subscription.id, false);
 
       res.json({ success: true });
-    } catch (error) {
+    }
+    catch (error) {
       console.error('Error canceling subscription:', error);
       if (error instanceof Error && error.message.includes('not found')) {
         res.status(404).json({ error: error.message });
-      } else {
+      }
+      else {
         res.status(500).json({ error: 'Internal server error' });
       }
     }
@@ -204,11 +211,13 @@ export default class SubscriptionRouteHandlers {
       const portalUrl = await this.interface.getBillingPortalUrl(account.id, returnUrl);
 
       res.json({ portalUrl });
-    } catch (error) {
+    }
+    catch (error) {
       console.error('Error getting billing portal URL:', error);
       if (error instanceof Error && error.message.includes('not found')) {
         res.status(404).json({ error: error.message });
-      } else {
+      }
+      else {
         res.status(500).json({ error: 'Internal server error' });
       }
     }

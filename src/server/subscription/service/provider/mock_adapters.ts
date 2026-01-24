@@ -84,7 +84,7 @@ export class MockStripeAdapter implements PaymentProviderAdapter {
    */
   async registerWebhook(
     webhookUrl: string,
-    credentials: ProviderCredentials
+    credentials: ProviderCredentials,
   ): Promise<WebhookRegistration> {
     const timestamp = Date.now();
 
@@ -288,7 +288,7 @@ export class MockPayPalAdapter implements PaymentProviderAdapter {
    */
   async registerWebhook(
     webhookUrl: string,
-    credentials: ProviderCredentials
+    credentials: ProviderCredentials,
   ): Promise<WebhookRegistration> {
     const timestamp = Date.now();
 

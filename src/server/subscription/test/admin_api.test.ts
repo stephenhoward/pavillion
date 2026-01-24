@@ -155,9 +155,9 @@ describe('Admin Subscription API', () => {
         .expect(200);
 
       expect(response.body).toHaveLength(2);
-      expect(response.body[0].providerType).toBe('stripe');
+      expect(response.body[0].provider_type).toBe('stripe');
       expect(response.body[0].configured).toBe(true);
-      expect(response.body[1].providerType).toBe('paypal');
+      expect(response.body[1].provider_type).toBe('paypal');
       expect(response.body[1].configured).toBe(false);
       // Credentials should not be exposed
       expect(response.body[0].credentials).toBeUndefined();

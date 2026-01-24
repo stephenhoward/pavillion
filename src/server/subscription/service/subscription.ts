@@ -75,7 +75,8 @@ export default class SubscriptionService {
       entity = SubscriptionSettingsEntity.fromModel(settings);
       entity.id = uuidv4();
       await entity.save();
-    } else {
+    }
+    else {
       // Update existing settings
       entity.enabled = settings.enabled;
       entity.monthly_price = settings.monthlyPrice;
@@ -408,14 +409,14 @@ export default class SubscriptionService {
     page: number = 1,
     limit: number = 50,
   ): Promise<{
-    subscriptions: Subscription[];
-    pagination: {
-      currentPage: number;
-      totalPages: number;
-      totalCount: number;
-      limit: number;
-    };
-  }> {
+      subscriptions: Subscription[];
+      pagination: {
+        currentPage: number;
+        totalPages: number;
+        totalCount: number;
+        limit: number;
+      };
+    }> {
     const offset = (page - 1) * limit;
 
     const { rows, count } = await SubscriptionEntity.findAndCountAll({
@@ -497,11 +498,13 @@ export default class SubscriptionService {
         this.eventBus.emit('subscription:payment_failed', {
           subscription: subscription.toModel(),
         });
-      } else if (previousStatus === 'past_due' && event.status === 'suspended') {
+      }
+      else if (previousStatus === 'past_due' && event.status === 'suspended') {
         this.eventBus.emit('subscription:suspended', {
           subscription: subscription.toModel(),
         });
-      } else if (event.status === 'active' && previousStatus !== 'active') {
+      }
+      else if (event.status === 'active' && previousStatus !== 'active') {
         this.eventBus.emit('subscription:reactivated', {
           subscription: subscription.toModel(),
         });
@@ -614,16 +617,17 @@ export default class SubscriptionService {
         config.id,
         'stripe',
         credentials.stripeClientId,
-        credentials.stripeClientSecret
+        credentials.stripeClientSecret,
       );
       await config.save();
-    } else {
+    }
+    else {
       // Create new config
       config = PlatformOAuthConfigEntity.fromCredentials(
         uuidv4(),
         'stripe',
         credentials.stripeClientId,
-        credentials.stripeClientSecret
+        credentials.stripeClientSecret,
       );
       await config.save();
     }

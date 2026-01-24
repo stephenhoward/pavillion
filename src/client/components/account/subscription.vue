@@ -297,10 +297,16 @@ onMounted(async () => {
         </div>
 
         <div class="form-actions">
-          <button type="button" class="primary" :disabled="processing" @click="submitSubscribe">
+          <button type="button"
+                  class="primary"
+                  :disabled="processing"
+                  @click="submitSubscribe">
             {{ t("confirm_subscribe_button") }}
           </button>
-          <button type="button" class="secondary" :disabled="processing" @click="cancelSubscribeForm">
+          <button type="button"
+                  class="secondary"
+                  :disabled="processing"
+                  @click="cancelSubscribeForm">
             {{ t("cancel_button") }}
           </button>
         </div>

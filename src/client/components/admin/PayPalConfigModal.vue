@@ -83,9 +83,11 @@ async function handleSubmit() {
 
     // Reset form on success
     resetForm();
-  } catch (error) {
+  }
+  catch (error) {
     console.error('Error submitting PayPal configuration:', error);
-  } finally {
+  }
+  finally {
     submitting.value = false;
   }
 }
@@ -120,19 +122,22 @@ function handleClose() {
 function validateField(field) {
   if (field === 'clientId' && !clientId.value.trim()) {
     errors.value.clientId = t('client_id_required');
-  } else if (field === 'clientId') {
+  }
+  else if (field === 'clientId') {
     errors.value.clientId = '';
   }
 
   if (field === 'clientSecret' && !clientSecret.value.trim()) {
     errors.value.clientSecret = t('client_secret_required');
-  } else if (field === 'clientSecret') {
+  }
+  else if (field === 'clientSecret') {
     errors.value.clientSecret = '';
   }
 
   if (field === 'environment' && !environment.value) {
     errors.value.environment = t('environment_required');
-  } else if (field === 'environment') {
+  }
+  else if (field === 'environment') {
     errors.value.environment = '';
   }
 }
@@ -140,7 +145,10 @@ function validateField(field) {
 
 <template>
   <div v-if="show" class="modal-overlay" @click.self="handleClose">
-    <div class="modal-container" role="dialog" aria-modal="true" :aria-label="t('title')">
+    <div class="modal-container"
+         role="dialog"
+         aria-modal="true"
+         :aria-label="t('title')">
       <div class="modal-header">
         <h2>{{ t('title') }}</h2>
         <button

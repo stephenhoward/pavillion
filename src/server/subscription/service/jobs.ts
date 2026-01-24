@@ -21,7 +21,8 @@ export async function checkGracePeriodExpiry(): Promise<void> {
   try {
     await subscriptionService.suspendExpiredSubscriptions();
     console.log('[SubscriptionJobs] Grace period check completed');
-  } catch (error) {
+  }
+  catch (error) {
     console.error('[SubscriptionJobs] Error checking grace period expiry:', error);
     throw error;
   }

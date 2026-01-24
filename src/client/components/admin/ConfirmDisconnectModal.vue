@@ -48,9 +48,11 @@ async function handleConfirm() {
     await emit('confirm');
     // Reset state after successful disconnect
     resetState();
-  } catch (error) {
+  }
+  catch (error) {
     console.error('Error during disconnect:', error);
-  } finally {
+  }
+  finally {
     disconnecting.value = false;
   }
 }
@@ -76,7 +78,10 @@ function resetState() {
 
 <template>
   <div v-if="show" class="modal-overlay" @click.self="handleClose">
-    <div class="modal-container" role="dialog" aria-modal="true" :aria-label="t('title', { provider: providerName })">
+    <div class="modal-container"
+         role="dialog"
+         aria-modal="true"
+         :aria-label="t('title', { provider: providerName })">
       <div class="modal-header">
         <h2>{{ t('title', { provider: providerName }) }}</h2>
         <button
@@ -92,10 +97,22 @@ function resetState() {
 
       <div class="modal-body">
         <div class="warning-icon">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <svg width="48"
+               height="48"
+               viewBox="0 0 24 24"
+               fill="none"
+               xmlns="http://www.w3.org/2000/svg">
             <path d="M12 2L2 20h20L12 2z" fill="#dc3545" opacity="0.2"/>
-            <path d="M12 2L2 20h20L12 2z" stroke="#dc3545" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M12 9v4M12 17h.01" stroke="#dc3545" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M12 2L2 20h20L12 2z"
+                  stroke="#dc3545"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"/>
+            <path d="M12 9v4M12 17h.01"
+                  stroke="#dc3545"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"/>
           </svg>
         </div>
 
