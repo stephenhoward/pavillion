@@ -1,8 +1,8 @@
 {
     "EventScheduleEntity": [
         {
-            "id": "es-1-1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
-            "event_id": "evt-1-1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+            "id": "90318419-8adb-48d2-a0fe-0dca7f08c3eb",
+            "event_id": "37d1bb5a-452b-432e-ac46-268b9c565bde",
             "timezone": "America/Los_Angeles",
             "start_date": "2025-06-15T10:00:00.000",
             "end_date": "2025-06-15T18:00:00.000",
@@ -13,8 +13,8 @@
             "is_exclusion": false
         },
         {
-            "id": "es-2-2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
-            "event_id": "evt-2-2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
+            "id": "f6b3cd75-b326-461e-a1fd-67f6079b18a1",
+            "event_id": "35d10fac-fa3e-4d42-a8ac-d597338d8d64",
             "timezone": "America/Los_Angeles",
             "start_date": "2025-05-22T18:30:00.000",
             "end_date": "2025-05-22T20:00:00.000",
@@ -25,8 +25,8 @@
             "is_exclusion": false
         },
         {
-            "id": "es-3-3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f",
-            "event_id": "evt-3-3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f",
+            "id": "25e6fd77-f3f7-4195-af87-d8eec8ca6f91",
+            "event_id": "6ec54e50-1abd-44b3-a670-71d5c0f7433b",
             "timezone": "America/Los_Angeles",
             "start_date": "2025-07-04T12:00:00.000",
             "end_date": "2025-07-04T16:00:00.000",
@@ -37,8 +37,8 @@
             "is_exclusion": false
         },
         {
-            "id": "es-4-4d5e6f7a-8b9c-0d1e-2f3a-4b5c6d7e8f9a",
-            "event_id": "evt-4-4d5e6f7a-8b9c-0d1e-2f3a-4b5c6d7e8f9a",
+            "id": "30cb0e00-924d-4c1b-abaf-c8b9b671100d",
+            "event_id": "cfdb67f1-bf39-4adb-a630-526c6e241e5a",
             "timezone": "America/Los_Angeles",
             "start_date": "2025-05-25T09:00:00.000",
             "end_date": "2025-05-25T10:30:00.000",
@@ -49,8 +49,8 @@
             "is_exclusion": false
         },
         {
-            "id": "es-5-5e6f7a8b-9c0d-1e2f-3a4b-5c6d7e8f9a0b",
-            "event_id": "evt-5-5e6f7a8b-9c0d-1e2f-3a4b-5c6d7e8f9a0b",
+            "id": "e3d4684e-0644-40aa-a1e1-7ab478082b59",
+            "event_id": "6b84598c-eeaf-4a6a-ad5e-7d5811682a6b",
             "timezone": "America/Los_Angeles",
             "start_date": "2025-06-02T19:00:00.000",
             "end_date": "2025-06-02T21:00:00.000",
@@ -61,8 +61,8 @@
             "is_exclusion": false
         },
         {
-            "id": "es-6-6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c",
-            "event_id": "evt-6-6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c",
+            "id": "05050723-14ca-46db-aabf-afbb5ae68d03",
+            "event_id": "e7c14f3d-9f5a-4778-ada9-8979480b964c",
             "timezone": "America/Los_Angeles",
             "start_date": "2025-05-28T09:00:00.000",
             "end_date": "2025-05-28T12:00:00.000",
@@ -73,8 +73,8 @@
             "is_exclusion": false
         },
         {
-            "id": "es-7-7a8b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
-            "event_id": "evt-7-7a8b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
+            "id": "6814312b-2152-4534-a79c-c4c7ccb6cbc1",
+            "event_id": "b9f95a62-b4c9-4ccd-ae49-12f1899b0ee0",
             "timezone": "America/Los_Angeles",
             "start_date": "2025-05-24T08:00:00.000",
             "end_date": "2025-05-24T13:00:00.000",
@@ -85,8 +85,8 @@
             "is_exclusion": false
         },
         {
-            "id": "es-8-8b9c0d1e-2f3a-4b5c-6d7e-8f9a0b1c2d3e",
-            "event_id": "evt-8-8b9c0d1e-2f3a-4b5c-6d7e-8f9a0b1c2d3e",
+            "id": "09921b48-9312-4adc-a73c-5e2006467201",
+            "event_id": "7a35d17a-f87d-4bfd-ae6d-89c3a53b8998",
             "timezone": "America/Los_Angeles",
             "start_date": "2025-06-10T18:00:00.000",
             "end_date": "2025-06-10T20:00:00.000",
@@ -97,8 +97,8 @@
             "is_exclusion": false
         },
         {
-            "id": "es-9-9c0d1e2f-3a4b-5c6d-7e8f-9a0b1c2d3e4f",
-            "event_id": "evt-9-9c0d1e2f-3a4b-5c6d-7e8f-9a0b1c2d3e4f",
+            "id": "d5d15cff-3c98-4c5e-ade9-d8bcdd37d149",
+            "event_id": "d759c12b-02f9-414b-a957-f325f02cf0c6",
             "timezone": "America/Los_Angeles",
             "start_date": "2025-07-15T11:00:00.000",
             "end_date": "2025-07-15T17:00:00.000",
@@ -109,8 +109,8 @@
             "is_exclusion": false
         },
         {
-            "id": "es-10-0d1e2f3a-4b5c-6d7e-8f9a-0b1c2d3e4f5a",
-            "event_id": "evt-10-0d1e2f3a-4b5c-6d7e-8f9a-0b1c2d3e4f5a",
+            "id": "5de09438-a96b-4bd3-a4b3-9ecaa59d54b6",
+            "event_id": "d6d4ab24-1164-4b35-ab4b-59041d0dfff7",
             "timezone": "America/Los_Angeles",
             "start_date": "2025-06-20T20:00:00.000",
             "end_date": "2025-06-20T22:30:00.000",
@@ -121,8 +121,8 @@
             "is_exclusion": false
         },
         {
-            "id": "es-tu-1-6e87d5ca-4d89-42c1-aa9d-5ef437fe7711",
-            "event_id": "evt-tu-1-6e87d5ca-4d89-42c1-aa9d-5ef437fe7711",
+            "id": "6c7ce4bd-8d71-470b-a84d-82dba261a149",
+            "event_id": "34ca7066-322c-4b66-ad78-00360f71e698",
             "timezone": "America/Los_Angeles",
             "start_date": "2025-05-20T07:00:00.000",
             "end_date": "2025-05-20T08:30:00.000",
@@ -133,8 +133,8 @@
             "is_exclusion": false
         },
         {
-            "id": "es-tu-2-6e87d5ca-4d89-42c1-aa9d-5ef437fe7722",
-            "event_id": "evt-tu-2-6e87d5ca-4d89-42c1-aa9d-5ef437fe7722",
+            "id": "e2a961b1-89c4-4278-a8e9-bb33687abe99",
+            "event_id": "d09334bd-e24d-4bfc-a46c-8c6dcf8f0b17",
             "timezone": "America/Los_Angeles",
             "start_date": "2025-05-21T17:30:00.000",
             "end_date": "2025-05-21T18:30:00.000",
@@ -145,8 +145,8 @@
             "is_exclusion": false
         },
         {
-            "id": "es-tu-3-6e87d5ca-4d89-42c1-aa9d-5ef437fe7733",
-            "event_id": "evt-tu-3-6e87d5ca-4d89-42c1-aa9d-5ef437fe7733",
+            "id": "cb4fe0bb-505a-424c-ae76-637b5dab9f3c",
+            "event_id": "72a94cd2-eb3f-4f08-a008-574d54f809c9",
             "timezone": "America/Los_Angeles",
             "start_date": "2025-06-08T19:00:00.000",
             "end_date": "2025-06-08T22:00:00.000",
@@ -157,8 +157,8 @@
             "is_exclusion": false
         },
         {
-            "id": "es-tu-4-6e87d5ca-4d89-42c1-aa9d-5ef437fe7744",
-            "event_id": "evt-tu-4-6e87d5ca-4d89-42c1-aa9d-5ef437fe7744",
+            "id": "cf1560e8-096d-4523-ae20-a102f1174142",
+            "event_id": "2fa20dc5-d403-479b-a773-358ac4fe9fd3",
             "timezone": "America/Los_Angeles",
             "start_date": "2025-05-15T14:00:00.000",
             "end_date": "2025-05-15T17:00:00.000",
@@ -169,8 +169,8 @@
             "is_exclusion": false
         },
         {
-            "id": "es-tu-5-6e87d5ca-4d89-42c1-aa9d-5ef437fe7755",
-            "event_id": "evt-tu-5-6e87d5ca-4d89-42c1-aa9d-5ef437fe7755",
+            "id": "4d3dedf0-c68e-480e-a519-98a9e09adc42",
+            "event_id": "792895df-c319-4920-a09e-9a8749cd3d76",
             "timezone": "America/Los_Angeles",
             "start_date": "2025-07-12T18:00:00.000",
             "end_date": "2025-07-12T21:00:00.000",
@@ -181,8 +181,8 @@
             "is_exclusion": false
         },
         {
-            "id": "es-mc-1-6e87d5ca-4d89-42c1-aa9d-5ef437fe8811",
-            "event_id": "evt-mc-1-6e87d5ca-4d89-42c1-aa9d-5ef437fe8811",
+            "id": "97debbe4-c489-4f8f-aaa1-227cb521c776",
+            "event_id": "6ec0637c-9dae-4489-ae74-f6b4301f318d",
             "timezone": "America/Los_Angeles",
             "start_date": "2025-06-25T18:00:00.000",
             "end_date": "2025-06-25T20:30:00.000",
@@ -193,8 +193,8 @@
             "is_exclusion": false
         },
         {
-            "id": "es-mc-2-6e87d5ca-4d89-42c1-aa9d-5ef437fe8822",
-            "event_id": "evt-mc-2-6e87d5ca-4d89-42c1-aa9d-5ef437fe8822",
+            "id": "0441642c-af8f-4f21-a964-86a0b97eb9a7",
+            "event_id": "5b41c6b3-1335-4bc5-aaee-ae44db2a114e",
             "timezone": "America/Los_Angeles",
             "start_date": "2025-05-29T06:00:00.000",
             "end_date": "2025-05-29T07:00:00.000",
@@ -205,8 +205,8 @@
             "is_exclusion": false
         },
         {
-            "id": "es-mc-3-6e87d5ca-4d89-42c1-aa9d-5ef437fe8833",
-            "event_id": "evt-mc-3-6e87d5ca-4d89-42c1-aa9d-5ef437fe8833",
+            "id": "e34e8f2b-8ddd-48f2-a3e4-a90adaf98a82",
+            "event_id": "4383e093-e939-4fb2-a572-47b914fad047",
             "timezone": "America/Los_Angeles",
             "start_date": "2025-07-18T19:30:00.000",
             "end_date": "2025-07-18T22:00:00.000",
@@ -217,8 +217,8 @@
             "is_exclusion": false
         },
         {
-            "id": "es-mc-4-6e87d5ca-4d89-42c1-aa9d-5ef437fe8844",
-            "event_id": "evt-mc-4-6e87d5ca-4d89-42c1-aa9d-5ef437fe8844",
+            "id": "b85a8f68-4b12-4676-a100-d50cd4c54fae",
+            "event_id": "4a9f09c3-8ab1-45e0-a14b-ee3b1bfb1c76",
             "timezone": "America/Los_Angeles",
             "start_date": "2025-06-05T10:00:00.000",
             "end_date": "2025-06-05T13:00:00.000",
@@ -229,8 +229,8 @@
             "is_exclusion": false
         },
         {
-            "id": "es-mc-5-6e87d5ca-4d89-42c1-aa9d-5ef437fe8855",
-            "event_id": "evt-mc-5-6e87d5ca-4d89-42c1-aa9d-5ef437fe8855",
+            "id": "424aa110-b61b-4393-ab19-1849028e0671",
+            "event_id": "8531edec-f098-4cd6-a961-5d75a5ffe582",
             "timezone": "America/Los_Angeles",
             "start_date": "2025-06-14T09:00:00.000",
             "end_date": "2025-06-14T12:00:00.000",
