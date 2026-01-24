@@ -26,7 +26,7 @@ export default class CalendarService {
     if (calendar) {
       return calendar;
     }
-    const calendarData = await ModelService.getModel('/api/public/v1/calendars/' + urlName);
+    const calendarData = await ModelService.getModel('/api/public/v1/calendar/' + urlName);
     if ( calendarData) {
       calendar = Calendar.fromObject(calendarData);
       // Update the store with the fetched calendar
@@ -44,7 +44,7 @@ export default class CalendarService {
    */
   async loadCalendarEvents(calendarUrlName: string): Promise<CalendarEventInstance[]> {
     try {
-      const events = await ModelService.listModels(`/api/public/v1/calendars/${calendarUrlName}/events`);
+      const events = await ModelService.listModels(`/api/public/v1/calendar/${calendarUrlName}/events`);
       const calendarEvents = events.map(event => CalendarEventInstance.fromObject(event));
       this.eventStore.setEvents(calendarEvents);
       return calendarEvents;

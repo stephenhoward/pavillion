@@ -21,6 +21,7 @@ import MediaDomain from './media';
 import SetupDomain from './setup';
 import SubscriptionDomain from './subscription';
 import { createSetupModeMiddleware } from './setup/middleware/setup-mode';
+import { backfillUserActors } from '@/server/activitypub/scripts/backfill-user-actors';
 
 /**
  * Validates production environment configuration.
@@ -48,8 +49,8 @@ function validateProductionEnvironment(): void {
  * @returns Promise that resolves when database is ready
  */
 async function initializeDatabase(): Promise<void> {
-  // Development and test environments use sync, production uses migrations
-  if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') {
+  // Development, test, and federation environments use sync; production uses migrations
+  if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'federation') {
     // Check if database reset is disabled (for containerized development with persistent data)
     const skipReset = process.env.DB_RESET === 'false';
 
@@ -64,11 +65,16 @@ async function initializeDatabase(): Promise<void> {
       console.log('Test mode: Skipping database sync (managed by test environment).');
     }
     else {
-      // Default development behavior: reset and re-seed database
-      console.log('Development mode: Syncing database schema...');
+      // Default development/federation behavior: reset and re-seed database
+      const envLabel = process.env.NODE_ENV === 'federation' ? 'Federation' : 'Development';
+      console.log(`${envLabel} mode: Syncing database schema...`);
       await db.sync({ force: true });
       await seedDB();
       console.log('Database synced and seeded successfully.');
+
+      // Backfill UserActors for seeded accounts
+      await backfillUserActors(undefined, false);
+      console.log('User actors backfilled successfully.');
     }
   }
   else {
@@ -193,10 +199,10 @@ const initPavillionServer = async (app: express.Application, port: number) => {
   const authenticationDomain = new AuthenticationDomain(eventBus, accountsDomain.interface, emailDomain.interface);
   authenticationDomain.initialize(app);
 
-  new ActivityPubDomain(eventBus).initialize(app);
-
   const calendarDomain = new CalendarDomain(eventBus, accountsDomain.interface, emailDomain.interface);
   calendarDomain.initialize(app);
+
+  new ActivityPubDomain(eventBus, calendarDomain.interface, accountsDomain.interface).initialize(app);
 
   // Set up CalendarInterface on AccountsInterface to enable calendar editor invitation acceptance
   // TODO: move invites into a separate domain to avoid circular dependency

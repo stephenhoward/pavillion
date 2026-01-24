@@ -47,8 +47,8 @@ import {
 const TEST_CALENDAR_ID = 'testid';
 const LOCAL_ACTOR_URL = 'https://local.federation.test/calendars/events';
 const REMOTE_CALENDAR_HANDLE = 'remotecalendar@remotedomain.test';
-const REMOTE_PROFILE_URL = 'https://remotedomain.test/o/testcalendar';
-const REMOTE_INBOX_URL = 'https://remotedomain.test/o/testcalendar/inbox';
+const REMOTE_PROFILE_URL = 'https://remotedomain.test/calendars/testcalendar';
+const REMOTE_INBOX_URL = 'https://remotedomain.test/calendars/testcalendar/inbox';
 const OBSERVER_CALENDAR_HANDLE = 'observercalendar@observerdomain.test';
 
 
@@ -185,14 +185,26 @@ describe('getRecipients', () => {
 
   it('should return an array with followers and observers', async () => {
     const followersStub = sandbox.stub(FollowerCalendarEntity, 'findAll');
-    followersStub.resolves([
-      FollowerCalendarEntity.build({ remote_calendar_id: REMOTE_CALENDAR_HANDLE }),
-    ]);
+    // Mock follower with remoteCalendar association containing actor_uri
+    const mockFollower = {
+      remote_calendar_id: 'mock-remote-calendar-uuid-1',
+      remoteCalendar: {
+        id: 'mock-remote-calendar-uuid-1',
+        actor_uri: REMOTE_CALENDAR_HANDLE,
+      },
+    };
+    followersStub.resolves([mockFollower as any]);
 
     const observersStub = sandbox.stub(EventActivityEntity, 'findAll');
-    observersStub.resolves([
-      EventActivityEntity.build({ remote_calendar_id: OBSERVER_CALENDAR_HANDLE }),
-    ]);
+    // Mock observer with remoteCalendar association containing actor_uri
+    const mockObserver = {
+      remote_calendar_id: 'mock-remote-calendar-uuid-2',
+      remoteCalendar: {
+        id: 'mock-remote-calendar-uuid-2',
+        actor_uri: OBSERVER_CALENDAR_HANDLE,
+      },
+    };
+    observersStub.resolves([mockObserver as any]);
 
     const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID });
     const result = await service.getRecipients(calendar, { id: 'testobject' });

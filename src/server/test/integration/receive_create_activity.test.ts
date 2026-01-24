@@ -111,11 +111,11 @@ describe('ActivityPub Create Activity', async () => {
         '@context': 'https://www.w3.org/ns/activitystreams',
         id: `https://${remoteDomain}/api/v1/events/1`,
         type: 'Create',
-        actor: `https://${remoteDomain}/o/testcalendar`,
+        actor: `https://${remoteDomain}/calendars/testcalendar`,
         object: {
           '@context': 'https://www.w3.org/ns/activitystreams',
           type: 'Event',
-          attributedTo: `https://${remoteDomain}/o/testcalendar`,
+          attributedTo: `https://${remoteDomain}/calendars/testcalendar`,
           content: {
             en: {
               name: 'Test Event',

@@ -1,13 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import config from 'config';
+import { Op } from 'sequelize';
 import ActivityPubService from '@/server/activitypub/service/members';
 import { Calendar } from '@/common/model/calendar';
 import { EventEntity } from '@/server/calendar/entity/event';
 import { FollowingCalendarEntity, SharedEventEntity } from '@/server/activitypub/entity/activitypub';
 import { setupActivityPubSchema, teardownActivityPubSchema } from './helpers/database';
 
-describe('ActivityPubService - getFeed with AP Identifier Join', () => {
+describe('ActivityPubService - getFeed with EventObjectEntity Join', () => {
   let sandbox: sinon.SinonSandbox;
   let service: ActivityPubService;
   let calendar: Calendar;
@@ -29,21 +30,18 @@ describe('ActivityPubService - getFeed with AP Identifier Join', () => {
   });
 
   it('should return events from followed calendars only', async () => {
-    const domain = config.get('domain');
-    const remoteCalendarId = 'https://remote.example.com/o/remotecalendar';
-
-    // Mock events from a followed calendar
+    // Remote events have null calendar_id
     const mockEvents = [
       EventEntity.build({
-        id: 'https://remote.example.com/events/event-1',
-        calendar_id: remoteCalendarId,
-        event_source_url: '/remotecalendar/event-1',
+        id: 'event-uuid-1',
+        calendar_id: null,
+        event_source_url: 'https://remote.example.com/events/event-1',
         createdAt: new Date('2026-01-10'),
       }),
       EventEntity.build({
-        id: 'https://remote.example.com/events/event-2',
-        calendar_id: remoteCalendarId,
-        event_source_url: '/remotecalendar/event-2',
+        id: 'event-uuid-2',
+        calendar_id: null,
+        event_source_url: 'https://remote.example.com/events/event-2',
         createdAt: new Date('2026-01-11'),
       }),
     ];
@@ -59,7 +57,8 @@ describe('ActivityPubService - getFeed with AP Identifier Join', () => {
 
     // Verify results include events from followed calendar
     expect(result.length).toBe(2);
-    expect(result[0].calendar_id).toBe(remoteCalendarId);
+    // Remote events have null calendar_id
+    expect(result[0].calendar_id).toBeNull();
   });
 
   it('should return empty array when calendar has no follows', async () => {
@@ -73,14 +72,12 @@ describe('ActivityPubService - getFeed with AP Identifier Join', () => {
     expect(result).toEqual([]);
   });
 
-  it('should correctly join via calendar_id = remote_calendar_id', async () => {
-    const remoteCalendarId = 'https://remote.example.com/o/calendar1';
-
+  it('should query using EventObjectEntity join for remote events', async () => {
     const mockEvents = [
       EventEntity.build({
-        id: 'https://remote.example.com/events/test',
-        calendar_id: remoteCalendarId,
-        event_source_url: '/calendar1/test',
+        id: 'event-uuid-3',
+        calendar_id: null,
+        event_source_url: 'https://remote.example.com/events/test',
         createdAt: new Date('2026-01-12'),
       }),
     ];
@@ -90,28 +87,30 @@ describe('ActivityPubService - getFeed with AP Identifier Join', () => {
 
     await service.getFeed(calendar, 0, 20);
 
-    // Verify the query uses a subquery for the join
+    // Verify the query structure for the new design
     const queryOptions = findAllStub.firstCall.args[0] as any;
 
-    // Check that the where clause uses a subquery for the join
+    // Check that the where clause filters for remote events (calendar_id = null)
     expect(queryOptions.where).toBeDefined();
-    expect(queryOptions.where.calendar_id).toBeDefined();
+    expect(queryOptions.where.calendar_id).toBeNull();
+
+    // Check that it uses a subquery to join via EventObjectEntity
+    expect(queryOptions.where.id).toBeDefined();
+    expect(queryOptions.where.id[Op.in]).toBeDefined();
   });
 
   it('should order results by createdAt DESC', async () => {
-    const remoteCalendarId = 'https://remote.example.com/o/calendar2';
-
     const mockEvents = [
       EventEntity.build({
-        id: 'https://remote.example.com/events/newer',
-        calendar_id: remoteCalendarId,
-        event_source_url: '/calendar2/newer',
+        id: 'event-uuid-newer',
+        calendar_id: null,
+        event_source_url: 'https://remote.example.com/events/newer',
         createdAt: new Date('2026-01-15'),
       }),
       EventEntity.build({
-        id: 'https://remote.example.com/events/older',
-        calendar_id: remoteCalendarId,
-        event_source_url: '/calendar2/older',
+        id: 'event-uuid-older',
+        calendar_id: null,
+        event_source_url: 'https://remote.example.com/events/older',
         createdAt: new Date('2026-01-10'),
       }),
     ];

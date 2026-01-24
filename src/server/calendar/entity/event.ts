@@ -5,6 +5,7 @@ import { CalendarEvent, CalendarEventContent, CalendarEventSchedule, language } 
 import db from '@/server/common/entity/db';
 import { LocationEntity } from '@/server/calendar/entity/location';
 import { MediaEntity } from '@/server/media/entity/media';
+import { CalendarEntity } from '@/server/calendar/entity/calendar';
 
 @Table({ tableName: 'event' })
 class EventEntity extends Model {
@@ -26,9 +27,18 @@ class EventEntity extends Model {
   @Column({ type: DataType.UUID })
   declare parent_event_id: string;
 
+  /**
+   * FK to CalendarEntity for events owned by a local calendar.
+   * Null for remote-origin events (events copied from federation).
+   * AP origin information is tracked separately in EventObjectEntity.
+   */
+  @ForeignKey(() => CalendarEntity)
   @Index('idx_event_calendar_id')
-  @Column({ type: DataType.STRING })
-  declare calendar_id: string;
+  @Column({ type: DataType.UUID, allowNull: true })
+  declare calendar_id: string | null;
+
+  @BelongsTo(() => CalendarEntity, 'calendar_id')
+  declare calendar: CalendarEntity;
 
   @ForeignKey(() => LocationEntity)
   @Column({ type: DataType.STRING })
@@ -60,21 +70,24 @@ class EventEntity extends Model {
   declare categoryAssignments: any[];
 
   toModel(): CalendarEvent {
-    let model = new CalendarEvent( this.calendar_id, this.id, this.event_source_url );
-    if ( this.location ) {
+    let model = new CalendarEvent(this.id, this.calendar_id, this.event_source_url);
+    if (this.location) {
       model.location = this.location.toModel();
     }
-    if ( this.media ) {
+    if (this.media) {
       model.media = this.media.toModel();
     }
-    if ( this.content && this.content.length > 0 ) {
-      for ( let content of this.content ) {
+    if (this.content && this.content.length > 0) {
+      for (let content of this.content) {
         model.addContent(content.toModel());
       }
     }
     return model;
   };
 
+  /**
+   * Creates an EventEntity from a CalendarEvent model.
+   */
   static fromModel(event: CalendarEvent): EventEntity {
     return EventEntity.build({
       id: event.id,
@@ -201,7 +214,6 @@ class EventScheduleEntity extends Model {
  */
 import { EventCategoryAssignmentEntity } from './event_category_assignment';
 import { EventCategoryEntity } from './event_category';
-import { CalendarEntity } from './calendar';
 
 /**
  * Register all entities with Sequelize.
@@ -242,19 +254,12 @@ EventCategoryAssignmentEntity.belongsTo(EventCategoryEntity, {
 /**
  * Define Calendar <-> Event associations.
  *
- * Note: calendar_id is a STRING field that can contain either a UUID or an AP identifier,
- * so we use constraints: false to allow eager loading without database-level FK constraints.
+ * The calendar association is already defined via @BelongsTo decorator.
+ * This programmatic definition adds the hasMany side for eager loading.
  */
 CalendarEntity.hasMany(EventEntity, {
   foreignKey: 'calendar_id',
   as: 'events',
-  constraints: false,
-});
-
-EventEntity.belongsTo(CalendarEntity, {
-  foreignKey: 'calendar_id',
-  as: 'calendar',
-  constraints: false,
 });
 
 export {

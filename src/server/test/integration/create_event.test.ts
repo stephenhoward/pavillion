@@ -106,8 +106,10 @@ describe('Event API', () => {
     if (message && entity) {
       // Use type assertion to access properties
       const messageObj = message.message as any;
-      expect(messageObj.type,"proper message type created").toBe('Create');
-      expect(messageObj.object?.id, "has an appropriate id").toMatch(entity.id);
+      // Event propagation uses Announce activity, not Create
+      expect(messageObj.type,"proper message type created").toBe('Announce');
+      // The object field is the event URL string, which should contain the event ID
+      expect(messageObj.object, "has an appropriate event URL").toContain(entity.id);
       expect(message.processed_time,"message in the outbox was processed").not.toBe(null);
     }
     expect(postStub.calledOnce,"post to remote inbox").toBe(true);

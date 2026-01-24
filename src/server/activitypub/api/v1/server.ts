@@ -30,26 +30,46 @@ export default class ActivityPubServerRoutes {
 
     // Public endpoints (no signature verification required)
     router.get('/.well-known/webfinger', this.lookupUser.bind(this));
-    router.get('/o/:orgname', this.getUserProfile.bind(this));
-    router.get('/o/:orgname/outbox', this.readOutbox.bind(this));
 
-    // Secure endpoints (require signature verification)
-    router.post('/o/:orgname/inbox', verifyHttpSignature as RequestHandler, this.addToInbox.bind(this));
+    // Calendar (Group) actor endpoints
+    router.get('/calendars/:urlname', this.getCalendarActor.bind(this));
+    router.get('/calendars/:urlname/events/:eventid', this.getEvent.bind(this));
+    router.get('/calendars/:urlname/outbox', this.readOutbox.bind(this));
+    router.post('/calendars/:urlname/inbox', verifyHttpSignature as RequestHandler, this.addToInbox.bind(this));
 
     app.use(routePrefix, router);
   }
 
-  /** Find calendar profile location by webfinger resource
-     * @params resource - acct:orgname@domain
-     * @returns a WebFingerResponse record
-     * reference: https://www.w3.org/community/reports/socialcg/CG-FINAL-apwf-20240608/#forward-discovery
-     */
+  /**
+   * Find calendar or user profile location by webfinger resource
+   *
+   * Supports two handle formats:
+   * - @user@domain - Person actor lookup
+   * - calendar@domain - Group actor (calendar) lookup
+   *
+   * @params resource - acct:@user@domain or acct:calendar@domain
+   * @returns a WebFingerResponse record
+   * reference: https://www.w3.org/community/reports/socialcg/CG-FINAL-apwf-20240608/#forward-discovery
+   */
   async lookupUser(req: Request, res: Response): Promise<void> {
     if (typeof req.query.resource === 'string') {
-      let { username, domain } = this.service.parseWebFingerResource(req.query.resource);
-      let webfingerResponse = await this.service.lookupWebFinger(username, domain);
+      console.log('[API] WebFinger resource:', req.query.resource);
+      const parsed = this.service.parseWebFingerResource(req.query.resource);
+      console.log('[API] Parsed:', parsed);
+
+      if (parsed.type === 'unknown' || !parsed.name || !parsed.domain) {
+        res.status(400).send('Invalid resource format');
+        return;
+      }
+
+      const webfingerResponse = await this.service.lookupWebFinger(
+        parsed.name,
+        parsed.domain,
+        parsed.type as 'user' | 'calendar',
+      );
+
       if ( webfingerResponse === null ) {
-        res.status(404).send('Calendar not found');
+        res.status(404).send(`${parsed.type === 'user' ? 'User' : 'Calendar'} not found`);
       }
       else {
         res.json(webfingerResponse.toObject());
@@ -61,40 +81,148 @@ export default class ActivityPubServerRoutes {
   }
 
   /**
-     * Get orginzation actor record by org name
-     * @params orgname - org name for the profile
-     * @returns a UserProfileResponse record
-     * reference: https://www.w3.org/TR/activitypub/#actor-objects
-     */
-  async getUserProfile(req: Request, res: Response): Promise<void> {
-    // todo: grab proper domain for this
-    let profileResponse = await this.service.lookupUserProfile(req.params.orgname);
+   * Get calendar Group actor by URL name (NEW PATTERN)
+   *
+   * @params urlname - calendar URL name
+   * @returns Group actor JSON-LD with editors collection
+   * reference: https://www.w3.org/TR/activitypub/#actor-objects
+   */
+  async getCalendarActor(req: Request, res: Response): Promise<void> {
+    const profileResponse = await this.service.lookupUserProfile(req.params.urlname);
+
     if ( profileResponse === null ) {
       res.status(404).send('Calendar not found');
     }
     else {
-      res.json(profileResponse.toObject());
+      const actor = profileResponse.toObject();
+
+      // Update URLs to use /calendars/ pattern
+      const domain = actor.id.split('/')[2];
+      const urlname = req.params.urlname;
+      actor.id = `https://${domain}/calendars/${urlname}`;
+      actor.inbox = `https://${domain}/calendars/${urlname}/inbox`;
+      actor.outbox = `https://${domain}/calendars/${urlname}/outbox`;
+
+      // Add editors collection reference (Task 3.5)
+      actor.editors = `https://${domain}/calendars/${urlname}/editors`;
+
+      // Update publicKey id to match new actor URI
+      actor.publicKey.id = `${actor.id}#main-key`;
+      actor.publicKey.owner = actor.id;
+
+      // Add security context for publicKey support (Task 3.5)
+      actor['@context'] = [
+        'https://www.w3.org/ns/activitystreams',
+        'https://w3id.org/security/v1',
+      ];
+
+      res.setHeader('Content-Type', 'application/activity+json');
+      res.json(actor);
     }
   }
 
   /**
-     * Add an activity message to a calendar's inbox
-     * @param orgname - the org name of the owner of the inbox
-     * @param req.body - the message to add to the inbox
-     * reference: https://www.w3.org/TR/activitypub/#server-to-server-interactions
-     */
+   * Get an event object as ActivityPub JSON
+   *
+   * @param urlname - calendar URL name
+   * @param eventid - event UUID
+   * @returns Event object as ActivityPub JSON-LD
+   */
+  async getEvent(req: Request, res: Response): Promise<void> {
+    const { urlname, eventid } = req.params;
+
+    try {
+      // Get the calendar to construct the full event URL
+      const calendar = await this.calendarService.getCalendarByName(urlname);
+      if (!calendar) {
+        res.status(404).send('Calendar not found');
+        return;
+      }
+
+      // Get the event by ID
+      const event = await this.calendarService.getEventById(eventid);
+      if (!event) {
+        res.status(404).send('Event not found');
+        return;
+      }
+
+      // Convert the event to ActivityPub EventObject format
+      const EventObject = (await import('@/server/activitypub/model/object/event')).EventObject;
+      const eventObject = new EventObject(calendar, event);
+
+      // EventObject is a plain class - serialize it directly
+      res.setHeader('Content-Type', 'application/activity+json');
+      res.json(eventObject);
+    }
+    catch (error) {
+      console.error(`[API] Error fetching event ${req.params.eventid}:`, error);
+      res.status(500).send('Internal server error');
+    }
+  }
+
+  /**
+   * Add an activity message to a calendar's inbox
+   *
+   * @param urlname - the URL name of the calendar inbox owner
+   * @param req.body - the message to add to the inbox
+   * reference: https://www.w3.org/TR/activitypub/#server-to-server-interactions
+   */
   async addToInbox(req: Request, res: Response): Promise<void> {
-    let calendar = await this.calendarService.getCalendarByName(req.params.orgname);
+    const calendarName = req.params.urlname;
+    let calendar = await this.calendarService.getCalendarByName(calendarName);
 
     if ( calendar === null ) {
       res.status(404).send('Calendar not found');
       return;
     }
 
-    console.log(`[INBOX] Received activity type: ${req.body.type} for calendar ${req.params.orgname}`);
+    console.log(`[INBOX] Received activity type: ${req.body.type} for calendar ${calendarName}`);
     console.log(`[INBOX] Activity body:`, JSON.stringify(req.body, null, 2));
 
-    // TODO: validate message sender is allowed to send this message
+    // Check if this is from a Person actor (for synchronous processing)
+    const actorUri = req.body.actor;
+    const isPersonActor = actorUri && this.service.isPersonActorUri(actorUri);
+
+    // Person actor Create/Update/Delete activities are processed synchronously
+    if (isPersonActor && ['Create', 'Update', 'Delete'].includes(req.body.type)) {
+      try {
+        let activity;
+        switch (req.body.type) {
+          case 'Create':
+            activity = CreateActivity.fromObject(req.body);
+            break;
+          case 'Update':
+            activity = UpdateActivity.fromObject(req.body);
+            break;
+          case 'Delete':
+            activity = DeleteActivity.fromObject(req.body);
+            break;
+        }
+
+        if (activity) {
+          const result = await this.service.processPersonActorActivity(calendar, activity);
+          if (result) {
+            res.status(200).json(result.toObject());
+          }
+          else {
+            res.status(200).send('Activity processed');
+          }
+          return;
+        }
+      }
+      catch (error: any) {
+        console.error(`[INBOX] Error processing Person actor activity:`, error);
+        if (error.message === 'Actor is not an authorized editor of this calendar') {
+          res.status(403).send('Forbidden: Not an authorized editor');
+        }
+        else {
+          res.status(500).send('Error processing activity');
+        }
+        return;
+      }
+    }
+
+    // Traditional async processing for calendar actor activities and other types
     let message;
 
     switch(req.body.type) {
@@ -128,11 +256,12 @@ export default class ActivityPubServerRoutes {
   }
 
   /**
-     * Read the outbox of a calendar
-     * @param orgname - the org name of the owner of the outbox
-     * @returns a list of messages in the outbox
-     * reference: https://www.w3.org/TR/activitypub/#outbox
-     */
+   * Read the outbox of a calendar
+   *
+   * @param urlname - the URL name of the outbox owner
+   * @returns a list of messages in the outbox
+   * reference: https://www.w3.org/TR/activitypub/#outbox
+   */
   // TODO: paging or other limits to the quantity of messages returned
   async readOutbox(req: Request, res: Response): Promise<void> {
     // Implementation needed

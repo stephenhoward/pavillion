@@ -131,7 +131,7 @@ export default class EventRoutes {
 
     try {
       const event = await this.service.createEvent(account, req.body);
-      res.json(event.toObject());
+      res.status(201).json(event.toObject());
     }
     catch (error) {
       if (error instanceof LocationValidationError) {
@@ -330,8 +330,11 @@ export default class EventRoutes {
       return;
     }
 
+    // calendarId is optional - needed for remote event deletion
+    const calendarId = req.query.calendarId as string | undefined;
+
     try {
-      await this.service.deleteEvent(account, eventId);
+      await this.service.deleteEvent(account, eventId, calendarId);
       res.status(204).send(); // No content response for successful deletion
     }
     catch (error) {

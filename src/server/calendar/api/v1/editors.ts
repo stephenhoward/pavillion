@@ -20,6 +20,7 @@ class EditorRoutes {
     // Editor management routes
     router.get('/calendars/:calendarId/editors', ExpressHelper.loggedInOnly, this.listEditors.bind(this));
     router.post('/calendars/:calendarId/editors', ExpressHelper.loggedInOnly, this.grantEditAccess.bind(this));
+    router.delete('/calendars/:calendarId/editors/remote', ExpressHelper.loggedInOnly, this.removeRemoteEditor.bind(this));
     router.delete('/calendars/:calendarId/editors/:editorId', ExpressHelper.loggedInOnly, this.removeEditAccess.bind(this));
 
     // Invitation management routes
@@ -46,7 +47,13 @@ class EditorRoutes {
     try {
       const result = await this.service.listCalendarEditorsWithInvitations(account, req.params.calendarId);
       res.json({
-        activeEditors: result.activeEditors.map((editor) => editor.toObject()),
+        activeEditors: result.activeEditors.map((editor) => {
+          // Remote editors are plain objects with actorUri, others have toObject()
+          if ('toObject' in editor && typeof editor.toObject === 'function') {
+            return editor.toObject();
+          }
+          return editor;
+        }),
         pendingInvitations: result.pendingInvitations.map((invitation) => invitation.toObject()),
       });
     }
@@ -171,6 +178,59 @@ class EditorRoutes {
         console.error("Error revoking edit access:", error);
         res.status(500).json({
           "error": "An error occurred while revoking edit access",
+        });
+      }
+    }
+  }
+
+  /**
+   * Remove a remote (federated) editor from a calendar
+   * DELETE /api/v1/calendars/:calendarId/editors/remote
+   * Body: { actorUri: string }
+   */
+  async removeRemoteEditor(req: Request, res: Response) {
+    const account = req.user as Account;
+
+    if (!account) {
+      res.status(401).json({
+        "error": "Authentication required",
+      });
+      return;
+    }
+
+    const { actorUri } = req.body;
+
+    if (!actorUri) {
+      res.status(400).json({
+        "error": "Missing actorUri in request body",
+      });
+      return;
+    }
+
+    try {
+      await this.service.removeRemoteEditor(account, req.params.calendarId, actorUri);
+      res.status(204).send();
+    }
+    catch (error) {
+      if (error instanceof CalendarEditorPermissionError) {
+        res.status(403).json({
+          "error": error.message,
+        });
+      }
+      else if (error instanceof EditorNotFoundError) {
+        res.status(404).json({
+          "error": error.message,
+        });
+      }
+      else if (error instanceof CalendarNotFoundError) {
+        res.status(404).json({
+          "error": error.message,
+        });
+      }
+      else {
+        console.error("Error removing remote editor:", error);
+        res.status(500).json({
+          "error": "An error occurred while removing the remote editor",
         });
       }
     }

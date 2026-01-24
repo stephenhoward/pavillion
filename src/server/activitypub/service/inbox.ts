@@ -1,6 +1,7 @@
 import { DateTime } from "luxon";
 import { v4 as uuidv4 } from 'uuid';
 import { EventEmitter } from "events";
+import axios from "axios";
 
 import CreateActivity from "@/server/activitypub/model/action/create";
 import UpdateActivity from "@/server/activitypub/model/action/update";
@@ -9,11 +10,14 @@ import FollowActivity from "@/server/activitypub/model/action/follow";
 import AcceptActivity from "@/server/activitypub/model/action/accept";
 import AnnounceActivity from "@/server/activitypub/model/action/announce";
 import { ActivityPubInboxMessageEntity, EventActivityEntity, FollowerCalendarEntity, FollowingCalendarEntity } from "@/server/activitypub/entity/activitypub";
+import { EventObjectEntity } from "@/server/activitypub/entity/event_object";
+import RemoteCalendarService from "@/server/activitypub/service/remote_calendar";
 import { ActivityPubActor } from "@/server/activitypub/model/base";
 import CalendarInterface from "@/server/calendar/interface";
 import { CalendarEvent } from "@/common/model/events";
 import { Calendar } from "@/common/model/calendar";
 import { addToOutbox } from "@/server/activitypub/helper/outbox";
+import { CalendarEditorRemoteEntity } from "@/server/calendar/entity/calendar_editor_remote";
 
 /**
  * Service responsible for processing incoming ActivityPub messages in the inbox.
@@ -21,10 +25,12 @@ import { addToOutbox } from "@/server/activitypub/helper/outbox";
 class ProcessInboxService {
   calendarInterface: CalendarInterface;
   eventBus: EventEmitter;
+  remoteCalendarService: RemoteCalendarService;
 
   constructor(eventBus: EventEmitter, calendarInterface: CalendarInterface) {
     this.eventBus = eventBus;
     this.calendarInterface = calendarInterface;
+    this.remoteCalendarService = new RemoteCalendarService();
   }
 
   /**
@@ -128,102 +134,341 @@ class ProcessInboxService {
   async actorOwnsObject(message: any): Promise<boolean> {
     // TODO: implement a remote verification of the actor's ownership of the object
     // by retrieving the object from its server and checking that attributedTo.
-    console.log(`[INBOX] Verifying actor ownership:`);
-    console.log(`[INBOX]   message.actor: ${message.actor}`);
-    console.log(`[INBOX]   message.object.attributedTo: ${message.object.attributedTo}`);
-    console.log(`[INBOX]   message.object:`, JSON.stringify(message.object, null, 2));
-
-    if ( message.actor == message.object.attributedTo ) {
-      return true;
-    }
-    return false;
+    return message.actor === message.object.attributedTo;
   }
 
   /**
    * Processes a Create activity by creating a new event if it doesn't exist.
+   * Handles both:
+   * - Create from calendar actors (federated event sharing)
+   * - Create from Person actors (remote editors creating events)
    *
    * @param {Calendar} calendar - The calendar context for the event
    * @param {CreateActivity} message - The Create activity message
    * @returns {Promise<void>}
    */
-  async processCreateEvent(calendar: Calendar, message: CreateActivity) {
-    console.log(`[INBOX] Processing Create activity for event ${message.object.id}`);
-    console.log(`[INBOX] Event from actor: ${message.actor}`);
+  async processCreateEvent(calendar: Calendar, message: CreateActivity): Promise<CalendarEvent | null> {
+    const apObjectId = message.object.id;
+    const actorUri = message.actor;
 
-    let existingEvent = null;
-    try {
-      existingEvent = await this.calendarInterface.getEventById(message.object.id);
+    // Check if we already have this AP object by looking up EventObjectEntity
+    const existingApObject = await EventObjectEntity.findOne({
+      where: { ap_id: apObjectId },
+    });
+
+    if (existingApObject) {
+      // Event already exists, skip
+      return null;
     }
-    catch {
-      // Event not found - this is expected for new events
-    }
 
-    if ( ! existingEvent ) {
-      console.log(`[INBOX] Event ${message.object.id} does not exist locally, creating...`);
+    // Check if this is from a Person actor (remote editor) vs a calendar actor
+    const isPersonActor = await this.isPersonActorUri(actorUri);
 
-      let ok = await this.actorOwnsObject(message);
-      if ( ok ) {
-        // Set calendarId to the remote calendar's AP identifier (from message.actor)
-        const eventParams = {
-          ...message.object,
-          calendarId: message.actor,
-        };
-        console.log(`[INBOX] Calling addRemoteEvent with calendarId: ${message.actor}`);
-        await this.calendarInterface.addRemoteEvent(calendar, eventParams);
-        console.log(`[INBOX] Successfully created remote event ${message.object.id}`);
+    if (isPersonActor) {
+      // Verify the Person is an authorized editor of this calendar
+      const isAuthorizedEditor = await this.isAuthorizedRemoteEditor(calendar.id, actorUri);
+
+      if (!isAuthorizedEditor) {
+        console.warn(`[INBOX] Person actor ${actorUri} is not authorized to create events on calendar ${calendar.urlName}`);
+        throw new Error('Actor is not an authorized editor of this calendar');
       }
-      else {
-        console.warn(`[INBOX] Actor ownership verification failed for event ${message.object.id}`);
-      }
+
+      console.log(`[INBOX] Processing Create from authorized remote editor: ${actorUri}`);
     }
     else {
-      console.log(`[INBOX] Event ${message.object.id} already exists, skipping create`);
+      // Traditional calendar-to-calendar federation - verify ownership
+      const ok = await this.actorOwnsObject(message);
+      if (!ok) {
+        console.warn(`[INBOX] Actor ownership verification failed for event ${apObjectId}`);
+        return null;
+      }
+    }
+
+    // Generate a new UUID for the local event record
+    const localEventId = uuidv4();
+
+    // Create the event
+    const eventParams = {
+      ...message.object,
+      id: localEventId,
+      event_source_url: apObjectId,
+      calendarId: calendar.id,
+    };
+
+    // For Person actor creates, use the full event params from the object
+    if (isPersonActor && message.object.eventParams) {
+      Object.assign(eventParams, message.object.eventParams);
+      eventParams.id = localEventId;
+      eventParams.calendarId = calendar.id;
+    }
+
+    const createdEvent = await this.calendarInterface.addRemoteEvent(calendar, eventParams);
+
+    // Create EventObjectEntity to track the AP identity
+    await EventObjectEntity.create({
+      event_id: localEventId,
+      ap_id: apObjectId,
+      attributed_to: actorUri,
+    });
+
+    console.log(`[INBOX] Created event ${localEventId} from ${isPersonActor ? 'Person' : 'Calendar'} actor ${actorUri}`);
+
+    return createdEvent;
+  }
+
+  /**
+   * Processes a Person actor activity synchronously and returns the result.
+   * Used by the API layer for cross-instance editor operations.
+   *
+   * @param calendar - The calendar receiving the activity
+   * @param activity - The activity to process (Create, Update, Delete)
+   * @returns The created/updated event or null
+   */
+  async processPersonActorActivity(
+    calendar: Calendar,
+    activity: CreateActivity | UpdateActivity | DeleteActivity,
+  ): Promise<CalendarEvent | null> {
+    const actorUri = activity.actor;
+
+    // Verify this is from a Person actor
+    const isPersonActor = await this.isPersonActorUri(actorUri);
+    if (!isPersonActor) {
+      throw new Error('Activity is not from a Person actor');
+    }
+
+    // Verify the Person is an authorized editor
+    const isAuthorizedEditor = await this.isAuthorizedRemoteEditor(calendar.id, actorUri);
+    if (!isAuthorizedEditor) {
+      throw new Error('Actor is not an authorized editor of this calendar');
+    }
+
+    switch (activity.type) {
+      case 'Create':
+        return this.processCreateEvent(calendar, activity as CreateActivity);
+      case 'Update':
+        return this.processUpdateEvent(calendar, activity as UpdateActivity);
+      case 'Delete':
+        await this.processDeleteEvent(calendar, activity as DeleteActivity);
+        return null;
+      default:
+        throw new Error(`Unsupported activity type: ${(activity as any).type}`);
     }
   }
 
   /**
+   * Checks if an actor URI is likely a Person actor (user) vs a calendar actor
+   * Person actors typically have /users/ in the path
+   *
+   * @param actorUri - The actor URI to check
+   * @returns True if this appears to be a Person actor
+   */
+  private async isPersonActorUri(actorUri: string): Promise<boolean> {
+    return actorUri.includes('/users/');
+  }
+
+  /**
+   * Checks if a Person actor is an authorized remote editor of a calendar
+   *
+   * @param calendarId - The calendar ID
+   * @param actorUri - The Person actor URI
+   * @returns True if authorized
+   */
+  private async isAuthorizedRemoteEditor(calendarId: string, actorUri: string): Promise<boolean> {
+    const editor = await CalendarEditorRemoteEntity.findOne({
+      where: {
+        calendar_id: calendarId,
+        actor_uri: actorUri,
+      },
+    });
+    return editor !== null;
+  }
+
+  /**
    * Determines if an event originated from the local server.
+   * Local events have a non-null calendar_id, while remote events have null.
    *
    * @param {CalendarEvent} event - The event to check
    * @returns {boolean} True if the event is local, false otherwise
    */
   isLocalEvent(event: CalendarEvent): boolean {
-    // TODO: implement this propely
-    return event.origin === 'local';
+    return event.isLocal();
   }
 
   /**
    * Processes an Update activity by updating the local copy of a remote event.
+   * Handles both:
+   * - Update from calendar actors (federated event sharing)
+   * - Update from Person actors (remote editors updating events)
    *
    * @param {Calendar} calendar - The calendar context for the event
    * @param {UpdateActivity} message - The Update activity message
-   * @returns {Promise<void>}
+   * @returns {Promise<CalendarEvent | null>}
    */
-  async processUpdateEvent(calendar: Calendar, message: UpdateActivity) {
-    let existingEvent = await this.calendarInterface.getEventById(message.object.id);
-    if ( existingEvent && ! this.isLocalEvent(existingEvent) ) {
-      let ok = await this.actorOwnsObject(message);
-      if ( ok ) {
-        await this.calendarInterface.updateRemoteEvent(calendar, message.object);
+  async processUpdateEvent(calendar: Calendar, message: UpdateActivity): Promise<CalendarEvent | null> {
+    const apObjectId = message.object.id;
+    const actorUri = message.actor;
+
+    // Look up the local event by its AP ID
+    let apObject = await EventObjectEntity.findOne({
+      where: { ap_id: apObjectId },
+    });
+
+    let existingEvent: CalendarEvent | null = null;
+
+    if (apObject) {
+      existingEvent = await this.calendarInterface.getEventById(apObject.event_id);
+    }
+
+    // For Person actor updates, also try looking up by local event ID
+    // (the object.id path may contain the local event ID instead of the original AP ID)
+    if (!existingEvent && message.object.eventParams?.id) {
+      const localEventId = message.object.eventParams.id;
+      existingEvent = await this.calendarInterface.getEventById(localEventId);
+
+      // If found, also try to find the corresponding AP object
+      if (existingEvent && !apObject) {
+        apObject = await EventObjectEntity.findOne({
+          where: { event_id: localEventId },
+        });
       }
     }
+
+    if (!existingEvent) {
+      // Event not found - can't update
+      console.warn(`[INBOX] Update activity for unknown event: ${apObjectId}`);
+      return null;
+    }
+
+    // Check if this is from a Person actor (remote editor) vs a calendar actor
+    const isPersonActor = await this.isPersonActorUri(actorUri);
+
+    if (isPersonActor) {
+      // Verify the Person is an authorized editor of this calendar
+      const isAuthorizedEditor = await this.isAuthorizedRemoteEditor(calendar.id, actorUri);
+
+      if (!isAuthorizedEditor) {
+        console.warn(`[INBOX] Person actor ${actorUri} is not authorized to update events on calendar ${calendar.urlName}`);
+        throw new Error('Actor is not an authorized editor of this calendar');
+      }
+
+      console.log(`[INBOX] Processing Update from authorized remote editor: ${actorUri}`);
+    }
+    else {
+      // Traditional calendar-to-calendar federation
+      if (this.isLocalEvent(existingEvent)) {
+        // Can't update local events via federation from calendar actors
+        return null;
+      }
+
+      const ok = await this.actorOwnsObject(message);
+      if (!ok) {
+        return null;
+      }
+    }
+
+    // Create event params with local UUID for database
+    const eventParams = {
+      ...message.object,
+      id: apObject.event_id,
+      event_source_url: apObjectId,
+    };
+
+    // For Person actor updates, use the full event params from the object
+    if (isPersonActor && message.object.eventParams) {
+      Object.assign(eventParams, message.object.eventParams);
+      eventParams.id = apObject.event_id;
+    }
+
+    const updatedEvent = await this.calendarInterface.updateRemoteEvent(calendar, eventParams);
+
+    console.log(`[INBOX] Updated event ${apObject.event_id} from ${isPersonActor ? 'Person' : 'Calendar'} actor ${actorUri}`);
+
+    return updatedEvent;
   }
 
   /**
-   * Processes a Delete activity by deleting the local copy of a remote event.
+   * Processes a Delete activity by deleting the local copy of an event.
+   * Handles both:
+   * - Delete from calendar actors (federated event sharing)
+   * - Delete from Person actors (remote editors deleting events)
    *
    * @param {Calendar} calendar - The calendar context for the event
    * @param {DeleteActivity} message - The Delete activity message
    * @returns {Promise<void>}
    */
   async processDeleteEvent(calendar: Calendar, message: DeleteActivity) {
-    let existingEvent = await this.calendarInterface.getEventById(message.object.id);
-    if ( existingEvent && ! this.isLocalEvent(existingEvent) ) {
-      let ok = await this.actorOwnsObject(message);
-      if ( ok ) {
-        await this.calendarInterface.deleteRemoteEvent(message.object.id);
+    const apObjectId = message.object.id;
+    const actorUri = message.actor;
+
+    // Look up the local event by its AP ID
+    let apObject = await EventObjectEntity.findOne({
+      where: { ap_id: apObjectId },
+    });
+
+    let existingEvent: CalendarEvent | null = null;
+    let eventIdToDelete: string | null = null;
+
+    if (apObject) {
+      existingEvent = await this.calendarInterface.getEventById(apObject.event_id);
+      eventIdToDelete = apObject.event_id;
+    }
+
+    // For Person actor deletes, also try looking up by local event ID
+    // (the object.id path may contain the local event ID instead of the original AP ID)
+    if (!existingEvent && message.object.eventId) {
+      const localEventId = message.object.eventId;
+      existingEvent = await this.calendarInterface.getEventById(localEventId);
+      eventIdToDelete = localEventId;
+
+      // If found, also try to find the corresponding AP object
+      if (existingEvent && !apObject) {
+        apObject = await EventObjectEntity.findOne({
+          where: { event_id: localEventId },
+        });
       }
     }
+
+    if (!existingEvent || !eventIdToDelete) {
+      // Event not found - nothing to delete
+      console.warn(`[INBOX] Delete activity for unknown event: ${apObjectId}`);
+      return;
+    }
+
+    // Check if this is from a Person actor (remote editor) vs a calendar actor
+    const isPersonActor = await this.isPersonActorUri(actorUri);
+
+    if (isPersonActor) {
+      // Verify the Person is an authorized editor of this calendar
+      const isAuthorizedEditor = await this.isAuthorizedRemoteEditor(calendar.id, actorUri);
+
+      if (!isAuthorizedEditor) {
+        console.warn(`[INBOX] Person actor ${actorUri} is not authorized to delete events on calendar ${calendar.urlName}`);
+        throw new Error('Actor is not an authorized editor of this calendar');
+      }
+
+      console.log(`[INBOX] Processing Delete from authorized remote editor: ${actorUri}`);
+    }
+    else {
+      // Traditional calendar-to-calendar federation
+      if (this.isLocalEvent(existingEvent)) {
+        // Can't delete local events via federation from calendar actors
+        return;
+      }
+
+      const ok = await this.actorOwnsObject(message);
+      if (!ok) {
+        return;
+      }
+    }
+
+    await this.calendarInterface.deleteRemoteEvent(eventIdToDelete);
+
+    // Also delete the EventObjectEntity record if it exists
+    if (apObject) {
+      await apObject.destroy();
+    }
+
+    console.log(`[INBOX] Deleted event ${eventIdToDelete} from ${isPersonActor ? 'Person' : 'Calendar'} actor ${actorUri}`);
   }
 
   /**
@@ -237,9 +482,12 @@ class ProcessInboxService {
   async processFollowAccount(calendar: Calendar, message: FollowActivity) {
     console.log(`[INBOX] Processing Follow activity from ${message.actor} for calendar ${calendar.urlName}`);
 
+    // Get or create RemoteCalendarEntity for the follower
+    const remoteCalendar = await this.remoteCalendarService.findOrCreateByActorUri(message.actor);
+
     let existingFollow = await FollowerCalendarEntity.findOne({
       where: {
-        remote_calendar_id: message.actor,
+        remote_calendar_id: remoteCalendar.id,
         calendar_id: calendar.id,
       },
     });
@@ -250,7 +498,7 @@ class ProcessInboxService {
       // Create the follower relationship
       await FollowerCalendarEntity.create({
         id: uuidv4(),
-        remote_calendar_id: message.actor,
+        remote_calendar_id: remoteCalendar.id,
         calendar_id: calendar.id,
       });
 
@@ -291,11 +539,19 @@ class ProcessInboxService {
 
       console.log(`[INBOX] Accept confirms Follow of ${followActivity.object}`);
 
+      // Find the RemoteCalendarEntity for the remote calendar we're following
+      const remoteActorUrl = followActivity.object as string;
+      const remoteCalendar = await this.remoteCalendarService.getByActorUri(remoteActorUrl);
+
+      if (!remoteCalendar) {
+        console.warn(`[INBOX] No RemoteCalendarEntity found for ${remoteActorUrl}, Accept may be for unknown follow`);
+        return;
+      }
+
       // Find the corresponding FollowingCalendarEntity record
-      // The follow.object is the remote calendar we're following
       const followingRecord = await FollowingCalendarEntity.findOne({
         where: {
-          remote_calendar_id: followActivity.object as string,
+          remote_calendar_id: remoteCalendar.id,
           calendar_id: calendar.id,
         },
       });
@@ -327,9 +583,16 @@ class ProcessInboxService {
     // Extract the actor from the original Follow activity message
     const actor = typeof message.message === 'object' ? message.message.actor : message.actor;
 
+    // Find the RemoteCalendarEntity for this actor
+    const remoteCalendar = await this.remoteCalendarService.getByActorUri(actor);
+    if (!remoteCalendar) {
+      console.warn(`[INBOX] No RemoteCalendarEntity found for ${actor}, cannot unfollow`);
+      return;
+    }
+
     await FollowerCalendarEntity.destroy({
       where: {
-        remote_calendar_id: actor,
+        remote_calendar_id: remoteCalendar.id,
         calendar_id: calendar.id,
       },
     });
@@ -343,21 +606,72 @@ class ProcessInboxService {
    * @returns {Promise<void>}
    */
   async processShareEvent(calendar: Calendar, message: AnnounceActivity) {
-    let existingShare = await EventActivityEntity.findOne({
+    // Extract event URL from the object (either a string URL or an object with id)
+    const apObjectId = typeof message.object === 'string' ? message.object : message.object.id;
+
+    // Check if we already have this AP object
+    let apObject = await EventObjectEntity.findOne({
+      where: { ap_id: apObjectId },
+    });
+
+    // If event doesn't exist locally, fetch and store it
+    if (!apObject) {
+      try {
+        // Fetch the event object from the remote server
+        const response = await axios.get(apObjectId, {
+          timeout: 10000,
+          headers: {
+            'Accept': 'application/activity+json, application/ld+json',
+          },
+        });
+
+        if (response && response.data) {
+          // Generate a new UUID for the local event record
+          const localEventId = uuidv4();
+
+          // Determine the attributed_to from the fetched object or the announcer
+          const attributedTo = response.data.attributedTo || message.actor;
+
+          // Store the event locally with null calendar_id (remote event)
+          const eventParams = {
+            ...response.data,
+            id: localEventId,
+            event_source_url: apObjectId,
+          };
+
+          await this.calendarInterface.addRemoteEvent(calendar, eventParams);
+
+          // Create EventObjectEntity to track the AP identity
+          apObject = await EventObjectEntity.create({
+            event_id: localEventId,
+            ap_id: apObjectId,
+            attributed_to: attributedTo,
+          });
+        }
+      }
+      catch (error: any) {
+        console.error(`[INBOX] Failed to fetch or store remote event ${apObjectId}:`, error.message);
+        return;
+      }
+    }
+
+    // Track the Announce activity - use RemoteCalendarEntity reference
+    const sharerRemoteCalendar = await this.remoteCalendarService.findOrCreateByActorUri(message.actor);
+
+    const existingShare = await EventActivityEntity.findOne({
       where: {
-        event_id: message.object.id,
-        calendar_id: calendar.id,
+        event_id: apObjectId,
+        remote_calendar_id: sharerRemoteCalendar.id,
         type: 'share',
       },
     });
 
-    if ( ! existingShare ) {
-      EventActivityEntity.create({
-        event_id: message.object.id,
-        calendar_id: calendar.id,
+    if (!existingShare) {
+      await EventActivityEntity.create({
+        event_id: apObjectId,
+        remote_calendar_id: sharerRemoteCalendar.id,
         type: 'share',
       });
-      // IF it's a event local to this server, send to all followers and sharers
     }
   }
 
@@ -370,10 +684,23 @@ class ProcessInboxService {
    */
   // TODO: proper message type
   async processUnshareEvent(calendar: Calendar, message: any) {
+    // Extract event ID from the object (either a string URL or an object with id)
+    const eventId = typeof message.object === 'string' ? message.object : message.object.id;
+
+    // Extract the actor from the original Announce activity message
+    const actor = typeof message.message === 'object' ? message.message.actor : message.actor;
+
+    // Find the RemoteCalendarEntity for this actor
+    const remoteCalendar = await this.remoteCalendarService.getByActorUri(actor);
+    if (!remoteCalendar) {
+      console.warn(`[INBOX] No RemoteCalendarEntity found for ${actor}, cannot unshare`);
+      return;
+    }
+
     let existingShare = await EventActivityEntity.findOne({
       where: {
-        event_id: message.object.id,
-        calendar_id: calendar.id,
+        event_id: eventId,
+        remote_calendar_id: remoteCalendar.id,
         type: 'share',
       },
     });

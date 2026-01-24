@@ -3,9 +3,15 @@ class WebFingerResponse {
   subject: string;
   links: WebFingerLink[];
 
-  constructor(orgName: string, domain: string) {
-    this.subject = 'acct:' + orgName + '@' + domain;
-    this.links = [ new WebFingerLink(orgName, domain) ];
+  constructor(name: string, domain: string, type: 'user' | 'calendar' = 'calendar') {
+    if (type === 'user') {
+      this.subject = 'acct:@' + name + '@' + domain;
+      this.links = [ new WebFingerLink(name, domain, 'user') ];
+    }
+    else {
+      this.subject = 'acct:' + name + '@' + domain;
+      this.links = [ new WebFingerLink(name, domain, 'calendar') ];
+    }
   }
 
   toObject(): Record<string, any> {
@@ -21,10 +27,16 @@ class WebFingerLink {
   type: string;
   href: string;
 
-  constructor(orgName: string, domain: string) {
+  constructor(name: string, domain: string, actorType: 'user' | 'calendar' = 'calendar') {
     this.rel = 'self';
     this.type = 'application/activity+json';
-    this.href = 'https://' + domain + '/o/' + orgName;
+
+    if (actorType === 'user') {
+      this.href = 'https://' + domain + '/users/' + name;
+    }
+    else {
+      this.href = 'https://' + domain + '/calendars/' + name;
+    }
   }
 
   toObject(): Record<string, any> {

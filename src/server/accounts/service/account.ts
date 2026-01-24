@@ -1,6 +1,7 @@
 import { scryptSync, randomBytes } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { DateTime } from 'luxon';
+import config from 'config';
 
 import { Account } from "@/common/model/account";
 import AccountInvitation from '@/common/model/invitation';
@@ -32,6 +33,7 @@ type AccountInfo = {
  * Use this class to manage the lifecycle of accounts in the system
  */
 export default class AccountService {
+
   constructor(
     private eventBus: EventEmitter,
     private configurationInterface: ConfigurationInterface,
@@ -50,15 +52,15 @@ export default class AccountService {
   }
 
   /**
-     * Sends the owner of the provided email a message inviting them to create an account,
-     * if they do not already have an account.
-     * @param email
-     * @param message
-     * @returns a promise that resolves to undefined
-     * @throws AccountAlreadyExistsError if an account already exists for the provided email
-     * @throws AccountInviteAlreadyExistsError if an invitation already exists for the provided email
-     * @throws AccountInvitationPermissionError if the inviter lacks permission to send invitations
-     */
+    * Sends the owner of the provided email a message inviting them to create an account,
+    * if they do not already have an account.
+    * @param email
+    * @param message
+    * @returns a promise that resolves to undefined
+    * @throws AccountAlreadyExistsError if an account already exists for the provided email
+    * @throws AccountInviteAlreadyExistsError if an invitation already exists for the provided email
+    * @throws AccountInvitationPermissionError if the inviter lacks permission to send invitations
+    */
   async inviteNewAccount(inviter: Account, email:string, message: string, calendarId?: string): Promise<AccountInvitation> {
 
     // Check if user has permission to send invitations based on registration mode
@@ -102,10 +104,10 @@ export default class AccountService {
   }
 
   /**
-     * Resends an invitation email and resets the expiration time
-     * @param id - The ID of the invitation to resend
-     * @returns a promise that resolves to the updated invitation or undefined if not found
-     */
+    * Resends an invitation email and resets the expiration time
+    * @param id - The ID of the invitation to resend
+    * @returns a promise that resolves to the updated invitation or undefined if not found
+    */
   async resendInvite(id: string): Promise<AccountInvitation|undefined> {
     const invitation = await AccountInvitationEntity.findByPk(id, { include: [ 'inviter' ] });
     if (!invitation) {
@@ -142,10 +144,10 @@ export default class AccountService {
   }
 
   /**
-     * Creates a new account for the provided email address, if it does not yet exist
-     * @param - email the email address to associate with the new account
-     * @returns a promise that resolves to a boolean
-     */
+    * Creates a new account for the provided email address, if it does not yet exist
+    * @param - email the email address to associate with the new account
+    * @returns a promise that resolves to an account
+    */
   async registerNewAccount(email:string): Promise<Account> {
 
     const settings = await this.configurationInterface.getAllSettings();
@@ -160,15 +162,15 @@ export default class AccountService {
   }
 
   /**
-     * Allows a user to apply for an account when registration mode is set to 'apply'
-     *
-     * @param email - The email address of the applicant
-     * @param message - Any message the applicant wants to include with their application
-     * @returns A promise that resolves to true if the application was successfully created
-     * @throws AccountAlreadyExistsError if an account already exists for the provided email
-     * @throws AccountApplicationAlreadyExistsError if an application already exists for the provided email
-     * @throws AccountApplicationsClosedError if the system is not accepting applications
-     */
+    * Allows a user to apply for an account when registration mode is set to 'apply'
+    *
+    * @param email - The email address of the applicant
+    * @param message - Any message the applicant wants to include with their application
+    * @returns A promise that resolves to true if the application was successfully created
+    * @throws AccountAlreadyExistsError if an account already exists for the provided email
+    * @throws AccountApplicationAlreadyExistsError if an application already exists for the provided email
+    * @throws AccountApplicationsClosedError if the system is not accepting applications
+    */
   async applyForNewAccount(email: string, message?: string): Promise<boolean> {
     const settings = await this.configurationInterface.getAllSettings();
 
@@ -268,6 +270,25 @@ export default class AccountService {
 
       // Clear setup mode cache so middleware will query DB fresh and find the admin
       this.setupInterface.clearCache();
+    }
+
+    // Emit account.created event for ActivityPub domain to create UserActor
+    // Only if username is set (accounts created via invitation may not have username yet)
+    if (accountInfo.account.username) {
+      try {
+        const domain = config.get<string>('domain');
+        if (domain) {
+          this.eventBus.emit('account.created', {
+            accountId: accountInfo.account.id,
+            username: accountInfo.account.username,
+            domain: domain,
+          });
+        }
+      }
+      catch (error) {
+        console.error('Failed to emit account.created event:', accountInfo.account.id, error);
+        // Don't fail account creation if event emission fails
+      }
     }
 
     return accountInfo;
@@ -414,12 +435,12 @@ export default class AccountService {
   }
 
   /**
-     * Approves an account application and creates a new account for the applicant
-     *
-     * @param id - The ID of the application to approve
-     * @returns {Promise<Account>} A promise that resolves to the newly created account
-     * @throws {noAccountApplicationExistsError} if no application exists with the given ID
-     */
+    * Approves an account application and creates a new account for the applicant
+    *
+    * @param id - The ID of the application to approve
+    * @returns {Promise<Account>} A promise that resolves to the newly created account
+    * @throws {noAccountApplicationExistsError} if no application exists with the given ID
+    */
   async acceptAccountApplication(id: string): Promise<Account> {
 
     const application = await AccountApplicationEntity.findByPk(id);
@@ -441,13 +462,13 @@ export default class AccountService {
   }
 
   /**
-     * Rejects an account application and optionally notifies the applicant
-     *
-     * @param id - The ID of the application to reject
-     * @param silent - If true, no email notification will be sent to the applicant (default: false)
-     * @returns A promise that resolves to undefined
-     * @throws {noAccountApplicationExistsError} if no application exists with the given ID
-     */
+    * Rejects an account application and optionally notifies the applicant
+    *
+    * @param id - The ID of the application to reject
+    * @param silent - If true, no email notification will be sent to the applicant (default: false)
+    * @returns A promise that resolves to undefined
+    * @throws {noAccountApplicationExistsError} if no application exists with the given ID
+    */
   async rejectAccountApplication(id: string, silent: boolean = false): Promise<undefined> {
     const application = await AccountApplicationEntity.findByPk(id);
 
@@ -522,10 +543,10 @@ export default class AccountService {
   }
 
   /**
-     * Returns the account associated with a given email address, or undefined if no such account exists
-     * @param {string} email the email address to search for
-     * @returns {Promise<Account | undefined>} a promise that resolves to the account associated with the given email address, or undefined if no such account exists
-     */
+    * Returns the account associated with a given email address, or undefined if no such account exists
+    * @param {string} email the email address to search for
+    * @returns {Promise<Account | undefined>} a promise that resolves to the account associated with the given email address, or undefined if no such account exists
+    */
   async getAccountByEmail(email:string): Promise<Account | undefined> {
     let account = await AccountEntity.findOne({ where: { email: email }});
     if (!account) { return undefined; }
@@ -538,10 +559,10 @@ export default class AccountService {
   }
 
   /**
-     * Returns the account associated with a given ID, or undefined if no such account exists
-     * @param {string} id the account ID to search for
-     * @returns {Promise<Account | undefined>} a promise that resolves to the account associated with the given ID, or undefined if no such account exists
-     */
+    * Returns the account associated with a given ID, or undefined if no such account exists
+    * @param {string} id the account ID to search for
+    * @returns {Promise<Account | undefined>} a promise that resolves to the account associated with the given ID, or undefined if no such account exists
+    */
   async getAccountById(id:string): Promise<Account | undefined> {
     let account = await AccountEntity.findByPk(id);
     if (!account) { return undefined; }
@@ -554,9 +575,25 @@ export default class AccountService {
   }
 
   /**
-     * Returns all accounts in the system
-     * @returns {Promise<Account[]>} a promise that resolves to an array of all accounts
-     */
+   * Returns the account associated with a given username, or undefined if no such account exists
+   * @param {string} username the username to search for
+   * @returns {Promise<Account | undefined>} a promise that resolves to the account associated with the given username, or undefined if no such account exists
+   */
+  async getAccountByUsername(username: string): Promise<Account | undefined> {
+    let account = await AccountEntity.findOne({ where: { username: username }});
+    if (!account) { return undefined; }
+
+    let roles = await AccountRoleEntity.findAll({ where: { account_id: account.id } });
+
+    let accountModel = account.toModel();
+    accountModel.roles = roles.map(role => role.role);
+    return accountModel;
+  }
+
+  /**
+    * Returns all accounts in the system
+    * @returns {Promise<Account[]>} a promise that resolves to an array of all accounts
+    */
   async getAllAccounts(): Promise<Account[]> {
     let accounts = await AccountEntity.findAll({
       order: [['createdAt', 'DESC']],
@@ -611,11 +648,11 @@ export default class AccountService {
   }
 
   /**
-     * Checks credentials against an account, and returns the corresponding Account if successful
-     * @param email
-     * @param password
-     * @returns a promise that resolves to an Account if the credentials match, or undefined if they do not
-     */
+   * Checks credentials against an account, and returns the corresponding Account if successful
+   * @param email
+   * @param password
+   * @returns a promise that resolves to an Account if the credentials match, or undefined if they do not
+   */
   async checkCredentials(email: string, password: string): Promise<Account | undefined> {
     let account = await this.getAccountByEmail(email);
     if (!account) { return undefined; }
@@ -664,12 +701,12 @@ export default class AccountService {
   }
 
   /**
-     * Sets the password for an account using a valid password reset code
-     * @param {string} code - The password reset code
-     * @param {string} newPassword - The new password to set
-     * @returns {Promise<boolean>} True if the password was successfully set
-     * @throws {Error} If the code is invalid, expired, or password validation fails
-     */
+    * Sets the password for an account using a valid password reset code
+    * @param {string} code - The password reset code
+    * @param {string} newPassword - The new password to set
+    * @returns {Promise<boolean>} True if the password was successfully set
+    * @throws {Error} If the code is invalid, expired, or password validation fails
+    */
   async resetPasswordWithCode(code: string, newPassword: string): Promise<boolean> {
     // Validate the reset code and get the account
     const account = await this.validatePasswordResetCode(code);
@@ -703,11 +740,11 @@ export default class AccountService {
   }
 
   /**
-     * Sets the password for an account
-     * @param {Account} account - The account to set the password for
-     * @param {string} password - The new password
-     * @returns {Promise<boolean>} True if the password was successfully set
-     */
+    * Sets the password for an account
+    * @param {Account} account - The account to set the password for
+    * @param {string} password - The new password
+    * @returns {Promise<boolean>} True if the password was successfully set
+    */
   async setPassword(account: Account, password: string): Promise<boolean> {
     let secret = await AccountSecretsEntity.findByPk(account.id);
     if (!secret) {
@@ -746,7 +783,7 @@ export default class AccountService {
     // Delete invitations sent by this account
     await AccountInvitationEntity.destroy({ where: { invited_by: accountId } });
 
-    // Delete the account itself
+    // Delete the account itself (UserActor will be deleted via CASCADE)
     await account.destroy();
 
     return true;

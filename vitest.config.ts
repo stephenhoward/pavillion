@@ -11,13 +11,17 @@ export default defineConfig({
     // Sequelize instance with its own SQLite :memory: database.
     // This provides true test isolation without modifying production code.
     fileParallelism: true,
-    pool: 'forks',  // Use child_process.fork() for process-level isolation
+    pool: 'vmThreads',  // Use VM-based threads for better isolation and RPC stability
     poolOptions: {
-      forks: {
-        // Each test file runs in isolation with fresh module state
-        isolate: true,
+      vmThreads: {
+        // Each test file runs in a separate VM context with isolated module state
+        // This prevents Sequelize instance sharing while avoiding fork RPC timeouts
+        minThreads: 1,
+        maxThreads: 4,
       },
     },
+    // Increase teardown timeout to allow workers to finish cleanup
+    teardownTimeout: 15000,
     exclude: [
       '**/node_modules/**',
       '**/dist/**',

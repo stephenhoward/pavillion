@@ -20,7 +20,7 @@ class EventObject extends ActivityPubObject {
 
     return id.match('^https?:\/\/')
       ? id
-      : 'https://'+config.get('domain')+'/o/'+calendar.urlName+'/events/'+id;
+      : 'https://'+config.get('domain')+'/calendars/'+calendar.urlName+'/events/'+id;
   }
 
   constructor( calendar: Calendar, event: CalendarEvent ) {
@@ -29,7 +29,7 @@ class EventObject extends ActivityPubObject {
 
     // Set attributedTo to the calendar's actor URL
     const domain = config.get('domain');
-    this.attributedTo = 'https://'+domain+'/o/'+calendar.urlName;
+    this.attributedTo = 'https://'+domain+'/calendars/'+calendar.urlName;
 
     this.date = event.date;
     this.content = event.toObject().content;

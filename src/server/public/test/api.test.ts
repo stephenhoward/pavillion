@@ -45,7 +45,7 @@ describe('Public Calendar API', () => {
     apiSandbox.restore();
   });
 
-  describe('GET /calendars/:urlName/categories', () => {
+  describe('GET /calendar/:urlName/categories', () => {
     it('should return 404 for non-existent calendar', async () => {
       let calendarStub = apiSandbox.stub(publicInterface, 'getCalendarByName');
       calendarStub.resolves(null);
@@ -115,7 +115,7 @@ describe('Public Calendar API', () => {
     });
   });
 
-  describe('GET /calendars/:calendar/events with category filtering', () => {
+  describe('GET /calendar/:calendar/events with category filtering', () => {
     it('should filter events by single category', async () => {
       // Setup stubs for this specific test
       const calendar = new Calendar('cal-id', 'test-calendar');

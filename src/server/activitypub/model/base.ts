@@ -65,7 +65,7 @@ class ActivityPubActor {
     }
     else if ( calendar instanceof Calendar ) {
       const domain = config.get('domain');
-      return 'https://'+domain+'/o/'+calendar.urlName;
+      return 'https://'+domain+'/calendars/'+calendar.urlName;
     }
 
     throw('cannot generate url for this account profile: '+ calendar);

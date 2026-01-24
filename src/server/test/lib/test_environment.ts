@@ -10,13 +10,16 @@ import '@/server/common/entity/account';
 import '@/server/accounts/entity/account_invitation';
 import '@/server/calendar/entity/calendar';
 import '@/server/calendar/entity/calendar_editor';
+import '@/server/calendar/entity/calendar_editor_person';
 import '@/server/calendar/entity/event_category';
 import '@/server/calendar/entity/event_category_content';
 import '@/server/calendar/entity/event';
 import '@/server/calendar/entity/event_category_assignment';
 import '@/server/calendar/entity/event_instance';
+import '@/server/calendar/entity/event_repost';
 import '@/server/calendar/entity/location';
 import '@/server/activitypub/entity/activitypub';
+import '@/server/activitypub/entity/event_object';
 import '@/server/media/entity/media';
 import '@/server/configuration/entity/settings';
 
@@ -95,16 +98,16 @@ export class TestEnvironment {
     webfingerStub.resolves({
       data: {
         links: [
-          { rel:'self', href:`https://${remoteDomain}/o/${calendarName}` },
+          { rel:'self', href:`https://${remoteDomain}/calendars/${calendarName}` },
         ],
       },
     });
 
-    const profileStub = getStub.withArgs(`https://${remoteDomain}/o/${calendarName}`);
+    const profileStub = getStub.withArgs(`https://${remoteDomain}/calendars/${calendarName}`);
     profileStub.resolves({
       status: 200,
       data: {
-        inbox: `https://${remoteDomain}/o/${calendarName}/inbox`,
+        inbox: `https://${remoteDomain}/calendars/${calendarName}/inbox`,
         publicKey: {
           publicKeyPem: 'fake key',
         },
@@ -113,7 +116,7 @@ export class TestEnvironment {
   }
 
   fakeRemoteAuth(remoteDomain: string, calendarName: string ){
-    return `Signature keyId="https://${remoteDomain}/o/${calendarName}#main_key",algorithm="rsa-sha256",` +
+    return `Signature keyId="https://${remoteDomain}/calendars/${calendarName}#main_key",algorithm="rsa-sha256",` +
                     'headers="(request-target) host date content-type digest",' +
                     'signature="fakeSignature"';
 

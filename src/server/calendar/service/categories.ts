@@ -123,8 +123,13 @@ class CategoryService {
    * @throws CategoryNotFoundError if category doesn't exist or doesn't belong to the specified calendar
    */
   async updateCategory(account: Account, categoryId: string, categoryData: Record<string,any>, calendarId?: string): Promise<EventCategory> {
-    // Get category to verify it exists and verify calendar match
-    const category = await this.getCategory(categoryId, calendarId);
+    // Get category to verify it exists (without calendar validation)
+    const category = await this.getCategory(categoryId);
+
+    // Verify category belongs to the specified calendar if calendarId is provided
+    if (calendarId && category.calendarId !== calendarId) {
+      throw new CategoryNotFoundError();
+    }
 
     // Get calendar and verify ownership/editor permissions
     const calendar = await this.getCalendar(category.calendarId);
@@ -439,20 +444,13 @@ class CategoryService {
       throw new EventNotFoundError();
     }
 
-    // Extract urlName from event's ActivityPub calendar URL
-    // Events store AP URLs (https://domain/o/urlName), categories use UUIDs
-    const urlNameMatch = event.calendar_id.match(/\/o\/([^\/]+)$/);
-    if (!urlNameMatch) {
-      throw new Error('Invalid calendar ActivityPub URL format');
-    }
-    const urlName = urlNameMatch[1];
-    const eventCalendar = await this.calendarService?.getCalendarByName(urlName);
-    if (!eventCalendar) {
-      throw new CalendarNotFoundError('Calendar not found for event');
+    // Verify the event is a local event (has a calendar_id)
+    if (!event.calendar_id) {
+      throw new Error('Cannot assign categories to remote events');
     }
 
     // Verify the event belongs to the same calendar as the category
-    if (eventCalendar.id !== category.calendarId) {
+    if (event.calendar_id !== category.calendarId) {
       throw new CategoryEventCalendarMismatchError();
     }
 
@@ -503,20 +501,13 @@ class CategoryService {
       throw new EventNotFoundError();
     }
 
-    // Extract urlName from event's ActivityPub calendar URL
-    // Events store AP URLs (https://domain/o/urlName), categories use UUIDs
-    const urlNameMatch = event.calendar_id.match(/\/o\/([^\/]+)$/);
-    if (!urlNameMatch) {
-      throw new Error('Invalid calendar ActivityPub URL format');
-    }
-    const urlName = urlNameMatch[1];
-    const eventCalendar = await this.calendarService?.getCalendarByName(urlName);
-    if (!eventCalendar) {
-      throw new CalendarNotFoundError('Calendar not found for event');
+    // Verify the event is a local event (has a calendar_id)
+    if (!event.calendar_id) {
+      throw new Error('Cannot unassign categories from remote events');
     }
 
     // Verify the event belongs to the same calendar as the category
-    if (eventCalendar.id !== category.calendarId) {
+    if (event.calendar_id !== category.calendarId) {
       throw new CategoryEventCalendarMismatchError();
     }
 
@@ -673,8 +664,9 @@ class CategoryService {
       return true;
     }
 
-    // Import CalendarEditorEntity dynamically to avoid circular dependency
+    // Import entities dynamically to avoid circular dependency
     const { CalendarEditorEntity } = await import('@/server/calendar/entity/calendar_editor');
+    const { CalendarEditorPersonEntity } = await import('@/server/calendar/entity/calendar_editor_person');
     const { CalendarEntity } = await import('@/server/calendar/entity/calendar');
 
     // Check if user owns the calendar
@@ -683,15 +675,27 @@ class CategoryService {
       return true;
     }
 
-    // Check if user has editor access
-    const editorRelationship = await CalendarEditorEntity.findOne({
+    // Check if user has federated editor access
+    const federatedEditorRelationship = await CalendarEditorEntity.findOne({
       where: {
         calendar_id: calendar.id,
         account_id: account.id,
       },
     });
 
-    return editorRelationship !== null;
+    if (federatedEditorRelationship) {
+      return true;
+    }
+
+    // Check if user has local person editor access
+    const localPersonEditorRelationship = await CalendarEditorPersonEntity.findOne({
+      where: {
+        calendar_id: calendar.id,
+        account_id: account.id,
+      },
+    });
+
+    return localPersonEditorRelationship !== null;
   }
 }
 

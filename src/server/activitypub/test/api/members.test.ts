@@ -125,13 +125,18 @@ describe('unfollowCalendar', () => {
     let userCanModifyStub = sandbox.stub(CalendarService.prototype, 'userCanModifyCalendar');
     userCanModifyStub.resolves(true);
 
-    // Mock follow entity lookup
+    // Mock follow entity lookup - now includes remoteCalendar association
     let findOneStub = sandbox.stub(FollowingCalendarEntity, 'findOne');
-    findOneStub.resolves(FollowingCalendarEntity.build({
+    const mockFollowEntity = {
       id: 'testfollowid',
-      remote_calendar_id: 'https://remote.example/o/remotecal',
+      remote_calendar_id: 'mock-remote-calendar-uuid',
       calendar_id: 'testcalendarid',
-    }));
+      remoteCalendar: {
+        id: 'mock-remote-calendar-uuid',
+        actor_uri: 'https://remote.example/calendars/remotecal',
+      },
+    };
+    findOneStub.resolves(mockFollowEntity as any);
 
     // Mock the interface method, not the internal service
     let unfollowMock = sandbox.stub(activityPubInterface, 'unfollowCalendar');

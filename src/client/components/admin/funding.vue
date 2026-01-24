@@ -64,17 +64,17 @@ const currencyOptions = [
 
 // Computed property to check if any payment provider is configured
 const hasConfiguredProvider = computed(() => {
-  return providers.value.some(provider => provider.configured);
+  return providers.value?.some(provider => provider.configured) ?? false;
 });
 
 // Computed property to get list of configured providers only
 const configuredProviders = computed(() => {
-  return providers.value.filter(provider => provider.configured);
+  return providers.value?.filter(provider => provider.configured) ?? [];
 });
 
 // Computed property to get list of unconfigured providers
 const unconfiguredProviders = computed(() => {
-  return providers.value.filter(provider => !provider.configured);
+  return providers.value?.filter(provider => !provider.configured) ?? [];
 });
 
 // Computed property to check if all providers are configured

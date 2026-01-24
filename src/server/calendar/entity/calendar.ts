@@ -43,6 +43,7 @@ class CalendarEntity extends Model {
     }
     calendar.defaultDateRange = this.default_date_range as DefaultDateRange || null;
     calendar.widgetAllowedDomain = this.widget_allowed_domain || null;
+    (calendar as any).accountId = this.account_id; // Add account ownership information
 
     return calendar;
   };

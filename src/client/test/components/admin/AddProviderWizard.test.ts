@@ -54,7 +54,7 @@ describe('AddProviderWizard', () => {
       },
     });
 
-    expect(wrapper.find('.modal-overlay').exists()).toBe(true);
+    expect(wrapper.find('dialog.modal').exists()).toBe(true);
     expect(wrapper.text()).toContain('Add Payment Provider');
   });
 
@@ -186,6 +186,6 @@ describe('AddProviderWizard', () => {
 
     expect(wrapper.find('.error-message').exists()).toBe(true);
     expect(wrapper.text()).toContain('Failed to connect Stripe');
-    expect(wrapper.find('.modal-overlay').exists()).toBe(true); // Still open
+    expect(wrapper.find('dialog.modal').exists()).toBe(true); // Still open
   });
 });

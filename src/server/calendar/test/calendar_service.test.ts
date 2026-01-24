@@ -7,6 +7,8 @@ import { CalendarEditor } from '@/common/model/calendar_editor';
 import AccountInvitation from '@/common/model/invitation';
 import { CalendarEntity, CalendarContentEntity } from '@/server/calendar/entity/calendar';
 import { CalendarEditorEntity } from '@/server/calendar/entity/calendar_editor';
+import { CalendarEditorPersonEntity } from '@/server/calendar/entity/calendar_editor_person';
+import { CalendarEditorRemoteEntity } from '@/server/calendar/entity/calendar_editor_remote';
 import CalendarService from '@/server/calendar/service/calendar';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
 
@@ -198,9 +200,13 @@ describe('editableCalendarsForUser', () => {
       CalendarEntity.fromModel(cal2),
     ]);
 
-    // Stub CalendarEditorEntity to return empty array (no editor relationships)
+    // Stub CalendarEditorEntity to return empty array (no federated editor relationships)
     const editorFindAllStub = sandbox.stub(CalendarEditorEntity, 'findAll');
     editorFindAllStub.resolves([]);
+
+    // Stub CalendarEditorPersonEntity to return empty array (no local person editor relationships)
+    const personEditorFindAllStub = sandbox.stub(CalendarEditorPersonEntity, 'findAll');
+    personEditorFindAllStub.resolves([]);
 
     const result = await service.editableCalendarsForUser(acct);
 
@@ -213,9 +219,13 @@ describe('editableCalendarsForUser', () => {
     const calendarFindAllStub = sandbox.stub(CalendarEntity, 'findAll');
     calendarFindAllStub.resolves([]);
 
-    // Stub CalendarEditorEntity to return empty array (no editor relationships)
+    // Stub CalendarEditorEntity to return empty array (no federated editor relationships)
     const editorFindAllStub = sandbox.stub(CalendarEditorEntity, 'findAll');
     editorFindAllStub.resolves([]);
+
+    // Stub CalendarEditorPersonEntity to return empty array (no local person editor relationships)
+    const personEditorFindAllStub = sandbox.stub(CalendarEditorPersonEntity, 'findAll');
+    personEditorFindAllStub.resolves([]);
 
     const result = await service.editableCalendarsForUser(acct);
 
@@ -231,7 +241,7 @@ describe('editableCalendarsForUser', () => {
       CalendarEntity.fromModel(cal1), // Owned calendar
     ]);
 
-    // Stub CalendarEditorEntity to return one editor relationship
+    // Stub CalendarEditorEntity to return one federated editor relationship
     const editorFindAllStub = sandbox.stub(CalendarEditorEntity, 'findAll');
     const editorEntity = CalendarEditorEntity.fromModel(new CalendarEditor(
       'editorId',
@@ -241,6 +251,10 @@ describe('editableCalendarsForUser', () => {
     editorEntity.calendar = CalendarEntity.fromModel(cal2);
 
     editorFindAllStub.resolves([ editorEntity ]);
+
+    // Stub CalendarEditorPersonEntity to return empty array (no local person editor relationships)
+    const personEditorFindAllStub = sandbox.stub(CalendarEditorPersonEntity, 'findAll');
+    personEditorFindAllStub.resolves([]);
 
     const result = await service.editableCalendarsForUser(acct);
 
@@ -278,34 +292,33 @@ describe('userCanModifyCalendar', () => {
   });
 
   it('should return true if user owns the calendar', async () => {
-    const editableCalendarsStub = sandbox.stub(service, 'editableCalendarsForUser');
-    editableCalendarsStub.resolves([cal]);
+    const userCanEditCalendarStub = sandbox.stub(service, 'userCanEditCalendar');
+    userCanEditCalendarStub.resolves(true);
 
     const result = await service.userCanModifyCalendar(acct, cal);
 
     expect(result).toBe(true);
-    expect(editableCalendarsStub.calledWith(acct)).toBe(true);
+    expect(userCanEditCalendarStub.calledWith(acct.id, cal.id)).toBe(true);
   });
 
   it('should return false if user has no calendars', async () => {
-    const editableCalendarsStub = sandbox.stub(service, 'editableCalendarsForUser');
-    editableCalendarsStub.resolves([]);
+    const userCanEditCalendarStub = sandbox.stub(service, 'userCanEditCalendar');
+    userCanEditCalendarStub.resolves(false);
 
     const result = await service.userCanModifyCalendar(acct, cal);
 
     expect(result).toBe(false);
-    expect(editableCalendarsStub.calledWith(acct)).toBe(true);
+    expect(userCanEditCalendarStub.calledWith(acct.id, cal.id)).toBe(true);
   });
 
   it('should return false if user does not own the calendar', async () => {
-    const otherCal = new Calendar('otherCalendarId', 'othercal');
-    const editableCalendarsStub = sandbox.stub(service, 'editableCalendarsForUser');
-    editableCalendarsStub.resolves([otherCal]);
+    const userCanEditCalendarStub = sandbox.stub(service, 'userCanEditCalendar');
+    userCanEditCalendarStub.resolves(false);
 
     const result = await service.userCanModifyCalendar(acct, cal);
 
     expect(result).toBe(false);
-    expect(editableCalendarsStub.calledWith(acct)).toBe(true);
+    expect(userCanEditCalendarStub.calledWith(acct.id, cal.id)).toBe(true);
   });
 });
 
@@ -682,11 +695,13 @@ describe('Calendar Ownership and Editor Permissions', () => {
       const getCalendarStub = sandbox.stub(service, 'getCalendar');
       const isOwnerStub = sandbox.stub(service, 'isCalendarOwner');
       const destroyStub = sandbox.stub(CalendarEditorEntity, 'destroy');
+      const destroyPersonStub = sandbox.stub(CalendarEditorPersonEntity, 'destroy');
 
       getCalendarStub.resolves(calendar);
       isOwnerStub.withArgs(owner, calendar).resolves(true);
       isOwnerStub.withArgs(nonOwner, calendar).resolves(false);
       destroyStub.resolves(1); // One record deleted
+      destroyPersonStub.resolves(0); // No person records
 
       const result = await service.removeEditAccess(owner, 'cal-id', 'user-id');
       expect(result).toBe(true);
@@ -708,10 +723,12 @@ describe('Calendar Ownership and Editor Permissions', () => {
       const getCalendarStub = sandbox.stub(service, 'getCalendar');
       const isOwnerStub = sandbox.stub(service, 'isCalendarOwner');
       const destroyStub = sandbox.stub(CalendarEditorEntity, 'destroy');
+      const destroyPersonStub = sandbox.stub(CalendarEditorPersonEntity, 'destroy');
 
       getCalendarStub.resolves(calendar);
       isOwnerStub.resolves(false); // User is not the calendar owner
       destroyStub.resolves(1); // One record deleted
+      destroyPersonStub.resolves(0); // No person records
 
       // User removing themselves (same account ID)
       const result = await service.removeEditAccess(nonOwner, 'cal-id', nonOwner.id);
@@ -735,11 +752,13 @@ describe('Calendar Ownership and Editor Permissions', () => {
     it('should succeed for admin even if not owner', async () => {
       const getCalendarStub = sandbox.stub(service, 'getCalendar');
       const destroyStub = sandbox.stub(CalendarEditorEntity, 'destroy');
+      const destroyPersonStub = sandbox.stub(CalendarEditorPersonEntity, 'destroy');
       const isOwnerStub = sandbox.stub(service, 'isCalendarOwner');
 
       isOwnerStub.resolves(false); // Admin is not the owner
       getCalendarStub.resolves(calendar);
       destroyStub.resolves(1); // One record deleted
+      destroyPersonStub.resolves(0); // No person records
 
       const result = await service.removeEditAccess(admin, 'cal-id', 'user-id');
       expect(result).toBe(true);
@@ -756,12 +775,16 @@ describe('Calendar Ownership and Editor Permissions', () => {
       getCalendarStub.resolves(calendar);
       canViewEditorsStub.resolves(true);
 
-      // Mock active editors
+      // Mock federated editors
       const mockEditor = {
         toModel: () => new CalendarEditor('editor-id', 'cal-id', 'user-id'),
       };
       const findAllStub = sandbox.stub(CalendarEditorEntity, 'findAll');
       findAllStub.resolves([mockEditor as any]);
+
+      // Mock local person editors (empty array for this test)
+      const findAllPersonStub = sandbox.stub(CalendarEditorPersonEntity, 'findAll');
+      findAllPersonStub.resolves([]);
 
       mockAccountsInterface.getAccountById.withArgs('owner-id').resolves(owner);
 
@@ -800,10 +823,14 @@ describe('Calendar Ownership and Editor Permissions', () => {
       const getCalendarStub = sandbox.stub(service, 'getCalendar');
       const canViewEditorsStub = sandbox.stub(service as any, 'canViewCalendarEditors');
       const findAllStub = sandbox.stub(CalendarEditorEntity, 'findAll');
+      const findAllPersonStub = sandbox.stub(CalendarEditorPersonEntity, 'findAll');
+      const findAllRemoteStub = sandbox.stub(CalendarEditorRemoteEntity, 'findAll');
 
       getCalendarStub.resolves(calendar);
       canViewEditorsStub.resolves(true);
       findAllStub.resolves([]);
+      findAllPersonStub.resolves([]);
+      findAllRemoteStub.resolves([]);
 
       // Spy on the unified listInvitations method
       const listInvitationsStub = mockAccountsInterface.listInvitations = sandbox.stub();
@@ -822,12 +849,20 @@ describe('Calendar Ownership and Editor Permissions', () => {
       getCalendarStub.resolves(calendar);
       canViewEditorsStub.resolves(true);
 
-      // Mock active editors
+      // Mock federated active editors
       const mockEditor = {
         toModel: () => new CalendarEditor('editor-id', 'cal-id', 'user-id'),
       };
       const findAllStub = sandbox.stub(CalendarEditorEntity, 'findAll');
       findAllStub.resolves([mockEditor as any]);
+
+      // Mock local person editors (empty for this test)
+      const findAllPersonStub = sandbox.stub(CalendarEditorPersonEntity, 'findAll');
+      findAllPersonStub.resolves([]);
+
+      // Mock remote editors (empty for this test)
+      const findAllRemoteStub = sandbox.stub(CalendarEditorRemoteEntity, 'findAll');
+      findAllRemoteStub.resolves([]);
 
       // Mock pending invitations using unified method
       const mockInvitation = new AccountInvitation(

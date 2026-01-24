@@ -46,8 +46,11 @@ describe('createEvent', () => {
     });
 
     expect(event.id).toBeDefined();
-    expect(event.id).toMatch(/^https:\/\/pavillion.dev\/events\/[a-z0-9-]+$/);
-    expect(eventSpy.returnValues[0].calendar_id).toBe('https://pavillion.dev/o/testme');
+    // event.id should now be a UUID
+    expect(event.id).toMatch(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/);
+    // event.eventSourceUrl should be a relative path with calendar urlName and event UUID
+    expect(event.eventSourceUrl).toMatch(/^\/testme\/[a-f0-9-]+$/);
+    expect(eventSpy.returnValues[0].calendar_id).toBe(cal.id);
     expect(contentSpy.returnValues[0].event_id).toBe(event.id);
     expect(event.content("en").name).toBe('testName');
     expect(saveStub.called).toBe(true);
@@ -72,7 +75,7 @@ describe('createEvent', () => {
     });
 
     expect(event.id).toBeDefined();
-    expect(eventSpy.returnValues[0].calendar_id).toBe('https://pavillion.dev/o/testme');
+    expect(eventSpy.returnValues[0].calendar_id).toBe(cal.id);
     expect(event.location).toBeDefined();
     expect(saveStub.called).toBe(true);
   });

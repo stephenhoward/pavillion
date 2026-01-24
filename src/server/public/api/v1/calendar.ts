@@ -10,9 +10,9 @@ export default class CalendarRoutes {
 
   installHandlers(app: Application, routePrefix: string): void {
     const router = express.Router();
-    router.get('/calendars/:urlName', this.getCalendar.bind(this));
-    router.get('/calendars/:urlName/categories', this.listCategories.bind(this));
-    router.get('/calendars/:calendar/events', this.listInstances.bind(this));
+    router.get('/calendar/:urlName', this.getCalendar.bind(this));
+    router.get('/calendar/:urlName/categories', this.listCategories.bind(this));
+    router.get('/calendar/:calendar/events', this.listInstances.bind(this));
     router.get('/events/:id', this.getEvent.bind(this));
     router.get('/instances/:id', this.getEventInstance.bind(this));
     app.use(routePrefix, router);

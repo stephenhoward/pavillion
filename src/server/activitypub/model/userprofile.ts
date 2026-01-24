@@ -6,14 +6,13 @@ class UserProfileResponse {
   outbox: string;
   publicKey: string;
 
-  constructor(urlName: string, domain: string) {
-    this.id = 'https://' + domain + '/o/' + urlName;
+  constructor(urlName: string, domain: string, publicKey?: string) {
+    this.id = 'https://' + domain + '/calendars/' + urlName;
     this.type = 'Organization';
     this.preferredUsername = urlName;
-    this.inbox = 'https://' + domain + '/o/' + urlName + '/inbox';
-    this.outbox = 'https://' + domain + '/o/' + urlName + '/outbox';
-    // TODO provide public key in profile response:
-    this.publicKey = '';
+    this.inbox = 'https://' + domain + '/calendars/' + urlName + '/inbox';
+    this.outbox = 'https://' + domain + '/calendars/' + urlName + '/outbox';
+    this.publicKey = publicKey || '';
   }
 
   toObject(): Record<string, any> {

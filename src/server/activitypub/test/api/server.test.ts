@@ -63,49 +63,6 @@ describe('lookupUser', () => {
   });
 });
 
-describe('getUserProfile', () => {
-  let routes: ActivityPubServerRoutes;
-  let sandbox: sinon.SinonSandbox = sinon.createSandbox();
-  let activityPubInterface: ActivityPubInterface;
-
-  beforeEach(() => {
-    const eventBus = new EventEmitter();
-    activityPubInterface = new ActivityPubInterface(eventBus);
-    const calendarAPI = new CalendarInterface(eventBus);
-    routes = new ActivityPubServerRoutes(activityPubInterface, calendarAPI);
-  });
-
-  afterEach(() => {
-    sandbox.restore();
-  });
-
-  it('should fail with unknown user', async () => {
-    let req = { params: { user: 'testuser' } };
-    let res = { status: sinon.stub(), send: sinon.stub() };
-    res.status.returns(res);
-
-    let lookupMock = sandbox.stub(activityPubInterface, 'lookupUserProfile');
-    lookupMock.resolves(null);
-
-    await routes.getUserProfile(req as any, res as any);
-
-    expect(res.status.calledWith(404)).toBe(true);
-    expect(res.send.calledWith('Calendar not found')).toBe(true);
-  });
-
-  it('should succeed with known user', async () => {
-    let req = { params: { user: 'testuser' } };
-    let res = { json: sinon.stub() };
-
-    let lookupMock = sandbox.stub(activityPubInterface, 'lookupUserProfile');
-    lookupMock.resolves(new UserProfileResponse('testuser','testdomain.com'));
-
-    await routes.getUserProfile(req as any, res as any);
-
-    expect(res.json.called).toBe(true);
-  });
-});
-
 describe('addToInbox', () => {
   let routes: ActivityPubServerRoutes;
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();

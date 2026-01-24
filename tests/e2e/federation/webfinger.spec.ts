@@ -87,7 +87,7 @@ test.describe('WebFinger Discovery', () => {
     );
 
     expect(profileLink).toBeDefined();
-    expect(profileLink.href).toContain(`/o/${testCalendarUrlName}`);
+    expect(profileLink.href).toContain(`/calendars/${testCalendarUrlName}`);
   });
 
   test('should return valid ActivityPub actor document from profile URL', async ({ request }) => {
@@ -101,7 +101,7 @@ test.describe('WebFinger Discovery', () => {
     });
 
     // Fetch the ActivityPub actor document directly
-    const actorUrl = `${INSTANCE_ALPHA.baseUrl}/o/${calendarUrlName}`;
+    const actorUrl = `${INSTANCE_ALPHA.baseUrl}/calendars/${calendarUrlName}`;
     const actorResponse = await request.get(actorUrl, {
       headers: {
         'Accept': 'application/activity+json',
@@ -115,7 +115,7 @@ test.describe('WebFinger Discovery', () => {
     // Verify required ActivityPub actor fields
     expect(actorData['@context']).toBeDefined();
     expect(actorData.type).toBe('Organization');
-    expect(actorData.id).toContain(`/o/${calendarUrlName}`);
+    expect(actorData.id).toContain(`/calendars/${calendarUrlName}`);
 
     // Verify inbox and outbox are present (required for federation)
     expect(actorData.inbox).toBeDefined();
@@ -183,6 +183,6 @@ test.describe('WebFinger Discovery', () => {
 
     expect(profileLink).toBeDefined();
     expect(profileLink.href).toContain(INSTANCE_ALPHA.domain);
-    expect(profileLink.href).toContain(`/o/${calendarUrlName}`);
+    expect(profileLink.href).toContain(`/calendars/${calendarUrlName}`);
   });
 });

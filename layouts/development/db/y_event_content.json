@@ -1,284 +1,284 @@
 {
     "EventContentEntity": [
         {
-            "id": "c57770dd-8e3a-50c9-8a16-1aba01191a26",
-            "event_id": "c87a9e6b-76e9-5a3a-85dc-f58406636358",
+            "id": "cb5dd650-f0e3-4735-ac4f-2db9362d9206",
+            "event_id": "37d1bb5a-452b-432e-ac46-268b9c565bde",
             "language": "en",
             "name": "Summer Festival",
             "description": "Annual summer festival with music, food vendors, and activities for all ages."
         },
         {
-            "id": "900a7794-ab84-5dbc-b988-3c8a8182f8fd",
-            "event_id": "c87a9e6b-76e9-5a3a-85dc-f58406636358",
+            "id": "a2dfa59a-c560-4ebb-ab8b-5c4681497bf4",
+            "event_id": "37d1bb5a-452b-432e-ac46-268b9c565bde",
             "language": "es",
             "name": "Festival de Verano",
-            "description": "Festival anual de verano con m\u00fasica, vendedores de comida y actividades para todas las edades."
+            "description": "Festival anual de verano con música, vendedores de comida y actividades para todas las edades."
         },
         {
-            "id": "bdcb8758-14b4-542b-baaf-ddfd1ac8d3a9",
-            "event_id": "c0f581ed-3138-5018-8339-37461ac830cd",
+            "id": "ac777455-1595-4b62-ab5a-23d7a8f1690e",
+            "event_id": "35d10fac-fa3e-4d42-a8ac-d597338d8d64",
             "language": "en",
             "name": "Book Club Meeting",
             "description": "Monthly book club meeting to discuss 'The Great Gatsby'. Open to new members."
         },
         {
-            "id": "4eabdd34-7943-5071-a234-7b407e434cb9",
-            "event_id": "c0f581ed-3138-5018-8339-37461ac830cd",
+            "id": "3065a7ef-cd38-4815-a71f-c5614e4d3b91",
+            "event_id": "35d10fac-fa3e-4d42-a8ac-d597338d8d64",
             "language": "es",
-            "name": "Reuni\u00f3n del Club de Lectura",
-            "description": "Reuni\u00f3n mensual del club de lectura para discutir 'El Gran Gatsby'. Abierto a nuevos miembros."
+            "name": "Reunión del Club de Lectura",
+            "description": "Reunión mensual del club de lectura para discutir 'El Gran Gatsby'. Abierto a nuevos miembros."
         },
         {
-            "id": "deb8a7ea-72d0-50b7-b69a-015dfcd68ccc",
-            "event_id": "b136325c-22fe-5b32-bdcb-a87226205a90",
+            "id": "8b1f09dc-40e7-4cee-afbc-18a8774065be",
+            "event_id": "6ec54e50-1abd-44b3-a670-71d5c0f7433b",
             "language": "en",
             "name": "Community Picnic",
             "description": "A family-friendly community picnic. Bring your own food or purchase from vendors."
         },
         {
-            "id": "c0b50635-fdb1-5e4a-9993-be850ecc5754",
-            "event_id": "b136325c-22fe-5b32-bdcb-a87226205a90",
+            "id": "83d53fdc-5443-4fee-ada8-0ad71b96c7da",
+            "event_id": "6ec54e50-1abd-44b3-a670-71d5c0f7433b",
             "language": "es",
             "name": "Picnic Comunitario",
             "description": "Un picnic comunitario para toda la familia. Trae tu propia comida o compra de los vendedores."
         },
         {
-            "id": "161189f2-6886-583b-aa3a-c377cfe7cafe",
-            "event_id": "fa9aa65a-21f4-594b-9793-22254e44ad60",
+            "id": "d2b3bbf9-1e49-4bbb-ae5d-500edf4a2c4c",
+            "event_id": "cfdb67f1-bf39-4adb-a630-526c6e241e5a",
             "language": "en",
             "name": "Outdoor Yoga Class",
             "description": "Outdoor yoga class suitable for all levels. Please bring your own mat and water."
         },
         {
-            "id": "30d9b1bf-0d7c-548c-9407-63370f94c125",
-            "event_id": "fa9aa65a-21f4-594b-9793-22254e44ad60",
+            "id": "939ced74-67c9-4668-abd9-6f0191cd1773",
+            "event_id": "cfdb67f1-bf39-4adb-a630-526c6e241e5a",
             "language": "es",
             "name": "Clase de Yoga al Aire Libre",
             "description": "Clase de yoga al aire libre adecuada para todos los niveles. Por favor traiga su propia colchoneta y agua."
         },
         {
-            "id": "ea72a03f-132f-5a9f-a970-789fe4d81a5d",
-            "event_id": "55356b83-c2ef-5ef1-9b24-a53415a8f862",
+            "id": "bf62bdcc-ac9a-4880-a3f3-1f0929aef32f",
+            "event_id": "6b84598c-eeaf-4a6a-ad5e-7d5811682a6b",
             "language": "en",
             "name": "Poetry Reading",
             "description": "An evening of poetry with local poets sharing their work. Open mic segment available."
         },
         {
-            "id": "68edf26f-4769-5067-a8f1-1bafc9a79db1",
-            "event_id": "55356b83-c2ef-5ef1-9b24-a53415a8f862",
+            "id": "1c2162ce-ec45-4845-af01-93e876c3db6e",
+            "event_id": "6b84598c-eeaf-4a6a-ad5e-7d5811682a6b",
             "language": "es",
-            "name": "Lectura de Poes\u00eda",
-            "description": "Una noche de poes\u00eda con poetas locales compartiendo su trabajo. Segmento de micr\u00f3fono abierto disponible."
+            "name": "Lectura de Poesía",
+            "description": "Una noche de poesía con poetas locales compartiendo su trabajo. Segmento de micrófono abierto disponible."
         },
         {
-            "id": "16af1c94-ed32-56b3-971f-f64bc5cdab4b",
-            "event_id": "734796aa-e227-513d-9e00-9c99940e9ae3",
+            "id": "cd468276-2e44-4e6e-a9f6-f3fccb2ce127",
+            "event_id": "e7c14f3d-9f5a-4778-ada9-8979480b964c",
             "language": "en",
             "name": "Community Garden Workday",
             "description": "Help maintain our community garden. Tools provided, but please wear appropriate clothing."
         },
         {
-            "id": "e01196f7-2638-5cd0-b563-61c86811b8c9",
-            "event_id": "734796aa-e227-513d-9e00-9c99940e9ae3",
+            "id": "4a9a0b36-1825-4c8e-a4f3-964ea0005066",
+            "event_id": "e7c14f3d-9f5a-4778-ada9-8979480b964c",
             "language": "es",
-            "name": "D\u00eda de Trabajo en el Jard\u00edn Comunitario",
-            "description": "Ayuda a mantener nuestro jard\u00edn comunitario. Herramientas proporcionadas, pero por favor use ropa apropiada."
+            "name": "Día de Trabajo en el Jardín Comunitario",
+            "description": "Ayuda a mantener nuestro jardín comunitario. Herramientas proporcionadas, pero por favor use ropa apropiada."
         },
         {
-            "id": "44464939-f3aa-5ca2-926f-60efa9765bdd",
-            "event_id": "87349736-2294-5e30-9a17-235ef709f717",
+            "id": "d09fa5f0-f793-4eb9-aa64-9084aebcf879",
+            "event_id": "b9f95a62-b4c9-4ccd-ae49-12f1899b0ee0",
             "language": "en",
             "name": "Farmers Market",
             "description": "Weekly farmers market featuring local produce, crafts, and prepared foods."
         },
         {
-            "id": "99a46a85-0640-5bc1-830a-20317d0dc0cd",
-            "event_id": "87349736-2294-5e30-9a17-235ef709f717",
+            "id": "b6edf23f-6b8d-4756-adfc-9e19e1cf1980",
+            "event_id": "b9f95a62-b4c9-4ccd-ae49-12f1899b0ee0",
             "language": "es",
             "name": "Mercado de Agricultores",
-            "description": "Mercado semanal de agricultores con productos locales, artesan\u00edas y alimentos preparados."
+            "description": "Mercado semanal de agricultores con productos locales, artesanías y alimentos preparados."
         },
         {
-            "id": "0c3455ff-8956-54e6-a4a2-b2f91023786f",
-            "event_id": "10680e1a-cad5-5882-9446-f90c63879136",
+            "id": "8cb20e2d-fe4a-452b-a4aa-0982c9bb6cf1",
+            "event_id": "7a35d17a-f87d-4bfd-ae6d-89c3a53b8998",
             "language": "en",
             "name": "Tech Talk: Future of AI",
             "description": "Expert panel discussion on the future of artificial intelligence and its impact on society."
         },
         {
-            "id": "c8be6c33-0c7f-5492-9951-bafc6a3b53eb",
-            "event_id": "10680e1a-cad5-5882-9446-f90c63879136",
+            "id": "455e36ae-56a9-43d1-a686-34c70d2847ec",
+            "event_id": "7a35d17a-f87d-4bfd-ae6d-89c3a53b8998",
             "language": "es",
-            "name": "Charla Tecnol\u00f3gica: El Futuro de la IA",
-            "description": "Panel de discusi\u00f3n de expertos sobre el futuro de la inteligencia artificial y su impacto en la sociedad."
+            "name": "Charla Tecnológica: El Futuro de la IA",
+            "description": "Panel de discusión de expertos sobre el futuro de la inteligencia artificial y su impacto en la sociedad."
         },
         {
-            "id": "85b862e5-82b0-5c90-876e-c1f1271752ad",
-            "event_id": "a09733ad-dcf0-5eee-ba3b-96526aa0ffb2",
+            "id": "fc773050-3a75-4a8f-a53c-2317161f3f58",
+            "event_id": "d759c12b-02f9-414b-a957-f325f02cf0c6",
             "language": "en",
             "name": "Art in the Park",
             "description": "Outdoor art exhibition featuring works from local artists. Live music and refreshments."
         },
         {
-            "id": "cf73b3fb-cc7a-5aa5-9ff2-94d8404f09d9",
-            "event_id": "a09733ad-dcf0-5eee-ba3b-96526aa0ffb2",
+            "id": "75024fb4-536c-4ba3-aa9f-67468f693efd",
+            "event_id": "d759c12b-02f9-414b-a957-f325f02cf0c6",
             "language": "es",
             "name": "Arte en el Parque",
-            "description": "Exhibici\u00f3n de arte al aire libre con obras de artistas locales. M\u00fasica en vivo y refrescos."
+            "description": "Exhibición de arte al aire libre con obras de artistas locales. Música en vivo y refrescos."
         },
         {
-            "id": "c1b08511-70ac-51f1-a3da-9ba56e1e7073",
-            "event_id": "ca8cbeff-2c20-5553-a6ea-617327c49d38",
+            "id": "4b52019c-a536-49d3-a53e-c52fa247afab",
+            "event_id": "d6d4ab24-1164-4b35-ab4b-59041d0dfff7",
             "language": "en",
             "name": "Family Movie Night",
             "description": "Free outdoor movie screening. Popcorn provided, bring your own seating and blankets."
         },
         {
-            "id": "5f207ce9-0b6b-512f-8f82-b1691cb7f456",
-            "event_id": "ca8cbeff-2c20-5553-a6ea-617327c49d38",
+            "id": "49820548-4e4d-439a-a2f4-54f25c2bf064",
+            "event_id": "d6d4ab24-1164-4b35-ab4b-59041d0dfff7",
             "language": "es",
-            "name": "Noche de Pel\u00edcula Familiar",
-            "description": "Proyecci\u00f3n gratuita de pel\u00edculas al aire libre. Palomitas proporcionadas, traiga sus propios asientos y mantas."
+            "name": "Noche de Película Familiar",
+            "description": "Proyección gratuita de películas al aire libre. Palomitas proporcionadas, traiga sus propios asientos y mantas."
         },
         {
-            "id": "4e9ce40d-0f0e-5e69-81cd-44f9e978a4fd",
-            "event_id": "afce2cf4-83cf-59d3-86ba-49f6419ac03f",
+            "id": "60a4e6e1-977c-417b-a3a4-555c3ea43322",
+            "event_id": "34ca7066-322c-4b66-ad78-00360f71e698",
             "language": "en",
             "name": "Morning Fitness Bootcamp",
             "description": "High-energy fitness bootcamp for all fitness levels. Bring water and enthusiasm!"
         },
         {
-            "id": "25879aa3-145d-53cc-9b8e-061155bb938f",
-            "event_id": "afce2cf4-83cf-59d3-86ba-49f6419ac03f",
+            "id": "d000f420-5c25-46a9-a1b9-b3b33f41720d",
+            "event_id": "34ca7066-322c-4b66-ad78-00360f71e698",
             "language": "es",
-            "name": "Campamento de Acondicionamiento F\u00edsico Matutino",
-            "description": "Campamento de acondicionamiento f\u00edsico de alta energ\u00eda para todos los niveles. Traiga agua y entusiasmo!"
+            "name": "Campamento de Acondicionamiento Físico Matutino",
+            "description": "Campamento de acondicionamiento físico de alta energía para todos los niveles. Traiga agua y entusiasmo!"
         },
         {
-            "id": "5e4ac133-2c77-582a-90b1-97ab222b8648",
-            "event_id": "7d2ac4bd-71f9-5162-b939-11bb36b6adba",
+            "id": "3a3fdabc-4c10-4ddb-a113-7b7df9dd7ab6",
+            "event_id": "d09334bd-e24d-4bfc-a46c-8c6dcf8f0b17",
             "language": "en",
             "name": "Wednesday Meditation Circle",
             "description": "Weekly guided meditation session in the park. Beginners welcome."
         },
         {
-            "id": "9a18cb52-edd2-529c-9df1-36575cff6cd4",
-            "event_id": "7d2ac4bd-71f9-5162-b939-11bb36b6adba",
+            "id": "19449dd9-75a5-4340-afa0-72b252306396",
+            "event_id": "d09334bd-e24d-4bfc-a46c-8c6dcf8f0b17",
             "language": "es",
-            "name": "C\u00edrculo de Meditaci\u00f3n del Mi\u00e9rcoles",
-            "description": "Sesi\u00f3n de meditaci\u00f3n guiada semanal en el parque. Principiantes bienvenidos."
+            "name": "Círculo de Meditación del Miércoles",
+            "description": "Sesión de meditación guiada semanal en el parque. Principiantes bienvenidos."
         },
         {
-            "id": "a66d9b01-21dc-5376-8714-e999eb6487d7",
-            "event_id": "4e4782cf-4fc9-51ce-8d3d-d3f25ddd3e54",
+            "id": "6828d757-31f6-4002-a841-b8d694511c9c",
+            "event_id": "72a94cd2-eb3f-4f08-a008-574d54f809c9",
             "language": "en",
             "name": "Virtual Game Night",
             "description": "Online multiplayer game night. Link will be shared with registered participants."
         },
         {
-            "id": "9db115ac-8793-582d-ac82-933ed097e671",
-            "event_id": "4e4782cf-4fc9-51ce-8d3d-d3f25ddd3e54",
+            "id": "68e0c36e-c734-477b-a746-bb4b410d409d",
+            "event_id": "72a94cd2-eb3f-4f08-a008-574d54f809c9",
             "language": "es",
             "name": "Noche de Juegos Virtual",
-            "description": "Noche de juegos multijugador en l\u00ednea. El enlace se compartir\u00e1 con los participantes registrados."
+            "description": "Noche de juegos multijugador en línea. El enlace se compartirá con los participantes registrados."
         },
         {
-            "id": "14c44739-d76a-5c31-a83a-480899294cf3",
-            "event_id": "82027826-aaf2-567a-919f-b70e5f17e829",
+            "id": "1e0155d1-b6d4-480b-a197-9413f0b29731",
+            "event_id": "2fa20dc5-d403-479b-a773-358ac4fe9fd3",
             "language": "en",
             "name": "Monthly Crafts Workshop",
             "description": "Learn new crafting skills each month. Materials provided, just bring creativity!"
         },
         {
-            "id": "802f9b07-0429-521d-802e-4e40cd24d4ed",
-            "event_id": "82027826-aaf2-567a-919f-b70e5f17e829",
+            "id": "38e0489d-a434-4b0c-a2f5-554c664336c5",
+            "event_id": "2fa20dc5-d403-479b-a773-358ac4fe9fd3",
             "language": "es",
             "name": "Taller de Manualidades Mensual",
             "description": "Aprenda nuevas habilidades de manualidades cada mes. Materiales proporcionados, solo traiga creatividad!"
         },
         {
-            "id": "d121236d-4b29-5e63-99b6-07425e2a7f3f",
-            "event_id": "e0bda77d-76dc-5ae2-9272-58ec1faac32d",
+            "id": "8da4362c-e5b2-43f0-afd1-67cb36b29ab4",
+            "event_id": "792895df-c319-4920-a09e-9a8749cd3d76",
             "language": "en",
             "name": "Cooking Class: Italian Cuisine",
             "description": "Learn to prepare authentic Italian dishes from a professional chef."
         },
         {
-            "id": "d4eaa14c-57eb-5633-9295-c7f15cddd807",
-            "event_id": "e0bda77d-76dc-5ae2-9272-58ec1faac32d",
+            "id": "0e7df338-fadb-4b24-a2e5-b0443b0cde4d",
+            "event_id": "792895df-c319-4920-a09e-9a8749cd3d76",
             "language": "es",
             "name": "Clase de Cocina: Cocina Italiana",
-            "description": "Aprenda a preparar platos italianos aut\u00e9nticos de un chef profesional."
+            "description": "Aprenda a preparar platos italianos auténticos de un chef profesional."
         },
         {
-            "id": "479f1d41-a032-573e-9483-8119ddd373dd",
-            "event_id": "4dc8e677-ae44-57e6-8a1a-cb8eb9b5c726",
+            "id": "f219b85d-7e2d-4c58-a297-dc3d1454faff",
+            "event_id": "6ec0637c-9dae-4489-ae74-f6b4301f318d",
             "language": "en",
             "name": "Business Networking Mixer",
             "description": "Connect with local entrepreneurs and business professionals over appetizers and drinks."
         },
         {
-            "id": "bffe485f-0534-58f8-b6b0-2d6c0a6b60d8",
-            "event_id": "4dc8e677-ae44-57e6-8a1a-cb8eb9b5c726",
+            "id": "4f2d74b5-2fb1-41e1-aec5-0ce8b68a3c68",
+            "event_id": "6ec0637c-9dae-4489-ae74-f6b4301f318d",
             "language": "es",
             "name": "Evento de Networking Empresarial",
-            "description": "Con\u00e9ctese con emprendedores locales y profesionales de negocios con aperitivos y bebidas."
+            "description": "Conéctese con emprendedores locales y profesionales de negocios con aperitivos y bebidas."
         },
         {
-            "id": "6a80aec8-e403-5f68-90af-07d1887dce74",
-            "event_id": "cb39dea7-4d8a-54e8-8b83-c6392acd1fea",
+            "id": "4f9c06a9-2715-44a6-a999-db56070f0a1e",
+            "event_id": "5b41c6b3-1335-4bc5-aaee-ae44db2a114e",
             "language": "en",
             "name": "Thursday Morning Run Club",
             "description": "Weekly 5K run through the neighborhood. All paces welcome!"
         },
         {
-            "id": "b1f03702-e628-5c23-9d38-79d3fd7bd539",
-            "event_id": "cb39dea7-4d8a-54e8-8b83-c6392acd1fea",
+            "id": "77456176-3c81-4a8a-a3ef-e35c1024c844",
+            "event_id": "5b41c6b3-1335-4bc5-aaee-ae44db2a114e",
             "language": "es",
-            "name": "Club de Carrera del Jueves por la Ma\u00f1ana",
+            "name": "Club de Carrera del Jueves por la Mañana",
             "description": "Carrera semanal de 5K por el vecindario. Todos los ritmos son bienvenidos!"
         },
         {
-            "id": "31cac836-7e34-59c3-a56b-03439d274172",
-            "event_id": "f872349a-c1fd-5bf6-b5c8-076f64ddbac3",
+            "id": "2fb82c67-cd37-4b79-a6d3-5070632730c8",
+            "event_id": "4383e093-e939-4fb2-a572-47b914fad047",
             "language": "en",
             "name": "Live Jazz Performance",
             "description": "Evening of live jazz music at the amphitheater. Free admission, donations appreciated."
         },
         {
-            "id": "202b244c-98e7-527b-8161-4017fcca2bd9",
-            "event_id": "f872349a-c1fd-5bf6-b5c8-076f64ddbac3",
+            "id": "aea5b42a-f91d-4d64-ab0f-ed46f00e3699",
+            "event_id": "4383e093-e939-4fb2-a572-47b914fad047",
             "language": "es",
-            "name": "Presentaci\u00f3n de Jazz en Vivo",
-            "description": "Noche de m\u00fasica de jazz en vivo en el anfiteatro. Entrada gratuita, se agradecen donaciones."
+            "name": "Presentación de Jazz en Vivo",
+            "description": "Noche de música de jazz en vivo en el anfiteatro. Entrada gratuita, se agradecen donaciones."
         },
         {
-            "id": "4bb45358-cd99-504a-939c-14222384417f",
-            "event_id": "ed343f2c-86e9-5c04-86d8-790b0d5e58fe",
+            "id": "f3fae6eb-a26a-4e4f-ac35-9c603a8bb6d4",
+            "event_id": "4a9f09c3-8ab1-45e0-a14b-ee3b1bfb1c76",
             "language": "en",
             "name": "Photography Workshop",
             "description": "Monthly workshop covering different photography techniques. Bring your camera!"
         },
         {
-            "id": "5e2f08bd-caf1-5a81-8fbe-3ec207740e84",
-            "event_id": "ed343f2c-86e9-5c04-86d8-790b0d5e58fe",
+            "id": "12c0f7ef-229f-4024-a3d8-ae93e6940c2e",
+            "event_id": "4a9f09c3-8ab1-45e0-a14b-ee3b1bfb1c76",
             "language": "es",
-            "name": "Taller de Fotograf\u00eda",
-            "description": "Taller mensual que cubre diferentes t\u00e9cnicas de fotograf\u00eda. Traiga su c\u00e1mara!"
+            "name": "Taller de Fotografía",
+            "description": "Taller mensual que cubre diferentes técnicas de fotografía. Traiga su cámara!"
         },
         {
-            "id": "94338211-1c74-5da2-9214-0b6fa4f5444e",
-            "event_id": "6591ddd2-4592-51de-b93c-a94d9f6cf6e6",
+            "id": "cd587cf4-60aa-4cac-addf-e69f70a890ea",
+            "event_id": "8531edec-f098-4cd6-a961-5d75a5ffe582",
             "language": "en",
             "name": "Environmental Cleanup Day",
             "description": "Help clean up local parks and waterways. Gloves and bags provided."
         },
         {
-            "id": "f59d1282-1eab-5b75-ad82-4a916ab4adff",
-            "event_id": "6591ddd2-4592-51de-b93c-a94d9f6cf6e6",
+            "id": "d0ed70fb-3f39-4ec3-ae9c-402dfde0ae37",
+            "event_id": "8531edec-f098-4cd6-a961-5d75a5ffe582",
             "language": "es",
-            "name": "D\u00eda de Limpieza Ambiental",
-            "description": "Ayude a limpiar los parques locales y v\u00edas fluviales. Se proporcionan guantes y bolsas."
+            "name": "Día de Limpieza Ambiental",
+            "description": "Ayude a limpiar los parques locales y vías fluviales. Se proporcionan guantes y bolsas."
         }
     ]
 }

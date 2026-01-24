@@ -42,6 +42,10 @@ export default class AccountsInterface {
     return this.accountService.getAccountById(id);
   }
 
+  async getAccountByUsername(username: string): Promise<Account | undefined> {
+    return this.accountService.getAccountByUsername(username);
+  }
+
   async setPassword(account: Account, password: string): Promise<boolean> {
     return this.accountService.setPassword(account, password);
   }

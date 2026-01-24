@@ -19,7 +19,7 @@ describe('useBulkSelection', () => {
 
     it('should select and deselect individual events', () => {
       const { selectedEvents, selectedCount, hasSelection, toggleEventSelection } = useBulkSelection();
-      const event = new CalendarEvent('calendar-1', 'event-1');
+      const event = new CalendarEvent('event-1', 'calendar-1');
 
       toggleEventSelection(event);
       expect(selectedEvents.value).toContain('event-1');
@@ -34,7 +34,7 @@ describe('useBulkSelection', () => {
 
     it('should check if event is selected', () => {
       const { isEventSelected, toggleEventSelection } = useBulkSelection();
-      const event = new CalendarEvent('calendar-1', 'event-1');
+      const event = new CalendarEvent('event-1', 'calendar-1');
 
       expect(isEventSelected(event)).toBe(false);
 
@@ -47,9 +47,9 @@ describe('useBulkSelection', () => {
     it('should select all events from provided list', () => {
       const { selectedEvents, selectedCount, selectAll } = useBulkSelection();
       const events = [
-        new CalendarEvent('calendar-1', 'event-1'),
-        new CalendarEvent('calendar-1', 'event-2'),
-        new CalendarEvent('calendar-1', 'event-3'),
+        new CalendarEvent('event-1', 'calendar-1'),
+        new CalendarEvent('event-2', 'calendar-1'),
+        new CalendarEvent('event-3', 'calendar-1'),
       ];
 
       selectAll(events);
@@ -64,8 +64,8 @@ describe('useBulkSelection', () => {
     it('should deselect all events', () => {
       const { selectedEvents, selectedCount, selectAll, deselectAll } = useBulkSelection();
       const events = [
-        new CalendarEvent('calendar-1', 'event-1'),
-        new CalendarEvent('calendar-1', 'event-2'),
+        new CalendarEvent('event-1', 'calendar-1'),
+        new CalendarEvent('event-2', 'calendar-1'),
       ];
 
       selectAll(events);
@@ -81,9 +81,9 @@ describe('useBulkSelection', () => {
     it('should detect indeterminate state when some events are selected', () => {
       const { selectAllState, toggleEventSelection } = useBulkSelection();
       const events = [
-        new CalendarEvent('calendar-1', 'event-1'),
-        new CalendarEvent('calendar-1', 'event-2'),
-        new CalendarEvent('calendar-1', 'event-3'),
+        new CalendarEvent('event-1', 'calendar-1'),
+        new CalendarEvent('event-2', 'calendar-1'),
+        new CalendarEvent('event-3', 'calendar-1'),
       ];
 
       // Initially unchecked
@@ -104,9 +104,9 @@ describe('useBulkSelection', () => {
     it('should provide selected event objects for bulk operations', () => {
       const { getSelectedEventObjects, toggleEventSelection } = useBulkSelection();
       const events = [
-        new CalendarEvent('calendar-1', 'event-1'),
-        new CalendarEvent('calendar-1', 'event-2'),
-        new CalendarEvent('calendar-1', 'event-3'),
+        new CalendarEvent('event-1', 'calendar-1'),
+        new CalendarEvent('event-2', 'calendar-1'),
+        new CalendarEvent('event-3', 'calendar-1'),
       ];
 
       toggleEventSelection(events[0]);

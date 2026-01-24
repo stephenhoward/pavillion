@@ -2,58 +2,80 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { EventEntity } from '../entity/event';
 import { CalendarEvent } from '@/common/model/events';
 
-describe('EventEntity Schema - AP Identifier Support', () => {
-  let apIdentifier: string;
+describe('EventEntity Schema - Calendar ID Support', () => {
   let uuidIdentifier: string;
+  let eventId: string;
 
   beforeEach(() => {
-    apIdentifier = 'https://example.com/o/testcalendar';
     uuidIdentifier = '123e4567-e89b-12d3-a456-426614174000';
+    eventId = '987e6543-e21b-45d3-b789-426614174999';
   });
 
-  it('should create EventEntity with STRING calendar_id (AP URL format)', async () => {
-    const event = new CalendarEvent(apIdentifier, 'https://example.com/events/test-event-1', null);
-    const eventEntity = EventEntity.fromModel(event);
-
-    expect(eventEntity.calendar_id).toBe(apIdentifier);
-    expect(typeof eventEntity.calendar_id).toBe('string');
-    expect(eventEntity.calendar_id).toMatch(/^https:\/\//);
-  });
-
-  it('should create EventEntity with UUID calendar_id (backward compatibility during transition)', async () => {
-    const event = new CalendarEvent(uuidIdentifier, 'https://example.com/events/test-event-2', null);
+  it('should create EventEntity with UUID calendar_id for local events', async () => {
+    const event = new CalendarEvent(eventId, uuidIdentifier, '/testcalendar/event-1');
     const eventEntity = EventEntity.fromModel(event);
 
     expect(eventEntity.calendar_id).toBe(uuidIdentifier);
     expect(typeof eventEntity.calendar_id).toBe('string');
-    expect(eventEntity.calendar_id).toMatch(/^[0-9a-f-]+$/);
+    expect(eventEntity.calendar_id).toMatch(/^[0-9a-f-]+$/i);
   });
 
-  it('should allow saving EventEntity with AP identifier calendar_id', async () => {
-    const event = new CalendarEvent(apIdentifier, 'https://example.com/events/test-event-3', null);
+  it('should create EventEntity with null calendar_id for remote events', async () => {
+    const event = new CalendarEvent(eventId, null, 'https://remote.example.com/events/123');
     const eventEntity = EventEntity.fromModel(event);
 
-    // Build the entity (this validates schema compatibility)
-    const built = EventEntity.build({
-      id: event.id,
-      calendar_id: apIdentifier,
-      event_source_url: event.eventSourceUrl,
-    });
-
-    expect(built.calendar_id).toBe(apIdentifier);
-    expect(built.id).toBe(event.id);
+    expect(eventEntity.calendar_id).toBeNull();
   });
 
-  it('should support toModel conversion with AP identifier calendar_id', () => {
+  it('should allow building EventEntity with UUID calendar_id', async () => {
+    const built = EventEntity.build({
+      id: eventId,
+      calendar_id: uuidIdentifier,
+      event_source_url: '/testcalendar/event-1',
+    });
+
+    expect(built.calendar_id).toBe(uuidIdentifier);
+    expect(built.id).toBe(eventId);
+  });
+
+  it('should allow building EventEntity with null calendar_id (remote event)', async () => {
+    const built = EventEntity.build({
+      id: eventId,
+      calendar_id: null,
+      event_source_url: 'https://remote.example.com/events/123',
+    });
+
+    expect(built.calendar_id).toBeNull();
+    expect(built.id).toBe(eventId);
+  });
+
+  it('should convert toModel with UUID calendar_id', () => {
     const eventEntity = EventEntity.build({
-      id: 'https://example.com/events/test-event-4',
-      calendar_id: apIdentifier,
-      event_source_url: '/testcalendar/test-event-4',
+      id: eventId,
+      calendar_id: uuidIdentifier,
+      event_source_url: '/testcalendar/event-1',
     });
 
     const model = eventEntity.toModel();
 
-    expect(model.calendarId).toBe(apIdentifier);
-    expect(model.id).toBe('https://example.com/events/test-event-4');
+    expect(model.calendarId).toBe(uuidIdentifier);
+    expect(model.id).toBe(eventId);
+    expect(model.isLocal()).toBe(true);
+    expect(model.isRemote()).toBe(false);
+  });
+
+  it('should convert toModel with null calendar_id (remote event)', () => {
+    const eventEntity = EventEntity.build({
+      id: eventId,
+      calendar_id: null,
+      event_source_url: 'https://remote.example.com/events/123',
+    });
+
+    const model = eventEntity.toModel();
+
+    expect(model.calendarId).toBeNull();
+    expect(model.id).toBe(eventId);
+    expect(model.isLocal()).toBe(false);
+    expect(model.isRemote()).toBe(true);
   });
 });

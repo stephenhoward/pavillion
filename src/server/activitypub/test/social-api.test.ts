@@ -10,7 +10,7 @@ import ActivityPubMemberRoutes from '@/server/activitypub/api/v1/members';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
-import { setupActivityPubSchema, teardownActivityPubSchema } from './helpers/database';
+import { setupActivityPubSchema, teardownActivityPubSchema, getOrCreateRemoteCalendar } from './helpers/database';
 
 describe('ActivityPub Social API - Unfollow Endpoint', () => {
   let sandbox: sinon.SinonSandbox;
@@ -21,8 +21,8 @@ describe('ActivityPub Social API - Unfollow Endpoint', () => {
   // Test data
   const testAccount = new Account('account-123', 'test@example.com');
   const testCalendar = new Calendar('calendar-123', 'testcal');
-  const remoteCalendarId = 'remotecal@remote.example.com';
-  const followId = 'https://beta.federation.local/o/testcal/follows/follow-abc-123';
+  const remoteActorUri = 'https://remote.example.com/calendars/remotecal';
+  const followId = 'https://beta.federation.local/calendars/testcal/follows/follow-abc-123';
 
   beforeEach(async () => {
     await setupActivityPubSchema();
@@ -71,11 +71,14 @@ describe('ActivityPub Social API - Unfollow Endpoint', () => {
       languages: 'en',
     });
 
+    // Create RemoteCalendarEntity first, then following relationship
+    const remoteCalendar = await getOrCreateRemoteCalendar(remoteActorUri);
+
     // Create following relationship in database for unfollow tests
     await FollowingCalendarEntity.create({
       id: followId,
       calendar_id: testCalendar.id,
-      remote_calendar_id: remoteCalendarId,
+      remote_calendar_id: remoteCalendar.id,
     });
   });
 
@@ -96,7 +99,7 @@ describe('ActivityPub Social API - Unfollow Endpoint', () => {
         .set('Content-Type', 'application/json')
         .send({
           calendarId: testCalendar.id,
-          remoteCalendar: remoteCalendarId,
+          remoteCalendar: remoteActorUri,
         });
 
       // Verify: Request succeeded
@@ -108,7 +111,7 @@ describe('ActivityPub Social API - Unfollow Endpoint', () => {
       expect(activityPubInterface.unfollowCalendar.firstCall.args).toEqual([
         testAccount,
         testCalendar,
-        remoteCalendarId,
+        remoteActorUri,
       ]);
     });
 
@@ -116,7 +119,7 @@ describe('ActivityPub Social API - Unfollow Endpoint', () => {
       // Setup: Mock following entity exists
       const mockFollowingEntity = {
         id: followId,
-        remote_calendar_id: remoteCalendarId,
+        remote_calendar_id: remoteActorUri,
         calendar_id: testCalendar.id,
         destroy: sandbox.stub().resolves(),
       };
@@ -133,7 +136,7 @@ describe('ActivityPub Social API - Unfollow Endpoint', () => {
         .set('Content-Type', 'application/json')
         .send({
           calendarId: testCalendar.id,
-          remoteCalendar: remoteCalendarId,
+          remoteCalendar: remoteActorUri,
         });
 
       // Verify: Request succeeded
@@ -154,7 +157,7 @@ describe('ActivityPub Social API - Unfollow Endpoint', () => {
         .set('Content-Type', 'application/json')
         .send({
           calendarId: testCalendar.id,
-          remoteCalendar: remoteCalendarId,
+          remoteCalendar: remoteActorUri,
         });
 
       // Verify: Permission denied
@@ -171,7 +174,7 @@ describe('ActivityPub Social API - Unfollow Endpoint', () => {
         .delete(`/api/v1/social/follows/${encodedFollowId}`)
         .set('Content-Type', 'application/json')
         .send({
-          remoteCalendar: remoteCalendarId,
+          remoteCalendar: remoteActorUri,
         });
 
       // Verify: Bad request
@@ -198,7 +201,7 @@ describe('ActivityPub Social API - Unfollow Endpoint', () => {
 
       // Verify: Service was called with remote_calendar_id from database
       expect(activityPubInterface.unfollowCalendar.calledOnce).toBe(true);
-      expect(activityPubInterface.unfollowCalendar.firstCall.args[2]).toBe(remoteCalendarId);
+      expect(activityPubInterface.unfollowCalendar.firstCall.args[2]).toBe(remoteActorUri);
     });
   });
 });

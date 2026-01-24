@@ -15,29 +15,29 @@
             "description": "Un calendario de prueba con eventos de muestra para desarrollo"
         },
         {
-            "id": "cc000000-6e87-4d89-aa9d-5ef437fe3344",
-            "calendar_id": "ca17e000-6e87-4d89-aa9d-5ef437fe3333",
+            "id": "f49e9a7b-59cd-478f-acb1-50e3354afc11",
+            "calendar_id": "cbe74815-939e-48b3-af44-1cd4eb3671bb",
             "language": "en",
             "name": "TestUser's Calendar",
             "description": "TestUser's personal calendar with varied events for testing"
         },
         {
-            "id": "cc000000-6e87-4d89-aa9d-5ef437fe3355",
-            "calendar_id": "ca17e000-6e87-4d89-aa9d-5ef437fe3333",
+            "id": "fe149a13-e9d1-4120-a7dc-7adbbe0e66d1",
+            "calendar_id": "cbe74815-939e-48b3-af44-1cd4eb3671bb",
             "language": "es",
             "name": "Calendario de TestUser",
             "description": "Calendario personal de TestUser con eventos variados para pruebas"
         },
         {
-            "id": "cc000000-6e87-4d89-aa9d-5ef437fe4455",
-            "calendar_id": "ca17e000-6e87-4d89-aa9d-5ef437fe4444",
+            "id": "cf959372-d62d-4d01-a8df-fec3fbf1df48",
+            "calendar_id": "c8569a35-dccb-4f97-a214-a4dec6c84262",
             "language": "en",
             "name": "MultiCalendar's Events",
             "description": "MultiCalendarTestUser's event calendar for testing multi-calendar workflows"
         },
         {
-            "id": "cc000000-6e87-4d89-aa9d-5ef437fe4466",
-            "calendar_id": "ca17e000-6e87-4d89-aa9d-5ef437fe4444",
+            "id": "2290b85f-e4ab-44b1-a851-c2d2d2f88d7c",
+            "calendar_id": "c8569a35-dccb-4f97-a214-a4dec6c84262",
             "language": "es",
             "name": "Eventos de MultiCalendar",
             "description": "Calendario de eventos de MultiCalendarTestUser para probar flujos de múltiples calendarios"

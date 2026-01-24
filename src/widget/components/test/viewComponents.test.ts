@@ -82,14 +82,17 @@ describe('Widget View Components', () => {
     it('displays "+N more" indicator when more than 3 events per day', async () => {
       const publicStore = usePublicCalendarStore();
 
+      // Use current date so events appear in the default week view
+      const today = new Date().toISOString().split('T')[0];
+
       // Mock events with more than 3 events on one day
       // FIXED: Component uses publicStore.allEvents, not publicStore.events
       publicStore.allEvents = [
-        { id: '1', start: { toISODate: () => '2026-01-06', toLocaleString: () => '10:00 AM' }, event: { id: 'e1', content: () => ({ name: 'Event 1' }), media: null, categories: [] } },
-        { id: '2', start: { toISODate: () => '2026-01-06', toLocaleString: () => '11:00 AM' }, event: { id: 'e2', content: () => ({ name: 'Event 2' }), media: null, categories: [] } },
-        { id: '3', start: { toISODate: () => '2026-01-06', toLocaleString: () => '12:00 PM' }, event: { id: 'e3', content: () => ({ name: 'Event 3' }), media: null, categories: [] } },
-        { id: '4', start: { toISODate: () => '2026-01-06', toLocaleString: () => '1:00 PM' }, event: { id: 'e4', content: () => ({ name: 'Event 4' }), media: null, categories: [] } },
-        { id: '5', start: { toISODate: () => '2026-01-06', toLocaleString: () => '2:00 PM' }, event: { id: 'e5', content: () => ({ name: 'Event 5' }), media: null, categories: [] } },
+        { id: '1', start: { toISODate: () => today, toLocaleString: () => '10:00 AM' }, event: { id: 'e1', content: () => ({ name: 'Event 1' }), media: null, categories: [] } },
+        { id: '2', start: { toISODate: () => today, toLocaleString: () => '11:00 AM' }, event: { id: 'e2', content: () => ({ name: 'Event 2' }), media: null, categories: [] } },
+        { id: '3', start: { toISODate: () => today, toLocaleString: () => '12:00 PM' }, event: { id: 'e3', content: () => ({ name: 'Event 3' }), media: null, categories: [] } },
+        { id: '4', start: { toISODate: () => today, toLocaleString: () => '1:00 PM' }, event: { id: 'e4', content: () => ({ name: 'Event 4' }), media: null, categories: [] } },
+        { id: '5', start: { toISODate: () => today, toLocaleString: () => '2:00 PM' }, event: { id: 'e5', content: () => ({ name: 'Event 5' }), media: null, categories: [] } },
       ] as any;
 
       const wrapper = mount(WeekView, {

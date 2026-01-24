@@ -1,10 +1,15 @@
 import { v4 as uuidv4 } from 'uuid';
 import { UniqueConstraintError } from 'sequelize';
+import { EventEmitter } from 'events';
+import config from 'config';
+import axios from 'axios';
 
 import { Calendar, DefaultDateRange } from '@/common/model/calendar';
 import { Account } from '@/common/model/account';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { CalendarEditorEntity } from '@/server/calendar/entity/calendar_editor';
+import { CalendarEditorPersonEntity } from '@/server/calendar/entity/calendar_editor_person';
+import { CalendarEditorRemoteEntity, RemoteEditor } from '@/server/calendar/entity/calendar_editor_remote';
 import { CalendarEditor } from '@/common/model/calendar_editor';
 import AccountInvitation from '@/common/model/invitation';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
@@ -16,15 +21,34 @@ import EditorNotificationEmail from '@/server/calendar/model/editor_notification
 
 // Import the interface type (this avoids circular dependency)
 type CalendarEditorsResponse = {
-  activeEditors: CalendarEditor[];
+  activeEditors: (CalendarEditor | RemoteEditorInfo)[];
   pendingInvitations: AccountInvitation[];
 };
 
+// Remote editor info for API responses
+type RemoteEditorInfo = {
+  id: string;
+  actorUri: string;
+  username: string;
+  domain: string;
+};
+
+// Response type for grantEditAccessByEmail
+type GrantEditAccessResult = {
+  type: 'editor' | 'invitation' | 'remote_editor';
+  data: CalendarEditor | AccountInvitation | { actorUri: string };
+};
+
 class CalendarService {
+  private eventBus?: EventEmitter;
+
   constructor(
     private accountsInterface?: AccountsInterface,
     private emailInterface?: EmailInterface,
-  ) {}
+    eventBus?: EventEmitter,
+  ) {
+    this.eventBus = eventBus;
+  }
   async getCalendar(id: string): Promise<Calendar|null> {
     const calendar = await CalendarEntity.findByPk(id);
     return calendar ? calendar.toModel() : null;
@@ -76,16 +100,23 @@ class CalendarService {
     // Get calendars owned by the user
     let ownedCalendars = await CalendarEntity.findAll({ where: { account_id: account.id } });
 
-    // Get calendars where the user has editor access
-    let editorRelationships = await CalendarEditorEntity.findAll({
+    // Get calendars where the user has federated editor access
+    let federatedEditorRelationships = await CalendarEditorEntity.findAll({
       where: { account_id: account.id },
       include: [CalendarEntity],
+    });
+
+    // Get calendars where the user has local person editor access
+    let localPersonEditorRelationships = await CalendarEditorPersonEntity.findAll({
+      where: { account_id: account.id },
+      include: [{ association: 'calendar' }],
     });
 
     // Combine owned calendars and editor calendars
     let allCalendars = [
       ...ownedCalendars.map(calendar => calendar.toModel()),
-      ...editorRelationships.map(rel => rel.calendar.toModel()),
+      ...federatedEditorRelationships.map(rel => rel.calendar.toModel()),
+      ...localPersonEditorRelationships.map((rel: any) => rel.calendar.toModel()),
     ];
 
     // Remove duplicates (in case user is both owner and editor)
@@ -102,10 +133,16 @@ class CalendarService {
     // Get calendars owned by the user
     let ownedCalendars = await CalendarEntity.findAll({ where: { account_id: account.id } });
 
-    // Get calendars where the user has editor access
-    let editorRoles = await CalendarEditorEntity.findAll({
+    // Get calendars where the user has remote editor access (federated)
+    let remoteEditorRoles = await CalendarEditorEntity.findAll({
       where: { account_id: account.id },
       include: [CalendarEntity],
+    });
+
+    // Get calendars where the user has local person editor access
+    let localEditorRoles = await CalendarEditorPersonEntity.findAll({
+      where: { account_id: account.id },
+      include: [{ association: 'calendar' }],
     });
 
     // Create result with relationship information
@@ -114,7 +151,11 @@ class CalendarService {
         calendar: calendar.toModel(),
         role: 'owner' as const,
       })),
-      ...editorRoles.map(rel => ({
+      ...remoteEditorRoles.map(rel => ({
+        calendar: rel.calendar.toModel(),
+        role: 'editor' as const,
+      })),
+      ...localEditorRoles.map((rel: any) => ({
         calendar: rel.calendar.toModel(),
         role: 'editor' as const,
       })),
@@ -132,15 +173,13 @@ class CalendarService {
   }
 
   async userCanModifyCalendar(account: Account, calendar: Calendar): Promise<boolean> {
-    if ( ! account.hasRole('admin') ) {
-      let calendars = await this.editableCalendarsForUser(account);
-      if ( calendars.length == 0 ) {
-        return false;
-      }
-      // check if the calendar is in the list of editable calendars
-      return calendars.some((cal) => cal.id == calendar.id);
+    // Admins can modify any calendar
+    if (account.hasRole('admin')) {
+      return true;
     }
-    return true;
+
+    // Check if user is owner or has been granted editor access
+    return this.userCanEditCalendar(account.id, calendar.id);
   }
 
   async getCalendarByName(name: string): Promise<Calendar|null> {
@@ -245,11 +284,119 @@ class CalendarService {
   }
 
   /**
-   * Grant edit access by email address - handles both existing and new users
+   * Check if an email is in federated format (username@remote.domain)
+   * Federated emails have a domain that differs from the local instance domain.
+   *
+   * @param email - Email address to check
+   * @returns Object with isFederated flag and parsed username/domain, or null if not federated
+   */
+  private parseFederatedEmail(email: string): { isFederated: boolean; username?: string; domain?: string } {
+    const localDomain = config.get<string>('domain');
+
+    // Check if email looks like username@domain (no TLD like .com, .org, etc. that indicates a real email)
+    // Federated identifiers typically have domains like "beta.federation.local"
+    const parts = email.split('@');
+    if (parts.length !== 2) {
+      return { isFederated: false };
+    }
+
+    const [username, domain] = parts;
+
+    // Skip if it's the local domain
+    if (domain === localDomain) {
+      return { isFederated: false };
+    }
+
+    // Check if the domain looks like a federation domain (contains a dot but isn't a typical email domain)
+    // We consider it federated if the domain contains "federation" or "local" or matches known patterns
+    // For production, we might want a more sophisticated check
+    const isFederationDomain = domain.includes('.') &&
+      (domain.endsWith('.local') ||
+       domain.includes('federation') ||
+       !domain.match(/\.(com|org|net|edu|gov|io|co|dev)$/i));
+
+    if (isFederationDomain) {
+      return { isFederated: true, username, domain };
+    }
+
+    return { isFederated: false };
+  }
+
+  /**
+   * Look up a remote user via WebFinger and fetch their Person actor
+   *
+   * @param username - Username on the remote instance
+   * @param domain - Domain of the remote instance
+   * @returns Remote user information including actorUri
+   */
+  private async lookupRemoteUser(username: string, domain: string): Promise<{
+    actorUri: string;
+    preferredUsername: string;
+    inbox: string;
+    publicKey?: string;
+  }> {
+    // WebFinger lookup for user (note the @ prefix for user resources)
+    const webfingerUrl = `https://${domain}/.well-known/webfinger?resource=acct:@${username}@${domain}`;
+
+    let webfingerResponse;
+    try {
+      webfingerResponse = await axios.get(webfingerUrl, { timeout: 10000 });
+    }
+    catch (error: any) {
+      if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
+        throw new Error(`Could not connect to ${domain}`);
+      }
+      if (error.response?.status === 404) {
+        throw new Error(`User "${username}" not found on ${domain}`);
+      }
+      throw new Error(`Failed to lookup user: ${error.message}`);
+    }
+
+    // Find the ActivityPub actor URL from WebFinger links
+    const actorLink = webfingerResponse.data.links?.find(
+      (link: any) => link.rel === 'self' && link.type === 'application/activity+json',
+    );
+
+    if (!actorLink || !actorLink.href) {
+      throw new Error('User does not support ActivityPub federation');
+    }
+
+    const actorUri = actorLink.href;
+
+    // Fetch the Person actor to verify it exists
+    let actorResponse;
+    try {
+      actorResponse = await axios.get(actorUri, {
+        headers: {
+          'Accept': 'application/activity+json',
+        },
+        timeout: 10000,
+      });
+    }
+    catch (error: any) {
+      throw new Error(`Failed to fetch user actor: ${error.message}`);
+    }
+
+    const actor = actorResponse.data;
+
+    if (actor.type !== 'Person') {
+      throw new Error(`Expected Person actor but got ${actor.type}`);
+    }
+
+    return {
+      actorUri,
+      preferredUsername: actor.preferredUsername || username,
+      inbox: actor.inbox,
+      publicKey: actor.publicKey?.publicKeyPem,
+    };
+  }
+
+  /**
+   * Grant edit access by email address - handles local users, federated users, and new users
    *
    * @param grantingAccount - Account granting access (must be calendar owner or admin)
    * @param calendarId - ID of the calendar to grant access to
-   * @param email - Email address to grant edit access to
+   * @param email - Email address or federated identifier to grant edit access to
    * @param message - Optional personal message to include in the invitation
    * @returns The created editor relationship or invitation details
    * @throws CalendarNotFoundError if calendar not found
@@ -261,22 +408,40 @@ class CalendarService {
     calendarId: string,
     email: string,
     message?: string,
-  ): Promise<{ type: 'editor' | 'invitation', data: CalendarEditor | any }> {
+  ): Promise<GrantEditAccessResult> {
 
     if (!this.accountsInterface) {
       throw new Error('AccountsInterface not available');
+    }
+
+    // Check if this is a federated email (e.g., Admin@beta.federation.local)
+    const federatedInfo = this.parseFederatedEmail(email);
+
+    if (federatedInfo.isFederated && federatedInfo.username && federatedInfo.domain) {
+      // Handle federated user from remote instance
+      return this.grantRemoteEditorAccess(
+        grantingAccount,
+        calendarId,
+        federatedInfo.username,
+        federatedInfo.domain,
+      );
     }
 
     // Try to find existing account by email
     const existingAccount = await this.accountsInterface.getAccountByEmail(email);
 
     if (existingAccount) {
-      // User exists - grant editor access directly
-      const editorRelationship = await this.grantEditAccess(grantingAccount, calendarId, existingAccount.id);
+      // User exists locally - grant person editor access directly
+      await this.grantEditorAccess(grantingAccount, calendarId, existingAccount.id);
 
+      // Return compatible format (CalendarEditor-like object)
       return {
         type: 'editor',
-        data: editorRelationship,
+        data: {
+          id: existingAccount.id,
+          calendarId: calendarId,
+          email: existingAccount.email,
+        },
       };
     }
 
@@ -305,6 +470,99 @@ class CalendarService {
     return {
       type: 'invitation',
       data: invitation,
+    };
+  }
+
+  /**
+   * Grant editor access to a remote (federated) user
+   *
+   * @param grantingAccount - Account granting access
+   * @param calendarId - Calendar to grant access to
+   * @param remoteUsername - Username on the remote instance
+   * @param remoteDomain - Domain of the remote instance
+   * @returns Remote editor result with actor URI
+   */
+  private async grantRemoteEditorAccess(
+    grantingAccount: Account,
+    calendarId: string,
+    remoteUsername: string,
+    remoteDomain: string,
+  ): Promise<GrantEditAccessResult> {
+    // Get and validate calendar exists
+    const calendar = await this.getCalendar(calendarId);
+    if (!calendar) {
+      throw new CalendarNotFoundError();
+    }
+
+    // Check if granting account has permission (must be calendar owner or admin)
+    if (!grantingAccount.hasRole('admin')) {
+      const isOwner = await this.isCalendarOwner(grantingAccount, calendar);
+      if (!isOwner) {
+        throw new CalendarEditorPermissionError('Permission denied: only calendar owner can grant edit access');
+      }
+    }
+
+    // Look up the remote user via WebFinger
+    const remoteUser = await this.lookupRemoteUser(remoteUsername, remoteDomain);
+
+    // Check if remote editor already exists
+    const existingEditor = await CalendarEditorRemoteEntity.findOne({
+      where: {
+        calendar_id: calendarId,
+        actor_uri: remoteUser.actorUri,
+      },
+    });
+
+    if (existingEditor) {
+      throw new EditorAlreadyExistsError('This remote user is already an editor of this calendar');
+    }
+
+    // Create the remote editor relationship
+    await CalendarEditorRemoteEntity.create({
+      id: uuidv4(),
+      calendar_id: calendarId,
+      actor_uri: remoteUser.actorUri,
+      remote_username: remoteUser.preferredUsername,
+      remote_domain: remoteDomain,
+      granted_by: grantingAccount.id,
+    });
+
+    // Send ActivityPub Add activity to notify the remote user
+    const localDomain = config.get<string>('domain');
+    const calendarActorUri = `https://${localDomain}/calendars/${calendar.urlName}`;
+    const calendarInboxUrl = `https://${localDomain}/calendars/${calendar.urlName}/inbox`;
+
+    const addActivity = {
+      '@context': 'https://www.w3.org/ns/activitystreams',
+      type: 'Add',
+      id: `${calendarActorUri}/activities/${uuidv4()}`,
+      actor: calendarActorUri,
+      object: remoteUser.actorUri,
+      target: `${calendarActorUri}/editors`,
+      calendarId: calendar.id,
+      calendarInboxUrl: calendarInboxUrl,
+    };
+
+    // Send to remote user's inbox
+    try {
+      await axios.post(remoteUser.inbox, addActivity, {
+        timeout: 10000,
+        headers: {
+          'Content-Type': 'application/activity+json',
+        },
+      });
+      console.log(`[CALENDAR] Sent Add activity to ${remoteUser.inbox}`);
+    }
+    catch (error: any) {
+      // Log but don't fail - the local record is created, notification is best-effort
+      console.error(`[CALENDAR] Failed to send Add activity to ${remoteUser.inbox}: ${error.message}`);
+    }
+
+    return {
+      type: 'remote_editor',
+      data: {
+        actorUri: remoteUser.actorUri,
+      },
     };
   }
 
@@ -349,11 +607,59 @@ class CalendarService {
       throw new CalendarEditorPermissionError('Calendar owners cannot remove themselves from their own calendar');
     }
 
-    // Find and delete editor relationship
-    const deleted = await CalendarEditorEntity.destroy({
+    // Try to delete from both federated and local person editor tables
+    const federatedDeleted = await CalendarEditorEntity.destroy({
       where: {
         calendar_id: calendar.id,
         account_id: editorAccount.id,
+      },
+    });
+
+    const localPersonDeleted = await CalendarEditorPersonEntity.destroy({
+      where: {
+        calendar_id: calendar.id,
+        account_id: editorAccount.id,
+      },
+    });
+
+    const totalDeleted = federatedDeleted + localPersonDeleted;
+
+    if (totalDeleted === 0) {
+      throw new EditorNotFoundError();
+    }
+
+    return true;
+  }
+
+  /**
+   * Remove a remote (federated) editor from a calendar
+   *
+   * @param revokingAccount - Account revoking the remote editor access
+   * @param calendarId - ID of the calendar
+   * @param actorUri - ActivityPub actor URI of the remote editor
+   * @returns True if editor was removed
+   * @throws CalendarNotFoundError if calendar not found
+   * @throws CalendarEditorPermissionError if user lacks permission
+   * @throws EditorNotFoundError if remote editor not found
+   */
+  async removeRemoteEditor(revokingAccount: Account, calendarId: string, actorUri: string): Promise<boolean> {
+    // Get and validate calendar exists
+    const calendar = await this.getCalendar(calendarId);
+    if (!calendar) {
+      throw new CalendarNotFoundError();
+    }
+
+    // Check if revoking account has permission (must be owner or admin)
+    const revokerIsOwner = await this.isCalendarOwner(revokingAccount, calendar);
+    if (!revokerIsOwner && !revokingAccount.hasRole('admin')) {
+      throw new CalendarEditorPermissionError('Permission denied: only calendar owner can revoke remote editor access');
+    }
+
+    // Delete the remote editor
+    const deleted = await CalendarEditorRemoteEntity.destroy({
+      where: {
+        calendar_id: calendar.id,
+        actor_uri: actorUri,
       },
     });
 
@@ -403,11 +709,31 @@ class CalendarService {
       throw new CalendarEditorPermissionError('Permission denied: only calendar owner can view editors');
     }
 
-    const editors = await CalendarEditorEntity.findAll({
+    // Get federated editors
+    const federatedEditors = await CalendarEditorEntity.findAll({
       where: { calendar_id: calendar.id },
     });
 
-    return editors.map(editor => editor.toModel());
+    // Get local person editors with account information
+    const localPersonEditors = await CalendarEditorPersonEntity.findAll({
+      where: { calendar_id: calendar.id },
+      include: [
+        {
+          association: 'account',
+          attributes: ['id', 'email'],
+        },
+      ],
+    });
+
+    // Combine both types into CalendarEditor format
+    return [
+      ...federatedEditors.map(editor => editor.toModel()),
+      ...localPersonEditors.map((personEditor: any) => new CalendarEditor(
+        personEditor.account.id,
+        personEditor.calendar_id,
+        personEditor.account.email,
+      )),
+    ];
   }
 
   /**
@@ -429,10 +755,45 @@ class CalendarService {
       throw new CalendarEditorPermissionError('Permission denied: only calendar owner can view editors');
     }
 
-    // Get active editors
-    const editors = await CalendarEditorEntity.findAll({
+    // Get federated editors (old system - editors who are local accounts that were added through federation)
+    const federatedEditors = await CalendarEditorEntity.findAll({
       where: { calendar_id: calendar.id },
     });
+
+    // Get local person editors with account information
+    const localPersonEditors = await CalendarEditorPersonEntity.findAll({
+      where: { calendar_id: calendar.id },
+      include: [
+        {
+          association: 'account',
+          attributes: ['id', 'email'],
+        },
+      ],
+    });
+
+    // Get remote editors (new system - editors from other ActivityPub instances)
+    const remoteEditors = await CalendarEditorRemoteEntity.findAll({
+      where: { calendar_id: calendar.id },
+    });
+
+    // Combine all editor types
+    const allEditors: (CalendarEditor | RemoteEditorInfo)[] = [
+      // Federated editors (local accounts)
+      ...federatedEditors.map(editor => editor.toModel()),
+      // Local person editors
+      ...localPersonEditors.map((personEditor: any) => new CalendarEditor(
+        personEditor.account.id,
+        personEditor.calendar_id,
+        personEditor.account.email,
+      )),
+      // Remote editors (from other ActivityPub instances) - includes actorUri
+      ...remoteEditors.map(remoteEditor => ({
+        id: remoteEditor.id,
+        actorUri: remoteEditor.actor_uri,
+        username: remoteEditor.remote_username,
+        domain: remoteEditor.remote_domain,
+      })),
+    ];
 
     // Get pending invitations for this calendar using unified method
     let pendingInvitations: AccountInvitation[] = [];
@@ -441,7 +802,7 @@ class CalendarService {
     }
 
     return {
-      activeEditors: editors.map(editor => editor.toModel()),
+      activeEditors: allEditors,
       pendingInvitations: pendingInvitations,
     };
   }
@@ -567,7 +928,34 @@ class CalendarService {
       await this.createCalendarContent(calendar.id, content);
     }
 
+    // Emit calendar.created event for ActivityPub domain to create CalendarActor
+    this.emitCalendarCreatedEvent(calendar);
+
     return calendar;
+  }
+
+  /**
+   * Emits the calendar.created event for ActivityPub actor creation
+   */
+  private emitCalendarCreatedEvent(calendar: Calendar): void {
+    if (!this.eventBus) {
+      return;
+    }
+
+    try {
+      const domain = config.get<string>('domain');
+      if (domain) {
+        this.eventBus.emit('calendar.created', {
+          calendarId: calendar.id,
+          urlName: calendar.urlName,
+          domain: domain,
+        });
+      }
+    }
+    catch (error) {
+      console.error('Failed to emit calendar.created event:', calendar.id, error);
+      // Don't fail calendar creation if event emission fails
+    }
   }
 
   /**
@@ -648,6 +1036,171 @@ class CalendarService {
     }
 
     return calendarEntity.toModel();
+  }
+
+  /**
+   * Grant editor access to a calendar for a local person/account
+   *
+   * @param owner - The account performing the grant (must be calendar owner)
+   * @param calendarId - The calendar to grant access to
+   * @param editorAccountId - The account to grant editor access to
+   */
+  async grantEditorAccess(owner: Account, calendarId: string, editorAccountId: string): Promise<void> {
+    // Verify calendar exists
+    const calendar = await this.getCalendar(calendarId);
+    if (!calendar) {
+      throw new CalendarNotFoundError('Calendar not found');
+    }
+
+    // Verify requester is the owner
+    if (!owner.hasRole('admin')) {
+      const isOwner = await this.isCalendarOwner(owner, calendar);
+      if (!isOwner) {
+        throw new CalendarEditorPermissionError('Only calendar owner can grant editor access');
+      }
+    }
+
+    // Prevent granting access to the owner themselves
+    if (editorAccountId === owner.id) {
+      throw new CalendarEditorPermissionError('Cannot grant editor access to calendar owner');
+    }
+
+    // Create editor relationship
+    try {
+      await CalendarEditorPersonEntity.create({
+        calendar_id: calendarId,
+        account_id: editorAccountId,
+        granted_by: owner.id,
+      });
+    }
+    catch (error) {
+      if (error instanceof UniqueConstraintError) {
+        throw new EditorAlreadyExistsError('User already has editor access to this calendar');
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Revoke editor access from a calendar
+   *
+   * @param owner - The account performing the revocation (must be calendar owner)
+   * @param calendarId - The calendar to revoke access from
+   * @param editorAccountId - The account to revoke editor access from
+   */
+  async revokeEditorAccess(owner: Account, calendarId: string, editorAccountId: string): Promise<void> {
+    // Verify calendar exists
+    const calendar = await this.getCalendar(calendarId);
+    if (!calendar) {
+      throw new CalendarNotFoundError('Calendar not found');
+    }
+
+    // Verify requester is the owner
+    if (!owner.hasRole('admin')) {
+      const isOwner = await this.isCalendarOwner(owner, calendar);
+      if (!isOwner) {
+        throw new CalendarEditorPermissionError('Only calendar owner can revoke editor access');
+      }
+    }
+
+    // Find and remove editor relationship
+    const editorEntity = await CalendarEditorPersonEntity.findOne({
+      where: {
+        calendar_id: calendarId,
+        account_id: editorAccountId,
+      },
+    });
+
+    if (!editorEntity) {
+      throw new EditorNotFoundError('Editor relationship not found');
+    }
+
+    await editorEntity.destroy();
+  }
+
+  /**
+   * Check if a user can edit a calendar (either as owner or editor)
+   *
+   * @param accountId - The account to check permissions for
+   * @param calendarId - The calendar to check
+   * @returns true if user can edit the calendar
+   */
+  async userCanEditCalendar(accountId: string, calendarId: string): Promise<boolean> {
+    // Check if calendar exists
+    const calendar = await this.getCalendar(calendarId);
+    if (!calendar) {
+      return false;
+    }
+
+    // Check if user is the owner
+    if (calendar.accountId === accountId) {
+      return true;
+    }
+
+    // Check if user has federated editor access
+    const federatedEditorEntity = await CalendarEditorEntity.findOne({
+      where: {
+        calendar_id: calendarId,
+        account_id: accountId,
+      },
+    });
+
+    if (federatedEditorEntity) {
+      return true;
+    }
+
+    // Check if user has local person editor access
+    const localPersonEditorEntity = await CalendarEditorPersonEntity.findOne({
+      where: {
+        calendar_id: calendarId,
+        account_id: accountId,
+      },
+    });
+
+    return localPersonEditorEntity !== null;
+  }
+
+  /**
+   * List all local person editors of a calendar
+   *
+   * @param calendarId - The calendar to list editors for
+   * @returns Array of local person editor information
+   */
+  async listPersonEditors(calendarId: string): Promise<Array<{
+    accountId: string;
+    username: string;
+    email: string;
+    grantedBy: string;
+  }>> {
+    // Verify calendar exists
+    const calendar = await this.getCalendar(calendarId);
+    if (!calendar) {
+      throw new CalendarNotFoundError('Calendar not found');
+    }
+
+    // Fetch all editor relationships with account details
+    const editorEntities = await CalendarEditorPersonEntity.findAll({
+      where: {
+        calendar_id: calendarId,
+      },
+      include: [
+        {
+          association: 'account',
+          attributes: ['id', 'username', 'email'],
+        },
+        {
+          association: 'grantor',
+          attributes: ['id', 'username', 'email'],
+        },
+      ],
+    });
+
+    return editorEntities.map((entity: any) => ({
+      accountId: entity.account.id,
+      username: entity.account.username,
+      email: entity.account.email,
+      grantedBy: entity.grantor.id,
+    }));
   }
 }
 
