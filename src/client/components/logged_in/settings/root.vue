@@ -28,7 +28,8 @@ async function checkSubscriptionsEnabled() {
   try {
     const options = await subscriptionService.getOptions();
     subscriptionsEnabled.value = options.enabled;
-  } catch (error) {
+  }
+  catch (error) {
     // Silently fail - subscriptions are not enabled if we can't fetch options
     subscriptionsEnabled.value = false;
   }
