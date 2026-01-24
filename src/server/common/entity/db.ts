@@ -72,7 +72,7 @@ const shiftDates = (data: unknown, offsetDays: number): unknown => {
 };
 
 export const seedDB = async () => {
-  if ( process.env.NODE_ENV === "development" ) {
+  if ( process.env.NODE_ENV === "development" || process.env.NODE_ENV === "federation" ) {
     const seedPath = path.join(path.resolve(), "layouts/development/db");
     const files = await fs.readdir(seedPath);
 

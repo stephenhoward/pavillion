@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { EventEmitter } from 'events';
 
 import { FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
+import { RemoteCalendarEntity } from '@/server/activitypub/entity/remote_calendar';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { EventEntity, EventContentEntity } from '@/server/calendar/entity/event';
 import { Account } from '@/common/model/account';
@@ -12,7 +13,6 @@ import AccountService from '@/server/accounts/service/account';
 import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
 import { TestEnvironment } from '@/server/test/lib/test_environment';
-import { ActivityPubActor } from '@/server/activitypub/model/base';
 
 describe('FollowingCalendarEntity associations', () => {
   let env: TestEnvironment;
@@ -54,11 +54,17 @@ describe('FollowingCalendarEntity associations', () => {
     });
     testEventId = event.id;
 
-    // Create following relationship
+    // Create RemoteCalendarEntity first for the foreign key
+    const remoteCalendar = await RemoteCalendarEntity.create({
+      id: uuidv4(),
+      actor_uri: 'https://remote.example.com/calendars/remotecal',
+    });
+
+    // Create following relationship using the RemoteCalendarEntity UUID
     testFollowingId = `https://example.com/follows/${uuidv4()}`;
     await FollowingCalendarEntity.create({
       id: testFollowingId,
-      remote_calendar_id: 'https://remote.example.com/o/remotecal',
+      remote_calendar_id: remoteCalendar.id,
       calendar_id: testCalendar.id,
       auto_repost_originals: false,
       auto_repost_reposts: false,
@@ -95,11 +101,9 @@ describe('FollowingCalendarEntity associations', () => {
     expect(following).toBeDefined();
     expect(following?.calendar).toBeDefined();
 
-    // Events store calendar_id as ActivityPub URL (https://domain/o/urlName), not UUID
-    // So we need to query events using the calendar's AP identifier
-    const calendarApUrl = ActivityPubActor.actorUrl(testCalendar);
+    // Events store calendar_id as UUID for local events
     const events = await EventEntity.findAll({
-      where: { calendar_id: calendarApUrl },
+      where: { calendar_id: testCalendar.id },
       include: [{
         model: EventContentEntity,
         as: 'content',
@@ -143,9 +147,15 @@ describe('FollowingCalendarEntity associations', () => {
     const emptyCalendar = await calendarInterface.createCalendar(testAccount, 'emptycalendar');
     const emptyFollowingId = `https://example.com/follows/${uuidv4()}`;
 
+    // Create RemoteCalendarEntity first for the foreign key
+    const emptyRemoteCalendar = await RemoteCalendarEntity.create({
+      id: uuidv4(),
+      actor_uri: 'https://remote.example.com/calendars/emptycal',
+    });
+
     await FollowingCalendarEntity.create({
       id: emptyFollowingId,
-      remote_calendar_id: 'https://remote.example.com/o/emptycal',
+      remote_calendar_id: emptyRemoteCalendar.id,
       calendar_id: emptyCalendar.id,
       auto_repost_originals: false,
       auto_repost_reposts: false,

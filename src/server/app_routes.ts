@@ -121,6 +121,6 @@ router.get(/^\/widget\/.*/i, handlers.widget_index);
 router.get(/^\/@.*/i, handlers.site_index);
 
 // Client app catch-all (goes last)
-router.get(/^\/(?!(api|assets|\.well-known|o|widget)\/).*/i, handlers.client_index);
+router.get(/^\/(?!(api|assets|\.well-known|calendars|users|widget)\/).*/i, handlers.client_index);
 
 export { handlers, router };

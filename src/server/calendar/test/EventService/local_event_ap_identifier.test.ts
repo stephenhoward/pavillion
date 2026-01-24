@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
-import config from 'config';
 import { Op } from 'sequelize';
 import EventService from '@/server/calendar/service/events';
 import CalendarService from '@/server/calendar/service/calendar';
@@ -10,8 +9,9 @@ import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import { EventEntity } from '@/server/calendar/entity/event';
 import { EventContentEntity, EventScheduleEntity } from '@/server/calendar/entity/event';
+import { EventRepostEntity } from '@/server/calendar/entity/event_repost';
 
-describe('EventService - AP Identifier Storage', () => {
+describe('EventService - Calendar ID Storage', () => {
   let sandbox: sinon.SinonSandbox;
   let eventService: EventService;
   let calendarService: CalendarService;
@@ -38,7 +38,7 @@ describe('EventService - AP Identifier Storage', () => {
     sandbox.restore();
   });
 
-  it('should store AP identifier (format: https://{domain}/o/{urlName}) as calendar_id', async () => {
+  it('should store calendar UUID as calendar_id for local events', async () => {
     // Stub methods to avoid database calls
     sandbox.stub(calendarService, 'getCalendar').resolves(calendar);
     sandbox.stub(calendarService, 'editableCalendarsForUser').resolves([calendar]);
@@ -47,9 +47,6 @@ describe('EventService - AP Identifier Storage', () => {
     const eventEntitySaveStub = sandbox.stub(EventEntity.prototype, 'save').resolves();
     sandbox.stub(EventContentEntity.prototype, 'save').resolves();
     sandbox.stub(EventScheduleEntity.prototype, 'save').resolves();
-
-    const domain = config.get('domain');
-    const expectedCalendarId = `https://${domain}/o/${calendar.urlName}`;
 
     const eventParams = {
       calendarId: calendar.id,
@@ -70,49 +67,15 @@ describe('EventService - AP Identifier Storage', () => {
 
     await eventService.createEvent(account, eventParams);
 
-    // Verify EventEntity was saved with AP identifier
+    // Verify EventEntity was saved with calendar UUID
     expect(eventEntitySaveStub.calledOnce).toBe(true);
     const savedEntity = eventEntitySaveStub.thisValues[0] as EventEntity;
-    expect(savedEntity.calendar_id).toBe(expectedCalendarId);
-    expect(savedEntity.calendar_id).toMatch(/^https:\/\/.+\/o\/.+$/);
+    expect(savedEntity.calendar_id).toBe(calendar.id);
   });
 
-  it('should work for calendar with valid urlName', async () => {
-    const calendarWithUrlName = new Calendar('test-calendar-id-2', 'mycalendar');
-
-    sandbox.stub(calendarService, 'getCalendar').resolves(calendarWithUrlName);
-    sandbox.stub(calendarService, 'editableCalendarsForUser').resolves([calendarWithUrlName]);
-
-    // Stub database save operations
-    const eventEntitySaveStub = sandbox.stub(EventEntity.prototype, 'save').resolves();
-    sandbox.stub(EventContentEntity.prototype, 'save').resolves();
-    sandbox.stub(EventScheduleEntity.prototype, 'save').resolves();
-
-    const domain = config.get('domain');
-    const expectedCalendarId = `https://${domain}/o/mycalendar`;
-
-    const eventParams = {
-      calendarId: calendarWithUrlName.id,
-      content: {
-        en: { name: 'My Event', description: 'Description' },
-      },
-      schedules: [{
-        start: new Date('2026-01-15T10:00:00Z'),
-        end: new Date('2026-01-15T11:00:00Z'),
-      }],
-    };
-
-    (eventService as any).calendarService = calendarService;
-
-    await eventService.createEvent(account, eventParams);
-
-    const savedEntity = eventEntitySaveStub.thisValues[0] as EventEntity;
-    expect(savedEntity.calendar_id).toBe(expectedCalendarId);
-  });
-
-  it('should use AP identifier for listEvents filtering', async () => {
-    const domain = config.get('domain');
-    const expectedCalendarId = `https://${domain}/o/${calendar.urlName}`;
+  it('should use calendar UUID for listEvents filtering with reposts support', async () => {
+    // Stub EventRepostEntity.findAll to simulate no reposts
+    sandbox.stub(EventRepostEntity, 'findAll').resolves([]);
 
     // Stub EventEntity.findAll to capture where clause
     const findAllStub = sandbox.stub(EventEntity, 'findAll').resolves([]);
@@ -121,19 +84,51 @@ describe('EventService - AP Identifier Storage', () => {
 
     expect(findAllStub.calledOnce).toBe(true);
     const queryOptions = findAllStub.firstCall.args[0] as any;
-    // Verify that both UUID and AP identifier are included in the query
-    expect(queryOptions.where.calendar_id).toEqual({
-      [Op.in]: [calendar.id, expectedCalendarId]
-    });
+
+    // Verify the query uses Op.or with calendar_id
+    expect(queryOptions.where[Op.or]).toBeDefined();
+    const orConditions = queryOptions.where[Op.or];
+
+    // First condition should be owned events (calendar_id matches)
+    expect(orConditions[0].calendar_id).toBe(calendar.id);
   });
 
-  it('should retrieve event with AP identifier calendar_id via getEventById', async () => {
-    const domain = config.get('domain');
-    const expectedCalendarId = `https://${domain}/o/${calendar.urlName}`;
+  it('should include reposted events in listEvents', async () => {
+    const repostedEventId = 'reposted-event-uuid';
+
+    // Stub EventRepostEntity.findAll to return a reposted event
+    sandbox.stub(EventRepostEntity, 'findAll').resolves([
+      { event_id: repostedEventId } as any,
+    ]);
+
+    // Stub EventEntity.findAll to capture where clause
+    const findAllStub = sandbox.stub(EventEntity, 'findAll').resolves([]);
+
+    await eventService.listEvents(calendar);
+
+    expect(findAllStub.calledOnce).toBe(true);
+    const queryOptions = findAllStub.firstCall.args[0] as any;
+
+    // Verify the query includes both owned and reposted events
+    expect(queryOptions.where[Op.or]).toBeDefined();
+    const orConditions = queryOptions.where[Op.or];
+
+    // Should have two conditions: owned events and reposted events
+    expect(orConditions.length).toBe(2);
+
+    // First condition: owned events
+    expect(orConditions[0].calendar_id).toBe(calendar.id);
+
+    // Second condition: reposted events
+    expect(orConditions[1].id[Op.in]).toContain(repostedEventId);
+  });
+
+  it('should retrieve event with UUID calendar_id via getEventById', async () => {
+    const eventId = 'test-event-uuid';
 
     const mockEvent = EventEntity.build({
-      id: 'https://example.com/events/test-event',
-      calendar_id: expectedCalendarId,
+      id: eventId,
+      calendar_id: calendar.id,
       event_source_url: '/testcalendar/event-1',
     });
 
@@ -144,9 +139,33 @@ describe('EventService - AP Identifier Storage', () => {
     // Inject stubbed category service
     (eventService as any).categoryService = categoryService;
 
-    const result = await eventService.getEventById('https://example.com/events/test-event');
+    const result = await eventService.getEventById(eventId);
 
-    expect(result.calendarId).toBe(expectedCalendarId);
-    expect(result.id).toBe('https://example.com/events/test-event');
+    expect(result.calendarId).toBe(calendar.id);
+    expect(result.id).toBe(eventId);
+  });
+
+  it('should return null calendarId for remote events', async () => {
+    const eventId = 'remote-event-uuid';
+
+    // Remote events have null calendar_id
+    const mockEvent = EventEntity.build({
+      id: eventId,
+      calendar_id: null,
+      event_source_url: 'https://remote.example.com/events/123',
+    });
+
+    // Stub database queries
+    sandbox.stub(EventEntity, 'findOne').resolves(mockEvent);
+    sandbox.stub(categoryService, 'getEventCategories').resolves([]);
+
+    // Inject stubbed category service
+    (eventService as any).categoryService = categoryService;
+
+    const result = await eventService.getEventById(eventId);
+
+    expect(result.calendarId).toBeNull();
+    expect(result.isRemote()).toBe(true);
+    expect(result.isLocal()).toBe(false);
   });
 });

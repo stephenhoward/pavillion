@@ -1,4 +1,4 @@
-import { Model, Column, Table, BelongsTo, ForeignKey, DataType, PrimaryKey, BeforeCreate } from 'sequelize-typescript';
+import { Model, Column, Table, BelongsTo, ForeignKey, DataType, PrimaryKey, BeforeCreate, BeforeUpdate } from 'sequelize-typescript';
 
 import { Account, Profile } from '@/common/model/account';
 import AccountApplication from '@/common/model/application';
@@ -36,6 +36,23 @@ class AccountEntity extends Model {
       username: account.username,
       email: account.email,
     });
+  }
+
+  /**
+   * Enforce username immutability - prevent changes after initial set
+   * Username can only be set during creation, never modified after
+   */
+  @BeforeUpdate
+  static async preventUsernameChange(instance: AccountEntity) {
+    // Check if username was changed
+    if (instance.changed('username')) {
+      const previousUsername = instance.previous('username');
+
+      // If username was previously set (not empty/null), prevent change
+      if (previousUsername && previousUsername.trim() !== '') {
+        throw new Error('Username cannot be changed after it has been set');
+      }
+    }
   }
 };
 

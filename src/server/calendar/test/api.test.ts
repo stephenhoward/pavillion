@@ -117,7 +117,7 @@ describe('Event API', () => {
     const response = await request(testApp(router))
       .post('/handler');
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(201);
     expect(response.body.error).toBeUndefined();
     expect(eventStub.called).toBe(true);
   });
@@ -319,8 +319,8 @@ describe('Event API', () => {
 
   it('bulkAssignCategories: should succeed with valid request', async () => {
     let bulkAssignStub = eventSandbox.stub(calendarInterface, 'bulkAssignCategories');
-    const mockEvent1 = new CalendarEvent('calendar1', 'event1');
-    const mockEvent2 = new CalendarEvent('calendar1', 'event2');
+    const mockEvent1 = new CalendarEvent('event1', 'calendar1');
+    const mockEvent2 = new CalendarEvent('event2', 'calendar1');
     bulkAssignStub.resolves([mockEvent1, mockEvent2]);
 
     router.post('/handler', addRequestUser, (req, res) => { routes.bulkAssignCategories(req, res); });

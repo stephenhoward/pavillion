@@ -5,6 +5,7 @@ import ExpressHelper from '@/server/common/helper/express';
 import CalendarService from '@/server/calendar/service/calendar';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import { FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
+import { RemoteCalendarEntity } from '@/server/activitypub/entity/remote_calendar';
 import {
   InvalidRemoteCalendarIdentifierError,
   InvalidRepostPolicySettingsError,
@@ -365,12 +366,13 @@ export default class ActivityPubMemberRoutes {
     }
 
     try {
-      // Look up the follow relationship by ID to get the remote calendar ID
+      // Look up the follow relationship by ID with RemoteCalendarEntity to get the actor URI
       const followEntity = await FollowingCalendarEntity.findOne({
         where: {
           id: followId,
           calendar_id: calendar.id,
         },
+        include: [{ model: RemoteCalendarEntity, as: 'remoteCalendar' }],
       });
 
       if (!followEntity) {
@@ -378,7 +380,14 @@ export default class ActivityPubMemberRoutes {
         return;
       }
 
-      await this.service.unfollowCalendar(account, calendar, followEntity.remote_calendar_id);
+      // Get the actor URI from the RemoteCalendarEntity
+      const actorUri = followEntity.remoteCalendar?.actor_uri;
+      if (!actorUri) {
+        res.status(500).send('Remote calendar not found');
+        return;
+      }
+
+      await this.service.unfollowCalendar(account, calendar, actorUri);
       res.status(200).send('Unfollowed');
     }
     catch (error: any) {

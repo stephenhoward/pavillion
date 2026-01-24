@@ -158,7 +158,7 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
     async loadCalendar(calendarUrlName: string) {
       try {
         const calendarData = await ModelService.getModel(
-          `/api/public/v1/calendars/${calendarUrlName}`,
+          `/api/public/v1/calendar/${calendarUrlName}`,
         );
 
         if (calendarData && calendarData.defaultDateRange) {
@@ -193,7 +193,7 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
 
       try {
         const categoriesData = await ModelService.listModels(
-          `/api/public/v1/calendars/${calendarUrlName}/categories`,
+          `/api/public/v1/calendar/${calendarUrlName}/categories`,
         );
 
         this.availableCategories = categoriesData.map(categoryData =>
@@ -222,7 +222,7 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
       this.eventError = null;
 
       try {
-        let url = `/api/public/v1/calendars/${calendarUrlName}/events`;
+        let url = `/api/public/v1/calendar/${calendarUrlName}/events`;
         const params = new URLSearchParams();
 
         // Add search parameter if provided (minimum 3 characters)

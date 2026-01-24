@@ -15,3 +15,15 @@ export interface ActivityPubEventDeletedPayload {
   calendar: Calendar;
   event: CalendarEvent;
 }
+
+export interface AccountCreatedPayload {
+  accountId: string;
+  username: string;
+  domain: string;
+}
+
+export interface CalendarCreatedPayload {
+  calendarId: string;
+  urlName: string;
+  domain: string;
+}

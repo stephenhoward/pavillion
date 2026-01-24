@@ -1,8 +1,11 @@
 import { v4 as uuidv4 } from 'uuid';
 import config from 'config';
+import axios from 'axios';
 
 import { Account } from "@/common/model/account";
 import { Calendar } from "@/common/model/calendar";
+import { RemoteCalendarAccessEntity } from "@/server/calendar/entity/remote_calendar_access";
+import { UserActorEntity } from "@/server/activitypub/entity/user_actor";
 import { CalendarEvent, CalendarEventContent, CalendarEventSchedule } from "@/common/model/events";
 import { EventLocation, validateLocationHierarchy } from "@/common/model/location";
 import { EventContentEntity, EventEntity, EventScheduleEntity } from "@/server/calendar/entity/event";
@@ -17,9 +20,9 @@ import { EventCategoryEntity } from '@/server/calendar/entity/event_category';
 import { EventCategoryContentEntity } from '@/server/calendar/entity/event_category_content';
 import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_category_assignment';
 import { EventInstanceEntity } from '@/server/calendar/entity/event_instance';
+import { EventRepostEntity } from '@/server/calendar/entity/event_repost';
 import db from '@/server/common/entity/db';
-import { Op, fn, col, where, literal } from 'sequelize';
-import { ActivityPubActor } from '@/server/activitypub/model/base';
+import { Op, literal } from 'sequelize';
 
 /**
  * Service class for managing events
@@ -41,26 +44,34 @@ class EventService {
   }
 
   /**
-     * retrieves the events for the provided calendar
-     * @param calendar - the calendar to retrieve events for
-     * @param options - optional search and filter parameters
-     * @returns a promise that resolves to the list of events
-     */
+   * Retrieves events for the provided calendar.
+   * Returns events that are either:
+   * - Owned by the calendar (calendar_id matches)
+   * - Reposted by the calendar (via EventRepostEntity)
+   *
+   * @param calendar - the calendar to retrieve events for
+   * @param options - optional search and filter parameters
+   * @returns a promise that resolves to the list of events
+   */
   async listEvents(calendar: Calendar, options?: {
     search?: string;
     categories?: string[];
   }): Promise<CalendarEvent[]> {
 
-    // Support both UUID and AP identifier calendar IDs during transition
-    const uuid = calendar.id;
-    const apId = ActivityPubActor.actorUrl(calendar);
+    // Get event IDs that are reposted by this calendar
+    const reposts = await EventRepostEntity.findAll({
+      where: { calendar_id: calendar.id },
+      attributes: ['event_id'],
+    });
+    const repostedEventIds = reposts.map(r => r.event_id);
 
-    // Base query options
+    // Query events owned by calendar OR reposted by calendar
     const queryOptions: any = {
       where: {
-        calendar_id: {
-          [Op.in]: [uuid, apId],
-        },
+        [Op.or]: [
+          { calendar_id: calendar.id },
+          ...(repostedEventIds.length > 0 ? [{ id: { [Op.in]: repostedEventIds } }] : []),
+        ],
       },
       include: [
         LocationEntity,
@@ -68,15 +79,17 @@ class EventService {
         MediaEntity,
         {
           model: EventCategoryAssignmentEntity,
-          as: 'categoryAssignments', // Required because association uses alias (see event.ts line 231)
+          as: 'categoryAssignments',
           include: [{
             model: EventCategoryEntity,
-            as: 'category', // Required because association uses alias (see event.ts line 241)
+            as: 'category',
             include: [EventCategoryContentEntity],
           }],
         },
       ],
-    };    // Handle search parameter
+    };
+
+    // Handle search parameter
     if (options?.search && options.search.trim()) {
       // Use LOWER() for case-insensitive search that works on both PostgreSQL and SQLite
       // Escape single quotes in search term for SQL literal
@@ -143,9 +156,283 @@ class EventService {
     return mappedEvents;
   }
 
-  generateEventUrl(): string {
+  generateEventId(): string {
+    return uuidv4();
+  }
+
+  generateEventUrl(eventId: string): string {
     const domain = config.get('domain');
-    return 'https://' + domain + '/events/' + uuidv4();
+    return 'https://' + domain + '/events/' + eventId;
+  }
+
+  /**
+   * Creates an event on a remote calendar by sending an ActivityPub Create activity
+   *
+   * @param account - The local account creating the event
+   * @param remoteAccess - The RemoteCalendarAccessEntity with remote calendar info
+   * @param eventParams - The parameters for the new event
+   * @returns A promise that resolves to the created event (from remote response)
+   */
+  private async createRemoteEvent(
+    account: Account,
+    remoteAccess: RemoteCalendarAccessEntity,
+    eventParams: Record<string, any>,
+  ): Promise<CalendarEvent> {
+    // Get the local user's actor for signing the activity
+    const userActor = await UserActorEntity.findOne({
+      where: { account_id: account.id },
+    });
+
+    if (!userActor) {
+      throw new InsufficientCalendarPermissionsError('User does not have an ActivityPub identity configured');
+    }
+
+    const localDomain = config.get<string>('domain');
+    const eventId = this.generateEventId();
+
+    // Build the ActivityPub Create activity
+    const createActivity = {
+      '@context': 'https://www.w3.org/ns/activitystreams',
+      type: 'Create',
+      id: `https://${localDomain}/activities/${uuidv4()}`,
+      actor: userActor.actor_uri,
+      to: [remoteAccess.remote_calendar_actor_uri],
+      object: {
+        type: 'Event',
+        id: `https://${localDomain}/events/${eventId}`,
+        name: eventParams.content?.en?.name || eventParams.name || 'Untitled Event',
+        summary: eventParams.content?.en?.description || eventParams.description || '',
+        startTime: this.buildIsoDateTime(eventParams.start_date, eventParams.start_time),
+        endTime: this.buildIsoDateTime(eventParams.end_date, eventParams.end_time),
+        attributedTo: userActor.actor_uri,
+        calendarId: remoteAccess.remote_calendar_id,
+        eventParams: eventParams,
+      },
+    };
+
+    // Send to the remote calendar's inbox
+    const inboxUrl = remoteAccess.remote_calendar_inbox_url;
+    if (!inboxUrl) {
+      throw new CalendarNotFoundError('Remote calendar inbox URL not configured');
+    }
+
+    console.log(`[EVENTS] Sending Create activity to remote calendar: ${inboxUrl}`);
+
+    try {
+      const response = await axios.post(inboxUrl, createActivity, {
+        timeout: 15000,
+        headers: {
+          'Content-Type': 'application/activity+json',
+        },
+      });
+
+      console.log(`[EVENTS] Remote calendar accepted Create activity (status: ${response.status})`);
+
+      // The remote calendar should return the created event as JSON
+      if (response.data && typeof response.data === 'object' && response.data.id) {
+        // Use the event data returned by the remote calendar
+        const event = CalendarEvent.fromObject(response.data);
+        return event;
+      }
+
+      // Fallback: construct a local representation of the event if no response data
+      const event = new CalendarEvent(
+        eventId,
+        remoteAccess.remote_calendar_id,
+        this.generateEventUrl(eventId),
+        false,
+      );
+
+      // Add content from params
+      if (eventParams.content) {
+        for (const [language, content] of Object.entries(eventParams.content)) {
+          const contentObj = content as any;
+          event.addContent(new CalendarEventContent(language, contentObj.name || '', contentObj.description || ''));
+        }
+      }
+
+      return event;
+    }
+    catch (error: any) {
+      console.error(`[EVENTS] Failed to create event on remote calendar: ${error.message}`);
+      if (error.response?.status === 403) {
+        throw new InsufficientCalendarPermissionsError('You are not authorized to create events on this calendar');
+      }
+      throw new Error(`Failed to create event on remote calendar: ${error.message}`);
+    }
+  }
+
+  /**
+   * Helper to build ISO date-time string from date and time parts
+   */
+  private buildIsoDateTime(date: string, time?: string): string {
+    if (!date) return '';
+    if (time) {
+      return `${date}T${time}:00`;
+    }
+    return `${date}T00:00:00`;
+  }
+
+  /**
+   * Updates an event on a remote calendar by sending an ActivityPub Update activity
+   *
+   * @param account - The local account updating the event
+   * @param remoteAccess - The RemoteCalendarAccessEntity with remote calendar info
+   * @param eventId - The ID of the event to update
+   * @param eventParams - The updated event parameters
+   * @returns A promise that resolves to the updated event
+   */
+  private async updateRemoteEventViaActivityPub(
+    account: Account,
+    remoteAccess: RemoteCalendarAccessEntity,
+    eventId: string,
+    eventParams: Record<string, any>,
+  ): Promise<CalendarEvent> {
+    // Get the local user's actor for signing the activity
+    const userActor = await UserActorEntity.findOne({
+      where: { account_id: account.id },
+    });
+
+    if (!userActor) {
+      throw new InsufficientCalendarPermissionsError('User does not have an ActivityPub identity configured');
+    }
+
+    const localDomain = config.get<string>('domain');
+
+    // Build the ActivityPub Update activity
+    // Include the local event ID in eventParams so the remote can look it up
+    const eventParamsWithId = { ...eventParams, id: eventId };
+
+    const updateActivity = {
+      '@context': 'https://www.w3.org/ns/activitystreams',
+      type: 'Update',
+      id: `https://${localDomain}/activities/${uuidv4()}`,
+      actor: userActor.actor_uri,
+      to: [remoteAccess.remote_calendar_actor_uri],
+      object: {
+        type: 'Event',
+        id: `https://${localDomain}/events/${eventId}`,
+        name: eventParams.content?.en?.name || eventParams.name || 'Untitled Event',
+        summary: eventParams.content?.en?.description || eventParams.description || '',
+        startTime: this.buildIsoDateTime(eventParams.start_date, eventParams.start_time),
+        endTime: this.buildIsoDateTime(eventParams.end_date, eventParams.end_time),
+        attributedTo: userActor.actor_uri,
+        calendarId: remoteAccess.remote_calendar_id,
+        eventParams: eventParamsWithId,
+      },
+    };
+
+    // Send to the remote calendar's inbox
+    const inboxUrl = remoteAccess.remote_calendar_inbox_url;
+    if (!inboxUrl) {
+      throw new CalendarNotFoundError('Remote calendar inbox URL not configured');
+    }
+
+    console.log(`[EVENTS] Sending Update activity to remote calendar: ${inboxUrl}`);
+
+    try {
+      const response = await axios.post(inboxUrl, updateActivity, {
+        timeout: 15000,
+        headers: {
+          'Content-Type': 'application/activity+json',
+        },
+      });
+
+      console.log(`[EVENTS] Remote calendar accepted Update activity (status: ${response.status})`);
+
+      // Construct a local representation of the updated event
+      const event = new CalendarEvent(
+        eventId,
+        remoteAccess.remote_calendar_id,
+        this.generateEventUrl(eventId),
+        false,
+      );
+
+      // Add content from params
+      if (eventParams.content) {
+        for (const [language, content] of Object.entries(eventParams.content)) {
+          const contentObj = content as any;
+          event.addContent(new CalendarEventContent(language, contentObj.name || '', contentObj.description || ''));
+        }
+      }
+
+      return event;
+    }
+    catch (error: any) {
+      console.error(`[EVENTS] Failed to update event on remote calendar: ${error.message}`);
+      if (error.response?.status === 403) {
+        throw new InsufficientCalendarPermissionsError('You are not authorized to update events on this calendar');
+      }
+      throw new Error(`Failed to update event on remote calendar: ${error.message}`);
+    }
+  }
+
+  /**
+   * Deletes an event on a remote calendar by sending an ActivityPub Delete activity
+   *
+   * @param account - The local account deleting the event
+   * @param remoteAccess - The RemoteCalendarAccessEntity with remote calendar info
+   * @param eventId - The ID of the event to delete
+   * @returns A promise that resolves when the delete is complete
+   */
+  private async deleteRemoteEventViaActivityPub(
+    account: Account,
+    remoteAccess: RemoteCalendarAccessEntity,
+    eventId: string,
+  ): Promise<void> {
+    // Get the local user's actor for signing the activity
+    const userActor = await UserActorEntity.findOne({
+      where: { account_id: account.id },
+    });
+
+    if (!userActor) {
+      throw new InsufficientCalendarPermissionsError('User does not have an ActivityPub identity configured');
+    }
+
+    const localDomain = config.get<string>('domain');
+
+    // Build the ActivityPub Delete activity
+    // Include the local event ID so the remote can look it up
+    const deleteActivity = {
+      '@context': 'https://www.w3.org/ns/activitystreams',
+      type: 'Delete',
+      id: `https://${localDomain}/activities/${uuidv4()}`,
+      actor: userActor.actor_uri,
+      to: [remoteAccess.remote_calendar_actor_uri],
+      object: {
+        type: 'Tombstone',
+        id: `https://${localDomain}/events/${eventId}`,
+        formerType: 'Event',
+        calendarId: remoteAccess.remote_calendar_id,
+        eventId: eventId,
+      },
+    };
+
+    // Send to the remote calendar's inbox
+    const inboxUrl = remoteAccess.remote_calendar_inbox_url;
+    if (!inboxUrl) {
+      throw new CalendarNotFoundError('Remote calendar inbox URL not configured');
+    }
+
+    console.log(`[EVENTS] Sending Delete activity to remote calendar: ${inboxUrl}`);
+
+    try {
+      const response = await axios.post(inboxUrl, deleteActivity, {
+        timeout: 15000,
+        headers: {
+          'Content-Type': 'application/activity+json',
+        },
+      });
+
+      console.log(`[EVENTS] Remote calendar accepted Delete activity (status: ${response.status})`);
+    }
+    catch (error: any) {
+      console.error(`[EVENTS] Failed to delete event on remote calendar: ${error.message}`);
+      if (error.response?.status === 403) {
+        throw new InsufficientCalendarPermissionsError('You are not authorized to delete events on this calendar');
+      }
+      throw new Error(`Failed to delete event on remote calendar: ${error.message}`);
+    }
   }
 
   /**
@@ -158,14 +445,33 @@ class EventService {
 
     const calendar = await this.calendarService.getCalendar(eventParams.calendarId);
     const calendars = await this.calendarService.editableCalendarsForUser(account);
-    if ( ! calendar ) {
+
+    // Check if this is a local calendar
+    if (calendar) {
+      if (!calendars.some(c => c.id == calendar.id)) {
+        throw new InsufficientCalendarPermissionsError('Insufficient permissions to modify events in this calendar');
+      }
+      // Continue with local event creation below
+    }
+    else {
+      // Calendar not found locally - check if it's a remote calendar we have access to
+      const remoteAccess = await RemoteCalendarAccessEntity.findOne({
+        where: {
+          account_id: account.id,
+          remote_calendar_id: eventParams.calendarId,
+        },
+      });
+
+      if (remoteAccess) {
+        // This is a remote calendar - delegate to remote event creation
+        return this.createRemoteEvent(account, remoteAccess, eventParams);
+      }
+
       throw new CalendarNotFoundError('Calendar for event does not exist');
     }
-    if ( ! calendars.some(c => c.id == calendar.id) ) {
-      throw new InsufficientCalendarPermissionsError('Insufficient permissions to modify events in this calendar');
-    }
 
-    eventParams.id = this.generateEventUrl();
+    eventParams.id = this.generateEventId();
+    eventParams.calendarId = calendar.id;
 
     const event = CalendarEvent.fromObject(eventParams);
     if ( calendar.urlName.length > 0 ) {
@@ -174,10 +480,6 @@ class EventService {
     else {
       event.eventSourceUrl = '';
     }
-
-    // Generate AP identifier for the calendar
-    const calendarApIdentifier = ActivityPubActor.actorUrl(calendar);
-    event.calendarId = calendarApIdentifier;
 
     const eventEntity = EventEntity.fromModel(event);
 
@@ -269,30 +571,36 @@ class EventService {
   async updateEvent(account: Account, eventId: string, eventParams:Record<string,any>): Promise<CalendarEvent> {
     const eventEntity = await EventEntity.findByPk(eventId);
 
-    if ( ! eventEntity ) {
+    // If event not found locally, check if this is a remote event the user can update
+    if (!eventEntity) {
+      // Check if the user has remote calendar access for the specified calendarId
+      if (eventParams.calendarId) {
+        const remoteAccess = await RemoteCalendarAccessEntity.findOne({
+          where: {
+            account_id: account.id,
+            remote_calendar_id: eventParams.calendarId,
+          },
+        });
+
+        if (remoteAccess) {
+          // This is a remote calendar event - delegate to remote update
+          return this.updateRemoteEventViaActivityPub(account, remoteAccess, eventId, eventParams);
+        }
+      }
       throw new EventNotFoundError('Event not found');
     }
 
-    // Calendar ID is now stored as an ActivityPub URL (https://domain/o/urlName)
-    // Extract the urlName from the URL and look up by that
-    let calendar: Calendar | null = null;
-    if (eventEntity.calendar_id && eventEntity.calendar_id.startsWith('https://')) {
-      // Extract urlName from ActivityPub URL format: https://domain/o/urlName
-      const match = eventEntity.calendar_id.match(/\/o\/([^\/]+)$/);
-      if (match) {
-        const urlName = match[1];
-        calendar = await this.calendarService.getCalendarByName(urlName);
-      }
-    }
-    else if (eventEntity.calendar_id) {
-      // Legacy support: if it's a UUID, look up by primary key
-      calendar = await this.calendarService.getCalendar(eventEntity.calendar_id);
+    // Remote events stored locally (calendar_id is null) cannot be updated through this method
+    if (!eventEntity.calendar_id) {
+      throw new InsufficientCalendarPermissionsError('Cannot update remote events through this method');
     }
 
-    const calendars = await this.calendarService.editableCalendarsForUser(account);
+    const calendar = await this.calendarService.getCalendar(eventEntity.calendar_id);
     if ( ! calendar ) {
       throw new CalendarNotFoundError('Calendar for event does not exist');
     }
+
+    const calendars = await this.calendarService.editableCalendarsForUser(account);
     if ( ! calendars.some(c => c.id == calendar.id) ) {
       throw new InsufficientCalendarPermissionsError('Insufficient permissions to modify events in this calendar');
     }
@@ -441,40 +749,40 @@ class EventService {
   }
 
   /**
-     * Add a new event from a remote calendar
-     * @param eventParams - the parameters for the new event
-     * @returns a promise that resolves to the created Event
-     */
+   * Add a new event from a remote calendar.
+   * Remote events have calendar_id = null since they don't belong to a local calendar.
+   * The AP origin information is tracked separately in EventObjectEntity.
+   *
+   * @param calendar - the local calendar context (used for location storage)
+   * @param eventParams - the parameters for the new event
+   * @returns a promise that resolves to the created Event
+   */
   async addRemoteEvent(calendar: Calendar, eventParams:Record<string,any>): Promise<CalendarEvent> {
-    console.log(`[EventService] addRemoteEvent called with eventParams:`, JSON.stringify(eventParams, null, 2));
-
     if ( ! eventParams.id ) {
       throw new Error('Event id is required');
     }
-    // TODO: validate id is legit.
-    if ( eventParams.id.match(/^https:\/\/[^\/]+\/events\/[0-9a-f-]+$/) === null ) {
+    // Validate event id format
+    // Accept: UUID only, or full URL formats
+    if ( eventParams.id.match(/^([0-9a-f-]+|https:\/\/[^\/]+(\/calendars\/[^\/]+)?\/events\/[0-9a-f-]+)$/) === null ) {
       throw new Error('Invalid event id');
     }
 
+    // If calendarId is explicitly provided (e.g., from a cross-instance editor),
+    // preserve it. Otherwise, set to null for traditional remote federated events.
+    if (!eventParams.calendarId) {
+      eventParams.calendarId = null;
+    }
+
     const event = CalendarEvent.fromObject(eventParams);
-    console.log(`[EventService] Created CalendarEvent model with calendarId: ${event.calendarId}`);
-
     const eventEntity = EventEntity.fromModel(event);
-    console.log(`[EventService] Created EventEntity with calendar_id: ${eventEntity.calendar_id}`);
-
-    //TODO: check and validate the calendar id
 
     if( eventParams.location ) {
-      // Todo: See if we already imported this location
-
       let location = await this.locationService.findOrCreateLocation(calendar, eventParams.location);
       eventEntity.location_id = location.id;
       event.location = location;
     }
 
-    console.log(`[EventService] Saving event entity to database...`);
     await eventEntity.save();
-    console.log(`[EventService] Event entity saved with ID: ${eventEntity.id}, calendar_id: ${eventEntity.calendar_id}`);
 
     if ( eventParams.content ) {
       for( let [language,content] of Object.entries(eventParams.content) ) {
@@ -492,13 +800,14 @@ class EventService {
   }
 
   /**
-   * Update a remote event with new data from a federated Update activity
+   * Update a remote event with new data from a federated Update activity.
+   * This is called when receiving an Update activity via ActivityPub.
+   *
    * @param calendar - the local calendar receiving this update (for location context)
    * @param eventParams - the updated event parameters
    * @returns a promise that resolves to the updated Event
    */
   async updateRemoteEvent(calendar: Calendar, eventParams: Record<string,any>): Promise<CalendarEvent> {
-    console.log(`[EventService] Updating remote event ${eventParams.id}`);
 
     const eventEntity = await EventEntity.findByPk(eventParams.id);
 
@@ -605,18 +914,17 @@ class EventService {
 
     await eventEntity.save();
 
-    console.log(`[EventService] Successfully updated remote event ${eventParams.id}`);
     return event;
   }
 
   /**
-   * Delete a remote event
+   * Delete a remote event.
+   * This is called when receiving a Delete activity via ActivityPub.
+   *
    * @param eventId - the ID of the event to delete
    * @returns a promise that resolves when the event is deleted
    */
   async deleteRemoteEvent(eventId: string): Promise<void> {
-    console.log(`[EventService] Deleting remote event ${eventId}`);
-
     const eventEntity = await EventEntity.findByPk(eventId, {
       include: [EventContentEntity, LocationEntity, EventScheduleEntity, MediaEntity],
     });
@@ -651,8 +959,6 @@ class EventService {
       await eventEntity.destroy({ transaction });
 
       await transaction.commit();
-
-      console.log(`[EventService] Successfully deleted remote event ${eventId}`);
     }
     catch (error) {
       await transaction.rollback();
@@ -719,32 +1025,30 @@ class EventService {
         throw new BulkEventsNotFoundError('Some events were not found or you do not have permission to modify them');
       }
 
-      // 2. Verify all events belong to same calendar (simplifies category validation)
+      // 2. Verify all events belong to same local calendar (remote events not supported)
       const calendarIds = [...new Set(events.map(event => event.calendar_id))];
+
+      // Check for remote events (calendar_id is null)
+      if (calendarIds.includes(null)) {
+        throw new MixedCalendarEventsError('Cannot bulk assign categories to remote events');
+      }
+
       if (calendarIds.length > 1) {
         throw new MixedCalendarEventsError('All events must belong to the same calendar');
       }
 
-      const calendarApUrl = calendarIds[0];
+      const calendarId = calendarIds[0] as string;
+      const calendar = await this.calendarService.getCalendar(calendarId);
 
-      // Extract urlName from ActivityPub URL (format: https://domain/o/urlName)
-      // Events store AP URLs, but categories use calendar UUIDs
-      const urlNameMatch = calendarApUrl.match(/\/o\/([^\/]+)$/);
-      if (!urlNameMatch) {
-        throw new Error('Invalid calendar ActivityPub URL format');
-      }
-      const urlName = urlNameMatch[1];
-      const calendar = await this.calendarService.getCalendarByName(urlName);
       if (!calendar) {
         throw new CalendarNotFoundError('Calendar not found for events');
       }
-      const calendarUuid = calendar.id;
 
       // 3. Validate categories exist and belong to the same calendar
       const categories = await EventCategoryEntity.findAll({
         where: {
           id: categoryIds,
-          calendar_id: calendarUuid,  // Use UUID, not AP URL
+          calendar_id: calendarId,  // Use UUID, not AP URL
         },
         transaction,
       });
@@ -756,7 +1060,7 @@ class EventService {
       // 4. Check user has permission to modify events (do this AFTER data validation)
       // All events are in the same calendar (validated above), so just check permission for that calendar
       const userCalendars = await this.calendarService.editableCalendarsForUser(account);
-      const hasPermission = userCalendars.some(cal => cal.id === calendarUuid);
+      const hasPermission = userCalendars.some(cal => cal.id === calendarId);
       if (!hasPermission) {
         throw new InsufficientCalendarPermissionsError('Insufficient permissions to modify events in this calendar');
       }
@@ -816,34 +1120,41 @@ class EventService {
    * Delete an event
    * @param account - The account attempting to delete the event
    * @param eventId - The ID of the event to delete
+   * @param calendarId - Optional calendar ID, required for remote calendar events
    * @throws EventNotFoundError if the event doesn't exist
    * @throws InsufficientCalendarPermissionsError if the user can't modify the calendar
    */
-  async deleteEvent(account: Account, eventId: string): Promise<void> {
+  async deleteEvent(account: Account, eventId: string, calendarId?: string): Promise<void> {
     const eventEntity = await EventEntity.findByPk(eventId, {
       include: [EventContentEntity, LocationEntity, EventScheduleEntity, MediaEntity],
     });
 
+    // If event not found locally, check if this is a remote event the user can delete
     if (!eventEntity) {
+      // Check if the user has remote calendar access for the specified calendarId
+      if (calendarId) {
+        const remoteAccess = await RemoteCalendarAccessEntity.findOne({
+          where: {
+            account_id: account.id,
+            remote_calendar_id: calendarId,
+          },
+        });
+
+        if (remoteAccess) {
+          // This is a remote calendar event - delegate to remote delete
+          await this.deleteRemoteEventViaActivityPub(account, remoteAccess, eventId);
+          return;
+        }
+      }
       throw new EventNotFoundError(`Event with ID ${eventId} not found`);
     }
 
-    // Calendar ID is now stored as an ActivityPub URL (https://domain/o/urlName)
-    // Extract the urlName from the URL and look up by that
-    let calendar: Calendar | null = null;
-    if (eventEntity.calendar_id && eventEntity.calendar_id.startsWith('https://')) {
-      // Extract urlName from ActivityPub URL format: https://domain/o/urlName
-      const match = eventEntity.calendar_id.match(/\/o\/([^\/]+)$/);
-      if (match) {
-        const urlName = match[1];
-        calendar = await this.calendarService.getCalendarByName(urlName);
-      }
-    }
-    else if (eventEntity.calendar_id) {
-      // Legacy support: if it's a UUID, look up by primary key
-      calendar = await this.calendarService.getCalendar(eventEntity.calendar_id);
+    // Remote events stored locally (calendar_id is null) cannot be deleted through this method
+    if (!eventEntity.calendar_id) {
+      throw new InsufficientCalendarPermissionsError('Cannot delete remote events through this method - use deleteRemoteEvent');
     }
 
+    const calendar = await this.calendarService.getCalendar(eventEntity.calendar_id);
     if (!calendar) {
       throw new CalendarNotFoundError(`Calendar not found for event ${eventId}`);
     }

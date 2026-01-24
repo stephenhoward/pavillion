@@ -352,14 +352,12 @@ describe('CategoryService', () => {
 
       sandbox.stub(categoryService, 'getCategory').resolves(mockCategory);
 
-      // Event has AP URL pointing to the same calendar
+      // Event belongs to the same calendar (matching UUID)
       const mockEventEntity = {
-        calendar_id: 'https://example.com/o/testcalendar',
+        calendar_id: 'calendar-123',
       };
       sandbox.stub(EventEntity, 'findByPk').resolves(mockEventEntity as any);
 
-      // Calendar lookup by urlName returns calendar with matching ID
-      mockCalendarService.getCalendarByName.resolves(testCalendar);
       mockCalendarService.getCalendar.resolves(testCalendar);
       mockCalendarService.userCanModifyCalendar.resolves(true);
 
@@ -400,15 +398,11 @@ describe('CategoryService', () => {
       const mockCategory = new EventCategory('category-123', 'calendar-123');
       sandbox.stub(categoryService, 'getCategory').resolves(mockCategory);
 
-      // Event has AP URL pointing to a different calendar
+      // Event belongs to a different calendar (different UUID)
       const mockEventEntity = {
-        calendar_id: 'https://example.com/o/differentcalendar',
+        calendar_id: 'different-calendar-id',
       };
       sandbox.stub(EventEntity, 'findByPk').resolves(mockEventEntity as any);
-
-      // Return a calendar with different ID
-      const differentCalendar = new Calendar('different-calendar-id', 'account-123');
-      mockCalendarService.getCalendarByName.resolves(differentCalendar);
 
       await expect(
         categoryService.assignCategoryToEvent(testAccount, 'event-123', 'category-123'),
@@ -419,14 +413,12 @@ describe('CategoryService', () => {
       const mockCategory = new EventCategory('category-123', 'calendar-123');
       sandbox.stub(categoryService, 'getCategory').resolves(mockCategory);
 
-      // Event has AP URL pointing to the same calendar
+      // Event belongs to the same calendar (matching UUID)
       const mockEventEntity = {
-        calendar_id: 'https://example.com/o/testcalendar',
+        calendar_id: 'calendar-123',
       };
       sandbox.stub(EventEntity, 'findByPk').resolves(mockEventEntity as any);
 
-      // Calendar lookup by urlName returns calendar with matching ID
-      mockCalendarService.getCalendarByName.resolves(testCalendar);
       mockCalendarService.getCalendar.resolves(testCalendar);
       mockCalendarService.userCanModifyCalendar.resolves(false);
 
@@ -439,14 +431,12 @@ describe('CategoryService', () => {
       const mockCategory = new EventCategory('category-123', 'calendar-123');
       sandbox.stub(categoryService, 'getCategory').resolves(mockCategory);
 
-      // Event has AP URL pointing to the same calendar
+      // Event belongs to the same calendar (matching UUID)
       const mockEventEntity = {
-        calendar_id: 'https://example.com/o/testcalendar',
+        calendar_id: 'calendar-123',
       };
       sandbox.stub(EventEntity, 'findByPk').resolves(mockEventEntity as any);
 
-      // Calendar lookup by urlName returns calendar with matching ID
-      mockCalendarService.getCalendarByName.resolves(testCalendar);
       mockCalendarService.getCalendar.resolves(testCalendar);
       mockCalendarService.userCanModifyCalendar.resolves(true);
 
@@ -465,14 +455,12 @@ describe('CategoryService', () => {
       const mockCategory = new EventCategory('category-123', 'calendar-123');
       sandbox.stub(categoryService, 'getCategory').resolves(mockCategory);
 
-      // Event has AP URL pointing to the same calendar
+      // Event belongs to the same calendar (matching UUID)
       const mockEventEntity = {
-        calendar_id: 'https://example.com/o/testcalendar',
+        calendar_id: 'calendar-123',
       };
       sandbox.stub(EventEntity, 'findByPk').resolves(mockEventEntity as any);
 
-      // Calendar lookup by urlName returns calendar with matching ID
-      mockCalendarService.getCalendarByName.resolves(testCalendar);
       mockCalendarService.getCalendar.resolves(testCalendar);
       mockCalendarService.userCanModifyCalendar.resolves(true);
 
@@ -489,14 +477,12 @@ describe('CategoryService', () => {
       const mockCategory = new EventCategory('category-123', 'calendar-123');
       sandbox.stub(categoryService, 'getCategory').resolves(mockCategory);
 
-      // Event has AP URL pointing to the same calendar
+      // Event belongs to the same calendar (matching UUID)
       const mockEventEntity = {
-        calendar_id: 'https://example.com/o/testcalendar',
+        calendar_id: 'calendar-123',
       };
       sandbox.stub(EventEntity, 'findByPk').resolves(mockEventEntity as any);
 
-      // Calendar lookup by urlName returns calendar with matching ID
-      mockCalendarService.getCalendarByName.resolves(testCalendar);
       mockCalendarService.getCalendar.resolves(testCalendar);
       mockCalendarService.userCanModifyCalendar.resolves(true);
 

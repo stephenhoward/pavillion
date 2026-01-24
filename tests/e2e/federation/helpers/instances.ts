@@ -90,10 +90,10 @@ export function formatWebFingerResource(calendarUrlName: string, instance: Insta
  *
  * @param calendarUrlName - The calendar's URL name
  * @param instance - The instance configuration
- * @returns The full actor URL (e.g., 'https://alpha.federation.local/o/community_events')
+ * @returns The full actor URL (e.g., 'https://alpha.federation.local/calendars/community_events')
  */
 export function formatActorUrl(calendarUrlName: string, instance: InstanceConfig): string {
-  return `${instance.baseUrl}/o/${calendarUrlName}`;
+  return `${instance.baseUrl}/calendars/${calendarUrlName}`;
 }
 
 /**

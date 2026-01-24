@@ -14,6 +14,12 @@
  */
 
 import { InstanceConfig } from './instances';
+import https from 'https';
+
+// Create an HTTPS agent that accepts self-signed certificates for local testing
+const httpsAgent = new https.Agent({
+  rejectUnauthorized: false,
+});
 
 /**
  * Calendar data for API creation
@@ -115,7 +121,7 @@ export interface FollowerResponse {
 export async function getToken(
   instance: InstanceConfig,
   email: string,
-  password: string
+  password: string,
 ): Promise<string> {
   // Pavillion uses /api/auth/v1/login for authentication
   const response = await fetch(`${instance.baseUrl}/api/auth/v1/login`, {
@@ -124,6 +130,8 @@ export async function getToken(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ email, password }),
+    // @ts-ignore - agent is not in the TypeScript types but works at runtime
+    agent: httpsAgent,
   });
 
   if (!response.ok) {
@@ -156,7 +164,7 @@ export async function getToken(
 export async function createCalendar(
   instance: InstanceConfig,
   token: string,
-  calendarData: CalendarData
+  calendarData: CalendarData,
 ): Promise<CalendarResponse> {
   const response = await fetch(`${instance.baseUrl}/api/v1/calendars`, {
     method: 'POST',
@@ -165,6 +173,8 @@ export async function createCalendar(
       'Authorization': `Bearer ${token}`,
     },
     body: JSON.stringify(calendarData),
+    // @ts-ignore - agent is not in the TypeScript types but works at runtime
+    agent: httpsAgent,
   });
 
   if (!response.ok) {
@@ -198,7 +208,7 @@ export async function createCalendar(
 export async function createEvent(
   instance: InstanceConfig,
   token: string,
-  eventData: EventData
+  eventData: EventData,
 ): Promise<EventResponse> {
   const response = await fetch(`${instance.baseUrl}/api/v1/events`, {
     method: 'POST',
@@ -241,7 +251,7 @@ export async function followCalendar(
   instance: InstanceConfig,
   token: string,
   localCalendarId: string,
-  remoteCalendarId: string
+  remoteCalendarId: string,
 ): Promise<void> {
   const response = await fetch(`${instance.baseUrl}/api/v1/social/follows`, {
     method: 'POST',
@@ -288,7 +298,7 @@ export async function unfollowCalendar(
   token: string,
   followId: string,
   localCalendarId: string,
-  remoteCalendarId: string
+  remoteCalendarId: string,
 ): Promise<void> {
   const response = await fetch(`${instance.baseUrl}/api/v1/social/follows/${encodeURIComponent(followId)}`, {
     method: 'DELETE',
@@ -320,7 +330,7 @@ export async function unfollowCalendar(
 export async function getFollows(
   instance: InstanceConfig,
   token: string,
-  calendarId: string
+  calendarId: string,
 ): Promise<FollowResponse[]> {
   const response = await fetch(
     `${instance.baseUrl}/api/v1/social/follows?calendarId=${calendarId}`,
@@ -328,7 +338,7 @@ export async function getFollows(
       headers: {
         'Authorization': `Bearer ${token}`,
       },
-    }
+    },
   );
 
   if (!response.ok) {
@@ -351,7 +361,7 @@ export async function getFollows(
 export async function getFollowers(
   instance: InstanceConfig,
   token: string,
-  calendarId: string
+  calendarId: string,
 ): Promise<FollowerResponse[]> {
   const response = await fetch(
     `${instance.baseUrl}/api/v1/social/followers?calendarId=${calendarId}`,
@@ -359,7 +369,7 @@ export async function getFollowers(
       headers: {
         'Authorization': `Bearer ${token}`,
       },
-    }
+    },
   );
 
   if (!response.ok) {
@@ -382,7 +392,7 @@ export async function getFollowers(
 export async function getFeed(
   instance: InstanceConfig,
   token: string,
-  calendarId: string
+  calendarId: string,
 ): Promise<{ events: Array<{ id: string; content: Record<string, { title: string }> }>; hasMore: boolean }> {
   const response = await fetch(
     `${instance.baseUrl}/api/v1/social/feed?calendarId=${calendarId}`,
@@ -390,7 +400,7 @@ export async function getFeed(
       headers: {
         'Authorization': `Bearer ${token}`,
       },
-    }
+    },
   );
 
   if (!response.ok) {
@@ -418,7 +428,7 @@ export async function updateEvent(
   instance: InstanceConfig,
   token: string,
   eventId: string,
-  eventData: Partial<EventData>
+  eventData: Partial<EventData>,
 ): Promise<EventResponse> {
   const response = await fetch(`${instance.baseUrl}/api/v1/events/${encodeURIComponent(eventId)}`, {
     method: 'PUT',
@@ -447,7 +457,7 @@ export async function updateEvent(
  */
 export async function getCalendars(
   instance: InstanceConfig,
-  token: string
+  token: string,
 ): Promise<CalendarResponse[]> {
   const response = await fetch(`${instance.baseUrl}/api/v1/calendars`, {
     headers: {
@@ -461,4 +471,103 @@ export async function getCalendars(
   }
 
   return await response.json();
+}
+
+/**
+ * Get events for a specific calendar
+ *
+ * @param instance - The instance to query
+ * @param token - Authentication token
+ * @param calendarId - ID of the calendar to get events for
+ * @returns Response object (use .json() to get events array)
+ * @throws Error if the request fails
+ */
+export async function getCalendarEvents(
+  instance: InstanceConfig,
+  token: string,
+  calendarId: string,
+): Promise<Response> {
+  return await fetch(
+    `${instance.baseUrl}/api/v1/calendars/${calendarId}/events`,
+    {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      // @ts-ignore - agent is not in the TypeScript types but works at runtime
+      agent: httpsAgent,
+    },
+  );
+}
+
+/**
+ * Create a new account on the instance
+ *
+ * @param instance - The instance to create the account on
+ * @param username - Username for the account
+ * @param email - Email for the account
+ * @returns Account data with generated password
+ * @throws Error if account creation fails
+ */
+export async function createAccount(
+  instance: InstanceConfig,
+  username: string,
+  email: string,
+): Promise<{ id: string; username: string; email: string; password: string }> {
+  // Generate a random password for the test account
+  const password = `test-${Math.random().toString(36).substring(7)}`;
+
+  const response = await fetch(`${instance.baseUrl}/api/v1/accounts`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      username,
+      email,
+      password,
+    }),
+    // @ts-ignore - agent is not in the TypeScript types but works at runtime
+    agent: httpsAgent,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to create account: ${response.status} ${errorText}`);
+  }
+
+  const account = await response.json();
+  return { ...account, password };
+}
+
+/**
+ * Grant editor access to a user by email
+ *
+ * @param instance - The instance where the calendar exists
+ * @param token - Authentication token for the calendar owner
+ * @param calendarId - ID of the calendar to grant access to
+ * @param editorEmail - Email of the user to grant editor access (can be federated email like user@instance.domain)
+ * @returns Response object
+ * @throws Error if granting access fails
+ */
+export async function grantEditorAccessByEmail(
+  instance: InstanceConfig,
+  token: string,
+  calendarId: string,
+  editorEmail: string,
+): Promise<Response> {
+  return await fetch(
+    `${instance.baseUrl}/api/v1/calendars/${calendarId}/editors`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        email: editorEmail,
+      }),
+      // @ts-ignore - agent is not in the TypeScript types but works at runtime
+      agent: httpsAgent,
+    },
+  );
 }

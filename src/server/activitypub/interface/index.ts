@@ -1,5 +1,7 @@
-import { EventEmitter } from 'events';import { Account } from '@/common/model/account';
+import { EventEmitter } from 'events';
+import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
+import { CalendarEvent } from '@/common/model/events';
 import { EventEntity } from '@/server/calendar/entity/event';
 import { ActivityPubActivity } from '@/server/activitypub/model/base';
 import { WebFingerResponse } from '@/server/activitypub/model/webfinger';
@@ -11,6 +13,10 @@ import ProcessInboxService from '../service/inbox';
 import ProcessOutboxService from '../service/outbox';
 import { ActivityPubOutboxMessageEntity, ActivityPubInboxMessageEntity } from '@/server/activitypub/entity/activitypub';
 import CalendarInterface from '@/server/calendar/interface';
+import AccountsInterface from '@/server/accounts/interface';
+import CreateActivity from '@/server/activitypub/model/action/create';
+import UpdateActivity from '@/server/activitypub/model/action/update';
+import DeleteActivity from '@/server/activitypub/model/action/delete';
 
 /**
  * Implementation of the ActivityPub internal API interface
@@ -23,10 +29,10 @@ export default class ActivityPubInterface {
   private outboxService: ProcessOutboxService;
   private calendarInterface: CalendarInterface;
 
-  constructor(eventBus: EventEmitter ) {
-    this.calendarInterface = new CalendarInterface(eventBus);
+  constructor(eventBus: EventEmitter, calendarInterface: CalendarInterface, accountsInterface: AccountsInterface ) {
+    this.calendarInterface = calendarInterface;
     this.memberService = new ActivityPubMemberService(eventBus);
-    this.serverService = new ActivityPubServerService(eventBus);
+    this.serverService = new ActivityPubServerService(eventBus, calendarInterface, accountsInterface);
     this.inboxSerivce = new ProcessInboxService(eventBus, this.calendarInterface);
     this.outboxService = new ProcessOutboxService(eventBus);
   }
@@ -69,12 +75,12 @@ export default class ActivityPubInterface {
     return this.serverService.readOutbox(calendar);
   }
 
-  parseWebFingerResource(resource: string): { username: string; domain: string } {
+  parseWebFingerResource(resource: string): { type: 'user' | 'calendar' | 'unknown'; name: string; domain: string } {
     return this.serverService.parseWebFingerResource(resource);
   }
 
-  async lookupWebFinger(urlName: string, domain: string): Promise<WebFingerResponse | null> {
-    return this.serverService.lookupWebFinger(urlName, domain);
+  async lookupWebFinger(urlName: string, domain: string, type: 'user' | 'calendar'): Promise<WebFingerResponse | null> {
+    return this.serverService.lookupWebFinger(urlName, domain, type);
   }
 
   async lookupUserProfile(calendarName: string): Promise<UserProfileResponse | null> {
@@ -137,5 +143,23 @@ export default class ActivityPubInterface {
   }
   async processInboxMessage(message: ActivityPubInboxMessageEntity): Promise<void> {
     await this.inboxSerivce.processInboxMessage(message);
+  }
+
+  /**
+   * Checks if an actor URI is a Person actor (vs calendar actor)
+   */
+  isPersonActorUri(actorUri: string): boolean {
+    return actorUri.includes('/users/');
+  }
+
+  /**
+   * Process a Person actor activity synchronously
+   * Used for cross-instance editor operations where immediate response is needed
+   */
+  async processPersonActorActivity(
+    calendar: Calendar,
+    activity: CreateActivity | UpdateActivity | DeleteActivity,
+  ): Promise<CalendarEvent | null> {
+    return this.inboxSerivce.processPersonActorActivity(calendar, activity);
   }
 }

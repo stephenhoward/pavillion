@@ -201,6 +201,20 @@ describe('processInboxMessage', () => {
     sandbox.stub(testService.calendarInterface, 'getCalendar')
       .resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: 'testcalendar' }));
 
+    // Mock RemoteCalendarService to return a RemoteCalendar
+    const mockRemoteCalendar = {
+      id: 'mock-remote-calendar-uuid',
+      actorUri: REMOTE_ACTOR_URL,
+      displayName: null,
+      inboxUrl: null,
+      sharedInboxUrl: null,
+      publicKey: null,
+      lastFetched: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    sandbox.stub(testService.remoteCalendarService, 'findOrCreateByActorUri').resolves(mockRemoteCalendar);
+
     // Mock FollowerCalendarEntity to simulate no existing follower
     const findOneStub = sandbox.stub(FollowerCalendarEntity, 'findOne').resolves(null);
     const createStub = sandbox.stub(FollowerCalendarEntity, 'create').resolves({} as any);

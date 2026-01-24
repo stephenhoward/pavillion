@@ -40,7 +40,7 @@ export default class CalendarInterface {
     accountsInterface?: AccountsInterface,
     configurationInterface?: ConfigurationInterface,
   ) {
-    this.calendarService = new CalendarService(accountsInterface, configurationInterface);
+    this.calendarService = new CalendarService(accountsInterface, eventBus);
     this. eventService = new EventService(eventBus);
     this. locationService = new LocationService();
     this.eventInstanceService = new EventInstanceService(eventBus);
@@ -105,8 +105,8 @@ export default class CalendarInterface {
     return this.eventService.updateEvent(account, eventId, eventParams);
   }
 
-  async deleteEvent(account: Account, eventId: string): Promise<void> {
-    return this.eventService.deleteEvent(account, eventId);
+  async deleteEvent(account: Account, eventId: string, calendarId?: string): Promise<void> {
+    return this.eventService.deleteEvent(account, eventId, calendarId);
   }
 
   async addRemoteEvent(calendar: Calendar, eventParams: Record<string, any>): Promise<CalendarEvent> {
@@ -168,6 +168,10 @@ export default class CalendarInterface {
 
   async removeEditAccess(revokingAccount: Account, calendarId: string, editorAccountId: string): Promise<boolean> {
     return this.calendarService.removeEditAccess(revokingAccount, calendarId, editorAccountId);
+  }
+
+  async removeRemoteEditor(revokingAccount: Account, calendarId: string, actorUri: string): Promise<boolean> {
+    return this.calendarService.removeRemoteEditor(revokingAccount, calendarId, actorUri);
   }
 
   async listCalendarEditors(account: Account, calendarId: string): Promise<CalendarEditor[]> {

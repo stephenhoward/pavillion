@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import ProcessInboxService from '@/server/activitypub/service/inbox';
 import { FollowerCalendarEntity, FollowingCalendarEntity, ActivityPubOutboxMessageEntity } from '@/server/activitypub/entity/activitypub';
+import { RemoteCalendarEntity } from '@/server/activitypub/entity/remote_calendar';
 import FollowActivity from '@/server/activitypub/model/action/follow';
 import { Calendar, CalendarContent } from '@/common/model/calendar';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
@@ -47,22 +48,28 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
   describe('processFollowAccount', () => {
     it('should create FollowerCalendarEntity record when Follow activity is processed', async () => {
       // Arrange
-      const remoteActorUrl = 'https://remote.instance/o/remote-calendar';
+      const remoteActorUrl = 'https://remote.instance/calendars/remote-calendar';
       const followActivity = new FollowActivity(remoteActorUrl, testCalendar.id);
 
       // Act
       await inboxService.processFollowAccount(testCalendar, followActivity);
 
-      // Assert - Check that FollowerCalendarEntity was created
+      // Assert - Check that RemoteCalendarEntity was created for the follower
+      const remoteCalendar = await RemoteCalendarEntity.findOne({
+        where: { actor_uri: remoteActorUrl },
+      });
+      expect(remoteCalendar).not.toBeNull();
+
+      // Assert - Check that FollowerCalendarEntity was created with reference to RemoteCalendarEntity
       const follower = await FollowerCalendarEntity.findOne({
         where: {
-          remote_calendar_id: remoteActorUrl,
+          remote_calendar_id: remoteCalendar!.id,
           calendar_id: testCalendar.id,
         },
       });
 
       expect(follower).not.toBeNull();
-      expect(follower?.remote_calendar_id).toBe(remoteActorUrl);
+      expect(follower?.remote_calendar_id).toBe(remoteCalendar!.id);
       expect(follower?.calendar_id).toBe(testCalendar.id);
 
       // Assert - Check that Accept activity was queued in outbox
@@ -76,9 +83,9 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
 
     it('should queue Accept activity for delivery after Follow processing', async () => {
       // Arrange
-      const remoteActorUrl = 'https://remote.instance/o/remote-calendar';
+      const remoteActorUrl = 'https://remote.instance/calendars/remote-calendar';
       const followActivity = new FollowActivity(remoteActorUrl, testCalendar.id);
-      followActivity.id = 'https://remote.instance/o/remote-calendar/follows/123';
+      followActivity.id = 'https://remote.instance/calendars/remote-calendar/follows/123';
 
       // Act
       await inboxService.processFollowAccount(testCalendar, followActivity);
@@ -96,9 +103,9 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
 
     it('should include the original Follow activity in the Accept object', async () => {
       // Arrange
-      const remoteActorUrl = 'https://remote.instance/o/remote-calendar';
+      const remoteActorUrl = 'https://remote.instance/calendars/remote-calendar';
       const followActivity = new FollowActivity(remoteActorUrl, testCalendar.id);
-      followActivity.id = 'https://remote.instance/o/remote-calendar/follows/123';
+      followActivity.id = 'https://remote.instance/calendars/remote-calendar/follows/123';
 
       // Act
       await inboxService.processFollowAccount(testCalendar, followActivity);
@@ -115,7 +122,7 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
 
     it('should not create duplicate follower record if already exists', async () => {
       // Arrange
-      const remoteActorUrl = 'https://remote.instance/o/remote-calendar';
+      const remoteActorUrl = 'https://remote.instance/calendars/remote-calendar';
       const followActivity = new FollowActivity(remoteActorUrl, testCalendar.id);
 
       const existingFollower = {
@@ -141,9 +148,9 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
   describe('processAcceptActivity', () => {
     it('should confirm follow relationship when Accept is received', async () => {
       // Arrange
-      const remoteCalendarUrl = 'https://remote.instance/o/remote-calendar';
+      const remoteCalendarUrl = 'https://remote.instance/calendars/remote-calendar';
       const followActivity = new FollowActivity(testCalendar.id, remoteCalendarUrl);
-      followActivity.id = 'https://local.instance/o/test-calendar/follows/456';
+      followActivity.id = 'https://local.instance/calendars/test-calendar/follows/456';
 
       // Create an Accept activity that references the Follow
       const acceptActivity = {
@@ -152,12 +159,25 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
         object: followActivity,
       };
 
+      // Mock RemoteCalendarEntity that would be found for this AP URL
+      const mockRemoteCalendar = {
+        id: 'mock-remote-calendar-uuid',
+        actor_uri: remoteCalendarUrl,
+        display_name: null,
+        inbox_url: null,
+        shared_inbox_url: null,
+        public_key: null,
+        last_fetched: null,
+      };
+
       const existingFollowing = {
         id: uuidv4(),
-        remote_calendar_id: remoteCalendarUrl,
+        remote_calendar_id: mockRemoteCalendar.id, // Use UUID, not AP URL
         calendar_id: testCalendar.id,
       };
 
+      // Stub remoteCalendarService to return the mock remote calendar
+      sandbox.stub(inboxService.remoteCalendarService, 'getByActorUri').resolves(mockRemoteCalendar as any);
       const findOneStub = sandbox.stub(FollowingCalendarEntity, 'findOne').resolves(existingFollowing as any);
       const consoleLogStub = sandbox.stub(console, 'log');
 
@@ -167,7 +187,7 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
       // Assert
       expect(findOneStub.calledOnce).toBe(true);
       expect(findOneStub.firstCall.args[0].where).toMatchObject({
-        remote_calendar_id: remoteCalendarUrl,
+        remote_calendar_id: mockRemoteCalendar.id, // Check for UUID, not AP URL
         calendar_id: testCalendar.id,
       });
       expect(consoleLogStub.called).toBe(true);

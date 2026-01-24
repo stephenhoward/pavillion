@@ -7,7 +7,7 @@ import { CalendarEntity } from '@/server/calendar/entity/calendar';
 @Table({ tableName: 'location' })
 class LocationEntity extends Model {
   @PrimaryKey
-  @Column({ type: DataType.STRING })
+  @Column({ type: DataType.UUID })
   declare id: string;
 
   @ForeignKey(() => CalendarEntity)

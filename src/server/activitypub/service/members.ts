@@ -10,6 +10,8 @@ import { ActivityPubActivity } from "@/server/activitypub/model/base";
 import FollowActivity from "@/server/activitypub/model/action/follow";
 import AnnounceActivity from "@/server/activitypub/model/action/announce";
 import { FollowingCalendarEntity, FollowerCalendarEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
+import { RemoteCalendarEntity } from "@/server/activitypub/entity/remote_calendar";
+import RemoteCalendarService from "@/server/activitypub/service/remote_calendar";
 import UndoActivity from "../model/action/undo";
 import { EventEntity } from "@/server/calendar/entity/event";
 import CalendarInterface from "@/server/calendar/interface";
@@ -27,17 +29,43 @@ import {
 } from '@/common/exceptions/activitypub';
 import { InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
 
+/**
+ * Converts an ActivityPub actor URI to a human-readable calendar@domain format.
+ * Example: https://alpha.federation.local/calendars/my_calendar -> my_calendar@alpha.federation.local
+ *
+ * @param actorUri The full ActivityPub actor URI
+ * @returns The calendar identifier in calendar@domain format, or the original URI if parsing fails
+ */
+function actorUriToIdentifier(actorUri: string): string {
+  try {
+    const url = new URL(actorUri);
+    const domain = url.hostname;
+    // Extract calendar name from path (e.g., /calendars/my_calendar -> my_calendar)
+    const pathParts = url.pathname.split('/').filter(part => part.length > 0);
+    if (pathParts.length >= 2 && pathParts[0] === 'calendars') {
+      return `${pathParts[1]}@${domain}`;
+    }
+    // Fallback: return the full URI if we can't parse it
+    return actorUri;
+  }
+  catch {
+    return actorUri;
+  }
+}
+
 class ActivityPubService {
   calendarService: CalendarInterface;
+  remoteCalendarService: RemoteCalendarService;
 
   constructor(
     private eventBus: EventEmitter,
   ) {
     this.calendarService = new CalendarInterface(eventBus);
+    this.remoteCalendarService = new RemoteCalendarService();
   }
 
   async actorUrl(calendar: Calendar): Promise<string> {
-    return 'https://' + config.get('domain') + '/o/' + calendar.urlName;
+    return 'https://' + config.get('domain') + '/calendars/' + calendar.urlName;
   }
 
   static isValidDomain(domain: string): boolean {
@@ -99,14 +127,21 @@ class ActivityPubService {
     }
 
     // Resolve the ActivityPub actor URL from the WebFinger identifier first
-    // This is necessary because we need to check if we're already following using the AP URL
     const remoteProfile = await this.lookupRemoteCalendar(orgIdentifier);
     const remoteActorUrl = remoteProfile.actorUrl;
 
-    // Check if we're already following this calendar (using the AP URL)
+    // Get or create RemoteCalendarEntity for this remote calendar
+    const remoteCalendar = await this.remoteCalendarService.findOrCreateByActorUri(remoteActorUrl);
+
+    // Update cached metadata from the profile we just fetched
+    await this.remoteCalendarService.updateMetadata(remoteActorUrl, {
+      displayName: remoteProfile.name,
+    });
+
+    // Check if we're already following this calendar (using the RemoteCalendarEntity UUID)
     let existingFollowEntity = await FollowingCalendarEntity.findOne({
       where: {
-        remote_calendar_id: remoteActorUrl,
+        remote_calendar_id: remoteCalendar.id,
         calendar_id: calendar.id,
       },
     });
@@ -131,7 +166,7 @@ class ActivityPubService {
 
     let followEntity = FollowingCalendarEntity.build({
       id: followActivity.id,
-      remote_calendar_id: remoteActorUrl,  // Store the AP URL, not the WebFinger identifier
+      remote_calendar_id: remoteCalendar.id,  // Store the RemoteCalendarEntity UUID
       calendar_id: calendar.id,
       auto_repost_originals: autoRepostOriginals,
       auto_repost_reposts: autoRepostReposts,
@@ -146,20 +181,33 @@ class ActivityPubService {
       throw new InsufficientCalendarPermissionsError('User does not have permission to modify calendar: ' + calendar.id);
     }
 
+    // The orgIdentifier could be a WebFinger identifier (username@domain) or an AP URL
+    // First, try to resolve it to an AP URL if it's a WebFinger identifier
+    let remoteActorUrl = orgIdentifier;
+    if (ActivityPubService.isValidOrgIdentifier(orgIdentifier)) {
+      const remoteProfile = await this.lookupRemoteCalendar(orgIdentifier);
+      remoteActorUrl = remoteProfile.actorUrl;
+    }
+
+    // Find the RemoteCalendarEntity by actor URI
+    const remoteCalendar = await this.remoteCalendarService.getByActorUri(remoteActorUrl);
+    if (!remoteCalendar) {
+      // No remote calendar found, nothing to unfollow
+      return;
+    }
+
     let followings = await FollowingCalendarEntity.findAll({
       where: {
-        remote_calendar_id: orgIdentifier,
+        remote_calendar_id: remoteCalendar.id,
         calendar_id: calendar.id,
       },
     });
 
     let actor = await this.actorUrl(calendar);
     for (let following of followings) {
-      // Create Undo activity and explicitly set the recipient
-      // This is necessary because we're about to destroy the follow relationship,
-      // so the outbox processor won't be able to look it up later
+      // Create Undo activity and explicitly set the recipient to the AP actor URL
       const undoActivity = new UndoActivity(actor, following.id);
-      undoActivity.to = [following.remote_calendar_id];
+      undoActivity.to = [remoteCalendar.actorUri];
 
       this.addToOutbox(calendar, undoActivity);
       await following.destroy();
@@ -234,29 +282,53 @@ class ActivityPubService {
   /**
    * Get list of calendars that this calendar is following
    * @param calendar The calendar whose followings to retrieve
-   * @returns Array of FollowingCalendarEntity objects
+   * @returns Array of FollowingCalendar objects with human-readable remoteCalendarId
    */
   async getFollowing(calendar: Calendar): Promise<FollowingCalendar[]> {
     const entities = await FollowingCalendarEntity.findAll({
       where: {
         calendar_id: calendar.id,
       },
+      include: [{ model: RemoteCalendarEntity, as: 'remoteCalendar' }],
     });
-    return entities.map(entity => entity.toModel());
+    return entities.map(entity => {
+      // Convert actor_uri to human-readable calendar@domain format
+      const remoteCalendarId = entity.remoteCalendar
+        ? actorUriToIdentifier(entity.remoteCalendar.actor_uri)
+        : entity.remote_calendar_id;
+      return new FollowingCalendar(
+        entity.id,
+        remoteCalendarId,
+        entity.calendar_id,
+        entity.auto_repost_originals,
+        entity.auto_repost_reposts,
+      );
+    });
   }
 
   /**
    * Get list of calendars that are following this calendar
    * @param calendar The calendar whose followers to retrieve
-   * @returns Array of FollowerCalendarEntity objects
+   * @returns Array of FollowerCalendar objects with human-readable remoteCalendarId
    */
   async getFollowers(calendar: Calendar): Promise<FollowerCalendar[]> {
     const entities = await FollowerCalendarEntity.findAll({
       where: {
         calendar_id: calendar.id,
       },
+      include: [{ model: RemoteCalendarEntity, as: 'remoteCalendar' }],
     });
-    return entities.map(entity => entity.toModel());
+    return entities.map(entity => {
+      // Convert actor_uri to human-readable calendar@domain format
+      const remoteCalendarId = entity.remoteCalendar
+        ? actorUriToIdentifier(entity.remoteCalendar.actor_uri)
+        : entity.remote_calendar_id;
+      return new FollowerCalendar(
+        entity.id,
+        remoteCalendarId,
+        entity.calendar_id,
+      );
+    });
   }
 
   /**
@@ -387,23 +459,30 @@ class ActivityPubService {
 
     console.log(`[MemberService] getFeed called for calendar ID: ${calendar.id}`);
 
-    // First, let's see what we're following
+    // First, let's see what we're following (with RemoteCalendar details)
     const following = await FollowingCalendarEntity.findAll({
       where: { calendar_id: calendar.id },
+      include: [{ model: RemoteCalendarEntity, as: 'remoteCalendar' }],
     });
     console.log(`[MemberService] This calendar is following ${following.length} remote calendars:`);
     following.forEach(f => {
-      console.log(`[MemberService]   - ${f.remote_calendar_id}`);
+      console.log(`[MemberService]   - ${f.remoteCalendar?.actor_uri || f.remote_calendar_id}`);
     });
 
-    // Use raw SQL to join EventEntity with FollowingCalendarEntity via AP identifiers
-    // Join condition: EventEntity.calendar_id = FollowingCalendarEntity.remote_calendar_id
-    // Filter: FollowingCalendarEntity.calendar_id = local calendar UUID
+    // Query remote events from calendars this calendar is following.
+    // Remote events have calendar_id = null and are tracked via EventObjectEntity.attributed_to
+    // We join with ap_event_object to find events attributed to followed calendars.
     const events = await EventEntity.findAll({
       where: {
-        calendar_id: {
+        // Remote events have null calendar_id
+        calendar_id: null,
+        // Match events where the attributed_to actor is a followed calendar
+        id: {
           [Op.in]: EventEntity.sequelize!.literal(
-            `(SELECT remote_calendar_id FROM ap_following WHERE calendar_id = '${calendar.id}')`,
+            `(SELECT eo.event_id FROM ap_event_object eo
+              JOIN remote_calendar rc ON eo.attributed_to = rc.actor_uri
+              JOIN ap_following f ON f.remote_calendar_id = rc.id
+              WHERE f.calendar_id = '${calendar.id}')`,
           ),
         },
       },

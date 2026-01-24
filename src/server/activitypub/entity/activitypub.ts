@@ -4,6 +4,7 @@ import { event_activity } from '@/common/model/events';
 import { FollowingCalendar, FollowerCalendar } from '@/common/model/follow';
 import db from '@/server/common/entity/db';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
+import { RemoteCalendarEntity } from '@/server/activitypub/entity/remote_calendar';
 import { ActivityPubActivity } from '@/server/activitypub/model/base';
 import CreateActivity from '@/server/activitypub/model/action/create';
 import UpdateActivity from '@/server/activitypub/model/action/update';
@@ -90,7 +91,10 @@ class ActivityPubOutboxMessageEntity extends ActivityPubMessageEntity {
 }
 
 /**
- * Base class for calendar follow relationships with common properties
+ * Base class for calendar follow relationships with common properties.
+ *
+ * Note: remote_calendar_id references RemoteCalendarEntity by UUID, not by AP URL.
+ * The actual AP actor URL is stored in RemoteCalendarEntity.actor_uri.
  */
 abstract class BaseFollowEntity extends Model {
   @PrimaryKey
@@ -100,8 +104,12 @@ abstract class BaseFollowEntity extends Model {
   })
   declare id: string;
 
-  @Column({ type: DataType.STRING })
+  @ForeignKey(() => RemoteCalendarEntity)
+  @Column({ type: DataType.UUID })
   declare remote_calendar_id: string;
+
+  @BelongsTo(() => RemoteCalendarEntity)
+  declare remoteCalendar: RemoteCalendarEntity;
 
   @ForeignKey(() => CalendarEntity)
   @Column({ type: DataType.UUID })
@@ -183,8 +191,13 @@ class SharedEventEntity extends Model {
   declare auto_posted: boolean;
 }
 
-// a list of activities (shares, etc) that other calendars have done to a calendar's
-// own events
+/**
+ * A list of activities (shares, etc) that other calendars have done to a calendar's
+ * own events.
+ *
+ * Note: remote_calendar_id references RemoteCalendarEntity by UUID, not by AP URL.
+ * The actual AP actor URL is stored in RemoteCalendarEntity.actor_uri.
+ */
 @Table({ tableName: 'ap_event_activity'})
 class EventActivityEntity extends Model {
 
@@ -195,8 +208,12 @@ class EventActivityEntity extends Model {
   @Column({ type: DataType.STRING })
   declare type: event_activity;
 
-  @Column({ type: DataType.STRING })
+  @ForeignKey(() => RemoteCalendarEntity)
+  @Column({ type: DataType.UUID })
   declare remote_calendar_id: string;
+
+  @BelongsTo(() => RemoteCalendarEntity)
+  declare remoteCalendar: RemoteCalendarEntity;
 }
 
 db.addModels([
