@@ -38,23 +38,26 @@
   --pav-border-style-dotted: dotted;
   --pav-border-style-none: none;
   
-  /* Border Colors (referencing color tokens) */
-  --pav-border-color-subtle: var(--pav-color-neutral-200);
-  --pav-border-color-medium: var(--pav-color-neutral-300);
-  --pav-border-color-strong: var(--pav-color-neutral-400);
+  /* Border Colors (referencing Stone palette) */
+  --pav-border-color-subtle: var(--pav-color-stone-200);
+  --pav-border-color-light: var(--pav-color-stone-200);
+  --pav-border-color-medium: var(--pav-color-stone-300);
+  --pav-border-color-strong: var(--pav-color-stone-400);
   --pav-border-color-brand: var(--pav-color-brand-primary);
-  --pav-border-color-success: var(--pav-color-success-500);
-  --pav-border-color-warning: var(--pav-color-warning-500);
-  --pav-border-color-error: var(--pav-color-error-500);
+  --pav-border-color-success: var(--pav-color-success);
+  --pav-border-color-warning: var(--pav-color-warning);
+  --pav-border-color-error: var(--pav-color-error);
   --pav-border-color-focus: var(--pav-color-brand-secondary);
+  --pav-border-color-active: var(--pav-color-interactive-active-border);
 }
 
 /* Dark mode border color overrides */
 @media (prefers-color-scheme: dark) {
   :root {
-    --pav-border-color-subtle: var(--pav-color-neutral-700);
-    --pav-border-color-medium: var(--pav-color-neutral-600);
-    --pav-border-color-strong: var(--pav-color-neutral-500);
+    --pav-border-color-subtle: var(--pav-color-stone-700);
+    --pav-border-color-light: var(--pav-color-stone-700);
+    --pav-border-color-medium: var(--pav-color-stone-600);
+    --pav-border-color-strong: var(--pav-color-stone-500);
   }
 }
 

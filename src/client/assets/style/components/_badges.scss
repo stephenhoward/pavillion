@@ -169,8 +169,8 @@
     min-width: 20px;
     height: 20px;
     padding: 0 var(--pav-spacing-xs);
-    background-color: var(--pav-color-error);
-    color: var(--pav-color-text-inverse);
+    background-color: var(--pav-color-interactive-active);
+    color: white;
     border-radius: var(--pav-border-radius-full);
     font-size: var(--pav-font-size-2xs);
     font-weight: var(--pav-font-weight-bold);
@@ -202,9 +202,9 @@
   
   /* Category Badge */
   .badge--category {
-    background-color: var(--pav-color-brand-primary-light);
-    color: var(--pav-color-brand-primary-dark);
-    border-color: var(--pav-color-brand-primary);
+    background-color: var(--pav-color-interactive-active-bg);
+    color: var(--pav-color-interactive-active-text);
+    border-color: var(--pav-color-interactive-active-border);
     font-weight: var(--pav-font-weight-medium);
   }
   
@@ -302,8 +302,8 @@
     }
     
     .badge--category {
-      background-color: var(--pav-color-brand-primary-dark);
-      color: var(--pav-color-brand-primary-light);
+      background-color: var(--pav-color-interactive-active-bg);
+      color: var(--pav-color-interactive-active-text);
     }
   }
   

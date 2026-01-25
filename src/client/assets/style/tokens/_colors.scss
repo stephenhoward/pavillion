@@ -1,28 +1,56 @@
 /**
  * Color Design Tokens
  * Defines all color values as CSS custom properties
+ *
+ * Color Palette:
+ * - Stone: Warm grays for surfaces, borders, and neutral text
+ * - Orange: Accent color for interactive/active states
  */
 
 :root {
-  /* Brand Colors - Warmer Orange Palette */
-  --pav-color-brand-primary: #FF7043;
-  --pav-color-brand-primary-dark: #D84315;
-  --pav-color-brand-primary-light: #FFAB91;
+  /* Brand Colors - Orange Accent Palette */
+  --pav-color-brand-primary: #F97316;
+  --pav-color-brand-primary-dark: #EA580C;
+  --pav-color-brand-primary-light: #FB923C;
   --pav-color-brand-secondary: #1976D2;
   --pav-color-brand-secondary-dark: #115293;
   --pav-color-brand-secondary-light: #63A4FF;
 
-  /* Neutral Colors */
-  --pav-color-neutral-50: #FAFAFA;
-  --pav-color-neutral-100: #F5F5F5;
-  --pav-color-neutral-200: #EEE;
-  --pav-color-neutral-300: #E0E0E0;
-  --pav-color-neutral-400: #BDBDBD;
-  --pav-color-neutral-500: #9E9E9E;
-  --pav-color-neutral-600: #757575;
-  --pav-color-neutral-700: #616161;
-  --pav-color-neutral-800: #424242;
-  --pav-color-neutral-900: #212121;
+  /* Orange Accent Palette (for active/selected states) */
+  --pav-color-orange-50: #FFF7ED;
+  --pav-color-orange-100: #FFEDD5;
+  --pav-color-orange-200: #FED7AA;
+  --pav-color-orange-300: #FDBA74;
+  --pav-color-orange-400: #FB923C;
+  --pav-color-orange-500: #F97316;
+  --pav-color-orange-600: #EA580C;
+  --pav-color-orange-700: #C2410C;
+  --pav-color-orange-800: #9A3412;
+  --pav-color-orange-900: #7C2D12;
+
+  /* Stone Palette (warm grays) */
+  --pav-color-stone-50: #FAFAF9;
+  --pav-color-stone-100: #F5F5F4;
+  --pav-color-stone-200: #E7E5E4;
+  --pav-color-stone-300: #D6D3D1;
+  --pav-color-stone-400: #A8A29E;
+  --pav-color-stone-500: #78716C;
+  --pav-color-stone-600: #57534E;
+  --pav-color-stone-700: #44403C;
+  --pav-color-stone-800: #292524;
+  --pav-color-stone-900: #1C1917;
+
+  /* Neutral Colors (mapped to Stone for warm gray feel) */
+  --pav-color-neutral-50: var(--pav-color-stone-50);
+  --pav-color-neutral-100: var(--pav-color-stone-100);
+  --pav-color-neutral-200: var(--pav-color-stone-200);
+  --pav-color-neutral-300: var(--pav-color-stone-300);
+  --pav-color-neutral-400: var(--pav-color-stone-400);
+  --pav-color-neutral-500: var(--pav-color-stone-500);
+  --pav-color-neutral-600: var(--pav-color-stone-600);
+  --pav-color-neutral-700: var(--pav-color-stone-700);
+  --pav-color-neutral-800: var(--pav-color-stone-800);
+  --pav-color-neutral-900: var(--pav-color-stone-900);
   
   /* Semantic Colors - Colorblind-Accessible */
   --pav-color-success: #1976D2;    /* Blue - universally distinguishable */
@@ -52,6 +80,12 @@
   --pav-color-interactive-primary-hover: var(--pav-color-brand-primary-dark);
   --pav-color-interactive-secondary: var(--pav-color-neutral-600);
   --pav-color-interactive-secondary-hover: var(--pav-color-neutral-700);
+
+  /* Active/Selected State Colors (Orange) */
+  --pav-color-interactive-active: var(--pav-color-orange-500);
+  --pav-color-interactive-active-bg: var(--pav-color-orange-50);
+  --pav-color-interactive-active-text: var(--pav-color-orange-700);
+  --pav-color-interactive-active-border: var(--pav-color-orange-200);
   
   /* Alert Colors - Backgrounds and text */
   --pav-color-alert-info-bg: #E0F2F1;
@@ -70,39 +104,43 @@
 /* Dark mode color overrides */
 @media (prefers-color-scheme: dark) {
   :root {
-    /* Surface Colors - Dark mode */
+    /* Surface Colors - Dark mode (Stone-based) */
+    --pav-color-surface-primary: var(--pav-color-stone-900);
+    --pav-color-surface-secondary: var(--pav-color-stone-800);
+    --pav-color-surface-tertiary: var(--pav-color-stone-700);
 
-   /* --pav-color-surface-primary: #121212; */
-    --pav-color-surface-primary: #1e1e1e;
-    --pav-color-surface-secondary: #2a2a2a;
-    --pav-color-surface-tertiary: #3a3a3a;
-    
-    /* Neutral Colors - Dark mode adjustments */
-    --pav-color-neutral-50: #121212;
-    --pav-color-neutral-100: #1e1e1e;
-    --pav-color-neutral-200: #2a2a2a;
-    --pav-color-neutral-300: #363636;
-    --pav-color-neutral-400: #555;
-    --pav-color-neutral-500: #777;
-    --pav-color-neutral-600: #999;
-    --pav-color-neutral-700: #bbb;
-    --pav-color-neutral-800: #ddd;
-    --pav-color-neutral-900: #fff;
-    
+    /* Stone Palette - Dark mode (inverted scale for semantic usage) */
+    --pav-color-neutral-50: var(--pav-color-stone-900);
+    --pav-color-neutral-100: var(--pav-color-stone-800);
+    --pav-color-neutral-200: var(--pav-color-stone-700);
+    --pav-color-neutral-300: var(--pav-color-stone-600);
+    --pav-color-neutral-400: var(--pav-color-stone-500);
+    --pav-color-neutral-500: var(--pav-color-stone-400);
+    --pav-color-neutral-600: var(--pav-color-stone-400);
+    --pav-color-neutral-700: var(--pav-color-stone-300);
+    --pav-color-neutral-800: var(--pav-color-stone-200);
+    --pav-color-neutral-900: var(--pav-color-stone-50);
+
     /* Text Colors - Dark mode */
-    --pav-color-text-primary: #fff;
-    --pav-color-text-secondary: #bbb;
-    --pav-color-text-muted: #999;
-    --pav-color-text-inverse: #212121;
-    
+    --pav-color-text-primary: var(--pav-color-stone-50);
+    --pav-color-text-secondary: var(--pav-color-stone-300);
+    --pav-color-text-muted: var(--pav-color-stone-400);
+    --pav-color-text-inverse: var(--pav-color-stone-900);
+
     /* Border Colors - Dark mode */
-    --pav-color-border-primary: #444;
-    --pav-color-border-secondary: #363636;
-    
+    --pav-color-border-primary: var(--pav-color-stone-600);
+    --pav-color-border-secondary: var(--pav-color-stone-700);
+
     /* Interactive Colors - Dark mode */
-    --pav-color-interactive-secondary: #999;
-    --pav-color-interactive-secondary-hover: #bbb;
-    
+    --pav-color-interactive-secondary: var(--pav-color-stone-400);
+    --pav-color-interactive-secondary-hover: var(--pav-color-stone-300);
+
+    /* Active/Selected State Colors - Dark mode (Orange with transparency) */
+    --pav-color-interactive-active: var(--pav-color-orange-400);
+    --pav-color-interactive-active-bg: oklch(0.705 0.213 47.604 / 0.1);
+    --pav-color-interactive-active-text: var(--pav-color-orange-300);
+    --pav-color-interactive-active-border: var(--pav-color-orange-600);
+
     /* Alert Colors - Dark mode */
     --pav-color-alert-info-bg: #1A4848;
     --pav-color-alert-info-text: #80CBC4;
@@ -112,12 +150,12 @@
     --pav-color-alert-warning-text: #FFCC80;
     --pav-color-alert-error-bg: #3D1A4A;
     --pav-color-alert-error-text: #CE93D8;
-    
+
     /* Semantic Colors - Dark mode (colorblind-accessible) */
-    --pav-color-success: #64B5F6;    /* Light blue for dark backgrounds */
-    --pav-color-warning: #FFB74D;    /* Amber maintains visibility */
-    --pav-color-error: #CE93D8;      /* Light purple for dark mode contrast */
-    --pav-color-info: #4DB6AC;       /* Light teal for dark backgrounds */
+    --pav-color-success: #64B5F6;
+    --pav-color-warning: #FFB74D;
+    --pav-color-error: #CE93D8;
+    --pav-color-info: #4DB6AC;
   }
 }
 
@@ -127,6 +165,28 @@
 $color-brand-primary: var(--pav-color-brand-primary);
 $color-brand-primary-dark: var(--pav-color-brand-primary-dark);
 $color-brand-primary-light: var(--pav-color-brand-primary-light);
+
+/* Orange Accent Colors */
+$color-orange-50: var(--pav-color-orange-50);
+$color-orange-100: var(--pav-color-orange-100);
+$color-orange-200: var(--pav-color-orange-200);
+$color-orange-300: var(--pav-color-orange-300);
+$color-orange-400: var(--pav-color-orange-400);
+$color-orange-500: var(--pav-color-orange-500);
+$color-orange-600: var(--pav-color-orange-600);
+$color-orange-700: var(--pav-color-orange-700);
+
+/* Stone Palette */
+$color-stone-50: var(--pav-color-stone-50);
+$color-stone-100: var(--pav-color-stone-100);
+$color-stone-200: var(--pav-color-stone-200);
+$color-stone-300: var(--pav-color-stone-300);
+$color-stone-400: var(--pav-color-stone-400);
+$color-stone-500: var(--pav-color-stone-500);
+$color-stone-600: var(--pav-color-stone-600);
+$color-stone-700: var(--pav-color-stone-700);
+$color-stone-800: var(--pav-color-stone-800);
+$color-stone-900: var(--pav-color-stone-900);
 
 /* Neutral Colors */
 $color-neutral-50: var(--pav-color-neutral-50);
@@ -169,39 +229,48 @@ $color-interactive-primary-hover: var(--pav-color-interactive-primary-hover);
 $color-interactive-secondary: var(--pav-color-interactive-secondary);
 $color-interactive-secondary-hover: var(--pav-color-interactive-secondary-hover);
 
+/* Active/Selected State Colors */
+$color-interactive-active: var(--pav-color-interactive-active);
+$color-interactive-active-bg: var(--pav-color-interactive-active-bg);
+$color-interactive-active-text: var(--pav-color-interactive-active-text);
+$color-interactive-active-border: var(--pav-color-interactive-active-border);
+
 /* Legacy color variables for gradual migration */
-$orange: var(--pav-color-brand-primary);
-$orange-dark: var(--pav-color-brand-primary-dark);
-$gray-light: var(--pav-color-neutral-400);
-$gray-dark: var(--pav-color-neutral-800);
-$black: var(--pav-color-neutral-900);
+$orange: var(--pav-color-orange-500);
+$orange-dark: var(--pav-color-orange-600);
+$gray-light: var(--pav-color-stone-400);
+$gray-dark: var(--pav-color-stone-800);
+$black: var(--pav-color-stone-900);
 
 /**
  * Usage Guidelines:
- * 
+ *
  * 1. Prefer CSS custom properties (--pav-color-*) in new components
  * 2. Use SCSS variables ($color-*) when build-time logic is needed
  * 3. Legacy variables ($orange, $gray-dark, etc.) are for migration only
  * 4. Dark mode is handled automatically via prefers-color-scheme
  * 5. All colors are WCAG 2.1 AA compliant for their intended usage
  * 6. Semantic colors are colorblind-accessible (no red/green dependence)
- * 
- * Color Palette - Warmer Orange (Colorblind-Accessible):
- * - Brand: Warmer orange (#FF7043) for friendly, approachable feel
+ *
+ * Color Palette:
+ * - Stone: Warm grays (#FAFAF9 to #1C1917) for a softer, more inviting feel
+ * - Orange: Accent color (#F97316) for active/selected states and brand
  * - Success: Blue (#1976D2) - universally distinguishable positive action
  * - Warning: Orange (#F57C00) - maintains brand consistency for caution
  * - Error: Purple (#7B1FA2) - distinct color that doesn't rely on red/green
  * - Info: Teal (#00796B) - neutral, informational tone
- * 
+ *
  * Token Categories:
- * - Brand: Primary brand colors and variations
- * - Neutral: Grayscale palette from light to dark (adjusted for better contrast)
+ * - Stone: Warm gray palette (replaces neutral for primary use)
+ * - Orange: Accent palette for interactive active states
+ * - Neutral: Mapped to Stone for backwards compatibility
  * - Semantic: Success, warning, error, info states (colorblind-safe)
  * - Surface: Background colors for different elevation levels
  * - Text: Text colors for different hierarchy levels
  * - Border: Border and outline colors for interactive elements
  * - Interactive: Colors for buttons, links, and other interactive elements
- * 
+ * - Interactive Active: Orange-based colors for selected/active navigation
+ *
  * Accessibility Features:
  * - WCAG 2.1 AA contrast compliance (4.5:1+ for normal text)
  * - Color-universal design works for all types of color vision deficiency

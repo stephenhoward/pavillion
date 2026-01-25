@@ -1,0 +1,106 @@
+/**
+ * Shell Layout Mixins
+ * Responsive app shell with sidebar (desktop) and bottom nav (mobile)
+ *
+ * Note: Breakpoint mixins are available globally via main.scss imports
+ */
+
+/**
+ * Main shell layout wrapper
+ * Creates the root flex container for the app shell
+ */
+@mixin pav-shell-layout {
+  display: flex;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background-color: var(--pav-surface-primary);
+}
+
+/**
+ * Desktop sidebar navigation
+ * Fixed to left side, hidden on mobile
+ */
+@mixin pav-shell-sidebar {
+  display: none;
+  position: fixed;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: var(--pav-shell-sidebar-width);
+  background-color: var(--pav-surface-secondary);
+  border-inline-end: 1px solid var(--pav-border-subtle);
+  z-index: 100;
+
+  @include pav-media(md) {
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+/**
+ * Main content area
+ * Adjusts padding/margin based on nav visibility
+ */
+@mixin pav-shell-main {
+  flex: 1;
+  width: 100%;
+  padding-block-end: calc(var(--pav-shell-bottom-nav-height) + var(--pav-shell-safe-area-bottom));
+
+  @include pav-media(md) {
+    padding-block-end: 0;
+    margin-inline-start: var(--pav-shell-sidebar-width);
+    width: calc(100% - var(--pav-shell-sidebar-width));
+  }
+}
+
+/**
+ * Mobile bottom navigation bar
+ * Fixed to bottom, hidden on desktop
+ */
+@mixin pav-shell-bottom-nav {
+  display: flex;
+  position: fixed;
+  inset-inline: 0;
+  inset-block-end: 0;
+  height: calc(var(--pav-shell-bottom-nav-height) + var(--pav-shell-safe-area-bottom));
+  padding-block-end: var(--pav-shell-safe-area-bottom);
+  background-color: var(--pav-surface-secondary);
+  border-block-start: 1px solid var(--pav-border-subtle);
+  z-index: 100;
+
+  @include pav-media(md) {
+    display: none;
+  }
+}
+
+/**
+ * Navigation list container
+ * Used in both sidebar and bottom nav
+ */
+@mixin pav-shell-nav-list {
+  display: flex;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  gap: var(--pav-space-1);
+}
+
+/**
+ * Sidebar navigation list (vertical)
+ */
+@mixin pav-shell-nav-list-sidebar {
+  @include pav-shell-nav-list;
+  flex-direction: column;
+  padding: var(--pav-space-4);
+}
+
+/**
+ * Bottom nav list (horizontal)
+ */
+@mixin pav-shell-nav-list-bottom {
+  @include pav-shell-nav-list;
+  flex-direction: row;
+  justify-content: space-around;
+  align-items: stretch;
+  width: 100%;
+  padding: var(--pav-space-2) var(--pav-space-4);
+}

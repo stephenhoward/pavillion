@@ -1,0 +1,143 @@
+/**
+ * Shell Navigation Component Styles
+ * Styles for navigation items in sidebar and bottom nav
+ *
+ * Design: Stone palette with Orange accent for active states
+ * Icons: Lucide icons with strokeWidth 2
+ */
+
+/**
+ * Base navigation item styles
+ * Shared between sidebar and bottom nav items
+ */
+.shell-nav-item {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+  color: var(--pav-nav-inactive-text);
+  border-radius: var(--pav-border-radius-lg);
+  transition: all 0.15s ease-in-out;
+  position: relative;
+  font-family: var(--pav-font-family-display);
+
+  /* Icon styling - Lucide icons render as SVG with stroke, not fill */
+  &__icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    flex-shrink: 0;
+    color: var(--pav-nav-inactive-icon);
+    transition: color 0.15s ease-in-out;
+
+    /* Override reset.scss fill: currentcolor - Lucide icons use stroke only */
+    fill: none;
+  }
+
+  /* Label text */
+  &__label {
+    font-size: var(--pav-font-size-sm);
+    font-weight: var(--pav-font-weight-medium);
+    line-height: 1;
+    transition: color 0.15s ease-in-out;
+  }
+
+  /* Badge for notifications */
+  &__badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    padding: 0 var(--pav-space-1_5);
+    background-color: var(--pav-color-interactive-active);
+    color: white;
+    font-size: var(--pav-font-size-xs);
+    font-weight: var(--pav-font-weight-semibold);
+    border-radius: var(--pav-border-radius-full);
+  }
+
+  /* Hover state */
+  &:hover:not(&--active) {
+    background-color: var(--pav-interactive-hover);
+    color: var(--pav-text-primary);
+
+    .shell-nav-item__icon {
+      color: var(--pav-text-primary);
+    }
+  }
+
+  /* Focus state */
+  &:focus-visible {
+    outline: 2px solid var(--pav-border-color-focus);
+    outline-offset: 2px;
+  }
+
+  /* Active/current state */
+  &--active {
+    background-color: var(--pav-nav-active-bg);
+    color: var(--pav-nav-active-text);
+
+    .shell-nav-item__icon {
+      color: var(--pav-color-interactive-active);
+    }
+
+    .shell-nav-item__label {
+      color: var(--pav-nav-active-text);
+      font-weight: var(--pav-font-weight-medium);
+    }
+  }
+}
+
+/**
+ * Sidebar variant
+ * Horizontal layout with icon + label
+ */
+.shell-nav-item--sidebar {
+  flex-direction: row;
+  gap: var(--pav-space-3);
+  padding: var(--pav-space-2_5) var(--pav-space-3);
+  min-height: var(--pav-shell-nav-item-height);
+
+  .shell-nav-item__badge {
+    margin-inline-start: auto;
+  }
+}
+
+/**
+ * Bottom nav variant
+ * Vertical layout with icon above label
+ */
+.shell-nav-item--bottom {
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--pav-space-1);
+  padding: var(--pav-space-2);
+  flex: 1;
+  text-align: center;
+  background-color: transparent;
+  min-height: var(--pav-shell-bottom-nav-height);
+
+  .shell-nav-item__icon {
+    width: 1.5rem;
+    height: 1.5rem;
+  }
+
+  .shell-nav-item__label {
+    font-size: var(--pav-font-size-xs);
+  }
+
+  .shell-nav-item__badge {
+    position: absolute;
+    top: var(--pav-space-1);
+    right: 50%;
+    transform: translateX(calc(50% + 0.75rem));
+    min-width: 1rem;
+    height: 1rem;
+    font-size: 0.625rem;
+    padding: 0 var(--pav-space-0_5);
+  }
+
+  /* Active state for bottom nav - no background, just color change */
+  &.shell-nav-item--active {
+    background-color: transparent;
+  }
+}

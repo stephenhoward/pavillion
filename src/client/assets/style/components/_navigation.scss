@@ -1,239 +1,14 @@
 /**
  * Navigation Component Styles
- * Sidebar, menu, and navigation patterns
+ * General navigation patterns (tabs, breadcrumbs)
+ *
+ * Note: Shell navigation (sidebar, bottom nav) styles are in _shell-nav.scss
  */
- nav {
-  background-color: var(--pav-surface-secondary);
-
-  list-style-type: none;
-
-  /* Navigation links */
-  a {
-    padding: var(--pav-space-sm) var(--pav-space-md);
-    border-radius: var(--pav-border-radius-sm);
-    text-decoration: none;
-    color: var(--pav-text-secondary);
-    font-weight: var(--pav-font-weight-medium);
-    transition: all 0.2s ease-in-out;
-    
-    &:hover {
-      background-color: var(--pav-surface-tertiary);
-      color: var(--pav-text-primary);
-    }
-    
-    &:focus-visible {
-      outline: var(--pav-border-width-2) solid var(--pav-border-color-focus);
-      outline-offset: var(--pav-space-0_5);
-    }
-    
-    /* Active/current navigation item */
-    &[aria-current="page"] {
-      background-color: var(--pav-color-brand-primary);
-      color: var(--pav-text-inverse);
-    }
-  }
-}
-
-[role="navigation"] {
-  /* Override semantic nav styling for elements that aren't nav tags */
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: var(--pav-space-md);
-  padding: var(--pav-space-sm) var(--pav-space-md);
-  
-  /* Visual styling */
-  background-color: var(--pav-surface-secondary);
-  border-bottom: var(--pav-border-width-1) solid var(--pav-border-color-subtle);
-  
-  /* Navigation links within role="navigation" */
-  a, [role="link"] {
-    padding: var(--pav-space-sm) var(--pav-space-md);
-    border-radius: var(--pav-border-radius-sm);
-    text-decoration: none;
-    color: var(--pav-text-secondary);
-    font-weight: var(--pav-font-weight-medium);
-    transition: all 0.2s ease-in-out;
-    
-    &:hover {
-      background-color: var(--pav-surface-tertiary);
-      color: var(--pav-text-primary);
-    }
-    
-    &:focus-visible {
-      outline: var(--pav-border-width-2) solid var(--pav-border-color-focus);
-      outline-offset: var(--pav-space-0_5);
-    }
-    
-    /* Current/active navigation item */
-    &[aria-current="page"] {
-      background-color: var(--pav-color-brand-primary);
-      color: var(--pav-text-inverse);
-    }
-  }
-  [role="button"] {
-    padding: var(--pav-space-1_5) var(--pav-space-3);
-    font-size: var(--pav-font-size-sm);
-  }
-
-  /* Vertical navigation variant */
-  &[data-orientation="vertical"] {
-    flex-direction: column;
-    align-items: stretch;
-    
-    a, [role="link"] {
-      text-align: left;
-    }
-  }
-}
-
-.nav {
-  /* Base navigation styles */
-  display: flex;
-  
-  &--vertical {
-    flex-direction: column;
-  }
-  
-  &--horizontal {
-    flex-direction: row;
-  }
-  
-  /* Navigation list */
-  &__list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: inherit;
-  }
-  
-  /* Navigation items */
-  &__item {
-    display: flex;
-  }
-  
-  /* Navigation links */
-  &__link {
-    display: flex;
-    align-items: center;
-    padding: var(--pav-space-3) var(--pav-space-4);
-    color: var(--pav-text-secondary);
-    text-decoration: none;
-    font-weight: var(--pav-font-weight-medium);
-    border-radius: var(--pav-border-radius-md);
-    transition: all 0.2s ease-in-out;
-    
-    &:hover {
-      color: var(--pav-text-primary);
-      background-color: var(--pav-interactive-hover);
-    }
-    
-    &:focus {
-      outline: none;
-      box-shadow: var(--pav-shadow-focus);
-    }
-    
-    &--active {
-      color: var(--pav-color-brand-primary);
-      background-color: rgb(255 145 49 / 10%);
-      
-      &:hover {
-        color: var(--pav-color-brand-primary);
-        background-color: rgb(255 145 49 / 15%);
-      }
-    }
-  }
-  
-  /* Navigation icons */
-  &__icon {
-    width: 1.25rem;
-    height: 1.25rem;
-    margin-right: var(--pav-space-3);
-    flex-shrink: 0;
-  }
-  
-  /* Badge for notifications */
-  &__badge {
-    background-color: var(--pav-color-brand-primary);
-    color: var(--pav-text-inverse);
-    font-size: var(--pav-font-size-xs);
-    font-weight: var(--pav-font-weight-bold);
-    padding: var(--pav-space-0_5) var(--pav-space-1_5);
-    border-radius: var(--pav-border-radius-full);
-    margin-left: auto;
-    min-width: 1.25rem;
-    text-align: center;
-  }
-}
-
-/* Sidebar navigation */
-.sidebar {
-  background-color: var(--pav-color-neutral-800);
-  color: var(--pav-text-inverse);
-  width: 16rem;
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  
-  &__header {
-    padding: var(--pav-space-6);
-    border-bottom: var(--pav-border-width-1) solid var(--pav-color-neutral-700);
-  }
-  
-  &__brand {
-    font-size: var(--pav-font-size-xl);
-    font-weight: var(--pav-font-weight-bold);
-    color: var(--pav-text-inverse);
-    text-decoration: none;
-  }
-  
-  &__nav {
-    flex: 1;
-    padding: var(--pav-space-4);
-    overflow-y: auto;
-    
-    .nav__link {
-      color: var(--pav-color-neutral-300);
-      
-      &:hover {
-        color: var(--pav-text-inverse);
-        background-color: var(--pav-color-neutral-700);
-      }
-      
-      &--active {
-        color: var(--pav-text-inverse);
-        background-color: var(--pav-color-brand-primary);
-        
-        .nav__icon {
-          filter: brightness(0) invert(1);
-        }
-        
-        &:hover {
-          background-color: var(--pav-color-brand-primary-dark);
-        }
-      }
-    }
-    
-    .nav__icon {
-      filter: brightness(0) invert(1) opacity(0.7);
-    }
-    
-    .nav__link--active .nav__icon {
-      filter: brightness(0) invert(1);
-    }
-  }
-  
-  &__footer {
-    padding: var(--pav-space-4);
-    border-top: var(--pav-border-width-1) solid var(--pav-color-neutral-700);
-  }
-}
 
 /* Tab navigation */
 .tabs {
   border-bottom: var(--pav-border-width-1) solid var(--pav-border-primary);
-  
+
   &__list {
     display: flex;
     list-style: none;
@@ -241,11 +16,11 @@
     padding: 0;
     gap: var(--pav-space-1);
   }
-  
+
   &__item {
     display: flex;
   }
-  
+
   &__link {
     display: flex;
     align-items: center;
@@ -255,24 +30,24 @@
     font-weight: var(--pav-font-weight-medium);
     border-bottom: 2px solid transparent;
     transition: all 0.2s ease-in-out;
-    
+
     &:hover {
       color: var(--pav-text-primary);
       border-bottom-color: var(--pav-border-secondary);
     }
-    
+
     &:focus {
       outline: none;
       box-shadow: var(--pav-shadow-focus);
     }
-    
+
     &--active {
-      color: var(--pav-color-brand-primary);
-      border-bottom-color: var(--pav-color-brand-primary);
-      
+      color: var(--pav-color-interactive-active-text);
+      border-bottom-color: var(--pav-color-interactive-active);
+
       &:hover {
-        color: var(--pav-color-brand-primary);
-        border-bottom-color: var(--pav-color-brand-primary);
+        color: var(--pav-color-interactive-active-text);
+        border-bottom-color: var(--pav-color-interactive-active);
       }
     }
   }
@@ -285,33 +60,33 @@
   gap: var(--pav-space-2);
   font-size: var(--pav-font-size-sm);
   color: var(--pav-text-muted);
-  
+
   &__item {
     display: flex;
     align-items: center;
-    
+
     &:not(:last-child)::after {
       content: '/';
       margin-left: var(--pav-space-2);
       color: var(--pav-text-muted);
     }
   }
-  
+
   &__link {
-    color: var(--pav-color-brand-primary);
+    color: var(--pav-color-interactive-active);
     text-decoration: none;
-    
+
     &:hover {
       text-decoration: underline;
     }
-    
+
     &:focus {
       outline: none;
       box-shadow: var(--pav-shadow-focus);
       border-radius: var(--pav-border-radius-sm);
     }
   }
-  
+
   &__current {
     color: var(--pav-text-primary);
     font-weight: var(--pav-font-weight-medium);

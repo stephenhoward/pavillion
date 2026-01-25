@@ -59,11 +59,18 @@
   --pav-space-grid-gap: var(--pav-space-4);              /* 16px default grid gap */
   --pav-space-grid-gap-sm: var(--pav-space-2);           /* 8px tight grid gap */
   --pav-space-grid-gap-lg: var(--pav-space-6);           /* 24px loose grid gap */
-  
+
   /* Typography Spacing */
   --pav-space-text-line-height: 1.5;                     /* 1.5x line height */
   --pav-space-text-paragraph-gap: var(--pav-space-4);    /* 16px paragraph spacing */
   --pav-space-text-heading-gap: var(--pav-space-6);      /* 24px heading margins */
+
+  /* Shell Layout Tokens */
+  --pav-shell-sidebar-width: 15rem;                      /* 240px sidebar width */
+  --pav-shell-bottom-nav-height: 4rem;                   /* 64px bottom nav height */
+  --pav-shell-safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --pav-shell-nav-item-height: 2.75rem;                  /* 44px touch target */
+  --pav-shell-nav-icon-size: 1.5rem;                     /* 24px icon size */
 }
 
 /* Responsive Spacing Adjustments */
@@ -129,6 +136,13 @@ $space-input-padding-x: var(--pav-space-input-padding-x);
 $space-card-padding: var(--pav-space-card-padding);
 $space-section-padding-y: var(--pav-space-section-padding-y);
 $space-section-padding-x: var(--pav-space-section-padding-x);
+
+/* Shell Layout */
+$shell-sidebar-width: var(--pav-shell-sidebar-width);
+$shell-bottom-nav-height: var(--pav-shell-bottom-nav-height);
+$shell-safe-area-bottom: var(--pav-shell-safe-area-bottom);
+$shell-nav-item-height: var(--pav-shell-nav-item-height);
+$shell-nav-icon-size: var(--pav-shell-nav-icon-size);
 
 /**
  * Spacing System Guidelines:

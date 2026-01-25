@@ -161,82 +161,9 @@ describe('Navigation Integration - Task Group 4', () => {
     vi.clearAllMocks();
   });
 
-  describe('New Event Button Navigation', () => {
-    it('should navigate to /event route when clicking New Event with single calendar', async () => {
-      router = createTestRouter();
-      await router.push('/calendar');
-      await router.isReady();
-
-      // Mock single calendar
-      mockLoadCalendars.mockResolvedValue([
-        createMockCalendar('cal-1', 'test-calendar'),
-      ]);
-
-      const wrapper = mountComponent(RootView, router, {
-        pinia,
-        provide: {
-          site_config: { settings: () => ({ domain: 'test.com' }) },
-        },
-        stubs: {
-          RouterView: true,
-          EditEventView: true,
-          CalendarSelector: true,
-        },
-      });
-
-      await flushPromises();
-      await nextTick();
-
-      // Find and click the new event button
-      const newEventButton = wrapper.find('#new-event-button button');
-      expect(newEventButton.exists()).toBe(true);
-
-      await newEventButton.trigger('click');
-      await flushPromises();
-
-      // After implementation, this should navigate to /event route
-      // For now we verify the button exists and is clickable
-      expect(newEventButton.exists()).toBe(true);
-    });
-
-    it('should show calendar selector when clicking New Event with multiple calendars', async () => {
-      router = createTestRouter();
-      await router.push('/calendar');
-      await router.isReady();
-
-      // Mock multiple calendars
-      mockLoadCalendars.mockResolvedValue([
-        createMockCalendar('cal-1', 'test-calendar-1'),
-        createMockCalendar('cal-2', 'test-calendar-2'),
-      ]);
-
-      const wrapper = mountComponent(RootView, router, {
-        pinia,
-        provide: {
-          site_config: { settings: () => ({ domain: 'test.com' }) },
-        },
-        stubs: {
-          RouterView: true,
-          EditEventView: true,
-          CalendarSelector: true,
-        },
-      });
-
-      await flushPromises();
-      await nextTick();
-
-      // Find and click the new event button
-      const newEventButton = wrapper.find('#new-event-button button');
-      expect(newEventButton.exists()).toBe(true);
-
-      await newEventButton.trigger('click');
-      await flushPromises();
-
-      // After implementation, calendar selector should appear
-      // The button should exist and be functional
-      expect(newEventButton.exists()).toBe(true);
-    });
-  });
+  // Note: "New Event Button Navigation" tests removed - the New Event button was
+  // intentionally removed from main navigation per design decision. Event creation
+  // will be accessible from calendar/event list headers in a future spec.
 
   describe('Edit Action Navigation', () => {
     it('should navigate to /event/:eventId when clicking edit action on event', async () => {

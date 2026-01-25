@@ -48,8 +48,8 @@
   
   &:focus {
     outline: none;
-    border-color: var(--pav-color-brand-secondary);
-    box-shadow: var(--pav-shadow-focus);
+    border-color: var(--pav-color-interactive-active);
+    box-shadow: 0 0 0 3px var(--pav-color-interactive-active-bg);
   }
   
   &:disabled {
@@ -110,7 +110,10 @@
   padding-right: var(--pav-space-10);
   
   &:focus {
-    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%23ff9131' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+    /* Orange-500 (#F97316) for focused state arrow */
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%23F97316' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+    border-color: var(--pav-color-interactive-active);
+    box-shadow: 0 0 0 3px var(--pav-color-interactive-active-bg);
   }
 }
 
@@ -120,19 +123,20 @@
   appearance: none;
   width: 1.125rem;
   height: 1.125rem;
-  border: var(--pav-border-width-2) solid var(--pav-border-secondary);
+  border: var(--pav-border-width-2) solid var(--pav-border-color-medium);
   background-color: var(--pav-surface-primary);
   cursor: pointer;
   transition: all 0.2s ease-in-out;
-  
+
   &:focus {
     outline: none;
-    box-shadow: var(--pav-shadow-focus);
+    border-color: var(--pav-color-interactive-active);
+    box-shadow: 0 0 0 3px var(--pav-color-interactive-active-bg);
   }
-  
+
   &:checked {
-    background-color: var(--pav-color-brand-primary);
-    border-color: var(--pav-color-brand-primary);
+    background-color: var(--pav-color-interactive-active);
+    border-color: var(--pav-color-interactive-active);
   }
 }
 

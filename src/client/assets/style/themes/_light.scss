@@ -1,27 +1,36 @@
 /**
  * Light Theme
- * Default theme with light color scheme
+ * Default theme with Stone palette (warm grays)
  */
 
 :root,
 [data-theme="light"] {
-  /* Surface Colors */
+  /* Surface Colors (Stone-based) */
   --pav-surface-primary: var(--pav-color-surface-primary);
   --pav-surface-secondary: var(--pav-color-surface-secondary);
   --pav-surface-tertiary: var(--pav-color-surface-tertiary);
-  
+  --pav-surface-card: var(--pav-color-stone-50);
+
   /* Text Colors */
   --pav-text-primary: var(--pav-color-text-primary);
   --pav-text-secondary: var(--pav-color-text-secondary);
   --pav-text-muted: var(--pav-color-text-muted);
   --pav-text-inverse: var(--pav-color-text-inverse);
-  
-  /* Border Colors */
-  --pav-border-primary: var(--pav-border-color-light);
-  --pav-border-secondary: var(--pav-border-color-medium);
-  
+
+  /* Border Colors (Stone-based) */
+  --pav-border-primary: var(--pav-color-stone-300);
+  --pav-border-secondary: var(--pav-color-stone-200);
+  --pav-border-subtle: var(--pav-color-stone-200);
+
   /* Interactive States */
-  --pav-interactive-hover: var(--pav-color-neutral-100);
-  --pav-interactive-active: var(--pav-color-neutral-200);
-  --pav-interactive-disabled: var(--pav-color-neutral-300);
+  --pav-interactive-hover: var(--pav-color-stone-100);
+  --pav-interactive-active: var(--pav-color-stone-200);
+  --pav-interactive-disabled: var(--pav-color-stone-300);
+
+  /* Navigation Active States (Orange accent) */
+  --pav-nav-active-bg: var(--pav-color-interactive-active-bg);
+  --pav-nav-active-text: var(--pav-color-interactive-active-text);
+  --pav-nav-active-icon: var(--pav-color-interactive-active);
+  --pav-nav-inactive-text: var(--pav-color-stone-500);
+  --pav-nav-inactive-icon: var(--pav-color-stone-400);
 }

@@ -42,6 +42,7 @@
   @import './layout/logical-properties';
   @import './layout/logged-out';
   @import './layout/app';
+  @import './layout/shell';
 }
 
 // 5. Component Library (semantic components)
@@ -61,6 +62,7 @@
   @import './components/dialogs';
   @import './components/empty-state';
   @import './components/settings';
+  @import './components/shell-nav';
 }
 
 // 6. Utility Classes (highest specificity, overrides)
