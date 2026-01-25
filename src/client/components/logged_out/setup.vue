@@ -1,130 +1,107 @@
 <template>
   <div class="setup-container">
-    <!-- Success state after setup is complete -->
-    <div v-if="state.setupComplete"
-         class="welcome-card setup-card">
-      <div class="alert alert--success"
-           role="alert"
-           aria-live="polite">
-        <h3>{{ t('success_title') }}</h3>
-        <p>{{ t('success_message') }}</p>
-      </div>
-      <button class="primary"
-              type="button"
-              @click="navigateToLogin">
+    <!-- Success State -->
+    <div v-if="state.setupComplete" class="welcome-card">
+      <SuccessState>
+        <h3 class="success-heading">{{ t('success_title') }}</h3>
+        <p class="success-message">{{ t('success_message') }}</p>
+      </SuccessState>
+
+      <button type="button" @click="navigateToLogin">
         {{ t('continue_to_login') }}
       </button>
     </div>
 
-    <!-- Language selection card (shown first) -->
-    <div v-else-if="!state.languageSelected"
-         class="welcome-card setup-card language-card">
+    <!-- Language Selection -->
+    <div v-else-if="!state.languageSelected" class="welcome-card">
       <h3>{{ t('language_select_title') }}</h3>
-      <p class="setup-description">{{ t('language_select_description') }}</p>
+      <p class="instructions">{{ t('language_select_description') }}</p>
 
-      <div class="form-group">
-        <select id="setup-language-select"
-                class="form-control"
-                v-model="state.defaultLanguage"
-                @change="selectLanguage(state.defaultLanguage)">
-          <option v-for="lang in AVAILABLE_LANGUAGES"
-                  :key="lang.code"
-                  :value="lang.code">
-            {{ lang.nativeName }}
-          </option>
-        </select>
+      <div class="form-stack">
+        <div class="form-field">
+          <label for="setup-language-select">{{ t('language_label') }}</label>
+          <select
+            id="setup-language-select"
+            v-model="state.defaultLanguage"
+            @change="selectLanguage(state.defaultLanguage)"
+          >
+            <option
+              v-for="lang in AVAILABLE_LANGUAGES"
+              :key="lang.code"
+              :value="lang.code"
+            >
+              {{ lang.nativeName }}
+            </option>
+          </select>
+        </div>
+
+        <button type="button" @click="proceedToSetup">
+          {{ t('continue_button') }}
+        </button>
       </div>
-
-      <button class="primary"
-              type="button"
-              @click="proceedToSetup">
-        {{ t('continue_button') }}
-      </button>
     </div>
 
-    <!-- Setup form -->
-    <form v-else
-          class="welcome-card setup-card"
-          @submit.prevent="handleSubmit"
-          novalidate>
+    <!-- Setup Form -->
+    <form
+      v-else
+      class="welcome-card"
+      @submit.prevent="handleSubmit"
+      novalidate
+    >
       <h3>{{ t('title') }}</h3>
-      <p class="setup-description">{{ t('description') }}</p>
+      <p class="instructions">{{ t('description') }}</p>
 
-      <!-- Error alert -->
-      <div class="alert alert--error alert--sm"
-           v-if="state.formError"
-           role="alert"
-           aria-live="polite"
-           :aria-describedby="state.formError ? 'setup-error' : undefined">
-        <span id="setup-error">{{ translateError(state.formError) }}</span>
-      </div>
+      <ErrorAlert
+        :error="state.passwordError ? translateError(state.passwordError) : (state.formError ? translateError(state.formError) : '')"
+      />
 
-      <fieldset class="form-stack">
-        <!-- Email field -->
-        <div class="form-group">
-          <label for="setup-email" class="sr-only">{{ t('email_label') }}</label>
-          <input type="email"
-                 id="setup-email"
-                 class="form-control"
-                 :class="{ 'form-control--error': state.formError }"
-                 :placeholder="t('email_placeholder')"
-                 v-model="state.email"
-                 autocomplete="email"
-                 required />
-        </div>
+      <div class="form-stack">
+        <label for="setup-email" class="sr-only">{{ t('email_label') }}</label>
+        <input
+          type="email"
+          id="setup-email"
+          :placeholder="t('email_placeholder')"
+          v-model="state.email"
+          autocomplete="email"
+          required
+        />
 
-        <!-- Password field -->
-        <div class="form-group">
-          <label for="setup-password" class="sr-only">{{ t('password_label') }}</label>
-          <input type="password"
-                 id="setup-password"
-                 class="form-control"
-                 :class="{ 'form-control--error': state.passwordError || state.formError }"
-                 :placeholder="t('password_placeholder')"
-                 v-model="state.password"
-                 @blur="validatePasswordField"
-                 autocomplete="new-password"
-                 required />
-          <div v-if="state.passwordError"
-               class="password-validation-error"
-               role="alert">
-            {{ translateError(state.passwordError) }}
-          </div>
-        </div>
+        <label for="setup-password" class="sr-only">{{ t('password_label') }}</label>
+        <input
+          type="password"
+          id="setup-password"
+          :placeholder="t('password_placeholder')"
+          v-model="state.password"
+          @blur="validatePasswordField"
+          autocomplete="new-password"
+          required
+        />
 
-        <!-- Password confirmation field -->
-        <div class="form-group">
-          <label for="setup-password-confirm" class="sr-only">{{ t('password_confirm_label') }}</label>
-          <input type="password"
-                 id="setup-password-confirm"
-                 class="form-control"
-                 :class="{ 'form-control--error': state.formError }"
-                 :placeholder="t('password_confirm_placeholder')"
-                 v-model="state.passwordConfirm"
-                 autocomplete="new-password"
-                 required />
-        </div>
+        <label for="setup-password-confirm" class="sr-only">{{ t('password_confirm_label') }}</label>
+        <input
+          type="password"
+          id="setup-password-confirm"
+          :placeholder="t('password_confirm_placeholder')"
+          v-model="state.passwordConfirm"
+          autocomplete="new-password"
+          required
+        />
 
-        <!-- Site title field -->
-        <div class="form-group">
-          <label for="setup-site-title" class="sr-only">{{ t('site_title_label') }}</label>
-          <input type="text"
-                 id="setup-site-title"
-                 class="form-control"
-                 :class="{ 'form-control--error': state.formError }"
-                 :placeholder="t('site_title_placeholder')"
-                 v-model="state.siteTitle"
-                 required />
+        <div class="form-field">
+          <label for="setup-site-title">{{ t('site_title_label') }}</label>
+          <input
+            type="text"
+            id="setup-site-title"
+            :placeholder="t('site_title_placeholder')"
+            v-model="state.siteTitle"
+            required
+          />
           <div class="field-description">{{ t('site_title_description') }}</div>
         </div>
 
-        <!-- Registration mode dropdown -->
-        <div class="form-group">
+        <div class="form-field">
           <label for="setup-registration-mode">{{ t('registration_mode_label') }}</label>
-          <select id="setup-registration-mode"
-                  class="form-control"
-                  v-model="state.registrationMode"
-                  required>
+          <select id="setup-registration-mode" v-model="state.registrationMode" required>
             <option value="open">{{ t('registration_mode_open') }}</option>
             <option value="apply">{{ t('registration_mode_apply') }}</option>
             <option value="invitation">{{ t('registration_mode_invitation') }}</option>
@@ -133,20 +110,15 @@
           <div class="field-description">{{ t('registration_mode_description') }}</div>
         </div>
 
-        <!-- Action buttons -->
         <div class="button-group">
-          <button class="secondary"
-                  type="button"
-                  @click="goBackToLanguage">
+          <button class="secondary" type="button" @click="goBackToLanguage">
             {{ t('back_button') }}
           </button>
-          <button class="primary"
-                  type="submit"
-                  :disabled="state.submitting">
+          <button type="submit" :disabled="state.submitting">
             {{ state.submitting ? t('submitting_button') : t('submit_button') }}
           </button>
         </div>
-      </fieldset>
+      </div>
     </form>
   </div>
 </template>
@@ -158,6 +130,8 @@ import i18next from 'i18next';
 import { validatePassword } from '@/common/validation/password';
 import { AVAILABLE_LANGUAGES, getBrowserLanguage } from '@/common/i18n/languages';
 import SetupService from '@/client/service/setup';
+import ErrorAlert from './ErrorAlert.vue';
+import SuccessState from './SuccessState.vue';
 
 // Allow injection of setup service for testing
 const injectedSetupService = inject('setupService', null);
@@ -348,153 +322,121 @@ async function handleSubmit() {
   width: 100%;
 }
 
-.setup-card {
-  max-width: 440px;
-  width: 100%;
+.instructions {
+  font-size: 1.125rem; /* 18px */
+  color: var(--pav-color-stone-600);
+  margin-bottom: 2rem; /* 32px */
+  text-align: center;
 
-  h3 {
-    margin-bottom: 0.5rem;
-    font-size: 1.5rem;
-    font-weight: $font-medium;
-    color: $light-mode-text;
-    text-align: center;
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-stone-300);
+  }
+}
 
-    @include dark-mode {
-      color: $dark-mode-text;
+.form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem; /* 24px */
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem; /* 8px */
+
+  label {
+    font-size: 1rem; /* 16px */
+    font-weight: var(--pav-font-weight-medium);
+    color: var(--pav-color-stone-800);
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-200);
     }
   }
 
-  .setup-description {
-    margin-bottom: 1.5rem;
-    font-size: 0.9rem;
-    color: $light-mode-secondary-text;
-    text-align: center;
+  select {
+    width: 100%;
+    border-radius: 9999px; /* Pill shape */
+    border: 1px solid var(--pav-color-stone-300);
+    padding: 1.125rem 1.5rem; /* 18px 24px */
+    font-size: 1.125rem; /* 18px */
+    background-color: white;
+    color: var(--pav-color-stone-900);
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
 
-    @include dark-mode {
-      color: $dark-mode-secondary-text;
+    &:focus {
+      outline: none;
+      border-color: var(--pav-color-orange-400);
+      box-shadow: 0 0 0 3px rgb(249 115 22 / 0.4);
     }
-  }
 
-  .form-group {
-    margin-bottom: 1rem;
-
-    label:not(.sr-only) {
-      display: block;
-      margin-bottom: 0.5rem;
-      font-weight: $font-medium;
-      font-size: 0.9rem;
-      color: $light-mode-text;
-
-      @include dark-mode {
-        color: $dark-mode-text;
-      }
+    @media (prefers-color-scheme: dark) {
+      background-color: var(--pav-color-stone-700);
+      border-color: var(--pav-color-stone-600);
+      color: var(--pav-color-stone-100);
     }
   }
 
   .field-description {
-    margin-top: 0.25rem;
-    font-size: 0.8rem;
-    color: $light-mode-secondary-text;
+    font-size: 0.875rem; /* 14px */
+    color: var(--pav-color-stone-600);
 
-    @include dark-mode {
-      color: $dark-mode-secondary-text;
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-400);
     }
   }
+}
 
-  .password-validation-error {
-    margin-top: 0.25rem;
-    font-size: 0.8rem;
-    color: #c62828;
+.button-group {
+  display: flex;
+  gap: 1rem; /* 16px */
+  margin-top: 0.5rem;
 
-    @include dark-mode {
-      color: #ef5350;
-    }
-  }
-
-  select.form-control {
-    width: 100%;
-    padding: var(--pav-space-sm, 8px) var(--pav-space-md, 12px);
-    border-radius: var(--pav-border-radius-full, 20px);
-    border: 1px solid var(--pav-border-color-medium, #ccc);
-    font-size: var(--pav-font-size-base, 14px);
-    background-color: var(--pav-surface-primary, #fff);
-    cursor: pointer;
-    appearance: auto;
-
-    @include dark-mode {
-      background-color: $dark-mode-input-background;
-      border-color: #555;
-      color: $dark-mode-input-text;
-    }
-
-    &:focus {
-      outline: none;
-      border-color: $focus-color;
-      box-shadow: 0 0 0 2px rgba($focus-color, 0.2);
-
-      @include dark-mode {
-        border-color: $focus-color-dark;
-        box-shadow: 0 0 0 2px rgba($focus-color-dark, 0.2);
-      }
-    }
-  }
-
-  button.primary {
-    width: 100%;
-    margin-top: 1rem;
-  }
-
-  .button-group {
-    display: flex;
-    gap: 0.75rem;
-    margin-top: 1rem;
-
-    button {
-      flex: 1;
-      margin-top: 0;
-    }
+  button {
+    flex: 1;
   }
 
   button.secondary {
-    width: 100%;
-    padding: 0.75rem 1rem;
-    border: 2px solid #ddd;
-    border-radius: var(--pav-border-radius-full, 20px);
-    background: transparent;
-    font-size: 1rem;
-    font-weight: $font-medium;
+    border-radius: 9999px;
+    padding: 1.125rem 1.5rem; /* 18px 24px */
+    font-size: 1.125rem; /* 18px */
+    font-weight: var(--pav-font-weight-medium);
+    background-color: white;
+    border: 1px solid var(--pav-color-stone-300);
+    color: var(--pav-color-stone-700);
     cursor: pointer;
-    transition: all 0.2s ease;
-    color: $light-mode-text;
+    transition: all 0.2s ease-in-out;
 
-    @include dark-mode {
-      border-color: #555;
-      color: $dark-mode-text;
+    &:hover:not(:disabled) {
+      border-color: var(--pav-color-orange-400);
+      color: var(--pav-color-orange-600);
     }
 
-    &:hover {
-      border-color: $focus-color;
-      background-color: rgba($focus-color, 0.05);
+    @media (prefers-color-scheme: dark) {
+      background-color: var(--pav-color-stone-800);
+      border-color: var(--pav-color-stone-600);
+      color: var(--pav-color-stone-300);
 
-      @include dark-mode {
-        border-color: $focus-color-dark;
-        background-color: rgba($focus-color-dark, 0.1);
+      &:hover:not(:disabled) {
+        border-color: var(--pav-color-orange-400);
+        color: var(--pav-color-orange-400);
       }
     }
   }
+}
 
-  .alert--success {
-    text-align: center;
-    margin-bottom: 1.5rem;
+.success-heading {
+  text-align: center;
+}
 
-    h3 {
-      margin-bottom: 0.5rem;
-    }
+.success-message {
+  font-size: 1.125rem; /* 18px */
+  color: var(--pav-color-stone-600);
+  text-align: center;
 
-    p {
-      margin: 0;
-    }
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-stone-300);
   }
-
 }
 </style>

@@ -119,4 +119,8 @@ export default class AccountsInterface {
     return this.accountService.getAdmins();
   }
 
+  async generatePasswordResetCodeForAccount(account: Account): Promise<string> {
+    return this.accountService.generatePasswordResetCodeForAccount(account);
+  }
+
 }

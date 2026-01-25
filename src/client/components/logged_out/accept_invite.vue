@@ -1,91 +1,86 @@
 <template>
-  <div v-if="! state.codeValidated" class="welcome-card">
+  <!-- Expired Invitation State -->
+  <div v-if="!state.codeValidated" class="welcome-card">
     <h3>{{ t('bad_invite_title') }}</h3>
-    <p>{{ t('bad_invite_explanation') }}</p>
-    <router-link class="primary"
-                 :to="{ name: 'login', params: { em: state.email}}"
-                 role="button">
+    <p class="instructions">{{ t('bad_invite_explanation') }}</p>
+
+    <router-link
+      class="forgot"
+      :to="{ name: 'login', query: { email: state.email }}"
+    >
       {{ t("go_login") }}
     </router-link>
   </div>
 
-  <!-- Success state after password is set -->
-  <div v-else-if="state.invitationAccepted"
-       class="card card--elevated vstack stack--lg card__content">
-    <div class="alert alert--success alert--sm" role="alert" aria-live="polite">
-      <h3>{{ t('invitation_accepted_title') }}</h3>
-      <p>{{ t('invitation_accepted_description') }}</p>
+  <!-- Success State -->
+  <div v-else-if="state.invitationAccepted" class="welcome-card">
+    <SuccessState>
+      <h3 class="success-heading">{{ t('invitation_accepted_title') }}</h3>
+      <p class="success-message">{{ t('invitation_accepted_description') }}</p>
 
       <!-- Calendar access information -->
-      <div v-if="state.calendarAccess && state.calendarAccess.length"
-           class="calendar-access-info">
+      <div
+        v-if="state.calendarAccess && state.calendarAccess.length"
+        class="calendar-access-info"
+      >
         <h4>{{ t('calendar_access_granted_title') }}</h4>
         <ul class="calendar-list">
-          <li v-for="calendar in state.calendarAccess"
-              :key="calendar.calendarId"
-              class="calendar-item">
+          <li
+            v-for="calendar in state.calendarAccess"
+            :key="calendar.calendarId"
+            class="calendar-item"
+          >
             <strong>{{ calendar.calendarName }}</strong>
             <span class="invited-by">{{ t('invited_by', { email: calendar.invitedBy }) }}</span>
           </li>
         </ul>
       </div>
-    </div>
+    </SuccessState>
 
-    <router-link class="primary"
-                 to="/auth/login"
-                 role="button">
+    <router-link class="forgot" to="/auth/login">
       {{ t('continue_to_login') }}
     </router-link>
   </div>
 
-  <!-- Password setup form -->
-  <form v-else
-        class="card card--elevated vstack stack--lg card__content"
-        @submit.prevent="setPassword"
-        novalidate>
+  <!-- Password Setup Form -->
+  <form
+    v-else
+    class="welcome-card"
+    @submit.prevent="setPassword"
+    novalidate
+  >
     <h3>{{ t('new_account_password_title') }}</h3>
-    <p>{{ t('registration_new_password') }}</p>
-    <div class="alert alert--error alert--sm"
-         v-if="state.form_error"
-         role="alert"
-         aria-live="polite"
-         :aria-describedby="state.form_error ? 'invite-error' : undefined">
-      <span id="invite-error">{{ translateError(state.form_error) }}</span>
-    </div>
-    <fieldset class="form-stack">
+    <p class="instructions">{{ t('registration_new_password') }}</p>
+
+    <ErrorAlert :error="state.passwordError ? translateError(state.passwordError) : (state.form_error ? translateError(state.form_error) : '')" />
+
+    <div class="form-stack">
       <label for="invite-password" class="sr-only">{{ t('password_placeholder') }}</label>
-      <input type="password"
-             id="invite-password"
-             class="form-control"
-             :class="{ 'form-control--error': state.form_error || state.passwordError }"
-             :placeholder="t('password_placeholder')"
-             v-model="state.password"
-             @blur="validatePasswordField"
-             :aria-invalid="state.form_error ? 'true' : 'false'"
-             :aria-describedby="state.form_error ? 'invite-error' : undefined"
-             required/>
-      <div v-if="state.passwordError"
-           class="password-validation-error"
-           role="alert">
-        {{ translateError(state.passwordError) }}
-      </div>
+      <input
+        type="password"
+        id="invite-password"
+        :placeholder="t('password_placeholder')"
+        v-model="state.password"
+        @blur="validatePasswordField"
+        autocomplete="new-password"
+        required
+      />
+
       <label for="invite-password2" class="sr-only">{{ t('password2_placeholder') }}</label>
-      <input type="password"
-             id="invite-password2"
-             class="form-control"
-             :class="{ 'form-control--error': state.form_error }"
-             :placeholder="t('password2_placeholder')"
-             v-model="state.password2"
-             :aria-invalid="state.form_error ? 'true' : 'false'"
-             :aria-describedby="state.form_error ? 'invite-error' : undefined"
-             @keyup.enter="setPassword"
-             required/>
-      <button class="primary"
-              type="submit"
-              :aria-describedby="state.form_error ? 'invite-error' : undefined">
+      <input
+        type="password"
+        id="invite-password2"
+        :placeholder="t('password2_placeholder')"
+        v-model="state.password2"
+        autocomplete="new-password"
+        @keyup.enter="setPassword"
+        required
+      />
+
+      <button type="submit">
         {{ t('set_password_button') || 'Set Password' }}
       </button>
-    </fieldset>
+    </div>
   </form>
 </template>
 
@@ -96,6 +91,8 @@ import { inject, onBeforeMount, reactive } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { validatePassword } from '@/common/validation/password';
+import ErrorAlert from './ErrorAlert.vue';
+import SuccessState from './SuccessState.vue';
 
 const router = useRouter();
 const route = useRoute();
@@ -234,24 +231,55 @@ async function setPassword() {
 <style scoped lang="scss">
 @use '../../assets/mixins' as *;
 
-.calendar-access-info {
-  margin-top: 1rem;
-  padding: 1rem;
-  background-color: rgba(0, 0, 0, 0.05);
-  border-radius: 8px;
+.instructions {
+  font-size: 1.125rem; /* 18px */
+  color: var(--pav-color-stone-600);
+  margin-bottom: 2rem; /* 32px */
 
   @media (prefers-color-scheme: dark) {
-    background-color: rgba(255, 255, 255, 0.05);
+    color: var(--pav-color-stone-300);
+  }
+}
+
+.form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem; /* 24px */
+}
+
+.success-heading {
+  text-align: center;
+}
+
+.success-message {
+  font-size: 1.125rem; /* 18px */
+  color: var(--pav-color-stone-600);
+  text-align: center;
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-stone-300);
+  }
+}
+
+.calendar-access-info {
+  margin-top: 1.5rem; /* 24px */
+  padding: 1.5rem; /* 24px */
+  background-color: var(--pav-color-stone-100);
+  border-radius: 1rem; /* 16px - rounded-2xl */
+
+  @media (prefers-color-scheme: dark) {
+    background-color: var(--pav-color-stone-800);
   }
 
   h4 {
-    margin: 0 0 0.75rem 0;
-    font-size: 1rem;
-    font-weight: $font-medium;
-    color: $light-mode-text;
+    margin: 0 0 1rem 0;
+    font-size: 1rem; /* 16px */
+    font-weight: var(--pav-font-weight-medium);
+    color: var(--pav-color-stone-800);
+    text-align: center;
 
     @media (prefers-color-scheme: dark) {
-      color: $dark-mode-text;
+      color: var(--pav-color-stone-200);
     }
   }
 }
@@ -266,57 +294,37 @@ async function setPassword() {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  padding: 0.75rem;
-  margin-bottom: 0.5rem;
-  background-color: $light-mode-background;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 6px;
+  padding: 1rem; /* 16px */
+  margin-bottom: 0.75rem; /* 12px */
+  background-color: white;
+  border: 1px solid var(--pav-color-stone-200);
+  border-radius: 0.75rem; /* 12px - rounded-xl */
 
   @media (prefers-color-scheme: dark) {
-    background-color: $dark-mode-background;
-    border-color: rgba(255, 255, 255, 0.1);
+    background-color: var(--pav-color-stone-700);
+    border-color: var(--pav-color-stone-600);
   }
 
   strong {
-    font-weight: $font-medium;
-    color: $light-mode-text;
+    font-weight: var(--pav-font-weight-medium);
+    color: var(--pav-color-stone-900);
 
     @media (prefers-color-scheme: dark) {
-      color: $dark-mode-text;
+      color: var(--pav-color-stone-100);
     }
   }
 
   .invited-by {
-    font-size: 0.875rem;
-    color: rgba(0, 0, 0, 0.7);
+    font-size: 0.875rem; /* 14px */
+    color: var(--pav-color-stone-600);
 
     @media (prefers-color-scheme: dark) {
-      color: rgba(255, 255, 255, 0.7);
+      color: var(--pav-color-stone-400);
     }
   }
 
   &:last-child {
     margin-bottom: 0;
-  }
-}
-
-.password-validation-error {
-  margin-top: 0.25rem;
-  font-size: 0.8rem;
-  color: #c62828;
-
-  @media (prefers-color-scheme: dark) {
-    color: #ef5350;
-  }
-}
-
-@media (max-width: 480px) {
-  .calendar-access-info {
-    padding: 0.75rem;
-  }
-
-  .calendar-item {
-    padding: 0.5rem;
   }
 }
 </style>

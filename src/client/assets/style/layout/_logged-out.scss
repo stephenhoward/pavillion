@@ -7,46 +7,239 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--pav-space-xl);
   min-height: 100vh;
+  padding: var(--pav-space-4) var(--pav-space-4);
+  background-color: var(--pav-color-stone-200);
 
-  footer.logo,header {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12pt;
+  @media (prefers-color-scheme: dark) {
+    background-color: var(--pav-color-stone-900);
+  }
+
+  /* Header with site title */
+  header {
+    margin-bottom: var(--pav-space-8);
     text-align: center;
+
     h1 {
-          font-size: 12pt;
+      font-size: 1.875rem; /* 30px */
+      font-weight: var(--pav-font-weight-semibold);
+      color: var(--pav-color-stone-800);
+      letter-spacing: -0.025em;
+
+      @media (prefers-color-scheme: dark) {
+        color: var(--pav-color-stone-100);
+      }
+
+      @media (min-width: 640px) {
+        font-size: 2.25rem; /* 36px */
+      }
     }
   }
+
+  /* Main content area */
+  section {
+    width: 100%;
+    max-width: 28rem; /* 448px */
+  }
+
+  /* Footer with Pavillion branding */
+  footer.logo {
+    margin-top: var(--pav-space-8);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--pav-space-2);
+    font-size: 0.875rem; /* 14px */
+    color: var(--pav-color-stone-500);
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-400);
+    }
+  }
+
   div.pavillion-logo {
     display: inline-block;
-    background-color: var(--pav-color-text-primary);
+    background-color: currentColor;
     -webkit-mask-size: contain;
     -webkit-mask-repeat: no-repeat;
     -webkit-mask-image: url('@/client/assets/pavillion-logo.svg');
     mask-size: contain;
     mask-repeat: no-repeat;
     mask-image: url('@/client/assets/pavillion-logo.svg');
-    width: 24px;
-    height: 24px;
-    margin-right: 4px;
+    width: 1rem; /* 16px */
+    height: 1rem; /* 16px */
   }
-  .welcome-card {
-    @include card;
-    @include vstack;
-    max-width: 400px;
 
+  /* Auth card styles */
+  .welcome-card {
+    background-color: white;
+    border-radius: 1rem; /* 16px - rounded-2xl */
+    padding: 2.5rem; /* 40px */
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    box-shadow: var(--pav-shadow-lg), 0 0 0 1px rgb(231 229 228 / 0.5);
+
+    @media (prefers-color-scheme: dark) {
+      background-color: var(--pav-color-stone-800);
+      box-shadow: none;
+    }
+
+    h3 {
+      font-size: 2.25rem; /* 36px */
+      font-weight: var(--pav-font-weight-light);
+      color: var(--pav-color-stone-800);
+      text-align: center;
+      margin-bottom: 2.5rem; /* 40px */
+
+      @media (prefers-color-scheme: dark) {
+        color: var(--pav-color-stone-100);
+      }
+    }
+
+    /* Pill-shaped inputs for auth forms */
     input[type="text"],
     input[type="email"],
     input[type="password"] {
       width: 100%;
-      border-radius: var(--pav-border-radius-full);
-      border: 1px solid var(--pav-border-color-medium);
-      padding: var(--pav-space-sm) var(--pav-space-md);
-      font-size: var(--pav-font-size-base);
-      background-color: var(--pav-surface-primary);
+      border-radius: 9999px; /* Full pill shape */
+      border: 1px solid var(--pav-color-stone-300);
+      padding: 1.125rem 1.5rem; /* 18px 24px */
+      font-size: 1.125rem; /* 18px */
+      background-color: white;
+      color: var(--pav-color-stone-900);
+      transition: all 0.2s ease-in-out;
+
+      &::placeholder {
+        color: var(--pav-color-stone-400);
+      }
+
+      &:focus {
+        outline: none;
+        border-color: var(--pav-color-orange-400);
+        box-shadow: 0 0 0 3px rgb(249 115 22 / 0.4);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        background-color: var(--pav-color-stone-700);
+        border-color: var(--pav-color-stone-600);
+        color: var(--pav-color-stone-100);
+
+        &::placeholder {
+          color: var(--pav-color-stone-500);
+        }
+      }
+    }
+
+    /* Error state for inputs */
+    input.form-control--error {
+      border-color: rgb(239 68 68); /* red-500 */
+
+      @media (prefers-color-scheme: dark) {
+        border-color: rgb(185 28 28); /* red-700 */
+      }
+    }
+
+    /* Buttons */
+    button[type="submit"],
+    button.primary {
+      width: 100%;
+      border-radius: 9999px;
+      padding: 1.125rem 1.5rem; /* 18px 24px */
+      font-size: 1.125rem; /* 18px */
+      font-weight: var(--pav-font-weight-medium);
+      background-color: var(--pav-color-orange-500);
+      color: white;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s ease-in-out;
+
+      &:hover {
+        opacity: 0.9;
+      }
+
+      &:focus {
+        outline: none;
+        box-shadow: 0 0 0 2px var(--pav-color-orange-500), 0 0 0 4px rgb(249 115 22 / 0.4);
+
+        @media (prefers-color-scheme: dark) {
+          box-shadow: 0 0 0 2px var(--pav-color-orange-500), 0 0 0 4px rgb(249 115 22 / 0.4);
+        }
+      }
+
+      &:active {
+        transform: scale(0.98);
+      }
+    }
+
+    /* Secondary buttons and links styled as buttons */
+    a[role="button"],
+    button:not([type="submit"]):not(.primary):not(.forgot) {
+      display: block;
+      width: 100%;
+      border-radius: 9999px;
+      padding: 1.125rem 1.5rem; /* 18px 24px */
+      font-size: 1.125rem; /* 18px */
+      font-weight: var(--pav-font-weight-medium);
+      background-color: white;
+      color: var(--pav-color-stone-700);
+      border: 1px solid var(--pav-color-stone-300);
+      cursor: pointer;
+      text-decoration: none;
+      text-align: center;
+      transition: all 0.2s ease-in-out;
+
+      &:hover {
+        background-color: var(--pav-color-stone-50);
+      }
+
+      &:focus {
+        outline: none;
+        box-shadow: 0 0 0 2px var(--pav-color-stone-400), 0 0 0 4px rgb(168 162 158 / 0.3);
+      }
+
+      &:active {
+        transform: scale(0.98);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        background-color: var(--pav-color-stone-700);
+        border-color: var(--pav-color-stone-600);
+        color: var(--pav-color-stone-200);
+
+        &:hover {
+          background-color: var(--pav-color-stone-600);
+        }
+      }
+    }
+
+    /* Text links (like "Forgot Password?") */
+    a.forgot,
+    button.forgot {
+      display: inline-block;
+      margin-top: 1.25rem; /* 20px */
+      font-size: 1rem; /* 16px */
+      color: var(--pav-color-orange-500);
+      text-decoration: none;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+      transition: color 0.2s ease-in-out;
+
+      &:hover {
+        color: var(--pav-color-orange-600);
+      }
+
+      &:focus {
+        outline: none;
+        text-decoration: underline;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        color: var(--pav-color-orange-400);
+
+        &:hover {
+          color: var(--pav-color-orange-300);
+        }
+      }
     }
   }
 }

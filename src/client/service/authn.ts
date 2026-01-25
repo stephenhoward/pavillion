@@ -336,7 +336,7 @@ export default class AuthenticationService {
    * @returns {Promise<boolean>} True if token is valid, false otherwise
    * @throws Will throw an error if token is null or empty or request fails
    */
-  async check_password_reset_token( token: string ): Promise<boolean> {
+  async check_password_reset_token( token: string ): Promise<{valid: boolean, isNewAccount?: boolean}> {
 
     if ( token == null || token == '' ) {
       throw("Must provide a password reset token");
@@ -344,7 +344,13 @@ export default class AuthenticationService {
 
     try {
       let response = await axios.get( this._authUrl('/reset-password/' + token) );
-      return response.data.message == 'ok' ? true : false;
+      if (response.data.message == 'ok') {
+        return {
+          valid: true,
+          isNewAccount: response.data.isNewAccount,
+        };
+      }
+      return { valid: false };
     }
     catch (error) {
       if ( axios.isAxiosError(error) ) {
@@ -353,7 +359,7 @@ export default class AuthenticationService {
           throw(axiosError.response.status);
         }
       }
-      return false;
+      return { valid: false };
     }
   }
 

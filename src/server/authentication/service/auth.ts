@@ -123,20 +123,23 @@ export default class AuthenticationService {
   }
 
   /**
-   * Validates if a password reset code is valid and not expired.
+   * Validates if a password reset code is valid and not expired, and returns the associated account.
    *
    * @param {string} code - The password reset code to validate
-   * @returns {Promise<boolean>} True if the code is valid and not expired, false otherwise
+   * @returns {Promise<Account|undefined>} The account if the code is valid and not expired, undefined otherwise
    */
-  async validatePasswordResetCode(code: string): Promise<boolean> {
-    const secret = await AccountSecretsEntity.findOne({where: {password_reset_code: code}});
+  async validatePasswordResetCode(code: string): Promise<Account|undefined> {
+    const secret = await AccountSecretsEntity.findOne({
+      where: {password_reset_code: code},
+      include: AccountEntity,
+    });
 
-    if ( secret ) {
+    if ( secret && secret.account ) {
       if ( secret.password_reset_expiration && DateTime.now() < DateTime.fromJSDate(secret.password_reset_expiration) ) {
-        return true;
+        return secret.account.toModel();
       }
     }
-    return false;
+    return undefined;
   }
 
   /**

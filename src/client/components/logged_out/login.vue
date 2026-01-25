@@ -3,56 +3,58 @@
         @submit.prevent="doLogin"
         novalidate>
     <h3>{{ t('title') }}</h3>
-    <div class="alert alert--error alert--sm"
-         v-if="state.err"
-         role="alert"
-         aria-live="polite"
-         :aria-describedby="state.err ? 'login-error' : undefined">
-      <span id="login-error">{{ state.err }}</span>
-    </div>
-    <fieldset class="form-stack">
+
+    <ErrorAlert :error="state.err" />
+
+    <div class="form-stack">
       <label for="login-email" class="sr-only">{{ t('email') }}</label>
       <input type="email"
              id="login-email"
              :class="{ 'form-control--error': state.err }"
-             v-bind:placeholder="t('email')"
+             :placeholder="t('email')"
              v-model="state.email"
              :aria-invalid="state.err ? 'true' : 'false'"
              :aria-describedby="state.err ? 'login-error' : undefined"
+             autocomplete="email"
              required/>
+
       <label for="login-password" class="sr-only">{{ t('password') }}</label>
       <input type="password"
              id="login-password"
              :class="{ 'form-control--error': state.err }"
-             v-bind:placeholder="t('password')"
+             :placeholder="t('password')"
              v-model="state.password"
              :aria-invalid="state.err ? 'true' : 'false'"
              :aria-describedby="state.err ? 'login-error' : undefined"
+             autocomplete="current-password"
              @keyup.enter="doLogin"
              required/>
+
       <button class="primary"
               type="submit"
               :aria-describedby="state.err ? 'login-error' : undefined">
         {{ t("login_button") }}
       </button>
-    </fieldset>
-    <div class="hstack stack--sm hstack--center">
-      <router-link id="register"
-                   class="w-full"
-                   v-if="state.registrationMode == 'open'"
+    </div>
+
+    <div v-if="state.registrationMode == 'open' || state.registrationMode == 'apply'"
+         class="secondary-actions">
+      <router-link v-if="state.registrationMode == 'open'"
                    :to="{ name: 'register', query: { email: state.email}}"
                    role="button">
         {{ t("register_button") }}
       </router-link>
-      <router-link id="apply"
-                   class="w-full"
-                   v-if="state.registrationMode == 'apply'"
+      <router-link v-if="state.registrationMode == 'apply'"
                    :to="{ name: 'register-apply', query: { email: state.email}}"
                    role="button">
         {{ t("apply_button") }}
       </router-link>
     </div>
-    <router-link class="forgot" :to="{ name: 'forgot_password', query: { email: state.email }}" >{{ t("forgot_password") }}</router-link>
+
+    <router-link class="forgot"
+                 :to="{ name: 'forgot_password', query: { email: state.email }}">
+      {{ t("forgot_password") }}
+    </router-link>
   </form>
 </template>
 
@@ -60,6 +62,7 @@
 import { reactive, inject } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
+import ErrorAlert from './ErrorAlert.vue';
 
 const router = useRouter();
 const route = useRoute();
@@ -109,4 +112,16 @@ async function doLogin() {
   }
 }
 </script>
+
+<style scoped lang="scss">
+.form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem; /* 24px */
+}
+
+.secondary-actions {
+  margin-top: 1.5rem; /* 24px */
+}
+</style>
 

@@ -40,7 +40,6 @@
   @import './layout/grid';
   @import './layout/flexbox';
   @import './layout/logical-properties';
-  @import './layout/logged-out';
   @import './layout/app';
   @import './layout/shell';
 }
@@ -63,6 +62,7 @@
   @import './components/empty-state';
   @import './components/settings';
   @import './components/shell-nav';
+  @import './layout/logged-out';  // Auth screens with component-specific styling
 }
 
 // 6. Utility Classes (highest specificity, overrides)

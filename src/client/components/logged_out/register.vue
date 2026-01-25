@@ -1,40 +1,52 @@
 <template>
+  <!-- Success state -->
   <div v-if="state.showSuccess" class="welcome-card">
-    <h3>{{ t('title') }}</h3>
-    <p>Check your email "{{ state.email }}" for a confirmation link</p>
+    <SuccessState>
+      <h3>{{ t('title') }}</h3>
+      <p class="success-message">
+        Check your email "{{ state.email }}" for a confirmation link
+      </p>
+    </SuccessState>
   </div>
-  <form v-else
-        class="welcome-card"
-        @submit.prevent="doRegister"
-        novalidate>
+
+  <!-- Form state -->
+  <form
+    v-else
+    class="welcome-card"
+    @submit.prevent="doRegister"
+    novalidate
+  >
     <h3>{{ t('title') }}</h3>
-    <div class="alert alert--error alert--sm"
-         v-if="state.err"
-         role="alert"
-         aria-live="polite"
-         :aria-describedby="state.err ? 'register-error' : undefined">
-      <span id="register-error">{{ state.err }}</span>
-    </div>
-    <fieldset class="form-stack">
-      <legend class="sr-only">{{ t('title') }}</legend>
+
+    <ErrorAlert :error="state.err" />
+
+    <div class="form-stack">
       <label for="register-email" class="sr-only">{{ t('email') }}</label>
-      <input type="email"
-             id="register-email"
-             class="form-control"
-             :class="{ 'form-control--error': state.err }"
-             v-bind:placeholder="t('email')"
-             v-model="state.email"
-             :aria-invalid="state.err ? 'true' : 'false'"
-             :aria-describedby="state.err ? 'register-error' : undefined"
-             required/>
-      <button class="primary"
-              type="submit"
-              :aria-describedby="state.err ? 'register-error' : undefined">
+      <input
+        type="email"
+        id="register-email"
+        :class="{ 'form-control--error': state.err }"
+        :placeholder="t('email')"
+        v-model="state.email"
+        :aria-invalid="state.err ? 'true' : 'false'"
+        :aria-describedby="state.err ? 'register-error' : undefined"
+        autocomplete="email"
+        required
+      />
+
+      <button
+        class="primary"
+        type="submit"
+        :aria-describedby="state.err ? 'register-error' : undefined"
+      >
         {{ t("create_button") }}
       </button>
-    </fieldset>
-    <router-link class="forgot"
-                 :to="{ name: 'login', params: { em: state.email}}">
+    </div>
+
+    <router-link
+      class="forgot"
+      :to="{ name: 'login', query: { email: state.email}}"
+    >
       {{ t("go_login") }}
     </router-link>
   </form>
@@ -44,6 +56,8 @@
 import { reactive, onBeforeMount, inject } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
+import ErrorAlert from './ErrorAlert.vue';
+import SuccessState from './SuccessState.vue';
 
 const site_config = inject('site_config');
 const router = useRouter();
@@ -107,4 +121,19 @@ async function doRegister() {
 }
 </script>
 
+<style scoped lang="scss">
+.form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem; /* 24px */
+}
 
+.success-message {
+  font-size: 1.125rem; /* 18px */
+  color: var(--pav-color-stone-600);
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-stone-300);
+  }
+}
+</style>

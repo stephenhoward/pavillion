@@ -32,7 +32,7 @@ export default class AuthenticationInterface {
     return this.authenticationService.generatePasswordResetCodeForAccount(account);
   }
 
-  async validatePasswordResetCode(code: string): Promise<boolean> {
+  async validatePasswordResetCode(code: string): Promise<Account|undefined> {
     return this.authenticationService.validatePasswordResetCode(code);
   }
 
