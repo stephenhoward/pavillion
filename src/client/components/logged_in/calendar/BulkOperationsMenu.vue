@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
+import PillButton from '@/client/components/common/PillButton.vue';
 
 const { t } = useTranslation('calendars', {
   keyPrefix: 'bulk_operations',
@@ -42,8 +43,8 @@ const deleteEvents = () => {
 
 <template>
   <div
+    v-if="isVisible"
     class="bulk-operations-menu"
-    :class="{ hidden: !isVisible }"
     role="toolbar"
     :aria-label="t('menu_label')"
   >
@@ -57,64 +58,84 @@ const deleteEvents = () => {
     </div>
 
     <div class="bulk-actions">
-      <button
+      <PillButton
         type="button"
-        class="secondary"
+        variant="secondary"
+        size="sm"
+        class="assign-btn"
         data-testid="assign-categories-btn"
         @click="assignCategories"
         :aria-label="t('assign_categories_label')"
       >
         {{ t('assign_categories') }}
-      </button>
+      </PillButton>
 
-      <button
+      <PillButton
         type="button"
-        class="danger"
+        variant="secondary"
+        size="sm"
+        class="delete-btn"
         data-testid="delete-events-btn"
         @click="deleteEvents"
         :aria-label="t('delete_events_label')"
       >
         {{ t('delete_events') }}
-      </button>
+      </PillButton>
 
-      <button
+      <PillButton
         type="button"
-        class="tertiary"
+        variant="ghost"
+        size="sm"
         data-testid="deselect-all-btn"
         @click="deselectAll"
         :aria-label="t('deselect_all_label')"
       >
         {{ t('deselect_all') }}
-      </button>
+      </PillButton>
     </div>
   </div>
 </template>
 
 <style scoped lang="scss">
-@use '../../../assets/mixins' as *;
+@use '../../../assets/style/components/event-management' as *;
 
 .bulk-operations-menu {
-  @include floating-container-bottom-center;
-  @include floating-container-horizontal;
+  @include bulk-actions-bar;
 
   .selection-info {
-    @include floating-selection-info;
+    .selection-count {
+      color: white;
+      font-weight: 500;
+      font-size: 0.9375rem;
+    }
   }
 
   .bulk-actions {
-    @include floating-actions-group;
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
 
-    button {
-      &.secondary {
-        @include floating-btn-primary;
+    // Sky-500 for assign categories button
+    .assign-btn {
+      background-color: var(--pav-color-sky-500);
+      color: white;
+      border-color: var(--pav-color-sky-500);
+
+      &:hover {
+        background-color: var(--pav-color-sky-600);
+        border-color: var(--pav-color-sky-600);
       }
+    }
 
-      &.danger {
-        @include floating-btn-danger;
-      }
+    // Red-500 for delete events button
+    .delete-btn {
+      background-color: var(--pav-color-red-500);
+      color: white;
+      border-color: var(--pav-color-red-500);
 
-      &.tertiary {
-        @include floating-btn-ghost;
+      &:hover {
+        background-color: var(--pav-color-red-600);
+        border-color: var(--pav-color-red-600);
       }
     }
   }

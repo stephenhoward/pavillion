@@ -1,8 +1,11 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { useTranslation } from 'i18next-vue';
+import { X } from 'lucide-vue-next';
 import CalendarService from '@/client/service/calendar';
 import { useEventStore } from '@/client/stores/eventStore';
+import PillButton from '@/client/components/common/PillButton.vue';
+import ToggleChip from '@/client/components/common/ToggleChip.vue';
 
 const { t } = useTranslation('calendars', {
   keyPrefix: 'bulk_operations',
@@ -121,7 +124,7 @@ const toggleCategory = (categoryId) => {
         @click="handleClose"
         :aria-label="t('close_dialog')"
       >
-        ×
+        <X :size="20" aria-hidden="true" />
       </button>
     </header>
 
@@ -142,62 +145,65 @@ const toggleCategory = (categoryId) => {
         </div>
 
         <div v-else class="category-list">
-          <label
+          <ToggleChip
             v-for="category in availableCategories"
             :key="category.id"
-            class="category-option"
-          >
-            <input
-              type="checkbox"
-              :value="category.id"
-              :checked="selectedCategoryIds.includes(category.id)"
-              @change="toggleCategory(category.id)"
-            />
-            <span class="category-name">{{ category.content('en').name }}</span>
-          </label>
+            :model-value="selectedCategoryIds.includes(category.id)"
+            :label="category.content('en').name"
+            @update:model-value="() => toggleCategory(category.id)"
+          />
         </div>
       </div>
     </div>
 
     <footer>
-      <button
-        type="button"
-        class="btn-ghost"
+      <PillButton
+        variant="ghost"
         @click="handleClose"
         :disabled="isLoading"
       >
         {{ t('cancel') }}
-      </button>
-      <button
-        type="button"
-        class="btn-primary"
+      </PillButton>
+      <PillButton
+        variant="primary"
         @click="handleAssignCategories"
         :disabled="!isFormValid || isLoading"
       >
         <span v-if="isLoading">{{ t('assigning') }}</span>
         <span v-else>{{ t('assign_categories') }}</span>
-      </button>
+      </PillButton>
     </footer>
   </div>
 </template>
 
 <style scoped lang="scss">
-@use '../../../assets/mixins' as *;
-
-// Use existing dialog system from _dialogs.scss - minimal custom styling needed
+@use '@/client/assets/mixins' as *;
+@use '@/client/assets/style/components/event-management' as *;
 
 .close-button {
   background: none;
   border: none;
-  font-size: 24px;
   cursor: pointer;
-  padding: 4px 8px;
-  color: #666;
-  border-radius: 4px;
+  padding: 0.5rem;
+  color: var(--pav-color-stone-600);
+  border-radius: 0.5rem; // rounded-lg
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s, color 0.2s;
 
   &:hover {
-    background: rgba(0, 0, 0, 0.05);
-    color: #333;
+    background-color: var(--pav-color-stone-100);
+    color: var(--pav-color-stone-900);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-stone-400);
+
+    &:hover {
+      background-color: var(--pav-color-stone-800);
+      color: var(--pav-color-stone-100);
+    }
   }
 }
 
@@ -207,67 +213,69 @@ const toggleCategory = (categoryId) => {
 }
 
 .selection-summary {
-  margin: 0 0 20px 0;
-  color: #666;
-  font-size: 14px;
+  margin: 0 0 1.5rem 0;
+  color: var(--pav-color-stone-600);
+  font-size: 0.875rem;
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-stone-400);
+  }
 }
 
 .error-message {
-  @include error-message;
-  margin-bottom: 20px;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  background-color: var(--pav-color-red-50);
+  border: 1px solid var(--pav-color-red-200);
+  border-radius: 0.75rem; // rounded-xl
+  color: var(--pav-color-red-700);
+  font-size: 0.875rem;
+
+  @media (prefers-color-scheme: dark) {
+    background-color: rgba(239, 68, 68, 0.1);
+    border-color: var(--pav-color-red-900);
+    color: var(--pav-color-red-300);
+  }
 }
 
 .category-selection {
   h3 {
-    margin: 0 0 16px 0;
-    font-size: 16px;
-    font-weight: 500;
+    @include section-label;
+    margin: 0 0 1rem 0;
   }
 
   .no-categories {
-    @include loading-state;
+    text-align: center;
+    padding: 2rem 1rem;
+    color: var(--pav-color-stone-500);
+    font-size: 0.875rem;
     font-style: italic;
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-400);
+    }
   }
 
   .category-list {
-    @include vstack-gap($spacing-sm);
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 0.75rem;
 
-    .category-option {
-      @include list-item-base;
-      cursor: pointer;
-      gap: 12px;
-
-      &:hover {
-        background: rgba(0, 123, 255, 0.05);
-        border-color: #007bff;
-      }
-
-      input[type="checkbox"] {
-        width: 18px;
-        height: 18px;
-        cursor: pointer;
-      }
-
-      .category-name {
-        flex: 1;
-        font-weight: 500;
-        user-select: none;
-      }
+    @media (max-width: 768px) {
+      grid-template-columns: 1fr;
     }
   }
 }
 
 footer {
-  button {
-    &.btn-primary {
-      @include btn-primary;
-      @include btn-md;
-    }
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--pav-color-stone-200);
 
-    &.btn-ghost {
-      @include btn-ghost;
-      @include btn-md;
-    }
+  @media (prefers-color-scheme: dark) {
+    border-top-color: var(--pav-color-stone-700);
   }
 }
 </style>

@@ -1,0 +1,259 @@
+// Event Management Component Styles
+// Mixins and patterns for event list and event editor screens
+
+// ======================
+// Animations
+// ======================
+
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+// ======================
+// Mixins
+// ======================
+
+// Sticky header with backdrop blur
+@mixin sticky-blur-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  backdrop-filter: blur(8px);
+  background: rgba(255, 255, 255, 0.8);
+
+  @media (prefers-color-scheme: dark) {
+    background: rgba(28, 25, 23, 0.8); // Stone-900 with opacity
+  }
+}
+
+// Pill-shaped search input with icon
+@mixin pill-search-input {
+  position: relative;
+
+  input {
+    width: 100%;
+    padding: 0.75rem 2.5rem 0.75rem 2.5rem; // space for icon on both sides
+    border-radius: 9999px;
+    border: 1px solid var(--pav-color-stone-200);
+    background: var(--pav-color-stone-50);
+    color: var(--pav-color-stone-900);
+    font-size: 0.9375rem; // 15px
+    transition: all 0.15s ease;
+
+    &::placeholder {
+      color: var(--pav-color-stone-400);
+    }
+
+    &:focus {
+      outline: none;
+      border-color: var(--pav-color-orange-500);
+      background: white;
+      box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      background: var(--pav-color-stone-800);
+      border-color: var(--pav-color-stone-700);
+      color: var(--pav-color-stone-100);
+    }
+  }
+
+  .search-icon {
+    position: absolute;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 1.25rem;
+    height: 1.25rem;
+    color: var(--pav-color-stone-400);
+    pointer-events: none;
+  }
+
+  .clear-search {
+    position: absolute;
+    right: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    padding: 0.25rem;
+    background: transparent;
+    border: none;
+    border-radius: 9999px;
+    color: var(--pav-color-stone-500);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+
+    &:hover {
+      background: var(--pav-color-stone-200);
+      color: var(--pav-color-stone-700);
+    }
+
+    &:focus {
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.3);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-400);
+
+      &:hover {
+        background: var(--pav-color-stone-700);
+        color: var(--pav-color-stone-200);
+      }
+    }
+  }
+}
+
+// Event card with selection state
+@mixin event-card {
+  border-radius: 0.75rem; // rounded-xl
+  border: 1px solid var(--pav-color-stone-200);
+  background: white;
+  padding: 1rem;
+  transition: all 0.15s ease;
+
+  &:hover {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  }
+
+  &.selected {
+    border-color: var(--pav-color-orange-400);
+    background: var(--pav-color-orange-50);
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    background: var(--pav-color-stone-800);
+    border-color: var(--pav-color-stone-700);
+
+    &.selected {
+      border-color: var(--pav-color-orange-400);
+      background: rgba(249, 115, 22, 0.1);
+    }
+  }
+}
+
+// Section label (no uppercase, more muted)
+@mixin section-label {
+  font-size: 0.8125rem; // 13px
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--pav-color-stone-600);
+  margin-bottom: 0.75rem;
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-stone-400);
+  }
+}
+
+// Section card wrapper
+@mixin section-card {
+  background: white;
+  border-radius: 0.75rem; // rounded-xl
+  border: 1px solid var(--pav-color-stone-200);
+  padding: 1.5rem;
+
+  @media (prefers-color-scheme: dark) {
+    background: var(--pav-color-stone-800);
+    border-color: var(--pav-color-stone-700);
+  }
+}
+
+// Category filter container with dynamic scroll indicators
+@mixin category-filter-container {
+  position: relative;
+
+  .category-chips {
+    display: flex;
+    gap: 0.75rem;
+    padding-bottom: 0.25rem; // space for focus ring
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none; // Firefox
+
+    &::-webkit-scrollbar {
+      display: none; // Chrome, Safari
+    }
+  }
+}
+
+// Bulk actions bar
+@mixin bulk-actions-bar {
+  position: fixed;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+
+  background: var(--pav-color-stone-900);
+  color: white;
+  border-radius: 1rem; // rounded-2xl
+  padding: 1rem 1.5rem;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+
+  animation: slide-up 0.3s ease-out;
+
+  @media (prefers-color-scheme: dark) {
+    background: var(--pav-color-stone-800);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
+  }
+}
+
+// Form input with rounded corners and focus state
+@mixin form-input-rounded {
+  border-radius: 0.75rem; // rounded-xl
+  background: var(--pav-color-stone-50);
+  border: 1px solid var(--pav-color-stone-200);
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  color: var(--pav-color-stone-900);
+  transition: all 0.15s ease;
+
+  &::placeholder {
+    color: var(--pav-color-stone-400);
+  }
+
+  &:focus {
+    outline: none;
+    border-color: var(--pav-color-orange-500);
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    background: var(--pav-color-stone-800);
+    border-color: var(--pav-color-stone-700);
+    color: var(--pav-color-stone-100);
+  }
+}
+
+// Hover reveal actions (for edit/duplicate buttons)
+@mixin hover-reveal {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+
+  *:hover > & {
+    opacity: 1;
+  }
+}

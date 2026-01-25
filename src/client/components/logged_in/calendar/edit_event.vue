@@ -1,28 +1,41 @@
 <style scoped lang="scss">
 @use '@/client/assets/mixins' as *;
+@use '@/client/assets/style/components/event-management' as *;
 
 /* Full-page event editor container - uses 100vh since it renders as a top-level route */
 .event-editor-page {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  background-color: var(--pav-color-surface-primary);
+  background-color: var(--pav-color-stone-50);
+
+  @media (prefers-color-scheme: dark) {
+    background-color: var(--pav-color-stone-900);
+  }
 }
 
-/* Page header with back button and title */
+/* Page header with back button, title, and action buttons */
 .page-header {
   display: flex;
   align-items: center;
-  gap: var(--pav-space-md);
-  padding: var(--pav-space-lg) var(--pav-space-xl);
-  border-bottom: 1px solid var(--pav-color-border-secondary);
-  background-color: var(--pav-color-surface-primary);
+  gap: 1rem;
+  padding: 1.5rem 2rem;
+  border-bottom: 1px solid var(--pav-color-stone-200);
+  background-color: white;
   position: sticky;
   top: 0;
   z-index: 10;
 
-  @include dark-mode {
-    background-color: var(--pav-color-surface-secondary);
+  @media (prefers-color-scheme: dark) {
+    background-color: var(--pav-color-stone-800);
+    border-bottom-color: var(--pav-color-stone-700);
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-left: auto;
   }
 
   .back-button {
@@ -31,36 +44,51 @@
     justify-content: center;
     width: 40px;
     height: 40px;
-    border: 1px solid var(--pav-color-border-primary);
-    border-radius: var(--pav-border-radius-md);
+    border: none;
+    border-radius: 0.5rem; // rounded-lg
     background-color: transparent;
-    color: var(--pav-color-text-primary);
+    color: var(--pav-color-stone-700);
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.15s ease;
     flex-shrink: 0;
 
+    svg {
+      width: 20px;
+      height: 20px;
+      min-width: 20px;
+      display: block;
+      flex-shrink: 0;
+    }
+
     &:hover {
-      background-color: var(--pav-color-interactive-secondary-hover);
-      border-color: var(--pav-color-border-focus);
+      background-color: var(--pav-color-stone-100);
+      color: var(--pav-color-stone-900);
     }
 
-    &:focus {
-      outline: none;
-      box-shadow: 0 0 0 2px rgba(var(--pav-color-interactive-primary-rgb), 0.2);
+    &:focus-visible {
+      outline: 2px solid var(--pav-color-orange-500);
+      outline-offset: 2px;
     }
 
-    .back-icon {
-      font-size: 20px;
-      line-height: 1;
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-400);
+
+      &:hover {
+        background-color: var(--pav-color-stone-800);
+        color: var(--pav-color-stone-200);
+      }
     }
   }
 
   h1 {
     margin: 0;
-    font-size: var(--pav-font-size-heading-3);
-    font-weight: var(--pav-font-weight-semibold);
-    color: var(--pav-color-text-primary);
-    flex: 1;
+    font-size: 1.25rem; // text-xl (smaller than before)
+    font-weight: 500; // font-medium (lighter than semibold)
+    color: var(--pav-color-stone-900);
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-100);
+    }
   }
 }
 
@@ -98,40 +126,352 @@
   border: 0;
 }
 
-/* Main form container */
-main[role="main"] {
+/* Main form container - single column */
+main[role="main"].editor-main {
   flex: 1;
-  padding: var(--pav-space-xl);
-  max-width: 900px;
-  margin: 0 auto;
   width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 0;
   box-sizing: border-box;
-
-  @include mobile-only {
-    padding: var(--pav-space-lg);
-  }
 }
 
 /* Form styling */
 form {
   display: flex;
   flex-direction: column;
-  gap: var(--pav-space-xl);
+  gap: 0;
+}
+
+.btn-cancel {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--pav-color-stone-600);
+  font-size: 0.9375rem;
+  font-weight: 400;
+  cursor: pointer;
+  transition: color 0.15s ease;
+
+  &:hover {
+    color: var(--pav-color-stone-900);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-stone-400);
+
+    &:hover {
+      color: var(--pav-color-stone-200);
+    }
+  }
+}
+
+.btn-save {
+  padding: 0.625rem 1.5rem;
+  border: none;
+  background: var(--pav-color-orange-500);
+  color: white;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 9999px; // Full pill shape
+  transition: all 0.15s ease;
+
+  &:hover {
+    background: var(--pav-color-orange-600);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--pav-color-orange-500);
+    outline-offset: 2px;
+  }
+}
+
+/* Single column container */
+.editor-container {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  padding: 2rem;
+
+  @media (max-width: 768px) {
+    padding: 1rem;
+    gap: 1.5rem;
+  }
+}
+
+/* Section styling */
+.editor-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.section-header {
+  margin: 0;
+  padding: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--pav-color-stone-500);
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-stone-400);
+  }
+}
+
+.section-card {
+  background: white;
+  border: 1px solid var(--pav-color-stone-200);
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+
+  @media (prefers-color-scheme: dark) {
+    background: var(--pav-color-stone-800);
+    border-color: var(--pav-color-stone-700);
+  }
+}
+
+/* Event fields */
+.event-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.field-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--pav-color-stone-700);
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-stone-300);
+  }
+
+  .info-icon {
+    margin-left: 0.25rem;
+    color: var(--pav-color-stone-400);
+    cursor: help;
+  }
+}
+
+.field-input,
+.field-textarea {
+  padding: 0.625rem 0.875rem;
+  border: 1px solid var(--pav-color-stone-200);
+  border-radius: 0.375rem;
+  font-size: 0.9375rem;
+  background: var(--pav-color-stone-50);
+  color: var(--pav-color-stone-900);
+  font-family: inherit;
+  transition: all 0.15s ease;
+
+  &:focus {
+    outline: none;
+    border-color: var(--pav-color-orange-500);
+    background: white;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    background: var(--pav-color-stone-900);
+    border-color: var(--pav-color-stone-600);
+    color: var(--pav-color-stone-100);
+
+    &:focus {
+      background: var(--pav-color-stone-800);
+    }
+  }
+}
+
+.field-textarea {
+  resize: vertical;
+  min-height: 80px;
+  line-height: 1.5;
+}
+
+.remove-translation-link {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--pav-color-red-600);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s ease;
+
+  &:hover {
+    color: var(--pav-color-red-700);
+    text-decoration: underline;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-red-400);
+
+    &:hover {
+      color: var(--pav-color-red-300);
+    }
+  }
+}
+
+/* Location display/editor */
+.location-display {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.location-info {
+  flex: 1;
+}
+
+.location-name {
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--pav-color-stone-900);
+  margin-bottom: 0.25rem;
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-stone-100);
+  }
+}
+
+.location-address {
+  font-size: 0.875rem;
+  color: var(--pav-color-stone-600);
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-stone-400);
+  }
+}
+
+.btn-change {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--pav-color-stone-300);
+  background: white;
+  color: var(--pav-color-stone-700);
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &:hover {
+    background: var(--pav-color-stone-50);
+    border-color: var(--pav-color-stone-400);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    background: var(--pav-color-stone-800);
+    border-color: var(--pav-color-stone-600);
+    color: var(--pav-color-stone-300);
+
+    &:hover {
+      background: var(--pav-color-stone-700);
+    }
+  }
+}
+
+.location-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.location-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 0.5rem;
+
+  @media (max-width: 480px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Schedule list */
+.schedule-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.schedule-item {
+  padding: 1rem;
+  background: var(--pav-color-stone-50);
+  border: 1px solid var(--pav-color-stone-200);
+  border-radius: 0.5rem;
+
+  @media (prefers-color-scheme: dark) {
+    background: var(--pav-color-stone-900);
+    border-color: var(--pav-color-stone-700);
+  }
+}
+
+.add-schedule-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border: 2px dashed var(--pav-color-stone-300);
+  background: transparent;
+  color: var(--pav-color-stone-600);
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  width: 100%;
+  justify-content: center;
+
+  &:hover {
+    border-color: var(--pav-color-stone-400);
+    background: var(--pav-color-stone-50);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    border-color: var(--pav-color-stone-600);
+    color: var(--pav-color-stone-400);
+
+    &:hover {
+      border-color: var(--pav-color-stone-500);
+      background: var(--pav-color-stone-800);
+    }
+  }
+}
+
+.schedule-help-text {
+  margin: 0.75rem 0 0 0;
+  font-size: 0.8125rem;
+  color: var(--pav-color-stone-500);
+  line-height: 1.5;
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-stone-400);
+  }
 }
 
 /* Error styling */
 .error {
-  color: #d32f2f;
+  color: var(--pav-color-red-700);
   font-size: 0.9rem;
-  padding: var(--pav-space-md);
-  border-radius: var(--pav-border-radius-md);
-  background-color: rgba(211, 47, 47, 0.1);
-  border: 1px solid rgba(211, 47, 47, 0.3);
+  padding: 1rem 1.5rem;
+  border-radius: 0.75rem; // rounded-xl
+  background-color: var(--pav-color-red-50);
+  border: 1px solid var(--pav-color-red-200);
 
   @media (prefers-color-scheme: dark) {
-    color: #f44336;
-    background-color: rgba(244, 67, 54, 0.1);
-    border-color: rgba(244, 67, 54, 0.3);
+    color: var(--pav-color-red-300);
+    background-color: rgba(239, 68, 68, 0.1);
+    border-color: var(--pav-color-red-900);
   }
 
   ul {
@@ -149,33 +489,9 @@ form {
   }
 }
 
-/* Fieldset styling */
-fieldset {
-  border: 1px solid var(--pav-color-border-primary);
-  border-radius: var(--pav-border-radius-md);
-  padding: var(--pav-space-xl);
-  margin: 0;
-  background-color: var(--pav-color-surface-primary);
-
-  @include dark-mode {
-    background-color: var(--pav-color-surface-secondary);
-  }
-
-  legend {
-    font-weight: var(--pav-font-weight-semibold);
-    font-size: var(--pav-font-size-heading-5);
-    color: var(--pav-color-text-primary);
-    padding: 0 var(--pav-space-sm);
-  }
-}
-
-/* Form group styling */
+/* Form group styling (for general use) */
 .form-group {
-  margin-bottom: var(--pav-space-lg);
-
-  &:last-child {
-    margin-bottom: 0;
-  }
+  margin-bottom: 0;
 
   label {
     display: block;
@@ -183,171 +499,22 @@ fieldset {
     font-weight: var(--pav-font-weight-medium);
     color: var(--pav-color-text-primary);
   }
-
-  input {
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    appearance: none;
-    font-size: 14px;
-    display: block;
-    width: 100%;
-    border-radius: var(--pav-border-radius-sm);
-    border: 1px solid var(--pav-color-border-primary);
-    padding: var(--pav-space-md);
-    background-color: var(--pav-color-surface-primary);
-    color: var(--pav-color-text-primary);
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
-
-    &:focus {
-      outline: none;
-      border-color: var(--pav-color-border-focus);
-      box-shadow: 0 0 0 2px rgba(var(--pav-color-interactive-primary-rgb), 0.2);
-    }
-
-    &:required {
-      border-left: 3px solid var(--pav-color-border-focus);
-    }
-
-    &.invalid {
-      border-color: #d32f2f;
-      border-width: 2px;
-
-      @media (prefers-color-scheme: dark) {
-        border-color: #f44336;
-      }
-    }
-
-    @include dark-mode {
-      background-color: var(--pav-color-surface-secondary);
-    }
-  }
-
-  select {
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    appearance: none;
-    font-size: 14px;
-    display: block;
-    width: 100%;
-    border-radius: var(--pav-border-radius-sm);
-    border: 1px solid var(--pav-color-border-primary);
-    padding: var(--pav-space-md);
-    background-color: var(--pav-color-surface-primary);
-    color: var(--pav-color-text-primary);
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
-    cursor: pointer;
-
-    &:focus {
-      outline: none;
-      border-color: var(--pav-color-border-focus);
-      box-shadow: 0 0 0 2px rgba(var(--pav-color-interactive-primary-rgb), 0.2);
-    }
-
-    @include dark-mode {
-      background-color: var(--pav-color-surface-secondary);
-    }
-  }
-}
-
-/* Language controls */
-.language-controls {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--pav-space-md);
-  margin-bottom: var(--pav-space-lg);
-
-  .form-group {
-    flex: 1;
-    margin-bottom: 0;
-  }
-
-  button {
-    padding: var(--pav-space-md);
-    border: 1px solid var(--pav-color-border-primary);
-    border-radius: var(--pav-border-radius-sm);
-    background-color: var(--pav-color-surface-secondary);
-    color: var(--pav-color-text-primary);
-    cursor: pointer;
-    flex-shrink: 0;
-
-    &:hover {
-      background-color: var(--pav-color-interactive-secondary-hover);
-    }
-  }
-}
-
-/* Event content fields */
-.event-content-fields {
-  display: flex;
-  flex-direction: column;
-  gap: var(--pav-space-md);
-  padding: var(--pav-space-lg);
-  background-color: var(--pav-color-surface-secondary);
-  border-radius: var(--pav-border-radius-sm);
-  border: 1px solid var(--pav-color-border-secondary);
-
-  @include dark-mode {
-    background-color: var(--pav-color-surface-primary);
-  }
-}
-
-/* Location fieldset specific styling */
-fieldset.location {
-  .form-group {
-    &:first-child input {
-      max-width: 500px;
-    }
-  }
-}
-
-/* Schedule styling */
-.schedule-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--pav-space-lg);
-}
-
-.schedule {
-  position: relative;
-  padding: var(--pav-space-lg);
-  border: 1px solid var(--pav-color-border-secondary);
-  border-radius: var(--pav-border-radius-md);
-  background-color: var(--pav-color-surface-secondary);
-
-  @include dark-mode {
-    background-color: var(--pav-color-surface-primary);
-  }
-
-  .remove {
-    position: absolute;
-    top: var(--pav-space-sm);
-    right: var(--pav-space-sm);
-    font-size: 20px;
-    background: none;
-    border: none;
-    color: var(--pav-color-text-secondary);
-    cursor: pointer;
-    padding: var(--pav-space-xs);
-    border-radius: var(--pav-border-radius-sm);
-    transition: all 0.2s ease;
-
-    &:hover {
-      color: var(--pav-color-danger);
-      background-color: rgba(var(--pav-color-danger-rgb), 0.1);
-    }
-  }
 }
 
 /* Form actions footer */
 .form-actions {
   display: flex;
-  gap: var(--pav-space-md);
   justify-content: flex-end;
-  padding-top: var(--pav-space-xl);
-  border-top: 1px solid var(--pav-color-border-secondary);
-  margin-top: var(--pav-space-lg);
+  gap: 0.75rem;
+  padding-top: 2rem;
+  margin-top: 2rem;
+  border-top: 1px solid var(--pav-color-stone-200);
 
-  @include mobile-only {
+  @media (prefers-color-scheme: dark) {
+    border-top-color: var(--pav-color-stone-700);
+  }
+
+  @media (max-width: 768px) {
     flex-direction: column-reverse;
 
     button {
@@ -435,15 +602,31 @@ button {
 
 <template>
   <div class="event-editor-page">
-    <!-- Page Header with Back Button -->
+    <!-- Page Header with Back Button and Actions -->
     <header class="page-header">
       <button type="button"
               class="back-button"
               @click="handleBack"
               :aria-label="t('back_button', 'Go back')">
-        <span class="back-icon" aria-hidden="true">&larr;</span>
+        <ArrowLeft :size="20" aria-hidden="true" />
       </button>
       <h1>{{ pageTitle }}</h1>
+      <div class="header-actions">
+        <button
+          type="button"
+          class="btn-cancel"
+          @click="handleBack"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          form="event-form"
+          class="btn-save"
+        >
+          Save Changes
+        </button>
+      </div>
     </header>
 
     <!-- Loading State -->
@@ -453,8 +636,15 @@ button {
     </div>
 
     <!-- Main Content - only render when event is loaded -->
-    <main v-else-if="state.event" role="main" aria-label="Event Editor">
-      <form @submit.prevent="saveModel()" aria-label="Event Information Form">
+    <main
+      v-else-if="state.event"
+      role="main"
+      aria-label="Event Editor"
+      class="editor-main"
+    >
+      <form id="event-form" @submit.prevent="saveModel()" aria-label="Event Information Form">
+
+        <!-- Error Display -->
         <div v-if="state.err"
              ref="errorContainer"
              class="error"
@@ -470,182 +660,196 @@ button {
           </div>
         </div>
 
-        <!-- Calendar Selection -->
-        <fieldset v-if="state.availableCalendars.length > 1" class="calendar-selection">
-          <legend>{{ t('calendar_label') }}</legend>
-          <div class="form-group">
-            <label for="calendar-select" class="sr-only">Choose Calendar</label>
-            <select id="calendar-select"
-                    v-model="state.event.calendarId"
-                    :aria-describedby="state.err ? 'calendar-error' : null">
-              <option v-for="calendar in state.availableCalendars" :key="calendar.id" :value="calendar.id">
-                {{ calendar.content('en').name || calendar.urlName }}
-              </option>
-            </select>
-          </div>
-        </fieldset>
+        <!-- Single Column Layout -->
+        <div class="editor-container">
 
-        <!-- Event Description -->
-        <fieldset class="description">
-          <legend>{{ t('event_description_label') }}</legend>
-          <div class="language-controls">
-            <div class="form-group">
-              <label for="language-select">Language</label>
-              <select id="language-select" v-model="state.lang">
-                <option v-for="lang in languages" :key="lang" :value="lang">{{ iso6391.getName(lang) }}</option>
-              </select>
+          <!-- EVENT DETAILS Section -->
+          <section class="editor-section">
+            <h2 class="section-header">EVENT DETAILS</h2>
+
+            <div class="section-card">
+              <!-- Language Tabs -->
+              <LanguageTabSelector
+                v-model="state.lang"
+                :languages="languages"
+                @add-language="state.showLanguagePicker = true"
+                @remove-language="removeLanguage"
+              />
+
+              <!-- Event Content Fields (for selected language) -->
+              <div
+                :dir="iso6391.getDir(state.lang) === 'rtl' ? 'rtl' : 'ltr'"
+                class="event-fields"
+              >
+                <div class="form-field">
+                  <label :for="`event-name-${state.lang}`" class="field-label">Event Title</label>
+                  <input
+                    :id="`event-name-${state.lang}`"
+                    type="text"
+                    name="name"
+                    v-model="state.event.content(state.lang).name"
+                    class="field-input"
+                    required
+                  />
+                </div>
+
+                <div class="form-field">
+                  <label :for="`event-description-${state.lang}`" class="field-label">Description</label>
+                  <textarea
+                    :id="`event-description-${state.lang}`"
+                    name="description"
+                    v-model="state.event.content(state.lang).description"
+                    class="field-textarea"
+                    rows="4"
+                  />
+                </div>
+
+                <div class="form-field">
+                  <label :for="`event-accessibility-${state.lang}`" class="field-label">
+                    Accessibility Information
+                    <span class="info-icon" title="Information about accessibility features">ⓘ</span>
+                  </label>
+                  <textarea
+                    :id="`event-accessibility-${state.lang}`"
+                    name="accessibility"
+                    v-model="state.event.content(state.lang).accessibilityInfo"
+                    class="field-textarea"
+                    rows="3"
+                  />
+                </div>
+
+                <button
+                  v-if="languages.length > 1"
+                  type="button"
+                  class="remove-translation-link"
+                  @click="removeLanguage(state.lang)"
+                >
+                  Remove {{ iso6391.getName(state.lang) }} translation
+                </button>
+              </div>
             </div>
-            <button type="button"
-                    :aria-label="t('add_language')"
-                    @click="state.showLanguagePicker=true;">
-              +
-            </button>
-          </div>
+          </section>
 
-          <div v-for="language in languages" :key="language">
-            <div v-if="language == state.lang"
-                 :dir="iso6391.getDir(language) == 'rtl' ? 'rtl' : ''"
-                 class="event-content-fields">
-              <div class="form-group">
-                <label :for="`event-name-${language}`">Event Name</label>
-                <input :id="`event-name-${language}`"
-                       type="text"
-                       name="name"
-                       :placeholder="t('name_placeholder')"
-                       v-model="state.event.content(language).name"
-                       required />
+          <!-- LOCATION Section -->
+          <section class="editor-section">
+            <h2 class="section-header">LOCATION</h2>
+
+            <div class="section-card">
+              <div class="location-display" v-if="state.event.location.name">
+                <div class="location-info">
+                  <div class="location-name">{{ state.event.location.name }}</div>
+                  <div class="location-address">
+                    {{ [state.event.location.address, state.event.location.city, state.event.location.state, state.event.location.postalCode].filter(Boolean).join(', ') }}
+                  </div>
+                </div>
+                <button type="button" class="btn-change" @click="state.showLocationEditor = true">
+                  Change
+                </button>
               </div>
 
-              <div class="form-group">
-                <label :for="`event-description-${language}`">Event Description</label>
-                <input :id="`event-description-${language}`"
-                       type="text"
-                       name="description"
-                       :placeholder="t('description_placeholder')"
-                       v-model="state.event.content(language).description" />
+              <div class="location-editor" v-else>
+                <div class="form-field">
+                  <input
+                    type="text"
+                    v-model="state.event.location.name"
+                    placeholder="Location name"
+                    class="field-input"
+                  />
+                </div>
+                <div class="form-field">
+                  <input
+                    type="text"
+                    v-model="state.event.location.address"
+                    placeholder="Street address"
+                    class="field-input"
+                  />
+                </div>
+                <div class="location-row">
+                  <input
+                    type="text"
+                    v-model="state.event.location.city"
+                    placeholder="City"
+                    class="field-input"
+                  />
+                  <input
+                    type="text"
+                    v-model="state.event.location.state"
+                    placeholder="State"
+                    class="field-input"
+                  />
+                  <input
+                    type="text"
+                    v-model="state.event.location.postalCode"
+                    placeholder="Zip"
+                    class="field-input"
+                  />
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- EVENT IMAGE Section -->
+          <section class="editor-section">
+            <h2 class="section-header">EVENT IMAGE</h2>
+
+            <div class="section-card">
+              <ImageUpload
+                :calendar-id="state.event.calendarId || 'default'"
+                :multiple="false"
+                @upload-complete="handleImageUpload"
+                aria-label="Event Image Upload"
+              />
+            </div>
+          </section>
+
+          <!-- CATEGORIES Section -->
+          <section class="editor-section">
+            <h2 class="section-header">CATEGORIES</h2>
+
+            <div class="section-card">
+              <CategorySelector
+                :calendar-id="state.event.calendarId"
+                :selected-categories="state.selectedCategories"
+                @categories-changed="handleCategoriesChanged"
+                aria-label="Select Event Categories"
+              />
+            </div>
+          </section>
+
+          <!-- DATE & TIME Section -->
+          <section class="editor-section">
+            <h2 class="section-header">DATE & TIME</h2>
+
+            <div class="section-card">
+              <div class="schedule-list" role="group" aria-label="Event Schedules">
+                <div
+                  v-for="(schedule, index) in state.event.schedules"
+                  :key="index"
+                  class="schedule-item"
+                >
+                  <EventRecurrenceView
+                    :schedule="schedule"
+                    @remove-schedule="state.event.dropSchedule(index)"
+                  />
+                </div>
               </div>
 
-              <button type="button"
-                      @click="removeLanguage(language)"
-                      :aria-label="`Remove ${iso6391.getName(language)} language`">
-                {{ t('remove_language') }}
+              <button
+                type="button"
+                class="add-schedule-btn"
+                @click="state.event.addSchedule()"
+              >
+                <Plus :size="16" aria-hidden="true" />
+                Add another schedule
               </button>
+
+              <p class="schedule-help-text">
+                Add multiple schedules to create events that occur at different times or with different patterns.
+              </p>
             </div>
-          </div>
-        </fieldset>
+          </section>
 
-        <!-- Location Information -->
-        <fieldset class="location">
-          <legend>{{ t('location_label') }}</legend>
-          <div class="form-group">
-            <label for="location-name">Location Name</label>
-            <input id="location-name"
-                   type="text"
-                   name="name"
-                   :placeholder="t('location_name_placeholder')"
-                   v-model="state.event.location.name" />
-          </div>
-
-          <div class="form-group">
-            <label for="location-address">Address</label>
-            <input id="location-address"
-                   type="text"
-                   name="address"
-                   :placeholder="t('address_placeholder')"
-                   :class="{ invalid: state.invalidFields.includes('address') }"
-                   v-model="state.event.location.address" />
-          </div>
-
-          <div class="form-group">
-            <label for="location-city">City</label>
-            <input id="location-city"
-                   type="text"
-                   name="city"
-                   :placeholder="t('city_placeholder')"
-                   :class="{ invalid: state.invalidFields.includes('city') }"
-                   v-model="state.event.location.city" />
-          </div>
-
-          <div class="form-group">
-            <label for="location-state">State/Province</label>
-            <input id="location-state"
-                   type="text"
-                   name="state"
-                   :placeholder="t('state_placeholder')"
-                   :class="{ invalid: state.invalidFields.includes('state') }"
-                   v-model="state.event.location.state" />
-          </div>
-
-          <div class="form-group">
-            <label for="location-postal">Postal Code</label>
-            <input id="location-postal"
-                   type="text"
-                   name="postalCode"
-                   :placeholder="t('postalCode_placeholder')"
-                   :class="{ invalid: state.invalidFields.includes('postalCode') }"
-                   v-model="state.event.location.postalCode" />
-          </div>
-        </fieldset>
-
-        <!-- Media Upload -->
-        <fieldset class="images">
-          <legend>{{ t('image_label') }}</legend>
-          <ImageUpload
-            :calendar-id="state.event.calendarId || 'default'"
-            :multiple="false"
-            @upload-complete="handleImageUpload"
-            aria-label="Event Image Upload"
-          />
-        </fieldset>
-
-        <!-- Categories -->
-        <fieldset class="categories">
-          <legend>Event Categories</legend>
-          <CategorySelector
-            :calendar-id="state.event.calendarId"
-            :selected-categories="state.selectedCategories"
-            @categories-changed="handleCategoriesChanged"
-            aria-label="Select Event Categories"
-          />
-        </fieldset>
-
-        <!-- Event Scheduling -->
-        <fieldset class="scheduling">
-          <legend>{{ t('dates_label') }}</legend>
-          <div class="schedule-list" role="group" aria-label="Event Schedules">
-            <div class="schedule"
-                 v-for="(schedule, index) in state.event.schedules"
-                 :key="index"
-                 role="group"
-                 :aria-label="`Schedule ${index + 1}`">
-              <button class="remove"
-                      v-if="state.event.schedules.length > 1"
-                      type="button"
-                      @click="state.event.dropSchedule(index)"
-                      :aria-label="`Remove schedule ${index + 1}`">
-                &times;
-              </button>
-              <EventRecurrenceView :schedule="schedule" />
-            </div>
-          </div>
-          <button type="button"
-                  @click="state.event.addSchedule()"
-                  aria-label="Add new schedule">
-            {{ t("add_date_button") }}
-          </button>
-        </fieldset>
-
-        <!-- Form Actions -->
-        <footer class="form-actions">
-          <button type="button"
-                  class="btn btn--secondary"
-                  @click="handleBack">
-            {{ t("close_button") }}
-          </button>
-          <button type="submit" class="primary">
-            {{ (state.event.id && !state.isDuplicationMode) ? t("update_button") : t("create_button") }}
-          </button>
-        </footer>
+        </div>
       </form>
     </main>
 
@@ -673,19 +877,21 @@ button {
     <div class="unsaved-changes-confirmation">
       <p>{{ t('unsaved_changes_message', 'You have unsaved changes. Are you sure you want to leave?') }}</p>
       <div class="dialog-actions">
-        <button
+        <PillButton
           type="button"
+          variant="ghost"
           @click="cancelLeave"
         >
           {{ t('unsaved_changes_cancel', 'Stay') }}
-        </button>
-        <button
+        </PillButton>
+        <PillButton
           type="button"
+          variant="secondary"
           class="danger"
           @click="confirmLeave"
         >
           {{ t('unsaved_changes_confirm', 'Leave') }}
-        </button>
+        </PillButton>
       </div>
     </div>
   </ModalLayout>
@@ -695,6 +901,7 @@ button {
 import { reactive, ref, onBeforeMount, onMounted, computed, watch, nextTick } from 'vue';
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
+import { ArrowLeft, Plus, X, MapPin, Image, Calendar, Clock, Repeat, Trash2, Tag } from 'lucide-vue-next';
 import { CalendarEvent } from '@/common/model/events';
 import { EventLocation } from '@/common/model/location';
 import { validateLocationHierarchy } from '@/common/model/location';
@@ -708,8 +915,16 @@ import languagePicker from '@/client/components/common/languagePicker.vue';
 import ImageUpload from '@/client/components/common/media/ImageUpload.vue';
 import CategorySelector from './CategorySelector.vue';
 import ModalLayout from '@/client/components/common/modal.vue';
+import PillButton from '@/client/components/common/PillButton.vue';
+import LanguageTabSelector from '@/client/components/common/LanguageTabSelector.vue';
+import EditorPanel from './EditorPanel.vue';
 import iso6391 from 'iso-639-1-dir';
 import { useEventDuplication } from '@/client/composables/useEventDuplication';
+
+// Icon aliases for template use
+const CalendarIcon = Calendar;
+const ImageIcon = Image;
+const TagIcon = Tag;
 
 // Props for edit mode (eventId passed from route)
 const props = defineProps({
@@ -757,6 +972,7 @@ const state = reactive({
   isLoading: true,
   err: '',
   showLanguagePicker: false,
+  showLocationEditor: false,
   showUnsavedChangesDialog: false,
   lang: defaultLanguage,
   availableCalendars: [],

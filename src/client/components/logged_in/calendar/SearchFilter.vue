@@ -2,10 +2,11 @@
   <div class="search-filter">
     <!-- Search Input -->
     <div class="search-section">
-      <label for="event-search" class="search-label sr-only">
+      <label for="event-search" class="sr-only">
         {{ t('search_events') }}
       </label>
-      <div class="search-input-container">
+      <div class="search-input-wrapper">
+        <Search :size="20" class="search-icon" />
         <input
           id="event-search"
           v-model="state.searchQuery"
@@ -19,8 +20,9 @@
           type="button"
           class="clear-search"
           @click="clearSearch"
+          aria-label="Clear search"
         >
-          ✕
+          <X :size="16" />
         </button>
       </div>
     </div>
@@ -39,35 +41,55 @@
         {{ state.categoryError }}
       </div>
 
-      <div v-else-if="state.availableCategories.length > 0" class="category-filter">
-        <div
-          v-for="category in state.availableCategories"
-          :key="category.id"
-          class="category-option"
-          :class="{ 'selected': state.selectedCategoryIds.includes(category.id) }"
-          @click="toggleCategory(category.id)"
-        >
-          <span class="category-name">
-            {{ getCategoryName(category) }}
-          </span>
+      <div v-else-if="state.availableCategories.length > 0" class="category-filter-container">
+        <div ref="categoryScrollRef" class="category-chips">
+          <ToggleChip
+            v-for="category in state.availableCategories"
+            :key="category.id"
+            :model-value="state.selectedCategoryIds.includes(category.id)"
+            :label="getCategoryName(category)"
+            @update:model-value="() => toggleCategory(category.id)"
+          />
+        </div>
+
+        <!-- Left fade gradient with chevron -->
+        <div v-if="state.showStartFade" class="scroll-indicator start">
+          <div class="fade-gradient start-gradient"></div>
+          <div class="chevron-icon">
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+          </div>
+        </div>
+
+        <!-- Right fade gradient with chevron -->
+        <div v-if="state.showEndFade" class="scroll-indicator end">
+          <div class="fade-gradient end-gradient"></div>
+          <div class="chevron-icon">
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </div>
         </div>
       </div>
     </div>
 
-
     <!-- Clear All Filters -->
     <div v-if="hasActiveFilters" class="clear-filters-section">
-      <button type="button" class="clear-all-filters" @click="clearAllFilters">
+      <PillButton variant="ghost" size="sm" @click="clearAllFilters">
         {{ t('clear_all_filters') }}
-      </button>
+      </PillButton>
     </div>
   </div>
 </template>
 
 <script setup>
-import { reactive, onMounted, watch, computed } from 'vue';
+import { reactive, onMounted, onUnmounted, watch, computed, ref, nextTick } from 'vue';
 import { useTranslation } from 'i18next-vue';
+import { Search, X } from 'lucide-vue-next';
 import CategoryService from '@/client/service/category';
+import ToggleChip from '@/client/components/common/ToggleChip.vue';
+import PillButton from '@/client/components/common/PillButton.vue';
 
 const props = defineProps({
   calendarId: {
@@ -88,6 +110,9 @@ const { t, i18n } = useTranslation('calendars', {
 
 const categoryService = new CategoryService();
 
+// Ref for category scroll container
+const categoryScrollRef = ref(null);
+
 const state = reactive({
   searchQuery: props.initialFilters.search || '',
   selectedCategoryIds: props.initialFilters.categories || [],
@@ -97,6 +122,10 @@ const state = reactive({
   categoryError: '',
 
   searchTimeout: null,
+
+  // Scroll indicator states
+  showStartFade: false,
+  showEndFade: false,
 });
 
 // Computed properties
@@ -104,6 +133,19 @@ const hasActiveFilters = computed(() => {
   return state.searchQuery.trim() !== '' ||
          state.selectedCategoryIds.length > 0;
 });
+
+// Scroll indicator logic
+const checkOverflow = () => {
+  const el = categoryScrollRef.value;
+  if (el) {
+    const hasOverflow = el.scrollWidth > el.clientWidth;
+    const isScrolledToEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 1;
+    const isScrolledToStart = el.scrollLeft <= 1;
+    state.showEndFade = hasOverflow && !isScrolledToEnd;
+    state.showStartFade = hasOverflow && !isScrolledToStart;
+  }
+};
+
 
 // Get category name with null safety
 const getCategoryName = (category) => {
@@ -143,6 +185,9 @@ const loadCategories = async () => {
 
   try {
     state.availableCategories = await categoryService.loadCategories(props.calendarId);
+    // Check overflow after categories load and render
+    await nextTick();
+    checkOverflow();
   }
   catch (error) {
     console.error('Failed to load categories:', error);
@@ -209,68 +254,168 @@ watch(() => props.calendarId, (newCalendarId) => {
   }
 }, { immediate: true });
 
-onMounted(() => {
-  loadCategories();
+// Watch for category changes to update overflow indicators
+watch(() => state.availableCategories, async () => {
+  await nextTick();
+  checkOverflow();
+});
+
+onMounted(async () => {
+  await loadCategories();
+
+  // Set up event listeners for scroll indicators after categories load
+  await nextTick();
+
+  window.addEventListener('resize', checkOverflow);
+
+  const el = categoryScrollRef.value;
+  if (el) {
+    el.addEventListener('scroll', checkOverflow);
+    // Initial check
+    checkOverflow();
+  }
+});
+
+onUnmounted(() => {
+  // Clean up event listeners
+  window.removeEventListener('resize', checkOverflow);
+
+  const el = categoryScrollRef.value;
+  if (el) {
+    el.removeEventListener('scroll', checkOverflow);
+  }
 });
 </script>
 
 <style scoped lang="scss">
-@use '../../../assets/mixins' as *;
+@use '../../../assets/style/components/event-management' as *;
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 
 .search-filter {
-  @include filter-container;
+  max-width: 56rem; // max-w-4xl
+  margin: 0 auto;
+  padding: 1rem;
 }
 
 .search-section {
-  @include filter-section;
+  margin-bottom: 1.5rem;
 
-  .search-label {
-    @include filter-label;
-  }
-
-  .search-input-container {
-    @include search-input-container;
-  }
-
-  .search-input {
-    @include search-input;
-  }
-
-  .clear-search {
-    @include search-clear-button;
+  .search-input-wrapper {
+    @include pill-search-input;
   }
 }
 
 .category-filter-section {
-  @include filter-section;
-  margin-top: $spacing-md;
+  margin-bottom: 1rem;
 
   .filter-label {
-    @include filter-label;
+    @include section-label;
+    margin-bottom: 0.75rem;
   }
 
   .loading {
-    @include filter-loading;
+    color: var(--pav-color-stone-600);
+    font-style: italic;
+    padding: 1rem 0;
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-400);
+    }
   }
 
   .error {
-    @include filter-error;
+    color: var(--pav-color-red-600);
+    padding: 1rem;
+    background: var(--pav-color-red-50);
+    border-radius: 0.5rem;
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-red-300);
+      background: rgba(220, 53, 69, 0.1);
+    }
   }
 
-  .category-filter {
+  .category-filter-container {
     @include category-filter-container;
-  }
 
-  .category-option {
-    @include category-chip;
+    // Scroll indicators
+    .scroll-indicator {
+      position: absolute;
+      inset-block: 0;
+      display: flex;
+      align-items: center;
+      pointer-events: none;
+
+      &.start {
+        inset-inline-start: 0;
+      }
+
+      &.end {
+        inset-inline-end: 0;
+      }
+
+      .fade-gradient {
+        width: 3rem;
+        height: 100%;
+
+        &.start-gradient {
+          background: linear-gradient(to right, white, rgba(255, 255, 255, 0.8), transparent);
+
+          @media (prefers-color-scheme: dark) {
+            background: linear-gradient(to right, var(--pav-color-stone-900), rgba(28, 25, 23, 0.8), transparent);
+          }
+        }
+
+        &.end-gradient {
+          background: linear-gradient(to left, white, rgba(255, 255, 255, 0.8), transparent);
+
+          @media (prefers-color-scheme: dark) {
+            background: linear-gradient(to left, var(--pav-color-stone-900), rgba(28, 25, 23, 0.8), transparent);
+          }
+        }
+      }
+
+      .chevron-icon {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        margin-top: -0.125rem;
+        color: var(--pav-color-stone-400);
+
+        @media (prefers-color-scheme: dark) {
+          color: var(--pav-color-stone-500);
+        }
+      }
+
+      &.start .chevron-icon {
+        inset-inline-start: 0;
+      }
+
+      &.end .chevron-icon {
+        inset-inline-end: 0;
+      }
+    }
   }
 }
 
 .clear-filters-section {
-  @include clear-filters-section;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--pav-color-stone-200);
 
-  .clear-all-filters {
-    @include clear-all-filters-btn;
+  @media (prefers-color-scheme: dark) {
+    border-top-color: var(--pav-color-stone-700);
   }
 }
 </style>

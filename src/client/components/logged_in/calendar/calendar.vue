@@ -3,11 +3,13 @@ import { onBeforeMount, reactive, inject, ref, watch, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
+import { Calendar, MapPin, Languages, Repeat, Pencil, Copy } from 'lucide-vue-next';
 import { useEventStore } from '@/client/stores/eventStore';
 import CalendarService from '@/client/service/calendar';
 import EventService from '@/client/service/event';
 import EventImage from '@/client/components/common/media/EventImage.vue';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
+import PillButton from '@/client/components/common/PillButton.vue';
 import BulkOperationsMenu from './BulkOperationsMenu.vue';
 import CategorySelectionDialog from './CategorySelectionDialog.vue';
 import SearchFilter from './SearchFilter.vue';
@@ -388,30 +390,46 @@ const hasActiveFilters = computed(() => {
     </div>
     <div v-else>
       <header class="calendar-header">
-        <h1>
-          <span v-if="state.calendar">{{ state.calendar.urlName }}@{{ site_domain }}</span>
-          <span v-else>{{ calendarId }}@{{ site_domain }}</span>
-        </h1>
-        <nav aria-label="Calendar Management">
-          <RouterLink
-            type="button"
-            @click="navigateToManagement"
-            v-if="state.calendar"
-            :aria-label="`Manage calendar: ${state.calendar.urlName}`"
-            :to="{ name: 'calendar_management', params: { calendar: state.calendar.urlName } }"
-          >
-            {{ t('manage_calendar') }}
-          </RouterLink>
-        </nav>
-      </header>
+        <div class="header-content">
+          <div class="header-title-section">
+            <h1>
+              <span v-if="state.calendar">{{ state.calendar.urlName }}@{{ site_domain }}</span>
+              <span v-else>{{ calendarId }}@{{ site_domain }}</span>
+            </h1>
+            <div class="header-actions">
+              <RouterLink
+                v-if="state.calendar"
+                :to="{ name: 'calendar_management', params: { calendar: state.calendar.urlName } }"
+                custom
+                v-slot="{ navigate }"
+              >
+                <PillButton
+                  variant="ghost"
+                  @click="navigate"
+                  :aria-label="`Manage calendar: ${state.calendar.urlName}`"
+                >
+                  {{ t('manage_calendar') }}
+                </PillButton>
+              </RouterLink>
+              <PillButton
+                variant="primary"
+                @click="newEvent"
+                :aria-label="t('createEvent')"
+              >
+                {{ t('createEvent') }}
+              </PillButton>
+            </div>
+          </div>
 
-      <!-- Search and Filter Controls -->
-      <SearchFilter
-        v-if="state.calendar && (store.events?.length > 0 || hasActiveFilters)"
-        :calendar-id="calendarId"
-        :initial-filters="initialFilters"
-        @filters-changed="handleFiltersChanged"
-      />
+          <!-- Search and Filter Controls -->
+          <SearchFilter
+            v-if="state.calendar && (store.events?.length > 0 || hasActiveFilters)"
+            :calendar-id="calendarId"
+            :initial-filters="initialFilters"
+            @filters-changed="handleFiltersChanged"
+          />
+        </div>
+      </header>
 
       <!-- Loading State -->
       <div v-if="state.isLoading" class="loading-state">
@@ -457,32 +475,42 @@ const hasActiveFilters = computed(() => {
             >
               <EventImage :media="event.media" size="small" />
               <div class="event-content">
-                <h3 :id="`event-title-${event.id}`">{{ event.content("en").name }}</h3>
-                <div v-if="formatEventDate(event)" class="event-date">
-                  <span class="date-text">📅 {{ formatEventDate(event) }}</span>
-                  <span v-if="isRecurring(event)" class="recurrence-badge">🔄 {{ getRecurrenceText(event) }}</span>
+                <div class="event-title-row">
+                  <h3 :id="`event-title-${event.id}`">{{ event.content("en").name }}</h3>
+                  <span v-if="event.languages && event.languages.length > 1" class="language-count">
+                    <Languages :size="16" />
+                    {{ event.languages.length }} languages
+                  </span>
                 </div>
-                <p v-if="event.content('en').description">{{ event.content("en").description }}</p>
+                <div v-if="formatEventDate(event)" class="event-date">
+                  <Calendar :size="16" class="date-icon" />
+                  <span class="date-text">{{ formatEventDate(event) }}</span>
+                  <span v-if="isRecurring(event)" class="recurrence-badge">
+                    <Repeat :size="14" />
+                    {{ getRecurrenceText(event) }}
+                  </span>
+                </div>
+                <p v-if="event.content('en').description" class="event-description">{{ event.content("en").description }}</p>
               </div>
             </article>
             <div class="event-actions">
               <button
                 type="button"
-                class="edit-btn"
+                class="edit-btn icon-btn"
                 @click.stop="handleEditEvent(event)"
                 :aria-label="`Edit event: ${event.content('en').name}`"
                 title="Edit this event"
               >
-                ✏️
+                <Pencil :size="18" />
               </button>
               <button
                 type="button"
-                class="duplicate-btn"
+                class="duplicate-btn icon-btn"
                 @click.stop="handleDuplicateEvent(event)"
                 :aria-label="`Duplicate event: ${event.content('en').name}`"
                 title="Duplicate this event"
               >
-                📄
+                <Copy :size="18" />
               </button>
             </div>
           </li>
@@ -498,9 +526,9 @@ const hasActiveFilters = computed(() => {
       <EmptyLayout v-else-if="!state.isLoading && !hasActiveFilters && (!store.events || store.events.length === 0)"
                    :title="t('noEvents')"
                    :description="t('noEventsDescription')">
-        <button type="button" class="primary" @click="newEvent()">
+        <PillButton variant="primary" @click="newEvent()">
           {{ t('createEvent') }}
-        </button>
+        </PillButton>
       </EmptyLayout>
     </div>
 
@@ -524,6 +552,7 @@ const hasActiveFilters = computed(() => {
 
 <style scoped lang="scss">
 @use '@/client/assets/mixins' as *;
+@use '@/client/assets/style/components/event-management' as *;
 
 /* Screen reader only class for accessibility */
 .sr-only {
@@ -538,58 +567,92 @@ const hasActiveFilters = computed(() => {
   border: 0;
 }
 
-/* Main element styling */
-main[role="main"] {
-  min-height: 100vh;
-  padding: var(--pav-space-lg);
-}
-
-/* Calendar header with navigation */
+/* Calendar header with sticky blur effect */
 .calendar-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin: 20px;
+  @include sticky-blur-header;
+  padding: 1.5rem 1rem;
+  border-bottom: 1px solid var(--pav-color-stone-200);
 
-  h1 {
-    font-size: 16pt;
-    font-weight: 200;
-    margin: 0;
+  @media (prefers-color-scheme: dark) {
+    border-bottom-color: var(--pav-color-stone-700);
   }
 
-  nav[aria-label="Calendar Management"] {
-    .manage-btn {
-      font-size: 0.9rem;
-      padding: 0.5rem 1rem;
+  .header-content {
+    max-width: 56rem; // max-w-4xl
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .header-title-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+
+    h1 {
+      font-size: 2.25rem; // text-4xl
+      font-weight: 300; // font-light
+      margin: 0;
+      color: var(--pav-color-stone-800);
+
+      @media (prefers-color-scheme: dark) {
+        color: var(--pav-color-stone-100);
+      }
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 0.75rem;
+      flex-shrink: 0;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .header-title-section {
+      flex-direction: column;
+      align-items: stretch;
+
+      h1 {
+        font-size: 1.5rem;
+      }
+
+      .header-actions {
+        width: 100%;
+      }
     }
   }
 }
 
-/* Events section styling */
+/* Events section with new design system */
 section[aria-label="Calendar Events"] {
-  margin: var(--pav-space-lg) 0;
+  max-width: 56rem; // max-w-4xl
+  margin: 0 auto;
+  padding: 1.5rem 1rem;
 
   .event-controls {
-    margin: 20px;
-    padding-bottom: 16px;
-    border-bottom: 1px solid var(--border-color, #e0e0e0);
+    padding: 1rem 0;
+    margin-bottom: 1rem;
 
     .select-all-control {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 0.75rem;
       cursor: pointer;
       font-weight: 500;
-      color: var(--text-primary, #333);
+      font-size: 0.875rem;
+      color: var(--pav-color-stone-700);
 
-      @include dark-mode {
-        color: var(--text-primary-dark, #fff);
+      @media (prefers-color-scheme: dark) {
+        color: var(--pav-color-stone-200);
       }
 
       input[type="checkbox"] {
-        width: 18px;
-        height: 18px;
+        width: 1.125rem;
+        height: 1.125rem;
         cursor: pointer;
+        accent-color: var(--pav-color-orange-500);
       }
 
       span {
@@ -597,130 +660,141 @@ section[aria-label="Calendar Events"] {
       }
 
       &:hover {
-        color: var(--primary-color, #007bff);
+        color: var(--pav-color-orange-600);
       }
-    }
-
-    @include dark-mode {
-      border-color: var(--border-color-dark, #4a5568);
     }
   }
 
   .event-list {
     list-style: none;
     padding: 0;
-    margin: 20px;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
 
     .event-item {
+      @include event-card;
       display: flex;
       align-items: flex-start;
-      gap: 15px;
-      padding: 15px;
-      margin-bottom: 15px;
-      border: 1px var(--pav-color-surface-primary);
-      border-radius: 8px;
-      transition: all 0.2s ease;
-
-      &.selected {
-        border-color: var(--pav-color-interactive-primary);
-        background: rgba(0, 123, 255, 0.05);
-      }
+      gap: 1rem;
 
       &:hover {
-        border-color: #e0e0e0;
-        box-shadow: 0 2px 8px rgba(0, 123, 255, 0.2);
+        .event-actions {
+          @include hover-reveal;
+          opacity: 1;
+        }
       }
 
-      @include dark-mode {
-        border-color: #444;
+      &.selected {
+        border-color: var(--pav-color-orange-400);
+        background: var(--pav-color-orange-50);
+        box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
 
-        &.selected {
-          border-color: #007bff;
-          background: rgba(0, 123, 255, 0.1);
-        }
-
-        &:hover {
-          border-color: #007bff;
-          box-shadow: 0 2px 8px rgba(0, 123, 255, 0.2);
+        @media (prefers-color-scheme: dark) {
+          background: rgba(249, 115, 22, 0.1);
         }
       }
 
       .event-checkbox {
-        display: flex;
-        align-items: center;
-        padding-top: 2px;
+        padding-top: 0.25rem;
 
         input[type="checkbox"] {
-          width: 18px;
-          height: 18px;
+          width: 1.125rem;
+          height: 1.125rem;
           cursor: pointer;
+          accent-color: var(--pav-color-orange-500);
         }
       }
 
       .event-article {
         display: flex;
         align-items: flex-start;
-        gap: 15px;
+        gap: 1rem;
         flex: 1;
         cursor: pointer;
+        min-width: 0; // Fix flex overflow
       }
 
       .event-actions {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 0.5rem;
+        opacity: 0;
+        transition: opacity 0.2s ease;
 
-        .edit-btn,
-        .duplicate-btn {
+        .icon-btn {
           background: transparent;
-          border: 1px solid #e0e0e0;
-          border-radius: 6px;
-          padding: 8px;
-          font-size: 16px;
+          border: none;
+          border-radius: 0.5rem; // rounded-lg
+          padding: 0.5rem;
           cursor: pointer;
-          color: var(--text-secondary, #666);
-          transition: all 0.2s ease;
+          color: var(--pav-color-stone-600);
+          transition: all 0.15s ease;
           display: flex;
           align-items: center;
           justify-content: center;
-          width: 36px;
-          height: 36px;
 
           &:hover {
-            background-color: var(--background-secondary, #f5f5f5);
-            border-color: var(--primary-color, #007bff);
-            color: var(--primary-color, #007bff);
-            transform: translateY(-1px);
+            background: var(--pav-color-stone-100);
+            color: var(--pav-color-orange-500);
           }
 
-          &:active {
-            transform: translateY(0);
-          }
-
-          @include dark-mode {
-            border-color: #4a5568;
-            color: #a0aec0;
+          @media (prefers-color-scheme: dark) {
+            color: var(--pav-color-stone-400);
 
             &:hover {
-              background-color: #2d3748;
-              border-color: #007bff;
-              color: #007bff;
+              background: var(--pav-color-stone-700);
+              border-color: var(--pav-color-orange-500);
+              color: var(--pav-color-orange-500);
             }
           }
+        }
+
+        // Always show on mobile/touch devices
+        @media (max-width: 768px) {
+          opacity: 1;
         }
       }
     }
 
     .event-content {
       flex: 1;
+      min-width: 0; // Fix text overflow
 
-      h3 {
-        margin: 0 0 8px 0;
-        font-size: 18px;
-        color: #333;
+      .event-title-row {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 0.5rem;
 
-        @include dark-mode {
-          color: #fff;
+        h3 {
+          margin: 0;
+          font-size: 1.125rem; // text-lg
+          font-weight: 600; // font-semibold
+          color: var(--pav-color-stone-900);
+
+          @media (prefers-color-scheme: dark) {
+            color: var(--pav-color-stone-100);
+          }
+        }
+
+        .language-count {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.25rem;
+          padding: 0.125rem 0.5rem;
+          background: var(--pav-color-sky-100);
+          border-radius: 9999px; // pill
+          color: var(--pav-color-sky-700);
+          font-size: 0.75rem; // text-xs
+          font-weight: 500;
+          white-space: nowrap;
+
+          @media (prefers-color-scheme: dark) {
+            background: rgba(14, 165, 233, 0.2);
+            color: var(--pav-color-sky-300);
+          }
         }
       }
 
@@ -728,89 +802,88 @@ section[aria-label="Calendar Events"] {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        gap: 12px;
-        margin: 8px 0;
-        font-size: 14px;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+        font-size: 0.875rem; // text-sm
+
+        .date-icon {
+          color: var(--pav-color-orange-500);
+          flex-shrink: 0;
+        }
 
         .date-text {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          color: #555;
+          color: var(--pav-color-stone-600);
           font-weight: 500;
 
-          @include dark-mode {
-            color: #bbb;
+          @media (prefers-color-scheme: dark) {
+            color: var(--pav-color-stone-300);
           }
         }
 
         .recurrence-badge {
           display: inline-flex;
           align-items: center;
-          gap: 4px;
-          padding: 2px 8px;
-          background: #e3f2fd;
-          border: 1px solid #2196f3;
-          border-radius: 12px;
-          color: #1976d2;
-          font-size: 12px;
+          gap: 0.25rem;
+          padding: 0.125rem 0.5rem;
+          background: var(--pav-color-sky-100);
+          border-radius: 9999px; // pill
+          color: var(--pav-color-sky-700);
+          font-size: 0.75rem; // text-xs
           font-weight: 500;
 
-          @include dark-mode {
-            background: rgba(33, 150, 243, 0.2);
-            border-color: #2196f3;
-            color: #64b5f6;
+          @media (prefers-color-scheme: dark) {
+            background: rgba(14, 165, 233, 0.2);
+            color: var(--pav-color-sky-300);
           }
         }
       }
 
-      p {
-        margin: 8px 0 0 0;
-        color: #666;
-        font-size: 14px;
-        line-height: 1.4;
+      .event-description {
+        margin: 0;
+        color: var(--pav-color-stone-600);
+        font-size: 0.875rem; // text-sm
+        line-height: 1.5;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
 
-        @include dark-mode {
-          color: #ccc;
+        @media (prefers-color-scheme: dark) {
+          color: var(--pav-color-stone-400);
         }
       }
     }
   }
 }
 
-.management-section {
-  margin: 20px;
-  padding: 20px;
-  background: var(--background-secondary, #f8f9fa);
-  border-radius: 8px;
-  border: 1px solid var(--border-color, #e0e0e0);
+.error {
+  max-width: 56rem; // max-w-4xl
+  margin: 2rem auto;
+  padding: 1rem 1.5rem;
+  background: var(--pav-color-red-50);
+  border: 1px solid var(--pav-color-red-200);
+  border-radius: 0.75rem; // rounded-xl
+  color: var(--pav-color-red-700);
+  text-align: center;
 
-  @include dark-mode {
-    background: var(--background-secondary-dark, #2d3748);
-    border-color: var(--border-color-dark, #4a5568);
+  @media (prefers-color-scheme: dark) {
+    background: rgba(220, 53, 69, 0.1);
+    border-color: var(--pav-color-red-900);
+    color: var(--pav-color-red-300);
   }
 }
 
-.management-tabs {
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
-}
-
-.error {
-  color: red;
-  padding: 20px;
-  text-align: center;
-}
-
 .loading-state {
-  padding: 20px;
+  max-width: 56rem; // max-w-4xl
+  margin: 2rem auto;
+  padding: 3rem 1rem;
   text-align: center;
-  color: $light-mode-text;
+  color: var(--pav-color-stone-600);
   font-style: italic;
+  font-size: 1.125rem;
 
   @media (prefers-color-scheme: dark) {
-    color: $dark-mode-text;
+    color: var(--pav-color-stone-400);
   }
 }
 </style>

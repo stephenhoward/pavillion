@@ -14,20 +14,13 @@
 
     <!-- Categories Selection -->
     <div v-else-if="state.availableCategories.length > 0" class="categories-list">
-      <div
+      <ToggleChip
         v-for="category in state.availableCategories"
         :key="category.id"
-        class="category-option"
-        :class="{ 'selected': state.selectedCategoryIds.includes(category.id) }"
-        @click="toggleCategory(category.id)"
-      >
-        <input
-          type="checkbox"
-          :checked="state.selectedCategoryIds.includes(category.id)"
-          @change="toggleCategory(category.id)"
-        />
-        <span class="category-name">{{ category.content(currentLanguage)?.name || 'Unnamed Category' }}</span>
-      </div>
+        :model-value="state.selectedCategoryIds.includes(category.id)"
+        :label="category.content(currentLanguage)?.name || 'Unnamed Category'"
+        @update:model-value="() => toggleCategory(category.id)"
+      />
     </div>
 
     <!-- No Categories State -->
@@ -42,6 +35,7 @@
 import { reactive, onMounted, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import CategoryService from '@/client/service/category';
+import ToggleChip from '@/client/components/common/ToggleChip.vue';
 
 const props = defineProps({
   calendarId: {
@@ -144,114 +138,77 @@ onMounted(async () => {
 </script>
 
 <style scoped lang="scss">
-@use '@/client/assets/mixins' as *;
+@use '@/client/assets/style/components/event-management' as *;
 
 .category-selector {
-  margin-bottom: 20px;
+  margin-bottom: 1.5rem;
 }
 
 .category-label {
+  @include section-label;
   display: block;
-  margin-bottom: 8px;
-  font-weight: 500;
-  color: var(--color-text, #374151);
+  margin-bottom: 1rem;
 }
 
 .loading {
   text-align: center;
-  padding: 16px;
-  color: var(--color-text-secondary, #6b7280);
-  font-size: 14px;
+  padding: 1rem;
+  color: var(--pav-color-stone-600);
+  font-size: 0.875rem;
+  font-style: italic;
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-stone-400);
+  }
 }
 
 .error {
-  padding: 12px;
-  margin-bottom: 16px;
-  background-color: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.2);
-  border-radius: 6px;
-  color: rgb(153, 27, 27);
-  font-size: 14px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  background-color: var(--pav-color-red-50);
+  border: 1px solid var(--pav-color-red-200);
+  border-radius: 0.75rem; // rounded-xl
+  color: var(--pav-color-red-700);
+  font-size: 0.875rem;
+
+  @media (prefers-color-scheme: dark) {
+    background-color: rgba(239, 68, 68, 0.1);
+    border-color: var(--pav-color-red-900);
+    color: var(--pav-color-red-300);
+  }
 }
 
 .categories-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-height: 200px;
-  overflow-y: auto;
-  border: 1px solid var(--color-border, #d1d5db);
-  border-radius: 6px;
-  padding: 8px;
-}
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.75rem;
 
-.category-option {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-
-  &:hover {
-    background-color: var(--color-surface-hover, #f9fafb);
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
   }
-
-  &.selected {
-    background-color: var(--color-primary-light, #fef3c7);
-    border-color: var(--color-primary, #ea580c);
-  }
-}
-
-.category-option input[type="checkbox"] {
-  margin: 0;
-  cursor: pointer;
-}
-
-.category-name {
-  flex: 1;
-  font-size: 14px;
-  color: var(--color-text, #374151);
 }
 
 .no-categories {
   text-align: center;
-  padding: 24px 16px;
-  color: var(--color-text-secondary, #6b7280);
+  padding: 1.5rem 1rem;
+  color: var(--pav-color-stone-500);
+  font-size: 0.875rem;
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-stone-400);
+  }
 
   p {
-    margin: 0 0 8px 0;
+    margin: 0 0 0.5rem 0;
 
     &.help-text {
-      font-size: 12px;
-      color: var(--color-text-tertiary, #9ca3af);
+      font-size: 0.75rem;
+      color: var(--pav-color-stone-400);
+
+      @media (prefers-color-scheme: dark) {
+        color: var(--pav-color-stone-500);
+      }
     }
-  }
-}
-
-@include dark-mode {
-  .category-label {
-    color: var(--color-text-dark, #f9fafb);
-  }
-
-  .category-option {
-    &:hover {
-      background-color: var(--color-surface-hover-dark, #374151);
-    }
-
-    &.selected {
-      background-color: var(--color-primary-light-dark, #451a03);
-    }
-  }
-
-  .category-name {
-    color: var(--color-text-dark, #f9fafb);
-  }
-
-  .categories-list {
-    border-color: var(--color-border-dark, #4b5563);
-    background-color: var(--color-surface-dark, #1f2937);
   }
 }
 </style>

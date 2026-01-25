@@ -1,86 +1,463 @@
 <style scoped lang="scss">
 @use '@/client/assets/mixins' as *;
+@use '@/client/assets/style/components/event-management' as *;
 
-button.disclosure {
-    background: none;
-    border: none;
-    font-size: 16px;
-    @include dark-mode {
-        color: $dark-mode-text;
-    }
-}
-input,select {
-    font-size: 14px;
-    border-radius: 6px;
-    border: 1px solid $light-mode-border;
-    padding: 6px;
-    @include dark-mode {
-        color: $dark-mode-input-text;
-        background: $dark-mode-input-background;
-        border-color: $dark-mode-border;
-    }
-}
-form {
-    margin-top: 15px;
-}
-
-label.repeat-interval {
-    display: block;
-    margin-bottom: 10px;
-    input {
-        width: 40px;
-    }
-}
-div.end-type {
-    margin-top: 15px;
-    label {
-        display: block;
-        margin-top: 5px;
-    }
-    input[type="number"] {
-        width: 40px;
-    }
-}
-div.week-parameters {
-    label {
-        display: block;
-    }
-}
-div.month-parameters {
+.recurrence-rule {
+  .schedule-header {
     display: flex;
-    flex-wrap: wrap;
     justify-content: space-between;
-    margin-top: 10px;
-    & > div {
-        min-width: 150px;
-        margin-bottom: 15px;
+    align-items: center;
+    margin-bottom: 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--pav-color-stone-700);
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-300);
     }
-    label {
+  }
+
+  .remove-schedule-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem;
+    border: none;
+    background: none;
+    color: var(--pav-color-stone-400);
+    cursor: pointer;
+    transition: color 0.15s ease;
+
+    &:hover {
+      color: var(--pav-color-red-600);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--pav-color-orange-500);
+      outline-offset: 2px;
+      border-radius: 0.25rem;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-500);
+
+      &:hover {
+        color: var(--pav-color-red-400);
+      }
+    }
+  }
+
+  .schedule-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .grid-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .grid-label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--pav-color-stone-700);
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-300);
+    }
+  }
+
+  .grid-input {
+    padding: 0.625rem 0.875rem;
+    border: 1px solid var(--pav-color-stone-200);
+    border-radius: 0.375rem;
+    font-size: 0.9375rem;
+    background: white;
+    color: var(--pav-color-stone-900);
+    font-family: inherit;
+    transition: all 0.15s ease;
+
+    &:focus {
+      outline: none;
+      border-color: var(--pav-color-orange-500);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      background: var(--pav-color-stone-900);
+      color: var(--pav-color-stone-100);
+      border-color: var(--pav-color-stone-700);
+
+      &:focus {
+        border-color: var(--pav-color-orange-500);
+      }
+    }
+  }
+
+  .add-recurrence-btn {
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--pav-color-orange-500);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color 0.15s ease;
+
+    &:hover {
+      color: var(--pav-color-orange-600);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-orange-400);
+
+      &:hover {
+        color: var(--pav-color-orange-300);
+      }
+    }
+  }
+
+  form.repeats {
+    margin-top: 1.5rem;
+    padding: 1.5rem;
+    background-color: var(--pav-color-stone-50);
+    border: 1px solid var(--pav-color-stone-200);
+    border-radius: 0.75rem; // rounded-xl
+
+    @media (prefers-color-scheme: dark) {
+      background-color: var(--pav-color-stone-800);
+      border-color: var(--pav-color-stone-700);
+    }
+
+    label.repeat-interval {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+      color: var(--pav-color-stone-700);
+
+      @media (prefers-color-scheme: dark) {
+        color: var(--pav-color-stone-300);
+      }
+
+      input[type="number"] {
+        @include form-input-rounded;
+        width: 60px;
+        text-align: center;
+      }
+    }
+
+    div.week-parameters {
+      margin-bottom: 1.5rem;
+      color: var(--pav-color-stone-700);
+
+      @media (prefers-color-scheme: dark) {
+        color: var(--pav-color-stone-300);
+      }
+
+      > label:first-of-type {
         display: block;
-        input {
-            margin-right: 5px;
+        margin-bottom: 0.75rem;
+        font-weight: 500;
+      }
+
+      label {
+        display: inline-flex;
+        align-items: center;
+        margin-right: 0.5rem;
+        margin-bottom: 0.5rem;
+
+        input[type="checkbox"] {
+          // Hide the actual checkbox
+          position: absolute;
+          opacity: 0;
+          pointer-events: none;
+
+          // Style the label as a button
+          & + * {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            background-color: var(--pav-color-stone-100);
+            color: var(--pav-color-stone-600);
+            border: 1px solid var(--pav-color-stone-300);
+            border-radius: 9999px; // rounded-full (pill)
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            user-select: none;
+
+            @media (prefers-color-scheme: dark) {
+              background-color: var(--pav-color-stone-700);
+              color: var(--pav-color-stone-300);
+              border-color: var(--pav-color-stone-600);
+            }
+          }
+
+          // Hover state
+          &:not(:checked) + *:hover {
+            background-color: var(--pav-color-stone-200);
+            border-color: var(--pav-color-stone-400);
+
+            @media (prefers-color-scheme: dark) {
+              background-color: var(--pav-color-stone-600);
+              border-color: var(--pav-color-stone-500);
+            }
+          }
+
+          // Selected (checked) state
+          &:checked + * {
+            background-color: var(--pav-color-orange-500);
+            color: white;
+            border-color: var(--pav-color-orange-600);
+
+            @media (prefers-color-scheme: dark) {
+              background-color: var(--pav-color-orange-500);
+              border-color: var(--pav-color-orange-400);
+            }
+          }
+
+          // Focus state
+          &:focus-visible + * {
+            outline: 2px solid var(--pav-color-orange-500);
+            outline-offset: 2px;
+          }
         }
+      }
     }
+
+    div.month-parameters {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+
+      > div {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+
+        label {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          font-size: 0.875rem;
+          color: var(--pav-color-stone-700);
+
+          @media (prefers-color-scheme: dark) {
+            color: var(--pav-color-stone-300);
+          }
+
+          input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            accent-color: var(--pav-color-orange-500);
+          }
+        }
+      }
+    }
+
+    div.end-type {
+      color: var(--pav-color-stone-700);
+
+      @media (prefers-color-scheme: dark) {
+        color: var(--pav-color-stone-300);
+      }
+
+      > label:first-of-type {
+        display: block;
+        margin-bottom: 0.75rem;
+        font-weight: 500;
+      }
+
+      label {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+        font-size: 0.875rem;
+
+        input[type="radio"] {
+          width: 18px;
+          height: 18px;
+          cursor: pointer;
+          accent-color: var(--pav-color-orange-500);
+        }
+
+        input[type="number"] {
+          @include form-input-rounded;
+          width: 60px;
+          text-align: center;
+        }
+
+        input[type="date"] {
+          @include form-input-rounded;
+        }
+      }
+    }
+  }
+
+  // Compact mode for sidebar display
+  &--compact {
+    .summary {
+      gap: 0.75rem;
+
+      input[type="datetime-local"] {
+        font-size: 0.875rem;
+        padding: 0.625rem 0.875rem;
+      }
+
+      label {
+        font-size: 0.875rem;
+        gap: 0.375rem;
+
+        select {
+          font-size: 0.875rem;
+          padding: 0.625rem 0.875rem;
+        }
+      }
+    }
+
+    form.repeats {
+      margin-top: 1rem;
+      padding: 1rem;
+
+      label.repeat-interval {
+        margin-bottom: 1rem;
+        font-size: 0.875rem;
+
+        input[type="number"] {
+          width: 50px;
+          font-size: 0.875rem;
+          padding: 0.5rem 0.625rem;
+        }
+      }
+
+      div.week-parameters {
+        margin-bottom: 1rem;
+        font-size: 0.875rem;
+
+        > label:first-of-type {
+          margin-bottom: 0.5rem;
+        }
+
+        label {
+          input[type="checkbox"] + * {
+            padding: 0.375rem 0.75rem;
+            font-size: 0.8125rem;
+          }
+        }
+      }
+
+      div.month-parameters {
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+
+        > div {
+          gap: 0.375rem;
+
+          label {
+            font-size: 0.8125rem;
+
+            input[type="checkbox"] {
+              width: 16px;
+              height: 16px;
+            }
+          }
+        }
+      }
+
+      div.end-type {
+        font-size: 0.875rem;
+
+        > label:first-of-type {
+          margin-bottom: 0.5rem;
+        }
+
+        label {
+          font-size: 0.8125rem;
+          margin-bottom: 0.375rem;
+
+          input[type="radio"] {
+            width: 16px;
+            height: 16px;
+          }
+
+          input[type="number"] {
+            width: 50px;
+            font-size: 0.8125rem;
+            padding: 0.5rem 0.625rem;
+          }
+
+          input[type="date"] {
+            font-size: 0.8125rem;
+            padding: 0.5rem 0.625rem;
+          }
+        }
+      }
+    }
+  }
 }
 </style>
 
 <template>
-  <div class="recurrence-rule">
-    <div class="summary">
-      <input type="datetime-local" v-model="state.startDate" @input="compileRecurrence()"/>
-      <label>
-        <!--button class="disclosure" v-if="props.schedule.frequency.length > 0" type="button" @click="state.showRecurrence = !state.showRecurrence">{{ state.showRecurrence ? '▼' : '▶' }}</button-->
-        {{ t('frequency-label') }}:
-        <select v-model="props.schedule.frequency" @change="state.showRecurrence = props.schedule.frequency.length > 0 ? true : false; compileRecurrence()">
-          <option value="">{{ t('frequencyNone') }}</option>
-          <option value="daily">{{  t('frequencyDaily') }}</option>
-          <option value="weekly">{{ t('frequencyWeekly') }}</option>
-          <option value="monthly">{{  t('frequencyMonthly') }}</option>
-          <option value="yearly">{{  t('frequencyYearly') }}</option>
-        </select>
-      </label>
+  <div :class="['recurrence-rule', { 'recurrence-rule--compact': compact }]">
+    <div class="schedule-header">
+      <span>Schedule</span>
+      <button
+        type="button"
+        class="remove-schedule-btn"
+        @click="emit('remove-schedule')"
+        aria-label="Remove this schedule"
+      >
+        <Trash2 :size="16" aria-hidden="true" />
+      </button>
     </div>
-    <form class="repeats" v-if="state.showRecurrence == true">
+
+    <!-- Date/Time Grid -->
+    <div class="schedule-grid">
+      <div class="grid-field">
+        <label class="grid-label">Date</label>
+        <input type="date" v-model="state.date" @input="updateStartDate()" class="grid-input"/>
+      </div>
+
+      <div class="grid-field">
+        <label class="grid-label">Time</label>
+        <input type="time" v-model="state.time" @input="updateStartDate()" class="grid-input"/>
+      </div>
+
+      <div class="grid-field">
+        <label class="grid-label">Duration (minutes)</label>
+        <input type="number" v-model="state.duration" @input="compileRecurrence()" class="grid-input" min="0" step="15"/>
+      </div>
+
+      <div class="grid-field">
+        <label class="grid-label">Timezone</label>
+        <select v-model="state.timezone" @change="compileRecurrence()" class="grid-input">
+          <option value="America/Los_Angeles">America/Los Angeles</option>
+          <option value="America/Denver">America/Denver</option>
+          <option value="America/Chicago">America/Chicago</option>
+          <option value="America/New_York">America/New York</option>
+          <option value="UTC">UTC</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Add Recurrence Toggle -->
+    <button
+      type="button"
+      class="add-recurrence-btn"
+      @click="state.showRecurrence = !state.showRecurrence"
+      v-if="!state.showRecurrence"
+    >
+      + Add recurrence
+    </button>
+
+    <!-- Recurrence Form -->
+    <form class="repeats" v-if="state.showRecurrence">
       <label class="repeat-interval" v-if="props.schedule.frequency">
         {{ t('every') }} <input type="number" v-model="props.schedule.interval" @change="compileRecurrence()" /> {{  props.schedule.frequency ? t( props.schedule.frequency + 'Term') : '' }}
       </label>
@@ -124,18 +501,45 @@ import { reactive } from 'vue';
 import { CalendarEventSchedule } from '@/common/model/events';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
+import { Trash2 } from 'lucide-vue-next';
 
 const props = defineProps({
   schedule: CalendarEventSchedule,
+  compact: {
+    type: Boolean,
+    default: false,
+  },
 });
+
+const emit = defineEmits(['remove-schedule']);
 
 const { t } = useTranslation('event_editor', {
   keyPrefix: 'recurrence',
 });
 
+// Initialize date/time fields from startDate
+const initDateTime = () => {
+  if (props.schedule.startDate) {
+    const dt = props.schedule.startDate;
+    return {
+      date: dt.toFormat('yyyy-MM-dd'),
+      time: dt.toFormat('HH:mm'),
+    };
+  }
+  return {
+    date: '',
+    time: '',
+  };
+};
+
+const { date: initialDate, time: initialTime } = initDateTime();
+
 const state = reactive({
   showRecurrence: false,
-  startDate: props.schedule.startDate ? props.schedule.startDate.toISO() : '',
+  date: initialDate,
+  time: initialTime,
+  duration: 60, // Default duration in minutes
+  timezone: 'America/Los_Angeles', // Default timezone
   endDate: props.schedule.endDate ? props.schedule.endDate.toISO() : '',
   endType: 'none',
   weekdays: {
@@ -186,9 +590,17 @@ const state = reactive({
   },
 });
 
-const compileRecurrence = () => {
+const updateStartDate = () => {
+  if (state.date && state.time) {
+    const dateTimeString = `${state.date}T${state.time}`;
+    props.schedule.startDate = DateTime.fromISO(dateTimeString);
+  }
+};
 
-  props.schedule.startDate = state.startDate ? DateTime.fromISO(state.startDate) : null;
+const compileRecurrence = () => {
+  // Update startDate from separate date/time fields
+  updateStartDate();
+
   props.schedule.interval = props.schedule.frequency ? props.schedule.interval || 1 : 0;
   props.schedule.count = props.schedule.frequency && state.endType == 'after' ? props.schedule.count : 0;
   props.schedule.endDate = props.schedule.frequency && state.endType == 'on' ? props.schedule.endDate : '';

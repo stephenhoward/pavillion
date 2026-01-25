@@ -40,6 +40,30 @@
   --pav-color-stone-800: #292524;
   --pav-color-stone-900: #1C1917;
 
+  /* Sky Palette (for action buttons) */
+  --pav-color-sky-50: #F0F9FF;
+  --pav-color-sky-100: #E0F2FE;
+  --pav-color-sky-200: #BAE6FD;
+  --pav-color-sky-300: #7DD3FC;
+  --pav-color-sky-400: #38BDF8;
+  --pav-color-sky-500: #0EA5E9;
+  --pav-color-sky-600: #0284C7;
+  --pav-color-sky-700: #0369A1;
+  --pav-color-sky-800: #075985;
+  --pav-color-sky-900: #0C4A6E;
+
+  /* Red Palette (for destructive actions) */
+  --pav-color-red-50: #FEF2F2;
+  --pav-color-red-100: #FEE2E2;
+  --pav-color-red-200: #FECACA;
+  --pav-color-red-300: #FCA5A5;
+  --pav-color-red-400: #F87171;
+  --pav-color-red-500: #EF4444;
+  --pav-color-red-600: #DC2626;
+  --pav-color-red-700: #B91C1C;
+  --pav-color-red-800: #991B1B;
+  --pav-color-red-900: #7F1D1D;
+
   /* Neutral Colors (mapped to Stone for warm gray feel) */
   --pav-color-neutral-50: var(--pav-color-stone-50);
   --pav-color-neutral-100: var(--pav-color-stone-100);

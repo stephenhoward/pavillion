@@ -153,8 +153,39 @@
 
 .radio {
   border-radius: var(--pav-border-radius-full);
-  
+
   &:checked {
     background-image: radial-gradient(white 40%, transparent 40%);
   }
+}
+
+/* Rounded-xl input variant for Event Management design system */
+.input--rounded-xl {
+  border-radius: 0.75rem; /* rounded-xl */
+  background-color: var(--pav-color-stone-50);
+  border: var(--pav-border-width-1) solid var(--pav-color-stone-200);
+  padding: 0.75rem 1rem;
+
+  &::placeholder {
+    color: var(--pav-color-stone-400);
+  }
+
+  &:focus {
+    outline: none;
+    border-color: var(--pav-color-orange-500);
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    background-color: var(--pav-color-stone-800);
+    border-color: var(--pav-color-stone-700);
+    color: var(--pav-color-stone-100);
+  }
+}
+
+/* Textarea variant with rounded-xl */
+.textarea--rounded-xl {
+  @extend .input--rounded-xl;
+  min-height: 120px;
+  resize: vertical;
 }
