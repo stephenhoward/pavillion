@@ -239,7 +239,7 @@ describe('updateEvent with location', () => {
     expect(saveEventStub.called).toBe(true);
     expect(findLocationStub.called).toBe(false);
     expect(updatedEvent.location).toBeNull();
-    expect(eventEntity.location_id).toBe('');
+    expect(eventEntity.location_id).toBeNull();
   });
 
 

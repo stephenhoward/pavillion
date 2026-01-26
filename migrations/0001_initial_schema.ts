@@ -468,6 +468,11 @@ export default {
       name: 'idx_location_calendar_id',
     });
 
+    // Add index on name for location search performance
+    await queryInterface.addIndex('location', ['name'], {
+      name: 'idx_location_name',
+    });
+
     // =========================================
     // MEDIA MANAGEMENT
     // =========================================
@@ -591,6 +596,11 @@ export default {
     // Add index on calendar_id for events
     await queryInterface.addIndex('event', ['calendar_id'], {
       name: 'idx_event_calendar_id',
+    });
+
+    // Add index on location_id for efficient event-location joins
+    await queryInterface.addIndex('event', ['location_id'], {
+      name: 'idx_event_location_id',
     });
 
     // event_content - Event translations

@@ -71,6 +71,7 @@ class EventEntity extends Model {
 
   toModel(): CalendarEvent {
     let model = new CalendarEvent(this.id, this.calendar_id, this.event_source_url);
+    model.locationId = this.location_id || null;
     if (this.location) {
       model.location = this.location.toModel();
     }

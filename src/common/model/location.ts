@@ -1,11 +1,58 @@
-import { PrimaryModel } from '@/common/model/model';
+import { Model, TranslatedModel, TranslatedContentModel } from '@/common/model/model';
+
+/**
+ * Represents translatable content for an event location.
+ * Locations can have accessibility information in multiple languages.
+ */
+class EventLocationContent extends Model implements TranslatedContentModel {
+  constructor(
+    public language: string,
+    public accessibilityInfo: string = '',
+  ) {
+    super();
+  }
+
+  /**
+   * Validates that the content has required information.
+   */
+  isValid(): boolean {
+    return this.language.length > 0;
+  }
+
+  /**
+   * Checks if the content is empty (no accessibility info).
+   */
+  isEmpty(): boolean {
+    return this.accessibilityInfo.trim().length === 0;
+  }
+
+  /**
+   * Convert to plain object for serialization.
+   */
+  toObject(): Record<string, any> {
+    return {
+      language: this.language,
+      accessibilityInfo: this.accessibilityInfo,
+    };
+  }
+
+  /**
+   * Create from plain object.
+   */
+  static fromObject(obj: Record<string, any>): EventLocationContent {
+    return new EventLocationContent(
+      obj.language,
+      obj.accessibilityInfo ?? '',
+    );
+  }
+}
 
 /**
  * Represents a physical location where an event takes place.
- * Contains address information and other location details.
+ * Contains address information and multilingual accessibility details.
  */
-class EventLocation extends PrimaryModel {
-  id: string = '';
+class EventLocation extends TranslatedModel<EventLocationContent> {
+  _content: Record<string, EventLocationContent> = {};
   name: string = '';
   address: string = '';
   city: string = '';
@@ -25,8 +72,7 @@ class EventLocation extends PrimaryModel {
    * @param {string} [country] - Country name
    */
   constructor(id?: string, name?: string, address?: string, city?: string, state?: string, postalCode?: string, country?: string) {
-    super();
-    this.id=id ?? '';
+    super(id ?? '');
     this.name = name ?? '';
     this.address = address ?? '';
     this.city = city ?? '';
@@ -36,13 +82,38 @@ class EventLocation extends PrimaryModel {
   }
 
   /**
+   * Creates new content for a specified language.
+   *
+   * @param {string} language - The language code to create content for
+   * @returns {EventLocationContent} New content instance for the specified language
+   * @protected
+   */
+  protected createContent(language: string): EventLocationContent {
+    return new EventLocationContent(language);
+  }
+
+  /**
    * Creates an EventLocation instance from a plain object.
    *
    * @param {Record<string, any>} obj - Plain object containing location data
    * @returns {EventLocation} A new EventLocation instance
    */
   static fromObject(obj: Record<string, any>): EventLocation {
-    return new EventLocation(obj.id, obj.name, obj.address, obj.city, obj.state, obj.postalCode, obj.country);
+    const location = new EventLocation(obj.id, obj.name, obj.address, obj.city, obj.state, obj.postalCode, obj.country);
+
+    // Load content if present
+    if (obj.content) {
+      for (const [language, contentObj] of Object.entries(obj.content)) {
+        if (typeof contentObj === 'object' && contentObj !== null) {
+          const contentData = contentObj as Record<string, any>;
+          contentData.language = language; // Ensure language is set
+          const content = EventLocationContent.fromObject(contentData);
+          location.addContent(content);
+        }
+      }
+    }
+
+    return location;
   }
 
   /**
@@ -60,6 +131,10 @@ class EventLocation extends PrimaryModel {
       state: this.state,
       postalCode: this.postalCode,
       country: this.country,
+      content: Object.fromEntries(
+        Object.entries(this._content)
+          .map(([language, content]: [string, EventLocationContent]) => [language, content.toObject()]),
+      ),
     };
   }
 };
@@ -118,4 +193,4 @@ function validateLocationHierarchy(location: EventLocation): string[] {
   return errors;
 }
 
-export { EventLocation, validateLocationHierarchy };
+export { EventLocation, EventLocationContent, validateLocationHierarchy };

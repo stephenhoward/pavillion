@@ -734,58 +734,11 @@ button {
           <section class="editor-section">
             <h2 class="section-header">LOCATION</h2>
 
-            <div class="section-card">
-              <div class="location-display" v-if="state.event.location.name">
-                <div class="location-info">
-                  <div class="location-name">{{ state.event.location.name }}</div>
-                  <div class="location-address">
-                    {{ [state.event.location.address, state.event.location.city, state.event.location.state, state.event.location.postalCode].filter(Boolean).join(', ') }}
-                  </div>
-                </div>
-                <button type="button" class="btn-change" @click="state.showLocationEditor = true">
-                  Change
-                </button>
-              </div>
-
-              <div class="location-editor" v-else>
-                <div class="form-field">
-                  <input
-                    type="text"
-                    v-model="state.event.location.name"
-                    placeholder="Location name"
-                    class="field-input"
-                  />
-                </div>
-                <div class="form-field">
-                  <input
-                    type="text"
-                    v-model="state.event.location.address"
-                    placeholder="Street address"
-                    class="field-input"
-                  />
-                </div>
-                <div class="location-row">
-                  <input
-                    type="text"
-                    v-model="state.event.location.city"
-                    placeholder="City"
-                    class="field-input"
-                  />
-                  <input
-                    type="text"
-                    v-model="state.event.location.state"
-                    placeholder="State"
-                    class="field-input"
-                  />
-                  <input
-                    type="text"
-                    v-model="state.event.location.postalCode"
-                    placeholder="Zip"
-                    class="field-input"
-                  />
-                </div>
-              </div>
-            </div>
+            <LocationDisplayCard
+              :location="state.event.location"
+              @change-location="handleOpenLocationPicker"
+              @add-location="handleOpenLocationPicker"
+            />
           </section>
 
           <!-- EVENT IMAGE Section -->
@@ -868,6 +821,28 @@ button {
                      @select="(lang) => addLanguage(lang)" />
   </div>
 
+  <!-- Location Picker Modal -->
+  <LocationPickerModal
+    v-if="state.showLocationPicker"
+    ref="locationPickerRef"
+    :locations="state.availableLocations"
+    :selected-location-id="state.event?.locationId || null"
+    @location-selected="handleLocationSelected"
+    @create-new="handleCreateNewLocation"
+    @remove-location="handleRemoveLocation"
+    @close="state.showLocationPicker = false"
+  />
+
+  <!-- Create Location Form Modal -->
+  <CreateLocationForm
+    v-if="state.showCreateLocationForm"
+    ref="createLocationFormRef"
+    :languages="languages"
+    @create-location="handleLocationCreated"
+    @back-to-search="handleBackToSearch"
+    @close="state.showCreateLocationForm = false"
+  />
+
   <!-- Unsaved Changes Confirmation Dialog -->
   <ModalLayout
     v-if="state.showUnsavedChangesDialog"
@@ -909,6 +884,7 @@ import { useCalendarStore } from '@/client/stores/calendarStore';
 import CalendarService from '@/client/service/calendar';
 import EventService from '@/client/service/event';
 import CategoryService from '@/client/service/category';
+import LocationService from '@/client/service/location';
 import ModelService from '@/client/service/models';
 import EventRecurrenceView from './event_recurrence.vue';
 import languagePicker from '@/client/components/common/languagePicker.vue';
@@ -917,6 +893,9 @@ import CategorySelector from './CategorySelector.vue';
 import ModalLayout from '@/client/components/common/modal.vue';
 import PillButton from '@/client/components/common/PillButton.vue';
 import LanguageTabSelector from '@/client/components/common/LanguageTabSelector.vue';
+import LocationDisplayCard from '@/client/components/common/LocationDisplayCard.vue';
+import LocationPickerModal from '@/client/components/common/LocationPickerModal.vue';
+import CreateLocationForm from '@/client/components/common/CreateLocationForm.vue';
 import EditorPanel from './EditorPanel.vue';
 import iso6391 from 'iso-639-1-dir';
 import { useEventDuplication } from '@/client/composables/useEventDuplication';
@@ -942,6 +921,7 @@ const router = useRouter();
 const eventService = new EventService();
 const calendarService = new CalendarService();
 const categoryService = new CategoryService();
+const locationService = new LocationService();
 const calendarStore = useCalendarStore();
 const { stripEventForDuplication } = useEventDuplication();
 
@@ -959,6 +939,10 @@ const availableLanguages = ref([...new Set([defaultLanguage, ...allLanguages])])
 // Error container ref for scrolling
 const errorContainer = ref(null);
 
+// Modal refs
+const locationPickerRef = ref(null);
+const createLocationFormRef = ref(null);
+
 // Dirty state tracking
 const isDirty = ref(false);
 const originalEventSnapshot = ref(null);
@@ -972,10 +956,12 @@ const state = reactive({
   isLoading: true,
   err: '',
   showLanguagePicker: false,
-  showLocationEditor: false,
+  showLocationPicker: false,
+  showCreateLocationForm: false,
   showUnsavedChangesDialog: false,
   lang: defaultLanguage,
   availableCalendars: [],
+  availableLocations: [],
   mediaId: null,
   calendar: null,
   selectedCategories: [],
@@ -1150,6 +1136,113 @@ const handleImageUpload = (results) => {
 const handleCategoriesChanged = (categories) => {
   state.selectedCategories = categories;
 };
+
+/**
+ * Fetch locations for the current calendar
+ */
+const fetchLocations = async (calendarId) => {
+  if (!calendarId) return;
+
+  try {
+    state.availableLocations = await locationService.getLocations(calendarId);
+  }
+  catch (error) {
+    console.error('Error fetching locations:', error);
+    state.availableLocations = [];
+  }
+};
+
+/**
+ * Handle opening the location picker modal
+ */
+const handleOpenLocationPicker = async () => {
+  // Fetch latest locations before showing picker
+  await fetchLocations(state.event.calendarId);
+  state.showLocationPicker = true;
+};
+
+/**
+ * Handle location selection from the picker
+ */
+const handleLocationSelected = async (location) => {
+  // Set the locationId on the event
+  state.event.locationId = location.id;
+
+  // Also set the location object for display purposes
+  state.event.location = location;
+
+  // Close the picker
+  state.showLocationPicker = false;
+};
+
+/**
+ * Handle "Create New" button click from location picker
+ */
+const handleCreateNewLocation = () => {
+  // Close picker and open create form
+  state.showLocationPicker = false;
+  state.showCreateLocationForm = true;
+};
+
+/**
+ * Handle location creation from the create form
+ */
+const handleLocationCreated = async (locationData) => {
+  try {
+    // Create the location via API
+    const newLocation = await locationService.createLocation(state.event.calendarId, locationData);
+
+    // Add to available locations
+    state.availableLocations.push(newLocation);
+
+    // Auto-select the newly created location
+    state.event.locationId = newLocation.id;
+    state.event.location = newLocation;
+
+    // Close the create form
+    state.showCreateLocationForm = false;
+  }
+  catch (error) {
+    console.error('Error creating location:', error);
+    state.err = 'Failed to create location';
+  }
+};
+
+/**
+ * Handle "Remove location" button click
+ */
+const handleRemoveLocation = () => {
+  // Clear the location reference
+  state.event.locationId = null;
+  state.event.location = new EventLocation();
+
+  // Close the picker
+  state.showLocationPicker = false;
+};
+
+/**
+ * Handle "Back to search" from create location form
+ */
+const handleBackToSearch = () => {
+  state.showCreateLocationForm = false;
+  state.showLocationPicker = true;
+};
+
+// Watch for location picker visibility and show/hide the modal
+watch(() => state.showLocationPicker, async (newValue) => {
+  if (newValue) {
+    await nextTick();
+    locationPickerRef.value?.dialogRef?.showModal();
+  }
+});
+
+// Watch for create location form visibility and show/hide the modal
+watch(() => state.showCreateLocationForm, async (newValue) => {
+  if (newValue) {
+    await nextTick();
+    createLocationFormRef.value?.dialogRef?.showModal();
+  }
+});
 
 // Watch for error changes and scroll into view
 watch(() => state.err, async (newError) => {
@@ -1367,6 +1460,9 @@ onBeforeMount(async () => {
 
       // Set current calendar
       state.calendar = state.availableCalendars.find(c => c.id === state.event.calendarId);
+
+      // Fetch locations for the calendar
+      await fetchLocations(state.event.calendarId);
     }
   }
   catch (error) {
@@ -1413,50 +1509,15 @@ const saveModel = async () => {
     return;
   }
 
-  // Validate location hierarchy
-  const locationErrors = validateLocationHierarchy(model.location);
-  if (locationErrors.length > 0) {
-    state.err = locationErrors.map(errorCode => {
-      switch (errorCode) {
-        case 'LOCATION_CITY_REQUIRES_ADDRESS':
-          return t('error_location_city_requires_address');
-        case 'LOCATION_STATE_REQUIRES_CITY':
-          return t('error_location_state_requires_city');
-        case 'LOCATION_STATE_REQUIRES_ADDRESS':
-          return t('error_location_state_requires_address');
-        case 'LOCATION_POSTAL_CODE_REQUIRES_STATE':
-          return t('error_location_postal_code_requires_state');
-        case 'LOCATION_POSTAL_CODE_REQUIRES_CITY':
-          return t('error_location_postal_code_requires_city');
-        case 'LOCATION_POSTAL_CODE_REQUIRES_ADDRESS':
-          return t('error_location_postal_code_requires_address');
-        default:
-          return t('error_invalid_location');
-      }
-    });
-
-    // Determine which fields are invalid based on error messages
-    locationErrors.forEach(error => {
-      if (error.includes('REQUIRES_CITY')) {
-        state.invalidFields.push('city');
-      }
-      if (error.includes('REQUIRES_ADDRESS')) {
-        state.invalidFields.push('address');
-      }
-      if (error.includes('REQUIRES_STATE')) {
-        state.invalidFields.push('state');
-      }
-      if (error.includes('REQUIRES_POSTAL_CODE')) {
-        state.invalidFields.push('postalCode');
-      }
-    });
-
-    return;
-  }
-
   try {
     if (state.mediaId) {
       model.mediaId = state.mediaId;
+    }
+
+    // Set locationId if a location has been selected
+    // (The location object is only for display purposes in the UI)
+    if (state.event.locationId) {
+      model.locationId = state.event.locationId;
     }
 
     // Save the event
@@ -1473,8 +1534,8 @@ const saveModel = async () => {
       }
     }
 
-    // Update last interacted calendar
-    calendarStore.setLastInteractedCalendar(model.calendarId);
+    // Update selected calendar
+    calendarStore.setSelectedCalendar(model.calendarId);
 
     // Reset dirty state after successful save to allow navigation
     isDirty.value = false;

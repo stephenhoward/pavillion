@@ -122,6 +122,14 @@ export default class CalendarInterface {
   }
 
   // Location operations
+  async getLocationsForCalendar(calendar: Calendar): Promise<EventLocation[]> {
+    return this.locationService.getLocationsForCalendar(calendar);
+  }
+
+  async getLocationById(calendar: Calendar, locationId: string): Promise<EventLocation | null> {
+    return this.locationService.getLocationById(calendar, locationId);
+  }
+
   async findLocation(calendar: Calendar, location: EventLocation): Promise<EventLocation | null> {
     return this.locationService.findLocation(calendar, location);
   }

@@ -35,6 +35,15 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
    * Null for remote-origin events (events copied from federation).
    */
   calendarId: string | null = null;
+  /**
+   * ID of the location where this event takes place.
+   * References a LocationEntity by ID.
+   */
+  locationId: string | null = null;
+  /**
+   * Full location object (deprecated, use locationId instead).
+   * Kept for backward compatibility during transition period.
+   */
   location: EventLocation | null = null;
   media: Media | null = null;
   mediaId: string | null = null; // Temporary field for API communication
@@ -120,6 +129,7 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
     let event = new CalendarEvent(obj.id, obj.calendarId ?? null, obj.eventSourceUrl);
 
     event.date = obj.date || '';
+    event.locationId = obj.locationId ?? null;
     event.location = obj.location ? EventLocation.fromObject(obj.location) : null;
     event.media = obj.media ? Media.fromObject(obj.media) : null;
     event.mediaId = obj.mediaId || null;
@@ -158,6 +168,7 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
       id: this.id,
       date: this.date,
       calendarId: this.calendarId,
+      locationId: this.locationId,
       location: this.location?.toObject(),
       media: this.media?.toObject(),
       eventSourceUrl: this.eventSourceUrl,

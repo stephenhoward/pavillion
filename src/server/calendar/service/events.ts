@@ -483,7 +483,20 @@ class EventService {
 
     const eventEntity = EventEntity.fromModel(event);
 
-    if( eventParams.location ) {
+    // Handle locationId (reference to existing location)
+    if (eventParams.locationId) {
+      // Validate that location exists and belongs to this calendar
+      const location = await this.locationService.getLocationById(calendar, eventParams.locationId);
+      if (!location) {
+        throw new Error('Location not found or does not belong to this calendar');
+      }
+
+      eventEntity.location_id = eventParams.locationId;
+      event.locationId = eventParams.locationId;
+      event.location = location;
+    }
+    // Fallback to embedded location object (for backward compatibility)
+    else if( eventParams.location ) {
       // Validate location hierarchy before processing
       const location = EventLocation.fromObject(eventParams.location);
       const validationErrors = validateLocationHierarchy(location);
@@ -651,8 +664,28 @@ class EventService {
       }
     }
 
-    if ( eventEntity.location_id && ! eventParams.location ) {
-      eventEntity.location_id = '';
+    // Handle locationId (reference to existing location) if present
+    if (eventParams.hasOwnProperty('locationId')) {
+      if (eventParams.locationId === null) {
+        // Clear the location
+        eventEntity.location_id = null;
+        event.locationId = null;
+        event.location = null;
+      } else {
+        // Validate that location exists and belongs to this calendar
+        const location = await this.locationService.getLocationById(calendar, eventParams.locationId);
+        if (!location) {
+          throw new Error('Location not found or does not belong to this calendar');
+        }
+
+        eventEntity.location_id = eventParams.locationId;
+        event.locationId = eventParams.locationId;
+        event.location = location;
+      }
+    }
+    // Fallback to embedded location object (for backward compatibility)
+    else if ( eventEntity.location_id && ! eventParams.location ) {
+      eventEntity.location_id = null;
       event.location = null;
     }
     else if( eventParams.location ) {
@@ -863,7 +896,7 @@ class EventService {
 
     // Update location
     if (eventEntity.location_id && !eventParams.location) {
-      eventEntity.location_id = '';
+      eventEntity.location_id = null;
       event.location = null;
     }
     else if (eventParams.location) {

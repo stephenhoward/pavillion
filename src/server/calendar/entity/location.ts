@@ -1,10 +1,11 @@
-import { Model, Table, Column, PrimaryKey, BelongsTo, DataType, ForeignKey } from 'sequelize-typescript';
+import { Model, Table, Column, PrimaryKey, BelongsTo, HasMany, DataType, ForeignKey, CreatedAt, UpdatedAt } from 'sequelize-typescript';
 
 import { EventLocation } from '@/common/model/location';
 import db from '@/server/common/entity/db';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
+import { LocationContentEntity } from '@/server/calendar/entity/location_content';
 
-@Table({ tableName: 'location' })
+@Table({ tableName: 'location', timestamps: true })
 class LocationEntity extends Model {
   @PrimaryKey
   @Column({ type: DataType.UUID })
@@ -32,11 +33,37 @@ class LocationEntity extends Model {
   @Column({ type: DataType.STRING })
   declare country: string;
 
+  @CreatedAt
+  declare createdAt: Date;
+
+  @UpdatedAt
+  declare updatedAt: Date;
+
+  @HasMany(() => LocationContentEntity)
+  declare content: LocationContentEntity[];
+
   @BelongsTo(() => CalendarEntity)
   declare calendar: CalendarEntity;
 
   toModel(): EventLocation {
-    return new EventLocation( this.id, this.name, this.address, this.city, this.state, this.postal_code, this.country );
+    const location = new EventLocation(
+      this.id,
+      this.name,
+      this.address,
+      this.city,
+      this.state,
+      this.postal_code,
+      this.country,
+    );
+
+    // Add content if loaded
+    if (this.content) {
+      for (const contentEntity of this.content) {
+        location.addContent(contentEntity.toModel());
+      }
+    }
+
+    return location;
   }
 
   static fromModel(location: EventLocation): LocationEntity {
@@ -52,8 +79,10 @@ class LocationEntity extends Model {
   }
 }
 
-db.addModels([LocationEntity]);
+// Register both entities with Sequelize to ensure proper associations
+db.addModels([LocationEntity, LocationContentEntity]);
 
 export {
   LocationEntity,
+  LocationContentEntity,
 };

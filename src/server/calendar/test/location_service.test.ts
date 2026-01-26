@@ -112,6 +112,14 @@ describe('findLocation', () => {
       let saveStub = sandbox.stub(LocationEntity.prototype, 'save');
       let eventSpy = sandbox.spy(LocationEntity, 'fromModel');
 
+      // Stub getLocationById to return the created location
+      const getLocationByIdStub = sandbox.stub(service, 'getLocationById');
+      const expectedLocation = new EventLocation(
+        'https://pavillion.dev/places/test-id',
+        'testName',
+      );
+      getLocationByIdStub.resolves(expectedLocation);
+
       let location = await service.createLocation(
         new Calendar('testCalendarId', 'testme'),
         new EventLocation('', 'testName'),
