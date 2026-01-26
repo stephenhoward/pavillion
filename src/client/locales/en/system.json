@@ -8,7 +8,10 @@
     },
     "language_picker": {
         "search_language": "Search for a language",
-        "select_language": "Select a Language"
+        "select_language": "Select a Language",
+        "close": "Close",
+        "no_languages_match": "No languages match your search",
+        "all_languages_added": "All languages have been added"
     },
     "navigation": {
         "skip_to_content": "Skip to main content"

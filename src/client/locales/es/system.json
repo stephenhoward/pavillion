@@ -8,7 +8,10 @@
   },
   "language_picker": {
     "search_language": "Buscar un idioma",
-    "select_language": "Seleccionar un Idioma"
+    "select_language": "Seleccionar un Idioma",
+    "close": "Cerrar",
+    "no_languages_match": "Ningún idioma coincide con tu búsqueda",
+    "all_languages_added": "Todos los idiomas han sido agregados"
   },
   "navigation": {
     "skip_to_content": "Saltar al contenido principal"
