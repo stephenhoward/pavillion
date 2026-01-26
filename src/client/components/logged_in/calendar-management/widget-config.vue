@@ -4,18 +4,99 @@
       <h3>{{ t('configuration_title') }}</h3>
       <p class="section-description">{{ t('configuration_description') }}</p>
 
-      <div class="form-group">
-        <label for="viewMode" class="form-label">{{ t('view_mode_label') }}</label>
-        <div class="form-field">
-          <select
-            id="viewMode"
-            v-model="state.viewMode"
+      <div class="form-group view-mode-group">
+        <label class="form-label">{{ t('view_mode_label') }}</label>
+        <div class="view-mode-cards">
+          <button
+            type="button"
+            class="view-mode-card"
+            :class="{ 'view-mode-card--selected': state.viewMode === 'list' }"
+            @click="state.viewMode = 'list'"
           >
-            <option value="list">{{ t('view_mode_list') }}</option>
-            <option value="week">{{ t('view_mode_week') }}</option>
-            <option value="month">{{ t('view_mode_month') }}</option>
-          </select>
-          <div class="description">{{ t('view_mode_help') }}</div>
+            <div class="view-mode-card__illustration">
+              <div class="list-illustration">
+                <div class="list-line"></div>
+                <div class="list-line"></div>
+                <div class="list-line"></div>
+              </div>
+            </div>
+            <div class="view-mode-card__content">
+              <div class="view-mode-card__title">{{ t('view_mode_list_title') }}</div>
+              <div class="view-mode-card__description">{{ t('view_mode_list_description') }}</div>
+            </div>
+            <div v-if="state.viewMode === 'list'" class="view-mode-card__checkmark">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            class="view-mode-card"
+            :class="{ 'view-mode-card--selected': state.viewMode === 'week' }"
+            @click="state.viewMode = 'week'"
+          >
+            <div class="view-mode-card__illustration">
+              <div class="week-illustration">
+                <div class="week-day"></div>
+                <div class="week-day"></div>
+                <div class="week-day week-day--highlight"></div>
+                <div class="week-day"></div>
+                <div class="week-day week-day--highlight"></div>
+                <div class="week-day"></div>
+                <div class="week-day"></div>
+              </div>
+            </div>
+            <div class="view-mode-card__content">
+              <div class="view-mode-card__title">{{ t('view_mode_week_title') }}</div>
+              <div class="view-mode-card__description">{{ t('view_mode_week_description') }}</div>
+            </div>
+            <div v-if="state.viewMode === 'week'" class="view-mode-card__checkmark">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            class="view-mode-card"
+            :class="{ 'view-mode-card--selected': state.viewMode === 'month' }"
+            @click="state.viewMode = 'month'"
+          >
+            <div class="view-mode-card__illustration">
+              <div class="month-illustration">
+                <div class="month-row">
+                  <div class="month-cell"></div>
+                  <div class="month-cell"></div>
+                  <div class="month-cell month-cell--highlight"></div>
+                  <div class="month-cell"></div>
+                  <div class="month-cell month-cell--highlight"></div>
+                  <div class="month-cell"></div>
+                  <div class="month-cell"></div>
+                </div>
+                <div class="month-row">
+                  <div class="month-cell"></div>
+                  <div class="month-cell month-cell--highlight"></div>
+                  <div class="month-cell"></div>
+                  <div class="month-cell"></div>
+                  <div class="month-cell"></div>
+                  <div class="month-cell"></div>
+                  <div class="month-cell"></div>
+                </div>
+              </div>
+            </div>
+            <div class="view-mode-card__content">
+              <div class="view-mode-card__title">{{ t('view_mode_month_title') }}</div>
+              <div class="view-mode-card__description">{{ t('view_mode_month_description') }}</div>
+            </div>
+            <div v-if="state.viewMode === 'month'" class="view-mode-card__checkmark">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </div>
+          </button>
         </div>
       </div>
 
@@ -135,109 +216,262 @@ defineExpose({
 </script>
 
 <style scoped lang="scss">
-@use '../../../assets/mixins' as *;
+@use '../../../assets/style/components/calendar-admin' as *;
 
 .widget-config {
-  max-width: 900px;
-  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pav-space-6);
 
   .config-section,
   .preview-section {
-    margin-bottom: $spacing-2xl;
-
     h3 {
-      margin: 0 0 $spacing-sm 0;
-      font-size: 18px;
-      font-weight: $font-medium;
-      color: $light-mode-text;
-
-      @include dark-mode {
-        color: $dark-mode-text;
-      }
+      @include admin-section-title;
+      font-size: 1rem;
+      font-weight: 500;
+      margin-bottom: var(--pav-space-3);
     }
 
     .section-description {
-      margin: 0 0 $spacing-xl 0;
-      font-size: 14px;
-      color: $light-mode-secondary-text;
+      margin: 0 0 var(--pav-space-4) 0;
+      font-size: 0.875rem;
+      color: var(--pav-color-stone-600);
       line-height: 1.5;
 
-      @include dark-mode {
-        color: $dark-mode-secondary-text;
+      @media (prefers-color-scheme: dark) {
+        color: var(--pav-color-stone-400);
       }
     }
   }
 
-  .description {
-    margin: $spacing-xs 0 0 0;
-    font-size: 14px;
-    color: $light-mode-secondary-text;
-    line-height: 1.5;
+  .form-group {
+    margin-bottom: var(--pav-space-6);
 
-    @include dark-mode {
-      color: $dark-mode-secondary-text;
+    .form-label {
+      display: block;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--pav-color-stone-700);
+      margin-bottom: var(--pav-space-3);
+
+      @media (prefers-color-scheme: dark) {
+        color: var(--pav-color-stone-300);
+      }
+    }
+
+    .description {
+      margin: var(--pav-space-2) 0 0 0;
+      font-size: 0.875rem;
+      color: var(--pav-color-stone-600);
+      line-height: 1.5;
+
+      @media (prefers-color-scheme: dark) {
+        color: var(--pav-color-stone-400);
+      }
+    }
+
+    select {
+      @include admin-form-input;
+      cursor: pointer;
+    }
+  }
+
+  .view-mode-group {
+    .view-mode-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: var(--pav-space-4);
+
+      @media (min-width: 768px) {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
+
+    .view-mode-card {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: var(--pav-space-5);
+      background: var(--pav-bg-primary);
+      border: 2px solid var(--pav-border-primary);
+      border-radius: 0.75rem;
+      cursor: pointer;
+      transition: all 0.2s;
+
+      &:hover {
+        border-color: var(--pav-color-stone-400);
+      }
+
+      &--selected {
+        border-color: var(--pav-color-orange-500);
+        background: oklch(0.705 0.213 47.604 / 0.02);
+
+        @media (prefers-color-scheme: dark) {
+          background: oklch(0.705 0.213 47.604 / 0.05);
+        }
+      }
+
+      &__illustration {
+        width: 100%;
+        height: 80px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: var(--pav-space-4);
+      }
+
+      &__content {
+        text-align: center;
+      }
+
+      &__title {
+        font-size: 0.9375rem;
+        font-weight: 500;
+        color: var(--pav-color-stone-900);
+        margin-bottom: var(--pav-space-1);
+
+        @media (prefers-color-scheme: dark) {
+          color: var(--pav-color-stone-100);
+        }
+      }
+
+      &__description {
+        font-size: 0.8125rem;
+        color: var(--pav-color-stone-600);
+
+        @media (prefers-color-scheme: dark) {
+          color: var(--pav-color-stone-400);
+        }
+      }
+
+      &__checkmark {
+        position: absolute;
+        top: var(--pav-space-3);
+        right: var(--pav-space-3);
+        color: var(--pav-color-orange-500);
+      }
+    }
+  }
+
+  .list-illustration {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 80%;
+
+    .list-line {
+      height: 12px;
+      background: var(--pav-color-stone-300);
+      border-radius: 4px;
+
+      @media (prefers-color-scheme: dark) {
+        background: var(--pav-color-stone-700);
+      }
+    }
+  }
+
+  .week-illustration {
+    display: flex;
+    gap: 4px;
+    width: 90%;
+
+    .week-day {
+      flex: 1;
+      height: 60px;
+      background: var(--pav-color-stone-200);
+      border-radius: 4px;
+
+      @media (prefers-color-scheme: dark) {
+        background: var(--pav-color-stone-700);
+      }
+
+      &--highlight {
+        background: var(--pav-color-orange-200);
+
+        @media (prefers-color-scheme: dark) {
+          background: oklch(0.705 0.213 47.604 / 0.3);
+        }
+      }
+    }
+  }
+
+  .month-illustration {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 90%;
+
+    .month-row {
+      display: flex;
+      gap: 4px;
+    }
+
+    .month-cell {
+      flex: 1;
+      height: 24px;
+      background: var(--pav-color-stone-200);
+      border-radius: 2px;
+
+      @media (prefers-color-scheme: dark) {
+        background: var(--pav-color-stone-700);
+      }
+
+      &--highlight {
+        background: var(--pav-color-orange-200);
+
+        @media (prefers-color-scheme: dark) {
+          background: oklch(0.705 0.213 47.604 / 0.3);
+        }
+      }
     }
   }
 
   .color-picker-wrapper {
     display: flex;
     align-items: center;
-    gap: $spacing-md;
+    gap: var(--pav-space-3);
 
     .color-input {
-      width: 80px;
-      height: 44px;
-      border: 1px solid $light-mode-border;
-      border-radius: $component-border-radius-small;
+      width: 60px;
+      height: 60px;
+      border: 1px solid var(--pav-border-primary);
+      border-radius: 0.5rem;
       cursor: pointer;
       transition: all 0.2s ease;
 
-      @include dark-mode {
-        border-color: $dark-mode-border;
-      }
-
       &:focus {
         outline: none;
-        border-color: $focus-color;
-        box-shadow: 0 0 0 3px rgba($focus-color, 0.1);
-
-        @include dark-mode {
-          border-color: $focus-color-dark;
-          box-shadow: 0 0 0 3px rgba($focus-color-dark, 0.1);
-        }
+        box-shadow: 0 0 0 3px oklch(0.705 0.213 47.604 / 0.4);
+        border-color: var(--pav-color-orange-500);
       }
     }
 
     .color-value {
-      font-size: 15px;
+      font-size: 0.9375rem;
       font-family: monospace;
-      color: $light-mode-text;
-      font-weight: $font-medium;
-
-      @include dark-mode {
-        color: $dark-mode-text;
-      }
+      color: var(--pav-text-primary);
+      font-weight: 500;
     }
   }
 
   .preview-section {
     .preview-container {
-      border: 1px solid $light-mode-border;
-      border-radius: $component-border-radius-small;
-      background: $light-mode-panel-background;
-      padding: $spacing-lg;
+      border: 1px solid var(--pav-border-primary);
+      border-radius: 0.75rem;
+      background: var(--pav-color-stone-100);
+      padding: var(--pav-space-4);
       min-height: 600px;
 
-      @include dark-mode {
-        background: $dark-mode-input-background;
-        border-color: $dark-mode-border;
+      @media (prefers-color-scheme: dark) {
+        background: var(--pav-color-stone-800);
       }
 
       .widget-preview {
         width: 100%;
         height: 600px;
         border: none;
-        border-radius: $component-border-radius-small;
+        border-radius: 0.75rem;
       }
     }
   }

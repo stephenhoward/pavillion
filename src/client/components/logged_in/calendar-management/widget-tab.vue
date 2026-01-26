@@ -72,48 +72,38 @@ const widgetConfigState = computed(() => {
 </script>
 
 <style scoped lang="scss">
-@use '../../../assets/mixins' as *;
+@use '../../../assets/style/components/calendar-admin' as *;
 
 .widget-tab {
-  padding: $spacing-xl 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pav-space-6);
+}
 
-  .widget-sections {
-    max-width: 1000px;
-    margin: 0 auto;
+.widget-sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pav-space-8);
+}
 
-    .widget-section {
-      margin-bottom: $spacing-3xl;
-      padding: $spacing-2xl;
-      background: $light-mode-panel-background;
-      border: 1px solid $light-mode-border;
-      border-radius: $component-border-radius-small;
+.widget-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pav-space-4);
 
-      @include dark-mode {
-        background: $dark-mode-panel-background;
-        border-color: $dark-mode-border;
-      }
+  h2 {
+    @include admin-section-title;
+    margin: 0;
+  }
 
-      h2 {
-        margin: 0 0 $spacing-md 0;
-        font-size: 22px;
-        font-weight: $font-bold;
-        color: $light-mode-text;
+  .section-intro {
+    margin: 0;
+    color: var(--pav-color-stone-600);
+    font-size: 0.875rem;
+    line-height: 1.5;
 
-        @include dark-mode {
-          color: $dark-mode-text;
-        }
-      }
-
-      .section-intro {
-        margin: 0 0 $spacing-xl 0;
-        font-size: 15px;
-        color: $light-mode-secondary-text;
-        line-height: 1.6;
-
-        @include dark-mode {
-          color: $dark-mode-secondary-text;
-        }
-      }
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-400);
     }
   }
 }

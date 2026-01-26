@@ -1,87 +1,95 @@
 <template>
   <ModalLayout
     :title="localCategory?.id ? t('edit_category_title') : t('add_category_title')"
+    modal-class="category-editor-modal"
     @close="$emit('close')"
   >
-    <div class="form-stack">
+    <div class="category-editor">
       <div v-if="state.error" class="alert alert--error">
         {{ state.error }}
       </div>
-      <div class="form-group">
-        <p class="form-helper">{{ t('category_name_help') }}</p>
-        <label v-for="lang in localCategory?.getLanguages()" for="categoryName">
-          <span class="labeltext">{{ iso6391.getNativeName(lang) }}:</span>
-          <input
-            id="categoryName"
-            type="text"
-            class="form-control"
-            v-model="localCategory.content(lang).name"
-            :dir="iso6391.getDir(lang) == 'rtl' ? 'rtl' : ''"
-            :placeholder="t('category_name_placeholder')"
-            :disabled="state.isSaving"
-            @keyup.enter="saveCategory"
-            ref="categoryNameInput"
-          />
-          <button
-            v-if="localCategory && localCategory.getLanguages().length > 1"
-            type="button"
-            class="btn btn--xs btn--danger btn--icon"
-            aria-label="Remove Language"
-            @click="removeLanguage(lang)"
-          >
-            ×
-          </button>
-        </label>
-      </div>
-      <div class="form-group controls">
-        <button
-          type="button"
-          class="btn btn--secondary"
-          @click="state.showLanguagePicker = true"
+
+      <p class="form-helper">{{ t('category_name_help') }}</p>
+
+      <div class="language-fields">
+        <div
+          v-for="lang in localCategory?.getLanguages()"
+          :key="lang"
+          class="language-field"
         >
-          {{ t('add_language') }}
-        </button>
+          <label class="language-label">{{ iso6391.getNativeName(lang) }}:</label>
+          <div class="language-input-wrapper">
+            <input
+              type="text"
+              class="language-input"
+              v-model="localCategory.content(lang).name"
+              :dir="iso6391.getDir(lang) == 'rtl' ? 'rtl' : ''"
+              :placeholder="t('category_name_placeholder')"
+              :disabled="state.isSaving"
+              @keyup.enter="saveCategory"
+              ref="categoryNameInput"
+            />
+            <button
+              v-if="localCategory && localCategory.getLanguages().length > 1"
+              type="button"
+              class="remove-language-button"
+              aria-label="Remove Language"
+              @click="removeLanguage(lang)"
+            >
+              <X :size="16" :stroke-width="2" />
+            </button>
+          </div>
+        </div>
       </div>
+
+      <button
+        type="button"
+        class="add-language-button"
+        @click="state.showLanguagePicker = true"
+      >
+        + {{ t('add_language') }}
+      </button>
 
       <div class="form-actions">
         <button
           type="button"
-          class="primary"
-          @click="saveCategory"
-          :disabled="state.isSaving || !canSaveCategory()"
-        >
-          {{ state.isSaving ? (localCategory?.id ? t('updating') : t('creating')) : (localCategory?.id ? t('save_button') : t('create_button')) }}
-        </button>
-        <button
-          type="button"
-          class="btn btn--secondary"
+          class="btn-ghost"
           @click="$emit('close')"
           :disabled="state.isSaving"
         >
           {{ t('cancel_button') }}
         </button>
+        <PillButton
+          variant="primary"
+          @click="saveCategory"
+          :disabled="state.isSaving || !canSaveCategory()"
+        >
+          {{ state.isSaving ? (localCategory?.id ? t('updating') : t('creating')) : (localCategory?.id ? t('save_button') : t('create_button')) }}
+        </PillButton>
       </div>
     </div>
-  </ModalLayout>
 
-  <!-- Language Picker -->
-  <LanguagePicker
-    v-if="state.showLanguagePicker"
-    :languages="availableLanguages"
-    :selectedLanguages="localCategory ? localCategory.getLanguages() : []"
-    @select="addLanguage"
-    @close="state.showLanguagePicker = false"
-  />
+    <!-- Language Picker - Inside dialog for proper z-index layering -->
+    <LanguagePicker
+      v-if="state.showLanguagePicker"
+      :languages="availableLanguages"
+      :selectedLanguages="localCategory ? localCategory.getLanguages() : []"
+      @select="addLanguage"
+      @close="state.showLanguagePicker = false"
+    />
+  </ModalLayout>
 </template>
 
 <script setup>
 import { reactive, ref, nextTick, onMounted, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
+import { X } from 'lucide-vue-next';
 import iso6391 from 'iso-639-1-dir';
 import { EventCategoryContent } from '@/common/model/event_category_content';
 import CategoryService from '@/client/service/category';
 import ModalLayout from '@/client/components/common/modal.vue';
 import LanguagePicker from '@/client/components/common/languagePicker.vue';
+import PillButton from '@/client/components/common/PillButton.vue';
 
 const emit = defineEmits(['close', 'saved']);
 
@@ -220,105 +228,155 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
+@use '../../../assets/style/components/calendar-admin' as *;
 
-dialog .modal-content {
-  max-width: 500px;
+// Constrain modal width to match reference design
+:global(.category-editor-modal > div) {
+  max-width: 600px !important;
 }
+
 .category-editor {
-  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pav-space-4);
 }
 
-.form-group {
-  margin-bottom: 1rem;
+.form-helper {
+  margin: 0;
+  color: var(--pav-color-stone-600);
+  font-size: 0.875rem;
 
-  &.controls {
-    text-align: center;
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-stone-400);
   }
+}
 
-  label {
-  display: grid;
-  grid-template-columns: 60px 1fr 48px;
-  margin-bottom: 0.5rem;
-  font-weight: 500;
-  color: var(--text-primary);
-  width: 100%;
-  padding: 0.75rem;
-  border-radius: 0.375rem;
-  border-color: rgba(255, 255, 255, 0.7);
-  background: rgba(255, 255, 255, 0.2);
+.language-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pav-space-3);
+}
+
+.language-field {
+  display: flex;
+  flex-direction: row;
   align-items: center;
-
-  span.labeltext {
-    display: block;
-    font-size: 80%;
-    grid-column-start: 1;
-    grid-column-end: 2;
-  }
-  input {
-    font-size: 1rem;
-    flex: 1;
-    background: transparent;
-    border: none;
-    margin: 0 0.5rem;
-    grid-column-start: 2;
-    grid-column-end: 3;
-  }
-  button {
-    grid-column-start: 3;
-    grid-column-end: 4;
-    margin-left: 15px;
-  }
-}
+  gap: var(--pav-space-3);
 }
 
-.help-text {
-  margin-top: 0.5rem;
-  font-size: 0.85rem;
-  color: var(--text-secondary);
+.language-label {
+  font-weight: 500;
+  font-size: 0.875rem;
+  color: var(--pav-color-stone-700);
+  min-width: 80px;
+  flex-shrink: 0;
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-stone-300);
+  }
+}
+
+.language-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--pav-space-2);
+  flex: 1;
+}
+
+.language-input {
+  @include admin-form-input;
+  flex: 1;
+}
+
+.remove-language-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--pav-space-2);
+  background: none;
+  border: none;
+  border-radius: 0.375rem;
+  color: var(--pav-color-stone-400);
+  cursor: pointer;
+  transition: color 0.2s, background-color 0.2s;
+
+  &:hover {
+    color: var(--pav-color-stone-600);
+    background: var(--pav-color-stone-100);
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-300);
+      background: var(--pav-color-stone-700);
+    }
+  }
+}
+
+.add-language-button {
+  align-self: flex-start;
+  padding: var(--pav-space-2) var(--pav-space-3);
+  background: none;
+  border: none;
+  color: var(--pav-color-stone-600);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.2s;
+
+  &:hover {
+    color: var(--pav-color-orange-600);
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-orange-400);
+    }
+  }
 }
 
 .form-actions {
   display: flex;
-  gap: 0.75rem;
+  gap: var(--pav-space-3);
   justify-content: flex-end;
-  margin-top: 1.5rem;
+  margin-top: var(--pav-space-4);
+  padding-top: var(--pav-space-4);
+  border-top: 1px solid var(--pav-border-primary);
 }
 
-.error {
-  color: var(--error-color);
-  margin-bottom: 1rem;
-  padding: 0.75rem;
-  background: var(--error-background);
-  border: 1px solid var(--error-border);
-  border-radius: 0.375rem;
-}
-</style>
-
-<style scoped lang="scss">
-@use '@/client/assets/mixins' as *;
-
-.language-controls {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 20px;
-}
-
-.language-tabs {
-  display: flex;
-  gap: 5px;
-}
-
-.remove-language-btn {
-  padding: 5px 10px;
-  color: white;
-  border-radius: 4px;
+.btn-ghost {
+  padding: var(--pav-space-2) var(--pav-space-4);
+  background: none;
+  border: none;
+  color: var(--pav-color-stone-600);
+  font-weight: 500;
   cursor: pointer;
-  font-size: 16px;
+  transition: color 0.2s;
 
   &:hover {
-    background: #c82333;
-    border-color: #bd2130;
+    color: var(--pav-color-stone-900);
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-100);
+    }
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.alert {
+  padding: var(--pav-space-3);
+  margin-bottom: var(--pav-space-4);
+  border-radius: 0.75rem;
+  font-size: 0.875rem;
+
+  &.alert--error {
+    background-color: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    color: var(--pav-color-red-700);
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-red-400);
+    }
   }
 }
 </style>

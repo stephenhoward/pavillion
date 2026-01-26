@@ -64,18 +64,22 @@ const activateTab = (tab) => {
     </div>
 
     <template v-else-if="state.calendar">
-      <nav class="breadcrumb">
-        <RouterLink class="breadcrumb__item" :to="`/calendar/${state.calendar.urlName}`">📅 {{ state.calendar.urlName }}</RouterLink>
-        <span class="breadcrumb__item">{{ t('page_title') }}</span>
-      </nav>
+      <div class="calendar-management__header">
+        <nav class="calendar-management__breadcrumb">
+          <span class="calendar-management__breadcrumb-item">{{ state.calendar.urlName }}</span>
+          <span class="calendar-management__breadcrumb-separator">/</span>
+          <span class="calendar-management__breadcrumb-item">settings</span>
+        </nav>
+        <h1 class="calendar-management__title">{{ t('page_title') }}</h1>
+      </div>
 
-      <nav role="tablist" class="tab-list">
+      <nav role="tablist" class="calendar-management__tabs">
         <button
           type="button"
           role="tab"
           :aria-selected="state.activeTab === 'categories' ? 'true' : 'false'"
           aria-controls="categories-panel"
-          class="tab"
+          class="calendar-management__tab"
           @click="activateTab('categories')"
         >
           {{ t('categories_tab') }}
@@ -85,7 +89,7 @@ const activateTab = (tab) => {
           role="tab"
           :aria-selected="state.activeTab === 'editors' ? 'true' : 'false'"
           aria-controls="editors-panel"
-          class="tab"
+          class="calendar-management__tab"
           @click="activateTab('editors')"
         >
           {{ t('editors_tab') }}
@@ -95,7 +99,7 @@ const activateTab = (tab) => {
           role="tab"
           :aria-selected="state.activeTab === 'settings' ? 'true' : 'false'"
           aria-controls="settings-panel"
-          class="tab"
+          class="calendar-management__tab"
           @click="activateTab('settings')"
         >
           {{ t('settings_tab') }}
@@ -105,7 +109,7 @@ const activateTab = (tab) => {
           role="tab"
           :aria-selected="state.activeTab === 'widget' ? 'true' : 'false'"
           aria-controls="widget-panel"
-          class="tab"
+          class="calendar-management__tab"
           @click="activateTab('widget')"
         >
           {{ t('widget_tab') }}
@@ -118,7 +122,7 @@ const activateTab = (tab) => {
         aria-labelledby="categories-tab"
         :aria-hidden="state.activeTab !== 'categories'"
         :hidden="state.activeTab !== 'categories'"
-        class="tab-panel"
+        class="calendar-management__panel"
       >
         <CategoriesTab v-if="state.calendar" :calendar-id="state.calendar.id" />
       </div>
@@ -129,7 +133,7 @@ const activateTab = (tab) => {
         aria-labelledby="editors-tab"
         :aria-hidden="state.activeTab !== 'editors'"
         :hidden="state.activeTab !== 'editors'"
-        class="tab-panel"
+        class="calendar-management__panel"
       >
         <EditorsTab :calendar-id="state.calendar.id" />
       </div>
@@ -140,7 +144,7 @@ const activateTab = (tab) => {
         aria-labelledby="settings-tab"
         :aria-hidden="state.activeTab !== 'settings'"
         :hidden="state.activeTab !== 'settings'"
-        class="tab-panel"
+        class="calendar-management__panel"
       >
         <SettingsTab :calendar-id="state.calendar.id" />
       </div>
@@ -151,7 +155,7 @@ const activateTab = (tab) => {
         aria-labelledby="widget-tab"
         :aria-hidden="state.activeTab !== 'widget'"
         :hidden="state.activeTab !== 'widget'"
-        class="tab-panel"
+        class="calendar-management__panel"
       >
         <WidgetTab
           :calendar-id="state.calendar.id"

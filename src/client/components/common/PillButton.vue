@@ -3,11 +3,11 @@
  * PillButton Component
  *
  * A reusable pill-shaped button with multiple visual variants matching the design system.
- * Supports primary (Orange), secondary (outlined), and ghost (transparent) styles.
+ * Supports primary (Orange), secondary (outlined), ghost (transparent), and danger (Red) styles.
  */
 
 const props = withDefaults(defineProps<{
-  variant?: 'primary' | 'secondary' | 'ghost';
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
   type?: 'button' | 'submit' | 'reset';
   disabled?: boolean;
   size?: 'sm' | 'md' | 'lg';
@@ -133,6 +133,19 @@ const handleClick = (event: MouseEvent) => {
       &:hover:not(.pill-button--disabled) {
         background: var(--pav-color-stone-800);
       }
+    }
+  }
+
+  &--danger {
+    background: var(--pav-color-red-600);
+    color: white;
+
+    &:hover:not(.pill-button--disabled) {
+      opacity: 0.9;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      background: var(--pav-color-red-600);
     }
   }
 

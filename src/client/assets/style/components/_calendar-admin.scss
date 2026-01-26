@@ -1,0 +1,207 @@
+// Calendar Administration Styles
+// Mixins and styles for calendar management screens
+
+// Section pattern (used across all tabs)
+@mixin admin-section {
+  margin-bottom: var(--pav-space-8);
+}
+
+@mixin admin-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--pav-space-6);
+}
+
+@mixin admin-section-title {
+  font-size: 1.5rem;
+  font-weight: 300;
+  color: var(--pav-text-primary);
+}
+
+@mixin admin-section-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--pav-color-stone-500);
+  margin-bottom: var(--pav-space-4);
+}
+
+// Card pattern (categories, editors)
+@mixin admin-card {
+  background: var(--pav-bg-primary);
+  border: 1px solid var(--pav-border-primary);
+  border-radius: 0.75rem; // rounded-xl
+  padding: var(--pav-space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--pav-space-4);
+
+  &:not(:last-child) {
+    margin-bottom: var(--pav-space-3);
+  }
+}
+
+// Badge pattern (owner, federated)
+@mixin admin-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pav-space-1);
+  padding: var(--pav-space-1) var(--pav-space-2);
+  border-radius: 9999px; // pill
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+@mixin admin-badge-orange {
+  @include admin-badge;
+  background: var(--pav-color-orange-50);
+  color: var(--pav-color-orange-700);
+
+  @media (prefers-color-scheme: dark) {
+    background: oklch(0.705 0.213 47.604 / 0.1);
+    color: var(--pav-color-orange-300);
+  }
+}
+
+@mixin admin-badge-sky {
+  @include admin-badge;
+  background: var(--pav-color-sky-50);
+  color: var(--pav-color-sky-700);
+
+  @media (prefers-color-scheme: dark) {
+    background: oklch(0.725 0.143 232.661 / 0.1);
+    color: var(--pav-color-sky-300);
+  }
+}
+
+// Form input pattern
+@mixin admin-form-input {
+  width: 100%;
+  padding: var(--pav-space-3) var(--pav-space-4);
+  border: 1px solid var(--pav-border-primary);
+  border-radius: 0.75rem; // rounded-xl
+  background: var(--pav-color-stone-50);
+  color: var(--pav-text-primary);
+  font-size: 1rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+
+  &:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px oklch(0.705 0.213 47.604 / 0.4); // Orange-500 with 40% opacity
+    border-color: var(--pav-color-orange-500);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    background: var(--pav-color-stone-800);
+  }
+}
+
+// Tab navigation
+@mixin admin-tabs {
+  display: flex;
+  gap: var(--pav-space-6);
+  border-bottom: 1px solid var(--pav-border-primary);
+  margin-bottom: var(--pav-space-6);
+}
+
+@mixin admin-tab-button {
+  position: relative;
+  padding: var(--pav-space-3) 0;
+  background: none;
+  border: none;
+  color: var(--pav-color-stone-500);
+  font-weight: 500;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: color 0.2s;
+
+  &:hover {
+    color: var(--pav-color-stone-700);
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-300);
+    }
+  }
+
+  &[aria-selected="true"] {
+    color: var(--pav-color-orange-600);
+
+    &::after {
+      content: '';
+      position: absolute;
+      bottom: -1px;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: var(--pav-color-orange-500);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-orange-400);
+    }
+  }
+}
+
+// Calendar Management Root Component
+.calendar-management {
+  max-width: 56rem; // max-w-4xl
+  margin: 0 auto;
+  padding: var(--pav-space-6);
+
+  &__header {
+    margin-bottom: var(--pav-space-6);
+  }
+
+  &__breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: var(--pav-space-2);
+    color: var(--pav-color-stone-500);
+    font-size: 0.875rem;
+    margin-bottom: var(--pav-space-3);
+  }
+
+  &__breadcrumb-item {
+    color: var(--pav-color-stone-500);
+  }
+
+  &__breadcrumb-separator {
+    color: var(--pav-color-stone-400);
+  }
+
+  &__title {
+    font-size: 2rem;
+    font-weight: 300;
+    color: var(--pav-text-primary);
+    margin: 0;
+  }
+
+  &__tabs {
+    @include admin-tabs;
+  }
+
+  &__tab {
+    @include admin-tab-button;
+  }
+
+  &__panel {
+    // Panel styles (individual tabs will style their content)
+  }
+
+  .loading-message,
+  .error-message {
+    padding: var(--pav-space-4);
+    text-align: center;
+    color: var(--pav-text-secondary);
+  }
+
+  .error-message {
+    color: var(--pav-color-red-600);
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-red-400);
+    }
+  }
+}

@@ -14,66 +14,80 @@
     <LoadingMessage v-if="state.isLoading" :description="t('loading')" />
 
     <!-- Categories List -->
-    <div v-else-if="state.categories.length > 0" class="vstack stack--md">
-      <div class="hstack hstack--between">
-        <button
-          type="button"
-          class="primary"
+    <div v-else-if="state.categories.length > 0" class="categories-content">
+      <div class="categories-header">
+        <h2 class="categories-title">{{ t('event_categories') }}</h2>
+        <PillButton
+          variant="primary"
           @click="openCreateEditor"
         >
+          <Plus :size="20" :stroke-width="2" />
           {{ t('add_category_button') }}
-        </button>
+        </PillButton>
       </div>
-      <div
-        v-for="category in state.categories"
-        :key="category.id"
-        class="hstack hstack--between stack--md category-item"
-      >
-        <div class="hstack stack--sm category-info-with-checkbox">
+
+      <div class="categories-list">
+        <div
+          v-for="category in state.categories"
+          :key="category.id"
+          class="category-card"
+          :class="{ 'category-card--selected': state.selectedCategories.has(category.id) }"
+        >
           <input
             type="checkbox"
             :checked="state.selectedCategories.has(category.id)"
             @change="toggleCategorySelection(category.id)"
             :aria-label="`Select ${category.content(currentLanguage)?.name || 'Unnamed Category'}`"
+            class="category-checkbox"
           />
+
           <div class="category-info">
-            <span class="category-name">
+            <div class="category-name">
               {{ category.content(currentLanguage)?.name || 'Unnamed Category' }}
-              <span class="event-count">({{ category.eventCount || 0 }})</span>
-            </span>
+            </div>
+            <div class="category-meta">
+              <span class="event-count">{{ category.eventCount || 0 }} events</span>
+              <span class="language-indicator">
+                <Languages :size="16" :stroke-width="2" />
+                {{ category.getLanguages().length }} languages
+              </span>
+            </div>
           </div>
-        </div>
-        <div class="hstack stack--sm">
-          <button
-            type="button"
-            class="btn btn--sm btn--secondary"
-            @click="openEditEditor(category)"
-            :disabled="state.isDeleting === category.id"
-          >
-            {{ t('edit_button') }}
-          </button>
-          <button
-            type="button"
-            class="btn btn--sm btn--danger"
-            @click="confirmDeleteCategory(category)"
-            :disabled="state.isDeleting === category.id"
-          >
-            {{ state.isDeleting === category.id ? t('deleting') : t('delete_button') }}
-          </button>
+
+          <div class="category-actions">
+            <button
+              type="button"
+              class="icon-button"
+              @click="openEditEditor(category)"
+              :disabled="state.isDeleting === category.id"
+              :aria-label="t('edit_button')"
+            >
+              <Pencil :size="20" :stroke-width="2" />
+            </button>
+            <button
+              type="button"
+              class="icon-button icon-button--danger"
+              @click="confirmDeleteCategory(category)"
+              :disabled="state.isDeleting === category.id"
+              :aria-label="t('delete_button')"
+            >
+              <Trash2 :size="20" :stroke-width="2" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
 
     <!-- Empty State -->
     <EmptyLayout v-else :title="t('no_categories')" :description="t('no_categories_description')">
-      <button
-        type="button"
-        class="primary"
+      <PillButton
+        variant="primary"
         @click="openCreateEditor"
         :disabled="state.isLoading"
       >
+        <Plus :size="20" :stroke-width="2" />
         {{ t('add_category_button') }}
-      </button>
+      </PillButton>
     </EmptyLayout>
 
     <!-- Category Editor Modal -->
@@ -88,72 +102,82 @@
     <ModalLayout
       v-if="state.showDeleteDialog && state.categoryToDelete"
       :title="t('confirm_delete_title')"
+      modal-class="delete-category-modal"
       @close="cancelDeleteCategory"
     >
       <div class="delete-dialog">
-        <p>
-          {{ t('confirm_delete_message', {
-            name: state.categoryToDelete.content(currentLanguage)?.name || 'Unnamed Category',
-            count: state.categoryToDelete.eventCount || 0
-          }) }}
+        <p class="delete-description">
+          Are you sure you want to delete "<strong>{{ state.categoryToDelete.content(currentLanguage)?.name || 'Unnamed Category' }}</strong>"?
+          <span v-if="(state.categoryToDelete.eventCount || 0) > 0">
+            This category is assigned to <strong>{{ state.categoryToDelete.eventCount }} {{ state.categoryToDelete.eventCount === 1 ? 'event' : 'events' }}</strong>.
+          </span>
         </p>
 
-        <div class="vstack stack--md">
-          <label class="radio-option">
+        <div class="delete-options">
+          <label
+            class="delete-radio-option"
+            :class="{ 'delete-radio-option--selected': state.deleteAction === 'remove' }"
+          >
             <input
               type="radio"
               v-model="state.deleteAction"
               value="remove"
               name="delete-action"
             />
-            <span>{{ t('delete_option_remove') }}</span>
+            <div class="option-content">
+              <span class="option-title">{{ t('delete_option_remove') }}</span>
+              <p class="option-description">Events will remain but won't have this category</p>
+            </div>
           </label>
 
-          <label class="radio-option">
+          <label
+            v-if="otherCategories.length > 0"
+            class="delete-radio-option"
+            :class="{ 'delete-radio-option--selected': state.deleteAction === 'migrate' }"
+          >
             <input
               type="radio"
               v-model="state.deleteAction"
               value="migrate"
               name="delete-action"
             />
-            <span>{{ t('delete_option_migrate') }}</span>
-          </label>
-
-          <div v-if="state.deleteAction === 'migrate'" class="migration-target-selector">
-            <label for="migration-target">{{ t('migrate_to_label') }}</label>
-            <select
-              id="migration-target"
-              v-model="state.deleteMigrationTarget"
-              class="migration-target"
-            >
-              <option value="">{{ t('select_category') }}</option>
-              <option
-                v-for="cat in otherCategories"
-                :key="cat.id"
-                :value="cat.id"
+            <div class="option-content">
+              <span class="option-title">{{ t('delete_option_migrate') }}</span>
+              <p class="option-description">Move all events to a different category</p>
+              <select
+                v-if="state.deleteAction === 'migrate'"
+                v-model="state.deleteMigrationTarget"
+                class="migration-target"
+                @click.stop
               >
-                {{ cat.content(currentLanguage)?.name || 'Unnamed Category' }}
-              </option>
-            </select>
-          </div>
+                <option
+                  v-for="cat in otherCategories"
+                  :key="cat.id"
+                  :value="cat.id"
+                >
+                  {{ cat.content(currentLanguage)?.name || 'Unnamed Category' }}
+                </option>
+              </select>
+            </div>
+          </label>
         </div>
 
-        <div class="form-actions">
+        <div class="delete-actions">
           <button
             type="button"
-            class="danger btn-confirm-delete"
-            @click="deleteCategory"
-            :disabled="!canConfirmDelete || state.isDeleting === state.categoryToDelete?.id"
-          >
-            {{ state.isDeleting === state.categoryToDelete?.id ? t('deleting') : t('delete_button') }}
-          </button>
-          <button
-            type="button"
+            class="btn-ghost"
             @click="cancelDeleteCategory"
             :disabled="state.isDeleting === state.categoryToDelete?.id"
           >
             {{ t('cancel') }}
           </button>
+          <PillButton
+            variant="danger"
+            @click="deleteCategory"
+            :disabled="!canConfirmDelete || state.isDeleting === state.categoryToDelete?.id"
+          >
+            {{ state.isDeleting === state.categoryToDelete?.id ? t('deleting') : t('delete_button') }}
+          </PillButton>
         </div>
       </div>
     </ModalLayout>
@@ -162,52 +186,56 @@
     <ModalLayout
       v-if="state.showMergeDialog"
       :title="t('merge_categories_title')"
+      modal-class="merge-categories-modal"
       @close="cancelMergeDialog"
     >
       <div class="merge-dialog">
-        <p>{{ t('merge_categories_description') }}</p>
+        <p class="merge-description">{{ t('merge_categories_description') }}</p>
 
-        <div class="vstack stack--md">
-          <div class="merge-category-list">
-            <label
-              v-for="category in selectedCategoriesArray"
-              :key="category.id"
-              class="radio-option"
-            >
-              <input
-                type="radio"
-                v-model="state.mergeTargetId"
-                :value="category.id"
-                name="merge-target"
-              />
-              <span>
+        <div class="merge-category-list">
+          <label
+            v-for="category in selectedCategoriesArray"
+            :key="category.id"
+            class="merge-radio-option"
+            :class="{ 'merge-radio-option--selected': state.mergeTargetId === category.id }"
+          >
+            <input
+              type="radio"
+              v-model="state.mergeTargetId"
+              :value="category.id"
+              name="merge-target"
+            />
+            <div class="category-info">
+              <span class="category-name">
                 {{ category.content(currentLanguage)?.name || 'Unnamed Category' }}
-                <span class="event-count">({{ category.eventCount || 0 }} {{ t('events') }})</span>
               </span>
-            </label>
-          </div>
-
-          <div class="total-events">
-            <strong>{{ t('total_affected_events') }}:</strong> {{ totalAffectedEvents }}
-          </div>
+              <span class="category-event-count">
+                {{ category.eventCount || 0 }} {{ category.eventCount === 1 ? 'event' : 'events' }}
+              </span>
+            </div>
+          </label>
         </div>
 
-        <div class="form-actions">
+        <div class="total-events-section">
+          {{ t('total_affected_events') }}: <span class="total-count">{{ totalAffectedEvents }}</span>
+        </div>
+
+        <div class="merge-actions">
           <button
             type="button"
-            class="primary btn-confirm-merge"
-            @click="mergeCategories"
-            :disabled="!state.mergeTargetId || state.isMerging"
-          >
-            {{ state.isMerging ? t('merging') : t('merge_button') }}
-          </button>
-          <button
-            type="button"
+            class="btn-ghost"
             @click="cancelMergeDialog"
             :disabled="state.isMerging"
           >
             {{ t('cancel') }}
           </button>
+          <PillButton
+            variant="primary"
+            @click="mergeCategories"
+            :disabled="!state.mergeTargetId || state.isMerging"
+          >
+            {{ state.isMerging ? t('merging') : t('merge_button') }}
+          </PillButton>
         </div>
       </div>
     </ModalLayout>
@@ -224,6 +252,7 @@
 <script setup>
 import { reactive, onMounted, ref, computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
+import { Plus, Pencil, Trash2, Languages } from 'lucide-vue-next';
 import { EventCategory } from '@/common/model/event_category';
 import CategoryService from '@/client/service/category';
 import CategoryEditor from './CategoryEditor.vue';
@@ -232,6 +261,7 @@ import { EventCategoryContent } from '@/common/model/event_category_content';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
 import BulkCategoriesMenu from './BulkCategoriesMenu.vue';
+import PillButton from '@/client/components/common/PillButton.vue';
 
 const props = defineProps({
   calendarId: {
@@ -552,170 +582,467 @@ onMounted(async () => {
 </script>
 
 <style scoped lang="scss">
-.category-item {
+@use '../../../assets/style/components/calendar-admin' as *;
+
+.categories-content {
+  @include admin-section;
+}
+
+.categories-header {
+  @include admin-section-header;
+}
+
+.categories-title {
+  @include admin-section-title;
+}
+
+.categories-list {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  transition: border-color 0.2s ease;
+  flex-direction: column;
+  gap: var(--pav-space-3);
+}
+
+.category-card {
+  @include admin-card;
 
   &:hover {
-    border-color: var(--color-border-hover);
+    border-color: var(--pav-color-stone-300);
+
+    @media (prefers-color-scheme: dark) {
+      border-color: var(--pav-color-stone-600);
+    }
+  }
+
+  &--selected {
+    background-color: var(--pav-color-orange-50);
+    border-color: var(--pav-color-orange-200);
+
+    @media (prefers-color-scheme: dark) {
+      background-color: oklch(0.705 0.213 47.604 / 0.1);
+      border-color: var(--pav-color-orange-800);
+    }
   }
 }
 
-.category-info-with-checkbox {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-
-  input[type="checkbox"] {
-    width: 18px;
-    height: 18px;
-    cursor: pointer;
-  }
+.category-checkbox {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  flex-shrink: 0;
 }
 
 .category-info {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pav-space-2);
+}
 
-  .category-name {
-    font-weight: 500;
-    color: var(--color-text);
+.category-name {
+  font-weight: 500;
+  font-size: 1rem;
+  color: var(--pav-color-stone-900);
 
-    .event-count {
-      font-weight: 400;
-      color: var(--color-text-secondary);
-      margin-left: 4px;
-    }
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-stone-100);
+  }
+}
+
+.category-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--pav-space-3);
+  font-size: 0.875rem;
+  color: var(--pav-color-stone-600);
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-stone-400);
+  }
+}
+
+.event-count {
+  color: var(--pav-color-stone-600);
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-stone-400);
+  }
+}
+
+.language-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pav-space-1);
+  color: var(--pav-color-stone-500);
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-stone-400);
   }
 }
 
 .category-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--pav-space-2);
+  align-items: center;
+}
 
-  button {
-    padding: 6px 12px;
-    font-size: 14px;
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--pav-space-2);
+  background: none;
+  border: none;
+  border-radius: 0.375rem;
+  color: var(--pav-color-stone-500);
+  cursor: pointer;
+  transition: color 0.2s, background-color 0.2s;
+
+  &:hover {
+    color: var(--pav-color-orange-600);
+    background: var(--pav-color-stone-100);
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-orange-400);
+      background: var(--pav-color-stone-800);
+    }
   }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  &--danger:hover {
+    color: var(--pav-color-red-600);
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-red-400);
+    }
+  }
+}
+
+// Constrain modal widths to match reference design
+:global(.merge-categories-modal > div),
+:global(.delete-category-modal > div) {
+  max-width: 600px !important;
 }
 
 .delete-dialog,
 .merge-dialog {
-  p {
-    margin: 0 0 24px 0;
-    color: var(--color-text);
+  display: flex;
+  flex-direction: column;
+  gap: var(--pav-space-4);
+}
+
+.delete-dialog {
+  .delete-description {
+    margin: 0 0 var(--pav-space-4) 0;
+    color: var(--pav-color-stone-600);
+    font-size: 0.875rem;
+    line-height: 1.5;
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-400);
+    }
   }
 
-  .radio-option {
+  .delete-options {
     display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px;
-    border: 1px solid var(--color-border);
-    border-radius: 6px;
+    flex-direction: column;
+    gap: var(--pav-space-3);
+  }
+
+  .delete-radio-option {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--pav-space-3);
+    padding: var(--pav-space-4);
+    border: 2px solid var(--pav-color-stone-200);
+    border-radius: 0.75rem;
     cursor: pointer;
-    transition: background-color 0.2s ease;
+    transition: all 0.2s ease;
+
+    @media (prefers-color-scheme: dark) {
+      border-color: var(--pav-color-stone-700);
+    }
 
     &:hover {
-      background-color: var(--color-surface-hover);
+      background-color: var(--pav-color-stone-50);
+
+      @media (prefers-color-scheme: dark) {
+        background-color: var(--pav-color-stone-800);
+      }
+    }
+
+    &--selected {
+      border-color: var(--pav-color-orange-500);
+      background-color: var(--pav-color-orange-50);
+
+      @media (prefers-color-scheme: dark) {
+        background-color: oklch(0.705 0.213 47.604 / 0.1);
+      }
     }
 
     input[type="radio"] {
-      width: 18px;
-      height: 18px;
+      margin-top: 0.125rem;
+      width: 16px;
+      height: 16px;
       cursor: pointer;
+      flex-shrink: 0;
+      accent-color: var(--pav-color-orange-500);
     }
 
-    span {
+    .option-content {
       flex: 1;
-      color: var(--color-text);
+      min-width: 0;
     }
 
-    .event-count {
-      color: var(--color-text-secondary);
-      font-size: 14px;
-    }
-  }
-
-  .migration-target-selector {
-    margin-top: 12px;
-    padding-left: 30px;
-
-    label {
+    .option-title {
       display: block;
-      margin-bottom: 8px;
       font-weight: 500;
-      color: var(--color-text);
+      font-size: 0.875rem;
+      color: var(--pav-color-stone-900);
+      margin-bottom: 0.125rem;
+
+      @media (min-width: 640px) {
+        font-size: 1rem;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        color: var(--pav-color-stone-100);
+      }
     }
 
-    select {
+    .option-description {
+      margin: 0 0 var(--pav-space-3) 0;
+      font-size: 0.75rem;
+      color: var(--pav-color-stone-500);
+      line-height: 1.4;
+
+      @media (min-width: 640px) {
+        font-size: 0.875rem;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        color: var(--pav-color-stone-400);
+      }
+    }
+
+    .migration-target {
       width: 100%;
-      padding: 8px 12px;
-      border: 1px solid var(--color-border);
-      border-radius: 6px;
-      background-color: var(--color-surface);
-      color: var(--color-text);
-      font-size: 14px;
+      padding: 0.75rem 1rem;
+      border-radius: 0.75rem;
+      background-color: var(--pav-color-stone-100);
+      border: none;
+      font-size: 0.875rem;
+      color: var(--pav-color-stone-900);
+      cursor: pointer;
 
       &:focus {
         outline: none;
-        border-color: var(--color-primary);
+        box-shadow: 0 0 0 2px var(--pav-color-orange-500);
+      }
+
+      @media (min-width: 640px) {
+        padding: 0.625rem 1rem;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        background-color: var(--pav-color-stone-800);
+        color: var(--pav-color-stone-100);
       }
     }
   }
 
+  .delete-actions {
+    display: flex;
+    gap: var(--pav-space-3);
+    justify-content: flex-end;
+    padding-top: var(--pav-space-4);
+    border-top: 1px solid var(--pav-border-primary);
+  }
+
+  .btn-ghost {
+    padding: var(--pav-space-2) var(--pav-space-4);
+    background: none;
+    border: none;
+    color: var(--pav-color-stone-600);
+    font-weight: 500;
+    cursor: pointer;
+    transition: color 0.2s;
+
+    &:hover {
+      color: var(--pav-color-stone-900);
+
+      @media (prefers-color-scheme: dark) {
+        color: var(--pav-color-stone-100);
+      }
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+}
+
+.merge-dialog {
+  .merge-description {
+    margin-bottom: var(--pav-space-4);
+  }
+
   .merge-category-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--pav-space-3);
     max-height: 300px;
     overflow-y: auto;
   }
 
-  .total-events {
-    padding: 16px;
-    background-color: var(--color-surface-secondary);
-    border-radius: 6px;
-    text-align: center;
+  .merge-radio-option {
+    display: flex;
+    align-items: center;
+    gap: var(--pav-space-3);
+    padding: var(--pav-space-4);
+    border: 2px solid var(--pav-color-stone-200);
+    border-radius: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
 
-    strong {
-      color: var(--color-text);
+    @media (prefers-color-scheme: dark) {
+      border-color: var(--pav-color-stone-700);
+    }
+
+    &:hover {
+      background-color: var(--pav-color-stone-50);
+
+      @media (prefers-color-scheme: dark) {
+        background-color: var(--pav-color-stone-800);
+      }
+    }
+
+    &--selected {
+      border-color: var(--pav-color-orange-500);
+      background-color: var(--pav-color-orange-50);
+
+      @media (prefers-color-scheme: dark) {
+        background-color: oklch(0.705 0.213 47.604 / 0.1);
+      }
+    }
+
+    input[type="radio"] {
+      width: 20px;
+      height: 20px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .category-info {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: var(--pav-space-1);
+    }
+
+    .category-name {
+      color: var(--pav-color-stone-900);
+      font-weight: 500;
+      font-size: 1rem;
+
+      @media (prefers-color-scheme: dark) {
+        color: var(--pav-color-stone-100);
+      }
+    }
+
+    .category-event-count {
+      color: var(--pav-color-stone-600);
+      font-size: 0.875rem;
+
+      @media (prefers-color-scheme: dark) {
+        color: var(--pav-color-stone-400);
+      }
     }
   }
 
-  .form-actions {
+  .total-events-section {
+    padding: var(--pav-space-4);
+    background-color: var(--pav-color-stone-100);
+    border-radius: 0.75rem;
+    text-align: start;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--pav-color-stone-900);
+
+    @media (prefers-color-scheme: dark) {
+      background-color: var(--pav-color-stone-800);
+      color: var(--pav-color-stone-100);
+    }
+
+    .total-count {
+      color: var(--pav-color-orange-600);
+
+      @media (prefers-color-scheme: dark) {
+        color: var(--pav-color-orange-400);
+      }
+    }
+  }
+
+  .merge-actions {
     display: flex;
-    gap: 12px;
+    gap: var(--pav-space-3);
     justify-content: flex-end;
-    margin-top: 24px;
+    padding-top: var(--pav-space-4);
+    border-top: 1px solid var(--pav-border-primary);
+  }
+
+  .btn-ghost {
+    padding: var(--pav-space-2) var(--pav-space-4);
+    background: none;
+    border: none;
+    color: var(--pav-color-stone-600);
+    font-weight: 500;
+    cursor: pointer;
+    transition: color 0.2s;
+
+    &:hover {
+      color: var(--pav-color-stone-900);
+
+      @media (prefers-color-scheme: dark) {
+        color: var(--pav-color-stone-100);
+      }
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
   }
 }
 
 .alert {
-  padding: 12px;
-  margin-bottom: 16px;
-  border-radius: 6px;
-  font-size: 14px;
+  padding: var(--pav-space-3);
+  margin-bottom: var(--pav-space-4);
+  border-radius: 0.75rem;
+  font-size: 0.875rem;
 
   &.alert--error {
     background-color: rgba(239, 68, 68, 0.1);
     border: 1px solid rgba(239, 68, 68, 0.2);
-    color: rgb(153, 27, 27);
+    color: var(--pav-color-red-700);
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-red-400);
+    }
   }
 
   &.alert--success {
     background-color: rgba(34, 197, 94, 0.1);
     border: 1px solid rgba(34, 197, 94, 0.2);
     color: rgb(21, 128, 61);
-  }
-}
 
-.loading {
-  text-align: center;
-  padding: 48px 24px;
-  color: var(--color-text-secondary);
+    @media (prefers-color-scheme: dark) {
+      color: rgb(134, 239, 172);
+    }
+  }
 }
 </style>

@@ -2,12 +2,12 @@
   <div class="editors-tab">
 
     <!-- Error Display -->
-    <div v-if="state.error" class="error">
+    <div v-if="state.error" class="alert alert--error">
       {{ state.error }}
     </div>
 
     <!-- Success Display -->
-    <div v-if="state.success" class="success">
+    <div v-if="state.success" class="alert alert--success">
       {{ state.success }}
     </div>
 
@@ -15,81 +15,88 @@
     <LoadingMessage v-if="state.isLoading" :description="t('loading')" />
 
     <!-- Editors and Invitations List -->
-    <div v-else-if="state.editors.length > 0 || state.pendingInvitations.length > 0" class="editors-list">
-      <div class="hstack--end">
-        <button
-          v-if="canLeaveCalendar()"
-          type="button"
-          class="secondary leave-calendar-btn"
-          @click="confirmLeaveCalendar"
-          :disabled="state.isLeavingCalendar"
-        >
-          <span v-if="state.isLeavingCalendar" class="loading-spinner"/>
-          {{ state.isLeavingCalendar ? t('leaving') : t('leave_calendar_button') }}
-        </button>
-        <button
-          type="button"
-          class="primary add-editor-btn"
-          @click="openAddForm"
-          :disabled="state.isLoading || state.isAdding"
-        >
+    <div v-else-if="state.editors.length > 0 || state.pendingInvitations.length > 0" class="editors-content">
+      <!-- Section Header -->
+      <div class="editors-header">
+        <h2 class="editors-title">{{ t('calendar_editors') }}</h2>
+        <PillButton variant="primary" @click="openAddForm">
+          <Plus :size="20" :stroke-width="2" />
           {{ t('add_editor_button') }}
-        </button>
+        </PillButton>
       </div>
 
       <!-- Active Editors Section -->
-      <div v-if="state.editors.length > 0" class="section active-editors">
-        <h3 class="section-title">{{ t('active_editors_title') }}</h3>
+      <div v-if="state.editors.length > 0" class="editors-section">
+        <h3 class="section-label">{{ t('editors_label') }}</h3>
         <div
           v-for="editor in state.editors"
           :key="editor.id"
-          class="editor-item"
+          class="editor-card"
           :class="{ 'is-removing': state.isRemoving === editor.id }"
         >
+          <div class="editor-avatar"></div>
           <div class="editor-info">
-            <span class="editor-account">{{ editor.email }}</span>
+            <div class="editor-name-row">
+              <span class="editor-name">{{ editor.email }}</span>
+            </div>
+            <span class="editor-email">{{ editor.email }}</span>
           </div>
+          <div class="editor-actions">
+            <button
+              type="button"
+              class="btn-ghost"
+              @click="confirmRemoveEditor(editor)"
+              :disabled="state.isRemoving === editor.id"
+            >
+              {{ state.isRemoving === editor.id ? t('removing') : t('remove_button') }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Leave Calendar Button -->
+        <div v-if="canLeaveCalendar()" class="leave-calendar-section">
           <button
             type="button"
-            class="danger remove-btn"
-            @click="confirmRemoveEditor(editor)"
-            :disabled="state.isRemoving === editor.id"
+            class="btn-ghost btn-ghost--danger"
+            @click="confirmLeaveCalendar"
+            :disabled="state.isLeavingCalendar"
           >
-            <span v-if="state.isRemoving === editor.id" class="loading-spinner"/>
-            {{ state.isRemoving === editor.id ? t('removing') : t('remove_button') }}
+            {{ state.isLeavingCalendar ? t('leaving') : t('leave_calendar_button') }}
           </button>
         </div>
       </div>
 
       <!-- Pending Invitations Section -->
-      <div v-if="state.pendingInvitations.length > 0" class="section pending-invitations">
-        <h3 class="section-title">{{ t('pending_invitations_title') }}</h3>
+      <div v-if="state.pendingInvitations.length > 0" class="editors-section">
+        <h3 class="section-label">{{ t('pending_invitations') }}</h3>
         <div
           v-for="invitation in state.pendingInvitations"
           :key="invitation.id"
-          class="editor-item invitation-item"
+          class="editor-card editor-card--invitation"
           :class="{ 'is-processing': state.invitationOperations[invitation.id] }"
         >
-          <div class="editor-info">
-            <span class="editor-account">{{ invitation.email }}</span>
+          <div class="invitation-icon">
+            <Mail :size="20" :stroke-width="2" />
           </div>
-          <div class="invitation-actions">
+          <div class="editor-info">
+            <div class="editor-name">{{ invitation.email }}</div>
+            <div class="invitation-status">{{ t('invitation_pending') }}</div>
+          </div>
+          <div class="editor-actions">
             <button
               type="button"
-              class="secondary resend-btn"
+              class="btn-text btn-text--primary"
               @click="resendInvitation(invitation.id)"
               :disabled="state.invitationOperations[invitation.id]"
             >
-              <span v-if="state.invitationOperations[invitation.id] === 'resending'" class="loading-spinner"/>
               {{ state.invitationOperations[invitation.id] === 'resending' ? t('resending') : t('resend_button') }}
             </button>
             <button
               type="button"
-              class="danger cancel-btn"
+              class="btn-text"
               @click="cancelInvitation(invitation.id)"
               :disabled="state.invitationOperations[invitation.id]"
             >
-              <span v-if="state.invitationOperations[invitation.id] === 'canceling'" class="loading-spinner"/>
               {{ state.invitationOperations[invitation.id] === 'canceling' ? t('canceling') : t('cancel_button') }}
             </button>
           </div>
@@ -99,14 +106,10 @@
 
     <!-- Empty State -->
     <EmptyLayout v-else :title="t('no_editors')" :description="t('no_editors_description')">
-      <button
-        type="button"
-        class="primary add-editor-btn"
-        @click="openAddForm"
-        :disabled="state.isLoading || state.isAdding"
-      >
+      <PillButton variant="primary" @click="openAddForm">
+        <Plus :size="20" :stroke-width="2" />
         {{ t('add_editor_button') }}
-      </button>
+      </PillButton>
     </EmptyLayout>
 
     <!-- Add Editor Form -->
@@ -116,11 +119,16 @@
       @close="closeAddForm"
     >
       <div class="add-editor-form">
+        <div v-if="state.addError" class="alert alert--error">
+          {{ state.addError }}
+        </div>
+
         <div class="form-group">
           <label for="email">{{ t('account_id_label') }}</label>
           <input
             id="email"
             type="text"
+            class="form-input"
             v-model="state.newAccountId"
             :placeholder="t('account_id_placeholder')"
             :disabled="state.isAdding"
@@ -130,27 +138,22 @@
           <p class="help-text">{{ t('account_id_help') }}</p>
         </div>
 
-        <div v-if="state.addError" class="error">
-          {{ state.addError }}
-        </div>
-
         <div class="form-actions">
           <button
             type="button"
-            class="primary"
-            @click="addEditor"
-            :disabled="state.isAdding || !state.newAccountId.trim()"
-          >
-            <span v-if="state.isAdding" class="loading-spinner"/>
-            {{ state.isAdding ? t('adding') : t('add_button') }}
-          </button>
-          <button
-            type="button"
+            class="btn-ghost"
             @click="closeAddForm"
             :disabled="state.isAdding"
           >
             {{ t('cancel_button') }}
           </button>
+          <PillButton
+            variant="primary"
+            @click="addEditor"
+            :disabled="state.isAdding || !state.newAccountId.trim()"
+          >
+            {{ state.isAdding ? t('adding') : t('add_editor_button') }}
+          </PillButton>
         </div>
       </div>
     </ModalLayout>
@@ -161,25 +164,24 @@
       :title="t('confirm_remove_title')"
       @close="cancelRemoveEditor"
     >
-      <div class="remove-confirmation">
+      <div class="confirmation-modal">
         <p>{{ t('confirm_remove_message', { email: state.editorToRemove.email }) }}</p>
         <div class="form-actions">
           <button
             type="button"
-            class="danger"
-            @click="removeEditor"
-            :disabled="state.isRemoving === state.editorToRemove?.id"
-          >
-            <span v-if="state.isRemoving === state.editorToRemove?.id" class="loading-spinner"/>
-            {{ state.isRemoving === state.editorToRemove?.id ? t('removing') : t('remove_button') }}
-          </button>
-          <button
-            type="button"
+            class="btn-ghost"
             @click="cancelRemoveEditor"
             :disabled="state.isRemoving === state.editorToRemove?.id"
           >
             {{ t('cancel_button') }}
           </button>
+          <PillButton
+            variant="danger"
+            @click="removeEditor"
+            :disabled="state.isRemoving === state.editorToRemove?.id"
+          >
+            {{ state.isRemoving === state.editorToRemove?.id ? t('removing') : t('remove_button') }}
+          </PillButton>
         </div>
       </div>
     </ModalLayout>
@@ -190,25 +192,24 @@
       :title="t('confirm_leave_title')"
       @close="cancelLeaveCalendar"
     >
-      <div class="leave-confirmation">
+      <div class="confirmation-modal">
         <p>{{ t('confirm_leave_message') }}</p>
         <div class="form-actions">
           <button
             type="button"
-            class="danger"
-            @click="leaveCalendar"
-            :disabled="state.isLeavingCalendar"
-          >
-            <span v-if="state.isLeavingCalendar" class="loading-spinner"/>
-            {{ state.isLeavingCalendar ? t('leaving') : t('leave_calendar_button') }}
-          </button>
-          <button
-            type="button"
+            class="btn-ghost"
             @click="cancelLeaveCalendar"
             :disabled="state.isLeavingCalendar"
           >
             {{ t('cancel_button') }}
           </button>
+          <PillButton
+            variant="danger"
+            @click="leaveCalendar"
+            :disabled="state.isLeavingCalendar"
+          >
+            {{ state.isLeavingCalendar ? t('leaving') : t('leave_calendar_button') }}
+          </PillButton>
         </div>
       </div>
     </ModalLayout>
@@ -218,9 +219,11 @@
 <script setup>
 import { reactive, onMounted, nextTick, ref } from 'vue';
 import { useTranslation } from 'i18next-vue';
+import { Plus, Crown, Globe, Mail, ArrowUp, Trash2, X } from 'lucide-vue-next';
 import CalendarService from '@/client/service/calendar';
 import AuthenticationService from '@/client/service/authn';
 import ModalLayout from '@/client/components/common/modal.vue';
+import PillButton from '@/client/components/common/PillButton.vue';
 import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/common/exceptions/editor';
 import { EmptyValueError, AccountInviteAlreadyExistsError } from '@/common/exceptions';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
@@ -572,541 +575,287 @@ onMounted(loadEditors);
 </script>
 
 <style scoped lang="scss">
-@use '../../../assets/mixins' as *;
+@use '../../../assets/style/components/calendar-admin' as *;
 
 .editors-tab {
-  .editors-header {
-    display: flex;
-    justify-content: flex-end;
-    margin-bottom: $spacing-2xl;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pav-space-6);
+}
+
+.editors-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pav-space-8);
+}
+
+.editors-header {
+  @include admin-section-header;
+}
+
+.editors-title {
+  @include admin-section-title;
+}
+
+.editors-section {
+  @include admin-section;
+}
+
+.section-label {
+  @include admin-section-label;
+}
+
+.editor-card {
+  @include admin-card;
+
+  &.editor-card--invitation {
+    border-style: dashed;
   }
 
-  .editors-list {
-    display: flex;
-    flex-direction: column;
-    gap: $spacing-md;
-    max-width: 800px;
-    margin: 0 auto;
-
-    // Add horizontal padding on mobile for better spacing
-    @media (max-width: 480px) {
-      padding: 0 $spacing-sm;
-    }
-
-    .hstack--end {
-      display: flex;
-      gap: $spacing-md;
-      justify-content: flex-end;
-      margin-bottom: $spacing-lg;
-      flex-wrap: wrap;
-
-      @media (max-width: 480px) {
-        flex-direction: column;
-        align-items: stretch;
-
-        button {
-          width: 100%;
-          min-height: 44px; // Better touch target size
-        }
-      }
-    }
-
-    .leave-calendar-btn {
-      padding: $spacing-sm $spacing-lg;
-      font-size: 14px;
-      transition: all 0.2s ease;
-
-      &:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-      }
-    }
+  &.is-removing,
+  &.is-processing {
+    opacity: 0.6;
+    pointer-events: none;
   }
+}
 
-  .editor-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: $spacing-lg;
-    background: $light-mode-panel-background;
-    transition: all 0.2s ease;
-    position: relative;
-    overflow: hidden;
+.editor-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--pav-color-stone-300);
+  flex-shrink: 0;
 
-    @include dark-mode {
-      background: $dark-mode-panel-background;
-      border-color: $dark-mode-border;
-    }
-
-    // Add loading overlay when removing
-    &.is-removing {
-      opacity: 0.7;
-      pointer-events: none;
-
-      &::after {
-        content: '';
-        position: absolute;
-        inset: 0;
-        background: linear-gradient(
-          90deg,
-          transparent 0%,
-          rgba(255, 255, 255, 0.3) 50%,
-          transparent 100%
-        );
-        animation: shimmer 1.5s infinite;
-      }
-    }
-
-    // Tablet layout adjustments
-    @media (max-width: 768px) {
-      padding: $spacing-md;
-    }
-
-    // Mobile layout - stack elements
-    @media (max-width: 576px) {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: $spacing-md;
-      padding: $spacing-lg $spacing-md;
-    }
+  @media (prefers-color-scheme: dark) {
+    background: var(--pav-color-stone-700);
   }
+}
 
-  .editor-info {
-    flex: 1;
-    min-width: 0; // Allow text truncation
+.invitation-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--pav-color-stone-100);
+  color: var(--pav-color-stone-400);
+  flex-shrink: 0;
 
-    .editor-account {
-      font-weight: $font-medium;
-      color: $light-mode-text;
-      word-break: break-word;
-      display: flex;
-      align-items: center;
-      min-width: 0; // Allow text truncation
-
-      @include dark-mode {
-        color: $dark-mode-text;
-      }
-
-      // Add icon before email for better visual hierarchy
-      &::before {
-        content: '👤';
-        margin-right: $spacing-sm;
-        opacity: 0.7;
-        flex-shrink: 0; // Prevent icon from shrinking
-      }
-
-      // On mobile, make text smaller if needed
-      @media (max-width: 480px) {
-        font-size: 14px;
-      }
-    }
+  @media (prefers-color-scheme: dark) {
+    background: var(--pav-color-stone-800);
+    color: var(--pav-color-stone-500);
   }
+}
 
-  .remove-btn {
-    padding: $spacing-sm $spacing-lg;
-    font-size: 14px;
-    white-space: nowrap;
-    transition: all 0.2s ease;
+.editor-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pav-space-1);
+  min-width: 0;
+}
 
-    &:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
+.editor-name-row {
+  display: flex;
+  align-items: center;
+  gap: var(--pav-space-2);
+}
 
-    @media (max-width: 576px) {
-      align-self: flex-end;
-      width: 100%;
-    }
+.editor-name {
+  font-weight: 500;
+  color: var(--pav-color-stone-900);
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-stone-100);
   }
+}
 
-  @keyframes shimmer {
-    0% {
-      transform: translateX(-100%);
-    }
-    100% {
-      transform: translateX(100%);
+.editor-email {
+  font-size: 0.875rem;
+  color: var(--pav-color-stone-600);
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-stone-400);
+  }
+}
+
+.owner-badge {
+  @include admin-badge-orange;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pav-space-1);
+}
+
+.federated-badge {
+  @include admin-badge-sky;
+}
+
+.invitation-status {
+  font-size: 0.875rem;
+  color: var(--pav-color-stone-500);
+}
+
+.editor-actions {
+  display: flex;
+  gap: var(--pav-space-2);
+  align-items: center;
+}
+
+.btn-ghost {
+  padding: var(--pav-space-2) var(--pav-space-4);
+  background: none;
+  border: none;
+  color: var(--pav-color-stone-600);
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.2s;
+  border-radius: 0.375rem;
+
+  &:hover {
+    color: var(--pav-color-stone-900);
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-100);
     }
   }
 
-  .empty-state {
-    text-align: center;
-    padding: 48px 24px;
-    color: var(--color-text-secondary);
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 
-    p {
-      margin: 0 0 8px 0;
+  &.btn-ghost--danger {
+    color: var(--pav-color-red-600);
 
-      &.description {
-        font-size: 14px;
-        color: var(--color-text-tertiary);
+    &:hover {
+      color: var(--pav-color-red-700);
+
+      @media (prefers-color-scheme: dark) {
+        color: var(--pav-color-red-400);
       }
     }
   }
+}
 
-  .add-editor-form {
-    .form-group {
-      margin-bottom: $spacing-xl;
+.btn-text {
+  padding: var(--pav-space-1) var(--pav-space-2);
+  background: none;
+  border: none;
+  color: var(--pav-color-stone-600);
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.2s;
+  font-size: 0.875rem;
 
-      label {
-        display: block;
-        margin-bottom: $spacing-sm;
-        font-weight: $font-medium;
-        color: $light-mode-text;
+  &:hover {
+    color: var(--pav-color-stone-900);
 
-        @include dark-mode {
-          color: $dark-mode-text;
-        }
-      }
-
-      input {
-        width: 100%;
-        padding: $spacing-md $spacing-lg;
-        border: 1px solid $light-mode-border;
-        border-radius: $component-border-radius-small;
-        font-size: 16px; // Prevent iOS zoom on focus
-        background: $light-mode-panel-background;
-        color: $light-mode-text;
-        transition: all 0.2s ease;
-        min-height: 44px; // Better touch target size
-
-        @include dark-mode {
-          background: $dark-mode-input-background;
-          border-color: $dark-mode-border;
-          color: $dark-mode-input-text;
-        }
-
-        &:focus {
-          outline: none;
-          border-color: $focus-color;
-          box-shadow: 0 0 0 3px rgba($focus-color, 0.1);
-
-          @include dark-mode {
-            border-color: $focus-color-dark;
-            box-shadow: 0 0 0 3px rgba($focus-color-dark, 0.1);
-          }
-        }
-
-        &:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-          background: rgba(0, 0, 0, 0.05);
-
-          @include dark-mode {
-            background: rgba(255, 255, 255, 0.05);
-          }
-        }
-      }
-
-      .help-text {
-        margin: $spacing-sm 0 0 0;
-        font-size: 12px;
-        color: $light-mode-secondary-text;
-
-        @include dark-mode {
-          color: $dark-mode-secondary-text;
-        }
-      }
-    }
-
-    .form-actions {
-      display: flex;
-      gap: $spacing-md;
-      justify-content: flex-end;
-      margin-top: $spacing-2xl;
-
-      @media (max-width: 480px) {
-        flex-direction: column-reverse;
-
-        button {
-          width: 100%;
-        }
-      }
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-100);
     }
   }
 
-  .remove-confirmation {
-    p {
-      margin: 0 0 $spacing-2xl 0;
-      color: $light-mode-text;
-      line-height: 1.5;
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 
-      @include dark-mode {
-        color: $dark-mode-text;
-      }
-    }
+  &.btn-text--primary {
+    color: var(--pav-color-orange-600);
 
-    .form-actions {
-      display: flex;
-      gap: $spacing-md;
-      justify-content: flex-end;
+    &:hover {
+      color: var(--pav-color-orange-700);
 
-      @media (max-width: 480px) {
-        flex-direction: column-reverse;
-
-        button {
-          width: 100%;
-        }
+      @media (prefers-color-scheme: dark) {
+        color: var(--pav-color-orange-400);
       }
     }
   }
+}
 
-  .leave-confirmation {
-    p {
-      margin: 0 0 $spacing-2xl 0;
-      color: $light-mode-text;
-      line-height: 1.5;
+.leave-calendar-section {
+  margin-top: var(--pav-space-4);
+  padding-top: var(--pav-space-4);
+  border-top: 1px solid var(--pav-border-primary);
+}
 
-      @include dark-mode {
-        color: $dark-mode-text;
-      }
-    }
+.add-editor-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pav-space-4);
+}
 
-    .form-actions {
-      display: flex;
-      gap: $spacing-md;
-      justify-content: flex-end;
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pav-space-2);
 
-      @media (max-width: 480px) {
-        flex-direction: column-reverse;
+  label {
+    font-weight: 500;
+    font-size: 0.875rem;
+    color: var(--pav-color-stone-700);
 
-        button {
-          width: 100%;
-        }
-      }
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-300);
     }
   }
 
-  .error {
-    padding: $spacing-lg;
-    margin-bottom: $spacing-lg;
+  .form-input {
+    @include admin-form-input;
+  }
+
+  .help-text {
+    margin: 0;
+    color: var(--pav-color-stone-600);
+    font-size: 0.875rem;
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-400);
+    }
+  }
+}
+
+.form-actions {
+  display: flex;
+  gap: var(--pav-space-3);
+  justify-content: flex-end;
+  margin-top: var(--pav-space-4);
+  padding-top: var(--pav-space-4);
+  border-top: 1px solid var(--pav-border-primary);
+}
+
+.confirmation-modal {
+  p {
+    margin: 0 0 var(--pav-space-6) 0;
+    color: var(--pav-text-primary);
+    line-height: 1.5;
+  }
+}
+
+.alert {
+  padding: var(--pav-space-3);
+  margin-bottom: var(--pav-space-4);
+  border-radius: 0.75rem;
+  font-size: 0.875rem;
+
+  &.alert--error {
     background-color: rgba(239, 68, 68, 0.1);
-    border: 1px solid rgba(239, 68, 68, 0.25);
-    border-radius: $component-border-radius-small;
-    color: rgb(153, 27, 27);
-    font-size: 14px;
-    line-height: 1.4;
-    border-left: 4px solid rgba(239, 68, 68, 0.5);
-    animation: slideIn 0.3s ease;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    color: var(--pav-color-red-700);
 
-    @include dark-mode {
-      background-color: rgba(239, 68, 68, 0.15);
-      border-color: rgba(239, 68, 68, 0.3);
-      color: rgb(248, 113, 113);
-    }
-
-    // Add warning icon
-    &::before {
-      content: '⚠️';
-      margin-right: $spacing-sm;
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-red-400);
     }
   }
 
-  .success {
-    padding: $spacing-lg;
-    margin-bottom: $spacing-lg;
+  &.alert--success {
     background-color: rgba(34, 197, 94, 0.1);
-    border: 1px solid rgba(34, 197, 94, 0.25);
-    border-radius: $component-border-radius-small;
-    color: rgb(21, 128, 61);
-    font-size: 14px;
-    line-height: 1.4;
-    border-left: 4px solid rgba(34, 197, 94, 0.5);
-    animation: slideIn 0.3s ease;
+    border: 1px solid rgba(34, 197, 94, 0.2);
+    color: var(--pav-color-green-700);
 
-    @include dark-mode {
-      background-color: rgba(34, 197, 94, 0.15);
-      border-color: rgba(34, 197, 94, 0.3);
-      color: rgb(74, 222, 128);
-    }
-
-    // Add success icon
-    &::before {
-      content: '✅';
-      margin-right: $spacing-sm;
-    }
-  }
-
-  @keyframes slideIn {
-    from {
-      opacity: 0;
-      transform: translateY(-10px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  // Enhanced loading state
-  .loading {
-    text-align: center;
-    padding: $spacing-4xl $spacing-2xl;
-    color: $light-mode-secondary-text;
-
-    @include dark-mode {
-      color: $dark-mode-secondary-text;
-    }
-  }
-
-  // Loading spinner for buttons
-  .loading-spinner {
-    display: inline-block;
-    width: 12px;
-    height: 12px;
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    border-radius: 50%;
-    border-top-color: rgba(255, 255, 255, 0.8);
-    animation: spin 0.8s linear infinite;
-    margin-right: $spacing-sm;
-    vertical-align: middle;
-  }
-
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
-  // Button loading state adjustments
-  button {
-    position: relative;
-    transition: all 0.2s ease;
-
-    &:disabled {
-      opacity: 0.7;
-      cursor: not-allowed;
-      transform: none !important;
-    }
-
-    .loading-spinner {
-      // Adjust spinner color for different button types
-      border-color: rgba(255, 255, 255, 0.3);
-      border-top-color: rgba(255, 255, 255, 0.8);
-    }
-
-    &.secondary .loading-spinner {
-      border-color: rgba(0, 0, 0, 0.3);
-      border-top-color: rgba(0, 0, 0, 0.6);
-
-      @include dark-mode {
-        border-color: rgba(255, 255, 255, 0.3);
-        border-top-color: rgba(255, 255, 255, 0.8);
-      }
-    }
-  }
-
-  // Section styling for active editors and pending invitations
-  .section {
-    margin-bottom: $spacing-2xl;
-
-    &:last-child {
-      margin-bottom: 0;
-    }
-
-    .section-title {
-      font-size: 18px;
-      font-weight: $font-medium;
-      color: $light-mode-text;
-      margin: 0 0 $spacing-lg 0;
-      padding-bottom: $spacing-sm;
-      border-bottom: 2px solid $light-mode-border;
-
-      @include dark-mode {
-        color: $dark-mode-text;
-        border-color: $dark-mode-border;
-      }
-    }
-  }
-
-  // Invitation-specific styling
-  .invitation-item {
-
-    &.is-processing {
-      opacity: 0.7;
-      pointer-events: none;
-    }
-
-    .editor-info {
-      display: flex;
-      flex-direction: column;
-      gap: $spacing-xs;
-
-      @media (min-width: 576px) {
-        flex-direction: row;
-        align-items: center;
-        gap: $spacing-md;
-      }
-    }
-
-    .editor-status {
-      font-size: 12px;
-      font-weight: $font-medium;
-      padding: $spacing-xs $spacing-sm;
-      border-radius: $component-border-radius-small;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      flex-shrink: 0;
-
-      &.active {
-        background: rgba(34, 197, 94, 0.1);
-        color: rgb(21, 128, 61);
-        border: 1px solid rgba(34, 197, 94, 0.25);
-
-        @include dark-mode {
-          background: rgba(34, 197, 94, 0.15);
-          border-color: rgba(34, 197, 94, 0.3);
-          color: rgb(74, 222, 128);
-        }
-      }
-
-      &.pending {
-        background: rgba(245, 158, 11, 0.1);
-        color: rgb(146, 64, 14);
-        border: 1px solid rgba(245, 158, 11, 0.25);
-
-        @include dark-mode {
-          background: rgba(245, 158, 11, 0.15);
-          border-color: rgba(245, 158, 11, 0.3);
-          color: rgb(251, 191, 36);
-        }
-      }
-    }
-
-    .invitation-actions {
-      display: flex;
-      gap: $spacing-sm;
-      flex-shrink: 0;
-
-      @media (max-width: 576px) {
-        width: 100%;
-        justify-content: space-between;
-      }
-
-      .resend-btn, .cancel-btn {
-        padding: $spacing-sm $spacing-md;
-        font-size: 14px;
-        white-space: nowrap;
-        transition: all 0.2s ease;
-
-        &:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-
-        @media (max-width: 576px) {
-          flex: 1;
-          min-height: 44px; // Better touch target size on mobile
-          font-size: 16px; // Prevent iOS zoom on focus
-        }
-      }
-
-      .resend-btn {
-        min-width: 80px;
-      }
-
-      .cancel-btn {
-        min-width: 70px;
-      }
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-green-400);
     }
   }
 }

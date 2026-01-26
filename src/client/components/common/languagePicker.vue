@@ -2,7 +2,7 @@
 .language-selector-modal {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  z-index: 1100;
   display: flex;
   align-items: center;
   justify-content: center;

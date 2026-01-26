@@ -1,12 +1,12 @@
 <template>
   <div class="settings-tab">
     <!-- Error Display -->
-    <div v-if="state.error" class="error">
+    <div v-if="state.error" class="alert alert--error">
       {{ state.error }}
     </div>
 
     <!-- Success Display -->
-    <div v-if="state.success" class="success">
+    <div v-if="state.success" class="alert alert--success">
       {{ state.success }}
     </div>
 
@@ -14,12 +14,15 @@
     <LoadingMessage v-if="state.isLoading" :description="t('loading')" />
 
     <!-- Settings Form -->
-    <div v-else class="settings-form">
-      <div class="form-group">
-        <label for="defaultDateRange">{{ t('default_date_range_label') }}</label>
-        <p class="help-text">{{ t('default_date_range_help') }}</p>
+    <div v-else class="settings-content">
+      <h2 class="settings-title">{{ t('calendar_settings') }}</h2>
+
+      <div class="setting-section">
+        <h3 class="setting-label">{{ t('default_date_range_label') }}</h3>
+        <p class="setting-description">{{ t('default_date_range_help') }}</p>
         <select
           id="defaultDateRange"
+          class="setting-select"
           v-model="state.defaultDateRange"
           :disabled="state.isSaving"
           @change="saveSettings"
@@ -128,133 +131,104 @@ onMounted(loadSettings);
 </script>
 
 <style scoped lang="scss">
-@use '../../../assets/mixins' as *;
+@use '../../../assets/style/components/calendar-admin' as *;
 
 .settings-tab {
-  max-width: 600px;
-  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pav-space-6);
+}
 
-  .settings-form {
-    .form-group {
-      margin-bottom: $spacing-2xl;
+.settings-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pav-space-6);
+}
 
-      label {
-        display: block;
-        margin-bottom: $spacing-sm;
-        font-weight: $font-medium;
-        color: $light-mode-text;
-        font-size: 16px;
+.settings-title {
+  @include admin-section-title;
+  margin: 0;
+}
 
-        @include dark-mode {
-          color: $dark-mode-text;
-        }
-      }
+.setting-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pav-space-3);
+}
 
-      .help-text {
-        margin: 0 0 $spacing-md 0;
-        font-size: 14px;
-        color: $light-mode-secondary-text;
-        line-height: 1.5;
+.setting-label {
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--pav-color-stone-900);
+  margin: 0;
 
-        @include dark-mode {
-          color: $dark-mode-secondary-text;
-        }
-      }
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-stone-100);
+  }
+}
 
-      select {
-        width: 100%;
-        max-width: 300px;
-        padding: $spacing-md $spacing-lg;
-        border: 1px solid $light-mode-border;
-        border-radius: $component-border-radius-small;
-        font-size: 16px;
-        background: $light-mode-panel-background;
-        color: $light-mode-text;
-        transition: all 0.2s ease;
-        min-height: 44px;
-        cursor: pointer;
+.setting-description {
+  margin: 0;
+  color: var(--pav-color-stone-600);
+  font-size: 0.875rem;
+  line-height: 1.5;
 
-        @include dark-mode {
-          background: $dark-mode-input-background;
-          border-color: $dark-mode-border;
-          color: $dark-mode-input-text;
-        }
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-stone-400);
+  }
+}
 
-        &:focus {
-          outline: none;
-          border-color: $focus-color;
-          box-shadow: 0 0 0 3px rgba($focus-color, 0.1);
+.setting-select {
+  width: 100%;
+  max-width: 300px;
+  padding: var(--pav-space-3) var(--pav-space-4);
+  border: 1px solid var(--pav-border-primary);
+  border-radius: 0.75rem;
+  background: var(--pav-color-stone-50);
+  color: var(--pav-text-primary);
+  font-size: 1rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  cursor: pointer;
 
-          @include dark-mode {
-            border-color: $focus-color-dark;
-            box-shadow: 0 0 0 3px rgba($focus-color-dark, 0.1);
-          }
-        }
-
-        &:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-      }
-    }
+  &:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px oklch(0.705 0.213 47.604 / 0.4);
+    border-color: var(--pav-color-orange-500);
   }
 
-  .error {
-    padding: $spacing-lg;
-    margin-bottom: $spacing-lg;
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    background: var(--pav-color-stone-800);
+  }
+}
+
+.alert {
+  padding: var(--pav-space-3);
+  margin-bottom: var(--pav-space-4);
+  border-radius: 0.75rem;
+  font-size: 0.875rem;
+
+  &.alert--error {
     background-color: rgba(239, 68, 68, 0.1);
-    border: 1px solid rgba(239, 68, 68, 0.25);
-    border-radius: $component-border-radius-small;
-    color: rgb(153, 27, 27);
-    font-size: 14px;
-    line-height: 1.4;
-    border-left: 4px solid rgba(239, 68, 68, 0.5);
-    animation: slideIn 0.3s ease;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    color: var(--pav-color-red-700);
 
-    @include dark-mode {
-      background-color: rgba(239, 68, 68, 0.15);
-      border-color: rgba(239, 68, 68, 0.3);
-      color: rgb(248, 113, 113);
-    }
-
-    &::before {
-      content: '⚠️';
-      margin-right: $spacing-sm;
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-red-400);
     }
   }
 
-  .success {
-    padding: $spacing-lg;
-    margin-bottom: $spacing-lg;
+  &.alert--success {
     background-color: rgba(34, 197, 94, 0.1);
-    border: 1px solid rgba(34, 197, 94, 0.25);
-    border-radius: $component-border-radius-small;
-    color: rgb(21, 128, 61);
-    font-size: 14px;
-    line-height: 1.4;
-    border-left: 4px solid rgba(34, 197, 94, 0.5);
-    animation: slideIn 0.3s ease;
+    border: 1px solid rgba(34, 197, 94, 0.2);
+    color: var(--pav-color-green-700);
 
-    @include dark-mode {
-      background-color: rgba(34, 197, 94, 0.15);
-      border-color: rgba(34, 197, 94, 0.3);
-      color: rgb(74, 222, 128);
-    }
-
-    &::before {
-      content: '✅';
-      margin-right: $spacing-sm;
-    }
-  }
-
-  @keyframes slideIn {
-    from {
-      opacity: 0;
-      transform: translateY(-10px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-green-400);
     }
   }
 }
