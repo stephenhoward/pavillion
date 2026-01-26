@@ -2,53 +2,53 @@
  * Button Component Styles
  * Comprehensive button system with variants and states
  */
-button {
-  /* Base button styling using semantic defaults */
+button:not([role="tab"]) {
+  /* Base button styling using semantic defaults, excluding tab buttons */
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--pav-space-2);
-  
+
   /* Spacing using design tokens */
   padding: var(--pav-space-button-padding-y) var(--pav-space-button-padding-x);
-  
+
   /* Typography */
   font-family: var(--pav-font-family-primary);
   font-size: var(--pav-font-size-body);
   font-weight: var(--pav-font-weight-medium);
   line-height: var(--pav-line-height-heading);
-  
+
   /* Visual styling */
   background-color: var(--pav-color-interactive-primary);
   color: var(--pav-text-inverse);
   border: var(--pav-border-width-1) solid var(--pav-color-interactive-primary);
   border-radius: var(--pav-border-radius-button);
-  
+
   /* Interaction */
   cursor: pointer;
   transition: all 0.2s ease-in-out;
   text-decoration: none;
   white-space: nowrap;
-  
+
   /* Focus management */
   &:focus-visible {
     outline: var(--pav-border-width-2) solid var(--pav-border-color-focus);
     outline-offset: var(--pav-space-0_5);
     box-shadow: var(--pav-shadow-focus);
   }
-  
+
   /* Interactive states */
   &:hover:not(:disabled) {
     background-color: var(--pav-color-interactive-primary-hover);
     border-color: var(--pav-color-interactive-primary-hover);
     transform: translateY(-1px);
   }
-  
+
   &:active:not(:disabled) {
     background-color: var(--pav-color-interactive-primary-hover);
     transform: translateY(1px);
   }
-  
+
   /* Disabled state */
   &:disabled {
     cursor: not-allowed;
@@ -294,8 +294,8 @@ button.primary {
 
 button,
 a.button {
-  /* Apply base button styles to native elements */
-  &:not([class*="btn"]) {
+  /* Apply base button styles to native elements, excluding tabs */
+  &:not([class*="btn"]):not([role="tab"]) {
     @extend .btn, .btn--secondary;
   }
 }

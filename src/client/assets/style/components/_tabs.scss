@@ -45,14 +45,12 @@
     /* Hover state */
     &:hover:not([aria-selected="true"]) {
       color: var(--pav-text-primary);
-      background-color: var(--pav-interactive-hover);
     }
     
     /* Active/selected state */
     &[aria-selected="true"] {
       color: var(--pav-color-interactive-active-text);
       border-bottom-color: var(--pav-color-interactive-active);
-      background-color: var(--pav-color-interactive-active-bg);
     }
     
     /* Disabled state */

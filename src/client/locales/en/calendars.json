@@ -170,6 +170,7 @@
     "deselect_all_label": "Deselect all selected categories"
   },
   "settings": {
+    "title": "Calendar Settings",
     "loading": "Loading settings...",
     "default_date_range_label": "Default Date Filter",
     "default_date_range_help": "When visitors view your public calendar without specifying a date range, events will be filtered to show this time period starting from today.",

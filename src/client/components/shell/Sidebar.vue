@@ -28,7 +28,7 @@ defineProps<{
   inset-block: 0;
   inset-inline-start: 0;
   width: var(--pav-shell-sidebar-width);
-  background-color: var(--pav-surface-secondary);
+  background-color: var(--pav-surface-primary);
   border-inline-end: 1px solid var(--pav-border-subtle);
   z-index: 100;
   flex-direction: column;

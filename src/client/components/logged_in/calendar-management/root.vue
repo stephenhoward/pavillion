@@ -54,7 +54,7 @@ const activateTab = (tab) => {
 </script>
 
 <template>
-  <section class="calendar-management">
+  <div class="calendar-management-root">
     <div v-if="state.loading" class="loading-message">
       {{ t('loading_calendar') }}
     </div>
@@ -64,104 +64,112 @@ const activateTab = (tab) => {
     </div>
 
     <template v-else-if="state.calendar">
-      <div class="calendar-management__header">
-        <nav class="calendar-management__breadcrumb">
-          <span class="calendar-management__breadcrumb-item">{{ state.calendar.urlName }}</span>
-          <span class="calendar-management__breadcrumb-separator">/</span>
-          <span class="calendar-management__breadcrumb-item">settings</span>
-        </nav>
-        <h1 class="calendar-management__title">{{ t('page_title') }}</h1>
-      </div>
+      <!-- Header with tabs -->
+      <header class="calendar-management-root__header">
+        <div class="calendar-management-root__header-content">
+          <div class="calendar-management-root__header-top">
+            <nav class="calendar-management-root__breadcrumb">
+              <span class="calendar-management-root__breadcrumb-item">{{ state.calendar.urlName }}</span>
+              <span class="calendar-management-root__breadcrumb-separator">/</span>
+              <span class="calendar-management-root__breadcrumb-item">settings</span>
+            </nav>
+            <h1 class="calendar-management-root__title">{{ t('page_title') }}</h1>
+          </div>
 
-      <nav role="tablist" class="calendar-management__tabs">
-        <button
-          type="button"
-          role="tab"
-          :aria-selected="state.activeTab === 'categories' ? 'true' : 'false'"
-          aria-controls="categories-panel"
-          class="calendar-management__tab"
-          @click="activateTab('categories')"
+          <nav role="tablist" class="calendar-management-root__tabs">
+            <button
+              type="button"
+              role="tab"
+              :aria-selected="state.activeTab === 'categories' ? 'true' : 'false'"
+              aria-controls="categories-panel"
+              class="calendar-management-root__tab"
+              @click="activateTab('categories')"
+            >
+              {{ t('categories_tab') }}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              :aria-selected="state.activeTab === 'editors' ? 'true' : 'false'"
+              aria-controls="editors-panel"
+              class="calendar-management-root__tab"
+              @click="activateTab('editors')"
+            >
+              {{ t('editors_tab') }}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              :aria-selected="state.activeTab === 'settings' ? 'true' : 'false'"
+              aria-controls="settings-panel"
+              class="calendar-management-root__tab"
+              @click="activateTab('settings')"
+            >
+              {{ t('settings_tab') }}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              :aria-selected="state.activeTab === 'widget' ? 'true' : 'false'"
+              aria-controls="widget-panel"
+              class="calendar-management-root__tab"
+              @click="activateTab('widget')"
+            >
+              {{ t('widget_tab') }}
+            </button>
+          </nav>
+        </div>
+      </header>
+
+      <!-- Main content area -->
+      <main class="calendar-management-root__main">
+        <div
+          id="categories-panel"
+          role="tabpanel"
+          aria-labelledby="categories-tab"
+          :aria-hidden="state.activeTab !== 'categories'"
+          :hidden="state.activeTab !== 'categories'"
+          class="calendar-management-root__panel"
         >
-          {{ t('categories_tab') }}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          :aria-selected="state.activeTab === 'editors' ? 'true' : 'false'"
-          aria-controls="editors-panel"
-          class="calendar-management__tab"
-          @click="activateTab('editors')"
+          <CategoriesTab v-if="state.calendar" :calendar-id="state.calendar.id" />
+        </div>
+
+        <div
+          id="editors-panel"
+          role="tabpanel"
+          aria-labelledby="editors-tab"
+          :aria-hidden="state.activeTab !== 'editors'"
+          :hidden="state.activeTab !== 'editors'"
+          class="calendar-management-root__panel"
         >
-          {{ t('editors_tab') }}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          :aria-selected="state.activeTab === 'settings' ? 'true' : 'false'"
-          aria-controls="settings-panel"
-          class="calendar-management__tab"
-          @click="activateTab('settings')"
+          <EditorsTab :calendar-id="state.calendar.id" />
+        </div>
+
+        <div
+          id="settings-panel"
+          role="tabpanel"
+          aria-labelledby="settings-tab"
+          :aria-hidden="state.activeTab !== 'settings'"
+          :hidden="state.activeTab !== 'settings'"
+          class="calendar-management-root__panel"
         >
-          {{ t('settings_tab') }}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          :aria-selected="state.activeTab === 'widget' ? 'true' : 'false'"
-          aria-controls="widget-panel"
-          class="calendar-management__tab"
-          @click="activateTab('widget')"
+          <SettingsTab :calendar-id="state.calendar.id" />
+        </div>
+
+        <div
+          id="widget-panel"
+          role="tabpanel"
+          aria-labelledby="widget-tab"
+          :aria-hidden="state.activeTab !== 'widget'"
+          :hidden="state.activeTab !== 'widget'"
+          class="calendar-management-root__panel"
         >
-          {{ t('widget_tab') }}
-        </button>
-      </nav>
-
-      <div
-        id="categories-panel"
-        role="tabpanel"
-        aria-labelledby="categories-tab"
-        :aria-hidden="state.activeTab !== 'categories'"
-        :hidden="state.activeTab !== 'categories'"
-        class="calendar-management__panel"
-      >
-        <CategoriesTab v-if="state.calendar" :calendar-id="state.calendar.id" />
-      </div>
-
-      <div
-        id="editors-panel"
-        role="tabpanel"
-        aria-labelledby="editors-tab"
-        :aria-hidden="state.activeTab !== 'editors'"
-        :hidden="state.activeTab !== 'editors'"
-        class="calendar-management__panel"
-      >
-        <EditorsTab :calendar-id="state.calendar.id" />
-      </div>
-
-      <div
-        id="settings-panel"
-        role="tabpanel"
-        aria-labelledby="settings-tab"
-        :aria-hidden="state.activeTab !== 'settings'"
-        :hidden="state.activeTab !== 'settings'"
-        class="calendar-management__panel"
-      >
-        <SettingsTab :calendar-id="state.calendar.id" />
-      </div>
-
-      <div
-        id="widget-panel"
-        role="tabpanel"
-        aria-labelledby="widget-tab"
-        :aria-hidden="state.activeTab !== 'widget'"
-        :hidden="state.activeTab !== 'widget'"
-        class="calendar-management__panel"
-      >
-        <WidgetTab
-          :calendar-id="state.calendar.id"
-          :calendar-url-name="state.calendar.urlName"
-        />
-      </div>
+          <WidgetTab
+            :calendar-id="state.calendar.id"
+            :calendar-url-name="state.calendar.urlName"
+          />
+        </div>
+      </main>
     </template>
-  </section>
+  </div>
 </template>

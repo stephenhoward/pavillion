@@ -113,15 +113,15 @@
   border: none;
   color: var(--pav-color-stone-500);
   font-weight: 500;
-  font-size: 1rem;
+  font-size: 0.875rem;
   cursor: pointer;
   transition: color 0.2s;
 
-  &:hover {
-    color: var(--pav-color-stone-700);
+  &:hover:not([aria-selected="true"]) {
+    color: var(--pav-color-stone-900);
 
     @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-300);
+      color: var(--pav-color-stone-200);
     }
   }
 
@@ -131,7 +131,7 @@
     &::after {
       content: '';
       position: absolute;
-      bottom: -1px;
+      bottom: 0;
       left: 0;
       right: 0;
       height: 3px;
@@ -145,13 +145,40 @@
 }
 
 // Calendar Management Root Component
-.calendar-management {
-  max-width: 56rem; // max-w-4xl
-  margin: 0 auto;
-  padding: var(--pav-space-6);
+.calendar-management-root {
+  min-height: 100vh;
+  background: var(--pav-color-stone-50);
+  width: 100%;
+  min-width: 0;
+
+  @media (prefers-color-scheme: dark) {
+    background: var(--pav-color-stone-950);
+  }
 
   &__header {
-    margin-bottom: var(--pav-space-6);
+    background: var(--pav-surface-primary);
+    border-bottom: 1px solid var(--pav-border-primary);
+    overflow: hidden;
+
+    @media (prefers-color-scheme: dark) {
+      background: var(--pav-color-stone-900);
+      border-bottom-color: var(--pav-color-stone-800);
+    }
+  }
+
+  &__header-content {
+    max-width: 56rem; // max-w-4xl
+    margin: 0 auto;
+    padding: 0 var(--pav-space-4);
+    min-width: 0;
+  }
+
+  &__header-top {
+    padding: var(--pav-space-4) 0;
+
+    @media (min-width: 640px) {
+      padding: var(--pav-space-6) 0;
+    }
   }
 
   &__breadcrumb {
@@ -160,30 +187,64 @@
     gap: var(--pav-space-2);
     color: var(--pav-color-stone-500);
     font-size: 0.875rem;
-    margin-bottom: var(--pav-space-3);
+    margin-bottom: var(--pav-space-2);
+    min-width: 0;
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-400);
+    }
+
+    @media (min-width: 640px) {
+      font-size: 0.875rem;
+    }
   }
 
   &__breadcrumb-item {
     color: var(--pav-color-stone-500);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-400);
+    }
   }
 
   &__breadcrumb-separator {
     color: var(--pav-color-stone-400);
+    flex-shrink: 0;
   }
 
   &__title {
-    font-size: 2rem;
+    font-size: 1.25rem;
     font-weight: 300;
-    color: var(--pav-text-primary);
+    color: var(--pav-color-stone-900);
     margin: 0;
+
+    @media (min-width: 640px) {
+      font-size: 1.5rem;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-100);
+    }
   }
 
   &__tabs {
     @include admin-tabs;
+    margin-bottom: 0;
   }
 
   &__tab {
     @include admin-tab-button;
+  }
+
+  &__main {
+    max-width: 56rem; // max-w-4xl
+    margin: 0 auto;
+    padding: 0 var(--pav-space-4);
+    min-width: 0;
   }
 
   &__panel {
