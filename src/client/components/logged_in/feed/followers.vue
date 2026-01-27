@@ -39,50 +39,40 @@ const isLoading = computed(() => feedStore.isLoadingFollowers);
 </template>
 
 <style scoped lang="scss">
-@use '@/client/assets/mixins' as *;
-
 section.loading {
   display: flex;
   justify-content: center;
   align-items: center;
   min-height: 200px;
-  color: $light-mode-text;
+  color: var(--pav-color-text-primary);
   font-style: italic;
-
-  @media (prefers-color-scheme: dark) {
-    color: $dark-mode-text;
-  }
 }
 
 section.followers-list {
   display: flex;
   flex-direction: column;
-  gap: $spacing-lg;
-  padding: $spacing-lg;
+  gap: var(--pav-space-4);
+  padding: var(--pav-space-4);
 
   div.followers-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     flex-wrap: wrap;
-    gap: $spacing-md;
+    gap: var(--pav-space-3);
 
     h2 {
       margin: 0;
       font-size: 1.5rem;
-      font-weight: $font-medium;
-      color: $light-mode-text;
-
-      @media (prefers-color-scheme: dark) {
-        color: $dark-mode-text;
-      }
+      font-weight: var(--pav-font-weight-medium);
+      color: var(--pav-color-text-primary);
     }
   }
 
   div.followers-items {
     display: flex;
     flex-direction: column;
-    gap: $spacing-md;
+    gap: var(--pav-space-3);
   }
 }
 </style>

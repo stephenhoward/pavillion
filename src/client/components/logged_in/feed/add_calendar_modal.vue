@@ -268,12 +268,10 @@ const handleClose = () => {
 </template>
 
 <style scoped lang="scss">
-@use '@/client/assets/mixins' as *;
-
 div.add-calendar-modal {
   display: flex;
   flex-direction: column;
-  gap: $spacing-lg;
+  gap: var(--pav-space-4);
   min-width: 300px;
 
   @media (min-width: 768px) {
@@ -283,33 +281,28 @@ div.add-calendar-modal {
   div.form-group {
     display: flex;
     flex-direction: column;
-    gap: $spacing-sm;
+    gap: var(--pav-space-2);
 
     label {
-      font-weight: $font-medium;
-      color: $light-mode-text;
-
-      @media (prefers-color-scheme: dark) {
-        color: $dark-mode-text;
-      }
+      font-weight: var(--pav-font-weight-medium);
+      color: var(--pav-color-text-primary);
     }
 
     input.identifier-input {
-      padding: $spacing-md;
-      border-radius: $form-input-border-radius;
+      padding: var(--pav-space-3);
+      border-radius: var(--pav-border-radius-pill);
       border: 1px solid rgba(0, 0, 0, 0.2);
       background: white;
-      color: $light-mode-text;
+      color: var(--pav-color-text-primary);
       font-size: 1rem;
 
       @media (prefers-color-scheme: dark) {
-        background: $dark-mode-background;
-        color: $dark-mode-text;
+        background: var(--pav-color-surface-primary);
         border-color: rgba(255, 255, 255, 0.2);
       }
 
       &:focus {
-        outline: 2px solid $light-mode-button-background;
+        outline: 2px solid var(--pav-color-interactive-primary);
         outline-offset: 2px;
       }
     }
@@ -326,87 +319,71 @@ div.add-calendar-modal {
   }
 
   div.loading-state {
-    padding: $spacing-md;
+    padding: var(--pav-space-3);
     text-align: center;
-    color: $light-mode-text;
+    color: var(--pav-color-text-primary);
     font-style: italic;
-
-    @media (prefers-color-scheme: dark) {
-      color: $dark-mode-text;
-    }
   }
 
   div.error-state {
-    padding: $spacing-md;
+    padding: var(--pav-space-3);
     background: rgba(239, 68, 68, 0.1);
     border: 1px solid rgba(239, 68, 68, 0.3);
-    border-radius: $form-input-border-radius;
+    border-radius: var(--pav-border-radius-pill);
     color: rgb(239, 68, 68);
   }
 
   div.preview-section {
-    padding: $spacing-lg;
+    padding: var(--pav-space-4);
     background: rgba(0, 0, 0, 0.05);
-    border-radius: $form-input-border-radius;
+    border-radius: var(--pav-border-radius-pill);
 
     @media (prefers-color-scheme: dark) {
       background: rgba(255, 255, 255, 0.05);
     }
 
     h3 {
-      margin: 0 0 $spacing-md 0;
+      margin: 0 0 var(--pav-space-3) 0;
       font-size: 1.125rem;
-      font-weight: $font-medium;
-      color: $light-mode-text;
-
-      @media (prefers-color-scheme: dark) {
-        color: $dark-mode-text;
-      }
+      font-weight: var(--pav-font-weight-medium);
+      color: var(--pav-color-text-primary);
     }
 
     div.preview-content {
       display: flex;
       flex-direction: column;
-      gap: $spacing-sm;
-      margin-bottom: $spacing-lg;
+      gap: var(--pav-space-2);
+      margin-bottom: var(--pav-space-4);
 
       div.preview-item {
         font-size: 0.875rem;
-        color: $light-mode-text;
-
-        @media (prefers-color-scheme: dark) {
-          color: $dark-mode-text;
-        }
+        color: var(--pav-color-text-primary);
 
         strong {
-          font-weight: $font-medium;
+          font-weight: var(--pav-font-weight-medium);
         }
       }
     }
 
     div.policy-section {
       border-top: 1px solid rgba(0, 0, 0, 0.1);
-      padding-top: $spacing-lg;
+      padding-top: var(--pav-space-4);
 
       @media (prefers-color-scheme: dark) {
         border-color: rgba(255, 255, 255, 0.1);
       }
 
       h4 {
-        margin: 0 0 $spacing-sm 0;
+        margin: 0 0 var(--pav-space-2) 0;
         font-size: 1rem;
-        font-weight: $font-medium;
-        color: $light-mode-text;
-
-        @media (prefers-color-scheme: dark) {
-          color: $dark-mode-text;
-        }
+        font-weight: var(--pav-font-weight-medium);
+        color: var(--pav-color-text-primary);
       }
 
       p.policy-description {
         font-size: 0.875rem;
         color: rgba(0, 0, 0, 0.6);
-        margin: 0 0 $spacing-md 0;
+        margin: 0 0 var(--pav-space-3) 0;
 
         @media (prefers-color-scheme: dark) {
           color: rgba(255, 255, 255, 0.6);
@@ -416,32 +393,31 @@ div.add-calendar-modal {
       div.policy-toggles {
         display: flex;
         flex-direction: column;
-        gap: $spacing-md;
+        gap: var(--pav-space-3);
       }
     }
   }
 
   div.modal-actions {
     display: flex;
-    gap: $spacing-md;
+    gap: var(--pav-space-3);
     justify-content: flex-end;
-    margin-top: $spacing-md;
+    margin-top: var(--pav-space-3);
 
     button {
-      padding: $spacing-sm $spacing-lg;
-      border-radius: $form-input-border-radius;
-      font-weight: $font-medium;
+      padding: var(--pav-space-2) var(--pav-space-4);
+      border-radius: var(--pav-border-radius-pill);
+      font-weight: var(--pav-font-weight-medium);
       cursor: pointer;
       transition: all 0.2s ease;
 
       &.secondary {
         background: transparent;
         border: 1px solid rgba(0, 0, 0, 0.2);
-        color: $light-mode-text;
+        color: var(--pav-color-text-primary);
 
         @media (prefers-color-scheme: dark) {
           border-color: rgba(255, 255, 255, 0.2);
-          color: $dark-mode-text;
         }
 
         &:hover {
@@ -454,12 +430,12 @@ div.add-calendar-modal {
       }
 
       &.primary {
-        background: $light-mode-button-background;
+        background: var(--pav-color-interactive-primary);
         border: none;
         color: white;
 
         &:hover:not(:disabled) {
-          background: darken($light-mode-button-background, 10%);
+          background: var(--pav-color-interactive-primary-hover);
         }
 
         &:disabled {
@@ -469,7 +445,7 @@ div.add-calendar-modal {
       }
 
       &:focus {
-        outline: 2px solid $light-mode-button-background;
+        outline: 2px solid var(--pav-color-interactive-primary);
         outline-offset: 2px;
       }
     }

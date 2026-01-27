@@ -1,7 +1,4 @@
 <style scoped lang="scss">
-@use '@/client/assets/mixins' as *;
-@use '@/client/assets/style/components/event-management' as *;
-
 /* Full-page event editor container - uses 100vh since it renders as a top-level route */
 .event-editor-page {
   display: flex;
@@ -589,7 +586,7 @@ button {
     gap: var(--pav-space-md);
     justify-content: flex-end;
 
-    @include mobile-only {
+    @media (max-width: 599px) {
       flex-direction: column-reverse;
 
       button {

@@ -160,8 +160,6 @@ function resetState() {
 </template>
 
 <style scoped lang="scss">
-@use '../../assets/mixins' as *;
-
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -181,8 +179,8 @@ function resetState() {
 }
 
 .modal-container {
-  background: $light-mode-panel-background;
-  border-radius: $component-border-radius;
+  background: var(--pav-color-surface-secondary);
+  border-radius: 8px;
   max-width: 500px;
   width: 100%;
   max-height: 90vh;
@@ -190,7 +188,6 @@ function resetState() {
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
 
   @media (prefers-color-scheme: dark) {
-    background: $dark-mode-panel-background;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.2);
   }
 }
@@ -200,16 +197,12 @@ function resetState() {
   justify-content: space-between;
   align-items: center;
   padding: 1.5rem;
-  border-bottom: 1px solid $light-mode-border;
-
-  @media (prefers-color-scheme: dark) {
-    border-bottom-color: $dark-mode-border;
-  }
+  border-bottom: 1px solid var(--pav-color-border-primary);
 
   h2 {
     margin: 0;
     font-size: 1.5rem;
-    font-weight: 500;
+    font-weight: var(--pav-font-weight-medium);
     color: #dc3545;
 
     @media (prefers-color-scheme: dark) {
@@ -222,7 +215,7 @@ function resetState() {
     border: none;
     font-size: 2rem;
     line-height: 1;
-    color: $light-mode-secondary-text;
+    color: var(--pav-color-text-secondary);
     cursor: pointer;
     padding: 0;
     width: 2rem;
@@ -232,20 +225,12 @@ function resetState() {
     justify-content: center;
 
     &:hover:not(:disabled) {
-      color: $light-mode-text;
+      color: var(--pav-color-text-primary);
     }
 
     &:disabled {
       opacity: 0.5;
       cursor: not-allowed;
-    }
-
-    @media (prefers-color-scheme: dark) {
-      color: $dark-mode-secondary-text;
-
-      &:hover:not(:disabled) {
-        color: $dark-mode-text;
-      }
     }
   }
 }
@@ -265,24 +250,16 @@ function resetState() {
     .message-primary {
       margin: 0 0 1rem 0;
       font-size: 1rem;
-      font-weight: 500;
-      color: $light-mode-text;
+      font-weight: var(--pav-font-weight-medium);
+      color: var(--pav-color-text-primary);
       line-height: 1.5;
-
-      @media (prefers-color-scheme: dark) {
-        color: $dark-mode-text;
-      }
     }
 
     .message-secondary {
       margin: 0;
       font-size: 0.875rem;
-      color: $light-mode-secondary-text;
+      color: var(--pav-color-text-secondary);
       line-height: 1.5;
-
-      @media (prefers-color-scheme: dark) {
-        color: $dark-mode-secondary-text;
-      }
     }
   }
 
@@ -290,7 +267,7 @@ function resetState() {
     padding: 1rem;
     background: rgba(220, 53, 69, 0.05);
     border: 1px solid rgba(220, 53, 69, 0.2);
-    border-radius: $component-border-radius;
+    border-radius: 8px;
     margin-bottom: 1.5rem;
 
     @media (prefers-color-scheme: dark) {
@@ -319,13 +296,9 @@ function resetState() {
 
       .checkbox-text {
         font-size: 0.875rem;
-        font-weight: 500;
-        color: $light-mode-text;
+        font-weight: var(--pav-font-weight-medium);
+        color: var(--pav-color-text-primary);
         line-height: 1.4;
-
-        @media (prefers-color-scheme: dark) {
-          color: $dark-mode-text;
-        }
       }
     }
   }
@@ -336,11 +309,7 @@ function resetState() {
   gap: 1rem;
   justify-content: flex-end;
   padding-top: 1.5rem;
-  border-top: 1px solid $light-mode-border;
-
-  @media (prefers-color-scheme: dark) {
-    border-top-color: $dark-mode-border;
-  }
+  border-top: 1px solid var(--pav-color-border-primary);
 
   button {
     min-width: 120px;
@@ -350,9 +319,9 @@ function resetState() {
       color: white;
       border: none;
       padding: 0.5rem 1rem;
-      border-radius: $component-border-radius;
+      border-radius: 8px;
       cursor: pointer;
-      font-weight: 500;
+      font-weight: var(--pav-font-weight-medium);
 
       &:hover:not(:disabled) {
         background: #c82333;

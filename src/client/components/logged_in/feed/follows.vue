@@ -100,61 +100,51 @@ const handleFollowSuccess = async () => {
 </template>
 
 <style scoped lang="scss">
-@use '@/client/assets/mixins' as *;
-
 section.loading {
   display: flex;
   justify-content: center;
   align-items: center;
   min-height: 200px;
-  color: $light-mode-text;
+  color: var(--pav-color-text-primary);
   font-style: italic;
-
-  @media (prefers-color-scheme: dark) {
-    color: $dark-mode-text;
-  }
 }
 
 section.follows-list {
   display: flex;
   flex-direction: column;
-  gap: $spacing-lg;
-  padding: $spacing-lg;
+  gap: var(--pav-space-4);
+  padding: var(--pav-space-4);
 
   div.follows-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     flex-wrap: wrap;
-    gap: $spacing-md;
+    gap: var(--pav-space-3);
 
     h2 {
       margin: 0;
       font-size: 1.5rem;
-      font-weight: $font-medium;
-      color: $light-mode-text;
-
-      @media (prefers-color-scheme: dark) {
-        color: $dark-mode-text;
-      }
+      font-weight: var(--pav-font-weight-medium);
+      color: var(--pav-color-text-primary);
     }
 
     button.add-button {
-      padding: $spacing-sm $spacing-lg;
-      background: $light-mode-button-background;
+      padding: var(--pav-space-2) var(--pav-space-4);
+      background: var(--pav-color-interactive-primary);
       color: white;
       border: none;
-      border-radius: $form-input-border-radius;
-      font-weight: $font-medium;
+      border-radius: var(--pav-border-radius-pill);
+      font-weight: var(--pav-font-weight-medium);
       cursor: pointer;
       transition: background-color 0.2s ease;
 
       &:hover {
-        background: darken($light-mode-button-background, 10%);
+        background: var(--pav-color-interactive-primary-hover);
       }
 
       &:focus {
-        outline: 2px solid $light-mode-button-background;
+        outline: 2px solid var(--pav-color-interactive-primary);
         outline-offset: 2px;
       }
     }
@@ -163,7 +153,7 @@ section.follows-list {
   div.follows-items {
     display: flex;
     flex-direction: column;
-    gap: $spacing-md;
+    gap: var(--pav-space-3);
   }
 }
 </style>

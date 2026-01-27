@@ -229,8 +229,6 @@ async function setPassword() {
 </script>
 
 <style scoped lang="scss">
-@use '../../assets/mixins' as *;
-
 .instructions {
   font-size: 1.125rem; /* 18px */
   color: var(--pav-color-stone-600);

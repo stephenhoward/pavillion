@@ -88,8 +88,6 @@ const selectCalendar = (calendarInfo) => {
 </script>
 
 <style scoped lang="scss">
-@use '@/client/assets/mixins' as *;
-
 .calendar-selector {
   display: flex;
   flex-direction: column;
@@ -107,7 +105,7 @@ const selectCalendar = (calendarInfo) => {
 
     .calendar-item {
       padding: 0.8rem 1rem;
-      border: 1px solid $light-mode-border;
+      border: 1px solid var(--pav-color-border-primary);
       border-radius: 6px;
       cursor: pointer;
       margin-bottom: 0.5rem;
@@ -117,7 +115,7 @@ const selectCalendar = (calendarInfo) => {
       align-items: center;
 
       &:hover {
-        background-color: $light-mode-selected-background;
+        background-color: var(--pav-color-surface-hover);
       }
 
       &.editor-calendar {
@@ -153,12 +151,6 @@ const selectCalendar = (calendarInfo) => {
       }
 
       @media (prefers-color-scheme: dark) {
-        border-color: $dark-mode-border;
-
-        &:hover {
-          background-color: $dark-mode-selected-background;
-        }
-
         &.editor-calendar {
           border-left-color: #60a5fa;
         }
@@ -186,16 +178,12 @@ const selectCalendar = (calendarInfo) => {
 
     button {
       font-size: 14px;
-      border: 1px solid $light-mode-border;
+      border: 1px solid var(--pav-color-border-primary);
       border-radius: 6px;
       padding: 6px 10px;
       margin-left: 10px;
-
-      @media (prefers-color-scheme: dark) {
-        color: $dark-mode-text;
-        background: $dark-mode-background;
-        border-color: $dark-mode-border;
-      }
+      color: var(--pav-color-text-primary);
+      background: var(--pav-color-surface-primary);
     }
   }
 }

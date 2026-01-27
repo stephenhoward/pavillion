@@ -314,8 +314,6 @@ async function handleSubmit() {
 </script>
 
 <style scoped lang="scss">
-@use '../../assets/mixins' as *;
-
 .setup-container {
   display: flex;
   justify-content: center;

@@ -17,19 +17,16 @@ defineProps<{
 </template>
 
 <style scoped lang="scss">
-@use '@/client/assets/mixins' as *;
-
 div.follower-list-item {
   display: flex;
   flex-direction: column;
-  gap: $spacing-md;
-  padding: $spacing-lg;
-  background: $light-mode-background;
-  border-radius: $form-input-border-radius;
+  gap: var(--pav-space-3);
+  padding: var(--pav-space-4);
+  background: var(--pav-color-surface-primary);
+  border-radius: var(--pav-border-radius-pill);
   border: 1px solid rgba(0, 0, 0, 0.1);
 
   @media (prefers-color-scheme: dark) {
-    background: $dark-mode-button-background;
     border-color: rgba(255, 255, 255, 0.1);
   }
 
@@ -38,12 +35,8 @@ div.follower-list-item {
 
     div.remote-identifier {
       font-size: 1rem;
-      font-weight: $font-medium;
-      color: $light-mode-text;
-
-      @media (prefers-color-scheme: dark) {
-        color: $dark-mode-text;
-      }
+      font-weight: var(--pav-font-weight-medium);
+      color: var(--pav-color-text-primary);
     }
   }
 }

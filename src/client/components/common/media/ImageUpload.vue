@@ -492,9 +492,7 @@ const handleKeyDown = (event: KeyboardEvent) => {
 </template>
 
 <style scoped lang="scss">
-@use '@/client/assets/mixins' as *;
-
-// Design tokens
+// Component-local design tokens
 $accent-color: #e67e22;
 $accent-color-light: #f39c12;
 $success-color: #27ae60;
@@ -519,7 +517,7 @@ $transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   transition: $transition-smooth;
   overflow: hidden;
 
-  @include dark-mode {
+  @media (prefers-color-scheme: dark) {
     border-color: rgba(255, 255, 255, 0.15);
     background: linear-gradient(135deg, #2a2a2a 0%, #1f1f1f 100%);
   }
@@ -530,7 +528,7 @@ $transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     transform: translateY(-2px);
     box-shadow: 0 8px 24px rgba(230, 126, 34, 0.15);
 
-    @include dark-mode {
+    @media (prefers-color-scheme: dark) {
       background: linear-gradient(135deg, #2d2520 0%, #1f1a15 100%);
     }
 
@@ -553,7 +551,7 @@ $transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     transform: scale(1.02);
     box-shadow: 0 12px 32px rgba(230, 126, 34, 0.25);
 
-    @include dark-mode {
+    @media (prefers-color-scheme: dark) {
       background: linear-gradient(135deg, #3d2d20 0%, #2d2015 100%);
     }
 
@@ -609,7 +607,7 @@ $transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   color: #999;
   transition: $transition-smooth;
 
-  @include dark-mode {
+  @media (prefers-color-scheme: dark) {
     color: #666;
   }
 
@@ -624,10 +622,10 @@ $transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   .primary {
     margin: 0 0 4px 0;
     font-size: 16px;
-    font-weight: $font-medium;
+    font-weight: var(--pav-font-weight-medium);
     color: #333;
 
-    @include dark-mode {
+    @media (prefers-color-scheme: dark) {
       color: #ddd;
     }
   }
@@ -637,14 +635,14 @@ $transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     font-size: 14px;
     color: #777;
 
-    @include dark-mode {
+    @media (prefers-color-scheme: dark) {
       color: #888;
     }
   }
 
   .browse-link {
     color: $accent-color;
-    font-weight: $font-medium;
+    font-weight: var(--pav-font-weight-medium);
     text-decoration: underline;
     text-underline-offset: 2px;
 
@@ -663,7 +661,7 @@ $transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 
-  @include dark-mode {
+  @media (prefers-color-scheme: dark) {
     color: #666;
   }
 
@@ -741,7 +739,7 @@ $transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 .progress-percentage {
   position: absolute;
   font-size: 18px;
-  font-weight: $font-bold;
+  font-weight: var(--pav-font-weight-semibold);
   color: white;
 }
 
@@ -781,10 +779,6 @@ $transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   padding: 12px 16px;
   background: #1a1a1a;
   border-radius: 0 0 $border-radius $border-radius;
-
-  @include dark-mode {
-    background: #1a1a1a;
-  }
 }
 
 .file-details {
@@ -797,7 +791,7 @@ $transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
 .file-name {
   font-size: 13px;
-  font-weight: $font-medium;
+  font-weight: var(--pav-font-weight-medium);
   color: white;
   white-space: nowrap;
   overflow: hidden;
@@ -822,7 +816,7 @@ $transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border: none;
   border-radius: 8px;
   font-size: 12px;
-  font-weight: $font-medium;
+  font-weight: var(--pav-font-weight-medium);
   cursor: pointer;
   transition: $transition-smooth;
   background: rgba(255, 255, 255, 0.1);
@@ -889,7 +883,7 @@ $transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   font-size: 13px;
   color: $error-color;
 
-  @include dark-mode {
+  @media (prefers-color-scheme: dark) {
     background: rgba(231, 76, 60, 0.15);
   }
 

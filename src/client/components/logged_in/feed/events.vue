@@ -216,8 +216,6 @@ onUnmounted(() => {
 </template>
 
 <style scoped lang="scss">
-@use '../../../assets/mixins' as *;
-
 div.events-container {
   display: flex;
   flex-direction: column;
@@ -226,31 +224,22 @@ div.events-container {
 
   div.events-list {
     flex: 1;
-    padding: $spacing-lg;
+    padding: var(--pav-space-4);
 
     div.event-item {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      gap: $spacing-lg;
-      padding: $spacing-lg;
-      margin-bottom: $spacing-md;
-      background: $light-mode-panel-background;
-      border: 1px solid $light-mode-border;
-      border-radius: $component-border-radius;
+      gap: var(--pav-space-4);
+      padding: var(--pav-space-4);
+      margin-bottom: var(--pav-space-3);
+      background: var(--pav-color-surface-secondary);
+      border: 1px solid var(--pav-color-border-primary);
+      border-radius: var(--pav-border-radius-md);
       transition: box-shadow 0.2s ease;
 
       &:hover {
-        box-shadow: $box-shadow-light;
-      }
-
-      @media (prefers-color-scheme: dark) {
-        background: $dark-mode-panel-background;
-        border-color: $dark-mode-border;
-
-        &:hover {
-          box-shadow: $box-shadow-medium;
-        }
+        box-shadow: var(--pav-shadow-sm);
       }
 
       div.event-content {
@@ -258,51 +247,35 @@ div.events-container {
         min-width: 0; // Enable text truncation
 
         h3.event-title {
-          margin: 0 0 $spacing-xs 0;
+          margin: 0 0 var(--pav-space-1) 0;
           font-size: 18px;
-          font-weight: $font-medium;
-          color: $light-mode-text;
-
-          @media (prefers-color-scheme: dark) {
-            color: $dark-mode-text;
-          }
+          font-weight: var(--pav-font-weight-medium);
+          color: var(--pav-color-text-primary);
         }
 
         p.event-date {
-          margin: 0 0 $spacing-sm 0;
+          margin: 0 0 var(--pav-space-2) 0;
           font-size: 14px;
-          color: $light-mode-secondary-text;
-
-          @media (prefers-color-scheme: dark) {
-            color: $dark-mode-secondary-text;
-          }
+          color: var(--pav-color-text-secondary);
         }
 
         p.event-description {
-          margin: 0 0 $spacing-sm 0;
+          margin: 0 0 var(--pav-space-2) 0;
           font-size: 14px;
           line-height: 1.5;
-          color: $light-mode-text;
+          color: var(--pav-color-text-primary);
           overflow: hidden;
           text-overflow: ellipsis;
           display: -webkit-box;
           -webkit-line-clamp: 2;
           -webkit-box-orient: vertical;
-
-          @media (prefers-color-scheme: dark) {
-            color: $dark-mode-text;
-          }
         }
 
         p.event-source {
           margin: 0;
           font-size: 12px;
-          color: $light-mode-secondary-text;
+          color: var(--pav-color-text-secondary);
           font-style: italic;
-
-          @media (prefers-color-scheme: dark) {
-            color: $dark-mode-secondary-text;
-          }
         }
       }
 
@@ -312,13 +285,13 @@ div.events-container {
         align-items: center;
 
         button.repost-button {
-          padding: $spacing-sm $spacing-lg;
+          padding: var(--pav-space-2) var(--pav-space-4);
           background: #f97316;
           color: white;
           border: none;
-          border-radius: $component-border-radius-small;
+          border-radius: var(--pav-border-radius-sm);
           font-size: 14px;
-          font-weight: $font-medium;
+          font-weight: var(--pav-font-weight-medium);
           cursor: pointer;
           transition: background 0.2s ease;
 
@@ -332,13 +305,13 @@ div.events-container {
         }
 
         button.reposted-label {
-          padding: $spacing-sm $spacing-lg;
+          padding: var(--pav-space-2) var(--pav-space-4);
           background: #22c55e;
           color: white;
           border: none;
-          border-radius: $component-border-radius-small;
+          border-radius: var(--pav-border-radius-sm);
           font-size: 14px;
-          font-weight: $font-medium;
+          font-weight: var(--pav-font-weight-medium);
           cursor: pointer;
           transition: background 0.2s ease;
 
@@ -352,18 +325,18 @@ div.events-container {
         }
 
         span.auto-posted-label {
-          padding: $spacing-sm $spacing-lg;
+          padding: var(--pav-space-2) var(--pav-space-4);
           background: #6b7280;
           color: white;
-          border-radius: $component-border-radius-small;
+          border-radius: var(--pav-border-radius-sm);
           font-size: 14px;
-          font-weight: $font-medium;
+          font-weight: var(--pav-font-weight-medium);
         }
       }
 
       @media (max-width: 768px) {
         flex-direction: column;
-        gap: $spacing-md;
+        gap: var(--pav-space-3);
 
         div.event-actions {
           width: 100%;
@@ -383,16 +356,12 @@ div.events-container {
     }
 
     div.loading-indicator {
-      padding: $spacing-2xl;
+      padding: var(--pav-space-6);
       text-align: center;
 
       p {
-        color: $light-mode-secondary-text;
+        color: var(--pav-color-text-secondary);
         font-size: 14px;
-
-        @media (prefers-color-scheme: dark) {
-          color: $dark-mode-secondary-text;
-        }
       }
     }
   }
@@ -402,10 +371,10 @@ div.events-container {
     background: #f97316;
     color: white;
     border: none;
-    padding: $spacing-md $spacing-2xl;
-    border-radius: $component-border-radius;
+    padding: var(--pav-space-3) var(--pav-space-6);
+    border-radius: var(--pav-border-radius-md);
     font-size: 16px;
-    font-weight: $font-medium;
+    font-weight: var(--pav-font-weight-medium);
     cursor: pointer;
     transition: background 0.2s ease;
 

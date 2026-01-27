@@ -551,9 +551,6 @@ const hasActiveFilters = computed(() => {
 </template>
 
 <style scoped lang="scss">
-@use '@/client/assets/mixins' as *;
-@use '@/client/assets/style/components/event-management' as *;
-
 /* Screen reader only class for accessibility */
 .sr-only {
   position: absolute;
@@ -569,7 +566,17 @@ const hasActiveFilters = computed(() => {
 
 /* Calendar header with sticky blur effect */
 .calendar-header {
-  @include sticky-blur-header;
+  /* Inlined: sticky-blur-header */
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  backdrop-filter: blur(8px);
+  background: rgba(255, 255, 255, 0.8);
+
+  @media (prefers-color-scheme: dark) {
+    background: rgba(28, 25, 23, 0.8); // Stone-900 with opacity
+  }
+
   padding: 1.5rem 1rem;
   border-bottom: 1px solid var(--pav-color-stone-200);
 
@@ -674,15 +681,31 @@ section[aria-label="Calendar Events"] {
     gap: 1rem;
 
     .event-item {
-      @include event-card;
+      /* Inlined: event-card */
+      border-radius: 0.75rem; // rounded-xl
+      border: 1px solid var(--pav-color-stone-200);
+      background: white;
+      padding: 1rem;
+      transition: all 0.15s ease;
+
+      &:hover {
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        background: var(--pav-color-stone-800);
+        border-color: var(--pav-color-stone-700);
+      }
+
       display: flex;
       align-items: flex-start;
       gap: 1rem;
 
       &:hover {
         .event-actions {
-          @include hover-reveal;
+          /* Inlined: hover-reveal */
           opacity: 1;
+          transition: opacity 0.2s ease;
         }
       }
 

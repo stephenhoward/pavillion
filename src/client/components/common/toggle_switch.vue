@@ -59,28 +59,22 @@ const handleKeydown = (event: KeyboardEvent) => {
 </template>
 
 <style scoped lang="scss">
-@use '@/client/assets/mixins' as *;
-
 div.toggle-switch-container {
   display: flex;
   flex-direction: column;
-  gap: $spacing-xs;
+  gap: var(--pav-space-1);
 
   div.toggle-switch-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: $spacing-md;
+    gap: var(--pav-space-3);
 
     label.toggle-label {
       font-size: 0.875rem;
-      font-weight: $font-medium;
-      color: $light-mode-text;
+      font-weight: var(--pav-font-weight-medium);
+      color: var(--pav-color-text-primary);
       flex: 1;
-
-      @media (prefers-color-scheme: dark) {
-        color: $dark-mode-text;
-      }
     }
 
     button.toggle-switch {
@@ -88,32 +82,20 @@ div.toggle-switch-container {
       width: 44px;
       height: 24px;
       min-height: 24px;
-      background: #ccc;
+      background: var(--pav-color-border-secondary);
       border: none;
       border-radius: 12px;
       cursor: pointer;
       transition: background-color 0.2s ease;
       flex-shrink: 0;
 
-      @media (prefers-color-scheme: dark) {
-        background: #555;
-      }
-
       &:focus {
-        outline: 2px solid $light-mode-button-background;
+        outline: 2px solid var(--pav-color-interactive-primary);
         outline-offset: 2px;
-
-        @media (prefers-color-scheme: dark) {
-          outline-color: $dark-mode-button-background;
-        }
       }
 
       &.active {
-        background: $light-mode-button-background;
-
-        @media (prefers-color-scheme: dark) {
-          background: $dark-mode-button-background;
-        }
+        background: var(--pav-color-interactive-primary);
 
         span.toggle-slider {
           transform: translateX(20px);
@@ -141,13 +123,9 @@ div.toggle-switch-container {
 
   p.toggle-help-text {
     font-size: 0.75rem;
-    color: rgba(0, 0, 0, 0.6);
+    color: var(--pav-color-text-secondary);
     margin: 0;
     padding-left: 0;
-
-    @media (prefers-color-scheme: dark) {
-      color: rgba(255, 255, 255, 0.6);
-    }
   }
 }
 </style>

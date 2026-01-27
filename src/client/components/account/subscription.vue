@@ -388,8 +388,6 @@ onMounted(async () => {
 </template>
 
 <style scoped lang="scss">
-@use '../../assets/mixins' as *;
-
 .subscription-management {
   padding: 20px;
   max-width: 800px;
@@ -402,13 +400,9 @@ onMounted(async () => {
   .back-button {
     display: inline-block;
     margin-bottom: 1rem;
-    color: $light-mode-button-background;
+    color: var(--pav-color-interactive-primary);
     text-decoration: none;
     font-size: 0.875rem;
-
-    @media (prefers-color-scheme: dark) {
-      color: $dark-mode-button-background;
-    }
 
     &:hover {
       text-decoration: underline;
@@ -431,11 +425,7 @@ h2 {
 .loading {
   padding: 2rem;
   text-align: center;
-  color: $light-mode-secondary-text;
-
-  @media (prefers-color-scheme: dark) {
-    color: $dark-mode-secondary-text;
-  }
+  color: var(--pav-color-text-secondary);
 }
 
 .success-message {
@@ -477,22 +467,14 @@ h2 {
       flex-direction: column;
       gap: 0.5rem;
       padding: 1rem;
-      border: 1px solid $light-mode-border;
-      border-radius: $component-border-radius;
+      border: 1px solid var(--pav-color-border-primary);
+      border-radius: 8px;
       min-width: 150px;
-
-      @media (prefers-color-scheme: dark) {
-        border-color: $dark-mode-border;
-      }
 
       .price {
         font-size: 1.5rem;
-        font-weight: 600;
-        color: $light-mode-button-background;
-
-        @media (prefers-color-scheme: dark) {
-          color: $dark-mode-button-background;
-        }
+        font-weight: var(--pav-font-weight-semibold);
+        color: var(--pav-color-interactive-primary);
       }
     }
   }
@@ -500,27 +482,18 @@ h2 {
 
 .subscribe-form {
   padding: 2rem;
-  border: 1px solid $light-mode-border;
-  border-radius: $component-border-radius;
-  background: $light-mode-panel-background;
-
-  @media (prefers-color-scheme: dark) {
-    border-color: $dark-mode-border;
-    background: $dark-mode-panel-background;
-  }
+  border: 1px solid var(--pav-color-border-primary);
+  border-radius: 8px;
+  background: var(--pav-color-surface-secondary);
 
   .form-group {
     margin-bottom: 1.5rem;
 
     .form-label {
       display: block;
-      font-weight: 500;
+      font-weight: var(--pav-font-weight-medium);
       margin-bottom: 0.5rem;
-      color: $light-mode-text;
-
-      @media (prefers-color-scheme: dark) {
-        color: $dark-mode-text;
-      }
+      color: var(--pav-color-text-primary);
     }
 
     .provider-options, .cycle-options {
@@ -533,20 +506,12 @@ h2 {
         align-items: center;
         gap: 0.5rem;
         padding: 0.75rem;
-        border: 1px solid $light-mode-border;
-        border-radius: $component-border-radius;
+        border: 1px solid var(--pav-color-border-primary);
+        border-radius: 8px;
         cursor: pointer;
 
-        @media (prefers-color-scheme: dark) {
-          border-color: $dark-mode-border;
-        }
-
         &:hover {
-          background: $light-mode-selected-background;
-
-          @media (prefers-color-scheme: dark) {
-            background: $dark-mode-selected-background;
-          }
+          background: var(--pav-color-surface-hover);
         }
 
         input[type="radio"] {
@@ -560,26 +525,20 @@ h2 {
         width: 100%;
         max-width: 200px;
         padding: 0.5rem;
-        border: 1px solid $light-mode-border;
-        border-radius: $component-border-radius;
-        background: $light-mode-panel-background;
-        color: $light-mode-text;
+        border: 1px solid var(--pav-color-border-primary);
+        border-radius: 8px;
+        background: var(--pav-color-surface-secondary);
+        color: var(--pav-color-text-primary);
 
         @media (prefers-color-scheme: dark) {
-          border-color: $dark-mode-border;
-          background: $dark-mode-input-background;
-          color: $dark-mode-input-text;
+          background: var(--pav-color-surface-tertiary);
         }
       }
 
       .description {
         margin-top: 0.5rem;
         font-size: 0.875rem;
-        color: $light-mode-secondary-text;
-
-        @media (prefers-color-scheme: dark) {
-          color: $dark-mode-secondary-text;
-        }
+        color: var(--pav-color-text-secondary);
       }
     }
   }
@@ -594,44 +553,31 @@ h2 {
 .subscription-status {
   .status-card {
     padding: 1.5rem;
-    border: 1px solid $light-mode-border;
-    border-radius: $component-border-radius;
-    background: $light-mode-panel-background;
-
-    @media (prefers-color-scheme: dark) {
-      border-color: $dark-mode-border;
-      background: $dark-mode-panel-background;
-    }
+    border: 1px solid var(--pav-color-border-primary);
+    border-radius: 8px;
+    background: var(--pav-color-surface-secondary);
 
     .status-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
       padding: 0.75rem 0;
-      border-bottom: 1px solid $light-mode-border;
-
-      @media (prefers-color-scheme: dark) {
-        border-color: $dark-mode-border;
-      }
+      border-bottom: 1px solid var(--pav-color-border-primary);
 
       &:last-child {
         border-bottom: none;
       }
 
       .label {
-        font-weight: 500;
-        color: $light-mode-secondary-text;
-
-        @media (prefers-color-scheme: dark) {
-          color: $dark-mode-secondary-text;
-        }
+        font-weight: var(--pav-font-weight-medium);
+        color: var(--pav-color-text-secondary);
       }
 
       .status-badge {
         padding: 0.25rem 0.75rem;
         border-radius: 4px;
         font-size: 0.875rem;
-        font-weight: 500;
+        font-weight: var(--pav-font-weight-medium);
 
         &.status-active {
           background: #d4edda;
@@ -700,10 +646,6 @@ h2 {
 .subscriptions-disabled {
   padding: 2rem;
   text-align: center;
-  color: $light-mode-secondary-text;
-
-  @media (prefers-color-scheme: dark) {
-    color: $dark-mode-secondary-text;
-  }
+  color: var(--pav-color-text-secondary);
 }
 </style>

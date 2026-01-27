@@ -177,7 +177,6 @@ const toggleCategory = (categoryId) => {
 </template>
 
 <style scoped lang="scss">
-@use '@/client/assets/mixins' as *;
 @use '@/client/assets/style/components/event-management' as *;
 
 .close-button {

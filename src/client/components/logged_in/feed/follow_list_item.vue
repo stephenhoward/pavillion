@@ -71,19 +71,16 @@ const handleUnfollow = () => {
 </template>
 
 <style scoped lang="scss">
-@use '@/client/assets/mixins' as *;
-
 div.follow-list-item {
   display: flex;
   flex-direction: column;
-  gap: $spacing-md;
-  padding: $spacing-lg;
-  background: $light-mode-background;
-  border-radius: $form-input-border-radius;
+  gap: var(--pav-space-3);
+  padding: var(--pav-space-4);
+  background: var(--pav-color-surface-primary);
+  border-radius: var(--pav-border-radius-pill);
   border: 1px solid rgba(0, 0, 0, 0.1);
 
   @media (prefers-color-scheme: dark) {
-    background: $dark-mode-button-background;
     border-color: rgba(255, 255, 255, 0.1);
   }
 
@@ -98,42 +95,38 @@ div.follow-list-item {
 
     div.remote-identifier {
       font-size: 1rem;
-      font-weight: $font-medium;
-      color: $light-mode-text;
-
-      @media (prefers-color-scheme: dark) {
-        color: $dark-mode-text;
-      }
+      font-weight: var(--pav-font-weight-medium);
+      color: var(--pav-color-text-primary);
     }
   }
 
   div.follow-actions {
     display: flex;
     flex-direction: column;
-    gap: $spacing-md;
+    gap: var(--pav-space-3);
     align-items: stretch;
 
     @media (min-width: 768px) {
       flex-direction: column;
       align-items: flex-end;
-      gap: $spacing-md;
+      gap: var(--pav-space-3);
     }
 
     div.policy-toggles {
       display: flex;
       flex-direction: column;
-      gap: $spacing-md;
+      gap: var(--pav-space-3);
       min-width: 240px;
     }
 
     button.unfollow-button {
-      padding: $spacing-sm $spacing-md;
+      padding: var(--pav-space-2) var(--pav-space-3);
       border: 1px solid rgba(0, 0, 0, 0.2);
-      border-radius: $form-input-border-radius;
+      border-radius: var(--pav-border-radius-pill);
       background: white;
-      color: $light-mode-text;
+      color: var(--pav-color-text-primary);
       font-size: 0.875rem;
-      font-weight: $font-medium;
+      font-weight: var(--pav-font-weight-medium);
       cursor: pointer;
       white-space: nowrap;
       transition: background-color 0.2s ease;
@@ -144,8 +137,7 @@ div.follow-list-item {
       }
 
       @media (prefers-color-scheme: dark) {
-        background: $dark-mode-background;
-        color: $dark-mode-text;
+        background: var(--pav-color-surface-primary);
         border-color: rgba(255, 255, 255, 0.2);
       }
 
@@ -158,7 +150,7 @@ div.follow-list-item {
       }
 
       &:focus {
-        outline: 2px solid $light-mode-button-background;
+        outline: 2px solid var(--pav-color-interactive-primary);
         outline-offset: 2px;
       }
     }

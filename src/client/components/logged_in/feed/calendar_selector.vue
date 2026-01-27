@@ -55,61 +55,40 @@ const handleChange = (event) => {
 </template>
 
 <style scoped lang="scss">
-@use '../../../assets/mixins' as *;
-
 div.calendar-selector {
   display: flex;
   align-items: center;
-  gap: $spacing-md;
-  padding: $spacing-lg;
-  background: $light-mode-panel-background;
-  border-bottom: 1px solid $light-mode-border;
-
-  @media (prefers-color-scheme: dark) {
-    background: $dark-mode-panel-background;
-    border-bottom-color: $dark-mode-border;
-  }
+  gap: var(--pav-space-3);
+  padding: var(--pav-space-4);
+  background: var(--pav-color-surface-secondary);
+  border-bottom: 1px solid var(--pav-color-border-primary);
 
   label {
-    font-weight: $font-medium;
-    color: $light-mode-text;
-
-    @media (prefers-color-scheme: dark) {
-      color: $dark-mode-text;
-    }
+    font-weight: var(--pav-font-weight-medium);
+    color: var(--pav-color-text-primary);
   }
 
   select {
     flex: 1;
     max-width: 300px;
-    padding: $spacing-sm $spacing-md;
-    border: 1px solid $light-mode-border;
-    border-radius: $component-border-radius-small;
-    background: $light-mode-panel-background;
-    color: $light-mode-text;
+    padding: var(--pav-space-2) var(--pav-space-3);
+    border: 1px solid var(--pav-color-border-primary);
+    border-radius: var(--pav-border-radius-sm);
+    background: var(--pav-color-surface-tertiary);
+    color: var(--pav-color-text-primary);
     font-size: 14px;
     cursor: pointer;
 
     &:focus {
-      outline: 2px solid $focus-color;
+      outline: 2px solid var(--pav-color-interactive-primary);
       outline-offset: 2px;
-    }
-
-    @media (prefers-color-scheme: dark) {
-      background: $dark-mode-input-background;
-      color: $dark-mode-input-text;
-      border-color: $dark-mode-border;
-
-      &:focus {
-        outline-color: $focus-color-dark;
-      }
     }
   }
 
   @media (max-width: 768px) {
     flex-direction: column;
     align-items: stretch;
-    gap: $spacing-sm;
+    gap: var(--pav-space-2);
 
     select {
       max-width: none;

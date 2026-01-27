@@ -254,8 +254,6 @@ function validateField(field) {
 </template>
 
 <style scoped lang="scss">
-@use '../../assets/mixins' as *;
-
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -275,8 +273,8 @@ function validateField(field) {
 }
 
 .modal-container {
-  background: $light-mode-panel-background;
-  border-radius: $component-border-radius;
+  background: var(--pav-color-surface-secondary);
+  border-radius: 8px;
   max-width: 500px;
   width: 100%;
   max-height: 90vh;
@@ -284,7 +282,6 @@ function validateField(field) {
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
 
   @media (prefers-color-scheme: dark) {
-    background: $dark-mode-panel-background;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.2);
   }
 }
@@ -294,21 +291,13 @@ function validateField(field) {
   justify-content: space-between;
   align-items: center;
   padding: 1.5rem;
-  border-bottom: 1px solid $light-mode-border;
-
-  @media (prefers-color-scheme: dark) {
-    border-bottom-color: $dark-mode-border;
-  }
+  border-bottom: 1px solid var(--pav-color-border-primary);
 
   h2 {
     margin: 0;
     font-size: 1.5rem;
-    font-weight: 500;
-    color: $light-mode-text;
-
-    @media (prefers-color-scheme: dark) {
-      color: $dark-mode-text;
-    }
+    font-weight: var(--pav-font-weight-medium);
+    color: var(--pav-color-text-primary);
   }
 
   .close-button {
@@ -316,7 +305,7 @@ function validateField(field) {
     border: none;
     font-size: 2rem;
     line-height: 1;
-    color: $light-mode-secondary-text;
+    color: var(--pav-color-text-secondary);
     cursor: pointer;
     padding: 0;
     width: 2rem;
@@ -326,20 +315,12 @@ function validateField(field) {
     justify-content: center;
 
     &:hover:not(:disabled) {
-      color: $light-mode-text;
+      color: var(--pav-color-text-primary);
     }
 
     &:disabled {
       opacity: 0.5;
       cursor: not-allowed;
-    }
-
-    @media (prefers-color-scheme: dark) {
-      color: $dark-mode-secondary-text;
-
-      &:hover:not(:disabled) {
-        color: $dark-mode-text;
-      }
     }
   }
 }
@@ -349,12 +330,8 @@ function validateField(field) {
 
   .modal-description {
     margin: 0 0 1.5rem 0;
-    color: $light-mode-secondary-text;
+    color: var(--pav-color-text-secondary);
     line-height: 1.5;
-
-    @media (prefers-color-scheme: dark) {
-      color: $dark-mode-secondary-text;
-    }
   }
 
   .form-group {
@@ -367,13 +344,9 @@ function validateField(field) {
 
   .form-label {
     display: block;
-    font-weight: 500;
+    font-weight: var(--pav-font-weight-medium);
     margin-bottom: 0.5rem;
-    color: $light-mode-text;
-
-    @media (prefers-color-scheme: dark) {
-      color: $dark-mode-text;
-    }
+    color: var(--pav-color-text-primary);
 
     .required {
       color: #dc3545;
@@ -384,10 +357,10 @@ function validateField(field) {
   .form-input {
     width: 100%;
     padding: 0.5rem;
-    border: 1px solid $light-mode-border;
-    border-radius: $component-border-radius;
-    background: $light-mode-panel-background;
-    color: $light-mode-text;
+    border: 1px solid var(--pav-color-border-primary);
+    border-radius: 8px;
+    background: var(--pav-color-surface-secondary);
+    color: var(--pav-color-text-primary);
     font-size: 1rem;
 
     &:focus {
@@ -407,17 +380,11 @@ function validateField(field) {
     &:disabled {
       opacity: 0.6;
       cursor: not-allowed;
-      background: $light-mode-selected-background;
+      background: var(--pav-color-surface-hover);
     }
 
     @media (prefers-color-scheme: dark) {
-      border-color: $dark-mode-border;
-      background: $dark-mode-input-background;
-      color: $dark-mode-input-text;
-
-      &:disabled {
-        background: $dark-mode-selected-background;
-      }
+      background: var(--pav-color-surface-tertiary);
     }
   }
 
@@ -430,12 +397,8 @@ function validateField(field) {
   .field-help {
     margin-top: 0.5rem;
     font-size: 0.875rem;
-    color: $light-mode-secondary-text;
+    color: var(--pav-color-text-secondary);
     line-height: 1.4;
-
-    @media (prefers-color-scheme: dark) {
-      color: $dark-mode-secondary-text;
-    }
   }
 }
 
@@ -445,11 +408,7 @@ function validateField(field) {
   justify-content: flex-end;
   margin-top: 2rem;
   padding-top: 1.5rem;
-  border-top: 1px solid $light-mode-border;
-
-  @media (prefers-color-scheme: dark) {
-    border-top-color: $dark-mode-border;
-  }
+  border-top: 1px solid var(--pav-color-border-primary);
 
   button {
     min-width: 100px;

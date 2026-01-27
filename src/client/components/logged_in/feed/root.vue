@@ -186,77 +186,66 @@ onMounted(async () => {
 </template>
 
 <style scoped lang="scss">
-@use '../../../assets/mixins' as *;
-
 div.feed-root {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: $light-mode-panel-background;
-
-  @media (prefers-color-scheme: dark) {
-    background: $dark-mode-background;
-  }
+  background: var(--pav-color-surface-secondary);
 
   div.no-calendar-selected {
-    @include empty-state;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: var(--pav-space-10) var(--pav-space-5);
+    min-height: 250px;
 
     p {
       font-size: 16px;
-      color: $light-mode-secondary-text;
-
-      @media (prefers-color-scheme: dark) {
-        color: $dark-mode-secondary-text;
-      }
+      color: var(--pav-color-text-secondary);
     }
   }
 
   div.loading-state {
-    @include empty-state;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: var(--pav-space-10) var(--pav-space-5);
+    min-height: 250px;
 
     p {
       font-size: 16px;
-      color: $light-mode-secondary-text;
-
-      @media (prefers-color-scheme: dark) {
-        color: $dark-mode-secondary-text;
-      }
+      color: var(--pav-color-text-secondary);
     }
   }
 
   div.tab-navigation {
     display: flex;
-    border-bottom: 2px solid $light-mode-border;
-    background: $light-mode-panel-background;
-
-    @media (prefers-color-scheme: dark) {
-      border-bottom-color: $dark-mode-border;
-      background: $dark-mode-panel-background;
-    }
+    border-bottom: 2px solid var(--pav-color-border-primary);
+    background: var(--pav-color-surface-secondary);
 
     button.tab {
       flex: 0 0 auto;
-      padding: $spacing-lg $spacing-2xl;
+      padding: var(--pav-space-4) var(--pav-space-6);
       border: none;
       background: transparent;
-      color: $light-mode-secondary-text;
+      color: var(--pav-color-text-secondary);
       font-size: 16px;
-      font-weight: $font-regular;
+      font-weight: var(--pav-font-weight-regular);
       cursor: pointer;
       position: relative;
       transition: color 0.2s ease;
 
       &:hover {
-        color: $light-mode-text;
-
-        @media (prefers-color-scheme: dark) {
-          color: $dark-mode-text;
-        }
+        color: var(--pav-color-text-primary);
       }
 
       &.active {
         color: #f97316;
-        font-weight: $font-medium;
+        font-weight: var(--pav-font-weight-medium);
 
         &::after {
           content: '';
@@ -268,16 +257,12 @@ div.feed-root {
           background: #f97316;
         }
       }
-
-      @media (prefers-color-scheme: dark) {
-        color: $dark-mode-secondary-text;
-      }
     }
 
     @media (max-width: 768px) {
       button.tab {
         flex: 1 1 0;
-        padding: $spacing-md $spacing-lg;
+        padding: var(--pav-space-3) var(--pav-space-4);
         font-size: 14px;
       }
     }

@@ -422,18 +422,12 @@ function handleSuccess() {
 </template>
 
 <style scoped lang="scss">
-@use '../../assets/mixins' as *;
-
 .progress-indicator {
   text-align: center;
   padding: 0 0 1rem 0;
   font-size: 0.875rem;
-  font-weight: 500;
-  color: $light-mode-secondary-text;
-
-  @media (prefers-color-scheme: dark) {
-    color: $dark-mode-secondary-text;
-  }
+  font-weight: var(--pav-font-weight-medium);
+  color: var(--pav-color-text-secondary);
 }
 
 .wizard-content {
@@ -457,22 +451,14 @@ function handleSuccess() {
     .step-title {
       margin: 0 0 0.5rem 0;
       font-size: 1.25rem;
-      font-weight: 500;
-      color: $light-mode-text;
-
-      @media (prefers-color-scheme: dark) {
-        color: $dark-mode-text;
-      }
+      font-weight: var(--pav-font-weight-medium);
+      color: var(--pav-color-text-primary);
     }
 
     .step-description {
       margin: 0 0 1.5rem 0;
-      color: $light-mode-secondary-text;
+      color: var(--pav-color-text-secondary);
       line-height: 1.5;
-
-      @media (prefers-color-scheme: dark) {
-        color: $dark-mode-secondary-text;
-      }
     }
   }
 }
@@ -485,12 +471,12 @@ function handleSuccess() {
 
   .provider-card {
     padding: 1.5rem;
-    border: 2px solid $light-mode-border;
-    border-radius: $component-border-radius;
+    border: 2px solid var(--pav-color-border-primary);
+    border-radius: 8px;
     cursor: pointer;
     text-align: center;
     transition: all 0.2s ease;
-    background: $light-mode-panel-background;
+    background: var(--pav-color-surface-secondary);
 
     &:hover {
       border-color: #4a90e2;
@@ -505,7 +491,6 @@ function handleSuccess() {
     }
 
     @media (prefers-color-scheme: dark) {
-      border-color: $dark-mode-border;
       background: rgba(255, 255, 255, 0.05);
 
       &:hover {
@@ -528,22 +513,14 @@ function handleSuccess() {
     .provider-name {
       margin: 0 0 0.5rem 0;
       font-size: 1.125rem;
-      font-weight: 500;
-      color: $light-mode-text;
-
-      @media (prefers-color-scheme: dark) {
-        color: $dark-mode-text;
-      }
+      font-weight: var(--pav-font-weight-medium);
+      color: var(--pav-color-text-primary);
     }
 
     .provider-description {
       margin: 0;
       font-size: 0.875rem;
-      color: $light-mode-secondary-text;
-
-      @media (prefers-color-scheme: dark) {
-        color: $dark-mode-secondary-text;
-      }
+      color: var(--pav-color-text-secondary);
     }
   }
 }
@@ -560,13 +537,9 @@ function handleSuccess() {
 
     .form-label {
       display: block;
-      font-weight: 500;
+      font-weight: var(--pav-font-weight-medium);
       margin-bottom: 0.5rem;
-      color: $light-mode-text;
-
-      @media (prefers-color-scheme: dark) {
-        color: $dark-mode-text;
-      }
+      color: var(--pav-color-text-primary);
 
       .required {
         color: #dc3545;
@@ -577,10 +550,10 @@ function handleSuccess() {
     .form-input {
       width: 100%;
       padding: 0.5rem;
-      border: 1px solid $light-mode-border;
-      border-radius: $component-border-radius;
-      background: $light-mode-panel-background;
-      color: $light-mode-text;
+      border: 1px solid var(--pav-color-border-primary);
+      border-radius: 8px;
+      background: var(--pav-color-surface-secondary);
+      color: var(--pav-color-text-primary);
       font-size: 1rem;
 
       &:focus {
@@ -600,17 +573,11 @@ function handleSuccess() {
       &:disabled {
         opacity: 0.6;
         cursor: not-allowed;
-        background: $light-mode-selected-background;
+        background: var(--pav-color-surface-hover);
       }
 
       @media (prefers-color-scheme: dark) {
-        border-color: $dark-mode-border;
-        background: $dark-mode-input-background;
-        color: $dark-mode-input-text;
-
-        &:disabled {
-          background: $dark-mode-selected-background;
-        }
+        background: var(--pav-color-surface-tertiary);
       }
     }
 
@@ -648,21 +615,13 @@ function handleSuccess() {
   .success-message {
     margin-bottom: 1rem;
     font-size: 1.125rem;
-    font-weight: 500;
-    color: $light-mode-text;
-
-    @media (prefers-color-scheme: dark) {
-      color: $dark-mode-text;
-    }
+    font-weight: var(--pav-font-weight-medium);
+    color: var(--pav-color-text-primary);
   }
 
   .ready-message {
     margin: 0;
-    color: $light-mode-secondary-text;
-
-    @media (prefers-color-scheme: dark) {
-      color: $dark-mode-secondary-text;
-    }
+    color: var(--pav-color-text-secondary);
   }
 }
 

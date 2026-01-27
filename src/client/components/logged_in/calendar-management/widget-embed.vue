@@ -102,8 +102,6 @@ const copyToClipboard = async () => {
 </script>
 
 <style scoped lang="scss">
-@use '../../../assets/mixins' as *;
-
 .widget-embed {
   max-width: 800px;
   margin: 0 auto;
@@ -176,18 +174,18 @@ const copyToClipboard = async () => {
   }
 
   .error {
-    padding: $spacing-lg;
-    margin-bottom: $spacing-lg;
+    padding: var(--pav-space-4);
+    margin-bottom: var(--pav-space-4);
     background-color: rgba(239, 68, 68, 0.1);
     border: 1px solid rgba(239, 68, 68, 0.25);
-    border-radius: $component-border-radius-small;
+    border-radius: 6px;
     color: rgb(153, 27, 27);
     font-size: 14px;
     line-height: 1.4;
     border-left: 4px solid rgba(239, 68, 68, 0.5);
     animation: slideIn 0.3s ease;
 
-    @include dark-mode {
+    @media (prefers-color-scheme: dark) {
       background-color: rgba(239, 68, 68, 0.15);
       border-color: rgba(239, 68, 68, 0.3);
       color: rgb(248, 113, 113);
@@ -195,23 +193,23 @@ const copyToClipboard = async () => {
 
     &::before {
       content: '⚠️';
-      margin-right: $spacing-sm;
+      margin-right: var(--pav-space-2);
     }
   }
 
   .success {
-    padding: $spacing-lg;
-    margin-bottom: $spacing-lg;
+    padding: var(--pav-space-4);
+    margin-bottom: var(--pav-space-4);
     background-color: rgba(34, 197, 94, 0.1);
     border: 1px solid rgba(34, 197, 94, 0.25);
-    border-radius: $component-border-radius-small;
+    border-radius: 6px;
     color: rgb(21, 128, 61);
     font-size: 14px;
     line-height: 1.4;
     border-left: 4px solid rgba(34, 197, 94, 0.5);
     animation: slideIn 0.3s ease;
 
-    @include dark-mode {
+    @media (prefers-color-scheme: dark) {
       background-color: rgba(34, 197, 94, 0.15);
       border-color: rgba(34, 197, 94, 0.3);
       color: rgb(74, 222, 128);
@@ -219,7 +217,7 @@ const copyToClipboard = async () => {
 
     &::before {
       content: '✅';
-      margin-right: $spacing-sm;
+      margin-right: var(--pav-space-2);
     }
   }
 
