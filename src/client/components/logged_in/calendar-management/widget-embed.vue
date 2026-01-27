@@ -1,7 +1,6 @@
 <template>
   <div class="widget-embed">
-    <div class="embed-code-container">
-      <pre class="embed-code"><code>{{ embedCode }}</code></pre>
+    <div class="embed-header">
       <button
         class="copy-btn"
         :disabled="state.copying"
@@ -10,6 +9,8 @@
         {{ state.copied ? t('copied') : t('copy_button') }}
       </button>
     </div>
+
+    <pre class="embed-code"><code>{{ embedCode }}</code></pre>
 
     <div v-if="state.error" class="error">
       {{ state.error }}
@@ -107,62 +108,70 @@ const copyToClipboard = async () => {
   max-width: 800px;
   margin: 0 auto;
 
-  .embed-code-container {
-    position: relative;
-    margin-bottom: $spacing-lg;
+  .embed-header {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: var(--pav-space-3);
+  }
 
-    .embed-code {
-      margin: 0;
-      padding: $spacing-lg;
-      background: rgb(247, 247, 247);
-      border: 1px solid $light-mode-border;
-      border-radius: $component-border-radius-small;
-      overflow-x: auto;
-      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-      font-size: 13px;
-      line-height: 1.6;
-      color: rgb(51, 51, 51);
+  .copy-btn {
+    padding: var(--pav-space-2) var(--pav-space-4);
+    background: var(--pav-color-orange-500);
+    color: white;
+    border: none;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-height: 36px;
 
-      @include dark-mode {
-        background: rgb(30, 30, 30);
-        border-color: $dark-mode-border;
-        color: rgb(220, 220, 220);
-      }
+    @media (prefers-color-scheme: dark) {
+      background: var(--pav-color-orange-600);
+      color: white;
+    }
 
-      code {
-        font-family: inherit;
-        white-space: pre;
+    &:hover:not(:disabled) {
+      background: var(--pav-color-orange-600);
+
+      @media (prefers-color-scheme: dark) {
+        background: var(--pav-color-orange-500);
       }
     }
 
-    .copy-btn {
-      position: absolute;
-      top: $spacing-md;
-      right: $spacing-md;
-      padding: $spacing-sm $spacing-lg;
-      background: $light-mode-button-background;
-      color: white;
-      border: none;
-      border-radius: $component-border-radius-small;
-      font-size: 14px;
-      font-weight: $font-medium;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      min-height: 36px;
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+  }
 
-      @include dark-mode {
-        background: $dark-mode-button-background;
-        color: white;
-      }
+  .embed-code {
+    margin: 0 0 var(--pav-space-4) 0;
+    padding: var(--pav-space-4);
+    background: var(--pav-color-stone-50);
+    border: 1px solid var(--pav-border-primary);
+    border-radius: 0.75rem;
+    overflow-x: auto;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.8125rem;
+    line-height: 1.6;
+    color: var(--pav-color-stone-900);
 
-      &:hover:not(:disabled) {
-        opacity: 0.9;
-      }
+    @media (min-width: 640px) {
+      padding: var(--pav-space-6);
+      font-size: 0.875rem;
+    }
 
-      &:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-      }
+    @media (prefers-color-scheme: dark) {
+      background: var(--pav-color-stone-800);
+      border-color: var(--pav-color-stone-700);
+      color: var(--pav-color-stone-100);
+    }
+
+    code {
+      font-family: inherit;
+      white-space: pre-wrap;
+      word-break: break-all;
     }
   }
 

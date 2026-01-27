@@ -54,9 +54,14 @@
 
         <!-- Left fade gradient with chevron -->
         <div v-if="state.showStartFade" class="scroll-indicator start">
-          <div class="fade-gradient start-gradient"></div>
+          <div class="fade-gradient start-gradient"/>
           <div class="chevron-icon">
-            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <svg width="16"
+                 height="16"
+                 fill="none"
+                 viewBox="0 0 24 24"
+                 stroke="currentColor"
+                 stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
           </div>
@@ -64,9 +69,14 @@
 
         <!-- Right fade gradient with chevron -->
         <div v-if="state.showEndFade" class="scroll-indicator end">
-          <div class="fade-gradient end-gradient"></div>
+          <div class="fade-gradient end-gradient"/>
           <div class="chevron-icon">
-            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <svg width="16"
+                 height="16"
+                 fill="none"
+                 viewBox="0 0 24 24"
+                 stroke="currentColor"
+                 stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
             </svg>
           </div>

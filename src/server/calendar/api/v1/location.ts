@@ -56,10 +56,12 @@ export default class LocationRoutes {
 
       const locations = await this.service.getLocationsForCalendar(calendar);
       res.json(locations.map(location => location.toObject()));
-    } catch (error) {
+    }
+    catch (error) {
       if (error instanceof CalendarNotFoundError) {
         res.status(404).json({ error: 'Calendar not found', errorName: 'CalendarNotFoundError' });
-      } else {
+      }
+      else {
         res.status(500).json({ error: 'Internal server error' });
       }
     }
@@ -89,14 +91,18 @@ export default class LocationRoutes {
       const createdLocation = await this.service.createLocation(calendar, locationData);
 
       res.status(201).json(createdLocation.toObject());
-    } catch (error) {
+    }
+    catch (error) {
       if (error instanceof CalendarNotFoundError) {
         res.status(404).json({ error: 'Calendar not found', errorName: 'CalendarNotFoundError' });
-      } else if (error instanceof InsufficientCalendarPermissionsError) {
+      }
+      else if (error instanceof InsufficientCalendarPermissionsError) {
         res.status(403).json({ error: 'Insufficient permissions to modify this calendar', errorName: 'InsufficientCalendarPermissionsError' });
-      } else if (error instanceof Error && error.message === 'Location name is required') {
+      }
+      else if (error instanceof Error && error.message === 'Location name is required') {
         res.status(400).json({ error: error.message });
-      } else {
+      }
+      else {
         res.status(500).json({ error: 'Internal server error' });
       }
     }
@@ -124,10 +130,12 @@ export default class LocationRoutes {
       }
 
       res.json(location.toObject());
-    } catch (error) {
+    }
+    catch (error) {
       if (error instanceof CalendarNotFoundError) {
         res.status(404).json({ error: 'Calendar not found', errorName: 'CalendarNotFoundError' });
-      } else {
+      }
+      else {
         res.status(500).json({ error: 'Internal server error' });
       }
     }

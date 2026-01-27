@@ -18,7 +18,7 @@ const itemsWithActiveState = computed<NavigationItemWithState[]>(() =>
   props.navigationItems.map(item => ({
     ...item,
     isActive: isRouteActive(item.to),
-  }))
+  })),
 );
 
 /**

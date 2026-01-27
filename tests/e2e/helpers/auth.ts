@@ -32,8 +32,8 @@ export async function loginAsAdmin(page: Page) {
   // Click login button
   await page.getByRole('button', { name: 'Sign in' }).click();
 
-  // Wait for navigation to complete
-  await page.waitForURL('**/calendar', { timeout: 10000 });
+  // Wait for navigation to complete (longer timeout for server startup)
+  await page.waitForURL('**/calendar', { timeout: 30000 });
 }
 
 /**
@@ -51,6 +51,6 @@ export async function loginAsFreshUser(page: Page) {
   // Click login button
   await page.getByRole('button', { name: 'Sign in' }).click();
 
-  // Wait for navigation to complete
-  await page.waitForURL('**/calendar', { timeout: 10000 });
+  // Wait for navigation to complete (longer timeout for server startup)
+  await page.waitForURL('**/calendar', { timeout: 30000 });
 }

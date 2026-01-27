@@ -34,7 +34,7 @@
           class="editor-card"
           :class="{ 'is-removing': state.isRemoving === editor.id }"
         >
-          <div class="editor-avatar"></div>
+          <div class="editor-avatar"/>
           <div class="editor-info">
             <div class="editor-name-row">
               <span class="editor-name">{{ editor.email }}</span>

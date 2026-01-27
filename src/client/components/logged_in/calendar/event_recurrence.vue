@@ -421,17 +421,28 @@
     <div class="schedule-grid">
       <div class="grid-field">
         <label class="grid-label">Date</label>
-        <input type="date" v-model="state.date" @input="updateStartDate()" class="grid-input"/>
+        <input type="date"
+               v-model="state.date"
+               @input="updateStartDate()"
+               class="grid-input"/>
       </div>
 
       <div class="grid-field">
         <label class="grid-label">Time</label>
-        <input type="time" v-model="state.time" @input="updateStartDate()" class="grid-input"/>
+        <input type="time"
+               v-model="state.time"
+               @input="updateStartDate()"
+               class="grid-input"/>
       </div>
 
       <div class="grid-field">
         <label class="grid-label">Duration (minutes)</label>
-        <input type="number" v-model="state.duration" @input="compileRecurrence()" class="grid-input" min="0" step="15"/>
+        <input type="number"
+               v-model="state.duration"
+               @input="compileRecurrence()"
+               class="grid-input"
+               min="0"
+               step="15"/>
       </div>
 
       <div class="grid-field">

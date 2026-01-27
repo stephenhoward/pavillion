@@ -671,7 +671,8 @@ class EventService {
         eventEntity.location_id = null;
         event.locationId = null;
         event.location = null;
-      } else {
+      }
+      else {
         // Validate that location exists and belongs to this calendar
         const location = await this.locationService.getLocationById(calendar, eventParams.locationId);
         if (!location) {

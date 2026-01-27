@@ -15,9 +15,9 @@
           >
             <div class="view-mode-card__illustration">
               <div class="list-illustration">
-                <div class="list-line"></div>
-                <div class="list-line"></div>
-                <div class="list-line"></div>
+                <div class="list-line"/>
+                <div class="list-line"/>
+                <div class="list-line"/>
               </div>
             </div>
             <div class="view-mode-card__content">
@@ -25,8 +25,16 @@
               <div class="view-mode-card__description">{{ t('view_mode_list_description') }}</div>
             </div>
             <div v-if="state.viewMode === 'list'" class="view-mode-card__checkmark">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="20 6 9 17 4 12"></polyline>
+              <svg xmlns="http://www.w3.org/2000/svg"
+                   width="20"
+                   height="20"
+                   viewBox="0 0 24 24"
+                   fill="none"
+                   stroke="currentColor"
+                   stroke-width="2"
+                   stroke-linecap="round"
+                   stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
               </svg>
             </div>
           </button>
@@ -39,13 +47,13 @@
           >
             <div class="view-mode-card__illustration">
               <div class="week-illustration">
-                <div class="week-day"></div>
-                <div class="week-day"></div>
-                <div class="week-day week-day--highlight"></div>
-                <div class="week-day"></div>
-                <div class="week-day week-day--highlight"></div>
-                <div class="week-day"></div>
-                <div class="week-day"></div>
+                <div class="week-day"/>
+                <div class="week-day"/>
+                <div class="week-day week-day--highlight"/>
+                <div class="week-day"/>
+                <div class="week-day week-day--highlight"/>
+                <div class="week-day"/>
+                <div class="week-day"/>
               </div>
             </div>
             <div class="view-mode-card__content">
@@ -53,8 +61,16 @@
               <div class="view-mode-card__description">{{ t('view_mode_week_description') }}</div>
             </div>
             <div v-if="state.viewMode === 'week'" class="view-mode-card__checkmark">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="20 6 9 17 4 12"></polyline>
+              <svg xmlns="http://www.w3.org/2000/svg"
+                   width="20"
+                   height="20"
+                   viewBox="0 0 24 24"
+                   fill="none"
+                   stroke="currentColor"
+                   stroke-width="2"
+                   stroke-linecap="round"
+                   stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
               </svg>
             </div>
           </button>
@@ -68,22 +84,22 @@
             <div class="view-mode-card__illustration">
               <div class="month-illustration">
                 <div class="month-row">
-                  <div class="month-cell"></div>
-                  <div class="month-cell"></div>
-                  <div class="month-cell month-cell--highlight"></div>
-                  <div class="month-cell"></div>
-                  <div class="month-cell month-cell--highlight"></div>
-                  <div class="month-cell"></div>
-                  <div class="month-cell"></div>
+                  <div class="month-cell"/>
+                  <div class="month-cell"/>
+                  <div class="month-cell month-cell--highlight"/>
+                  <div class="month-cell"/>
+                  <div class="month-cell month-cell--highlight"/>
+                  <div class="month-cell"/>
+                  <div class="month-cell"/>
                 </div>
                 <div class="month-row">
-                  <div class="month-cell"></div>
-                  <div class="month-cell month-cell--highlight"></div>
-                  <div class="month-cell"></div>
-                  <div class="month-cell"></div>
-                  <div class="month-cell"></div>
-                  <div class="month-cell"></div>
-                  <div class="month-cell"></div>
+                  <div class="month-cell"/>
+                  <div class="month-cell month-cell--highlight"/>
+                  <div class="month-cell"/>
+                  <div class="month-cell"/>
+                  <div class="month-cell"/>
+                  <div class="month-cell"/>
+                  <div class="month-cell"/>
                 </div>
               </div>
             </div>
@@ -92,8 +108,16 @@
               <div class="view-mode-card__description">{{ t('view_mode_month_description') }}</div>
             </div>
             <div v-if="state.viewMode === 'month'" class="view-mode-card__checkmark">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="20 6 9 17 4 12"></polyline>
+              <svg xmlns="http://www.w3.org/2000/svg"
+                   width="20"
+                   height="20"
+                   viewBox="0 0 24 24"
+                   fill="none"
+                   stroke="currentColor"
+                   stroke-width="2"
+                   stroke-linecap="round"
+                   stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
               </svg>
             </div>
           </button>

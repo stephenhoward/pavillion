@@ -90,6 +90,14 @@ const widgetConfigState = computed(() => {
   display: flex;
   flex-direction: column;
   gap: var(--pav-space-4);
+  background: white;
+  border-radius: 0.75rem;
+  padding: var(--pav-space-6);
+  overflow: hidden;
+
+  @media (prefers-color-scheme: dark) {
+    background: var(--pav-color-stone-900);
+  }
 
   h2 {
     @include admin-section-title;
