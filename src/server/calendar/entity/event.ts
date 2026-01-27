@@ -41,7 +41,7 @@ class EventEntity extends Model {
   declare calendar: CalendarEntity;
 
   @ForeignKey(() => LocationEntity)
-  @Column({ type: DataType.STRING })
+  @Column({ type: DataType.UUID })
   declare location_id: string;
 
   @ForeignKey(() => MediaEntity)

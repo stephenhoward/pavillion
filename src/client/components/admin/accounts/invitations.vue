@@ -241,6 +241,11 @@ const openInviteForm = () => {
   state.inviteFormOpen = true;
 };
 
+// Expose method to parent component
+defineExpose({
+  openInviteForm,
+});
+
 const onInvited = async () => {
   state.inviteFormOpen = false;
   await loadInvitations();

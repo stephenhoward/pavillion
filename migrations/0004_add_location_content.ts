@@ -42,14 +42,6 @@ export default {
         allowNull: true,
         comment: 'Accessibility information in the specified language',
       },
-      createdAt: {
-        type: DataTypes.DATE,
-        allowNull: false,
-      },
-      updatedAt: {
-        type: DataTypes.DATE,
-        allowNull: false,
-      },
     });
 
     // Add index on location_id for efficient queries

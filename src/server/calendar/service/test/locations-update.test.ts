@@ -84,29 +84,38 @@ describe('LocationService - Event Update Location Handling (LOC-003)', () => {
       country: 'USA',
     };
 
+    // Mock LocationEntity.findByPk to return null for empty ID
+    // (EventLocation.fromObject with no id creates location with id='')
+    const findByPkStub = sandbox.stub(LocationEntity, 'findByPk').resolves(null);
+
     // Mock LocationEntity.findOne to return null (location not found by field matching)
     const findOneStub = sandbox.stub(LocationEntity, 'findOne').resolves(null);
+
+    // Create the expected result location
+    const expectedLocation = new EventLocation(
+      'https://localhost:3000/places/new-location-id',
+      locationParams.name,
+      locationParams.address,
+      locationParams.city,
+      locationParams.state,
+      locationParams.postalCode,
+      locationParams.country,
+    );
 
     // Mock LocationEntity.fromModel and save
     const mockEntity = {
       id: '',
       calendar_id: testCalendar.id,
       save: sandbox.stub().resolves(),
-      toModel: () => new EventLocation(
-        'https://localhost:3000/places/new-location-id',
-        locationParams.name,
-        locationParams.address,
-        locationParams.city,
-        locationParams.state,
-        locationParams.postalCode,
-        locationParams.country,
-      ),
     };
     sandbox.stub(LocationEntity, 'fromModel').returns(mockEntity as any);
 
+    // Mock getLocationById to return the created location
+    sandbox.stub(locationService, 'getLocationById').resolves(expectedLocation);
+
     const result = await locationService.findOrCreateLocation(testCalendar, locationParams);
 
-    // Verify findOne was called (because id was missing)
+    // Verify findOne was called (because id was empty/falsy)
     expect(findOneStub.calledOnce).toBe(true);
 
     // Verify a new location was created with a generated URL ID
@@ -162,7 +171,7 @@ describe('LocationService - Event Update Location Handling (LOC-003)', () => {
   it('should handle updating event location from one venue to another', async () => {
     // Simulate changing the location of an event from one venue to another
     const newLocationParams = {
-      id: '', // Empty ID because it's a different location
+      // Omit id property entirely - this is a new location
       name: 'New Venue',
       address: '456 Oak Ave',
       city: 'Chicago',
@@ -171,25 +180,34 @@ describe('LocationService - Event Update Location Handling (LOC-003)', () => {
       country: 'USA',
     };
 
+    // Mock findByPk to return null for empty ID
+    // (EventLocation.fromObject with no id creates location with id='')
+    sandbox.stub(LocationEntity, 'findByPk').resolves(null);
+
     // Mock findOne to return null (new location doesn't exist yet)
     sandbox.stub(LocationEntity, 'findOne').resolves(null);
+
+    // Create the expected result location
+    const expectedLocation = new EventLocation(
+      'https://localhost:3000/places/new-venue-id',
+      newLocationParams.name,
+      newLocationParams.address,
+      newLocationParams.city,
+      newLocationParams.state,
+      newLocationParams.postalCode,
+      newLocationParams.country,
+    );
 
     // Mock creation of new location
     const mockEntity = {
       id: '',
       calendar_id: testCalendar.id,
       save: sandbox.stub().resolves(),
-      toModel: () => new EventLocation(
-        'https://localhost:3000/places/new-venue-id',
-        newLocationParams.name,
-        newLocationParams.address,
-        newLocationParams.city,
-        newLocationParams.state,
-        newLocationParams.postalCode,
-        newLocationParams.country,
-      ),
     };
     sandbox.stub(LocationEntity, 'fromModel').returns(mockEntity as any);
+
+    // Mock getLocationById to return the created location
+    sandbox.stub(locationService, 'getLocationById').resolves(expectedLocation);
 
     const result = await locationService.findOrCreateLocation(testCalendar, newLocationParams);
 

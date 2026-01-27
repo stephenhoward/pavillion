@@ -134,11 +134,14 @@ test.describe('Admin Account Management', () => {
     // Wait for invitations panel
     await page.waitForSelector('section#invitations-panel:not([hidden])', { timeout: 5000 });
 
-    // Click the "Send Invitation" link inside the invitations panel to open the invite form
-    // The invitations panel has a .send-invitation-link button when empty,
-    // or we may need the header invite-button. Try both patterns.
-    const sendInviteLink = page.locator('.send-invitation-link, .invite-button').first();
-    await sendInviteLink.click();
+    // Click the "Send Invitation" link to open the invite form
+    // There are two buttons that can open the form:
+    // 1. The .send-invitation-link inside the invitations panel (when no invitations exist)
+    // 2. The .invite-button in the page header (visible when on invitations tab)
+    // Both should work, so we try to find either and use the first visible one
+    const sendInviteButton = page.locator('.send-invitation-link, .invite-button').first();
+    await sendInviteButton.waitFor({ state: 'visible', timeout: 5000 });
+    await sendInviteButton.click();
 
     // Wait for InviteFormView modal to render (it's conditionally rendered with v-if)
     await page.waitForSelector('dialog.modal-dialog[open]', { timeout: 5000 });

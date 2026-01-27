@@ -24,6 +24,8 @@ const state = reactive({
   isLoading: false,
 });
 
+const invitationsViewRef = ref(null);
+
 onBeforeMount(async () => {
   await loadAccounts();
 });
@@ -96,7 +98,7 @@ const subTabs = computed(() => [
         v-if="state.activeTab === 'invitations'"
         type="button"
         class="invite-button"
-        @click="activateTab('invitations')"
+        @click="invitationsViewRef?.openInviteForm()"
       >
         <svg width="20"
              height="20"
@@ -223,7 +225,7 @@ const subTabs = computed(() => [
       :hidden="state.activeTab !== 'invitations'"
       class="tab-panel"
     >
-      <InvitationsView />
+      <InvitationsView ref="invitationsViewRef" />
     </section>
   </section>
 </template>

@@ -53,7 +53,11 @@ NC='\033[0m' # No Color
 
 # Detect if running in development mode
 is_development() {
-  [ "$NODE_ENV" = "development" ]
+  [ "$NODE_ENV" = "development" ] || [ "$NODE_ENV" = "federation" ]
+}
+
+is_federation() {
+  [ "$NODE_ENV" = "federation" ]
 }
 
 # Detect if running in worker mode
@@ -214,7 +218,13 @@ run_migrations() {
 
 # Function to start the application
 start_app() {
-  if is_development; then
+  if is_federation; then
+    # Federation testing mode - backend only with hot-reload
+    log_info "Starting federation instance..."
+    log_info "  Backend:  http://localhost:3000"
+    log_info "========================================"
+    exec npx tsx watch src/server/app.ts
+  elif is_development; then
     # Development mode
     if is_worker_mode "$@"; then
       log_info "Starting worker process with hot-reload..."

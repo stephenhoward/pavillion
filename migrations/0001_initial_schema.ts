@@ -415,7 +415,7 @@ export default {
     // location - Event locations
     await queryInterface.createTable('location', {
       id: {
-        type: DataTypes.STRING,
+        type: DataTypes.UUID,
         primaryKey: true,
         allowNull: false,
       },
@@ -433,15 +433,15 @@ export default {
         type: DataTypes.STRING,
         allowNull: true,
       },
-      street_address: {
+      address: {
         type: DataTypes.STRING,
         allowNull: true,
       },
-      locality: {
+      city: {
         type: DataTypes.STRING,
         allowNull: true,
       },
-      region: {
+      state: {
         type: DataTypes.STRING,
         allowNull: true,
       },
@@ -564,7 +564,7 @@ export default {
         allowNull: true,
       },
       location_id: {
-        type: DataTypes.STRING,
+        type: DataTypes.UUID,
         allowNull: true,
         references: {
           model: 'location',
