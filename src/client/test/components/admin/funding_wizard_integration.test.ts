@@ -104,7 +104,7 @@ describe('Funding Page Wizard Integration', () => {
     await wrapper.vm.$nextTick();
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    const addProviderButton = wrapper.find('button.add-provider-button');
+    const addProviderButton = wrapper.find('button.btn-text-orange');
     expect(addProviderButton.exists()).toBe(true);
     expect(addProviderButton.text()).toBe('Add Provider');
   });
@@ -152,7 +152,7 @@ describe('Funding Page Wizard Integration', () => {
     await wrapper.vm.$nextTick();
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    const addProviderButton = wrapper.find('button.add-provider-button');
+    const addProviderButton = wrapper.find('button.btn-text-orange');
     expect(addProviderButton.exists()).toBe(true);
     expect(addProviderButton.attributes('disabled')).toBeDefined();
     expect(addProviderButton.attributes('title')).toBe('All available providers are already connected');
@@ -202,10 +202,10 @@ describe('Funding Page Wizard Integration', () => {
     await wrapper.vm.$nextTick();
 
     // Verify the providers section is rendered
-    const providersSection = wrapper.find('.providers-section');
+    const providersSection = wrapper.find('.providers-card');
     expect(providersSection.exists()).toBe(true);
 
-    const addProviderButton = wrapper.find('button.add-provider-button');
+    const addProviderButton = wrapper.find('button.btn-text-orange');
     expect(addProviderButton.exists()).toBe(true);
 
     // Verify providers data is loaded in the component
@@ -285,7 +285,7 @@ describe('Funding Page Wizard Integration', () => {
     await new Promise(resolve => setTimeout(resolve, 100));
 
     // Open wizard
-    const addProviderButton = wrapper.find('button.add-provider-button');
+    const addProviderButton = wrapper.find('button.btn-text-orange');
     await addProviderButton.trigger('click');
     await wrapper.vm.$nextTick();
 
@@ -313,10 +313,10 @@ describe('Funding Page Wizard Integration', () => {
     await wrapper.vm.$nextTick();
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    const providersSection = wrapper.find('.providers-section');
+    const providersSection = wrapper.find('.providers-card');
     expect(providersSection.exists()).toBe(true);
 
-    const sectionTitle = providersSection.find('h2');
+    const sectionTitle = providersSection.find('.card-title');
     expect(sectionTitle.text()).toBe('Connected Payment Providers');
   });
 
@@ -336,11 +336,11 @@ describe('Funding Page Wizard Integration', () => {
     await wrapper.vm.$nextTick();
 
     // Verify the providers section is rendered
-    const providersSection = wrapper.find('.providers-section');
+    const providersSection = wrapper.find('.providers-card');
     expect(providersSection.exists()).toBe(true);
 
     // Open wizard
-    const addProviderButton = wrapper.find('button.add-provider-button');
+    const addProviderButton = wrapper.find('button.btn-text-orange');
     expect(addProviderButton.exists()).toBe(true);
 
     // Directly call the method instead of clicking since button might be disabled

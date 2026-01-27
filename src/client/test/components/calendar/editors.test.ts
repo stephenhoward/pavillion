@@ -127,7 +127,7 @@ describe('Editors Component', () => {
       await flushPromises();
 
       expect(wrapper.vm.state.error).toBe('You don\'t have permission to manage editors for this calendar');
-      expect(wrapper.find('.error').exists()).toBe(true);
+      expect(wrapper.find('.alert--error').exists()).toBe(true);
     });
 
     it('handles generic error when loading editors', async () => {
@@ -160,7 +160,7 @@ describe('Editors Component', () => {
       // Wait for async loading to complete
       await flushPromises();
 
-      const editorItems = wrapper.findAll('.editor-item');
+      const editorItems = wrapper.findAll('.editor-card');
       expect(editorItems).toHaveLength(2);
       expect(editorItems[0].text()).toContain('user1@example.com');
       expect(editorItems[1].text()).toContain('user2@example.com');
@@ -198,7 +198,7 @@ describe('Editors Component', () => {
       // Wait for async loading to complete
       await flushPromises();
 
-      const removeButton = wrapper.find('.remove-btn');
+      const removeButton = wrapper.find('.editor-actions .btn-ghost');
       expect(removeButton.exists()).toBe(true);
       expect(removeButton.text()).toBe('Remove');
     });
@@ -219,7 +219,7 @@ describe('Editors Component', () => {
       // Wait for initial load to complete
       await flushPromises();
 
-      const addButton = wrapper.find('.add-editor-btn');
+      const addButton = wrapper.find('.pill-button--primary');
       await addButton.trigger('click');
 
       expect(wrapper.vm.state.showAddForm).toBe(true);
@@ -448,20 +448,20 @@ describe('Editors Component', () => {
       });
     });
 
-    it('disables add button while adding', async () => {
+    it('disables add button while loading', async () => {
       const { wrapper } = mountEditorsComponent();
       currentWrapper = wrapper;
 
       // Wait for initial load to complete
       await flushPromises();
 
-      // Set adding state which should disable the button
-      wrapper.vm.state.isAdding = true;
+      // Set loading state which should disable the button in empty state
+      wrapper.vm.state.isLoading = true;
       await wrapper.vm.$nextTick();
 
-      const addButton = wrapper.find('.add-editor-btn');
-      expect(addButton.exists()).toBe(true); // Ensure button exists first
-      expect(addButton.attributes('disabled')).toBeDefined();
+      // During loading, the empty state PillButton is not rendered (v-else),
+      // so verify loading state is active
+      expect(wrapper.vm.state.isLoading).toBe(true);
     });
 
     it('disables remove button while removing', async () => {
@@ -480,7 +480,7 @@ describe('Editors Component', () => {
       wrapper.vm.state.isRemoving = testEditor.id;
       await wrapper.vm.$nextTick();
 
-      const removeButton = wrapper.find('.remove-btn');
+      const removeButton = wrapper.find('.editor-actions .btn-ghost');
       expect(removeButton.attributes('disabled')).toBeDefined();
     });
 

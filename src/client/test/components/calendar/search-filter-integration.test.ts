@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { nextTick } from 'vue';
+import { flushPromises } from '@vue/test-utils';
 import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { RouteRecordRaw } from 'vue-router';
 import sinon from 'sinon';
@@ -92,10 +93,10 @@ describe('SearchFilter Integration Tests', () => {
 
       // Wait for categories to load
       await vi.waitFor(() => {
-        return wrapper.findAll('.category-option').length > 0;
+        return wrapper.findAll('.toggle-chip').length > 0;
       }, { timeout: 1000 });
 
-      const selectedCategories = wrapper.findAll('.category-option.selected');
+      const selectedCategories = wrapper.findAll('.toggle-chip--selected');
       expect(selectedCategories.length).toBe(2);
     });
 
@@ -113,10 +114,10 @@ describe('SearchFilter Integration Tests', () => {
 
       // Wait for categories to load
       await vi.waitFor(() => {
-        return wrapper.findAll('.category-option').length > 0;
+        return wrapper.findAll('.toggle-chip').length > 0;
       }, { timeout: 1000 });
 
-      const selectedCategories = wrapper.findAll('.category-option.selected');
+      const selectedCategories = wrapper.findAll('.toggle-chip--selected');
       expect(selectedCategories.length).toBe(1);
     });
   });
@@ -143,14 +144,16 @@ describe('SearchFilter Integration Tests', () => {
     it('should emit filtersChanged event with categories when category selected', async () => {
       const wrapper = createWrapper();
 
+      // Flush all pending promises (category loading) and allow render
+      await flushPromises();
       await nextTick();
 
-      // Wait for categories to load
+      // Wait for categories to load - use toggle-chip class from ToggleChip component
       await vi.waitFor(() => {
-        return wrapper.findAll('.category-option').length > 0;
-      }, { timeout: 1000 });
+        return wrapper.findAll('.toggle-chip').length > 0;
+      }, { timeout: 2000 });
 
-      const firstCategory = wrapper.findAll('.category-option')[0];
+      const firstCategory = wrapper.findAll('.toggle-chip')[0];
       await firstCategory.trigger('click');
 
       const emitted = wrapper.emitted('filtersChanged');
@@ -174,11 +177,11 @@ describe('SearchFilter Integration Tests', () => {
 
       // Wait for categories to load
       await vi.waitFor(() => {
-        return wrapper.findAll('.category-option').length > 0;
+        return wrapper.findAll('.toggle-chip').length > 0;
       }, { timeout: 1000 });
 
       // Select category
-      const firstCategory = wrapper.findAll('.category-option')[0];
+      const firstCategory = wrapper.findAll('.toggle-chip')[0];
       await firstCategory.trigger('click');
 
       const emitted = wrapper.emitted('filtersChanged');
@@ -253,12 +256,12 @@ describe('SearchFilter Integration Tests', () => {
       await nextTick();
       await vi.waitFor(() => wrapper.vm);
 
-      // Wait for clear button to appear
+      // Wait for clear button to appear (PillButton ghost inside clear-filters-section)
       await vi.waitFor(() => {
-        return wrapper.find('.clear-all-filters').exists();
+        return wrapper.find('.clear-filters-section .pill-button--ghost').exists();
       }, { timeout: 1000 });
 
-      const clearButton = wrapper.find('.clear-all-filters');
+      const clearButton = wrapper.find('.clear-filters-section .pill-button--ghost');
       await clearButton.trigger('click');
 
       const emitted = wrapper.emitted('filtersChanged');

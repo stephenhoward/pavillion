@@ -1,23 +1,26 @@
 .settings {
-    .form-group {
-        display: grid;
-        grid-template-columns: 1fr 3fr;
-        column-gap: var(--pav-space-md);
-        align-items: center;
-        margin-bottom: var(--pav-space-md);
-        label {
-            background:none;
-            grid-column: 0 / 1;
-        }
-        input {
-            border: 1px solid var(--pav-border-color-medium);
-            border-radius: var(--pav-border-radius-md);
-            background-color: var(--pav-color-darken);
-            padding: var(--pav-space-sm) var(--pav-space-md);
-        }
-        button {
-            padding: var(--pav-space-0) var(--pav-space-sm);
-            font-size: var(--pav-font-size-xs);
-        }
+  .form-group {
+    display: grid;
+    grid-template-columns: 1fr 3fr;
+    column-gap: var(--pav-space-4);
+    align-items: center;
+    margin-bottom: var(--pav-space-4);
+
+    label {
+      background: none;
+      grid-column: 0 / 1;
     }
+
+    input {
+      border: 1px solid var(--pav-border-color-light);
+      border-radius: var(--pav-border-radius-md);
+      background-color: var(--pav-color-surface-primary);
+      padding: var(--pav-space-2) var(--pav-space-4);
+    }
+
+    button {
+      padding: var(--pav-space-0) var(--pav-space-2);
+      font-size: var(--pav-font-size-xs);
+    }
+  }
 }

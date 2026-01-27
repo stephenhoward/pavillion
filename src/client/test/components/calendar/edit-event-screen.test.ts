@@ -69,6 +69,22 @@ vi.mock('@/client/service/category', () => ({
   })),
 }));
 
+// Mock the LocationService
+vi.mock('@/client/service/location', () => ({
+  default: vi.fn().mockImplementation(() => ({
+    getLocations: vi.fn().mockResolvedValue([]),
+    createLocation: vi.fn().mockResolvedValue({}),
+  })),
+}));
+
+// Mock the ModelService
+const mockGetModel = vi.fn().mockResolvedValue(null);
+vi.mock('@/client/service/models', () => ({
+  default: {
+    getModel: (...args: any[]) => mockGetModel(...args),
+  },
+}));
+
 // Mock i18next-vue
 vi.mock('i18next-vue', () => ({
   default: {
@@ -185,13 +201,18 @@ describe('EditEventView - Component Refactoring', () => {
     it('should initialize a new event in create mode', async () => {
       const wrapper = await mountEditEventView('/event');
 
-      // The form should be visible for creating a new event
-      const form = wrapper.find('form');
-      expect(form.exists()).toBe(true);
+      // Wait for async initialization to complete (onBeforeMount loads calendars, fetches locations)
+      await flushPromises();
+      await nextTick();
+      await nextTick();
 
       // Should have the event-editor-page container
       const pageContainer = wrapper.find('.event-editor-page');
       expect(pageContainer.exists()).toBe(true);
+
+      // The form should be visible for creating a new event (inside main with v-else-if="state.event")
+      const form = wrapper.find('form');
+      expect(form.exists()).toBe(true);
     });
   });
 
@@ -199,17 +220,14 @@ describe('EditEventView - Component Refactoring', () => {
     it('should detect edit mode when eventId param is present', async () => {
       const testEventId = '123e4567-e89b-12d3-a456-426614174000';
 
-      // Mock the fetch for loading event in edit mode
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({
-          id: testEventId,
-          calendarId: 'calendar-123',
-          schedules: [],
-          contents: [{ language: 'en', name: 'Test Event', description: 'Test' }],
-          location: {},
-          categories: [],
-        }),
+      // Mock ModelService.getModel for loading event in edit mode
+      mockGetModel.mockResolvedValueOnce({
+        id: testEventId,
+        calendarId: 'calendar-123',
+        schedules: [],
+        contents: [{ language: 'en', name: 'Test Event', description: 'Test' }],
+        location: {},
+        categories: [],
       });
 
       await mountEditEventView(`/event/${testEventId}`, { eventId: testEventId });
@@ -223,17 +241,14 @@ describe('EditEventView - Component Refactoring', () => {
     it('should detect duplicate mode when from query param is present', async () => {
       const sourceEventId = '123e4567-e89b-12d3-a456-426614174000';
 
-      // Mock the fetch for loading source event
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({
-          id: sourceEventId,
-          calendarId: 'calendar-123',
-          schedules: [],
-          contents: [{ language: 'en', name: 'Test Event', description: 'Test' }],
-          location: {},
-          categories: [],
-        }),
+      // Mock ModelService.getModel for loading source event
+      mockGetModel.mockResolvedValueOnce({
+        id: sourceEventId,
+        calendarId: 'calendar-123',
+        schedules: [],
+        contents: [{ language: 'en', name: 'Test Event', description: 'Test' }],
+        location: {},
+        categories: [],
       });
 
       const wrapper = await mountEditEventView(`/event?from=${sourceEventId}`);
@@ -284,6 +299,11 @@ describe('EditEventView - Component Refactoring', () => {
 
     it('should have proper full-page container styling', async () => {
       const wrapper = await mountEditEventView('/event');
+
+      // Wait for async initialization to complete
+      await flushPromises();
+      await nextTick();
+      await nextTick();
 
       // Should have the main page container class
       const container = wrapper.find('.event-editor-page');

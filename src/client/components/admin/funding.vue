@@ -24,6 +24,9 @@ const saving = ref(false);
 const successMessage = ref('');
 const errorMessage = ref('');
 
+// Sub-tab state
+const activeSubTab = ref<'subscriptions' | 'settings'>('subscriptions');
+
 // Settings form state
 const enabled = ref(false);
 const monthlyPrice = ref(10.00);
@@ -427,223 +430,437 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="funding-settings" aria-labelledby="funding-heading">
-    <h1 id="funding-heading">{{ t("title") }}</h1>
-
-    <div role="status" aria-live="polite">
-      <div v-if="successMessage" class="success-message">{{ successMessage }}</div>
-      <div v-if="errorMessage" class="error-message">{{ errorMessage }}</div>
+  <section class="funding-page" aria-labelledby="funding-heading">
+    <!-- Page Header -->
+    <div class="page-header">
+      <div class="page-header-text">
+        <h1 id="funding-heading">{{ t("title") }}</h1>
+        <p class="page-subtitle">{{ t("settings_section_title") }}</p>
+      </div>
     </div>
 
-    <div v-if="loading" class="loading">{{ t("loading") }}</div>
+    <!-- Status Messages -->
+    <div role="status" aria-live="polite">
+      <div v-if="successMessage" class="alert alert--success">
+        <svg class="alert-icon"
+             width="20"
+             height="20"
+             viewBox="0 0 20 20"
+             fill="currentColor">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+        </svg>
+        {{ successMessage }}
+      </div>
+      <div v-if="errorMessage" class="alert alert--error">
+        <svg class="alert-icon"
+             width="20"
+             height="20"
+             viewBox="0 0 24 24"
+             fill="none"
+             stroke="currentColor"
+             stroke-width="2">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12"
+                y1="8"
+                x2="12"
+                y2="12" />
+          <line x1="12"
+                y1="16"
+                x2="12.01"
+                y2="16" />
+        </svg>
+        {{ errorMessage }}
+      </div>
+    </div>
 
-    <div v-else class="settings-content">
-      <!-- Subscription Settings Form -->
-      <form class="settings-form" @submit.prevent="updateSettings">
-        <h2>{{ t("settings_section_title") }}</h2>
+    <div v-if="loading" class="loading-state">{{ t("loading") }}</div>
 
-        <div class="form-group">
-          <label class="form-label">
-            <input type="checkbox"
-                   v-model="enabled"
-                   :disabled="saving"
-                   @change="toggleEnabled" />
-            {{ t("enabled_label") }}
-          </label>
-          <div class="description">{{ t("enabled_description") }}</div>
-        </div>
-
-        <!-- Show provider setup message when enabled but no providers configured -->
-        <div v-if="enabled && !hasConfiguredProvider" class="info-message">
-          {{ t("setup_provider_message") }}
-        </div>
-
-        <!-- Only show pricing configuration when enabled AND at least one provider is configured -->
-        <template v-if="enabled && hasConfiguredProvider">
-          <div class="form-group">
-            <label class="form-label">{{ t("currency_label") }}</label>
-            <div class="form-field">
-              <select v-model="currency" :disabled="saving">
-                <option v-for="curr in currencyOptions" :key="curr.value" :value="curr.value">
-                  {{ curr.label }}
-                </option>
-              </select>
-              <div class="description">{{ t("currency_description") }}</div>
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">{{ t("monthly_price_label") }}</label>
-            <div class="form-field">
-              <input
-                type="number"
-                v-model.number="monthlyPrice"
-                step="0.01"
-                min="0"
-                :disabled="saving"
-              />
-              <div class="description">{{ t("monthly_price_description") }}</div>
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">{{ t("yearly_price_label") }}</label>
-            <div class="form-field">
-              <input
-                type="number"
-                v-model.number="yearlyPrice"
-                step="0.01"
-                min="0"
-                :disabled="saving"
-              />
-              <div class="description">{{ t("yearly_price_description") }}</div>
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">
-              <input type="checkbox" v-model="payWhatYouCan" :disabled="saving" />
-              {{ t("pwyc_label") }}
-            </label>
-            <div class="description">{{ t("pwyc_description") }}</div>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">{{ t("grace_period_label") }}</label>
-            <div class="form-field">
-              <input
-                type="number"
-                v-model.number="gracePeriodDays"
-                min="0"
-                :disabled="saving"
-              />
-              <div class="description">{{ t("grace_period_description") }}</div>
-            </div>
-          </div>
-
-          <button type="submit" class="primary" :disabled="saving">
-            {{ t("save_settings_button") }}
-          </button>
-        </template>
-      </form>
-
-      <!-- Payment Providers Section - only show when enabled -->
-      <section v-if="enabled" class="providers-section">
-        <div class="section-header-with-action">
-          <h2>{{ t("providers_section_title") }}</h2>
+    <template v-else>
+      <!-- Sub-Tab Navigation -->
+      <div class="subtab-border">
+        <nav role="tablist" aria-label="Funding sections" class="subtab-nav">
           <button
             type="button"
-            class="primary add-provider-button"
-            @click="openAddProviderWizard"
-            :disabled="allProvidersConfigured"
-            :title="allProvidersConfigured ? t('add_provider_tooltip_disabled') : ''"
+            role="tab"
+            :aria-selected="activeSubTab === 'subscriptions' ? 'true' : 'false'"
+            aria-controls="subscriptions-panel"
+            class="subtab"
+            :class="{ 'subtab--active': activeSubTab === 'subscriptions' }"
+            @click="activeSubTab = 'subscriptions'"
           >
-            {{ t("add_provider_button") }}
+            {{ t("subscriptions_section_title") }}
+            <span
+              v-if="subscriptions.length > 0"
+              class="subtab-badge"
+              :class="{ 'subtab-badge--active': activeSubTab === 'subscriptions' }"
+            >
+              {{ subscriptions.length }}
+            </span>
           </button>
+          <button
+            type="button"
+            role="tab"
+            :aria-selected="activeSubTab === 'settings' ? 'true' : 'false'"
+            aria-controls="settings-panel"
+            class="subtab"
+            :class="{ 'subtab--active': activeSubTab === 'settings' }"
+            @click="activeSubTab = 'settings'"
+          >
+            {{ t("settings_section_title") }}
+          </button>
+        </nav>
+      </div>
+
+      <!-- Subscriptions Tab Panel -->
+      <section
+        id="subscriptions-panel"
+        role="tabpanel"
+        :aria-hidden="activeSubTab !== 'subscriptions' ? 'true' : 'false'"
+        :hidden="activeSubTab !== 'subscriptions'"
+        class="tab-panel"
+      >
+        <!-- Empty state -->
+        <div v-if="subscriptions.length === 0" class="empty-card">
+          <svg class="empty-icon"
+               width="48"
+               height="48"
+               viewBox="0 0 24 24"
+               fill="none"
+               stroke="currentColor"
+               stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+          </svg>
+          <p class="empty-title">{{ t("no_subscriptions") }}</p>
+          <p class="empty-description">Subscriptions will appear here when users subscribe to your instance</p>
         </div>
 
-        <div v-if="providersLoading" class="loading">{{ t("loading_providers") }}</div>
-
-        <div v-else class="providers-list">
-          <div v-for="provider in configuredProviders" :key="provider.provider_type" class="provider-item">
-            <div class="provider-info">
-              <h3>
-                {{ provider.display_name }}
-                <span class="connected-badge">
-                  {{ t("connected_badge") }}
-                </span>
-              </h3>
-              <span class="provider-type">{{ provider.provider_type }}</span>
-            </div>
-
-            <div class="provider-actions">
-              <label class="toggle-label">
-                <input
-                  type="checkbox"
-                  :checked="provider.enabled"
-                  @change="toggleProvider(provider)"
-                />
-                {{ t("provider_enabled_label") }}
-              </label>
-              <button
-                type="button"
-                class="secondary"
-                @click="disconnectProvider(provider.provider_type)"
-              >
-                {{ t("disconnect_button") }}
-              </button>
-            </div>
+        <!-- Subscriptions list -->
+        <div v-else class="subscriptions-card">
+          <!-- Desktop Table -->
+          <div class="subscriptions-table-desktop">
+            <table class="subscriptions-table" role="table" aria-label="Subscriptions">
+              <thead>
+                <tr>
+                  <th scope="col">{{ t("subscription_user_column") }}</th>
+                  <th scope="col">{{ t("subscription_amount_column") }}</th>
+                  <th scope="col">{{ t("subscription_cycle_column") }}</th>
+                  <th scope="col">{{ t("subscription_status_column") }}</th>
+                  <th scope="col">{{ t("subscription_period_column") }}</th>
+                  <th scope="col" class="col-actions">{{ t("subscription_actions_column") }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="sub in subscriptions" :key="sub.id">
+                  <td class="cell-user">{{ sub.account_email }}</td>
+                  <td class="cell-amount">{{ formatAmount(sub.amount, sub.currency) }}</td>
+                  <td class="cell-cycle">{{ t(`billing_cycle_${sub.billing_cycle}`) }}</td>
+                  <td class="cell-status">
+                    <span
+                      class="status-badge"
+                      :class="`status-badge--${sub.status}`"
+                    >
+                      {{ t(`status_${sub.status}`) }}
+                    </span>
+                  </td>
+                  <td class="cell-date">{{ formatDate(sub.current_period_end) }}</td>
+                  <td class="cell-actions">
+                    <button
+                      v-if="sub.status === 'active'"
+                      type="button"
+                      class="action-link action-link--danger"
+                      @click="forceCancelSubscription(sub.id)"
+                    >
+                      {{ t("force_cancel_button") }}
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
 
-          <div v-if="configuredProviders.length === 0" class="no-providers">
-            {{ t("no_providers") }}
-          </div>
-        </div>
-      </section>
-
-      <!-- Subscriptions List Section -->
-      <section v-if="enabled" class="subscriptions-section">
-        <h2>{{ t("subscriptions_section_title") }}</h2>
-
-        <div v-if="subscriptions.length === 0" class="no-subscriptions">
-          {{ t("no_subscriptions") }}
-        </div>
-
-        <table v-else class="subscriptions-table">
-          <thead>
-            <tr>
-              <th>{{ t("subscription_user_column") }}</th>
-              <th>{{ t("subscription_provider_column") }}</th>
-              <th>{{ t("subscription_amount_column") }}</th>
-              <th>{{ t("subscription_cycle_column") }}</th>
-              <th>{{ t("subscription_status_column") }}</th>
-              <th>{{ t("subscription_period_column") }}</th>
-              <th>{{ t("subscription_actions_column") }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="sub in subscriptions" :key="sub.id">
-              <td>{{ sub.account_email }}</td>
-              <td>{{ getProviderName(sub.provider_type) }}</td>
-              <td>{{ formatAmount(sub.amount, sub.currency) }}</td>
-              <td>{{ t(`billing_cycle_${sub.billing_cycle}`) }}</td>
-              <td>
-                <span :class="`status-badge status-${sub.status}`">
+          <!-- Mobile Cards -->
+          <div class="subscriptions-mobile">
+            <div v-for="sub in subscriptions" :key="sub.id" class="subscription-card">
+              <div class="subscription-card-header">
+                <div class="subscription-card-info">
+                  <p class="subscription-card-email">{{ sub.account_email }}</p>
+                  <p class="subscription-card-amount">
+                    <span class="amount-value">{{ formatAmount(sub.amount, sub.currency) }}</span>
+                    / {{ t(`billing_cycle_${sub.billing_cycle}`) }}
+                  </p>
+                </div>
+                <span
+                  class="status-badge"
+                  :class="`status-badge--${sub.status}`"
+                >
                   {{ t(`status_${sub.status}`) }}
                 </span>
-              </td>
-              <td>{{ formatDate(sub.current_period_end) }}</td>
-              <td>
+              </div>
+              <div class="subscription-card-footer">
+                <p class="subscription-card-period">
+                  Period ends {{ formatDate(sub.current_period_end) }}
+                </p>
                 <button
                   v-if="sub.status === 'active'"
                   type="button"
-                  class="danger-small"
+                  class="action-link-mobile action-link--danger"
                   @click="forceCancelSubscription(sub.id)"
                 >
                   {{ t("force_cancel_button") }}
                 </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+              </div>
+            </div>
+          </div>
 
-        <div v-if="subscriptionsTotal > subscriptionsLimit" class="pagination">
-          <button
-            :disabled="subscriptionsPage === 1"
-            @click="subscriptionsPage--; loadSubscriptions()"
-          >
-            {{ t("previous_page") }}
-          </button>
-          <span>{{ t("page_indicator", { page: subscriptionsPage, total: Math.ceil(subscriptionsTotal / subscriptionsLimit) }) }}</span>
-          <button
-            :disabled="subscriptionsPage * subscriptionsLimit >= subscriptionsTotal"
-            @click="subscriptionsPage++; loadSubscriptions()"
-          >
-            {{ t("next_page") }}
-          </button>
+          <!-- Pagination -->
+          <div v-if="subscriptionsTotal > subscriptionsLimit" class="pagination">
+            <p class="pagination-info">
+              {{ t("page_indicator", { page: subscriptionsPage, total: Math.ceil(subscriptionsTotal / subscriptionsLimit) }) }}
+            </p>
+            <div class="pagination-buttons">
+              <button
+                class="pagination-btn"
+                :disabled="subscriptionsPage === 1"
+                @click="subscriptionsPage--; loadSubscriptions()"
+              >
+                {{ t("previous_page") }}
+              </button>
+              <button
+                class="pagination-btn"
+                :disabled="subscriptionsPage * subscriptionsLimit >= subscriptionsTotal"
+                @click="subscriptionsPage++; loadSubscriptions()"
+              >
+                {{ t("next_page") }}
+              </button>
+            </div>
+          </div>
         </div>
       </section>
-    </div>
+
+      <!-- Settings Tab Panel -->
+      <section
+        id="settings-panel"
+        role="tabpanel"
+        :aria-hidden="activeSubTab !== 'settings' ? 'true' : 'false'"
+        :hidden="activeSubTab !== 'settings'"
+        class="tab-panel"
+      >
+        <div class="settings-content">
+          <!-- Enable Subscriptions Toggle Card -->
+          <div class="settings-card">
+            <label class="toggle-row">
+              <input
+                type="checkbox"
+                v-model="enabled"
+                :disabled="saving"
+                class="toggle-checkbox"
+                @change="toggleEnabled"
+              />
+              <div class="toggle-text">
+                <span class="toggle-label">{{ t("enabled_label") }}</span>
+                <p class="toggle-description">{{ t("enabled_description") }}</p>
+              </div>
+            </label>
+          </div>
+
+          <!-- Show provider setup message when enabled but no providers configured -->
+          <div v-if="enabled && !hasConfiguredProvider" class="alert alert--warning">
+            <svg class="alert-icon"
+                 width="20"
+                 height="20"
+                 viewBox="0 0 24 24"
+                 fill="none"
+                 stroke="currentColor"
+                 stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div>
+              <p class="alert-title">{{ t("setup_provider_message") }}</p>
+              <p class="alert-description">Add a payment provider below to start accepting subscriptions.</p>
+            </div>
+          </div>
+
+          <!-- Payment Providers Section - only show when enabled -->
+          <section v-if="enabled" class="providers-card">
+            <div class="card-header">
+              <h2 class="card-title">{{ t("providers_section_title") }}</h2>
+              <button
+                type="button"
+                class="btn-text-orange"
+                @click="openAddProviderWizard"
+                :disabled="allProvidersConfigured"
+                :title="allProvidersConfigured ? t('add_provider_tooltip_disabled') : ''"
+              >
+                <svg width="20"
+                     height="20"
+                     viewBox="0 0 24 24"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="2"
+                     stroke-linecap="round"
+                     stroke-linejoin="round">
+                  <path d="M12 4v16m8-8H4" />
+                </svg>
+                {{ t("add_provider_button") }}
+              </button>
+            </div>
+
+            <div v-if="providersLoading" class="loading-state loading-state--card">{{ t("loading_providers") }}</div>
+
+            <template v-else>
+              <!-- Empty providers -->
+              <div v-if="configuredProviders.length === 0" class="empty-card-inline">
+                <svg class="empty-icon-small"
+                     width="48"
+                     height="48"
+                     viewBox="0 0 24 24"
+                     fill="none"
+                     stroke="currentColor"
+                     stroke-width="1.5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                </svg>
+                <p class="empty-title">{{ t("no_providers") }}</p>
+                <button type="button" class="btn-text-orange" @click="openAddProviderWizard">
+                  <svg width="20"
+                       height="20"
+                       viewBox="0 0 24 24"
+                       fill="none"
+                       stroke="currentColor"
+                       stroke-width="2"
+                       stroke-linecap="round"
+                       stroke-linejoin="round">
+                    <path d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add your first provider
+                </button>
+              </div>
+
+              <!-- Provider items -->
+              <div v-else class="providers-list">
+                <div v-for="provider in configuredProviders" :key="provider.provider_type" class="provider-item">
+                  <div class="provider-info">
+                    <div class="provider-name-row">
+                      <h3 class="provider-name">{{ provider.display_name }}</h3>
+                      <span class="connected-badge">{{ t("connected_badge") }}</span>
+                    </div>
+                    <span class="provider-type">{{ provider.provider_type }}</span>
+                  </div>
+                  <div class="provider-actions">
+                    <label class="toggle-inline">
+                      <input
+                        type="checkbox"
+                        :checked="provider.enabled"
+                        @change="toggleProvider(provider)"
+                      />
+                      <span class="toggle-inline-label">{{ t("provider_enabled_label") }}</span>
+                    </label>
+                    <button
+                      type="button"
+                      class="action-link action-link--danger"
+                      @click="disconnectProvider(provider.provider_type)"
+                    >
+                      {{ t("disconnect_button") }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </section>
+
+          <!-- Subscription Pricing Section - only show when enabled AND provider configured -->
+          <template v-if="enabled && hasConfiguredProvider">
+            <section class="pricing-card">
+              <div class="card-header card-header--border-only">
+                <h2 class="card-title">Subscription Pricing</h2>
+              </div>
+
+              <form class="pricing-form" @submit.prevent="updateSettings">
+                <div class="pricing-grid">
+                  <!-- Currency -->
+                  <div class="form-group">
+                    <label class="form-label" for="funding-currency">{{ t("currency_label") }}</label>
+                    <select
+                      id="funding-currency"
+                      v-model="currency"
+                      :disabled="saving"
+                      class="form-select"
+                    >
+                      <option v-for="curr in currencyOptions" :key="curr.value" :value="curr.value">
+                        {{ curr.label }}
+                      </option>
+                    </select>
+                  </div>
+
+                  <!-- Monthly Price -->
+                  <div class="form-group">
+                    <label class="form-label" for="funding-monthly">{{ t("monthly_price_label") }}</label>
+                    <input
+                      id="funding-monthly"
+                      type="number"
+                      v-model.number="monthlyPrice"
+                      step="0.01"
+                      min="0"
+                      :disabled="saving"
+                      class="form-input"
+                    />
+                    <p class="form-hint">{{ t("monthly_price_description") }}</p>
+                  </div>
+
+                  <!-- Yearly Price -->
+                  <div class="form-group">
+                    <label class="form-label" for="funding-yearly">{{ t("yearly_price_label") }}</label>
+                    <input
+                      id="funding-yearly"
+                      type="number"
+                      v-model.number="yearlyPrice"
+                      step="0.01"
+                      min="0"
+                      :disabled="saving"
+                      class="form-input"
+                    />
+                    <p class="form-hint">{{ t("yearly_price_description") }}</p>
+                  </div>
+                </div>
+
+                <div class="pricing-options">
+                  <!-- Pay What You Can -->
+                  <label class="toggle-row toggle-row--compact">
+                    <input type="checkbox"
+                           v-model="payWhatYouCan"
+                           :disabled="saving"
+                           class="toggle-checkbox" />
+                    <div class="toggle-text">
+                      <span class="toggle-label">{{ t("pwyc_label") }}</span>
+                      <p class="toggle-description">{{ t("pwyc_description") }}</p>
+                    </div>
+                  </label>
+
+                  <!-- Grace Period -->
+                  <div class="form-group form-group--inline">
+                    <label class="form-label" for="funding-grace">{{ t("grace_period_label") }}</label>
+                    <input
+                      id="funding-grace"
+                      type="number"
+                      v-model.number="gracePeriodDays"
+                      min="0"
+                      :disabled="saving"
+                      class="form-input form-input--narrow"
+                    />
+                    <p class="form-hint">{{ t("grace_period_description") }}</p>
+                  </div>
+                </div>
+
+                <div class="pricing-actions">
+                  <button type="submit" class="btn-primary" :disabled="saving">
+                    {{ t("save_settings_button") }}
+                  </button>
+                </div>
+              </form>
+            </section>
+          </template>
+        </div>
+      </section>
+    </template>
 
     <!-- PayPal Configuration Modal -->
     <PayPalConfigModal
@@ -671,337 +888,976 @@ onMounted(async () => {
 </template>
 
 <style scoped lang="scss">
-@use '../../assets/mixins' as *;
+@use '../../assets/style/tokens/breakpoints' as *;
 
-.funding-settings {
-  padding: 20px;
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-h1 {
-  font-weight: 200;
-  font-size: 2rem;
-  margin-bottom: 1.5rem;
-}
-
-h2 {
-  font-weight: 200;
-  font-size: 1.5rem;
-  margin-bottom: 1rem;
-  margin-top: 2rem;
-}
-
-.loading {
-  padding: 2rem;
-  text-align: center;
-  color: $light-mode-secondary-text;
-
-  @media (prefers-color-scheme: dark) {
-    color: $dark-mode-secondary-text;
-  }
-}
-
-.success-message {
-  margin-bottom: 1.5rem;
-  padding: 0.75rem;
-  background-color: #f0fff0;
-  border: 1px solid #73d873;
-  color: #2a7d2a;
-  border-radius: 4px;
-}
-
-.error-message {
-  margin-bottom: 1.5rem;
-  padding: 0.75rem;
-  background-color: #fff0f0;
-  border: 1px solid #d87373;
-  color: #7d2a2a;
-  border-radius: 4px;
-}
-
-.info-message {
-  margin-bottom: 1.5rem;
-  padding: 0.75rem;
-  background-color: #f0f8ff;
-  border: 1px solid #73a9d8;
-  color: #2a5a7d;
-  border-radius: 4px;
-
-  @media (prefers-color-scheme: dark) {
-    background-color: #1a3a4a;
-    border-color: #4a7a9a;
-    color: #a0c8e8;
-  }
-}
-
-.settings-content {
+.funding-page {
   display: flex;
   flex-direction: column;
-  gap: 2rem;
-}
+  gap: var(--pav-space-6);
 
-.settings-form {
-  .form-group {
-    margin-bottom: 1.5rem;
+  /* Page Header */
+  .page-header {
+    display: flex;
+    flex-direction: column;
+    gap: var(--pav-space-4);
 
-    .form-label {
-      display: block;
-      font-weight: 500;
-      margin-bottom: 0.5rem;
-      color: $light-mode-text;
-
-      @media (prefers-color-scheme: dark) {
-        color: $dark-mode-text;
-      }
-
-      input[type="checkbox"] {
-        margin-right: 0.5rem;
-      }
+    @include pav-media(sm) {
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
     }
 
-    .form-field {
-      input, select {
-        width: 100%;
-        max-width: 400px;
-        padding: 0.5rem;
-        border: 1px solid $light-mode-border;
-        border-radius: $component-border-radius;
-        background: $light-mode-panel-background;
-        color: $light-mode-text;
+    .page-header-text {
+      h1 {
+        margin: 0 0 var(--pav-space-1) 0;
+        font-size: var(--pav-font-size-2xl);
+        font-weight: var(--pav-font-weight-light);
+        color: var(--pav-color-text-primary);
+      }
 
-        @media (prefers-color-scheme: dark) {
-          border-color: $dark-mode-border;
-          background: $dark-mode-input-background;
-          color: $dark-mode-input-text;
+      .page-subtitle {
+        margin: 0;
+        font-size: var(--pav-font-size-xs);
+        color: var(--pav-color-text-muted);
+      }
+    }
+  }
+
+  /* Alerts */
+  .alert {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--pav-space-3);
+    padding: var(--pav-space-3) var(--pav-space-4);
+    border-radius: var(--pav-border-radius-lg);
+    font-size: var(--pav-font-size-xs);
+
+    .alert-icon {
+      flex-shrink: 0;
+      margin-top: var(--pav-space-0_5);
+    }
+
+    .alert-title {
+      margin: 0;
+      font-weight: var(--pav-font-weight-medium);
+    }
+
+    .alert-description {
+      margin: var(--pav-space-1) 0 0;
+      font-size: var(--pav-font-size-xs);
+    }
+
+    &--success {
+      background: var(--pav-color-emerald-50);
+      border: 1px solid var(--pav-color-emerald-200);
+      color: var(--pav-color-emerald-700);
+    }
+
+    &--error {
+      background: var(--pav-color-red-50);
+      border: 1px solid var(--pav-color-red-200);
+      color: var(--pav-color-red-700);
+    }
+
+    &--warning {
+      background: var(--pav-color-amber-50);
+      border: 1px solid var(--pav-color-amber-200);
+      color: var(--pav-color-amber-800);
+    }
+  }
+
+  /* Loading */
+  .loading-state {
+    padding: var(--pav-space-12);
+    text-align: center;
+    color: var(--pav-color-text-muted);
+
+    &--card {
+      padding: var(--pav-space-8);
+    }
+  }
+
+  /* Sub-Tab Navigation */
+  .subtab-border {
+    border-bottom: 1px solid var(--pav-border-color-light);
+    margin: 0 calc(-1 * var(--pav-space-4));
+    padding: 0 var(--pav-space-4);
+
+    @include pav-media(md) {
+      margin: 0;
+      padding: 0;
+    }
+
+    .subtab-nav {
+      display: flex;
+      gap: var(--pav-space-4);
+      overflow-x: auto;
+
+      @include pav-media(sm) {
+        gap: var(--pav-space-6);
+      }
+
+      .subtab {
+        padding-bottom: var(--pav-space-3);
+        font-size: var(--pav-font-size-xs);
+        font-weight: var(--pav-font-weight-medium);
+        font-family: inherit;
+        border: none;
+        border-bottom: 2px solid transparent;
+        background: none;
+        color: var(--pav-color-text-muted);
+        cursor: pointer;
+        white-space: nowrap;
+        flex-shrink: 0;
+        transition: color 0.2s ease, border-color 0.2s ease;
+
+        &:hover {
+          color: var(--pav-color-text-secondary);
+        }
+
+        &--active {
+          border-bottom-color: var(--pav-color-orange-500);
+          color: var(--pav-color-orange-600);
+        }
+
+        .subtab-badge {
+          margin-left: var(--pav-space-2);
+          padding: var(--pav-space-0_5) var(--pav-space-2);
+          border-radius: var(--pav-border-radius-full);
+          font-size: var(--pav-font-size-2xs);
+          background: var(--pav-color-stone-100);
+          color: var(--pav-color-text-muted);
+
+          &--active {
+            background: var(--pav-color-orange-100);
+            color: var(--pav-color-orange-600);
+          }
+        }
+      }
+    }
+  }
+
+  .tab-panel {
+    outline: none;
+  }
+
+  /* Empty States */
+  .empty-card {
+    background: var(--pav-color-surface-primary);
+    border-radius: var(--pav-border-radius-xl);
+    border: 1px solid var(--pav-border-color-light);
+    padding: var(--pav-space-12);
+    text-align: center;
+
+    .empty-icon {
+      color: var(--pav-color-stone-300);
+      margin: 0 auto var(--pav-space-4);
+      display: block;
+    }
+
+    .empty-title {
+      margin: 0;
+      color: var(--pav-color-text-muted);
+    }
+
+    .empty-description {
+      margin: var(--pav-space-1) 0 0;
+      font-size: var(--pav-font-size-xs);
+      color: var(--pav-color-stone-400);
+    }
+  }
+
+  .empty-card-inline {
+    padding: var(--pav-space-12);
+    text-align: center;
+
+    .empty-icon-small {
+      color: var(--pav-color-stone-300);
+      margin: 0 auto var(--pav-space-4);
+      display: block;
+    }
+
+    .empty-title {
+      margin: 0 0 var(--pav-space-4);
+      color: var(--pav-color-text-muted);
+    }
+  }
+
+  /* Status Badges */
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--pav-space-1) var(--pav-space-2_5);
+    border-radius: var(--pav-border-radius-full);
+    font-size: var(--pav-font-size-2xs);
+    font-weight: var(--pav-font-weight-medium);
+    text-transform: capitalize;
+
+    &--active {
+      background: var(--pav-color-emerald-100);
+      color: var(--pav-color-emerald-700);
+    }
+
+    &--past_due {
+      background: var(--pav-color-amber-100);
+      color: var(--pav-color-amber-700);
+    }
+
+    &--suspended {
+      background: var(--pav-color-red-100);
+      color: var(--pav-color-red-700);
+    }
+
+    &--cancelled {
+      background: var(--pav-color-stone-100);
+      color: var(--pav-color-stone-500);
+    }
+  }
+
+  /* Subscriptions Card (table + mobile) */
+  .subscriptions-card {
+    background: var(--pav-color-surface-primary);
+    border-radius: var(--pav-border-radius-xl);
+    border: 1px solid var(--pav-border-color-light);
+    overflow: hidden;
+
+    .subscriptions-table-desktop {
+      display: none;
+
+      @include pav-media(md) {
+        display: block;
+      }
+
+      .subscriptions-table {
+        width: 100%;
+        border-collapse: collapse;
+
+        thead {
+          tr {
+            border-bottom: 1px solid var(--pav-border-color-light);
+            background: var(--pav-color-stone-50);
+          }
+
+          th {
+            padding: var(--pav-space-3) var(--pav-space-6);
+            text-align: left;
+            font-size: var(--pav-font-size-2xs);
+            font-weight: var(--pav-font-weight-semibold);
+            color: var(--pav-color-text-muted);
+            text-transform: uppercase;
+            letter-spacing: var(--pav-letter-spacing-wider);
+
+            &.col-actions {
+              text-align: right;
+            }
+          }
+        }
+
+        tbody {
+          tr {
+            border-bottom: 1px solid var(--pav-border-color-light);
+            transition: background-color 0.15s ease;
+
+            &:last-child {
+              border-bottom: none;
+            }
+
+            &:hover {
+              background: var(--pav-color-stone-50);
+            }
+          }
+
+          td {
+            padding: var(--pav-space-4) var(--pav-space-6);
+          }
+
+          .cell-user {
+            font-weight: var(--pav-font-weight-medium);
+            color: var(--pav-color-text-primary);
+          }
+
+          .cell-amount {
+            font-weight: var(--pav-font-weight-medium);
+            color: var(--pav-color-text-primary);
+          }
+
+          .cell-cycle {
+            color: var(--pav-color-text-secondary);
+            text-transform: capitalize;
+          }
+
+          .cell-date {
+            color: var(--pav-color-text-secondary);
+            font-size: var(--pav-font-size-xs);
+          }
+
+          .cell-actions {
+            text-align: right;
+          }
         }
       }
     }
 
-    .description {
-      margin-top: 0.5rem;
-      font-size: 0.875rem;
-      color: $light-mode-secondary-text;
+    .subscriptions-mobile {
+      display: block;
 
-      @media (prefers-color-scheme: dark) {
-        color: $dark-mode-secondary-text;
+      @include pav-media(md) {
+        display: none;
+      }
+
+      .subscription-card {
+        padding: var(--pav-space-4);
+        border-bottom: 1px solid var(--pav-border-color-light);
+
+        &:last-child {
+          border-bottom: none;
+        }
+
+        .subscription-card-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: var(--pav-space-3);
+
+          .subscription-card-info {
+            min-width: 0;
+            flex: 1;
+
+            .subscription-card-email {
+              margin: 0;
+              font-weight: var(--pav-font-weight-medium);
+              color: var(--pav-color-text-primary);
+              word-break: break-all;
+            }
+
+            .subscription-card-amount {
+              margin: var(--pav-space-1) 0 0;
+              font-size: var(--pav-font-size-xs);
+              color: var(--pav-color-text-muted);
+
+              .amount-value {
+                font-weight: var(--pav-font-weight-medium);
+                color: var(--pav-color-text-primary);
+              }
+            }
+          }
+        }
+
+        .subscription-card-footer {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: var(--pav-space-3);
+          margin-top: var(--pav-space-3);
+
+          .subscription-card-period {
+            margin: 0;
+            font-size: var(--pav-font-size-xs);
+            color: var(--pav-color-text-muted);
+          }
+        }
       }
     }
   }
 
-  button.primary {
-    margin-top: 1rem;
-  }
-}
-
-.providers-section {
-  .section-header-with-action {
+  /* Pagination */
+  .pagination {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1rem;
+    flex-direction: column;
+    gap: var(--pav-space-3);
+    padding: var(--pav-space-4) var(--pav-space-6);
+    border-top: 1px solid var(--pav-border-color-light);
 
-    h2 {
-      margin: 0;
+    @include pav-media(sm) {
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
     }
 
-    .add-provider-button {
+    .pagination-info {
+      margin: 0;
+      font-size: var(--pav-font-size-xs);
+      color: var(--pav-color-text-muted);
+      text-align: center;
+
+      @include pav-media(sm) {
+        text-align: left;
+      }
+    }
+
+    .pagination-buttons {
+      display: flex;
+      gap: var(--pav-space-2);
+      justify-content: center;
+
+      @include pav-media(sm) {
+        justify-content: flex-end;
+      }
+    }
+
+    .pagination-btn {
+      padding: var(--pav-space-1_5) var(--pav-space-4);
+      border: 1px solid var(--pav-border-color-medium);
+      border-radius: var(--pav-border-radius-full);
+      background: none;
+      font-size: var(--pav-font-size-xs);
+      font-weight: var(--pav-font-weight-medium);
+      font-family: inherit;
+      color: var(--pav-color-text-secondary);
+      cursor: pointer;
+      transition: background-color 0.2s ease, color 0.2s ease;
+
+      &:hover:not(:disabled) {
+        background: var(--pav-color-stone-50);
+      }
+
       &:disabled {
         opacity: 0.5;
         cursor: not-allowed;
       }
+    }
+  }
+
+  /* Action Links */
+  .action-link {
+    background: none;
+    border: none;
+    font-size: var(--pav-font-size-xs);
+    font-weight: var(--pav-font-weight-medium);
+    font-family: inherit;
+    cursor: pointer;
+    padding: 0;
+    transition: color 0.2s ease;
+
+    &--danger {
+      color: var(--pav-color-red-600);
+
+      &:hover {
+        color: var(--pav-color-red-700);
+      }
+    }
+  }
+
+  .action-link-mobile {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    padding: var(--pav-space-1_5) var(--pav-space-3);
+    border-radius: var(--pav-border-radius-full);
+    font-size: var(--pav-font-size-xs);
+    font-weight: var(--pav-font-weight-medium);
+    font-family: inherit;
+    cursor: pointer;
+    transition: color 0.2s ease, background-color 0.2s ease;
+
+    &.action-link--danger {
+      color: var(--pav-color-red-600);
+
+      &:hover {
+        background: var(--pav-color-red-50);
+      }
+    }
+  }
+
+  /* Settings Content */
+  .settings-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--pav-space-6);
+  }
+
+  .settings-card {
+    background: var(--pav-color-surface-primary);
+    border-radius: var(--pav-border-radius-xl);
+    border: 1px solid var(--pav-border-color-light);
+    padding: var(--pav-space-6);
+  }
+
+  /* Toggle Rows */
+  .toggle-row {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--pav-space-3);
+    cursor: pointer;
+
+    &--compact {
+      padding: 0;
+    }
+
+    .toggle-checkbox {
+      width: 1.25rem;
+      height: 1.25rem;
+      margin-top: var(--pav-space-0_5);
+      border-radius: var(--pav-border-radius-xs);
+      border: 1px solid var(--pav-border-color-medium);
+      accent-color: var(--pav-color-orange-500);
+      cursor: pointer;
+    }
+
+    .toggle-text {
+      .toggle-label {
+        display: block;
+        font-weight: var(--pav-font-weight-medium);
+        color: var(--pav-color-text-primary);
+      }
+
+      .toggle-description {
+        margin: var(--pav-space-0_5) 0 0;
+        font-size: var(--pav-font-size-xs);
+        color: var(--pav-color-text-muted);
+      }
+    }
+  }
+
+  .toggle-inline {
+    display: flex;
+    align-items: center;
+    gap: var(--pav-space-2);
+    cursor: pointer;
+
+    input[type="checkbox"] {
+      width: 1rem;
+      height: 1rem;
+      border-radius: var(--pav-border-radius-xs);
+      accent-color: var(--pav-color-orange-500);
+      cursor: pointer;
+    }
+
+    .toggle-inline-label {
+      font-size: var(--pav-font-size-xs);
+      color: var(--pav-color-text-secondary);
+    }
+  }
+
+  /* Provider Card */
+  .providers-card {
+    background: var(--pav-color-surface-primary);
+    border-radius: var(--pav-border-radius-xl);
+    border: 1px solid var(--pav-border-color-light);
+    overflow: hidden;
+  }
+
+  .card-header {
+    display: flex;
+    flex-direction: column;
+    gap: var(--pav-space-3);
+    padding: var(--pav-space-4) var(--pav-space-6);
+    border-bottom: 1px solid var(--pav-border-color-light);
+
+    @include pav-media(sm) {
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    &--border-only {
+      border-bottom: 1px solid var(--pav-border-color-light);
+    }
+
+    .card-title {
+      margin: 0;
+      font-size: var(--pav-font-size-base);
+      font-weight: var(--pav-font-weight-medium);
+      color: var(--pav-color-text-primary);
+    }
+  }
+
+  .btn-text-orange {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--pav-space-2);
+    padding: var(--pav-space-2) var(--pav-space-6);
+    background: none;
+    border: none;
+    border-radius: var(--pav-border-radius-full);
+    font-size: var(--pav-font-size-xs);
+    font-weight: var(--pav-font-weight-medium);
+    font-family: inherit;
+    color: var(--pav-color-orange-600);
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    width: 100%;
+
+    @include pav-media(sm) {
+      width: auto;
+    }
+
+    &:hover {
+      background: var(--pav-color-orange-50);
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
   }
 
   .providers-list {
+    .provider-item {
+      display: flex;
+      flex-direction: column;
+      gap: var(--pav-space-4);
+      padding: var(--pav-space-4) var(--pav-space-6);
+      border-bottom: 1px solid var(--pav-border-color-light);
+
+      @include pav-media(sm) {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      &:last-child {
+        border-bottom: none;
+      }
+
+      .provider-info {
+        .provider-name-row {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: var(--pav-space-2);
+
+          .provider-name {
+            margin: 0;
+            font-size: var(--pav-font-size-sm);
+            font-weight: var(--pav-font-weight-medium);
+            color: var(--pav-color-text-primary);
+          }
+
+          .connected-badge {
+            display: inline-block;
+            padding: var(--pav-space-0_5) var(--pav-space-2);
+            font-size: var(--pav-font-size-2xs);
+            font-weight: var(--pav-font-weight-medium);
+            background: var(--pav-color-emerald-100);
+            color: var(--pav-color-emerald-700);
+            border-radius: var(--pav-border-radius-xs);
+          }
+        }
+
+        .provider-type {
+          display: block;
+          margin-top: var(--pav-space-0_5);
+          font-size: var(--pav-font-size-xs);
+          color: var(--pav-color-text-muted);
+        }
+      }
+
+      .provider-actions {
+        display: flex;
+        gap: var(--pav-space-4);
+        align-items: center;
+      }
+    }
+  }
+
+  /* Pricing Card */
+  .pricing-card {
+    background: var(--pav-color-surface-primary);
+    border-radius: var(--pav-border-radius-xl);
+    border: 1px solid var(--pav-border-color-light);
+    overflow: hidden;
+  }
+
+  .pricing-form {
+    padding: var(--pav-space-6);
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: var(--pav-space-6);
   }
 
-  .provider-item {
+  .pricing-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--pav-space-6);
+
+    @include pav-media(md) {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+
+  .pricing-options {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--pav-space-6);
+
+    @include pav-media(md) {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  .pricing-actions {
+    padding-top: var(--pav-space-2);
+  }
+
+  /* Form Elements */
+  .form-group {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1rem;
-    border: 1px solid $light-mode-border;
-    border-radius: $component-border-radius;
-    background: $light-mode-panel-background;
+    flex-direction: column;
 
-    @media (prefers-color-scheme: dark) {
-      border-color: $dark-mode-border;
-      background: $dark-mode-panel-background;
+    &--inline {
+      gap: var(--pav-space-2);
     }
 
-    .provider-info {
-      h3 {
-        margin: 0;
-        font-size: 1.25rem;
-        font-weight: 500;
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-      }
-
-      .connected-badge {
-        display: inline-block;
-        padding: 0.25rem 0.75rem;
-        font-size: 0.75rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        background: #d4edda;
-        color: #155724;
-        border-radius: 12px;
-
-        @media (prefers-color-scheme: dark) {
-          background: #1e4620;
-          color: #7fd68a;
-        }
-      }
-
-      .provider-type {
-        font-size: 0.875rem;
-        color: $light-mode-secondary-text;
-
-        @media (prefers-color-scheme: dark) {
-          color: $dark-mode-secondary-text;
-        }
-      }
+    .form-label {
+      display: block;
+      font-size: var(--pav-font-size-xs);
+      font-weight: var(--pav-font-weight-medium);
+      color: var(--pav-color-text-secondary);
+      margin-bottom: var(--pav-space-2);
     }
 
-    .provider-actions {
-      display: flex;
-      gap: 1rem;
-      align-items: center;
-
-      .toggle-label {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-      }
-
-      button {
-        position: relative;
-
-        .connecting-spinner {
-          display: inline-block;
-          width: 14px;
-          height: 14px;
-          margin-right: 0.5rem;
-          border: 2px solid rgba(255, 255, 255, 0.3);
-          border-top-color: white;
-          border-radius: 50%;
-          animation: spinner-rotate 0.6s linear infinite;
-        }
-      }
+    .form-hint {
+      margin: var(--pav-space-1) 0 0;
+      font-size: var(--pav-font-size-2xs);
+      color: var(--pav-color-text-muted);
     }
   }
 
-  .no-providers {
-    padding: 2rem;
-    text-align: center;
-    color: $light-mode-secondary-text;
+  .form-input,
+  .form-select {
+    width: 100%;
+    padding: var(--pav-space-2_5) var(--pav-space-5);
+    background: var(--pav-color-surface-primary);
+    border: 1px solid var(--pav-border-color-medium);
+    border-radius: var(--pav-border-radius-full);
+    font-size: var(--pav-font-size-xs);
+    font-family: inherit;
+    color: var(--pav-color-text-primary);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
 
-    @media (prefers-color-scheme: dark) {
-      color: $dark-mode-secondary-text;
+    &:focus {
+      outline: none;
+      border-color: var(--pav-color-orange-500);
+      box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.2);
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+  }
+
+  .form-select {
+    appearance: none;
+    cursor: pointer;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.75rem center;
+    background-repeat: no-repeat;
+    background-size: 1.25rem;
+    padding-right: var(--pav-space-10);
+  }
+
+  .form-input--narrow {
+    max-width: 120px;
+  }
+
+  /* Primary Button */
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--pav-space-2_5) var(--pav-space-6);
+    background: var(--pav-color-orange-500);
+    color: var(--pav-color-text-inverse);
+    font-weight: var(--pav-font-weight-medium);
+    font-size: var(--pav-font-size-xs);
+    font-family: inherit;
+    border: none;
+    border-radius: var(--pav-border-radius-full);
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+
+    &:hover {
+      background: var(--pav-color-orange-600);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--pav-color-orange-500);
+      outline-offset: 2px;
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
     }
   }
 }
 
-.subscriptions-section {
-  .subscriptions-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 1rem;
+/* Dark Mode */
+@media (prefers-color-scheme: dark) {
+  .funding-page {
+    .subtab-border {
+      .subtab-nav {
+        .subtab {
+          &--active {
+            color: var(--pav-color-orange-400);
+          }
 
-    th, td {
-      padding: 0.75rem;
-      text-align: left;
-      border-bottom: 1px solid $light-mode-border;
+          &:hover {
+            color: var(--pav-color-stone-300);
+          }
 
-      @media (prefers-color-scheme: dark) {
-        border-color: $dark-mode-border;
+          .subtab-badge {
+            background: var(--pav-color-stone-800);
+            color: var(--pav-color-stone-400);
+
+            &--active {
+              background: rgba(249, 115, 22, 0.15);
+              color: var(--pav-color-orange-300);
+            }
+          }
+        }
       }
     }
 
-    th {
-      font-weight: 600;
-      background: $light-mode-selected-background;
+    .empty-card {
+      .empty-icon {
+        color: var(--pav-color-stone-600);
+      }
 
-      @media (prefers-color-scheme: dark) {
-        background: $dark-mode-selected-background;
+      .empty-description {
+        color: var(--pav-color-stone-500);
+      }
+    }
+
+    .empty-card-inline {
+      .empty-icon-small {
+        color: var(--pav-color-stone-600);
+      }
+    }
+
+    .alert {
+      &--success {
+        background: rgba(16, 185, 129, 0.1);
+        border-color: var(--pav-color-emerald-800);
+        color: var(--pav-color-emerald-300);
+      }
+
+      &--error {
+        background: rgba(239, 68, 68, 0.1);
+        border-color: var(--pav-color-red-800);
+        color: var(--pav-color-red-300);
+      }
+
+      &--warning {
+        background: rgba(245, 158, 11, 0.1);
+        border-color: var(--pav-color-amber-800);
+        color: var(--pav-color-amber-200);
       }
     }
 
     .status-badge {
-      padding: 0.25rem 0.5rem;
-      border-radius: 4px;
-      font-size: 0.875rem;
-      font-weight: 500;
-
-      &.status-active {
-        background: #d4edda;
-        color: #155724;
+      &--active {
+        background: rgba(16, 185, 129, 0.15);
+        color: var(--pav-color-emerald-300);
       }
 
-      &.status-past_due {
-        background: #fff3cd;
-        color: #856404;
+      &--past_due {
+        background: rgba(245, 158, 11, 0.15);
+        color: var(--pav-color-amber-300);
       }
 
-      &.status-suspended, &.status-cancelled {
-        background: #f8d7da;
-        color: #721c24;
+      &--suspended {
+        background: rgba(239, 68, 68, 0.15);
+        color: var(--pav-color-red-300);
+      }
+
+      &--cancelled {
+        background: var(--pav-color-stone-800);
+        color: var(--pav-color-stone-400);
       }
     }
 
-    button.danger-small {
-      padding: 0.25rem 0.5rem;
-      font-size: 0.875rem;
-      background: #dc3545;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
+    .subscriptions-card {
+      .subscriptions-table-desktop {
+        .subscriptions-table {
+          thead tr {
+            background: rgba(41, 37, 36, 0.5);
+          }
+
+          tbody tr:hover {
+            background: rgba(41, 37, 36, 0.3);
+          }
+        }
+      }
+    }
+
+    .pagination-btn {
+      &:hover:not(:disabled) {
+        background: var(--pav-color-stone-800);
+      }
+    }
+
+    .action-link {
+      &--danger {
+        color: var(--pav-color-red-400);
+
+        &:hover {
+          color: var(--pav-color-red-300);
+        }
+      }
+    }
+
+    .action-link-mobile {
+      &.action-link--danger {
+        color: var(--pav-color-red-400);
+
+        &:hover {
+          background: rgba(239, 68, 68, 0.1);
+        }
+      }
+    }
+
+    .toggle-row {
+      .toggle-text {
+        .toggle-label {
+          color: var(--pav-color-stone-100);
+        }
+      }
+    }
+
+    .toggle-inline {
+      .toggle-inline-label {
+        color: var(--pav-color-stone-400);
+      }
+    }
+
+    .providers-list {
+      .provider-item {
+        .provider-info {
+          .connected-badge {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--pav-color-emerald-300);
+          }
+        }
+      }
+    }
+
+    .btn-text-orange {
+      color: var(--pav-color-orange-400);
 
       &:hover {
-        background: #c82333;
+        background: rgba(249, 115, 22, 0.1);
       }
     }
-  }
 
-  .no-subscriptions {
-    padding: 2rem;
-    text-align: center;
-    color: $light-mode-secondary-text;
+    .form-input,
+    .form-select {
+      background: var(--pav-color-stone-800);
+      border-color: var(--pav-color-stone-600);
+      color: var(--pav-color-stone-100);
 
-    @media (prefers-color-scheme: dark) {
-      color: $dark-mode-secondary-text;
-    }
-  }
-
-  .pagination {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 1rem;
-    margin-top: 1rem;
-
-    button {
-      &:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
+      &:focus {
+        border-color: var(--pav-color-orange-400);
+        box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.15);
       }
     }
-  }
-}
 
-@keyframes spinner-rotate {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
+    .form-select {
+      background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23a8a29e' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    }
   }
 }
 </style>

@@ -12,6 +12,16 @@ import {
 } from '@/common/exceptions/editor';
 import { AccountInviteAlreadyExistsError } from '@/common/exceptions';
 
+// Stub for PillButton component
+const PillButtonStub = {
+  template: '<button :class="[\'pill-button\', `pill-button--${variant}`]" @click="$emit(\'click\', $event)"><slot /></button>',
+  props: ['variant', 'type', 'disabled', 'size'],
+  emits: ['click'],
+};
+
+// Stub for lucide icons
+const IconStub = { template: '<span />' };
+
 // Mock i18next-vue
 vi.mock('i18next-vue', () => ({
   useTranslation: () => ({
@@ -89,6 +99,14 @@ describe('EditorsTab Component', () => {
             ModalLayout: true,
             EmptyLayout: true,
             LoadingMessage: true,
+            PillButton: PillButtonStub,
+            Plus: IconStub,
+            Mail: IconStub,
+            Crown: IconStub,
+            Globe: IconStub,
+            ArrowUp: IconStub,
+            Trash2: IconStub,
+            X: IconStub,
           },
         },
       });
@@ -100,7 +118,7 @@ describe('EditorsTab Component', () => {
       expect(calendarServiceMock.listCalendarEditors).toHaveBeenCalledWith('calendar-123');
 
       // Should display both editors
-      const editorItems = wrapper.findAll('.editor-item');
+      const editorItems = wrapper.findAll('.editor-card');
       expect(editorItems).toHaveLength(2);
 
       // Check editor emails are displayed
@@ -140,6 +158,14 @@ describe('EditorsTab Component', () => {
             ModalLayout: true,
             EmptyLayout: true,
             LoadingMessage: true,
+            PillButton: PillButtonStub,
+            Plus: IconStub,
+            Mail: IconStub,
+            Crown: IconStub,
+            Globe: IconStub,
+            ArrowUp: IconStub,
+            Trash2: IconStub,
+            X: IconStub,
           },
         },
       });
@@ -149,8 +175,8 @@ describe('EditorsTab Component', () => {
 
       // Assert
       // Should have sections for active editors and pending invitations
-      expect(wrapper.find('.active-editors').exists()).toBe(true);
-      expect(wrapper.find('.pending-invitations').exists()).toBe(true);
+      const sections = wrapper.findAll('.editors-section');
+      expect(sections.length).toBeGreaterThanOrEqual(2);
 
       // Check both emails are present
       expect(wrapper.html()).toContain('alice@example.com');
@@ -179,6 +205,14 @@ describe('EditorsTab Component', () => {
               template: '<div class="empty-stub"><slot /></div>',
             },
             LoadingMessage: true,
+            PillButton: PillButtonStub,
+            Plus: IconStub,
+            Mail: IconStub,
+            Crown: IconStub,
+            Globe: IconStub,
+            ArrowUp: IconStub,
+            Trash2: IconStub,
+            X: IconStub,
           },
         },
       });
@@ -187,7 +221,7 @@ describe('EditorsTab Component', () => {
       await nextTick();
 
       // Act
-      const addButton = wrapper.find('.add-editor-btn');
+      const addButton = wrapper.find('.pill-button--primary');
       expect(addButton.exists()).toBe(true);
 
       await addButton.trigger('click');
@@ -224,6 +258,14 @@ describe('EditorsTab Component', () => {
               template: '<div class="empty-stub"><slot /></div>',
             },
             LoadingMessage: true,
+            PillButton: PillButtonStub,
+            Plus: IconStub,
+            Mail: IconStub,
+            Crown: IconStub,
+            Globe: IconStub,
+            ArrowUp: IconStub,
+            Trash2: IconStub,
+            X: IconStub,
           },
         },
       });
@@ -232,7 +274,7 @@ describe('EditorsTab Component', () => {
       await nextTick();
 
       // Act
-      await wrapper.find('.add-editor-btn').trigger('click');
+      await wrapper.find('.pill-button--primary').trigger('click');
       await nextTick();
 
       // Assert
@@ -272,6 +314,14 @@ describe('EditorsTab Component', () => {
             },
             EmptyLayout: true,
             LoadingMessage: true,
+            PillButton: PillButtonStub,
+            Plus: IconStub,
+            Mail: IconStub,
+            Crown: IconStub,
+            Globe: IconStub,
+            ArrowUp: IconStub,
+            Trash2: IconStub,
+            X: IconStub,
           },
         },
       });
@@ -280,7 +330,7 @@ describe('EditorsTab Component', () => {
       await nextTick();
 
       // Act
-      const removeButton = wrapper.find('.remove-btn');
+      const removeButton = wrapper.find('.btn-ghost');
       expect(removeButton.exists()).toBe(true);
 
       await removeButton.trigger('click');
@@ -290,7 +340,7 @@ describe('EditorsTab Component', () => {
       // Confirmation modal should be shown
       expect(wrapper.vm.state.editorToRemove).not.toBeNull();
       expect(wrapper.vm.state.editorToRemove.id).toBe('editor-1');
-      expect(wrapper.find('.remove-confirmation').exists()).toBe(true);
+      expect(wrapper.find('.confirmation-modal').exists()).toBe(true);
     });
 
     it('should remove editor when confirmation is accepted', async () => {
@@ -322,6 +372,14 @@ describe('EditorsTab Component', () => {
             },
             EmptyLayout: true,
             LoadingMessage: true,
+            PillButton: PillButtonStub,
+            Plus: IconStub,
+            Mail: IconStub,
+            Crown: IconStub,
+            Globe: IconStub,
+            ArrowUp: IconStub,
+            Trash2: IconStub,
+            X: IconStub,
           },
         },
       });
@@ -330,7 +388,7 @@ describe('EditorsTab Component', () => {
       await nextTick();
 
       // Open confirmation
-      await wrapper.find('.remove-btn').trigger('click');
+      await wrapper.find('.btn-ghost').trigger('click');
       await nextTick();
 
       // Act
@@ -377,6 +435,14 @@ describe('EditorsTab Component', () => {
             ModalLayout: true,
             EmptyLayout: true,
             LoadingMessage: true,
+            PillButton: PillButtonStub,
+            Plus: IconStub,
+            Mail: IconStub,
+            Crown: IconStub,
+            Globe: IconStub,
+            ArrowUp: IconStub,
+            Trash2: IconStub,
+            X: IconStub,
           },
         },
       });
@@ -389,7 +455,7 @@ describe('EditorsTab Component', () => {
       expect(wrapper.vm.canLeaveCalendar()).toBe(true);
 
       // Leave button should be visible
-      const leaveButton = wrapper.find('.leave-calendar-btn');
+      const leaveButton = wrapper.find('.btn-ghost--danger');
       expect(leaveButton.exists()).toBe(true);
     });
 
@@ -420,6 +486,14 @@ describe('EditorsTab Component', () => {
             ModalLayout: true,
             EmptyLayout: true,
             LoadingMessage: true,
+            PillButton: PillButtonStub,
+            Plus: IconStub,
+            Mail: IconStub,
+            Crown: IconStub,
+            Globe: IconStub,
+            ArrowUp: IconStub,
+            Trash2: IconStub,
+            X: IconStub,
           },
         },
       });
@@ -429,7 +503,7 @@ describe('EditorsTab Component', () => {
 
       // Assert
       expect(wrapper.vm.canLeaveCalendar()).toBe(false);
-      expect(wrapper.find('.leave-calendar-btn').exists()).toBe(false);
+      expect(wrapper.find('.btn-ghost--danger').exists()).toBe(false);
     });
   });
 
@@ -462,6 +536,14 @@ describe('EditorsTab Component', () => {
               template: '<div class="empty-stub"><slot /></div>',
             },
             LoadingMessage: true,
+            PillButton: PillButtonStub,
+            Plus: IconStub,
+            Mail: IconStub,
+            Crown: IconStub,
+            Globe: IconStub,
+            ArrowUp: IconStub,
+            Trash2: IconStub,
+            X: IconStub,
           },
         },
       });
@@ -470,7 +552,7 @@ describe('EditorsTab Component', () => {
       await nextTick();
 
       // Open add form
-      await wrapper.find('.add-editor-btn').trigger('click');
+      await wrapper.find('.pill-button--primary').trigger('click');
       await nextTick();
 
       // Act
@@ -480,11 +562,8 @@ describe('EditorsTab Component', () => {
       await nextTick();
 
       // Submit form
-      const addButton = wrapper.findAll('button.primary').find(btn =>
-        btn.element.textContent?.includes('add_button') ||
-        btn.element.textContent?.includes('adding'),
-      );
-      await addButton!.trigger('click');
+      const addButton = wrapper.find('.add-editor-form .pill-button--primary');
+      await addButton.trigger('click');
       await flushPromises();
 
       // Assert
@@ -522,6 +601,14 @@ describe('EditorsTab Component', () => {
               template: '<div class="empty-stub"><slot /></div>',
             },
             LoadingMessage: true,
+            PillButton: PillButtonStub,
+            Plus: IconStub,
+            Mail: IconStub,
+            Crown: IconStub,
+            Globe: IconStub,
+            ArrowUp: IconStub,
+            Trash2: IconStub,
+            X: IconStub,
           },
         },
       });
@@ -530,18 +617,15 @@ describe('EditorsTab Component', () => {
       await nextTick();
 
       // Open add form
-      await wrapper.find('.add-editor-btn').trigger('click');
+      await wrapper.find('.pill-button--primary').trigger('click');
       await nextTick();
 
       // Act
       await wrapper.find('#email').setValue('existing@example.com');
       await nextTick();
 
-      const addButton = wrapper.findAll('button.primary').find(btn =>
-        btn.element.textContent?.includes('add_button') ||
-        btn.element.textContent?.includes('adding'),
-      );
-      await addButton!.trigger('click');
+      const addButton = wrapper.find('.add-editor-form .pill-button--primary');
+      await addButton.trigger('click');
       await flushPromises();
 
       // Assert
@@ -573,6 +657,14 @@ describe('EditorsTab Component', () => {
               template: '<div class="empty-stub"><slot /></div>',
             },
             LoadingMessage: true,
+            PillButton: PillButtonStub,
+            Plus: IconStub,
+            Mail: IconStub,
+            Crown: IconStub,
+            Globe: IconStub,
+            ArrowUp: IconStub,
+            Trash2: IconStub,
+            X: IconStub,
           },
         },
       });
@@ -581,18 +673,15 @@ describe('EditorsTab Component', () => {
       await nextTick();
 
       // Open add form
-      await wrapper.find('.add-editor-btn').trigger('click');
+      await wrapper.find('.pill-button--primary').trigger('click');
       await nextTick();
 
       // Act
       await wrapper.find('#email').setValue('invited@example.com');
       await nextTick();
 
-      const addButton = wrapper.findAll('button.primary').find(btn =>
-        btn.element.textContent?.includes('add_button') ||
-        btn.element.textContent?.includes('adding'),
-      );
-      await addButton!.trigger('click');
+      const addButton = wrapper.find('.add-editor-form .pill-button--primary');
+      await addButton.trigger('click');
       await flushPromises();
 
       // Assert
@@ -626,6 +715,14 @@ describe('EditorsTab Component', () => {
             ModalLayout: true,
             EmptyLayout: true,
             LoadingMessage: true,
+            PillButton: PillButtonStub,
+            Plus: IconStub,
+            Mail: IconStub,
+            Crown: IconStub,
+            Globe: IconStub,
+            ArrowUp: IconStub,
+            Trash2: IconStub,
+            X: IconStub,
           },
         },
       });
@@ -634,7 +731,7 @@ describe('EditorsTab Component', () => {
       await nextTick();
 
       // Act
-      const cancelButton = wrapper.find('.cancel-btn');
+      const cancelButton = wrapper.find('.btn-text:not(.btn-text--primary)');
       expect(cancelButton.exists()).toBe(true);
 
       await cancelButton.trigger('click');
@@ -674,6 +771,14 @@ describe('EditorsTab Component', () => {
             ModalLayout: true,
             EmptyLayout: true,
             LoadingMessage: true,
+            PillButton: PillButtonStub,
+            Plus: IconStub,
+            Mail: IconStub,
+            Crown: IconStub,
+            Globe: IconStub,
+            ArrowUp: IconStub,
+            Trash2: IconStub,
+            X: IconStub,
           },
         },
       });
@@ -682,7 +787,7 @@ describe('EditorsTab Component', () => {
       await nextTick();
 
       // Act
-      const resendButton = wrapper.find('.resend-btn');
+      const resendButton = wrapper.find('.btn-text--primary');
       expect(resendButton.exists()).toBe(true);
 
       await resendButton.trigger('click');
@@ -716,6 +821,14 @@ describe('EditorsTab Component', () => {
             ModalLayout: true,
             EmptyLayout: true,
             LoadingMessage: true,
+            PillButton: PillButtonStub,
+            Plus: IconStub,
+            Mail: IconStub,
+            Crown: IconStub,
+            Globe: IconStub,
+            ArrowUp: IconStub,
+            Trash2: IconStub,
+            X: IconStub,
           },
         },
       });
@@ -725,7 +838,7 @@ describe('EditorsTab Component', () => {
 
       // Assert
       expect(wrapper.vm.state.error).toBe('error_permission_denied');
-      expect(wrapper.find('.error').exists()).toBe(true);
+      expect(wrapper.find('.alert--error').exists()).toBe(true);
     });
 
     it('should handle editor not found error during removal', async () => {
@@ -759,6 +872,14 @@ describe('EditorsTab Component', () => {
             },
             EmptyLayout: true,
             LoadingMessage: true,
+            PillButton: PillButtonStub,
+            Plus: IconStub,
+            Mail: IconStub,
+            Crown: IconStub,
+            Globe: IconStub,
+            ArrowUp: IconStub,
+            Trash2: IconStub,
+            X: IconStub,
           },
         },
       });
@@ -767,7 +888,7 @@ describe('EditorsTab Component', () => {
       await nextTick();
 
       // Open confirmation
-      await wrapper.find('.remove-btn').trigger('click');
+      await wrapper.find('.btn-ghost').trigger('click');
       await nextTick();
 
       // Act

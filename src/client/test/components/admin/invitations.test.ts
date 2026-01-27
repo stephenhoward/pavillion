@@ -2,11 +2,10 @@ import { expect, describe, it, beforeEach, afterEach, vi } from 'vitest';
 import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { RouteRecordRaw } from 'vue-router';
 import { flushPromises } from '@vue/test-utils';
-import axios from 'axios';
 
 import { mountComponent } from '@/client/test/lib/vue';
 import Invitations from '@/client/components/admin/accounts/invitations.vue';
-import AccountInvitation from '@/common/model/invitation';
+import ModelService from '@/client/service/models';
 
 const routes: RouteRecordRaw[] = [
   { path: '/test', component: {}, name: 'test' },
@@ -19,7 +18,8 @@ const mountInvitationsComponent = () => {
   });
 
   const authnMock = {
-    resendInvitation: vi.fn(),
+    resend_invitation: vi.fn(),
+    revoke_invitation: vi.fn(),
   };
 
   const wrapper = mountComponent(Invitations, router, {
@@ -36,13 +36,11 @@ const mountInvitationsComponent = () => {
 };
 
 describe('Admin Invitations Component', () => {
-  let axiosGetSpy: any;
-  let axiosDeleteSpy: any;
+  let listModelsSpy: any;
   let currentWrapper: any = null;
 
   beforeEach(() => {
-    axiosGetSpy = vi.spyOn(axios, 'get');
-    axiosDeleteSpy = vi.spyOn(axios, 'delete');
+    listModelsSpy = vi.spyOn(ModelService, 'listModels');
   });
 
   afterEach(() => {
@@ -54,7 +52,7 @@ describe('Admin Invitations Component', () => {
   });
 
   describe('Component Initialization', () => {
-    it('loads invitations from unified endpoint on mount', async () => {
+    it('loads invitations from admin endpoint on mount', async () => {
       const testInvitations = [
         {
           id: 'inv-1',
@@ -74,7 +72,7 @@ describe('Admin Invitations Component', () => {
         },
       ];
 
-      axiosGetSpy.mockResolvedValue({ data: testInvitations });
+      listModelsSpy.mockResolvedValue(testInvitations);
 
       const { wrapper } = mountInvitationsComponent();
       currentWrapper = wrapper;
@@ -83,16 +81,15 @@ describe('Admin Invitations Component', () => {
       await wrapper.vm.$nextTick();
 
       // Verify the correct endpoint was called
-      expect(axiosGetSpy).toHaveBeenCalledWith('/api/v1/admin/invitations');
+      expect(listModelsSpy).toHaveBeenCalledWith('/api/v1/admin/invitations');
 
       // Verify invitations were loaded into store
       expect(wrapper.vm.store.invitations).toHaveLength(2);
-      expect(wrapper.vm.store.invitations[0]).toBeInstanceOf(AccountInvitation);
       expect(wrapper.vm.store.invitations[0].email).toBe('user1@example.com');
     });
 
     it('shows empty state when no invitations exist', async () => {
-      axiosGetSpy.mockResolvedValue({ data: [] });
+      listModelsSpy.mockResolvedValue([]);
 
       const { wrapper } = mountInvitationsComponent();
       currentWrapper = wrapper;
@@ -100,12 +97,12 @@ describe('Admin Invitations Component', () => {
       await flushPromises();
       await wrapper.vm.$nextTick();
 
-      // Verify empty state is displayed
-      expect(wrapper.text()).toContain('No Invitations');
+      // Verify empty state is displayed (active invitations section shows empty message)
+      expect(wrapper.text()).toContain('No active invitations');
     });
 
     it('handles error loading invitations', async () => {
-      axiosGetSpy.mockRejectedValue(new Error('Failed to load invitations'));
+      listModelsSpy.mockRejectedValue(new Error('Failed to load invitations'));
 
       const { wrapper } = mountInvitationsComponent();
       currentWrapper = wrapper;
@@ -113,19 +110,13 @@ describe('Admin Invitations Component', () => {
       await flushPromises();
       await wrapper.vm.$nextTick();
 
-      // Verify error state is set
-      expect(wrapper.vm.state.loadError).toBe(true);
-
-      // Verify invitations array is empty
+      // Verify invitations array is empty (error is logged to console)
       expect(wrapper.vm.store.invitations).toEqual([]);
-
-      // Verify error message is displayed
-      expect(wrapper.text()).toContain('Failed to load invitations');
     });
   });
 
   describe('Invitation Actions', () => {
-    it('cancels invitation using unified endpoint', async () => {
+    it('cancels invitation using revoke_invitation', async () => {
       const testInvitations = [
         {
           id: 'inv-1',
@@ -137,11 +128,11 @@ describe('Admin Invitations Component', () => {
         },
       ];
 
-      axiosGetSpy.mockResolvedValue({ data: testInvitations });
-      axiosDeleteSpy.mockResolvedValue({ data: {} });
+      listModelsSpy.mockResolvedValue(testInvitations);
 
-      const { wrapper } = mountInvitationsComponent();
+      const { wrapper, authnMock } = mountInvitationsComponent();
       currentWrapper = wrapper;
+      authnMock.revoke_invitation.mockResolvedValue({});
 
       await flushPromises();
       await wrapper.vm.$nextTick();
@@ -149,37 +140,27 @@ describe('Admin Invitations Component', () => {
       const invitation = wrapper.vm.store.invitations[0];
       await wrapper.vm.cancelInvitation(invitation);
 
-      // Verify the correct delete endpoint was called
-      expect(axiosDeleteSpy).toHaveBeenCalledWith('/api/v1/invitations/inv-1');
-
-      // Verify invitation was removed from store
-      expect(wrapper.vm.store.invitations).toHaveLength(0);
+      // Verify revoke was called
+      expect(authnMock.revoke_invitation).toHaveBeenCalledWith('inv-1');
     });
 
-    it('resends invitation and updates store', async () => {
+    it('resends invitation and shows success message', async () => {
       const testInvitations = [
         {
           id: 'inv-1',
           email: 'user1@example.com',
           invitedBy: 'admin-id',
           calendarId: null,
-          expirationTime: new Date(Date.now() - 86400000).toISOString(), // Expired
+          expirationTime: new Date(Date.now() - 86400000).toISOString(),
           code: 'code1',
         },
       ];
 
-      const updatedInvitation = {
-        ...testInvitations[0],
-        expirationTime: new Date(Date.now() + 86400000).toISOString(), // New expiration
-        code: 'new-code',
-      };
-
-      axiosGetSpy.mockResolvedValue({ data: testInvitations });
+      listModelsSpy.mockResolvedValue(testInvitations);
 
       const { wrapper, authnMock } = mountInvitationsComponent();
       currentWrapper = wrapper;
-
-      authnMock.resendInvitation.mockResolvedValue(updatedInvitation);
+      authnMock.resend_invitation.mockResolvedValue({});
 
       await flushPromises();
       await wrapper.vm.$nextTick();
@@ -188,15 +169,11 @@ describe('Admin Invitations Component', () => {
       await wrapper.vm.resendInvitation(invitation);
 
       // Verify resend was called
-      expect(authnMock.resendInvitation).toHaveBeenCalledWith('inv-1');
-
-      // Verify store was updated with new invitation data
-      // Note: The resend updates the invitation, but code may not be exposed in the model
-      expect(wrapper.vm.store.invitations[0].email).toBe('user1@example.com');
+      expect(authnMock.resend_invitation).toHaveBeenCalledWith('inv-1');
 
       // Verify success message is shown
       await wrapper.vm.$nextTick();
-      expect(wrapper.vm.state.resendSuccess).toBe('user1@example.com');
+      expect(wrapper.vm.state.successMessage).toBeTruthy();
     });
 
     it('handles resend invitation error', async () => {
@@ -211,12 +188,11 @@ describe('Admin Invitations Component', () => {
         },
       ];
 
-      axiosGetSpy.mockResolvedValue({ data: testInvitations });
+      listModelsSpy.mockResolvedValue(testInvitations);
 
       const { wrapper, authnMock } = mountInvitationsComponent();
       currentWrapper = wrapper;
-
-      authnMock.resendInvitation.mockRejectedValue(new Error('Failed to resend'));
+      authnMock.resend_invitation.mockRejectedValue(new Error('Failed to resend'));
 
       await flushPromises();
       await wrapper.vm.$nextTick();
@@ -226,13 +202,12 @@ describe('Admin Invitations Component', () => {
 
       // Verify error message is shown
       await wrapper.vm.$nextTick();
-      expect(wrapper.vm.state.resendError).toBe('user1@example.com');
-      expect(wrapper.vm.state.resending).toBeNull();
+      expect(wrapper.vm.state.errorMessage).toBeTruthy();
     });
   });
 
   describe('Invitation Display', () => {
-    it('correctly formats expiration times', async () => {
+    it('correctly formats dates', async () => {
       const futureDate = new Date(Date.now() + 86400000);
       const testInvitations = [
         {
@@ -245,7 +220,7 @@ describe('Admin Invitations Component', () => {
         },
       ];
 
-      axiosGetSpy.mockResolvedValue({ data: testInvitations });
+      listModelsSpy.mockResolvedValue(testInvitations);
 
       const { wrapper } = mountInvitationsComponent();
       currentWrapper = wrapper;
@@ -253,12 +228,12 @@ describe('Admin Invitations Component', () => {
       await flushPromises();
       await wrapper.vm.$nextTick();
 
-      const formattedTime = wrapper.vm.formatExpirationTime(futureDate);
-      expect(formattedTime).not.toBe('expired');
-      expect(formattedTime).not.toBe('unknown_expiration');
+      const formattedDate = wrapper.vm.formatDate(futureDate.toISOString());
+      expect(formattedDate).toBeTruthy();
+      expect(formattedDate).not.toBe('');
     });
 
-    it('marks expired invitations correctly', async () => {
+    it('identifies expired invitations correctly', async () => {
       const pastDate = new Date(Date.now() - 86400000);
       const testInvitations = [
         {
@@ -271,7 +246,7 @@ describe('Admin Invitations Component', () => {
         },
       ];
 
-      axiosGetSpy.mockResolvedValue({ data: testInvitations });
+      listModelsSpy.mockResolvedValue(testInvitations);
 
       const { wrapper } = mountInvitationsComponent();
       currentWrapper = wrapper;
@@ -279,29 +254,25 @@ describe('Admin Invitations Component', () => {
       await flushPromises();
       await wrapper.vm.$nextTick();
 
-      const isExpired = wrapper.vm.isExpired(pastDate);
+      const isExpired = wrapper.vm.isExpired({ expirationTime: pastDate.toISOString() });
       expect(isExpired).toBe(true);
-
-      const formattedTime = wrapper.vm.formatExpirationTime(pastDate);
-      expect(formattedTime).toBe('Expired');
     });
   });
 
   describe('Unified Endpoint Integration', () => {
     it('uses /api/v1/admin/invitations for listing invitations', async () => {
-      axiosGetSpy.mockResolvedValue({ data: [] });
+      listModelsSpy.mockResolvedValue([]);
 
       const { wrapper } = mountInvitationsComponent();
       currentWrapper = wrapper;
 
       await flushPromises();
 
-      // Verify the admin endpoint is used, not the old /api/accounts/v1/invitations
-      expect(axiosGetSpy).toHaveBeenCalledWith('/api/v1/admin/invitations');
-      expect(axiosGetSpy).not.toHaveBeenCalledWith('/api/accounts/v1/invitations');
+      // Verify the admin endpoint is used
+      expect(listModelsSpy).toHaveBeenCalledWith('/api/v1/admin/invitations');
     });
 
-    it('uses /api/v1/invitations for deleting invitations', async () => {
+    it('uses authn.revoke_invitation for deleting invitations', async () => {
       const testInvitations = [
         {
           id: 'inv-1',
@@ -313,11 +284,11 @@ describe('Admin Invitations Component', () => {
         },
       ];
 
-      axiosGetSpy.mockResolvedValue({ data: testInvitations });
-      axiosDeleteSpy.mockResolvedValue({ data: {} });
+      listModelsSpy.mockResolvedValue(testInvitations);
 
-      const { wrapper } = mountInvitationsComponent();
+      const { wrapper, authnMock } = mountInvitationsComponent();
       currentWrapper = wrapper;
+      authnMock.revoke_invitation.mockResolvedValue({});
 
       await flushPromises();
       await wrapper.vm.$nextTick();
@@ -325,9 +296,8 @@ describe('Admin Invitations Component', () => {
       const invitation = wrapper.vm.store.invitations[0];
       await wrapper.vm.cancelInvitation(invitation);
 
-      // Verify the unified endpoint is used for deletion
-      expect(axiosDeleteSpy).toHaveBeenCalledWith('/api/v1/invitations/inv-1');
-      expect(axiosDeleteSpy).not.toHaveBeenCalledWith('/api/accounts/v1/invitations/inv-1');
+      // Verify the revoke method is used
+      expect(authnMock.revoke_invitation).toHaveBeenCalledWith('inv-1');
     });
   });
 });

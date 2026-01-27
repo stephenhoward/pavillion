@@ -94,7 +94,7 @@ describe('LocationDisplayCard', () => {
         },
       });
 
-      await wrapper.find('.location-display-card--empty').trigger('click');
+      await wrapper.find('.add-location-button').trigger('click');
       expect(wrapper.emitted('add-location')).toBeTruthy();
       expect(wrapper.emitted('add-location')).toHaveLength(1);
     });
@@ -119,7 +119,7 @@ describe('LocationDisplayCard', () => {
         },
       });
 
-      const button = wrapper.find('.location-display-card--empty');
+      const button = wrapper.find('.add-location-button');
       expect(button.exists()).toBe(true);
       expect(button.text()).toBe('Add Location');
       expect(button.find('svg').exists()).toBe(true); // Has icon
@@ -135,7 +135,7 @@ describe('LocationDisplayCard', () => {
         },
       });
 
-      await wrapper.find('.location-display-card--empty').trigger('click');
+      await wrapper.find('.add-location-button').trigger('click');
       expect(wrapper.emitted('add-location')).toBeTruthy();
       expect(wrapper.emitted('add-location')).toHaveLength(1);
     });

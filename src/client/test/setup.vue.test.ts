@@ -39,8 +39,10 @@ const mountSetup = async (setupService?: any, skipLanguageSelection = true) => {
     await wrapper.vm.$nextTick();
 
     // Find and click the Continue button on language selection screen
-    const continueButton = wrapper.find('button.primary');
-    if (continueButton.exists()) {
+    // The button has no class="primary" - it's a plain button with type="button"
+    const buttons = wrapper.findAll('button[type="button"]');
+    const continueButton = buttons.find(btn => btn.text().length > 0);
+    if (continueButton) {
       await continueButton.trigger('click');
       await wrapper.vm.$nextTick();
     }
@@ -109,7 +111,7 @@ describe('Setup Component', () => {
       await wrapper.vm.$nextTick();
 
       // Check that validation error is displayed
-      const errorEl = wrapper.find('.password-validation-error');
+      const errorEl = wrapper.find('.error-alert');
       expect(errorEl.exists()).toBe(true);
     });
 
@@ -122,7 +124,7 @@ describe('Setup Component', () => {
       await wrapper.vm.$nextTick();
 
       // Check that validation error is displayed
-      const errorEl = wrapper.find('.password-validation-error');
+      const errorEl = wrapper.find('.error-alert');
       expect(errorEl.exists()).toBe(true);
     });
   });
@@ -230,7 +232,7 @@ describe('Setup Component', () => {
       await wrapper.vm.$nextTick();
 
       // Check that error alert is shown
-      expect(wrapper.find('.alert--error').exists()).toBe(true);
+      expect(wrapper.find('.error-alert').exists()).toBe(true);
 
       // API should NOT have been called since validation failed
       expect(mockSetupService.completeSetup).not.toHaveBeenCalled();

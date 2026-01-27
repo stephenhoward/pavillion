@@ -107,9 +107,9 @@ describe('Widget Integration Tests', () => {
         },
       });
 
-      // Select week view using the select dropdown (not radio inputs)
-      const viewModeSelect = configWrapper.find('select#viewMode');
-      await viewModeSelect.setValue('week');
+      // Select week view by clicking the week card button
+      const weekCard = configWrapper.findAll('button.view-mode-card')[1]; // list=0, week=1, month=2
+      await weekCard.trigger('click');
 
       // Set accent color
       const colorInput = configWrapper.find('input[type="color"]');

@@ -69,7 +69,7 @@ test.describe('Event Search End-to-End', () => {
 
     // Verify events and categories exist
     expect(await page.locator('.event-item').count()).toBeGreaterThan(0);
-    expect(await page.locator('.category-option').count()).toBeGreaterThan(0);
+    expect(await page.locator('.toggle-chip').count()).toBeGreaterThan(0);
 
     // Add search query
     const searchInput = page.locator('#event-search');
@@ -78,7 +78,7 @@ test.describe('Event Search End-to-End', () => {
       await page.waitForTimeout(500);
 
       // Select a category
-      const firstCategory = page.locator('.category-option').first();
+      const firstCategory = page.locator('.toggle-chip').first();
       await firstCategory.click();
       await page.waitForTimeout(500);
 
@@ -137,14 +137,14 @@ test.describe('Event Search End-to-End', () => {
       await page.waitForTimeout(500);
 
       // Add category if available
-      const firstCategory = page.locator('.category-option').first();
+      const firstCategory = page.locator('.toggle-chip').first();
       if (await firstCategory.count() > 0) {
         await firstCategory.click();
         await page.waitForTimeout(500);
       }
 
       // Click clear all filters
-      const clearAllButton = page.locator('.clear-all-filters');
+      const clearAllButton = page.locator('.clear-filters-section .pill-button');
       if (await clearAllButton.isVisible()) {
         await clearAllButton.click();
         await page.waitForTimeout(500);

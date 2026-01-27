@@ -129,7 +129,7 @@ describe('Widget Admin UI Components', () => {
       await new Promise(resolve => setTimeout(resolve, 100));
 
       const input = wrapper.find('input[type="text"]');
-      const addButton = wrapper.find('button.add-domain-btn');
+      const addButton = wrapper.find('button.update-button');
 
       await input.setValue('newsite.com');
       await addButton.trigger('click');
@@ -153,17 +153,15 @@ describe('Widget Admin UI Components', () => {
         },
       });
 
-      // Check for view mode selector (select dropdown, not radio buttons)
-      const viewModeSelect = wrapper.find('select#viewMode');
-      expect(viewModeSelect.exists()).toBe(true);
-      const viewModeOptions = viewModeSelect.findAll('option');
-      expect(viewModeOptions.length).toBe(3); // week, month, list
+      // Check for view mode selector (card buttons, not select dropdown)
+      const viewModeCards = wrapper.findAll('button.view-mode-card');
+      expect(viewModeCards.length).toBe(3); // list, week, month
 
       // Check for accent color input
       const colorInput = wrapper.find('input[type="color"]');
       expect(colorInput.exists()).toBe(true);
 
-      // Check for color mode selector (select dropdown, not radio buttons)
+      // Check for color mode selector (select dropdown)
       const colorModeSelect = wrapper.find('select#colorMode');
       expect(colorModeSelect.exists()).toBe(true);
       const colorModeOptions = colorModeSelect.findAll('option');
@@ -181,9 +179,9 @@ describe('Widget Admin UI Components', () => {
         },
       });
 
-      // Change view mode using select dropdown
-      const viewModeSelect = wrapper.find('select#viewMode');
-      await viewModeSelect.setValue('week');
+      // Change view mode by clicking the week card button
+      const weekCard = wrapper.findAll('button.view-mode-card')[1]; // list=0, week=1, month=2
+      await weekCard.trigger('click');
 
       // Change accent color
       const colorInput = wrapper.find('input[type="color"]');

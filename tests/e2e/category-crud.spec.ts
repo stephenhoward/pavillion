@@ -27,8 +27,8 @@ test.describe('Category CRUD Workflow', () => {
     // Wait for calendar view to load
     await page.waitForTimeout(2000);
 
-    // Click "Manage" link to access calendar management
-    const manageLink = page.locator('a:has-text("Manage"), a[href*="/manage"]');
+    // Click "Manage" button to access calendar management (PillButton rendered as <button>)
+    const manageLink = page.locator('button:has-text("Manage"), a:has-text("Manage"), a[href*="/manage"]').first();
     await manageLink.click();
 
     // Wait for management page to load
@@ -49,7 +49,7 @@ test.describe('Category CRUD Workflow', () => {
     });
 
     // Wait for either category list or "Add Category" button
-    await page.waitForSelector('button.primary:has-text("Add"), button:has-text("category")', { timeout: 10000 });
+    await page.waitForSelector('.pill-button--primary, .category-card', { timeout: 10000 });
 
     // Verify no 404 errors occurred
     expect(failed404Requests).toHaveLength(0);
@@ -60,8 +60,8 @@ test.describe('Category CRUD Workflow', () => {
     await page.goto('/calendar');
     await page.waitForTimeout(2000);
 
-    // Click "Manage" link to access calendar management
-    const manageLink = page.locator('a:has-text("Manage"), a[href*="/manage"]');
+    // Click "Manage" button to access calendar management (PillButton rendered as <button>)
+    const manageLink = page.locator('button:has-text("Manage"), a:has-text("Manage"), a[href*="/manage"]').first();
     await manageLink.click();
     await page.waitForTimeout(1000);
 
@@ -71,8 +71,8 @@ test.describe('Category CRUD Workflow', () => {
       await categoriesTab.click();
     }
 
-    // Click "Add Category" button (uses .primary class)
-    const addButton = page.locator('button.primary').filter({ hasText: /add.*category|category/i }).first();
+    // Click "Add Category" button (PillButton with pill-button--primary class)
+    const addButton = page.locator('.pill-button--primary').filter({ hasText: /add.*category|category/i }).first();
     await addButton.click();
 
     // Wait for modal dialog to open (native HTML dialog element)
@@ -89,12 +89,12 @@ test.describe('Category CRUD Workflow', () => {
     // Generate unique category name
     const categoryName = `Test Category ${Date.now()}`;
 
-    // Fill in category name (CategoryEditor has input with class .form-control)
-    const nameInput = page.locator('dialog[open] input.form-control[type="text"]').first();
+    // Fill in category name (CategoryEditor has input with class .language-input)
+    const nameInput = page.locator('dialog[open] input.language-input[type="text"]').first();
     await nameInput.fill(categoryName);
 
-    // Click "Create" button (primary button in modal)
-    const createButton = page.locator('dialog[open] button.primary').filter({ hasText: /create/i });
+    // Click "Create" button (PillButton primary in modal)
+    const createButton = page.locator('dialog[open] .pill-button--primary').filter({ hasText: /create/i });
     await createButton.click();
 
     // Wait for dialog to close
@@ -117,8 +117,8 @@ test.describe('Category CRUD Workflow', () => {
     await page.goto('/calendar');
     await page.waitForTimeout(2000);
 
-    // Click "Manage" link to access calendar management
-    const manageLink = page.locator('a:has-text("Manage"), a[href*="/manage"]');
+    // Click "Manage" button to access calendar management (PillButton rendered as <button>)
+    const manageLink = page.locator('button:has-text("Manage"), a:has-text("Manage"), a[href*="/manage"]').first();
     await manageLink.click();
     await page.waitForTimeout(1000);
 
@@ -128,8 +128,8 @@ test.describe('Category CRUD Workflow', () => {
       await categoriesTab.click();
     }
 
-    // Look for first category edit button (uses .btn--secondary class within .category-item)
-    const editButton = page.locator('.category-item .btn--secondary').filter({ hasText: /edit/i }).first();
+    // Look for first category edit button (icon-button within .category-card, identified by aria-label)
+    const editButton = page.locator('.category-card .icon-button:not(.icon-button--danger)').first();
     const editButtonExists = await editButton.count() > 0;
 
     if (editButtonExists) {
@@ -140,13 +140,13 @@ test.describe('Category CRUD Workflow', () => {
       await page.waitForSelector('dialog.modal-dialog[open]', { timeout: 5000 });
 
       // Update category name
-      const nameInput = page.locator('dialog[open] input.form-control[type="text"]').first();
+      const nameInput = page.locator('dialog[open] input.language-input[type="text"]').first();
       const updatedName = `Updated Category ${Date.now()}`;
       await nameInput.clear();
       await nameInput.fill(updatedName);
 
-      // Click "Save" button
-      const saveButton = page.locator('dialog[open] button.primary').filter({ hasText: /save|update/i }).first();
+      // Click "Save" button (PillButton primary in modal)
+      const saveButton = page.locator('dialog[open] .pill-button--primary').filter({ hasText: /save|update/i }).first();
       await saveButton.click();
 
       // Wait for dialog to close
@@ -156,29 +156,29 @@ test.describe('Category CRUD Workflow', () => {
       await expect(page.locator(`.category-name:has-text("${updatedName}")`)).toBeVisible({ timeout: 10000 });
     } else {
       // No categories to edit - create one first
-      const addButton = page.locator('button.primary').filter({ hasText: /add.*category/i }).first();
+      const addButton = page.locator('.pill-button--primary').filter({ hasText: /add.*category/i }).first();
       await addButton.click();
       await page.waitForSelector('dialog.modal-dialog[open]');
 
       const categoryName = `Test Category ${Date.now()}`;
-      const nameInput = page.locator('dialog[open] input.form-control[type="text"]').first();
+      const nameInput = page.locator('dialog[open] input.language-input[type="text"]').first();
       await nameInput.fill(categoryName);
 
-      const createButton = page.locator('dialog[open] button.primary').filter({ hasText: /create/i });
+      const createButton = page.locator('dialog[open] .pill-button--primary').filter({ hasText: /create/i });
       await createButton.click();
       await page.waitForSelector('dialog[open]', { state: 'hidden' });
 
       // Now edit it
-      const newEditButton = page.locator('.category-item .btn--secondary').filter({ hasText: /edit/i }).first();
+      const newEditButton = page.locator('.category-card .icon-button:not(.icon-button--danger)').first();
       await newEditButton.click();
       await page.waitForSelector('dialog.modal-dialog[open]');
 
-      const nameInputEdit = page.locator('dialog[open] input.form-control[type="text"]').first();
+      const nameInputEdit = page.locator('dialog[open] input.language-input[type="text"]').first();
       const updatedName = `Updated Category ${Date.now()}`;
       await nameInputEdit.clear();
       await nameInputEdit.fill(updatedName);
 
-      const saveButton = page.locator('dialog[open] button.primary').filter({ hasText: /save/i }).first();
+      const saveButton = page.locator('dialog[open] .pill-button--primary').filter({ hasText: /save/i }).first();
       await saveButton.click();
       await page.waitForSelector('dialog[open]', { state: 'hidden' });
 
@@ -191,8 +191,8 @@ test.describe('Category CRUD Workflow', () => {
     await page.goto('/calendar');
     await page.waitForTimeout(2000);
 
-    // Click "Manage" link to access calendar management
-    const manageLink = page.locator('a:has-text("Manage"), a[href*="/manage"]');
+    // Click "Manage" button to access calendar management (PillButton rendered as <button>)
+    const manageLink = page.locator('button:has-text("Manage"), a:has-text("Manage"), a[href*="/manage"]').first();
     await manageLink.click();
     await page.waitForTimeout(1000);
 
@@ -203,26 +203,26 @@ test.describe('Category CRUD Workflow', () => {
     }
 
     // Create a category to delete
-    const addButton = page.locator('button.primary').filter({ hasText: /add.*category/i }).first();
+    const addButton = page.locator('.pill-button--primary').filter({ hasText: /add.*category/i }).first();
     await addButton.click();
     await page.waitForSelector('dialog.modal-dialog[open]');
 
     const categoryName = `Delete Me ${Date.now()}`;
-    const nameInput = page.locator('dialog[open] input.form-control[type="text"]').first();
+    const nameInput = page.locator('dialog[open] input.language-input[type="text"]').first();
     await nameInput.fill(categoryName);
 
-    const createButton = page.locator('dialog[open] button.primary').filter({ hasText: /create/i });
+    const createButton = page.locator('dialog[open] .pill-button--primary').filter({ hasText: /create/i });
     await createButton.click();
     await page.waitForSelector('dialog[open]', { state: 'hidden' });
 
     // Verify category was created
     await expect(page.locator(`.category-name:has-text("${categoryName}")`)).toBeVisible();
 
-    // Find the category item containing this category
-    const categoryItem = page.locator('.category-item').filter({ hasText: categoryName });
+    // Find the category card containing this category
+    const categoryItem = page.locator('.category-card').filter({ hasText: categoryName });
 
-    // Click delete button within this category item (uses .btn--danger class)
-    const deleteButton = categoryItem.locator('.btn--danger').filter({ hasText: /delete/i });
+    // Click delete button within this category card (icon-button with --danger modifier)
+    const deleteButton = categoryItem.locator('.icon-button--danger');
     await deleteButton.click();
 
     // Wait for confirmation dialog (ModalLayout wraps a dialog)
@@ -232,8 +232,8 @@ test.describe('Category CRUD Workflow', () => {
     const removeOption = page.locator('dialog[open] input[type="radio"][value="remove"]');
     await removeOption.click();
 
-    // Click confirm delete button (danger button in modal)
-    const confirmButton = page.locator('dialog[open] button.danger').filter({ hasText: /delete/i });
+    // Click confirm delete button (PillButton danger in modal)
+    const confirmButton = page.locator('dialog[open] .pill-button--danger').filter({ hasText: /delete/i });
     await confirmButton.click();
 
     // Wait for dialog to close

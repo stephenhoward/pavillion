@@ -100,7 +100,9 @@ describe('Login Screen', () => {
       },
     });
     it('has registration link', () => {
-      expect(openWrapper.find('#register').exists()).toBe(true);
+      const links = openWrapper.findAll('a');
+      const registerLink = links.find(a => a.attributes('href')?.includes('/register'));
+      expect(registerLink !== undefined).toBe(true);
     });
 
     it('no apply link', () => {
@@ -125,7 +127,9 @@ describe('Login Screen', () => {
     });
 
     it('has apply link', () => {
-      expect(applyWrapper.find('#apply').exists()).toBe(true);
+      const links = applyWrapper.findAll('a');
+      const applyLink = links.find(a => a.attributes('href')?.includes('/apply'));
+      expect(applyLink !== undefined).toBe(true);
     });
   });
 

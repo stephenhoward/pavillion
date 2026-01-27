@@ -49,16 +49,18 @@ test.describe('Admin Account Management', () => {
     // Wait for accounts section
     await page.waitForSelector('section#accounts', { timeout: 10000 });
 
-    // Wait for accounts table
-    await page.waitForSelector('table[role="table"][aria-label="User accounts"]', { timeout: 10000 });
+    // Wait for accounts table (desktop) or account cards (mobile) - both are rendered, use desktop table
+    await page.waitForSelector('.accounts-table-desktop table[role="table"][aria-label="User accounts"], .accounts-mobile .account-card', { timeout: 10000 });
 
-    // Should show at least one account row (the logged-in admin)
-    const accountRows = page.locator('table[role="table"] tbody tr');
-    const rowCount = await accountRows.count();
-    expect(rowCount).toBeGreaterThan(0);
+    // Check for at least one account in either desktop table rows or mobile cards
+    const desktopRows = page.locator('.accounts-table-desktop table[role="table"] tbody tr');
+    const mobileCards = page.locator('.accounts-mobile .account-card');
+    const desktopCount = await desktopRows.count();
+    const mobileCount = await mobileCards.count();
+    expect(desktopCount + mobileCount).toBeGreaterThan(0);
 
-    // Should show admin email in the list
-    await expect(page.locator('text=admin@pavillion.dev')).toBeVisible({ timeout: 5000 });
+    // Should show admin email in the list (visible in whichever layout is active)
+    await expect(page.locator('text=admin@pavillion.dev').first()).toBeVisible({ timeout: 5000 });
   });
 
   test('should navigate to Applications tab without errors', async ({ page }) => {
@@ -132,24 +134,26 @@ test.describe('Admin Account Management', () => {
     // Wait for invitations panel
     await page.waitForSelector('section#invitations-panel:not([hidden])', { timeout: 5000 });
 
-    // Click "Invite New Account" or similar button
-    const inviteButton = page.locator('button:has-text("Invite"), button.primary:has-text("invite")').first();
-    await inviteButton.click();
+    // Click the "Send Invitation" link inside the invitations panel to open the invite form
+    // The invitations panel has a .send-invitation-link button when empty,
+    // or we may need the header invite-button. Try both patterns.
+    const sendInviteLink = page.locator('.send-invitation-link, .invite-button').first();
+    await sendInviteLink.click();
 
-    // Wait for InviteFormView to render (it's conditionally rendered with v-if)
-    await page.waitForTimeout(500);
+    // Wait for InviteFormView modal to render (it's conditionally rendered with v-if)
+    await page.waitForSelector('dialog.modal-dialog[open]', { timeout: 5000 });
 
     // The form should now be visible - look for email input
-    const emailInput = page.locator('input[type="email"]').first();
+    const emailInput = page.locator('dialog[open] input[type="email"]').first();
     await expect(emailInput).toBeVisible({ timeout: 3000 });
 
     // Fill in email address
     const uniqueEmail = `test-${Date.now()}@example.com`;
     await emailInput.fill(uniqueEmail);
 
-    // Find and click the send/submit button
-    // Use force: true to bypass actionability checks (header may overlap in modal)
-    const submitButton = page.locator('button[type="submit"], button.primary').filter({ hasText: /send|invite/i }).first();
+    // Find and click the send/submit button inside the dialog
+    // The invite form has a .btn-submit button
+    const submitButton = page.locator('dialog[open] .btn-submit, dialog[open] button').filter({ hasText: /send|invite/i }).first();
     await submitButton.click({ force: true });
 
     // Wait for response

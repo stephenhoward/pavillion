@@ -28,7 +28,7 @@ describe('BulkOperationsMenu', () => {
     it('should be hidden when no events are selected', () => {
       const wrapper = createWrapper({ selectedCount: 0 });
 
-      expect(wrapper.find('.bulk-operations-menu').classes()).toContain('hidden');
+      expect(wrapper.find('.bulk-operations-menu').exists()).toBe(false);
     });
 
     it('should be visible when events are selected', () => {

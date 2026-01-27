@@ -86,11 +86,14 @@ describe('Category Management Enhancements - Frontend UI', () => {
 
       const categoryNames = wrapper.findAll('.category-name');
       expect(categoryNames[0].text()).toContain('Music');
-      expect(categoryNames[0].text()).toContain('(23)');
       expect(categoryNames[1].text()).toContain('Sports');
-      expect(categoryNames[1].text()).toContain('(10)');
       expect(categoryNames[2].text()).toContain('Arts');
-      expect(categoryNames[2].text()).toContain('(0)');
+
+      // Event counts are displayed in a separate .event-count element
+      const eventCounts = wrapper.findAll('.event-count');
+      expect(eventCounts[0].text()).toContain('23');
+      expect(eventCounts[1].text()).toContain('10');
+      expect(eventCounts[2].text()).toContain('0');
     });
   });
 
@@ -144,24 +147,21 @@ describe('Category Management Enhancements - Frontend UI', () => {
         return wrapper.vm.state.categories.length > 0;
       }, { timeout: 1000 });
 
-      // Initially bulk menu should be hidden
-      let bulkMenu = wrapper.find('.bulk-categories-menu');
-      expect(bulkMenu.classes()).toContain('hidden');
+      // Initially bulk menu should not exist (uses v-if)
+      expect(wrapper.find('.bulk-categories-menu').exists()).toBe(false);
 
-      // Select one category - still hidden
+      // Select one category - still not visible
       const checkboxes = wrapper.findAll('input[type="checkbox"]');
       await checkboxes[0].setValue(true);
       await nextTick();
 
-      bulkMenu = wrapper.find('.bulk-categories-menu');
-      expect(bulkMenu.classes()).toContain('hidden');
+      expect(wrapper.find('.bulk-categories-menu').exists()).toBe(false);
 
       // Select second category - menu should be visible
       await checkboxes[1].setValue(true);
       await nextTick();
 
-      bulkMenu = wrapper.find('.bulk-categories-menu');
-      expect(bulkMenu.classes()).not.toContain('hidden');
+      expect(wrapper.find('.bulk-categories-menu').exists()).toBe(true);
 
       // Merge button should be present
       const mergeButton = wrapper.find('[data-testid="merge-categories-btn"]');
@@ -186,7 +186,7 @@ describe('Category Management Enhancements - Frontend UI', () => {
       }, { timeout: 1000 });
 
       // Click delete button
-      const deleteButtons = wrapper.findAll('.btn--danger');
+      const deleteButtons = wrapper.findAll('.icon-button--danger');
       await deleteButtons[0].trigger('click');
       await nextTick();
 
@@ -215,7 +215,7 @@ describe('Category Management Enhancements - Frontend UI', () => {
       }, { timeout: 1000 });
 
       // Click delete button
-      const deleteButtons = wrapper.findAll('.btn--danger');
+      const deleteButtons = wrapper.findAll('.icon-button--danger');
       await deleteButtons[0].trigger('click');
       await nextTick();
 
@@ -247,7 +247,7 @@ describe('Category Management Enhancements - Frontend UI', () => {
       }, { timeout: 1000 });
 
       // Click delete button
-      const deleteButtons = wrapper.findAll('.btn--danger');
+      const deleteButtons = wrapper.findAll('.icon-button--danger');
       await deleteButtons[0].trigger('click');
       await nextTick();
 
@@ -287,7 +287,7 @@ describe('Category Management Enhancements - Frontend UI', () => {
       }, { timeout: 1000 });
 
       // Click delete button
-      const deleteButtons = wrapper.findAll('.btn--danger');
+      const deleteButtons = wrapper.findAll('.icon-button--danger');
       await deleteButtons[0].trigger('click');
       await nextTick();
 
@@ -300,8 +300,8 @@ describe('Category Management Enhancements - Frontend UI', () => {
       await dropdown.setValue('cat-2');
       await nextTick();
 
-      // Confirm deletion
-      const confirmButton = wrapper.find('.btn-confirm-delete');
+      // Confirm deletion - PillButton with variant="danger" in the delete dialog
+      const confirmButton = wrapper.find('.delete-actions .pill-button--danger');
       await confirmButton.trigger('click');
       await nextTick();
 
@@ -380,7 +380,7 @@ describe('Category Management Enhancements - Frontend UI', () => {
       await nextTick();
 
       // Check total count (should be sum of all selected)
-      const totalText = wrapper.find('.total-events').text();
+      const totalText = wrapper.find('.total-events-section').text();
       expect(totalText).toContain('23'); // 15 + 8
     });
 
@@ -416,8 +416,8 @@ describe('Category Management Enhancements - Frontend UI', () => {
       await targetRadio.setValue(true);
       await nextTick();
 
-      // Confirm merge
-      const confirmButton = wrapper.find('.btn-confirm-merge');
+      // Confirm merge - PillButton with variant="primary" in the merge dialog
+      const confirmButton = wrapper.find('.merge-actions .pill-button--primary');
       await confirmButton.trigger('click');
       await nextTick();
 

@@ -64,6 +64,30 @@
   --pav-color-red-800: #991B1B;
   --pav-color-red-900: #7F1D1D;
 
+  /* Amber Palette (for pending/warning status badges) */
+  --pav-color-amber-50: #FFFBEB;
+  --pav-color-amber-100: #FEF3C7;
+  --pav-color-amber-200: #FDE68A;
+  --pav-color-amber-300: #FCD34D;
+  --pav-color-amber-400: #FBBF24;
+  --pav-color-amber-500: #F59E0B;
+  --pav-color-amber-600: #D97706;
+  --pav-color-amber-700: #B45309;
+  --pav-color-amber-800: #92400E;
+  --pav-color-amber-900: #78350F;
+
+  /* Emerald Palette (for positive/accept actions) */
+  --pav-color-emerald-50: #ECFDF5;
+  --pav-color-emerald-100: #D1FAE5;
+  --pav-color-emerald-200: #A7F3D0;
+  --pav-color-emerald-300: #6EE7B7;
+  --pav-color-emerald-400: #34D399;
+  --pav-color-emerald-500: #10B981;
+  --pav-color-emerald-600: #059669;
+  --pav-color-emerald-700: #047857;
+  --pav-color-emerald-800: #065F46;
+  --pav-color-emerald-900: #064E3B;
+
   /* Neutral Colors (mapped to Stone for warm gray feel) */
   --pav-color-neutral-50: var(--pav-color-stone-50);
   --pav-color-neutral-100: var(--pav-color-stone-100);
@@ -75,30 +99,30 @@
   --pav-color-neutral-700: var(--pav-color-stone-700);
   --pav-color-neutral-800: var(--pav-color-stone-800);
   --pav-color-neutral-900: var(--pav-color-stone-900);
-  
+
   /* Semantic Colors - Colorblind-Accessible */
   --pav-color-success: #1976D2;    /* Blue - universally distinguishable */
   --pav-color-warning: #F57C00;    /* Orange - maintains brand consistency */
   --pav-color-error: #7B1FA2;      /* Purple - distinct from other colors */
   --pav-color-info: #00796B;       /* Teal - neutral, informational */
-  
+
   /* Surface Colors */
   --pav-color-surface-primary: #FFF;
   --pav-color-surface-secondary: #FAFAFA;
   --pav-color-surface-tertiary: #F5F5F5;
-  
+
   /* Text Colors */
   --pav-color-text-primary: var(--pav-color-neutral-900);
   --pav-color-text-secondary: var(--pav-color-neutral-600);
   --pav-color-text-muted: var(--pav-color-neutral-500);
   --pav-color-text-inverse: #fff;
-  
+
   /* Border Colors */
   --pav-color-border-primary: var(--pav-color-neutral-300);
   --pav-color-border-secondary: var(--pav-color-neutral-200);
   --pav-color-border-focus: var(--pav-color-brand-secondary);
   --pav-color-border-error: var(--pav-color-error);
-  
+
   /* Interactive Colors */
   --pav-color-interactive-primary: var(--pav-color-brand-primary);
   --pav-color-interactive-primary-hover: var(--pav-color-brand-primary-dark);
@@ -110,7 +134,7 @@
   --pav-color-interactive-active-bg: var(--pav-color-orange-50);
   --pav-color-interactive-active-text: var(--pav-color-orange-700);
   --pav-color-interactive-active-border: var(--pav-color-orange-200);
-  
+
   /* Alert Colors - Backgrounds and text */
   --pav-color-alert-info-bg: #E0F2F1;
   --pav-color-alert-info-text: #004D40;
@@ -279,6 +303,8 @@ $black: var(--pav-color-stone-900);
  * Color Palette:
  * - Stone: Warm grays (#FAFAF9 to #1C1917) for a softer, more inviting feel
  * - Orange: Accent color (#F97316) for active/selected states and brand
+ * - Amber: Status palette (#FFFBEB to #78350F) for pending/warning badges
+ * - Emerald: Action palette (#ECFDF5 to #064E3B) for positive/accept actions
  * - Success: Blue (#1976D2) - universally distinguishable positive action
  * - Warning: Orange (#F57C00) - maintains brand consistency for caution
  * - Error: Purple (#7B1FA2) - distinct color that doesn't rely on red/green
@@ -287,6 +313,8 @@ $black: var(--pav-color-stone-900);
  * Token Categories:
  * - Stone: Warm gray palette (replaces neutral for primary use)
  * - Orange: Accent palette for interactive active states
+ * - Amber: Pending status indicators and warning badges
+ * - Emerald: Positive action buttons and success indicators
  * - Neutral: Mapped to Stone for backwards compatibility
  * - Semantic: Success, warning, error, info states (colorblind-safe)
  * - Surface: Background colors for different elevation levels

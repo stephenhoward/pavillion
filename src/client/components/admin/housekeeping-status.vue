@@ -12,6 +12,7 @@ const { t } = useTranslation('admin', {
 const status = ref(null);
 const loading = ref(true);
 const error = ref('');
+const statusExpanded = ref(false);
 
 /**
  * Fetches housekeeping status from API
@@ -81,10 +82,10 @@ function formatAbsoluteTime(isoDate) {
 }
 
 /**
- * Computed alert class for disk usage
+ * Computed alert level string
  */
-const diskAlertClass = computed(() => {
-  if (!status.value) return '';
+const alertLevel = computed(() => {
+  if (!status.value) return 'ok';
 
   const alerts = status.value.alerts;
   if (alerts.includes('critical')) return 'critical';
@@ -93,16 +94,20 @@ const diskAlertClass = computed(() => {
 });
 
 /**
- * Computed disk usage color for progress bar
+ * Computed status badge label
  */
-const diskUsageColor = computed(() => {
-  if (!status.value) return '#4CAF50';
-
-  const alerts = status.value.alerts;
-  if (alerts.includes('critical')) return '#f44336';
-  if (alerts.includes('warning')) return '#ff9800';
-  return '#4CAF50';
+const statusBadgeLabel = computed(() => {
+  if (alertLevel.value === 'critical') return t('alert_critical');
+  if (alertLevel.value === 'warning') return t('alert_warning');
+  return t('healthy', 'Healthy');
 });
+
+/**
+ * Toggle the expanded/collapsed state
+ */
+function toggleExpanded() {
+  statusExpanded.value = !statusExpanded.value;
+}
 
 // Fetch status on mount
 onMounted(() => {
@@ -111,91 +116,130 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="housekeeping-status" aria-labelledby="housekeeping-heading">
-    <h2 id="housekeeping-heading">{{ t("status_title") }}</h2>
+  <section class="status-panel" aria-labelledby="housekeeping-heading">
+    <!-- Collapsed header -->
+    <button
+      class="status-header"
+      type="button"
+      @click="toggleExpanded"
+      :aria-expanded="statusExpanded"
+      aria-controls="status-details"
+    >
+      <div class="status-header-left">
+        <h2 id="housekeeping-heading">{{ t("status_title") }}</h2>
+        <span v-if="!loading && !error" class="status-badge" :class="alertLevel">
+          <span class="status-dot"/>
+          {{ statusBadgeLabel }}
+        </span>
+      </div>
+      <svg
+        class="chevron-icon"
+        :class="{ expanded: statusExpanded }"
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <polyline points="6 9 12 15 18 9"/>
+      </svg>
+    </button>
 
-    <div v-if="loading" class="loading">
+    <!-- Loading state -->
+    <div v-if="loading" class="status-loading">
       {{ t("loading") }}
     </div>
 
-    <div v-else-if="error" class="error-message" role="alert">
+    <!-- Error state -->
+    <div v-else-if="error" class="status-error" role="alert">
       {{ error }}
     </div>
 
-    <div v-else-if="status" class="status-content">
+    <!-- Expanded details -->
+    <div
+      v-else-if="status && statusExpanded"
+      id="status-details"
+      class="status-details"
+    >
+      <div class="status-divider"/>
+
       <!-- Disk Usage -->
-      <div class="status-item disk-usage" :class="diskAlertClass">
-        <div class="status-label">{{ t("disk_usage") }}</div>
-        <div class="disk-progress">
-          <div class="progress-bar">
-            <div
-              class="progress-fill"
-              :style="{ width: `${status.diskUsage.percentageUsed}%`, backgroundColor: diskUsageColor }"
-              role="progressbar"
-              :aria-valuenow="status.diskUsage.percentageUsed"
-              aria-valuemin="0"
-              aria-valuemax="100"
-            />
-          </div>
-          <div class="disk-stats">
-            <span class="percentage">{{ status.diskUsage.percentageUsed.toFixed(1) }}%</span>
-            <span class="details">
-              {{ formatBytes(status.diskUsage.totalBytes - status.diskUsage.freeBytes) }}
-              / {{ formatBytes(status.diskUsage.totalBytes) }}
-            </span>
-          </div>
+      <div class="disk-usage-section">
+        <div class="disk-usage-header">
+          <span class="disk-label">{{ t("disk_usage") }}</span>
+          <span class="disk-stats-text">
+            {{ formatBytes(status.diskUsage.totalBytes - status.diskUsage.freeBytes) }}
+            / {{ formatBytes(status.diskUsage.totalBytes) }}
+          </span>
+        </div>
+        <div class="progress-track">
+          <div
+            class="progress-fill"
+            :class="alertLevel"
+            :style="{ width: `${status.diskUsage.percentageUsed}%` }"
+            role="progressbar"
+            :aria-valuenow="status.diskUsage.percentageUsed"
+            aria-valuemin="0"
+            aria-valuemax="100"
+          />
+        </div>
+        <div class="disk-percentage" :class="alertLevel">
+          {{ status.diskUsage.percentageUsed.toFixed(1) }}% {{ t("disk_usage", "used") }}
         </div>
       </div>
 
-      <!-- Last Backup -->
-      <div class="status-item">
-        <div class="status-label">{{ t("last_backup") }}</div>
-        <div class="status-value" v-if="status.lastBackup">
-          <div class="backup-date">{{ formatAbsoluteTime(status.lastBackup.date) }}</div>
-          <div class="backup-details">
-            {{ formatBytes(status.lastBackup.size) }} ({{ status.lastBackup.type }})
+      <!-- Backup Info Grid -->
+      <div class="info-grid">
+        <!-- Last Backup -->
+        <div class="info-card">
+          <div class="info-card-label">{{ t("last_backup") }}</div>
+          <div v-if="status.lastBackup" class="info-card-content">
+            <div class="info-card-value">{{ formatAbsoluteTime(status.lastBackup.date) }}</div>
+            <div class="info-card-meta">
+              {{ formatBytes(status.lastBackup.size) }} &middot; {{ status.lastBackup.type }}
+            </div>
           </div>
+          <div v-else class="info-card-empty">{{ t("no_backups") }}</div>
         </div>
-        <div class="status-value empty" v-else>
-          {{ t("no_backups") }}
-        </div>
-      </div>
 
-      <!-- Next Backup -->
-      <div class="status-item">
-        <div class="status-label">{{ t("next_backup") }}</div>
-        <div class="status-value" v-if="status.nextBackup">
-          {{ formatRelativeTime(status.nextBackup) }}
-        </div>
-        <div class="status-value empty" v-else>
-          {{ t("not_scheduled") }}
-        </div>
-      </div>
-
-      <!-- Alert Status -->
-      <div class="status-item" v-if="status.alerts.includes('warning') || status.alerts.includes('critical')">
-        <div class="status-label">{{ t("alerts") }}</div>
-        <div class="alert-badge" :class="diskAlertClass">
-          <span v-if="status.alerts.includes('critical')">{{ t("alert_critical") }}</span>
-          <span v-else-if="status.alerts.includes('warning')">{{ t("alert_warning") }}</span>
-        </div>
-      </div>
-
-      <!-- Retention Stats -->
-      <div class="status-item retention-stats">
-        <div class="status-label">{{ t("retention_policy") }}</div>
-        <div class="retention-grid">
-          <div class="retention-item">
-            <span class="retention-label">{{ t("daily") }}</span>
-            <span class="retention-value">{{ status.retentionStats.daily.current }} / {{ status.retentionStats.daily.target }}</span>
+        <!-- Next Backup -->
+        <div class="info-card">
+          <div class="info-card-label">{{ t("next_backup") }}</div>
+          <div v-if="status.nextBackup" class="info-card-content">
+            <div class="info-card-value">{{ formatRelativeTime(status.nextBackup) }}</div>
+            <div class="info-card-meta">{{ formatAbsoluteTime(status.nextBackup) }}</div>
           </div>
-          <div class="retention-item">
-            <span class="retention-label">{{ t("weekly") }}</span>
-            <span class="retention-value">{{ status.retentionStats.weekly.current }} / {{ status.retentionStats.weekly.target }}</span>
-          </div>
-          <div class="retention-item">
-            <span class="retention-label">{{ t("monthly") }}</span>
-            <span class="retention-value">{{ status.retentionStats.monthly.current }} / {{ status.retentionStats.monthly.target }}</span>
+          <div v-else class="info-card-empty">{{ t("not_scheduled") }}</div>
+        </div>
+
+        <!-- Retention Policy -->
+        <div class="info-card">
+          <div class="info-card-label">{{ t("retention_policy") }}</div>
+          <div class="retention-list">
+            <div class="retention-row">
+              <span class="retention-label">{{ t("daily") }}</span>
+              <span class="retention-value">
+                <span class="retention-current">{{ status.retentionStats.daily.current }}</span>
+                / {{ status.retentionStats.daily.target }}
+              </span>
+            </div>
+            <div class="retention-row">
+              <span class="retention-label">{{ t("weekly") }}</span>
+              <span class="retention-value">
+                <span class="retention-current">{{ status.retentionStats.weekly.current }}</span>
+                / {{ status.retentionStats.weekly.target }}
+              </span>
+            </div>
+            <div class="retention-row">
+              <span class="retention-label">{{ t("monthly") }}</span>
+              <span class="retention-value">
+                <span class="retention-current">{{ status.retentionStats.monthly.current }}</span>
+                / {{ status.retentionStats.monthly.target }}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -204,201 +248,314 @@ onMounted(() => {
 </template>
 
 <style scoped lang="scss">
-@use '../../assets/mixins' as *;
+@use '../../assets/style/tokens/breakpoints' as *;
 
-.housekeeping-status {
-  padding: 1.5rem;
-  background: $light-mode-background;
-  border-radius: 8px;
-  margin-bottom: 2rem;
+.status-panel {
+  background: var(--pav-color-surface-primary);
+  border: 1px solid var(--pav-border-color-light);
+  border-radius: var(--pav-border-radius-card);
+  overflow: hidden;
 
-  @media (prefers-color-scheme: dark) {
-    background: $dark-mode-background;
-  }
-
-  h2 {
-    font-weight: $font-medium;
-    font-size: 1.5rem;
-    margin-bottom: 1.5rem;
-    color: $light-mode-text;
-
-    @media (prefers-color-scheme: dark) {
-      color: $dark-mode-text;
-    }
-  }
-
-  .loading {
-    text-align: center;
-    padding: 2rem;
-    color: $light-mode-text;
-
-    @media (prefers-color-scheme: dark) {
-      color: $dark-mode-text;
-    }
-  }
-
-  .error-message {
-    padding: 0.75rem;
-    background-color: #fff0f0;
-    border: 1px solid #d87373;
-    color: #7d2a2a;
-    border-radius: 4px;
-
-    @media (prefers-color-scheme: dark) {
-      background-color: #4a2a2a;
-      border-color: #d87373;
-      color: #ffcccc;
-    }
-  }
-
-  .status-content {
+  .status-header {
     display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-  }
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: var(--pav-space-4) var(--pav-space-6);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--pav-color-text-primary);
+    font-family: inherit;
 
-  .status-item {
-    .status-label {
-      font-weight: $font-medium;
-      margin-bottom: 0.5rem;
-      color: $light-mode-text;
+    &:hover {
+      background: var(--pav-color-surface-secondary);
+    }
 
-      @media (prefers-color-scheme: dark) {
-        color: $dark-mode-text;
+    &:focus-visible {
+      outline: 2px solid var(--pav-color-brand-primary);
+      outline-offset: -2px;
+      border-radius: var(--pav-border-radius-card);
+    }
+
+    .status-header-left {
+      display: flex;
+      align-items: center;
+      gap: var(--pav-space-3);
+
+      h2 {
+        margin: 0;
+        font-size: var(--pav-font-size-base);
+        font-weight: var(--pav-font-weight-medium);
+        color: var(--pav-color-text-primary);
+      }
+
+      .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--pav-space-1_5);
+        padding: var(--pav-space-1) var(--pav-space-2_5);
+        border-radius: var(--pav-border-radius-badge);
+        font-size: var(--pav-font-size-2xs);
+        font-weight: var(--pav-font-weight-medium);
+
+        .status-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: var(--pav-border-radius-full);
+        }
+
+        &.ok {
+          background: var(--pav-color-emerald-50);
+          color: var(--pav-color-emerald-800);
+
+          .status-dot {
+            background: var(--pav-color-emerald-500);
+          }
+        }
+
+        &.warning {
+          background: var(--pav-color-amber-50);
+          color: var(--pav-color-amber-800);
+
+          .status-dot {
+            background: var(--pav-color-amber-500);
+          }
+        }
+
+        &.critical {
+          background: var(--pav-color-red-50);
+          color: var(--pav-color-red-800);
+
+          .status-dot {
+            background: var(--pav-color-red-500);
+          }
+        }
       }
     }
 
-    .status-value {
-      color: $light-mode-text;
+    .chevron-icon {
+      transition: transform 0.2s ease;
+      color: var(--pav-color-text-muted);
+      flex-shrink: 0;
 
-      @media (prefers-color-scheme: dark) {
-        color: $dark-mode-text;
-      }
-
-      &.empty {
-        opacity: 0.6;
-        font-style: italic;
+      &.expanded {
+        transform: rotate(180deg);
       }
     }
   }
 
-  .disk-usage {
-    .disk-progress {
-      .progress-bar {
-        width: 100%;
-        height: 20px;
-        background-color: #e0e0e0;
-        border-radius: 10px;
-        overflow: hidden;
-        margin-bottom: 0.5rem;
+  .status-loading {
+    padding: var(--pav-space-6);
+    text-align: center;
+    color: var(--pav-color-text-muted);
+    font-size: var(--pav-font-size-xs);
+  }
 
-        @media (prefers-color-scheme: dark) {
-          background-color: #555;
-        }
+  .status-error {
+    margin: 0 var(--pav-space-6) var(--pav-space-4);
+    padding: var(--pav-space-3);
+    background: var(--pav-color-red-50);
+    border: 1px solid var(--pav-color-red-200);
+    border-radius: var(--pav-border-radius-md);
+    color: var(--pav-color-red-700);
+    font-size: var(--pav-font-size-xs);
+  }
 
-        .progress-fill {
-          height: 100%;
-          transition: width 0.3s ease, background-color 0.3s ease;
-        }
-      }
+  .status-details {
+    padding: 0 var(--pav-space-6) var(--pav-space-6);
 
-      .disk-stats {
+    .status-divider {
+      height: 1px;
+      background: var(--pav-border-color-light);
+      margin-bottom: var(--pav-space-5);
+    }
+
+    .disk-usage-section {
+      margin-bottom: var(--pav-space-5);
+
+      .disk-usage-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        font-size: 0.9rem;
+        margin-bottom: var(--pav-space-2);
 
-        .percentage {
-          font-weight: $font-bold;
-          font-size: 1.1rem;
+        .disk-label {
+          font-size: var(--pav-font-size-xs);
+          font-weight: var(--pav-font-weight-medium);
+          color: var(--pav-color-text-secondary);
         }
 
-        .details {
-          opacity: 0.8;
+        .disk-stats-text {
+          font-size: var(--pav-font-size-2xs);
+          color: var(--pav-color-text-muted);
+        }
+      }
+
+      .progress-track {
+        width: 100%;
+        height: 12px;
+        background: var(--pav-color-stone-100);
+        border-radius: var(--pav-border-radius-full);
+        overflow: hidden;
+
+        .progress-fill {
+          height: 100%;
+          border-radius: var(--pav-border-radius-full);
+          transition: width 0.3s ease;
+
+          &.ok {
+            background: var(--pav-color-emerald-500);
+          }
+
+          &.warning {
+            background: var(--pav-color-amber-500);
+          }
+
+          &.critical {
+            background: var(--pav-color-red-500);
+          }
+        }
+      }
+
+      .disk-percentage {
+        margin-top: var(--pav-space-1_5);
+        font-size: var(--pav-font-size-2xs);
+        font-weight: var(--pav-font-weight-medium);
+
+        &.ok {
+          color: var(--pav-color-emerald-600);
+        }
+
+        &.warning {
+          color: var(--pav-color-amber-600);
+        }
+
+        &.critical {
+          color: var(--pav-color-red-600);
         }
       }
     }
 
-    &.critical .disk-stats .percentage {
-      color: #f44336;
-    }
-
-    &.warning .disk-stats .percentage {
-      color: #ff9800;
-    }
-
-    &.ok .disk-stats .percentage {
-      color: #4CAF50;
-    }
-  }
-
-  .backup-date {
-    font-size: 1rem;
-    margin-bottom: 0.25rem;
-  }
-
-  .backup-details {
-    font-size: 0.85rem;
-    opacity: 0.7;
-  }
-
-  .alert-badge {
-    display: inline-block;
-    padding: 0.5rem 1rem;
-    border-radius: 4px;
-    font-weight: $font-medium;
-
-    &.critical {
-      background-color: #ffebee;
-      color: #c62828;
-      border: 1px solid #ef5350;
-
-      @media (prefers-color-scheme: dark) {
-        background-color: #4a2a2a;
-        color: #ffcccc;
-        border-color: #ef5350;
-      }
-    }
-
-    &.warning {
-      background-color: #fff3e0;
-      color: #e65100;
-      border: 1px solid #ff9800;
-
-      @media (prefers-color-scheme: dark) {
-        background-color: #4a3a2a;
-        color: #ffddaa;
-        border-color: #ff9800;
-      }
-    }
-  }
-
-  .retention-stats {
-    .retention-grid {
+    .info-grid {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 1rem;
+      grid-template-columns: 1fr;
+      gap: var(--pav-space-3);
 
-      .retention-item {
-        display: flex;
-        flex-direction: column;
-        padding: 0.75rem;
-        background-color: #f5f5f5;
-        border-radius: 4px;
+      @include pav-media(sm) {
+        grid-template-columns: repeat(3, 1fr);
+      }
 
-        @media (prefers-color-scheme: dark) {
-          background-color: #444;
+      .info-card {
+        background: var(--pav-color-surface-secondary);
+        border-radius: var(--pav-border-radius-md);
+        padding: var(--pav-space-4);
+
+        .info-card-label {
+          font-size: var(--pav-font-size-2xs);
+          font-weight: var(--pav-font-weight-medium);
+          color: var(--pav-color-text-muted);
+          text-transform: uppercase;
+          letter-spacing: var(--pav-letter-spacing-wider);
+          margin-bottom: var(--pav-space-2);
         }
 
-        .retention-label {
-          font-size: 0.85rem;
-          opacity: 0.8;
-          margin-bottom: 0.25rem;
+        .info-card-value {
+          font-size: var(--pav-font-size-xs);
+          font-weight: var(--pav-font-weight-medium);
+          color: var(--pav-color-text-primary);
+          margin-bottom: var(--pav-space-1);
         }
 
-        .retention-value {
-          font-size: 1.1rem;
-          font-weight: $font-medium;
+        .info-card-meta {
+          font-size: var(--pav-font-size-2xs);
+          color: var(--pav-color-text-muted);
+        }
+
+        .info-card-empty {
+          font-size: var(--pav-font-size-xs);
+          color: var(--pav-color-text-muted);
+          font-style: italic;
+        }
+
+        .retention-list {
+          display: flex;
+          flex-direction: column;
+          gap: var(--pav-space-1_5);
+
+          .retention-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+
+            .retention-label {
+              font-size: var(--pav-font-size-2xs);
+              color: var(--pav-color-text-secondary);
+            }
+
+            .retention-value {
+              font-size: var(--pav-font-size-2xs);
+              color: var(--pav-color-text-muted);
+
+              .retention-current {
+                font-weight: var(--pav-font-weight-semibold);
+                color: var(--pav-color-brand-primary);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .status-panel {
+    .status-header {
+      .status-header-left {
+        .status-badge {
+          &.ok {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--pav-color-emerald-300);
+          }
+
+          &.warning {
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--pav-color-amber-300);
+          }
+
+          &.critical {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--pav-color-red-300);
+          }
+        }
+      }
+    }
+
+    .status-error {
+      background: rgba(239, 68, 68, 0.1);
+      border-color: rgba(239, 68, 68, 0.3);
+      color: var(--pav-color-red-300);
+    }
+
+    .status-details {
+      .disk-usage-section {
+        .progress-track {
+          background: var(--pav-color-stone-700);
+        }
+
+        .disk-percentage {
+          &.ok {
+            color: var(--pav-color-emerald-300);
+          }
+
+          &.warning {
+            color: var(--pav-color-amber-300);
+          }
+
+          &.critical {
+            color: var(--pav-color-red-300);
+          }
         }
       }
     }

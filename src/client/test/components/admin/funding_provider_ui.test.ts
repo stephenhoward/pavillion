@@ -205,7 +205,7 @@ describe('Funding Provider UI Components', () => {
     // Initially modal should not be visible
     expect(wrapper.find('.modal-overlay').exists()).toBe(false);
 
-    const disconnectButton = wrapper.find('button.secondary');
+    const disconnectButton = wrapper.find('button.action-link--danger');
     await disconnectButton.trigger('click');
     await nextTick();
     await new Promise(resolve => setTimeout(resolve, 50));
@@ -252,7 +252,7 @@ describe('Funding Provider UI Components', () => {
 
     // Note: The actual error display implementation will be added in subsequent subtasks.
     // This test verifies the component mounts successfully.
-    expect(wrapper.find('.funding-settings').exists()).toBe(true);
+    expect(wrapper.find('.funding-page').exists()).toBe(true);
   });
 
   /**
@@ -274,7 +274,7 @@ describe('Funding Provider UI Components', () => {
     // which will be implemented in subsequent subtasks
     wrapper = mountFunding();
     await nextTick();
-    expect(wrapper.find('.funding-settings').exists()).toBe(true);
+    expect(wrapper.find('.funding-page').exists()).toBe(true);
   });
 
   /**
