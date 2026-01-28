@@ -4,7 +4,7 @@ import { Sequelize, DataTypes } from 'sequelize';
  * Base Schema Migration
  *
  * This migration creates the complete Pavillion database schema including:
- * - Account management (accounts, profiles, invitations, applications)
+ * - Account management (accounts, invitations, applications)
  * - Calendar management (calendars, events, schedules, categories, locations)
  * - Media management
  * - ActivityPub federation (inbox, outbox, following, followers)
@@ -126,33 +126,6 @@ export default {
       },
       status_timestamp: {
         type: DataTypes.DATE,
-        allowNull: true,
-      },
-      createdAt: {
-        type: DataTypes.DATE,
-        allowNull: false,
-      },
-      updatedAt: {
-        type: DataTypes.DATE,
-        allowNull: false,
-      },
-    });
-
-    // profile - User profiles
-    await queryInterface.createTable('profile', {
-      account_id: {
-        type: DataTypes.UUID,
-        primaryKey: true,
-        allowNull: false,
-        references: {
-          model: 'account',
-          key: 'id',
-        },
-        onUpdate: 'CASCADE',
-        onDelete: 'CASCADE',
-      },
-      description: {
-        type: DataTypes.STRING,
         allowNull: true,
       },
       createdAt: {
@@ -1252,7 +1225,6 @@ export default {
 
     // Account management
     await queryInterface.dropTable('account_invitation');
-    await queryInterface.dropTable('profile');
     await queryInterface.dropTable('account_application');
     await queryInterface.dropTable('account_secrets');
     await queryInterface.dropTable('account');

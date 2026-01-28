@@ -5,7 +5,7 @@ This directory contains Sequelize database migrations for Pavillion.
 ## Base Schema
 
 The `0001_initial_schema.ts` migration creates the complete initial database schema including:
-- Account management (accounts, profiles, invitations, applications)
+- Account management (accounts, invitations, applications)
 - Calendar management (calendars, events, schedules, categories, locations)
 - Media management
 - ActivityPub federation (inbox, outbox, following, followers)

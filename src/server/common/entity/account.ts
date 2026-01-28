@@ -1,6 +1,6 @@
 import { Model, Column, Table, BelongsTo, ForeignKey, DataType, PrimaryKey, BeforeCreate, BeforeUpdate } from 'sequelize-typescript';
 
-import { Account, Profile } from '@/common/model/account';
+import { Account } from '@/common/model/account';
 import AccountApplication from '@/common/model/application';
 import db from '@/server/common/entity/db';
 
@@ -13,9 +13,6 @@ class AccountEntity extends Model {
 
   @Column({ type: DataType.STRING })
   declare username: string;
-
-  @Column({ type: DataType.STRING })
-  declare domain: string;
 
   @Column({ type: DataType.STRING })
   declare email: string;
@@ -101,31 +98,6 @@ class AccountApplicationEntity extends Model {
   }
 };
 
-@Table({ tableName: 'profile' })
-class ProfileEntity extends Model {
-  @ForeignKey(() => AccountEntity)
-  @PrimaryKey
-  @Column({ type: DataType.UUID })
-  declare account_id: string;
-
-  @Column({ type: DataType.STRING })
-  declare description: string;
-
-  @Column({ type: DataType.STRING })
-  declare url: string;
-
-  @BelongsTo(() => AccountEntity)
-  declare account: AccountEntity;
-
-  toModel(): Profile {
-    return Profile.fromObject({
-      id: this.account_id,
-      description: this.description,
-      url: this.url,
-    });
-  };
-};
-
 @Table({ tableName: 'account_secrets' })
 class AccountSecretsEntity extends Model {
   @ForeignKey(() => AccountEntity)
@@ -152,12 +124,11 @@ class AccountSecretsEntity extends Model {
   declare account: AccountEntity;
 };
 
-db.addModels([AccountEntity, AccountRoleEntity, AccountSecretsEntity, AccountApplicationEntity, ProfileEntity]);
+db.addModels([AccountEntity, AccountRoleEntity, AccountSecretsEntity, AccountApplicationEntity]);
 
 export {
   AccountEntity,
   AccountRoleEntity,
   AccountSecretsEntity,
   AccountApplicationEntity,
-  ProfileEntity,
 };

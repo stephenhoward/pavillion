@@ -6,7 +6,6 @@ import { PrimaryModel } from '@/common/model/model';
 class Account extends PrimaryModel {
   username: string = '';
   email: string = '';
-  profile: Profile | null = null;
   roles: string[] | null = null;
   calendarLanguages: string[] = ['en'];
   language: string = 'en';
@@ -47,7 +46,6 @@ class Account extends PrimaryModel {
       id: this.id,
       username: this.username,
       email: this.email,
-      profile: this.profile,
       roles: this.roles,
     };
   };
@@ -60,7 +58,6 @@ class Account extends PrimaryModel {
    */
   static fromObject(obj: Record<string,any>): Account {
     let account = new Account(obj.id, obj.username, obj.email);
-    account.profile = obj.profile;
     account.roles = obj.roles;
     return account;
   }
@@ -73,15 +70,4 @@ class Account extends PrimaryModel {
   clone(): Account { return Account.fromObject(this.toObject()); }
 };
 
-/**
- * Represents a user's public profile information.
- * Contains identifiers and links to the user's profile.
- */
-class Profile {
-  declare id: string;
-  declare username: string;
-  declare domain: string;
-  declare url: string;
-};
-
-export { Account, Profile};
+export { Account };
