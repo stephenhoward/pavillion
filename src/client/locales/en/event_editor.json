@@ -7,6 +7,7 @@
     "create_button": "Create Event",
     "update_button": "Update Event",
     "close_button": "Close",
+    "back_button": "Go back",
     "add_date_button": "Add another date",
     "add_language": "Add a Language",
     "remove_language": "Remove This Language",
