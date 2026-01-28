@@ -82,10 +82,6 @@ export default {
         type: DataTypes.STRING,
         allowNull: true,
       },
-      url_verification_code: {
-        type: DataTypes.STRING,
-        allowNull: true,
-      },
       password_reset_code: {
         type: DataTypes.STRING,
         allowNull: true,

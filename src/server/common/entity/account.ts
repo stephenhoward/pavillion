@@ -112,9 +112,6 @@ class AccountSecretsEntity extends Model {
   declare password: string | null;
 
   @Column({ type: DataType.STRING })
-  declare url_verification_code: string | null;
-
-  @Column({ type: DataType.STRING })
   declare password_reset_code: string | null;
 
   @Column({ type: DataType.DATE })
