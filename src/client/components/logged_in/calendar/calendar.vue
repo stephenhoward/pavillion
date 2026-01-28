@@ -50,6 +50,7 @@ const {
   selectAllState,
   toggleSelectAll,
   deselectAll,
+  getSelectedEventObjects,
 } = useBulkSelection();
 
 // Search and filter functionality
