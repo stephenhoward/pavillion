@@ -9,6 +9,8 @@ import { EventInstanceEntity } from '../../entity/event_instance';
 import { LocationEntity } from '../../entity/location';
 import { MediaEntity } from '../../../media/entity/media';
 import { EventCategoryAssignmentEntity } from '../../entity/event_category_assignment';
+import { CalendarMemberEntity } from '../../entity/calendar_member';
+import { CalendarActorEntity } from '../../../activitypub/entity/calendar_actor';
 import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError } from '@/common/exceptions/calendar';
 import db from '@/server/common/entity/db';
 
@@ -102,6 +104,23 @@ describe('EventService.deleteEvent', () => {
       .rejects.toThrow(`Event with ID ${eventId} not found`);
   });
 
+  it('should throw EventNotFoundError when event not found and calendarId provided but no remote membership', async () => {
+    const account = new Account('account-123', 'test@example.com', 'test@example.com');
+    const eventId = 'remote-event-123';
+    const calendarId = 'remote-calendar-actor-123';
+
+    // Mock event not found locally
+    sandbox.stub(EventEntity, 'findByPk').resolves(null);
+
+    // Mock no remote membership found
+    sandbox.stub(CalendarMemberEntity, 'findOne').resolves(null);
+
+    await expect(eventService.deleteEvent(account, eventId, calendarId))
+      .rejects.toThrow(EventNotFoundError);
+    await expect(eventService.deleteEvent(account, eventId, calendarId))
+      .rejects.toThrow(`Event with ID ${eventId} not found`);
+  });
+
   it('should throw CalendarNotFoundError when calendar does not exist', async () => {
     const account = new Account('account-123', 'test@example.com', 'test@example.com');
     const eventId = 'event-123';
@@ -136,6 +155,23 @@ describe('EventService.deleteEvent', () => {
       .rejects.toThrow(InsufficientCalendarPermissionsError);
     await expect(eventService.deleteEvent(account, eventId))
       .rejects.toThrow(`User does not have permission to delete events in calendar ${calendar.urlName}`);
+  });
+
+  it('should throw InsufficientCalendarPermissionsError when trying to delete remote event', async () => {
+    const account = new Account('account-123', 'test@example.com', 'test@example.com');
+    const eventId = 'remote-event-123';
+
+    // Mock a remote event (calendar_id is null for remote events stored locally)
+    const mockEventEntity = {
+      calendar_id: null,
+    };
+
+    sandbox.stub(EventEntity, 'findByPk').resolves(mockEventEntity as any);
+
+    await expect(eventService.deleteEvent(account, eventId))
+      .rejects.toThrow(InsufficientCalendarPermissionsError);
+    await expect(eventService.deleteEvent(account, eventId))
+      .rejects.toThrow('Cannot delete remote events through this method - use deleteRemoteEvent');
   });
 
   it('should rollback transaction on database error', async () => {
@@ -217,5 +253,69 @@ describe('EventService.deleteEvent', () => {
 
     expect(getCalendarStub.calledWith('calendar-123')).toBe(true);
     expect(userCanModifyStub.calledWith(account, calendar)).toBe(true);
+  });
+
+  it('should call deleteRemoteEventViaActivityPub when event not found locally but valid remote membership exists', async () => {
+    const account = new Account('account-123', 'test@example.com', 'test@example.com');
+    const eventId = 'remote-event-123';
+    const calendarId = 'remote-calendar-actor-456';
+
+    // Mock event not found locally
+    sandbox.stub(EventEntity, 'findByPk').resolves(null);
+
+    // Mock calendar actor with toModel method
+    const mockCalendarActor = {
+      id: 'remote-calendar-actor-456',
+      actor_uri: 'https://remote.example.com/calendars/test-calendar',
+      inbox_url: 'https://remote.example.com/inbox',
+      toModel: sandbox.stub().returns({
+        id: 'remote-calendar-actor-456',
+        actorType: 'remote' as const,
+        calendarId: null,
+        actorUri: 'https://remote.example.com/calendars/test-calendar',
+        remoteDisplayName: 'Test Remote Calendar',
+        remoteDomain: 'remote.example.com',
+        inboxUrl: 'https://remote.example.com/inbox',
+        sharedInboxUrl: null,
+        lastFetched: new Date(),
+        publicKey: 'mock-public-key',
+        privateKey: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
+    };
+
+    // Mock remote membership found
+    const mockRemoteMembership = {
+      account_id: 'account-123',
+      calendar_actor_id: 'remote-calendar-actor-456',
+      calendar_id: null,
+      role: 'editor',
+      calendarActor: mockCalendarActor,
+    };
+
+    sandbox.stub(CalendarMemberEntity, 'findOne').resolves(mockRemoteMembership as any);
+
+    // Stub the private deleteRemoteEventViaActivityPub method
+    const deleteRemoteStub = sandbox.stub(eventService as any, 'deleteRemoteEventViaActivityPub').resolves();
+
+    // Call deleteEvent with calendarId
+    await eventService.deleteEvent(account, eventId, calendarId);
+
+    // Verify findOne was called with correct parameters
+    expect((CalendarMemberEntity.findOne as sinon.SinonStub).calledWith({
+      where: {
+        account_id: account.id,
+        calendar_actor_id: calendarId,
+        calendar_id: null,
+      },
+      include: [{ model: CalendarActorEntity, as: 'calendarActor' }],
+    })).toBe(true);
+
+    // Verify deleteRemoteEventViaActivityPub was called with correct parameters
+    expect(deleteRemoteStub.calledOnce).toBe(true);
+    expect(deleteRemoteStub.firstCall.args[0]).toEqual(account);
+    expect(deleteRemoteStub.firstCall.args[1]).toEqual(mockCalendarActor.toModel());
+    expect(deleteRemoteStub.firstCall.args[2]).toEqual(eventId);
   });
 });
