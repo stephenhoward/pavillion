@@ -6,7 +6,9 @@
     "go_login": "back to sign in",
     "400": "bad sign in",
     "unknown_error": "An unknown error occurred",
-    "account_exists": "An account already exists for this email address"
+    "registration_submitted": "If this email is not already registered, you will receive an email shortly.",
+    "registration_closed": "Account registration is currently closed.",
+    "error_creating_account": "An error occurred while creating your account. Please try again later."
   },
   "apply": {
     "title": "Apply for an account",
@@ -16,8 +18,10 @@
     "go_login": "back to sign in",
     "400": "bad sign in",
     "unknown_error": "An unknown error occurred",
-    "account_exists": "An account already exists for this email address",
-    "application_submitted": "Your account application has been recorded."
+    "application_submitted": "If this email is not already registered, your application will be reviewed.",
+    "account_applications_closed": "Account applications are currently closed.",
+    "application_processing_error": "An error occurred while processing your application. Please try again later.",
+    "invalid_request": "Invalid request. Please check your input and try again."
   },
   "accept_invite": {
     "bad_invite_title": "Invitation expired",

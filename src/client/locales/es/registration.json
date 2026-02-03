@@ -1,0 +1,46 @@
+{
+  "register": {
+    "title": "Crear una cuenta",
+    "create_button": "Crear una cuenta",
+    "email": "correo electrónico",
+    "go_login": "volver a iniciar sesión",
+    "400": "error al registrar",
+    "unknown_error": "Ocurrió un error desconocido",
+    "registration_submitted": "TODO: Si este correo no está registrado, recibirás un correo en breve.",
+    "registration_closed": "TODO: El registro de cuentas está actualmente cerrado.",
+    "error_creating_account": "TODO: Ocurrió un error al crear tu cuenta. Por favor intenta más tarde."
+  },
+  "apply": {
+    "title": "Solicitar una cuenta",
+    "create_button": "Solicitar una Cuenta",
+    "email": "correo electrónico",
+    "message_label": "Mensaje",
+    "go_login": "volver a iniciar sesión",
+    "400": "error al registrar",
+    "unknown_error": "Ocurrió un error desconocido",
+    "application_submitted": "TODO: Si este correo no está registrado, tu solicitud será revisada.",
+    "account_applications_closed": "Las solicitudes de cuenta están actualmente cerradas.",
+    "application_processing_error": "Ocurrió un error al procesar tu solicitud. Por favor intenta más tarde.",
+    "invalid_request": "Solicitud inválida. Por favor verifica tu información e intenta nuevamente."
+  },
+  "accept_invite": {
+    "bad_invite_title": "Invitación expirada",
+    "bad_invite_explanation": "Tu invitación ha expirado o es inválida. Por favor contacta al administrador para una nueva invitación.",
+    "go_login": "volver a iniciar sesión",
+    "new_account_password_title": "Aceptar Invitación",
+    "registration_new_password": "Crea una contraseña para completar la configuración de tu cuenta.",
+    "password_placeholder": "Contraseña",
+    "password2_placeholder": "Confirmar contraseña",
+    "set_password_button": "Crear Cuenta",
+    "missing_password": "Se requiere una contraseña",
+    "missing_password2": "Se requiere confirmar la contraseña",
+    "bad_password_match": "Las contraseñas no coinciden",
+    "invitation_accepted_title": "¡Cuenta creada exitosamente!",
+    "invitation_accepted_description": "Tu cuenta ha sido creada y estás listo para comenzar.",
+    "calendar_access_granted_title": "Acceso al calendario otorgado:",
+    "invited_by": "Invitado por {{email}}",
+    "continue_to_login": "Continuar al Inicio de Sesión",
+    "password_too_short": "La contraseña debe tener al menos 8 caracteres",
+    "password_needs_variety": "La contraseña debe incluir al menos dos de: letras, números, caracteres especiales"
+  }
+}

@@ -4,7 +4,7 @@
     <SuccessState>
       <h3>{{ t('title') }}</h3>
       <p class="success-message">
-        Check your email "{{ state.email }}" for a confirmation link
+        {{ t('registration_submitted') }}
       </p>
     </SuccessState>
   </div>

@@ -22,25 +22,26 @@ export default class AccountRouteHandlers {
   async registerHandler(req: Request, res: Response): Promise<void> {
     try {
       let account = await this.service.registerNewAccount(req.body.email);
-      if ( account ) {
-        res.json({message: 'email sent'});
-      }
-      else {
-        res.status(400).json({message: 'error creating account'});
+      if ( !account ) {
+        res.status(400).json({message: 'error_creating_account'});
+        return;
       }
     }
     catch (error) {
       if ( error instanceof AccountAlreadyExistsError ) {
-        res.status(400).json({message: 'account_exists'});
+        console.info('Registration attempt for existing account');
       }
       else if ( error instanceof AccountRegistrationClosedError ) {
-        res.status(400).json({message: 'registration closed'});
+        res.status(400).json({message: 'registration_closed'});
+        return;
       }
       else {
         console.error(error);
-        res.status(400).json({message: 'error creating account'});
+        res.status(400).json({message: 'error_creating_account'});
+        return;
       }
     }
+    res.json({message: 'registration_submitted'});
   }
 
   async getCurrentUser(req: Request, res: Response): Promise<void> {

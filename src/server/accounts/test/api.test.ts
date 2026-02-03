@@ -14,6 +14,12 @@ import AccountApplication from '../../../common/model/application';
 import AccountApiV1 from '../api/v1';
 import ConfigurationInterface from '../../configuration/interface';
 import SetupInterface from '../../setup/interface';
+import {
+  AccountAlreadyExistsError,
+  AccountRegistrationClosedError,
+  AccountApplicationAlreadyExistsError,
+  AccountApplicationsClosedError,
+} from '../exceptions';
 
 describe('API v1', () => {
 
@@ -50,7 +56,7 @@ describe('Account API', () => {
     sandbox.restore();
   });
 
-  it('register: should succeed', async () => {
+  it('register: should return registration_submitted for new account', async () => {
     stub.resolves(new Account('id', 'testme', 'testme'));
     router.post('/handler', accountHandlers.registerHandler.bind(accountHandlers));
 
@@ -59,10 +65,37 @@ describe('Account API', () => {
       .send({email: 'testme'});
 
     expect(response.status).toBe(200);
+    expect(response.body.message).toBe('registration_submitted');
     expect(stub.called).toBe(true);
   });
 
-  it('register: should fail', async () => {
+  it('register: should return registration_submitted for existing account (prevent enumeration)', async () => {
+    stub.rejects(new AccountAlreadyExistsError());
+    router.post('/handler', accountHandlers.registerHandler.bind(accountHandlers));
+
+    const response = await request(testApp(router))
+      .post('/handler')
+      .send({email: 'existing@test.com'});
+
+    expect(response.status).toBe(200);
+    expect(response.body.message).toBe('registration_submitted');
+    expect(stub.called).toBe(true);
+  });
+
+  it('register: should return registration_closed when registration is closed', async () => {
+    stub.rejects(new AccountRegistrationClosedError());
+    router.post('/handler', accountHandlers.registerHandler.bind(accountHandlers));
+
+    const response = await request(testApp(router))
+      .post('/handler')
+      .send({email: 'testme'});
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe('registration_closed');
+    expect(stub.called).toBe(true);
+  });
+
+  it('register: should handle undefined account return gracefully', async () => {
     stub.resolves(undefined);
     router.post('/handler', accountHandlers.registerHandler.bind(accountHandlers));
 
@@ -71,6 +104,20 @@ describe('Account API', () => {
       .send({email: 'testme'});
 
     expect(response.status).toBe(400);
+    expect(response.body.message).toBe('error_creating_account');
+    expect(stub.called).toBe(true);
+  });
+
+  it('register: should handle unexpected errors', async () => {
+    stub.rejects(new Error('Database error'));
+    router.post('/handler', accountHandlers.registerHandler.bind(accountHandlers));
+
+    const response = await request(testApp(router))
+      .post('/handler')
+      .send({email: 'testme'});
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe('error_creating_account');
     expect(stub.called).toBe(true);
   });
 
@@ -488,7 +535,8 @@ describe ('Invitations API', () => {
 
   it('invite new account: should succeed', async () => {
     let stub2 = sandbox.stub(accountsInterface,'inviteNewAccount');
-    stub2.resolves(new AccountInvitation('id', 'testme', 'testme'));
+    const mockInviter = new Account('inviter-id', 'inviter', 'inviter@test.com');
+    stub2.resolves(new AccountInvitation('id', 'testme', mockInviter));
     router.post('/handler', inviteHandlers.inviteToRegister.bind(inviteHandlers));
 
     const response = await request(testApp(router))
@@ -589,15 +637,73 @@ describe('Applications API', () => {
     sandbox.restore();
   });
 
-  it('apply to register: should succeed', async () => {
+  it('apply to register: should return application_submitted for new application', async () => {
     let stub2 = sandbox.stub(accountsInterface,'applyForNewAccount');
+    stub2.resolves();
     router.post('/handler', applicationHandlers.applyToRegister.bind(applicationHandlers));
 
     const response = await request(testApp(router))
       .post('/handler')
-      .send({email: 'testme'});
+      .send({email: 'testme', message: 'I want to join'});
 
     expect(response.status).toBe(200);
+    expect(response.body.message).toBe('application_submitted');
+    expect(stub2.called).toBe(true);
+  });
+
+  it('apply to register: should return application_submitted for existing account (prevent enumeration)', async () => {
+    let stub2 = sandbox.stub(accountsInterface,'applyForNewAccount');
+    stub2.rejects(new AccountAlreadyExistsError());
+    router.post('/handler', applicationHandlers.applyToRegister.bind(applicationHandlers));
+
+    const response = await request(testApp(router))
+      .post('/handler')
+      .send({email: 'existing@test.com', message: 'I want to join'});
+
+    expect(response.status).toBe(200);
+    expect(response.body.message).toBe('application_submitted');
+    expect(stub2.called).toBe(true);
+  });
+
+  it('apply to register: should return application_submitted for duplicate application (prevent enumeration)', async () => {
+    let stub2 = sandbox.stub(accountsInterface,'applyForNewAccount');
+    stub2.rejects(new AccountApplicationAlreadyExistsError());
+    router.post('/handler', applicationHandlers.applyToRegister.bind(applicationHandlers));
+
+    const response = await request(testApp(router))
+      .post('/handler')
+      .send({email: 'duplicate@test.com', message: 'I want to join'});
+
+    expect(response.status).toBe(200);
+    expect(response.body.message).toBe('application_submitted');
+    expect(stub2.called).toBe(true);
+  });
+
+  it('apply to register: should return account_applications_closed when applications are closed', async () => {
+    let stub2 = sandbox.stub(accountsInterface,'applyForNewAccount');
+    stub2.rejects(new AccountApplicationsClosedError());
+    router.post('/handler', applicationHandlers.applyToRegister.bind(applicationHandlers));
+
+    const response = await request(testApp(router))
+      .post('/handler')
+      .send({email: 'testme', message: 'I want to join'});
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe('account_applications_closed');
+    expect(stub2.called).toBe(true);
+  });
+
+  it('apply to register: should handle unexpected errors', async () => {
+    let stub2 = sandbox.stub(accountsInterface,'applyForNewAccount');
+    stub2.rejects(new Error('Database error'));
+    router.post('/handler', applicationHandlers.applyToRegister.bind(applicationHandlers));
+
+    const response = await request(testApp(router))
+      .post('/handler')
+      .send({email: 'testme', message: 'I want to join'});
+
+    expect(response.status).toBe(500);
+    expect(response.body.message).toBe('application_processing_error');
     expect(stub2.called).toBe(true);
   });
 

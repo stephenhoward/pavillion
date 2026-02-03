@@ -93,7 +93,11 @@
         "no_applications": "No pending applications",
         "no_applications_description": "No account applications at this time",
         "noApplications": "No pending applications",
-        "noApplicationsDescription": "No account applications at this time"
+        "noApplicationsDescription": "No account applications at this time",
+        "application_accepted": "Application accepted successfully",
+        "application_rejected": "Application rejected successfully",
+        "application_processing_error": "An error occurred while processing the application",
+        "invalid_request": "Invalid request parameters"
     },
     "invitations": {
         "title": "Invitations",
