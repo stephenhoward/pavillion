@@ -1150,20 +1150,20 @@ class EventService {
       }
 
       await transaction.commit();
-
-      // 8. Return updated events with their categories
-      const updatedEvents = [];
-      for (const eventId of eventIds) {
-        const updatedEvent = await this.getEventById(eventId);
-        updatedEvents.push(updatedEvent);
-      }
-
-      return updatedEvents;
     }
     catch (error) {
       await transaction.rollback();
       throw error;
     }
+
+    // 8. Return updated events with their categories (after successful commit)
+    const updatedEvents = [];
+    for (const eventId of eventIds) {
+      const updatedEvent = await this.getEventById(eventId);
+      updatedEvents.push(updatedEvent);
+    }
+
+    return updatedEvents;
   }
 
   /**
@@ -1248,18 +1248,18 @@ class EventService {
       await eventEntity.destroy({ transaction });
 
       await transaction.commit();
-
-      // Emit event for ActivityPub federation
-      this.eventBus.emit('event_deleted', {
-        eventId,
-        calendar,
-        account,
-      });
     }
     catch (error) {
       await transaction.rollback();
       throw error;
     }
+
+    // Emit event for ActivityPub federation (after successful commit)
+    this.eventBus.emit('event_deleted', {
+      eventId,
+      calendar,
+      account,
+    });
   }
 }
 
