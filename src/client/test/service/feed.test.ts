@@ -33,14 +33,14 @@ describe('FeedService', () => {
       const mockFollows = [
         {
           id: 'follow-1',
-          remoteCalendarId: 'remote@example.com',
+          calendarActorId: 'remote@example.com',
           calendarId: testCalendarId,
           autoRepostOriginals: false,
           autoRepostReposts: false,
         },
         {
           id: 'follow-2',
-          remoteCalendarId: 'another@example.org',
+          calendarActorId: 'another@example.org',
           calendarId: testCalendarId,
           autoRepostOriginals: true,
           autoRepostReposts: true,
@@ -57,7 +57,7 @@ describe('FeedService', () => {
       // Result should be FollowRelationship objects with boolean fields
       expect(result).toHaveLength(2);
       expect(result[0].id).toBe('follow-1');
-      expect(result[0].remoteCalendarId).toBe('remote@example.com');
+      expect(result[0].calendarActorId).toBe('remote@example.com');
       expect(result[0].autoRepostOriginals).toBe(false);
       expect(result[0].autoRepostReposts).toBe(false);
       expect(result[1].id).toBe('follow-2');
@@ -71,12 +71,12 @@ describe('FeedService', () => {
       const mockFollowers = [
         {
           id: 'follower-1',
-          remoteCalendarId: 'follower@example.com',
+          calendarActorId: 'follower@example.com',
           calendarId: testCalendarId,
         },
         {
           id: 'follower-2',
-          remoteCalendarId: 'another-follower@example.org',
+          calendarActorId: 'another-follower@example.org',
           calendarId: testCalendarId,
         },
       ];
@@ -92,7 +92,7 @@ describe('FeedService', () => {
       expect(result).toHaveLength(2);
       expect(result[0]).toBeInstanceOf(FollowerCalendar);
       expect(result[0].id).toBe('follower-1');
-      expect(result[0].remoteCalendarId).toBe('follower@example.com');
+      expect(result[0].calendarActorId).toBe('follower@example.com');
       expect(result[1]).toBeInstanceOf(FollowerCalendar);
       expect(result[1].id).toBe('follower-2');
     });
@@ -150,7 +150,7 @@ describe('FeedService', () => {
       const followId = 'follow-1';
       const mockUpdated: FollowRelationship = {
         id: followId,
-        remoteCalendarId: 'remote@example.com',
+        calendarActorId: 'remote@example.com',
         calendarId: testCalendarId,
         autoRepostOriginals: true,
         autoRepostReposts: true,
@@ -170,7 +170,7 @@ describe('FeedService', () => {
 
       // Result should be a FollowRelationship object
       expect(result.id).toBe(followId);
-      expect(result.remoteCalendarId).toBe('remote@example.com');
+      expect(result.calendarActorId).toBe('remote@example.com');
       expect(result.autoRepostOriginals).toBe(true);
       expect(result.autoRepostReposts).toBe(true);
     });

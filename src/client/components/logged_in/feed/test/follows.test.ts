@@ -70,14 +70,14 @@ describe('Following Tab', () => {
     feedStore.follows = [
       {
         id: 'follow-1',
-        remoteCalendarId: 'calendar@remote.com',
+        calendarActorId: 'calendar@remote.com',
         calendarId: 'test-calendar',
         autoRepostOriginals: false,
         autoRepostReposts: false,
       },
       {
         id: 'follow-2',
-        remoteCalendarId: 'events@other.com',
+        calendarActorId: 'events@other.com',
         calendarId: 'test-calendar',
         autoRepostOriginals: true,
         autoRepostReposts: true,
@@ -104,7 +104,7 @@ describe('Following Tab', () => {
     feedStore.follows = [
       {
         id: 'follow-1',
-        remoteCalendarId: 'calendar@remote.com',
+        calendarActorId: 'calendar@remote.com',
         calendarId: 'test-calendar',
         autoRepostOriginals: false,
         autoRepostReposts: false,
@@ -136,7 +136,7 @@ describe('Following Tab', () => {
     feedStore.follows = [
       {
         id: 'follow-1',
-        remoteCalendarId: 'calendar@remote.com',
+        calendarActorId: 'calendar@remote.com',
         calendarId: 'test-calendar',
         autoRepostOriginals: false,
         autoRepostReposts: false,
@@ -200,7 +200,7 @@ describe('Following Tab', () => {
     feedStore.follows = [
       {
         id: 'follow-1',
-        remoteCalendarId: 'calendar@remote.com',
+        calendarActorId: 'calendar@remote.com',
         calendarId: 'test-calendar',
         autoRepostOriginals: false,
         autoRepostReposts: false,
@@ -234,7 +234,7 @@ describe('Following Tab', () => {
     feedStore.follows = [
       {
         id: 'follow-1',
-        remoteCalendarId: 'calendar@remote.com',
+        calendarActorId: 'calendar@remote.com',
         calendarId: 'test-calendar',
         autoRepostOriginals: true,
         autoRepostReposts: true,

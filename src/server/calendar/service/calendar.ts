@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { UniqueConstraintError } from 'sequelize';
+import { Op, UniqueConstraintError } from 'sequelize';
 import { EventEmitter } from 'events';
 import config from 'config';
 import axios from 'axios';
@@ -7,10 +7,10 @@ import axios from 'axios';
 import { Calendar, DefaultDateRange } from '@/common/model/calendar';
 import { Account } from '@/common/model/account';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
-import { CalendarEditorEntity } from '@/server/calendar/entity/calendar_editor';
-import { CalendarEditorPersonEntity } from '@/server/calendar/entity/calendar_editor_person';
-import { CalendarEditorRemoteEntity, RemoteEditor } from '@/server/calendar/entity/calendar_editor_remote';
+import { CalendarMemberEntity } from '@/server/calendar/entity/calendar_member';
 import { CalendarEditor } from '@/common/model/calendar_editor';
+import { AccountEntity } from '@/server/common/entity/account';
+import { UserActorEntity } from '@/server/activitypub/entity/user_actor';
 import AccountInvitation from '@/common/model/invitation';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/common/exceptions/editor';
@@ -18,6 +18,7 @@ import { noAccountExistsError } from '@/server/accounts/exceptions';
 import AccountsInterface from '@/server/accounts/interface';
 import EmailInterface from '@/server/email/interface';
 import EditorNotificationEmail from '@/server/calendar/model/editor_notification_email';
+import db from '@/server/common/entity/db';
 
 // Import the interface type (this avoids circular dependency)
 type CalendarEditorsResponse = {
@@ -92,84 +93,53 @@ class CalendarService {
     return true;
   }
 
+  /**
+   * Get all calendars a user can edit (as owner or editor).
+   * Uses CalendarMemberEntity for a single unified query.
+   *
+   * @param account - The account to find editable calendars for
+   * @returns Array of calendars the user can edit
+   */
   async editableCalendarsForUser(account: Account): Promise<Calendar[]> {
     if (!account.id) {
       return [];
     }
 
-    // Get calendars owned by the user
-    let ownedCalendars = await CalendarEntity.findAll({ where: { account_id: account.id } });
-
-    // Get calendars where the user has federated editor access
-    let federatedEditorRelationships = await CalendarEditorEntity.findAll({
+    // Single query on CalendarMemberEntity for all memberships
+    const memberships = await CalendarMemberEntity.findAll({
       where: { account_id: account.id },
-      include: [CalendarEntity],
+      include: [{ model: CalendarEntity, as: 'calendar' }],
     });
 
-    // Get calendars where the user has local person editor access
-    let localPersonEditorRelationships = await CalendarEditorPersonEntity.findAll({
-      where: { account_id: account.id },
-      include: [{ association: 'calendar' }],
-    });
-
-    // Combine owned calendars and editor calendars
-    let allCalendars = [
-      ...ownedCalendars.map(calendar => calendar.toModel()),
-      ...federatedEditorRelationships.map(rel => rel.calendar.toModel()),
-      ...localPersonEditorRelationships.map((rel: any) => rel.calendar.toModel()),
-    ];
-
-    // Remove duplicates (in case user is both owner and editor)
-    return allCalendars.filter((calendar, index, self) =>
-      index === self.findIndex(c => c.id === calendar.id),
-    );
+    return memberships
+      .filter(m => m.calendar)
+      .map(m => m.calendar.toModel());
   }
 
+  /**
+   * Get all calendars a user can edit, with their role (owner or editor).
+   * Uses CalendarMemberEntity for a single unified query.
+   *
+   * @param account - The account to find editable calendars for
+   * @returns Array of calendars with role information
+   */
   async editableCalendarsWithRoleForUser(account: Account): Promise<Array<{calendar: Calendar, role: 'owner' | 'editor'}>> {
     if (!account.id) {
       return [];
     }
 
-    // Get calendars owned by the user
-    let ownedCalendars = await CalendarEntity.findAll({ where: { account_id: account.id } });
-
-    // Get calendars where the user has remote editor access (federated)
-    let remoteEditorRoles = await CalendarEditorEntity.findAll({
+    // Single query on CalendarMemberEntity for all memberships
+    const memberships = await CalendarMemberEntity.findAll({
       where: { account_id: account.id },
-      include: [CalendarEntity],
+      include: [{ model: CalendarEntity, as: 'calendar' }],
     });
 
-    // Get calendars where the user has local person editor access
-    let localEditorRoles = await CalendarEditorPersonEntity.findAll({
-      where: { account_id: account.id },
-      include: [{ association: 'calendar' }],
-    });
-
-    // Create result with relationship information
-    let calendarsWithRole = [
-      ...ownedCalendars.map(calendar => ({
-        calendar: calendar.toModel(),
-        role: 'owner' as const,
-      })),
-      ...remoteEditorRoles.map(rel => ({
-        calendar: rel.calendar.toModel(),
-        role: 'editor' as const,
-      })),
-      ...localEditorRoles.map((rel: any) => ({
-        calendar: rel.calendar.toModel(),
-        role: 'editor' as const,
-      })),
-    ];
-
-    // Remove duplicates (prioritize owner relationship over editor)
-    return calendarsWithRole.filter((calendarInfo, index, self) => {
-      const duplicateIndex = self.findIndex(c => c.calendar.id === calendarInfo.calendar.id);
-      if (duplicateIndex === index) {
-        return true; // First occurrence, keep it
-      }
-      // If this is a duplicate, only keep it if current is owner and first is editor
-      return calendarInfo.role === 'owner' && self[duplicateIndex].role === 'editor';
-    });
+    return memberships
+      .filter(m => m.calendar)
+      .map(m => ({
+        calendar: m.calendar.toModel(),
+        role: m.role as 'owner' | 'editor',
+      }));
   }
 
   async userCanModifyCalendar(account: Account, calendar: Calendar): Promise<boolean> {
@@ -191,18 +161,22 @@ class CalendarService {
   }
 
   /**
-   * Check if an account owns a calendar
+   * Check if an account owns a calendar.
+   * Uses CalendarMemberEntity to check for owner role.
    *
    * @param account - Account to check ownership for
    * @param calendar - Calendar to check ownership of
    * @returns True if the account owns the calendar
    */
   async isCalendarOwner(account: Account, calendar: Calendar): Promise<boolean> {
-    const calendarEntity = await CalendarEntity.findByPk(calendar.id);
-    if (!calendarEntity) {
-      return false;
-    }
-    return calendarEntity.account_id === account.id;
+    const membership = await CalendarMemberEntity.findOne({
+      where: {
+        calendar_id: calendar.id,
+        account_id: account.id,
+        role: 'owner',
+      },
+    });
+    return membership !== null;
   }
 
   /**
@@ -240,20 +214,18 @@ class CalendarService {
       throw new noAccountExistsError();
     }
 
-    // Create editor relationship with uniqueness constraint handling
-    // TODO: storing the email seems problematic long term - the inviter needs a way to identify who they invited,
-    // but I don't like the idea of storing potentially outdated email addresses here. I also don't like
-    // the inviter being able to see when the invitee changes their email address. Maybe we need to introduce names/handles?
+    // Create editor relationship via CalendarMemberEntity
     try {
-      const editorEntity = await CalendarEditorEntity.create({
+      await CalendarMemberEntity.create({
         id: uuidv4(),
         calendar_id: calendar.id,
         account_id: editorAccount.id,
-        email: editorAccount.email,
+        role: 'editor',
+        granted_by: grantingAccount.id,
       });
 
       await this.sendEditorNotificationEmail(calendar, grantingAccount, editorAccount, message);
-      return editorEntity.toModel();
+      return new CalendarEditor(editorAccount.id, calendar.id, editorAccount.email);
     }
     catch (error) {
       if (error instanceof UniqueConstraintError) {
@@ -505,25 +477,39 @@ class CalendarService {
     // Look up the remote user via WebFinger
     const remoteUser = await this.lookupRemoteUser(remoteUsername, remoteDomain);
 
-    // Check if remote editor already exists
-    const existingEditor = await CalendarEditorRemoteEntity.findOne({
-      where: {
-        calendar_id: calendarId,
+    // Find or create UserActorEntity for this remote user
+    const [userActorEntity] = await UserActorEntity.findOrCreate({
+      where: { actor_uri: remoteUser.actorUri },
+      defaults: {
+        id: uuidv4(),
+        actor_type: 'remote',
+        account_id: null,
         actor_uri: remoteUser.actorUri,
+        remote_username: remoteUser.preferredUsername,
+        remote_domain: remoteDomain,
+        public_key: remoteUser.publicKey || null,
+        private_key: null,
       },
     });
 
-    if (existingEditor) {
+    // Check if already an editor via CalendarMemberEntity
+    const existingMember = await CalendarMemberEntity.findOne({
+      where: {
+        calendar_id: calendarId,
+        user_actor_id: userActorEntity.id,
+      },
+    });
+
+    if (existingMember) {
       throw new EditorAlreadyExistsError('This remote user is already an editor of this calendar');
     }
 
-    // Create the remote editor relationship
-    await CalendarEditorRemoteEntity.create({
+    // Create membership
+    await CalendarMemberEntity.create({
       id: uuidv4(),
       calendar_id: calendarId,
-      actor_uri: remoteUser.actorUri,
-      remote_username: remoteUser.preferredUsername,
-      remote_domain: remoteDomain,
+      user_actor_id: userActorEntity.id,
+      role: 'editor',
       granted_by: grantingAccount.id,
     });
 
@@ -607,24 +593,16 @@ class CalendarService {
       throw new CalendarEditorPermissionError('Calendar owners cannot remove themselves from their own calendar');
     }
 
-    // Try to delete from both federated and local person editor tables
-    const federatedDeleted = await CalendarEditorEntity.destroy({
+    // Delete from CalendarMemberEntity only
+    const deleted = await CalendarMemberEntity.destroy({
       where: {
         calendar_id: calendar.id,
         account_id: editorAccount.id,
+        role: 'editor',
       },
     });
 
-    const localPersonDeleted = await CalendarEditorPersonEntity.destroy({
-      where: {
-        calendar_id: calendar.id,
-        account_id: editorAccount.id,
-      },
-    });
-
-    const totalDeleted = federatedDeleted + localPersonDeleted;
-
-    if (totalDeleted === 0) {
+    if (deleted === 0) {
       throw new EditorNotFoundError();
     }
 
@@ -655,11 +633,17 @@ class CalendarService {
       throw new CalendarEditorPermissionError('Permission denied: only calendar owner can revoke remote editor access');
     }
 
-    // Delete the remote editor
-    const deleted = await CalendarEditorRemoteEntity.destroy({
+    // Find the UserActorEntity for this remote actor
+    const userActor = await UserActorEntity.findOne({ where: { actor_uri: actorUri } });
+    if (!userActor) {
+      throw new EditorNotFoundError();
+    }
+
+    const deleted = await CalendarMemberEntity.destroy({
       where: {
         calendar_id: calendar.id,
-        actor_uri: actorUri,
+        user_actor_id: userActor.id,
+        role: 'editor',
       },
     });
 
@@ -692,8 +676,10 @@ class CalendarService {
   }
 
   /**
-   * Get all editors for a calendar
+   * Get all editors for a calendar.
+   * Uses CalendarMemberEntity for a single unified query.
    *
+   * @param account - Account requesting the list (must be owner or admin)
    * @param calendarId - ID of the calendar to get editors for
    * @returns Array of editor relationships
    * @throws CalendarNotFoundError if calendar not found
@@ -709,36 +695,34 @@ class CalendarService {
       throw new CalendarEditorPermissionError('Permission denied: only calendar owner can view editors');
     }
 
-    // Get federated editors
-    const federatedEditors = await CalendarEditorEntity.findAll({
-      where: { calendar_id: calendar.id },
-    });
-
-    // Get local person editors with account information
-    const localPersonEditors = await CalendarEditorPersonEntity.findAll({
-      where: { calendar_id: calendar.id },
+    // Query CalendarMemberEntity for editors with account info
+    const editorMembers = await CalendarMemberEntity.findAll({
+      where: {
+        calendar_id: calendar.id,
+        role: 'editor',
+        account_id: { [Op.ne]: null },
+      },
       include: [
         {
-          association: 'account',
+          model: AccountEntity,
+          as: 'account',
           attributes: ['id', 'email'],
         },
       ],
     });
 
-    // Combine both types into CalendarEditor format
-    return [
-      ...federatedEditors.map(editor => editor.toModel()),
-      ...localPersonEditors.map((personEditor: any) => new CalendarEditor(
-        personEditor.account.id,
-        personEditor.calendar_id,
-        personEditor.account.email,
-      )),
-    ];
+    return editorMembers
+      .filter(m => m.account)
+      .map(m => new CalendarEditor(
+        m.account.id,
+        m.calendar_id,
+        m.account.email,
+      ));
   }
 
   /**
    * Lists calendar editors and pending invitations for a calendar.
-   * This enhanced version includes both active editors and pending invitations.
+   * Uses CalendarMemberEntity for a single unified query.
    *
    * @param account - The account requesting the editor list
    * @param calendarId - The ID of the calendar
@@ -755,45 +739,47 @@ class CalendarService {
       throw new CalendarEditorPermissionError('Permission denied: only calendar owner can view editors');
     }
 
-    // Get federated editors (old system - editors who are local accounts that were added through federation)
-    const federatedEditors = await CalendarEditorEntity.findAll({
-      where: { calendar_id: calendar.id },
-    });
-
-    // Get local person editors with account information
-    const localPersonEditors = await CalendarEditorPersonEntity.findAll({
-      where: { calendar_id: calendar.id },
+    // Query CalendarMemberEntity for all editors (both local and remote)
+    const editorMembers = await CalendarMemberEntity.findAll({
+      where: {
+        calendar_id: calendar.id,
+        role: 'editor',
+      },
       include: [
         {
-          association: 'account',
+          model: AccountEntity,
+          as: 'account',
           attributes: ['id', 'email'],
+        },
+        {
+          model: UserActorEntity,
+          as: 'userActor',
         },
       ],
     });
 
-    // Get remote editors (new system - editors from other ActivityPub instances)
-    const remoteEditors = await CalendarEditorRemoteEntity.findAll({
-      where: { calendar_id: calendar.id },
-    });
+    // Build the editors list from unified membership records
+    const allEditors: (CalendarEditor | RemoteEditorInfo)[] = [];
 
-    // Combine all editor types
-    const allEditors: (CalendarEditor | RemoteEditorInfo)[] = [
-      // Federated editors (local accounts)
-      ...federatedEditors.map(editor => editor.toModel()),
-      // Local person editors
-      ...localPersonEditors.map((personEditor: any) => new CalendarEditor(
-        personEditor.account.id,
-        personEditor.calendar_id,
-        personEditor.account.email,
-      )),
-      // Remote editors (from other ActivityPub instances) - includes actorUri
-      ...remoteEditors.map(remoteEditor => ({
-        id: remoteEditor.id,
-        actorUri: remoteEditor.actor_uri,
-        username: remoteEditor.remote_username,
-        domain: remoteEditor.remote_domain,
-      })),
-    ];
+    for (const member of editorMembers) {
+      if (member.account_id && member.account) {
+        // Local member - create CalendarEditor
+        allEditors.push(new CalendarEditor(
+          member.account.id,
+          member.calendar_id,
+          member.account.email,
+        ));
+      }
+      else if (member.user_actor_id && member.userActor) {
+        // Remote member - create RemoteEditorInfo
+        allEditors.push({
+          id: member.id,
+          actorUri: member.userActor.actor_uri,
+          username: member.userActor.remote_username || '',
+          domain: member.userActor.remote_domain || '',
+        });
+      }
+    }
 
     // Get pending invitations for this calendar using unified method
     let pendingInvitations: AccountInvitation[] = [];
@@ -879,12 +865,22 @@ class CalendarService {
     return await this.accountsInterface!.resendInvite(invitationId);
   }
 
+  /**
+   * Get the primary (owned) calendar for a user.
+   * Uses CalendarMemberEntity to find owner membership.
+   *
+   * @param account - The account to find the primary calendar for
+   * @returns The primary calendar, or null if none found
+   */
   async getPrimaryCalendarForUser(account: Account): Promise<Calendar|null> {
     if (!account.id) {
       return null;
     }
-    let calendar = await CalendarEntity.findOne({ where: { account_id: account.id } });
-    return calendar ? calendar.toModel() : null;
+    const membership = await CalendarMemberEntity.findOne({
+      where: { account_id: account.id, role: 'owner' },
+      include: [{ model: CalendarEntity, as: 'calendar' }],
+    });
+    return membership?.calendar ? membership.calendar.toModel() : null;
   }
 
   /**
@@ -909,12 +905,25 @@ class CalendarService {
       throw new UrlNameAlreadyExistsError();
     }
 
-    // Create the calendar with the specified URL name
-    const calendarEntity = await CalendarEntity.create({
-      id: uuidv4(),
-      account_id: account.id,
-      url_name: urlName,
-      languages: 'en',  // Default language
+    const calendarId = uuidv4();
+
+    // Wrap calendar + owner member creation in transaction
+    const calendarEntity = await db.transaction(async (t) => {
+      const entity = await CalendarEntity.create({
+        id: calendarId,
+        url_name: urlName,
+        languages: 'en',
+      }, { transaction: t });
+
+      await CalendarMemberEntity.create({
+        id: uuidv4(),
+        calendar_id: calendarId,
+        account_id: account.id,
+        role: 'owner',
+        granted_by: null,
+      }, { transaction: t });
+
+      return entity;
     });
 
     const calendar = calendarEntity.toModel();
@@ -1065,11 +1074,13 @@ class CalendarService {
       throw new CalendarEditorPermissionError('Cannot grant editor access to calendar owner');
     }
 
-    // Create editor relationship
+    // Create editor relationship via CalendarMemberEntity
     try {
-      await CalendarEditorPersonEntity.create({
+      await CalendarMemberEntity.create({
+        id: uuidv4(),
         calendar_id: calendarId,
         account_id: editorAccountId,
+        role: 'editor',
         granted_by: owner.id,
       });
     }
@@ -1103,65 +1114,47 @@ class CalendarService {
       }
     }
 
-    // Find and remove editor relationship
-    const editorEntity = await CalendarEditorPersonEntity.findOne({
+    // Delete from CalendarMemberEntity only
+    const deleted = await CalendarMemberEntity.destroy({
       where: {
         calendar_id: calendarId,
         account_id: editorAccountId,
+        role: 'editor',
       },
     });
 
-    if (!editorEntity) {
+    if (deleted === 0) {
       throw new EditorNotFoundError('Editor relationship not found');
     }
-
-    await editorEntity.destroy();
   }
 
   /**
-   * Check if a user can edit a calendar (either as owner or editor)
+   * Check if a user can edit a calendar (either as owner or editor).
+   * Uses CalendarMemberEntity for a single unified query.
+   * Supports both local calendars (via calendar_id) and remote calendars (via calendar_actor_id).
    *
    * @param accountId - The account to check permissions for
-   * @param calendarId - The calendar to check
+   * @param calendarId - The calendar UUID (local) or CalendarActorEntity UUID (remote)
    * @returns true if user can edit the calendar
    */
   async userCanEditCalendar(accountId: string, calendarId: string): Promise<boolean> {
-    // Check if calendar exists
-    const calendar = await this.getCalendar(calendarId);
-    if (!calendar) {
-      return false;
-    }
-
-    // Check if user is the owner
-    if (calendar.accountId === accountId) {
-      return true;
-    }
-
-    // Check if user has federated editor access
-    const federatedEditorEntity = await CalendarEditorEntity.findOne({
+    // Check for membership via either calendar_id (local) or calendar_actor_id (remote)
+    const membership = await CalendarMemberEntity.findOne({
       where: {
-        calendar_id: calendarId,
         account_id: accountId,
+        [Op.or]: [
+          { calendar_id: calendarId },
+          { calendar_actor_id: calendarId },
+        ],
       },
     });
 
-    if (federatedEditorEntity) {
-      return true;
-    }
-
-    // Check if user has local person editor access
-    const localPersonEditorEntity = await CalendarEditorPersonEntity.findOne({
-      where: {
-        calendar_id: calendarId,
-        account_id: accountId,
-      },
-    });
-
-    return localPersonEditorEntity !== null;
+    return membership !== null;
   }
 
   /**
-   * List all local person editors of a calendar
+   * List all local person editors of a calendar.
+   * Uses CalendarMemberEntity for a single unified query.
    *
    * @param calendarId - The calendar to list editors for
    * @returns Array of local person editor information
@@ -1178,29 +1171,35 @@ class CalendarService {
       throw new CalendarNotFoundError('Calendar not found');
     }
 
-    // Fetch all editor relationships with account details
-    const editorEntities = await CalendarEditorPersonEntity.findAll({
+    // Query CalendarMemberEntity for local editors with account and grantor details
+    const editorMembers = await CalendarMemberEntity.findAll({
       where: {
         calendar_id: calendarId,
+        account_id: { [Op.ne]: null },
+        role: 'editor',
       },
       include: [
         {
-          association: 'account',
+          model: AccountEntity,
+          as: 'account',
           attributes: ['id', 'username', 'email'],
         },
         {
-          association: 'grantor',
+          model: AccountEntity,
+          as: 'grantor',
           attributes: ['id', 'username', 'email'],
         },
       ],
     });
 
-    return editorEntities.map((entity: any) => ({
-      accountId: entity.account.id,
-      username: entity.account.username,
-      email: entity.account.email,
-      grantedBy: entity.grantor.id,
-    }));
+    return editorMembers
+      .filter((m: any) => m.account && m.grantor)
+      .map((m: any) => ({
+        accountId: m.account.id,
+        username: m.account.username,
+        email: m.account.email,
+        grantedBy: m.grantor.id,
+      }));
   }
 }
 

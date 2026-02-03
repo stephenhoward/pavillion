@@ -87,12 +87,12 @@ export default class ActivityPubInterface {
     return this.serverService.lookupUserProfile(calendarName);
   }
 
-  async addFollower(remoteCalendarId: string, localCalendar: Calendar, followActivityId: string): Promise<void> {
-    return this.serverService.addFollower(remoteCalendarId, localCalendar, followActivityId);
+  async addFollower(calendarActorId: string, localCalendar: Calendar, followActivityId: string): Promise<void> {
+    return this.serverService.addFollower(calendarActorId, localCalendar, followActivityId);
   }
 
-  async removeFollower(remoteCalendarId: string, localCalendar: Calendar): Promise<void> {
-    return this.serverService.removeFollower(remoteCalendarId, localCalendar);
+  async removeFollower(calendarActorId: string, localCalendar: Calendar): Promise<void> {
+    return this.serverService.removeFollower(calendarActorId, localCalendar);
   }
 
   async getFeed(calendar: Calendar, page?: number, pageSize?: number): Promise<EventEntity[]> {

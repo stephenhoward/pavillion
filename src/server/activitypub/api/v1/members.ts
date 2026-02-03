@@ -5,7 +5,7 @@ import ExpressHelper from '@/server/common/helper/express';
 import CalendarService from '@/server/calendar/service/calendar';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import { FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
-import { RemoteCalendarEntity } from '@/server/activitypub/entity/remote_calendar';
+import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import {
   InvalidRemoteCalendarIdentifierError,
   InvalidRepostPolicySettingsError,
@@ -366,13 +366,13 @@ export default class ActivityPubMemberRoutes {
     }
 
     try {
-      // Look up the follow relationship by ID with RemoteCalendarEntity to get the actor URI
+      // Look up the follow relationship by ID with CalendarActorEntity to get the actor URI
       const followEntity = await FollowingCalendarEntity.findOne({
         where: {
           id: followId,
           calendar_id: calendar.id,
         },
-        include: [{ model: RemoteCalendarEntity, as: 'remoteCalendar' }],
+        include: [{ model: CalendarActorEntity, as: 'calendarActor' }],
       });
 
       if (!followEntity) {
@@ -380,10 +380,10 @@ export default class ActivityPubMemberRoutes {
         return;
       }
 
-      // Get the actor URI from the RemoteCalendarEntity
-      const actorUri = followEntity.remoteCalendar?.actor_uri;
+      // Get the actor URI from the CalendarActorEntity
+      const actorUri = followEntity.calendarActor?.actor_uri;
       if (!actorUri) {
-        res.status(500).send('Remote calendar not found');
+        res.status(500).send('Calendar actor not found');
         return;
       }
 

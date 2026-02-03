@@ -15,6 +15,7 @@ storage
 .serena
 agent-os
 CLAUDE.md
+.beads/
 
 # Test artifacts
 .playwright-mcp
@@ -35,3 +36,4 @@ docker/federation/ssl/*.key
 .env
 config/local.yaml
 config/production.yaml
+AGENTS.md

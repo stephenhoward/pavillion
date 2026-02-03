@@ -7,7 +7,8 @@ import db from '@/server/common/entity/db';
 import CalendarService from '@/server/calendar/service/calendar';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { AccountEntity } from '@/server/common/entity/account';
-import { CalendarEditorRemoteEntity } from '@/server/calendar/entity/calendar_editor_remote';
+import { CalendarMemberEntity } from '@/server/calendar/entity/calendar_member';
+import { UserActorEntity } from '@/server/activitypub/entity/user_actor';
 import { Account } from '@/common/model/account';
 import AccountsInterface from '@/server/accounts/interface';
 import { EventEmitter } from 'events';
@@ -49,6 +50,15 @@ describe('CalendarService.grantEditAccessByEmail - Remote Editors', () => {
       languages: 'en',
     });
 
+    // Create CalendarMemberEntity owner row (needed for isCalendarOwner reads)
+    await CalendarMemberEntity.create({
+      id: uuidv4(),
+      calendar_id: testCalendarId,
+      account_id: testAccountId,
+      role: 'owner',
+      granted_by: null,
+    });
+
     // Mock accounts interface
     mockAccountsInterface = {
       getAccountByEmail: sandbox.stub().resolves(null),
@@ -63,7 +73,8 @@ describe('CalendarService.grantEditAccessByEmail - Remote Editors', () => {
 
   afterEach(async () => {
     sandbox.restore();
-    await CalendarEditorRemoteEntity.destroy({ where: {}, force: true });
+    await CalendarMemberEntity.destroy({ where: {}, force: true });
+    await UserActorEntity.destroy({ where: {}, force: true });
     await CalendarEntity.destroy({ where: {}, force: true });
     await AccountEntity.destroy({ where: {}, force: true });
   });
@@ -174,24 +185,45 @@ describe('CalendarService.grantEditAccessByEmail - Remote Editors', () => {
       expect(result.type).toBe('remote_editor');
       expect((result.data as any).actorUri).toBe('https://beta.federation.local/users/Admin');
 
-      // Verify entity was created
-      const remoteEditor = await CalendarEditorRemoteEntity.findOne({
-        where: { calendar_id: testCalendarId },
+      // Verify UserActorEntity was created
+      const userActor = await UserActorEntity.findOne({
+        where: { actor_uri: 'https://beta.federation.local/users/Admin' },
       });
-      expect(remoteEditor).not.toBeNull();
-      expect(remoteEditor?.actor_uri).toBe('https://beta.federation.local/users/Admin');
-      expect(remoteEditor?.remote_username).toBe('Admin');
-      expect(remoteEditor?.remote_domain).toBe('beta.federation.local');
+      expect(userActor).not.toBeNull();
+      expect(userActor?.remote_username).toBe('Admin');
+      expect(userActor?.remote_domain).toBe('beta.federation.local');
+
+      // Verify CalendarMemberEntity was created with user_actor_id
+      const membership = await CalendarMemberEntity.findOne({
+        where: {
+          calendar_id: testCalendarId,
+          user_actor_id: userActor!.id,
+          role: 'editor',
+        },
+      });
+      expect(membership).not.toBeNull();
     });
 
     it('should throw error if remote editor already exists', async () => {
-      // Create existing remote editor
-      await CalendarEditorRemoteEntity.create({
-        id: uuidv4(),
-        calendar_id: testCalendarId,
+      // Create existing UserActorEntity for the remote user
+      const userActorId = uuidv4();
+      await UserActorEntity.create({
+        id: userActorId,
+        actor_type: 'remote',
+        account_id: null,
         actor_uri: 'https://beta.federation.local/users/Admin',
         remote_username: 'Admin',
         remote_domain: 'beta.federation.local',
+        public_key: null,
+        private_key: null,
+      });
+
+      // Create existing CalendarMemberEntity for the remote editor
+      await CalendarMemberEntity.create({
+        id: uuidv4(),
+        calendar_id: testCalendarId,
+        user_actor_id: userActorId,
+        role: 'editor',
         granted_by: testAccountId,
       });
 
@@ -264,19 +296,33 @@ describe('CalendarService.grantEditAccessByEmail - Remote Editors', () => {
 
   describe('removeRemoteEditor', () => {
     it('should remove remote editor by actor URI', async () => {
-      // Create a remote editor first
-      await CalendarEditorRemoteEntity.create({
-        id: uuidv4(),
-        calendar_id: testCalendarId,
+      // Create UserActorEntity for the remote editor
+      const userActorId = uuidv4();
+      await UserActorEntity.create({
+        id: userActorId,
+        actor_type: 'remote',
+        account_id: null,
         actor_uri: 'https://beta.federation.local/users/Editor',
         remote_username: 'Editor',
         remote_domain: 'beta.federation.local',
+        public_key: null,
+        private_key: null,
+      });
+
+      // Create CalendarMemberEntity for the remote editor
+      await CalendarMemberEntity.create({
+        id: uuidv4(),
+        calendar_id: testCalendarId,
+        user_actor_id: userActorId,
+        role: 'editor',
         granted_by: testAccountId,
       });
 
-      // Verify it exists
-      let count = await CalendarEditorRemoteEntity.count({ where: { calendar_id: testCalendarId } });
-      expect(count).toBe(1);
+      // Verify membership exists
+      let membership = await CalendarMemberEntity.findOne({
+        where: { calendar_id: testCalendarId, user_actor_id: userActorId },
+      });
+      expect(membership).not.toBeNull();
 
       // Remove the remote editor
       const result = await service.removeRemoteEditor(
@@ -287,9 +333,15 @@ describe('CalendarService.grantEditAccessByEmail - Remote Editors', () => {
 
       expect(result).toBe(true);
 
-      // Verify it was removed
-      count = await CalendarEditorRemoteEntity.count({ where: { calendar_id: testCalendarId } });
-      expect(count).toBe(0);
+      // Verify membership was removed
+      membership = await CalendarMemberEntity.findOne({
+        where: { calendar_id: testCalendarId, user_actor_id: userActorId },
+      });
+      expect(membership).toBeNull();
+
+      // UserActorEntity should still exist (we don't delete actors)
+      const userActor = await UserActorEntity.findByPk(userActorId);
+      expect(userActor).not.toBeNull();
     });
 
     it('should throw EditorNotFoundError if remote editor does not exist', async () => {
@@ -323,13 +375,25 @@ describe('CalendarService.grantEditAccessByEmail - Remote Editors', () => {
       const adminAccount = new Account(adminAccountId, 'admin@pavillion.dev');
       adminAccount.roles = ['admin'];
 
-      // Create a remote editor
-      await CalendarEditorRemoteEntity.create({
-        id: uuidv4(),
-        calendar_id: testCalendarId,
+      // Create UserActorEntity for the remote editor
+      const userActorId = uuidv4();
+      await UserActorEntity.create({
+        id: userActorId,
+        actor_type: 'remote',
+        account_id: null,
         actor_uri: 'https://beta.federation.local/users/Editor',
         remote_username: 'Editor',
         remote_domain: 'beta.federation.local',
+        public_key: null,
+        private_key: null,
+      });
+
+      // Create CalendarMemberEntity for the remote editor
+      await CalendarMemberEntity.create({
+        id: uuidv4(),
+        calendar_id: testCalendarId,
+        user_actor_id: userActorId,
+        role: 'editor',
         granted_by: testAccountId,
       });
 
@@ -353,13 +417,25 @@ describe('CalendarService.grantEditAccessByEmail - Remote Editors', () => {
       });
       const otherAccount = new Account(otherAccountId, 'other@pavillion.dev');
 
-      // Create a remote editor
-      await CalendarEditorRemoteEntity.create({
-        id: uuidv4(),
-        calendar_id: testCalendarId,
+      // Create UserActorEntity for the remote editor
+      const userActorId = uuidv4();
+      await UserActorEntity.create({
+        id: userActorId,
+        actor_type: 'remote',
+        account_id: null,
         actor_uri: 'https://beta.federation.local/users/Editor',
         remote_username: 'Editor',
         remote_domain: 'beta.federation.local',
+        public_key: null,
+        private_key: null,
+      });
+
+      // Create CalendarMemberEntity for the remote editor
+      await CalendarMemberEntity.create({
+        id: uuidv4(),
+        calendar_id: testCalendarId,
+        user_actor_id: userActorId,
+        role: 'editor',
         granted_by: testAccountId,
       });
 

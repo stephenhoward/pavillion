@@ -250,4 +250,101 @@ describe('UserActorService', () => {
       expect(actor).toBeNull();
     });
   });
+
+  describe('createActor (actor_type)', () => {
+    it('should set actor_type to local for new actors', async () => {
+      const accountId = uuidv4();
+      const username = 'carol';
+
+      await AccountEntity.create({
+        id: accountId,
+        username: username,
+        email: 'carol@example.com',
+        domain: testDomain,
+        language: 'en',
+      });
+
+      const account = new Account(accountId, username, 'carol@example.com');
+      const actor = await service.createActor(account, testDomain);
+
+      expect(actor.actorType).toBe('local');
+      expect(actor.remoteUsername).toBeNull();
+      expect(actor.remoteDomain).toBeNull();
+    });
+  });
+
+  describe('findOrCreateRemoteActor', () => {
+    it('should create a new remote actor when none exists', async () => {
+      const actorUri = 'https://remote.example/users/admin';
+      const remoteUsername = 'admin';
+      const remoteDomain = 'remote.example';
+
+      const actor = await service.findOrCreateRemoteActor(actorUri, remoteUsername, remoteDomain);
+
+      expect(actor).not.toBeNull();
+      expect(actor.actorType).toBe('remote');
+      expect(actor.actorUri).toBe(actorUri);
+      expect(actor.remoteUsername).toBe(remoteUsername);
+      expect(actor.remoteDomain).toBe(remoteDomain);
+      expect(actor.accountId).toBeNull();
+      expect(actor.privateKey).toBeNull();
+    });
+
+    it('should return existing remote actor when one exists', async () => {
+      const actorUri = 'https://remote.example/users/editor';
+      const remoteUsername = 'editor';
+      const remoteDomain = 'remote.example';
+
+      const first = await service.findOrCreateRemoteActor(actorUri, remoteUsername, remoteDomain);
+      const second = await service.findOrCreateRemoteActor(actorUri, remoteUsername, remoteDomain);
+
+      expect(first.id).toBe(second.id);
+      expect(first.actorUri).toBe(second.actorUri);
+    });
+
+    it('should store public key when provided', async () => {
+      const actorUri = 'https://remote.example/users/signed';
+      const publicKey = '-----BEGIN PUBLIC KEY-----\nMIIBIjAN...test\n-----END PUBLIC KEY-----';
+
+      const actor = await service.findOrCreateRemoteActor(actorUri, 'signed', 'remote.example', publicKey);
+
+      expect(actor.publicKey).toBe(publicKey);
+    });
+  });
+
+  describe('signActivity (null key handling)', () => {
+    it('should throw when trying to sign with a remote actor (no private key)', async () => {
+      const actorUri = 'https://remote.example/users/remote-signer';
+
+      await service.findOrCreateRemoteActor(actorUri, 'remote-signer', 'remote.example');
+
+      const activity = { type: 'Create', actor: actorUri };
+      const targetUrl = 'https://other.example/inbox';
+
+      await expect(service.signActivity(actorUri, activity, targetUrl))
+        .rejects
+        .toThrow('does not have a private key');
+    });
+  });
+
+  describe('verifySignature (null key handling)', () => {
+    it('should return false when actor has no public key', async () => {
+      const actorUri = 'https://remote.example/users/no-key';
+
+      await service.findOrCreateRemoteActor(actorUri, 'no-key', 'remote.example');
+
+      const mockRequest = {
+        headers: {
+          signature: `keyId="${actorUri}#main-key",signature="test",algorithm="rsa-sha256",headers="(request-target) host date"`,
+          date: new Date().toUTCString(),
+          host: 'remote.example',
+        },
+        method: 'POST',
+        url: '/inbox',
+      } as any;
+
+      const result = await service.verifySignature(mockRequest, actorUri);
+      expect(result).toBe(false);
+    });
+  });
 });

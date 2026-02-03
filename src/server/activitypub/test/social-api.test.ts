@@ -10,7 +10,7 @@ import ActivityPubMemberRoutes from '@/server/activitypub/api/v1/members';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
-import { setupActivityPubSchema, teardownActivityPubSchema, getOrCreateRemoteCalendar } from './helpers/database';
+import { setupActivityPubSchema, teardownActivityPubSchema, getOrCreateRemoteCalendarActor } from './helpers/database';
 
 describe('ActivityPub Social API - Unfollow Endpoint', () => {
   let sandbox: sinon.SinonSandbox;
@@ -71,14 +71,14 @@ describe('ActivityPub Social API - Unfollow Endpoint', () => {
       languages: 'en',
     });
 
-    // Create RemoteCalendarEntity first, then following relationship
-    const remoteCalendar = await getOrCreateRemoteCalendar(remoteActorUri);
+    // Create CalendarActorEntity (remote type) first, then following relationship
+    const calendarActor = await getOrCreateRemoteCalendarActor(remoteActorUri);
 
     // Create following relationship in database for unfollow tests
     await FollowingCalendarEntity.create({
       id: followId,
       calendar_id: testCalendar.id,
-      remote_calendar_id: remoteCalendar.id,
+      calendar_actor_id: calendarActor.id,
     });
   });
 
@@ -119,7 +119,7 @@ describe('ActivityPub Social API - Unfollow Endpoint', () => {
       // Setup: Mock following entity exists
       const mockFollowingEntity = {
         id: followId,
-        remote_calendar_id: remoteActorUri,
+        calendar_actor_id: remoteActorUri,
         calendar_id: testCalendar.id,
         destroy: sandbox.stub().resolves(),
       };
@@ -199,7 +199,7 @@ describe('ActivityPub Social API - Unfollow Endpoint', () => {
       expect(response.status).toBe(200);
       expect(response.text).toBe('Unfollowed');
 
-      // Verify: Service was called with remote_calendar_id from database
+      // Verify: Service was called with calendar_actor_id from database
       expect(activityPubInterface.unfollowCalendar.calledOnce).toBe(true);
       expect(activityPubInterface.unfollowCalendar.firstCall.args[2]).toBe(remoteActorUri);
     });

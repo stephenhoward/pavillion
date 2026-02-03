@@ -36,7 +36,7 @@ const errorMap = {
  */
 export interface FollowRelationship {
   id: string;
-  remoteCalendarId: string;
+  calendarActorId: string;
   calendarId: string;
   autoRepostOriginals: boolean;
   autoRepostReposts: boolean;
@@ -47,7 +47,7 @@ export interface FollowRelationship {
  */
 export interface FollowerRelationship {
   id: string;
-  remoteCalendarId: string;
+  calendarActorId: string;
   calendarId: string;
 }
 
@@ -111,7 +111,7 @@ export default class FeedService {
       const data = await ModelService.listModels(`/api/v1/social/follows?calendarId=${calendarId}`);
       return data.map(item => ({
         id: item.id,
-        remoteCalendarId: item.remoteCalendarId,
+        calendarActorId: item.calendarActorId,
         calendarId: item.calendarId,
         autoRepostOriginals: item.autoRepostOriginals ?? false,
         autoRepostReposts: item.autoRepostReposts ?? false,
@@ -205,12 +205,12 @@ export default class FeedService {
   /**
    * Unfollow a remote calendar
    * @param calendarId The local calendar ID
-   * @param remoteCalendarId The remote calendar identifier to unfollow
+   * @param calendarActorId The calendar actor identifier to unfollow
    * @returns Promise<void>
    */
-  async unfollowCalendar(calendarId: string, remoteCalendarId: string): Promise<void> {
+  async unfollowCalendar(calendarId: string, calendarActorId: string): Promise<void> {
     try {
-      await ModelService.delete(`/api/v1/social/follows/${encodeURIComponent(remoteCalendarId)}?calendarId=${calendarId}`);
+      await ModelService.delete(`/api/v1/social/follows/${encodeURIComponent(calendarActorId)}?calendarId=${calendarId}`);
     }
     catch (error: unknown) {
       console.error('Error unfollowing calendar:', error);

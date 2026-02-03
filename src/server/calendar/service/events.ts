@@ -4,7 +4,8 @@ import axios from 'axios';
 
 import { Account } from "@/common/model/account";
 import { Calendar } from "@/common/model/calendar";
-import { RemoteCalendarAccessEntity } from "@/server/calendar/entity/remote_calendar_access";
+import { CalendarMemberEntity } from "@/server/calendar/entity/calendar_member";
+import { CalendarActorEntity, CalendarActor } from "@/server/activitypub/entity/calendar_actor";
 import { UserActorEntity } from "@/server/activitypub/entity/user_actor";
 import { CalendarEvent, CalendarEventContent, CalendarEventSchedule } from "@/common/model/events";
 import { EventLocation, validateLocationHierarchy } from "@/common/model/location";
@@ -22,7 +23,7 @@ import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_ca
 import { EventInstanceEntity } from '@/server/calendar/entity/event_instance';
 import { EventRepostEntity } from '@/server/calendar/entity/event_repost';
 import db from '@/server/common/entity/db';
-import { Op, literal } from 'sequelize';
+import { Op, literal, where, fn, col } from 'sequelize';
 
 /**
  * Service class for managing events
@@ -92,12 +93,20 @@ class EventService {
     // Handle search parameter
     if (options?.search && options.search.trim()) {
       // Use LOWER() for case-insensitive search that works on both PostgreSQL and SQLite
-      // Escape single quotes in search term for SQL literal
-      const searchTerm = options.search.trim().toLowerCase().replace(/'/g, "''");
+      const searchTerm = options.search.trim().toLowerCase();
       queryOptions.include.push({
         model: EventContentEntity,
         as: 'content',  // Use the association alias
-        where: literal(`(LOWER(\`content\`.\`name\`) LIKE '%${searchTerm}%' OR LOWER(\`content\`.\`description\`) LIKE '%${searchTerm}%')`),
+        where: {
+          [Op.or]: [
+            where(fn('LOWER', col('content.name')), {
+              [Op.like]: `%${searchTerm}%`,
+            }),
+            where(fn('LOWER', col('content.description')), {
+              [Op.like]: `%${searchTerm}%`,
+            }),
+          ],
+        },
         required: true, // INNER JOIN to only include events with matching content
       });
     }
@@ -169,13 +178,13 @@ class EventService {
    * Creates an event on a remote calendar by sending an ActivityPub Create activity
    *
    * @param account - The local account creating the event
-   * @param remoteAccess - The RemoteCalendarAccessEntity with remote calendar info
+   * @param remoteCalendarActor - The CalendarActor representing the remote calendar
    * @param eventParams - The parameters for the new event
    * @returns A promise that resolves to the created event (from remote response)
    */
   private async createRemoteEvent(
     account: Account,
-    remoteAccess: RemoteCalendarAccessEntity,
+    remoteCalendarActor: CalendarActor,
     eventParams: Record<string, any>,
   ): Promise<CalendarEvent> {
     // Get the local user's actor for signing the activity
@@ -196,7 +205,7 @@ class EventService {
       type: 'Create',
       id: `https://${localDomain}/activities/${uuidv4()}`,
       actor: userActor.actor_uri,
-      to: [remoteAccess.remote_calendar_actor_uri],
+      to: [remoteCalendarActor.actorUri],
       object: {
         type: 'Event',
         id: `https://${localDomain}/events/${eventId}`,
@@ -205,13 +214,13 @@ class EventService {
         startTime: this.buildIsoDateTime(eventParams.start_date, eventParams.start_time),
         endTime: this.buildIsoDateTime(eventParams.end_date, eventParams.end_time),
         attributedTo: userActor.actor_uri,
-        calendarId: remoteAccess.remote_calendar_id,
+        calendarId: remoteCalendarActor.id,
         eventParams: eventParams,
       },
     };
 
     // Send to the remote calendar's inbox
-    const inboxUrl = remoteAccess.remote_calendar_inbox_url;
+    const inboxUrl = remoteCalendarActor.inboxUrl;
     if (!inboxUrl) {
       throw new CalendarNotFoundError('Remote calendar inbox URL not configured');
     }
@@ -238,7 +247,7 @@ class EventService {
       // Fallback: construct a local representation of the event if no response data
       const event = new CalendarEvent(
         eventId,
-        remoteAccess.remote_calendar_id,
+        remoteCalendarActor.id,
         this.generateEventUrl(eventId),
         false,
       );
@@ -277,14 +286,14 @@ class EventService {
    * Updates an event on a remote calendar by sending an ActivityPub Update activity
    *
    * @param account - The local account updating the event
-   * @param remoteAccess - The RemoteCalendarAccessEntity with remote calendar info
+   * @param remoteCalendarActor - The CalendarActor representing the remote calendar
    * @param eventId - The ID of the event to update
    * @param eventParams - The updated event parameters
    * @returns A promise that resolves to the updated event
    */
   private async updateRemoteEventViaActivityPub(
     account: Account,
-    remoteAccess: RemoteCalendarAccessEntity,
+    remoteCalendarActor: CalendarActor,
     eventId: string,
     eventParams: Record<string, any>,
   ): Promise<CalendarEvent> {
@@ -308,7 +317,7 @@ class EventService {
       type: 'Update',
       id: `https://${localDomain}/activities/${uuidv4()}`,
       actor: userActor.actor_uri,
-      to: [remoteAccess.remote_calendar_actor_uri],
+      to: [remoteCalendarActor.actorUri],
       object: {
         type: 'Event',
         id: `https://${localDomain}/events/${eventId}`,
@@ -317,13 +326,13 @@ class EventService {
         startTime: this.buildIsoDateTime(eventParams.start_date, eventParams.start_time),
         endTime: this.buildIsoDateTime(eventParams.end_date, eventParams.end_time),
         attributedTo: userActor.actor_uri,
-        calendarId: remoteAccess.remote_calendar_id,
+        calendarId: remoteCalendarActor.id,
         eventParams: eventParamsWithId,
       },
     };
 
     // Send to the remote calendar's inbox
-    const inboxUrl = remoteAccess.remote_calendar_inbox_url;
+    const inboxUrl = remoteCalendarActor.inboxUrl;
     if (!inboxUrl) {
       throw new CalendarNotFoundError('Remote calendar inbox URL not configured');
     }
@@ -343,7 +352,7 @@ class EventService {
       // Construct a local representation of the updated event
       const event = new CalendarEvent(
         eventId,
-        remoteAccess.remote_calendar_id,
+        remoteCalendarActor.id,
         this.generateEventUrl(eventId),
         false,
       );
@@ -371,13 +380,13 @@ class EventService {
    * Deletes an event on a remote calendar by sending an ActivityPub Delete activity
    *
    * @param account - The local account deleting the event
-   * @param remoteAccess - The RemoteCalendarAccessEntity with remote calendar info
+   * @param remoteCalendarActor - The CalendarActor representing the remote calendar
    * @param eventId - The ID of the event to delete
    * @returns A promise that resolves when the delete is complete
    */
   private async deleteRemoteEventViaActivityPub(
     account: Account,
-    remoteAccess: RemoteCalendarAccessEntity,
+    remoteCalendarActor: CalendarActor,
     eventId: string,
   ): Promise<void> {
     // Get the local user's actor for signing the activity
@@ -398,18 +407,18 @@ class EventService {
       type: 'Delete',
       id: `https://${localDomain}/activities/${uuidv4()}`,
       actor: userActor.actor_uri,
-      to: [remoteAccess.remote_calendar_actor_uri],
+      to: [remoteCalendarActor.actorUri],
       object: {
         type: 'Tombstone',
         id: `https://${localDomain}/events/${eventId}`,
         formerType: 'Event',
-        calendarId: remoteAccess.remote_calendar_id,
+        calendarId: remoteCalendarActor.id,
         eventId: eventId,
       },
     };
 
     // Send to the remote calendar's inbox
-    const inboxUrl = remoteAccess.remote_calendar_inbox_url;
+    const inboxUrl = remoteCalendarActor.inboxUrl;
     if (!inboxUrl) {
       throw new CalendarNotFoundError('Remote calendar inbox URL not configured');
     }
@@ -455,16 +464,20 @@ class EventService {
     }
     else {
       // Calendar not found locally - check if it's a remote calendar we have access to
-      const remoteAccess = await RemoteCalendarAccessEntity.findOne({
+      // Find membership on a remote calendar by calendar_actor_id
+      const remoteMembership = await CalendarMemberEntity.findOne({
         where: {
           account_id: account.id,
-          remote_calendar_id: eventParams.calendarId,
+          calendar_actor_id: eventParams.calendarId,
+          calendar_id: null, // Ensure this is remote calendar membership
         },
+        include: [{ model: CalendarActorEntity, as: 'calendarActor' }],
       });
 
-      if (remoteAccess) {
+      if (remoteMembership && remoteMembership.calendarActor) {
         // This is a remote calendar - delegate to remote event creation
-        return this.createRemoteEvent(account, remoteAccess, eventParams);
+        const remoteCalendarActor = remoteMembership.calendarActor.toModel();
+        return this.createRemoteEvent(account, remoteCalendarActor, eventParams);
       }
 
       throw new CalendarNotFoundError('Calendar for event does not exist');
@@ -586,18 +599,21 @@ class EventService {
 
     // If event not found locally, check if this is a remote event the user can update
     if (!eventEntity) {
-      // Check if the user has remote calendar access for the specified calendarId
+      // Check if the user has remote calendar membership for the specified calendarId
       if (eventParams.calendarId) {
-        const remoteAccess = await RemoteCalendarAccessEntity.findOne({
+        const remoteMembership = await CalendarMemberEntity.findOne({
           where: {
             account_id: account.id,
-            remote_calendar_id: eventParams.calendarId,
+            calendar_actor_id: eventParams.calendarId,
+            calendar_id: null, // Ensure this is remote calendar membership
           },
+          include: [{ model: CalendarActorEntity, as: 'calendarActor' }],
         });
 
-        if (remoteAccess) {
+        if (remoteMembership && remoteMembership.calendarActor) {
           // This is a remote calendar event - delegate to remote update
-          return this.updateRemoteEventViaActivityPub(account, remoteAccess, eventId, eventParams);
+          const remoteCalendarActor = remoteMembership.calendarActor.toModel();
+          return this.updateRemoteEventViaActivityPub(account, remoteCalendarActor, eventId, eventParams);
         }
       }
       throw new EventNotFoundError('Event not found');
@@ -1165,18 +1181,21 @@ class EventService {
 
     // If event not found locally, check if this is a remote event the user can delete
     if (!eventEntity) {
-      // Check if the user has remote calendar access for the specified calendarId
+      // Check if the user has remote calendar membership for the specified calendarId
       if (calendarId) {
-        const remoteAccess = await RemoteCalendarAccessEntity.findOne({
+        const remoteMembership = await CalendarMemberEntity.findOne({
           where: {
             account_id: account.id,
-            remote_calendar_id: calendarId,
+            calendar_actor_id: calendarId,
+            calendar_id: null, // Ensure this is remote calendar membership
           },
+          include: [{ model: CalendarActorEntity, as: 'calendarActor' }],
         });
 
-        if (remoteAccess) {
+        if (remoteMembership && remoteMembership.calendarActor) {
           // This is a remote calendar event - delegate to remote delete
-          await this.deleteRemoteEventViaActivityPub(account, remoteAccess, eventId);
+          const remoteCalendarActor = remoteMembership.calendarActor.toModel();
+          await this.deleteRemoteEventViaActivityPub(account, remoteCalendarActor, eventId);
           return;
         }
       }

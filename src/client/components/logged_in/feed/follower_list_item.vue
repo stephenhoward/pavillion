@@ -10,7 +10,7 @@ defineProps<{
   <div class="follower-list-item">
     <div class="follower-info">
       <div class="remote-identifier">
-        {{ follower.remoteCalendarId }}
+        {{ follower.calendarActorId }}
       </div>
     </div>
   </div>

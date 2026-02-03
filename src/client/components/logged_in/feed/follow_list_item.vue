@@ -35,7 +35,7 @@ const handleUnfollow = () => {
   <div class="follow-list-item">
     <div class="follow-info">
       <div class="remote-identifier">
-        {{ follow.remoteCalendarId }}
+        {{ follow.calendarActorId }}
       </div>
     </div>
 

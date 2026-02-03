@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { EventEmitter } from 'events';
 
 import { FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
-import { RemoteCalendarEntity } from '@/server/activitypub/entity/remote_calendar';
+import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { EventEntity, EventContentEntity } from '@/server/calendar/entity/event';
 import { Account } from '@/common/model/account';
@@ -54,17 +54,21 @@ describe('FollowingCalendarEntity associations', () => {
     });
     testEventId = event.id;
 
-    // Create RemoteCalendarEntity first for the foreign key
-    const remoteCalendar = await RemoteCalendarEntity.create({
+    // Create CalendarActorEntity (remote type) first for the foreign key
+    const calendarActor = await CalendarActorEntity.create({
       id: uuidv4(),
+      actor_type: 'remote',
+      calendar_id: null,
       actor_uri: 'https://remote.example.com/calendars/remotecal',
+      remote_domain: 'remote.example.com',
+      private_key: null,
     });
 
-    // Create following relationship using the RemoteCalendarEntity UUID
+    // Create following relationship using the CalendarActorEntity UUID
     testFollowingId = `https://example.com/follows/${uuidv4()}`;
     await FollowingCalendarEntity.create({
       id: testFollowingId,
-      remote_calendar_id: remoteCalendar.id,
+      calendar_actor_id: calendarActor.id,
       calendar_id: testCalendar.id,
       auto_repost_originals: false,
       auto_repost_reposts: false,
@@ -147,15 +151,19 @@ describe('FollowingCalendarEntity associations', () => {
     const emptyCalendar = await calendarInterface.createCalendar(testAccount, 'emptycalendar');
     const emptyFollowingId = `https://example.com/follows/${uuidv4()}`;
 
-    // Create RemoteCalendarEntity first for the foreign key
-    const emptyRemoteCalendar = await RemoteCalendarEntity.create({
+    // Create CalendarActorEntity (remote type) first for the foreign key
+    const emptyCalendarActor = await CalendarActorEntity.create({
       id: uuidv4(),
+      actor_type: 'remote',
+      calendar_id: null,
       actor_uri: 'https://remote.example.com/calendars/emptycal',
+      remote_domain: 'remote.example.com',
+      private_key: null,
     });
 
     await FollowingCalendarEntity.create({
       id: emptyFollowingId,
-      remote_calendar_id: emptyRemoteCalendar.id,
+      calendar_actor_id: emptyCalendarActor.id,
       calendar_id: emptyCalendar.id,
       auto_repost_originals: false,
       auto_repost_reposts: false,

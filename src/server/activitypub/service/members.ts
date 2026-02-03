@@ -10,7 +10,7 @@ import { ActivityPubActivity } from "@/server/activitypub/model/base";
 import FollowActivity from "@/server/activitypub/model/action/follow";
 import AnnounceActivity from "@/server/activitypub/model/action/announce";
 import { FollowingCalendarEntity, FollowerCalendarEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
-import { RemoteCalendarEntity } from "@/server/activitypub/entity/remote_calendar";
+import { CalendarActorEntity } from "@/server/activitypub/entity/calendar_actor";
 import RemoteCalendarService from "@/server/activitypub/service/remote_calendar";
 import UndoActivity from "../model/action/undo";
 import { EventEntity } from "@/server/calendar/entity/event";
@@ -130,7 +130,7 @@ class ActivityPubService {
     const remoteProfile = await this.lookupRemoteCalendar(orgIdentifier);
     const remoteActorUrl = remoteProfile.actorUrl;
 
-    // Get or create RemoteCalendarEntity for this remote calendar
+    // Get or create CalendarActorEntity for this remote calendar
     const remoteCalendar = await this.remoteCalendarService.findOrCreateByActorUri(remoteActorUrl);
 
     // Update cached metadata from the profile we just fetched
@@ -138,10 +138,10 @@ class ActivityPubService {
       displayName: remoteProfile.name,
     });
 
-    // Check if we're already following this calendar (using the RemoteCalendarEntity UUID)
+    // Check if we're already following this calendar (using the CalendarActorEntity UUID)
     let existingFollowEntity = await FollowingCalendarEntity.findOne({
       where: {
-        remote_calendar_id: remoteCalendar.id,
+        calendar_actor_id: remoteCalendar.id,
         calendar_id: calendar.id,
       },
     });
@@ -166,7 +166,7 @@ class ActivityPubService {
 
     let followEntity = FollowingCalendarEntity.build({
       id: followActivity.id,
-      remote_calendar_id: remoteCalendar.id,  // Store the RemoteCalendarEntity UUID
+      calendar_actor_id: remoteCalendar.id,  // Store the CalendarActorEntity UUID
       calendar_id: calendar.id,
       auto_repost_originals: autoRepostOriginals,
       auto_repost_reposts: autoRepostReposts,
@@ -189,7 +189,7 @@ class ActivityPubService {
       remoteActorUrl = remoteProfile.actorUrl;
     }
 
-    // Find the RemoteCalendarEntity by actor URI
+    // Find the CalendarActorEntity by actor URI
     const remoteCalendar = await this.remoteCalendarService.getByActorUri(remoteActorUrl);
     if (!remoteCalendar) {
       // No remote calendar found, nothing to unfollow
@@ -198,7 +198,7 @@ class ActivityPubService {
 
     let followings = await FollowingCalendarEntity.findAll({
       where: {
-        remote_calendar_id: remoteCalendar.id,
+        calendar_actor_id: remoteCalendar.id,
         calendar_id: calendar.id,
       },
     });
@@ -282,23 +282,23 @@ class ActivityPubService {
   /**
    * Get list of calendars that this calendar is following
    * @param calendar The calendar whose followings to retrieve
-   * @returns Array of FollowingCalendar objects with human-readable remoteCalendarId
+   * @returns Array of FollowingCalendar objects with human-readable calendarActorId
    */
   async getFollowing(calendar: Calendar): Promise<FollowingCalendar[]> {
     const entities = await FollowingCalendarEntity.findAll({
       where: {
         calendar_id: calendar.id,
       },
-      include: [{ model: RemoteCalendarEntity, as: 'remoteCalendar' }],
+      include: [{ model: CalendarActorEntity, as: 'calendarActor' }],
     });
     return entities.map(entity => {
       // Convert actor_uri to human-readable calendar@domain format
-      const remoteCalendarId = entity.remoteCalendar
-        ? actorUriToIdentifier(entity.remoteCalendar.actor_uri)
-        : entity.remote_calendar_id;
+      const calendarActorId = entity.calendarActor
+        ? actorUriToIdentifier(entity.calendarActor.actor_uri)
+        : entity.calendar_actor_id;
       return new FollowingCalendar(
         entity.id,
-        remoteCalendarId,
+        calendarActorId,
         entity.calendar_id,
         entity.auto_repost_originals,
         entity.auto_repost_reposts,
@@ -309,23 +309,23 @@ class ActivityPubService {
   /**
    * Get list of calendars that are following this calendar
    * @param calendar The calendar whose followers to retrieve
-   * @returns Array of FollowerCalendar objects with human-readable remoteCalendarId
+   * @returns Array of FollowerCalendar objects with human-readable calendarActorId
    */
   async getFollowers(calendar: Calendar): Promise<FollowerCalendar[]> {
     const entities = await FollowerCalendarEntity.findAll({
       where: {
         calendar_id: calendar.id,
       },
-      include: [{ model: RemoteCalendarEntity, as: 'remoteCalendar' }],
+      include: [{ model: CalendarActorEntity, as: 'calendarActor' }],
     });
     return entities.map(entity => {
       // Convert actor_uri to human-readable calendar@domain format
-      const remoteCalendarId = entity.remoteCalendar
-        ? actorUriToIdentifier(entity.remoteCalendar.actor_uri)
-        : entity.remote_calendar_id;
+      const calendarActorId = entity.calendarActor
+        ? actorUriToIdentifier(entity.calendarActor.actor_uri)
+        : entity.calendar_actor_id;
       return new FollowerCalendar(
         entity.id,
-        remoteCalendarId,
+        calendarActorId,
         entity.calendar_id,
       );
     });
@@ -459,14 +459,14 @@ class ActivityPubService {
 
     console.log(`[MemberService] getFeed called for calendar ID: ${calendar.id}`);
 
-    // First, let's see what we're following (with RemoteCalendar details)
+    // First, let's see what we're following (with CalendarActor details)
     const following = await FollowingCalendarEntity.findAll({
       where: { calendar_id: calendar.id },
-      include: [{ model: RemoteCalendarEntity, as: 'remoteCalendar' }],
+      include: [{ model: CalendarActorEntity, as: 'calendarActor' }],
     });
     console.log(`[MemberService] This calendar is following ${following.length} remote calendars:`);
     following.forEach(f => {
-      console.log(`[MemberService]   - ${f.remoteCalendar?.actor_uri || f.remote_calendar_id}`);
+      console.log(`[MemberService]   - ${f.calendarActor?.actor_uri || f.calendar_actor_id}`);
     });
 
     // Query remote events from calendars this calendar is following.
@@ -480,8 +480,8 @@ class ActivityPubService {
         id: {
           [Op.in]: EventEntity.sequelize!.literal(
             `(SELECT eo.event_id FROM ap_event_object eo
-              JOIN remote_calendar rc ON eo.attributed_to = rc.actor_uri
-              JOIN ap_following f ON f.remote_calendar_id = rc.id
+              JOIN calendar_actor ca ON eo.attributed_to = ca.actor_uri AND ca.actor_type = 'remote'
+              JOIN ap_following f ON f.calendar_actor_id = ca.id
               WHERE f.calendar_id = '${calendar.id}')`,
           ),
         },

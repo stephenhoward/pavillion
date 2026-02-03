@@ -81,6 +81,10 @@ export const seedDB = async () => {
     let globalEarliest: Date | null = null;
 
     for (const file of files.sort()) {
+      // Skip non-JSON files
+      if (!file.endsWith('.json')) {
+        continue;
+      }
       const content = await fs.readFile(path.join(seedPath, file), 'utf8');
       const data = JSON.parse(content);
       allData.push({ file, data });

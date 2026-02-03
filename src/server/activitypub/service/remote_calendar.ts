@@ -1,22 +1,43 @@
-import { RemoteCalendarEntity, RemoteCalendar } from '@/server/activitypub/entity/remote_calendar';
+import { CalendarActorEntity, CalendarActor } from '@/server/activitypub/entity/calendar_actor';
 
 /**
- * Service for managing remote calendar references.
+ * Service for managing remote calendar actor references.
  *
  * This service provides methods for creating, retrieving, and updating
  * cached metadata for remote calendars discovered through ActivityPub federation.
+ *
+ * Remote calendars are stored in CalendarActorEntity with actor_type='remote'.
  */
 export default class RemoteCalendarService {
+
+  /**
+   * Extract domain from an ActivityPub actor URI.
+   *
+   * @param actorUri - The ActivityPub actor URI (e.g., https://example.com/calendars/events)
+   * @returns The domain (e.g., "example.com")
+   */
+  private extractDomain(actorUri: string): string | null {
+    try {
+      const url = new URL(actorUri);
+      return url.hostname;
+    }
+    catch {
+      return null;
+    }
+  }
 
   /**
    * Find an existing remote calendar by its ActivityPub actor URI
    *
    * @param actorUri - The ActivityPub actor URI (e.g., https://example.com/calendars/events)
-   * @returns The RemoteCalendar if found, null otherwise
+   * @returns The CalendarActor if found, null otherwise
    */
-  async getByActorUri(actorUri: string): Promise<RemoteCalendar | null> {
-    const entity = await RemoteCalendarEntity.findOne({
-      where: { actor_uri: actorUri },
+  async getByActorUri(actorUri: string): Promise<CalendarActor | null> {
+    const entity = await CalendarActorEntity.findOne({
+      where: {
+        actor_uri: actorUri,
+        actor_type: 'remote',
+      },
     });
 
     return entity ? entity.toModel() : null;
@@ -26,25 +47,30 @@ export default class RemoteCalendarService {
    * Find an existing remote calendar by its local UUID
    *
    * @param id - The local UUID reference
-   * @returns The RemoteCalendar if found, null otherwise
+   * @returns The CalendarActor if found, null otherwise
    */
-  async getById(id: string): Promise<RemoteCalendar | null> {
-    const entity = await RemoteCalendarEntity.findByPk(id);
+  async getById(id: string): Promise<CalendarActor | null> {
+    const entity = await CalendarActorEntity.findOne({
+      where: {
+        id,
+        actor_type: 'remote',
+      },
+    });
     return entity ? entity.toModel() : null;
   }
 
   /**
    * Find or create a remote calendar reference by actor URI.
    *
-   * This is the primary method for obtaining a RemoteCalendar reference.
+   * This is the primary method for obtaining a remote CalendarActor reference.
    * If the remote calendar doesn't exist in our database, it creates a new
    * entry with minimal information. The caller can then update the metadata
    * after fetching the full actor profile.
    *
    * @param actorUri - The ActivityPub actor URI
-   * @returns The existing or newly created RemoteCalendar
+   * @returns The existing or newly created CalendarActor
    */
-  async findOrCreateByActorUri(actorUri: string): Promise<RemoteCalendar> {
+  async findOrCreateByActorUri(actorUri: string): Promise<CalendarActor> {
     // Check if already exists
     const existing = await this.getByActorUri(actorUri);
     if (existing) {
@@ -52,8 +78,12 @@ export default class RemoteCalendarService {
     }
 
     // Create new entry with minimal information
-    const entity = await RemoteCalendarEntity.create({
+    const entity = await CalendarActorEntity.create({
+      actor_type: 'remote',
+      calendar_id: null,
       actor_uri: actorUri,
+      remote_domain: this.extractDomain(actorUri),
+      private_key: null,
     });
 
     return entity.toModel();
@@ -67,7 +97,7 @@ export default class RemoteCalendarService {
    *
    * @param actorUri - The ActivityPub actor URI
    * @param metadata - The metadata to update
-   * @returns The updated RemoteCalendar, or null if not found
+   * @returns The updated CalendarActor, or null if not found
    */
   async updateMetadata(
     actorUri: string,
@@ -77,9 +107,12 @@ export default class RemoteCalendarService {
       sharedInboxUrl?: string | null;
       publicKey?: string | null;
     },
-  ): Promise<RemoteCalendar | null> {
-    const entity = await RemoteCalendarEntity.findOne({
-      where: { actor_uri: actorUri },
+  ): Promise<CalendarActor | null> {
+    const entity = await CalendarActorEntity.findOne({
+      where: {
+        actor_uri: actorUri,
+        actor_type: 'remote',
+      },
     });
 
     if (!entity) {
@@ -88,7 +121,7 @@ export default class RemoteCalendarService {
 
     // Update fields that are provided
     if (metadata.displayName !== undefined) {
-      entity.display_name = metadata.displayName;
+      entity.remote_display_name = metadata.displayName;
     }
     if (metadata.inboxUrl !== undefined) {
       entity.inbox_url = metadata.inboxUrl;
@@ -113,7 +146,7 @@ export default class RemoteCalendarService {
    *
    * @param id - The local UUID reference
    * @param metadata - The metadata to update
-   * @returns The updated RemoteCalendar, or null if not found
+   * @returns The updated CalendarActor, or null if not found
    */
   async updateMetadataById(
     id: string,
@@ -123,8 +156,13 @@ export default class RemoteCalendarService {
       sharedInboxUrl?: string | null;
       publicKey?: string | null;
     },
-  ): Promise<RemoteCalendar | null> {
-    const entity = await RemoteCalendarEntity.findByPk(id);
+  ): Promise<CalendarActor | null> {
+    const entity = await CalendarActorEntity.findOne({
+      where: {
+        id,
+        actor_type: 'remote',
+      },
+    });
 
     if (!entity) {
       return null;
@@ -132,7 +170,7 @@ export default class RemoteCalendarService {
 
     // Update fields that are provided
     if (metadata.displayName !== undefined) {
-      entity.display_name = metadata.displayName;
+      entity.remote_display_name = metadata.displayName;
     }
     if (metadata.inboxUrl !== undefined) {
       entity.inbox_url = metadata.inboxUrl;
@@ -155,16 +193,16 @@ export default class RemoteCalendarService {
   /**
    * Check if cached metadata is stale and should be refreshed.
    *
-   * @param remoteCalendar - The remote calendar to check
+   * @param calendarActor - The remote calendar actor to check
    * @param maxAgeMs - Maximum age in milliseconds before considering stale (default: 1 hour)
    * @returns true if metadata should be refreshed
    */
-  isMetadataStale(remoteCalendar: RemoteCalendar, maxAgeMs: number = 3600000): boolean {
-    if (!remoteCalendar.lastFetched) {
+  isMetadataStale(calendarActor: CalendarActor, maxAgeMs: number = 3600000): boolean {
+    if (!calendarActor.lastFetched) {
       return true;
     }
 
-    const age = Date.now() - remoteCalendar.lastFetched.getTime();
+    const age = Date.now() - calendarActor.lastFetched.getTime();
     return age > maxAgeMs;
   }
 
@@ -178,8 +216,11 @@ export default class RemoteCalendarService {
    * @returns true if deleted, false if not found
    */
   async deleteByActorUri(actorUri: string): Promise<boolean> {
-    const deleted = await RemoteCalendarEntity.destroy({
-      where: { actor_uri: actorUri },
+    const deleted = await CalendarActorEntity.destroy({
+      where: {
+        actor_uri: actorUri,
+        actor_type: 'remote',
+      },
     });
 
     return deleted > 0;
@@ -192,10 +233,12 @@ export default class RemoteCalendarService {
    *
    * @param onlyStale - If true, only return calendars with stale metadata
    * @param maxAgeMs - Maximum age for staleness check (default: 1 hour)
-   * @returns Array of RemoteCalendar objects
+   * @returns Array of CalendarActor objects
    */
-  async getAll(onlyStale: boolean = false, maxAgeMs: number = 3600000): Promise<RemoteCalendar[]> {
-    const entities = await RemoteCalendarEntity.findAll();
+  async getAll(onlyStale: boolean = false, maxAgeMs: number = 3600000): Promise<CalendarActor[]> {
+    const entities = await CalendarActorEntity.findAll({
+      where: { actor_type: 'remote' },
+    });
     const models = entities.map(e => e.toModel());
 
     if (onlyStale) {

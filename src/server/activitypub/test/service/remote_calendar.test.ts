@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 
 import RemoteCalendarService from '@/server/activitypub/service/remote_calendar';
-import { RemoteCalendarEntity } from '@/server/activitypub/entity/remote_calendar';
+import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 
 describe('RemoteCalendarService', () => {
   let service: RemoteCalendarService;
@@ -22,22 +22,30 @@ describe('RemoteCalendarService', () => {
       const actorUri = 'https://remote.example/calendars/events';
       const mockEntity = {
         id: 'remote-id-123',
+        actor_type: 'remote',
+        calendar_id: null,
         actor_uri: actorUri,
-        display_name: 'Remote Events',
+        remote_display_name: 'Remote Events',
+        remote_domain: 'remote.example',
         inbox_url: 'https://remote.example/calendars/events/inbox',
         shared_inbox_url: null,
         public_key: '-----BEGIN PUBLIC KEY-----\nKEY\n-----END PUBLIC KEY-----',
+        private_key: null,
         last_fetched: new Date('2025-01-15'),
         createdAt: new Date(),
         updatedAt: new Date(),
         toModel: function() {
           return {
             id: this.id,
+            actorType: this.actor_type,
+            calendarId: this.calendar_id,
             actorUri: this.actor_uri,
-            displayName: this.display_name,
+            remoteDisplayName: this.remote_display_name,
+            remoteDomain: this.remote_domain,
             inboxUrl: this.inbox_url,
             sharedInboxUrl: this.shared_inbox_url,
             publicKey: this.public_key,
+            privateKey: this.private_key,
             lastFetched: this.last_fetched,
             createdAt: this.createdAt,
             updatedAt: this.updatedAt,
@@ -45,18 +53,18 @@ describe('RemoteCalendarService', () => {
         },
       };
 
-      sandbox.stub(RemoteCalendarEntity, 'findOne').resolves(mockEntity as any);
+      sandbox.stub(CalendarActorEntity, 'findOne').resolves(mockEntity as any);
 
       const result = await service.getByActorUri(actorUri);
 
       expect(result).toBeDefined();
       expect(result?.actorUri).toBe(actorUri);
-      expect(result?.displayName).toBe('Remote Events');
+      expect(result?.remoteDisplayName).toBe('Remote Events');
       expect(result?.inboxUrl).toBe('https://remote.example/calendars/events/inbox');
     });
 
     it('should return null when not found', async () => {
-      sandbox.stub(RemoteCalendarEntity, 'findOne').resolves(null);
+      sandbox.stub(CalendarActorEntity, 'findOne').resolves(null);
 
       const result = await service.getByActorUri('https://nonexistent.example/calendars/test');
 
@@ -69,22 +77,30 @@ describe('RemoteCalendarService', () => {
       const id = 'remote-id-456';
       const mockEntity = {
         id,
+        actor_type: 'remote',
+        calendar_id: null,
         actor_uri: 'https://remote.example/calendars/community',
-        display_name: 'Community Calendar',
+        remote_display_name: 'Community Calendar',
+        remote_domain: 'remote.example',
         inbox_url: 'https://remote.example/calendars/community/inbox',
         shared_inbox_url: 'https://remote.example/inbox',
         public_key: null,
+        private_key: null,
         last_fetched: null,
         createdAt: new Date(),
         updatedAt: new Date(),
         toModel: function() {
           return {
             id: this.id,
+            actorType: this.actor_type,
+            calendarId: this.calendar_id,
             actorUri: this.actor_uri,
-            displayName: this.display_name,
+            remoteDisplayName: this.remote_display_name,
+            remoteDomain: this.remote_domain,
             inboxUrl: this.inbox_url,
             sharedInboxUrl: this.shared_inbox_url,
             publicKey: this.public_key,
+            privateKey: this.private_key,
             lastFetched: this.last_fetched,
             createdAt: this.createdAt,
             updatedAt: this.updatedAt,
@@ -92,7 +108,7 @@ describe('RemoteCalendarService', () => {
         },
       };
 
-      sandbox.stub(RemoteCalendarEntity, 'findByPk').resolves(mockEntity as any);
+      sandbox.stub(CalendarActorEntity, 'findOne').resolves(mockEntity as any);
 
       const result = await service.getById(id);
 
@@ -102,7 +118,7 @@ describe('RemoteCalendarService', () => {
     });
 
     it('should return null when not found by UUID', async () => {
-      sandbox.stub(RemoteCalendarEntity, 'findByPk').resolves(null);
+      sandbox.stub(CalendarActorEntity, 'findOne').resolves(null);
 
       const result = await service.getById('nonexistent-uuid');
 
@@ -115,22 +131,30 @@ describe('RemoteCalendarService', () => {
       const actorUri = 'https://existing.example/calendars/events';
       const mockEntity = {
         id: 'existing-id',
+        actor_type: 'remote',
+        calendar_id: null,
         actor_uri: actorUri,
-        display_name: 'Existing Calendar',
+        remote_display_name: 'Existing Calendar',
+        remote_domain: 'existing.example',
         inbox_url: 'https://existing.example/calendars/events/inbox',
         shared_inbox_url: null,
         public_key: null,
+        private_key: null,
         last_fetched: new Date(),
         createdAt: new Date(),
         updatedAt: new Date(),
         toModel: function() {
           return {
             id: this.id,
+            actorType: this.actor_type,
+            calendarId: this.calendar_id,
             actorUri: this.actor_uri,
-            displayName: this.display_name,
+            remoteDisplayName: this.remote_display_name,
+            remoteDomain: this.remote_domain,
             inboxUrl: this.inbox_url,
             sharedInboxUrl: this.shared_inbox_url,
             publicKey: this.public_key,
+            privateKey: this.private_key,
             lastFetched: this.last_fetched,
             createdAt: this.createdAt,
             updatedAt: this.updatedAt,
@@ -138,8 +162,8 @@ describe('RemoteCalendarService', () => {
         },
       };
 
-      sandbox.stub(RemoteCalendarEntity, 'findOne').resolves(mockEntity as any);
-      const createStub = sandbox.stub(RemoteCalendarEntity, 'create');
+      sandbox.stub(CalendarActorEntity, 'findOne').resolves(mockEntity as any);
+      const createStub = sandbox.stub(CalendarActorEntity, 'create');
 
       const result = await service.findOrCreateByActorUri(actorUri);
 
@@ -151,22 +175,30 @@ describe('RemoteCalendarService', () => {
       const actorUri = 'https://new.example/calendars/events';
       const mockCreatedEntity = {
         id: 'new-id-789',
+        actor_type: 'remote',
+        calendar_id: null,
         actor_uri: actorUri,
-        display_name: null,
+        remote_display_name: null,
+        remote_domain: 'new.example',
         inbox_url: null,
         shared_inbox_url: null,
         public_key: null,
+        private_key: null,
         last_fetched: null,
         createdAt: new Date(),
         updatedAt: new Date(),
         toModel: function() {
           return {
             id: this.id,
+            actorType: this.actor_type,
+            calendarId: this.calendar_id,
             actorUri: this.actor_uri,
-            displayName: this.display_name,
+            remoteDisplayName: this.remote_display_name,
+            remoteDomain: this.remote_domain,
             inboxUrl: this.inbox_url,
             sharedInboxUrl: this.shared_inbox_url,
             publicKey: this.public_key,
+            privateKey: this.private_key,
             lastFetched: this.last_fetched,
             createdAt: this.createdAt,
             updatedAt: this.updatedAt,
@@ -174,13 +206,13 @@ describe('RemoteCalendarService', () => {
         },
       };
 
-      sandbox.stub(RemoteCalendarEntity, 'findOne').resolves(null);
-      sandbox.stub(RemoteCalendarEntity, 'create').resolves(mockCreatedEntity as any);
+      sandbox.stub(CalendarActorEntity, 'findOne').resolves(null);
+      sandbox.stub(CalendarActorEntity, 'create').resolves(mockCreatedEntity as any);
 
       const result = await service.findOrCreateByActorUri(actorUri);
 
       expect(result.actorUri).toBe(actorUri);
-      expect(result.displayName).toBeNull(); // Minimal creation, no metadata yet
+      expect(result.remoteDisplayName).toBeNull(); // Minimal creation, no metadata yet
     });
   });
 
@@ -189,11 +221,15 @@ describe('RemoteCalendarService', () => {
       const actorUri = 'https://remote.example/calendars/events';
       const mockEntity = {
         id: 'remote-id',
+        actor_type: 'remote',
+        calendar_id: null,
         actor_uri: actorUri,
-        display_name: null,
+        remote_display_name: null,
+        remote_domain: 'remote.example',
         inbox_url: null,
         shared_inbox_url: null,
         public_key: null,
+        private_key: null,
         last_fetched: null,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -201,11 +237,15 @@ describe('RemoteCalendarService', () => {
         toModel: function() {
           return {
             id: this.id,
+            actorType: this.actor_type,
+            calendarId: this.calendar_id,
             actorUri: this.actor_uri,
-            displayName: this.display_name,
+            remoteDisplayName: this.remote_display_name,
+            remoteDomain: this.remote_domain,
             inboxUrl: this.inbox_url,
             sharedInboxUrl: this.shared_inbox_url,
             publicKey: this.public_key,
+            privateKey: this.private_key,
             lastFetched: this.last_fetched,
             createdAt: this.createdAt,
             updatedAt: this.updatedAt,
@@ -213,7 +253,7 @@ describe('RemoteCalendarService', () => {
         },
       };
 
-      sandbox.stub(RemoteCalendarEntity, 'findOne').resolves(mockEntity as any);
+      sandbox.stub(CalendarActorEntity, 'findOne').resolves(mockEntity as any);
 
       const result = await service.updateMetadata(actorUri, {
         displayName: 'Updated Name',
@@ -222,7 +262,7 @@ describe('RemoteCalendarService', () => {
       });
 
       expect(result).toBeDefined();
-      expect(mockEntity.display_name).toBe('Updated Name');
+      expect(mockEntity.remote_display_name).toBe('Updated Name');
       expect(mockEntity.inbox_url).toBe('https://remote.example/calendars/events/inbox');
       expect(mockEntity.public_key).toBe('-----BEGIN PUBLIC KEY-----\nNEW_KEY\n-----END PUBLIC KEY-----');
       expect(mockEntity.last_fetched).toBeInstanceOf(Date);
@@ -230,7 +270,7 @@ describe('RemoteCalendarService', () => {
     });
 
     it('should return null if remote calendar not found', async () => {
-      sandbox.stub(RemoteCalendarEntity, 'findOne').resolves(null);
+      sandbox.stub(CalendarActorEntity, 'findOne').resolves(null);
 
       const result = await service.updateMetadata('https://nonexistent.example/calendars/test', {
         displayName: 'Test',
@@ -243,11 +283,15 @@ describe('RemoteCalendarService', () => {
       const actorUri = 'https://remote.example/calendars/events';
       const mockEntity = {
         id: 'remote-id',
+        actor_type: 'remote',
+        calendar_id: null,
         actor_uri: actorUri,
-        display_name: 'Original Name',
+        remote_display_name: 'Original Name',
+        remote_domain: 'remote.example',
         inbox_url: 'https://remote.example/original/inbox',
         shared_inbox_url: null,
         public_key: 'ORIGINAL_KEY',
+        private_key: null,
         last_fetched: null,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -255,11 +299,15 @@ describe('RemoteCalendarService', () => {
         toModel: function() {
           return {
             id: this.id,
+            actorType: this.actor_type,
+            calendarId: this.calendar_id,
             actorUri: this.actor_uri,
-            displayName: this.display_name,
+            remoteDisplayName: this.remote_display_name,
+            remoteDomain: this.remote_domain,
             inboxUrl: this.inbox_url,
             sharedInboxUrl: this.shared_inbox_url,
             publicKey: this.public_key,
+            privateKey: this.private_key,
             lastFetched: this.last_fetched,
             createdAt: this.createdAt,
             updatedAt: this.updatedAt,
@@ -267,12 +315,12 @@ describe('RemoteCalendarService', () => {
         },
       };
 
-      sandbox.stub(RemoteCalendarEntity, 'findOne').resolves(mockEntity as any);
+      sandbox.stub(CalendarActorEntity, 'findOne').resolves(mockEntity as any);
 
       // Only update display name
       await service.updateMetadata(actorUri, { displayName: 'New Name' });
 
-      expect(mockEntity.display_name).toBe('New Name');
+      expect(mockEntity.remote_display_name).toBe('New Name');
       expect(mockEntity.inbox_url).toBe('https://remote.example/original/inbox'); // Unchanged
       expect(mockEntity.public_key).toBe('ORIGINAL_KEY'); // Unchanged
     });
@@ -280,79 +328,95 @@ describe('RemoteCalendarService', () => {
 
   describe('isMetadataStale', () => {
     it('should return true if lastFetched is null', () => {
-      const remoteCalendar = {
+      const calendarActor = {
         id: 'test-id',
+        actorType: 'remote' as const,
+        calendarId: null,
         actorUri: 'https://remote.example/calendars/events',
-        displayName: null,
+        remoteDisplayName: null,
+        remoteDomain: 'remote.example',
         inboxUrl: null,
         sharedInboxUrl: null,
         publicKey: null,
+        privateKey: null,
         lastFetched: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
-      expect(service.isMetadataStale(remoteCalendar)).toBe(true);
+      expect(service.isMetadataStale(calendarActor)).toBe(true);
     });
 
     it('should return true if metadata is older than maxAge', () => {
       const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
-      const remoteCalendar = {
+      const calendarActor = {
         id: 'test-id',
+        actorType: 'remote' as const,
+        calendarId: null,
         actorUri: 'https://remote.example/calendars/events',
-        displayName: 'Test',
+        remoteDisplayName: 'Test',
+        remoteDomain: 'remote.example',
         inboxUrl: null,
         sharedInboxUrl: null,
         publicKey: null,
+        privateKey: null,
         lastFetched: twoHoursAgo,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
       // Default maxAge is 1 hour
-      expect(service.isMetadataStale(remoteCalendar)).toBe(true);
+      expect(service.isMetadataStale(calendarActor)).toBe(true);
     });
 
     it('should return false if metadata is fresh', () => {
       const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-      const remoteCalendar = {
+      const calendarActor = {
         id: 'test-id',
+        actorType: 'remote' as const,
+        calendarId: null,
         actorUri: 'https://remote.example/calendars/events',
-        displayName: 'Test',
+        remoteDisplayName: 'Test',
+        remoteDomain: 'remote.example',
         inboxUrl: null,
         sharedInboxUrl: null,
         publicKey: null,
+        privateKey: null,
         lastFetched: fiveMinutesAgo,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
       // Default maxAge is 1 hour, 5 minutes ago is fresh
-      expect(service.isMetadataStale(remoteCalendar)).toBe(false);
+      expect(service.isMetadataStale(calendarActor)).toBe(false);
     });
 
     it('should respect custom maxAge parameter', () => {
       const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-      const remoteCalendar = {
+      const calendarActor = {
         id: 'test-id',
+        actorType: 'remote' as const,
+        calendarId: null,
         actorUri: 'https://remote.example/calendars/events',
-        displayName: 'Test',
+        remoteDisplayName: 'Test',
+        remoteDomain: 'remote.example',
         inboxUrl: null,
         sharedInboxUrl: null,
         publicKey: null,
+        privateKey: null,
         lastFetched: fiveMinutesAgo,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
       // With 1 minute maxAge, 5 minutes ago is stale
-      expect(service.isMetadataStale(remoteCalendar, 60000)).toBe(true);
+      expect(service.isMetadataStale(calendarActor, 60000)).toBe(true);
     });
   });
 
   describe('deleteByActorUri', () => {
     it('should return true when deletion successful', async () => {
-      sandbox.stub(RemoteCalendarEntity, 'destroy').resolves(1);
+      sandbox.stub(CalendarActorEntity, 'destroy').resolves(1);
 
       const result = await service.deleteByActorUri('https://remote.example/calendars/events');
 
@@ -360,7 +424,7 @@ describe('RemoteCalendarService', () => {
     });
 
     it('should return false when nothing to delete', async () => {
-      sandbox.stub(RemoteCalendarEntity, 'destroy').resolves(0);
+      sandbox.stub(CalendarActorEntity, 'destroy').resolves(0);
 
       const result = await service.deleteByActorUri('https://nonexistent.example/calendars/test');
 

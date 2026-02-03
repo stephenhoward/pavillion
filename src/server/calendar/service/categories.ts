@@ -652,7 +652,8 @@ class CategoryService {
   }
 
   /**
-   * Check if a user can modify a calendar - internal helper method
+   * Check if a user can modify a calendar - internal helper method.
+   * Uses CalendarMemberEntity for unified membership lookup.
    */
   private async userCanModifyCalendar(account: Account, calendar: import('@/common/model/calendar').Calendar): Promise<boolean> {
     if (this.calendarService) {
@@ -664,38 +665,17 @@ class CategoryService {
       return true;
     }
 
-    // Import entities dynamically to avoid circular dependency
-    const { CalendarEditorEntity } = await import('@/server/calendar/entity/calendar_editor');
-    const { CalendarEditorPersonEntity } = await import('@/server/calendar/entity/calendar_editor_person');
-    const { CalendarEntity } = await import('@/server/calendar/entity/calendar');
+    // Use CalendarMemberEntity for unified membership check
+    const { CalendarMemberEntity } = await import('@/server/calendar/entity/calendar_member');
 
-    // Check if user owns the calendar
-    const calendarEntity = await CalendarEntity.findByPk(calendar.id);
-    if (calendarEntity && calendarEntity.account_id === account.id) {
-      return true;
-    }
-
-    // Check if user has federated editor access
-    const federatedEditorRelationship = await CalendarEditorEntity.findOne({
+    const membership = await CalendarMemberEntity.findOne({
       where: {
         calendar_id: calendar.id,
         account_id: account.id,
       },
     });
 
-    if (federatedEditorRelationship) {
-      return true;
-    }
-
-    // Check if user has local person editor access
-    const localPersonEditorRelationship = await CalendarEditorPersonEntity.findOne({
-      where: {
-        calendar_id: calendar.id,
-        account_id: account.id,
-      },
-    });
-
-    return localPersonEditorRelationship !== null;
+    return membership !== null;
   }
 }
 

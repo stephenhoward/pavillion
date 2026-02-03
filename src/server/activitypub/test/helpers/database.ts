@@ -28,7 +28,7 @@ import {
   ActivityPubInboxMessageEntity,
   ActivityPubOutboxMessageEntity,
 } from '@/server/activitypub/entity/activitypub';
-import { RemoteCalendarEntity } from '@/server/activitypub/entity/remote_calendar';
+import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { EventEntity } from '@/server/calendar/entity/event';
 
@@ -42,10 +42,10 @@ export async function setupActivityPubSchema(): Promise<void> {
   // Sync CalendarEntity first as it's referenced by many other tables
   await CalendarEntity.sync({ force: true });
 
-  // Sync RemoteCalendarEntity before tables that reference it
-  await RemoteCalendarEntity.sync({ force: true });
+  // Sync CalendarActorEntity before tables that reference it
+  await CalendarActorEntity.sync({ force: true });
 
-  // Sync ActivityPub models that depend on CalendarEntity and RemoteCalendarEntity
+  // Sync ActivityPub models that depend on CalendarEntity and CalendarActorEntity
   await FollowingCalendarEntity.sync({ force: true });
   await FollowerCalendarEntity.sync({ force: true });
   await SharedEventEntity.sync({ force: true });
@@ -72,33 +72,37 @@ export async function teardownActivityPubSchema(): Promise<void> {
   await FollowerCalendarEntity.drop();
   await FollowingCalendarEntity.drop();
   await EventEntity.drop();
-  await RemoteCalendarEntity.drop();
+  await CalendarActorEntity.drop();
   await CalendarEntity.drop();
 }
 
 /**
- * Create or retrieve a RemoteCalendarEntity for the given actor URI
+ * Create or retrieve a CalendarActorEntity (remote type) for the given actor URI
  *
  * @param actorUri - The ActivityPub actor URI
  * @param displayName - Optional display name for the remote calendar
- * @returns The RemoteCalendarEntity
+ * @returns The CalendarActorEntity
  */
-export async function getOrCreateRemoteCalendar(
+export async function getOrCreateRemoteCalendarActor(
   actorUri: string,
   displayName?: string,
-): Promise<RemoteCalendarEntity> {
-  let remoteCalendar = await RemoteCalendarEntity.findOne({
-    where: { actor_uri: actorUri },
+): Promise<CalendarActorEntity> {
+  let calendarActor = await CalendarActorEntity.findOne({
+    where: { actor_uri: actorUri, actor_type: 'remote' },
   });
 
-  if (!remoteCalendar) {
-    remoteCalendar = await RemoteCalendarEntity.create({
+  if (!calendarActor) {
+    calendarActor = await CalendarActorEntity.create({
+      actor_type: 'remote',
       actor_uri: actorUri,
-      display_name: displayName || null,
+      calendar_id: null,
+      remote_display_name: displayName || null,
+      remote_domain: new URL(actorUri).hostname,
+      private_key: null,
     });
   }
 
-  return remoteCalendar;
+  return calendarActor;
 }
 
 /**
@@ -109,27 +113,27 @@ export async function getOrCreateRemoteCalendar(
  * @param remoteActorUri - Remote calendar ActivityPub URL
  * @param autoRepostOriginals - Whether to auto-repost originals (default: false)
  * @param autoRepostReposts - Whether to auto-repost reposts (default: false)
- * @returns Object containing the created FollowingCalendarEntity and RemoteCalendarEntity
+ * @returns Object containing the created FollowingCalendarEntity and CalendarActorEntity
  */
 export async function createFollowingRelationship(
   calendarId: string,
   remoteActorUri: string,
   autoRepostOriginals: boolean = false,
   autoRepostReposts: boolean = false,
-): Promise<{ following: FollowingCalendarEntity; remoteCalendar: RemoteCalendarEntity }> {
-  // First get or create the RemoteCalendarEntity
-  const remoteCalendar = await getOrCreateRemoteCalendar(remoteActorUri);
+): Promise<{ following: FollowingCalendarEntity; calendarActor: CalendarActorEntity }> {
+  // First get or create the CalendarActorEntity (remote type)
+  const calendarActor = await getOrCreateRemoteCalendarActor(remoteActorUri);
 
   // Create the following relationship with the UUID reference
   const following = await FollowingCalendarEntity.create({
     id: `follow-${calendarId}-${Date.now()}`,
     calendar_id: calendarId,
-    remote_calendar_id: remoteCalendar.id,
+    calendar_actor_id: calendarActor.id,
     auto_repost_originals: autoRepostOriginals,
     auto_repost_reposts: autoRepostReposts,
   });
 
-  return { following, remoteCalendar };
+  return { following, calendarActor };
 }
 
 /**

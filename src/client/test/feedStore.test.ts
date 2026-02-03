@@ -66,7 +66,7 @@ describe('FeedStore', () => {
 
     it('should clear cached data when calendar selection changes', () => {
       feedStore.follows = [
-        { id: 'follow-1', remoteCalendarId: 'remote@example.com', calendarId: 'cal-1', autoRepostOriginals: false, autoRepostReposts: false },
+        { id: 'follow-1', calendarActorId: 'remote@example.com', calendarId: 'cal-1', autoRepostOriginals: false, autoRepostReposts: false },
       ];
       feedStore.events = [
         { id: 'event-1', title: 'Test Event', repostStatus: 'none' },
@@ -84,8 +84,8 @@ describe('FeedStore', () => {
   describe('follows/followers/events state management', () => {
     it('should store follows list with new boolean fields', () => {
       const follows = [
-        { id: 'follow-1', remoteCalendarId: 'remote1@example.com', calendarId: 'cal-1', autoRepostOriginals: false, autoRepostReposts: false },
-        { id: 'follow-2', remoteCalendarId: 'remote2@example.com', calendarId: 'cal-1', autoRepostOriginals: true, autoRepostReposts: true },
+        { id: 'follow-1', calendarActorId: 'remote1@example.com', calendarId: 'cal-1', autoRepostOriginals: false, autoRepostReposts: false },
+        { id: 'follow-2', calendarActorId: 'remote2@example.com', calendarId: 'cal-1', autoRepostOriginals: true, autoRepostReposts: true },
       ];
 
       feedStore.follows = follows;
@@ -96,8 +96,8 @@ describe('FeedStore', () => {
 
     it('should store followers list', () => {
       const followers = [
-        { id: 'follower-1', remoteCalendarId: 'follower1@example.com' },
-        { id: 'follower-2', remoteCalendarId: 'follower2@example.com' },
+        { id: 'follower-1', calendarActorId: 'follower1@example.com' },
+        { id: 'follower-2', calendarActorId: 'follower2@example.com' },
       ];
 
       feedStore.followers = followers;

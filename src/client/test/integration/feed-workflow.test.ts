@@ -54,7 +54,7 @@ describe('Feed Workflow Integration Tests', () => {
         data: [
           {
             id: 'follow-1',
-            remoteCalendarId: 'remote@example.com',
+            calendarActorId: 'remote@example.com',
             calendarId: 'local-cal-1',
             autoRepostOriginals: false,
             autoRepostReposts: false,
@@ -89,7 +89,7 @@ describe('Feed Workflow Integration Tests', () => {
 
       // Verify: Calendar is in follows list
       expect(feedStore.follows).toHaveLength(1);
-      expect(feedStore.follows[0].remoteCalendarId).toBe('remote@example.com');
+      expect(feedStore.follows[0].calendarActorId).toBe('remote@example.com');
 
       // Action: Load feed
       await feedStore.loadFeed();
@@ -154,7 +154,7 @@ describe('Feed Workflow Integration Tests', () => {
       feedStore.follows = [
         {
           id: 'follow-1',
-          remoteCalendarId: 'remote@example.com',
+          calendarActorId: 'remote@example.com',
           calendarId: 'cal-1',
           autoRepostOriginals: false,
           autoRepostReposts: false,
@@ -376,7 +376,7 @@ describe('Feed Workflow Integration Tests', () => {
       feedStore.follows = [
         {
           id: 'follow-1',
-          remoteCalendarId: 'remote@example.com',
+          calendarActorId: 'remote@example.com',
           calendarId: 'cal-1',
           autoRepostOriginals: false,
           autoRepostReposts: false,
@@ -388,7 +388,7 @@ describe('Feed Workflow Integration Tests', () => {
       axiosPatchStub.withArgs('/api/v1/social/follows/follow-1').resolves({
         data: {
           id: 'follow-1',
-          remoteCalendarId: 'remote@example.com',
+          calendarActorId: 'remote@example.com',
           calendarId: 'cal-1',
           autoRepostOriginals: true,
           autoRepostReposts: true,
@@ -413,7 +413,7 @@ describe('Feed Workflow Integration Tests', () => {
       feedStore.follows = [
         {
           id: 'follow-1',
-          remoteCalendarId: 'remote@example.com',
+          calendarActorId: 'remote@example.com',
           calendarId: 'cal-1',
           autoRepostOriginals: false,
           autoRepostReposts: false,

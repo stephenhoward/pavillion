@@ -125,14 +125,14 @@ describe('unfollowCalendar', () => {
     let userCanModifyStub = sandbox.stub(CalendarService.prototype, 'userCanModifyCalendar');
     userCanModifyStub.resolves(true);
 
-    // Mock follow entity lookup - now includes remoteCalendar association
+    // Mock follow entity lookup - now includes calendarActor association
     let findOneStub = sandbox.stub(FollowingCalendarEntity, 'findOne');
     const mockFollowEntity = {
       id: 'testfollowid',
-      remote_calendar_id: 'mock-remote-calendar-uuid',
+      calendar_actor_id: 'mock-calendar-actor-uuid',
       calendar_id: 'testcalendarid',
-      remoteCalendar: {
-        id: 'mock-remote-calendar-uuid',
+      calendarActor: {
+        id: 'mock-calendar-actor-uuid',
         actor_uri: 'https://remote.example/calendars/remotecal',
       },
     };

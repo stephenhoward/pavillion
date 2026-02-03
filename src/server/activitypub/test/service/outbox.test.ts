@@ -185,22 +185,22 @@ describe('getRecipients', () => {
 
   it('should return an array with followers and observers', async () => {
     const followersStub = sandbox.stub(FollowerCalendarEntity, 'findAll');
-    // Mock follower with remoteCalendar association containing actor_uri
+    // Mock follower with calendarActor association containing actor_uri
     const mockFollower = {
-      remote_calendar_id: 'mock-remote-calendar-uuid-1',
-      remoteCalendar: {
-        id: 'mock-remote-calendar-uuid-1',
+      calendar_actor_id: 'mock-calendar-actor-uuid-1',
+      calendarActor: {
+        id: 'mock-calendar-actor-uuid-1',
         actor_uri: REMOTE_CALENDAR_HANDLE,
       },
     };
     followersStub.resolves([mockFollower as any]);
 
     const observersStub = sandbox.stub(EventActivityEntity, 'findAll');
-    // Mock observer with remoteCalendar association containing actor_uri
+    // Mock observer with calendarActor association containing actor_uri
     const mockObserver = {
-      remote_calendar_id: 'mock-remote-calendar-uuid-2',
-      remoteCalendar: {
-        id: 'mock-remote-calendar-uuid-2',
+      calendar_actor_id: 'mock-calendar-actor-uuid-2',
+      calendarActor: {
+        id: 'mock-calendar-actor-uuid-2',
         actor_uri: OBSERVER_CALENDAR_HANDLE,
       },
     };

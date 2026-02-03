@@ -8,14 +8,18 @@ import { Calendar } from '@/common/model/calendar';
 import { FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
 import { InvalidRemoteCalendarIdentifierError } from '@/common/exceptions/activitypub';
 
-// Mock RemoteCalendar model for testing
+// Mock CalendarActor model for testing (remote type)
 const mockRemoteCalendar = {
-  id: 'mock-remote-calendar-uuid',
+  id: 'mock-calendar-actor-uuid',
+  actorType: 'remote',
+  calendarId: null,
   actorUri: 'https://testdomain.com/calendars/testcalendar',
-  displayName: null,
+  remoteDisplayName: null,
+  remoteDomain: 'testdomain.com',
   inboxUrl: null,
   sharedInboxUrl: null,
   publicKey: null,
+  privateKey: null,
   lastFetched: null,
   createdAt: new Date(),
   updatedAt: new Date(),
@@ -87,8 +91,8 @@ describe("followCalendar", () => {
     if ( callargs ) {
       expect( callargs.id ).toMatch(/https:\/\/testdomain.com\/calendars\/testcalendar\/follows\/[a-z0-9-]+/);
       expect( callargs.calendar_id ).toBe('testid');
-      // The remote_calendar_id should now be the RemoteCalendarEntity UUID
-      expect( callargs.remote_calendar_id ).toBe(mockRemoteCalendar.id);
+      // The calendar_actor_id should now be the CalendarActorEntity UUID
+      expect( callargs.calendar_actor_id ).toBe(mockRemoteCalendar.id);
 
       let outboxCall = addToOutboxStub.getCall(0);
       if ( outboxCall ) {
@@ -198,7 +202,7 @@ describe("unfollowCalendar", () => {
       calendarId: undefined,
     });
 
-    // Mock RemoteCalendarService to return the RemoteCalendar for the AP URL
+    // Mock RemoteCalendarService to return the CalendarActor for the AP URL
     let getByActorUriStub = sandbox.stub(service.remoteCalendarService, 'getByActorUri');
     getByActorUriStub.resolves(mockRemoteCalendar);
 
@@ -206,7 +210,7 @@ describe("unfollowCalendar", () => {
     getExistingFollowStub.resolves([
       FollowingCalendarEntity.build({
         id: 'testfollowid',
-        remote_calendar_id: mockRemoteCalendar.id,
+        calendar_actor_id: mockRemoteCalendar.id,
       }),
     ]);
 
@@ -267,7 +271,7 @@ describe("unfollowCalendar", () => {
 
     await service.unfollowCalendar(account, calendar,'testcalendar@testdomain.com');
 
-    // Since no RemoteCalendarEntity was found, nothing should happen
+    // Since no CalendarActorEntity was found, nothing should happen
     expect( destroyFollowStub.called ).toBe(false);
     expect( addToOutboxStub.called ).toBe(false);
   });

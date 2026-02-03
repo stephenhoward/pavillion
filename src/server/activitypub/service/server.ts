@@ -126,15 +126,15 @@ export default class ActivityPubService {
 
   /**
      * Record a new follower for a local calendar
-     * @param remoteCalendarId The remote calendar identifier
+     * @param calendarActorId The calendar actor ID (UUID of CalendarActorEntity)
      * @param localCalendar The local calendar being followed
      * @param followActivityId The ID of the follow activity
      */
-  async addFollower(remoteCalendarId: string, localCalendar: Calendar, followActivityId: string) {
+  async addFollower(calendarActorId: string, localCalendar: Calendar, followActivityId: string) {
     // Check if this follower already exists
     let existingFollower = await FollowerCalendarEntity.findOne({
       where: {
-        remote_calendar_id: remoteCalendarId,
+        calendar_actor_id: calendarActorId,
         calendar_id: localCalendar.id,
       },
     });
@@ -146,7 +146,7 @@ export default class ActivityPubService {
     // Create new follower record
     let followerEntity = FollowerCalendarEntity.build({
       id: followActivityId,
-      remote_calendar_id: remoteCalendarId,
+      calendar_actor_id: calendarActorId,
       calendar_id: localCalendar.id,
     });
 
@@ -155,13 +155,13 @@ export default class ActivityPubService {
 
   /**
      * Remove a follower from a local calendar
-     * @param remoteCalendarId The remote calendar identifier
+     * @param calendarActorId The calendar actor ID (UUID of CalendarActorEntity)
      * @param localCalendar The local calendar being unfollowed
      */
-  async removeFollower(remoteCalendarId: string, localCalendar: Calendar) {
+  async removeFollower(calendarActorId: string, localCalendar: Calendar) {
     let followers = await FollowerCalendarEntity.findAll({
       where: {
-        remote_calendar_id: remoteCalendarId,
+        calendar_actor_id: calendarActorId,
         calendar_id: localCalendar.id,
       },
     });

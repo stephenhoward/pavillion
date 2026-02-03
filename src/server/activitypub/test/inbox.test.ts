@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import ProcessInboxService from '@/server/activitypub/service/inbox';
 import { FollowerCalendarEntity, FollowingCalendarEntity, ActivityPubOutboxMessageEntity } from '@/server/activitypub/entity/activitypub';
-import { RemoteCalendarEntity } from '@/server/activitypub/entity/remote_calendar';
+import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import FollowActivity from '@/server/activitypub/model/action/follow';
 import { Calendar, CalendarContent } from '@/common/model/calendar';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
@@ -54,22 +54,22 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
       // Act
       await inboxService.processFollowAccount(testCalendar, followActivity);
 
-      // Assert - Check that RemoteCalendarEntity was created for the follower
-      const remoteCalendar = await RemoteCalendarEntity.findOne({
-        where: { actor_uri: remoteActorUrl },
+      // Assert - Check that CalendarActorEntity (remote type) was created for the follower
+      const calendarActor = await CalendarActorEntity.findOne({
+        where: { actor_uri: remoteActorUrl, actor_type: 'remote' },
       });
-      expect(remoteCalendar).not.toBeNull();
+      expect(calendarActor).not.toBeNull();
 
-      // Assert - Check that FollowerCalendarEntity was created with reference to RemoteCalendarEntity
+      // Assert - Check that FollowerCalendarEntity was created with reference to CalendarActorEntity
       const follower = await FollowerCalendarEntity.findOne({
         where: {
-          remote_calendar_id: remoteCalendar!.id,
+          calendar_actor_id: calendarActor!.id,
           calendar_id: testCalendar.id,
         },
       });
 
       expect(follower).not.toBeNull();
-      expect(follower?.remote_calendar_id).toBe(remoteCalendar!.id);
+      expect(follower?.calendar_actor_id).toBe(calendarActor!.id);
       expect(follower?.calendar_id).toBe(testCalendar.id);
 
       // Assert - Check that Accept activity was queued in outbox
@@ -127,7 +127,7 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
 
       const existingFollower = {
         id: uuidv4(),
-        remote_calendar_id: remoteActorUrl,
+        calendar_actor_id: remoteActorUrl,
         calendar_id: testCalendar.id,
       };
 
@@ -159,25 +159,29 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
         object: followActivity,
       };
 
-      // Mock RemoteCalendarEntity that would be found for this AP URL
-      const mockRemoteCalendar = {
-        id: 'mock-remote-calendar-uuid',
+      // Mock CalendarActorEntity that would be found for this AP URL
+      const mockCalendarActor = {
+        id: 'mock-calendar-actor-uuid',
+        actor_type: 'remote',
+        calendar_id: null,
         actor_uri: remoteCalendarUrl,
-        display_name: null,
+        remote_display_name: null,
+        remote_domain: 'remote.instance',
         inbox_url: null,
         shared_inbox_url: null,
         public_key: null,
+        private_key: null,
         last_fetched: null,
       };
 
       const existingFollowing = {
         id: uuidv4(),
-        remote_calendar_id: mockRemoteCalendar.id, // Use UUID, not AP URL
+        calendar_actor_id: mockCalendarActor.id, // Use UUID, not AP URL
         calendar_id: testCalendar.id,
       };
 
-      // Stub remoteCalendarService to return the mock remote calendar
-      sandbox.stub(inboxService.remoteCalendarService, 'getByActorUri').resolves(mockRemoteCalendar as any);
+      // Stub remoteCalendarService to return the mock calendar actor
+      sandbox.stub(inboxService.remoteCalendarService, 'getByActorUri').resolves(mockCalendarActor as any);
       const findOneStub = sandbox.stub(FollowingCalendarEntity, 'findOne').resolves(existingFollowing as any);
       const consoleLogStub = sandbox.stub(console, 'log');
 
@@ -187,7 +191,7 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
       // Assert
       expect(findOneStub.calledOnce).toBe(true);
       expect(findOneStub.firstCall.args[0].where).toMatchObject({
-        remote_calendar_id: mockRemoteCalendar.id, // Check for UUID, not AP URL
+        calendar_actor_id: mockCalendarActor.id, // Check for UUID, not AP URL
         calendar_id: testCalendar.id,
       });
       expect(consoleLogStub.called).toBe(true);

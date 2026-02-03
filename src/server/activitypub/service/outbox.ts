@@ -4,7 +4,7 @@ import axios from "axios";
 
 import { Calendar } from "@/common/model/calendar";
 import { ActivityPubOutboxMessageEntity, EventActivityEntity, FollowerCalendarEntity, FollowingCalendarEntity } from "@/server/activitypub/entity/activitypub";
-import { RemoteCalendarEntity } from "@/server/activitypub/entity/remote_calendar";
+import { CalendarActorEntity } from "@/server/activitypub/entity/calendar_actor";
 import UpdateActivity from "@/server/activitypub/model/action/update";
 import DeleteActivity from "@/server/activitypub/model/action/delete";
 import FollowActivity from "@/server/activitypub/model/action/follow";
@@ -173,14 +173,14 @@ class ProcessOutboxService {
   async getRecipients(calendar: Calendar, object: ActivityPubObject|string): Promise<string[]> {
     let recipients: string[] = [];
 
-    // Get followers with their RemoteCalendarEntity to get the actor_uri
+    // Get followers with their CalendarActorEntity to get the actor_uri
     const followers = await FollowerCalendarEntity.findAll({
       where: { calendar_id: calendar.id },
-      include: [{ model: RemoteCalendarEntity, as: 'remoteCalendar' }],
+      include: [{ model: CalendarActorEntity, as: 'calendarActor' }],
     });
     for (const follower of followers) {
-      if (follower.remoteCalendar?.actor_uri) {
-        recipients.push(follower.remoteCalendar.actor_uri);
+      if (follower.calendarActor?.actor_uri) {
+        recipients.push(follower.calendarActor.actor_uri);
       }
     }
 
@@ -192,25 +192,25 @@ class ProcessOutboxService {
       console.log(`[OUTBOX] Detected Follow ID in object, looking up follow relationship: ${object_id}`);
       const followEntity = await FollowingCalendarEntity.findOne({
         where: { id: object_id },
-        include: [{ model: RemoteCalendarEntity, as: 'remoteCalendar' }],
+        include: [{ model: CalendarActorEntity, as: 'calendarActor' }],
       });
-      if (followEntity?.remoteCalendar?.actor_uri) {
-        console.log(`[OUTBOX] Found follow relationship, adding recipient: ${followEntity.remoteCalendar.actor_uri}`);
-        recipients.push(followEntity.remoteCalendar.actor_uri);
+      if (followEntity?.calendarActor?.actor_uri) {
+        console.log(`[OUTBOX] Found follow relationship, adding recipient: ${followEntity.calendarActor.actor_uri}`);
+        recipients.push(followEntity.calendarActor.actor_uri);
       }
       else {
         console.log(`[OUTBOX] No follow relationship found for ID: ${object_id}`);
       }
     }
 
-    // Get event activity observers with their RemoteCalendarEntity to get the actor_uri
+    // Get event activity observers with their CalendarActorEntity to get the actor_uri
     const observers = await EventActivityEntity.findAll({
       where: { event_id: object_id },
-      include: [{ model: RemoteCalendarEntity, as: 'remoteCalendar' }],
+      include: [{ model: CalendarActorEntity, as: 'calendarActor' }],
     });
     for (const observer of observers) {
-      if (observer.remoteCalendar?.actor_uri) {
-        recipients.push(observer.remoteCalendar.actor_uri);
+      if (observer.calendarActor?.actor_uri) {
+        recipients.push(observer.calendarActor.actor_uri);
       }
     }
 

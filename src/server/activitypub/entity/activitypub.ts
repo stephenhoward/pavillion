@@ -4,7 +4,7 @@ import { event_activity } from '@/common/model/events';
 import { FollowingCalendar, FollowerCalendar } from '@/common/model/follow';
 import db from '@/server/common/entity/db';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
-import { RemoteCalendarEntity } from '@/server/activitypub/entity/remote_calendar';
+import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import { ActivityPubActivity } from '@/server/activitypub/model/base';
 import CreateActivity from '@/server/activitypub/model/action/create';
 import UpdateActivity from '@/server/activitypub/model/action/update';
@@ -93,8 +93,8 @@ class ActivityPubOutboxMessageEntity extends ActivityPubMessageEntity {
 /**
  * Base class for calendar follow relationships with common properties.
  *
- * Note: remote_calendar_id references RemoteCalendarEntity by UUID, not by AP URL.
- * The actual AP actor URL is stored in RemoteCalendarEntity.actor_uri.
+ * Note: calendar_actor_id references CalendarActorEntity (remote actors only).
+ * The actual AP actor URL is stored in CalendarActorEntity.actor_uri.
  */
 abstract class BaseFollowEntity extends Model {
   @PrimaryKey
@@ -104,12 +104,12 @@ abstract class BaseFollowEntity extends Model {
   })
   declare id: string;
 
-  @ForeignKey(() => RemoteCalendarEntity)
+  @ForeignKey(() => CalendarActorEntity)
   @Column({ type: DataType.UUID })
-  declare remote_calendar_id: string;
+  declare calendar_actor_id: string;
 
-  @BelongsTo(() => RemoteCalendarEntity)
-  declare remoteCalendar: RemoteCalendarEntity;
+  @BelongsTo(() => CalendarActorEntity)
+  declare calendarActor: CalendarActorEntity;
 
   @ForeignKey(() => CalendarEntity)
   @Column({ type: DataType.UUID })
@@ -143,7 +143,7 @@ class FollowingCalendarEntity extends BaseFollowEntity {
   toModel(): FollowingCalendar {
     return new FollowingCalendar(
       this.id,
-      this.remote_calendar_id,
+      this.calendar_actor_id,
       this.calendar_id,
       this.auto_repost_originals,
       this.auto_repost_reposts,
@@ -160,7 +160,7 @@ class FollowerCalendarEntity extends BaseFollowEntity {
   toModel(): FollowerCalendar {
     return new FollowerCalendar(
       this.id,
-      this.remote_calendar_id,
+      this.calendar_actor_id,
       this.calendar_id,
     );
   }
@@ -195,8 +195,8 @@ class SharedEventEntity extends Model {
  * A list of activities (shares, etc) that other calendars have done to a calendar's
  * own events.
  *
- * Note: remote_calendar_id references RemoteCalendarEntity by UUID, not by AP URL.
- * The actual AP actor URL is stored in RemoteCalendarEntity.actor_uri.
+ * Note: calendar_actor_id references CalendarActorEntity (remote actors only).
+ * The actual AP actor URL is stored in CalendarActorEntity.actor_uri.
  */
 @Table({ tableName: 'ap_event_activity'})
 class EventActivityEntity extends Model {
@@ -208,12 +208,12 @@ class EventActivityEntity extends Model {
   @Column({ type: DataType.STRING })
   declare type: event_activity;
 
-  @ForeignKey(() => RemoteCalendarEntity)
+  @ForeignKey(() => CalendarActorEntity)
   @Column({ type: DataType.UUID })
-  declare remote_calendar_id: string;
+  declare calendar_actor_id: string;
 
-  @BelongsTo(() => RemoteCalendarEntity)
-  declare remoteCalendar: RemoteCalendarEntity;
+  @BelongsTo(() => CalendarActorEntity)
+  declare calendarActor: CalendarActorEntity;
 }
 
 db.addModels([

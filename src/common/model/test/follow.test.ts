@@ -16,7 +16,7 @@ describe('FollowingCalendar Model', () => {
       );
 
       expect(follow.id).toBe('follow-1');
-      expect(follow.remoteCalendarId).toBe('remote@example.com');
+      expect(follow.calendarActorId).toBe('remote@example.com');
       expect(follow.calendarId).toBe('calendar-123');
       expect(follow.autoRepostOriginals).toBe(false);
       expect(follow.autoRepostReposts).toBe(false);
@@ -48,7 +48,7 @@ describe('FollowingCalendar Model', () => {
       const obj = follow.toObject();
 
       expect(obj.id).toBe('follow-3');
-      expect(obj.remoteCalendarId).toBe('calendar@other.net');
+      expect(obj.calendarActorId).toBe('calendar@other.net');
       expect(obj.calendarId).toBe('cal-789');
       expect(obj.autoRepostOriginals).toBe(true);
       expect(obj.autoRepostReposts).toBe(true);
@@ -62,7 +62,7 @@ describe('FollowingCalendar Model', () => {
     it('should deserialize object with new boolean fields', () => {
       const obj = {
         id: 'follow-4',
-        remoteCalendarId: 'events@domain.com',
+        calendarActorId: 'events@domain.com',
         calendarId: 'my-calendar',
         autoRepostOriginals: true,
         autoRepostReposts: false,
@@ -71,7 +71,7 @@ describe('FollowingCalendar Model', () => {
       const follow = FollowingCalendar.fromObject(obj);
 
       expect(follow.id).toBe('follow-4');
-      expect(follow.remoteCalendarId).toBe('events@domain.com');
+      expect(follow.calendarActorId).toBe('events@domain.com');
       expect(follow.calendarId).toBe('my-calendar');
       expect(follow.autoRepostOriginals).toBe(true);
       expect(follow.autoRepostReposts).toBe(false);
@@ -80,7 +80,7 @@ describe('FollowingCalendar Model', () => {
     it('should default to false when boolean fields are not provided', () => {
       const obj = {
         id: 'follow-5',
-        remoteCalendarId: 'test@test.com',
+        calendarActorId: 'test@test.com',
         calendarId: 'test-cal',
       };
 

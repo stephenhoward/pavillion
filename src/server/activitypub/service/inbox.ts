@@ -17,7 +17,8 @@ import CalendarInterface from "@/server/calendar/interface";
 import { CalendarEvent } from "@/common/model/events";
 import { Calendar } from "@/common/model/calendar";
 import { addToOutbox } from "@/server/activitypub/helper/outbox";
-import { CalendarEditorRemoteEntity } from "@/server/calendar/entity/calendar_editor_remote";
+import { UserActorEntity } from "@/server/activitypub/entity/user_actor";
+import { CalendarMemberEntity } from "@/server/calendar/entity/calendar_member";
 
 /**
  * Service responsible for processing incoming ActivityPub messages in the inbox.
@@ -267,20 +268,32 @@ class ProcessInboxService {
   }
 
   /**
-   * Checks if a Person actor is an authorized remote editor of a calendar
+   * Checks if a Person actor is an authorized remote editor of a calendar.
+   * Uses UserActorEntity + CalendarMemberEntity to look up membership.
    *
    * @param calendarId - The calendar ID
    * @param actorUri - The Person actor URI
    * @returns True if authorized
    */
   private async isAuthorizedRemoteEditor(calendarId: string, actorUri: string): Promise<boolean> {
-    const editor = await CalendarEditorRemoteEntity.findOne({
+    // First, find the UserActorEntity by actor_uri
+    const userActor = await UserActorEntity.findOne({
+      where: { actor_uri: actorUri },
+    });
+
+    if (!userActor) {
+      return false;
+    }
+
+    // Then, check if there's a CalendarMemberEntity for this actor and calendar
+    const membership = await CalendarMemberEntity.findOne({
       where: {
         calendar_id: calendarId,
-        actor_uri: actorUri,
+        user_actor_id: userActor.id,
       },
     });
-    return editor !== null;
+
+    return membership !== null;
   }
 
   /**
@@ -482,12 +495,12 @@ class ProcessInboxService {
   async processFollowAccount(calendar: Calendar, message: FollowActivity) {
     console.log(`[INBOX] Processing Follow activity from ${message.actor} for calendar ${calendar.urlName}`);
 
-    // Get or create RemoteCalendarEntity for the follower
+    // Get or create CalendarActorEntity for the follower
     const remoteCalendar = await this.remoteCalendarService.findOrCreateByActorUri(message.actor);
 
     let existingFollow = await FollowerCalendarEntity.findOne({
       where: {
-        remote_calendar_id: remoteCalendar.id,
+        calendar_actor_id: remoteCalendar.id,
         calendar_id: calendar.id,
       },
     });
@@ -498,7 +511,7 @@ class ProcessInboxService {
       // Create the follower relationship
       await FollowerCalendarEntity.create({
         id: uuidv4(),
-        remote_calendar_id: remoteCalendar.id,
+        calendar_actor_id: remoteCalendar.id,
         calendar_id: calendar.id,
       });
 
@@ -539,19 +552,19 @@ class ProcessInboxService {
 
       console.log(`[INBOX] Accept confirms Follow of ${followActivity.object}`);
 
-      // Find the RemoteCalendarEntity for the remote calendar we're following
+      // Find the CalendarActorEntity for the remote calendar we're following
       const remoteActorUrl = followActivity.object as string;
       const remoteCalendar = await this.remoteCalendarService.getByActorUri(remoteActorUrl);
 
       if (!remoteCalendar) {
-        console.warn(`[INBOX] No RemoteCalendarEntity found for ${remoteActorUrl}, Accept may be for unknown follow`);
+        console.warn(`[INBOX] No CalendarActorEntity found for ${remoteActorUrl}, Accept may be for unknown follow`);
         return;
       }
 
       // Find the corresponding FollowingCalendarEntity record
       const followingRecord = await FollowingCalendarEntity.findOne({
         where: {
-          remote_calendar_id: remoteCalendar.id,
+          calendar_actor_id: remoteCalendar.id,
           calendar_id: calendar.id,
         },
       });
@@ -583,16 +596,16 @@ class ProcessInboxService {
     // Extract the actor from the original Follow activity message
     const actor = typeof message.message === 'object' ? message.message.actor : message.actor;
 
-    // Find the RemoteCalendarEntity for this actor
+    // Find the CalendarActorEntity for this actor
     const remoteCalendar = await this.remoteCalendarService.getByActorUri(actor);
     if (!remoteCalendar) {
-      console.warn(`[INBOX] No RemoteCalendarEntity found for ${actor}, cannot unfollow`);
+      console.warn(`[INBOX] No CalendarActorEntity found for ${actor}, cannot unfollow`);
       return;
     }
 
     await FollowerCalendarEntity.destroy({
       where: {
-        remote_calendar_id: remoteCalendar.id,
+        calendar_actor_id: remoteCalendar.id,
         calendar_id: calendar.id,
       },
     });
@@ -655,13 +668,13 @@ class ProcessInboxService {
       }
     }
 
-    // Track the Announce activity - use RemoteCalendarEntity reference
+    // Track the Announce activity - use CalendarActorEntity reference
     const sharerRemoteCalendar = await this.remoteCalendarService.findOrCreateByActorUri(message.actor);
 
     const existingShare = await EventActivityEntity.findOne({
       where: {
         event_id: apObjectId,
-        remote_calendar_id: sharerRemoteCalendar.id,
+        calendar_actor_id: sharerRemoteCalendar.id,
         type: 'share',
       },
     });
@@ -669,7 +682,7 @@ class ProcessInboxService {
     if (!existingShare) {
       await EventActivityEntity.create({
         event_id: apObjectId,
-        remote_calendar_id: sharerRemoteCalendar.id,
+        calendar_actor_id: sharerRemoteCalendar.id,
         type: 'share',
       });
     }
@@ -690,17 +703,17 @@ class ProcessInboxService {
     // Extract the actor from the original Announce activity message
     const actor = typeof message.message === 'object' ? message.message.actor : message.actor;
 
-    // Find the RemoteCalendarEntity for this actor
+    // Find the CalendarActorEntity for this actor
     const remoteCalendar = await this.remoteCalendarService.getByActorUri(actor);
     if (!remoteCalendar) {
-      console.warn(`[INBOX] No RemoteCalendarEntity found for ${actor}, cannot unshare`);
+      console.warn(`[INBOX] No CalendarActorEntity found for ${actor}, cannot unshare`);
       return;
     }
 
     let existingShare = await EventActivityEntity.findOne({
       where: {
         event_id: eventId,
-        remote_calendar_id: remoteCalendar.id,
+        calendar_actor_id: remoteCalendar.id,
         type: 'share',
       },
     });

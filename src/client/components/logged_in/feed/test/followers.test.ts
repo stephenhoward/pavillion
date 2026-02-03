@@ -72,11 +72,13 @@ describe('Followers Tab', () => {
     const mockFollowers: FollowerRelationship[] = [
       {
         id: 'follower-1',
-        remoteCalendarId: 'test@example.com',
+        calendarActorId: 'test-actor-1',
+        calendarId: 'calendar-1',
       },
       {
         id: 'follower-2',
-        remoteCalendarId: 'calendar@remote.org',
+        calendarActorId: 'test-actor-2',
+        calendarId: 'calendar-2',
       },
     ];
 
@@ -92,8 +94,8 @@ describe('Followers Tab', () => {
     await wrapper.vm.$nextTick();
 
     // Should display both follower identifiers
-    expect(wrapper.text()).toContain('test@example.com');
-    expect(wrapper.text()).toContain('calendar@remote.org');
+    expect(wrapper.text()).toContain('test-actor-1');
+    expect(wrapper.text()).toContain('test-actor-2');
   });
 
   it('should show loading state while fetching followers', () => {

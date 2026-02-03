@@ -1,16 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
-import { EventEmitter } from 'events';
 
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import CalendarService from '@/server/calendar/service/calendar';
-import { CalendarEditorPersonEntity } from '@/server/calendar/entity/calendar_editor_person';
-import { CalendarEditorEntity } from '@/server/calendar/entity/calendar_editor';
+import { CalendarMemberEntity } from '@/server/calendar/entity/calendar_member';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { AccountEntity } from '@/server/common/entity/account';
-import ConfigurationInterface from '@/server/configuration/interface';
-import SetupInterface from '@/server/setup/interface';
 
 describe('CalendarService - Editor Permissions', () => {
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
@@ -20,10 +16,7 @@ describe('CalendarService - Editor Permissions', () => {
   let calendar: Calendar;
 
   beforeEach(() => {
-    const eventBus = new EventEmitter();
-    const configInterface = new ConfigurationInterface();
-    const setupInterface = new SetupInterface();
-    service = new CalendarService(eventBus, configInterface, setupInterface);
+    service = new CalendarService();
 
     // Create test accounts
     ownerAccount = new Account('owner-id');
@@ -44,18 +37,19 @@ describe('CalendarService - Editor Permissions', () => {
   });
 
   describe('grantEditorAccess', () => {
-    it('should create calendar_editor_person record', async () => {
+    it('should create CalendarMemberEntity editor record', async () => {
       // Stub getCalendar to return test calendar
       sandbox.stub(service, 'getCalendar').resolves(calendar);
 
       // Stub isCalendarOwner to return true for owner
       sandbox.stub(service, 'isCalendarOwner').resolves(true);
 
-      // Stub CalendarEditorPersonEntity.create
-      const createStub = sandbox.stub(CalendarEditorPersonEntity, 'create').resolves({
-        id: 'editor-record-id',
+      // Stub CalendarMemberEntity.create
+      const createStub = sandbox.stub(CalendarMemberEntity, 'create').resolves({
+        id: 'member-record-id',
         calendar_id: calendar.id,
         account_id: editorAccount.id,
+        role: 'editor',
         granted_by: ownerAccount.id,
       } as any);
 
@@ -65,6 +59,7 @@ describe('CalendarService - Editor Permissions', () => {
       expect(createStub.firstCall.args[0]).toMatchObject({
         calendar_id: calendar.id,
         account_id: editorAccount.id,
+        role: 'editor',
         granted_by: ownerAccount.id,
       });
     });
@@ -98,24 +93,25 @@ describe('CalendarService - Editor Permissions', () => {
   });
 
   describe('revokeEditorAccess', () => {
-    it('should remove editor relationship', async () => {
+    it('should remove editor relationship via CalendarMemberEntity', async () => {
       sandbox.stub(service, 'getCalendar').resolves(calendar);
 
       // Stub isCalendarOwner to return true for owner
       sandbox.stub(service, 'isCalendarOwner').resolves(true);
 
-      const mockEditorEntity = {
-        calendar_id: calendar.id,
-        account_id: editorAccount.id,
-        destroy: sandbox.stub().resolves(),
-      };
-
-      const findOneStub = sandbox.stub(CalendarEditorPersonEntity, 'findOne').resolves(mockEditorEntity as any);
+      // Stub CalendarMemberEntity.destroy to return 1 (one record deleted)
+      const destroyStub = sandbox.stub(CalendarMemberEntity, 'destroy').resolves(1);
 
       await service.revokeEditorAccess(ownerAccount, calendar.id, editorAccount.id);
 
-      expect(findOneStub.calledOnce).toBe(true);
-      expect(mockEditorEntity.destroy.calledOnce).toBe(true);
+      expect(destroyStub.calledOnce).toBe(true);
+      expect(destroyStub.firstCall.args[0]).toMatchObject({
+        where: {
+          calendar_id: calendar.id,
+          account_id: editorAccount.id,
+          role: 'editor',
+        },
+      });
     });
 
     it('should throw error if non-owner tries to revoke access', async () => {
@@ -128,7 +124,8 @@ describe('CalendarService - Editor Permissions', () => {
 
     it('should throw error if editor relationship not found', async () => {
       sandbox.stub(service, 'getCalendar').resolves(calendar);
-      sandbox.stub(CalendarEditorPersonEntity, 'findOne').resolves(null);
+      sandbox.stub(service, 'isCalendarOwner').resolves(true);
+      sandbox.stub(CalendarMemberEntity, 'destroy').resolves(0);
 
       await expect(
         service.revokeEditorAccess(ownerAccount, calendar.id, editorAccount.id),
@@ -138,9 +135,12 @@ describe('CalendarService - Editor Permissions', () => {
 
   describe('userCanEditCalendar', () => {
     it('should return true for calendar owner', async () => {
-      sandbox.stub(service, 'getCalendar').resolves(calendar);
-      sandbox.stub(CalendarEditorEntity, 'findOne').resolves(null);
-      sandbox.stub(CalendarEditorPersonEntity, 'findOne').resolves(null);
+      // Stub CalendarMemberEntity.findOne to return an owner membership
+      sandbox.stub(CalendarMemberEntity, 'findOne').resolves({
+        calendar_id: calendar.id,
+        account_id: ownerAccount.id,
+        role: 'owner',
+      } as any);
 
       const result = await service.userCanEditCalendar(ownerAccount.id, calendar.id);
 
@@ -148,15 +148,12 @@ describe('CalendarService - Editor Permissions', () => {
     });
 
     it('should return true for editors', async () => {
-      sandbox.stub(service, 'getCalendar').resolves(calendar);
-
-      const mockEditorEntity = {
+      // Stub CalendarMemberEntity.findOne to return an editor membership
+      sandbox.stub(CalendarMemberEntity, 'findOne').resolves({
         calendar_id: calendar.id,
         account_id: editorAccount.id,
-      };
-
-      sandbox.stub(CalendarEditorEntity, 'findOne').resolves(null);
-      sandbox.stub(CalendarEditorPersonEntity, 'findOne').resolves(mockEditorEntity as any);
+        role: 'editor',
+      } as any);
 
       const result = await service.userCanEditCalendar(editorAccount.id, calendar.id);
 
@@ -166,9 +163,8 @@ describe('CalendarService - Editor Permissions', () => {
     it('should return false for non-editors', async () => {
       const randomAccount = new Account('random-id');
 
-      sandbox.stub(service, 'getCalendar').resolves(calendar);
-      sandbox.stub(CalendarEditorEntity, 'findOne').resolves(null);
-      sandbox.stub(CalendarEditorPersonEntity, 'findOne').resolves(null);
+      // Stub CalendarMemberEntity.findOne to return null (no membership)
+      sandbox.stub(CalendarMemberEntity, 'findOne').resolves(null);
 
       const result = await service.userCanEditCalendar(randomAccount.id, calendar.id);
 
@@ -176,7 +172,8 @@ describe('CalendarService - Editor Permissions', () => {
     });
 
     it('should return false if calendar not found', async () => {
-      sandbox.stub(service, 'getCalendar').resolves(null);
+      // Stub CalendarMemberEntity.findOne to return null (no membership)
+      sandbox.stub(CalendarMemberEntity, 'findOne').resolves(null);
 
       const result = await service.userCanEditCalendar(ownerAccount.id, 'nonexistent-calendar');
 
@@ -188,11 +185,13 @@ describe('CalendarService - Editor Permissions', () => {
     it('should return all editors with metadata', async () => {
       sandbox.stub(service, 'getCalendar').resolves(calendar);
 
-      const mockEditorEntities = [
+      // Stub CalendarMemberEntity.findAll to return editor members with account and grantor
+      const mockEditorMembers = [
         {
-          id: 'editor-record-1',
+          id: 'member-1',
           calendar_id: calendar.id,
           account_id: 'editor-1-id',
+          role: 'editor',
           granted_by: ownerAccount.id,
           account: {
             id: 'editor-1-id',
@@ -206,9 +205,10 @@ describe('CalendarService - Editor Permissions', () => {
           },
         },
         {
-          id: 'editor-record-2',
+          id: 'member-2',
           calendar_id: calendar.id,
           account_id: 'editor-2-id',
+          role: 'editor',
           granted_by: ownerAccount.id,
           account: {
             id: 'editor-2-id',
@@ -223,7 +223,7 @@ describe('CalendarService - Editor Permissions', () => {
         },
       ];
 
-      sandbox.stub(CalendarEditorPersonEntity, 'findAll').resolves(mockEditorEntities as any);
+      sandbox.stub(CalendarMemberEntity, 'findAll').resolves(mockEditorMembers as any);
 
       const editors = await service.listPersonEditors(calendar.id);
 
@@ -242,7 +242,7 @@ describe('CalendarService - Editor Permissions', () => {
 
     it('should return empty array if no editors', async () => {
       sandbox.stub(service, 'getCalendar').resolves(calendar);
-      sandbox.stub(CalendarEditorPersonEntity, 'findAll').resolves([]);
+      sandbox.stub(CalendarMemberEntity, 'findAll').resolves([]);
 
       const editors = await service.listPersonEditors(calendar.id);
 

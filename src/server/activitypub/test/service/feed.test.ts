@@ -81,14 +81,14 @@ describe("ActivityPub Feed Service Methods", () => {
         FollowingCalendarEntity.build({
           id: 'follow-1',
           calendar_id: calendar.id,
-          remote_calendar_id: 'remote1@example.com',
+          calendar_actor_id: 'remote1@example.com',
           auto_repost_originals: false,
           auto_repost_reposts: false,
         }),
         FollowingCalendarEntity.build({
           id: 'follow-2',
           calendar_id: calendar.id,
-          remote_calendar_id: 'remote2@example.com',
+          calendar_actor_id: 'remote2@example.com',
           auto_repost_originals: true,
           auto_repost_reposts: true,
         }),
@@ -100,7 +100,7 @@ describe("ActivityPub Feed Service Methods", () => {
 
       expect(result).toHaveLength(2);
       expect(result[0].id).toBe('follow-1');
-      expect(result[0].remoteCalendarId).toBe('remote1@example.com');
+      expect(result[0].calendarActorId).toBe('remote1@example.com');
       expect(result[0].autoRepostOriginals).toBe(false);
       expect(result[0].autoRepostReposts).toBe(false);
       expect(result[1].autoRepostOriginals).toBe(true);
@@ -122,12 +122,12 @@ describe("ActivityPub Feed Service Methods", () => {
         FollowerCalendarEntity.build({
           id: 'follower-1',
           calendar_id: calendar.id,
-          remote_calendar_id: 'follower1@example.com',
+          calendar_actor_id: 'follower1@example.com',
         }),
         FollowerCalendarEntity.build({
           id: 'follower-2',
           calendar_id: calendar.id,
-          remote_calendar_id: 'follower2@example.com',
+          calendar_actor_id: 'follower2@example.com',
         }),
       ];
 
@@ -137,7 +137,7 @@ describe("ActivityPub Feed Service Methods", () => {
 
       expect(result).toHaveLength(2);
       expect(result[0].id).toBe('follower-1');
-      expect(result[0].remoteCalendarId).toBe('follower1@example.com');
+      expect(result[0].calendarActorId).toBe('follower1@example.com');
       expect(result[1].id).toBe('follower-2');
     });
 
@@ -155,7 +155,7 @@ describe("ActivityPub Feed Service Methods", () => {
       const mockFollow = FollowingCalendarEntity.build({
         id: 'follow-1',
         calendar_id: calendar.id,
-        remote_calendar_id: 'remote@example.com',
+        calendar_actor_id: 'remote@example.com',
         auto_repost_originals: false,
         auto_repost_reposts: false,
       }) as any;
@@ -182,7 +182,7 @@ describe("ActivityPub Feed Service Methods", () => {
       const mockFollow = FollowingCalendarEntity.build({
         id: 'follow-1',
         calendar_id: calendar.id,
-        remote_calendar_id: 'remote@example.com',
+        calendar_actor_id: 'remote@example.com',
         auto_repost_originals: false,
         auto_repost_reposts: false,
       }) as any;

@@ -4,7 +4,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { Account } from '@/common/model/account';
 import { UserActorEntity, UserActor } from '@/server/activitypub/entity/user_actor';
 import { AccountEntity } from '@/server/common/entity/account';
-import { RemoteCalendarAccessEntity } from '@/server/calendar/entity/remote_calendar_access';
+import { CalendarMemberEntity } from '@/server/calendar/entity/calendar_member';
+import RemoteCalendarService from '@/server/activitypub/service/remote_calendar';
 
 /**
  * HTTP Signature object for ActivityPub requests
@@ -47,6 +48,7 @@ export default class UserActorService {
     // Create entity
     const entity = await UserActorEntity.create({
       id: uuidv4(),
+      actor_type: 'local',
       account_id: account.id,
       actor_uri: actorUri,
       public_key: publicKey,
@@ -121,6 +123,33 @@ export default class UserActorService {
   }
 
   /**
+   * Finds an existing remote actor by URI, or creates a new one.
+   * Used when granting remote editor access via federation.
+   */
+  async findOrCreateRemoteActor(actorUri: string, remoteUsername: string, remoteDomain: string, publicKey?: string): Promise<UserActor> {
+    const existing = await UserActorEntity.findOne({
+      where: { actor_uri: actorUri },
+    });
+
+    if (existing) {
+      return existing.toModel();
+    }
+
+    const entity = await UserActorEntity.create({
+      id: uuidv4(),
+      actor_type: 'remote',
+      account_id: null,
+      actor_uri: actorUri,
+      remote_username: remoteUsername,
+      remote_domain: remoteDomain,
+      public_key: publicKey || null,
+      private_key: null,
+    });
+
+    return entity.toModel();
+  }
+
+  /**
    * Signs an ActivityPub activity with HTTP signatures
    *
    * @param actorUri - The actor URI performing the activity
@@ -133,6 +162,10 @@ export default class UserActorService {
     const actor = await this.getActorByUri(actorUri);
     if (!actor) {
       throw new Error(`Actor not found: ${actorUri}`);
+    }
+
+    if (!actor.privateKey) {
+      throw new Error(`Actor ${actorUri} does not have a private key (remote actors cannot sign activities)`);
     }
 
     // Parse target URL for host
@@ -181,6 +214,11 @@ export default class UserActorService {
       const actor = await this.getActorByUri(actorUri);
       if (!actor) {
         console.error(`Actor not found for verification: ${actorUri}`);
+        return false;
+      }
+
+      if (!actor.publicKey) {
+        console.error(`Actor ${actorUri} does not have a public key`);
         return false;
       }
 
@@ -261,7 +299,7 @@ export default class UserActorService {
     }
 
     // Extract target (the calendar's editors collection) and object (our user)
-    const target = activity.target; // e.g., "https://alpha.federation.local/calendars/events/editors"
+    const _target = activity.target; // e.g., "https://alpha.federation.local/calendars/events/editors"
     const object = activity.object; // e.g., "https://beta.federation.local/users/Admin"
 
     // Verify the object is us
@@ -272,16 +310,12 @@ export default class UserActorService {
 
     // Extract calendar info from the actor (the calendar that sent the Add)
     const calendarActorUri = activity.actor; // e.g., "https://alpha.federation.local/calendars/events"
-    const calendarId = activity.calendarId; // The calendar's UUID (custom property)
     const calendarInboxUrl = activity.calendarInboxUrl; // The calendar's inbox URL
 
-    if (!calendarActorUri || !calendarId) {
-      console.error('[USER INBOX] Missing calendar information in Add activity');
+    if (!calendarActorUri) {
+      console.error('[USER INBOX] Missing calendar actor URI in Add activity');
       return false;
     }
-
-    // Extract domain from actor URI
-    const calendarDomain = new URL(calendarActorUri).hostname;
 
     // Get the account ID for the local user
     const account = await AccountEntity.findOne({
@@ -293,31 +327,42 @@ export default class UserActorService {
       return false;
     }
 
-    // Check if access already exists
-    const existingAccess = await RemoteCalendarAccessEntity.findOne({
+    // Find or create the remote CalendarActorEntity
+    const remoteCalendarService = new RemoteCalendarService();
+    const remoteCalendarActor = await remoteCalendarService.findOrCreateByActorUri(calendarActorUri);
+
+    // Update inbox URL if provided
+    if (calendarInboxUrl) {
+      await remoteCalendarService.updateMetadata(calendarActorUri, {
+        inboxUrl: calendarInboxUrl,
+      });
+    }
+
+    // Check if membership already exists
+    const existingMember = await CalendarMemberEntity.findOne({
       where: {
+        calendar_actor_id: remoteCalendarActor.id,
         account_id: account.id,
-        remote_calendar_id: calendarId,
       },
     });
 
-    if (existingAccess) {
-      console.log(`[USER INBOX] Remote calendar access already exists for calendar ${calendarId}`);
+    if (existingMember) {
+      console.log(`[USER INBOX] Remote calendar membership already exists for calendar ${calendarActorUri}`);
       return true;
     }
 
-    // Create RemoteCalendarAccessEntity to record the access
-    await RemoteCalendarAccessEntity.create({
+    // Create CalendarMemberEntity to record the editor access on the remote calendar
+    await CalendarMemberEntity.create({
       id: uuidv4(),
+      calendar_id: null, // This is a remote calendar, not local
+      calendar_actor_id: remoteCalendarActor.id,
       account_id: account.id,
-      remote_calendar_id: calendarId,
-      remote_calendar_actor_uri: calendarActorUri,
-      remote_calendar_inbox_url: calendarInboxUrl || null,
-      remote_calendar_domain: calendarDomain,
-      granted_at: new Date(),
+      user_actor_id: null,
+      role: 'editor',
+      granted_by: null, // Remote grant, no local grantor
     });
 
-    console.log(`[USER INBOX] Created remote calendar access for user ${username} to calendar ${calendarId}`);
+    console.log(`[USER INBOX] Created remote calendar membership for user ${username} to calendar ${calendarActorUri}`);
     return true;
   }
 
@@ -342,11 +387,11 @@ export default class UserActorService {
       return false;
     }
 
-    // Extract the calendar ID from the activity
-    const calendarId = activity.calendarId;
+    // Extract the calendar actor URI from the activity
+    const calendarActorUri = activity.actor;
 
-    if (!calendarId) {
-      console.error('[USER INBOX] Missing calendarId in Remove activity');
+    if (!calendarActorUri) {
+      console.error('[USER INBOX] Missing calendar actor URI in Remove activity');
       return false;
     }
 
@@ -360,15 +405,24 @@ export default class UserActorService {
       return false;
     }
 
-    // Delete the RemoteCalendarAccessEntity
-    const deleted = await RemoteCalendarAccessEntity.destroy({
+    // Find the remote CalendarActorEntity by actor URI
+    const remoteCalendarService = new RemoteCalendarService();
+    const remoteCalendarActor = await remoteCalendarService.getByActorUri(calendarActorUri);
+
+    if (!remoteCalendarActor) {
+      console.log(`[USER INBOX] Remote calendar actor not found for URI: ${calendarActorUri}`);
+      return false;
+    }
+
+    // Delete the CalendarMemberEntity
+    const deleted = await CalendarMemberEntity.destroy({
       where: {
+        calendar_actor_id: remoteCalendarActor.id,
         account_id: account.id,
-        remote_calendar_id: calendarId,
       },
     });
 
-    console.log(`[USER INBOX] Removed remote calendar access for user ${username} to calendar ${calendarId} (deleted: ${deleted})`);
+    console.log(`[USER INBOX] Removed remote calendar membership for user ${username} to calendar ${calendarActorUri} (deleted: ${deleted})`);
     return true;
   }
 }

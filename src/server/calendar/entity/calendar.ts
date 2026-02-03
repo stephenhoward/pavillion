@@ -1,6 +1,5 @@
 import { Model, Column, Table, BelongsTo, ForeignKey, DataType, PrimaryKey } from 'sequelize-typescript';
 
-import { AccountEntity } from '@/server/common/entity/account';
 import { Calendar, CalendarContent, DefaultDateRange } from '@/common/model/calendar';
 import db from '@/server/common/entity/db';
 
@@ -10,10 +9,6 @@ class CalendarEntity extends Model {
   @PrimaryKey
   @Column({ type: DataType.UUID })
   declare id: string;
-
-  @ForeignKey(() => AccountEntity)
-  @Column({ type: DataType.UUID })
-  declare account_id: string;
 
   @Column({ type: DataType.STRING })
   declare url_name: string;
@@ -43,7 +38,6 @@ class CalendarEntity extends Model {
     }
     calendar.defaultDateRange = this.default_date_range as DefaultDateRange || null;
     calendar.widgetAllowedDomain = this.widget_allowed_domain || null;
-    (calendar as any).accountId = this.account_id; // Add account ownership information
 
     return calendar;
   };

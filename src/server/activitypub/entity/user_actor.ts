@@ -1,17 +1,22 @@
-import { Model, Column, Table, BelongsTo, ForeignKey, DataType, PrimaryKey, CreatedAt, UpdatedAt } from 'sequelize-typescript';
+import { Model, Column, Table, BelongsTo, ForeignKey, DataType, PrimaryKey, CreatedAt, UpdatedAt, Index } from 'sequelize-typescript';
 
 import { AccountEntity } from '@/server/common/entity/account';
 import db from '@/server/common/entity/db';
 
 /**
- * UserActor model for representing a user's ActivityPub Person actor
+ * UserActor model for representing a user's ActivityPub Person actor.
+ * Supports both local actors (linked to an account) and remote actors
+ * (discovered via federation).
  */
 export interface UserActor {
   id: string;
-  accountId: string;
+  actorType: 'local' | 'remote';
+  accountId: string | null;
   actorUri: string;
-  publicKey: string;
-  privateKey: string;
+  remoteUsername: string | null;
+  remoteDomain: string | null;
+  publicKey: string | null;
+  privateKey: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -23,18 +28,28 @@ class UserActorEntity extends Model {
   @Column({ type: DataType.UUID, defaultValue: DataType.UUIDV4 })
   declare id: string;
 
+  @Column({ type: DataType.STRING(10), allowNull: false, defaultValue: 'local' })
+  declare actor_type: 'local' | 'remote';
+
   @ForeignKey(() => AccountEntity)
-  @Column({ type: DataType.UUID, allowNull: false, unique: true })
-  declare account_id: string;
+  @Column({ type: DataType.UUID, allowNull: true, unique: true })
+  declare account_id: string | null;
 
   @Column({ type: DataType.STRING, allowNull: false, unique: true })
   declare actor_uri: string;
 
-  @Column({ type: DataType.TEXT, allowNull: false })
-  declare public_key: string;
+  @Column({ type: DataType.STRING, allowNull: true })
+  declare remote_username: string | null;
 
-  @Column({ type: DataType.TEXT, allowNull: false })
-  declare private_key: string;
+  @Index
+  @Column({ type: DataType.STRING, allowNull: true })
+  declare remote_domain: string | null;
+
+  @Column({ type: DataType.TEXT, allowNull: true })
+  declare public_key: string | null;
+
+  @Column({ type: DataType.TEXT, allowNull: true })
+  declare private_key: string | null;
 
   @CreatedAt
   declare createdAt: Date;
@@ -51,10 +66,13 @@ class UserActorEntity extends Model {
   toModel(): UserActor {
     return {
       id: this.id,
-      accountId: this.account_id,
+      actorType: this.actor_type,
+      accountId: this.account_id ?? null,
       actorUri: this.actor_uri,
-      publicKey: this.public_key,
-      privateKey: this.private_key,
+      remoteUsername: this.remote_username ?? null,
+      remoteDomain: this.remote_domain ?? null,
+      publicKey: this.public_key ?? null,
+      privateKey: this.private_key ?? null,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
     };
@@ -66,8 +84,11 @@ class UserActorEntity extends Model {
   static fromModel(userActor: UserActor): UserActorEntity {
     return UserActorEntity.build({
       id: userActor.id,
+      actor_type: userActor.actorType,
       account_id: userActor.accountId,
       actor_uri: userActor.actorUri,
+      remote_username: userActor.remoteUsername,
+      remote_domain: userActor.remoteDomain,
       public_key: userActor.publicKey,
       private_key: userActor.privateKey,
     });
