@@ -2,6 +2,11 @@ import express, { Request, Response } from 'express';
 import ExpressHelper from '@/server/common/helper/express';
 import SubscriptionInterface from '@/server/subscription/interface';
 import { Account } from '@/common/model/account';
+import {
+  InvalidBillingCycleError,
+  InvalidAmountError,
+  MissingRequiredFieldError,
+} from '@/server/subscription/exceptions';
 
 /**
  * User subscription route handlers
@@ -79,24 +84,6 @@ export default class SubscriptionRouteHandlers {
 
       const { providerConfigId, billingCycle, amount } = req.body;
 
-      // Validate required fields
-      if (!providerConfigId || !billingCycle) {
-        res.status(400).json({ error: 'providerConfigId and billingCycle are required' });
-        return;
-      }
-
-      // Validate billing cycle
-      if (billingCycle !== 'monthly' && billingCycle !== 'yearly') {
-        res.status(400).json({ error: 'billingCycle must be monthly or yearly' });
-        return;
-      }
-
-      // Validate amount for PWYC
-      if (amount !== undefined && (typeof amount !== 'number' || amount < 0)) {
-        res.status(400).json({ error: 'amount must be a non-negative number' });
-        return;
-      }
-
       const subscription = await this.interface.subscribe(
         account.id,
         account.email,
@@ -109,7 +96,16 @@ export default class SubscriptionRouteHandlers {
     }
     catch (error) {
       console.error('Error creating subscription:', error);
-      if (error instanceof Error) {
+      if (error instanceof MissingRequiredFieldError) {
+        res.status(400).json({ error: error.message });
+      }
+      else if (error instanceof InvalidBillingCycleError) {
+        res.status(400).json({ error: error.message });
+      }
+      else if (error instanceof InvalidAmountError) {
+        res.status(400).json({ error: error.message });
+      }
+      else if (error instanceof Error) {
         if (error.message.includes('not found') || error.message.includes('not enabled')) {
           res.status(400).json({ error: error.message });
         }
@@ -203,18 +199,16 @@ export default class SubscriptionRouteHandlers {
 
       const returnUrl = req.query.returnUrl as string;
 
-      if (!returnUrl) {
-        res.status(400).json({ error: 'returnUrl query parameter is required' });
-        return;
-      }
-
       const portalUrl = await this.interface.getBillingPortalUrl(account.id, returnUrl);
 
       res.json({ portalUrl });
     }
     catch (error) {
       console.error('Error getting billing portal URL:', error);
-      if (error instanceof Error && error.message.includes('not found')) {
+      if (error instanceof MissingRequiredFieldError) {
+        res.status(400).json({ error: error.message });
+      }
+      else if (error instanceof Error && error.message.includes('not found')) {
         res.status(404).json({ error: error.message });
       }
       else {

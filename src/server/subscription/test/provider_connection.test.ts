@@ -215,8 +215,9 @@ describe('ProviderConnectionService', () => {
     it('should throw error if credentials are invalid', async () => {
       const adminUser = { id: uuidv4(), email: 'admin@example.com' };
       const credentials: ProviderCredentials = {
-        client_id: '',
-        client_secret: '',
+        client_id: 'invalid_id',
+        client_secret: 'invalid_secret',
+        environment: 'sandbox',
       };
 
       sandbox.stub(service as any, 'getAdapter').returns(mockPayPalAdapter);

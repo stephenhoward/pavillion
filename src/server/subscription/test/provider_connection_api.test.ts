@@ -5,6 +5,7 @@ import sinon from 'sinon';
 import { testApp, addRequestUser } from '@/server/common/test/lib/express';
 import { ProviderConnectionService } from '@/server/subscription/service/provider_connection';
 import ProviderConnectionRoutes from '@/server/subscription/api/v1/provider_connection';
+import { InvalidCredentialsError } from '@/server/subscription/exceptions';
 
 /**
  * Tests for Provider Connection API routes
@@ -155,7 +156,7 @@ describe('Provider Connection API Routes', () => {
     });
 
     it('should return error for invalid credentials', async () => {
-      sandbox.stub(service, 'configurePayPal').rejects(new Error('Invalid PayPal credentials'));
+      sandbox.stub(service, 'configurePayPal').rejects(new InvalidCredentialsError('Invalid PayPal credentials'));
 
       router.use(addRequestUser);
       router.post('/paypal/configure', routes.configurePayPal.bind(routes));

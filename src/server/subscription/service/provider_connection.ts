@@ -9,6 +9,12 @@ import { WebhookManager } from '@/server/subscription/service/provider/webhook_m
 import { ProviderFactory } from '@/server/subscription/service/provider/factory';
 import { PaymentProviderAdapter, ProviderCredentials } from '@/server/subscription/service/provider/adapter';
 import SubscriptionService from '@/server/subscription/service/subscription';
+import {
+  InvalidProviderTypeError,
+  InvalidEnvironmentError,
+  MissingRequiredFieldError,
+  InvalidCredentialsError,
+} from '@/server/subscription/exceptions';
 
 /**
  * User object for admin operations
@@ -102,6 +108,15 @@ export class ProviderConnectionService {
    * @returns True if callback handled successfully, false otherwise
    */
   async handleStripeCallback(code: string, state: string): Promise<boolean> {
+    // Validate required parameters
+    if (!code || typeof code !== 'string') {
+      throw new MissingRequiredFieldError('code');
+    }
+
+    if (!state || typeof state !== 'string') {
+      throw new MissingRequiredFieldError('state');
+    }
+
     // Validate state token
     const isValidState = await this.oauthStateManager.validateToken(state, 'stripe');
     if (!isValidState) {
@@ -188,13 +203,31 @@ export class ProviderConnectionService {
    * @returns True if configuration successful
    */
   async configurePayPal(credentials: ProviderCredentials, adminUser: AdminUser): Promise<boolean> {
+    // Validate required fields (check for both undefined and empty string)
+    if (!credentials.client_id || credentials.client_id.trim() === '') {
+      throw new MissingRequiredFieldError('client_id');
+    }
+
+    if (!credentials.client_secret || credentials.client_secret.trim() === '') {
+      throw new MissingRequiredFieldError('client_secret');
+    }
+
+    if (!credentials.environment || credentials.environment.trim() === '') {
+      throw new MissingRequiredFieldError('environment');
+    }
+
+    // Validate environment value
+    if (credentials.environment !== 'sandbox' && credentials.environment !== 'production') {
+      throw new InvalidEnvironmentError();
+    }
+
     // Get PayPal adapter for validation
     const adapter = this.getAdapter('paypal', credentials);
 
     // Validate credentials format
     const isValid = await adapter.validateCredentials(credentials);
     if (!isValid) {
-      throw new Error('Invalid PayPal credentials');
+      throw new InvalidCredentialsError('Invalid PayPal credentials');
     }
 
     // Generate webhook URL
@@ -270,6 +303,11 @@ export class ProviderConnectionService {
    * @returns Provider status information
    */
   async getProviderStatus(providerType: ProviderType): Promise<ProviderStatus> {
+    // Validate provider type
+    if (providerType !== 'stripe' && providerType !== 'paypal') {
+      throw new InvalidProviderTypeError();
+    }
+
     const entity = await ProviderConfigEntity.findOne({
       where: { provider_type: providerType },
     });
@@ -318,6 +356,11 @@ export class ProviderConnectionService {
     providerType: ProviderType,
     confirmed: boolean = false,
   ): Promise<DisconnectionResult> {
+    // Validate provider type
+    if (providerType !== 'stripe' && providerType !== 'paypal') {
+      throw new InvalidProviderTypeError();
+    }
+
     // Find provider configuration
     const entity = await ProviderConfigEntity.findOne({
       where: { provider_type: providerType },

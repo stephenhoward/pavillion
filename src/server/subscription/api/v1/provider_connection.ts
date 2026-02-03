@@ -2,6 +2,12 @@ import express, { Request, Response } from 'express';
 import ExpressHelper from '@/server/common/helper/express';
 import { ProviderConnectionService } from '@/server/subscription/service/provider_connection';
 import { ProviderType } from '@/common/model/subscription';
+import {
+  InvalidProviderTypeError,
+  InvalidEnvironmentError,
+  MissingRequiredFieldError,
+  InvalidCredentialsError,
+} from '@/server/subscription/exceptions';
 
 /**
  * Provider Connection route handlers
@@ -96,14 +102,8 @@ export default class ProviderConnectionRoutes {
         return;
       }
 
-      // Validate required parameters
-      if (!code || typeof code !== 'string' || !state || typeof state !== 'string') {
-        res.redirect('/admin/funding?error=invalid_request');
-        return;
-      }
-
-      // Process OAuth callback
-      const success = await this.service.handleStripeCallback(code, state);
+      // Process OAuth callback (service validates parameters)
+      const success = await this.service.handleStripeCallback(code as string, state as string);
 
       if (!success) {
         res.redirect('/admin/funding?error=invalid_state');
@@ -115,7 +115,12 @@ export default class ProviderConnectionRoutes {
     }
     catch (error) {
       console.error('Error handling Stripe OAuth callback:', error);
-      res.redirect('/admin/funding?error=connection_failed');
+      if (error instanceof MissingRequiredFieldError) {
+        res.redirect('/admin/funding?error=invalid_request');
+      }
+      else {
+        res.redirect('/admin/funding?error=connection_failed');
+      }
     }
   }
 
@@ -134,22 +139,6 @@ export default class ProviderConnectionRoutes {
 
       const { client_id, client_secret, environment } = req.body;
 
-      // Validate required fields
-      if (!client_id || !client_secret || !environment) {
-        res.status(400).json({
-          error: 'Missing required fields: client_id, client_secret, and environment are required',
-        });
-        return;
-      }
-
-      // Validate environment value
-      if (environment !== 'sandbox' && environment !== 'production') {
-        res.status(400).json({
-          error: 'Invalid environment value. Must be "sandbox" or "production"',
-        });
-        return;
-      }
-
       const credentials = {
         client_id,
         client_secret,
@@ -166,7 +155,13 @@ export default class ProviderConnectionRoutes {
     catch (error) {
       console.error('Error configuring PayPal:', error);
 
-      if (error instanceof Error && error.message.includes('Invalid')) {
+      if (error instanceof MissingRequiredFieldError) {
+        res.status(400).json({ error: error.message });
+      }
+      else if (error instanceof InvalidEnvironmentError) {
+        res.status(400).json({ error: error.message });
+      }
+      else if (error instanceof InvalidCredentialsError) {
         res.status(400).json({ error: error.message });
       }
       else {
@@ -183,12 +178,6 @@ export default class ProviderConnectionRoutes {
     try {
       const { providerType } = req.params;
       const { confirm } = req.query;
-
-      // Validate provider type
-      if (providerType !== 'stripe' && providerType !== 'paypal') {
-        res.status(400).json({ error: 'Invalid provider type' });
-        return;
-      }
 
       const confirmed = confirm === 'true';
 
@@ -209,7 +198,10 @@ export default class ProviderConnectionRoutes {
     catch (error) {
       console.error('Error disconnecting provider:', error);
 
-      if (error instanceof Error && error.message.includes('not found')) {
+      if (error instanceof InvalidProviderTypeError) {
+        res.status(400).json({ error: error.message });
+      }
+      else if (error instanceof Error && error.message.includes('not found')) {
         res.status(404).json({ error: error.message });
       }
       else {

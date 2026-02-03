@@ -16,6 +16,13 @@ import { SubscriptionEventEntity } from '@/server/subscription/entity/subscripti
 import { PlatformOAuthConfigEntity } from '@/server/subscription/entity/platform_oauth_config';
 import { ProviderFactory } from '@/server/subscription/service/provider/factory';
 import { WebhookEvent, CreateSubscriptionParams } from '@/server/subscription/service/provider/adapter';
+import {
+  InvalidBillingCycleError,
+  InvalidAmountError,
+  InvalidCurrencyError,
+  MissingRequiredFieldError,
+  InvalidProviderTypeError,
+} from '@/server/subscription/exceptions';
 
 /**
  * Service for managing subscription operations
@@ -61,11 +68,16 @@ export default class SubscriptionService {
   async updateSettings(settings: SubscriptionSettings): Promise<boolean> {
     // Validate settings
     if (settings.monthlyPrice < 0 || settings.yearlyPrice < 0) {
-      throw new Error('Prices must be non-negative');
+      throw new InvalidAmountError('Prices must be non-negative');
     }
 
     if (settings.gracePeriodDays < 0) {
-      throw new Error('Grace period must be non-negative');
+      throw new InvalidAmountError('Grace period must be non-negative');
+    }
+
+    // Validate currency format (3-letter ISO 4217 code)
+    if (!/^[A-Z]{3}$/.test(settings.currency)) {
+      throw new InvalidCurrencyError();
     }
 
     let entity = await SubscriptionSettingsEntity.findOne();
@@ -168,6 +180,20 @@ export default class SubscriptionService {
     displayName: string,
     enabled: boolean,
   ): Promise<boolean> {
+    // Validate provider type
+    if (providerType !== 'stripe' && providerType !== 'paypal') {
+      throw new InvalidProviderTypeError();
+    }
+
+    // Validate displayName and enabled
+    if (typeof displayName !== 'string') {
+      throw new MissingRequiredFieldError('displayName');
+    }
+
+    if (typeof enabled !== 'boolean') {
+      throw new MissingRequiredFieldError('enabled');
+    }
+
     const entity = await ProviderConfigEntity.findOne({
       where: { provider_type: providerType },
     });
@@ -193,6 +219,11 @@ export default class SubscriptionService {
    * @returns True if disconnect successful
    */
   async disconnectProvider(providerType: ProviderType): Promise<boolean> {
+    // Validate provider type
+    if (providerType !== 'stripe' && providerType !== 'paypal') {
+      throw new InvalidProviderTypeError();
+    }
+
     const entity = await ProviderConfigEntity.findOne({
       where: { provider_type: providerType },
     });
@@ -270,6 +301,25 @@ export default class SubscriptionService {
     billingCycle: BillingCycle,
     amount: number,
   ): Promise<Subscription> {
+    // Validate required fields
+    if (!providerConfigId) {
+      throw new MissingRequiredFieldError('providerConfigId');
+    }
+
+    if (!billingCycle) {
+      throw new MissingRequiredFieldError('billingCycle');
+    }
+
+    // Validate billing cycle
+    if (billingCycle !== 'monthly' && billingCycle !== 'yearly') {
+      throw new InvalidBillingCycleError();
+    }
+
+    // Validate amount for PWYC
+    if (amount !== undefined && amount < 0) {
+      throw new InvalidAmountError();
+    }
+
     // Get provider configuration
     const providerEntity = await ProviderConfigEntity.findByPk(providerConfigId);
     if (!providerEntity) {
@@ -381,6 +431,11 @@ export default class SubscriptionService {
    * @returns Billing portal URL
    */
   async getBillingPortalUrl(accountId: string, returnUrl: string): Promise<string> {
+    // Validate required fields
+    if (!returnUrl) {
+      throw new MissingRequiredFieldError('returnUrl');
+    }
+
     const subscription = await this.getStatus(accountId);
     if (!subscription) {
       throw new Error('No subscription found');

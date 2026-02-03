@@ -3,6 +3,12 @@ import ExpressHelper from '@/server/common/helper/express';
 import SubscriptionInterface from '@/server/subscription/interface';
 import { ProviderConnectionService } from '@/server/subscription/service/provider_connection';
 import { SubscriptionSettings } from '@/common/model/subscription';
+import {
+  InvalidProviderTypeError,
+  InvalidAmountError,
+  InvalidCurrencyError,
+  MissingRequiredFieldError,
+} from '@/server/subscription/exceptions';
 
 /**
  * Admin route handlers for subscription management
@@ -205,7 +211,7 @@ export default class AdminRouteHandlers {
         return;
       }
 
-      // Validate provider type
+      // Validate provider type (would be done in service if this was implemented)
       if (providerType !== 'stripe' && providerType !== 'paypal') {
         res.status(400).json({ error: 'Invalid provider type' });
         return;
@@ -221,7 +227,12 @@ export default class AdminRouteHandlers {
     }
     catch (error) {
       console.error('Error initiating provider connection:', error);
-      res.status(500).json({ error: 'Internal server error' });
+      if (error instanceof InvalidProviderTypeError) {
+        res.status(400).json({ error: error.message });
+      }
+      else {
+        res.status(500).json({ error: 'Internal server error' });
+      }
     }
   }
 
@@ -239,7 +250,7 @@ export default class AdminRouteHandlers {
         return;
       }
 
-      // Validate provider type
+      // Validate provider type (would be done in service if this was implemented)
       if (providerType !== 'stripe' && providerType !== 'paypal') {
         res.status(400).json({ error: 'Invalid provider type' });
         return;
@@ -252,7 +263,12 @@ export default class AdminRouteHandlers {
     }
     catch (error) {
       console.error('Error handling OAuth callback:', error);
-      res.status(500).json({ error: 'Internal server error' });
+      if (error instanceof InvalidProviderTypeError) {
+        res.status(400).json({ error: error.message });
+      }
+      else {
+        res.status(500).json({ error: 'Internal server error' });
+      }
     }
   }
 
@@ -265,24 +281,19 @@ export default class AdminRouteHandlers {
       const { providerType } = req.params;
       const { displayName, enabled } = req.body;
 
-      // Validate provider type
-      if (providerType !== 'stripe' && providerType !== 'paypal') {
-        res.status(400).json({ error: 'Invalid provider type' });
-        return;
-      }
-
-      if (typeof displayName !== 'string' || typeof enabled !== 'boolean') {
-        res.status(400).json({ error: 'displayName and enabled are required' });
-        return;
-      }
-
       await this.interface.updateProvider(providerType, displayName, enabled);
 
       res.json({ success: true });
     }
     catch (error) {
       console.error('Error updating provider:', error);
-      if (error instanceof Error && error.message.includes('not found')) {
+      if (error instanceof InvalidProviderTypeError) {
+        res.status(400).json({ error: error.message });
+      }
+      else if (error instanceof MissingRequiredFieldError) {
+        res.status(400).json({ error: error.message });
+      }
+      else if (error instanceof Error && error.message.includes('not found')) {
         res.status(404).json({ error: error.message });
       }
       else {
@@ -299,19 +310,16 @@ export default class AdminRouteHandlers {
     try {
       const { providerType } = req.params;
 
-      // Validate provider type
-      if (providerType !== 'stripe' && providerType !== 'paypal') {
-        res.status(400).json({ error: 'Invalid provider type' });
-        return;
-      }
-
       await this.interface.disconnectProvider(providerType);
 
       res.json({ success: true });
     }
     catch (error) {
       console.error('Error disconnecting provider:', error);
-      if (error instanceof Error && error.message.includes('active subscription')) {
+      if (error instanceof InvalidProviderTypeError) {
+        res.status(400).json({ error: error.message });
+      }
+      else if (error instanceof Error && error.message.includes('active subscription')) {
         res.status(400).json({ error: error.message });
       }
       else {
