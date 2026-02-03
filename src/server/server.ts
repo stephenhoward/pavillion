@@ -150,6 +150,10 @@ const initPavillionServer = async (app: express.Application, port: number) => {
   // Validate production environment configuration before starting
   validateProductionEnvironment();
 
+  // Configure Express to trust proxy headers for accurate client IP detection
+  // This is essential for rate limiting behind reverse proxies like nginx
+  app.set('trust proxy', 1);
+
   // Set up health check endpoint first (before other routes and middleware)
   setupHealthCheck(app);
 

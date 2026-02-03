@@ -35,6 +35,25 @@ jwt:
 session:
   secret: 'development-only-session-secret-do-not-use-in-production'
 
+# Rate limiting configuration
+rateLimit:
+  enabled: true
+  store: memory
+  passwordReset:
+    byIp:
+      windowMs: 900000  # 15 minutes in milliseconds
+      max: 5  # 5 requests per IP per 15 minutes
+    byEmail:
+      windowMs: 3600000  # 1 hour in milliseconds
+      max: 3  # 3 requests per email per hour
+  login:
+    byIp:
+      windowMs: 900000  # 15 minutes in milliseconds
+      max: 10  # 10 requests per IP per 15 minutes
+    byEmail:
+      windowMs: 3600000  # 1 hour in milliseconds
+      max: 5  # 5 requests per email per hour
+
 # Housekeeping configuration for automated server maintenance
 housekeeping:
   enabled: true

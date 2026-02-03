@@ -19,3 +19,23 @@ media:
     - '.heic'
   storage:
     driver: 'memory'
+
+# Disable rate limiting in tests by default (unit tests expect this)
+# Integration tests that need rate limiting can enable it explicitly
+rateLimit:
+  enabled: false
+  store: memory
+  passwordReset:
+    byIp:
+      windowMs: 900000  # 15 minutes
+      max: 5
+    byEmail:
+      windowMs: 3600000  # 1 hour
+      max: 3
+  login:
+    byIp:
+      windowMs: 900000  # 15 minutes
+      max: 10
+    byEmail:
+      windowMs: 3600000  # 1 hour
+      max: 5

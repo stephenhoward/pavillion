@@ -8,6 +8,12 @@ import { noAccountExistsError } from '@/server/accounts/exceptions';
 import AccountsInterface from '@/server/accounts/interface';
 import { EmailAlreadyExistsError, InvalidPasswordError } from '@/server/authentication/exceptions';
 import AuthenticationInterface from '@/server/authentication/interface';
+import {
+  passwordResetByIp,
+  passwordResetByEmail,
+  loginByIp,
+  loginByEmail,
+} from '@/server/common/middleware/rate-limiters';
 
 export default class AuthenticationRouteHandlers {
   private service: AuthenticationInterface;
@@ -21,10 +27,10 @@ export default class AuthenticationRouteHandlers {
   installHandlers(app: Application, routePrefix: string): void {
     const router = express.Router();
 
-    router.post('/login', ...ExpressHelper.noUserOnly, this.login.bind(this) );
+    router.post('/login', loginByIp, loginByEmail, ...ExpressHelper.noUserOnly, this.login.bind(this) );
     router.get('/token', ...ExpressHelper.loggedInOnly, this.getToken.bind(this) );
     router.get('/reset-password/:code', this.checkPasswordResetCode.bind(this) );
-    router.post('/reset-password', this.generatePasswordResetCode.bind(this) );
+    router.post('/reset-password', passwordResetByIp, passwordResetByEmail, this.generatePasswordResetCode.bind(this) );
     router.post('/reset-password/:code', this.setPassword.bind(this) );
     router.post('/email', ...ExpressHelper.loggedInOnly, this.changeEmail.bind(this) );
     app.use(routePrefix, router);
