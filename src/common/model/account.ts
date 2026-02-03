@@ -6,6 +6,7 @@ import { PrimaryModel } from '@/common/model/model';
 class Account extends PrimaryModel {
   username: string = '';
   email: string = '';
+  displayName: string | null = null;
   roles: string[] | null = null;
   calendarLanguages: string[] = ['en'];
   language: string = 'en';
@@ -46,6 +47,7 @@ class Account extends PrimaryModel {
       id: this.id,
       username: this.username,
       email: this.email,
+      displayName: this.displayName,
       roles: this.roles,
     };
   };
@@ -58,6 +60,7 @@ class Account extends PrimaryModel {
    */
   static fromObject(obj: Record<string,any>): Account {
     let account = new Account(obj.id, obj.username, obj.email);
+    account.displayName = obj.displayName ?? null;
     account.roles = obj.roles;
     return account;
   }

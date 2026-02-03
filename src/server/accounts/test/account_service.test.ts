@@ -938,3 +938,163 @@ describe('listInvitations', () => {
   });
 
 });
+
+describe('updateProfile', () => {
+  let sandbox = sinon.createSandbox();
+  let accountService: AccountService;
+
+  beforeEach(() => {
+    const eventBus = new EventEmitter();
+    const configurationInterface = new ConfigurationInterface();
+    const setupInterface = new SetupInterface();
+    const emailInterface = new EmailInterface();
+    accountService = new AccountService(eventBus, configurationInterface, setupInterface, emailInterface);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('should update display name successfully', async () => {
+    const testAccount = new Account('user-id', 'testuser', 'test@example.com');
+    const mockEntity = {
+      id: 'user-id',
+      username: 'testuser',
+      email: 'test@example.com',
+      display_name: null,
+      save: sandbox.stub().resolves(),
+      toModel: () => {
+        const account = new Account('user-id', 'testuser', 'test@example.com');
+        account.displayName = 'New Display Name';
+        return account;
+      },
+    } as any;
+
+    const findByPkStub = sandbox.stub(AccountEntity, 'findByPk');
+    findByPkStub.resolves(mockEntity);
+
+    const result = await accountService.updateProfile(testAccount, 'New Display Name');
+
+    expect(findByPkStub.calledWith('user-id')).toBe(true);
+    expect(mockEntity.display_name).toBe('New Display Name');
+    expect(mockEntity.save.called).toBe(true);
+    expect(result.displayName).toBe('New Display Name');
+  });
+
+  it('should allow clearing display name with null', async () => {
+    const testAccount = new Account('user-id', 'testuser', 'test@example.com');
+    testAccount.displayName = 'Current Name';
+    const mockEntity = {
+      id: 'user-id',
+      username: 'testuser',
+      email: 'test@example.com',
+      display_name: 'Current Name',
+      save: sandbox.stub().resolves(),
+      toModel: () => {
+        const account = new Account('user-id', 'testuser', 'test@example.com');
+        account.displayName = null;
+        return account;
+      },
+    } as any;
+
+    const findByPkStub = sandbox.stub(AccountEntity, 'findByPk');
+    findByPkStub.resolves(mockEntity);
+
+    const result = await accountService.updateProfile(testAccount, null);
+
+    expect(findByPkStub.calledWith('user-id')).toBe(true);
+    expect(mockEntity.display_name).toBe(null);
+    expect(mockEntity.save.called).toBe(true);
+    expect(result.displayName).toBe(null);
+  });
+
+  it('should throw error if account not found', async () => {
+    const testAccount = new Account('non-existent-id', 'testuser', 'test@example.com');
+
+    const findByPkStub = sandbox.stub(AccountEntity, 'findByPk');
+    findByPkStub.resolves(null);
+
+    await expect(accountService.updateProfile(testAccount, 'New Name')).rejects
+      .toThrow('Account not found');
+
+    expect(findByPkStub.calledWith('non-existent-id')).toBe(true);
+  });
+
+  it('should handle empty string display name', async () => {
+    const testAccount = new Account('user-id', 'testuser', 'test@example.com');
+    const mockEntity = {
+      id: 'user-id',
+      username: 'testuser',
+      email: 'test@example.com',
+      display_name: null,
+      save: sandbox.stub().resolves(),
+      toModel: () => {
+        const account = new Account('user-id', 'testuser', 'test@example.com');
+        account.displayName = '';
+        return account;
+      },
+    } as any;
+
+    const findByPkStub = sandbox.stub(AccountEntity, 'findByPk');
+    findByPkStub.resolves(mockEntity);
+
+    const result = await accountService.updateProfile(testAccount, '');
+
+    expect(findByPkStub.calledWith('user-id')).toBe(true);
+    expect(mockEntity.display_name).toBe('');
+    expect(mockEntity.save.called).toBe(true);
+    expect(result.displayName).toBe('');
+  });
+
+  it('should update display name when one already exists', async () => {
+    const testAccount = new Account('user-id', 'testuser', 'test@example.com');
+    testAccount.displayName = 'Old Name';
+    const mockEntity = {
+      id: 'user-id',
+      username: 'testuser',
+      email: 'test@example.com',
+      display_name: 'Old Name',
+      save: sandbox.stub().resolves(),
+      toModel: () => {
+        const account = new Account('user-id', 'testuser', 'test@example.com');
+        account.displayName = 'Updated Name';
+        return account;
+      },
+    } as any;
+
+    const findByPkStub = sandbox.stub(AccountEntity, 'findByPk');
+    findByPkStub.resolves(mockEntity);
+
+    const result = await accountService.updateProfile(testAccount, 'Updated Name');
+
+    expect(findByPkStub.calledWith('user-id')).toBe(true);
+    expect(mockEntity.display_name).toBe('Updated Name');
+    expect(mockEntity.save.called).toBe(true);
+    expect(result.displayName).toBe('Updated Name');
+  });
+
+  it('should persist display name to database', async () => {
+    const testAccount = new Account('user-id', 'testuser', 'test@example.com');
+    const saveStub = sandbox.stub();
+    const mockEntity = {
+      id: 'user-id',
+      username: 'testuser',
+      email: 'test@example.com',
+      display_name: null,
+      save: saveStub,
+      toModel: () => {
+        const account = new Account('user-id', 'testuser', 'test@example.com');
+        account.displayName = 'Persisted Name';
+        return account;
+      },
+    } as any;
+
+    const findByPkStub = sandbox.stub(AccountEntity, 'findByPk');
+    findByPkStub.resolves(mockEntity);
+
+    await accountService.updateProfile(testAccount, 'Persisted Name');
+
+    expect(saveStub.calledOnce).toBe(true);
+    expect(mockEntity.display_name).toBe('Persisted Name');
+  });
+});

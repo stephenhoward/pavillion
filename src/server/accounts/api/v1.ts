@@ -11,13 +11,13 @@ export default class AccountApiV1 {
     app.use(express.json());
 
     const accountRouteHandlers = new AccountRoutes(internalAPI);
-    accountRouteHandlers.installHandlers(app, '/api/accounts/v1');
+    accountRouteHandlers.installHandlers(app, '/api/v1');
 
     const accountApplicationRouteHandlers = new AccountApplicationRoutes(internalAPI);
-    accountApplicationRouteHandlers.installHandlers(app, '/api/accounts/v1');
+    accountApplicationRouteHandlers.installHandlers(app, '/api/v1');
 
     const accountInvitationRoutes = new AccountInvitationRoutes(internalAPI);
-    accountInvitationRoutes.installHandlers(app, '/api/accounts/v1');
+    accountInvitationRoutes.installHandlers(app, '/api/v1');
 
     const adminAccountRoutes = new AdminAccountRoutes(internalAPI);
     adminAccountRoutes.installHandlers(app, '/api/v1');

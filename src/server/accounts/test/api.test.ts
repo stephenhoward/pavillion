@@ -74,6 +74,180 @@ describe('Account API', () => {
     expect(stub.called).toBe(true);
   });
 
+  it('GET /me: should return current user profile', async () => {
+    const testAccount = new Account('user-id', 'testuser', 'test@example.com');
+    testAccount.displayName = 'Test User';
+    testAccount.roles = ['user'];
+
+    router.get('/me', (req, res, next) => {
+      req.user = testAccount;
+      next();
+    }, accountHandlers.getCurrentUser.bind(accountHandlers));
+
+    const response = await request(testApp(router)).get('/me');
+
+    expect(response.status).toBe(200);
+    expect(response.body.id).toBe('user-id');
+    expect(response.body.username).toBe('testuser');
+    expect(response.body.email).toBe('test@example.com');
+    expect(response.body.displayName).toBe('Test User');
+  });
+
+  it('GET /me: should return 400 when user not authenticated', async () => {
+    router.get('/me', (req, res, next) => {
+      req.user = undefined;
+      next();
+    }, accountHandlers.getCurrentUser.bind(accountHandlers));
+
+    const response = await request(testApp(router)).get('/me');
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('User not authenticated');
+  });
+
+  it('PATCH /me/profile: should update display name', async () => {
+    const testAccount = new Account('user-id', 'testuser', 'test@example.com');
+    const updatedAccount = new Account('user-id', 'testuser', 'test@example.com');
+    updatedAccount.displayName = 'New Display Name';
+
+    const updateStub = sandbox.stub(accountsInterface, 'updateProfile');
+    updateStub.resolves(updatedAccount);
+
+    router.patch('/me/profile', (req, res, next) => {
+      req.user = testAccount;
+      next();
+    }, accountHandlers.updateProfile.bind(accountHandlers));
+
+    const response = await request(testApp(router))
+      .patch('/me/profile')
+      .send({ displayName: 'New Display Name' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.displayName).toBe('New Display Name');
+    expect(updateStub.called).toBe(true);
+    expect(updateStub.firstCall.args[0].id).toBe('user-id');
+    expect(updateStub.firstCall.args[1]).toBe('New Display Name');
+  });
+
+  it('PATCH /me/profile: should allow clearing display name with null', async () => {
+    const testAccount = new Account('user-id', 'testuser', 'test@example.com');
+    testAccount.displayName = 'Current Name';
+    const updatedAccount = new Account('user-id', 'testuser', 'test@example.com');
+    updatedAccount.displayName = null;
+
+    const updateStub = sandbox.stub(accountsInterface, 'updateProfile');
+    updateStub.resolves(updatedAccount);
+
+    router.patch('/me/profile', (req, res, next) => {
+      req.user = testAccount;
+      next();
+    }, accountHandlers.updateProfile.bind(accountHandlers));
+
+    const response = await request(testApp(router))
+      .patch('/me/profile')
+      .send({ displayName: null });
+
+    expect(response.status).toBe(200);
+    expect(response.body.displayName).toBe(null);
+    expect(updateStub.called).toBe(true);
+    expect(updateStub.firstCall.args[1]).toBe(null);
+  });
+
+  it('PATCH /me/profile: should return 400 when displayName is missing', async () => {
+    const testAccount = new Account('user-id', 'testuser', 'test@example.com');
+
+    router.patch('/me/profile', (req, res, next) => {
+      req.user = testAccount;
+      next();
+    }, accountHandlers.updateProfile.bind(accountHandlers));
+
+    const response = await request(testApp(router))
+      .patch('/me/profile')
+      .send({});
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('displayName is required');
+  });
+
+  it('PATCH /me/profile: should return 400 when user not authenticated', async () => {
+    router.patch('/me/profile', (req, res, next) => {
+      req.user = undefined;
+      next();
+    }, accountHandlers.updateProfile.bind(accountHandlers));
+
+    const response = await request(testApp(router))
+      .patch('/me/profile')
+      .send({ displayName: 'New Name' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('User not authenticated');
+  });
+
+  it('PATCH /me/profile: should handle empty string display name', async () => {
+    const testAccount = new Account('user-id', 'testuser', 'test@example.com');
+    const updatedAccount = new Account('user-id', 'testuser', 'test@example.com');
+    updatedAccount.displayName = '';
+
+    const updateStub = sandbox.stub(accountsInterface, 'updateProfile');
+    updateStub.resolves(updatedAccount);
+
+    router.patch('/me/profile', (req, res, next) => {
+      req.user = testAccount;
+      next();
+    }, accountHandlers.updateProfile.bind(accountHandlers));
+
+    const response = await request(testApp(router))
+      .patch('/me/profile')
+      .send({ displayName: '' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.displayName).toBe('');
+    expect(updateStub.called).toBe(true);
+  });
+
+  it('PATCH /me/profile: should handle service errors gracefully', async () => {
+    const testAccount = new Account('user-id', 'testuser', 'test@example.com');
+
+    const updateStub = sandbox.stub(accountsInterface, 'updateProfile');
+    updateStub.rejects(new Error('Database connection failed'));
+
+    router.patch('/me/profile', (req, res, next) => {
+      req.user = testAccount;
+      next();
+    }, accountHandlers.updateProfile.bind(accountHandlers));
+
+    const response = await request(testApp(router))
+      .patch('/me/profile')
+      .send({ displayName: 'New Name' });
+
+    expect(response.status).toBe(500);
+    expect(response.body.error).toBe('An error occurred while updating the profile');
+    expect(updateStub.called).toBe(true);
+  });
+
+  it('PATCH /me/profile: should update and return account with existing displayName', async () => {
+    const testAccount = new Account('user-id', 'testuser', 'test@example.com');
+    testAccount.displayName = 'Old Name';
+    const updatedAccount = new Account('user-id', 'testuser', 'test@example.com');
+    updatedAccount.displayName = 'New Name';
+
+    const updateStub = sandbox.stub(accountsInterface, 'updateProfile');
+    updateStub.resolves(updatedAccount);
+
+    router.patch('/me/profile', (req, res, next) => {
+      req.user = testAccount;
+      next();
+    }, accountHandlers.updateProfile.bind(accountHandlers));
+
+    const response = await request(testApp(router))
+      .patch('/me/profile')
+      .send({ displayName: 'New Name' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.displayName).toBe('New Name');
+    expect(updateStub.calledWith(testAccount, 'New Name')).toBe(true);
+  });
+
 });
 
 describe ('Invitations API', () => {

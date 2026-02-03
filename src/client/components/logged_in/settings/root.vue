@@ -4,6 +4,7 @@ import { useTranslation } from 'i18next-vue';
 import EmailModal from '@/client/components/logged_in/settings/email_modal.vue';
 import PasswordModal from '@/client/components/logged_in/settings/password_modal.vue';
 import SubscriptionService from '@/client/service/subscription';
+import AccountService from '@/client/service/account';
 
 const authn = inject('authn');
 
@@ -11,18 +12,23 @@ const state = reactive({
   userInfo: {
     isAdmin: authn.isAdmin(),
     email: authn.userEmail(),
-    displayName: '', // TODO: Get from user profile
-    username: authn.userEmail()?.split('@')[0] || '', // Derive from email for now
+    displayName: '',
+    username: authn.userEmail()?.split('@')[0] || '',
     preferredLanguage: 'en', // TODO: Get from user profile
   },
   changeEmail: false,
   changePassword: false,
+  isLoading: true,
+  isSaving: false,
 });
+
+const saveMessage = ref(null);
 
 const { t } = useTranslation('profile');
 
 const subscriptionsEnabled = ref(false);
 const subscriptionService = new SubscriptionService();
+const accountService = new AccountService();
 
 // Available languages
 const languages = [
@@ -37,6 +43,25 @@ const languages = [
   { code: 'ar', name: 'العربية' },
   { code: 'he', name: 'עברית' },
 ];
+
+/**
+ * Load user profile data from server
+ */
+async function loadProfile() {
+  try {
+    state.isLoading = true;
+    const profile = await accountService.getProfile();
+    state.userInfo.displayName = profile.displayName || '';
+    state.userInfo.email = profile.email;
+    state.userInfo.username = profile.username || profile.email.split('@')[0];
+  }
+  catch (error) {
+    console.error('Error loading profile:', error);
+  }
+  finally {
+    state.isLoading = false;
+  }
+}
 
 /**
  * Check if subscriptions are enabled on this instance
@@ -63,9 +88,35 @@ function handleLanguageChange() {
 /**
  * Handle display name change
  */
-function handleDisplayNameChange() {
-  // TODO: Implement display name saving
-  console.log('Display name changed to:', state.userInfo.displayName);
+async function handleDisplayNameChange() {
+  // Don't save if still loading initial data
+  if (state.isLoading) {
+    return;
+  }
+
+  try {
+    state.isSaving = true;
+    saveMessage.value = null;
+
+    const updatedProfile = await accountService.updateProfile(state.userInfo.displayName);
+    state.userInfo.displayName = updatedProfile.displayName || '';
+
+    // Show success message briefly
+    saveMessage.value = t('display_name_saved', { defaultValue: 'Display name saved' });
+    setTimeout(() => {
+      saveMessage.value = null;
+    }, 3000);
+  }
+  catch (error) {
+    console.error('Error saving display name:', error);
+    saveMessage.value = t('display_name_error', { defaultValue: 'Error saving display name' });
+    setTimeout(() => {
+      saveMessage.value = null;
+    }, 5000);
+  }
+  finally {
+    state.isSaving = false;
+  }
 }
 
 /**
@@ -77,7 +128,10 @@ function handleLogout() {
 }
 
 onMounted(async () => {
-  await checkSubscriptionsEnabled();
+  await Promise.all([
+    loadProfile(),
+    checkSubscriptionsEnabled(),
+  ]);
 });
 </script>
 
@@ -102,15 +156,21 @@ onMounted(async () => {
               <label for="display-name" class="field-label">
                 {{ t("display_name_label", { defaultValue: "Display Name" }) }}
               </label>
-              <div class="input-with-button">
+              <div class="input-with-feedback">
                 <input
                   id="display-name"
                   type="text"
                   v-model="state.userInfo.displayName"
                   :placeholder="t('display_name_placeholder', { defaultValue: 'Your display name' })"
+                  :disabled="state.isLoading || state.isSaving"
                   class="text-input"
                   @blur="handleDisplayNameChange"
                 />
+                <transition name="fade">
+                  <span v-if="saveMessage" class="save-feedback" :class="{ 'is-error': saveMessage.includes('Error') || saveMessage.includes('error') }">
+                    {{ saveMessage }}
+                  </span>
+                </transition>
               </div>
             </div>
 
@@ -364,6 +424,12 @@ onMounted(async () => {
   }
 }
 
+.input-with-feedback {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pav-space-2);
+}
+
 .text-input {
   width: 100%;
   padding: 0.625rem 1rem;
@@ -380,11 +446,44 @@ onMounted(async () => {
     border-color: transparent;
   }
 
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
   @media (prefers-color-scheme: dark) {
     background: var(--pav-color-stone-800);
     border-color: var(--pav-color-stone-700);
     color: var(--pav-color-stone-100);
   }
+}
+
+.save-feedback {
+  font-size: 0.875rem;
+  color: var(--pav-color-green-600);
+  font-weight: 500;
+
+  &.is-error {
+    color: var(--pav-color-red-600);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-green-400);
+
+    &.is-error {
+      color: var(--pav-color-red-400);
+    }
+  }
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 
 .readonly-field {

@@ -823,6 +823,25 @@ export default class AccountService {
   }
 
   /**
+   * Updates the display name for an account.
+   *
+   * @param account - The account to update
+   * @param displayName - The new display name (or null to clear)
+   * @returns The updated account model
+   */
+  async updateProfile(account: Account, displayName: string | null): Promise<Account> {
+    const accountEntity = await AccountEntity.findByPk(account.id);
+    if (!accountEntity) {
+      throw new Error('Account not found');
+    }
+
+    accountEntity.display_name = displayName;
+    await accountEntity.save();
+
+    return accountEntity.toModel();
+  }
+
+  /**
    * Delete an account by its ID.
    * This will also delete all associated data (secrets, roles, invitations sent, etc.)
    *

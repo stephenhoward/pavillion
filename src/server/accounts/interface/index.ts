@@ -50,6 +50,10 @@ export default class AccountsInterface {
     return this.accountService.setPassword(account, password);
   }
 
+  async updateProfile(account: Account, displayName: string | null): Promise<Account> {
+    return await this.accountService.updateProfile(account, displayName);
+  }
+
   async loadAccountRoles(account: Account): Promise<Account> {
     return this.accountService.loadAccountRoles(account);
   }

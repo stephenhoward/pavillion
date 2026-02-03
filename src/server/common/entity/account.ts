@@ -20,9 +20,13 @@ class AccountEntity extends Model {
   @Column({ type: DataType.STRING })
   declare language: string;
 
+  @Column({ type: DataType.STRING, allowNull: true })
+  declare display_name: string | null;
+
   toModel(): Account {
     let account = new Account( this.id, this.username, this.email );
     account.language = this.language;
+    account.displayName = this.display_name ?? null;
 
     return account;
   };
@@ -32,6 +36,7 @@ class AccountEntity extends Model {
       id: account.id,
       username: account.username,
       email: account.email,
+      display_name: account.displayName ?? null,
     });
   }
 
