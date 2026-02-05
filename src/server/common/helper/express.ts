@@ -21,7 +21,23 @@ declare module 'express-serve-static-core' {
 const jwtSecret = config.get<string>('jwt.secret');
 const expirationMinutes = 5;
 
+// UUID v4 validation regex
+const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export default {
+  /**
+   * Validates if a string is a valid UUID v4
+   */
+  isValidUUID(uuid: string): boolean {
+    return typeof uuid === 'string' && UUID_V4_REGEX.test(uuid);
+  },
+
+  /**
+   * Validates an array of UUIDs and returns an array of invalid ones
+   */
+  findInvalidUUIDs(uuids: string[]): string[] {
+    return uuids.filter(uuid => !this.isValidUUID(uuid));
+  },
   adminOnly: [
     passport.authenticate('jwt', {session: false}),
     async (req: Request, res: Response, next: (err?: any) => void) => {

@@ -153,3 +153,56 @@ describe('generateJWT', async () => {
     expect(payload.exp).toBeDefined();
   });
 });
+
+describe('isValidUUID', () => {
+  it('should validate correct UUID v4', () => {
+    expect(expressHelper.isValidUUID('550e8400-e29b-41d4-a716-446655440000')).toBe(true);
+    expect(expressHelper.isValidUUID('c73bcdcc-2669-4bf6-81d3-e4ae73fb11fd')).toBe(true);
+    expect(expressHelper.isValidUUID('C73BCDCC-2669-4BF6-81D3-E4AE73FB11FD')).toBe(true); // uppercase
+  });
+
+  it('should reject invalid UUIDs', () => {
+    expect(expressHelper.isValidUUID('not-a-uuid')).toBe(false);
+    expect(expressHelper.isValidUUID('12345')).toBe(false);
+    expect(expressHelper.isValidUUID('')).toBe(false);
+    expect(expressHelper.isValidUUID('550e8400-e29b-41d4-a716-44665544000')).toBe(false); // too short
+    expect(expressHelper.isValidUUID('550e8400-e29b-41d4-a716-4466554400000')).toBe(false); // too long
+    expect(expressHelper.isValidUUID('550e8400-e29b-31d4-a716-446655440000')).toBe(false); // not v4 (wrong version digit)
+  });
+
+  it('should reject non-string values', () => {
+    expect(expressHelper.isValidUUID(null as any)).toBe(false);
+    expect(expressHelper.isValidUUID(undefined as any)).toBe(false);
+    expect(expressHelper.isValidUUID(123 as any)).toBe(false);
+    expect(expressHelper.isValidUUID({} as any)).toBe(false);
+  });
+});
+
+describe('findInvalidUUIDs', () => {
+  it('should return empty array for all valid UUIDs', () => {
+    const uuids = [
+      '550e8400-e29b-41d4-a716-446655440000',
+      'c73bcdcc-2669-4bf6-81d3-e4ae73fb11fd',
+    ];
+    expect(expressHelper.findInvalidUUIDs(uuids)).toEqual([]);
+  });
+
+  it('should return all invalid UUIDs', () => {
+    const uuids = ['not-a-uuid', '12345', 'also-invalid'];
+    expect(expressHelper.findInvalidUUIDs(uuids)).toEqual(['not-a-uuid', '12345', 'also-invalid']);
+  });
+
+  it('should return only invalid UUIDs from mixed array', () => {
+    const uuids = [
+      '550e8400-e29b-41d4-a716-446655440000',
+      'invalid-uuid',
+      'c73bcdcc-2669-4bf6-81d3-e4ae73fb11fd',
+      'bad-one',
+    ];
+    expect(expressHelper.findInvalidUUIDs(uuids)).toEqual(['invalid-uuid', 'bad-one']);
+  });
+
+  it('should handle empty array', () => {
+    expect(expressHelper.findInvalidUUIDs([])).toEqual([]);
+  });
+});
