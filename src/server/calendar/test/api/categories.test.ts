@@ -525,13 +525,16 @@ describe('Category API', () => {
     });
 
     it('should assign category successfully', async () => {
-      const mockAssignment = { id: 'assignment-id', eventId: 'event-id', categoryId: 'cat-id', toObject: () => ({ id: 'assignment-id' }) };
+      const eventId = '550e8400-e29b-41d4-a716-446655440000';
+      const categoryId = '550e8400-e29b-41d4-a716-446655440001';
+      const assignmentId = '550e8400-e29b-41d4-a716-446655440002';
+      const mockAssignment = { id: assignmentId, eventId, categoryId, toObject: () => ({ id: assignmentId }) };
       let assignStub = categorySandbox.stub(calendarInterface, 'assignCategoryToEvent');
       assignStub.resolves(mockAssignment as any);
 
       router.post('/handler', addRequestUser, (req, res) => {
-        req.params.eventId = 'event-id';
-        req.params.categoryId = 'cat-id';
+        req.params.eventId = eventId;
+        req.params.categoryId = categoryId;
         routes.assignCategoryToEvent(req, res);
       });
 
@@ -547,8 +550,8 @@ describe('Category API', () => {
       assignStub.rejects(new CategoryAlreadyAssignedError());
 
       router.post('/handler', addRequestUser, (req, res) => {
-        req.params.eventId = 'event-id';
-        req.params.categoryId = 'cat-id';
+        req.params.eventId = '550e8400-e29b-41d4-a716-446655440000';
+        req.params.categoryId = '550e8400-e29b-41d4-a716-446655440001';
         routes.assignCategoryToEvent(req, res);
       });
 
@@ -565,8 +568,8 @@ describe('Category API', () => {
       assignStub.rejects(new CategoryEventCalendarMismatchError());
 
       router.post('/handler', addRequestUser, (req, res) => {
-        req.params.eventId = 'event-id';
-        req.params.categoryId = 'cat-id';
+        req.params.eventId = '550e8400-e29b-41d4-a716-446655440000';
+        req.params.categoryId = '550e8400-e29b-41d4-a716-446655440001';
         routes.assignCategoryToEvent(req, res);
       });
 
@@ -677,8 +680,8 @@ describe('Category API', () => {
       unassignStub.resolves();
 
       router.delete('/handler', addRequestUser, (req, res) => {
-        req.params.eventId = 'event-id';
-        req.params.categoryId = 'cat-id';
+        req.params.eventId = '550e8400-e29b-41d4-a716-446655440000';
+        req.params.categoryId = '550e8400-e29b-41d4-a716-446655440001';
         routes.unassignCategoryFromEvent(req, res);
       });
 
@@ -694,8 +697,8 @@ describe('Category API', () => {
       unassignStub.rejects(new InsufficientCalendarPermissionsError());
 
       router.delete('/handler', addRequestUser, (req, res) => {
-        req.params.eventId = 'event-id';
-        req.params.categoryId = 'cat-id';
+        req.params.eventId = '550e8400-e29b-41d4-a716-446655440000';
+        req.params.categoryId = '550e8400-e29b-41d4-a716-446655440001';
         routes.unassignCategoryFromEvent(req, res);
       });
 

@@ -539,8 +539,9 @@ describe('Category Management - Comprehensive Integration', () => {
       const categoryResponse = await env.authPost(authKey, `/api/v1/calendars/${calendar.id}/categories`, categoryData);
       const categoryId = categoryResponse.body.id;
 
-      // Try to assign to non-existent event
-      const response = await env.authPost(authKey, '/api/v1/events/non-existent-event/categories/' + categoryId, {});
+      // Try to assign to non-existent event (using valid UUID format that doesn't exist)
+      const nonExistentEventId = '00000000-0000-4000-8000-000000000001';
+      const response = await env.authPost(authKey, `/api/v1/events/${nonExistentEventId}/categories/${categoryId}`, {});
 
       expect(response.status).toBe(404);
       expect(response.body).toHaveProperty('errorName', 'EventNotFoundError');

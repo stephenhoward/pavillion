@@ -132,7 +132,7 @@ describe('Event Deletion and Update Authorization - IDOR Prevention', () => {
         });
 
         await expect(
-          calendarInterface.deleteEvent(ownerAccount, testEvent.id, ownerCalendar.id)
+          calendarInterface.deleteEvent(ownerAccount, testEvent.id, ownerCalendar.id),
         ).resolves.not.toThrow();
       });
     });
@@ -159,14 +159,14 @@ describe('Event Deletion and Update Authorization - IDOR Prevention', () => {
 
         // Editor should be able to delete it
         await expect(
-          calendarInterface.deleteEvent(editorAccount, testEvent.id, ownerCalendar.id)
+          calendarInterface.deleteEvent(editorAccount, testEvent.id, ownerCalendar.id),
         ).resolves.not.toThrow();
       });
 
       it('should not allow editor to delete events from non-shared calendars', async () => {
         // Editor tries to delete event from attacker's calendar (no permissions)
         await expect(
-          calendarInterface.deleteEvent(editorAccount, attackerEvent.id, attackerCalendar.id)
+          calendarInterface.deleteEvent(editorAccount, attackerEvent.id, attackerCalendar.id),
         ).rejects.toThrow(InsufficientCalendarPermissionsError);
       });
     });
@@ -175,7 +175,7 @@ describe('Event Deletion and Update Authorization - IDOR Prevention', () => {
       it('should prevent user from deleting events from another user calendar', async () => {
         // Attacker tries to delete owner's event
         await expect(
-          calendarInterface.deleteEvent(attackerAccount, ownerEvent.id, ownerCalendar.id)
+          calendarInterface.deleteEvent(attackerAccount, ownerEvent.id, ownerCalendar.id),
         ).rejects.toThrow(InsufficientCalendarPermissionsError);
       });
 
@@ -183,14 +183,14 @@ describe('Event Deletion and Update Authorization - IDOR Prevention', () => {
         // Attacker tries to delete owner's event by manipulating calendarId parameter
         // This tests that we validate permissions based on the event's actual calendar
         await expect(
-          calendarInterface.deleteEvent(attackerAccount, ownerEvent.id, attackerCalendar.id)
+          calendarInterface.deleteEvent(attackerAccount, ownerEvent.id, attackerCalendar.id),
         ).rejects.toThrow(InsufficientCalendarPermissionsError);
       });
 
       it('should reject deletion with non-existent event ID', async () => {
         const fakeEventId = 'non-existent-event-id';
         await expect(
-          calendarInterface.deleteEvent(ownerAccount, fakeEventId, ownerCalendar.id)
+          calendarInterface.deleteEvent(ownerAccount, fakeEventId, ownerCalendar.id),
         ).rejects.toThrow(EventNotFoundError);
       });
     });
@@ -207,7 +207,7 @@ describe('Event Deletion and Update Authorization - IDOR Prevention', () => {
                 description: 'Updated description',
               },
             },
-          })
+          }),
         ).resolves.not.toThrow();
       });
     });
@@ -241,7 +241,7 @@ describe('Event Deletion and Update Authorization - IDOR Prevention', () => {
                 description: 'Modified by editor',
               },
             },
-          })
+          }),
         ).resolves.not.toThrow();
       });
 
@@ -255,7 +255,7 @@ describe('Event Deletion and Update Authorization - IDOR Prevention', () => {
                 description: 'Should fail',
               },
             },
-          })
+          }),
         ).rejects.toThrow(InsufficientCalendarPermissionsError);
       });
     });
@@ -271,7 +271,7 @@ describe('Event Deletion and Update Authorization - IDOR Prevention', () => {
                 description: 'Should be blocked',
               },
             },
-          })
+          }),
         ).rejects.toThrow(InsufficientCalendarPermissionsError);
       });
 
@@ -287,7 +287,7 @@ describe('Event Deletion and Update Authorization - IDOR Prevention', () => {
                 description: 'Should be blocked',
               },
             },
-          })
+          }),
         ).rejects.toThrow(InsufficientCalendarPermissionsError);
       });
 
@@ -301,7 +301,7 @@ describe('Event Deletion and Update Authorization - IDOR Prevention', () => {
                 description: 'Should fail',
               },
             },
-          })
+          }),
         ).rejects.toThrow(EventNotFoundError);
       });
     });
@@ -329,7 +329,7 @@ describe('Event Deletion and Update Authorization - IDOR Prevention', () => {
 
       // Editor should be able to delete it
       await expect(
-        calendarInterface.deleteEvent(editorAccount, testEvent.id, ownerCalendar.id)
+        calendarInterface.deleteEvent(editorAccount, testEvent.id, ownerCalendar.id),
       ).resolves.not.toThrow();
     });
 
@@ -361,7 +361,7 @@ describe('Event Deletion and Update Authorization - IDOR Prevention', () => {
               description: 'Modified by editor',
             },
           },
-        })
+        }),
       ).resolves.not.toThrow();
     });
 
@@ -393,7 +393,7 @@ describe('Event Deletion and Update Authorization - IDOR Prevention', () => {
               description: 'Modified by editor',
             },
           },
-        })
+        }),
       ).resolves.not.toThrow();
 
       // Attacker should NOT be able to modify it
@@ -405,7 +405,7 @@ describe('Event Deletion and Update Authorization - IDOR Prevention', () => {
               description: 'Should fail',
             },
           },
-        })
+        }),
       ).rejects.toThrow(InsufficientCalendarPermissionsError);
     });
 
@@ -438,7 +438,7 @@ describe('Event Deletion and Update Authorization - IDOR Prevention', () => {
 
       // Temp user should no longer be able to delete or update
       await expect(
-        calendarInterface.deleteEvent(tempAccount, testEvent.id, ownerCalendar.id)
+        calendarInterface.deleteEvent(tempAccount, testEvent.id, ownerCalendar.id),
       ).rejects.toThrow(InsufficientCalendarPermissionsError);
 
       await expect(
@@ -449,7 +449,7 @@ describe('Event Deletion and Update Authorization - IDOR Prevention', () => {
               description: 'Should fail',
             },
           },
-        })
+        }),
       ).rejects.toThrow(InsufficientCalendarPermissionsError);
     });
   });

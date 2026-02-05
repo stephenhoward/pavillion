@@ -845,12 +845,12 @@ describe('Calendar Ownership and Editor Permissions', () => {
 
       // Spy on the unified listInvitations method
       const listInvitationsStub = mockAccountsInterface.listInvitations = sandbox.stub();
-      listInvitationsStub.resolves([]);
+      listInvitationsStub.resolves({ invitations: [], pagination: { currentPage: 1, totalPages: 1, totalCount: 0, limit: 100 } });
 
       await service.listCalendarEditorsWithInvitations(owner, 'cal-id');
 
       // Verify the unified method was called with correct parameters
-      expect(listInvitationsStub.calledWith(undefined, 'cal-id')).toBe(true);
+      expect(listInvitationsStub.calledWith(1, 100, undefined, 'cal-id')).toBe(true);
     });
 
     it('should return both active editors and pending invitations', async () => {
@@ -888,7 +888,7 @@ describe('Calendar Ownership and Editor Permissions', () => {
       );
 
       mockAccountsInterface.listInvitations = sandbox.stub();
-      mockAccountsInterface.listInvitations.resolves([mockInvitation]);
+      mockAccountsInterface.listInvitations.resolves({ invitations: [mockInvitation], pagination: { currentPage: 1, totalPages: 1, totalCount: 1, limit: 100 } });
 
       const result = await service.listCalendarEditorsWithInvitations(owner, 'cal-id');
 
@@ -938,7 +938,7 @@ describe('Calendar Ownership and Editor Permissions', () => {
       );
 
       const listInvitationsStub = mockAccountsInterface.listInvitations = sandbox.stub();
-      listInvitationsStub.resolves([mockInvitation]);
+      listInvitationsStub.resolves({ invitations: [mockInvitation], pagination: { currentPage: 1, totalPages: 1, totalCount: 1, limit: 100 } });
 
       const cancelStub = mockAccountsInterface.cancelInvite = sandbox.stub();
       cancelStub.resolves(true);
@@ -946,7 +946,7 @@ describe('Calendar Ownership and Editor Permissions', () => {
       await service.cancelCalendarInvitation(owner, 'cal-id', 'invite-id');
 
       // Verify unified method was called with correct parameters
-      expect(listInvitationsStub.calledWith(undefined, 'cal-id')).toBe(true);
+      expect(listInvitationsStub.calledWith(1, 100, undefined, 'cal-id')).toBe(true);
       expect(cancelStub.calledWith('invite-id')).toBe(true);
     });
 
@@ -959,7 +959,7 @@ describe('Calendar Ownership and Editor Permissions', () => {
 
       // Mock empty invitations list
       const listInvitationsStub = mockAccountsInterface.listInvitations = sandbox.stub();
-      listInvitationsStub.resolves([]);
+      listInvitationsStub.resolves({ invitations: [], pagination: { currentPage: 1, totalPages: 1, totalCount: 0, limit: 100 } });
 
       await expect(service.cancelCalendarInvitation(owner, 'cal-id', 'wrong-invite-id'))
         .rejects.toThrow('Invitation not found or not associated with this calendar');
@@ -985,7 +985,7 @@ describe('Calendar Ownership and Editor Permissions', () => {
       );
 
       const listInvitationsStub = mockAccountsInterface.listInvitations = sandbox.stub();
-      listInvitationsStub.resolves([mockInvitation]);
+      listInvitationsStub.resolves({ invitations: [mockInvitation], pagination: { currentPage: 1, totalPages: 1, totalCount: 1, limit: 100 } });
 
       const resendStub = mockAccountsInterface.resendInvite = sandbox.stub();
       resendStub.resolves(mockInvitation);
@@ -993,7 +993,7 @@ describe('Calendar Ownership and Editor Permissions', () => {
       await service.resendCalendarInvitation(owner, 'cal-id', 'invite-id');
 
       // Verify unified method was called with correct parameters
-      expect(listInvitationsStub.calledWith(undefined, 'cal-id')).toBe(true);
+      expect(listInvitationsStub.calledWith(1, 100, undefined, 'cal-id')).toBe(true);
       expect(resendStub.calledWith('invite-id')).toBe(true);
     });
 
@@ -1006,7 +1006,7 @@ describe('Calendar Ownership and Editor Permissions', () => {
 
       // Mock empty invitations list
       const listInvitationsStub = mockAccountsInterface.listInvitations = sandbox.stub();
-      listInvitationsStub.resolves([]);
+      listInvitationsStub.resolves({ invitations: [], pagination: { currentPage: 1, totalPages: 1, totalCount: 0, limit: 100 } });
 
       await expect(service.resendCalendarInvitation(owner, 'cal-id', 'wrong-invite-id'))
         .rejects.toThrow('Invitation not found or not associated with this calendar');

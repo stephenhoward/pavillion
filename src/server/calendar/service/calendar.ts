@@ -784,7 +784,8 @@ class CalendarService {
     // Get pending invitations for this calendar using unified method
     let pendingInvitations: AccountInvitation[] = [];
     if (this.accountsInterface) {
-      pendingInvitations = await this.accountsInterface.listInvitations(undefined, calendarId);
+      const result = await this.accountsInterface.listInvitations(1, 100, undefined, calendarId);
+      pendingInvitations = result.invitations;
     }
 
     return {
@@ -818,8 +819,8 @@ class CalendarService {
     }
 
     // Verify the invitation belongs to this calendar using unified method
-    const pendingInvitations = await this.accountsInterface!.listInvitations(undefined, calendarId);
-    const invitation = pendingInvitations.find(inv => inv.id === invitationId);
+    const result = await this.accountsInterface!.listInvitations(1, 100, undefined, calendarId);
+    const invitation = result.invitations.find(inv => inv.id === invitationId);
 
     if (!invitation) {
       throw new Error('Invitation not found or not associated with this calendar');
@@ -854,8 +855,8 @@ class CalendarService {
     }
 
     // Verify the invitation belongs to this calendar using unified method
-    const pendingInvitations = await this.accountsInterface!.listInvitations(undefined, calendarId);
-    const invitation = pendingInvitations.find(inv => inv.id === invitationId);
+    const result = await this.accountsInterface!.listInvitations(1, 100, undefined, calendarId);
+    const invitation = result.invitations.find(inv => inv.id === invitationId);
 
     if (!invitation) {
       throw new Error('Invitation not found or not associated with this calendar');

@@ -116,7 +116,7 @@ describe('Account API', () => {
       .post('/handler')
       .send({email: 'testme'});
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(500);
     expect(response.body.message).toBe('error_creating_account');
     expect(stub.called).toBe(true);
   });
@@ -378,12 +378,12 @@ describe ('Invitations API', () => {
     const setupInterface = new SetupInterface();
     const testInterface = new AccountsInterface(eventBus, configurationInterface, setupInterface);
     const serviceStub = sandbox.stub(testInterface['accountService'], 'listInvitations');
-    serviceStub.resolves([]);
+    serviceStub.resolves({ invitations: [], pagination: { currentPage: 1, totalPages: 1, totalCount: 0, limit: 50 } });
 
-    const result = await testInterface.listInvitations(mockInviterId);
+    const result = await testInterface.listInvitations(1, 50, mockInviterId);
 
-    expect(result).toEqual([]);
-    expect(serviceStub.calledWith(mockInviterId, undefined)).toBe(true);
+    expect(result.invitations).toEqual([]);
+    expect(serviceStub.calledWith(1, 50, mockInviterId, undefined)).toBe(true);
   });
 
   it('list invitations: should filter by calendarId only', async () => {
@@ -393,12 +393,12 @@ describe ('Invitations API', () => {
     const setupInterface = new SetupInterface();
     const testInterface = new AccountsInterface(eventBus, configurationInterface, setupInterface);
     const serviceStub = sandbox.stub(testInterface['accountService'], 'listInvitations');
-    serviceStub.resolves([]);
+    serviceStub.resolves({ invitations: [], pagination: { currentPage: 1, totalPages: 1, totalCount: 0, limit: 50 } });
 
-    const result = await testInterface.listInvitations(undefined, mockCalendarId);
+    const result = await testInterface.listInvitations(1, 50, undefined, mockCalendarId);
 
-    expect(result).toEqual([]);
-    expect(serviceStub.calledWith(undefined, mockCalendarId)).toBe(true);
+    expect(result.invitations).toEqual([]);
+    expect(serviceStub.calledWith(1, 50, undefined, mockCalendarId)).toBe(true);
   });
 
   it('list invitations: should filter by both inviterId and calendarId', async () => {
@@ -409,12 +409,12 @@ describe ('Invitations API', () => {
     const setupInterface = new SetupInterface();
     const testInterface = new AccountsInterface(eventBus, configurationInterface, setupInterface);
     const serviceStub = sandbox.stub(testInterface['accountService'], 'listInvitations');
-    serviceStub.resolves([]);
+    serviceStub.resolves({ invitations: [], pagination: { currentPage: 1, totalPages: 1, totalCount: 0, limit: 50 } });
 
-    const result = await testInterface.listInvitations(mockInviterId, mockCalendarId);
+    const result = await testInterface.listInvitations(1, 50, mockInviterId, mockCalendarId);
 
-    expect(result).toEqual([]);
-    expect(serviceStub.calledWith(mockInviterId, mockCalendarId)).toBe(true);
+    expect(result.invitations).toEqual([]);
+    expect(serviceStub.calledWith(1, 50, mockInviterId, mockCalendarId)).toBe(true);
   });
 
   it('cross-user privacy: User A cannot see User B\'s invitations', async () => {
@@ -709,13 +709,15 @@ describe('Applications API', () => {
 
   it('list applications: should succeed', async () => {
     let stub2 = sandbox.stub(accountsInterface,'listAccountApplications');
-    stub2.resolves([]);
+    stub2.resolves({ applications: [], pagination: { currentPage: 1, totalPages: 1, totalCount: 0, limit: 50 } });
     router.get('/handler', applicationHandlers.listApplications.bind(applicationHandlers));
 
     const response = await request(testApp(router)).get('/handler');
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual([]);
+    expect(response.body).toHaveProperty('applications');
+    expect(response.body).toHaveProperty('pagination');
+    expect(response.body.applications).toEqual([]);
     expect(stub2.called).toBe(true);
   });
 

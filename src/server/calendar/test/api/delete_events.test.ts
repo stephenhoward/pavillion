@@ -38,6 +38,65 @@ describe('Delete Event API Tests', () => {
       expect(deleteEventStub.called).toBe(false);
     });
 
+    it('should reject malformed UUID with 400 error', async () => {
+      const deleteEventStub = sandbox.stub(calendarInterface, 'deleteEvent');
+      router.delete('/handler/:id', addRequestUser, (req, res) => {
+        routes.deleteEvent(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .delete('/handler/not-a-valid-uuid');
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('invalid UUID format in event ID');
+      expect(deleteEventStub.called).toBe(false);
+    });
+
+    it('should reject malformed UUID with special characters', async () => {
+      const deleteEventStub = sandbox.stub(calendarInterface, 'deleteEvent');
+      router.delete('/handler/:id', addRequestUser, (req, res) => {
+        routes.deleteEvent(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .delete('/handler/123e4567-e89b-12d3-a456-42661417400@invalid');
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('invalid UUID format in event ID');
+      expect(deleteEventStub.called).toBe(false);
+    });
+
+    it('should reject UUID with incorrect version', async () => {
+      const deleteEventStub = sandbox.stub(calendarInterface, 'deleteEvent');
+      router.delete('/handler/:id', addRequestUser, (req, res) => {
+        routes.deleteEvent(req, res);
+      });
+
+      // UUID v3 instead of v4 (has '3' in version position)
+      const response = await request(testApp(router))
+        .delete('/handler/123e4567-e89b-32d3-a456-426614174000');
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('invalid UUID format in event ID');
+      expect(deleteEventStub.called).toBe(false);
+    });
+
+    it('should accept valid UUID v4', async () => {
+      const deleteEventStub = sandbox.stub(calendarInterface, 'deleteEvent');
+      deleteEventStub.resolves();
+
+      router.delete('/handler/:id', addRequestUser, (req, res) => {
+        routes.deleteEvent(req, res);
+      });
+
+      // Valid UUID v4 with correct format
+      const response = await request(testApp(router))
+        .delete('/handler/123e4567-e89b-42d3-a456-426614174000');
+
+      expect(response.status).toBe(204);
+      expect(deleteEventStub.called).toBe(true);
+    });
+
     it('should fail without event ID', async () => {
       const deleteEventStub = sandbox.stub(calendarInterface, 'deleteEvent');
       router.delete('/handler', addRequestUser, (req, res) => {
@@ -55,17 +114,18 @@ describe('Delete Event API Tests', () => {
 
     it('should return 404 when event not found', async () => {
       const deleteEventStub = sandbox.stub(calendarInterface, 'deleteEvent');
-      deleteEventStub.throws(new EventNotFoundError('Event with ID test-event not found'));
+      const testEventId = '123e4567-e89b-42d3-a456-426614174000';
+      deleteEventStub.throws(new EventNotFoundError(`Event with ID ${testEventId} not found`));
 
       router.delete('/handler/:id', addRequestUser, (req, res) => {
         routes.deleteEvent(req, res);
       });
 
       const response = await request(testApp(router))
-        .delete('/handler/test-event');
+        .delete(`/handler/${testEventId}`);
 
       expect(response.status).toBe(404);
-      expect(response.body.error).toBe('Event with ID test-event not found');
+      expect(response.body.error).toBe(`Event with ID ${testEventId} not found`);
       expect(response.body.errorName).toBe('EventNotFoundError');
       expect(deleteEventStub.called).toBe(true);
     });
@@ -78,8 +138,9 @@ describe('Delete Event API Tests', () => {
         routes.deleteEvent(req, res);
       });
 
+      const restrictedEventId = '223e4567-e89b-42d3-a456-426614174000';
       const response = await request(testApp(router))
-        .delete('/handler/restricted-event');
+        .delete(`/handler/${restrictedEventId}`);
 
       expect(response.status).toBe(403);
       expect(response.body.error).toBe('User does not have permission to delete events in this calendar');
@@ -95,8 +156,9 @@ describe('Delete Event API Tests', () => {
         routes.deleteEvent(req, res);
       });
 
+      const errorEventId = '323e4567-e89b-42d3-a456-426614174000';
       const response = await request(testApp(router))
-        .delete('/handler/db-error-event');
+        .delete(`/handler/${errorEventId}`);
 
       expect(response.status).toBe(500);
       expect(response.body.error).toBe('An error occurred while deleting the event');
@@ -111,8 +173,9 @@ describe('Delete Event API Tests', () => {
         routes.deleteEvent(req, res);
       });
 
+      const validEventId = '423e4567-e89b-42d3-a456-426614174000';
       const response = await request(testApp(router))
-        .delete('/handler/valid-event');
+        .delete(`/handler/${validEventId}`);
 
       expect(response.status).toBe(204);
       expect(response.body).toEqual({});
@@ -127,11 +190,12 @@ describe('Delete Event API Tests', () => {
         routes.deleteEvent(req, res);
       });
 
+      const testEventId = '523e4567-e89b-42d3-a456-426614174000';
       await request(testApp(router))
-        .delete('/handler/test-event-id');
+        .delete(`/handler/${testEventId}`);
 
       expect(deleteEventStub.called).toBe(true);
-      expect(deleteEventStub.firstCall.args[1]).toBe('test-event-id'); // Event ID
+      expect(deleteEventStub.firstCall.args[1]).toBe(testEventId); // Event ID
       expect(typeof deleteEventStub.firstCall.args[0]).toBe('object'); // Account object
     });
   });

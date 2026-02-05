@@ -173,11 +173,12 @@ describe('Event API', () => {
 
   it('updateEvent: should fail when event not found', async () => {
     let eventStub = eventSandbox.stub(calendarInterface, 'updateEvent');
+    const eventId = '550e8400-e29b-41d4-a716-446655440000';
 
     eventStub.throws(new EventNotFoundError('Event not found'));
 
     router.put('/handler', addRequestUser, (req,res) => {
-      req.params.id = 'nonexistent-event';
+      req.params.id = eventId;
       routes.updateEvent(req,res);
     });
 
@@ -192,11 +193,12 @@ describe('Event API', () => {
 
   it('updateEvent: should fail when calendar for event not found', async () => {
     let eventStub = eventSandbox.stub(calendarInterface, 'updateEvent');
+    const eventId = '550e8400-e29b-41d4-a716-446655440000';
 
     eventStub.throws(new CalendarNotFoundError('Calendar for event does not exist'));
 
     router.put('/handler', addRequestUser, (req,res) => {
-      req.params.id = 'event-id';
+      req.params.id = eventId;
       routes.updateEvent(req,res);
     });
 
@@ -211,11 +213,12 @@ describe('Event API', () => {
 
   it('updateEvent: should fail without edit permissions', async () => {
     let eventStub = eventSandbox.stub(calendarInterface, 'updateEvent');
+    const eventId = '550e8400-e29b-41d4-a716-446655440000';
 
     eventStub.throws(new InsufficientCalendarPermissionsError('Insufficient permissions to modify events in this calendar'));
 
     router.put('/handler', addRequestUser, (req,res) => {
-      req.params.id = 'event-id';
+      req.params.id = eventId;
       routes.updateEvent(req,res);
     });
 
@@ -230,12 +233,14 @@ describe('Event API', () => {
 
   it('updateEvent: should succeed', async () => {
     let eventStub = eventSandbox.stub(calendarInterface, 'updateEvent');
+    const eventId = '550e8400-e29b-41d4-a716-446655440000';
+    const calendarId = '550e8400-e29b-41d4-a716-446655440010';
 
-    const updatedEvent = new CalendarEvent('event-id', 'calendar-id');
+    const updatedEvent = new CalendarEvent(eventId, calendarId);
     eventStub.resolves(updatedEvent);
 
     router.put('/handler', addRequestUser, (req,res) => {
-      req.params.id = 'event-id';
+      req.params.id = eventId;
       routes.updateEvent(req,res);
     });
 
@@ -317,10 +322,57 @@ describe('Event API', () => {
     expect(response.body.error).toBe('all categoryIds must be strings');
   });
 
+  it('bulkAssignCategories: should fail with invalid UUID in eventIds', async () => {
+    router.post('/handler', addRequestUser, (req, res) => { routes.bulkAssignCategories(req, res); });
+
+    const response = await request(testApp(router))
+      .post('/handler')
+      .send({
+        eventIds: ['not-a-uuid', '12345'],
+        categoryIds: ['550e8400-e29b-41d4-a716-446655440000'],
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('invalid UUID format in eventIds');
+    expect(response.body.invalidIds).toEqual(['not-a-uuid', '12345']);
+  });
+
+  it('bulkAssignCategories: should fail with invalid UUID in categoryIds', async () => {
+    router.post('/handler', addRequestUser, (req, res) => { routes.bulkAssignCategories(req, res); });
+
+    const response = await request(testApp(router))
+      .post('/handler')
+      .send({
+        eventIds: ['550e8400-e29b-41d4-a716-446655440000'],
+        categoryIds: ['invalid-uuid', 'also-bad'],
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('invalid UUID format in categoryIds');
+    expect(response.body.invalidIds).toEqual(['invalid-uuid', 'also-bad']);
+  });
+
+  it('bulkAssignCategories: should fail with mixed valid and invalid UUIDs', async () => {
+    router.post('/handler', addRequestUser, (req, res) => { routes.bulkAssignCategories(req, res); });
+
+    const response = await request(testApp(router))
+      .post('/handler')
+      .send({
+        eventIds: ['550e8400-e29b-41d4-a716-446655440000', 'bad-uuid'],
+        categoryIds: ['550e8400-e29b-41d4-a716-446655440001'],
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('invalid UUID format in eventIds');
+    expect(response.body.invalidIds).toEqual(['bad-uuid']);
+  });
+
   it('bulkAssignCategories: should succeed with valid request', async () => {
     let bulkAssignStub = eventSandbox.stub(calendarInterface, 'bulkAssignCategories');
-    const mockEvent1 = new CalendarEvent('event1', 'calendar1');
-    const mockEvent2 = new CalendarEvent('event2', 'calendar1');
+    const event1Id = '550e8400-e29b-41d4-a716-446655440000';
+    const event2Id = '550e8400-e29b-41d4-a716-446655440001';
+    const mockEvent1 = new CalendarEvent(event1Id, '550e8400-e29b-41d4-a716-446655440010');
+    const mockEvent2 = new CalendarEvent(event2Id, '550e8400-e29b-41d4-a716-446655440010');
     bulkAssignStub.resolves([mockEvent1, mockEvent2]);
 
     router.post('/handler', addRequestUser, (req, res) => { routes.bulkAssignCategories(req, res); });
@@ -328,15 +380,15 @@ describe('Event API', () => {
     const response = await request(testApp(router))
       .post('/handler')
       .send({
-        eventIds: ['event1', 'event2'],
-        categoryIds: ['cat1', 'cat2'],
+        eventIds: [event1Id, event2Id],
+        categoryIds: ['550e8400-e29b-41d4-a716-446655440020', '550e8400-e29b-41d4-a716-446655440021'],
       });
 
     expect(response.status).toBe(200);
     expect(Array.isArray(response.body)).toBe(true);
     expect(response.body).toHaveLength(2);
-    expect(response.body[0].id).toBe('event1');
-    expect(response.body[1].id).toBe('event2');
+    expect(response.body[0].id).toBe(event1Id);
+    expect(response.body[1].id).toBe(event2Id);
     expect(bulkAssignStub.called).toBe(true);
   });
 
@@ -349,8 +401,8 @@ describe('Event API', () => {
     const response = await request(testApp(router))
       .post('/handler')
       .send({
-        eventIds: ['event1'],
-        categoryIds: ['cat1'],
+        eventIds: ['550e8400-e29b-41d4-a716-446655440000'],
+        categoryIds: ['550e8400-e29b-41d4-a716-446655440020'],
       });
 
     expect(response.status).toBe(403);
@@ -367,8 +419,8 @@ describe('Event API', () => {
     const response = await request(testApp(router))
       .post('/handler')
       .send({
-        eventIds: ['event1', 'event2'],
-        categoryIds: ['cat1'],
+        eventIds: ['550e8400-e29b-41d4-a716-446655440000', '550e8400-e29b-41d4-a716-446655440001'],
+        categoryIds: ['550e8400-e29b-41d4-a716-446655440020'],
       });
 
     expect(response.status).toBe(422);
@@ -385,8 +437,8 @@ describe('Event API', () => {
     const response = await request(testApp(router))
       .post('/handler')
       .send({
-        eventIds: ['event1'],
-        categoryIds: ['cat1'],
+        eventIds: ['550e8400-e29b-41d4-a716-446655440000'],
+        categoryIds: ['550e8400-e29b-41d4-a716-446655440020'],
       });
 
     expect(response.status).toBe(500);
