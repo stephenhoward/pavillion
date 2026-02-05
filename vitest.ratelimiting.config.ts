@@ -6,35 +6,31 @@ export default defineConfig({
   test: {
     environment: 'happy-dom',
     globals: true,
-    // Integration tests use forks pool because:
-    // 1. They have fewer files, so RPC timeout issues don't occur
-    // 2. The sqlite3 native module crashes with vmThreads during cleanup
+    // Rate limiting tests use forks pool
     fileParallelism: true,
     pool: 'forks',
     poolOptions: {
       forks: {
         isolate: true,
         minForks: 1,
-        maxForks: 4,
+        maxForks: 1, // Run serially to avoid rate limit conflicts between tests
       },
     },
     teardownTimeout: 15000,
-    include: ['**/integration/**/*.test.ts'],
+    // Only include the rate limiting integration test file
+    include: ['**/authentication/test/integration/rate_limiting.test.ts'],
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
-      '**/cypress/**',
-      '**/.{idea,git,cache,output,temp}/**',
-      '**/tests/e2e/**',
-      '**/*.e2e.test.ts',
-      // Exclude rate limiting tests - run separately with test:ratelimiting
-      '**/authentication/test/integration/rate_limiting.test.ts',
     ],
-    coverage: {
-      reportOnFailure: true,
-    },
     env: {
       NODE_ENV: 'test',
+      // Enable rate limiting via NODE_CONFIG
+      NODE_CONFIG: JSON.stringify({
+        rateLimit: {
+          enabled: true,
+        },
+      }),
     },
   },
   resolve: {

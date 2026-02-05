@@ -16,8 +16,7 @@ import { EventEmitter } from 'events';
  * the configured limits are exceeded.
  *
  * NOTE: These tests require rate limiting to be enabled in the test environment.
- * To run these tests, set rateLimit.enabled=true in config/test.yaml or use
- * NODE_CONFIG='{"rateLimit":{"enabled":true}}' npm test
+ * To run these tests, use: npm run test:ratelimiting
  *
  * The tests share the same IP address (localhost) in the test environment,
  * so IP-based rate limits accumulate across test cases. The tests verify that
