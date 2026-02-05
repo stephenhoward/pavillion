@@ -10,7 +10,18 @@ class DeleteActivity extends ActivityPubActivity {
     this.id = objectUrl + '/delete';
   }
 
-  static fromObject(object: Record<string,any>): DeleteActivity {
+  static fromObject(object: Record<string,any>): DeleteActivity | null {
+    if (!object || typeof object !== 'object') {
+      return null;
+    }
+
+    if (!object.actor || typeof object.actor !== 'string') {
+      return null;
+    }
+
+    if (!object.object || typeof object.object !== 'string') {
+      return null;
+    }
 
     let activity = new DeleteActivity(object.actor, object.object);
     if ( object.id ) {

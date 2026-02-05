@@ -222,6 +222,74 @@ describe('HTTP Signature Verification', () => {
     expect(next.called).toBe(false);
   });
 
+  it('should reject when keyId is not a valid URL', async () => {
+    parseRequestStub.returns({
+      params: {
+        keyId: 'not-a-valid-url',
+        signature: 'validSignature',
+        headers: ['(request-target)', 'host', 'date'],
+      },
+    } as any);
+
+    await verifyHttpSignature(req as Request, res as Response, next as any);
+
+    expect(axiosGetStub.called).toBe(false);
+    expect(res.status.calledWith(401)).toBe(true);
+    expect(res.json.calledWith({ error: 'Could not retrieve public key' })).toBe(true);
+    expect(next.called).toBe(false);
+  });
+
+  it('should reject when keyId is an empty string', async () => {
+    parseRequestStub.returns({
+      params: {
+        keyId: '',
+        signature: 'validSignature',
+        headers: ['(request-target)', 'host', 'date'],
+      },
+    } as any);
+
+    await verifyHttpSignature(req as Request, res as Response, next as any);
+
+    expect(axiosGetStub.called).toBe(false);
+    expect(res.status.calledWith(401)).toBe(true);
+    expect(res.json.calledWith({ error: 'Invalid signature format - missing required parameters' })).toBe(true);
+    expect(next.called).toBe(false);
+  });
+
+  it('should reject when keyId contains only whitespace', async () => {
+    parseRequestStub.returns({
+      params: {
+        keyId: '   ',
+        signature: 'validSignature',
+        headers: ['(request-target)', 'host', 'date'],
+      },
+    } as any);
+
+    await verifyHttpSignature(req as Request, res as Response, next as any);
+
+    expect(axiosGetStub.called).toBe(false);
+    expect(res.status.calledWith(401)).toBe(true);
+    expect(res.json.calledWith({ error: 'Could not retrieve public key' })).toBe(true);
+    expect(next.called).toBe(false);
+  });
+
+  it('should reject when keyId is a malformed URL with special characters', async () => {
+    parseRequestStub.returns({
+      params: {
+        keyId: 'http://<script>alert("xss")</script>',
+        signature: 'validSignature',
+        headers: ['(request-target)', 'host', 'date'],
+      },
+    } as any);
+
+    await verifyHttpSignature(req as Request, res as Response, next as any);
+
+    expect(axiosGetStub.called).toBe(false);
+    expect(res.status.calledWith(401)).toBe(true);
+    expect(res.json.calledWith({ error: 'Could not retrieve public key' })).toBe(true);
+    expect(next.called).toBe(false);
+  });
+
   it('should reject when signature verification fails', async () => {
     parseRequestStub.returns({
       params: {
@@ -279,6 +347,40 @@ describe('HTTP Signature Verification', () => {
 
     await verifyHttpSignature(req as Request, res as Response, next as any);
 
+    expect(res.status.calledWith(403)).toBe(true);
+    expect(res.json.calledWith({ error: 'Actor does not have permission for this operation' })).toBe(true);
+    expect(next.called).toBe(false);
+  });
+
+  it('should reject when actor URL attempts startsWith bypass', async () => {
+    // Test for security vulnerability: actor URL that starts with legitimate actor but has extra characters
+    // This should be rejected with the fix (using exact match instead of startsWith)
+    req.body = { actor: 'https://example.com/users/someactor-fake' };
+
+    parseRequestStub.returns({
+      params: {
+        keyId: 'https://example.com/users/someactor#main-key',
+        signature: 'validSignature',
+        headers: ['(request-target)', 'host', 'date'],
+      },
+    } as any);
+
+    // Configure successful public key retrieval
+    axiosGetStub.resolves({
+      status: 200,
+      data: {
+        publicKey: {
+          publicKeyPem: '-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0Rdj53hR\n-----END PUBLIC KEY-----',
+        },
+      },
+    });
+
+    // Configure successful signature verification
+    verifySignatureStub.returns(true);
+
+    await verifyHttpSignature(req as Request, res as Response, next as any);
+
+    // Should reject because actor does not exactly match
     expect(res.status.calledWith(403)).toBe(true);
     expect(res.json.calledWith({ error: 'Actor does not have permission for this operation' })).toBe(true);
     expect(next.called).toBe(false);
@@ -461,6 +563,168 @@ describe('HTTP Signature Verification', () => {
 
       // Verify next was never called
       expect(next.called).toBe(false);
+    });
+  });
+
+  describe('SSRF Protection - Private IP Blocking', () => {
+    it('should reject keyId with private IPv4 address (10.0.0.0/8)', async () => {
+      parseRequestStub.returns({
+        params: {
+          keyId: 'http://10.0.0.1/users/someactor#main-key',
+          signature: 'validSignature',
+          headers: ['(request-target)', 'host', 'date'],
+        },
+      } as any);
+
+      await verifyHttpSignature(req as Request, res as Response, next as any);
+
+      // Should reject without making any network requests
+      expect(axiosGetStub.called).toBe(false);
+      expect(res.status.calledWith(401)).toBe(true);
+      expect(res.json.calledWith({ error: 'Could not retrieve public key' })).toBe(true);
+      expect(next.called).toBe(false);
+    });
+
+    it('should reject keyId with private IPv4 address (192.168.0.0/16)', async () => {
+      parseRequestStub.returns({
+        params: {
+          keyId: 'http://192.168.1.1/users/someactor#main-key',
+          signature: 'validSignature',
+          headers: ['(request-target)', 'host', 'date'],
+        },
+      } as any);
+
+      await verifyHttpSignature(req as Request, res as Response, next as any);
+
+      expect(axiosGetStub.called).toBe(false);
+      expect(res.status.calledWith(401)).toBe(true);
+      expect(res.json.calledWith({ error: 'Could not retrieve public key' })).toBe(true);
+      expect(next.called).toBe(false);
+    });
+
+    it('should reject keyId with loopback address (127.0.0.1)', async () => {
+      parseRequestStub.returns({
+        params: {
+          keyId: 'http://127.0.0.1:3000/users/someactor#main-key',
+          signature: 'validSignature',
+          headers: ['(request-target)', 'host', 'date'],
+        },
+      } as any);
+
+      await verifyHttpSignature(req as Request, res as Response, next as any);
+
+      expect(axiosGetStub.called).toBe(false);
+      expect(res.status.calledWith(401)).toBe(true);
+      expect(res.json.calledWith({ error: 'Could not retrieve public key' })).toBe(true);
+      expect(next.called).toBe(false);
+    });
+
+    it('should reject keyId with link-local address (169.254.169.254 - AWS metadata)', async () => {
+      parseRequestStub.returns({
+        params: {
+          keyId: 'http://169.254.169.254/latest/meta-data',
+          signature: 'validSignature',
+          headers: ['(request-target)', 'host', 'date'],
+        },
+      } as any);
+
+      await verifyHttpSignature(req as Request, res as Response, next as any);
+
+      expect(axiosGetStub.called).toBe(false);
+      expect(res.status.calledWith(401)).toBe(true);
+      expect(res.json.calledWith({ error: 'Could not retrieve public key' })).toBe(true);
+      expect(next.called).toBe(false);
+    });
+
+    it('should reject keyId with private IPv6 address (::1)', async () => {
+      parseRequestStub.returns({
+        params: {
+          keyId: 'http://[::1]/users/someactor#main-key',
+          signature: 'validSignature',
+          headers: ['(request-target)', 'host', 'date'],
+        },
+      } as any);
+
+      await verifyHttpSignature(req as Request, res as Response, next as any);
+
+      expect(axiosGetStub.called).toBe(false);
+      expect(res.status.calledWith(401)).toBe(true);
+      expect(res.json.calledWith({ error: 'Could not retrieve public key' })).toBe(true);
+      expect(next.called).toBe(false);
+    });
+
+    it('should reject keyId with IPv6 link-local address (fe80::)', async () => {
+      parseRequestStub.returns({
+        params: {
+          keyId: 'http://[fe80::1]/users/someactor#main-key',
+          signature: 'validSignature',
+          headers: ['(request-target)', 'host', 'date'],
+        },
+      } as any);
+
+      await verifyHttpSignature(req as Request, res as Response, next as any);
+
+      expect(axiosGetStub.called).toBe(false);
+      expect(res.status.calledWith(401)).toBe(true);
+      expect(res.json.calledWith({ error: 'Could not retrieve public key' })).toBe(true);
+      expect(next.called).toBe(false);
+    });
+
+    it('should reject when publicKey URL in actor object points to private IP', async () => {
+      parseRequestStub.returns({
+        params: {
+          keyId: 'https://example.com/users/someactor#main-key',
+          signature: 'validSignature',
+          headers: ['(request-target)', 'host', 'date'],
+        },
+      } as any);
+
+      // First call returns actor object with private IP for publicKey
+      axiosGetStub.onFirstCall().resolves({
+        status: 200,
+        data: {
+          publicKey: 'http://192.168.1.1/key', // Private IP in publicKey URL
+        },
+      });
+
+      await verifyHttpSignature(req as Request, res as Response, next as any);
+
+      // Should make first call but reject before second call
+      expect(axiosGetStub.callCount).toBe(1);
+      expect(res.status.calledWith(401)).toBe(true);
+      expect(res.json.calledWith({ error: 'Could not retrieve public key' })).toBe(true);
+      expect(next.called).toBe(false);
+    });
+
+    it('should allow keyId with public IP address', async () => {
+      // Update request body to match the keyId domain
+      req.body = { actor: 'https://8.8.8.8/users/someactor' };
+
+      parseRequestStub.returns({
+        params: {
+          keyId: 'https://8.8.8.8/users/someactor#main-key',
+          signature: 'validSignature',
+          headers: ['(request-target)', 'host', 'date'],
+        },
+      } as any);
+
+      // Configure successful public key retrieval
+      axiosGetStub.resolves({
+        status: 200,
+        data: {
+          publicKey: {
+            publicKeyPem: '-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0Rdj53hR\n-----END PUBLIC KEY-----',
+          },
+        },
+      });
+
+      // Configure successful signature verification
+      verifySignatureStub.returns(true);
+
+      await verifyHttpSignature(req as Request, res as Response, next as any);
+
+      expect(axiosGetStub.called).toBe(true);
+      expect(next.called).toBe(true);
     });
   });
 });

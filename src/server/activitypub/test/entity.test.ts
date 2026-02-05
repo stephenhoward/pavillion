@@ -19,42 +19,84 @@ describe('toModel', () => {
 
   it('should make a create message', async () => {
 
-    let testEntity = ActivityPubInboxMessageEntity.build({ id: 'testId1', type: 'Create', message: { object: { id: 'testObjectId' } }});
+    let testEntity = ActivityPubInboxMessageEntity.build({
+      id: 'testId1',
+      type: 'Create',
+      message: {
+        actor: 'https://example.com/users/1',
+        object: { id: 'testObjectId' }
+      }
+    });
 
     assertType<CreateActivity>( testEntity.toModel() );
   });
 
   it('should make an update message', async () => {
 
-    let testEntity = ActivityPubInboxMessageEntity.build({ id: 'testId1', type: 'Update', message: { object: { id: 'testObjectId' } } });
+    let testEntity = ActivityPubInboxMessageEntity.build({
+      id: 'testId1',
+      type: 'Update',
+      message: {
+        actor: 'https://example.com/users/1',
+        object: { id: 'testObjectId' }
+      }
+    });
 
     assertType<UpdateActivity>( testEntity.toModel() );
   });
 
   it('should make a delete message', async () => {
 
-    let testEntity = ActivityPubInboxMessageEntity.build({ id: 'testId1', type: 'Delete', message: {} });
+    let testEntity = ActivityPubInboxMessageEntity.build({
+      id: 'testId1',
+      type: 'Delete',
+      message: {
+        actor: 'https://example.com/users/1',
+        object: 'https://example.com/events/1'
+      }
+    });
 
     assertType<DeleteActivity>( testEntity.toModel() );
   });
 
   it('should make a follow message', async () => {
 
-    let testEntity = ActivityPubInboxMessageEntity.build({ id: 'testId1', type: 'Follow', message: {} });
+    let testEntity = ActivityPubInboxMessageEntity.build({
+      id: 'testId1',
+      type: 'Follow',
+      message: {
+        actor: 'https://example.com/users/1',
+        object: 'https://example.com/users/2'
+      }
+    });
 
     assertType<FollowActivity>( testEntity.toModel() );
   });
 
   it('should make an announce message', async () => {
 
-    let testEntity = ActivityPubInboxMessageEntity.build({id: 'testId1', type: 'Announce', message: {} });
+    let testEntity = ActivityPubInboxMessageEntity.build({
+      id: 'testId1',
+      type: 'Announce',
+      message: {
+        actor: 'https://example.com/users/1',
+        object: 'https://example.com/events/1'
+      }
+    });
 
     assertType<AnnounceActivity>( testEntity.toModel() );
   });
 
   it('should make an undo message', async () => {
 
-    let testEntity = ActivityPubInboxMessageEntity.build({ id: 'testId1', type: 'Undo', message: {} });
+    let testEntity = ActivityPubInboxMessageEntity.build({
+      id: 'testId1',
+      type: 'Undo',
+      message: {
+        actor: 'https://example.com/users/1',
+        object: 'https://example.com/activities/follow/1'
+      }
+    });
 
     assertType<UndoActivity>( testEntity.toModel() );
   });

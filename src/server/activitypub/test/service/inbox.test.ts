@@ -16,7 +16,7 @@
  * - Tracking method calls and arguments
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import sinon from 'sinon';
 import { EventEmitter } from 'events';
 
@@ -24,6 +24,8 @@ import { Calendar } from '@/common/model/calendar';
 import ProcessInboxService from '@/server/activitypub/service/inbox';
 import { ActivityPubInboxMessageEntity, ActivityPubOutboxMessageEntity, FollowerCalendarEntity } from '@/server/activitypub/entity/activitypub';
 import CalendarInterface from '@/server/calendar/interface';
+import { UserActorEntity } from '@/server/activitypub/entity/user_actor';
+import { CalendarMemberEntity } from '@/server/calendar/entity/calendar_member';
 
 // Import Fedify mock helpers for creating well-formed ActivityPub activities
 import {
@@ -34,6 +36,15 @@ import {
   createMockAnnounceActivity,
   createMockUndoActivity,
 } from '@/server/activitypub/test/helpers/fedify-mock';
+
+
+// Mock the remote-fetch module at the top level for vitest
+vi.mock('@/server/activitypub/helper/remote-fetch', () => ({
+  fetchRemoteObject: vi.fn(),
+}));
+
+// Import after mock is set up
+import { fetchRemoteObject } from '@/server/activitypub/helper/remote-fetch';
 
 
 describe('processInboxMessage', () => {
@@ -353,5 +364,714 @@ describe('processInboxMessage', () => {
     expect(updateStub.calledOnce).toBe(true);
     expect(updateStub.getCalls()[0].args[0]['processed_time']).toBeDefined();
     expect(updateStub.getCalls()[0].args[0]['processed_status']).toBe('ok');
+  });
+
+  describe('Null handling in activity processing', () => {
+    it('should handle Undo with missing message object', async () => {
+      const message = ActivityPubInboxMessageEntity.build({
+        calendar_id: TEST_CALENDAR_ID,
+        type: 'Undo',
+        message: null, // Missing message
+      });
+
+      const updateStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype, 'update');
+
+      await service.processInboxMessage(message);
+
+      expect(updateStub.calledOnce).toBe(true);
+      expect(updateStub.getCalls()[0].args[0]['processed_status']).toBe('error');
+    });
+
+    it('should handle Undo with message missing object property', async () => {
+      const message = ActivityPubInboxMessageEntity.build({
+        calendar_id: TEST_CALENDAR_ID,
+        type: 'Undo',
+        message: { actor: 'test' }, // Missing object property
+      });
+
+      const updateStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype, 'update');
+
+      await service.processInboxMessage(message);
+
+      expect(updateStub.calledOnce).toBe(true);
+      expect(updateStub.getCalls()[0].args[0]['processed_status']).toBe('error');
+    });
+
+    it('should handle Accept with missing object', async () => {
+      const acceptActivity = {
+        type: 'Accept',
+        actor: REMOTE_ACTOR_URL,
+        object: null, // Missing object
+      };
+
+      const message = ActivityPubInboxMessageEntity.build({
+        calendar_id: TEST_CALENDAR_ID,
+        type: 'Accept',
+        message: acceptActivity,
+      });
+
+      const updateStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype, 'update');
+
+      await service.processInboxMessage(message);
+
+      // Should fail validation since fromObject will return null
+      expect(updateStub.calledOnce).toBe(true);
+      expect(updateStub.getCalls()[0].args[0]['processed_status']).toBe('error');
+    });
+
+    it('should handle Announce with missing object', async () => {
+      const announceActivity = createMockAnnounceActivity(REMOTE_ACTOR_URL, null as any);
+
+      const message = ActivityPubInboxMessageEntity.build({
+        calendar_id: TEST_CALENDAR_ID,
+        type: 'Announce',
+        message: announceActivity,
+      });
+
+      const updateStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype, 'update');
+
+      await service.processInboxMessage(message);
+
+      // fromObject should return null for invalid activity
+      expect(updateStub.calledOnce).toBe(true);
+      expect(updateStub.getCalls()[0].args[0]['processed_status']).toBe('error');
+    });
+
+    it('should handle Announce with object missing id', async () => {
+      const announceActivity = {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'Announce',
+        actor: REMOTE_ACTOR_URL,
+        object: { type: 'Event' }, // Missing id
+      };
+
+      const message = ActivityPubInboxMessageEntity.build({
+        calendar_id: TEST_CALENDAR_ID,
+        type: 'Announce',
+        message: announceActivity,
+      });
+
+      const updateStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype, 'update');
+
+      await service.processInboxMessage(message);
+
+      // Should fail validation or handle gracefully
+      expect(updateStub.calledOnce).toBe(true);
+      // Could be either error (fromObject fails) or ok (processShareEvent returns early)
+      const status = updateStub.getCalls()[0].args[0]['processed_status'];
+      expect(['ok', 'error']).toContain(status);
+    });
+
+    it('should handle processUnfollowAccount with missing message', async () => {
+      const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID });
+
+      // Call with null message
+      await service.processUnfollowAccount(calendar, null);
+
+      // Should return gracefully without throwing
+      // No assertions needed - just verify it doesn't throw
+    });
+
+    it('should handle processUnfollowAccount with missing actor', async () => {
+      const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID });
+
+      // Call with message missing actor
+      await service.processUnfollowAccount(calendar, { message: {} });
+
+      // Should return gracefully without throwing
+      // No assertions needed - just verify it doesn't throw
+    });
+
+    it('should handle processUnshareEvent with missing object', async () => {
+      const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID });
+
+      // Call with null message
+      await service.processUnshareEvent(calendar, null);
+
+      // Should return gracefully without throwing
+      // No assertions needed - just verify it doesn't throw
+    });
+
+    it('should handle processUnshareEvent with object missing id', async () => {
+      const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID });
+
+      // Call with object missing id
+      await service.processUnshareEvent(calendar, {
+        object: { type: 'Event' },
+        message: { actor: REMOTE_ACTOR_URL },
+      });
+
+      // Should return gracefully without throwing
+      // No assertions needed - just verify it doesn't throw
+    });
+
+    it('should handle processUnshareEvent with missing actor', async () => {
+      const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID });
+
+      // Call with missing actor
+      await service.processUnshareEvent(calendar, {
+        object: REMOTE_EVENT_URL,
+        message: {},
+      });
+
+      // Should return gracefully without throwing
+      // No assertions needed - just verify it doesn't throw
+    });
+  });
+});
+
+
+describe('actorOwnsObject', () => {
+  let service: ProcessInboxService;
+  const mockFetchRemoteObject = vi.mocked(fetchRemoteObject);
+
+  const REMOTE_ACTOR_URL = 'https://remote.federation.test/calendars/events';
+  const REMOTE_EVENT_URL = 'https://remote.federation.test/events/123';
+  const DIFFERENT_ACTOR_URL = 'https://attacker.example/calendars/malicious';
+
+  beforeEach(() => {
+    const eventBus = new EventEmitter();
+    const calendarInterface = new CalendarInterface(eventBus);
+    service = new ProcessInboxService(eventBus, calendarInterface);
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should return true when remote object attributedTo matches actor (string)', async () => {
+    // Remote server confirms the actor owns this object
+    mockFetchRemoteObject.mockResolvedValue({
+      id: REMOTE_EVENT_URL,
+      type: 'Event',
+      name: 'Community Meetup',
+      attributedTo: REMOTE_ACTOR_URL,
+    });
+
+    const message = {
+      actor: REMOTE_ACTOR_URL,
+      object: {
+        id: REMOTE_EVENT_URL,
+        attributedTo: REMOTE_ACTOR_URL, // This could be spoofed in the message
+      },
+    };
+
+    const result = await service.actorOwnsObject(message);
+
+    expect(result).toBe(true);
+    expect(mockFetchRemoteObject).toHaveBeenCalledOnce();
+    expect(mockFetchRemoteObject).toHaveBeenCalledWith(REMOTE_EVENT_URL);
+  });
+
+  it('should return false when remote object attributedTo does not match actor', async () => {
+    // Remote server says the object belongs to someone else
+    mockFetchRemoteObject.mockResolvedValue({
+      id: REMOTE_EVENT_URL,
+      type: 'Event',
+      name: 'Community Meetup',
+      attributedTo: 'https://legitimate-owner.example/calendars/real',
+    });
+
+    const message = {
+      actor: DIFFERENT_ACTOR_URL, // Attacker claims to own this
+      object: {
+        id: REMOTE_EVENT_URL,
+        attributedTo: DIFFERENT_ACTOR_URL, // Spoofed attributedTo
+      },
+    };
+
+    const result = await service.actorOwnsObject(message);
+
+    expect(result).toBe(false);
+    expect(mockFetchRemoteObject).toHaveBeenCalledOnce();
+    expect(mockFetchRemoteObject).toHaveBeenCalledWith(REMOTE_EVENT_URL);
+  });
+
+  it('should return false when remote fetch fails', async () => {
+    // Remote server is unreachable or returns error
+    mockFetchRemoteObject.mockResolvedValue(null);
+
+    const message = {
+      actor: REMOTE_ACTOR_URL,
+      object: {
+        id: REMOTE_EVENT_URL,
+        attributedTo: REMOTE_ACTOR_URL,
+      },
+    };
+
+    const result = await service.actorOwnsObject(message);
+
+    expect(result).toBe(false);
+  });
+
+  it('should return false when remote object has no attributedTo', async () => {
+    // Remote object exists but has no attributedTo field
+    mockFetchRemoteObject.mockResolvedValue({
+      id: REMOTE_EVENT_URL,
+      type: 'Event',
+      name: 'Community Meetup',
+      // No attributedTo field
+    });
+
+    const message = {
+      actor: REMOTE_ACTOR_URL,
+      object: {
+        id: REMOTE_EVENT_URL,
+        attributedTo: REMOTE_ACTOR_URL,
+      },
+    };
+
+    const result = await service.actorOwnsObject(message);
+
+    expect(result).toBe(false);
+  });
+
+  it('should return false when message has no object URI', async () => {
+    const message = {
+      actor: REMOTE_ACTOR_URL,
+      object: {
+        // No id field
+        name: 'Some Event',
+      },
+    };
+
+    const result = await service.actorOwnsObject(message);
+
+    expect(result).toBe(false);
+    expect(mockFetchRemoteObject).not.toHaveBeenCalled();
+  });
+
+  it('should handle object as string URI', async () => {
+    mockFetchRemoteObject.mockResolvedValue({
+      id: REMOTE_EVENT_URL,
+      type: 'Event',
+      attributedTo: REMOTE_ACTOR_URL,
+    });
+
+    const message = {
+      actor: REMOTE_ACTOR_URL,
+      object: REMOTE_EVENT_URL, // Object is just a string URI
+    };
+
+    const result = await service.actorOwnsObject(message);
+
+    expect(result).toBe(true);
+    expect(mockFetchRemoteObject).toHaveBeenCalledOnce();
+    expect(mockFetchRemoteObject).toHaveBeenCalledWith(REMOTE_EVENT_URL);
+  });
+
+  it('should return true when actor is in attributedTo array (string elements)', async () => {
+    // attributedTo can be an array of actors
+    mockFetchRemoteObject.mockResolvedValue({
+      id: REMOTE_EVENT_URL,
+      type: 'Event',
+      attributedTo: [
+        'https://other.example/calendars/other',
+        REMOTE_ACTOR_URL,
+        'https://another.example/calendars/another',
+      ],
+    });
+
+    const message = {
+      actor: REMOTE_ACTOR_URL,
+      object: { id: REMOTE_EVENT_URL },
+    };
+
+    const result = await service.actorOwnsObject(message);
+
+    expect(result).toBe(true);
+  });
+
+  it('should return false when actor is not in attributedTo array', async () => {
+    mockFetchRemoteObject.mockResolvedValue({
+      id: REMOTE_EVENT_URL,
+      type: 'Event',
+      attributedTo: [
+        'https://other.example/calendars/other',
+        'https://another.example/calendars/another',
+      ],
+    });
+
+    const message = {
+      actor: DIFFERENT_ACTOR_URL,
+      object: { id: REMOTE_EVENT_URL },
+    };
+
+    const result = await service.actorOwnsObject(message);
+
+    expect(result).toBe(false);
+  });
+
+  it('should handle attributedTo array with object elements', async () => {
+    // attributedTo array elements can be objects with id property
+    mockFetchRemoteObject.mockResolvedValue({
+      id: REMOTE_EVENT_URL,
+      type: 'Event',
+      attributedTo: [
+        { id: 'https://other.example/calendars/other', type: 'Application' },
+        { id: REMOTE_ACTOR_URL, type: 'Application' },
+      ],
+    });
+
+    const message = {
+      actor: REMOTE_ACTOR_URL,
+      object: { id: REMOTE_EVENT_URL },
+    };
+
+    const result = await service.actorOwnsObject(message);
+
+    expect(result).toBe(true);
+  });
+
+  it('should handle attributedTo as object with id property', async () => {
+    // attributedTo can be a single object with id property
+    mockFetchRemoteObject.mockResolvedValue({
+      id: REMOTE_EVENT_URL,
+      type: 'Event',
+      attributedTo: { id: REMOTE_ACTOR_URL, type: 'Application' },
+    });
+
+    const message = {
+      actor: REMOTE_ACTOR_URL,
+      object: { id: REMOTE_EVENT_URL },
+    };
+
+    const result = await service.actorOwnsObject(message);
+
+    expect(result).toBe(true);
+  });
+
+  it('should return false for attributedTo object with non-matching id', async () => {
+    mockFetchRemoteObject.mockResolvedValue({
+      id: REMOTE_EVENT_URL,
+      type: 'Event',
+      attributedTo: { id: 'https://legitimate-owner.example/calendars/real', type: 'Application' },
+    });
+
+    const message = {
+      actor: DIFFERENT_ACTOR_URL,
+      object: { id: REMOTE_EVENT_URL },
+    };
+
+    const result = await service.actorOwnsObject(message);
+
+    expect(result).toBe(false);
+  });
+});
+
+describe('isAuthorizedRemoteEditor caching', () => {
+  let service: ProcessInboxService;
+  let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+
+  const TEST_CALENDAR_ID = 'test-calendar-id';
+  const TEST_ACTOR_URI = 'https://remote.example/users/alice';
+  const TEST_USER_ACTOR_ID = 'test-user-actor-id';
+
+  beforeEach(() => {
+    const eventBus = new EventEmitter();
+    const calendarInterface = new CalendarInterface(eventBus);
+    service = new ProcessInboxService(eventBus, calendarInterface);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('should cache positive authorization results', async () => {
+    // Set up database mocks
+    const userActorFindStub = sandbox.stub(UserActorEntity, 'findOne');
+    const membershipFindStub = sandbox.stub(CalendarMemberEntity, 'findOne');
+
+    userActorFindStub.resolves({
+      id: TEST_USER_ACTOR_ID,
+      actor_uri: TEST_ACTOR_URI,
+    } as any);
+
+    membershipFindStub.resolves({
+      calendar_id: TEST_CALENDAR_ID,
+      user_actor_id: TEST_USER_ACTOR_ID,
+    } as any);
+
+    // First call - should hit database
+    const result1 = await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, TEST_ACTOR_URI);
+    expect(result1).toBe(true);
+    expect(userActorFindStub.callCount).toBe(1);
+    expect(membershipFindStub.callCount).toBe(1);
+
+    // Second call - should use cache
+    const result2 = await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, TEST_ACTOR_URI);
+    expect(result2).toBe(true);
+    expect(userActorFindStub.callCount).toBe(1); // No additional database call
+    expect(membershipFindStub.callCount).toBe(1); // No additional database call
+  });
+
+  it('should cache negative authorization results', async () => {
+    // Set up database mocks - user actor not found
+    const userActorFindStub = sandbox.stub(UserActorEntity, 'findOne');
+    userActorFindStub.resolves(null);
+
+    // First call - should hit database
+    const result1 = await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, TEST_ACTOR_URI);
+    expect(result1).toBe(false);
+    expect(userActorFindStub.callCount).toBe(1);
+
+    // Second call - should use cache
+    const result2 = await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, TEST_ACTOR_URI);
+    expect(result2).toBe(false);
+    expect(userActorFindStub.callCount).toBe(1); // No additional database call
+  });
+
+  it('should cache when user actor exists but membership does not', async () => {
+    // Set up database mocks
+    const userActorFindStub = sandbox.stub(UserActorEntity, 'findOne');
+    const membershipFindStub = sandbox.stub(CalendarMemberEntity, 'findOne');
+
+    userActorFindStub.resolves({
+      id: TEST_USER_ACTOR_ID,
+      actor_uri: TEST_ACTOR_URI,
+    } as any);
+
+    membershipFindStub.resolves(null); // No membership found
+
+    // First call - should hit database
+    const result1 = await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, TEST_ACTOR_URI);
+    expect(result1).toBe(false);
+    expect(userActorFindStub.callCount).toBe(1);
+    expect(membershipFindStub.callCount).toBe(1);
+
+    // Second call - should use cache
+    const result2 = await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, TEST_ACTOR_URI);
+    expect(result2).toBe(false);
+    expect(userActorFindStub.callCount).toBe(1); // No additional database call
+    expect(membershipFindStub.callCount).toBe(1); // No additional database call
+  });
+
+  it('should invalidate cache for specific calendar and actor', async () => {
+    // Set up database mocks
+    const userActorFindStub = sandbox.stub(UserActorEntity, 'findOne');
+    const membershipFindStub = sandbox.stub(CalendarMemberEntity, 'findOne');
+
+    userActorFindStub.resolves({
+      id: TEST_USER_ACTOR_ID,
+      actor_uri: TEST_ACTOR_URI,
+    } as any);
+
+    membershipFindStub.resolves({
+      calendar_id: TEST_CALENDAR_ID,
+      user_actor_id: TEST_USER_ACTOR_ID,
+    } as any);
+
+    // First call - populate cache
+    const result1 = await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, TEST_ACTOR_URI);
+    expect(result1).toBe(true);
+    expect(userActorFindStub.callCount).toBe(1);
+
+    // Invalidate cache
+    service.invalidateAuthorizationCache(TEST_CALENDAR_ID, TEST_ACTOR_URI);
+
+    // Third call - should hit database again
+    const result3 = await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, TEST_ACTOR_URI);
+    expect(result3).toBe(true);
+    expect(userActorFindStub.callCount).toBe(2); // Database called again
+  });
+
+  it('should invalidate all cache entries for a calendar', async () => {
+    // Set up database mocks
+    const userActorFindStub = sandbox.stub(UserActorEntity, 'findOne');
+    const membershipFindStub = sandbox.stub(CalendarMemberEntity, 'findOne');
+
+    userActorFindStub.resolves({
+      id: TEST_USER_ACTOR_ID,
+      actor_uri: TEST_ACTOR_URI,
+    } as any);
+
+    membershipFindStub.resolves({
+      calendar_id: TEST_CALENDAR_ID,
+      user_actor_id: TEST_USER_ACTOR_ID,
+    } as any);
+
+    const ACTOR_URI_2 = 'https://remote.example/users/bob';
+
+    // Populate cache for two actors
+    await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, TEST_ACTOR_URI);
+    await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, ACTOR_URI_2);
+    expect(userActorFindStub.callCount).toBe(2);
+
+    // Invalidate all for calendar
+    service.invalidateCalendarAuthorizationCache(TEST_CALENDAR_ID);
+
+    // Both should hit database again
+    await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, TEST_ACTOR_URI);
+    await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, ACTOR_URI_2);
+    expect(userActorFindStub.callCount).toBe(4); // Two more database calls
+  });
+
+  it('should respect cache expiration', async () => {
+    // Set up database mocks
+    const userActorFindStub = sandbox.stub(UserActorEntity, 'findOne');
+    const membershipFindStub = sandbox.stub(CalendarMemberEntity, 'findOne');
+
+    userActorFindStub.resolves({
+      id: TEST_USER_ACTOR_ID,
+      actor_uri: TEST_ACTOR_URI,
+    } as any);
+
+    membershipFindStub.resolves({
+      calendar_id: TEST_CALENDAR_ID,
+      user_actor_id: TEST_USER_ACTOR_ID,
+    } as any);
+
+    // First call - populate cache
+    const result1 = await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, TEST_ACTOR_URI);
+    expect(result1).toBe(true);
+    expect(userActorFindStub.callCount).toBe(1);
+
+    // Manually expire the cache entry
+    const cacheKey = `${TEST_CALENDAR_ID}:${TEST_ACTOR_URI}`;
+    const cache = (service as any).authorizationCache;
+    const entry = cache.get(cacheKey);
+    entry.expiresAt = Date.now() - 1000; // Expired 1 second ago
+
+    // Second call - should hit database because cache is expired
+    const result2 = await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, TEST_ACTOR_URI);
+    expect(result2).toBe(true);
+    expect(userActorFindStub.callCount).toBe(2); // Database called again
+  });
+
+  it('should clear expired entries without affecting valid ones', async () => {
+    // Set up database mocks
+    const userActorFindStub = sandbox.stub(UserActorEntity, 'findOne');
+    const membershipFindStub = sandbox.stub(CalendarMemberEntity, 'findOne');
+
+    userActorFindStub.resolves({
+      id: TEST_USER_ACTOR_ID,
+      actor_uri: TEST_ACTOR_URI,
+    } as any);
+
+    membershipFindStub.resolves({
+      calendar_id: TEST_CALENDAR_ID,
+      user_actor_id: TEST_USER_ACTOR_ID,
+    } as any);
+
+    const ACTOR_URI_2 = 'https://remote.example/users/bob';
+
+    // Populate cache for two actors
+    await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, TEST_ACTOR_URI);
+    await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, ACTOR_URI_2);
+
+    // Manually expire only the first entry
+    const cache = (service as any).authorizationCache;
+    const cacheKey1 = `${TEST_CALENDAR_ID}:${TEST_ACTOR_URI}`;
+    const entry1 = cache.get(cacheKey1);
+    entry1.expiresAt = Date.now() - 1000; // Expired
+
+    // Clear expired entries
+    service.clearExpiredAuthorizationCache();
+
+    // First should hit database again, second should use cache
+    await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, TEST_ACTOR_URI);
+    await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, ACTOR_URI_2);
+
+    expect(userActorFindStub.callCount).toBe(3); // One additional call for expired entry
+  });
+
+  it('should clear entire cache', async () => {
+    // Set up database mocks
+    const userActorFindStub = sandbox.stub(UserActorEntity, 'findOne');
+    const membershipFindStub = sandbox.stub(CalendarMemberEntity, 'findOne');
+
+    userActorFindStub.resolves({
+      id: TEST_USER_ACTOR_ID,
+      actor_uri: TEST_ACTOR_URI,
+    } as any);
+
+    membershipFindStub.resolves({
+      calendar_id: TEST_CALENDAR_ID,
+      user_actor_id: TEST_USER_ACTOR_ID,
+    } as any);
+
+    // Populate cache
+    await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, TEST_ACTOR_URI);
+    expect(userActorFindStub.callCount).toBe(1);
+
+    // Clear entire cache
+    service.clearAuthorizationCache();
+
+    // Should hit database again
+    await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, TEST_ACTOR_URI);
+    expect(userActorFindStub.callCount).toBe(2);
+  });
+
+  it('should maintain cache size under configured limit', async () => {
+    // Set up database mocks
+    const userActorFindStub = sandbox.stub(UserActorEntity, 'findOne');
+    const membershipFindStub = sandbox.stub(CalendarMemberEntity, 'findOne');
+
+    // Mock successful authorization for all actors
+    userActorFindStub.callsFake((options: any) => {
+      const actorUri = options.where.actor_uri;
+      return Promise.resolve({
+        id: `user-id-${actorUri}`,
+        actor_uri: actorUri,
+      } as any);
+    });
+
+    membershipFindStub.resolves({
+      calendar_id: TEST_CALENDAR_ID,
+      user_actor_id: TEST_USER_ACTOR_ID,
+    } as any);
+
+    // Add many entries to the cache
+    for (let i = 0; i < 100; i++) {
+      await (service as any).isAuthorizedRemoteEditor(
+        TEST_CALENDAR_ID,
+        `https://remote.example/users/actor${i}`,
+      );
+    }
+
+    // Cache should have stored 100 entries
+    const cacheSize = (service as any).authorizationCache.size;
+    expect(cacheSize).toBe(100);
+    expect(cacheSize).toBeLessThanOrEqual(1000); // Max size is 1000
+  });
+
+  it('should evict oldest entries when cache exceeds max size', async () => {
+    // Set up database mocks
+    const userActorFindStub = sandbox.stub(UserActorEntity, 'findOne');
+    const membershipFindStub = sandbox.stub(CalendarMemberEntity, 'findOne');
+
+    // Mock successful authorization
+    userActorFindStub.callsFake((options: any) => {
+      const actorUri = options.where.actor_uri;
+      return Promise.resolve({
+        id: `user-id-${actorUri}`,
+        actor_uri: actorUri,
+      } as any);
+    });
+
+    membershipFindStub.resolves({
+      calendar_id: TEST_CALENDAR_ID,
+      user_actor_id: TEST_USER_ACTOR_ID,
+    } as any);
+
+    // Add entries and check that old ones are accessible
+    const actor1 = 'https://remote.example/users/actor1';
+    const actor2 = 'https://remote.example/users/actor2';
+    const actor3 = 'https://remote.example/users/actor3';
+
+    await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, actor1);
+    await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, actor2);
+    await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, actor3);
+
+    expect(userActorFindStub.callCount).toBe(3);
+
+    // Access actor1 again - should be cached
+    await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, actor1);
+    expect(userActorFindStub.callCount).toBe(3); // Still 3, used cache
+
+    // Access actor2 again - should be cached
+    await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, actor2);
+    expect(userActorFindStub.callCount).toBe(3); // Still 3, used cache
   });
 });

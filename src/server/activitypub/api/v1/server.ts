@@ -9,6 +9,20 @@ import UndoActivity from '@/server/activitypub/model/action/undo';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import CalendarInterface from '@/server/calendar/interface';
 import { verifyHttpSignature } from '@/server/activitypub/helper/http_signature';
+import {
+  createActorRateLimiter,
+  createCalendarRateLimiter,
+} from '@/server/activitypub/middleware/rate-limit';
+import {
+  actorUriSchema,
+  createActivitySchema,
+  updateActivitySchema,
+  deleteActivitySchema,
+  followActivitySchema,
+  acceptActivitySchema,
+  announceActivitySchema,
+  undoActivitySchema,
+} from '@/server/activitypub/validation/schemas';
 
 /**
  * Routes for the ActivityPub Server to Server API
@@ -35,7 +49,11 @@ export default class ActivityPubServerRoutes {
     router.get('/calendars/:urlname', this.getCalendarActor.bind(this));
     router.get('/calendars/:urlname/events/:eventid', this.getEvent.bind(this));
     router.get('/calendars/:urlname/outbox', this.readOutbox.bind(this));
-    router.post('/calendars/:urlname/inbox', verifyHttpSignature as RequestHandler, this.addToInbox.bind(this));
+    router.post('/calendars/:urlname/inbox',
+      createActorRateLimiter(),
+      createCalendarRateLimiter(),
+      verifyHttpSignature as RequestHandler,
+      this.addToInbox.bind(this));
 
     app.use(routePrefix, router);
   }
@@ -179,8 +197,60 @@ export default class ActivityPubServerRoutes {
     console.log(`[INBOX] Received activity type: ${req.body.type} for calendar ${calendarName}`);
     console.log(`[INBOX] Activity body:`, JSON.stringify(req.body, null, 2));
 
-    // Check if this is from a Person actor (for synchronous processing)
+    // Validate actor URI
     const actorUri = req.body.actor;
+    const actorValidation = actorUriSchema.safeParse(actorUri);
+    if (!actorValidation.success) {
+      console.error(`[INBOX] Invalid actor URI:`, actorValidation.error.issues);
+      res.status(400).json({
+        error: 'Invalid actor URI',
+        details: actorValidation.error.issues,
+      });
+      return;
+    }
+
+    // Validate activity based on type
+    let activityValidation;
+    switch (req.body.type) {
+      case 'Create':
+        activityValidation = createActivitySchema.safeParse(req.body);
+        break;
+      case 'Update':
+        activityValidation = updateActivitySchema.safeParse(req.body);
+        break;
+      case 'Delete':
+        activityValidation = deleteActivitySchema.safeParse(req.body);
+        break;
+      case 'Follow':
+        activityValidation = followActivitySchema.safeParse(req.body);
+        break;
+      case 'Accept':
+        activityValidation = acceptActivitySchema.safeParse(req.body);
+        break;
+      case 'Announce':
+        activityValidation = announceActivitySchema.safeParse(req.body);
+        break;
+      case 'Undo':
+        activityValidation = undoActivitySchema.safeParse(req.body);
+        break;
+      default:
+        res.status(400).json({
+          error: 'Unsupported activity type',
+          details: `Activity type '${req.body.type}' is not supported`,
+        });
+        return;
+    }
+
+    if (!activityValidation.success) {
+      console.error(`[INBOX] Invalid ${req.body.type} activity:`, activityValidation.error.issues);
+      res.status(400).json({
+        error: `Invalid ${req.body.type} activity`,
+        details: activityValidation.error.issues,
+      });
+      return;
+    }
+
+    // Check if this is from a Person actor (for synchronous processing)
     const isPersonActor = actorUri && this.service.isPersonActorUri(actorUri);
 
     // Person actor Create/Update/Delete activities are processed synchronously

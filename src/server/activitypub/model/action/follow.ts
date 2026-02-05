@@ -10,7 +10,18 @@ class FollowActivity extends ActivityPubActivity {
     this.id = actorUrl + '/follows/'+ uuidv4();
   }
 
-  static fromObject(object: Record<string,any>): FollowActivity {
+  static fromObject(object: Record<string,any>): FollowActivity | null {
+    if (!object || typeof object !== 'object') {
+      return null;
+    }
+
+    if (!object.actor || typeof object.actor !== 'string') {
+      return null;
+    }
+
+    if (!object.object || typeof object.object !== 'string') {
+      return null;
+    }
 
     let activity = new FollowActivity(object.actor, object.object);
     if ( object.id ) {

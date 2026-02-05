@@ -10,7 +10,18 @@ class UndoActivity extends ActivityPubActivity {
     this.id = objectUrl + '/undo';
   }
 
-  static fromObject(object: Record<string,any>): UndoActivity {
+  static fromObject(object: Record<string,any>): UndoActivity | null {
+    if (!object || typeof object !== 'object') {
+      return null;
+    }
+
+    if (!object.actor || typeof object.actor !== 'string') {
+      return null;
+    }
+
+    if (!object.object || typeof object.object !== 'string') {
+      return null;
+    }
 
     let activity = new UndoActivity(object.actor, object.object);
     if ( object.id ) {

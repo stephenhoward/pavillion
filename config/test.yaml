@@ -39,3 +39,10 @@ rateLimit:
     byEmail:
       windowMs: 3600000  # 1 hour
       max: 5
+  activitypub:
+    actor:
+      windowMs: 60000  # 1 minute
+      max: 60
+    calendar:
+      windowMs: 60000  # 1 minute
+      max: 120

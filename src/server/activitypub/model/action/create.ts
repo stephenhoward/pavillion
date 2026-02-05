@@ -10,13 +10,33 @@ class CreateActivity extends ActivityPubActivity {
     this.id = object.id + '/create';
   }
 
-  static fromObject( json: Record<string, any> ): CreateActivity {
+  static fromObject( json: Record<string, any> ): CreateActivity | null {
+    if (!json || typeof json !== 'object') {
+      return null;
+    }
+
+    if (!json.actor || typeof json.actor !== 'string') {
+      return null;
+    }
+
+    if (!json.object) {
+      return null;
+    }
+
     let object = json.object;
     let actor = json.actor;
     let activity = new CreateActivity(actor, object);
-    activity.id = json.id;
-    activity.to = json.to;
-    activity.cc = json.cc;
+
+    if (json.id) {
+      activity.id = json.id;
+    }
+    if (json.to) {
+      activity.to = json.to;
+    }
+    if (json.cc) {
+      activity.cc = json.cc;
+    }
+
     return activity;
   }
 }

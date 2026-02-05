@@ -10,13 +10,33 @@ class UpdateActivity extends ActivityPubActivity {
     this.id = object.id + '/updates/' + uuidv4();
   }
 
-  static fromObject( json: Record<string, any> ): UpdateActivity {
+  static fromObject( json: Record<string, any> ): UpdateActivity | null {
+    if (!json || typeof json !== 'object') {
+      return null;
+    }
+
+    if (!json.actor || typeof json.actor !== 'string') {
+      return null;
+    }
+
+    if (!json.object) {
+      return null;
+    }
+
     let object = json.object;
     let actor = json.actor;
     let activity = new UpdateActivity(actor, object);
-    activity.id = json.id;
-    activity.to = json.to;
-    activity.cc = json.cc;
+
+    if (json.id) {
+      activity.id = json.id;
+    }
+    if (json.to) {
+      activity.to = json.to;
+    }
+    if (json.cc) {
+      activity.cc = json.cc;
+    }
+
     return activity;
   }
 }

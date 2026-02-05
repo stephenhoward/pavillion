@@ -15,7 +15,19 @@ class AcceptActivity extends ActivityPubActivity {
     this.id = actorUrl + '/accepts/' + uuidv4();
   }
 
-  static fromObject(object: Record<string, any>): AcceptActivity {
+  static fromObject(object: Record<string, any>): AcceptActivity | null {
+    if (!object || typeof object !== 'object') {
+      return null;
+    }
+
+    if (!object.actor || typeof object.actor !== 'string') {
+      return null;
+    }
+
+    if (!object.object) {
+      return null;
+    }
+
     let activity = new AcceptActivity(object.actor, object.object);
     if (object.id) {
       activity.id = object.id;

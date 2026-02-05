@@ -7,6 +7,8 @@ import crypto from 'crypto';
 import config from 'config';
 import { Cache } from '@/server/activitypub/helper/cache';
 import { PUBLIC_KEY_FETCH_TIMEOUT_MS } from '@/server/activitypub/constants';
+import { objectUriSchema } from '@/server/activitypub/validation/schemas';
+import { validateUrlNotPrivate } from '@/server/activitypub/helper/ip-validation';
 
 // A key cache to prevent frequent key fetching
 const keyCache = new Cache<string>(60 * 60 * 1000); // 1 hour expiration
@@ -198,14 +200,36 @@ async function getPublicKey(keyId: string): Promise<string | null> {
  * Fetches the public key from the keyId URL.
  * Handles different formats of public keys in ActivityPub implementations.
  *
+ * SECURITY: Validates that the keyId URL does not point to private IP addresses
+ * to prevent SSRF (Server-Side Request Forgery) attacks.
+ *
  * @param {string} keyId - The key identifier URL
  * @returns {Promise<string|null>} The public key as a string, or null if fetching fails
  */
 async function fetchPublicKey(keyId: string): Promise<string | null> {
   try {
+    // Validate keyId URL before fetching
+    const validationResult = objectUriSchema.safeParse(keyId);
+    if (!validationResult.success) {
+      console.error('Invalid keyId URL:', keyId, 'Validation errors:', validationResult.error.errors);
+      return null;
+    }
+
     // Extract the actor URL from the keyId
     const url = new URL(keyId);
     const actorUrl = `${url.protocol}//${url.host}${url.pathname.split('#')[0]}`;
+
+    // SECURITY: Validate that the URL does not point to a private IP address
+    // This prevents SSRF attacks where an attacker could probe internal networks
+    try {
+      await validateUrlNotPrivate(actorUrl);
+    }
+    catch (error) {
+      if (error instanceof Error) {
+        console.error(`Security: Blocked request to private IP for keyId ${keyId}: ${error.message}`);
+      }
+      return null;
+    }
 
     // Fetch the actor object with proper Accept headers
     // TODO: find a better shared place to put the user agent identifier and use that variable here
@@ -230,6 +254,17 @@ async function fetchPublicKey(keyId: string): Promise<string | null> {
     }
 
     if (actor.publicKey && typeof actor.publicKey === 'string') {
+      // SECURITY: Validate the publicKey URL as well if it's a string
+      try {
+        await validateUrlNotPrivate(actor.publicKey);
+      }
+      catch (error) {
+        if (error instanceof Error) {
+          console.error(`Security: Blocked request to private IP for publicKey URL ${actor.publicKey}: ${error.message}`);
+        }
+        return null;
+      }
+
       // Some implementations provide direct URL to the key
       const keyResponse = await axios.get(actor.publicKey, {
         headers: {
@@ -269,8 +304,10 @@ async function verifyActorPermission(requestActor: string|null, keyId: string): 
   const keyIdUrl = new URL(keyId);
   const actorUrl = `${keyIdUrl.protocol}//${keyIdUrl.host}${keyIdUrl.pathname.split('#')[0]}`;
 
-  // Basic check - the request actor should match the actor associated with the key
-  if (!requestActor.startsWith(actorUrl)) {
+  // Security fix: Use exact match instead of startsWith to prevent bypass attacks
+  // where an attacker could use an actor URL like "https://example.com/users/alice-fake"
+  // to match "https://example.com/users/alice"
+  if (requestActor !== actorUrl) {
     console.warn(`Actor mismatch: request actor ${requestActor} does not match key actor ${actorUrl}`);
     return false;
   }

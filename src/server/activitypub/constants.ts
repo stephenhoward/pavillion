@@ -25,3 +25,11 @@ export const FEDERATION_HTTP_TIMEOUT_MS = 15000;
  * Kept at 10 seconds for faster failure on signature verification.
  */
 export const PUBLIC_KEY_FETCH_TIMEOUT_MS = 10000;
+
+/**
+ * HTTP timeout for fetching remote ActivityPub objects (in milliseconds).
+ *
+ * Used when fetching remote objects by URI (e.g., events, actors, activities).
+ * Kept at 5 seconds for quick failure detection on object lookups.
+ */
+export const REMOTE_OBJECT_FETCH_TIMEOUT_MS = 5000;

@@ -71,18 +71,30 @@ class ProcessOutboxService {
     switch( message.type ) {
       case 'Create':
         activity = CreateActivity.fromObject(message.message);
+        if (!activity) {
+          throw new Error('Failed to parse Create activity');
+        }
         recipients = await this.getRecipients(calendar, activity.object);
         break;
       case 'Update':
         activity = UpdateActivity.fromObject(message.message);
+        if (!activity) {
+          throw new Error('Failed to parse Update activity');
+        }
         recipients = await this.getRecipients(calendar, activity.object);
         break;
       case 'Delete':
         activity = DeleteActivity.fromObject(message.message);
+        if (!activity) {
+          throw new Error('Failed to parse Delete activity');
+        }
         recipients = await this.getRecipients(calendar, activity.object);
         break;
       case 'Follow':
         activity = FollowActivity.fromObject(message.message);
+        if (!activity) {
+          throw new Error('Failed to parse Follow activity');
+        }
         // For Follow activities, send to the calendar being followed (the object)
         if (typeof activity.object === 'string') {
           recipients = [activity.object];
@@ -90,6 +102,9 @@ class ProcessOutboxService {
         break;
       case 'Accept':
         activity = AcceptActivity.fromObject(message.message);
+        if (!activity) {
+          throw new Error('Failed to parse Accept activity');
+        }
         // For Accept activities, send to the actor of the original Follow
         if (activity.object && typeof activity.object === 'object' && activity.object.actor) {
           recipients = [activity.object.actor];
@@ -97,10 +112,16 @@ class ProcessOutboxService {
         break;
       case 'Announce':
         activity = AnnounceActivity.fromObject(message.message);
+        if (!activity) {
+          throw new Error('Failed to parse Announce activity');
+        }
         recipients = await this.getRecipients(calendar, activity.object);
         break;
       case 'Undo':
         activity = UndoActivity.fromObject(message.message);
+        if (!activity) {
+          throw new Error('Failed to parse Undo activity');
+        }
         // Check if the activity has explicit recipients in the 'to' field
         if (activity.to && activity.to.length > 0) {
           recipients = activity.to;

@@ -10,7 +10,18 @@ class AnnounceActivity extends ActivityPubActivity {
     this.id = actorUrl + '/shares/'+ uuidv4();
   }
 
-  static fromObject(object: Record<string,any>): AnnounceActivity {
+  static fromObject(object: Record<string,any>): AnnounceActivity | null {
+    if (!object || typeof object !== 'object') {
+      return null;
+    }
+
+    if (!object.actor || typeof object.actor !== 'string') {
+      return null;
+    }
+
+    if (!object.object || typeof object.object !== 'string') {
+      return null;
+    }
 
     let activity = new AnnounceActivity(object.actor, object.object);
     if ( object.id ) {

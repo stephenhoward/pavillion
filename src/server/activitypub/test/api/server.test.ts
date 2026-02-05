@@ -94,8 +94,8 @@ describe('addToInbox', () => {
   });
 
   it('should fail with invalid message type', async () => {
-    let req = { params: { orgname: 'testuser' }, body: { type: 'Foobar' } };
-    let res = { status: sinon.stub(), send: sinon.stub() };
+    let req = { params: { orgname: 'testuser' }, body: { type: 'Foobar', actor: 'https://example.com/actor' } };
+    let res = { status: sinon.stub(), send: sinon.stub(), json: sinon.stub() };
     let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
     let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
 
@@ -106,11 +106,22 @@ describe('addToInbox', () => {
     await routes.addToInbox(req as any, res as any);
 
     expect(res.status.calledWith(400)).toBe(true);
-    expect(res.send.calledWith('Invalid message')).toBe(true);
+    expect(res.json.calledOnce).toBe(true);
+    const response = res.json.firstCall.args[0];
+    expect(response.error).toBe('Unsupported activity type');
   });
 
   it('should succeed with valid message type', async () => {
-    let req = { params: { orgname: 'testuser' }, body: { type: 'Create', object: { id: 'testObjectId' } } };
+    let req = {
+      params: { orgname: 'testuser' },
+      body: {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'Create',
+        id: 'https://example.com/activities/123',
+        actor: 'https://example.com/actor',
+        object: { id: 'https://example.com/objects/456', type: 'Event' },
+      },
+    };
     let res = { status: sinon.stub(), send: sinon.stub() };
     let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
     let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
@@ -123,5 +134,191 @@ describe('addToInbox', () => {
 
     expect(res.status.calledWith(200)).toBe(true);
     expect(res.send.calledWith('Message received')).toBe(true);
+  });
+
+  it('should fail with missing actor URI', async () => {
+    let req = { params: { urlname: 'testuser' }, body: { type: 'Create', object: { id: 'testObjectId' } } };
+    let res = { status: sinon.stub(), json: sinon.stub() };
+    let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
+
+    res.status.returns(res);
+    userFindMock.resolves(new Calendar("testId","testuser"));
+
+    await routes.addToInbox(req as any, res as any);
+
+    expect(res.status.calledWith(400)).toBe(true);
+    expect(res.json.calledOnce).toBe(true);
+    const response = res.json.firstCall.args[0];
+    expect(response.error).toBe('Invalid actor URI');
+    expect(response.details).toBeDefined();
+  });
+
+  it('should fail with invalid actor URI (not a URL)', async () => {
+    let req = { params: { urlname: 'testuser' }, body: { type: 'Create', actor: 'not-a-url', object: { id: 'testObjectId' } } };
+    let res = { status: sinon.stub(), json: sinon.stub() };
+    let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
+
+    res.status.returns(res);
+    userFindMock.resolves(new Calendar("testId","testuser"));
+
+    await routes.addToInbox(req as any, res as any);
+
+    expect(res.status.calledWith(400)).toBe(true);
+    expect(res.json.calledOnce).toBe(true);
+    const response = res.json.firstCall.args[0];
+    expect(response.error).toBe('Invalid actor URI');
+    expect(response.details).toBeDefined();
+  });
+
+  it('should allow HTTP actor URI in test environment', async () => {
+    let req = {
+      params: { urlname: 'testuser' },
+      body: {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'Create',
+        id: 'http://example.com/activities/123',
+        actor: 'http://example.com/actor',
+        object: { id: 'http://example.com/objects/testObjectId', type: 'Event' },
+      },
+    };
+    let res = { status: sinon.stub(), send: sinon.stub(), json: sinon.stub() };
+    let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
+    let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
+
+    res.status.returns(res);
+    userFindMock.resolves(new Calendar("testId","testuser"));
+    inboxMock.resolves();
+
+    await routes.addToInbox(req as any, res as any);
+
+    // HTTP URLs are allowed in test environment
+    expect(res.status.calledWith(200)).toBe(true);
+    expect(res.send.calledWith('Message received')).toBe(true);
+  });
+
+  it('should succeed with valid HTTPS actor URI', async () => {
+    let req = {
+      params: { urlname: 'testuser' },
+      body: {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'Follow',
+        id: 'https://remote.example.com/activities/follow-123',
+        actor: 'https://remote.example.com/calendars/remote',
+        object: 'https://local.example.com/calendars/testuser',
+      },
+    };
+    let res = { status: sinon.stub(), send: sinon.stub() };
+    let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
+    let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
+
+    res.status.returns(res);
+    userFindMock.resolves(new Calendar("testId","testuser"));
+    inboxMock.resolves();
+
+    await routes.addToInbox(req as any, res as any);
+
+    expect(res.status.calledWith(200)).toBe(true);
+    expect(res.send.calledWith('Message received')).toBe(true);
+  });
+
+  it('should fail with missing @context field', async () => {
+    let req = {
+      params: { urlname: 'testuser' },
+      body: {
+        type: 'Create',
+        id: 'https://example.com/activities/123',
+        actor: 'https://example.com/actor',
+        object: { id: 'https://example.com/objects/456', type: 'Event' },
+      },
+    };
+    let res = { status: sinon.stub(), json: sinon.stub() };
+    let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
+
+    res.status.returns(res);
+    userFindMock.resolves(new Calendar("testId","testuser"));
+
+    await routes.addToInbox(req as any, res as any);
+
+    expect(res.status.calledWith(400)).toBe(true);
+    expect(res.json.calledOnce).toBe(true);
+    const response = res.json.firstCall.args[0];
+    expect(response.error).toBe('Invalid Create activity');
+    expect(response.details).toBeDefined();
+  });
+
+  it('should fail with missing activity id', async () => {
+    let req = {
+      params: { urlname: 'testuser' },
+      body: {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'Update',
+        actor: 'https://example.com/actor',
+        object: { id: 'https://example.com/objects/456', type: 'Event' },
+      },
+    };
+    let res = { status: sinon.stub(), json: sinon.stub() };
+    let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
+
+    res.status.returns(res);
+    userFindMock.resolves(new Calendar("testId","testuser"));
+
+    await routes.addToInbox(req as any, res as any);
+
+    expect(res.status.calledWith(400)).toBe(true);
+    expect(res.json.calledOnce).toBe(true);
+    const response = res.json.firstCall.args[0];
+    expect(response.error).toBe('Invalid Update activity');
+    expect(response.details).toBeDefined();
+  });
+
+  it('should fail with missing object field in Create activity', async () => {
+    let req = {
+      params: { urlname: 'testuser' },
+      body: {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'Create',
+        id: 'https://example.com/activities/123',
+        actor: 'https://example.com/actor',
+      },
+    };
+    let res = { status: sinon.stub(), json: sinon.stub() };
+    let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
+
+    res.status.returns(res);
+    userFindMock.resolves(new Calendar("testId","testuser"));
+
+    await routes.addToInbox(req as any, res as any);
+
+    expect(res.status.calledWith(400)).toBe(true);
+    expect(res.json.calledOnce).toBe(true);
+    const response = res.json.firstCall.args[0];
+    expect(response.error).toBe('Invalid Create activity');
+    expect(response.details).toBeDefined();
+  });
+
+  it('should fail with invalid object URI in Delete activity', async () => {
+    let req = {
+      params: { urlname: 'testuser' },
+      body: {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'Delete',
+        id: 'https://example.com/activities/123',
+        actor: 'https://example.com/actor',
+        object: 'not-a-valid-url',
+      },
+    };
+    let res = { status: sinon.stub(), json: sinon.stub() };
+    let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
+
+    res.status.returns(res);
+    userFindMock.resolves(new Calendar("testId","testuser"));
+
+    await routes.addToInbox(req as any, res as any);
+
+    expect(res.status.calledWith(400)).toBe(true);
+    expect(res.json.calledOnce).toBe(true);
+    const response = res.json.firstCall.args[0];
+    expect(response.error).toBe('Invalid Delete activity');
+    expect(response.details).toBeDefined();
   });
 });

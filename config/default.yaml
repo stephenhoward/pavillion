@@ -53,6 +53,13 @@ rateLimit:
     byEmail:
       windowMs: 3600000  # 1 hour in milliseconds
       max: 5  # 5 requests per email per hour
+  activitypub:
+    actor:
+      windowMs: 60000  # 1 minute in milliseconds
+      max: 60  # 60 requests per actor per minute
+    calendar:
+      windowMs: 60000  # 1 minute in milliseconds
+      max: 120  # 120 requests per calendar per minute
 
 # Housekeeping configuration for automated server maintenance
 housekeeping:

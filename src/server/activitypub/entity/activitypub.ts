@@ -76,7 +76,12 @@ class ActivityPubMessageEntity extends Model {
       throw new Error('Invalid message type: "' + this.type + '"');
     }
 
-    return builder( this.message );
+    const result = builder( this.message );
+    if ( ! result ) {
+      throw new Error('Failed to parse activity from message');
+    }
+
+    return result;
   }
 }
 

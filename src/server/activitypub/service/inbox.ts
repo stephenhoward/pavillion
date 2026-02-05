@@ -2,6 +2,7 @@ import { DateTime } from "luxon";
 import { v4 as uuidv4 } from 'uuid';
 import { EventEmitter } from "events";
 import axios from "axios";
+import { logError } from '@/server/common/helper/error-logger';
 
 import CreateActivity from "@/server/activitypub/model/action/create";
 import UpdateActivity from "@/server/activitypub/model/action/update";
@@ -19,19 +20,148 @@ import { Calendar } from "@/common/model/calendar";
 import { addToOutbox } from "@/server/activitypub/helper/outbox";
 import { UserActorEntity } from "@/server/activitypub/entity/user_actor";
 import { CalendarMemberEntity } from "@/server/calendar/entity/calendar_member";
+import { fetchRemoteObject } from "@/server/activitypub/helper/remote-fetch";
+
+/**
+ * Cache entry for authorization results
+ */
+interface AuthorizationCacheEntry {
+  authorized: boolean;
+  expiresAt: number;
+}
+
+/**
+ * LRU cache for authorization results with automatic expiration.
+ * Extends Map to provide LRU eviction when size limit is reached.
+ */
+class AuthorizationLRUCache {
+  private cache: Map<string, { value: AuthorizationCacheEntry, accessOrder: number }> = new Map();
+  private accessCounter: number = 0;
+  private maxSize: number;
+  private ttl: number;
+
+  constructor(maxSize: number = 1000, ttlMs: number = 5 * 60 * 1000) {
+    this.maxSize = maxSize;
+    this.ttl = ttlMs;
+  }
+
+  set(key: string, value: AuthorizationCacheEntry): void {
+    // If key exists, remove it first to update access order
+    if (this.cache.has(key)) {
+      this.cache.delete(key);
+    }
+
+    // Add new entry with current access order
+    this.cache.set(key, { value, accessOrder: ++this.accessCounter });
+
+    // Evict oldest entries if we exceeded max size
+    if (this.cache.size > this.maxSize) {
+      this.evictOldest();
+    }
+  }
+
+  get(key: string): AuthorizationCacheEntry | undefined {
+    const item = this.cache.get(key);
+    if (!item) {
+      return undefined;
+    }
+
+    // Update access order for LRU
+    this.cache.delete(key);
+    item.accessOrder = ++this.accessCounter;
+    this.cache.set(key, item);
+
+    return item.value;
+  }
+
+  delete(key: string): void {
+    this.cache.delete(key);
+  }
+
+  clear(): void {
+    this.cache.clear();
+    this.accessCounter = 0;
+  }
+
+  keys(): IterableIterator<string> {
+    return this.cache.keys();
+  }
+
+  entries(): IterableIterator<[string, { value: AuthorizationCacheEntry, accessOrder: number }]> {
+    return this.cache.entries();
+  }
+
+  get size(): number {
+    return this.cache.size;
+  }
+
+  /**
+   * Get cache statistics for monitoring
+   * @returns Object with cache size, max size, and utilization percentage
+   */
+  getStats(): { size: number; maxSize: number; utilization: number } {
+    const utilization = this.maxSize > 0 ? (this.cache.size / this.maxSize) * 100 : 0;
+    return {
+      size: this.cache.size,
+      maxSize: this.maxSize,
+      utilization: Math.round(utilization * 100) / 100, // Round to 2 decimal places
+    };
+  }
+
+  /**
+   * Evict the least recently used entries to maintain max size
+   */
+  private evictOldest(): void {
+    const entriesToRemove = this.cache.size - this.maxSize;
+    if (entriesToRemove <= 0) {
+      return;
+    }
+
+    // Find entries with oldest access order
+    const entries = Array.from(this.cache.entries());
+    entries.sort((a, b) => a[1].accessOrder - b[1].accessOrder);
+
+    for (let i = 0; i < entriesToRemove; i++) {
+      this.cache.delete(entries[i][0]);
+    }
+  }
+}
 
 /**
  * Service responsible for processing incoming ActivityPub messages in the inbox.
+ *
+ * This service includes an in-memory cache for remote editor authorization checks
+ * to improve performance by avoiding redundant database queries. Cache entries
+ * are stored in an LRU cache with a maximum size of 1000 entries and a 5-minute TTL.
  */
 class ProcessInboxService {
   calendarInterface: CalendarInterface;
   eventBus: EventEmitter;
   remoteCalendarService: RemoteCalendarService;
 
+  /**
+   * LRU cache for remote editor authorization checks.
+   * Key format: `${calendarId}:${actorUri}`
+   * Value: { authorized: boolean }
+   * Max size: 1000 entries with LRU eviction
+   */
+  private authorizationCache: AuthorizationLRUCache;
+
+  /**
+   * Cache TTL in milliseconds (5 minutes)
+   */
+  private readonly CACHE_TTL = 5 * 60 * 1000;
+
+  /**
+   * Maximum cache size (number of entries)
+   */
+  private readonly CACHE_MAX_SIZE = 1000;
+
   constructor(eventBus: EventEmitter, calendarInterface: CalendarInterface) {
     this.eventBus = eventBus;
     this.calendarInterface = calendarInterface;
     this.remoteCalendarService = new RemoteCalendarService();
+    this.authorizationCache = new AuthorizationLRUCache(this.CACHE_MAX_SIZE, this.CACHE_TTL);
   }
 
   /**
@@ -72,24 +202,64 @@ class ProcessInboxService {
       }
       switch( message.type ) {
         case 'Create':
-          await this.processCreateEvent(calendar, CreateActivity.fromObject(message.message) );
+          {
+            const activity = CreateActivity.fromObject(message.message);
+            if (!activity) {
+              throw new Error('Failed to parse Create activity');
+            }
+            await this.processCreateEvent(calendar, activity);
+          }
           break;
         case 'Update':
-          this.processUpdateEvent(calendar, UpdateActivity.fromObject(message.message) );
+          {
+            const activity = UpdateActivity.fromObject(message.message);
+            if (!activity) {
+              throw new Error('Failed to parse Update activity');
+            }
+            this.processUpdateEvent(calendar, activity);
+          }
           break;
         case 'Delete':
-          this.processDeleteEvent(calendar, DeleteActivity.fromObject(message.message) );
+          {
+            const activity = DeleteActivity.fromObject(message.message);
+            if (!activity) {
+              throw new Error('Failed to parse Delete activity');
+            }
+            this.processDeleteEvent(calendar, activity);
+          }
           break;
         case 'Follow':
-          await this.processFollowAccount(calendar, FollowActivity.fromObject(message.message) );
+          {
+            const activity = FollowActivity.fromObject(message.message);
+            if (!activity) {
+              throw new Error('Failed to parse Follow activity');
+            }
+            await this.processFollowAccount(calendar, activity);
+          }
           break;
         case 'Accept':
-          await this.processAcceptActivity(calendar, AcceptActivity.fromObject(message.message) );
+          {
+            const activity = AcceptActivity.fromObject(message.message);
+            if (!activity) {
+              throw new Error('Failed to parse Accept activity');
+            }
+            await this.processAcceptActivity(calendar, activity);
+          }
           break;
         case 'Announce':
-          this.processShareEvent(calendar, AnnounceActivity.fromObject(message.message) );
+          {
+            const activity = AnnounceActivity.fromObject(message.message);
+            if (!activity) {
+              throw new Error('Failed to parse Announce activity');
+            }
+            this.processShareEvent(calendar, activity);
+          }
           break;
         case 'Undo':
+          if (!message.message || typeof message.message !== 'object' || !message.message.object) {
+            throw new Error('Invalid Undo activity: missing message object');
+          }
+
           let targetEntity = await ActivityPubInboxMessageEntity.findOne({
             where: { calendar_id: message.calendar_id, id: message.message.object },
           });
@@ -118,7 +288,7 @@ class ProcessInboxService {
       });
     }
     catch (e) {
-      console.error('Error processing message', e);
+      logError(e, `Error processing inbox message for calendar ${message.calendar_id}`);
       await message.update({
         processed_time: DateTime.now().toJSDate(),
         processed_status: 'error',
@@ -127,15 +297,71 @@ class ProcessInboxService {
   }
 
   /**
-   * Verifies that an actor owns the object they're trying to modify.
+   * Verifies that an actor owns the object they're trying to modify by fetching
+   * the object from its origin server and checking the attributedTo field.
+   *
+   * This provides security against spoofed activities where an attacker claims
+   * to own an object they don't actually control.
    *
    * @param {any} message - The message containing actor and object information
    * @returns {Promise<boolean>} True if the actor owns the object, false otherwise
    */
   async actorOwnsObject(message: any): Promise<boolean> {
-    // TODO: implement a remote verification of the actor's ownership of the object
-    // by retrieving the object from its server and checking that attributedTo.
-    return message.actor === message.object.attributedTo;
+    // Get the object URI - could be a string or an object with id
+    const objectUri = typeof message.object === 'string'
+      ? message.object
+      : message.object?.id;
+
+    if (!objectUri) {
+      console.warn('[INBOX] actorOwnsObject: No object URI found in message');
+      return false;
+    }
+
+    // Fetch the object from its origin server
+    const remoteObject = await fetchRemoteObject(objectUri);
+
+    if (!remoteObject) {
+      console.warn(`[INBOX] actorOwnsObject: Failed to fetch remote object from ${objectUri}`);
+      return false;
+    }
+
+    // Get the attributedTo from the fetched object
+    const attributedTo = remoteObject.attributedTo;
+
+    if (!attributedTo) {
+      console.warn(`[INBOX] actorOwnsObject: No attributedTo found on remote object ${objectUri}`);
+      return false;
+    }
+
+    // attributedTo can be a string or an array of strings
+    const actorUri = message.actor;
+
+    if (Array.isArray(attributedTo)) {
+      // Check if the actor is in the array
+      return attributedTo.some((attr) => {
+        // Each element could be a string URI or an object with id
+        if (typeof attr === 'string') {
+          return attr === actorUri;
+        }
+        if (typeof attr === 'object' && attr !== null && 'id' in attr) {
+          return (attr as { id: string }).id === actorUri;
+        }
+        return false;
+      });
+    }
+
+    // attributedTo is a single value
+    if (typeof attributedTo === 'string') {
+      return attributedTo === actorUri;
+    }
+
+    // attributedTo could be an object with an id
+    if (typeof attributedTo === 'object' && attributedTo !== null && 'id' in attributedTo) {
+      return (attributedTo as { id: string }).id === actorUri;
+    }
+
+    console.warn(`[INBOX] actorOwnsObject: Unexpected attributedTo format on remote object ${objectUri}`);
+    return false;
   }
 
   /**
@@ -149,6 +375,11 @@ class ProcessInboxService {
    * @returns {Promise<void>}
    */
   async processCreateEvent(calendar: Calendar, message: CreateActivity): Promise<CalendarEvent | null> {
+    if (!message.object || !message.object.id) {
+      console.warn(`[INBOX] Create activity missing object or object.id`);
+      return null;
+    }
+
     const apObjectId = message.object.id;
     const actorUri = message.actor;
 
@@ -270,18 +501,34 @@ class ProcessInboxService {
   /**
    * Checks if a Person actor is an authorized remote editor of a calendar.
    * Uses UserActorEntity + CalendarMemberEntity to look up membership.
+   * Results are cached for 5 minutes to improve performance.
    *
    * @param calendarId - The calendar ID
    * @param actorUri - The Person actor URI
    * @returns True if authorized
    */
   private async isAuthorizedRemoteEditor(calendarId: string, actorUri: string): Promise<boolean> {
+    const cacheKey = `${calendarId}:${actorUri}`;
+    const now = Date.now();
+
+    // Check cache first
+    const cached = this.authorizationCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+      return cached.authorized;
+    }
+
+    // Cache miss or expired - perform database lookup
     // First, find the UserActorEntity by actor_uri
     const userActor = await UserActorEntity.findOne({
       where: { actor_uri: actorUri },
     });
 
     if (!userActor) {
+      // Cache negative result
+      this.authorizationCache.set(cacheKey, {
+        authorized: false,
+        expiresAt: now + this.CACHE_TTL,
+      });
       return false;
     }
 
@@ -293,7 +540,70 @@ class ProcessInboxService {
       },
     });
 
-    return membership !== null;
+    const authorized = membership !== null;
+
+    // Cache the result
+    this.authorizationCache.set(cacheKey, {
+      authorized,
+      expiresAt: now + this.CACHE_TTL,
+    });
+
+    return authorized;
+  }
+
+  /**
+   * Invalidates the authorization cache for a specific calendar and actor.
+   * This should be called when membership changes.
+   *
+   * @param calendarId - The calendar ID
+   * @param actorUri - The Person actor URI
+   */
+  invalidateAuthorizationCache(calendarId: string, actorUri: string): void {
+    const cacheKey = `${calendarId}:${actorUri}`;
+    this.authorizationCache.delete(cacheKey);
+  }
+
+  /**
+   * Invalidates all authorization cache entries for a specific calendar.
+   * This should be called when calendar membership changes significantly.
+   *
+   * @param calendarId - The calendar ID
+   */
+  invalidateCalendarAuthorizationCache(calendarId: string): void {
+    for (const key of this.authorizationCache.keys()) {
+      if (key.startsWith(`${calendarId}:`)) {
+        this.authorizationCache.delete(key);
+      }
+    }
+  }
+
+  /**
+   * Clears all expired entries from the authorization cache.
+   * This can be called periodically to prevent unbounded cache growth.
+   */
+  clearExpiredAuthorizationCache(): void {
+    const now = Date.now();
+    for (const [key, entry] of this.authorizationCache.entries()) {
+      if (entry.expiresAt <= now) {
+        this.authorizationCache.delete(key);
+      }
+    }
+  }
+
+  /**
+   * Clears the entire authorization cache.
+   * Useful for testing or when a full cache reset is needed.
+   */
+  clearAuthorizationCache(): void {
+    this.authorizationCache.clear();
+  }
+
+  /**
+   * Get authorization cache statistics for monitoring.
+   * @returns Object with cache size, max size, and utilization percentage
+   */
+  getAuthorizationCacheStats(): { size: number; maxSize: number; utilization: number } {
+    return this.authorizationCache.getStats();
   }
 
   /**
@@ -318,6 +628,11 @@ class ProcessInboxService {
    * @returns {Promise<CalendarEvent | null>}
    */
   async processUpdateEvent(calendar: Calendar, message: UpdateActivity): Promise<CalendarEvent | null> {
+    if (!message.object || !message.object.id) {
+      console.warn(`[INBOX] Update activity missing object or object.id`);
+      return null;
+    }
+
     const apObjectId = message.object.id;
     const actorUri = message.actor;
 
@@ -410,6 +725,11 @@ class ProcessInboxService {
    * @returns {Promise<void>}
    */
   async processDeleteEvent(calendar: Calendar, message: DeleteActivity) {
+    if (!message.object || !message.object.id) {
+      console.warn(`[INBOX] Delete activity missing object or object.id`);
+      return;
+    }
+
     const apObjectId = message.object.id;
     const actorUri = message.actor;
 
@@ -546,8 +866,13 @@ class ProcessInboxService {
     // The Accept activity's object should be the original Follow activity
     const followObject = message.object;
 
+    if (!followObject) {
+      console.warn(`[INBOX] Accept activity missing object`);
+      return;
+    }
+
     // Verify this Accept corresponds to a Follow we sent
-    if (followObject && typeof followObject === 'object' && followObject.type === 'Follow') {
+    if (typeof followObject === 'object' && followObject.type === 'Follow') {
       const followActivity = followObject as FollowActivity;
 
       console.log(`[INBOX] Accept confirms Follow of ${followActivity.object}`);
@@ -594,7 +919,19 @@ class ProcessInboxService {
   // TODO: proper message type
   async processUnfollowAccount(calendar: Calendar, message: any) {
     // Extract the actor from the original Follow activity message
-    const actor = typeof message.message === 'object' ? message.message.actor : message.actor;
+    if (!message || (!message.message && !message.actor)) {
+      console.warn(`[INBOX] Unfollow message missing required actor information`);
+      return;
+    }
+
+    const actor = (typeof message.message === 'object' && message.message?.actor)
+      ? message.message.actor
+      : message.actor;
+
+    if (!actor) {
+      console.warn(`[INBOX] Unfollow message actor is null or undefined`);
+      return;
+    }
 
     // Find the CalendarActorEntity for this actor
     const remoteCalendar = await this.remoteCalendarService.getByActorUri(actor);
@@ -620,7 +957,19 @@ class ProcessInboxService {
    */
   async processShareEvent(calendar: Calendar, message: AnnounceActivity) {
     // Extract event URL from the object (either a string URL or an object with id)
-    const apObjectId = typeof message.object === 'string' ? message.object : message.object.id;
+    if (!message.object) {
+      console.warn(`[INBOX] Announce activity missing object`);
+      return;
+    }
+
+    const apObjectId = typeof message.object === 'string'
+      ? message.object
+      : (message.object as any)?.id;
+
+    if (!apObjectId) {
+      console.warn(`[INBOX] Announce activity object missing id`);
+      return;
+    }
 
     // Check if we already have this AP object
     let apObject = await EventObjectEntity.findOne({
@@ -663,7 +1012,7 @@ class ProcessInboxService {
         }
       }
       catch (error: any) {
-        console.error(`[INBOX] Failed to fetch or store remote event ${apObjectId}:`, error.message);
+        logError(error, `[INBOX] Failed to fetch or store remote event ${apObjectId}`);
         return;
       }
     }
@@ -698,10 +1047,34 @@ class ProcessInboxService {
   // TODO: proper message type
   async processUnshareEvent(calendar: Calendar, message: any) {
     // Extract event ID from the object (either a string URL or an object with id)
-    const eventId = typeof message.object === 'string' ? message.object : message.object.id;
+    if (!message || !message.object) {
+      console.warn(`[INBOX] Unshare message missing object`);
+      return;
+    }
+
+    const eventId = typeof message.object === 'string'
+      ? message.object
+      : message.object?.id;
+
+    if (!eventId) {
+      console.warn(`[INBOX] Unshare message object missing id`);
+      return;
+    }
 
     // Extract the actor from the original Announce activity message
-    const actor = typeof message.message === 'object' ? message.message.actor : message.actor;
+    if (!message.message && !message.actor) {
+      console.warn(`[INBOX] Unshare message missing actor information`);
+      return;
+    }
+
+    const actor = (typeof message.message === 'object' && message.message?.actor)
+      ? message.message.actor
+      : message.actor;
+
+    if (!actor) {
+      console.warn(`[INBOX] Unshare message actor is null or undefined`);
+      return;
+    }
 
     // Find the CalendarActorEntity for this actor
     const remoteCalendar = await this.remoteCalendarService.getByActorUri(actor);
