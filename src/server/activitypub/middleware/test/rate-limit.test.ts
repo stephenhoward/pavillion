@@ -500,7 +500,7 @@ describe('createCalendarRateLimiter', () => {
       app.use(express.json());
 
       const limiter = createCalendarRateLimiter(3, 60000);
-      app.post('/calendars/:urlName/inbox', limiter, (req, res) => {
+      app.post('/calendars/:urlname/inbox', limiter, (req, res) => {
         res.json({ success: true });
       });
 
@@ -520,7 +520,7 @@ describe('createCalendarRateLimiter', () => {
       app.use(express.json());
 
       const limiter = createCalendarRateLimiter(2, 60000);
-      app.post('/calendars/:urlName/inbox', limiter, (req, res) => {
+      app.post('/calendars/:urlname/inbox', limiter, (req, res) => {
         res.json({ success: true });
       });
 
@@ -548,7 +548,7 @@ describe('createCalendarRateLimiter', () => {
       app.use(express.json());
 
       const limiter = createCalendarRateLimiter(1, 60000);
-      app.post('/calendars/:urlName/inbox', limiter, (req, res) => {
+      app.post('/calendars/:urlname/inbox', limiter, (req, res) => {
         res.json({ success: true });
       });
 
@@ -572,7 +572,7 @@ describe('createCalendarRateLimiter', () => {
       app.use(express.json());
 
       const limiter = createCalendarRateLimiter(2, 60000);
-      app.post('/calendars/:urlName/inbox', limiter, (req, res) => {
+      app.post('/calendars/:urlname/inbox', limiter, (req, res) => {
         res.json({ success: true });
       });
 
@@ -605,7 +605,7 @@ describe('createCalendarRateLimiter', () => {
       app.use(express.json());
 
       const limiter = createCalendarRateLimiter(2, 60000);
-      app.post('/calendars/:urlName/inbox', limiter, (req, res) => {
+      app.post('/calendars/:urlname/inbox', limiter, (req, res) => {
         res.json({ success: true });
       });
 
@@ -636,7 +636,7 @@ describe('createCalendarRateLimiter', () => {
       app.use(express.json());
 
       const limiter = createCalendarRateLimiter();
-      app.post('/calendars/:urlName/inbox', limiter, (req, res) => {
+      app.post('/calendars/:urlname/inbox', limiter, (req, res) => {
         res.json({ success: true });
       });
 
@@ -664,7 +664,7 @@ describe('createCalendarRateLimiter', () => {
       app.use(express.json());
 
       const limiter = createCalendarRateLimiter(1, 60000);
-      app.post('/calendars/:urlName/inbox', limiter, (req, res) => {
+      app.post('/calendars/:urlname/inbox', limiter, (req, res) => {
         res.json({ success: true });
       });
 
@@ -712,7 +712,7 @@ describe('createCalendarRateLimiter', () => {
 
       // Very short window for testing (100ms)
       const limiter = createCalendarRateLimiter(1, 100);
-      app.post('/calendars/:urlName/inbox', limiter, (req, res) => {
+      app.post('/calendars/:urlname/inbox', limiter, (req, res) => {
         res.json({ success: true });
       });
 
@@ -748,7 +748,7 @@ describe('createCalendarRateLimiter', () => {
       app.use(express.json());
 
       const limiter = createCalendarRateLimiter(1, 60000);
-      app.post('/calendars/:urlName/inbox', limiter, (req, res) => {
+      app.post('/calendars/:urlname/inbox', limiter, (req, res) => {
         res.json({ success: true });
       });
 
@@ -811,7 +811,7 @@ describe('createCalendarRateLimiter', () => {
       app.use(express.json());
 
       const limiter = createCalendarRateLimiter(1, 60000);
-      app.post('/calendars/:urlName/inbox', limiter, (req, res) => {
+      app.post('/calendars/:urlname/inbox', limiter, (req, res) => {
         res.json({ success: true });
       });
 
@@ -833,7 +833,7 @@ describe('createCalendarRateLimiter', () => {
       const newLimiter = createCalendarRateLimiter(1, 60000);
       const newApp = express();
       newApp.use(express.json());
-      newApp.post('/calendars/:urlName/inbox', newLimiter, (req, res) => {
+      newApp.post('/calendars/:urlname/inbox', newLimiter, (req, res) => {
         res.json({ success: true });
       });
 
@@ -854,7 +854,7 @@ describe('createCalendarRateLimiter', () => {
       // Set up both limiters on same route
       const actorLimiter = createActorRateLimiter(1, 60000);
       const calendarLimiter = createCalendarRateLimiter(2, 60000);
-      app.post('/calendars/:urlName/inbox', actorLimiter, calendarLimiter, (req, res) => {
+      app.post('/calendars/:urlname/inbox', actorLimiter, calendarLimiter, (req, res) => {
         res.json({ success: true });
       });
 

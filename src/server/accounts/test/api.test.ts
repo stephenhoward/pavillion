@@ -321,7 +321,7 @@ describe ('Invitations API', () => {
     adminAccount.roles = ['admin'];
 
     let stub2 = sandbox.stub(accountsInterface, 'listInvitations');
-    stub2.resolves([]);
+    stub2.resolves({ invitations: [], pagination: { currentPage: 1, totalPages: 1, totalCount: 0, limit: 50 } });
     router.get('/handler', (req, res, next) => {
       req.user = adminAccount;
       next();
@@ -330,10 +330,11 @@ describe ('Invitations API', () => {
     const response = await request(testApp(router)).get('/handler');
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual([]);
+    expect(response.body.invitations).toEqual([]);
+    expect(response.body.pagination).toEqual({ currentPage: 1, totalPages: 1, totalCount: 0, limit: 50 });
     expect(stub2.called).toBe(true);
     // Verify admin gets all invitations (inviterId = undefined)
-    expect(stub2.firstCall.args[0]).toBeUndefined();
+    expect(stub2.firstCall.args[2]).toBeUndefined();
   });
 
   it('list invitations: regular user should receive only their own invitations', async () => {
@@ -341,7 +342,7 @@ describe ('Invitations API', () => {
     regularAccount.roles = [];
 
     let stub2 = sandbox.stub(accountsInterface, 'listInvitations');
-    stub2.resolves([]);
+    stub2.resolves({ invitations: [], pagination: { currentPage: 1, totalPages: 1, totalCount: 0, limit: 50 } });
     router.get('/handler', (req, res, next) => {
       req.user = regularAccount;
       next();
@@ -350,15 +351,16 @@ describe ('Invitations API', () => {
     const response = await request(testApp(router)).get('/handler');
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual([]);
+    expect(response.body.invitations).toEqual([]);
+    expect(response.body.pagination).toEqual({ currentPage: 1, totalPages: 1, totalCount: 0, limit: 50 });
     expect(stub2.called).toBe(true);
     // Verify regular user gets filtered by their ID
-    expect(stub2.firstCall.args[0]).toBe('user-id');
+    expect(stub2.firstCall.args[2]).toBe('user-id');
   });
 
   it('list invitations: should return 400 when user not authenticated', async () => {
     let stub2 = sandbox.stub(accountsInterface, 'listInvitations');
-    stub2.resolves([]);
+    stub2.resolves({ invitations: [], pagination: { currentPage: 1, totalPages: 1, totalCount: 0, limit: 50 } });
     router.get('/handler', (req, res, next) => {
       req.user = undefined;
       next();
@@ -423,7 +425,7 @@ describe ('Invitations API', () => {
 
     let stub2 = sandbox.stub(accountsInterface, 'listInvitations');
     // When User A requests, return empty (no invitations from User B)
-    stub2.resolves([]);
+    stub2.resolves({ invitations: [], pagination: { currentPage: 1, totalPages: 1, totalCount: 0, limit: 50 } });
 
     router.get('/handler', (req, res, next) => {
       req.user = userA;
@@ -433,9 +435,10 @@ describe ('Invitations API', () => {
     const response = await request(testApp(router)).get('/handler');
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual([]);
+    expect(response.body.invitations).toEqual([]);
+    expect(response.body.pagination).toEqual({ currentPage: 1, totalPages: 1, totalCount: 0, limit: 50 });
     // Verify User A's ID was used for filtering, not User B's
-    expect(stub2.firstCall.args[0]).toBe('user-a-id');
+    expect(stub2.firstCall.args[2]).toBe('user-a-id');
   });
 
   it('calendar owner privacy: sees only their editor invitations', async () => {
@@ -450,7 +453,7 @@ describe ('Invitations API', () => {
     ownInvitation.calendarId = 'calendar-123';
 
     let stub2 = sandbox.stub(accountsInterface, 'listInvitations');
-    stub2.resolves([ownInvitation]);
+    stub2.resolves({ invitations: [ownInvitation], pagination: { currentPage: 1, totalPages: 1, totalCount: 1, limit: 50 } });
 
     router.get('/handler', (req, res, next) => {
       req.user = calendarOwner;
@@ -460,10 +463,11 @@ describe ('Invitations API', () => {
     const response = await request(testApp(router)).get('/handler');
 
     expect(response.status).toBe(200);
-    expect(response.body.length).toBe(1);
-    expect(response.body[0].invitedBy.id).toBe('owner-id');
+    expect(response.body.invitations.length).toBe(1);
+    expect(response.body.invitations[0].invitedBy.id).toBe('owner-id');
+    expect(response.body.pagination).toEqual({ currentPage: 1, totalPages: 1, totalCount: 1, limit: 50 });
     // Verify only owner's invitations are requested
-    expect(stub2.firstCall.args[0]).toBe('owner-id');
+    expect(stub2.firstCall.args[2]).toBe('owner-id');
   });
 
   it('admin comprehensive view: can see all invitations from all users', async () => {
@@ -485,7 +489,7 @@ describe ('Invitations API', () => {
     );
 
     let stub2 = sandbox.stub(accountsInterface, 'listInvitations');
-    stub2.resolves([adminInvitation, userInvitation]);
+    stub2.resolves({ invitations: [adminInvitation, userInvitation], pagination: { currentPage: 1, totalPages: 1, totalCount: 2, limit: 50 } });
 
     router.get('/handler', (req, res, next) => {
       req.user = adminAccount;
@@ -495,9 +499,10 @@ describe ('Invitations API', () => {
     const response = await request(testApp(router)).get('/handler');
 
     expect(response.status).toBe(200);
-    expect(response.body.length).toBe(2);
+    expect(response.body.invitations.length).toBe(2);
+    expect(response.body.pagination).toEqual({ currentPage: 1, totalPages: 1, totalCount: 2, limit: 50 });
     // Verify admin gets all invitations (inviterId = undefined)
-    expect(stub2.firstCall.args[0]).toBeUndefined();
+    expect(stub2.firstCall.args[2]).toBeUndefined();
   });
 
   it('role-based filtering: admin receives undefined inviterId, regular user receives their ID', async () => {
@@ -508,7 +513,7 @@ describe ('Invitations API', () => {
     regularAccount.roles = [];
 
     let stub2 = sandbox.stub(accountsInterface, 'listInvitations');
-    stub2.resolves([]);
+    stub2.resolves({ invitations: [], pagination: { currentPage: 1, totalPages: 1, totalCount: 0, limit: 50 } });
 
     // Test admin
     router.get('/admin', (req, res, next) => {
@@ -518,7 +523,7 @@ describe ('Invitations API', () => {
 
     const adminResponse = await request(testApp(router)).get('/admin');
     expect(adminResponse.status).toBe(200);
-    expect(stub2.firstCall.args[0]).toBeUndefined();
+    expect(stub2.firstCall.args[2]).toBeUndefined();
 
     stub2.resetHistory();
 
@@ -530,7 +535,7 @@ describe ('Invitations API', () => {
 
     const userResponse = await request(testApp(router)).get('/user');
     expect(userResponse.status).toBe(200);
-    expect(stub2.firstCall.args[0]).toBe('user-id');
+    expect(stub2.firstCall.args[2]).toBe('user-id');
   });
 
   it('invite new account: should succeed', async () => {
@@ -932,13 +937,14 @@ describe('Admin API', () => {
       ];
 
       const stub = sandbox.stub(accountsInterface, 'listInvitations');
-      stub.resolves(mockInvitations);
+      stub.resolves({ invitations: mockInvitations, pagination: { currentPage: 1, totalPages: 1, totalCount: 2, limit: 50 } });
 
       // Admin should get all invitations (inviterId = undefined)
       const result = await accountsInterface.listInvitations();
 
-      expect(result).toEqual(mockInvitations);
-      expect(result.length).toBe(2);
+      expect(result.invitations).toEqual(mockInvitations);
+      expect(result.invitations.length).toBe(2);
+      expect(result.pagination).toEqual({ currentPage: 1, totalPages: 1, totalCount: 2, limit: 50 });
       expect(stub.called).toBe(true);
     });
   });

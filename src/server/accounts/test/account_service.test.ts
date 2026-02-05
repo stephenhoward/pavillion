@@ -729,7 +729,7 @@ describe('listInvitations', () => {
   let sandbox = sinon.createSandbox();
   let accountService: AccountService;
   let emailInterface: EmailInterface;
-  let findAllStub: sinon.SinonStub;
+  let findAndCountAllStub: sinon.SinonStub;
 
   beforeEach(() => {
     const eventBus = new EventEmitter();
@@ -737,7 +737,7 @@ describe('listInvitations', () => {
     const setupInterface = new SetupInterface();
     emailInterface = new EmailInterface();
     accountService = new AccountService(eventBus, configurationInterface, setupInterface, emailInterface);
-    findAllStub = sandbox.stub(AccountInvitationEntity, 'findAll');
+    findAndCountAllStub = sandbox.stub(AccountInvitationEntity, 'findAndCountAll');
   });
 
   afterEach(() => {
@@ -770,19 +770,24 @@ describe('listInvitations', () => {
       },
     ];
 
-    findAllStub.resolves(mockInvitations);
+    findAndCountAllStub.resolves({ count: 2, rows: mockInvitations });
 
     const result = await accountService.listInvitations();
 
-    expect(result).toHaveLength(2);
-    expect(findAllStub.calledOnce).toBe(true);
-    expect(findAllStub.firstCall.args[0]).toEqual({
+    expect(result.invitations).toHaveLength(2);
+    expect(result.pagination.totalCount).toBe(2);
+    expect(result.pagination.currentPage).toBe(1);
+    expect(result.pagination.limit).toBe(50);
+    expect(findAndCountAllStub.calledOnce).toBe(true);
+    expect(findAndCountAllStub.firstCall.args[0]).toEqual({
       where: {},
       order: [['createdAt', 'DESC']],
       include: [{
         model: AccountEntity,
         as: 'inviter',
       }],
+      limit: 50,
+      offset: 0,
     });
   });
 
@@ -801,19 +806,22 @@ describe('listInvitations', () => {
       },
     ];
 
-    findAllStub.resolves(mockInvitations);
+    findAndCountAllStub.resolves({ count: 1, rows: mockInvitations });
 
-    const result = await accountService.listInvitations('user123');
+    const result = await accountService.listInvitations(1, 50, 'user123');
 
-    expect(result).toHaveLength(1);
-    expect(findAllStub.calledOnce).toBe(true);
-    expect(findAllStub.firstCall.args[0]).toEqual({
+    expect(result.invitations).toHaveLength(1);
+    expect(result.pagination.totalCount).toBe(1);
+    expect(findAndCountAllStub.calledOnce).toBe(true);
+    expect(findAndCountAllStub.firstCall.args[0]).toEqual({
       where: { invited_by: 'user123' },
       order: [['createdAt', 'DESC']],
       include: [{
         model: AccountEntity,
         as: 'inviter',
       }],
+      limit: 50,
+      offset: 0,
     });
   });
 
@@ -832,19 +840,22 @@ describe('listInvitations', () => {
       },
     ];
 
-    findAllStub.resolves(mockInvitations);
+    findAndCountAllStub.resolves({ count: 1, rows: mockInvitations });
 
-    const result = await accountService.listInvitations(undefined, 'cal456');
+    const result = await accountService.listInvitations(1, 50, undefined, 'cal456');
 
-    expect(result).toHaveLength(1);
-    expect(findAllStub.calledOnce).toBe(true);
-    expect(findAllStub.firstCall.args[0]).toEqual({
+    expect(result.invitations).toHaveLength(1);
+    expect(result.pagination.totalCount).toBe(1);
+    expect(findAndCountAllStub.calledOnce).toBe(true);
+    expect(findAndCountAllStub.firstCall.args[0]).toEqual({
       where: { calendar_id: 'cal456' },
       order: [['createdAt', 'DESC']],
       include: [{
         model: AccountEntity,
         as: 'inviter',
       }],
+      limit: 50,
+      offset: 0,
     });
   });
 
@@ -863,13 +874,14 @@ describe('listInvitations', () => {
       },
     ];
 
-    findAllStub.resolves(mockInvitations);
+    findAndCountAllStub.resolves({ count: 1, rows: mockInvitations });
 
-    const result = await accountService.listInvitations('owner123', 'cal456');
+    const result = await accountService.listInvitations(1, 50, 'owner123', 'cal456');
 
-    expect(result).toHaveLength(1);
-    expect(findAllStub.calledOnce).toBe(true);
-    expect(findAllStub.firstCall.args[0]).toEqual({
+    expect(result.invitations).toHaveLength(1);
+    expect(result.pagination.totalCount).toBe(1);
+    expect(findAndCountAllStub.calledOnce).toBe(true);
+    expect(findAndCountAllStub.firstCall.args[0]).toEqual({
       where: {
         invited_by: 'owner123',
         calendar_id: 'cal456',
@@ -879,6 +891,8 @@ describe('listInvitations', () => {
         model: AccountEntity,
         as: 'inviter',
       }],
+      limit: 50,
+      offset: 0,
     });
   });
 
@@ -908,20 +922,20 @@ describe('listInvitations', () => {
       },
     ];
 
-    findAllStub.resolves(mockInvitations);
+    findAndCountAllStub.resolves({ count: 2, rows: mockInvitations });
 
     await accountService.listInvitations();
 
-    const callArgs = findAllStub.firstCall.args[0];
+    const callArgs = findAndCountAllStub.firstCall.args[0];
     expect(callArgs.order).toEqual([['createdAt', 'DESC']]);
   });
 
   it('should include inviter relation', async () => {
-    findAllStub.resolves([]);
+    findAndCountAllStub.resolves({ count: 0, rows: [] });
 
     await accountService.listInvitations();
 
-    const callArgs = findAllStub.firstCall.args[0];
+    const callArgs = findAndCountAllStub.firstCall.args[0];
     expect(callArgs.include).toEqual([{
       model: AccountEntity,
       as: 'inviter',
@@ -929,12 +943,13 @@ describe('listInvitations', () => {
   });
 
   it('should return empty array when no invitations found', async () => {
-    findAllStub.resolves([]);
+    findAndCountAllStub.resolves({ count: 0, rows: [] });
 
     const result = await accountService.listInvitations();
 
-    expect(result).toEqual([]);
-    expect(result).toHaveLength(0);
+    expect(result.invitations).toEqual([]);
+    expect(result.invitations).toHaveLength(0);
+    expect(result.pagination.totalCount).toBe(0);
   });
 
 });
