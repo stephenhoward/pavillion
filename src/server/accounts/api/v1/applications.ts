@@ -52,8 +52,16 @@ export default class AccountApplicationRouteHandlers {
   }
 
   async listApplications(req: Request, res: Response) {
-    const applications = await this.service.listAccountApplications();
-    res.json(applications);
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));
+    const status = req.query.status as string | undefined;
+
+    const result = await this.service.listAccountApplications(page, limit, status);
+
+    res.json({
+      applications: result.applications,
+      pagination: result.pagination,
+    });
   }
 
   async processApplication(req: Request, res: Response) {

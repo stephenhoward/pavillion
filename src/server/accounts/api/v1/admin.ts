@@ -50,13 +50,20 @@ export default class AdminAccountRouteHandlers {
 
   /**
    * GET /api/v1/admin/applications
-   * List all pending account applications
+   * List all pending account applications with pagination
    */
   async listApplications(req: Request, res: Response): Promise<void> {
     try {
-      const applications = await this.service.listAccountApplications();
+      const page = Math.max(1, parseInt(req.query.page as string) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));
+      const status = req.query.status as string | undefined;
 
-      res.json(applications.map(app => app.toObject()));
+      const result = await this.service.listAccountApplications(page, limit, status);
+
+      res.json({
+        applications: result.applications,
+        pagination: result.pagination,
+      });
     }
     catch (error) {
       console.error('Error listing applications:', error);
@@ -155,14 +162,20 @@ export default class AdminAccountRouteHandlers {
 
   /**
    * GET /api/v1/admin/invitations
-   * List all account invitations (admin sees all invitations)
+   * List all account invitations with pagination (admin sees all invitations)
    */
   async listInvitations(req: Request, res: Response): Promise<void> {
     try {
-      // Admin gets all invitations (inviterId = undefined)
-      const invitations = await this.service.listInvitations();
+      const page = Math.max(1, parseInt(req.query.page as string) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));
 
-      res.json(invitations.map(inv => inv.toObject()));
+      // Admin gets all invitations (inviterId = undefined)
+      const result = await this.service.listInvitations(page, limit);
+
+      res.json({
+        invitations: result.invitations.map(inv => inv.toObject()),
+        pagination: result.pagination,
+      });
     }
     catch (error) {
       console.error('Error listing invitations:', error);

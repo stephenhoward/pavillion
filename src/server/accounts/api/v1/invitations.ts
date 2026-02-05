@@ -30,11 +30,17 @@ export default class AccountInvitationRouteHandlers {
       return;
     }
 
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));
+
     // Admins see all invitations, regular users see only their own
     const inviterId = account.hasRole('admin') ? undefined : account.id;
-    const invitations = await this.service.listInvitations(inviterId);
+    const result = await this.service.listInvitations(page, limit, inviterId);
 
-    res.json(invitations.map(inv => inv.toObject()));
+    res.json({
+      invitations: result.invitations.map(inv => inv.toObject()),
+      pagination: result.pagination,
+    });
   }
 
   async inviteToRegister(req: Request, res: Response) {

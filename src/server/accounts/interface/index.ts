@@ -74,8 +74,20 @@ export default class AccountsInterface {
     return this.accountService.applyForNewAccount(email, message);
   }
 
-  async listAccountApplications(): Promise<AccountApplication[]> {
-    return this.accountService.listAccountApplications();
+  async listAccountApplications(
+    page: number = 1,
+    limit: number = 50,
+    status?: string,
+  ): Promise<{
+    applications: AccountApplication[];
+    pagination: {
+      currentPage: number;
+      totalPages: number;
+      totalCount: number;
+      limit: number;
+    };
+  }> {
+    return this.accountService.listAccountApplications(page, limit, status);
   }
 
   async acceptAccountApplication(id: string): Promise<Account> {
@@ -99,8 +111,21 @@ export default class AccountsInterface {
   async acceptAccountInvite(code: string, password: string): Promise<{ account: Account, calendars: string[] }> {
     return this.accountService.acceptAccountInvite(code, password);
   }
-  async listInvitations(inviterId?: string, calendarId?: string): Promise<AccountInvitation[]> {
-    return this.accountService.listInvitations(inviterId, calendarId);
+  async listInvitations(
+    page: number = 1,
+    limit: number = 50,
+    inviterId?: string,
+    calendarId?: string,
+  ): Promise<{
+    invitations: AccountInvitation[];
+    pagination: {
+      currentPage: number;
+      totalPages: number;
+      totalCount: number;
+      limit: number;
+    };
+  }> {
+    return this.accountService.listInvitations(page, limit, inviterId, calendarId);
   }
 
   async listAccounts(

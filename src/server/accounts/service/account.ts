@@ -489,13 +489,33 @@ export default class AccountService {
   }
 
   /**
-   * Lists account invitations with optional filtering.
+   * Lists account invitations with optional filtering and pagination.
    *
+   * @param page - Page number (1-indexed)
+   * @param limit - Number of items per page (max 100)
    * @param inviterId - Optional: Filter by the user who sent the invitation
    * @param calendarId - Optional: Filter by calendar for editor invitations
-   * @returns {Promise<AccountInvitation[]>} Array of account invitations
+   * @returns Paginated account invitations
    */
-  async listInvitations(inviterId?: string, calendarId?: string): Promise<AccountInvitation[]> {
+  async listInvitations(
+    page: number = 1,
+    limit: number = 50,
+    inviterId?: string,
+    calendarId?: string,
+  ): Promise<{
+    invitations: AccountInvitation[];
+    pagination: {
+      currentPage: number;
+      totalPages: number;
+      totalCount: number;
+      limit: number;
+    };
+  }> {
+    // Enforce pagination limits
+    const sanitizedPage = Math.max(1, page);
+    const sanitizedLimit = Math.min(100, Math.max(1, limit));
+    const offset = (sanitizedPage - 1) * sanitizedLimit;
+
     const whereClause: any = {};
 
     if (inviterId) {
@@ -506,41 +526,84 @@ export default class AccountService {
       whereClause.calendar_id = calendarId;
     }
 
-    const entities = await AccountInvitationEntity.findAll({
+    const { count, rows: entities } = await AccountInvitationEntity.findAndCountAll({
       where: whereClause,
       order: [['createdAt', 'DESC']],
       include: [{
         model: AccountEntity,
         as: 'inviter',
       }],
+      limit: sanitizedLimit,
+      offset,
     });
 
-    return entities.map(e => {
+    const invitations = entities.map(e => {
       const invitation = e.toModel();
       invitation.invitedBy = e.inviter.toModel();
       return invitation;
     });
+
+    return {
+      invitations,
+      pagination: {
+        currentPage: sanitizedPage,
+        totalPages: Math.ceil(count / sanitizedLimit),
+        totalCount: count,
+        limit: sanitizedLimit,
+      },
+    };
   }
 
   /**
-   * Lists account applications with optional status filtering.
+   * Lists account applications with optional status filtering and pagination.
    *
+   * @param page - Page number (1-indexed)
+   * @param limit - Number of items per page (max 100)
    * @param status - Optional status filter (pending, accepted, rejected)
-   * @returns {Promise<AccountApplication[]>} Array of account applications
+   * @returns Paginated account applications
    */
-  async listAccountApplications(status?: string): Promise<AccountApplication[]> {
+  async listAccountApplications(
+    page: number = 1,
+    limit: number = 50,
+    status?: string,
+  ): Promise<{
+    applications: AccountApplication[];
+    pagination: {
+      currentPage: number;
+      totalPages: number;
+      totalCount: number;
+      limit: number;
+    };
+  }> {
+    // Enforce pagination limits
+    const sanitizedPage = Math.max(1, page);
+    const sanitizedLimit = Math.min(100, Math.max(1, limit));
+    const offset = (sanitizedPage - 1) * sanitizedLimit;
+
     const whereClause: any = {};
 
     if (status) {
       whereClause.status = status;
     }
 
-    const entities = await AccountApplicationEntity.findAll({
+    const { count, rows: entities } = await AccountApplicationEntity.findAndCountAll({
       where: whereClause,
       order: [['createdAt', 'DESC']],
+      limit: sanitizedLimit,
+      offset,
     });
 
-    return entities.map(e => e.toModel());
+    const applications = entities.map(e => e.toModel());
+
+    return {
+      applications,
+      pagination: {
+        currentPage: sanitizedPage,
+        totalPages: Math.ceil(count / sanitizedLimit),
+        totalCount: count,
+        limit: sanitizedLimit,
+      },
+    };
   }
 
   /**
