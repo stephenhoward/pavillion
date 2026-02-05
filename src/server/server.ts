@@ -22,6 +22,7 @@ import SetupDomain from './setup';
 import SubscriptionDomain from './subscription';
 import { createSetupModeMiddleware } from './setup/middleware/setup-mode';
 import { backfillUserActors } from '@/server/activitypub/scripts/backfill-user-actors';
+import { globalErrorHandler } from '@/server/common/middleware/error-handler';
 
 /**
  * Validates production environment configuration.
@@ -223,6 +224,9 @@ const initPavillionServer = async (app: express.Application, port: number) => {
   // Initialize housekeeping domain (for automated server maintenance)
   const housekeepingDomain = new HousekeepingDomain(eventBus, emailDomain.interface, accountsDomain.interface);
   housekeepingDomain.initialize(app);
+
+  // Register global error handler (MUST be after all routes and middleware)
+  app.use(globalErrorHandler);
 
   // Initialize database before starting the server
   try {

@@ -10,6 +10,7 @@ import {
   CategoryAlreadyAssignedError,
   CategoryEventCalendarMismatchError,
 } from '@/common/exceptions/category';
+import { logError } from '@/server/common/helper/error-logger';
 
 class CategoryRoutes {
   private service: CalendarInterface;
@@ -75,7 +76,7 @@ class CategoryRoutes {
       res.json(categoriesWithCounts);
     }
     catch (error) {
-      console.error('Error fetching categories:', error);
+      logError(error, 'Error fetching categories');
       res.status(500).json({ "error": "Internal server error" });
     }
   }
@@ -101,7 +102,7 @@ class CategoryRoutes {
       res.status(201).json(category.toObject());
     }
     catch (error) {
-      console.error('Error creating category:', error);
+      logError(error, 'Error creating category');
 
       if (error instanceof CalendarNotFoundError) {
         res.status(404).json({ "error": "Calendar not found", "errorName": "CalendarNotFoundError" });
@@ -142,7 +143,7 @@ class CategoryRoutes {
       res.json(category.toObject());
     }
     catch (error) {
-      console.error('Error fetching category:', error);
+      logError(error, 'Error fetching category');
 
       if (error instanceof CategoryNotFoundError) {
         res.status(404).json({ "error": "Category not found", "errorName": "CategoryNotFoundError" });
@@ -192,7 +193,7 @@ class CategoryRoutes {
       res.json(category.toObject());
     }
     catch (error) {
-      console.error('Error updating category:', error);
+      logError(error, 'Error updating category');
 
       if (error instanceof CategoryNotFoundError) {
         res.status(404).json({ "error": "Category not found", "errorName": "CategoryNotFoundError" });
@@ -270,7 +271,7 @@ class CategoryRoutes {
       res.json({ affectedEventCount });
     }
     catch (error) {
-      console.error('Error deleting category:', error);
+      logError(error, 'Error deleting category');
 
       if (error instanceof CategoryNotFoundError) {
         res.status(404).json({ "error": "Category not found", "errorName": "CategoryNotFoundError" });
@@ -343,7 +344,7 @@ class CategoryRoutes {
       res.json(result);
     }
     catch (error) {
-      console.error('Error merging categories:', error);
+      logError(error, 'Error merging categories');
 
       if (error instanceof CategoryNotFoundError) {
         res.status(404).json({ "error": "One or more categories not found", "errorName": "CategoryNotFoundError" });
@@ -392,11 +393,26 @@ class CategoryRoutes {
         return;
       }
 
+      // Validate UUID format
+      if (!ExpressHelper.isValidUUID(eventId)) {
+        res.status(400).json({
+          "error": "invalid UUID format in event ID",
+        });
+        return;
+      }
+
+      if (!ExpressHelper.isValidUUID(categoryId)) {
+        res.status(400).json({
+          "error": "invalid UUID format in category ID",
+        });
+        return;
+      }
+
       const assignment = await this.service.assignCategoryToEvent(account, eventId, categoryId);
       res.status(201).json(assignment.toObject());
     }
     catch (error) {
-      console.error('Error assigning category to event:', error);
+      logError(error, 'Error assigning category to event');
 
       if (error instanceof CategoryNotFoundError) {
         res.status(404).json({ "error": "Category not found", "errorName": "CategoryNotFoundError" });
@@ -448,11 +464,26 @@ class CategoryRoutes {
         return;
       }
 
+      // Validate UUID format
+      if (!ExpressHelper.isValidUUID(eventId)) {
+        res.status(400).json({
+          "error": "invalid UUID format in event ID",
+        });
+        return;
+      }
+
+      if (!ExpressHelper.isValidUUID(categoryId)) {
+        res.status(400).json({
+          "error": "invalid UUID format in category ID",
+        });
+        return;
+      }
+
       await this.service.unassignCategoryFromEvent(account, eventId, categoryId);
       res.status(204).send();
     }
     catch (error) {
-      console.error('Error removing category assignment:', error);
+      logError(error, 'Error removing category assignment');
 
       if (error instanceof CategoryNotFoundError) {
         res.status(404).json({ "error": "Category not found", "errorName": "CategoryNotFoundError" });
@@ -500,7 +531,7 @@ class CategoryRoutes {
       res.json(categories.map(category => category.toObject()));
     }
     catch (error) {
-      console.error('Error fetching event categories:', error);
+      logError(error, 'Error fetching event categories');
       res.status(500).json({ "error": "Internal server error" });
     }
   }
@@ -533,7 +564,7 @@ class CategoryRoutes {
       res.json(event.toObject());
     }
     catch (error) {
-      console.error('Error setting event categories:', error);
+      logError(error, 'Error setting event categories');
 
       if (error instanceof EventNotFoundError) {
         res.status(404).json({ "error": "Event not found", "errorName": "EventNotFoundError" });
@@ -588,7 +619,7 @@ class CategoryRoutes {
       res.json(eventIds);
     }
     catch (error) {
-      console.error('Error fetching category events:', error);
+      logError(error, 'Error fetching category events');
 
       if (error instanceof CategoryNotFoundError) {
         res.status(404).json({ "error": "Category not found", "errorName": "CategoryNotFoundError" });

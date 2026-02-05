@@ -8,6 +8,7 @@ import { noAccountExistsError } from '@/server/accounts/exceptions';
 import AccountsInterface from '@/server/accounts/interface';
 import { EmailAlreadyExistsError, InvalidPasswordError } from '@/server/authentication/exceptions';
 import AuthenticationInterface from '@/server/authentication/interface';
+import { logError } from '@/server/common/helper/error-logger';
 import {
   passwordResetByIp,
   passwordResetByEmail,
@@ -85,8 +86,8 @@ export default class AuthenticationRouteHandlers {
         console.info('Password reset code requested for non-existent account');
       }
       else {
-        console.error(error);
-        res.status(400).json({message: 'error generating password reset code'});
+        logError(error, 'Error generating password reset code');
+        res.status(500).json({message: 'error generating password reset code'});
         return;
       }
     }
@@ -134,7 +135,7 @@ export default class AuthenticationRouteHandlers {
         res.status(401).json({ message: 'invalid_password' });
       }
       else {
-        console.error('Error changing email:', error);
+        logError(error, 'Error changing email');
         res.status(500).json({ message: 'server_error' });
       }
     }

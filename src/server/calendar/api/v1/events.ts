@@ -4,6 +4,7 @@ import { Account } from '@/common/model/account';
 import ExpressHelper from '@/server/common/helper/express';
 import CalendarInterface from '@/server/calendar/interface';
 import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError, BulkEventsNotFoundError, MixedCalendarEventsError, CategoriesNotFoundError, LocationValidationError } from '@/common/exceptions/calendar';
+import { logError } from '@/server/common/helper/error-logger';
 
 export default class EventRoutes {
   private service: CalendarInterface;
@@ -84,6 +85,14 @@ export default class EventRoutes {
       return;
     }
 
+    // Validate UUID format
+    if (!ExpressHelper.isValidUUID(eventId)) {
+      res.status(400).json({
+        "error": "invalid UUID format in event ID",
+      });
+      return;
+    }
+
     try {
       const event = await this.service.getEventById(eventId);
 
@@ -111,7 +120,7 @@ export default class EventRoutes {
         });
       }
       else {
-        console.error("Error getting event:", error);
+        logError(error, "Error getting event");
         res.status(500).json({
           "error": "An error occurred while getting the event",
         });
@@ -153,7 +162,7 @@ export default class EventRoutes {
         });
       }
       else {
-        console.error("Error creating event:", error);
+        logError(error, "Error creating event");
         res.status(500).json({
           "error": "An error occurred while creating the event",
         });
@@ -181,6 +190,14 @@ export default class EventRoutes {
 
     // Decode the URL-encoded event ID from the path parameter
     const eventId = decodeURIComponent(req.params.id);
+
+    // Validate UUID format
+    if (!ExpressHelper.isValidUUID(eventId)) {
+      res.status(400).json({
+        "error": "invalid UUID format in event ID",
+      });
+      return;
+    }
 
     try {
       const updatedEvent = await this.service.updateEvent(account, eventId, req.body);
@@ -212,7 +229,7 @@ export default class EventRoutes {
         });
       }
       else {
-        console.error("Error updating event:", error);
+        logError(error, "Error updating event");
         res.status(500).json({
           "error": "An error occurred while updating the event",
         });
@@ -262,6 +279,25 @@ export default class EventRoutes {
       return;
     }
 
+    // Validate that all IDs are valid UUIDs
+    const invalidEventIds = ExpressHelper.findInvalidUUIDs(eventIds);
+    if (invalidEventIds.length > 0) {
+      res.status(400).json({
+        "error": "invalid UUID format in eventIds",
+        "invalidIds": invalidEventIds,
+      });
+      return;
+    }
+
+    const invalidCategoryIds = ExpressHelper.findInvalidUUIDs(categoryIds);
+    if (invalidCategoryIds.length > 0) {
+      res.status(400).json({
+        "error": "invalid UUID format in categoryIds",
+        "invalidIds": invalidCategoryIds,
+      });
+      return;
+    }
+
     try {
       const events = await this.service.bulkAssignCategories(account, eventIds, categoryIds);
       res.json(events.map(event => event.toObject()));
@@ -304,7 +340,7 @@ export default class EventRoutes {
         });
       }
       else {
-        console.error("Error in bulk category assignment:", error);
+        logError(error, "Error in bulk category assignment");
         res.status(500).json({
           "error": "An error occurred while assigning categories",
         });
@@ -330,6 +366,14 @@ export default class EventRoutes {
       return;
     }
 
+    // Validate UUID format
+    if (!ExpressHelper.isValidUUID(eventId)) {
+      res.status(400).json({
+        "error": "invalid UUID format in event ID",
+      });
+      return;
+    }
+
     // calendarId is optional - needed for remote event deletion
     const calendarId = req.query.calendarId as string | undefined;
 
@@ -351,7 +395,7 @@ export default class EventRoutes {
         });
       }
       else {
-        console.error("Error deleting event:", error);
+        logError(error, "Error deleting event");
         res.status(500).json({
           "error": "An error occurred while deleting the event",
         });
