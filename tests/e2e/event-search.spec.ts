@@ -9,6 +9,11 @@ import { loginAsAdmin } from './helpers/auth';
  * - Search queries are persisted in URL for bookmarking
  * - Revisiting bookmarked URLs restores search state
  * - Search works alongside category filtering
+ *
+ * These tests are designed to be resilient to parallel test execution.
+ * Instead of relying on specific hardcoded event names, they read actual
+ * event data from the page to construct search queries, avoiding flakiness
+ * caused by other tests deleting events concurrently.
  */
 
 test.describe('Event Search End-to-End', () => {
@@ -20,144 +25,198 @@ test.describe('Event Search End-to-End', () => {
   test('should allow user to search for events by text', async ({ page }) => {
     // Navigate directly to the test calendar which has events and categories
     await page.goto('/calendar/test_calendar');
-    await page.waitForTimeout(1000);
 
-    // Find the search input - should exist since test_calendar has events
+    // Wait for events to load (the search input only appears when events exist)
     const searchInput = page.locator('#event-search');
-    await expect(searchInput).toBeVisible();
+    await expect(searchInput).toBeVisible({ timeout: 15000 });
 
-    // Count initial events - should be greater than 0
-    const initialEventCount = await page.locator('.event-item').count();
-    expect(initialEventCount).toBeGreaterThan(0);
+    // Wait for at least one event item to render
+    const eventItems = page.locator('.event-item');
+    await expect(eventItems.first()).toBeVisible({ timeout: 10000 });
 
-    // Type search query (search for 'festival' which exists in seed data)
-    await searchInput.fill('festival');
+    // Read the first event's title to construct a search term from real data
+    const firstEventTitle = await eventItems.first().locator('h3').textContent();
+    expect(firstEventTitle).toBeTruthy();
 
-    // Wait for debounce and API call
-    await page.waitForTimeout(500);
+    // Extract a meaningful search word from the event title (use the last word,
+    // which is typically the most unique part of titles like "Summer Festival",
+    // "Book Club Meeting", etc.)
+    const words = firstEventTitle!.trim().split(/\s+/);
+    const searchTerm = words[words.length - 1].toLowerCase();
 
-    // Check that URL was updated
-    const url = page.url();
-    expect(url).toContain('search=festival');
+    // Search for that term and wait for the API response
+    const responsePromise = page.waitForResponse(
+      (response) => response.url().includes('/api/v1/calendars/test_calendar/events') && response.status() === 200,
+    );
+    await searchInput.fill(searchTerm);
+    await responsePromise;
 
-    // Verify events are shown (filtered or all if all match)
-    const filteredEventCount = await page.locator('.event-item').count();
+    // Check that URL was updated with search parameter
+    await expect(page).toHaveURL(new RegExp(`search=${encodeURIComponent(searchTerm)}`));
+
+    // Verify filtered events are shown - the term came from an existing event so it must match
+    await expect(eventItems.first()).toBeVisible({ timeout: 5000 });
+    const filteredEventCount = await eventItems.count();
     expect(filteredEventCount).toBeGreaterThan(0);
   });
 
   test('should restore search from URL on page load', async ({ page }) => {
-    // Navigate directly to test_calendar with search parameter in URL
-    await page.goto('/calendar/test_calendar?search=club');
-    await page.waitForTimeout(1000);
+    // First, navigate to the calendar to find an event name we can use
+    await page.goto('/calendar/test_calendar');
 
-    // Verify search input is populated
+    const eventItems = page.locator('.event-item');
+    await expect(eventItems.first()).toBeVisible({ timeout: 15000 });
+
+    // Get a search term from an actual event
+    const firstEventTitle = await eventItems.first().locator('h3').textContent();
+    const words = firstEventTitle!.trim().split(/\s+/);
+    const searchTerm = words[words.length - 1].toLowerCase();
+
+    // Navigate with that search term as a URL parameter
+    await page.goto(`/calendar/test_calendar?search=${encodeURIComponent(searchTerm)}`);
+
+    // Wait for the search input to appear and verify it's populated
     const searchInput = page.locator('#event-search');
+    await expect(searchInput).toBeVisible({ timeout: 15000 });
+    await expect(searchInput).toHaveValue(searchTerm);
 
-    if (await searchInput.count() > 0) {
-      const searchValue = await searchInput.inputValue();
-      expect(searchValue).toBe('club');
-
-      // Verify URL still has search parameter
-      expect(page.url()).toContain('search=club');
-    }
+    // Verify URL still has search parameter
+    expect(page.url()).toContain(`search=${encodeURIComponent(searchTerm)}`);
   });
 
   test('should combine search with category filters', async ({ page }) => {
     // Navigate directly to test_calendar which has both events and categories
     await page.goto('/calendar/test_calendar');
-    await page.waitForTimeout(1000);
 
-    // Verify events and categories exist
-    expect(await page.locator('.event-item').count()).toBeGreaterThan(0);
-    expect(await page.locator('.toggle-chip').count()).toBeGreaterThan(0);
+    // Wait for events and categories to load
+    const eventItems = page.locator('.event-item');
+    await expect(eventItems.first()).toBeVisible({ timeout: 15000 });
+    const categoryChips = page.locator('.toggle-chip');
+    await expect(categoryChips.first()).toBeVisible({ timeout: 10000 });
 
-    // Add search query
+    // Get a search term from an actual event
+    const firstEventTitle = await eventItems.first().locator('h3').textContent();
+    const words = firstEventTitle!.trim().split(/\s+/);
+    const searchTerm = words[words.length - 1].toLowerCase();
+
+    // Add search query and wait for filtered API response
     const searchInput = page.locator('#event-search');
-    if (await searchInput.count() > 0) {
-      await searchInput.fill('community');
-      await page.waitForTimeout(500);
+    await expect(searchInput).toBeVisible();
 
-      // Select a category
-      const firstCategory = page.locator('.toggle-chip').first();
-      await firstCategory.click();
-      await page.waitForTimeout(500);
+    const searchResponse = page.waitForResponse(
+      (response) => response.url().includes('/api/v1/calendars/test_calendar/events') && response.status() === 200,
+    );
+    await searchInput.fill(searchTerm);
+    await searchResponse;
 
-      // Verify URL has both parameters
-      const url = page.url();
-      expect(url).toContain('search=community');
-      expect(url).toContain('categories=');
-    }
+    // Verify URL has search parameter
+    await expect(page).toHaveURL(new RegExp(`search=${encodeURIComponent(searchTerm)}`));
+
+    // Select a category and wait for the filtered API response
+    const categoryResponse = page.waitForResponse(
+      (response) => response.url().includes('/api/v1/calendars/test_calendar/events') && response.status() === 200,
+    );
+    await categoryChips.first().click();
+    await categoryResponse;
+
+    // Verify URL has both parameters
+    const url = page.url();
+    expect(url).toContain(`search=${encodeURIComponent(searchTerm)}`);
+    expect(url).toContain('categories=');
   });
 
   test('should clear search when clear button is clicked', async ({ page }) => {
     // Navigate directly to test_calendar
     await page.goto('/calendar/test_calendar');
-    await page.waitForTimeout(1000);
 
-    // Verify events exist
-    expect(await page.locator('.event-item').count()).toBeGreaterThan(0);
+    // Wait for events to load
+    const eventItems = page.locator('.event-item');
+    await expect(eventItems.first()).toBeVisible({ timeout: 15000 });
 
-    // Add search query
+    // Get a search term from an actual event
+    const firstEventTitle = await eventItems.first().locator('h3').textContent();
+    const words = firstEventTitle!.trim().split(/\s+/);
+    const searchTerm = words[words.length - 1].toLowerCase();
+
+    // Add search query and wait for API response
     const searchInput = page.locator('#event-search');
-    if (await searchInput.count() > 0) {
-      await searchInput.fill('picnic');
-      await page.waitForTimeout(500);
+    await expect(searchInput).toBeVisible();
 
-      // Verify URL updated
-      expect(page.url()).toContain('search=picnic');
+    const searchResponse = page.waitForResponse(
+      (response) => response.url().includes('/api/v1/calendars/test_calendar/events') && response.status() === 200,
+    );
+    await searchInput.fill(searchTerm);
+    await searchResponse;
 
-      // Click clear button
-      const clearButton = page.locator('.clear-search');
-      if (await clearButton.isVisible()) {
-        await clearButton.click();
-        await page.waitForTimeout(500);
+    // Verify URL updated
+    await expect(page).toHaveURL(new RegExp(`search=${encodeURIComponent(searchTerm)}`));
 
-        // Verify search is cleared
-        const searchValue = await searchInput.inputValue();
-        expect(searchValue).toBe('');
+    // Click clear button and wait for API response (clears search, reloads all events)
+    const clearButton = page.locator('.clear-search');
+    await expect(clearButton).toBeVisible();
 
-        // Verify URL no longer has search parameter
-        expect(page.url()).not.toContain('search=');
-      }
-    }
+    const clearResponse = page.waitForResponse(
+      (response) => response.url().includes('/api/v1/calendars/test_calendar/events') && response.status() === 200,
+    );
+    await clearButton.click();
+    await clearResponse;
+
+    // Verify search is cleared
+    await expect(searchInput).toHaveValue('');
+
+    // Verify URL no longer has search parameter
+    expect(page.url()).not.toContain('search=');
   });
 
   test('should clear all filters when clear all button is clicked', async ({ page }) => {
     // Navigate directly to test_calendar
     await page.goto('/calendar/test_calendar');
-    await page.waitForTimeout(1000);
 
-    // Verify events exist
-    expect(await page.locator('.event-item').count()).toBeGreaterThan(0);
+    // Wait for events to load
+    const eventItems = page.locator('.event-item');
+    await expect(eventItems.first()).toBeVisible({ timeout: 15000 });
 
-    // Add search query
+    // Get a search term from an actual event
+    const firstEventTitle = await eventItems.first().locator('h3').textContent();
+    const words = firstEventTitle!.trim().split(/\s+/);
+    const searchTerm = words[words.length - 1].toLowerCase();
+
+    // Add search query and wait for API response
     const searchInput = page.locator('#event-search');
-    if (await searchInput.count() > 0) {
-      await searchInput.fill('book');
-      await page.waitForTimeout(500);
+    await expect(searchInput).toBeVisible();
 
-      // Add category if available
-      const firstCategory = page.locator('.toggle-chip').first();
-      if (await firstCategory.count() > 0) {
-        await firstCategory.click();
-        await page.waitForTimeout(500);
-      }
+    const searchResponse = page.waitForResponse(
+      (response) => response.url().includes('/api/v1/calendars/test_calendar/events') && response.status() === 200,
+    );
+    await searchInput.fill(searchTerm);
+    await searchResponse;
 
-      // Click clear all filters
-      const clearAllButton = page.locator('.clear-filters-section .pill-button');
-      if (await clearAllButton.isVisible()) {
-        await clearAllButton.click();
-        await page.waitForTimeout(500);
-
-        // Verify search is cleared
-        const searchValue = await searchInput.inputValue();
-        expect(searchValue).toBe('');
-
-        // Verify URL has no filter parameters
-        const url = page.url();
-        expect(url).not.toContain('search=');
-        expect(url).not.toContain('categories=');
-      }
+    // Add category if available
+    const firstCategory = page.locator('.toggle-chip').first();
+    if (await firstCategory.count() > 0) {
+      const categoryResponse = page.waitForResponse(
+        (response) => response.url().includes('/api/v1/calendars/test_calendar/events') && response.status() === 200,
+      );
+      await firstCategory.click();
+      await categoryResponse;
     }
+
+    // Click clear all filters and wait for API response
+    const clearAllButton = page.locator('.clear-filters-section .pill-button');
+    await expect(clearAllButton).toBeVisible();
+
+    const clearAllResponse = page.waitForResponse(
+      (response) => response.url().includes('/api/v1/calendars/test_calendar/events') && response.status() === 200,
+    );
+    await clearAllButton.click();
+    await clearAllResponse;
+
+    // Verify search is cleared
+    await expect(searchInput).toHaveValue('');
+
+    // Verify URL has no filter parameters
+    const url = page.url();
+    expect(url).not.toContain('search=');
+    expect(url).not.toContain('categories=');
   });
 });

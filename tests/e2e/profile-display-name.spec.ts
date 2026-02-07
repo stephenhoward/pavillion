@@ -11,7 +11,13 @@ import { loginAsAdmin } from './helpers/auth';
  * - Display name persists after page reload
  * - Display name saves on blur with feedback
  * - Display name appears in admin accounts list
+ *
+ * These tests run serially because they all modify the same admin
+ * account's display name and would cause state pollution if run
+ * in parallel.
  */
+
+test.describe.configure({ mode: 'serial' });
 
 test.describe('Profile Display Name', () => {
   test.beforeEach(async ({ page }) => {

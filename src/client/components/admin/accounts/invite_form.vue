@@ -36,12 +36,12 @@
 </template>
 
 <script setup>
-import { reactive, inject } from 'vue';
+import { reactive } from 'vue';
 import { useTranslation } from 'i18next-vue';
+import axios from 'axios';
 import Modal from '@/client/components/common/modal.vue';
 
 const emit = defineEmits(['close', 'invited']);
-const authn = inject('authn');
 const { t } = useTranslation('admin', {
   keyPrefix: 'invite_form',
 });
@@ -58,12 +58,14 @@ const sendInvitation = async () => {
   state.errorMessage = null;
 
   try {
-    await authn.send_invitation(state.email.trim());
+    await axios.post('/api/v1/admin/invitations', {
+      email: state.email.trim(),
+    });
     emit('invited');
   }
   catch (error) {
     console.error('Error sending invitation:', error);
-    state.errorMessage = error.message || 'Failed to send invitation';
+    state.errorMessage = error.response?.data?.error || error.message || 'Failed to send invitation';
   }
   finally {
     state.sending = false;

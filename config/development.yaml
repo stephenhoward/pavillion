@@ -37,3 +37,8 @@ media:
     - '.jpg'
     - '.jpeg'
     - '.heic'
+
+# Disable rate limiting in development to prevent e2e test failures
+# when Playwright runs many parallel login requests
+rateLimit:
+  enabled: false
