@@ -54,7 +54,7 @@ export default class CalendarService {
     // Otherwise, fetch from the server and update the store
     try {
       const calendarsData = await ModelService.listModels('/api/v1/calendars');
-      const calendars = calendarsData.map(calendar => Calendar.fromObject(calendar));
+      const calendars = calendarsData.items.map(calendar => Calendar.fromObject(calendar));
 
       // Update the store with fetched calendars
       this.store.setCalendars(calendars);
@@ -74,7 +74,7 @@ export default class CalendarService {
   async loadCalendarsWithRelationship(): Promise<Array<CalendarInfo>> {
     try {
       const calendarsData = await ModelService.listModels('/api/v1/calendars');
-      return calendarsData.map(calendarData => CalendarInfo.fromObject(calendarData));
+      return calendarsData.items.map(calendarData => CalendarInfo.fromObject(calendarData));
     }
     catch (error) {
       console.error('Error loading calendars with relationship:', error);

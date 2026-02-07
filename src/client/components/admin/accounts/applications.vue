@@ -128,8 +128,8 @@ onBeforeMount(async () => {
 
 const loadApplications = async () => {
   try {
-    const response = await ModelService.listModels('/api/v1/admin/applications');
-    store.setApplications(response.map(app => {
+    const result = await ModelService.listModels('/api/v1/admin/applications', { dataKey: 'applications' });
+    store.setApplications(result.items.map(app => {
       return new AccountApplication(
         app.id,
         app.email,

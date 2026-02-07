@@ -213,7 +213,7 @@ export default class CategoryService {
 
     try {
       const categories = await ModelService.listModels(`/api/v1/events/${encodedEventId}/categories`);
-      const eventCategories = categories.map(event => EventCategory.fromObject(event));
+      const eventCategories = categories.items.map(event => EventCategory.fromObject(event));
       return eventCategories;
     }
     catch (error) {

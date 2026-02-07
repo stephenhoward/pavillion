@@ -208,8 +208,8 @@ onBeforeMount(async () => {
 
 const loadInvitations = async () => {
   try {
-    const response = await ModelService.listModels('/api/v1/admin/invitations');
-    store.invitations = response;
+    const result = await ModelService.listModels('/api/v1/admin/invitations', { dataKey: 'invitations' });
+    store.invitations = result.items;
   }
   catch (error) {
     console.error('Error loading invitations:', error);

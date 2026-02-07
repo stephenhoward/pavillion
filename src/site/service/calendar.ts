@@ -45,7 +45,7 @@ export default class CalendarService {
   async loadCalendarEvents(calendarUrlName: string): Promise<CalendarEventInstance[]> {
     try {
       const events = await ModelService.listModels(`/api/public/v1/calendar/${calendarUrlName}/events`);
-      const calendarEvents = events.map(event => CalendarEventInstance.fromObject(event));
+      const calendarEvents = events.items.map(event => CalendarEventInstance.fromObject(event));
       this.eventStore.setEvents(calendarEvents);
       return calendarEvents;
     }

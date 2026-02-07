@@ -1,6 +1,7 @@
 import axios, { AxiosError } from 'axios';
 import { PrimaryModel } from '@/common/model/model';
 import { validateAndEncodeId } from '@/client/service/utils';
+import ListResult from '@/client/service/list-result';
 
 export default class ModelService {
 
@@ -70,15 +71,38 @@ export default class ModelService {
   /**
    * Fetches a list of models from the server.
    *
-   * @param {string} url - The API endpoint URL to fetch models from
-   * @returns {Promise<Record<string,any>[]>} A promise resolving to an array of model data
+   * When dataKey is not provided, treats response.data as a flat array and
+   * returns a ListResult with no pagination. When dataKey is provided,
+   * extracts items from response.data[dataKey] and pagination metadata from
+   * response.data.pagination, returning a paginated ListResult with a
+   * fetch function for navigating pages.
+   *
+   * @param url - The API endpoint URL to fetch models from
+   * @param options - Optional configuration
+   * @param options.dataKey - Key to extract items from a paginated response envelope
+   * @returns A promise resolving to a ListResult wrapping the response data
    * @throws Will throw an error if the request fails
    */
-  static async listModels(url: string): Promise<Record<string,any>[]> {
+  static async listModels(url: string, options?: { dataKey?: string }): Promise<ListResult> {
 
     try {
       let response = await axios.get( url );
-      return response.data;
+
+      if (options?.dataKey) {
+        const items = response.data[options.dataKey] || [];
+        const pagination = response.data.pagination;
+
+        const fetchFn = (page: number): Promise<ListResult> => {
+          const pageUrl = new URL(url, 'http://localhost');
+          pageUrl.searchParams.set('page', String(page));
+          const updatedUrl = pageUrl.pathname + pageUrl.search;
+          return ModelService.listModels(updatedUrl, options);
+        };
+
+        return ListResult.fromPaginated(items, pagination, fetchFn);
+      }
+
+      return ListResult.fromArray(response.data);
     }
     catch(error) {
       throw( error );

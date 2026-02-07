@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import EventService from '@/client/service/event';
 import ModelService from '@/client/service/models';
+import ListResult from '@/client/service/list-result';
 import { CalendarEvent } from '@/common/model/events';
 import { Calendar } from '@/common/model/calendar';
 import { useEventStore } from '@/client/stores/eventStore';
@@ -70,7 +71,7 @@ describe('loadCalendarEvents', () => {
       { calendar_id: 'c1', id: 'evt1', date: '2023-01-01' },
       { calendar_id: 'c1', id: 'evt2', date: '2023-01-02' },
     ];
-    mockListModels.resolves(mockEvents);
+    mockListModels.resolves(ListResult.fromArray(mockEvents));
 
     // Act
     const result = await service.loadCalendarEvents('test-calendar');

@@ -6,6 +6,7 @@ import { flushPromises } from '@vue/test-utils';
 import { mountComponent } from '@/client/test/lib/vue';
 import Invitations from '@/client/components/admin/accounts/invitations.vue';
 import ModelService from '@/client/service/models';
+import ListResult from '@/client/service/list-result';
 
 const routes: RouteRecordRaw[] = [
   { path: '/test', component: {}, name: 'test' },
@@ -72,7 +73,7 @@ describe('Admin Invitations Component', () => {
         },
       ];
 
-      listModelsSpy.mockResolvedValue(testInvitations);
+      listModelsSpy.mockResolvedValue(ListResult.fromArray(testInvitations));
 
       const { wrapper } = mountInvitationsComponent();
       currentWrapper = wrapper;
@@ -80,8 +81,8 @@ describe('Admin Invitations Component', () => {
       await flushPromises();
       await wrapper.vm.$nextTick();
 
-      // Verify the correct endpoint was called
-      expect(listModelsSpy).toHaveBeenCalledWith('/api/v1/admin/invitations');
+      // Verify the correct endpoint and dataKey option were used
+      expect(listModelsSpy).toHaveBeenCalledWith('/api/v1/admin/invitations', { dataKey: 'invitations' });
 
       // Verify invitations were loaded into store
       expect(wrapper.vm.store.invitations).toHaveLength(2);
@@ -89,7 +90,7 @@ describe('Admin Invitations Component', () => {
     });
 
     it('shows empty state when no invitations exist', async () => {
-      listModelsSpy.mockResolvedValue([]);
+      listModelsSpy.mockResolvedValue(ListResult.fromArray([]));
 
       const { wrapper } = mountInvitationsComponent();
       currentWrapper = wrapper;
@@ -128,7 +129,7 @@ describe('Admin Invitations Component', () => {
         },
       ];
 
-      listModelsSpy.mockResolvedValue(testInvitations);
+      listModelsSpy.mockResolvedValue(ListResult.fromArray(testInvitations));
 
       const { wrapper, authnMock } = mountInvitationsComponent();
       currentWrapper = wrapper;
@@ -156,7 +157,7 @@ describe('Admin Invitations Component', () => {
         },
       ];
 
-      listModelsSpy.mockResolvedValue(testInvitations);
+      listModelsSpy.mockResolvedValue(ListResult.fromArray(testInvitations));
 
       const { wrapper, authnMock } = mountInvitationsComponent();
       currentWrapper = wrapper;
@@ -188,7 +189,7 @@ describe('Admin Invitations Component', () => {
         },
       ];
 
-      listModelsSpy.mockResolvedValue(testInvitations);
+      listModelsSpy.mockResolvedValue(ListResult.fromArray(testInvitations));
 
       const { wrapper, authnMock } = mountInvitationsComponent();
       currentWrapper = wrapper;
@@ -220,7 +221,7 @@ describe('Admin Invitations Component', () => {
         },
       ];
 
-      listModelsSpy.mockResolvedValue(testInvitations);
+      listModelsSpy.mockResolvedValue(ListResult.fromArray(testInvitations));
 
       const { wrapper } = mountInvitationsComponent();
       currentWrapper = wrapper;
@@ -246,7 +247,7 @@ describe('Admin Invitations Component', () => {
         },
       ];
 
-      listModelsSpy.mockResolvedValue(testInvitations);
+      listModelsSpy.mockResolvedValue(ListResult.fromArray(testInvitations));
 
       const { wrapper } = mountInvitationsComponent();
       currentWrapper = wrapper;
@@ -260,16 +261,16 @@ describe('Admin Invitations Component', () => {
   });
 
   describe('Unified Endpoint Integration', () => {
-    it('uses /api/v1/admin/invitations for listing invitations', async () => {
-      listModelsSpy.mockResolvedValue([]);
+    it('uses /api/v1/admin/invitations with dataKey for listing invitations', async () => {
+      listModelsSpy.mockResolvedValue(ListResult.fromArray([]));
 
       const { wrapper } = mountInvitationsComponent();
       currentWrapper = wrapper;
 
       await flushPromises();
 
-      // Verify the admin endpoint is used
-      expect(listModelsSpy).toHaveBeenCalledWith('/api/v1/admin/invitations');
+      // Verify the admin endpoint is used with the dataKey option
+      expect(listModelsSpy).toHaveBeenCalledWith('/api/v1/admin/invitations', { dataKey: 'invitations' });
     });
 
     it('uses authn.revoke_invitation for deleting invitations', async () => {
@@ -284,7 +285,7 @@ describe('Admin Invitations Component', () => {
         },
       ];
 
-      listModelsSpy.mockResolvedValue(testInvitations);
+      listModelsSpy.mockResolvedValue(ListResult.fromArray(testInvitations));
 
       const { wrapper, authnMock } = mountInvitationsComponent();
       currentWrapper = wrapper;

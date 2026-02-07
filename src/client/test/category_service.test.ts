@@ -3,6 +3,7 @@ import sinon from 'sinon';
 import axios from 'axios';
 import CategoryService from '@/client/service/category';
 import ModelService from '@/client/service/models';
+import ListResult from '@/client/service/list-result';
 import { EventCategory } from '@/common/model/event_category';
 import { CategoryNotFoundError } from '@/common/exceptions/category';
 import { CalendarNotFoundError, InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
@@ -228,7 +229,7 @@ describe('CategoryService', () => {
       };
 
       const mockListModels = sandbox.stub(ModelService, 'listModels');
-      mockListModels.resolves([mockCategoryData]);
+      mockListModels.resolves(ListResult.fromArray([mockCategoryData]));
 
       const categories = await service.getEventCategories('event-123');
 
@@ -261,7 +262,7 @@ describe('CategoryService', () => {
       };
 
       const mockListModels = sandbox.stub(ModelService, 'listModels');
-      mockListModels.resolves([mockCategoryData]);
+      mockListModels.resolves(ListResult.fromArray([mockCategoryData]));
 
       await service.getEventCategories(eventIdWithUrl);
 

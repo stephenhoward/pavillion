@@ -196,7 +196,7 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
           `/api/public/v1/calendar/${calendarUrlName}/categories`,
         );
 
-        this.availableCategories = categoriesData.map(categoryData =>
+        this.availableCategories = categoriesData.items.map(categoryData =>
           EventCategory.fromObject(categoryData),
         );
       }
@@ -252,7 +252,7 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
 
         const eventsData = await ModelService.listModels(url);
 
-        this.allEvents = eventsData.map(eventData =>
+        this.allEvents = eventsData.items.map(eventData =>
           CalendarEventInstance.fromObject(eventData),
         );
       }

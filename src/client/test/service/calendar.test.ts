@@ -4,6 +4,7 @@ import sinon from 'sinon';
 import axios from 'axios';
 import CalendarService from '@/client/service/calendar';
 import ModelService from '@/client/service/models';
+import ListResult from '@/client/service/list-result';
 import { Calendar } from '@/common/model/calendar';
 import { EmptyValueError, UnknownError } from '@/common/exceptions';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
@@ -41,7 +42,7 @@ describe('loadCalendars', () => {
     mockStore.calendars = calendars;
     mockStore.loaded = true;
     const mockListModels = sandbox.stub(ModelService, 'listModels');
-    mockListModels.resolves([]);
+    mockListModels.resolves(ListResult.fromArray([]));
 
     // Act
     const result = await service.loadCalendars();
@@ -58,7 +59,7 @@ describe('loadCalendars', () => {
       new Calendar('cal2', 'calendar-2'),
     ];
     const mockListModels = sandbox.stub(ModelService, 'listModels');
-    mockListModels.resolves(calendars.map(calendar => calendar.toObject()));
+    mockListModels.resolves(ListResult.fromArray(calendars.map(calendar => calendar.toObject())));
 
     // Ensure the store appears empty/not loaded
     mockStore.loaded = false;
@@ -80,7 +81,7 @@ describe('loadCalendars', () => {
     ];
     mockStore.setCalendars(calendars);
     const mockListModels = sandbox.stub(ModelService, 'listModels');
-    mockListModels.resolves(calendars.map(calendar => calendar.toObject()));
+    mockListModels.resolves(ListResult.fromArray(calendars.map(calendar => calendar.toObject())));
 
     // Act
     const result = await service.loadCalendars(true);

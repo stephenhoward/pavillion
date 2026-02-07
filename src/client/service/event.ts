@@ -64,7 +64,7 @@ export default class EventService {
       }
 
       const events = await ModelService.listModels(url);
-      const calendarEvents = events.map(event => CalendarEvent.fromObject(event));
+      const calendarEvents = events.items.map(event => CalendarEvent.fromObject(event));
       this.store.events = calendarEvents;
       return calendarEvents;
     }

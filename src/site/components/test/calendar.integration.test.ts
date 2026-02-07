@@ -7,6 +7,7 @@ import SearchFilterPublic from '../SearchFilterPublic.vue';
 import { usePublicCalendarStore } from '../../stores/publicCalendarStore';
 import CalendarService from '../../service/calendar';
 import ModelService from '@/client/service/models';
+import ListResult from '@/client/service/list-result';
 import { Calendar, CalendarContent } from '@/common/model/calendar';
 import { EventCategory } from '@/common/model/event_category';
 import CalendarEventInstance from '@/common/model/event_instance';
@@ -49,8 +50,8 @@ describe('calendar.vue - SearchFilterPublic Integration', () => {
       ],
     });
 
-    // Mock ModelService.listModels to return empty arrays
-    vi.mocked(ModelService.listModels).mockResolvedValue([]);
+    // Mock ModelService.listModels to return empty ListResult
+    vi.mocked(ModelService.listModels).mockResolvedValue(ListResult.fromArray([]));
   });
 
   afterEach(() => {

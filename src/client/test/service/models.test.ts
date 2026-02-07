@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import sinon from 'sinon';
 import ModelService from '@/client/service/models';
+import ListResult from '@/client/service/list-result';
 import axios from 'axios';
 import { PrimaryModel } from '@/common/model/model';
 
@@ -92,7 +93,7 @@ describe('ModelService', () => {
   });
 
   describe('listModels', () => {
-    it('should fetch a list of models', async () => {
+    it('should return a ListResult wrapping a flat array', async () => {
       // Arrange
       const mockResponse = {
         data: [
@@ -108,8 +109,111 @@ describe('ModelService', () => {
 
       // Assert
       sinon.assert.calledWith(axios.get as sinon.SinonStub, '/api/models');
-      expect(result).toEqual(mockResponse.data);
-      expect(result.length).toBe(2);
+      expect(result).toBeInstanceOf(ListResult);
+      expect(result.items).toEqual(mockResponse.data);
+      expect(result.items.length).toBe(2);
+      expect(result.currentPage).toBe(1);
+      expect(result.totalPages).toBe(1);
+    });
+
+    it('should return a paginated ListResult when dataKey is provided', async () => {
+      // Arrange
+      const mockResponse = {
+        data: {
+          events: [
+            { id: 'event1', title: 'Event 1' },
+            { id: 'event2', title: 'Event 2' },
+          ],
+          pagination: {
+            currentPage: 1,
+            totalPages: 3,
+            totalCount: 25,
+            limit: 10,
+          },
+        },
+      };
+
+      sandbox.stub(axios, 'get').resolves(mockResponse);
+
+      // Act
+      const result = await ModelService.listModels('/api/events', { dataKey: 'events' });
+
+      // Assert
+      expect(result).toBeInstanceOf(ListResult);
+      expect(result.items).toEqual(mockResponse.data.events);
+      expect(result.items.length).toBe(2);
+      expect(result.currentPage).toBe(1);
+      expect(result.totalPages).toBe(3);
+      expect(result.totalCount).toBe(25);
+      expect(result.hasNextPage).toBe(true);
+    });
+
+    it('should default to empty array when dataKey is missing from response', async () => {
+      // Arrange
+      const mockResponse = {
+        data: {
+          pagination: {
+            currentPage: 1,
+            totalPages: 1,
+            totalCount: 0,
+            limit: 10,
+          },
+        },
+      };
+
+      sandbox.stub(axios, 'get').resolves(mockResponse);
+
+      // Act
+      const result = await ModelService.listModels('/api/events', { dataKey: 'events' });
+
+      // Assert
+      expect(result.items).toEqual([]);
+      expect(result.totalCount).toBe(0);
+    });
+
+    it('should wire fetchFn so that next page calls listModels with updated page param', async () => {
+      // Arrange
+      const page1Response = {
+        data: {
+          items: [{ id: '1' }],
+          pagination: {
+            currentPage: 1,
+            totalPages: 2,
+            totalCount: 15,
+            limit: 10,
+          },
+        },
+      };
+      const page2Response = {
+        data: {
+          items: [{ id: '11' }],
+          pagination: {
+            currentPage: 2,
+            totalPages: 2,
+            totalCount: 15,
+            limit: 10,
+          },
+        },
+      };
+
+      const getStub = sandbox.stub(axios, 'get');
+      getStub.onFirstCall().resolves(page1Response);
+      getStub.onSecondCall().resolves(page2Response);
+
+      // Act
+      const result = await ModelService.listModels('/api/things', { dataKey: 'items' });
+      const nextPage = await result.fetchNextPage();
+
+      // Assert
+      expect(getStub.calledTwice).toBe(true);
+      // The second call should have page=2 in the URL
+      const secondCallUrl = getStub.secondCall.args[0];
+      expect(secondCallUrl).toContain('page=2');
+
+      expect(nextPage).toBeInstanceOf(ListResult);
+      expect(nextPage!.items).toEqual([{ id: '11' }]);
+      expect(nextPage!.currentPage).toBe(2);
+      expect(nextPage!.hasNextPage).toBe(false);
     });
 
     it('should throw an error when API call fails', async () => {

@@ -7,6 +7,7 @@ import calendar from '../calendar.vue';
 import { usePublicCalendarStore } from '../../stores/publicCalendarStore';
 import CalendarService from '../../service/calendar';
 import ModelService from '@/client/service/models';
+import ListResult from '@/client/service/list-result';
 import { Calendar, CalendarContent } from '@/common/model/calendar';
 import { EventCategory } from '@/common/model/event_category';
 import { EventCategoryContent } from '@/common/model/event_category_content';
@@ -64,7 +65,7 @@ describe('Public Event Search & Filtering - End-to-End Tests', () => {
     });
 
     // Mock ModelService
-    vi.mocked(ModelService.listModels).mockResolvedValue([]);
+    vi.mocked(ModelService.listModels).mockResolvedValue(ListResult.fromArray([]));
   });
 
   afterEach(() => {

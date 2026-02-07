@@ -34,7 +34,7 @@ async function loadAccounts() {
   state.isLoading = true;
   try {
     const response = await ModelService.listModels('/api/v1/admin/accounts');
-    accounts.value = response;
+    accounts.value = response.items;
   }
   catch (error) {
     console.error('Error loading accounts:', error);

@@ -109,7 +109,7 @@ export default class FeedService {
   async getFollows(calendarId: string): Promise<FollowRelationship[]> {
     try {
       const data = await ModelService.listModels(`/api/v1/social/follows?calendarId=${calendarId}`);
-      return data.map(item => ({
+      return data.items.map(item => ({
         id: item.id,
         calendarActorId: item.calendarActorId,
         calendarId: item.calendarId,
@@ -131,7 +131,7 @@ export default class FeedService {
   async getFollowers(calendarId: string): Promise<FollowerRelationship[]> {
     try {
       const data = await ModelService.listModels(`/api/v1/social/followers?calendarId=${calendarId}`);
-      return data.map(item => FollowerCalendar.fromObject(item));
+      return data.items.map(item => FollowerCalendar.fromObject(item));
     }
     catch (error) {
       console.error('Error fetching followers:', error);
