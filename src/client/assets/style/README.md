@@ -1,19 +1,19 @@
 # Pavillion Style System
 
-> **Complete Developer Reference**  
-> A unified, semantic-first CSS system with design tokens, components, and utilities.
+> **Complete Developer Reference**
+> A unified, semantic-first CSS system with design tokens and components.
 
 ## 🚀 Essential Info
 
 **The design system is globally available** - no imports needed in Vue components. Use design tokens, semantic HTML, and component classes.
 
-### Current Approach (August 2025)
+### Current Approach (February 2026)
 - **CSS-first philosophy** with minimal SCSS (better performance, future-proof)
 - **Semantic HTML5-first** with meaningful element structure
 - **CSS custom properties** for all values (colors, spacing, typography)
 - **Component classes** for common patterns (`.btn`, `.card`, `.input`)
-- **Utility classes** for layout and adjustments (`.flex`, `.m-4`, `.w-full`)
-- **CSS layers** for predictable specificity: `reset → tokens → base → layout → components → utilities`
+- **SCSS mixins** for layout and spacing (embedded inside semantic classes, not in markup)
+- **CSS layers** for predictable specificity: `reset → tokens → base → layout → components`
 - **Logical properties** for internationalization (LTR/RTL support)
 
 ## ✅ Do This
@@ -26,7 +26,7 @@
       <h3>{{ event.title }}</h3>
       <time :datetime="event.date">{{ formatDate(event.date) }}</time>
     </header>
-    <p class="text-secondary">{{ event.description }}</p>
+    <p>{{ event.description }}</p>
     <button class="btn btn--primary" @click="register">Register</button>
   </article>
 </template>
@@ -82,14 +82,12 @@ src/client/assets/style/
 │   ├── _tables.scss        # Table layouts and styles
 │   ├── _alerts.scss        # Alert and notification styles
 │   └── [13 other component files]
-├── utilities/          # Utility classes (.flex, .m-4, etc.)
-│   ├── _layout.scss        # Flexbox, grid, display utilities
-│   ├── _spacing.scss       # Margin, padding utilities
-│   ├── _typography.scss    # Text size, weight, alignment
-│   ├── _visibility.scss    # Show/hide, responsive visibility
-│   └── _debug.scss         # Development debugging utilities
 ├── layout/             # Layout patterns and containers
-├── mixins/             # SCSS helper functions
+├── mixins/             # SCSS mixins for layout, spacing, typography
+│   ├── _layout.scss        # Flexbox, grid, display mixins
+│   ├── _spacing.scss       # Margin, padding, gap mixins
+│   ├── _typography.scss    # Text size, weight, alignment mixins
+│   └── _visibility.scss    # Show/hide mixins
 ```
 
 ### CSS Layers (Specificity Order)
@@ -97,22 +95,20 @@ src/client/assets/style/
 Our styles use CSS `@layer` for predictable cascade control:
 
 ```css
-@layer reset, tokens, base, layout, components, utilities;
+@layer reset, tokens, base, layout, components;
 ```
 
 **Layer Order (lowest to highest specificity):**
 
 1. **reset** - CSS reset and normalize (box-sizing, margins, etc.)
-2. **tokens** - Design tokens (CSS custom properties) and themes  
+2. **tokens** - Design tokens (CSS custom properties) and themes
 3. **base** - Base typography and foundational element styles
-4. **layout** - Layout systems (grid, flexbox utilities)
+4. **layout** - Layout systems (grid, flexbox containers)
 5. **components** - Component styles (`.btn`, `.card`, `.modal`)
-6. **utilities** - Utility classes (`.m-4`, `.text-center`, `.hidden`)
 
 **Benefits:**
 - Eliminates `!important` usage
-- Predictable cascade behavior  
-- Utilities can always override components
+- Predictable cascade behavior
 - Clear separation of concerns
 - Future-proof architecture
 
@@ -204,31 +200,35 @@ Pre-built component patterns ready to use:
 <label class="label">Form label</label>
 ```
 
-## 🔧 Utility Classes
+## 🔧 Layout & Spacing Mixins
 
-For layout and quick adjustments:
+Use SCSS mixins inside semantic class definitions for consistent layout and spacing. **Never use utility classes directly in HTML markup.**
 
-### Layout
-```html
-<div class="flex justify-center items-center">Centered content</div>
-<div class="grid grid-cols-2 gap-4">Two-column grid</div>
-<div class="w-full h-screen">Full width and height</div>
+### Example Usage
+```scss
+// In your component's scoped SCSS
+.event-list {
+  @include flex-column;
+  @include gap-4;
+
+  &__item {
+    @include flex-between;
+    @include p-4;
+  }
+}
+
+.calendar-grid {
+  @include grid-cols(3);
+  @include gap-6;
+}
 ```
 
-### Spacing
-```html
-<div class="m-4">Margin on all sides</div>
-<div class="p-6">Padding on all sides</div>
-<div class="mt-8">Top margin only</div>
-<div class="space-y-4">Vertical spacing between children</div>
-```
+### Available Mixins
+- **Layout**: `flex`, `flex-column`, `flex-center`, `flex-between`, `grid`, `grid-cols($n)`
+- **Spacing**: `m-{1-12}`, `p-{1-12}`, `gap-{1-12}`, `space-y-{1-12}`
+- **Sizing**: `w-full`, `h-full`, `w-screen`, `h-screen`
 
-### Typography
-```html
-<h1 class="text-3xl font-bold">Large bold heading</h1>
-<p class="text-secondary text-sm">Small secondary text</p>
-<div class="text-center">Centered text</div>
-```
+> **Note**: See `src/client/assets/style/mixins/` for the complete mixin library.
 
 ## 🌍 Internationalization (Logical Properties)
 
@@ -280,16 +280,16 @@ Automatic light/dark theme support:
 ## 🔍 When to Use What
 
 ### Use Component Classes When:
-- Common UI patterns (buttons, cards, inputs)
+- Common UI patterns (buttons, cards, inputs, modals)
 - Multiple properties needed together
 - Consistent behavior across the app
 
-### Use Utility Classes When:
-- Simple layout adjustments
-- One-off spacing or sizing needs  
-- Prototyping and quick iterations
+### Use SCSS Mixins When:
+- Layout patterns (flex, grid) inside semantic classes
+- Consistent spacing inside semantic classes
+- Avoiding repetitive token usage
 
-### Use Custom CSS When:
+### Use Scoped CSS with Tokens When:
 - Component-specific styling
 - Complex animations or interactions
 - Unique visual requirements
@@ -356,12 +356,13 @@ Always use design tokens in custom CSS:
 }
 ```
 
-### Adding Utilities
+### Adding Mixins
 
 ```scss
-// src/client/assets/style/utilities/_spacing.scss
-.m-auto { margin: auto; }
-.p-8 { padding: var(--pav-space-8); }
+// src/client/assets/style/mixins/_spacing.scss
+@mixin m-auto { margin: auto; }
+@mixin p-8 { padding: var(--pav-space-8); }
+@mixin gap-4 { gap: var(--pav-space-4); }
 ```
 
 ## 🏆 Best Practices
@@ -550,7 +551,7 @@ document.documentElement.setAttribute('data-theme', 'dark');
 Our styles are organized in layers for predictable cascade:
 
 ```css
-@layer reset, tokens, base, layout, components, utilities, legacy;
+@layer reset, tokens, base, layout, components;
 ```
 
 **Order (lowest to highest specificity):**
@@ -559,8 +560,6 @@ Our styles are organized in layers for predictable cascade:
 3. **base** - Base typography
 4. **layout** - Grid/flexbox
 5. **components** - Components (.btn, .card)
-6. **utilities** - Utilities (.m-4, .hidden)
-7. **legacy** - Migration compatibility
 
 ## 🏗 File Structure
 
@@ -572,13 +571,12 @@ src/client/assets/style/
 ├── base/                     # Reset and base styles
 ├── layout/                   # Grid and flexbox
 ├── components/               # Component library
-├── utilities/                # Utility classes
-└── legacy/                   # Migration support
+└── mixins/                   # SCSS mixins (layout, spacing, typography)
 ```
 
 ## 🎨 Naming Conventions
 
-### Components (BEM-inspired)
+### Components (naming syntax)
 ```css
 .btn { }                      /* Block */
 .btn--primary { }             /* Modifier */
@@ -586,12 +584,12 @@ src/client/assets/style/
 .card__title--large { }       /* Element modifier */
 ```
 
-### Utilities (Tailwind-inspired)
-```css
-.m-4 { }                      /* margin */
-.p-6 { }                      /* padding */
-.text-lg { }                  /* font-size */
-.flex { }                     /* display */
+### Mixins (for use inside semantic classes)
+```scss
+@include m-4;                 /* margin */
+@include p-6;                 /* padding */
+@include text-lg;             /* font-size */
+@include flex;                /* display */
 ```
 
 ### Design Tokens
@@ -610,21 +608,21 @@ src/client/assets/style/
 
 ### Bundle Optimization
 - CSS custom properties (no runtime processing)
-- Tree-shakeable utilities
 - Minimal SCSS compilation
+- Mixins compiled into semantic classes
 
 ## 🧪 Development
 
 ### Adding Components
 1. Create file in `components/`
 2. Import in main.scss
-3. Follow BEM naming
+3. Follow naming conventions
 4. Use design tokens
 
-### Adding Utilities
-1. Add to appropriate utility file
-2. Follow naming convention
-3. Import in main.scss
+### Adding Mixins
+1. Add to appropriate mixin file in `mixins/`
+2. Follow naming convention (`@mixin flex-center`, `@mixin p-4`)
+3. Import in `mixins/index.scss`
 
 ### Testing
 ```bash
@@ -637,8 +635,8 @@ npm run lint         # Check code quality
 
 ### From Legacy Styles
 1. Replace hardcoded values with design tokens
-2. Convert to BEM naming convention
-3. Use utility classes for spacing/layout
+2. Use semantic class names with `--modifier` and `__element` syntax
+3. Use mixins for layout/spacing inside semantic classes
 4. Remove old styles after testing
 
 ### Example Migration
@@ -677,7 +675,6 @@ npm run lint         # Check code quality
 ### Learning
 - [CSS Layers Guide](https://developer.mozilla.org/en-US/docs/Web/CSS/@layer)
 - [CSS Custom Properties](https://developer.mozilla.org/en-US/docs/Web/CSS/--*)
-- [BEM Methodology](https://getbem.com/)
 
 ### Tools
 - [CSS Layers Browser Support](https://caniuse.com/css-cascade-layers)
