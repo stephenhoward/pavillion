@@ -3,6 +3,7 @@ import { reactive, computed, onMounted, nextTick } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useFeedStore } from '@/client/stores/feedStore';
 import { useCalendarStore } from '@/client/stores/calendarStore';
+import { useToast } from '@/client/composables/useToast';
 import CalendarSelector from './calendar_selector.vue';
 import FollowsView from './follows.vue';
 import FollowersView from './followers.vue';
@@ -11,6 +12,7 @@ import FollowedEventsView from './events.vue';
 const { t } = useTranslation('feed');
 const feedStore = useFeedStore();
 const calendarStore = useCalendarStore();
+const toast = useToast();
 
 const state = reactive({
   activeTab: 'events',
@@ -52,6 +54,7 @@ const loadFeedData = async () => {
   }
   catch (error) {
     console.error('Error loading feed data:', error);
+    toast.error(t('load_error'));
   }
 };
 

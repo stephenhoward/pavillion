@@ -3,10 +3,12 @@ import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
 import { useFeedStore } from '@/client/stores/feedStore';
+import { useToast } from '@/client/composables/useToast';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
 
 const { t } = useTranslation('feed', { keyPrefix: 'events' });
 const feedStore = useFeedStore();
+const toast = useToast();
 
 const events = computed(() => feedStore.events);
 const hasMore = computed(() => feedStore.eventsHasMore);
@@ -66,7 +68,7 @@ const handleRepost = async (eventId) => {
   }
   catch (error) {
     console.error('Error reposting event:', error);
-    // TODO: Show user-friendly error message
+    toast.error(t('repost_error'));
   }
 };
 
@@ -79,7 +81,7 @@ const handleUnrepost = async (eventId) => {
   }
   catch (error) {
     console.error('Error unreposting event:', error);
-    // TODO: Show user-friendly error message
+    toast.error(t('unrepost_error'));
   }
 };
 

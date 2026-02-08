@@ -9,6 +9,7 @@
     "followers_tab": "Followers",
     "select_calendar_prompt": "Please select a calendar to view its feed",
     "loading": "Loading...",
+    "load_error": "Failed to load feed data",
     "followers": {
         "title": "Followers",
         "description": "People who follow you",
@@ -31,7 +32,9 @@
         "title": "Events",
         "description": "Events from calendars you follow",
         "no_events": "No events",
-        "follow_button": "Follow a Calendar"
+        "follow_button": "Follow a Calendar",
+        "repost_error": "Failed to repost event",
+        "unrepost_error": "Failed to remove repost"
     },
     "add_calendar_modal": {
         "title": "Add a Calendar",

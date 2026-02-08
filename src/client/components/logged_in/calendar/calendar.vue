@@ -5,6 +5,7 @@ import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
 import { Calendar, MapPin, Languages, Repeat, Pencil, Copy } from 'lucide-vue-next';
 import { useEventStore } from '@/client/stores/eventStore';
+import { useToast } from '@/client/composables/useToast';
 import CalendarService from '@/client/service/calendar';
 import EventService from '@/client/service/event';
 import EventImage from '@/client/components/common/media/EventImage.vue';
@@ -28,6 +29,7 @@ const site_config = inject('site_config');
 const site_domain = site_config.settings().domain;
 const eventService = new EventService();
 const calendarStore = useCalendarStore();
+const toast = useToast();
 
 const route = useRoute();
 const router = useRouter();
@@ -300,6 +302,7 @@ const handleDeleteEvents = async () => {
   const confirmDelete = confirm(`Are you sure you want to delete ${selectedCount.value} event${selectedCount.value > 1 ? 's' : ''}?`);
 
   if (confirmDelete) {
+    const deleteCount = selectedEvents.value.length;
     try {
       // Get the actual event objects from the selected IDs
       const eventsToDelete = getSelectedEventObjects(store.events || []);
@@ -311,10 +314,11 @@ const handleDeleteEvents = async () => {
       // Reload events after deletion with current filters
       await eventService.loadCalendarEvents(calendarId.value, currentFilters);
       deselectAll();
+      toast.success(tBulk('delete_success', { count: deleteCount }));
     }
     catch (error) {
       console.error('Error deleting events:', error);
-      // TODO: Show user-friendly error message
+      toast.error(tBulk('delete_error'));
     }
   }
 };
