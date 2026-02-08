@@ -22,11 +22,20 @@ export class RateLimitError extends Error {
 
 /**
  * Thrown when report submission fails due to invalid input data.
+ * Contains an array of validation error messages.
+ *
+ * Accepts either a string message (for frontend use when reconstructing
+ * from API error responses) or a string array of individual validation
+ * errors (for backend service-layer validation).
  */
 export class ReportValidationError extends Error {
-  constructor(message: string = 'Invalid report data') {
-    super(message);
+  public errors: string[];
+
+  constructor(errors: string[] | string = 'Invalid report data') {
+    const errorArray = typeof errors === 'string' ? [errors] : errors;
+    super(errorArray.join('; ') || 'Invalid report data');
     this.name = 'ReportValidationError';
+    this.errors = errorArray;
     Object.setPrototypeOf(this, ReportValidationError.prototype);
   }
 }

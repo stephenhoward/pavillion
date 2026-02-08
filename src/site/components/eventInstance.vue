@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, onBeforeMount } from 'vue';
+import { reactive, onBeforeMount, ref } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useRoute } from 'vue-router';
 import { DateTime } from 'luxon';
@@ -7,12 +7,14 @@ import { DateTime } from 'luxon';
 import CalendarService from '../service/calendar';
 import NotFound from './notFound.vue';
 import EventImage from './EventImage.vue';
+import ReportEvent from './ReportEvent.vue';
 
 const { t } = useTranslation('system');
 const route = useRoute();
 const calendarId = route.params.calendar;
 const eventId = route.params.event;
 const instanceId = route.params.instance;
+const showReportModal = ref(false);
 const state = reactive({
   err: '',
   notFound: false,
@@ -21,6 +23,20 @@ const state = reactive({
   isLoading: false,
 });
 const calendarService = new CalendarService();
+
+/**
+ * Opens the report event modal dialog.
+ */
+function openReportModal() {
+  showReportModal.value = true;
+}
+
+/**
+ * Closes the report event modal dialog.
+ */
+function closeReportModal() {
+  showReportModal.value = false;
+}
 
 onBeforeMount(async () => {
   try {
@@ -76,13 +92,26 @@ onBeforeMount(async () => {
       <p>{{ state.instance.event.content("en").description }}</p>
     </main>
     <footer>
-      <a v-for="category in state.instance.event.categories"
-         class="event-category-badge"
-         :href="'/@'+ state.calendar.urlName + '?category='+category.content('en').name"
-      >
-        {{ category.content("en").name }}
-      </a>
+      <div class="category-badges">
+        <a v-for="category in state.instance.event.categories"
+           class="event-category-badge"
+           :href="'/@'+ state.calendar.urlName + '?category='+category.content('en').name"
+        >
+          {{ category.content("en").name }}
+        </a>
+      </div>
+      <button
+        type="button"
+        class="report-link"
+        @click="openReportModal"
+      >{{ t('report.link_text') }}</button>
     </footer>
+
+    <ReportEvent
+      v-if="showReportModal"
+      :event-id="eventId"
+      @close="closeReportModal"
+    />
   </div>
 </template>
 
@@ -221,15 +250,19 @@ main {
 }
 
 footer {
-  display: flex;
-  flex-wrap: wrap;
-  gap: $public-space-sm;
   margin-top: $public-space-xl;
   padding-top: $public-space-lg;
   border-top: 1px solid $public-border-subtle-light;
 
   @include public-dark-mode {
     border-top-color: $public-border-subtle-dark;
+  }
+
+  .category-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: $public-space-sm;
+    margin-bottom: $public-space-lg;
   }
 }
 
@@ -245,6 +278,35 @@ footer {
 
     @include public-dark-mode {
       background-color: $public-accent-hover-dark;
+    }
+  }
+}
+
+.report-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: $public-font-family;
+  font-size: $public-font-size-sm;
+  color: $public-text-tertiary-light;
+  cursor: pointer;
+  transition: $public-transition-fast;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+
+  &:hover {
+    color: $public-text-secondary-light;
+  }
+
+  &:focus-visible {
+    @include public-focus-visible;
+  }
+
+  @include public-dark-mode {
+    color: $public-text-tertiary-dark;
+
+    &:hover {
+      color: $public-text-secondary-dark;
     }
   }
 }

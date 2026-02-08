@@ -15,6 +15,32 @@
     },
     "navigation": {
         "skip_to_content": "Skip to main content"
+    },
+    "report": {
+        "form_title": "Report Event",
+        "close_dialog": "Close report dialog",
+        "category_label": "Category",
+        "category_spam": "Spam or advertising",
+        "category_inappropriate": "Inappropriate content",
+        "category_misleading": "Misleading information",
+        "category_harassment": "Harassment or abuse",
+        "category_other": "Other",
+        "description_label": "Description",
+        "description_placeholder": "Please describe the issue...",
+        "description_char_count": "{{remaining}} / {{max}} characters remaining",
+        "description_too_long": "Description exceeds maximum length",
+        "email_label": "Your email",
+        "submit_button": "Submit Report",
+        "cancel_button": "Close",
+        "submitting_button": "Submitting...",
+        "success_title": "Report Submitted",
+        "success_message": "Thank you for your report. It will be reviewed by the calendar owner.",
+        "error_duplicate": "You have already reported this event.",
+        "error_not_found": "This event could not be found.",
+        "error_generic": "An error occurred. Please try again.",
+        "error_validation": "Please fill in all required fields.",
+        "error_description_too_long": "Description exceeds maximum length.",
+        "report_button": "Report",
+        "report_event_label": "Report this event"
     }
 }
-

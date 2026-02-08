@@ -106,8 +106,77 @@ class Report extends PrimaryModel {
   }
 
   /**
+   * Serializes only the fields safe for the person who submitted the report.
+   * Excludes all sensitive, administrative, and reviewer fields.
+   *
+   * @returns Plain object with reporter-safe fields only
+   */
+  toReporterObject(): Record<string, any> {
+    return {
+      id: this.id,
+      eventId: this.eventId,
+      category: this.category,
+      description: this.description,
+      status: this.status,
+      createdAt: this.createdAt.toISOString(),
+    };
+  }
+
+  /**
+   * Serializes fields suitable for a calendar owner reviewing reports.
+   * Includes reporter-safe fields plus reporterType, but not account details
+   * or administrative metadata.
+   *
+   * @returns Plain object with owner-safe fields
+   */
+  toOwnerObject(): Record<string, any> {
+    return {
+      id: this.id,
+      eventId: this.eventId,
+      category: this.category,
+      description: this.description,
+      status: this.status,
+      reporterType: this.reporterType,
+      createdAt: this.createdAt.toISOString(),
+    };
+  }
+
+  /**
+   * Serializes all fields needed for instance admin review.
+   * Includes full report details except verification secrets
+   * (verificationToken, verificationExpiration).
+   *
+   * @returns Plain object with admin-level fields
+   */
+  toAdminObject(): Record<string, any> {
+    return {
+      id: this.id,
+      eventId: this.eventId,
+      calendarId: this.calendarId,
+      category: this.category,
+      description: this.description,
+      reporterEmailHash: this.reporterEmailHash,
+      reporterAccountId: this.reporterAccountId,
+      reporterType: this.reporterType,
+      adminId: this.adminId,
+      adminPriority: this.adminPriority,
+      adminDeadline: this.adminDeadline ? this.adminDeadline.toISOString() : null,
+      adminNotes: this.adminNotes,
+      status: this.status,
+      ownerNotes: this.ownerNotes,
+      reviewerId: this.reviewerId,
+      reviewerNotes: this.reviewerNotes,
+      reviewerTimestamp: this.reviewerTimestamp ? this.reviewerTimestamp.toISOString() : null,
+      escalationType: this.escalationType,
+      createdAt: this.createdAt.toISOString(),
+      updatedAt: this.updatedAt.toISOString(),
+    };
+  }
+
+  /**
    * Converts the report to a plain JavaScript object.
    * Date fields are serialized to ISO strings.
+   * This method includes ALL fields and should only be used for internal purposes.
    *
    * @returns {Record<string, any>} Plain object representation of the report
    */

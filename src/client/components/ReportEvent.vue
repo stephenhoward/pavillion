@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
+import { ref, reactive, computed, inject, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useTranslation } from 'i18next-vue';
-import ReportService from '@/site/service/report';
-import { DuplicateReportError, RateLimitError, ReportValidationError } from '@/common/exceptions/report';
+import ReportService from '@/client/service/report';
+import { DuplicateReportError, ReportValidationError } from '@/common/exceptions/report';
+import { EventNotFoundError } from '@/common/exceptions/calendar';
 import { ReportCategory } from '@/common/model/report';
 
 const { t } = useTranslation('system', {
@@ -32,6 +33,12 @@ let triggerElement: HTMLElement | null = null;
 
 const reportService = new ReportService();
 
+/** Authentication service injected from the client app. */
+const authn = inject<{ userEmail: () => string | null }>('authn');
+
+/** The current user's email address, displayed as read-only. */
+const userEmail = computed(() => authn?.userEmail() ?? '');
+
 /** Category options derived from the ReportCategory enum. */
 const categoryOptions = [
   { value: ReportCategory.SPAM, labelKey: 'category_spam' },
@@ -44,7 +51,6 @@ const categoryOptions = [
 const form = reactive({
   category: '',
   description: '',
-  email: '',
 });
 
 const state = reactive({
@@ -57,9 +63,6 @@ const state = reactive({
 const descriptionCharsRemaining = computed(() => {
   return MAX_DESCRIPTION_LENGTH - form.description.length;
 });
-
-/** Basic email format validation. */
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * Opens the modal dialog and focuses the first field.
@@ -106,7 +109,6 @@ function handleBackdropClick(event: MouseEvent) {
 function resetForm() {
   form.category = '';
   form.description = '';
-  form.email = '';
   state.isSubmitting = false;
   state.isSuccess = false;
   state.error = '';
@@ -114,11 +116,12 @@ function resetForm() {
 
 /**
  * Validates form fields before submission.
+ * No email validation needed for authenticated users.
  *
  * @returns true if the form is valid
  */
 function validate(): boolean {
-  if (!form.category || !form.description.trim() || !form.email.trim()) {
+  if (!form.category || !form.description.trim()) {
     state.error = t('error_validation');
     return false;
   }
@@ -126,15 +129,12 @@ function validate(): boolean {
     state.error = t('error_description_too_long');
     return false;
   }
-  if (!EMAIL_REGEX.test(form.email.trim())) {
-    state.error = t('error_validation');
-    return false;
-  }
   return true;
 }
 
 /**
  * Submits the report via the report service.
+ * No email parameter needed; the server uses JWT identity.
  */
 async function handleSubmit() {
   state.error = '';
@@ -150,7 +150,6 @@ async function handleSubmit() {
       props.eventId,
       form.category,
       form.description.trim(),
-      form.email.trim().toLowerCase(),
     );
 
     state.isSuccess = true;
@@ -159,8 +158,8 @@ async function handleSubmit() {
     if (error instanceof DuplicateReportError) {
       state.error = t('error_duplicate');
     }
-    else if (error instanceof RateLimitError) {
-      state.error = t('error_rate_limit');
+    else if (error instanceof EventNotFoundError) {
+      state.error = t('error_not_found');
     }
     else if (error instanceof ReportValidationError) {
       state.error = error.message !== 'Invalid report data'
@@ -184,7 +183,7 @@ onBeforeUnmount(() => {
   document.body.classList.remove('modal-open');
 });
 
-defineExpose({ open, close });
+defineExpose({ open, close, state });
 </script>
 
 <template>
@@ -201,7 +200,7 @@ defineExpose({ open, close });
         <h2 :id="titleId">{{ t('form_title') }}</h2>
         <button
           type="button"
-          class="report-dialog__close"
+          class="btn btn--ghost report-dialog__close"
           :aria-label="t('close_dialog')"
           @click="close"
         >&times;</button>
@@ -216,7 +215,7 @@ defineExpose({ open, close });
         <p>{{ t('success_message') }}</p>
         <button
           type="button"
-          class="report-dialog__btn report-dialog__btn--ghost"
+          class="btn btn--secondary"
           @click="close"
         >{{ t('cancel_button') }}</button>
       </div>
@@ -229,21 +228,25 @@ defineExpose({ open, close });
       >
         <div
           v-if="state.error"
-          class="report-dialog__error"
+          class="alert alert--error alert--sm"
           role="alert"
           aria-live="polite"
         >
           {{ state.error }}
         </div>
 
-        <div class="report-dialog__field">
-          <label :for="`report-category-${dialogId}`">
+        <div class="form__group">
+          <label
+            class="form__label"
+            :for="`report-category-${dialogId}`"
+          >
             {{ t('category_label') }} <span aria-hidden="true">*</span>
           </label>
           <select
             :id="`report-category-${dialogId}`"
             ref="categoryRef"
             v-model="form.category"
+            class="select"
             required
             :disabled="state.isSubmitting"
           >
@@ -259,13 +262,17 @@ defineExpose({ open, close });
           </select>
         </div>
 
-        <div class="report-dialog__field">
-          <label :for="`report-description-${dialogId}`">
+        <div class="form__group">
+          <label
+            class="form__label"
+            :for="`report-description-${dialogId}`"
+          >
             {{ t('description_label') }} <span aria-hidden="true">*</span>
           </label>
           <textarea
             :id="`report-description-${dialogId}`"
             v-model="form.description"
+            class="textarea"
             :placeholder="t('description_placeholder')"
             :maxlength="MAX_DESCRIPTION_LENGTH"
             rows="4"
@@ -275,38 +282,36 @@ defineExpose({ open, close });
           />
           <p
             :id="`report-description-counter-${dialogId}`"
-            class="report-dialog__char-counter"
+            class="form__help report-dialog__char-counter"
             :class="{ 'report-dialog__char-counter--warning': descriptionCharsRemaining <= 100 }"
             aria-live="polite"
           >{{ t('description_char_count', { remaining: descriptionCharsRemaining, max: MAX_DESCRIPTION_LENGTH }) }}</p>
         </div>
 
-        <div class="report-dialog__field">
-          <label :for="`report-email-${dialogId}`">
-            {{ t('email_label') }} <span aria-hidden="true">*</span>
+        <!-- Email display (read-only for authenticated users) -->
+        <div class="form__group">
+          <label
+            class="form__label"
+            :for="`report-email-${dialogId}`"
+          >
+            {{ t('email_label') }}
           </label>
-          <input
+          <div
             :id="`report-email-${dialogId}`"
-            v-model="form.email"
-            type="email"
-            :placeholder="t('email_placeholder')"
-            required
-            autocomplete="email"
-            :disabled="state.isSubmitting"
-          />
-          <p class="report-dialog__help">{{ t('email_help') }}</p>
+            class="input report-dialog__email-display"
+          >{{ userEmail }}</div>
         </div>
 
         <footer class="report-dialog__actions">
           <button
             type="button"
-            class="report-dialog__btn report-dialog__btn--ghost"
+            class="btn btn--secondary"
             :disabled="state.isSubmitting"
             @click="close"
           >{{ t('cancel_button') }}</button>
           <button
             type="submit"
-            class="report-dialog__btn report-dialog__btn--primary"
+            class="btn btn--primary"
             :disabled="state.isSubmitting"
           >{{ state.isSubmitting ? t('submitting_button') : t('submit_button') }}</button>
         </footer>
@@ -316,14 +321,12 @@ defineExpose({ open, close });
 </template>
 
 <style scoped lang="scss">
-@use '../assets/mixins' as *;
-
 // ================================================================
-// REPORT EVENT DIALOG (Site / Anonymous)
+// REPORT EVENT DIALOG (Client / Authenticated)
 // ================================================================
-// A modal dialog for anonymous visitors to report an event.
+// A modal dialog for authenticated users to report an event.
 // Uses the native <dialog> element for built-in accessibility.
-// Uses the public site mixin-based design system for theming.
+// Leverages the design system tokens for theming (auto dark mode).
 // Only component-specific layout styles remain here.
 // ================================================================
 
@@ -338,6 +341,7 @@ defineExpose({ open, close });
   border: none;
   background: transparent;
   overflow: auto;
+  z-index: var(--pav-z-index-modal);
 
   &::backdrop {
     background-color: rgb(0 0 0 / 50%);
@@ -348,21 +352,17 @@ defineExpose({ open, close });
 .report-dialog__content {
   margin-block-start: 10vh;
   margin-inline: auto;
-  padding: $public-space-xl;
+  padding: var(--pav-space-xl);
   width: 100%;
   max-width: 480px;
-  background: $public-bg-primary-light;
-  border-radius: $public-radius-md;
-  box-shadow: $public-shadow-xl-light;
+  background-color: var(--pav-surface-primary);
+  border-radius: var(--pav-border-radius-modal);
+  border: var(--pav-border-width-1) solid var(--pav-border-primary);
+  box-shadow: var(--pav-shadow-modal);
 
-  @include public-dark-mode {
-    background: $public-bg-primary-dark;
-    box-shadow: $public-shadow-xl-dark;
-  }
-
-  @include public-mobile-only {
-    margin: $public-space-lg;
-    max-width: calc(100% - #{$public-space-lg} * 2);
+  @media (max-width: 768px) {
+    margin: var(--pav-space-md);
+    max-width: calc(100% - var(--pav-space-xl));
   }
 }
 
@@ -370,180 +370,63 @@ defineExpose({ open, close });
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-block-end: $public-space-xl;
-  padding-block-end: $public-space-md;
-  border-block-end: 1px solid $public-border-subtle-light;
-
-  @include public-dark-mode {
-    border-block-end-color: $public-border-subtle-dark;
-  }
+  margin-block-end: var(--pav-space-xl);
+  padding-block-end: var(--pav-space-md);
+  border-block-end: var(--pav-border-width-1) solid var(--pav-border-subtle);
 
   h2 {
     margin: 0;
-    font-size: $public-font-size-lg;
-    font-weight: $public-font-weight-semibold;
-    color: $public-text-primary-light;
-
-    @include public-dark-mode {
-      color: $public-text-primary-dark;
-    }
+    font-size: var(--pav-font-size-h6);
+    font-weight: var(--pav-font-weight-semibold);
+    color: var(--pav-text-primary);
   }
 }
 
 .report-dialog__close {
-  background: none;
-  border: none;
-  font-size: $public-font-size-xl;
+  font-size: var(--pav-font-size-xl);
   line-height: 1;
-  color: $public-text-secondary-light;
-  cursor: pointer;
-  padding: $public-space-xs;
   min-width: 44px;
   min-height: 44px;
-  transition: $public-transition-fast;
-
-  &:hover {
-    color: $public-text-primary-light;
-  }
-
-  &:focus-visible {
-    @include public-focus-visible;
-  }
-
-  @include public-dark-mode {
-    color: $public-text-secondary-dark;
-
-    &:hover {
-      color: $public-text-primary-dark;
-    }
-  }
-}
-
-.report-dialog__error {
-  @include public-error-state;
-
-  margin-block-end: $public-space-lg;
 }
 
 .report-dialog__success {
   text-align: center;
-  padding-block: $public-space-xl;
+  padding-block: var(--pav-space-xl);
 
   p {
-    font-size: $public-font-size-md;
-    color: $public-success-light;
-    margin: 0 0 $public-space-xl 0;
-    line-height: $public-line-height-relaxed;
-
-    @include public-dark-mode {
-      color: $public-success-dark;
-    }
+    font-size: var(--pav-font-size-body);
+    color: var(--pav-color-success);
+    margin: 0 0 var(--pav-space-xl) 0;
+    line-height: var(--pav-line-height-relaxed);
   }
 }
 
-.report-dialog__field {
-  margin-block-end: $public-space-lg;
-
-  label {
-    display: block;
-    font-size: $public-font-size-sm;
-    font-weight: $public-font-weight-medium;
-    color: $public-text-primary-light;
-    margin-block-end: $public-space-xs;
-
-    span {
-      color: $public-error-light;
-
-      @include public-dark-mode {
-        color: $public-error-dark;
-      }
-    }
-
-    @include public-dark-mode {
-      color: $public-text-primary-dark;
-    }
-  }
-
-  select,
-  textarea,
-  input[type="email"] {
-    @include public-input-base;
-
-    box-sizing: border-box;
-  }
-
-  select {
-    appearance: auto;
-    cursor: pointer;
-  }
-
-  textarea {
-    resize: vertical;
-    min-height: 80px;
-  }
-}
-
-.report-dialog__help {
-  margin: $public-space-xs 0 0 0;
-  font-size: $public-font-size-xs;
-  color: $public-text-tertiary-light;
-
-  @include public-dark-mode {
-    color: $public-text-tertiary-dark;
-  }
+.report-dialog__email-display {
+  background-color: var(--pav-surface-tertiary);
+  color: var(--pav-text-muted);
+  cursor: default;
 }
 
 .report-dialog__char-counter {
-  margin: $public-space-xs 0 0 0;
-  font-size: $public-font-size-xs;
-  color: $public-text-tertiary-light;
   text-align: end;
-
-  @include public-dark-mode {
-    color: $public-text-tertiary-dark;
-  }
 }
 
 .report-dialog__char-counter--warning {
-  color: $public-error-light;
-
-  @include public-dark-mode {
-    color: $public-error-dark;
-  }
+  color: var(--pav-color-error);
 }
 
 .report-dialog__actions {
   display: flex;
   justify-content: flex-end;
-  gap: $public-space-md;
-  margin-block-start: $public-space-xl;
-  padding-block-start: $public-space-lg;
-  border-block-start: 1px solid $public-border-subtle-light;
-
-  @include public-dark-mode {
-    border-block-start-color: $public-border-subtle-dark;
-  }
+  gap: var(--pav-space-md);
+  margin-block-start: var(--pav-space-xl);
+  padding-block-start: var(--pav-space-lg);
+  border-block-start: var(--pav-border-width-1) solid var(--pav-border-subtle);
 }
 
-.report-dialog__btn {
-  @include public-button-base;
-
-  padding: $public-space-sm $public-space-xl;
-  font-size: $public-font-size-base;
-}
-
-.report-dialog__btn--primary {
-  @include public-button-primary;
-
-  padding: $public-space-sm $public-space-xl;
-  font-size: $public-font-size-base;
-}
-
-.report-dialog__btn--ghost {
-  @include public-button-ghost;
-
-  padding: $public-space-sm $public-space-xl;
-  font-size: $public-font-size-base;
+// Required asterisk color
+.form__label span {
+  color: var(--pav-color-error);
 }
 
 // Prevent background scroll when modal is open

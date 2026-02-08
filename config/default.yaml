@@ -76,6 +76,9 @@ rateLimit:
     byEmail:
       windowMs: 86400000  # 24 hours in milliseconds
       max: 3  # 3 verification emails per email per 24 hours
+    byAccount:
+      windowMs: 3600000  # 1 hour in milliseconds
+      max: 20  # 20 report submissions per account per hour
 
 # Housekeeping configuration for automated server maintenance
 housekeeping:

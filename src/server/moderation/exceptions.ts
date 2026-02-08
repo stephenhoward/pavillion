@@ -1,17 +1,4 @@
 /**
- * Custom error class for duplicate report submission.
- * Thrown when the same reporter has already reported a given event.
- */
-export class DuplicateReportError extends Error {
-  constructor(message: string = 'This event has already been reported by this reporter') {
-    super(message);
-    this.name = 'DuplicateReportError';
-    // Maintaining proper prototype chain in ES5+
-    Object.setPrototypeOf(this, DuplicateReportError.prototype);
-  }
-}
-
-/**
  * Custom error class for invalid or expired verification tokens.
  * Thrown when an anonymous reporter attempts to verify with a bad token.
  */

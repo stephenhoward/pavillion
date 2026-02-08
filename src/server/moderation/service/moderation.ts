@@ -1,16 +1,16 @@
 import { randomBytes, createHmac } from 'crypto';
 import { EventEmitter } from 'events';
-import { Op } from 'sequelize';
+import { Op, UniqueConstraintError } from 'sequelize';
 import config from 'config';
 
 import { Report, ReportCategory, ReportStatus } from '@/common/model/report';
 import type { ReporterType, EscalationType } from '@/common/model/report';
 import { EventNotFoundError } from '@/common/exceptions/calendar';
+import { DuplicateReportError, ReportValidationError } from '@/common/exceptions/report';
 import { ReportEntity } from '@/server/moderation/entity/report';
 import { EventReporterEntity } from '@/server/moderation/entity/event_reporter';
 import { ReportEscalationEntity } from '@/server/moderation/entity/report_escalation';
 import {
-  DuplicateReportError,
   InvalidVerificationTokenError,
   ReportNotFoundError,
   ReportAlreadyResolvedError,
@@ -23,6 +23,21 @@ const VERIFICATION_TOKEN_EXPIRY_HOURS = 24;
 
 /** Default page size for paginated queries. */
 const DEFAULT_PAGE_LIMIT = 20;
+
+/** Valid report categories derived from the ReportCategory enum values. */
+const VALID_CATEGORIES = Object.values(ReportCategory);
+
+/** Maximum allowed length for report description text. */
+const MAX_DESCRIPTION_LENGTH = 2000;
+
+/** Basic email format validation pattern. */
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Maximum allowed length for email address (RFC 5321 limit). */
+const MAX_EMAIL_LENGTH = 254;
+
+/** UUID v4 validation regex. */
+const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /**
  * Input data for creating a new report.
@@ -95,12 +110,104 @@ class ModerationService {
   }
 
   /**
+   * Collects validation errors for eventId, category, and description fields.
+   * Does not throw - returns an array of error messages for aggregation.
+   *
+   * @param eventId - Event UUID to report
+   * @param category - Report category value
+   * @param description - Report description text
+   * @returns Array of validation error messages (empty if valid)
+   */
+  validateReportFields(eventId: any, category: any, description: any): string[] {
+    const errors: string[] = [];
+
+    // Event ID validation - must be present and valid UUID format
+    if (!eventId) {
+      errors.push('Event ID is required');
+    }
+    else if (typeof eventId !== 'string' || !UUID_V4_REGEX.test(eventId)) {
+      errors.push('Event ID must be a valid UUID');
+    }
+
+    // Category validation - must be in the allowlist
+    if (!category) {
+      errors.push('Category is required');
+    }
+    else if (!VALID_CATEGORIES.includes(category)) {
+      errors.push(`Invalid category. Must be one of: ${VALID_CATEGORIES.join(', ')}`);
+    }
+
+    // Description validation - must be a non-empty string within length limit
+    if (!description && description !== 0 && description !== false) {
+      errors.push('Description is required');
+    }
+    else if (typeof description !== 'string') {
+      errors.push('Description must be a string');
+    }
+    else if (description.trim().length === 0) {
+      errors.push('Description is required');
+    }
+    else if (description.trim().length > MAX_DESCRIPTION_LENGTH) {
+      errors.push(`Description must be ${MAX_DESCRIPTION_LENGTH} characters or fewer`);
+    }
+
+    return errors;
+  }
+
+  /**
+   * Collects validation errors for email field.
+   * Does not throw - returns an array of error messages for aggregation.
+   *
+   * @param email - Reporter email address
+   * @returns Array of validation error messages (empty if valid)
+   */
+  validateEmailField(email: any): string[] {
+    const errors: string[] = [];
+
+    if (!email) {
+      errors.push('Email is required');
+    }
+    else if (typeof email === 'string' && email.trim().length > MAX_EMAIL_LENGTH) {
+      errors.push(`Email address must be ${MAX_EMAIL_LENGTH} characters or fewer`);
+    }
+    else if (typeof email !== 'string' || !EMAIL_REGEX.test(email.trim())) {
+      errors.push('A valid email address is required');
+    }
+
+    return errors;
+  }
+
+  /**
+   * Validates all report input fields and throws if any are invalid.
+   * Collects all errors across all fields before throwing, so the
+   * caller receives all validation issues in a single response.
+   *
+   * @param data - Report creation data to validate
+   * @throws ReportValidationError if any validation checks fail
+   */
+  validateCreateReportForEventInput(data: CreateReportForEventData): void {
+    const errors: string[] = [
+      ...this.validateReportFields(data.eventId, data.category, data.description),
+    ];
+
+    // Validate email for anonymous reporters
+    if (data.reporterType === 'anonymous') {
+      errors.push(...this.validateEmailField(data.reporterEmail));
+    }
+
+    if (errors.length > 0) {
+      throw new ReportValidationError(errors);
+    }
+  }
+
+  /**
    * Creates a new report for an event, resolving the calendarId internally.
-   * Looks up the event via CalendarInterface to determine which calendar
-   * the event belongs to, then delegates to createReport.
+   * Validates all input fields before proceeding with event lookup and
+   * report creation.
    *
    * @param data - Report creation data (without calendarId)
    * @returns The created Report domain model
+   * @throws ReportValidationError if input validation fails
    * @throws EventNotFoundError if the event does not exist or has no calendarId
    * @throws DuplicateReportError if the reporter has already reported this event
    * @throws EmailRateLimitError if the email has exceeded the verification email limit
@@ -109,6 +216,9 @@ class ModerationService {
     if (!this.calendarInterface) {
       throw new Error('CalendarInterface is required for createReportForEvent');
     }
+
+    // Validate all input fields in one pass
+    this.validateCreateReportForEventInput(data);
 
     let calendarId: string;
     try {
@@ -137,6 +247,12 @@ class ModerationService {
    * For authenticated and administrator reporters the status starts as submitted.
    * Checks for duplicate reports before creation.
    * For anonymous reporters, enforces per-email rate limiting on verification emails.
+   *
+   * If a concurrent request creates the EventReporter record between the
+   * duplicate check and the save, the DB unique constraint will reject the
+   * second insert. In that case the orphaned ReportEntity is cleaned up and
+   * a DuplicateReportError is thrown, keeping behavior consistent regardless
+   * of timing.
    *
    * @param data - Report creation data
    * @returns The created Report domain model
@@ -202,13 +318,28 @@ class ModerationService {
     const saved = await entity.save();
     const createdReport = saved.toModel();
 
-    // Create EventReporter record for duplicate tracking
+    // Create EventReporter record for duplicate tracking.
+    // The DB unique constraint on (event_id, reporter_identifier) guards
+    // against a race where a concurrent request passed the duplicate check
+    // above. If the constraint fires, clean up the orphaned report and
+    // surface the duplicate as a proper DuplicateReportError.
     const reporterRecord = EventReporterEntity.fromModel({
       eventId: data.eventId,
       reporterIdentifier,
       reportId: createdReport.id,
     });
-    await reporterRecord.save();
+
+    try {
+      await reporterRecord.save();
+    }
+    catch (error) {
+      if (error instanceof UniqueConstraintError) {
+        // Clean up the orphaned ReportEntity created moments ago
+        await ReportEntity.destroy({ where: { id: createdReport.id } });
+        throw new DuplicateReportError();
+      }
+      throw error;
+    }
 
     // Emit domain event with reporter email for verification email sending
     this.emit('reportCreated', {

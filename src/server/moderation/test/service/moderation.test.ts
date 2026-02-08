@@ -1,19 +1,23 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import { EventEmitter } from 'events';
+import { UniqueConstraintError } from 'sequelize';
 
 import { Report, ReportCategory, ReportStatus } from '@/common/model/report';
+import { DuplicateReportError, ReportValidationError } from '@/common/exceptions/report';
 import { ReportEntity } from '@/server/moderation/entity/report';
 import { EventReporterEntity } from '@/server/moderation/entity/event_reporter';
 import { ReportEscalationEntity } from '@/server/moderation/entity/report_escalation';
 import ModerationService from '@/server/moderation/service/moderation';
 import {
-  DuplicateReportError,
   InvalidVerificationTokenError,
   ReportNotFoundError,
   ReportAlreadyResolvedError,
   EmailRateLimitError,
 } from '@/server/moderation/exceptions';
+
+/** A valid UUID v4 for use in tests. */
+const VALID_UUID = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d';
 
 describe('ModerationService', () => {
   let sandbox: sinon.SinonSandbox;
@@ -28,6 +32,384 @@ describe('ModerationService', () => {
 
   afterEach(() => {
     sandbox.restore();
+  });
+
+  describe('validateReportFields', () => {
+
+    it('should return no errors for valid input', () => {
+      const errors = service.validateReportFields(VALID_UUID, 'spam', 'Valid description');
+
+      expect(errors).toHaveLength(0);
+    });
+
+    it('should return error when eventId is missing', () => {
+      const errors = service.validateReportFields(undefined, 'spam', 'Description');
+
+      expect(errors).toContain('Event ID is required');
+    });
+
+    it('should return error when eventId is empty string', () => {
+      const errors = service.validateReportFields('', 'spam', 'Description');
+
+      expect(errors).toContain('Event ID is required');
+    });
+
+    it('should return error when eventId is not a valid UUID', () => {
+      const errors = service.validateReportFields('not-a-uuid', 'spam', 'Description');
+
+      expect(errors).toContain('Event ID must be a valid UUID');
+    });
+
+    it('should return error when eventId is a non-string type (number)', () => {
+      const errors = service.validateReportFields(12345, 'spam', 'Description');
+
+      expect(errors).toContain('Event ID must be a valid UUID');
+    });
+
+    it('should return error when eventId is an object', () => {
+      const errors = service.validateReportFields({ id: 'test' }, 'spam', 'Description');
+
+      expect(errors).toContain('Event ID must be a valid UUID');
+    });
+
+    it('should return error when eventId is a boolean', () => {
+      const errors = service.validateReportFields(true, 'spam', 'Description');
+
+      expect(errors).toContain('Event ID must be a valid UUID');
+    });
+
+    it('should return error when eventId is a UUID-like string with wrong version digit', () => {
+      // UUID v3 format (version digit is 3, not 4)
+      const errors = service.validateReportFields('550e8400-e29b-31d4-a716-446655440000', 'spam', 'Description');
+
+      expect(errors).toContain('Event ID must be a valid UUID');
+    });
+
+    it('should return error when eventId is a UUID with wrong variant bits', () => {
+      // Valid v4 version digit but variant bits are wrong (starts with 0 instead of 8-b)
+      const errors = service.validateReportFields('550e8400-e29b-41d4-0716-446655440000', 'spam', 'Description');
+
+      expect(errors).toContain('Event ID must be a valid UUID');
+    });
+
+    it('should accept a valid UUID v4 eventId', () => {
+      const errors = service.validateReportFields(VALID_UUID, 'spam', 'Description');
+
+      const eventIdErrors = errors.filter(e => e.includes('Event ID'));
+      expect(eventIdErrors).toHaveLength(0);
+    });
+
+    it('should accept an uppercase UUID v4 eventId', () => {
+      const errors = service.validateReportFields('A1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D', 'spam', 'Description');
+
+      const eventIdErrors = errors.filter(e => e.includes('Event ID'));
+      expect(eventIdErrors).toHaveLength(0);
+    });
+
+    it('should return error when category is missing', () => {
+      const errors = service.validateReportFields(VALID_UUID, undefined, 'Description');
+
+      expect(errors).toContain('Category is required');
+    });
+
+    it('should return error when category is empty string', () => {
+      const errors = service.validateReportFields(VALID_UUID, '', 'Description');
+
+      expect(errors).toContain('Category is required');
+    });
+
+    it('should return error when category is not in the allowlist', () => {
+      const errors = service.validateReportFields(VALID_UUID, 'not_a_valid_category', 'Description');
+
+      expect(errors.some(e => e.includes('Invalid category'))).toBe(true);
+    });
+
+    it('should accept all valid report categories', () => {
+      const validCategories = ['spam', 'inappropriate', 'misleading', 'harassment', 'other'];
+
+      for (const category of validCategories) {
+        const errors = service.validateReportFields(VALID_UUID, category, 'Description');
+        const categoryErrors = errors.filter(e => e.includes('category') || e.includes('Category'));
+        expect(categoryErrors).toHaveLength(0);
+      }
+    });
+
+    it('should return error when description is missing', () => {
+      const errors = service.validateReportFields(VALID_UUID, 'spam', undefined);
+
+      expect(errors).toContain('Description is required');
+    });
+
+    it('should return error when description is empty string', () => {
+      const errors = service.validateReportFields(VALID_UUID, 'spam', '');
+
+      expect(errors).toContain('Description is required');
+    });
+
+    it('should return error when description is only whitespace', () => {
+      const errors = service.validateReportFields(VALID_UUID, 'spam', '   ');
+
+      expect(errors).toContain('Description is required');
+    });
+
+    it('should return error when description is a number', () => {
+      const errors = service.validateReportFields(VALID_UUID, 'spam', 12345);
+
+      expect(errors).toContain('Description must be a string');
+    });
+
+    it('should return error when description is a boolean', () => {
+      const errors = service.validateReportFields(VALID_UUID, 'spam', true);
+
+      expect(errors).toContain('Description must be a string');
+    });
+
+    it('should return error when description is an object', () => {
+      const errors = service.validateReportFields(VALID_UUID, 'spam', { text: 'hello' });
+
+      expect(errors).toContain('Description must be a string');
+    });
+
+    it('should return error when description is an array', () => {
+      const errors = service.validateReportFields(VALID_UUID, 'spam', ['line1', 'line2']);
+
+      expect(errors).toContain('Description must be a string');
+    });
+
+    it('should return error when description exceeds 2000 characters', () => {
+      const longDescription = 'a'.repeat(2001);
+      const errors = service.validateReportFields(VALID_UUID, 'spam', longDescription);
+
+      expect(errors.some(e => e.includes('2000 characters or fewer'))).toBe(true);
+    });
+
+    it('should accept a description of exactly 2000 characters', () => {
+      const exactDescription = 'a'.repeat(2000);
+      const errors = service.validateReportFields(VALID_UUID, 'spam', exactDescription);
+
+      const descErrors = errors.filter(e => e.includes('Description') || e.includes('characters'));
+      expect(descErrors).toHaveLength(0);
+    });
+
+    it('should collect multiple errors when multiple fields are invalid', () => {
+      const errors = service.validateReportFields(undefined, undefined, undefined);
+
+      expect(errors.length).toBeGreaterThanOrEqual(3);
+      expect(errors).toContain('Event ID is required');
+      expect(errors).toContain('Category is required');
+      expect(errors).toContain('Description is required');
+    });
+  });
+
+  describe('validateEmailField', () => {
+
+    it('should return no errors for a valid email', () => {
+      const errors = service.validateEmailField('test@example.com');
+
+      expect(errors).toHaveLength(0);
+    });
+
+    it('should return error when email is missing', () => {
+      const errors = service.validateEmailField(undefined);
+
+      expect(errors).toContain('Email is required');
+    });
+
+    it('should return error when email is empty string', () => {
+      const errors = service.validateEmailField('');
+
+      expect(errors).toContain('Email is required');
+    });
+
+    it('should return error when email exceeds 254 characters', () => {
+      const longEmail = 'a'.repeat(250) + '@test.com';
+      const errors = service.validateEmailField(longEmail);
+
+      expect(errors.some(e => e.includes('254 characters or fewer'))).toBe(true);
+    });
+
+    it('should return error when email format is invalid', () => {
+      const errors = service.validateEmailField('not-an-email');
+
+      expect(errors).toContain('A valid email address is required');
+    });
+
+    it('should return error when email is not a string', () => {
+      const errors = service.validateEmailField(12345);
+
+      expect(errors).toContain('A valid email address is required');
+    });
+
+    it('should accept an email of exactly 254 characters', () => {
+      const exactEmail = 'a'.repeat(244) + '@test.com';
+      const errors = service.validateEmailField(exactEmail);
+
+      expect(errors).toHaveLength(0);
+    });
+  });
+
+  describe('validateCreateReportForEventInput', () => {
+
+    it('should not throw for valid authenticated report input', () => {
+      expect(() => {
+        service.validateCreateReportForEventInput({
+          eventId: VALID_UUID,
+          category: ReportCategory.SPAM,
+          description: 'Valid report',
+          reporterType: 'authenticated',
+          reporterAccountId: 'account-1',
+        });
+      }).not.toThrow();
+    });
+
+    it('should not throw for valid anonymous report input', () => {
+      expect(() => {
+        service.validateCreateReportForEventInput({
+          eventId: VALID_UUID,
+          category: ReportCategory.SPAM,
+          description: 'Valid report',
+          reporterEmail: 'test@example.com',
+          reporterType: 'anonymous',
+        });
+      }).not.toThrow();
+    });
+
+    it('should throw ReportValidationError for invalid eventId', () => {
+      expect(() => {
+        service.validateCreateReportForEventInput({
+          eventId: 'not-a-uuid',
+          category: ReportCategory.SPAM,
+          description: 'Valid report',
+          reporterType: 'authenticated',
+        });
+      }).toThrow(ReportValidationError);
+    });
+
+    it('should throw ReportValidationError for invalid category', () => {
+      expect(() => {
+        service.validateCreateReportForEventInput({
+          eventId: VALID_UUID,
+          category: 'invalid' as ReportCategory,
+          description: 'Valid report',
+          reporterType: 'authenticated',
+        });
+      }).toThrow(ReportValidationError);
+    });
+
+    it('should throw ReportValidationError for empty description', () => {
+      expect(() => {
+        service.validateCreateReportForEventInput({
+          eventId: VALID_UUID,
+          category: ReportCategory.SPAM,
+          description: '   ',
+          reporterType: 'authenticated',
+        });
+      }).toThrow(ReportValidationError);
+    });
+
+    it('should throw ReportValidationError for non-string description (number)', () => {
+      expect(() => {
+        service.validateCreateReportForEventInput({
+          eventId: VALID_UUID,
+          category: ReportCategory.SPAM,
+          description: 123 as any,
+          reporterType: 'authenticated',
+        });
+      }).toThrow(ReportValidationError);
+    });
+
+    it('should throw ReportValidationError for missing email on anonymous reports', () => {
+      expect(() => {
+        service.validateCreateReportForEventInput({
+          eventId: VALID_UUID,
+          category: ReportCategory.SPAM,
+          description: 'Valid report',
+          reporterType: 'anonymous',
+        });
+      }).toThrow(ReportValidationError);
+    });
+
+    it('should throw ReportValidationError for invalid email on anonymous reports', () => {
+      expect(() => {
+        service.validateCreateReportForEventInput({
+          eventId: VALID_UUID,
+          category: ReportCategory.SPAM,
+          description: 'Valid report',
+          reporterEmail: 'not-an-email',
+          reporterType: 'anonymous',
+        });
+      }).toThrow(ReportValidationError);
+    });
+
+    it('should not validate email for authenticated reports', () => {
+      expect(() => {
+        service.validateCreateReportForEventInput({
+          eventId: VALID_UUID,
+          category: ReportCategory.SPAM,
+          description: 'Valid report',
+          reporterType: 'authenticated',
+          // No email provided and that is fine for authenticated
+        });
+      }).not.toThrow();
+    });
+
+    it('should collect all errors across all fields in a single exception', () => {
+      try {
+        service.validateCreateReportForEventInput({
+          eventId: 'not-a-uuid',
+          category: 'invalid' as ReportCategory,
+          description: '',
+          reporterEmail: 'bad-email',
+          reporterType: 'anonymous',
+        });
+        // Should not reach here
+        expect(true).toBe(false);
+      }
+      catch (error) {
+        expect(error).toBeInstanceOf(ReportValidationError);
+        const validationError = error as ReportValidationError;
+        expect(validationError.errors.length).toBeGreaterThanOrEqual(4);
+        expect(validationError.errors.some(e => e.includes('UUID'))).toBe(true);
+        expect(validationError.errors.some(e => e.includes('category'))).toBe(true);
+        expect(validationError.errors.some(e => e.includes('Description'))).toBe(true);
+        expect(validationError.errors.some(e => e.includes('email'))).toBe(true);
+      }
+    });
+
+    it('should include email errors along with field errors for anonymous reports', () => {
+      try {
+        service.validateCreateReportForEventInput({
+          eventId: VALID_UUID,
+          category: ReportCategory.SPAM,
+          description: 'Valid description',
+          reporterEmail: 'a'.repeat(260),
+          reporterType: 'anonymous',
+        });
+        expect(true).toBe(false);
+      }
+      catch (error) {
+        expect(error).toBeInstanceOf(ReportValidationError);
+        const validationError = error as ReportValidationError;
+        expect(validationError.errors.some(e => e.includes('254 characters'))).toBe(true);
+      }
+    });
+
+    it('should include "must be a string" error when non-string description is provided', () => {
+      try {
+        service.validateCreateReportForEventInput({
+          eventId: VALID_UUID,
+          category: ReportCategory.SPAM,
+          description: 42 as any,
+          reporterType: 'authenticated',
+        });
+        expect(true).toBe(false);
+      }
+      catch (error) {
+        expect(error).toBeInstanceOf(ReportValidationError);
+        const validationError = error as ReportValidationError;
+        expect(validationError.errors).toContain('Description must be a string');
+      }
+    });
   });
 
   describe('createReport', () => {
@@ -312,6 +694,70 @@ describe('ModerationService', () => {
       expect(capturedReporterData.eventId).toBe('event-1');
       expect(capturedReporterData.reporterIdentifier).toBe('account-1');
       expect(capturedReporterData.reportId).toBe('report-id-1');
+    });
+
+    it('should throw DuplicateReportError and clean up orphaned report on concurrent duplicate insert', async () => {
+      // Simulate the race condition: hasReporterAlreadyReported passes (returns false)
+      // but a concurrent request inserts the EventReporter first, so our save
+      // hits the DB unique constraint
+      sandbox.stub(service, 'hasReporterAlreadyReported').resolves(false);
+
+      const report = new Report('report-id-orphan');
+      report.eventId = 'event-1';
+      sandbox.stub(ReportEntity, 'fromModel').returns({
+        save: sandbox.stub().resolves({ toModel: () => report }),
+      } as any);
+
+      const destroyStub = sandbox.stub(ReportEntity, 'destroy').resolves(1);
+
+      // EventReporterEntity.save() throws UniqueConstraintError to simulate
+      // the concurrent insert that won the race
+      const uniqueError = new UniqueConstraintError({});
+      sandbox.stub(EventReporterEntity, 'fromModel').returns({
+        save: sandbox.stub().rejects(uniqueError),
+      } as any);
+
+      const emitSpy = sandbox.spy(eventBus, 'emit');
+
+      await expect(service.createReport({
+        eventId: 'event-1',
+        calendarId: 'calendar-1',
+        category: ReportCategory.SPAM,
+        description: 'Concurrent duplicate',
+        reporterAccountId: 'account-1',
+        reporterType: 'authenticated',
+      })).rejects.toThrow(DuplicateReportError);
+
+      // The orphaned ReportEntity should be cleaned up
+      expect(destroyStub.calledOnce).toBe(true);
+      expect(destroyStub.firstCall.args[0]).toEqual({ where: { id: 'report-id-orphan' } });
+
+      // No domain event should be emitted for a failed creation
+      expect(emitSpy.calledWith('reportCreated')).toBe(false);
+    });
+
+    it('should re-throw non-UniqueConstraintError errors from EventReporterEntity.save()', async () => {
+      sandbox.stub(service, 'hasReporterAlreadyReported').resolves(false);
+
+      const report = new Report('report-id-1');
+      sandbox.stub(ReportEntity, 'fromModel').returns({
+        save: sandbox.stub().resolves({ toModel: () => report }),
+      } as any);
+
+      // Simulate a generic database error (not a unique constraint violation)
+      const genericError = new Error('Connection lost');
+      sandbox.stub(EventReporterEntity, 'fromModel').returns({
+        save: sandbox.stub().rejects(genericError),
+      } as any);
+
+      await expect(service.createReport({
+        eventId: 'event-1',
+        calendarId: 'calendar-1',
+        category: ReportCategory.SPAM,
+        description: 'Test',
+        reporterAccountId: 'account-1',
+        reporterType: 'authenticated',
+      })).rejects.toThrow('Connection lost');
     });
   });
 

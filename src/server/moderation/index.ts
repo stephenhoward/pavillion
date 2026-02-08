@@ -2,6 +2,7 @@ import express, { Application } from 'express';
 import ModerationInterface from './interface';
 import ModerationEventHandlers from './events';
 import PublicReportRoutes from './api/v1/public-report-routes';
+import AuthenticatedReportRoutes from './api/v1/authenticated-report-routes';
 import VerifyRoutes from './api/v1/verify-routes';
 import CalendarInterface from '@/server/calendar/interface';
 import AccountsInterface from '@/server/accounts/interface';
@@ -47,6 +48,9 @@ export default class ModerationDomain {
 
     const publicReportRoutes = new PublicReportRoutes(this.interface);
     publicReportRoutes.installHandlers(app, '/api/public/v1');
+
+    const authenticatedReportRoutes = new AuthenticatedReportRoutes(this.interface);
+    authenticatedReportRoutes.installHandlers(app, '/api/v1');
 
     const verifyRoutes = new VerifyRoutes(this.interface);
     verifyRoutes.installHandlers(app, '/api/public/v1');

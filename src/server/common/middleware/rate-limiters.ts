@@ -2,6 +2,7 @@ import config from 'config';
 import type { RequestHandler } from 'express';
 import { createIpRateLimiter } from './rate-limit-by-ip';
 import { createCredentialRateLimiter } from './rate-limit-by-credential';
+import { createAccountRateLimiter } from './rate-limit-by-account';
 
 /**
  * Pre-configured rate limiters for specific endpoints.
@@ -115,5 +116,17 @@ export const reportSubmissionByEmail: RequestHandler = isRateLimitEnabled()
     config.get<number>('rateLimit.moderation.byEmail.windowMs'),
     'report-submission',
     'email',
+  )
+  : noOpMiddleware;
+
+/**
+ * Moderation report submission rate limiter by authenticated account.
+ * Limits: 20 reports per account per 1 hour (default config).
+ */
+export const reportSubmissionByAccount: RequestHandler = isRateLimitEnabled()
+  ? createAccountRateLimiter(
+    config.get<number>('rateLimit.moderation.byAccount.max'),
+    config.get<number>('rateLimit.moderation.byAccount.windowMs'),
+    'report-submission',
   )
   : noOpMiddleware;

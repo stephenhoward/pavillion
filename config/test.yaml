@@ -60,3 +60,6 @@ rateLimit:
     byEmail:
       windowMs: 86400000  # 24 hours
       max: 3
+    byAccount:
+      windowMs: 3600000  # 1 hour
+      max: 20

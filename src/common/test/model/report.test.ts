@@ -65,6 +65,31 @@ describe('Report Model', () => {
     return report;
   }
 
+  /**
+   * Creates a report with all sensitive fields populated,
+   * useful for verifying that tiered serialization excludes them.
+   */
+  function createFullyPopulatedReport(): Report {
+    const report = createFullReport();
+    report.reporterAccountId = 'account-id-1';
+    report.reporterEmailHash = 'hash-abc123';
+    report.verificationToken = 'secret-token-xyz';
+    report.verificationExpiration = sampleDate2;
+    report.adminId = 'admin-id-1';
+    report.adminPriority = 'high';
+    report.adminDeadline = sampleDate2;
+    report.adminNotes = 'Needs urgent review';
+    report.ownerNotes = 'Owner reviewed this';
+    report.reviewerId = 'reviewer-id-1';
+    report.reviewerNotes = 'Confirmed issue';
+    report.reviewerTimestamp = sampleDate2;
+    report.escalationType = 'manual';
+    report.reporterType = 'authenticated';
+    report.status = ReportStatus.UNDER_REVIEW;
+    report.updatedAt = sampleDate2;
+    return report;
+  }
+
   it('should create instance with default properties', () => {
     const report = new Report();
 
@@ -174,6 +199,169 @@ describe('Report Model', () => {
       expect(obj.verificationToken).toBe('token-abc');
       expect(obj.verificationExpiration).toBe(sampleDate2.toISOString());
       expect(obj.escalationType).toBe('manual');
+    });
+  });
+
+  describe('toReporterObject', () => {
+
+    it('should return only reporter-safe fields', () => {
+      const report = createFullReport();
+      const obj = report.toReporterObject();
+
+      expect(obj).toEqual({
+        id: 'report-id-1',
+        eventId: 'event-id-1',
+        category: 'spam',
+        description: 'This event is spam',
+        status: 'submitted',
+        createdAt: sampleDate.toISOString(),
+      });
+    });
+
+    it('should not include sensitive fields even when populated', () => {
+      const report = createFullyPopulatedReport();
+      const obj = report.toReporterObject();
+
+      // Verify only safe fields are present
+      const keys = Object.keys(obj);
+      expect(keys).toEqual(['id', 'eventId', 'category', 'description', 'status', 'createdAt']);
+
+      // Explicitly verify no sensitive fields
+      expect(obj).not.toHaveProperty('verificationToken');
+      expect(obj).not.toHaveProperty('verificationExpiration');
+      expect(obj).not.toHaveProperty('reporterEmailHash');
+      expect(obj).not.toHaveProperty('reporterAccountId');
+      expect(obj).not.toHaveProperty('adminNotes');
+      expect(obj).not.toHaveProperty('adminId');
+      expect(obj).not.toHaveProperty('adminPriority');
+      expect(obj).not.toHaveProperty('adminDeadline');
+      expect(obj).not.toHaveProperty('reviewerNotes');
+      expect(obj).not.toHaveProperty('reviewerId');
+      expect(obj).not.toHaveProperty('reviewerTimestamp');
+      expect(obj).not.toHaveProperty('ownerNotes');
+      expect(obj).not.toHaveProperty('calendarId');
+      expect(obj).not.toHaveProperty('reporterType');
+      expect(obj).not.toHaveProperty('escalationType');
+      expect(obj).not.toHaveProperty('updatedAt');
+    });
+
+    it('should serialize createdAt as ISO string', () => {
+      const report = createFullReport();
+      const obj = report.toReporterObject();
+
+      expect(obj.createdAt).toBe(sampleDate.toISOString());
+    });
+  });
+
+  describe('toOwnerObject', () => {
+
+    it('should return reporter-safe fields plus reporterType', () => {
+      const report = createFullReport();
+      const obj = report.toOwnerObject();
+
+      expect(obj).toEqual({
+        id: 'report-id-1',
+        eventId: 'event-id-1',
+        category: 'spam',
+        description: 'This event is spam',
+        status: 'submitted',
+        reporterType: 'anonymous',
+        createdAt: sampleDate.toISOString(),
+      });
+    });
+
+    it('should not include sensitive fields even when populated', () => {
+      const report = createFullyPopulatedReport();
+      const obj = report.toOwnerObject();
+
+      // Verify expected keys
+      const keys = Object.keys(obj);
+      expect(keys).toEqual(['id', 'eventId', 'category', 'description', 'status', 'reporterType', 'createdAt']);
+
+      // Explicitly verify no sensitive fields
+      expect(obj).not.toHaveProperty('verificationToken');
+      expect(obj).not.toHaveProperty('verificationExpiration');
+      expect(obj).not.toHaveProperty('reporterEmailHash');
+      expect(obj).not.toHaveProperty('reporterAccountId');
+      expect(obj).not.toHaveProperty('adminNotes');
+      expect(obj).not.toHaveProperty('adminId');
+      expect(obj).not.toHaveProperty('adminPriority');
+      expect(obj).not.toHaveProperty('adminDeadline');
+      expect(obj).not.toHaveProperty('reviewerNotes');
+      expect(obj).not.toHaveProperty('reviewerId');
+      expect(obj).not.toHaveProperty('reviewerTimestamp');
+      expect(obj).not.toHaveProperty('ownerNotes');
+    });
+
+    it('should include reporterType for authenticated reports', () => {
+      const report = createFullyPopulatedReport();
+      const obj = report.toOwnerObject();
+
+      expect(obj.reporterType).toBe('authenticated');
+    });
+  });
+
+  describe('toAdminObject', () => {
+
+    it('should return all fields needed for admin review', () => {
+      const report = createFullyPopulatedReport();
+      const obj = report.toAdminObject();
+
+      expect(obj).toEqual({
+        id: 'report-id-1',
+        eventId: 'event-id-1',
+        calendarId: 'calendar-id-1',
+        category: 'spam',
+        description: 'This event is spam',
+        reporterEmailHash: 'hash-abc123',
+        reporterAccountId: 'account-id-1',
+        reporterType: 'authenticated',
+        adminId: 'admin-id-1',
+        adminPriority: 'high',
+        adminDeadline: sampleDate2.toISOString(),
+        adminNotes: 'Needs urgent review',
+        status: 'under_review',
+        ownerNotes: 'Owner reviewed this',
+        reviewerId: 'reviewer-id-1',
+        reviewerNotes: 'Confirmed issue',
+        reviewerTimestamp: sampleDate2.toISOString(),
+        escalationType: 'manual',
+        createdAt: sampleDate.toISOString(),
+        updatedAt: sampleDate2.toISOString(),
+      });
+    });
+
+    it('should never include verificationToken or verificationExpiration', () => {
+      const report = createFullyPopulatedReport();
+      const obj = report.toAdminObject();
+
+      expect(obj).not.toHaveProperty('verificationToken');
+      expect(obj).not.toHaveProperty('verificationExpiration');
+    });
+
+    it('should handle nullable admin fields when null', () => {
+      const report = createFullReport();
+      const obj = report.toAdminObject();
+
+      expect(obj.adminId).toBe(null);
+      expect(obj.adminPriority).toBe(null);
+      expect(obj.adminDeadline).toBe(null);
+      expect(obj.adminNotes).toBe(null);
+      expect(obj.ownerNotes).toBe(null);
+      expect(obj.reviewerId).toBe(null);
+      expect(obj.reviewerNotes).toBe(null);
+      expect(obj.reviewerTimestamp).toBe(null);
+      expect(obj.escalationType).toBe(null);
+    });
+
+    it('should serialize date fields as ISO strings', () => {
+      const report = createFullyPopulatedReport();
+      const obj = report.toAdminObject();
+
+      expect(obj.createdAt).toBe(sampleDate.toISOString());
+      expect(obj.updatedAt).toBe(sampleDate2.toISOString());
+      expect(obj.adminDeadline).toBe(sampleDate2.toISOString());
+      expect(obj.reviewerTimestamp).toBe(sampleDate2.toISOString());
     });
   });
 

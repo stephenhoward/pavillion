@@ -3,7 +3,7 @@ import { onBeforeMount, reactive, inject, ref, watch, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
-import { Calendar, MapPin, Languages, Repeat, Pencil, Copy } from 'lucide-vue-next';
+import { Calendar, MapPin, Languages, Repeat, Pencil, Copy, Flag } from 'lucide-vue-next';
 import { useEventStore } from '@/client/stores/eventStore';
 import { useToast } from '@/client/composables/useToast';
 import CalendarService from '@/client/service/calendar';
@@ -14,6 +14,7 @@ import PillButton from '@/client/components/common/PillButton.vue';
 import BulkOperationsMenu from './BulkOperationsMenu.vue';
 import CategorySelectionDialog from './CategorySelectionDialog.vue';
 import SearchFilter from './SearchFilter.vue';
+import ReportEvent from '@/client/components/ReportEvent.vue';
 import { useBulkSelection } from '@/client/composables/useBulkSelection';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 
@@ -25,6 +26,12 @@ const { t } = useTranslation('calendars',{
 const { t: tBulk } = useTranslation('calendars', {
   keyPrefix: 'bulk_operations',
 });
+
+// For report translations
+const { t: tReport } = useTranslation('system', {
+  keyPrefix: 'report',
+});
+
 const site_config = inject('site_config');
 const site_domain = site_config.settings().domain;
 const eventService = new EventService();
@@ -66,6 +73,10 @@ const initialFilters = reactive({
   search: '',
   categories: [],
 });
+
+// Report dialog state
+const showReportDialog = ref(false);
+const reportEventId = ref('');
 
 /**
  * Initializes filter state from URL query parameters.
@@ -334,6 +345,22 @@ const handleDuplicateEvent = (event) => {
   });
 };
 
+/**
+ * Opens the report dialog for the specified event.
+ */
+const handleReportEvent = (event) => {
+  reportEventId.value = event.id;
+  showReportDialog.value = true;
+};
+
+/**
+ * Closes the report dialog and resets state.
+ */
+const handleReportDialogClose = () => {
+  showReportDialog.value = false;
+  reportEventId.value = '';
+};
+
 // Format event date for display
 const formatEventDate = (event) => {
   if (!event.schedules || event.schedules.length === 0) {
@@ -517,6 +544,15 @@ const hasActiveFilters = computed(() => {
               >
                 <Copy :size="18" />
               </button>
+              <button
+                type="button"
+                class="report-btn icon-btn"
+                @click.stop="handleReportEvent(event)"
+                :aria-label="tReport('report_event_label')"
+                :title="tReport('report_button')"
+              >
+                <Flag :size="18" />
+              </button>
             </div>
           </li>
         </ul>
@@ -551,6 +587,13 @@ const hasActiveFilters = computed(() => {
       :selected-event-ids="selectedEvents"
       @close="handleCategoryDialogClose"
       @assign-complete="handleAssignmentComplete"
+    />
+
+    <!-- Report Event Dialog -->
+    <ReportEvent
+      v-if="showReportDialog"
+      :event-id="reportEventId"
+      @close="handleReportDialogClose"
     />
   </div>
 </template>

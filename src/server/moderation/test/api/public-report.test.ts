@@ -12,7 +12,8 @@ import CalendarInterface from '@/server/calendar/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import EmailInterface from '@/server/email/interface';
 import { EventNotFoundError } from '@/common/exceptions/calendar';
-import { DuplicateReportError, EmailRateLimitError } from '@/server/moderation/exceptions';
+import { DuplicateReportError } from '@/common/exceptions/report';
+import { EmailRateLimitError } from '@/server/moderation/exceptions';
 
 describe('Public Report API - POST /events/:eventId/reports', () => {
   let routes: PublicReportRoutes;

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import config from 'config';
 import express, { Express } from 'express';
 import request from 'supertest';
+import { addRequestUser } from '@/server/common/test/lib/express';
 import {
   passwordResetByIp,
   passwordResetByEmail,
@@ -10,6 +11,7 @@ import {
   reportSubmissionByIp,
   reportSubmissionByEmail,
   reportVerificationByIp,
+  reportSubmissionByAccount,
 } from '../rate-limiters';
 
 describe('rate-limiters', () => {
@@ -70,6 +72,14 @@ describe('rate-limiters', () => {
       expect(windowMs).toBe(86400000); // 24 hours
     });
 
+    it('should use correct config values for moderation report submission by account', () => {
+      const maxRequests = config.get<number>('rateLimit.moderation.byAccount.max');
+      const windowMs = config.get<number>('rateLimit.moderation.byAccount.windowMs');
+
+      expect(maxRequests).toBe(20);
+      expect(windowMs).toBe(3600000); // 1 hour
+    });
+
     it('should check if rate limiting is enabled in config', () => {
       const enabled = config.get<boolean>('rateLimit.enabled');
       // In test environment, rate limiting is disabled
@@ -111,6 +121,11 @@ describe('rate-limiters', () => {
     it('should export reportVerificationByIp limiter', () => {
       expect(reportVerificationByIp).toBeDefined();
       expect(typeof reportVerificationByIp).toBe('function');
+    });
+
+    it('should export reportSubmissionByAccount limiter', () => {
+      expect(reportSubmissionByAccount).toBeDefined();
+      expect(typeof reportSubmissionByAccount).toBe('function');
     });
   });
 
@@ -195,6 +210,27 @@ describe('rate-limiters', () => {
         request(app).post('/test').send({ email: 'test@example.com' }),
         request(app).post('/test').send({ email: 'test@example.com' }),
         request(app).post('/test').send({ email: 'test@example.com' }),
+      ]);
+
+      responses.forEach(response => {
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({ success: true });
+      });
+    });
+
+    it('should allow account limiter to pass through when disabled', async () => {
+      app.post('/test',
+        addRequestUser,
+        reportSubmissionByAccount,
+        (req, res) => {
+          res.json({ success: true });
+        },
+      );
+
+      const responses = await Promise.all([
+        request(app).post('/test').send({ data: 'test' }),
+        request(app).post('/test').send({ data: 'test' }),
+        request(app).post('/test').send({ data: 'test' }),
       ]);
 
       responses.forEach(response => {
@@ -361,6 +397,26 @@ describe('rate-limiters', () => {
       }
     });
 
+    it('should apply reportSubmissionByAccount limiter to endpoint', async () => {
+      app.post('/report', addRequestUser, reportSubmissionByAccount, (req, res) => {
+        res.json({ success: true });
+      });
+
+      const response = await request(app)
+        .post('/report')
+        .send({ data: 'test' });
+
+      expect(response.status).toBe(200);
+
+      if (config.get<boolean>('rateLimit.enabled')) {
+        expect(response.headers['ratelimit-limit']).toBeDefined();
+        expect(response.headers['ratelimit-remaining']).toBeDefined();
+      }
+      else {
+        expect(response.headers['ratelimit-limit']).toBeUndefined();
+      }
+    });
+
     it('should allow combining IP and credential limiters', async () => {
       app.post('/reset', passwordResetByIp, passwordResetByEmail, (req, res) => {
         res.json({ success: true });
@@ -390,6 +446,26 @@ describe('rate-limiters', () => {
       const response = await request(app)
         .post('/report')
         .send({ email: 'test@example.com' });
+
+      expect(response.status).toBe(200);
+
+      if (config.get<boolean>('rateLimit.enabled')) {
+        expect(response.headers['ratelimit-limit']).toBeDefined();
+        expect(response.headers['ratelimit-remaining']).toBeDefined();
+      }
+      else {
+        expect(response.headers['ratelimit-limit']).toBeUndefined();
+      }
+    });
+
+    it('should allow combining report submission IP and account limiters', async () => {
+      app.post('/report', addRequestUser, reportSubmissionByIp, reportSubmissionByAccount, (req, res) => {
+        res.json({ success: true });
+      });
+
+      const response = await request(app)
+        .post('/report')
+        .send({ data: 'test' });
 
       expect(response.status).toBe(200);
 

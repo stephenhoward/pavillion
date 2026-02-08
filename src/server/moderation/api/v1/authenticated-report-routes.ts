@@ -1,23 +1,28 @@
 import express, { Request, Response, Application } from 'express';
 
+import { Account } from '@/common/model/account';
 import { ReportCategory } from '@/common/model/report';
 import { EventNotFoundError } from '@/common/exceptions/calendar';
 import { DuplicateReportError, ReportValidationError } from '@/common/exceptions/report';
+import ExpressHelper from '@/server/common/helper/express';
 import ModerationInterface from '@/server/moderation/interface';
-import { EmailRateLimitError } from '@/server/moderation/exceptions';
 import {
   reportSubmissionByIp,
-  reportSubmissionByEmail,
+  reportSubmissionByAccount,
 } from '@/server/common/middleware/rate-limiters';
 import { logError } from '@/server/common/helper/error-logger';
 
 /**
- * Public-facing route handler for anonymous event report submission.
+ * Authenticated route handler for event report submission.
  *
- * Handles POST /events/:eventId/reports for anonymous visitors
- * who want to report an event. No authentication is required.
+ * Handles POST /reports for logged-in users who want to report
+ * an event. Requires JWT authentication via loggedInOnly middleware.
+ * No email verification is needed for authenticated reporters.
+ *
+ * Rate limited by IP address (shared with public routes) and
+ * per-account (max 20 reports per account per hour).
  */
-export default class PublicReportRoutes {
+export default class AuthenticatedReportRoutes {
   private moderationInterface: ModerationInterface;
 
   constructor(moderationInterface: ModerationInterface) {
@@ -28,44 +33,55 @@ export default class PublicReportRoutes {
    * Registers route handlers on the given Express application.
    *
    * @param app - Express application instance
-   * @param routePrefix - URL prefix for all routes (e.g. '/api/public/v1')
+   * @param routePrefix - URL prefix for all routes (e.g. '/api/v1')
    */
   installHandlers(app: Application, routePrefix: string): void {
     const router = express.Router();
     router.post(
-      '/events/:eventId/reports',
+      '/reports',
+      ...ExpressHelper.loggedInOnly,
       reportSubmissionByIp,
-      reportSubmissionByEmail,
+      reportSubmissionByAccount,
       this.submitReport.bind(this),
     );
     app.use(routePrefix, router);
   }
 
   /**
-   * Handles anonymous report submission for a specific event.
+   * Handles authenticated report submission.
    *
    * Parses the request body and delegates to ModerationInterface
-   * for validation, event lookup, and report creation.
+   * for validation, event lookup, and report creation. Uses the
+   * authenticated user's account ID as the reporter identifier.
    *
-   * @param req - Express request with eventId param and report body
+   * @param req - Express request with authenticated user and report body
    * @param res - Express response
    */
   async submitReport(req: Request, res: Response): Promise<void> {
-    const { eventId } = req.params;
-    const { category, description, email } = req.body ?? {};
+    const account = req.user as Account;
+
+    if (!account) {
+      res.status(403).json({
+        error: 'Authentication required',
+        errorName: 'AuthenticationError',
+      });
+      return;
+    }
+
+    const { eventId, category, description } = req.body ?? {};
 
     try {
       const report = await this.moderationInterface.createReportForEvent({
         eventId,
         category: category as ReportCategory,
         description: typeof description === 'string' ? description.trim() : description,
-        reporterEmail: typeof email === 'string' ? email.trim().toLowerCase() : email,
-        reporterType: 'anonymous',
+        reporterAccountId: account.id,
+        reporterType: 'authenticated',
       });
 
       res.status(201).json({
-        message: 'Report submitted. Please check your email to verify.',
-        reportId: report.id,
+        message: 'Report submitted successfully.',
+        report: report.toReporterObject(),
       });
     }
     catch (error: any) {
@@ -93,15 +109,7 @@ export default class PublicReportRoutes {
         return;
       }
 
-      if (error instanceof EmailRateLimitError) {
-        res.status(429).json({
-          error: error.message,
-          errorName: error.name,
-        });
-        return;
-      }
-
-      logError(error, 'Failed to submit report');
+      logError(error, 'Failed to submit authenticated report');
       res.status(500).json({
         error: 'Failed to submit report',
       });
