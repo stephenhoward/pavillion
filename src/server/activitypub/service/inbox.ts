@@ -216,7 +216,7 @@ class ProcessInboxService {
             if (!activity) {
               throw new Error('Failed to parse Update activity');
             }
-            this.processUpdateEvent(calendar, activity);
+            await this.processUpdateEvent(calendar, activity);
           }
           break;
         case 'Delete':
@@ -225,7 +225,7 @@ class ProcessInboxService {
             if (!activity) {
               throw new Error('Failed to parse Delete activity');
             }
-            this.processDeleteEvent(calendar, activity);
+            await this.processDeleteEvent(calendar, activity);
           }
           break;
         case 'Follow':
@@ -252,7 +252,7 @@ class ProcessInboxService {
             if (!activity) {
               throw new Error('Failed to parse Announce activity');
             }
-            this.processShareEvent(calendar, activity);
+            await this.processShareEvent(calendar, activity);
           }
           break;
         case 'Undo':
@@ -268,10 +268,10 @@ class ProcessInboxService {
 
             switch( targetEntity.type ) {
               case 'Follow':
-                this.processUnfollowAccount(calendar, targetEntity);
+                await this.processUnfollowAccount(calendar, targetEntity);
                 break;
               case 'Announce':
-                this.processUnshareEvent(calendar, targetEntity);
+                await this.processUnshareEvent(calendar, targetEntity);
                 break;
             }
           }
@@ -1091,7 +1091,7 @@ class ProcessInboxService {
       },
     });
     if ( existingShare ) {
-      existingShare.destroy();
+      await existingShare.destroy();
       // IF it's a event local to this server, send to all followers and sharers
     };
   }

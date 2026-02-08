@@ -39,6 +39,12 @@ federation:
   # WARNING: Never set this in production!
   skipSignatures: false
 
+# Disable rate limiting in federation tests
+# Multiple test suites call getToken() in beforeAll which triggers login rate limits
+# when rate limiting is enabled (default.yaml has rateLimit.enabled: true)
+rateLimit:
+  enabled: false
+
 # Development mail configuration
 # Writes emails to files for debugging
 mail:
