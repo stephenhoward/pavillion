@@ -33,6 +33,7 @@ const handleClick = (event: MouseEvent) => {
   <button
     :type="type"
     :disabled="disabled"
+    :aria-disabled="disabled"
     :class="[
       'pill-button',
       `pill-button--${variant}`,

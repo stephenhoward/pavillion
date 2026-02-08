@@ -3,12 +3,21 @@
     <label class="category-label">{{ t('categories_label') }}</label>
 
     <!-- Loading State -->
-    <div v-if="state.isLoading" class="loading">
+    <div
+      v-if="state.isLoading"
+      class="loading"
+      role="status"
+      aria-live="polite"
+    >
       {{ t('loading_categories') }}
     </div>
 
     <!-- Error State -->
-    <div v-if="state.error" class="error">
+    <div
+      v-if="state.error"
+      class="error"
+      role="alert"
+    >
       {{ state.error }}
     </div>
 

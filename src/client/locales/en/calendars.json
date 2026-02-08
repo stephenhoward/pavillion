@@ -159,7 +159,10 @@
     "filter_by_categories": "Filter by Categories",
     "loading_categories": "Loading categories...",
     "categories_load_error": "Failed to load categories",
-    "clear_all_filters": "Clear All Filters"
+    "clear_all_filters": "Clear All Filters",
+    "sr_categories_selected": "{{count}} categories selected",
+    "sr_searching_for": "searching for \"{{query}}\"",
+    "sr_no_filters_active": "No filters active"
   },
   "bulk_category_operations": {
     "menu_label": "Bulk Category Operations",

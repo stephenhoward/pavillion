@@ -627,7 +627,12 @@ button {
     </header>
 
     <!-- Loading State -->
-    <div v-if="state.isLoading" class="loading-container">
+    <div
+      v-if="state.isLoading"
+      class="loading-container"
+      role="status"
+      aria-live="polite"
+    >
       <span class="loading-spinner" aria-hidden="true">&#8987;</span>
       <span>Loading...</span>
     </div>

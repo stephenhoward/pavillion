@@ -33,11 +33,20 @@
         {{ t('filter_by_categories') }}
       </label>
 
-      <div v-if="state.isLoadingCategories" class="loading">
+      <div
+        v-if="state.isLoadingCategories"
+        class="loading"
+        role="status"
+        aria-live="polite"
+      >
         {{ t('loading_categories') }}
       </div>
 
-      <div v-else-if="state.categoryError" class="error">
+      <div
+        v-else-if="state.categoryError"
+        class="error"
+        role="alert"
+      >
         {{ state.categoryError }}
       </div>
 
@@ -82,6 +91,15 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- Filter State Announcement for Screen Readers -->
+    <div
+      class="sr-only"
+      aria-live="polite"
+      role="status"
+    >
+      {{ filterStateAnnouncement }}
     </div>
 
     <!-- Clear All Filters -->
@@ -142,6 +160,27 @@ const state = reactive({
 const hasActiveFilters = computed(() => {
   return state.searchQuery.trim() !== '' ||
          state.selectedCategoryIds.length > 0;
+});
+
+/**
+ * Computed announcement text for screen readers when filter state changes
+ */
+const filterStateAnnouncement = computed(() => {
+  const parts = [];
+
+  if (state.selectedCategoryIds.length > 0) {
+    parts.push(t('sr_categories_selected', { count: state.selectedCategoryIds.length }));
+  }
+
+  if (state.searchQuery.trim()) {
+    parts.push(t('sr_searching_for', { query: state.searchQuery.trim() }));
+  }
+
+  if (parts.length === 0) {
+    return t('sr_no_filters_active');
+  }
+
+  return parts.join(', ');
 });
 
 // Scroll indicator logic
