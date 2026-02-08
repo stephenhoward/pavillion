@@ -1,0 +1,876 @@
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import sinon from 'sinon';
+import { EventEmitter } from 'events';
+
+import { Report, ReportCategory, ReportStatus } from '@/common/model/report';
+import { ReportEntity } from '@/server/moderation/entity/report';
+import { EventReporterEntity } from '@/server/moderation/entity/event_reporter';
+import { ReportEscalationEntity } from '@/server/moderation/entity/report_escalation';
+import ModerationService from '@/server/moderation/service/moderation';
+import {
+  DuplicateReportError,
+  InvalidVerificationTokenError,
+  ReportNotFoundError,
+  ReportAlreadyResolvedError,
+} from '@/server/moderation/exceptions';
+
+describe('ModerationService', () => {
+  let sandbox: sinon.SinonSandbox;
+  let service: ModerationService;
+  let eventBus: EventEmitter;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    eventBus = new EventEmitter();
+    service = new ModerationService(eventBus);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  describe('createReport', () => {
+
+    it('should create a report for an anonymous reporter with hashed email and verification token', async () => {
+      const hasReporterStub = sandbox.stub(service, 'hasReporterAlreadyReported').resolves(false);
+
+      // Stub the entity save to return a model-like entity
+      const report = new Report('report-id-1');
+      report.eventId = 'event-1';
+      report.calendarId = 'calendar-1';
+      report.category = ReportCategory.SPAM;
+      report.description = 'This is spam';
+      report.reporterType = 'anonymous';
+      report.status = ReportStatus.PENDING_VERIFICATION;
+
+      const mockEntity = {
+        save: sandbox.stub().resolves({
+          toModel: () => report,
+        }),
+      };
+      sandbox.stub(ReportEntity, 'fromModel').returns(mockEntity as any);
+
+      const mockReporterEntity = {
+        save: sandbox.stub().resolves({}),
+      };
+      sandbox.stub(EventReporterEntity, 'fromModel').returns(mockReporterEntity as any);
+
+      const emitSpy = sandbox.spy(eventBus, 'emit');
+
+      const result = await service.createReport({
+        eventId: 'event-1',
+        calendarId: 'calendar-1',
+        category: ReportCategory.SPAM,
+        description: 'This is spam',
+        reporterEmail: 'test@example.com',
+        reporterType: 'anonymous',
+      });
+
+      expect(result).toBeDefined();
+      expect(result.eventId).toBe('event-1');
+      expect(hasReporterStub.calledOnce).toBe(true);
+      expect(mockEntity.save.calledOnce).toBe(true);
+      expect(mockReporterEntity.save.calledOnce).toBe(true);
+      expect(emitSpy.calledWith('reportCreated')).toBe(true);
+    });
+
+    it('should set verification token and expiration for anonymous reporters', async () => {
+      sandbox.stub(service, 'hasReporterAlreadyReported').resolves(false);
+
+      let capturedReport: Report | null = null;
+      sandbox.stub(ReportEntity, 'fromModel').callsFake((r: Report) => {
+        capturedReport = r;
+        return {
+          save: sandbox.stub().resolves({ toModel: () => r }),
+        } as any;
+      });
+      sandbox.stub(EventReporterEntity, 'fromModel').returns({
+        save: sandbox.stub().resolves({}),
+      } as any);
+
+      await service.createReport({
+        eventId: 'event-1',
+        calendarId: 'calendar-1',
+        category: ReportCategory.SPAM,
+        description: 'Spam event',
+        reporterEmail: 'test@example.com',
+        reporterType: 'anonymous',
+      });
+
+      expect(capturedReport).not.toBeNull();
+      expect(capturedReport!.verificationToken).toBeTruthy();
+      expect(capturedReport!.verificationToken!.length).toBe(64); // 32 bytes hex
+      expect(capturedReport!.verificationExpiration).toBeInstanceOf(Date);
+      expect(capturedReport!.verificationExpiration!.getTime()).toBeGreaterThan(Date.now());
+      expect(capturedReport!.status).toBe(ReportStatus.PENDING_VERIFICATION);
+    });
+
+    it('should hash the email for anonymous reporters', async () => {
+      sandbox.stub(service, 'hasReporterAlreadyReported').resolves(false);
+
+      let capturedReport: Report | null = null;
+      sandbox.stub(ReportEntity, 'fromModel').callsFake((r: Report) => {
+        capturedReport = r;
+        return {
+          save: sandbox.stub().resolves({ toModel: () => r }),
+        } as any;
+      });
+      sandbox.stub(EventReporterEntity, 'fromModel').returns({
+        save: sandbox.stub().resolves({}),
+      } as any);
+
+      await service.createReport({
+        eventId: 'event-1',
+        calendarId: 'calendar-1',
+        category: ReportCategory.INAPPROPRIATE,
+        description: 'Bad content',
+        reporterEmail: 'Test@Example.com',
+        reporterType: 'anonymous',
+      });
+
+      expect(capturedReport).not.toBeNull();
+      expect(capturedReport!.reporterEmailHash).toBeTruthy();
+      // Email should be lowercased before hashing
+      expect(capturedReport!.reporterEmailHash!.length).toBe(64); // SHA-256 hex
+    });
+
+    it('should set status to submitted for authenticated reporters', async () => {
+      sandbox.stub(service, 'hasReporterAlreadyReported').resolves(false);
+
+      let capturedReport: Report | null = null;
+      sandbox.stub(ReportEntity, 'fromModel').callsFake((r: Report) => {
+        capturedReport = r;
+        return {
+          save: sandbox.stub().resolves({ toModel: () => r }),
+        } as any;
+      });
+      sandbox.stub(EventReporterEntity, 'fromModel').returns({
+        save: sandbox.stub().resolves({}),
+      } as any);
+
+      await service.createReport({
+        eventId: 'event-1',
+        calendarId: 'calendar-1',
+        category: ReportCategory.HARASSMENT,
+        description: 'Harassing content',
+        reporterAccountId: 'account-1',
+        reporterType: 'authenticated',
+      });
+
+      expect(capturedReport).not.toBeNull();
+      expect(capturedReport!.status).toBe(ReportStatus.SUBMITTED);
+      expect(capturedReport!.reporterAccountId).toBe('account-1');
+      expect(capturedReport!.verificationToken).toBeNull();
+    });
+
+    it('should set admin fields for administrator reporters', async () => {
+      sandbox.stub(service, 'hasReporterAlreadyReported').resolves(false);
+
+      let capturedReport: Report | null = null;
+      sandbox.stub(ReportEntity, 'fromModel').callsFake((r: Report) => {
+        capturedReport = r;
+        return {
+          save: sandbox.stub().resolves({ toModel: () => r }),
+        } as any;
+      });
+      sandbox.stub(EventReporterEntity, 'fromModel').returns({
+        save: sandbox.stub().resolves({}),
+      } as any);
+
+      const deadline = new Date('2026-03-01');
+
+      await service.createReport({
+        eventId: 'event-1',
+        calendarId: 'calendar-1',
+        category: ReportCategory.MISLEADING,
+        description: 'Misleading event info',
+        reporterAccountId: 'admin-account-1',
+        reporterType: 'administrator',
+        adminId: 'admin-account-1',
+        adminPriority: 'high',
+        adminDeadline: deadline,
+        adminNotes: 'Urgent review needed',
+      });
+
+      expect(capturedReport).not.toBeNull();
+      expect(capturedReport!.status).toBe(ReportStatus.SUBMITTED);
+      expect(capturedReport!.adminId).toBe('admin-account-1');
+      expect(capturedReport!.adminPriority).toBe('high');
+      expect(capturedReport!.adminDeadline).toEqual(deadline);
+      expect(capturedReport!.adminNotes).toBe('Urgent review needed');
+    });
+
+    it('should throw DuplicateReportError if reporter already reported the event', async () => {
+      sandbox.stub(service, 'hasReporterAlreadyReported').resolves(true);
+
+      await expect(service.createReport({
+        eventId: 'event-1',
+        calendarId: 'calendar-1',
+        category: ReportCategory.SPAM,
+        description: 'Spam again',
+        reporterEmail: 'test@example.com',
+        reporterType: 'anonymous',
+      })).rejects.toThrow(DuplicateReportError);
+    });
+
+    it('should throw an error if anonymous report is missing email', async () => {
+      await expect(service.createReport({
+        eventId: 'event-1',
+        calendarId: 'calendar-1',
+        category: ReportCategory.SPAM,
+        description: 'Missing email',
+        reporterType: 'anonymous',
+      })).rejects.toThrow('Reporter email is required for anonymous reports');
+    });
+
+    it('should create EventReporter record for duplicate tracking', async () => {
+      sandbox.stub(service, 'hasReporterAlreadyReported').resolves(false);
+
+      const report = new Report('report-id-1');
+      report.eventId = 'event-1';
+      sandbox.stub(ReportEntity, 'fromModel').returns({
+        save: sandbox.stub().resolves({ toModel: () => report }),
+      } as any);
+
+      let capturedReporterData: any = null;
+      sandbox.stub(EventReporterEntity, 'fromModel').callsFake((data: any) => {
+        capturedReporterData = data;
+        return { save: sandbox.stub().resolves({}) } as any;
+      });
+
+      await service.createReport({
+        eventId: 'event-1',
+        calendarId: 'calendar-1',
+        category: ReportCategory.SPAM,
+        description: 'Test',
+        reporterAccountId: 'account-1',
+        reporterType: 'authenticated',
+      });
+
+      expect(capturedReporterData).not.toBeNull();
+      expect(capturedReporterData.eventId).toBe('event-1');
+      expect(capturedReporterData.reporterIdentifier).toBe('account-1');
+      expect(capturedReporterData.reportId).toBe('report-id-1');
+    });
+  });
+
+  describe('getReportById', () => {
+
+    it('should return a report when found', async () => {
+      const report = new Report('report-id-1');
+      report.eventId = 'event-1';
+      report.status = ReportStatus.SUBMITTED;
+
+      const findByPkStub = sandbox.stub(ReportEntity, 'findByPk');
+      findByPkStub.resolves({
+        toModel: () => report,
+      } as any);
+
+      const result = await service.getReportById('report-id-1');
+
+      expect(result).not.toBeNull();
+      expect(result!.id).toBe('report-id-1');
+      expect(result!.eventId).toBe('event-1');
+      expect(findByPkStub.calledWith('report-id-1')).toBe(true);
+    });
+
+    it('should return null when report not found', async () => {
+      sandbox.stub(ReportEntity, 'findByPk').resolves(null);
+
+      const result = await service.getReportById('nonexistent');
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('getReportsForCalendar', () => {
+
+    it('should return paginated reports for a calendar', async () => {
+      const report1 = new Report('r-1');
+      report1.calendarId = 'calendar-1';
+      const report2 = new Report('r-2');
+      report2.calendarId = 'calendar-1';
+
+      const findAndCountAllStub = sandbox.stub(ReportEntity, 'findAndCountAll');
+      findAndCountAllStub.resolves({
+        rows: [
+          { toModel: () => report1 } as any,
+          { toModel: () => report2 } as any,
+        ],
+        count: 2,
+      });
+
+      const result = await service.getReportsForCalendar('calendar-1');
+
+      expect(result.reports).toHaveLength(2);
+      expect(result.pagination.currentPage).toBe(1);
+      expect(result.pagination.totalCount).toBe(2);
+      expect(result.pagination.totalPages).toBe(1);
+    });
+
+    it('should apply status filter when provided', async () => {
+      const findAndCountAllStub = sandbox.stub(ReportEntity, 'findAndCountAll');
+      findAndCountAllStub.resolves({ rows: [], count: 0 });
+
+      await service.getReportsForCalendar('calendar-1', { status: ReportStatus.SUBMITTED });
+
+      const callArgs = findAndCountAllStub.firstCall.args[0];
+      expect(callArgs.where.status).toBe(ReportStatus.SUBMITTED);
+    });
+
+    it('should apply category filter when provided', async () => {
+      const findAndCountAllStub = sandbox.stub(ReportEntity, 'findAndCountAll');
+      findAndCountAllStub.resolves({ rows: [], count: 0 });
+
+      await service.getReportsForCalendar('calendar-1', { category: ReportCategory.SPAM });
+
+      const callArgs = findAndCountAllStub.firstCall.args[0];
+      expect(callArgs.where.category).toBe(ReportCategory.SPAM);
+    });
+
+    it('should paginate with custom page and limit', async () => {
+      const findAndCountAllStub = sandbox.stub(ReportEntity, 'findAndCountAll');
+      findAndCountAllStub.resolves({ rows: [], count: 50 });
+
+      const result = await service.getReportsForCalendar('calendar-1', { page: 3, limit: 10 });
+
+      const callArgs = findAndCountAllStub.firstCall.args[0];
+      expect(callArgs.offset).toBe(20); // (3 - 1) * 10
+      expect(callArgs.limit).toBe(10);
+      expect(result.pagination.currentPage).toBe(3);
+      expect(result.pagination.totalPages).toBe(5);
+      expect(result.pagination.totalCount).toBe(50);
+      expect(result.pagination.limit).toBe(10);
+    });
+  });
+
+  describe('getReportsForEvent', () => {
+
+    it('should return all reports for an event', async () => {
+      const report1 = new Report('r-1');
+      report1.eventId = 'event-1';
+      const report2 = new Report('r-2');
+      report2.eventId = 'event-1';
+
+      const findAllStub = sandbox.stub(ReportEntity, 'findAll');
+      findAllStub.resolves([
+        { toModel: () => report1 } as any,
+        { toModel: () => report2 } as any,
+      ]);
+
+      const result = await service.getReportsForEvent('event-1');
+
+      expect(result).toHaveLength(2);
+      expect(result[0].id).toBe('r-1');
+      expect(result[1].id).toBe('r-2');
+      expect(findAllStub.calledOnce).toBe(true);
+      const callArgs = findAllStub.firstCall.args[0];
+      expect(callArgs.where.event_id).toBe('event-1');
+    });
+
+    it('should return empty array when no reports exist', async () => {
+      sandbox.stub(ReportEntity, 'findAll').resolves([]);
+
+      const result = await service.getReportsForEvent('event-no-reports');
+
+      expect(result).toHaveLength(0);
+    });
+  });
+
+  describe('getEscalatedReports', () => {
+
+    it('should return only escalated reports', async () => {
+      const report = new Report('r-1');
+      report.status = ReportStatus.ESCALATED;
+
+      const findAndCountAllStub = sandbox.stub(ReportEntity, 'findAndCountAll');
+      findAndCountAllStub.resolves({
+        rows: [{ toModel: () => report } as any],
+        count: 1,
+      });
+
+      const result = await service.getEscalatedReports();
+
+      expect(result.reports).toHaveLength(1);
+      expect(result.reports[0].status).toBe(ReportStatus.ESCALATED);
+      const callArgs = findAndCountAllStub.firstCall.args[0];
+      expect(callArgs.where.status).toBe(ReportStatus.ESCALATED);
+    });
+
+    it('should apply category filter to escalated reports', async () => {
+      const findAndCountAllStub = sandbox.stub(ReportEntity, 'findAndCountAll');
+      findAndCountAllStub.resolves({ rows: [], count: 0 });
+
+      await service.getEscalatedReports({ category: ReportCategory.HARASSMENT });
+
+      const callArgs = findAndCountAllStub.firstCall.args[0];
+      expect(callArgs.where.status).toBe(ReportStatus.ESCALATED);
+      expect(callArgs.where.category).toBe(ReportCategory.HARASSMENT);
+    });
+
+    it('should support pagination for escalated reports', async () => {
+      const findAndCountAllStub = sandbox.stub(ReportEntity, 'findAndCountAll');
+      findAndCountAllStub.resolves({ rows: [], count: 30 });
+
+      const result = await service.getEscalatedReports({ page: 2, limit: 10 });
+
+      const callArgs = findAndCountAllStub.firstCall.args[0];
+      expect(callArgs.offset).toBe(10);
+      expect(callArgs.limit).toBe(10);
+      expect(result.pagination.currentPage).toBe(2);
+      expect(result.pagination.totalPages).toBe(3);
+    });
+  });
+
+  describe('verifyReport', () => {
+
+    it('should verify a report with a valid token', async () => {
+      const report = new Report('report-id-1');
+      report.status = ReportStatus.SUBMITTED;
+
+      const futureDate = new Date();
+      futureDate.setHours(futureDate.getHours() + 12);
+
+      const mockEntity = {
+        verification_expiration: futureDate,
+        update: sandbox.stub().resolves(),
+        toModel: () => report,
+      };
+
+      sandbox.stub(ReportEntity, 'findOne').resolves(mockEntity as any);
+      const emitSpy = sandbox.spy(eventBus, 'emit');
+
+      const result = await service.verifyReport('valid-token');
+
+      expect(result).toBeDefined();
+      expect(mockEntity.update.calledOnce).toBe(true);
+      const updateArgs = mockEntity.update.firstCall.args[0];
+      expect(updateArgs.status).toBe(ReportStatus.SUBMITTED);
+      expect(updateArgs.verification_token).toBeNull();
+      expect(updateArgs.verification_expiration).toBeNull();
+      expect(emitSpy.calledWith('reportVerified')).toBe(true);
+    });
+
+    it('should throw InvalidVerificationTokenError if token not found', async () => {
+      sandbox.stub(ReportEntity, 'findOne').resolves(null);
+
+      await expect(service.verifyReport('invalid-token'))
+        .rejects.toThrow(InvalidVerificationTokenError);
+    });
+
+    it('should throw InvalidVerificationTokenError if token is expired', async () => {
+      const pastDate = new Date();
+      pastDate.setHours(pastDate.getHours() - 1);
+
+      const mockEntity = {
+        verification_expiration: pastDate,
+      };
+
+      sandbox.stub(ReportEntity, 'findOne').resolves(mockEntity as any);
+
+      await expect(service.verifyReport('expired-token'))
+        .rejects.toThrow(InvalidVerificationTokenError);
+    });
+  });
+
+  describe('resolveReport', () => {
+
+    it('should resolve a submitted report', async () => {
+      const report = new Report('report-id-1');
+      report.status = ReportStatus.RESOLVED;
+
+      const mockEntity = {
+        status: ReportStatus.SUBMITTED,
+        update: sandbox.stub().resolves(),
+        toModel: () => report,
+      };
+
+      sandbox.stub(ReportEntity, 'findByPk').resolves(mockEntity as any);
+
+      const mockEscalationEntity = {
+        save: sandbox.stub().resolves({}),
+      };
+      sandbox.stub(ReportEscalationEntity, 'fromModel').returns(mockEscalationEntity as any);
+
+      const emitSpy = sandbox.spy(eventBus, 'emit');
+
+      const result = await service.resolveReport('report-id-1', 'reviewer-1', 'Looks fine');
+
+      expect(result).toBeDefined();
+      expect(mockEntity.update.calledOnce).toBe(true);
+      const updateArgs = mockEntity.update.firstCall.args[0];
+      expect(updateArgs.status).toBe(ReportStatus.RESOLVED);
+      expect(updateArgs.reviewer_id).toBe('reviewer-1');
+      expect(updateArgs.reviewer_notes).toBe('Looks fine');
+      expect(updateArgs.reviewer_timestamp).toBeInstanceOf(Date);
+      expect(mockEscalationEntity.save.calledOnce).toBe(true);
+      expect(emitSpy.calledWith('reportResolved')).toBe(true);
+    });
+
+    it('should create an escalation record with correct data', async () => {
+      const report = new Report('report-id-1');
+      report.status = ReportStatus.RESOLVED;
+
+      const mockEntity = {
+        status: ReportStatus.SUBMITTED,
+        update: sandbox.stub().resolves(),
+        toModel: () => report,
+      };
+
+      sandbox.stub(ReportEntity, 'findByPk').resolves(mockEntity as any);
+
+      let capturedEscalationData: any = null;
+      sandbox.stub(ReportEscalationEntity, 'fromModel').callsFake((data: any) => {
+        capturedEscalationData = data;
+        return { save: sandbox.stub().resolves({}) } as any;
+      });
+
+      await service.resolveReport('report-id-1', 'reviewer-1', 'Resolved');
+
+      expect(capturedEscalationData).not.toBeNull();
+      expect(capturedEscalationData.reportId).toBe('report-id-1');
+      expect(capturedEscalationData.fromStatus).toBe(ReportStatus.SUBMITTED);
+      expect(capturedEscalationData.toStatus).toBe(ReportStatus.RESOLVED);
+      expect(capturedEscalationData.reviewerId).toBe('reviewer-1');
+      expect(capturedEscalationData.reviewerRole).toBe('owner');
+      expect(capturedEscalationData.decision).toBe('resolved');
+      expect(capturedEscalationData.notes).toBe('Resolved');
+    });
+
+    it('should throw ReportNotFoundError if report does not exist', async () => {
+      sandbox.stub(ReportEntity, 'findByPk').resolves(null);
+
+      await expect(service.resolveReport('nonexistent', 'reviewer-1', 'notes'))
+        .rejects.toThrow(ReportNotFoundError);
+    });
+
+    it('should throw ReportAlreadyResolvedError if report is already resolved', async () => {
+      sandbox.stub(ReportEntity, 'findByPk').resolves({
+        status: ReportStatus.RESOLVED,
+      } as any);
+
+      await expect(service.resolveReport('report-1', 'reviewer-1', 'notes'))
+        .rejects.toThrow(ReportAlreadyResolvedError);
+    });
+
+    it('should throw ReportAlreadyResolvedError if report is already dismissed', async () => {
+      sandbox.stub(ReportEntity, 'findByPk').resolves({
+        status: ReportStatus.DISMISSED,
+      } as any);
+
+      await expect(service.resolveReport('report-1', 'reviewer-1', 'notes'))
+        .rejects.toThrow(ReportAlreadyResolvedError);
+    });
+  });
+
+  describe('dismissReport', () => {
+
+    it('should auto-escalate a dismissed report to escalated status', async () => {
+      const report = new Report('report-id-1');
+      report.status = ReportStatus.ESCALATED;
+
+      const mockEntity = {
+        status: ReportStatus.SUBMITTED,
+        update: sandbox.stub().resolves(),
+        toModel: () => report,
+      };
+
+      sandbox.stub(ReportEntity, 'findByPk').resolves(mockEntity as any);
+
+      const mockEscalationEntity = {
+        save: sandbox.stub().resolves({}),
+      };
+      sandbox.stub(ReportEscalationEntity, 'fromModel').returns(mockEscalationEntity as any);
+
+      const emitSpy = sandbox.spy(eventBus, 'emit');
+
+      const result = await service.dismissReport('report-id-1', 'owner-1', 'Not an issue');
+
+      expect(result).toBeDefined();
+      expect(mockEntity.update.calledOnce).toBe(true);
+      const updateArgs = mockEntity.update.firstCall.args[0];
+      expect(updateArgs.status).toBe(ReportStatus.ESCALATED);
+      expect(updateArgs.escalation_type).toBe('automatic');
+      expect(updateArgs.reviewer_id).toBe('owner-1');
+      expect(updateArgs.reviewer_notes).toBe('Not an issue');
+      expect(emitSpy.calledWith('reportEscalated')).toBe(true);
+    });
+
+    it('should create escalation record with automatic escalation type', async () => {
+      const report = new Report('report-id-1');
+      report.status = ReportStatus.ESCALATED;
+
+      sandbox.stub(ReportEntity, 'findByPk').resolves({
+        status: ReportStatus.SUBMITTED,
+        update: sandbox.stub().resolves(),
+        toModel: () => report,
+      } as any);
+
+      let capturedEscalationData: any = null;
+      sandbox.stub(ReportEscalationEntity, 'fromModel').callsFake((data: any) => {
+        capturedEscalationData = data;
+        return { save: sandbox.stub().resolves({}) } as any;
+      });
+
+      await service.dismissReport('report-id-1', 'owner-1', 'Dismissed');
+
+      expect(capturedEscalationData).not.toBeNull();
+      expect(capturedEscalationData.fromStatus).toBe(ReportStatus.SUBMITTED);
+      expect(capturedEscalationData.toStatus).toBe(ReportStatus.ESCALATED);
+      expect(capturedEscalationData.decision).toBe('dismissed');
+      expect(capturedEscalationData.reviewerRole).toBe('owner');
+    });
+
+    it('should throw ReportNotFoundError if report does not exist', async () => {
+      sandbox.stub(ReportEntity, 'findByPk').resolves(null);
+
+      await expect(service.dismissReport('nonexistent', 'owner-1', 'notes'))
+        .rejects.toThrow(ReportNotFoundError);
+    });
+
+    it('should throw ReportAlreadyResolvedError if report is already resolved', async () => {
+      sandbox.stub(ReportEntity, 'findByPk').resolves({
+        status: ReportStatus.RESOLVED,
+      } as any);
+
+      await expect(service.dismissReport('report-1', 'owner-1', 'notes'))
+        .rejects.toThrow(ReportAlreadyResolvedError);
+    });
+
+    it('should throw ReportAlreadyResolvedError if report is already dismissed', async () => {
+      sandbox.stub(ReportEntity, 'findByPk').resolves({
+        status: ReportStatus.DISMISSED,
+      } as any);
+
+      await expect(service.dismissReport('report-1', 'owner-1', 'notes'))
+        .rejects.toThrow(ReportAlreadyResolvedError);
+    });
+  });
+
+  describe('escalateReport', () => {
+
+    it('should manually escalate a report', async () => {
+      const report = new Report('report-id-1');
+      report.status = ReportStatus.ESCALATED;
+
+      const mockEntity = {
+        status: ReportStatus.SUBMITTED,
+        update: sandbox.stub().resolves(),
+        toModel: () => report,
+      };
+
+      sandbox.stub(ReportEntity, 'findByPk').resolves(mockEntity as any);
+
+      const mockEscalationEntity = {
+        save: sandbox.stub().resolves({}),
+      };
+      sandbox.stub(ReportEscalationEntity, 'fromModel').returns(mockEscalationEntity as any);
+
+      const emitSpy = sandbox.spy(eventBus, 'emit');
+
+      const result = await service.escalateReport('report-id-1', 'Needs admin review');
+
+      expect(result).toBeDefined();
+      expect(mockEntity.update.calledOnce).toBe(true);
+      const updateArgs = mockEntity.update.firstCall.args[0];
+      expect(updateArgs.status).toBe(ReportStatus.ESCALATED);
+      expect(updateArgs.escalation_type).toBe('manual');
+      expect(mockEscalationEntity.save.calledOnce).toBe(true);
+      expect(emitSpy.calledWith('reportEscalated')).toBe(true);
+    });
+
+    it('should create escalation record with manual escalation type and system role', async () => {
+      const report = new Report('report-id-1');
+      report.status = ReportStatus.ESCALATED;
+
+      sandbox.stub(ReportEntity, 'findByPk').resolves({
+        status: ReportStatus.UNDER_REVIEW,
+        update: sandbox.stub().resolves(),
+        toModel: () => report,
+      } as any);
+
+      let capturedEscalationData: any = null;
+      sandbox.stub(ReportEscalationEntity, 'fromModel').callsFake((data: any) => {
+        capturedEscalationData = data;
+        return { save: sandbox.stub().resolves({}) } as any;
+      });
+
+      await service.escalateReport('report-id-1', 'Complex case');
+
+      expect(capturedEscalationData).not.toBeNull();
+      expect(capturedEscalationData.fromStatus).toBe(ReportStatus.UNDER_REVIEW);
+      expect(capturedEscalationData.toStatus).toBe(ReportStatus.ESCALATED);
+      expect(capturedEscalationData.decision).toBe('escalated');
+      expect(capturedEscalationData.reviewerRole).toBe('system');
+      expect(capturedEscalationData.notes).toBe('Complex case');
+    });
+
+    it('should throw ReportNotFoundError if report does not exist', async () => {
+      sandbox.stub(ReportEntity, 'findByPk').resolves(null);
+
+      await expect(service.escalateReport('nonexistent', 'reason'))
+        .rejects.toThrow(ReportNotFoundError);
+    });
+
+    it('should throw ReportAlreadyResolvedError if report is already resolved', async () => {
+      sandbox.stub(ReportEntity, 'findByPk').resolves({
+        status: ReportStatus.RESOLVED,
+      } as any);
+
+      await expect(service.escalateReport('report-1', 'reason'))
+        .rejects.toThrow(ReportAlreadyResolvedError);
+    });
+  });
+
+  describe('hasReporterAlreadyReported', () => {
+
+    it('should return true if a matching EventReporter record exists', async () => {
+      sandbox.stub(EventReporterEntity, 'findOne').resolves({
+        id: 'er-1',
+        event_id: 'event-1',
+        reporter_identifier: 'some-hash',
+      } as any);
+
+      const result = await service.hasReporterAlreadyReported('event-1', 'some-hash');
+
+      expect(result).toBe(true);
+    });
+
+    it('should return false if no matching EventReporter record exists', async () => {
+      sandbox.stub(EventReporterEntity, 'findOne').resolves(null);
+
+      const result = await service.hasReporterAlreadyReported('event-1', 'new-hash');
+
+      expect(result).toBe(false);
+    });
+
+    it('should query with correct event_id and reporter_identifier', async () => {
+      const findOneStub = sandbox.stub(EventReporterEntity, 'findOne').resolves(null);
+
+      await service.hasReporterAlreadyReported('event-42', 'reporter-abc');
+
+      expect(findOneStub.calledOnce).toBe(true);
+      const callArgs = findOneStub.firstCall.args[0];
+      expect(callArgs.where.event_id).toBe('event-42');
+      expect(callArgs.where.reporter_identifier).toBe('reporter-abc');
+    });
+  });
+
+  describe('event emission', () => {
+
+    it('should not throw if eventBus is not provided', async () => {
+      const serviceNoEventBus = new ModerationService();
+
+      sandbox.stub(serviceNoEventBus, 'hasReporterAlreadyReported').resolves(false);
+
+      const report = new Report('report-id-1');
+      sandbox.stub(ReportEntity, 'fromModel').returns({
+        save: sandbox.stub().resolves({ toModel: () => report }),
+      } as any);
+      sandbox.stub(EventReporterEntity, 'fromModel').returns({
+        save: sandbox.stub().resolves({}),
+      } as any);
+
+      await expect(serviceNoEventBus.createReport({
+        eventId: 'event-1',
+        calendarId: 'calendar-1',
+        category: ReportCategory.OTHER,
+        description: 'Test',
+        reporterAccountId: 'account-1',
+        reporterType: 'authenticated',
+      })).resolves.toBeDefined();
+    });
+
+    it('should emit reportCreated event with report payload', async () => {
+      sandbox.stub(service, 'hasReporterAlreadyReported').resolves(false);
+
+      const report = new Report('report-id-1');
+      report.eventId = 'event-1';
+      sandbox.stub(ReportEntity, 'fromModel').returns({
+        save: sandbox.stub().resolves({ toModel: () => report }),
+      } as any);
+      sandbox.stub(EventReporterEntity, 'fromModel').returns({
+        save: sandbox.stub().resolves({}),
+      } as any);
+
+      const emitSpy = sandbox.spy(eventBus, 'emit');
+
+      await service.createReport({
+        eventId: 'event-1',
+        calendarId: 'calendar-1',
+        category: ReportCategory.OTHER,
+        description: 'Test',
+        reporterAccountId: 'account-1',
+        reporterType: 'authenticated',
+      });
+
+      expect(emitSpy.calledWith('reportCreated', sinon.match({ report }))).toBe(true);
+    });
+
+    it('should emit reportResolved event with report and reviewerId', async () => {
+      const report = new Report('report-id-1');
+      report.status = ReportStatus.RESOLVED;
+
+      sandbox.stub(ReportEntity, 'findByPk').resolves({
+        status: ReportStatus.SUBMITTED,
+        update: sandbox.stub().resolves(),
+        toModel: () => report,
+      } as any);
+      sandbox.stub(ReportEscalationEntity, 'fromModel').returns({
+        save: sandbox.stub().resolves({}),
+      } as any);
+
+      const emitSpy = sandbox.spy(eventBus, 'emit');
+
+      await service.resolveReport('report-id-1', 'reviewer-1', 'Done');
+
+      expect(emitSpy.calledWith('reportResolved', sinon.match({
+        report,
+        reviewerId: 'reviewer-1',
+      }))).toBe(true);
+    });
+
+    it('should emit reportEscalated event on dismiss (auto-escalation)', async () => {
+      const report = new Report('report-id-1');
+      report.status = ReportStatus.ESCALATED;
+
+      sandbox.stub(ReportEntity, 'findByPk').resolves({
+        status: ReportStatus.SUBMITTED,
+        update: sandbox.stub().resolves(),
+        toModel: () => report,
+      } as any);
+      sandbox.stub(ReportEscalationEntity, 'fromModel').returns({
+        save: sandbox.stub().resolves({}),
+      } as any);
+
+      const emitSpy = sandbox.spy(eventBus, 'emit');
+
+      await service.dismissReport('report-id-1', 'owner-1', 'Not a real issue');
+
+      expect(emitSpy.calledWith('reportEscalated', sinon.match({
+        report,
+        reason: 'Not a real issue',
+      }))).toBe(true);
+    });
+
+    it('should emit reportVerified event on successful verification', async () => {
+      const report = new Report('report-id-1');
+      report.status = ReportStatus.SUBMITTED;
+
+      const futureDate = new Date();
+      futureDate.setHours(futureDate.getHours() + 12);
+
+      sandbox.stub(ReportEntity, 'findOne').resolves({
+        verification_expiration: futureDate,
+        update: sandbox.stub().resolves(),
+        toModel: () => report,
+      } as any);
+
+      const emitSpy = sandbox.spy(eventBus, 'emit');
+
+      await service.verifyReport('valid-token');
+
+      expect(emitSpy.calledWith('reportVerified', sinon.match({ report }))).toBe(true);
+    });
+  });
+});

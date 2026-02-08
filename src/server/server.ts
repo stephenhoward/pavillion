@@ -16,6 +16,7 @@ import CalendarDomain from '@/server/calendar';
 import ConfigurationDomain from './configuration';
 import EmailDomain from './email';
 import HousekeepingDomain from './housekeeping';
+import ModerationDomain from './moderation';
 import PublicCalendarDomain from './public';
 import MediaDomain from './media';
 import SetupDomain from './setup';
@@ -224,6 +225,10 @@ const initPavillionServer = async (app: express.Application, port: number) => {
   // Initialize housekeeping domain (for automated server maintenance)
   const housekeepingDomain = new HousekeepingDomain(eventBus, emailDomain.interface, accountsDomain.interface);
   housekeepingDomain.initialize(app);
+
+  // Initialize moderation domain (after calendar, accounts, and email domains)
+  const moderationDomain = new ModerationDomain(eventBus, calendarDomain.interface, accountsDomain.interface, emailDomain.interface);
+  moderationDomain.initialize(app);
 
   // Register global error handler (MUST be after all routes and middleware)
   app.use(globalErrorHandler);
