@@ -20,6 +20,10 @@ media:
   storage:
     driver: 'memory'
 
+# Moderation configuration for tests
+moderation:
+  emailHashSecret: 'test-email-hash-secret-stable-value'
+
 # Disable rate limiting in tests by default (unit tests expect this)
 # Integration tests that need rate limiting can enable it explicitly
 rateLimit:
@@ -46,3 +50,13 @@ rateLimit:
     calendar:
       windowMs: 60000  # 1 minute
       max: 120
+  moderation:
+    reportByIp:
+      windowMs: 900000  # 15 minutes
+      max: 10
+    verifyByIp:
+      windowMs: 900000  # 15 minutes
+      max: 20
+    byEmail:
+      windowMs: 86400000  # 24 hours
+      max: 3

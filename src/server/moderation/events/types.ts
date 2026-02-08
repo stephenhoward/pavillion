@@ -2,6 +2,7 @@ import { Report } from '@/common/model/report';
 
 export interface ReportCreatedPayload {
   report: Report;
+  reporterEmail?: string;
 }
 
 export interface ReportVerifiedPayload {

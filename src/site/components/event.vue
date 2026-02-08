@@ -1,16 +1,18 @@
-<script setup>
-import { reactive, onBeforeMount } from 'vue';
+<script setup lang="ts">
+import { reactive, onBeforeMount, ref } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useRoute } from 'vue-router';
 import CalendarService from '../service/calendar';
 import { useEventStore } from '../../client/stores/eventStore';
 import NotFound from './notFound.vue';
 import EventImage from './EventImage.vue';
+import ReportEvent from './ReportEvent.vue';
 
 const { t } = useTranslation('system');
 const route = useRoute();
 const calendarId = route.params.calendar;
 const eventId = route.params.event;
+const showReportModal = ref(false);
 const state = reactive({
   err: '',
   notFound: false,
@@ -49,6 +51,20 @@ onBeforeMount(async () => {
   }
 });
 
+/**
+ * Opens the report event modal dialog.
+ */
+function openReportModal() {
+  showReportModal.value = true;
+}
+
+/**
+ * Closes the report event modal dialog.
+ */
+function closeReportModal() {
+  showReportModal.value = false;
+}
+
 </script>
 
 <template>
@@ -72,6 +88,19 @@ onBeforeMount(async () => {
         <p>{{ state.event.content("en").description }}</p>
       </div>
     </main>
+    <footer class="event-footer">
+      <button
+        type="button"
+        class="report-link"
+        @click="openReportModal"
+      >{{ t('report.link_text') }}</button>
+    </footer>
+
+    <ReportEvent
+      v-if="showReportModal"
+      :event-id="eventId"
+      @close="closeReportModal"
+    />
   </div>
 </template>
 
@@ -190,6 +219,45 @@ onBeforeMount(async () => {
   .error {
     @include public-error-state;
     margin-bottom: $public-space-lg;
+  }
+}
+
+.event-footer {
+  margin-top: $public-space-2xl;
+  padding-top: $public-space-lg;
+  border-top: 1px solid $public-border-subtle-light;
+
+  @include public-dark-mode {
+    border-top-color: $public-border-subtle-dark;
+  }
+}
+
+.report-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: $public-font-family;
+  font-size: $public-font-size-sm;
+  color: $public-text-tertiary-light;
+  cursor: pointer;
+  transition: $public-transition-fast;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+
+  &:hover {
+    color: $public-text-secondary-light;
+  }
+
+  &:focus-visible {
+    @include public-focus-visible;
+  }
+
+  @include public-dark-mode {
+    color: $public-text-tertiary-dark;
+
+    &:hover {
+      color: $public-text-secondary-dark;
+    }
   }
 }
 

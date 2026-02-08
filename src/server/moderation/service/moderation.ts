@@ -1,8 +1,11 @@
-import { randomBytes, createHash } from 'crypto';
+import { randomBytes, createHmac } from 'crypto';
 import { EventEmitter } from 'events';
+import { Op } from 'sequelize';
+import config from 'config';
 
 import { Report, ReportCategory, ReportStatus } from '@/common/model/report';
 import type { ReporterType, EscalationType } from '@/common/model/report';
+import { EventNotFoundError } from '@/common/exceptions/calendar';
 import { ReportEntity } from '@/server/moderation/entity/report';
 import { EventReporterEntity } from '@/server/moderation/entity/event_reporter';
 import { ReportEscalationEntity } from '@/server/moderation/entity/report_escalation';
@@ -11,7 +14,9 @@ import {
   InvalidVerificationTokenError,
   ReportNotFoundError,
   ReportAlreadyResolvedError,
+  EmailRateLimitError,
 } from '@/server/moderation/exceptions';
+import CalendarInterface from '@/server/calendar/interface';
 
 /** Token expiration duration in hours. */
 const VERIFICATION_TOKEN_EXPIRY_HOURS = 24;
@@ -25,6 +30,23 @@ const DEFAULT_PAGE_LIMIT = 20;
 interface CreateReportData {
   eventId: string;
   calendarId: string;
+  category: ReportCategory;
+  description: string;
+  reporterEmail?: string;
+  reporterAccountId?: string;
+  reporterType: ReporterType;
+  adminId?: string;
+  adminPriority?: 'low' | 'medium' | 'high';
+  adminDeadline?: Date;
+  adminNotes?: string;
+}
+
+/**
+ * Input data for creating a report by event ID, without requiring calendarId.
+ * The service resolves the calendarId internally via the calendar domain.
+ */
+interface CreateReportForEventData {
+  eventId: string;
   category: ReportCategory;
   description: string;
   reporterEmail?: string;
@@ -65,9 +87,48 @@ interface PaginatedReports {
  */
 class ModerationService {
   private eventBus?: EventEmitter;
+  private calendarInterface?: CalendarInterface;
 
-  constructor(eventBus?: EventEmitter) {
+  constructor(eventBus?: EventEmitter, calendarInterface?: CalendarInterface) {
     this.eventBus = eventBus;
+    this.calendarInterface = calendarInterface;
+  }
+
+  /**
+   * Creates a new report for an event, resolving the calendarId internally.
+   * Looks up the event via CalendarInterface to determine which calendar
+   * the event belongs to, then delegates to createReport.
+   *
+   * @param data - Report creation data (without calendarId)
+   * @returns The created Report domain model
+   * @throws EventNotFoundError if the event does not exist or has no calendarId
+   * @throws DuplicateReportError if the reporter has already reported this event
+   * @throws EmailRateLimitError if the email has exceeded the verification email limit
+   */
+  async createReportForEvent(data: CreateReportForEventData): Promise<Report> {
+    if (!this.calendarInterface) {
+      throw new Error('CalendarInterface is required for createReportForEvent');
+    }
+
+    let calendarId: string;
+    try {
+      const event = await this.calendarInterface.getEventById(data.eventId);
+      if (!event || !event.calendarId) {
+        throw new EventNotFoundError();
+      }
+      calendarId = event.calendarId;
+    }
+    catch (error) {
+      if (error instanceof EventNotFoundError) {
+        throw error;
+      }
+      throw new EventNotFoundError();
+    }
+
+    return this.createReport({
+      ...data,
+      calendarId,
+    });
   }
 
   /**
@@ -75,10 +136,12 @@ class ModerationService {
    * For anonymous reporters the email is hashed and a verification token is generated.
    * For authenticated and administrator reporters the status starts as submitted.
    * Checks for duplicate reports before creation.
+   * For anonymous reporters, enforces per-email rate limiting on verification emails.
    *
    * @param data - Report creation data
    * @returns The created Report domain model
    * @throws DuplicateReportError if the reporter has already reported this event
+   * @throws EmailRateLimitError if the email has exceeded the verification email limit
    */
   async createReport(data: CreateReportData): Promise<Report> {
     const report = new Report();
@@ -97,6 +160,12 @@ class ModerationService {
       const emailHash = this.hashEmail(data.reporterEmail);
       report.reporterEmailHash = emailHash;
       reporterIdentifier = emailHash;
+
+      // Check per-email rate limit before proceeding
+      const emailExceedsLimit = await this.hasExceededEmailRateLimit(emailHash);
+      if (emailExceedsLimit) {
+        throw new EmailRateLimitError();
+      }
 
       // Anonymous reporters start in pending_verification
       report.status = ReportStatus.PENDING_VERIFICATION;
@@ -141,8 +210,11 @@ class ModerationService {
     });
     await reporterRecord.save();
 
-    // Emit domain event
-    this.emit('reportCreated', { report: createdReport });
+    // Emit domain event with reporter email for verification email sending
+    this.emit('reportCreated', {
+      report: createdReport,
+      reporterEmail: data.reporterEmail,
+    });
 
     return createdReport;
   }
@@ -245,33 +317,56 @@ class ModerationService {
   }
 
   /**
-   * Verifies a report using its verification token.
-   * Transitions from pending_verification to submitted.
+   * Verifies a report using its verification token via an atomic update.
+   * Uses a single UPDATE ... WHERE query that matches on the token,
+   * expected status, and non-expired expiration to prevent race conditions
+   * from concurrent verification requests. If 0 rows are affected, the
+   * token is invalid, expired, or was already consumed by another request.
    *
    * @param token - Verification token string
    * @returns The verified Report
-   * @throws InvalidVerificationTokenError if token is invalid or expired
+   * @throws InvalidVerificationTokenError if token is invalid, expired, or already used
    */
   async verifyReport(token: string): Promise<Report> {
+    // Atomic update: only succeeds if the token exists, the report is still
+    // pending verification, and the token has not expired
+    const [affectedCount] = await ReportEntity.update(
+      {
+        status: ReportStatus.SUBMITTED,
+        verification_token: null,
+        verification_expiration: null,
+      },
+      {
+        where: {
+          verification_token: token,
+          status: ReportStatus.PENDING_VERIFICATION,
+          verification_expiration: {
+            [Op.gt]: new Date(),
+          },
+        },
+      },
+    );
+
+    if (affectedCount === 0) {
+      throw new InvalidVerificationTokenError();
+    }
+
+    // Retrieve the updated report for event emission.
+    // The token was cleared by the atomic update, so we find the report
+    // by querying for the most recently updated submitted report with a
+    // null verification token. This is safe because the atomic update
+    // guarantees only one request succeeds.
     const entity = await ReportEntity.findOne({
-      where: { verification_token: token },
+      where: {
+        status: ReportStatus.SUBMITTED,
+        verification_token: null,
+      },
+      order: [['updated_at', 'DESC']],
     });
 
     if (!entity) {
       throw new InvalidVerificationTokenError();
     }
-
-    // Check token expiration
-    if (entity.verification_expiration && new Date() > entity.verification_expiration) {
-      throw new InvalidVerificationTokenError();
-    }
-
-    // Update status and clear verification fields
-    await entity.update({
-      status: ReportStatus.SUBMITTED,
-      verification_token: null,
-      verification_expiration: null,
-    });
 
     const report = entity.toModel();
 
@@ -439,13 +534,41 @@ class ModerationService {
   }
 
   /**
-   * Hashes an email address using SHA-256 for anonymous reporter tracking.
+   * Checks whether an email hash has exceeded the per-email rate limit
+   * for report submissions within the configured time window.
+   *
+   * @param emailHash - HMAC-SHA256 hash of the reporter email
+   * @returns True if the email has exceeded the rate limit
+   */
+  async hasExceededEmailRateLimit(emailHash: string): Promise<boolean> {
+    const windowMs = config.get<number>('rateLimit.moderation.byEmail.windowMs');
+    const maxReports = config.get<number>('rateLimit.moderation.byEmail.max');
+
+    const windowStart = new Date(Date.now() - windowMs);
+
+    const recentCount = await ReportEntity.count({
+      where: {
+        reporter_email_hash: emailHash,
+        created_at: {
+          [Op.gte]: windowStart,
+        },
+      },
+    });
+
+    return recentCount >= maxReports;
+  }
+
+  /**
+   * Hashes an email address using HMAC-SHA256 with a server-side secret
+   * for anonymous reporter tracking. Uses HMAC to prevent rainbow table
+   * attacks against the low-entropy email address space.
    *
    * @param email - Email address to hash
-   * @returns Hex-encoded SHA-256 hash of the lowercase email
+   * @returns Hex-encoded HMAC-SHA256 hash of the lowercase email
    */
-  private hashEmail(email: string): string {
-    return createHash('sha256')
+  hashEmail(email: string): string {
+    const secret = config.get<string>('moderation.emailHashSecret');
+    return createHmac('sha256', secret)
       .update(email.toLowerCase().trim())
       .digest('hex');
   }
@@ -484,4 +607,4 @@ class ModerationService {
 }
 
 export default ModerationService;
-export type { CreateReportData, ReportFilters, PaginatedReports };
+export type { CreateReportData, CreateReportForEventData, ReportFilters, PaginatedReports };

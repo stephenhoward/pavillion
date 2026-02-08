@@ -6,6 +6,7 @@ import {
   PrimaryKey,
   CreatedAt,
   UpdatedAt,
+  Index,
 } from 'sequelize-typescript';
 
 import { Report, ReportCategory, ReportStatus } from '@/common/model/report';
@@ -76,6 +77,7 @@ class ReportEntity extends Model {
   @Column({ type: DataType.DATE, allowNull: true })
   declare reviewer_timestamp: Date | null;
 
+  @Index
   @Column({ type: DataType.STRING, allowNull: true })
   declare verification_token: string | null;
 

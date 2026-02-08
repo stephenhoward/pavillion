@@ -49,3 +49,17 @@ export class ReportAlreadyResolvedError extends Error {
     Object.setPrototypeOf(this, ReportAlreadyResolvedError.prototype);
   }
 }
+
+/**
+ * Custom error class for per-email rate limit exceeded.
+ * Thrown when an email address has exceeded the maximum number of
+ * verification emails within the configured time window.
+ */
+export class EmailRateLimitError extends Error {
+  constructor(message: string = 'Too many reports from this email address, please try again later') {
+    super(message);
+    this.name = 'EmailRateLimitError';
+    // Maintaining proper prototype chain in ES5+
+    Object.setPrototypeOf(this, EmailRateLimitError.prototype);
+  }
+}

@@ -3,3 +3,4 @@ export * from './category';
 export * from './base';
 export * from './media';
 export * from './activitypub';
+export * from './report';

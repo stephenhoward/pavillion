@@ -7,6 +7,9 @@ import {
   passwordResetByEmail,
   loginByIp,
   loginByEmail,
+  reportSubmissionByIp,
+  reportSubmissionByEmail,
+  reportVerificationByIp,
 } from '../rate-limiters';
 
 describe('rate-limiters', () => {
@@ -43,6 +46,30 @@ describe('rate-limiters', () => {
       expect(windowMs).toBe(3600000); // 1 hour
     });
 
+    it('should use correct config values for moderation report submission by IP', () => {
+      const maxRequests = config.get<number>('rateLimit.moderation.reportByIp.max');
+      const windowMs = config.get<number>('rateLimit.moderation.reportByIp.windowMs');
+
+      expect(maxRequests).toBe(10);
+      expect(windowMs).toBe(900000); // 15 minutes
+    });
+
+    it('should use correct config values for moderation report verification by IP', () => {
+      const maxRequests = config.get<number>('rateLimit.moderation.verifyByIp.max');
+      const windowMs = config.get<number>('rateLimit.moderation.verifyByIp.windowMs');
+
+      expect(maxRequests).toBe(20);
+      expect(windowMs).toBe(900000); // 15 minutes
+    });
+
+    it('should use correct config values for moderation report submission by email', () => {
+      const maxRequests = config.get<number>('rateLimit.moderation.byEmail.max');
+      const windowMs = config.get<number>('rateLimit.moderation.byEmail.windowMs');
+
+      expect(maxRequests).toBe(3);
+      expect(windowMs).toBe(86400000); // 24 hours
+    });
+
     it('should check if rate limiting is enabled in config', () => {
       const enabled = config.get<boolean>('rateLimit.enabled');
       // In test environment, rate limiting is disabled
@@ -69,6 +96,21 @@ describe('rate-limiters', () => {
     it('should export loginByEmail limiter', () => {
       expect(loginByEmail).toBeDefined();
       expect(typeof loginByEmail).toBe('function');
+    });
+
+    it('should export reportSubmissionByIp limiter', () => {
+      expect(reportSubmissionByIp).toBeDefined();
+      expect(typeof reportSubmissionByIp).toBe('function');
+    });
+
+    it('should export reportSubmissionByEmail limiter', () => {
+      expect(reportSubmissionByEmail).toBeDefined();
+      expect(typeof reportSubmissionByEmail).toBe('function');
+    });
+
+    it('should export reportVerificationByIp limiter', () => {
+      expect(reportVerificationByIp).toBeDefined();
+      expect(typeof reportVerificationByIp).toBe('function');
     });
   });
 
@@ -138,6 +180,44 @@ describe('rate-limiters', () => {
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({ success: true });
+    });
+
+    it('should allow moderation limiters to pass through when disabled', async () => {
+      app.post('/test',
+        reportSubmissionByIp,
+        reportSubmissionByEmail,
+        (req, res) => {
+          res.json({ success: true });
+        },
+      );
+
+      const responses = await Promise.all([
+        request(app).post('/test').send({ email: 'test@example.com' }),
+        request(app).post('/test').send({ email: 'test@example.com' }),
+        request(app).post('/test').send({ email: 'test@example.com' }),
+      ]);
+
+      responses.forEach(response => {
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({ success: true });
+      });
+    });
+
+    it('should allow verification limiter to pass through when disabled', async () => {
+      app.get('/test', reportVerificationByIp, (req, res) => {
+        res.json({ success: true });
+      });
+
+      const responses = await Promise.all([
+        request(app).get('/test'),
+        request(app).get('/test'),
+        request(app).get('/test'),
+      ]);
+
+      responses.forEach(response => {
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({ success: true });
+      });
     });
   });
 
@@ -227,6 +307,60 @@ describe('rate-limiters', () => {
       }
     });
 
+    it('should apply reportSubmissionByIp limiter to endpoint', async () => {
+      app.post('/report', reportSubmissionByIp, (req, res) => {
+        res.json({ success: true });
+      });
+
+      const response = await request(app).post('/report');
+      expect(response.status).toBe(200);
+
+      if (config.get<boolean>('rateLimit.enabled')) {
+        expect(response.headers['ratelimit-limit']).toBeDefined();
+        expect(response.headers['ratelimit-remaining']).toBeDefined();
+      }
+      else {
+        expect(response.headers['ratelimit-limit']).toBeUndefined();
+      }
+    });
+
+    it('should apply reportVerificationByIp limiter to endpoint', async () => {
+      app.get('/verify', reportVerificationByIp, (req, res) => {
+        res.json({ success: true });
+      });
+
+      const response = await request(app).get('/verify');
+      expect(response.status).toBe(200);
+
+      if (config.get<boolean>('rateLimit.enabled')) {
+        expect(response.headers['ratelimit-limit']).toBeDefined();
+        expect(response.headers['ratelimit-remaining']).toBeDefined();
+      }
+      else {
+        expect(response.headers['ratelimit-limit']).toBeUndefined();
+      }
+    });
+
+    it('should apply reportSubmissionByEmail limiter to endpoint', async () => {
+      app.post('/report', reportSubmissionByEmail, (req, res) => {
+        res.json({ success: true });
+      });
+
+      const response = await request(app)
+        .post('/report')
+        .send({ email: 'test@example.com' });
+
+      expect(response.status).toBe(200);
+
+      if (config.get<boolean>('rateLimit.enabled')) {
+        expect(response.headers['ratelimit-limit']).toBeDefined();
+        expect(response.headers['ratelimit-remaining']).toBeDefined();
+      }
+      else {
+        expect(response.headers['ratelimit-limit']).toBeUndefined();
+      }
+    });
+
     it('should allow combining IP and credential limiters', async () => {
       app.post('/reset', passwordResetByIp, passwordResetByEmail, (req, res) => {
         res.json({ success: true });
@@ -239,6 +373,26 @@ describe('rate-limiters', () => {
       expect(response.status).toBe(200);
 
       // In test environment (disabled), no headers expected
+      if (config.get<boolean>('rateLimit.enabled')) {
+        expect(response.headers['ratelimit-limit']).toBeDefined();
+        expect(response.headers['ratelimit-remaining']).toBeDefined();
+      }
+      else {
+        expect(response.headers['ratelimit-limit']).toBeUndefined();
+      }
+    });
+
+    it('should allow combining report submission IP and email limiters', async () => {
+      app.post('/report', reportSubmissionByIp, reportSubmissionByEmail, (req, res) => {
+        res.json({ success: true });
+      });
+
+      const response = await request(app)
+        .post('/report')
+        .send({ email: 'test@example.com' });
+
+      expect(response.status).toBe(200);
+
       if (config.get<boolean>('rateLimit.enabled')) {
         expect(response.headers['ratelimit-limit']).toBeDefined();
         expect(response.headers['ratelimit-remaining']).toBeDefined();

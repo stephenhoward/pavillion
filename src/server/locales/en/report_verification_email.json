@@ -1,0 +1,15 @@
+{
+  "subject": "Verify your event report",
+  "title": "Verify Your Event Report",
+  "greeting": "Hello,",
+  "instructions": "You recently submitted a report for the event listed below. To complete your report, please verify your email address by clicking the button below.",
+  "event_label": "Event:",
+  "category_label": "Report category:",
+  "button": "Verify My Report",
+  "copy_link_text": "Or copy this link:",
+  "expiry_notice": "This verification link will expire in 24 hours.",
+  "ignore_message": "If you did not submit this report, you can safely ignore this email.",
+  "signature": "Thank you,",
+  "team_name": "The Pavillion Team",
+  "footer_text": "This is an automated message, please do not reply to this email."
+}

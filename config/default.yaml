@@ -35,6 +35,12 @@ jwt:
 session:
   secret: 'development-only-session-secret-do-not-use-in-production'
 
+# Moderation configuration
+moderation:
+  # HMAC secret for hashing reporter email addresses
+  # In production, this MUST be changed to a unique, random secret
+  emailHashSecret: 'development-only-email-hash-secret-do-not-use-in-production'
+
 # Rate limiting configuration
 rateLimit:
   enabled: true
@@ -60,6 +66,16 @@ rateLimit:
     calendar:
       windowMs: 60000  # 1 minute in milliseconds
       max: 120  # 120 requests per calendar per minute
+  moderation:
+    reportByIp:
+      windowMs: 900000  # 15 minutes in milliseconds
+      max: 10  # 10 report submissions per IP per 15 minutes
+    verifyByIp:
+      windowMs: 900000  # 15 minutes in milliseconds
+      max: 20  # 20 verification requests per IP per 15 minutes
+    byEmail:
+      windowMs: 86400000  # 24 hours in milliseconds
+      max: 3  # 3 verification emails per email per 24 hours
 
 # Housekeeping configuration for automated server maintenance
 housekeeping:

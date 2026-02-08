@@ -2,7 +2,7 @@ import { EventEmitter } from 'events';
 
 import { Report } from '@/common/model/report';
 import ModerationService from '../service/moderation';
-import type { CreateReportData, ReportFilters, PaginatedReports } from '../service/moderation';
+import type { CreateReportData, CreateReportForEventData, ReportFilters, PaginatedReports } from '../service/moderation';
 import CalendarInterface from '@/server/calendar/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import EmailInterface from '@/server/email/interface';
@@ -29,7 +29,19 @@ export default class ModerationInterface {
     this.calendarInterface = calendarInterface;
     this.accountsInterface = accountsInterface;
     this.emailInterface = emailInterface;
-    this.moderationService = new ModerationService(eventBus);
+    this.moderationService = new ModerationService(eventBus, calendarInterface);
+  }
+
+  /**
+   * Creates a new report for an event, resolving the calendarId internally
+   * by looking up the event via the calendar domain.
+   *
+   * @param data - Report creation data (without calendarId)
+   * @returns The created Report domain model
+   * @throws EventNotFoundError if the event does not exist
+   */
+  async createReportForEvent(data: CreateReportForEventData): Promise<Report> {
+    return this.moderationService.createReportForEvent(data);
   }
 
   /**
@@ -140,4 +152,4 @@ export default class ModerationInterface {
   }
 }
 
-export type { CreateReportData, ReportFilters, PaginatedReports };
+export type { CreateReportData, CreateReportForEventData, ReportFilters, PaginatedReports };

@@ -1,5 +1,6 @@
 {
     "not_found_error_message": "Not Found",
+    "error_load_event": "Failed to load event data",
     "filter_by_category": "Event Categories",
     "clear_filters": "Clear Filters",
     "no_events_with_filters": "No Events Found",
@@ -32,5 +33,31 @@
         "more_filters": "More Filters",
         "hide_filters": "Hide Filters",
         "show_filters": "Show Filters"
+    },
+    "report": {
+        "link_text": "Report Event",
+        "form_title": "Report this Event",
+        "category_label": "Category",
+        "category_spam": "Spam",
+        "category_inappropriate": "Inappropriate Content",
+        "category_misleading": "Misleading Information",
+        "category_harassment": "Harassment",
+        "category_other": "Other",
+        "description_label": "Description",
+        "description_placeholder": "Please describe the issue...",
+        "description_char_count": "{{remaining}} / {{max}} characters remaining",
+        "email_label": "Email",
+        "email_placeholder": "your@email.com",
+        "email_help": "We'll send a verification link to confirm your report.",
+        "submit_button": "Submit Report",
+        "cancel_button": "Cancel",
+        "submitting_button": "Submitting...",
+        "success_message": "Report submitted. Please check your email to verify.",
+        "error_duplicate": "You have already reported this event.",
+        "error_rate_limit": "Too many reports. Please try again later.",
+        "error_generic": "Something went wrong. Please try again.",
+        "error_validation": "Please fill in all required fields.",
+        "error_description_too_long": "Description must be 2000 characters or fewer.",
+        "close_dialog": "Close dialog"
     }
 }

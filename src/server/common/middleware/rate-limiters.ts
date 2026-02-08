@@ -80,3 +80,40 @@ export const loginByEmail: RequestHandler = isRateLimitEnabled()
     'email',
   )
   : noOpMiddleware;
+
+/**
+ * Moderation report submission rate limiter by IP address.
+ * Limits: 10 requests per IP per 15 minutes (default config).
+ */
+export const reportSubmissionByIp: RequestHandler = isRateLimitEnabled()
+  ? createIpRateLimiter(
+    config.get<number>('rateLimit.moderation.reportByIp.max'),
+    config.get<number>('rateLimit.moderation.reportByIp.windowMs'),
+    'report-submission',
+  )
+  : noOpMiddleware;
+
+/**
+ * Moderation report verification rate limiter by IP address.
+ * Limits: 20 requests per IP per 15 minutes (default config).
+ */
+export const reportVerificationByIp: RequestHandler = isRateLimitEnabled()
+  ? createIpRateLimiter(
+    config.get<number>('rateLimit.moderation.verifyByIp.max'),
+    config.get<number>('rateLimit.moderation.verifyByIp.windowMs'),
+    'report-verification',
+  )
+  : noOpMiddleware;
+
+/**
+ * Moderation report submission rate limiter by email address.
+ * Limits: 3 verification emails per email per 24 hours (default config).
+ */
+export const reportSubmissionByEmail: RequestHandler = isRateLimitEnabled()
+  ? createCredentialRateLimiter(
+    config.get<number>('rateLimit.moderation.byEmail.max'),
+    config.get<number>('rateLimit.moderation.byEmail.windowMs'),
+    'report-submission',
+    'email',
+  )
+  : noOpMiddleware;

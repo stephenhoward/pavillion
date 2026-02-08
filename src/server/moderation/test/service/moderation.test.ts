@@ -12,6 +12,7 @@ import {
   InvalidVerificationTokenError,
   ReportNotFoundError,
   ReportAlreadyResolvedError,
+  EmailRateLimitError,
 } from '@/server/moderation/exceptions';
 
 describe('ModerationService', () => {
@@ -33,6 +34,7 @@ describe('ModerationService', () => {
 
     it('should create a report for an anonymous reporter with hashed email and verification token', async () => {
       const hasReporterStub = sandbox.stub(service, 'hasReporterAlreadyReported').resolves(false);
+      sandbox.stub(service, 'hasExceededEmailRateLimit').resolves(false);
 
       // Stub the entity save to return a model-like entity
       const report = new Report('report-id-1');
@@ -76,6 +78,7 @@ describe('ModerationService', () => {
 
     it('should set verification token and expiration for anonymous reporters', async () => {
       sandbox.stub(service, 'hasReporterAlreadyReported').resolves(false);
+      sandbox.stub(service, 'hasExceededEmailRateLimit').resolves(false);
 
       let capturedReport: Report | null = null;
       sandbox.stub(ReportEntity, 'fromModel').callsFake((r: Report) => {
@@ -107,6 +110,7 @@ describe('ModerationService', () => {
 
     it('should hash the email for anonymous reporters', async () => {
       sandbox.stub(service, 'hasReporterAlreadyReported').resolves(false);
+      sandbox.stub(service, 'hasExceededEmailRateLimit').resolves(false);
 
       let capturedReport: Report | null = null;
       sandbox.stub(ReportEntity, 'fromModel').callsFake((r: Report) => {
@@ -202,6 +206,7 @@ describe('ModerationService', () => {
 
     it('should throw DuplicateReportError if reporter already reported the event', async () => {
       sandbox.stub(service, 'hasReporterAlreadyReported').resolves(true);
+      sandbox.stub(service, 'hasExceededEmailRateLimit').resolves(false);
 
       await expect(service.createReport({
         eventId: 'event-1',
@@ -221,6 +226,62 @@ describe('ModerationService', () => {
         description: 'Missing email',
         reporterType: 'anonymous',
       })).rejects.toThrow('Reporter email is required for anonymous reports');
+    });
+
+    it('should throw EmailRateLimitError when email exceeds rate limit', async () => {
+      sandbox.stub(service, 'hasExceededEmailRateLimit').resolves(true);
+
+      await expect(service.createReport({
+        eventId: 'event-1',
+        calendarId: 'calendar-1',
+        category: ReportCategory.SPAM,
+        description: 'Too many reports',
+        reporterEmail: 'spammer@example.com',
+        reporterType: 'anonymous',
+      })).rejects.toThrow(EmailRateLimitError);
+    });
+
+    it('should check email rate limit before duplicate check for anonymous reporters', async () => {
+      const emailRateLimitStub = sandbox.stub(service, 'hasExceededEmailRateLimit').resolves(true);
+      const duplicateStub = sandbox.stub(service, 'hasReporterAlreadyReported').resolves(false);
+
+      await expect(service.createReport({
+        eventId: 'event-1',
+        calendarId: 'calendar-1',
+        category: ReportCategory.SPAM,
+        description: 'Rate limited',
+        reporterEmail: 'limited@example.com',
+        reporterType: 'anonymous',
+      })).rejects.toThrow(EmailRateLimitError);
+
+      // Email rate limit should be checked
+      expect(emailRateLimitStub.calledOnce).toBe(true);
+      // Duplicate check should NOT be reached since rate limit was hit first
+      expect(duplicateStub.called).toBe(false);
+    });
+
+    it('should not check email rate limit for authenticated reporters', async () => {
+      sandbox.stub(service, 'hasReporterAlreadyReported').resolves(false);
+      const emailRateLimitStub = sandbox.stub(service, 'hasExceededEmailRateLimit');
+
+      const report = new Report('report-id-1');
+      sandbox.stub(ReportEntity, 'fromModel').returns({
+        save: sandbox.stub().resolves({ toModel: () => report }),
+      } as any);
+      sandbox.stub(EventReporterEntity, 'fromModel').returns({
+        save: sandbox.stub().resolves({}),
+      } as any);
+
+      await service.createReport({
+        eventId: 'event-1',
+        calendarId: 'calendar-1',
+        category: ReportCategory.SPAM,
+        description: 'Auth report',
+        reporterAccountId: 'account-1',
+        reporterType: 'authenticated',
+      });
+
+      expect(emailRateLimitStub.called).toBe(false);
     });
 
     it('should create EventReporter record for duplicate tracking', async () => {
@@ -251,6 +312,54 @@ describe('ModerationService', () => {
       expect(capturedReporterData.eventId).toBe('event-1');
       expect(capturedReporterData.reporterIdentifier).toBe('account-1');
       expect(capturedReporterData.reportId).toBe('report-id-1');
+    });
+  });
+
+  describe('hasExceededEmailRateLimit', () => {
+
+    it('should return true when report count equals the max limit', async () => {
+      const countStub = sandbox.stub(ReportEntity, 'count').resolves(3);
+
+      const result = await service.hasExceededEmailRateLimit('some-email-hash');
+
+      expect(result).toBe(true);
+      expect(countStub.calledOnce).toBe(true);
+    });
+
+    it('should return true when report count exceeds the max limit', async () => {
+      sandbox.stub(ReportEntity, 'count').resolves(5);
+
+      const result = await service.hasExceededEmailRateLimit('some-email-hash');
+
+      expect(result).toBe(true);
+    });
+
+    it('should return false when report count is below the max limit', async () => {
+      sandbox.stub(ReportEntity, 'count').resolves(1);
+
+      const result = await service.hasExceededEmailRateLimit('some-email-hash');
+
+      expect(result).toBe(false);
+    });
+
+    it('should return false when no recent reports exist', async () => {
+      sandbox.stub(ReportEntity, 'count').resolves(0);
+
+      const result = await service.hasExceededEmailRateLimit('some-email-hash');
+
+      expect(result).toBe(false);
+    });
+
+    it('should query with correct email hash and time window', async () => {
+      const countStub = sandbox.stub(ReportEntity, 'count').resolves(0);
+
+      await service.hasExceededEmailRateLimit('test-hash-123');
+
+      expect(countStub.calledOnce).toBe(true);
+      const callArgs = countStub.firstCall.args[0] as any;
+      expect(callArgs.where.reporter_email_hash).toBe('test-hash-123');
+      // The created_at filter should use Op.gte with a date within the window
+      expect(callArgs.where.created_at).toBeDefined();
     });
   });
 
@@ -424,52 +533,78 @@ describe('ModerationService', () => {
 
   describe('verifyReport', () => {
 
-    it('should verify a report with a valid token', async () => {
+    it('should verify a report with a valid token using an atomic update', async () => {
       const report = new Report('report-id-1');
       report.status = ReportStatus.SUBMITTED;
 
-      const futureDate = new Date();
-      futureDate.setHours(futureDate.getHours() + 12);
+      // Stub ReportEntity.update (static) to simulate 1 row affected
+      const updateStub = sandbox.stub(ReportEntity, 'update').resolves([1]);
 
-      const mockEntity = {
-        verification_expiration: futureDate,
-        update: sandbox.stub().resolves(),
+      // Stub ReportEntity.findOne to return the updated entity
+      sandbox.stub(ReportEntity, 'findOne').resolves({
         toModel: () => report,
-      };
+      } as any);
 
-      sandbox.stub(ReportEntity, 'findOne').resolves(mockEntity as any);
       const emitSpy = sandbox.spy(eventBus, 'emit');
 
       const result = await service.verifyReport('valid-token');
 
       expect(result).toBeDefined();
-      expect(mockEntity.update.calledOnce).toBe(true);
-      const updateArgs = mockEntity.update.firstCall.args[0];
-      expect(updateArgs.status).toBe(ReportStatus.SUBMITTED);
-      expect(updateArgs.verification_token).toBeNull();
-      expect(updateArgs.verification_expiration).toBeNull();
+      expect(result.status).toBe(ReportStatus.SUBMITTED);
+
+      // Verify the atomic update was called with correct parameters
+      expect(updateStub.calledOnce).toBe(true);
+      const [updateValues, updateOptions] = updateStub.firstCall.args;
+      expect(updateValues.status).toBe(ReportStatus.SUBMITTED);
+      expect(updateValues.verification_token).toBeNull();
+      expect(updateValues.verification_expiration).toBeNull();
+      expect(updateOptions.where.verification_token).toBe('valid-token');
+      expect(updateOptions.where.status).toBe(ReportStatus.PENDING_VERIFICATION);
+      expect(updateOptions.where.verification_expiration).toBeDefined();
+
       expect(emitSpy.calledWith('reportVerified')).toBe(true);
     });
 
-    it('should throw InvalidVerificationTokenError if token not found', async () => {
-      sandbox.stub(ReportEntity, 'findOne').resolves(null);
+    it('should throw InvalidVerificationTokenError when no rows are affected (invalid token)', async () => {
+      // Atomic update returns 0 affected rows - token not found or already used
+      sandbox.stub(ReportEntity, 'update').resolves([0]);
 
       await expect(service.verifyReport('invalid-token'))
         .rejects.toThrow(InvalidVerificationTokenError);
     });
 
-    it('should throw InvalidVerificationTokenError if token is expired', async () => {
-      const pastDate = new Date();
-      pastDate.setHours(pastDate.getHours() - 1);
-
-      const mockEntity = {
-        verification_expiration: pastDate,
-      };
-
-      sandbox.stub(ReportEntity, 'findOne').resolves(mockEntity as any);
+    it('should throw InvalidVerificationTokenError when token is expired (0 rows affected)', async () => {
+      // An expired token will not match the WHERE clause (verification_expiration > NOW()),
+      // so the atomic update returns 0 affected rows
+      sandbox.stub(ReportEntity, 'update').resolves([0]);
 
       await expect(service.verifyReport('expired-token'))
         .rejects.toThrow(InvalidVerificationTokenError);
+    });
+
+    it('should throw InvalidVerificationTokenError when token was already consumed by another request', async () => {
+      // Race condition scenario: another request already consumed the token,
+      // so the atomic update returns 0 affected rows
+      sandbox.stub(ReportEntity, 'update').resolves([0]);
+
+      await expect(service.verifyReport('already-consumed-token'))
+        .rejects.toThrow(InvalidVerificationTokenError);
+    });
+
+    it('should include expiration check in the atomic update WHERE clause', async () => {
+      const updateStub = sandbox.stub(ReportEntity, 'update').resolves([1]);
+
+      const report = new Report('report-id-1');
+      report.status = ReportStatus.SUBMITTED;
+      sandbox.stub(ReportEntity, 'findOne').resolves({
+        toModel: () => report,
+      } as any);
+
+      await service.verifyReport('some-token');
+
+      const updateOptions = updateStub.firstCall.args[1];
+      // The WHERE clause should include verification_expiration with Op.gt
+      expect(updateOptions.where.verification_expiration).toBeDefined();
     });
   });
 
@@ -857,12 +992,11 @@ describe('ModerationService', () => {
       const report = new Report('report-id-1');
       report.status = ReportStatus.SUBMITTED;
 
-      const futureDate = new Date();
-      futureDate.setHours(futureDate.getHours() + 12);
+      // Stub atomic update to succeed
+      sandbox.stub(ReportEntity, 'update').resolves([1]);
 
+      // Stub findOne to return the updated entity
       sandbox.stub(ReportEntity, 'findOne').resolves({
-        verification_expiration: futureDate,
-        update: sandbox.stub().resolves(),
         toModel: () => report,
       } as any);
 
