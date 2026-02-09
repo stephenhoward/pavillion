@@ -7,7 +7,7 @@ import { DateTime } from 'luxon';
 import CalendarService from '../service/calendar';
 import NotFound from './notFound.vue';
 import EventImage from './EventImage.vue';
-import ReportEvent from './ReportEvent.vue';
+import ReportEvent from './report-event.vue';
 
 const { t } = useTranslation('system');
 const route = useRoute();

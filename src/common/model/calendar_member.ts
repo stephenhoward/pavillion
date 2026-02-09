@@ -16,6 +16,7 @@ export class CalendarMember extends Model {
   declare accountId: string | null;
   declare userActorId: string | null;
   declare grantedBy: string | null;
+  declare canReviewReports: boolean;
 
   /**
    * Constructor for CalendarMember.
@@ -27,6 +28,7 @@ export class CalendarMember extends Model {
    * @param {string | null} accountId - Local account ID (null for remote members)
    * @param {string | null} userActorId - Remote actor ID (null for local members)
    * @param {string | null} grantedBy - Account ID of who granted access (null for original owner)
+   * @param {boolean} canReviewReports - Whether the member can review reports (default false)
    */
   constructor(
     id: string,
@@ -36,6 +38,7 @@ export class CalendarMember extends Model {
     accountId: string | null = null,
     userActorId: string | null = null,
     grantedBy: string | null = null,
+    canReviewReports: boolean = false,
   ) {
     super();
     this.id = id;
@@ -45,6 +48,7 @@ export class CalendarMember extends Model {
     this.accountId = accountId;
     this.userActorId = userActorId;
     this.grantedBy = grantedBy;
+    this.canReviewReports = canReviewReports;
   }
 
   /**
@@ -61,6 +65,7 @@ export class CalendarMember extends Model {
       accountId: this.accountId,
       userActorId: this.userActorId,
       grantedBy: this.grantedBy,
+      canReviewReports: this.canReviewReports,
     };
   }
 
@@ -79,6 +84,7 @@ export class CalendarMember extends Model {
       obj.accountId || null,
       obj.userActorId || null,
       obj.grantedBy || null,
+      obj.canReviewReports || false,
     );
   }
 }

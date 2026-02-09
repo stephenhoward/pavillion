@@ -124,8 +124,9 @@ class Report extends PrimaryModel {
 
   /**
    * Serializes fields suitable for a calendar owner reviewing reports.
-   * Includes reporter-safe fields plus reporterType, but not account details
-   * or administrative metadata.
+   * Includes report context, review status, owner/reviewer notes,
+   * and escalation info. Excludes sensitive reporter identity fields
+   * and administrative metadata.
    *
    * @returns Plain object with owner-safe fields
    */
@@ -133,11 +134,17 @@ class Report extends PrimaryModel {
     return {
       id: this.id,
       eventId: this.eventId,
+      calendarId: this.calendarId,
       category: this.category,
       description: this.description,
       status: this.status,
       reporterType: this.reporterType,
+      ownerNotes: this.ownerNotes,
+      reviewerNotes: this.reviewerNotes,
+      reviewerTimestamp: this.reviewerTimestamp ? this.reviewerTimestamp.toISOString() : null,
+      escalationType: this.escalationType,
       createdAt: this.createdAt.toISOString(),
+      updatedAt: this.updatedAt.toISOString(),
     };
   }
 

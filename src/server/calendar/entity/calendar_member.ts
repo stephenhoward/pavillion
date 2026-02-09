@@ -103,6 +103,13 @@ class CalendarMemberEntity extends Model {
   @Column({ type: DataType.UUID, allowNull: true })
   declare granted_by: string | null;
 
+  /**
+   * Whether the member can review reports on this calendar.
+   * Only applicable to editors; owners always have review permissions.
+   */
+  @Column({ type: DataType.BOOLEAN, defaultValue: false, allowNull: false })
+  declare can_review_reports: boolean;
+
   @CreatedAt
   declare createdAt: Date;
 
@@ -138,6 +145,7 @@ class CalendarMemberEntity extends Model {
       this.account_id,
       this.user_actor_id,
       this.granted_by,
+      this.can_review_reports,
     );
   }
 
@@ -156,6 +164,7 @@ class CalendarMemberEntity extends Model {
       account_id: member.accountId,
       user_actor_id: member.userActorId,
       granted_by: member.grantedBy,
+      can_review_reports: member.canReviewReports,
     });
   }
 }

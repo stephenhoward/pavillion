@@ -42,5 +42,89 @@
         "error_description_too_long": "Description exceeds maximum length.",
         "report_button": "Report",
         "report_event_label": "Report this event"
+    },
+    "moderation": {
+        "dashboard": {
+            "title": "Reports",
+            "empty": "No reports found",
+            "empty_description": "There are no reports for events in this calendar.",
+            "filter_status": "Filter by status",
+            "filter_category": "Filter by category",
+            "all_statuses": "All statuses",
+            "all_categories": "All categories",
+            "sort_by": "Sort by",
+            "sort_date": "Date",
+            "sort_status": "Status",
+            "sort_order_asc": "Ascending",
+            "sort_order_desc": "Descending",
+            "column_event": "Event",
+            "column_category": "Category",
+            "column_reporter": "Reporter",
+            "column_status": "Status",
+            "column_date": "Date",
+            "loading": "Loading reports...",
+            "error_loading": "Failed to load reports. Please try again.",
+            "page_info": "Page {{current}} of {{total}}",
+            "previous_page": "Previous page",
+            "next_page": "Next page"
+        },
+        "status": {
+            "submitted": "Submitted",
+            "under_review": "Under Review",
+            "resolved": "Resolved",
+            "dismissed": "Dismissed",
+            "escalated": "Escalated"
+        },
+        "category": {
+            "spam": "Spam",
+            "inappropriate": "Inappropriate",
+            "misleading": "Misleading",
+            "harassment": "Harassment",
+            "other": "Other"
+        },
+        "reporter_type": {
+            "anonymous": "Anonymous",
+            "authenticated": "Authenticated",
+            "administrator": "Administrator"
+        },
+        "detail": {
+            "title": "Report Detail",
+            "back_to_reports": "Back to Reports",
+            "description": "Description",
+            "reporter_type": "Reporter Type",
+            "reported_on": "Reported On",
+            "event": "Event",
+            "owner_notes": "Owner Notes",
+            "owner_notes_placeholder": "Add notes about this report...",
+            "save_notes": "Save Notes",
+            "saving_notes": "Saving...",
+            "notes_saved": "Notes saved successfully.",
+            "escalation_history": "Escalation History",
+            "no_escalation_history": "No escalation history.",
+            "escalation_from": "From",
+            "escalation_to": "To",
+            "escalation_by": "By",
+            "escalation_decision": "Decision",
+            "loading": "Loading report...",
+            "error_loading": "Failed to load report details."
+        },
+        "actions": {
+            "resolve": "Resolve",
+            "dismiss": "Dismiss",
+            "cancel": "Cancel",
+            "resolve_confirm": "Resolve this report",
+            "dismiss_confirm": "Dismiss this report",
+            "dismiss_warning": "Dismissing will automatically escalate this report to admin review.",
+            "notes_required": "Please provide notes explaining your decision.",
+            "notes_placeholder": "Enter your notes...",
+            "resolving": "Resolving...",
+            "dismissing": "Dismissing...",
+            "resolved_success": "Report has been resolved.",
+            "dismissed_success": "Report has been dismissed and escalated to admin."
+        },
+        "permissions": {
+            "can_review_reports": "Can review reports",
+            "toggle_permission": "Toggle report review permission"
+        }
     }
 }

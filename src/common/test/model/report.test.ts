@@ -255,19 +255,37 @@ describe('Report Model', () => {
 
   describe('toOwnerObject', () => {
 
-    it('should return reporter-safe fields plus reporterType', () => {
+    it('should return owner-relevant fields including review and escalation data', () => {
       const report = createFullReport();
       const obj = report.toOwnerObject();
 
       expect(obj).toEqual({
         id: 'report-id-1',
         eventId: 'event-id-1',
+        calendarId: 'calendar-id-1',
         category: 'spam',
         description: 'This event is spam',
         status: 'submitted',
         reporterType: 'anonymous',
+        ownerNotes: null,
+        reviewerNotes: null,
+        reviewerTimestamp: null,
+        escalationType: null,
         createdAt: sampleDate.toISOString(),
+        updatedAt: sampleDate.toISOString(),
       });
+    });
+
+    it('should include populated owner-relevant fields when set', () => {
+      const report = createFullyPopulatedReport();
+      const obj = report.toOwnerObject();
+
+      expect(obj.calendarId).toBe('calendar-id-1');
+      expect(obj.ownerNotes).toBe('Owner reviewed this');
+      expect(obj.reviewerNotes).toBe('Confirmed issue');
+      expect(obj.reviewerTimestamp).toBe(sampleDate2.toISOString());
+      expect(obj.escalationType).toBe('manual');
+      expect(obj.updatedAt).toBe(sampleDate2.toISOString());
     });
 
     it('should not include sensitive fields even when populated', () => {
@@ -276,7 +294,11 @@ describe('Report Model', () => {
 
       // Verify expected keys
       const keys = Object.keys(obj);
-      expect(keys).toEqual(['id', 'eventId', 'category', 'description', 'status', 'reporterType', 'createdAt']);
+      expect(keys).toEqual([
+        'id', 'eventId', 'calendarId', 'category', 'description', 'status',
+        'reporterType', 'ownerNotes', 'reviewerNotes', 'reviewerTimestamp',
+        'escalationType', 'createdAt', 'updatedAt',
+      ]);
 
       // Explicitly verify no sensitive fields
       expect(obj).not.toHaveProperty('verificationToken');
@@ -287,10 +309,7 @@ describe('Report Model', () => {
       expect(obj).not.toHaveProperty('adminId');
       expect(obj).not.toHaveProperty('adminPriority');
       expect(obj).not.toHaveProperty('adminDeadline');
-      expect(obj).not.toHaveProperty('reviewerNotes');
       expect(obj).not.toHaveProperty('reviewerId');
-      expect(obj).not.toHaveProperty('reviewerTimestamp');
-      expect(obj).not.toHaveProperty('ownerNotes');
     });
 
     it('should include reporterType for authenticated reports', () => {
@@ -298,6 +317,22 @@ describe('Report Model', () => {
       const obj = report.toOwnerObject();
 
       expect(obj.reporterType).toBe('authenticated');
+    });
+
+    it('should serialize date fields as ISO strings', () => {
+      const report = createFullyPopulatedReport();
+      const obj = report.toOwnerObject();
+
+      expect(obj.createdAt).toBe(sampleDate.toISOString());
+      expect(obj.updatedAt).toBe(sampleDate2.toISOString());
+      expect(obj.reviewerTimestamp).toBe(sampleDate2.toISOString());
+    });
+
+    it('should serialize reviewerTimestamp as null when not set', () => {
+      const report = createFullReport();
+      const obj = report.toOwnerObject();
+
+      expect(obj.reviewerTimestamp).toBe(null);
     });
   });
 

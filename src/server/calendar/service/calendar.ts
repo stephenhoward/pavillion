@@ -9,6 +9,7 @@ import { Account } from '@/common/model/account';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { CalendarMemberEntity } from '@/server/calendar/entity/calendar_member';
 import { CalendarEditor } from '@/common/model/calendar_editor';
+import { CalendarMember } from '@/common/model/calendar_member';
 import { AccountEntity } from '@/server/common/entity/account';
 import { UserActorEntity } from '@/server/activitypub/entity/user_actor';
 import AccountInvitation from '@/common/model/invitation';
@@ -152,6 +153,46 @@ class CalendarService {
     return this.userCanEditCalendar(account.id, calendar.id);
   }
 
+  /**
+   * Check if a user can review reports for a calendar.
+   * Admins and calendar owners always have access. Editors must have
+   * the can_review_reports permission explicitly granted.
+   *
+   * @param account - The account to check permissions for
+   * @param calendarId - The calendar UUID to check report review access for
+   * @returns True if the user can review reports for the calendar
+   */
+  async userCanReviewReports(account: Account, calendarId: string): Promise<boolean> {
+    // Instance admins can always review reports
+    if (account.hasRole('admin')) {
+      return true;
+    }
+
+    // Look up the membership for this account and calendar
+    const membership = await CalendarMemberEntity.findOne({
+      where: {
+        account_id: account.id,
+        calendar_id: calendarId,
+      },
+    });
+
+    if (!membership) {
+      return false;
+    }
+
+    // Calendar owners always have report review access
+    if (membership.role === 'owner') {
+      return true;
+    }
+
+    // Editors must have can_review_reports permission
+    if (membership.role === 'editor' && membership.can_review_reports) {
+      return true;
+    }
+
+    return false;
+  }
+
   async getCalendarByName(name: string): Promise<Calendar|null> {
     if (!name || ! this.isValidUrlName(name)) {
       return null;
@@ -177,6 +218,22 @@ class CalendarService {
       },
     });
     return membership !== null;
+  }
+
+  /**
+   * Retrieves the account ID of the calendar owner.
+   *
+   * @param calendarId - The calendar UUID to find the owner for
+   * @returns The owner's account ID, or null if no owner found
+   */
+  async getCalendarOwnerAccountId(calendarId: string): Promise<string | null> {
+    const membership = await CalendarMemberEntity.findOne({
+      where: {
+        calendar_id: calendarId,
+        role: 'owner',
+      },
+    });
+    return membership?.account_id ?? null;
   }
 
   /**
@@ -1201,6 +1258,60 @@ class CalendarService {
         email: m.account.email,
         grantedBy: m.grantor.id,
       }));
+  }
+
+  /**
+   * Update permissions for an editor on a calendar.
+   * Only calendar owners can update editor permissions.
+   *
+   * @param account - The account making the update (must be calendar owner)
+   * @param calendarId - The ID of the calendar
+   * @param editorAccountId - The account ID of the editor whose permissions are being updated
+   * @param permissions - The permissions to update
+   * @returns The updated CalendarMember
+   * @throws CalendarNotFoundError if calendar not found
+   * @throws CalendarEditorPermissionError if the requesting account is not the calendar owner
+   * @throws EditorNotFoundError if the editor membership is not found
+   */
+  async updateEditorPermissions(
+    account: Account,
+    calendarId: string,
+    editorAccountId: string,
+    permissions: { canReviewReports: boolean },
+  ): Promise<CalendarMember> {
+    // Get and validate calendar exists
+    const calendar = await this.getCalendar(calendarId);
+    if (!calendar) {
+      throw new CalendarNotFoundError();
+    }
+
+    // Only calendar owner or admin can update editor permissions
+    if (!account.hasRole('admin')) {
+      const isOwner = await this.isCalendarOwner(account, calendar);
+      if (!isOwner) {
+        throw new CalendarEditorPermissionError('Permission denied: only calendar owner can update editor permissions');
+      }
+    }
+
+    // Find the editor membership record
+    const membership = await CalendarMemberEntity.findOne({
+      where: {
+        calendar_id: calendarId,
+        account_id: editorAccountId,
+        role: 'editor',
+      },
+    });
+
+    if (!membership) {
+      throw new EditorNotFoundError();
+    }
+
+    // Update the permission
+    await membership.update({
+      can_review_reports: permissions.canReviewReports,
+    });
+
+    return membership.toModel();
   }
 }
 

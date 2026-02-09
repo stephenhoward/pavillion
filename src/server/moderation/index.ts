@@ -4,6 +4,7 @@ import ModerationEventHandlers from './events';
 import PublicReportRoutes from './api/v1/public-report-routes';
 import AuthenticatedReportRoutes from './api/v1/authenticated-report-routes';
 import VerifyRoutes from './api/v1/verify-routes';
+import OwnerReportRoutes from './api/v1/owner-report-routes';
 import CalendarInterface from '@/server/calendar/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import EmailInterface from '@/server/email/interface';
@@ -19,6 +20,7 @@ export default class ModerationDomain {
   public readonly interface: ModerationInterface;
   private readonly eventBus: EventEmitter;
   private readonly calendarInterface: CalendarInterface;
+  private readonly accountsInterface: AccountsInterface;
   private readonly emailInterface: EmailInterface;
 
   constructor(
@@ -29,6 +31,7 @@ export default class ModerationDomain {
   ) {
     this.eventBus = eventBus;
     this.calendarInterface = calendarInterface;
+    this.accountsInterface = accountsInterface;
     this.emailInterface = emailInterface;
     this.interface = new ModerationInterface(eventBus, calendarInterface, accountsInterface, emailInterface);
   }
@@ -39,8 +42,12 @@ export default class ModerationDomain {
   }
 
   public installEventHandlers() {
-    new ModerationEventHandlers(this.interface, this.calendarInterface, this.emailInterface)
-      .install(this.eventBus);
+    new ModerationEventHandlers(
+      this.interface,
+      this.calendarInterface,
+      this.accountsInterface,
+      this.emailInterface,
+    ).install(this.eventBus);
   }
 
   public installAPI(app: Application): void {
@@ -54,5 +61,8 @@ export default class ModerationDomain {
 
     const verifyRoutes = new VerifyRoutes(this.interface);
     verifyRoutes.installHandlers(app, '/api/public/v1');
+
+    const ownerReportRoutes = new OwnerReportRoutes(this.interface);
+    ownerReportRoutes.installHandlers(app, '/api/v1');
   }
 }

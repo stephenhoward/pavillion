@@ -2,6 +2,7 @@ import express, { Application } from 'express';
 import EventRoutes from '@/server/calendar/api/v1/events';
 import CalendarRoutes from '@/server/calendar/api/v1/calendar';
 import EditorRoutes from '@/server/calendar/api/v1/editors';
+import EditorPermissionRoutes from '@/server/calendar/api/v1/editor-permissions';
 import CategoryRoutes from '@/server/calendar/api/v1/categories';
 import LocationRoutes from '@/server/calendar/api/v1/location';
 import WidgetRoutes from '@/server/calendar/api/v1/widget';
@@ -19,6 +20,8 @@ export default class CalendarAPI {
     calendarRoutes.installHandlers(app, '/api/v1');
     let editorRoutes = new EditorRoutes(internalAPI);
     editorRoutes.installHandlers(app, '/api/v1');
+    let editorPermissionRoutes = new EditorPermissionRoutes(internalAPI);
+    editorPermissionRoutes.installHandlers(app, '/api/v1');
     let categoryRoutes = new CategoryRoutes(internalAPI);
     categoryRoutes.installHandlers(app, '/api/v1');
     let locationRoutes = new LocationRoutes(internalAPI);

@@ -3,7 +3,7 @@ import { mount, flushPromises, VueWrapper } from '@vue/test-utils';
 import sinon from 'sinon';
 import I18NextVue from 'i18next-vue';
 import i18next from 'i18next';
-import ReportEvent from '@/site/components/ReportEvent.vue';
+import ReportEvent from '@/site/components/report-event.vue';
 import { ReportCategory } from '@/common/model/report';
 import { DuplicateReportError, RateLimitError, ReportValidationError } from '@/common/exceptions/report';
 import { UnknownError } from '@/common/exceptions/base';

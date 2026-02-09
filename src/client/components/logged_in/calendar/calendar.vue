@@ -14,7 +14,7 @@ import PillButton from '@/client/components/common/PillButton.vue';
 import BulkOperationsMenu from './BulkOperationsMenu.vue';
 import CategorySelectionDialog from './CategorySelectionDialog.vue';
 import SearchFilter from './SearchFilter.vue';
-import ReportEvent from '@/client/components/ReportEvent.vue';
+import ReportEvent from '@/client/components/report-event.vue';
 import { useBulkSelection } from '@/client/composables/useBulkSelection';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 

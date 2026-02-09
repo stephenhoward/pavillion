@@ -83,6 +83,7 @@
     "editors_tab": "Editors",
     "settings_tab": "Settings",
     "widget_tab": "Widget",
+    "reports_tab": "Reports",
     "loading_calendar": "Loading calendar...",
     "error_loading_calendar": "Unable to load calendar. Please try again later.",
     "title": "Category Management",

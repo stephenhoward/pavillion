@@ -3,6 +3,7 @@ import { CalendarEvent } from '@/common/model/events';
 import { Account } from '@/common/model/account';
 import { EventLocation } from '@/common/model/location';
 import { CalendarEditor } from '@/common/model/calendar_editor';
+import { CalendarMember } from '@/common/model/calendar_member';
 import { EventCategory } from '@/common/model/event_category';
 import { EventCategoryAssignmentModel } from '@/common/model/event_category_assignment';
 import AccountInvitation from '@/common/model/invitation';
@@ -81,8 +82,30 @@ export default class CalendarInterface {
     return this.calendarService.userCanModifyCalendar(account, calendar);
   }
 
+  /**
+   * Checks if a user can review reports for a calendar.
+   * Admins and owners always can; editors need can_review_reports.
+   *
+   * @param account - The account to check
+   * @param calendarId - The calendar UUID
+   * @returns True if the user can review reports
+   */
+  async userCanReviewReports(account: Account, calendarId: string): Promise<boolean> {
+    return this.calendarService.userCanReviewReports(account, calendarId);
+  }
+
   async getPrimaryCalendarForUser(account: Account): Promise<Calendar | null> {
     return this.calendarService.getPrimaryCalendarForUser(account);
+  }
+
+  /**
+   * Retrieves the account ID of the calendar owner.
+   *
+   * @param calendarId - The calendar UUID to find the owner for
+   * @returns The owner's account ID, or null if no owner found
+   */
+  async getCalendarOwnerAccountId(calendarId: string): Promise<string | null> {
+    return this.calendarService.getCalendarOwnerAccountId(calendarId);
   }
 
   // Event operations
@@ -196,6 +219,24 @@ export default class CalendarInterface {
 
   async resendCalendarInvitation(requestingAccount: Account, calendarId: string, invitationId: string): Promise<AccountInvitation | undefined> {
     return this.calendarService.resendCalendarInvitation(requestingAccount, calendarId, invitationId);
+  }
+
+  /**
+   * Update permissions for an editor on a calendar.
+   *
+   * @param account - The account making the update (must be calendar owner)
+   * @param calendarId - The ID of the calendar
+   * @param editorAccountId - The account ID of the editor
+   * @param permissions - The permissions to update
+   * @returns The updated CalendarMember
+   */
+  async updateEditorPermissions(
+    account: Account,
+    calendarId: string,
+    editorAccountId: string,
+    permissions: { canReviewReports: boolean },
+  ): Promise<CalendarMember> {
+    return this.calendarService.updateEditorPermissions(account, calendarId, editorAccountId, permissions);
   }
 
   // Category operations

@@ -3,6 +3,7 @@ import { EventEmitter } from 'events';
 import { Op, UniqueConstraintError } from 'sequelize';
 import config from 'config';
 
+import { Account } from '@/common/model/account';
 import { Report, ReportCategory, ReportStatus } from '@/common/model/report';
 import type { ReporterType, EscalationType } from '@/common/model/report';
 import { EventNotFoundError } from '@/common/exceptions/calendar';
@@ -26,6 +27,18 @@ const DEFAULT_PAGE_LIMIT = 20;
 
 /** Valid report categories derived from the ReportCategory enum values. */
 const VALID_CATEGORIES = Object.values(ReportCategory);
+
+/** Valid sort fields for report listing. */
+const VALID_SORT_FIELDS = ['created_at', 'updated_at', 'status', 'category'];
+
+/** Valid sort orders. */
+const VALID_SORT_ORDERS = ['ASC', 'DESC'];
+
+/** Valid report status values for filtering. */
+const VALID_STATUSES = Object.values(ReportStatus);
+
+/** Valid reporter type values for source filtering. */
+const VALID_SOURCES: ReporterType[] = ['anonymous', 'authenticated', 'administrator'];
 
 /** Maximum allowed length for report description text. */
 const MAX_DESCRIPTION_LENGTH = 2000;
@@ -79,6 +92,10 @@ interface CreateReportForEventData {
 interface ReportFilters {
   status?: ReportStatus;
   category?: ReportCategory;
+  eventId?: string;
+  source?: ReporterType;
+  sortBy?: 'created_at' | 'updated_at' | 'status' | 'category';
+  sortOrder?: 'ASC' | 'DESC';
   page?: number;
   limit?: number;
 }
@@ -94,6 +111,21 @@ interface PaginatedReports {
     totalCount: number;
     limit: number;
   };
+}
+
+/**
+ * Escalation history record shape returned by getEscalationHistory.
+ */
+interface EscalationRecord {
+  id: string;
+  reportId: string;
+  fromStatus: string;
+  toStatus: string;
+  reviewerId: string | null;
+  reviewerRole: string;
+  decision: string;
+  notes: string | null;
+  createdAt: Date;
 }
 
 /**
@@ -365,10 +397,12 @@ class ModerationService {
    * Retrieves paginated reports for a calendar with optional filters.
    *
    * @param calendarId - Calendar UUID
-   * @param filters - Optional status, category, page, limit filters
+   * @param filters - Optional status, category, eventId, source, sorting, page, limit filters
    * @returns Paginated list of reports
    */
   async getReportsForCalendar(calendarId: string, filters: ReportFilters = {}): Promise<PaginatedReports> {
+    this.validateListFilters(filters);
+
     const page = filters.page ?? 1;
     const limit = filters.limit ?? DEFAULT_PAGE_LIMIT;
     const offset = (page - 1) * limit;
@@ -380,12 +414,21 @@ class ModerationService {
     if (filters.category) {
       where.category = filters.category;
     }
+    if (filters.eventId) {
+      where.event_id = filters.eventId;
+    }
+    if (filters.source) {
+      where.reporter_type = filters.source;
+    }
+
+    const sortBy = filters.sortBy ?? 'created_at';
+    const sortOrder = filters.sortOrder ?? 'DESC';
 
     const { rows, count } = await ReportEntity.findAndCountAll({
       where,
       limit,
       offset,
-      order: [['created_at', 'DESC']],
+      order: [[sortBy, sortOrder]],
     });
 
     return {
@@ -397,6 +440,81 @@ class ModerationService {
         limit,
       },
     };
+  }
+
+  /**
+   * Checks if a user has permission to review reports for a calendar.
+   * Delegates to CalendarInterface.userCanReviewReports.
+   *
+   * @param account - The authenticated account
+   * @param calendarId - Calendar UUID
+   * @returns True if the user can review reports
+   */
+  async userCanReviewReports(account: Account, calendarId: string): Promise<boolean> {
+    if (!this.calendarInterface) {
+      throw new Error('CalendarInterface is required for userCanReviewReports');
+    }
+    return this.calendarInterface.userCanReviewReports(account, calendarId);
+  }
+
+  /**
+   * Retrieves a report by ID and verifies it belongs to the specified calendar.
+   * Combines the common getReportById + calendar ownership check.
+   *
+   * @param reportId - Report UUID
+   * @param calendarId - Calendar UUID the report must belong to
+   * @returns The Report
+   * @throws ReportNotFoundError if report not found or belongs to a different calendar
+   */
+  async getReportForCalendar(reportId: string, calendarId: string): Promise<Report> {
+    const report = await this.getReportById(reportId);
+    if (!report || report.calendarId !== calendarId) {
+      throw new ReportNotFoundError();
+    }
+    return report;
+  }
+
+  /**
+   * Validates list filter parameters for report listing.
+   * Throws ReportValidationError if any filter values are invalid.
+   *
+   * @param filters - Filter parameters to validate
+   * @throws ReportValidationError if any filter is invalid
+   */
+  validateListFilters(filters: ReportFilters): void {
+    const errors: string[] = [];
+
+    if (filters.page !== undefined && (isNaN(filters.page) || filters.page < 1)) {
+      errors.push('Page must be a positive integer');
+    }
+
+    if (filters.limit !== undefined && (isNaN(filters.limit) || filters.limit < 1 || filters.limit > 100)) {
+      errors.push('Limit must be between 1 and 100');
+    }
+
+    if (filters.status && !VALID_STATUSES.includes(filters.status)) {
+      errors.push(`Invalid status. Must be one of: ${VALID_STATUSES.join(', ')}`);
+    }
+
+    if (filters.category && !VALID_CATEGORIES.includes(filters.category)) {
+      errors.push(`Invalid category. Must be one of: ${VALID_CATEGORIES.join(', ')}`);
+    }
+
+    if (filters.source && !VALID_SOURCES.includes(filters.source)) {
+      errors.push(`Invalid source. Must be one of: ${VALID_SOURCES.join(', ')}`);
+    }
+
+    if (filters.sortBy && !VALID_SORT_FIELDS.includes(filters.sortBy)) {
+      errors.push(`Invalid sortBy. Must be one of: ${VALID_SORT_FIELDS.join(', ')}`);
+    }
+
+    if (filters.sortOrder && !VALID_SORT_ORDERS.includes(filters.sortOrder)) {
+      errors.push('Invalid sortOrder. Must be ASC or DESC');
+    }
+
+    if (errors.length > 0) {
+      throw new ReportValidationError(errors);
+    }
   }
 
   /**
@@ -445,6 +563,38 @@ class ModerationService {
         limit,
       },
     };
+  }
+
+  /**
+   * Retrieves the escalation history for a report.
+   *
+   * @param reportId - Report UUID
+   * @returns Array of escalation records ordered by creation date
+   */
+  async getEscalationHistory(reportId: string): Promise<EscalationRecord[]> {
+    const entities = await ReportEscalationEntity.findAll({
+      where: { report_id: reportId },
+      order: [['created_at', 'ASC']],
+    });
+    return entities.map((entity) => entity.toModel() as EscalationRecord);
+  }
+
+  /**
+   * Updates the owner notes on a report.
+   *
+   * @param reportId - Report UUID
+   * @param ownerNotes - Notes from the calendar owner
+   * @returns The updated Report
+   * @throws ReportNotFoundError if report not found
+   */
+  async updateReportNotes(reportId: string, ownerNotes: string): Promise<Report> {
+    const entity = await ReportEntity.findByPk(reportId);
+    if (!entity) {
+      throw new ReportNotFoundError();
+    }
+
+    await entity.update({ owner_notes: ownerNotes });
+    return entity.toModel();
   }
 
   /**
@@ -738,4 +888,4 @@ class ModerationService {
 }
 
 export default ModerationService;
-export type { CreateReportData, CreateReportForEventData, ReportFilters, PaginatedReports };
+export type { CreateReportData, CreateReportForEventData, ReportFilters, PaginatedReports, EscalationRecord };

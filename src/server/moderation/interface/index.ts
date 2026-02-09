@@ -1,8 +1,9 @@
 import { EventEmitter } from 'events';
 
+import { Account } from '@/common/model/account';
 import { Report } from '@/common/model/report';
 import ModerationService from '../service/moderation';
-import type { CreateReportData, CreateReportForEventData, ReportFilters, PaginatedReports } from '../service/moderation';
+import type { CreateReportData, CreateReportForEventData, ReportFilters, PaginatedReports, EscalationRecord } from '../service/moderation';
 import CalendarInterface from '@/server/calendar/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import EmailInterface from '@/server/email/interface';
@@ -68,7 +69,7 @@ export default class ModerationInterface {
    * Retrieves paginated reports for a calendar with optional filters.
    *
    * @param calendarId - Calendar UUID
-   * @param filters - Optional status, category, page, limit filters
+   * @param filters - Optional status, category, eventId, source, sorting, page, limit filters
    * @returns Paginated list of reports
    */
   async getReportsForCalendar(calendarId: string, filters: ReportFilters = {}): Promise<PaginatedReports> {
@@ -93,6 +94,28 @@ export default class ModerationInterface {
    */
   async getEscalatedReports(filters: ReportFilters = {}): Promise<PaginatedReports> {
     return this.moderationService.getEscalatedReports(filters);
+  }
+
+  /**
+   * Retrieves the escalation history for a report.
+   *
+   * @param reportId - Report UUID
+   * @returns Array of escalation records ordered by creation date
+   */
+  async getEscalationHistory(reportId: string): Promise<EscalationRecord[]> {
+    return this.moderationService.getEscalationHistory(reportId);
+  }
+
+  /**
+   * Updates the owner notes on a report.
+   *
+   * @param reportId - Report UUID
+   * @param ownerNotes - Notes from the calendar owner
+   * @returns The updated Report
+   * @throws ReportNotFoundError if report not found
+   */
+  async updateReportNotes(reportId: string, ownerNotes: string): Promise<Report> {
+    return this.moderationService.updateReportNotes(reportId, ownerNotes);
   }
 
   /**
@@ -150,6 +173,29 @@ export default class ModerationInterface {
   async hasReporterAlreadyReported(eventId: string, reporterIdentifier: string): Promise<boolean> {
     return this.moderationService.hasReporterAlreadyReported(eventId, reporterIdentifier);
   }
+
+  /**
+   * Checks if a user has permission to review reports for a calendar.
+   *
+   * @param account - The authenticated account
+   * @param calendarId - Calendar UUID
+   * @returns True if the user can review reports
+   */
+  async userCanReviewReports(account: Account, calendarId: string): Promise<boolean> {
+    return this.moderationService.userCanReviewReports(account, calendarId);
+  }
+
+  /**
+   * Retrieves a report by ID, verifying it belongs to the specified calendar.
+   *
+   * @param reportId - Report UUID
+   * @param calendarId - Calendar UUID the report must belong to
+   * @returns The Report
+   * @throws ReportNotFoundError if report not found or belongs to a different calendar
+   */
+  async getReportForCalendar(reportId: string, calendarId: string): Promise<Report> {
+    return this.moderationService.getReportForCalendar(reportId, calendarId);
+  }
 }
 
-export type { CreateReportData, CreateReportForEventData, ReportFilters, PaginatedReports };
+export type { CreateReportData, CreateReportForEventData, ReportFilters, PaginatedReports, EscalationRecord };

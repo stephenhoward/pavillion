@@ -6,6 +6,8 @@ import CategoriesTab from './categories.vue';
 import EditorsTab from './editors.vue';
 import SettingsTab from './settings.vue';
 import WidgetTab from './widget-tab.vue';
+import ReportsDashboard from '@/client/components/moderation/reports-dashboard.vue';
+import ReportDetail from '@/client/components/moderation/report-detail.vue';
 import CalendarService from '../../../service/calendar';
 
 const route = useRoute();
@@ -26,6 +28,9 @@ const state = reactive({
   error: null,
 });
 
+// Reports sub-navigation state
+const selectedReportId = ref(null);
+
 onBeforeMount(async () => {
   state.loading = true;
   try {
@@ -43,12 +48,34 @@ onBeforeMount(async () => {
 
 const activateTab = (tab) => {
   state.activeTab = tab;
+
+  // Reset report detail view when switching to reports tab
+  if (tab === 'reports') {
+    selectedReportId.value = null;
+  }
+
   nextTick(() => {
     const panel = document.getElementById(`${tab}-panel`);
     if (panel) {
       panel.focus();
     }
   });
+};
+
+/**
+ * Navigates to the report detail view within the reports tab.
+ *
+ * @param reportId - The ID of the report to view
+ */
+const viewReport = (reportId) => {
+  selectedReportId.value = reportId;
+};
+
+/**
+ * Returns to the reports dashboard from the report detail view.
+ */
+const backToReports = () => {
+  selectedReportId.value = null;
 };
 
 </script>
@@ -100,6 +127,16 @@ const activateTab = (tab) => {
             <button
               type="button"
               role="tab"
+              :aria-selected="state.activeTab === 'reports' ? 'true' : 'false'"
+              aria-controls="reports-panel"
+              class="calendar-management-root__tab"
+              @click="activateTab('reports')"
+            >
+              {{ t('reports_tab') }}
+            </button>
+            <button
+              type="button"
+              role="tab"
               :aria-selected="state.activeTab === 'settings' ? 'true' : 'false'"
               aria-controls="settings-panel"
               class="calendar-management-root__tab"
@@ -143,6 +180,27 @@ const activateTab = (tab) => {
           class="calendar-management-root__panel"
         >
           <EditorsTab :calendar-id="state.calendar.id" />
+        </div>
+
+        <div
+          id="reports-panel"
+          role="tabpanel"
+          aria-labelledby="reports-tab"
+          :aria-hidden="state.activeTab !== 'reports'"
+          :hidden="state.activeTab !== 'reports'"
+          class="calendar-management-root__panel"
+        >
+          <ReportDetail
+            v-if="selectedReportId"
+            :calendar-id="state.calendar.id"
+            :report-id="selectedReportId"
+            @back="backToReports"
+          />
+          <ReportsDashboard
+            v-else
+            :calendar-id="state.calendar.id"
+            @view-report="viewReport"
+          />
         </div>
 
         <div
