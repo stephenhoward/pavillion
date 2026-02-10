@@ -1,0 +1,18 @@
+{
+  "subject": "[{{priority}}] Admin report on your event",
+  "title": "Admin Report Notification",
+  "greeting": "Hello,",
+  "notification": "An administrator has created a report about an event on your calendar. Please review and take action promptly.",
+  "event_label": "Event:",
+  "calendar_label": "Calendar:",
+  "category_label": "Report category:",
+  "description_label": "Description:",
+  "priority_label": "Priority:",
+  "deadline_label": "Deadline:",
+  "action_message": "Please review this report from your calendar's report dashboard and take appropriate action before the deadline.",
+  "review_button": "Review Report",
+  "copy_link_text": "Or copy this link:",
+  "signature": "Thank you,",
+  "team_name": "The Pavillion Team",
+  "footer_text": "This is an automated message, please do not reply to this email."
+}

@@ -6,6 +6,9 @@ import type {
   ReportFilters,
   ReportPagination,
   EscalationRecord,
+  AdminReportFilters,
+  CreateAdminReportData,
+  ModerationSettings,
 } from '@/client/service/moderation';
 
 /**
@@ -20,6 +23,7 @@ interface ReportDetail {
  * State interface for the moderation store.
  */
 interface ModerationState {
+  // Owner-level state
   reports: Report[];
   currentReport: ReportDetail | null;
   pagination: ReportPagination;
@@ -27,6 +31,17 @@ interface ModerationState {
   loading: boolean;
   loadingReport: boolean;
   error: string | null;
+
+  // Admin-level state
+  adminReports: Report[];
+  currentAdminReport: ReportDetail | null;
+  adminPagination: ReportPagination;
+  adminFilters: AdminReportFilters;
+  adminLoading: boolean;
+  loadingAdminReport: boolean;
+  moderationSettings: ModerationSettings | null;
+  loadingSettings: boolean;
+  adminError: string | null;
 }
 
 /** Shared service instance for all store actions. */
@@ -37,11 +52,13 @@ const moderationService = new ModerationService();
  *
  * Provides actions for listing, viewing, and acting on reports
  * filed against events in a calendar. Delegates all API
- * communication to ModerationService.
+ * communication to ModerationService. Also provides admin-level
+ * actions for instance-wide report management and moderation settings.
  */
 export const useModerationStore = defineStore('moderation', {
   state: (): ModerationState => {
     return {
+      // Owner-level state
       reports: [],
       currentReport: null,
       pagination: {
@@ -54,6 +71,22 @@ export const useModerationStore = defineStore('moderation', {
       loading: false,
       loadingReport: false,
       error: null,
+
+      // Admin-level state
+      adminReports: [],
+      currentAdminReport: null,
+      adminPagination: {
+        currentPage: 1,
+        totalPages: 0,
+        totalCount: 0,
+        limit: 20,
+      },
+      adminFilters: {},
+      adminLoading: false,
+      loadingAdminReport: false,
+      moderationSettings: null,
+      loadingSettings: false,
+      adminError: null,
     };
   },
 
@@ -76,9 +109,33 @@ export const useModerationStore = defineStore('moderation', {
       if (state.filters.sortOrder) count++;
       return count;
     },
+
+    /**
+     * Whether the admin reports array contains any reports.
+     */
+    hasAdminReports: (state) => state.adminReports.length > 0,
+
+    /**
+     * Count of active admin filter values.
+     */
+    activeAdminFilters: (state) => {
+      let count = 0;
+      if (state.adminFilters.status) count++;
+      if (state.adminFilters.category) count++;
+      if (state.adminFilters.calendarId) count++;
+      if (state.adminFilters.source) count++;
+      if (state.adminFilters.escalationType) count++;
+      if (state.adminFilters.sortBy) count++;
+      if (state.adminFilters.sortOrder) count++;
+      return count;
+    },
   },
 
   actions: {
+    // ──────────────────────────────────────────────────────────────
+    // Owner-level actions
+    // ──────────────────────────────────────────────────────────────
+
     /**
      * Fetches a paginated list of reports for a calendar.
      * Merges the current store filters with any additional filters provided.
@@ -292,6 +349,243 @@ export const useModerationStore = defineStore('moderation', {
       this.loading = false;
       this.loadingReport = false;
       this.error = null;
+    },
+
+    // ──────────────────────────────────────────────────────────────
+    // Admin-level actions
+    // ──────────────────────────────────────────────────────────────
+
+    /**
+     * Fetches a paginated list of admin-relevant reports.
+     * Merges the current admin filters with any additional filters provided.
+     *
+     * @param filters - Optional additional filter overrides
+     */
+    async fetchAdminReports(filters?: AdminReportFilters) {
+      this.adminLoading = true;
+      this.adminError = null;
+
+      try {
+        const mergedFilters: AdminReportFilters = {
+          ...this.adminFilters,
+          ...filters,
+        };
+
+        const result = await moderationService.getAdminReports(mergedFilters);
+        this.adminReports = result.reports;
+        this.adminPagination = result.pagination;
+      }
+      catch (error) {
+        this.adminError = error instanceof Error ? error.message : 'Failed to load admin reports';
+        throw error;
+      }
+      finally {
+        this.adminLoading = false;
+      }
+    },
+
+    /**
+     * Fetches a single admin report with its escalation history.
+     *
+     * @param reportId - The report UUID
+     */
+    async fetchAdminReport(reportId: string) {
+      this.loadingAdminReport = true;
+      this.adminError = null;
+
+      try {
+        const result = await moderationService.getAdminReport(reportId);
+        this.currentAdminReport = {
+          report: result.report,
+          escalationHistory: result.escalationHistory,
+        };
+      }
+      catch (error) {
+        this.adminError = error instanceof Error ? error.message : 'Failed to load admin report';
+        throw error;
+      }
+      finally {
+        this.loadingAdminReport = false;
+      }
+    },
+
+    /**
+     * Resolves a report as admin and updates local state.
+     *
+     * @param reportId - The report UUID
+     * @param notes - Resolution notes
+     */
+    async adminResolveReport(reportId: string, notes: string) {
+      this.adminError = null;
+
+      try {
+        const updatedReport = await moderationService.adminResolveReport(reportId, notes);
+
+        const index = this.adminReports.findIndex((r: Report) => r.id === reportId);
+        if (index >= 0) {
+          this.adminReports[index] = updatedReport;
+        }
+
+        if (this.currentAdminReport && this.currentAdminReport.report.id === reportId) {
+          this.currentAdminReport.report = updatedReport;
+        }
+      }
+      catch (error) {
+        this.adminError = error instanceof Error ? error.message : 'Failed to resolve report';
+        throw error;
+      }
+    },
+
+    /**
+     * Dismisses a report as admin and updates local state.
+     *
+     * @param reportId - The report UUID
+     * @param notes - Dismissal notes
+     */
+    async adminDismissReport(reportId: string, notes: string) {
+      this.adminError = null;
+
+      try {
+        const updatedReport = await moderationService.adminDismissReport(reportId, notes);
+
+        const index = this.adminReports.findIndex((r: Report) => r.id === reportId);
+        if (index >= 0) {
+          this.adminReports[index] = updatedReport;
+        }
+
+        if (this.currentAdminReport && this.currentAdminReport.report.id === reportId) {
+          this.currentAdminReport.report = updatedReport;
+        }
+      }
+      catch (error) {
+        this.adminError = error instanceof Error ? error.message : 'Failed to dismiss report';
+        throw error;
+      }
+    },
+
+    /**
+     * Overrides a calendar owner's decision on a report.
+     *
+     * @param reportId - The report UUID
+     * @param notes - Override notes
+     */
+    async adminOverrideReport(reportId: string, notes: string) {
+      this.adminError = null;
+
+      try {
+        const updatedReport = await moderationService.adminOverrideReport(reportId, notes);
+
+        const index = this.adminReports.findIndex((r: Report) => r.id === reportId);
+        if (index >= 0) {
+          this.adminReports[index] = updatedReport;
+        }
+
+        if (this.currentAdminReport && this.currentAdminReport.report.id === reportId) {
+          this.currentAdminReport.report = updatedReport;
+        }
+      }
+      catch (error) {
+        this.adminError = error instanceof Error ? error.message : 'Failed to override report';
+        throw error;
+      }
+    },
+
+    /**
+     * Creates an admin-initiated report for an event.
+     *
+     * @param data - The report creation data
+     * @returns The newly created report
+     */
+    async createAdminReport(data: CreateAdminReportData) {
+      this.adminError = null;
+
+      try {
+        const report = await moderationService.createAdminReport(data);
+        return report;
+      }
+      catch (error) {
+        this.adminError = error instanceof Error ? error.message : 'Failed to create report';
+        throw error;
+      }
+    },
+
+    /**
+     * Fetches instance-wide moderation settings.
+     */
+    async fetchModerationSettings() {
+      this.loadingSettings = true;
+      this.adminError = null;
+
+      try {
+        const settings = await moderationService.getModerationSettings();
+        this.moderationSettings = settings;
+      }
+      catch (error) {
+        this.adminError = error instanceof Error ? error.message : 'Failed to load settings';
+        throw error;
+      }
+      finally {
+        this.loadingSettings = false;
+      }
+    },
+
+    /**
+     * Saves updated moderation settings. Supports partial updates.
+     *
+     * @param settings - Partial settings to update
+     */
+    async saveModerationSettings(settings: Partial<ModerationSettings>) {
+      this.adminError = null;
+
+      try {
+        const updatedSettings = await moderationService.updateModerationSettings(settings);
+        this.moderationSettings = updatedSettings;
+      }
+      catch (error) {
+        this.adminError = error instanceof Error ? error.message : 'Failed to save settings';
+        throw error;
+      }
+    },
+
+    /**
+     * Updates admin filter state.
+     *
+     * @param filters - New admin filter values to apply
+     */
+    setAdminFilters(filters: AdminReportFilters) {
+      this.adminFilters = { ...filters };
+    },
+
+    /**
+     * Changes the admin report page number.
+     *
+     * @param page - The page number to navigate to
+     */
+    setAdminPage(page: number) {
+      this.adminFilters = {
+        ...this.adminFilters,
+        page,
+      };
+    },
+
+    /**
+     * Resets all admin-level state to initial values.
+     */
+    resetAdmin() {
+      this.adminReports = [];
+      this.currentAdminReport = null;
+      this.adminPagination = {
+        currentPage: 1,
+        totalPages: 0,
+        totalCount: 0,
+        limit: 20,
+      };
+      this.adminFilters = {};
+      this.adminLoading = false;
+      this.loadingAdminReport = false;
+      this.moderationSettings = null;
+      this.loadingSettings = false;
+      this.adminError = null;
     },
   },
 });

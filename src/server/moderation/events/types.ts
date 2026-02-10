@@ -18,3 +18,12 @@ export interface ReportResolvedPayload {
   report: Report;
   reviewerId: string;
 }
+
+export interface ReportAutoEscalatedPayload {
+  report: Report;
+  reason: string;
+}
+
+export interface ReportEscalationReminderPayload {
+  report: Report;
+}

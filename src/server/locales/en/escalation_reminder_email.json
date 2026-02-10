@@ -1,0 +1,16 @@
+{
+  "subject": "Reminder: Report pending review on your calendar",
+  "title": "Report Review Reminder",
+  "greeting": "Hello,",
+  "notification": "A report on your calendar requires your attention. If no action is taken, this report will be automatically escalated to an instance administrator.",
+  "event_label": "Event:",
+  "category_label": "Report category:",
+  "description_label": "Description:",
+  "time_remaining_label": "Time remaining before auto-escalation:",
+  "action_message": "Please review this report from your calendar's report dashboard and take action before it is escalated.",
+  "review_button": "Review Report",
+  "copy_link_text": "Or copy this link:",
+  "signature": "Thank you,",
+  "team_name": "The Pavillion Team",
+  "footer_text": "This is an automated message, please do not reply to this email."
+}

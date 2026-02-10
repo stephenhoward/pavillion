@@ -18,6 +18,7 @@ import {
   EmailRateLimitError,
 } from '@/server/moderation/exceptions';
 import CalendarInterface from '@/server/calendar/interface';
+import ConfigurationInterface from '@/server/configuration/interface';
 
 /** Token expiration duration in hours. */
 const VERIFICATION_TOKEN_EXPIRY_HOURS = 24;
@@ -40,6 +41,9 @@ const VALID_STATUSES = Object.values(ReportStatus);
 /** Valid reporter type values for source filtering. */
 const VALID_SOURCES: ReporterType[] = ['anonymous', 'authenticated', 'administrator'];
 
+/** Valid escalation type values for filtering. */
+const VALID_ESCALATION_TYPES: EscalationType[] = ['manual', 'automatic'];
+
 /** Maximum allowed length for report description text. */
 const MAX_DESCRIPTION_LENGTH = 2000;
 
@@ -51,6 +55,19 @@ const MAX_EMAIL_LENGTH = 254;
 
 /** UUID v4 validation regex. */
 const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Valid admin priority values. */
+const VALID_PRIORITIES = ['low', 'medium', 'high'];
+
+/** Valid admin action values for PUT /admin/reports/:reportId. */
+const VALID_ADMIN_ACTIONS = ['override', 'resolve', 'dismiss'];
+
+/** Default moderation settings stored as string key-value pairs in Configuration. */
+const MODERATION_SETTING_DEFAULTS: Record<string, number> = {
+  'moderation.autoEscalationHours': 72,
+  'moderation.adminReportEscalationHours': 24,
+  'moderation.reminderBeforeEscalationHours': 12,
+};
 
 /**
  * Input data for creating a new report.
@@ -87,13 +104,29 @@ interface CreateReportForEventData {
 }
 
 /**
+ * Input data for creating an admin-initiated report.
+ * Admin reports skip verification and go directly to submitted status.
+ */
+interface CreateAdminReportData {
+  eventId: string;
+  adminId: string;
+  category: ReportCategory;
+  description: string;
+  priority: 'low' | 'medium' | 'high';
+  deadline?: Date;
+  adminNotes?: string;
+}
+
+/**
  * Filter options for listing reports.
  */
 interface ReportFilters {
   status?: ReportStatus;
   category?: ReportCategory;
   eventId?: string;
+  calendarId?: string;
   source?: ReporterType;
+  escalationType?: EscalationType;
   sortBy?: 'created_at' | 'updated_at' | 'status' | 'category';
   sortOrder?: 'ASC' | 'DESC';
   page?: number;
@@ -129,16 +162,27 @@ interface EscalationRecord {
 }
 
 /**
+ * Moderation settings shape returned by getModerationSettings.
+ */
+interface ModerationSettings {
+  autoEscalationHours: number;
+  adminReportEscalationHours: number;
+  reminderBeforeEscalationHours: number;
+}
+
+/**
  * Service for managing the report lifecycle including creation,
  * duplicate detection, verification, status transitions, and escalation.
  */
 class ModerationService {
   private eventBus?: EventEmitter;
   private calendarInterface?: CalendarInterface;
+  private configurationInterface?: ConfigurationInterface;
 
-  constructor(eventBus?: EventEmitter, calendarInterface?: CalendarInterface) {
+  constructor(eventBus?: EventEmitter, calendarInterface?: CalendarInterface, configurationInterface?: ConfigurationInterface) {
     this.eventBus = eventBus;
     this.calendarInterface = calendarInterface;
+    this.configurationInterface = configurationInterface;
   }
 
   /**
@@ -233,6 +277,36 @@ class ModerationService {
   }
 
   /**
+   * Validates admin-specific report fields (priority, deadline).
+   * Does not throw - returns an array of error messages for aggregation.
+   *
+   * @param priority - Admin priority value
+   * @param deadline - Optional deadline date
+   * @returns Array of validation error messages (empty if valid)
+   */
+  validateAdminReportFields(priority: any, deadline?: Date): string[] {
+    const errors: string[] = [];
+
+    if (!priority) {
+      errors.push('Priority is required');
+    }
+    else if (!VALID_PRIORITIES.includes(priority)) {
+      errors.push(`Invalid priority. Must be one of: ${VALID_PRIORITIES.join(', ')}`);
+    }
+
+    if (deadline !== undefined) {
+      if (!(deadline instanceof Date) || isNaN(deadline.getTime())) {
+        errors.push('Deadline must be a valid date');
+      }
+      else if (deadline.getTime() <= Date.now()) {
+        errors.push('Deadline must be in the future');
+      }
+    }
+
+    return errors;
+  }
+
+  /**
    * Creates a new report for an event, resolving the calendarId internally.
    * Validates all input fields before proceeding with event lookup and
    * report creation.
@@ -270,6 +344,43 @@ class ModerationService {
     return this.createReport({
       ...data,
       calendarId,
+    });
+  }
+
+  /**
+   * Creates an admin-initiated report for an event.
+   * Validates admin-specific fields (priority, deadline) in addition
+   * to standard report fields. Delegates to createReportForEvent with
+   * reporterType set to 'administrator'. Admin reports skip verification
+   * and go directly to submitted status.
+   *
+   * @param data - Admin report creation data
+   * @returns The created Report domain model
+   * @throws ReportValidationError if input validation fails
+   * @throws EventNotFoundError if the event does not exist
+   * @throws DuplicateReportError if admin has already reported this event
+   */
+  async createAdminReport(data: CreateAdminReportData): Promise<Report> {
+    // Validate standard report fields + admin-specific fields in one pass
+    const errors: string[] = [
+      ...this.validateReportFields(data.eventId, data.category, data.description),
+      ...this.validateAdminReportFields(data.priority, data.deadline),
+    ];
+
+    if (errors.length > 0) {
+      throw new ReportValidationError(errors);
+    }
+
+    return this.createReportForEvent({
+      eventId: data.eventId,
+      category: data.category,
+      description: data.description,
+      reporterType: 'administrator',
+      reporterAccountId: data.adminId,
+      adminId: data.adminId,
+      adminPriority: data.priority,
+      adminDeadline: data.deadline,
+      adminNotes: data.adminNotes,
     });
   }
 
@@ -504,6 +615,10 @@ class ModerationService {
       errors.push(`Invalid source. Must be one of: ${VALID_SOURCES.join(', ')}`);
     }
 
+    if (filters.escalationType && !VALID_ESCALATION_TYPES.includes(filters.escalationType)) {
+      errors.push(`Invalid escalationType. Must be one of: ${VALID_ESCALATION_TYPES.join(', ')}`);
+    }
+
     if (filters.sortBy && !VALID_SORT_FIELDS.includes(filters.sortBy)) {
       errors.push(`Invalid sortBy. Must be one of: ${VALID_SORT_FIELDS.join(', ')}`);
     }
@@ -563,6 +678,92 @@ class ModerationService {
         limit,
       },
     };
+  }
+
+  /**
+   * Retrieves paginated admin-relevant reports with optional filters.
+   * Returns reports that are either escalated OR admin-initiated
+   * (reporterType = 'administrator'), with full filtering and sorting support.
+   *
+   * @param filters - Optional status, category, calendarId, source, escalationType, sorting, page, limit filters
+   * @returns Paginated list of admin-relevant reports
+   * @throws ReportValidationError if any filter values are invalid
+   */
+  async getAdminReports(filters: ReportFilters = {}): Promise<PaginatedReports> {
+    this.validateListFilters(filters);
+
+    const page = filters.page ?? 1;
+    const limit = filters.limit ?? DEFAULT_PAGE_LIMIT;
+    const offset = (page - 1) * limit;
+
+    // Base condition: escalated reports OR admin-initiated reports
+    const baseCondition: Record<string, any> = {
+      [Op.or]: [
+        { status: ReportStatus.ESCALATED },
+        { reporter_type: 'administrator' },
+      ],
+    };
+
+    // Build additional filter conditions
+    const additionalConditions: Record<string, any>[] = [];
+
+    if (filters.status) {
+      additionalConditions.push({ status: filters.status });
+    }
+    if (filters.category) {
+      additionalConditions.push({ category: filters.category });
+    }
+    if (filters.calendarId) {
+      additionalConditions.push({ calendar_id: filters.calendarId });
+    }
+    if (filters.source) {
+      additionalConditions.push({ reporter_type: filters.source });
+    }
+    if (filters.escalationType) {
+      additionalConditions.push({ escalation_type: filters.escalationType });
+    }
+
+    // Combine base condition with additional filters using AND
+    const where: Record<string, any> = additionalConditions.length > 0
+      ? { [Op.and]: [baseCondition, ...additionalConditions] }
+      : baseCondition;
+
+    const sortBy = filters.sortBy ?? 'created_at';
+    const sortOrder = filters.sortOrder ?? 'DESC';
+
+    const { rows, count } = await ReportEntity.findAndCountAll({
+      where,
+      limit,
+      offset,
+      order: [[sortBy, sortOrder]],
+    });
+
+    return {
+      reports: rows.map((entity) => entity.toModel()),
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(count / limit),
+        totalCount: count,
+        limit,
+      },
+    };
+  }
+
+  /**
+   * Retrieves a single report by ID for admin review.
+   * Unlike getReportForCalendar, this has no calendar scoping -
+   * admins can view any report across all calendars.
+   *
+   * @param reportId - Report UUID
+   * @returns The Report
+   * @throws ReportNotFoundError if report not found
+   */
+  async getAdminReport(reportId: string): Promise<Report> {
+    const report = await this.getReportById(reportId);
+    if (!report) {
+      throw new ReportNotFoundError();
+    }
+    return report;
   }
 
   /**
@@ -798,6 +999,148 @@ class ModerationService {
   }
 
   /**
+   * Resolves a report as an admin, recording the admin as reviewer.
+   * Creates an escalation record with reviewer_role 'admin'.
+   *
+   * @param reportId - Report UUID
+   * @param adminId - Admin account UUID
+   * @param notes - Resolution notes
+   * @returns The resolved Report
+   * @throws ReportNotFoundError if report not found
+   * @throws ReportAlreadyResolvedError if report is already resolved or dismissed
+   */
+  async adminResolveReport(reportId: string, adminId: string, notes: string): Promise<Report> {
+    const entity = await ReportEntity.findByPk(reportId);
+    if (!entity) {
+      throw new ReportNotFoundError();
+    }
+
+    const currentStatus = entity.status as ReportStatus;
+    if (currentStatus === ReportStatus.RESOLVED || currentStatus === ReportStatus.DISMISSED) {
+      throw new ReportAlreadyResolvedError();
+    }
+
+    await entity.update({
+      status: ReportStatus.RESOLVED,
+      reviewer_id: adminId,
+      reviewer_notes: notes,
+      reviewer_timestamp: new Date(),
+    });
+
+    const escalationRecord = ReportEscalationEntity.fromModel({
+      reportId,
+      fromStatus: currentStatus,
+      toStatus: ReportStatus.RESOLVED,
+      reviewerId: adminId,
+      reviewerRole: 'admin',
+      decision: 'resolved',
+      notes,
+    });
+    await escalationRecord.save();
+
+    const report = entity.toModel();
+
+    this.emit('reportResolved', { report, reviewerId: adminId });
+
+    return report;
+  }
+
+  /**
+   * Dismisses a report as an admin. This is a final decision -
+   * no further escalation is possible. Sets status to 'dismissed'.
+   * Creates an escalation record with reviewer_role 'admin' and
+   * decision 'dismissed'.
+   *
+   * @param reportId - Report UUID
+   * @param adminId - Admin account UUID
+   * @param notes - Dismissal notes
+   * @returns The dismissed Report
+   * @throws ReportNotFoundError if report not found
+   * @throws ReportAlreadyResolvedError if report is already resolved or dismissed
+   */
+  async adminDismissReport(reportId: string, adminId: string, notes: string): Promise<Report> {
+    const entity = await ReportEntity.findByPk(reportId);
+    if (!entity) {
+      throw new ReportNotFoundError();
+    }
+
+    const currentStatus = entity.status as ReportStatus;
+    if (currentStatus === ReportStatus.RESOLVED || currentStatus === ReportStatus.DISMISSED) {
+      throw new ReportAlreadyResolvedError();
+    }
+
+    await entity.update({
+      status: ReportStatus.DISMISSED,
+      reviewer_id: adminId,
+      reviewer_notes: notes,
+      reviewer_timestamp: new Date(),
+    });
+
+    const escalationRecord = ReportEscalationEntity.fromModel({
+      reportId,
+      fromStatus: currentStatus,
+      toStatus: ReportStatus.DISMISSED,
+      reviewerId: adminId,
+      reviewerRole: 'admin',
+      decision: 'dismissed',
+      notes,
+    });
+    await escalationRecord.save();
+
+    const report = entity.toModel();
+
+    this.emit('reportDismissed', { report, reviewerId: adminId });
+
+    return report;
+  }
+
+  /**
+   * Overrides the current status of a report as an admin, setting it
+   * to 'resolved' regardless of its current state. This allows admins
+   * to reverse owner decisions or act on reports in any status.
+   * Creates an escalation record with reviewer_role 'admin' and
+   * decision 'override'.
+   *
+   * @param reportId - Report UUID
+   * @param adminId - Admin account UUID
+   * @param notes - Override notes
+   * @returns The overridden Report
+   * @throws ReportNotFoundError if report not found
+   */
+  async adminOverrideReport(reportId: string, adminId: string, notes: string): Promise<Report> {
+    const entity = await ReportEntity.findByPk(reportId);
+    if (!entity) {
+      throw new ReportNotFoundError();
+    }
+
+    const currentStatus = entity.status as ReportStatus;
+
+    await entity.update({
+      status: ReportStatus.RESOLVED,
+      reviewer_id: adminId,
+      reviewer_notes: notes,
+      reviewer_timestamp: new Date(),
+    });
+
+    const escalationRecord = ReportEscalationEntity.fromModel({
+      reportId,
+      fromStatus: currentStatus,
+      toStatus: ReportStatus.RESOLVED,
+      reviewerId: adminId,
+      reviewerRole: 'admin',
+      decision: 'override',
+      notes,
+    });
+    await escalationRecord.save();
+
+    const report = entity.toModel();
+
+    this.emit('reportOverridden', { report, reviewerId: adminId });
+
+    return report;
+  }
+
+  /**
    * Checks whether a reporter has already reported a specific event.
    *
    * @param eventId - Event UUID
@@ -837,6 +1180,71 @@ class ModerationService {
     });
 
     return recentCount >= maxReports;
+  }
+
+  /**
+   * Retrieves current moderation settings from the Configuration domain.
+   * Returns defaults for any settings not explicitly configured.
+   *
+   * @returns Current moderation settings with defaults applied
+   */
+  async getModerationSettings(): Promise<ModerationSettings> {
+    if (!this.configurationInterface) {
+      throw new Error('ConfigurationInterface is required for getModerationSettings');
+    }
+
+    const autoEscalation = await this.configurationInterface.getSetting('moderation.autoEscalationHours');
+    const adminReportEscalation = await this.configurationInterface.getSetting('moderation.adminReportEscalationHours');
+    const reminderBefore = await this.configurationInterface.getSetting('moderation.reminderBeforeEscalationHours');
+
+    return {
+      autoEscalationHours: autoEscalation
+        ? parseFloat(autoEscalation)
+        : MODERATION_SETTING_DEFAULTS['moderation.autoEscalationHours'],
+      adminReportEscalationHours: adminReportEscalation
+        ? parseFloat(adminReportEscalation)
+        : MODERATION_SETTING_DEFAULTS['moderation.adminReportEscalationHours'],
+      reminderBeforeEscalationHours: reminderBefore
+        ? parseFloat(reminderBefore)
+        : MODERATION_SETTING_DEFAULTS['moderation.reminderBeforeEscalationHours'],
+    };
+  }
+
+  /**
+   * Updates moderation settings via the Configuration domain.
+   * Supports partial updates - only provided keys are updated.
+   * Returns the complete settings after update with defaults for unchanged values.
+   *
+   * @param updates - Partial settings object with values to update
+   * @returns Updated moderation settings
+   */
+  async updateModerationSettings(updates: Partial<ModerationSettings>): Promise<ModerationSettings> {
+    if (!this.configurationInterface) {
+      throw new Error('ConfigurationInterface is required for updateModerationSettings');
+    }
+
+    if (updates.autoEscalationHours !== undefined) {
+      await this.configurationInterface.setSetting(
+        'moderation.autoEscalationHours',
+        String(updates.autoEscalationHours),
+      );
+    }
+
+    if (updates.adminReportEscalationHours !== undefined) {
+      await this.configurationInterface.setSetting(
+        'moderation.adminReportEscalationHours',
+        String(updates.adminReportEscalationHours),
+      );
+    }
+
+    if (updates.reminderBeforeEscalationHours !== undefined) {
+      await this.configurationInterface.setSetting(
+        'moderation.reminderBeforeEscalationHours',
+        String(updates.reminderBeforeEscalationHours),
+      );
+    }
+
+    return this.getModerationSettings();
   }
 
   /**
@@ -888,4 +1296,5 @@ class ModerationService {
 }
 
 export default ModerationService;
-export type { CreateReportData, CreateReportForEventData, ReportFilters, PaginatedReports, EscalationRecord };
+export { VALID_ADMIN_ACTIONS };
+export type { CreateReportData, CreateReportForEventData, CreateAdminReportData, ReportFilters, PaginatedReports, EscalationRecord, ModerationSettings };

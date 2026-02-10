@@ -64,17 +64,30 @@ class ServiceSettings {
   }
 
   /**
-   * Updates a service setting
-   * @param parameter: a valid service setting from the Config type
-   * @param value: the new value for the setting
+   * Updates a service setting.
+   *
+   * For known Config keys, validates the value and updates the in-memory cache.
+   * For extension keys (e.g. moderation.*), persists directly to the database
+   * without in-memory caching.
+   *
+   * @param parameter - Setting key
+   * @param value - The new value for the setting
    * @returns Promise resolving to true if update was successful
    */
   async set(parameter: string, value: string|number): Promise<boolean> {
-    if( ! (parameter in this.config) ) {
-      console.error('Invalid parameter:', parameter);
-      return false;
+    // For known Config keys, validate and update in-memory cache
+    if (parameter in this.config) {
+      return this.setKnownParameter(parameter, value);
     }
 
+    // For extension keys (e.g. moderation.*), persist directly to database
+    return this.setExtensionParameter(parameter, value);
+  }
+
+  /**
+   * Handles setting of known Config-typed parameters with validation.
+   */
+  private async setKnownParameter(parameter: string, value: string|number): Promise<boolean> {
     // Validate the mode
     if ( parameter == 'registrationMode' ) {
       if (!['open', 'apply', 'invitation', 'closed'].includes(value as string)) {
@@ -151,8 +164,30 @@ class ServiceSettings {
         }
         break;
       default:
-        // For other parameters, just update the config
         break;
+    }
+
+    return true;
+  }
+
+  /**
+   * Persists an extension parameter directly to the database.
+   * Extension parameters (e.g. moderation.*) are not tracked in the
+   * in-memory Config but are stored in the service_config table.
+   *
+   * @param parameter - Extension setting key
+   * @param value - The value to store
+   * @returns Promise resolving to true if persisted successfully
+   */
+  private async setExtensionParameter(parameter: string, value: string|number): Promise<boolean> {
+    const [entity, created] = await ServiceSettingEntity.findOrCreate({
+      where: { parameter },
+      defaults: { parameter, value: String(value) },
+    });
+
+    if (!created) {
+      entity.value = String(value);
+      await entity.save();
     }
 
     return true;

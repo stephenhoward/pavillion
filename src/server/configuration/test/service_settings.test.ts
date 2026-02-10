@@ -142,13 +142,33 @@ describe('ServiceSettings', () => {
       expect(settings.get('registrationMode')).toBe('invitation'); // Default value
     });
 
-    it('should reject invalid parameter names', async () => {
+    it('should persist extension parameters not in the typed Config', async () => {
+      const mockSettingEntity = { parameter: 'moderation.autoEscalationHours', value: '48', save: sandbox.stub().resolves() };
+      sandbox.stub(ServiceSettingEntity, 'findOrCreate').resolves([
+        mockSettingEntity as unknown as ServiceSettingEntity,
+        true, // Created
+      ]);
       sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
 
       const settings = await ServiceSettings.getInstance();
-      const result = await settings.set('invalidParameter', 'value');
+      const result = await settings.set('moderation.autoEscalationHours', '48');
 
-      expect(result).toBe(false);
+      expect(result).toBe(true);
+    });
+
+    it('should update existing extension parameters', async () => {
+      const mockSettingEntity = { parameter: 'moderation.autoEscalationHours', value: '72', save: sandbox.stub().resolves() };
+      sandbox.stub(ServiceSettingEntity, 'findOrCreate').resolves([
+        mockSettingEntity as unknown as ServiceSettingEntity,
+        false, // Not created, already exists
+      ]);
+      sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+      const settings = await ServiceSettings.getInstance();
+      const result = await settings.set('moderation.autoEscalationHours', '48');
+
+      expect(result).toBe(true);
+      expect(mockSettingEntity.save.calledOnce).toBe(true);
     });
 
     it('should update the default date range', async () => {

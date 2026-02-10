@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 import { Report, ReportCategory, ReportStatus } from '@/common/model/report';
-import type { ReporterType } from '@/common/model/report';
+import type { ReporterType, AdminPriority } from '@/common/model/report';
 import { UnknownError } from '@/common/exceptions/base';
 import { validateAndEncodeId } from '@/client/service/utils';
 
@@ -17,6 +17,42 @@ export interface ReportFilters {
   sortOrder?: 'ASC' | 'DESC';
   page?: number;
   limit?: number;
+}
+
+/**
+ * Filters for querying admin reports.
+ */
+export interface AdminReportFilters {
+  page?: number;
+  limit?: number;
+  status?: string;
+  category?: string;
+  calendarId?: string;
+  source?: string;
+  escalationType?: string;
+  sortBy?: string;
+  sortOrder?: string;
+}
+
+/**
+ * Data for creating an admin-initiated report.
+ */
+export interface CreateAdminReportData {
+  eventId: string;
+  category: string;
+  description: string;
+  priority: AdminPriority;
+  deadline?: string;
+  adminNotes?: string;
+}
+
+/**
+ * Instance-wide moderation settings.
+ */
+export interface ModerationSettings {
+  autoEscalationHours: number;
+  adminReportEscalationHours: number;
+  reminderBeforeEscalationHours: number;
 }
 
 /**
@@ -75,6 +111,12 @@ const errorMap: Record<string, new (...args: any[]) => Error> = {
   },
   ValidationError: class ValidationError extends Error {
     constructor() { super('Invalid input'); this.name = 'ValidationError'; }
+  },
+  EventNotFoundError: class EventNotFoundError extends Error {
+    constructor() { super('Event not found'); this.name = 'EventNotFoundError'; }
+  },
+  DuplicateReportError: class DuplicateReportError extends Error {
+    constructor() { super('A report already exists for this event'); this.name = 'DuplicateReportError'; }
   },
 };
 
@@ -140,10 +182,56 @@ function buildFilterQuery(filters?: ReportFilters): string {
 }
 
 /**
+ * Builds a query string from admin report filters, omitting undefined values.
+ *
+ * @param filters - The admin report filter parameters
+ * @returns URL query string (including leading '?') or empty string
+ */
+function buildAdminFilterQuery(filters?: AdminReportFilters): string {
+  if (!filters) {
+    return '';
+  }
+
+  const params = new URLSearchParams();
+
+  if (filters.page !== undefined) {
+    params.set('page', String(filters.page));
+  }
+  if (filters.limit !== undefined) {
+    params.set('limit', String(filters.limit));
+  }
+  if (filters.status) {
+    params.set('status', filters.status);
+  }
+  if (filters.category) {
+    params.set('category', filters.category);
+  }
+  if (filters.calendarId) {
+    params.set('calendarId', filters.calendarId);
+  }
+  if (filters.source) {
+    params.set('source', filters.source);
+  }
+  if (filters.escalationType) {
+    params.set('escalationType', filters.escalationType);
+  }
+  if (filters.sortBy) {
+    params.set('sortBy', filters.sortBy);
+  }
+  if (filters.sortOrder) {
+    params.set('sortOrder', filters.sortOrder);
+  }
+
+  const queryString = params.toString();
+  return queryString ? `?${queryString}` : '';
+}
+
+/**
  * Client service for calendar owner moderation endpoints.
  *
  * Provides methods for listing, viewing, and acting on reports
- * filed against events in a calendar.
+ * filed against events in a calendar. Also provides admin-level
+ * methods for instance-wide report management and moderation settings.
  */
 export default class ModerationService {
 
@@ -295,6 +383,188 @@ export default class ModerationService {
     }
     catch (error: unknown) {
       console.error('Error updating editor permissions:', error);
+      handleModerationError(error);
+      throw new UnknownError();
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // Admin report methods
+  // ──────────────────────────────────────────────────────────────
+
+  /**
+   * Fetches a paginated list of admin-relevant reports with optional filters.
+   * Returns escalated reports and admin-initiated reports.
+   *
+   * @param filters - Optional filtering, sorting, and pagination parameters
+   * @returns Paginated list of reports
+   */
+  async getAdminReports(filters?: AdminReportFilters): Promise<PaginatedReportsResponse> {
+    try {
+      const query = buildAdminFilterQuery(filters);
+      const response = await axios.get(`/api/v1/admin/reports${query}`);
+
+      return {
+        reports: response.data.reports.map((reportData: Record<string, any>) => Report.fromObject(reportData)),
+        pagination: response.data.pagination,
+      };
+    }
+    catch (error: unknown) {
+      console.error('Error fetching admin reports:', error);
+      handleModerationError(error);
+      throw new UnknownError();
+    }
+  }
+
+  /**
+   * Fetches a single admin report detail with escalation history.
+   *
+   * @param reportId - The report UUID
+   * @returns Report detail with escalation history
+   */
+  async getAdminReport(reportId: string): Promise<ReportDetailResponse> {
+    try {
+      const encodedReportId = validateAndEncodeId(reportId, 'Report ID');
+      const response = await axios.get(`/api/v1/admin/reports/${encodedReportId}`);
+
+      return {
+        report: Report.fromObject(response.data.report),
+        escalationHistory: response.data.escalationHistory ?? [],
+      };
+    }
+    catch (error: unknown) {
+      console.error('Error fetching admin report detail:', error);
+      handleModerationError(error);
+      throw new UnknownError();
+    }
+  }
+
+  /**
+   * Resolves a report as an admin with notes.
+   *
+   * @param reportId - The report UUID
+   * @param notes - Resolution notes (required)
+   * @returns The resolved report
+   */
+  async adminResolveReport(reportId: string, notes: string): Promise<Report> {
+    try {
+      const encodedReportId = validateAndEncodeId(reportId, 'Report ID');
+      const response = await axios.put(
+        `/api/v1/admin/reports/${encodedReportId}`,
+        { action: 'resolve', notes },
+      );
+
+      return Report.fromObject(response.data.report);
+    }
+    catch (error: unknown) {
+      console.error('Error resolving admin report:', error);
+      handleModerationError(error);
+      throw new UnknownError();
+    }
+  }
+
+  /**
+   * Dismisses a report as an admin with notes.
+   *
+   * @param reportId - The report UUID
+   * @param notes - Dismissal notes (required)
+   * @returns The dismissed report
+   */
+  async adminDismissReport(reportId: string, notes: string): Promise<Report> {
+    try {
+      const encodedReportId = validateAndEncodeId(reportId, 'Report ID');
+      const response = await axios.put(
+        `/api/v1/admin/reports/${encodedReportId}`,
+        { action: 'dismiss', notes },
+      );
+
+      return Report.fromObject(response.data.report);
+    }
+    catch (error: unknown) {
+      console.error('Error dismissing admin report:', error);
+      handleModerationError(error);
+      throw new UnknownError();
+    }
+  }
+
+  /**
+   * Overrides a calendar owner's decision on a report.
+   *
+   * @param reportId - The report UUID
+   * @param notes - Override notes (required)
+   * @returns The overridden report
+   */
+  async adminOverrideReport(reportId: string, notes: string): Promise<Report> {
+    try {
+      const encodedReportId = validateAndEncodeId(reportId, 'Report ID');
+      const response = await axios.put(
+        `/api/v1/admin/reports/${encodedReportId}`,
+        { action: 'override', notes },
+      );
+
+      return Report.fromObject(response.data.report);
+    }
+    catch (error: unknown) {
+      console.error('Error overriding admin report:', error);
+      handleModerationError(error);
+      throw new UnknownError();
+    }
+  }
+
+  /**
+   * Creates an admin-initiated report for an event.
+   * Admin reports skip email verification and go directly to submitted status.
+   *
+   * @param data - The report creation data
+   * @returns The newly created report
+   */
+  async createAdminReport(data: CreateAdminReportData): Promise<Report> {
+    try {
+      const response = await axios.post('/api/v1/admin/reports', data);
+
+      return Report.fromObject(response.data.report);
+    }
+    catch (error: unknown) {
+      console.error('Error creating admin report:', error);
+      handleModerationError(error);
+      throw new UnknownError();
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // Moderation settings methods
+  // ──────────────────────────────────────────────────────────────
+
+  /**
+   * Fetches instance-wide moderation settings.
+   *
+   * @returns Current moderation settings
+   */
+  async getModerationSettings(): Promise<ModerationSettings> {
+    try {
+      const response = await axios.get('/api/v1/admin/moderation/settings');
+      return response.data;
+    }
+    catch (error: unknown) {
+      console.error('Error fetching moderation settings:', error);
+      handleModerationError(error);
+      throw new UnknownError();
+    }
+  }
+
+  /**
+   * Updates instance-wide moderation settings. Supports partial updates.
+   *
+   * @param settings - Partial settings to update
+   * @returns Updated moderation settings
+   */
+  async updateModerationSettings(settings: Partial<ModerationSettings>): Promise<ModerationSettings> {
+    try {
+      const response = await axios.put('/api/v1/admin/moderation/settings', settings);
+      return response.data;
+    }
+    catch (error: unknown) {
+      console.error('Error updating moderation settings:', error);
       handleModerationError(error);
       throw new UnknownError();
     }

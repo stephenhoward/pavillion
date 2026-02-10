@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>{{t 'title'}}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px 5px 0 0;
+            border-bottom: 3px solid #d9534f;
+        }
+        .content {
+            padding: 30px 20px;
+            background-color: #ffffff;
+        }
+        .highlight {
+            background-color: #fdf2f2;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border-left: 4px solid #d9534f;
+        }
+        .info {
+            background-color: #e7f3ff;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+            border-left: 4px solid #4A90E2;
+        }
+        .button {
+            display: inline-block;
+            padding: 12px 24px;
+            background-color: #d9534f;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            margin: 15px 0;
+            font-weight: bold;
+        }
+        .button:hover {
+            background-color: #c9302c;
+        }
+        .footer {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 0 0 5px 5px;
+            font-size: 12px;
+            color: #666;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>{{t 'title'}}</h1>
+        </div>
+
+        <div class="content">
+            <p>{{t 'greeting'}}</p>
+
+            <p>{{t 'notification'}}</p>
+
+            <div class="highlight">
+                <strong>{{t 'event_label'}}</strong> {{eventName}}<br>
+                <strong>{{t 'calendar_label'}}</strong> {{calendarName}}<br>
+                <strong>{{t 'category_label'}}</strong> {{reportCategory}}<br>
+                <strong>{{t 'description_label'}}</strong> {{reportDescription}}
+            </div>
+
+            <div class="info">
+                <strong>{{t 'owner_label'}}</strong> {{ownerEmail}}<br>
+                <strong>{{t 'pending_since_label'}}</strong> {{pendingSince}}
+            </div>
+
+            <p>{{t 'action_message'}}</p>
+
+            <p style="text-align: center;">
+                <a href="{{reviewUrl}}" class="button">
+                    {{t 'review_button'}}
+                </a>
+            </p>
+
+            <p>{{t 'copy_link_text'}}<br>
+            {{reviewUrl}}</p>
+
+            <p>{{t 'signature'}}<br>
+            {{t 'team_name'}}</p>
+        </div>
+
+        <div class="footer">
+            {{t 'footer_text'}}
+        </div>
+    </div>
+</body>
+</html>

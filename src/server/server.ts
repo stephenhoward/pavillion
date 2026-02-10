@@ -226,8 +226,8 @@ const initPavillionServer = async (app: express.Application, port: number) => {
   const housekeepingDomain = new HousekeepingDomain(eventBus, emailDomain.interface, accountsDomain.interface);
   housekeepingDomain.initialize(app);
 
-  // Initialize moderation domain (after calendar, accounts, and email domains)
-  const moderationDomain = new ModerationDomain(eventBus, calendarDomain.interface, accountsDomain.interface, emailDomain.interface);
+  // Initialize moderation domain (after calendar, accounts, email, and configuration domains)
+  const moderationDomain = new ModerationDomain(eventBus, calendarDomain.interface, accountsDomain.interface, emailDomain.interface, configurationDomain.interface);
   moderationDomain.initialize(app);
 
   // Register global error handler (MUST be after all routes and middleware)

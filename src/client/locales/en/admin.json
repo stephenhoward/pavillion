@@ -18,7 +18,168 @@
         "accounts_link": "Accounts",
         "federation_settings": "Federation",
         "blocked_instances": "List of blocked instances",
-        "payment_details": "Funding"
+        "payment_details": "Funding",
+        "moderation": "Moderation"
+    },
+    "moderation": {
+        "title": "Moderation Dashboard",
+        "subtitle": "Review escalated reports and admin-initiated moderation",
+        "loading": "Loading reports...",
+        "error": "Failed to load reports",
+        "no_reports": "No reports to review",
+        "no_reports_description": "All reports have been reviewed or there are no active reports",
+        "admin_reports": "Admin-Initiated Reports",
+        "escalated_reports": "Escalated Reports",
+        "view_details": "View Details",
+        "deadline": "Deadline",
+        "create_report": "Create Report",
+        "settings": "Settings",
+        "filters": {
+            "status": "Status",
+            "category": "Category",
+            "escalation_type": "Escalation Type",
+            "all_statuses": "All Statuses",
+            "all_categories": "All Categories",
+            "all_types": "All Types",
+            "manual": "Manual",
+            "automatic": "Automatic",
+            "reset": "Reset Filters"
+        },
+        "status": {
+            "submitted": "Submitted",
+            "under_review": "Under Review",
+            "escalated": "Escalated",
+            "resolved": "Resolved",
+            "dismissed": "Dismissed"
+        },
+        "category": {
+            "spam": "Spam",
+            "inappropriate": "Inappropriate",
+            "misleading": "Misleading",
+            "harassment": "Harassment",
+            "other": "Other"
+        },
+        "priority": {
+            "high": "High Priority",
+            "medium": "Medium Priority",
+            "low": "Low Priority"
+        },
+        "badge": {
+            "admin_initiated": "Admin",
+            "manually_escalated": "Manual",
+            "auto_escalated": "Auto"
+        },
+        "reporter": {
+            "anonymous": "Anonymous",
+            "authenticated": "Authenticated User",
+            "administrator": "Administrator"
+        },
+        "role": {
+            "owner": "Calendar Owner",
+            "editor": "Calendar Editor",
+            "admin": "Instance Admin"
+        },
+        "table": {
+            "event": "Event",
+            "calendar": "Calendar",
+            "category": "Category",
+            "priority": "Priority",
+            "deadline": "Deadline",
+            "status": "Status",
+            "escalation": "Escalation",
+            "actions": "Actions"
+        },
+        "deadline_overdue": "Overdue",
+        "deadline_today": "Today",
+        "deadline_tomorrow": "Tomorrow",
+        "pagination": {
+            "previous": "Previous",
+            "next": "Next",
+            "page_info": "Page {{current}} of {{total}}"
+        },
+        "detail": {
+            "title": "Report Details",
+            "subtitle": "View full report information and take action",
+            "back": "Back to Dashboard",
+            "loading": "Loading report...",
+            "error": "Failed to load report",
+            "report_information": "Report Information",
+            "event_id": "Event ID",
+            "calendar_id": "Calendar ID",
+            "category": "Category",
+            "reporter_type": "Reporter Type",
+            "status": "Status",
+            "escalation_type": "Escalation",
+            "priority": "Priority",
+            "deadline": "Deadline",
+            "description": "Description",
+            "created_at": "Created At",
+            "updated_at": "Updated At",
+            "owner_review": "Owner Review",
+            "owner_notes": "Owner Notes",
+            "reviewer_decision": "Reviewer Decision",
+            "escalation_timeline": "Escalation Timeline",
+            "timeline_event": "Timeline event",
+            "admin_actions": "Admin Actions",
+            "admin_notes_label": "Admin Notes",
+            "admin_notes_placeholder": "Enter notes explaining your decision...",
+            "notes_required": "Admin notes are required",
+            "resolve": "Resolve",
+            "override": "Override Owner Decision",
+            "dismiss": "Final Dismiss",
+            "resolve_success": "Report resolved successfully",
+            "override_success": "Owner decision overridden successfully",
+            "dismiss_success": "Report dismissed successfully"
+        },
+        "create": {
+            "title": "Create Admin Report",
+            "close": "Close",
+            "event_id": "Event ID",
+            "event_id_placeholder": "Enter event UUID",
+            "event_id_help": "The UUID of the event to report",
+            "category": "Category",
+            "category_placeholder": "Select category",
+            "description": "Description",
+            "description_placeholder": "Describe the issue with this event...",
+            "priority": "Priority",
+            "priority_placeholder": "Select priority",
+            "deadline": "Deadline",
+            "deadline_help": "Optional deadline for this report (leave blank for none)",
+            "admin_notes": "Admin Notes",
+            "admin_notes_placeholder": "Internal notes (not visible to calendar owner)...",
+            "admin_notes_help": "Private notes visible only to administrators",
+            "cancel": "Cancel",
+            "create": "Create Report",
+            "creating": "Creating...",
+            "success": "Report created successfully",
+            "error": {
+                "event_id_required": "Event ID is required",
+                "category_required": "Category is required",
+                "description_required": "Description is required",
+                "priority_required": "Priority is required",
+                "create_failed": "Failed to create report"
+            }
+        },
+        "settings": {
+            "title": "Moderation Settings",
+            "subtitle": "Configure instance-wide moderation policies",
+            "loading": "Loading settings...",
+            "load_error": "Failed to load settings",
+            "escalation_settings": "Escalation Settings",
+            "auto_escalation_hours": "Auto-Escalation Timeframe (hours)",
+            "auto_escalation_help": "Hours before unreviewed reports auto-escalate to admin (default: 72)",
+            "admin_report_escalation_hours": "Admin Report Escalation (hours)",
+            "admin_escalation_help": "Hours before admin-initiated reports auto-escalate if no action taken (default: 24)",
+            "reminder_before_hours": "Reminder Before Escalation (hours)",
+            "reminder_help": "Send reminder this many hours before auto-escalation (default: 12)",
+            "save": "Save Settings",
+            "saving": "Saving...",
+            "success": "Settings saved successfully",
+            "error": {
+                "must_be_positive": "Value must be greater than 0",
+                "save_failed": "Failed to save settings"
+            }
+        }
     },
     "housekeeping": {
         "status_title": "System Status",

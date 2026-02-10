@@ -3,10 +3,11 @@ import { EventEmitter } from 'events';
 import { Account } from '@/common/model/account';
 import { Report } from '@/common/model/report';
 import ModerationService from '../service/moderation';
-import type { CreateReportData, CreateReportForEventData, ReportFilters, PaginatedReports, EscalationRecord } from '../service/moderation';
+import type { CreateReportData, CreateReportForEventData, CreateAdminReportData, ReportFilters, PaginatedReports, EscalationRecord, ModerationSettings } from '../service/moderation';
 import CalendarInterface from '@/server/calendar/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import EmailInterface from '@/server/email/interface';
+import ConfigurationInterface from '@/server/configuration/interface';
 
 /**
  * Moderation domain interface for cross-domain communication.
@@ -20,17 +21,30 @@ export default class ModerationInterface {
   private calendarInterface: CalendarInterface;
   private accountsInterface: AccountsInterface;
   private emailInterface: EmailInterface;
+  private configurationInterface: ConfigurationInterface;
 
   constructor(
     eventBus: EventEmitter,
     calendarInterface: CalendarInterface,
     accountsInterface: AccountsInterface,
     emailInterface: EmailInterface,
+    configurationInterface: ConfigurationInterface,
   ) {
     this.calendarInterface = calendarInterface;
     this.accountsInterface = accountsInterface;
     this.emailInterface = emailInterface;
-    this.moderationService = new ModerationService(eventBus, calendarInterface);
+    this.configurationInterface = configurationInterface;
+    this.moderationService = new ModerationService(eventBus, calendarInterface, configurationInterface);
+  }
+
+  /**
+   * Returns the underlying ModerationService instance.
+   * Used internally by the domain for scheduler initialization.
+   *
+   * @returns The ModerationService instance
+   */
+  getModerationService(): ModerationService {
+    return this.moderationService;
   }
 
   /**
@@ -53,6 +67,20 @@ export default class ModerationInterface {
    */
   async createReport(data: CreateReportData): Promise<Report> {
     return this.moderationService.createReport(data);
+  }
+
+  /**
+   * Creates an admin-initiated report for an event.
+   * Admin reports skip verification and go directly to submitted status.
+   *
+   * @param data - Admin report creation data
+   * @returns The created Report domain model
+   * @throws ReportValidationError if input validation fails
+   * @throws EventNotFoundError if the event does not exist
+   * @throws DuplicateReportError if admin has already reported this event
+   */
+  async createAdminReport(data: CreateAdminReportData): Promise<Report> {
+    return this.moderationService.createAdminReport(data);
   }
 
   /**
@@ -94,6 +122,29 @@ export default class ModerationInterface {
    */
   async getEscalatedReports(filters: ReportFilters = {}): Promise<PaginatedReports> {
     return this.moderationService.getEscalatedReports(filters);
+  }
+
+  /**
+   * Retrieves paginated admin-relevant reports with optional filters.
+   * Returns reports that are either escalated OR admin-initiated.
+   *
+   * @param filters - Optional status, category, calendarId, source, escalationType, sorting, page, limit filters
+   * @returns Paginated list of admin-relevant reports
+   */
+  async getAdminReports(filters: ReportFilters = {}): Promise<PaginatedReports> {
+    return this.moderationService.getAdminReports(filters);
+  }
+
+  /**
+   * Retrieves a single report by ID for admin review.
+   * No calendar scoping - admins can view any report.
+   *
+   * @param reportId - Report UUID
+   * @returns The Report
+   * @throws ReportNotFoundError if report not found
+   */
+  async getAdminReport(reportId: string): Promise<Report> {
+    return this.moderationService.getAdminReport(reportId);
   }
 
   /**
@@ -164,6 +215,49 @@ export default class ModerationInterface {
   }
 
   /**
+   * Resolves a report as an admin with reviewer_role 'admin'.
+   *
+   * @param reportId - Report UUID
+   * @param adminId - Admin account UUID
+   * @param notes - Resolution notes
+   * @returns The resolved Report
+   * @throws ReportNotFoundError if report not found
+   * @throws ReportAlreadyResolvedError if report is already resolved or dismissed
+   */
+  async adminResolveReport(reportId: string, adminId: string, notes: string): Promise<Report> {
+    return this.moderationService.adminResolveReport(reportId, adminId, notes);
+  }
+
+  /**
+   * Dismisses a report as an admin. This is a final decision -
+   * no further escalation is possible.
+   *
+   * @param reportId - Report UUID
+   * @param adminId - Admin account UUID
+   * @param notes - Dismissal notes
+   * @returns The dismissed Report
+   * @throws ReportNotFoundError if report not found
+   * @throws ReportAlreadyResolvedError if report is already resolved or dismissed
+   */
+  async adminDismissReport(reportId: string, adminId: string, notes: string): Promise<Report> {
+    return this.moderationService.adminDismissReport(reportId, adminId, notes);
+  }
+
+  /**
+   * Overrides the current status of a report as an admin,
+   * changing status regardless of current state.
+   *
+   * @param reportId - Report UUID
+   * @param adminId - Admin account UUID
+   * @param notes - Override notes
+   * @returns The overridden Report
+   * @throws ReportNotFoundError if report not found
+   */
+  async adminOverrideReport(reportId: string, adminId: string, notes: string): Promise<Report> {
+    return this.moderationService.adminOverrideReport(reportId, adminId, notes);
+  }
+
+  /**
    * Checks whether a reporter has already reported a specific event.
    *
    * @param eventId - Event UUID
@@ -196,6 +290,25 @@ export default class ModerationInterface {
   async getReportForCalendar(reportId: string, calendarId: string): Promise<Report> {
     return this.moderationService.getReportForCalendar(reportId, calendarId);
   }
+
+  /**
+   * Retrieves current moderation settings.
+   *
+   * @returns Current moderation settings with defaults applied
+   */
+  async getModerationSettings(): Promise<ModerationSettings> {
+    return this.moderationService.getModerationSettings();
+  }
+
+  /**
+   * Updates moderation settings. Supports partial updates.
+   *
+   * @param updates - Partial settings to update
+   * @returns Updated moderation settings
+   */
+  async updateModerationSettings(updates: Partial<ModerationSettings>): Promise<ModerationSettings> {
+    return this.moderationService.updateModerationSettings(updates);
+  }
 }
 
-export type { CreateReportData, CreateReportForEventData, ReportFilters, PaginatedReports, EscalationRecord };
+export type { CreateReportData, CreateReportForEventData, CreateAdminReportData, ReportFilters, PaginatedReports, EscalationRecord, ModerationSettings };

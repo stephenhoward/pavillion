@@ -1,0 +1,18 @@
+{
+  "subject": "Report auto-escalated for admin review",
+  "title": "Report Auto-Escalated",
+  "greeting": "Hello,",
+  "notification": "A report has been automatically escalated to admin review because the calendar owner did not take action within the required timeframe.",
+  "event_label": "Event:",
+  "calendar_label": "Calendar:",
+  "category_label": "Report category:",
+  "description_label": "Description:",
+  "owner_label": "Calendar owner:",
+  "pending_since_label": "Pending since:",
+  "action_message": "Please review this report and take appropriate action from the admin moderation dashboard.",
+  "review_button": "Review Report",
+  "copy_link_text": "Or copy this link:",
+  "signature": "Thank you,",
+  "team_name": "The Pavillion Team",
+  "footer_text": "This is an automated message, please do not reply to this email."
+}

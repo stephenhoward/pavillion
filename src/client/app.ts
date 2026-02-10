@@ -38,6 +38,9 @@ import InvitesListView from '@/client/components/admin/accounts.vue';
 import AdminSettingsView from '@/client/components/admin/settings.vue';
 import FederationSettingsView from '@/client/components/admin/federation.vue';
 import FundingSettingsView from '@/client/components/admin/funding.vue';
+import ModerationDashboardView from '@/client/components/admin/moderation-dashboard.vue';
+import ReportDetailView from '@/client/components/admin/report-detail.vue';
+import ModerationSettingsView from '@/client/components/admin/moderation-settings.vue';
 
 // Track setup mode status globally
 let isSetupMode = false;
@@ -143,6 +146,9 @@ checkSetupMode().then((setupRequired) => {
         children: [
           { path: 'settings', component: AdminSettingsView, name: 'admin_settings', beforeEnter: mustBeAdmin },
           { path: 'accounts', component: InvitesListView, name: 'accounts', beforeEnter: mustBeAdmin },
+          { path: 'moderation', component: ModerationDashboardView, name: 'moderation', beforeEnter: mustBeAdmin },
+          { path: 'moderation/reports/:reportId', component: ReportDetailView, name: 'moderation_report_detail', beforeEnter: mustBeAdmin },
+          { path: 'moderation/settings', component: ModerationSettingsView, name: 'moderation_settings', beforeEnter: mustBeAdmin },
           { path: 'federation', component: FederationSettingsView, name: 'federation', beforeEnter: mustBeAdmin },
           { path: 'funding', component: FundingSettingsView, name: 'funding', beforeEnter: mustBeAdmin },
         ],
