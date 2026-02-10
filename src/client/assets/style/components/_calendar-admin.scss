@@ -20,10 +20,10 @@
 }
 
 @mixin admin-section-label {
-  font-size: 0.875rem;
-  font-weight: 500;
+  font-size: var(--pav-font-size-small);
+  font-weight: var(--pav-font-weight-medium);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--pav-letter-spacing-wider);
   color: var(--pav-color-stone-500);
   margin-bottom: var(--pav-space-4);
 }
@@ -50,8 +50,8 @@
   gap: var(--pav-space-1);
   padding: var(--pav-space-1) var(--pav-space-2);
   border-radius: 9999px; // pill
-  font-size: 0.75rem;
-  font-weight: 500;
+  font-size: var(--pav-font-size-caption);
+  font-weight: var(--pav-font-weight-medium);
 }
 
 @mixin admin-badge-orange {
@@ -73,6 +73,62 @@
   @media (prefers-color-scheme: dark) {
     background: oklch(0.725 0.143 232.661 / 0.1);
     color: var(--pav-color-sky-300);
+  }
+}
+
+// Report status badge pattern (moderation views)
+@mixin report-status-badge {
+  @include admin-badge;
+  white-space: nowrap;
+}
+
+@mixin report-status-badge--submitted {
+  background: var(--pav-color-sky-50);
+  color: var(--pav-color-sky-700);
+
+  @media (prefers-color-scheme: dark) {
+    background: oklch(0.725 0.143 232.661 / 0.15);
+    color: var(--pav-color-sky-300);
+  }
+}
+
+@mixin report-status-badge--under-review {
+  background: var(--pav-color-amber-50);
+  color: var(--pav-color-amber-700);
+
+  @media (prefers-color-scheme: dark) {
+    background: oklch(0.769 0.188 70.08 / 0.15);
+    color: var(--pav-color-amber-300);
+  }
+}
+
+@mixin report-status-badge--resolved {
+  background: var(--pav-color-emerald-50);
+  color: var(--pav-color-emerald-700);
+
+  @media (prefers-color-scheme: dark) {
+    background: oklch(0.765 0.177 163.223 / 0.15);
+    color: var(--pav-color-emerald-300);
+  }
+}
+
+@mixin report-status-badge--dismissed {
+  background: var(--pav-color-stone-100);
+  color: var(--pav-color-stone-600);
+
+  @media (prefers-color-scheme: dark) {
+    background: var(--pav-color-stone-800);
+    color: var(--pav-color-stone-400);
+  }
+}
+
+@mixin report-status-badge--escalated {
+  background: var(--pav-color-red-50);
+  color: var(--pav-color-red-700);
+
+  @media (prefers-color-scheme: dark) {
+    background: oklch(0.637 0.237 25.331 / 0.15);
+    color: var(--pav-color-red-300);
   }
 }
 

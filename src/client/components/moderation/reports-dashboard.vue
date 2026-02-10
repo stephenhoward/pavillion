@@ -7,12 +7,11 @@
  * editors use this to review and manage moderation reports.
  */
 import { reactive, onMounted, computed, watch } from 'vue';
-import { useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
-import { DateTime } from 'luxon';
 import { useModerationStore } from '@/client/stores/moderation-store';
 import { ReportStatus, ReportCategory } from '@/common/model/report';
 import type { ReportFilters } from '@/client/service/moderation';
+import { useReportFormatting } from '@/client/composables/useReportFormatting';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
 
@@ -29,6 +28,7 @@ const { t } = useTranslation('system', {
 });
 
 const store = useModerationStore();
+const { statusBadgeClass, statusLabel, categoryLabel, reporterTypeLabel, formatDate } = useReportFormatting();
 
 const filters = reactive({
   status: '' as string,
@@ -60,83 +60,6 @@ const categoryOptions = computed(() => [
   { value: ReportCategory.HARASSMENT, label: t('category.harassment') },
   { value: ReportCategory.OTHER, label: t('category.other') },
 ]);
-
-/**
- * Resolves the CSS class for a report status badge.
- *
- * @param status - The report status value
- * @returns CSS class name for the badge
- */
-const statusBadgeClass = (status: string): string => {
-  const classMap: Record<string, string> = {
-    [ReportStatus.SUBMITTED]: 'status-badge--submitted',
-    [ReportStatus.UNDER_REVIEW]: 'status-badge--under-review',
-    [ReportStatus.RESOLVED]: 'status-badge--resolved',
-    [ReportStatus.DISMISSED]: 'status-badge--dismissed',
-    [ReportStatus.ESCALATED]: 'status-badge--escalated',
-  };
-  return classMap[status] || '';
-};
-
-/**
- * Returns the translated label for a report status.
- *
- * @param status - The report status value
- * @returns Translated label string
- */
-const statusLabel = (status: string): string => {
-  const labelMap: Record<string, string> = {
-    [ReportStatus.SUBMITTED]: t('status.submitted'),
-    [ReportStatus.UNDER_REVIEW]: t('status.under_review'),
-    [ReportStatus.RESOLVED]: t('status.resolved'),
-    [ReportStatus.DISMISSED]: t('status.dismissed'),
-    [ReportStatus.ESCALATED]: t('status.escalated'),
-  };
-  return labelMap[status] || status;
-};
-
-/**
- * Returns the translated label for a report category.
- *
- * @param category - The report category value
- * @returns Translated label string
- */
-const categoryLabel = (category: string): string => {
-  const labelMap: Record<string, string> = {
-    [ReportCategory.SPAM]: t('category.spam'),
-    [ReportCategory.INAPPROPRIATE]: t('category.inappropriate'),
-    [ReportCategory.MISLEADING]: t('category.misleading'),
-    [ReportCategory.HARASSMENT]: t('category.harassment'),
-    [ReportCategory.OTHER]: t('category.other'),
-  };
-  return labelMap[category] || category;
-};
-
-/**
- * Returns the translated label for a reporter type.
- *
- * @param reporterType - The reporter type value
- * @returns Translated label string
- */
-const reporterTypeLabel = (reporterType: string): string => {
-  const labelMap: Record<string, string> = {
-    anonymous: t('reporter_type.anonymous'),
-    authenticated: t('reporter_type.authenticated'),
-    administrator: t('reporter_type.administrator'),
-  };
-  return labelMap[reporterType] || reporterType;
-};
-
-/**
- * Formats a date for display in the table.
- *
- * @param date - Date or ISO string to format
- * @returns Formatted date string
- */
-const formatDate = (date: Date | string): string => {
-  const dt = date instanceof Date ? DateTime.fromJSDate(date) : DateTime.fromISO(date as string);
-  return dt.toLocaleString(DateTime.DATE_MED);
-};
 
 /**
  * Applies filters and fetches reports from the store.
@@ -288,7 +211,7 @@ onMounted(async () => {
 
     <!-- Reports Table -->
     <div v-else class="reports-dashboard__table-container">
-      <table class="reports-dashboard__table" role="grid" :aria-label="t('dashboard.title')">
+      <table class="reports-dashboard__table" role="grid" :aria-label="t('dashboard.table_label')">
         <thead>
           <tr>
             <th scope="col">{{ t('dashboard.column_event') }}</th>
@@ -331,7 +254,7 @@ onMounted(async () => {
       <nav
         v-if="store.pagination.totalPages > 1"
         class="reports-dashboard__pagination"
-        :aria-label="t('dashboard.title')"
+        :aria-label="t('dashboard.pagination_label')"
       >
         <button
           type="button"
@@ -392,10 +315,10 @@ onMounted(async () => {
   }
 
   &__filter-label {
-    font-size: 0.75rem;
-    font-weight: 500;
+    font-size: var(--pav-font-size-caption);
+    font-weight: var(--pav-font-weight-medium);
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: var(--pav-letter-spacing-wider);
     color: var(--pav-color-stone-500);
   }
 
@@ -404,18 +327,20 @@ onMounted(async () => {
     appearance: auto;
     cursor: pointer;
     padding: var(--pav-space-2) var(--pav-space-3);
-    font-size: 0.875rem;
+    font-size: var(--pav-font-size-small);
   }
 
   &__error {
     padding: var(--pav-space-3);
     border-radius: 0.75rem;
-    font-size: 0.875rem;
-    background-color: rgba(239, 68, 68, 0.1);
-    border: 1px solid rgba(239, 68, 68, 0.2);
+    font-size: var(--pav-font-size-small);
+    background-color: var(--pav-color-red-50);
+    border: 1px solid var(--pav-color-red-200);
     color: var(--pav-color-red-700);
 
     @media (prefers-color-scheme: dark) {
+      background-color: oklch(0.637 0.237 25.331 / 0.1);
+      border-color: oklch(0.637 0.237 25.331 / 0.2);
       color: var(--pav-color-red-400);
     }
   }
@@ -431,11 +356,11 @@ onMounted(async () => {
     thead {
       th {
         padding: var(--pav-space-3) var(--pav-space-4);
-        text-align: left;
-        font-size: 0.75rem;
-        font-weight: 500;
+        text-align: start;
+        font-size: var(--pav-font-size-caption);
+        font-weight: var(--pav-font-weight-medium);
         text-transform: uppercase;
-        letter-spacing: 0.05em;
+        letter-spacing: var(--pav-letter-spacing-wider);
         color: var(--pav-color-stone-500);
         border-bottom: 1px solid var(--pav-border-primary);
         white-space: nowrap;
@@ -445,7 +370,7 @@ onMounted(async () => {
     tbody {
       td {
         padding: var(--pav-space-3) var(--pav-space-4);
-        font-size: 0.875rem;
+        font-size: var(--pav-font-size-small);
         color: var(--pav-text-primary);
         border-bottom: 1px solid var(--pav-border-primary);
         vertical-align: middle;
@@ -473,8 +398,8 @@ onMounted(async () => {
   }
 
   &__event-id {
-    font-family: monospace;
-    font-size: 0.8125rem;
+    font-family: var(--pav-font-family-mono);
+    font-size: var(--pav-font-size-caption);
     color: var(--pav-color-stone-600);
 
     @media (prefers-color-scheme: dark) {
@@ -497,7 +422,7 @@ onMounted(async () => {
     padding: var(--pav-space-2) var(--pav-space-3);
     color: var(--pav-text-primary);
     cursor: pointer;
-    font-size: 0.875rem;
+    font-size: var(--pav-font-size-small);
     transition: background-color 0.15s ease;
 
     &:hover:not(:disabled) {
@@ -520,7 +445,7 @@ onMounted(async () => {
   }
 
   &__page-info {
-    font-size: 0.875rem;
+    font-size: var(--pav-font-size-small);
     color: var(--pav-color-stone-600);
 
     @media (prefers-color-scheme: dark) {
@@ -529,64 +454,28 @@ onMounted(async () => {
   }
 }
 
-// Status badge styles
+// Status badge styles (shared mixin from calendar-admin)
 .status-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: var(--pav-space-1) var(--pav-space-2);
-  border-radius: 9999px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  white-space: nowrap;
+  @include report-status-badge;
 
   &--submitted {
-    background: var(--pav-color-sky-50);
-    color: var(--pav-color-sky-700);
-
-    @media (prefers-color-scheme: dark) {
-      background: oklch(0.725 0.143 232.661 / 0.15);
-      color: var(--pav-color-sky-300);
-    }
+    @include report-status-badge--submitted;
   }
 
   &--under-review {
-    background: var(--pav-color-amber-50, rgba(245, 158, 11, 0.1));
-    color: var(--pav-color-amber-700, #b45309);
-
-    @media (prefers-color-scheme: dark) {
-      background: rgba(245, 158, 11, 0.15);
-      color: var(--pav-color-amber-300, #fcd34d);
-    }
+    @include report-status-badge--under-review;
   }
 
   &--resolved {
-    background: var(--pav-color-green-50, rgba(34, 197, 94, 0.1));
-    color: var(--pav-color-green-700, #15803d);
-
-    @media (prefers-color-scheme: dark) {
-      background: rgba(34, 197, 94, 0.15);
-      color: var(--pav-color-green-300, #86efac);
-    }
+    @include report-status-badge--resolved;
   }
 
   &--dismissed {
-    background: var(--pav-color-stone-100);
-    color: var(--pav-color-stone-600);
-
-    @media (prefers-color-scheme: dark) {
-      background: var(--pav-color-stone-800);
-      color: var(--pav-color-stone-400);
-    }
+    @include report-status-badge--dismissed;
   }
 
   &--escalated {
-    background: var(--pav-color-red-50, rgba(239, 68, 68, 0.1));
-    color: var(--pav-color-red-700, #b91c1c);
-
-    @media (prefers-color-scheme: dark) {
-      background: rgba(239, 68, 68, 0.15);
-      color: var(--pav-color-red-300, #fca5a5);
-    }
+    @include report-status-badge--escalated;
   }
 }
 
@@ -605,7 +494,7 @@ onMounted(async () => {
       thead th,
       tbody td {
         padding: var(--pav-space-2) var(--pav-space-3);
-        font-size: 0.8125rem;
+        font-size: var(--pav-font-size-caption);
       }
     }
   }

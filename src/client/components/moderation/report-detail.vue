@@ -12,6 +12,7 @@ import { DateTime } from 'luxon';
 import { ArrowLeft } from 'lucide-vue-next';
 import { useModerationStore } from '@/client/stores/moderation-store';
 import { ReportStatus } from '@/common/model/report';
+import { useReportFormatting } from '@/client/composables/useReportFormatting';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
 import PillButton from '@/client/components/common/PillButton.vue';
 
@@ -29,6 +30,18 @@ const { t } = useTranslation('system', {
 });
 
 const store = useModerationStore();
+const { statusBadgeClass, statusLabel, categoryLabel, reporterTypeLabel } = useReportFormatting();
+
+/**
+ * Formats a date with time for the detail view.
+ *
+ * @param date - Date or ISO string to format
+ * @returns Formatted date/time string
+ */
+const formatDateTime = (date: Date | string): string => {
+  const dt = date instanceof Date ? DateTime.fromJSDate(date) : DateTime.fromISO(date as string);
+  return dt.toLocaleString(DateTime.DATETIME_MED);
+};
 
 const state = reactive({
   ownerNotes: '',
@@ -60,83 +73,6 @@ const canAct = computed(() => {
   return report.value.status !== ReportStatus.RESOLVED
     && report.value.status !== ReportStatus.DISMISSED;
 });
-
-/**
- * Resolves the CSS class for a status badge.
- *
- * @param status - The report status value
- * @returns CSS class for the badge
- */
-const statusBadgeClass = (status: string): string => {
-  const classMap: Record<string, string> = {
-    [ReportStatus.SUBMITTED]: 'status-badge--submitted',
-    [ReportStatus.UNDER_REVIEW]: 'status-badge--under-review',
-    [ReportStatus.RESOLVED]: 'status-badge--resolved',
-    [ReportStatus.DISMISSED]: 'status-badge--dismissed',
-    [ReportStatus.ESCALATED]: 'status-badge--escalated',
-  };
-  return classMap[status] || '';
-};
-
-/**
- * Returns the translated label for a report status.
- *
- * @param status - The report status value
- * @returns Translated label string
- */
-const statusLabel = (status: string): string => {
-  const labelMap: Record<string, string> = {
-    [ReportStatus.SUBMITTED]: t('status.submitted'),
-    [ReportStatus.UNDER_REVIEW]: t('status.under_review'),
-    [ReportStatus.RESOLVED]: t('status.resolved'),
-    [ReportStatus.DISMISSED]: t('status.dismissed'),
-    [ReportStatus.ESCALATED]: t('status.escalated'),
-  };
-  return labelMap[status] || status;
-};
-
-/**
- * Returns the translated label for a report category.
- *
- * @param category - The report category value
- * @returns Translated label string
- */
-const categoryLabel = (category: string): string => {
-  const labelMap: Record<string, string> = {
-    spam: t('category.spam'),
-    inappropriate: t('category.inappropriate'),
-    misleading: t('category.misleading'),
-    harassment: t('category.harassment'),
-    other: t('category.other'),
-  };
-  return labelMap[category] || category;
-};
-
-/**
- * Returns the translated label for a reporter type.
- *
- * @param reporterType - The reporter type value
- * @returns Translated label string
- */
-const reporterTypeLabel = (reporterType: string): string => {
-  const labelMap: Record<string, string> = {
-    anonymous: t('reporter_type.anonymous'),
-    authenticated: t('reporter_type.authenticated'),
-    administrator: t('reporter_type.administrator'),
-  };
-  return labelMap[reporterType] || reporterType;
-};
-
-/**
- * Formats a date for display.
- *
- * @param date - Date or ISO string to format
- * @returns Formatted date/time string
- */
-const formatDate = (date: Date | string): string => {
-  const dt = date instanceof Date ? DateTime.fromJSDate(date) : DateTime.fromISO(date as string);
-  return dt.toLocaleString(DateTime.DATETIME_MED);
-};
 
 /**
  * Navigates back to the reports dashboard.
@@ -340,7 +276,7 @@ onMounted(async () => {
 
           <div class="report-detail__info-item">
             <span class="report-detail__info-label">{{ t('detail.reported_on') }}</span>
-            <span class="report-detail__info-value">{{ formatDate(report.createdAt) }}</span>
+            <span class="report-detail__info-value">{{ formatDateTime(report.createdAt) }}</span>
           </div>
 
           <div class="report-detail__info-item">
@@ -386,7 +322,7 @@ onMounted(async () => {
       </section>
 
       <!-- Action Buttons -->
-      <section v-if="canAct" class="report-detail__section" aria-label="Report actions">
+      <section v-if="canAct" class="report-detail__section" :aria-label="t('actions.section_label')">
         <h3 class="report-detail__section-title">{{ t('actions.resolve_confirm') }}</h3>
 
         <!-- Action buttons when no form is open -->
@@ -495,7 +431,7 @@ onMounted(async () => {
                     {{ statusLabel(record.toStatus) }}
                   </span>
                 </span>
-                <span class="report-detail__timeline-date">{{ formatDate(record.createdAt) }}</span>
+                <span class="report-detail__timeline-date">{{ formatDateTime(record.createdAt) }}</span>
               </div>
               <div v-if="record.decision" class="report-detail__timeline-decision">
                 <span class="report-detail__timeline-decision-label">{{ t('detail.escalation_decision') }}:</span>
@@ -530,8 +466,8 @@ onMounted(async () => {
     background: none;
     border: none;
     color: var(--pav-color-stone-600);
-    font-weight: 500;
-    font-size: 0.875rem;
+    font-weight: var(--pav-font-weight-medium);
+    font-size: var(--pav-font-size-small);
     cursor: pointer;
     padding: var(--pav-space-2) 0;
     transition: color 0.2s;
@@ -570,12 +506,14 @@ onMounted(async () => {
   &__error {
     padding: var(--pav-space-3);
     border-radius: 0.75rem;
-    font-size: 0.875rem;
-    background-color: rgba(239, 68, 68, 0.1);
-    border: 1px solid rgba(239, 68, 68, 0.2);
+    font-size: var(--pav-font-size-small);
+    background-color: var(--pav-color-red-50);
+    border: 1px solid var(--pav-color-red-200);
     color: var(--pav-color-red-700);
 
     @media (prefers-color-scheme: dark) {
+      background-color: oklch(0.637 0.237 25.331 / 0.1);
+      border-color: oklch(0.637 0.237 25.331 / 0.2);
       color: var(--pav-color-red-400);
     }
   }
@@ -583,24 +521,28 @@ onMounted(async () => {
   &__alert {
     padding: var(--pav-space-3);
     border-radius: 0.75rem;
-    font-size: 0.875rem;
+    font-size: var(--pav-font-size-small);
 
     &--success {
-      background-color: rgba(34, 197, 94, 0.1);
-      border: 1px solid rgba(34, 197, 94, 0.2);
-      color: var(--pav-color-green-700);
+      background-color: var(--pav-color-emerald-50);
+      border: 1px solid var(--pav-color-emerald-200);
+      color: var(--pav-color-emerald-700);
 
       @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-green-400);
+        background-color: oklch(0.765 0.177 163.223 / 0.1);
+        border-color: oklch(0.765 0.177 163.223 / 0.2);
+        color: var(--pav-color-emerald-400);
       }
     }
 
     &--error {
-      background-color: rgba(239, 68, 68, 0.1);
-      border: 1px solid rgba(239, 68, 68, 0.2);
+      background-color: var(--pav-color-red-50);
+      border: 1px solid var(--pav-color-red-200);
       color: var(--pav-color-red-700);
 
       @media (prefers-color-scheme: dark) {
+        background-color: oklch(0.637 0.237 25.331 / 0.1);
+        border-color: oklch(0.637 0.237 25.331 / 0.2);
         color: var(--pav-color-red-400);
       }
     }
@@ -637,22 +579,22 @@ onMounted(async () => {
   }
 
   &__info-label {
-    font-size: 0.75rem;
-    font-weight: 500;
+    font-size: var(--pav-font-size-caption);
+    font-weight: var(--pav-font-weight-medium);
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: var(--pav-letter-spacing-wider);
     color: var(--pav-color-stone-500);
   }
 
   &__info-value {
-    font-size: 0.9375rem;
+    font-size: var(--pav-font-size-body);
     color: var(--pav-text-primary);
-    font-weight: 500;
+    font-weight: var(--pav-font-weight-medium);
   }
 
   &__event-id {
-    font-family: monospace;
-    font-size: 0.8125rem;
+    font-family: var(--pav-font-family-mono);
+    font-size: var(--pav-font-size-caption);
     word-break: break-all;
   }
 
@@ -663,8 +605,8 @@ onMounted(async () => {
 
   &__description-text {
     margin: var(--pav-space-2) 0 0;
-    font-size: 0.9375rem;
-    line-height: 1.6;
+    font-size: var(--pav-font-size-body);
+    line-height: var(--pav-line-height-relaxed);
     color: var(--pav-text-primary);
     white-space: pre-wrap;
   }
@@ -680,8 +622,8 @@ onMounted(async () => {
     resize: vertical;
     min-height: 5rem;
     font-family: inherit;
-    font-size: 0.9375rem;
-    line-height: 1.5;
+    font-size: var(--pav-font-size-body);
+    line-height: var(--pav-line-height-normal);
   }
 
   &__notes-actions {
@@ -702,20 +644,22 @@ onMounted(async () => {
 
   &__action-label {
     margin: 0;
-    font-weight: 500;
+    font-weight: var(--pav-font-weight-medium);
     color: var(--pav-text-primary);
   }
 
   &__dismiss-warning {
     padding: var(--pav-space-3);
     border-radius: 0.75rem;
-    font-size: 0.875rem;
-    background-color: rgba(245, 158, 11, 0.1);
-    border: 1px solid rgba(245, 158, 11, 0.2);
-    color: var(--pav-color-amber-700, #b45309);
+    font-size: var(--pav-font-size-small);
+    background-color: var(--pav-color-amber-50);
+    border: 1px solid var(--pav-color-amber-200);
+    color: var(--pav-color-amber-700);
 
     @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-amber-300, #fcd34d);
+      background-color: oklch(0.769 0.188 70.08 / 0.1);
+      border-color: oklch(0.769 0.188 70.08 / 0.2);
+      color: var(--pav-color-amber-300);
     }
   }
 
@@ -729,7 +673,7 @@ onMounted(async () => {
 
   // Escalation timeline
   &__empty-history {
-    font-size: 0.875rem;
+    font-size: var(--pav-font-size-small);
     color: var(--pav-color-stone-500);
     font-style: italic;
   }
@@ -802,26 +746,26 @@ onMounted(async () => {
 
   &__timeline-arrow {
     color: var(--pav-color-stone-400);
-    font-size: 0.875rem;
+    font-size: var(--pav-font-size-small);
   }
 
   &__timeline-date {
-    font-size: 0.75rem;
+    font-size: var(--pav-font-size-caption);
     color: var(--pav-color-stone-500);
     white-space: nowrap;
   }
 
   &__timeline-decision {
-    font-size: 0.875rem;
+    font-size: var(--pav-font-size-small);
     color: var(--pav-text-primary);
   }
 
   &__timeline-decision-label {
-    font-weight: 500;
+    font-weight: var(--pav-font-weight-medium);
   }
 
   &__timeline-notes {
-    font-size: 0.875rem;
+    font-size: var(--pav-font-size-small);
     color: var(--pav-color-stone-600);
     font-style: italic;
     white-space: pre-wrap;
@@ -832,69 +776,33 @@ onMounted(async () => {
   }
 
   &__timeline-reviewer {
-    font-size: 0.75rem;
+    font-size: var(--pav-font-size-caption);
     color: var(--pav-color-stone-500);
   }
 }
 
-// Status badge styles (shared with dashboard)
+// Status badge styles (shared mixin from calendar-admin)
 .status-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: var(--pav-space-1) var(--pav-space-2);
-  border-radius: 9999px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  white-space: nowrap;
+  @include report-status-badge;
 
   &--submitted {
-    background: var(--pav-color-sky-50);
-    color: var(--pav-color-sky-700);
-
-    @media (prefers-color-scheme: dark) {
-      background: oklch(0.725 0.143 232.661 / 0.15);
-      color: var(--pav-color-sky-300);
-    }
+    @include report-status-badge--submitted;
   }
 
   &--under-review {
-    background: var(--pav-color-amber-50, rgba(245, 158, 11, 0.1));
-    color: var(--pav-color-amber-700, #b45309);
-
-    @media (prefers-color-scheme: dark) {
-      background: rgba(245, 158, 11, 0.15);
-      color: var(--pav-color-amber-300, #fcd34d);
-    }
+    @include report-status-badge--under-review;
   }
 
   &--resolved {
-    background: var(--pav-color-green-50, rgba(34, 197, 94, 0.1));
-    color: var(--pav-color-green-700, #15803d);
-
-    @media (prefers-color-scheme: dark) {
-      background: rgba(34, 197, 94, 0.15);
-      color: var(--pav-color-green-300, #86efac);
-    }
+    @include report-status-badge--resolved;
   }
 
   &--dismissed {
-    background: var(--pav-color-stone-100);
-    color: var(--pav-color-stone-600);
-
-    @media (prefers-color-scheme: dark) {
-      background: var(--pav-color-stone-800);
-      color: var(--pav-color-stone-400);
-    }
+    @include report-status-badge--dismissed;
   }
 
   &--escalated {
-    background: var(--pav-color-red-50, rgba(239, 68, 68, 0.1));
-    color: var(--pav-color-red-700, #b91c1c);
-
-    @media (prefers-color-scheme: dark) {
-      background: rgba(239, 68, 68, 0.15);
-      color: var(--pav-color-red-300, #fca5a5);
-    }
+    @include report-status-badge--escalated;
   }
 }
 </style>

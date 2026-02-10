@@ -46,6 +46,8 @@
     "moderation": {
         "dashboard": {
             "title": "Reports",
+            "table_label": "Reports list",
+            "pagination_label": "Reports pagination",
             "empty": "No reports found",
             "empty_description": "There are no reports for events in this calendar.",
             "filter_status": "Filter by status",
@@ -109,6 +111,7 @@
             "error_loading": "Failed to load report details."
         },
         "actions": {
+            "section_label": "Report actions",
             "resolve": "Resolve",
             "dismiss": "Dismiss",
             "cancel": "Cancel",

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { reactive, nextTick, onBeforeMount, ref } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useRoute } from 'vue-router';
@@ -23,19 +23,18 @@ const calendarService = new CalendarService();
 
 const state = reactive({
   activeTab: 'categories',
-  calendar: null,
+  calendar: null as any,
   loading: false,
-  error: null,
+  error: null as string | null,
 });
 
 // Reports sub-navigation state
-const selectedReportId = ref(null);
+const selectedReportId = ref<string | null>(null);
 
 onBeforeMount(async () => {
   state.loading = true;
   try {
     state.calendar = await calendarService.getCalendarByUrlName(calendarUrlName);
-    console.log('Calendar data loaded:', state.calendar);
   }
   catch (error) {
     console.error('Failed to load calendar:', error);
@@ -46,7 +45,7 @@ onBeforeMount(async () => {
   }
 });
 
-const activateTab = (tab) => {
+const activateTab = (tab: string) => {
   state.activeTab = tab;
 
   // Reset report detail view when switching to reports tab
@@ -67,7 +66,7 @@ const activateTab = (tab) => {
  *
  * @param reportId - The ID of the report to view
  */
-const viewReport = (reportId) => {
+const viewReport = (reportId: string) => {
   selectedReportId.value = reportId;
 };
 
