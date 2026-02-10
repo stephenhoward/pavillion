@@ -5,12 +5,13 @@ import ExpressHelper from '@/server/common/helper/express';
 import CalendarInterface from '../../interface';
 import { CalendarEditorPermissionError, EditorNotFoundError } from '@/common/exceptions/editor';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
+import { logError } from '@/server/common/helper/error-logger';
 
 class EditorPermissionRoutes {
-  private service: CalendarInterface;
+  private calendarInterface: CalendarInterface;
 
   constructor(internalAPI: CalendarInterface) {
-    this.service = internalAPI;
+    this.calendarInterface = internalAPI;
   }
 
   installHandlers(app: Application, routePrefix: string): void {
@@ -36,6 +37,7 @@ class EditorPermissionRoutes {
     if (!account) {
       res.status(401).json({
         "error": "Authentication required",
+        "errorName": "AuthenticationError",
       });
       return;
     }
@@ -45,12 +47,13 @@ class EditorPermissionRoutes {
     if (typeof canReviewReports !== 'boolean') {
       res.status(400).json({
         "error": "Missing or invalid 'canReviewReports' in request body. Must be a boolean.",
+        "errorName": "ValidationError",
       });
       return;
     }
 
     try {
-      const updatedMember = await this.service.updateEditorPermissions(
+      const updatedMember = await this.calendarInterface.updateEditorPermissions(
         account,
         req.params.calendarId,
         req.params.editorId,
@@ -63,22 +66,26 @@ class EditorPermissionRoutes {
       if (error instanceof CalendarEditorPermissionError) {
         res.status(403).json({
           "error": error.message,
+          "errorName": "CalendarEditorPermissionError",
         });
       }
       else if (error instanceof CalendarNotFoundError) {
         res.status(404).json({
           "error": error.message,
+          "errorName": "CalendarNotFoundError",
         });
       }
       else if (error instanceof EditorNotFoundError) {
         res.status(404).json({
           "error": error.message,
+          "errorName": "EditorNotFoundError",
         });
       }
       else {
-        console.error("Error updating editor permissions:", error);
+        logError(error, 'Error updating editor permissions');
         res.status(500).json({
           "error": "An error occurred while updating editor permissions",
+          "errorName": "InternalServerError",
         });
       }
     }
