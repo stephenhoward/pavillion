@@ -1,11 +1,13 @@
 <script setup>
 import { reactive, inject, onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import EmailModal from '@/client/components/logged_in/settings/email_modal.vue';
 import PasswordModal from '@/client/components/logged_in/settings/password_modal.vue';
 import SubscriptionService from '@/client/service/subscription';
 import AccountService from '@/client/service/account';
 
+const router = useRouter();
 const authn = inject('authn');
 
 const state = reactive({
@@ -124,7 +126,7 @@ async function handleDisplayNameChange() {
  */
 function handleLogout() {
   // Use router to navigate to logout
-  window.location.href = '/logout';
+  router.push({ name: 'logout' });
 }
 
 onMounted(async () => {
