@@ -10,7 +10,7 @@ import {
 } from 'sequelize-typescript';
 
 import { Report, ReportCategory, ReportStatus } from '@/common/model/report';
-import type { ReporterType, AdminPriority, EscalationType } from '@/common/model/report';
+import type { ReporterType, AdminPriority, EscalationType, ForwardStatus } from '@/common/model/report';
 import db from '@/server/common/entity/db';
 
 /**
@@ -87,6 +87,18 @@ class ReportEntity extends Model {
   @Column({ type: DataType.STRING, allowNull: true })
   declare escalation_type: string | null;
 
+  @Column({ type: DataType.STRING, allowNull: true })
+  declare forwarded_from_instance: string | null;
+
+  @Column({ type: DataType.STRING, allowNull: true })
+  declare forwarded_report_id: string | null;
+
+  @Column({
+    type: DataType.ENUM('pending', 'acknowledged', 'no_response'),
+    allowNull: true,
+  })
+  declare forward_status: string | null;
+
   @CreatedAt
   declare created_at: Date;
 
@@ -119,6 +131,9 @@ class ReportEntity extends Model {
     report.verificationToken = this.verification_token;
     report.verificationExpiration = this.verification_expiration;
     report.escalationType = this.escalation_type as EscalationType | null;
+    report.forwardedFromInstance = this.forwarded_from_instance;
+    report.forwardedReportId = this.forwarded_report_id;
+    report.forwardStatus = this.forward_status as ForwardStatus | null;
     report.createdAt = this.created_at;
     report.updatedAt = this.updated_at;
     return report;
@@ -152,6 +167,9 @@ class ReportEntity extends Model {
       verification_token: report.verificationToken,
       verification_expiration: report.verificationExpiration,
       escalation_type: report.escalationType,
+      forwarded_from_instance: report.forwardedFromInstance,
+      forwarded_report_id: report.forwardedReportId,
+      forward_status: report.forwardStatus,
     });
   }
 }

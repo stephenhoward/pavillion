@@ -8,6 +8,7 @@ import VerifyRoutes from './api/v1/verify-routes';
 import OwnerReportRoutes from './api/v1/owner-report-routes';
 import AdminReportRoutes from './api/v1/admin-report-routes';
 import AdminSettingsRoutes from './api/v1/admin-settings-routes';
+import AdminInstanceRoutes from './api/v1/admin-instance-routes';
 import CalendarInterface from '@/server/calendar/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import EmailInterface from '@/server/email/interface';
@@ -72,7 +73,7 @@ export default class ModerationDomain {
     const verifyRoutes = new VerifyRoutes(this.interface);
     verifyRoutes.installHandlers(app, '/api/public/v1');
 
-    const ownerReportRoutes = new OwnerReportRoutes(this.interface);
+    const ownerReportRoutes = new OwnerReportRoutes(this.interface, this.calendarInterface);
     ownerReportRoutes.installHandlers(app, '/api/v1');
 
     const adminReportRoutes = new AdminReportRoutes(this.interface);
@@ -80,6 +81,9 @@ export default class ModerationDomain {
 
     const adminSettingsRoutes = new AdminSettingsRoutes(this.interface);
     adminSettingsRoutes.installHandlers(app, '/api/v1');
+
+    const adminInstanceRoutes = new AdminInstanceRoutes(this.interface);
+    adminInstanceRoutes.installHandlers(app, '/api/v1');
   }
 
   /**

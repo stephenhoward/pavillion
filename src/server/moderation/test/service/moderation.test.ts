@@ -9,12 +9,14 @@ import { ReportEntity } from '@/server/moderation/entity/report';
 import { EventReporterEntity } from '@/server/moderation/entity/event_reporter';
 import { ReportEscalationEntity } from '@/server/moderation/entity/report_escalation';
 import ModerationService from '@/server/moderation/service/moderation';
-import {
-  InvalidVerificationTokenError,
-  ReportNotFoundError,
-  ReportAlreadyResolvedError,
-  EmailRateLimitError,
-} from '@/server/moderation/exceptions';
+import { EventNotFoundError } from '@/common/exceptions/calendar';
+import { ReportNotFoundError } from '@/server/moderation/exceptions';
+import CalendarInterface from '@/server/calendar/interface';
+import ConfigurationInterface from '@/server/configuration/interface';
+import ActivityPubInterface from '@/server/activitypub/interface';
+import { CalendarEvent } from '@/common/model/events';
+import { Calendar } from '@/common/model/calendar';
+import config from 'config';
 
 /** A valid UUID v4 for use in tests. */
 const VALID_UUID = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d';
@@ -1451,6 +1453,165 @@ describe('ModerationService', () => {
       await service.verifyReport('valid-token');
 
       expect(emitSpy.calledWith('reportVerified', sinon.match({ report }))).toBe(true);
+    });
+
+    describe('forwardReport', () => {
+      let service: ModerationService;
+      let sandbox: sinon.SinonSandbox;
+      let mockEventBus: EventEmitter;
+      let mockCalendarInterface: CalendarInterface;
+      let mockConfigInterface: ConfigurationInterface;
+      let mockActivityPubInterface: ActivityPubInterface;
+
+      beforeEach(() => {
+        sandbox = sinon.createSandbox();
+        mockEventBus = new EventEmitter();
+        mockCalendarInterface = new CalendarInterface(mockEventBus);
+        mockConfigInterface = new ConfigurationInterface(mockEventBus);
+        mockActivityPubInterface = {} as ActivityPubInterface;
+
+        service = new ModerationService(
+          mockEventBus,
+          mockCalendarInterface,
+          mockConfigInterface,
+          mockActivityPubInterface,
+        );
+      });
+
+      afterEach(() => {
+        sandbox.restore();
+      });
+
+      it('should throw error if ActivityPubInterface is not provided', async () => {
+        const serviceWithoutAP = new ModerationService(mockEventBus, mockCalendarInterface, mockConfigInterface);
+        await expect(serviceWithoutAP.forwardReport('report-id', 'remote-actor')).rejects.toThrow(
+          'ActivityPubInterface is required for forwardReport',
+        );
+      });
+
+      it('should throw ReportNotFoundError if report does not exist', async () => {
+        sandbox.stub(service, 'getReportById').resolves(null);
+
+        await expect(service.forwardReport('nonexistent-report', 'remote-actor')).rejects.toThrow(
+          ReportNotFoundError,
+        );
+      });
+
+      it('should throw EventNotFoundError if event does not exist', async () => {
+        const mockReport = Report.fromObject({
+          id: 'report-id',
+          eventId: 'event-id',
+          calendarId: 'calendar-id',
+          category: ReportCategory.SPAM,
+          description: 'Test report',
+          reporterType: 'authenticated',
+          status: ReportStatus.SUBMITTED,
+        });
+
+        sandbox.stub(service, 'getReportById').resolves(mockReport);
+        sandbox.stub(mockCalendarInterface, 'getEventById').rejects(new EventNotFoundError());
+
+        await expect(service.forwardReport('report-id', 'remote-actor')).rejects.toThrow(
+          EventNotFoundError,
+        );
+      });
+
+      it('should send Flag activity via ActivityPub outbox', async () => {
+        const mockReport = Report.fromObject({
+          id: 'report-id',
+          eventId: 'event-id',
+          calendarId: 'calendar-id',
+          category: ReportCategory.SPAM,
+          description: 'Test report description',
+          reporterType: 'authenticated',
+          status: ReportStatus.SUBMITTED,
+          createdAt: new Date('2026-02-10T12:00:00Z'),
+        });
+
+        const mockEvent = CalendarEvent.fromObject({
+          id: 'event-id',
+          calendarId: 'calendar-id',
+          name: 'Test Event',
+        });
+
+        const mockCalendar = Calendar.fromObject({
+          id: 'calendar-id',
+          urlName: 'test-calendar',
+        });
+
+        sandbox.stub(service, 'getReportById').resolves(mockReport);
+        sandbox.stub(mockCalendarInterface, 'getEventById').resolves(mockEvent);
+        sandbox.stub(mockCalendarInterface, 'getCalendar').resolves(mockCalendar);
+
+        const actorUrlStub = sandbox.stub().resolves('https://local.instance/calendars/test-calendar');
+        const addToOutboxStub = sandbox.stub().resolves();
+        mockActivityPubInterface.actorUrl = actorUrlStub;
+        mockActivityPubInterface.addToOutbox = addToOutboxStub;
+
+        const configStub = sandbox.stub(config, 'get');
+        configStub.withArgs('server.domain').returns('local.instance');
+
+        const eventEmitSpy = sandbox.spy(mockEventBus, 'emit');
+
+        await service.forwardReport('report-id', 'https://remote.instance/calendars/remote');
+
+        // Verify Flag activity was built and sent
+        expect(addToOutboxStub.calledOnce).toBe(true);
+        const flagActivity = addToOutboxStub.getCall(0).args[1];
+        expect(flagActivity.type).toBe('Flag');
+        expect(flagActivity.content).toBe('Test report description');
+        expect(flagActivity.to).toEqual(['https://remote.instance/calendars/remote']);
+
+        // Verify event was emitted
+        expect(eventEmitSpy.calledWith('reportForwarded')).toBe(true);
+      });
+
+      it('should build admin Flag activity for administrator reports', async () => {
+        const mockReport = Report.fromObject({
+          id: 'report-id',
+          eventId: 'event-id',
+          calendarId: 'calendar-id',
+          category: ReportCategory.INAPPROPRIATE_CONTENT,
+          description: 'Admin concern',
+          reporterType: 'administrator',
+          status: ReportStatus.SUBMITTED,
+          adminId: 'admin-id',
+          adminPriority: 'high',
+          createdAt: new Date('2026-02-10T12:00:00Z'),
+        });
+
+        const mockEvent = CalendarEvent.fromObject({
+          id: 'event-id',
+          calendarId: 'calendar-id',
+          name: 'Test Event',
+        });
+
+        const mockCalendar = Calendar.fromObject({
+          id: 'calendar-id',
+          urlName: 'test-calendar',
+        });
+
+        sandbox.stub(service, 'getReportById').resolves(mockReport);
+        sandbox.stub(mockCalendarInterface, 'getEventById').resolves(mockEvent);
+        sandbox.stub(mockCalendarInterface, 'getCalendar').resolves(mockCalendar);
+
+        const addToOutboxStub = sandbox.stub().resolves();
+        mockActivityPubInterface.actorUrl = sandbox.stub().resolves('https://local.instance/calendars/test');
+        mockActivityPubInterface.addToOutbox = addToOutboxStub;
+
+        const configStub = sandbox.stub(config, 'get');
+        configStub.withArgs('server.domain').returns('local.instance');
+
+        await service.forwardReport('report-id', 'https://remote.instance/admin');
+
+        // Verify admin Flag activity was built
+        expect(addToOutboxStub.calledOnce).toBe(true);
+        const flagActivity = addToOutboxStub.getCall(0).args[1];
+        expect(flagActivity.type).toBe('Flag');
+        expect(flagActivity.tag).toBeDefined();
+        expect(flagActivity.tag.some((t: any) => t.name === '#admin-flag')).toBe(true);
+        expect(flagActivity.tag.some((t: any) => t.name === '#priority-high')).toBe(true);
+      });
     });
   });
 });

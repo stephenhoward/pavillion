@@ -14,6 +14,7 @@ import ProcessOutboxService from '../service/outbox';
 import { ActivityPubOutboxMessageEntity, ActivityPubInboxMessageEntity } from '@/server/activitypub/entity/activitypub';
 import CalendarInterface from '@/server/calendar/interface';
 import AccountsInterface from '@/server/accounts/interface';
+import ModerationInterface from '@/server/moderation/interface';
 import CreateActivity from '@/server/activitypub/model/action/create';
 import UpdateActivity from '@/server/activitypub/model/action/update';
 import DeleteActivity from '@/server/activitypub/model/action/delete';
@@ -29,11 +30,16 @@ export default class ActivityPubInterface {
   private outboxService: ProcessOutboxService;
   private calendarInterface: CalendarInterface;
 
-  constructor(eventBus: EventEmitter, calendarInterface: CalendarInterface, accountsInterface: AccountsInterface ) {
+  constructor(
+    eventBus: EventEmitter,
+    calendarInterface: CalendarInterface,
+    accountsInterface: AccountsInterface,
+    moderationInterface?: ModerationInterface,
+  ) {
     this.calendarInterface = calendarInterface;
     this.memberService = new ActivityPubMemberService(eventBus);
     this.serverService = new ActivityPubServerService(eventBus, calendarInterface, accountsInterface);
-    this.inboxSerivce = new ProcessInboxService(eventBus, this.calendarInterface);
+    this.inboxSerivce = new ProcessInboxService(eventBus, this.calendarInterface, moderationInterface);
     this.outboxService = new ProcessOutboxService(eventBus);
   }
 

@@ -64,7 +64,7 @@ describe('Owner Report API', () => {
       accountsInterface,
       emailInterface,
     );
-    routes = new OwnerReportRoutes(moderationInterface);
+    routes = new OwnerReportRoutes(moderationInterface, calendarInterface);
     router = express.Router();
   });
 
@@ -1369,8 +1369,8 @@ describe('Owner Report API', () => {
         });
       }
 
-      // 5 routes: GET list, GET detail, PUT update, POST resolve, POST dismiss
-      expect(routeCount).toBe(5);
+      // 6 routes: GET list, GET detail, PUT update, POST resolve, POST dismiss, POST forward
+      expect(routeCount).toBe(6);
     });
   });
 });

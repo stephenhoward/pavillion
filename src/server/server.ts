@@ -208,7 +208,12 @@ const initPavillionServer = async (app: express.Application, port: number) => {
   const calendarDomain = new CalendarDomain(eventBus, accountsDomain.interface, emailDomain.interface);
   calendarDomain.initialize(app);
 
-  new ActivityPubDomain(eventBus, calendarDomain.interface, accountsDomain.interface).initialize(app);
+  // Initialize moderation domain before ActivityPub (ActivityPub inbox needs ModerationInterface)
+  const moderationDomain = new ModerationDomain(eventBus, calendarDomain.interface, accountsDomain.interface, emailDomain.interface, configurationDomain.interface);
+  moderationDomain.initialize(app);
+
+  // Initialize ActivityPub domain with ModerationInterface for instance blocking
+  new ActivityPubDomain(eventBus, calendarDomain.interface, accountsDomain.interface, moderationDomain.interface).initialize(app);
 
   // Set up CalendarInterface on AccountsInterface to enable calendar editor invitation acceptance
   // TODO: move invites into a separate domain to avoid circular dependency
@@ -225,10 +230,6 @@ const initPavillionServer = async (app: express.Application, port: number) => {
   // Initialize housekeeping domain (for automated server maintenance)
   const housekeepingDomain = new HousekeepingDomain(eventBus, emailDomain.interface, accountsDomain.interface);
   housekeepingDomain.initialize(app);
-
-  // Initialize moderation domain (after calendar, accounts, email, and configuration domains)
-  const moderationDomain = new ModerationDomain(eventBus, calendarDomain.interface, accountsDomain.interface, emailDomain.interface, configurationDomain.interface);
-  moderationDomain.initialize(app);
 
   // Register global error handler (MUST be after all routes and middleware)
   app.use(globalErrorHandler);

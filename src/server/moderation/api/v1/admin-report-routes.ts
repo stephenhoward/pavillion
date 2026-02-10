@@ -12,6 +12,7 @@ import {
 } from '@/server/moderation/exceptions';
 import { VALID_ADMIN_ACTIONS } from '@/server/moderation/service/moderation';
 import { logError } from '@/server/common/helper/error-logger';
+import { ReportEscalationEntity } from '@/server/moderation/entity/report_escalation';
 
 /** UUID v4 format regex for path parameter validation. */
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -60,6 +61,12 @@ export default class AdminReportRoutes {
       '/admin/reports/:reportId',
       ...ExpressHelper.adminOnly,
       this.updateReport.bind(this),
+    );
+
+    router.post(
+      '/admin/reports/:reportId/forward-to-admin',
+      ...ExpressHelper.adminOnly,
+      this.forwardToAdmin.bind(this),
     );
 
     app.use(routePrefix, router);
@@ -377,6 +384,129 @@ export default class AdminReportRoutes {
       logError(error, `Failed to ${action} report`);
       res.status(500).json({
         error: `Failed to ${action} report`,
+      });
+    }
+  }
+
+  /**
+   * Forwards a report to the remote instance's admin actor.
+   * Requires that the reported event is from a remote instance (calendarId is null).
+   * Creates an escalation record and sends a Flag activity via ActivityPub.
+   *
+   * POST /api/v1/admin/reports/:reportId/forward-to-admin
+   */
+  async forwardToAdmin(req: Request, res: Response): Promise<void> {
+    const account = req.user as Account;
+
+    if (!account) {
+      res.status(403).json({
+        error: 'Authentication required',
+        errorName: 'ForbiddenError',
+      });
+      return;
+    }
+
+    if (!account.hasRole('admin')) {
+      res.status(403).json({
+        error: 'Admin access required',
+        errorName: 'ForbiddenError',
+      });
+      return;
+    }
+
+    const { reportId } = req.params;
+
+    if (!UUID_REGEX.test(reportId)) {
+      res.status(400).json({
+        error: 'Invalid reportId format',
+        errorName: 'ValidationError',
+      });
+      return;
+    }
+
+    try {
+      // Get the report
+      const report = await this.moderationInterface.getAdminReport(reportId);
+
+      // Get the event to check if it's remote
+      const event = await this.moderationInterface.getEventById(report.eventId);
+
+      // Validate that the event is remote (calendarId is null for remote events)
+      if (!event.isRemote()) {
+        res.status(400).json({
+          error: 'Cannot forward report: event is not from a remote instance',
+          errorName: 'ValidationError',
+        });
+        return;
+      }
+
+      // Extract the remote instance domain from the event source URL
+      // Event source URL format: https://remote.instance/events/uuid
+      let remoteInstanceDomain: string;
+
+      if (event.eventSourceUrl) {
+        try {
+          const url = new URL(event.eventSourceUrl);
+          remoteInstanceDomain = url.hostname;
+        }
+        catch {
+          res.status(400).json({
+            error: 'Cannot determine remote instance from event source URL',
+            errorName: 'ValidationError',
+          });
+          return;
+        }
+      }
+      else {
+        res.status(400).json({
+          error: 'Event is missing source URL',
+          errorName: 'ValidationError',
+        });
+        return;
+      }
+
+      // Construct the remote admin actor URI
+      const remoteAdminActorUri = `https://${remoteInstanceDomain}/admin`;
+
+      // Forward the report via ActivityPub
+      await this.moderationInterface.forwardReport(reportId, remoteAdminActorUri);
+
+      // Create escalation record to track the forwarding action
+      const escalationRecord = ReportEscalationEntity.fromModel({
+        reportId,
+        fromStatus: report.status,
+        toStatus: report.status, // Status doesn't change when forwarding
+        reviewerId: account.id,
+        reviewerRole: 'admin',
+        decision: 'forwarded_to_remote_admin',
+        notes: `Forwarded to remote admin at ${remoteInstanceDomain}`,
+      });
+      await escalationRecord.save();
+
+      res.json({
+        message: 'Report forwarded to remote admin',
+      });
+    }
+    catch (error: any) {
+      if (error instanceof ReportNotFoundError) {
+        res.status(404).json({
+          error: 'Report not found',
+          errorName: 'ReportNotFoundError',
+        });
+        return;
+      }
+
+      if (error instanceof EventNotFoundError) {
+        res.status(404).json({
+          error: 'Event not found',
+          errorName: 'EventNotFoundError',
+        });
+        return;
+      }
+
+      logError(error, 'Failed to forward report to remote admin');
+      res.status(500).json({
+        error: 'Failed to forward report',
       });
     }
   }

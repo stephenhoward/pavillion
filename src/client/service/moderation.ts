@@ -2,6 +2,7 @@ import axios from 'axios';
 
 import { Report, ReportCategory, ReportStatus } from '@/common/model/report';
 import type { ReporterType, AdminPriority } from '@/common/model/report';
+import { BlockedInstance } from '@/common/model/blocked_instance';
 import { UnknownError } from '@/common/exceptions/base';
 import { validateAndEncodeId } from '@/client/service/utils';
 
@@ -117,6 +118,9 @@ const errorMap: Record<string, new (...args: any[]) => Error> = {
   },
   DuplicateReportError: class DuplicateReportError extends Error {
     constructor() { super('A report already exists for this event'); this.name = 'DuplicateReportError'; }
+  },
+  InstanceAlreadyBlockedError: class InstanceAlreadyBlockedError extends Error {
+    constructor() { super('Instance is already blocked'); this.name = 'InstanceAlreadyBlockedError'; }
   },
 };
 
@@ -366,6 +370,33 @@ export default class ModerationService {
   }
 
   /**
+   * Forwards a report to the remote calendar owner via ActivityPub.
+   * Only valid for reposted events with eventSourceUrl.
+   *
+   * @param calendarId - The calendar UUID
+   * @param reportId - The report UUID
+   * @param message - Optional message to include with the report
+   * @returns The updated report with forwardStatus set to 'pending'
+   */
+  async forwardReport(calendarId: string, reportId: string, message?: string): Promise<Report> {
+    try {
+      const encodedCalendarId = validateAndEncodeId(calendarId, 'Calendar ID');
+      const encodedReportId = validateAndEncodeId(reportId, 'Report ID');
+      const response = await axios.post(
+        `/api/v1/calendars/${encodedCalendarId}/reports/${encodedReportId}/forward`,
+        { message: message || '' },
+      );
+
+      return Report.fromObject(response.data.report);
+    }
+    catch (error: unknown) {
+      console.error('Error forwarding report:', error);
+      handleModerationError(error);
+      throw new UnknownError();
+    }
+  }
+
+  /**
    * Updates an editor's moderation permission for a calendar.
    *
    * @param calendarId - The calendar UUID
@@ -531,6 +562,24 @@ export default class ModerationService {
     }
   }
 
+  /**
+   * Forwards a report to the remote instance's administrator.
+   * Only applicable for reports on remote events.
+   *
+   * @param reportId - The report UUID
+   */
+  async adminForwardToRemoteAdmin(reportId: string): Promise<void> {
+    try {
+      const encodedReportId = validateAndEncodeId(reportId, 'Report ID');
+      await axios.post(`/api/v1/admin/reports/${encodedReportId}/forward-to-admin`);
+    }
+    catch (error: unknown) {
+      console.error('Error forwarding report to remote admin:', error);
+      handleModerationError(error);
+      throw new UnknownError();
+    }
+  }
+
   // ──────────────────────────────────────────────────────────────
   // Moderation settings methods
   // ──────────────────────────────────────────────────────────────
@@ -565,6 +614,65 @@ export default class ModerationService {
     }
     catch (error: unknown) {
       console.error('Error updating moderation settings:', error);
+      handleModerationError(error);
+      throw new UnknownError();
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // Instance blocking methods
+  // ──────────────────────────────────────────────────────────────
+
+  /**
+   * Fetches list of all blocked instances.
+   *
+   * @returns Array of blocked instance domain models
+   */
+  async listBlockedInstances(): Promise<BlockedInstance[]> {
+    try {
+      const response = await axios.get('/api/v1/admin/moderation/blocked-instances');
+      return response.data.map((data: Record<string, any>) => BlockedInstance.fromObject(data));
+    }
+    catch (error: unknown) {
+      console.error('Error fetching blocked instances:', error);
+      handleModerationError(error);
+      throw new UnknownError();
+    }
+  }
+
+  /**
+   * Blocks an instance from federating with this instance.
+   *
+   * @param domain - The domain to block (e.g., 'bad-instance.example.com')
+   * @param reason - Reason for blocking the instance
+   * @returns The newly created BlockedInstance
+   */
+  async blockInstance(domain: string, reason: string): Promise<BlockedInstance> {
+    try {
+      const response = await axios.post('/api/v1/admin/moderation/block-instance', {
+        domain,
+        reason,
+      });
+      return BlockedInstance.fromObject(response.data);
+    }
+    catch (error: unknown) {
+      console.error('Error blocking instance:', error);
+      handleModerationError(error);
+      throw new UnknownError();
+    }
+  }
+
+  /**
+   * Unblocks an instance, allowing it to federate again.
+   *
+   * @param domain - The domain to unblock
+   */
+  async unblockInstance(domain: string): Promise<void> {
+    try {
+      await axios.delete(`/api/v1/admin/moderation/blocked-instances/${encodeURIComponent(domain)}`);
+    }
+    catch (error: unknown) {
+      console.error('Error unblocking instance:', error);
       handleModerationError(error);
       throw new UnknownError();
     }

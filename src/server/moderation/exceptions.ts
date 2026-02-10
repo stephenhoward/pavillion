@@ -50,3 +50,16 @@ export class EmailRateLimitError extends Error {
     Object.setPrototypeOf(this, EmailRateLimitError.prototype);
   }
 }
+
+/**
+ * Custom error class for attempting to block an already blocked instance.
+ * Thrown when trying to block an instance that is already in the blocked list.
+ */
+export class InstanceAlreadyBlockedError extends Error {
+  constructor(message: string = 'Instance is already blocked') {
+    super(message);
+    this.name = 'InstanceAlreadyBlockedError';
+    // Maintaining proper prototype chain in ES5+
+    Object.setPrototypeOf(this, InstanceAlreadyBlockedError.prototype);
+  }
+}

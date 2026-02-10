@@ -15,10 +15,13 @@ import { EventObjectEntity } from "@/server/activitypub/entity/event_object";
 import RemoteCalendarService from "@/server/activitypub/service/remote_calendar";
 import { ActivityPubActor } from "@/server/activitypub/model/base";
 import CalendarInterface from "@/server/calendar/interface";
+import ModerationInterface from "@/server/moderation/interface";
 import { CalendarEvent } from "@/common/model/events";
+import { ReportCategory } from "@/common/model/report";
 import { Calendar } from "@/common/model/calendar";
 import { addToOutbox } from "@/server/activitypub/helper/outbox";
 import { UserActorEntity } from "@/server/activitypub/entity/user_actor";
+import { ReportEntity } from "@/server/moderation/entity/report";
 import { CalendarMemberEntity } from "@/server/calendar/entity/calendar_member";
 import { fetchRemoteObject } from "@/server/activitypub/helper/remote-fetch";
 
@@ -133,9 +136,13 @@ class AuthorizationLRUCache {
  * This service includes an in-memory cache for remote editor authorization checks
  * to improve performance by avoiding redundant database queries. Cache entries
  * are stored in an LRU cache with a maximum size of 1000 entries and a 5-minute TTL.
+ *
+ * The service also filters incoming content from blocked instances via the
+ * ModerationInterface, rejecting activities early in the processing pipeline.
  */
 class ProcessInboxService {
   calendarInterface: CalendarInterface;
+  moderationInterface?: ModerationInterface;
   eventBus: EventEmitter;
   remoteCalendarService: RemoteCalendarService;
 
@@ -157,11 +164,29 @@ class ProcessInboxService {
    */
   private readonly CACHE_MAX_SIZE = 1000;
 
-  constructor(eventBus: EventEmitter, calendarInterface: CalendarInterface) {
+  constructor(eventBus: EventEmitter, calendarInterface: CalendarInterface, moderationInterface?: ModerationInterface) {
     this.eventBus = eventBus;
     this.calendarInterface = calendarInterface;
+    this.moderationInterface = moderationInterface;
     this.remoteCalendarService = new RemoteCalendarService();
     this.authorizationCache = new AuthorizationLRUCache(this.CACHE_MAX_SIZE, this.CACHE_TTL);
+  }
+
+  /**
+   * Extracts the domain from an actor URI.
+   * Handles various ActivityPub URI formats.
+   *
+   * @param actorUri - The actor URI to parse
+   * @returns The domain name (hostname) or empty string if parsing fails
+   */
+  private extractDomainFromActorUri(actorUri: string): string {
+    try {
+      const url = new URL(actorUri);
+      return url.hostname;
+    }
+    catch {
+      return '';
+    }
   }
 
   /**
@@ -189,6 +214,7 @@ class ProcessInboxService {
 
   /**
    * Processes a single inbox message based on its type.
+   * Checks if the source instance is blocked before processing.
    *
    * @param {ActivityPubInboxMessageEntity} message - The message entity to process
    * @returns {Promise<void>}
@@ -200,6 +226,29 @@ class ProcessInboxService {
       if ( ! calendar ) {
         throw new Error("No calendar found for inbox");
       }
+
+      // Extract actor from the message to check if the source instance is blocked
+      const actorUri = (message.message as any)?.actor;
+      if (actorUri && this.moderationInterface) {
+        const domain = this.extractDomainFromActorUri(actorUri);
+
+        if (domain) {
+          const isBlocked = await this.moderationInterface.isInstanceBlocked(domain);
+
+          if (isBlocked) {
+            console.log(`[INBOX] Rejected activity from blocked instance: ${domain} (actor: ${actorUri})`);
+
+            // Mark message as processed with 'blocked' status
+            await message.update({
+              processed_time: DateTime.now().toJSDate(),
+              processed_status: 'blocked',
+            });
+
+            return;
+          }
+        }
+      }
+
       switch( message.type ) {
         case 'Create':
           {
@@ -255,6 +304,11 @@ class ProcessInboxService {
             await this.processShareEvent(calendar, activity);
           }
           break;
+        case 'Flag':
+          {
+            await this.processFlagActivity(calendar, message.message);
+          }
+          break;
         case 'Undo':
           if (!message.message || typeof message.message !== 'object' || !message.message.object) {
             throw new Error('Invalid Undo activity: missing message object');
@@ -293,6 +347,88 @@ class ProcessInboxService {
         processed_time: DateTime.now().toJSDate(),
         processed_status: 'error',
       });
+    }
+  }
+
+
+  /**
+   * Processes a Flag activity by creating a federated report.
+   * Extracts event information from the object URI, parses category from hashtags,
+   * and creates a Report with reporterType='federation'.
+   *
+   * @param calendar - The calendar receiving the flag
+   * @param message - The Flag activity message
+   * @returns Promise<void>
+   */
+  async processFlagActivity(calendar: Calendar, message: any): Promise<void> {
+    if (!this.moderationInterface) {
+      console.warn('[INBOX] processFlagActivity called but moderationInterface not available');
+      return;
+    }
+
+    if (!message || !message.object) {
+      console.warn('[INBOX] Flag activity missing object');
+      return;
+    }
+
+    // Extract event ID from object URI
+    const objectUri = typeof message.object === 'string' ? message.object : message.object.id;
+    if (!objectUri) {
+      console.warn('[INBOX] Flag activity object missing id');
+      return;
+    }
+
+    // Parse event ID from URI (last path segment)
+    const eventIdMatch = objectUri.match(/\/events\/([a-f0-9-]+)$/i);
+    if (!eventIdMatch) {
+      console.warn(`[INBOX] Could not parse event ID from object URI: ${objectUri}`);
+      return;
+    }
+    const eventId = eventIdMatch[1];
+
+    // Look up the event to verify it exists
+    const event = await this.calendarInterface.getEventById(eventId);
+    if (!event || !event.calendarId) {
+      console.warn(`[INBOX] Flag activity references unknown event: ${eventId}`);
+      return;
+    }
+
+    // Extract category from hashtags
+    let category: ReportCategory = ReportCategory.OTHER;
+    if (message.tag && Array.isArray(message.tag)) {
+      for (const tag of message.tag) {
+        if (tag.type === 'Hashtag' && tag.name) {
+          const categoryName = tag.name.replace(/^#/, '');
+          if (Object.values(ReportCategory).includes(categoryName as ReportCategory)) {
+            category = categoryName as ReportCategory;
+            break;
+          }
+        }
+      }
+    }
+
+    // Extract domain from actor URI
+    const actorUri = message.actor;
+    const domain = this.extractDomainFromActorUri(actorUri);
+
+    // Create report via ModerationInterface
+    try {
+      const report = await this.moderationInterface.receiveRemoteReport({
+        eventId: event.id,
+        category,
+        description: message.content || '',
+        forwardedFromInstance: domain,
+        forwardedReportId: message.id,
+      });
+
+      console.log(`[INBOX] Created federation report ${report.id} for event ${eventId} from ${domain}`);
+
+      // Emit domain event
+      this.eventBus.emit('reportReceived', { report });
+    }
+    catch (error) {
+      logError(error, `[INBOX] Failed to create federation report for event ${eventId}`);
+      throw error;
     }
   }
 
@@ -851,29 +987,58 @@ class ProcessInboxService {
       console.log(`[INBOX] Follow relationship already exists for ${message.actor}, skipping`);
     }
   }
-
   /**
-   * Processes an Accept activity received in response to a Follow request.
-   * Confirms the follow relationship on the initiating side.
+   * Processes an Accept activity received in response to a Follow or Flag request.
+   * For Follow: Confirms the follow relationship on the initiating side.
+   * For Flag: Updates the forward_status to 'acknowledged' on the forwarded report.
    *
-   * @param {Calendar} calendar - The calendar that initiated the Follow
+   * @param {Calendar} calendar - The calendar that initiated the Follow/Flag
    * @param {AcceptActivity} message - The Accept activity message
    * @returns {Promise<void>}
    */
   async processAcceptActivity(calendar: Calendar, message: AcceptActivity) {
     console.log(`[INBOX] Processing Accept activity from ${message.actor} for calendar ${calendar.urlName}`);
 
-    // The Accept activity's object should be the original Follow activity
-    const followObject = message.object;
+    // The Accept activity's object should be the original activity (Follow or Flag)
+    const acceptedObject = message.object;
 
-    if (!followObject) {
+    if (!acceptedObject) {
       console.warn(`[INBOX] Accept activity missing object`);
       return;
     }
 
+    // Check if this is an Accept for a Flag activity
+    if (typeof acceptedObject === 'object' && acceptedObject.type === 'Flag') {
+      console.log(`[INBOX] Accept confirms Flag activity`);
+
+      // Extract Flag ID from the accepted object
+      const flagId = acceptedObject.id || (typeof acceptedObject === 'object' ? acceptedObject.id : null);
+
+      if (!flagId) {
+        console.warn(`[INBOX] Accept for Flag missing Flag ID`);
+        return;
+      }
+
+      // Find the report by forwarded_report_id
+      const report = await ReportEntity.findOne({
+        where: { forwarded_report_id: flagId },
+      });
+
+      if (!report) {
+        console.warn(`[INBOX] No report found for Flag ID: ${flagId}, Accept may be for unknown Flag`);
+        return;
+      }
+
+      // Update forward_status to 'acknowledged'
+      await report.update({ forward_status: 'acknowledged' });
+      console.log(`[INBOX] Updated report ${report.id} forward_status to 'acknowledged'`);
+
+      return;
+    }
+
     // Verify this Accept corresponds to a Follow we sent
-    if (typeof followObject === 'object' && followObject.type === 'Follow') {
-      const followActivity = followObject as FollowActivity;
+    if (typeof acceptedObject === 'object' && acceptedObject.type === 'Follow') {
+      const followActivity = acceptedObject as FollowActivity;
 
       console.log(`[INBOX] Accept confirms Follow of ${followActivity.object}`);
 
@@ -905,7 +1070,7 @@ class ProcessInboxService {
       }
     }
     else {
-      console.warn(`[INBOX] Accept activity does not contain valid Follow object`);
+      console.warn(`[INBOX] Accept activity does not contain valid Follow or Flag object`);
     }
   }
 

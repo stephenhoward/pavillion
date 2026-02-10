@@ -41,6 +41,7 @@ import FundingSettingsView from '@/client/components/admin/funding.vue';
 import ModerationDashboardView from '@/client/components/admin/moderation-dashboard.vue';
 import ReportDetailView from '@/client/components/admin/report-detail.vue';
 import ModerationSettingsView from '@/client/components/admin/moderation-settings.vue';
+import BlockedInstancesView from '@/client/components/admin/blocked-instances.vue';
 
 // Track setup mode status globally
 let isSetupMode = false;
@@ -149,6 +150,7 @@ checkSetupMode().then((setupRequired) => {
           { path: 'moderation', component: ModerationDashboardView, name: 'moderation', beforeEnter: mustBeAdmin },
           { path: 'moderation/reports/:reportId', component: ReportDetailView, name: 'moderation_report_detail', beforeEnter: mustBeAdmin },
           { path: 'moderation/settings', component: ModerationSettingsView, name: 'moderation_settings', beforeEnter: mustBeAdmin },
+          { path: 'moderation/blocked-instances', component: BlockedInstancesView, name: 'blocked_instances', beforeEnter: mustBeAdmin },
           { path: 'federation', component: FederationSettingsView, name: 'federation', beforeEnter: mustBeAdmin },
           { path: 'funding', component: FundingSettingsView, name: 'funding', beforeEnter: mustBeAdmin },
         ],

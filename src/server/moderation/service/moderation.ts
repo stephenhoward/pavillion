@@ -5,20 +5,25 @@ import config from 'config';
 
 import { Account } from '@/common/model/account';
 import { Report, ReportCategory, ReportStatus } from '@/common/model/report';
-import type { ReporterType, EscalationType } from '@/common/model/report';
+import type { ReporterType, EscalationType, ForwardStatus } from '@/common/model/report';
+import { BlockedInstance } from '@/common/model/blocked_instance';
 import { EventNotFoundError } from '@/common/exceptions/calendar';
 import { DuplicateReportError, ReportValidationError } from '@/common/exceptions/report';
 import { ReportEntity } from '@/server/moderation/entity/report';
 import { EventReporterEntity } from '@/server/moderation/entity/event_reporter';
 import { ReportEscalationEntity } from '@/server/moderation/entity/report_escalation';
+import { BlockedInstanceEntity } from '@/server/moderation/entity/blocked_instance';
 import {
   InvalidVerificationTokenError,
   ReportNotFoundError,
   ReportAlreadyResolvedError,
   EmailRateLimitError,
+  InstanceAlreadyBlockedError,
 } from '@/server/moderation/exceptions';
 import CalendarInterface from '@/server/calendar/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
+import ActivityPubInterface from '@/server/activitypub/interface';
+import FlagActivityBuilder from '@/server/moderation/service/flag-activity-builder';
 
 /** Token expiration duration in hours. */
 const VERIFICATION_TOKEN_EXPIRY_HOURS = 24;
@@ -117,6 +122,20 @@ interface CreateAdminReportData {
   adminNotes?: string;
 }
 
+
+/**
+ * Input data for receiving a remote report forwarded from another federated instance.
+ * Federation reports bypass email verification and go directly to submitted status.
+ */
+interface ReceiveRemoteReportData {
+  eventId: string;
+  calendarId: string;
+  category: ReportCategory;
+  description: string;
+  forwardedFromInstance: string;
+  forwardedReportId: string;
+}
+
 /**
  * Filter options for listing reports.
  */
@@ -173,16 +192,19 @@ interface ModerationSettings {
 /**
  * Service for managing the report lifecycle including creation,
  * duplicate detection, verification, status transitions, and escalation.
+ * Also manages instance-level blocking for federation moderation.
  */
 class ModerationService {
   private eventBus?: EventEmitter;
   private calendarInterface?: CalendarInterface;
   private configurationInterface?: ConfigurationInterface;
+  private activityPubInterface?: ActivityPubInterface;
 
-  constructor(eventBus?: EventEmitter, calendarInterface?: CalendarInterface, configurationInterface?: ConfigurationInterface) {
+  constructor(eventBus?: EventEmitter, calendarInterface?: CalendarInterface, configurationInterface?: ConfigurationInterface, activityPubInterface?: ActivityPubInterface) {
     this.eventBus = eventBus;
     this.calendarInterface = calendarInterface;
     this.configurationInterface = configurationInterface;
+    this.activityPubInterface = activityPubInterface;
   }
 
   /**
@@ -383,6 +405,16 @@ class ModerationService {
       adminNotes: data.adminNotes,
     });
   }
+
+  /**
+   * Receives a remote report forwarded from another federated instance via ActivityPub Flag activity.
+   * Creates a Report with reporterType='federation', status='submitted'.
+   * Emits reportReceived domain event for notification handling.
+   *
+   * @param data - Remote report data extracted from Flag activity
+   * @returns The created Report domain model
+   * @throws EventNotFoundError if the event does not exist
+   */
 
   /**
    * Creates a new report against an event.
@@ -1248,6 +1280,185 @@ class ModerationService {
   }
 
   /**
+   * Blocks an instance from federating with this instance.
+   * Creates a BlockedInstanceEntity record and returns the domain model.
+   *
+   * @param domain - Domain name to block
+   * @param reason - Reason for blocking
+   * @param adminAccountId - Admin account ID who initiated the block
+   * @returns The created BlockedInstance domain model
+   * @throws InstanceAlreadyBlockedError if the domain is already blocked
+   */
+  async blockInstance(domain: string, reason: string, adminAccountId: string): Promise<BlockedInstance> {
+    // Check if already blocked
+    const existing = await BlockedInstanceEntity.findOne({
+      where: { domain },
+    });
+
+    if (existing) {
+      throw new InstanceAlreadyBlockedError();
+    }
+
+    const blockedInstance = new BlockedInstance();
+    blockedInstance.domain = domain;
+    blockedInstance.reason = reason;
+    blockedInstance.blockedAt = new Date();
+    blockedInstance.blockedBy = adminAccountId;
+
+    const entity = BlockedInstanceEntity.fromModel(blockedInstance);
+    const saved = await entity.save();
+
+    return saved.toModel();
+  }
+
+  /**
+   * Unblocks an instance, allowing it to federate again.
+   * Silent if the domain was not blocked (idempotent operation).
+   *
+   * @param domain - Domain name to unblock
+   */
+  async unblockInstance(domain: string): Promise<void> {
+    await BlockedInstanceEntity.destroy({
+      where: { domain },
+    });
+  }
+
+  /**
+   * Lists all blocked instances, sorted by blocked_at DESC.
+   *
+   * @returns Array of BlockedInstance domain models
+   */
+  async listBlockedInstances(): Promise<BlockedInstance[]> {
+    const entities = await BlockedInstanceEntity.findAll({
+      order: [['blocked_at', 'DESC']],
+    });
+
+    return entities.map((entity) => entity.toModel());
+  }
+
+  /**
+   * Checks if an instance is blocked.
+   *
+   * @param domain - Domain name to check
+   * @returns True if the domain is blocked
+   */
+  async isInstanceBlocked(domain: string): Promise<boolean> {
+    const entity = await BlockedInstanceEntity.findOne({
+      where: { domain },
+    });
+
+    return entity !== null;
+  }
+
+  /**
+   * Forwards a report to a remote calendar owner via ActivityPub.
+   * Sends a Flag activity to the remote instance's inbox.
+   *
+   * @param reportId - Report UUID to forward
+   * @param targetActorUri - Actor URI of the remote calendar owner
+   * @throws ReportNotFoundError if report not found
+   */
+  async forwardReport(reportId: string, targetActorUri: string): Promise<void> {
+    if (!this.activityPubInterface) {
+      throw new Error('ActivityPubInterface is required for forwardReport');
+    }
+    if (!this.calendarInterface) {
+      throw new Error('CalendarInterface is required for forwardReport');
+    }
+    // Get the report
+    const report = await this.getReportById(reportId);
+    if (!report) {
+      throw new ReportNotFoundError();
+    }
+    // Get the event being reported
+    const event = await this.calendarInterface.getEventById(report.eventId);
+    if (!event) {
+      throw new EventNotFoundError();
+    }
+    // Build Flag activity using FlagActivityBuilder
+    const domain = config.get<string>('server.domain');
+    const flagBuilder = new FlagActivityBuilder(domain);
+    // Get calendar to determine actor URI
+    const calendar = await this.calendarInterface.getCalendar(report.calendarId);
+    if (!calendar) {
+      throw new Error('Calendar not found for report');
+    }
+    const calendarActorUri = await this.activityPubInterface.actorUrl(calendar);
+    // Build appropriate Flag activity based on reporter type
+    let flagActivity;
+    if (report.reporterType === 'administrator' && report.adminId) {
+      // Build admin flag with priority
+      const adminActorUri = `https://${domain}/admin`;
+      flagActivity = flagBuilder.buildAdminFlagActivity(report, event, adminActorUri);
+    }
+    else {
+      // Build standard owner-level flag
+      flagActivity = flagBuilder.buildFlagActivity(report, event, calendarActorUri);
+    }
+    // Set explicit recipient in 'to' field
+    flagActivity.to = [targetActorUri];
+    // Send via ActivityPub outbox
+    await this.activityPubInterface.addToOutbox(calendar, flagActivity);
+    // Emit domain event for tracking
+    this.emit('reportForwarded', {
+      report,
+      targetActorUri,
+    });
+  }
+  /**
+   * Receives a remote report forwarded from another federated instance.
+   * Creates a Report with reporterType='federation'.
+   *
+   * @param data - Remote report data including source instance information
+   * @returns The created Report domain model
+   * @throws EventNotFoundError if the event does not exist
+   */
+  async receiveRemoteReport(data: ReceiveRemoteReportData): Promise<Report> {
+    if (!this.calendarInterface) {
+      throw new Error('CalendarInterface is required for receiveRemoteReport');
+    }
+    // Look up the event to get calendarId
+    const event = await this.calendarInterface.getEventById(data.eventId);
+    if (!event || !event.calendarId) {
+      throw new EventNotFoundError();
+    }
+    // Create the report with federation reporter type
+    const report = new Report();
+    report.eventId = data.eventId;
+    report.calendarId = event.calendarId;
+    report.category = data.category;
+    report.description = data.description;
+    report.reporterType = 'federation' as ReporterType;
+    report.status = ReportStatus.SUBMITTED;
+    report.forwardedFromInstance = data.forwardedFromInstance;
+    report.forwardedReportId = data.forwardedReportId;
+    // Persist the report
+    const entity = ReportEntity.fromModel(report);
+    const saved = await entity.save();
+    const createdReport = saved.toModel();
+    // Emit domain event for notification
+    this.emit('reportReceived', { report: createdReport });
+    return createdReport;
+  }
+
+  /**
+   * Checks the acknowledgment status of a forwarded report.
+   * Returns the forward_status field which tracks whether the remote
+   * instance has acknowledged receipt of the forwarded Flag activity.
+   *
+   * @param reportId - Report UUID
+   * @returns Forward status ('pending' | 'acknowledged' | 'no_response') or null if not found or not forwarded
+   */
+  async checkForwardStatus(reportId: string): Promise<ForwardStatus | null> {
+    const entity = await ReportEntity.findByPk(reportId);
+    if (!entity) {
+      return null;
+    }
+    return (entity.forward_status as ForwardStatus) ?? null;
+  }
+
+
+  /**
    * Hashes an email address using HMAC-SHA256 with a server-side secret
    * for anonymous reporter tracking. Uses HMAC to prevent rainbow table
    * attacks against the low-entropy email address space.
@@ -1297,4 +1508,4 @@ class ModerationService {
 
 export default ModerationService;
 export { VALID_ADMIN_ACTIONS };
-export type { CreateReportData, CreateReportForEventData, CreateAdminReportData, ReportFilters, PaginatedReports, EscalationRecord, ModerationSettings };
+export type { CreateReportData, CreateReportForEventData, CreateAdminReportData, ReceiveRemoteReportData, ReportFilters, PaginatedReports, EscalationRecord, ModerationSettings };

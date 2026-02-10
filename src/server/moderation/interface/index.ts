@@ -2,12 +2,15 @@ import { EventEmitter } from 'events';
 
 import { Account } from '@/common/model/account';
 import { Report } from '@/common/model/report';
+import { BlockedInstance } from '@/common/model/blocked_instance';
+import { CalendarEvent } from '@/common/model/events';
 import ModerationService from '../service/moderation';
-import type { CreateReportData, CreateReportForEventData, CreateAdminReportData, ReportFilters, PaginatedReports, EscalationRecord, ModerationSettings } from '../service/moderation';
+import type { CreateReportData, CreateReportForEventData, CreateAdminReportData, ReportFilters, PaginatedReports, EscalationRecord, ModerationSettings, ReceiveRemoteReportData } from '../service/moderation';
 import CalendarInterface from '@/server/calendar/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import EmailInterface from '@/server/email/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
+import ActivityPubInterface from '@/server/activitypub/interface';
 
 /**
  * Moderation domain interface for cross-domain communication.
@@ -22,6 +25,7 @@ export default class ModerationInterface {
   private accountsInterface: AccountsInterface;
   private emailInterface: EmailInterface;
   private configurationInterface: ConfigurationInterface;
+  private activityPubInterface: ActivityPubInterface;
 
   constructor(
     eventBus: EventEmitter,
@@ -29,12 +33,14 @@ export default class ModerationInterface {
     accountsInterface: AccountsInterface,
     emailInterface: EmailInterface,
     configurationInterface: ConfigurationInterface,
+    activityPubInterface: ActivityPubInterface,
   ) {
     this.calendarInterface = calendarInterface;
     this.accountsInterface = accountsInterface;
     this.emailInterface = emailInterface;
     this.configurationInterface = configurationInterface;
-    this.moderationService = new ModerationService(eventBus, calendarInterface, configurationInterface);
+    this.activityPubInterface = activityPubInterface;
+    this.moderationService = new ModerationService(eventBus, calendarInterface, configurationInterface, activityPubInterface);
   }
 
   /**
@@ -81,6 +87,18 @@ export default class ModerationInterface {
    */
   async createAdminReport(data: CreateAdminReportData): Promise<Report> {
     return this.moderationService.createAdminReport(data);
+  }
+
+  /**
+   * Receives a remote report forwarded from another federated instance.
+   * Creates a Report with reporterType='federation'.
+   *
+   * @param data - Remote report data
+   * @returns The created Report domain model
+   * @throws EventNotFoundError if the event does not exist
+   */
+  async receiveRemoteReport(data: ReceiveRemoteReportData): Promise<Report> {
+    return this.moderationService.receiveRemoteReport(data);
   }
 
   /**
@@ -137,7 +155,7 @@ export default class ModerationInterface {
 
   /**
    * Retrieves a single report by ID for admin review.
-   * No calendar scoping - admins can view any report.
+   * Unlike getReportForCalendar, this has no calendar scoping.
    *
    * @param reportId - Report UUID
    * @returns The Report
@@ -158,7 +176,7 @@ export default class ModerationInterface {
   }
 
   /**
-   * Updates the owner notes on a report.
+   * Updates owner notes on a report.
    *
    * @param reportId - Report UUID
    * @param ownerNotes - Notes from the calendar owner
@@ -174,6 +192,7 @@ export default class ModerationInterface {
    *
    * @param token - Verification token string
    * @returns The verified Report
+   * @throws InvalidVerificationTokenError if token is invalid, expired, or already used
    */
   async verifyReport(token: string): Promise<Report> {
     return this.moderationService.verifyReport(token);
@@ -186,18 +205,22 @@ export default class ModerationInterface {
    * @param reviewerId - Account UUID of the reviewer
    * @param notes - Resolution notes
    * @returns The resolved Report
+   * @throws ReportNotFoundError if report not found
+   * @throws ReportAlreadyResolvedError if report is already resolved or dismissed
    */
   async resolveReport(reportId: string, reviewerId: string, notes: string): Promise<Report> {
     return this.moderationService.resolveReport(reportId, reviewerId, notes);
   }
 
   /**
-   * Dismisses a report. Dismissals by calendar owners auto-escalate to admin.
+   * Dismisses a report. Auto-escalates to admin.
    *
    * @param reportId - Report UUID
    * @param reviewerId - Account UUID of the calendar owner who dismissed
    * @param notes - Dismissal notes
    * @returns The escalated Report
+   * @throws ReportNotFoundError if report not found
+   * @throws ReportAlreadyResolvedError if report is already resolved or dismissed
    */
   async dismissReport(reportId: string, reviewerId: string, notes: string): Promise<Report> {
     return this.moderationService.dismissReport(reportId, reviewerId, notes);
@@ -209,13 +232,15 @@ export default class ModerationInterface {
    * @param reportId - Report UUID
    * @param reason - Reason for manual escalation
    * @returns The escalated Report
+   * @throws ReportNotFoundError if report not found
+   * @throws ReportAlreadyResolvedError if report is already resolved or dismissed
    */
   async escalateReport(reportId: string, reason: string): Promise<Report> {
     return this.moderationService.escalateReport(reportId, reason);
   }
 
   /**
-   * Resolves a report as an admin with reviewer_role 'admin'.
+   * Resolves a report as an admin, recording the admin as reviewer.
    *
    * @param reportId - Report UUID
    * @param adminId - Admin account UUID
@@ -229,7 +254,7 @@ export default class ModerationInterface {
   }
 
   /**
-   * Dismisses a report as an admin. This is a final decision -
+   * Dismisses a report as an admin. This is a final decision,
    * no further escalation is possible.
    *
    * @param reportId - Report UUID
@@ -309,6 +334,71 @@ export default class ModerationInterface {
   async updateModerationSettings(updates: Partial<ModerationSettings>): Promise<ModerationSettings> {
     return this.moderationService.updateModerationSettings(updates);
   }
+
+  /**
+   * Blocks an instance from federating with this instance.
+   *
+   * @param domain - Domain name to block
+   * @param reason - Reason for blocking the instance
+   * @param adminAccountId - Admin account UUID performing the block
+   * @returns The created BlockedInstance
+   * @throws InstanceAlreadyBlockedError if domain is already blocked
+   */
+  async blockInstance(domain: string, reason: string, adminAccountId: string): Promise<BlockedInstance> {
+    return this.moderationService.blockInstance(domain, reason, adminAccountId);
+  }
+
+  /**
+   * Unblocks an instance, allowing it to federate again.
+   * Silent if the domain was not blocked (idempotent operation).
+   *
+   * @param domain - Domain name to unblock
+   */
+  async unblockInstance(domain: string): Promise<void> {
+    return this.moderationService.unblockInstance(domain);
+  }
+
+  /**
+   * Lists all blocked instances, sorted by blocked_at DESC.
+   *
+   * @returns Array of BlockedInstance domain models
+   */
+  async listBlockedInstances(): Promise<BlockedInstance[]> {
+    return this.moderationService.listBlockedInstances();
+  }
+
+  /**
+   * Checks if an instance is blocked.
+   *
+   * @param domain - Domain name to check
+   * @returns True if the domain is blocked
+   */
+  async isInstanceBlocked(domain: string): Promise<boolean> {
+    return this.moderationService.isInstanceBlocked(domain);
+  }
+
+  /**
+   * Forwards a report to a remote calendar owner via ActivityPub.
+   *
+   * @param reportId - Report UUID to forward
+   * @param targetActorUri - Actor URI of the remote calendar owner
+   * @throws ReportNotFoundError if report not found
+   */
+  async forwardReport(reportId: string, targetActorUri: string): Promise<void> {
+    return this.moderationService.forwardReport(reportId, targetActorUri);
+  }
+
+  /**
+   * Retrieves an event by its ID via the calendar domain.
+   * Used for verifying event properties (e.g., whether it's remote) during report forwarding.
+   *
+   * @param eventId - Event UUID
+   * @returns The CalendarEvent
+   * @throws EventNotFoundError if event not found
+   */
+  async getEventById(eventId: string): Promise<CalendarEvent> {
+    return this.calendarInterface.getEventById(eventId);
+  }
 }
 
-export type { CreateReportData, CreateReportForEventData, CreateAdminReportData, ReportFilters, PaginatedReports, EscalationRecord, ModerationSettings };
+export type { CreateReportData, CreateReportForEventData, CreateAdminReportData, ReportFilters, PaginatedReports, EscalationRecord, ModerationSettings, ReceiveRemoteReportData };

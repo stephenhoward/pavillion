@@ -60,6 +60,8 @@ describe('Report Model', () => {
     report.verificationToken = null;
     report.verificationExpiration = null;
     report.escalationType = null;
+    report.forwardedFromInstance = null;
+    report.forwardedReportId = null;
     report.createdAt = sampleDate;
     report.updatedAt = sampleDate;
     return report;
@@ -113,6 +115,8 @@ describe('Report Model', () => {
     expect(report.verificationToken).toBe(null);
     expect(report.verificationExpiration).toBe(null);
     expect(report.escalationType).toBe(null);
+    expect(report.forwardedFromInstance).toBe(null);
+    expect(report.forwardedReportId).toBe(null);
     expect(report.createdAt).toBeInstanceOf(Date);
     expect(report.updatedAt).toBeInstanceOf(Date);
   });
@@ -165,6 +169,8 @@ describe('Report Model', () => {
         verificationToken: null,
         verificationExpiration: null,
         escalationType: null,
+        forwardedFromInstance: null,
+        forwardedReportId: null,
         createdAt: sampleDate.toISOString(),
         updatedAt: sampleDate.toISOString(),
       });
@@ -184,6 +190,8 @@ describe('Report Model', () => {
       report.verificationToken = 'token-abc';
       report.verificationExpiration = sampleDate2;
       report.escalationType = 'manual';
+      report.forwardedFromInstance = 'remote.example.com';
+      report.forwardedReportId = 'remote-report-123';
 
       const obj = report.toObject();
 
@@ -199,6 +207,8 @@ describe('Report Model', () => {
       expect(obj.verificationToken).toBe('token-abc');
       expect(obj.verificationExpiration).toBe(sampleDate2.toISOString());
       expect(obj.escalationType).toBe('manual');
+      expect(obj.forwardedFromInstance).toBe('remote.example.com');
+      expect(obj.forwardedReportId).toBe('remote-report-123');
     });
   });
 
@@ -242,6 +252,8 @@ describe('Report Model', () => {
       expect(obj).not.toHaveProperty('calendarId');
       expect(obj).not.toHaveProperty('reporterType');
       expect(obj).not.toHaveProperty('escalationType');
+      expect(obj).not.toHaveProperty('forwardedFromInstance');
+      expect(obj).not.toHaveProperty('forwardedReportId');
       expect(obj).not.toHaveProperty('updatedAt');
     });
 
@@ -271,6 +283,7 @@ describe('Report Model', () => {
         reviewerNotes: null,
         reviewerTimestamp: null,
         escalationType: null,
+        forwardedFromInstance: null,
         createdAt: sampleDate.toISOString(),
         updatedAt: sampleDate.toISOString(),
       });
@@ -297,7 +310,7 @@ describe('Report Model', () => {
       expect(keys).toEqual([
         'id', 'eventId', 'calendarId', 'category', 'description', 'status',
         'reporterType', 'ownerNotes', 'reviewerNotes', 'reviewerTimestamp',
-        'escalationType', 'createdAt', 'updatedAt',
+        'escalationType', 'forwardedFromInstance', 'createdAt', 'updatedAt',
       ]);
 
       // Explicitly verify no sensitive fields
@@ -310,6 +323,7 @@ describe('Report Model', () => {
       expect(obj).not.toHaveProperty('adminPriority');
       expect(obj).not.toHaveProperty('adminDeadline');
       expect(obj).not.toHaveProperty('reviewerId');
+      expect(obj).not.toHaveProperty('forwardedReportId');
     });
 
     it('should include reporterType for authenticated reports', () => {
@@ -361,6 +375,8 @@ describe('Report Model', () => {
         reviewerNotes: 'Confirmed issue',
         reviewerTimestamp: sampleDate2.toISOString(),
         escalationType: 'manual',
+        forwardedFromInstance: null,
+        forwardedReportId: null,
         createdAt: sampleDate.toISOString(),
         updatedAt: sampleDate2.toISOString(),
       });
@@ -387,6 +403,8 @@ describe('Report Model', () => {
       expect(obj.reviewerNotes).toBe(null);
       expect(obj.reviewerTimestamp).toBe(null);
       expect(obj.escalationType).toBe(null);
+      expect(obj.forwardedFromInstance).toBe(null);
+      expect(obj.forwardedReportId).toBe(null);
     });
 
     it('should serialize date fields as ISO strings', () => {
@@ -424,6 +442,8 @@ describe('Report Model', () => {
         verificationToken: null,
         verificationExpiration: null,
         escalationType: null,
+        forwardedFromInstance: null,
+        forwardedReportId: null,
         createdAt: sampleDate.toISOString(),
         updatedAt: sampleDate.toISOString(),
       };
@@ -440,6 +460,8 @@ describe('Report Model', () => {
       expect(report.reporterAccountId).toBe(null);
       expect(report.reporterType).toBe('anonymous');
       expect(report.status).toBe(ReportStatus.SUBMITTED);
+      expect(report.forwardedFromInstance).toBe(null);
+      expect(report.forwardedReportId).toBe(null);
       expect(report.createdAt).toEqual(sampleDate);
       expect(report.updatedAt).toEqual(sampleDate);
     });
@@ -466,6 +488,8 @@ describe('Report Model', () => {
         verificationToken: null,
         verificationExpiration: null,
         escalationType: 'automatic',
+        forwardedFromInstance: 'remote.example.com',
+        forwardedReportId: 'remote-123',
         createdAt: sampleDate.toISOString(),
         updatedAt: sampleDate2.toISOString(),
       };
@@ -477,6 +501,8 @@ describe('Report Model', () => {
       expect(report.escalationType).toBe('automatic');
       expect(report.reporterType).toBe('authenticated');
       expect(report.adminPriority).toBe('high');
+      expect(report.forwardedFromInstance).toBe('remote.example.com');
+      expect(report.forwardedReportId).toBe('remote-123');
     });
 
     it('should handle missing optional fields gracefully', () => {
@@ -507,6 +533,8 @@ describe('Report Model', () => {
       expect(report.verificationToken).toBe(null);
       expect(report.verificationExpiration).toBe(null);
       expect(report.escalationType).toBe(null);
+      expect(report.forwardedFromInstance).toBe(null);
+      expect(report.forwardedReportId).toBe(null);
     });
   });
 
@@ -558,6 +586,8 @@ describe('Report Model', () => {
       original.verificationToken = 'verify-token-abc';
       original.verificationExpiration = sampleDate2;
       original.escalationType = 'manual';
+      original.forwardedFromInstance = 'remote.example.com';
+      original.forwardedReportId = 'remote-report-456';
       original.createdAt = sampleDate;
       original.updatedAt = sampleDate2;
 
@@ -584,6 +614,8 @@ describe('Report Model', () => {
       expect(roundTrip.verificationToken).toBe(original.verificationToken);
       expect(roundTrip.verificationExpiration).toEqual(original.verificationExpiration);
       expect(roundTrip.escalationType).toBe(original.escalationType);
+      expect(roundTrip.forwardedFromInstance).toBe(original.forwardedFromInstance);
+      expect(roundTrip.forwardedReportId).toBe(original.forwardedReportId);
       expect(roundTrip.createdAt).toEqual(original.createdAt);
       expect(roundTrip.updatedAt).toEqual(original.updatedAt);
     });

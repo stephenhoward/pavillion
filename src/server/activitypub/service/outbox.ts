@@ -12,6 +12,7 @@ import AcceptActivity from "@/server/activitypub/model/action/accept";
 import AnnounceActivity from "@/server/activitypub/model/action/announce";
 import CreateActivity from "@/server/activitypub/model/action/create";
 import UndoActivity from "@/server/activitypub/model/action/undo";
+import FlagActivity from "@/server/activitypub/model/action/flag";
 import { ActivityPubObject } from "@/server/activitypub/model/base";
 import CalendarInterface from "@/server/calendar/interface";
 import { FEDERATION_HTTP_TIMEOUT_MS } from "@/server/activitypub/constants";
@@ -129,6 +130,17 @@ class ProcessOutboxService {
         }
         else {
           recipients = await this.getRecipients(calendar, activity.object);
+        }
+        break;
+      case 'Flag':
+        activity = FlagActivity.fromObject(message.message);
+        if (!activity) {
+          throw new Error('Failed to parse Flag activity');
+        }
+        // For Flag activities, use explicit 'to' field if present
+        if (activity.to && activity.to.length > 0) {
+          recipients = activity.to;
+          console.log(`[OUTBOX] Using explicit recipients from 'to' field for Flag activity: ${recipients.join(', ')}`);
         }
         break;
     }

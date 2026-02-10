@@ -1439,8 +1439,8 @@ describe('Admin Report API', () => {
         });
       }
 
-      // 4 routes: GET /admin/reports, POST /admin/reports, GET /admin/reports/:reportId, PUT /admin/reports/:reportId
-      expect(routeCount).toBe(4);
+      // 5 routes: GET /admin/reports, POST /admin/reports, GET /admin/reports/:reportId, PUT /admin/reports/:reportId, POST /admin/reports/:reportId/forward-to-admin
+      expect(routeCount).toBe(5);
     });
   });
 });

@@ -26,7 +26,7 @@ enum ReportStatus {
 /**
  * Type of reporter who filed the report.
  */
-type ReporterType = 'anonymous' | 'authenticated' | 'administrator';
+type ReporterType = 'anonymous' | 'authenticated' | 'administrator' | 'federation';
 
 /**
  * Priority level assigned by an administrator.
@@ -37,6 +37,11 @@ type AdminPriority = 'low' | 'medium' | 'high';
  * How a report was escalated.
  */
 type EscalationType = 'manual' | 'automatic';
+
+/**
+ * Acknowledgment status for forwarded reports.
+ */
+type ForwardStatus = 'pending' | 'acknowledged' | 'no_response';
 
 /**
  * Represents a report filed against an event.
@@ -63,6 +68,9 @@ class Report extends PrimaryModel {
   verificationToken: string | null = null;
   verificationExpiration: Date | null = null;
   escalationType: EscalationType | null = null;
+  forwardedFromInstance: string | null = null;
+  forwardedReportId: string | null = null;
+  forwardStatus: ForwardStatus | null = null;
   createdAt: Date = new Date();
   updatedAt: Date = new Date();
 
@@ -143,6 +151,8 @@ class Report extends PrimaryModel {
       reviewerNotes: this.reviewerNotes,
       reviewerTimestamp: this.reviewerTimestamp ? this.reviewerTimestamp.toISOString() : null,
       escalationType: this.escalationType,
+      forwardedFromInstance: this.forwardedFromInstance,
+      forwardStatus: this.forwardStatus,
       createdAt: this.createdAt.toISOString(),
       updatedAt: this.updatedAt.toISOString(),
     };
@@ -175,6 +185,9 @@ class Report extends PrimaryModel {
       reviewerNotes: this.reviewerNotes,
       reviewerTimestamp: this.reviewerTimestamp ? this.reviewerTimestamp.toISOString() : null,
       escalationType: this.escalationType,
+      forwardedFromInstance: this.forwardedFromInstance,
+      forwardedReportId: this.forwardedReportId,
+      forwardStatus: this.forwardStatus,
       createdAt: this.createdAt.toISOString(),
       updatedAt: this.updatedAt.toISOString(),
     };
@@ -209,6 +222,9 @@ class Report extends PrimaryModel {
       verificationToken: this.verificationToken,
       verificationExpiration: this.verificationExpiration ? this.verificationExpiration.toISOString() : null,
       escalationType: this.escalationType,
+      forwardedFromInstance: this.forwardedFromInstance,
+      forwardedReportId: this.forwardedReportId,
+      forwardStatus: this.forwardStatus,
       createdAt: this.createdAt.toISOString(),
       updatedAt: this.updatedAt.toISOString(),
     };
@@ -242,6 +258,9 @@ class Report extends PrimaryModel {
     report.verificationToken = obj.verificationToken ?? null;
     report.verificationExpiration = obj.verificationExpiration ? new Date(obj.verificationExpiration) : null;
     report.escalationType = obj.escalationType ?? null;
+    report.forwardedFromInstance = obj.forwardedFromInstance ?? null;
+    report.forwardedReportId = obj.forwardedReportId ?? null;
+    report.forwardStatus = obj.forwardStatus ?? null;
     report.createdAt = obj.createdAt ? new Date(obj.createdAt) : new Date();
     report.updatedAt = obj.updatedAt ? new Date(obj.updatedAt) : new Date();
     return report;
@@ -249,4 +268,4 @@ class Report extends PrimaryModel {
 }
 
 export { Report, ReportCategory, ReportStatus };
-export type { ReporterType, AdminPriority, EscalationType };
+export type { ReporterType, AdminPriority, EscalationType, ForwardStatus };

@@ -3,8 +3,10 @@ import express, { Request, Response, Application } from 'express';
 import { Account } from '@/common/model/account';
 import type { ReporterType } from '@/common/model/report';
 import { ReportValidationError } from '@/common/exceptions/report';
+import { EventNotFoundError } from '@/common/exceptions/calendar';
 import ExpressHelper from '@/server/common/helper/express';
 import ModerationInterface from '@/server/moderation/interface';
+import CalendarInterface from '@/server/calendar/interface';
 import {
   ReportNotFoundError,
   ReportAlreadyResolvedError,
@@ -32,9 +34,11 @@ interface AuthContext {
  */
 export default class OwnerReportRoutes {
   private moderationInterface: ModerationInterface;
+  private calendarInterface: CalendarInterface;
 
-  constructor(moderationInterface: ModerationInterface) {
+  constructor(moderationInterface: ModerationInterface, calendarInterface: CalendarInterface) {
     this.moderationInterface = moderationInterface;
+    this.calendarInterface = calendarInterface;
   }
 
   /**
@@ -74,6 +78,12 @@ export default class OwnerReportRoutes {
       '/calendars/:calendarId/reports/:reportId/dismiss',
       ...ExpressHelper.loggedInOnly,
       this.dismissReport.bind(this),
+    );
+
+    router.post(
+      '/calendars/:calendarId/reports/:reportId/forward',
+      ...ExpressHelper.loggedInOnly,
+      this.forwardReport.bind(this),
     );
 
     app.use(routePrefix, router);
@@ -388,6 +398,88 @@ export default class OwnerReportRoutes {
       logError(error, 'Failed to dismiss report');
       res.status(500).json({
         error: 'Failed to dismiss report',
+      });
+    }
+  }
+
+  /**
+   * Forwards a report to the remote calendar owner.
+   *
+   * POST /api/v1/calendars/:calendarId/reports/:reportId/forward
+   */
+  async forwardReport(req: Request, res: Response): Promise<void> {
+    const ctx = await this.requireAuth(req, res, true);
+    if (!ctx) return;
+
+    const { message } = req.body ?? {};
+
+    // Validate optional message field
+    if (message !== undefined && typeof message !== 'string') {
+      res.status(400).json({
+        error: 'Message must be a string',
+        errorName: 'ValidationError',
+      });
+      return;
+    }
+
+    try {
+      // Verify the report exists and belongs to this calendar
+      const report = await this.moderationInterface.getReportForCalendar(ctx.reportId!, ctx.calendarId);
+
+      // Get the event to check if it's remote/reposted
+      const event = await this.calendarInterface.getEventById(report.eventId);
+
+      // Validate that the event is a reposted (remote) event
+      if (event.calendarId !== null) {
+        res.status(400).json({
+          error: 'Reports can only be forwarded for reposted (remote) events',
+          errorName: 'ValidationError',
+        });
+        return;
+      }
+
+      // Validate that the event has a source URL
+      if (!event.eventSourceUrl) {
+        res.status(400).json({
+          error: 'Cannot forward report: event has no source URL',
+          errorName: 'ValidationError',
+        });
+        return;
+      }
+
+      // Extract the remote owner's actor URI from the event source URL
+      // Event source URL format: https://remote.instance/events/event-id
+      // We need to derive the calendar owner's actor URI
+      const url = new URL(event.eventSourceUrl);
+      const targetActorUri = `${url.protocol}//${url.host}/calendars/${url.pathname.split('/')[1] || 'calendar'}`;
+
+      // Call ModerationService.forwardReport()
+      await this.moderationInterface.forwardReport(ctx.reportId!, targetActorUri);
+
+      res.json({
+        message: 'Report forwarded successfully',
+      });
+    }
+    catch (error: any) {
+      if (error instanceof ReportNotFoundError) {
+        res.status(404).json({
+          error: 'Report not found',
+          errorName: 'ReportNotFoundError',
+        });
+        return;
+      }
+
+      if (error instanceof EventNotFoundError) {
+        res.status(404).json({
+          error: 'Event not found',
+          errorName: 'EventNotFoundError',
+        });
+        return;
+      }
+
+      logError(error, 'Failed to forward report');
+      res.status(500).json({
+        error: 'Failed to forward report',
       });
     }
   }
