@@ -7,6 +7,7 @@ import AccountsInterface from '@/server/accounts/interface';
 import EmailInterface from '@/server/email/interface';
 import ReportVerificationEmail from '../model/report_verification_email';
 import NewReportNotificationEmail from '../model/new_report_notification_email';
+import { logError } from '@/server/common/helper/error-logger';
 import type { ReportCreatedPayload, ReportVerifiedPayload } from './types';
 
 /**
@@ -159,7 +160,7 @@ export default class ModerationEventHandlers implements DomainEventHandlers {
     }
     catch (error) {
       // Log but don't fail - notification is best-effort
-      console.error('[MODERATION] Failed to send owner notification email:', error);
+      logError(error, '[MODERATION] Failed to send owner notification email');
     }
   }
 }
