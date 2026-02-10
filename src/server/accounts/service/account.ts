@@ -503,14 +503,14 @@ export default class AccountService {
     inviterId?: string,
     calendarId?: string,
   ): Promise<{
-    invitations: AccountInvitation[];
-    pagination: {
-      currentPage: number;
-      totalPages: number;
-      totalCount: number;
-      limit: number;
-    };
-  }> {
+      invitations: AccountInvitation[];
+      pagination: {
+        currentPage: number;
+        totalPages: number;
+        totalCount: number;
+        limit: number;
+      };
+    }> {
     // Enforce pagination limits
     const sanitizedPage = Math.max(1, page);
     const sanitizedLimit = Math.min(100, Math.max(1, limit));
@@ -567,14 +567,14 @@ export default class AccountService {
     limit: number = 50,
     status?: string,
   ): Promise<{
-    applications: AccountApplication[];
-    pagination: {
-      currentPage: number;
-      totalPages: number;
-      totalCount: number;
-      limit: number;
-    };
-  }> {
+      applications: AccountApplication[];
+      pagination: {
+        currentPage: number;
+        totalPages: number;
+        totalCount: number;
+        limit: number;
+      };
+    }> {
     // Enforce pagination limits
     const sanitizedPage = Math.max(1, page);
     const sanitizedLimit = Math.min(100, Math.max(1, limit));

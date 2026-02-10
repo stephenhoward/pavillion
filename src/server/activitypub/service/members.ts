@@ -112,7 +112,7 @@ class ActivityPubService {
       throw new InvalidRemoteCalendarIdentifierError('Invalid remote calendar identifier: ' + orgIdentifier);
     }
 
-    if (!this.calendarService.userCanModifyCalendar(account, calendar)) {
+    if (!(await this.calendarService.userCanModifyCalendar(account, calendar))) {
       throw new InsufficientCalendarPermissionsError('User does not have permission to modify calendar: ' + calendar.id);
     }
 
@@ -130,13 +130,42 @@ class ActivityPubService {
     const remoteProfile = await this.lookupRemoteCalendar(orgIdentifier);
     const remoteActorUrl = remoteProfile.actorUrl;
 
-    // Get or create CalendarActorEntity for this remote calendar
-    const remoteCalendar = await this.remoteCalendarService.findOrCreateByActorUri(remoteActorUrl);
+    // Get or create CalendarActorEntity
+    // For LOCAL calendars (those with calendarId), create with actor_type='local'
+    // For REMOTE calendars, use the remote calendar service
+    let remoteCalendar;
+    if (remoteProfile.calendarId) {
+      // This is a local calendar - find or create with actor_type='local'
+      const existing = await CalendarActorEntity.findOne({
+        where: {
+          actor_uri: remoteActorUrl,
+          actor_type: 'local',
+        },
+      });
 
-    // Update cached metadata from the profile we just fetched
-    await this.remoteCalendarService.updateMetadata(remoteActorUrl, {
-      displayName: remoteProfile.name,
-    });
+      if (existing) {
+        remoteCalendar = existing.toModel();
+      }
+      else {
+        const created = await CalendarActorEntity.create({
+          actor_type: 'local',
+          calendar_id: remoteProfile.calendarId,
+          actor_uri: remoteActorUrl,
+          remote_domain: null,
+          private_key: null,
+        });
+        remoteCalendar = created.toModel();
+      }
+    }
+    else {
+      // This is a remote calendar - use the remote calendar service
+      remoteCalendar = await this.remoteCalendarService.findOrCreateByActorUri(remoteActorUrl);
+
+      // Update cached metadata from the profile we just fetched
+      await this.remoteCalendarService.updateMetadata(remoteActorUrl, {
+        displayName: remoteProfile.name,
+      });
+    }
 
     // Check if we're already following this calendar (using the CalendarActorEntity UUID)
     let existingFollowEntity = await FollowingCalendarEntity.findOne({
@@ -177,7 +206,7 @@ class ActivityPubService {
   }
 
   async unfollowCalendar(account: Account, calendar: Calendar, orgIdentifier: string) {
-    if (!this.calendarService.userCanModifyCalendar(account, calendar)) {
+    if (!(await this.calendarService.userCanModifyCalendar(account, calendar))) {
       throw new InsufficientCalendarPermissionsError('User does not have permission to modify calendar: ' + calendar.id);
     }
 
@@ -189,16 +218,21 @@ class ActivityPubService {
       remoteActorUrl = remoteProfile.actorUrl;
     }
 
-    // Find the CalendarActorEntity by actor URI
-    const remoteCalendar = await this.remoteCalendarService.getByActorUri(remoteActorUrl);
-    if (!remoteCalendar) {
-      // No remote calendar found, nothing to unfollow
+    // Find the CalendarActorEntity by actor URI (works for both local and remote calendars)
+    const calendarActor = await CalendarActorEntity.findOne({
+      where: {
+        actor_uri: remoteActorUrl,
+      },
+    });
+
+    if (!calendarActor) {
+      // No calendar actor found, nothing to unfollow
       return;
     }
 
     let followings = await FollowingCalendarEntity.findAll({
       where: {
-        calendar_actor_id: remoteCalendar.id,
+        calendar_actor_id: calendarActor.id,
         calendar_id: calendar.id,
       },
     });
@@ -207,7 +241,7 @@ class ActivityPubService {
     for (let following of followings) {
       // Create Undo activity and explicitly set the recipient to the AP actor URL
       const undoActivity = new UndoActivity(actor, following.id);
-      undoActivity.to = [remoteCalendar.actorUri];
+      undoActivity.to = [calendarActor.actor_uri];
 
       this.addToOutbox(calendar, undoActivity);
       await following.destroy();
@@ -469,22 +503,38 @@ class ActivityPubService {
       console.log(`[MemberService]   - ${f.calendarActor?.actor_uri || f.calendar_actor_id}`);
     });
 
-    // Query remote events from calendars this calendar is following.
-    // Remote events have calendar_id = null and are tracked via EventObjectEntity.attributed_to
-    // We join with ap_event_object to find events attributed to followed calendars.
+    // Query events from calendars this calendar is following.
+    // This includes BOTH:
+    // - Remote events (calendar_id = null) tracked via EventObjectEntity.attributed_to
+    // - Local events (calendar_id = UUID) from followed local calendars
     const events = await EventEntity.findAll({
       where: {
-        // Remote events have null calendar_id
-        calendar_id: null,
-        // Match events where the attributed_to actor is a followed calendar
-        id: {
-          [Op.in]: EventEntity.sequelize!.literal(
-            `(SELECT eo.event_id FROM ap_event_object eo
-              JOIN calendar_actor ca ON eo.attributed_to = ca.actor_uri AND ca.actor_type = 'remote'
-              JOIN ap_following f ON f.calendar_actor_id = ca.id
-              WHERE f.calendar_id = '${calendar.id}')`,
-          ),
-        },
+        [Op.or]: [
+          // Remote events from followed remote calendars
+          {
+            calendar_id: null,
+            id: {
+              [Op.in]: EventEntity.sequelize!.literal(
+                `(SELECT eo.event_id FROM ap_event_object eo
+                  JOIN calendar_actor ca ON eo.attributed_to = ca.actor_uri AND ca.actor_type = 'remote'
+                  JOIN ap_following f ON f.calendar_actor_id = ca.id
+                  WHERE f.calendar_id = '${calendar.id}')`,
+              ),
+            },
+          },
+          // Local events from followed local calendars
+          {
+            calendar_id: {
+              [Op.in]: EventEntity.sequelize!.literal(
+                `(SELECT ca.calendar_id FROM ap_following f
+                  JOIN calendar_actor ca ON f.calendar_actor_id = ca.id
+                  WHERE f.calendar_id = '${calendar.id}'
+                    AND ca.actor_type = 'local'
+                    AND ca.calendar_id IS NOT NULL)`,
+              ),
+            },
+          },
+        ],
       },
       include: [
         {

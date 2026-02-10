@@ -24,8 +24,8 @@ describe('toModel', () => {
       type: 'Create',
       message: {
         actor: 'https://example.com/users/1',
-        object: { id: 'testObjectId' }
-      }
+        object: { id: 'testObjectId' },
+      },
     });
 
     assertType<CreateActivity>( testEntity.toModel() );
@@ -38,8 +38,8 @@ describe('toModel', () => {
       type: 'Update',
       message: {
         actor: 'https://example.com/users/1',
-        object: { id: 'testObjectId' }
-      }
+        object: { id: 'testObjectId' },
+      },
     });
 
     assertType<UpdateActivity>( testEntity.toModel() );
@@ -52,8 +52,8 @@ describe('toModel', () => {
       type: 'Delete',
       message: {
         actor: 'https://example.com/users/1',
-        object: 'https://example.com/events/1'
-      }
+        object: 'https://example.com/events/1',
+      },
     });
 
     assertType<DeleteActivity>( testEntity.toModel() );
@@ -66,8 +66,8 @@ describe('toModel', () => {
       type: 'Follow',
       message: {
         actor: 'https://example.com/users/1',
-        object: 'https://example.com/users/2'
-      }
+        object: 'https://example.com/users/2',
+      },
     });
 
     assertType<FollowActivity>( testEntity.toModel() );
@@ -80,8 +80,8 @@ describe('toModel', () => {
       type: 'Announce',
       message: {
         actor: 'https://example.com/users/1',
-        object: 'https://example.com/events/1'
-      }
+        object: 'https://example.com/events/1',
+      },
     });
 
     assertType<AnnounceActivity>( testEntity.toModel() );
@@ -94,8 +94,8 @@ describe('toModel', () => {
       type: 'Undo',
       message: {
         actor: 'https://example.com/users/1',
-        object: 'https://example.com/activities/follow/1'
-      }
+        object: 'https://example.com/activities/follow/1',
+      },
     });
 
     assertType<UndoActivity>( testEntity.toModel() );
