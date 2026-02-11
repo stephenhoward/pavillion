@@ -1,6 +1,8 @@
 // Calendar Administration Styles
 // Mixins and styles for calendar management screens
 
+@use '../mixins/tabs' as *;
+
 // Section pattern (used across all tabs)
 @mixin admin-section {
   margin-bottom: var(--pav-space-8);
@@ -154,52 +156,6 @@
   }
 }
 
-// Tab navigation
-@mixin admin-tabs {
-  display: flex;
-  gap: var(--pav-space-6);
-  border-bottom: 1px solid var(--pav-border-primary);
-  margin-bottom: var(--pav-space-6);
-}
-
-@mixin admin-tab-button {
-  position: relative;
-  padding: var(--pav-space-3) 0;
-  background: none;
-  border: none;
-  color: var(--pav-color-stone-500);
-  font-weight: 500;
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: color 0.2s;
-
-  &:hover:not([aria-selected="true"]) {
-    color: var(--pav-color-stone-900);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-200);
-    }
-  }
-
-  &[aria-selected="true"] {
-    color: var(--pav-color-orange-600);
-
-    &::after {
-      content: '';
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      height: 3px;
-      background: var(--pav-color-orange-500);
-    }
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-orange-400);
-    }
-  }
-}
-
 // Calendar Management Root Component
 .calendar-management-root {
   min-height: 100vh;
@@ -288,12 +244,12 @@
   }
 
   &__tabs {
-    @include admin-tabs;
+    @include tab-navigation;
     margin-bottom: 0;
   }
 
   &__tab {
-    @include admin-tab-button;
+    @include tab-button;
   }
 
   &__main {

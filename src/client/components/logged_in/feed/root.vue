@@ -111,13 +111,14 @@ onMounted(async () => {
       <div
         class="tab-navigation"
         role="tablist"
+        aria-label="Feed sections"
       >
         <button
           type="button"
           role="tab"
           :aria-selected="state.activeTab === 'events' ? 'true' : 'false'"
           aria-controls="events-panel"
-          :class="['tab', { active: state.activeTab === 'events' }]"
+          class="tab"
           @click="activateTab('events')"
         >
           {{ t('events_tab') }}
@@ -127,7 +128,7 @@ onMounted(async () => {
           role="tab"
           :aria-selected="state.activeTab === 'follows' ? 'true' : 'false'"
           aria-controls="follows-panel"
-          :class="['tab', { active: state.activeTab === 'follows' }]"
+          class="tab"
           @click="activateTab('follows')"
         >
           {{ t('follows_tab') }}
@@ -137,7 +138,7 @@ onMounted(async () => {
           role="tab"
           :aria-selected="state.activeTab === 'followers' ? 'true' : 'false'"
           aria-controls="followers-panel"
-          :class="['tab', { active: state.activeTab === 'followers' }]"
+          class="tab"
           @click="activateTab('followers')"
         >
           {{ t('followers_tab') }}
@@ -189,6 +190,8 @@ onMounted(async () => {
 </template>
 
 <style scoped lang="scss">
+@use '@/client/assets/style/mixins/tabs' as *;
+
 div.feed-root {
   display: flex;
   flex-direction: column;
@@ -205,7 +208,7 @@ div.feed-root {
     min-height: 250px;
 
     p {
-      font-size: 16px;
+      font-size: var(--pav-font-size-sm);
       color: var(--pav-color-text-secondary);
     }
   }
@@ -220,53 +223,24 @@ div.feed-root {
     min-height: 250px;
 
     p {
-      font-size: 16px;
+      font-size: var(--pav-font-size-sm);
       color: var(--pav-color-text-secondary);
     }
   }
 
   div.tab-navigation {
-    display: flex;
-    border-bottom: 2px solid var(--pav-color-border-primary);
+    @include tab-navigation;
     background: var(--pav-color-surface-secondary);
 
     button.tab {
-      flex: 0 0 auto;
-      padding: var(--pav-space-4) var(--pav-space-6);
-      border: none;
-      background: transparent;
-      color: var(--pav-color-text-secondary);
-      font-size: 16px;
-      font-weight: var(--pav-font-weight-regular);
-      cursor: pointer;
-      position: relative;
-      transition: color 0.2s ease;
-
-      &:hover {
-        color: var(--pav-color-text-primary);
-      }
-
-      &.active {
-        color: #f97316;
-        font-weight: var(--pav-font-weight-medium);
-
-        &::after {
-          content: '';
-          position: absolute;
-          bottom: -2px;
-          left: 0;
-          right: 0;
-          height: 3px;
-          background: #f97316;
-        }
-      }
+      @include tab-button;
     }
 
     @media (max-width: 768px) {
       button.tab {
         flex: 1 1 0;
         padding: var(--pav-space-3) var(--pav-space-4);
-        font-size: 14px;
+        font-size: var(--pav-font-size-xs);
       }
     }
   }

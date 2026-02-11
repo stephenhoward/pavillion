@@ -8,6 +8,11 @@
 
 import { Plus, X } from 'lucide-vue-next';
 import iso6391 from 'iso-639-1-dir';
+import { useTranslation } from 'i18next-vue';
+
+const { t } = useTranslation('system', {
+  keyPrefix: 'language_tab_selector',
+});
 
 const props = withDefaults(defineProps<{
   modelValue: string;        // Currently selected language code
@@ -39,18 +44,21 @@ const addLanguage = () => {
 
 <template>
   <div class="language-tab-selector">
-    <div class="tabs-container">
+    <nav
+      role="tablist"
+      aria-label="Language selection"
+      class="tabs-container"
+    >
       <button
         v-for="lang in languages"
         :key="lang"
         type="button"
-        :class="[
-          'language-tab',
-          { 'language-tab--active': lang === modelValue }
-        ]"
+        role="tab"
+        :aria-selected="lang === modelValue ? 'true' : 'false'"
+        :aria-controls="`content-${lang}`"
+        class="language-tab"
         @click="selectLanguage(lang)"
-        :aria-label="`Edit ${iso6391.getName(lang)} content`"
-        :aria-current="lang === modelValue ? 'true' : 'false'"
+        :aria-label="t('edit_content', { language: iso6391.getName(lang) })"
       >
         {{ iso6391.getName(lang) }}
       </button>
@@ -59,11 +67,11 @@ const addLanguage = () => {
         type="button"
         class="add-tab-btn"
         @click="addLanguage"
-        :aria-label="'Add language'"
+        :aria-label="t('add_language')"
       >
         <Plus :size="16" aria-hidden="true" />
       </button>
-    </div>
+    </nav>
   </div>
 </template>
 
@@ -91,52 +99,15 @@ const addLanguage = () => {
 }
 
 .language-tab {
-  position: relative;
-  padding: 0.75rem 0;
-  border: none;
-  background: none;
-  font-size: 0.9375rem;
-  font-weight: 400;
-  cursor: pointer;
-  transition: all 0.15s ease;
+  @include tab-button;
   white-space: nowrap;
-  color: var(--pav-color-stone-600);
 
-  // Inactive state - no underline
-  &:hover:not(.language-tab--active) {
-    color: var(--pav-color-stone-900);
-  }
+  // Override default inactive color for consistency with the unique design
+  &:not([aria-selected="true"]) {
+    color: var(--pav-color-stone-600);
 
-  // Active state - orange underline
-  &--active {
-    color: var(--pav-color-stone-900);
-    font-weight: 500;
-
-    &::after {
-      content: '';
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      height: 2px;
-      background: var(--pav-color-orange-500);
-    }
-  }
-
-  &:focus-visible {
-    outline: 2px solid var(--pav-color-orange-500);
-    outline-offset: 2px;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-400);
-
-    &:hover:not(.language-tab--active) {
-      color: var(--pav-color-stone-200);
-    }
-
-    &--active {
-      color: var(--pav-color-stone-200);
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-400);
     }
   }
 }

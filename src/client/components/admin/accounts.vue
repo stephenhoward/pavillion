@@ -144,6 +144,7 @@ const subTabs = computed(() => [
     <section
       id="accounts-panel"
       role="tabpanel"
+      tabindex="-1"
       aria-labelledby="accounts-tab"
       :aria-hidden="state.activeTab === 'accounts' ? 'false' : 'true'"
       :hidden="state.activeTab !== 'accounts'"
@@ -208,6 +209,7 @@ const subTabs = computed(() => [
     <section
       id="applications-panel"
       role="tabpanel"
+      tabindex="-1"
       aria-labelledby="applications-tab"
       :aria-hidden="state.activeTab === 'applications' ? 'false' : 'true'"
       :hidden="state.activeTab !== 'applications'"
@@ -220,6 +222,7 @@ const subTabs = computed(() => [
     <section
       id="invitations-panel"
       role="tabpanel"
+      tabindex="-1"
       aria-labelledby="invitations-tab"
       :aria-hidden="state.activeTab === 'invitations' ? 'false' : 'true'"
       :hidden="state.activeTab !== 'invitations'"
@@ -232,6 +235,7 @@ const subTabs = computed(() => [
 
 <style scoped lang="scss">
 @use '../../assets/style/tokens/breakpoints' as *;
+@use '../../assets/style/mixins/tabs' as *;
 
 .accounts-page {
   display: flex;
@@ -297,7 +301,6 @@ const subTabs = computed(() => [
   }
 
   .subtab-border {
-    border-bottom: 1px solid var(--pav-border-color-light);
     margin: 0 calc(-1 * var(--pav-space-4));
     padding: 0 var(--pav-space-4);
 
@@ -307,36 +310,13 @@ const subTabs = computed(() => [
     }
 
     .subtab-nav {
-      display: flex;
-      gap: var(--pav-space-4);
+      @include tab-navigation;
       overflow-x: auto;
 
-      @include pav-media(sm) {
-        gap: var(--pav-space-6);
-      }
-
       .subtab {
-        padding-bottom: var(--pav-space-3);
-        font-size: var(--pav-font-size-xs);
-        font-weight: var(--pav-font-weight-medium);
-        font-family: inherit;
-        border: none;
-        border-bottom: 2px solid transparent;
-        background: none;
-        color: var(--pav-color-text-muted);
-        cursor: pointer;
+        @include tab-button;
         white-space: nowrap;
         flex-shrink: 0;
-        transition: color 0.2s ease, border-color 0.2s ease;
-
-        &:hover {
-          color: var(--pav-color-text-secondary);
-        }
-
-        &--active {
-          border-bottom-color: var(--pav-color-orange-500);
-          color: var(--pav-color-orange-600);
-        }
 
         .subtab-badge {
           margin-left: var(--pav-space-2);
@@ -542,14 +522,6 @@ const subTabs = computed(() => [
     .subtab-border {
       .subtab-nav {
         .subtab {
-          &--active {
-            color: var(--pav-color-orange-400);
-          }
-
-          &:hover {
-            color: var(--pav-color-stone-300);
-          }
-
           .subtab-badge {
             background: var(--pav-color-stone-800);
             color: var(--pav-color-stone-400);

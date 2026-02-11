@@ -458,6 +458,7 @@
       }
     },
     "subscriptions_section_title": "Active Subscriptions",
+    "subscriptions_empty_state": "Subscriptions will appear here when users subscribe to your instance",
     "no_subscriptions": "No active subscriptions.",
     "subscription_user_column": "User",
     "subscription_provider_column": "Provider",
@@ -465,6 +466,7 @@
     "subscription_cycle_column": "Cycle",
     "subscription_status_column": "Status",
     "subscription_period_column": "Period End",
+    "subscription_period_end": "Period ends",
     "subscription_actions_column": "Actions",
     "billing_cycle_monthly": "Monthly",
     "billing_cycle_yearly": "Yearly",
@@ -479,6 +481,9 @@
     "previous_page": "Previous",
     "next_page": "Next",
     "page_indicator": "Page {{page}} of {{total}}",
+    "add_first_provider": "Add your first provider",
+    "add_first_provider_description": "Add a payment provider below to start accepting subscriptions.",
+    "subscription_pricing_title": "Subscription Pricing",
     "paypal_modal": {
       "title": "Configure PayPal",
       "description": "Enter your PayPal REST API credentials to enable PayPal subscriptions. You can obtain these from the PayPal Developer Dashboard.",

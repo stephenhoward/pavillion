@@ -230,3 +230,130 @@ const backToReports = () => {
     </template>
   </div>
 </template>
+
+<style scoped lang="scss">
+@use '@/client/assets/style/components/calendar-admin' as *;
+@use '@/client/assets/style/mixins/tabs' as *;
+
+.calendar-management-root {
+  min-height: 100vh;
+  background: var(--pav-color-stone-50);
+  width: 100%;
+  min-width: 0;
+
+  @media (prefers-color-scheme: dark) {
+    background: var(--pav-color-stone-950);
+  }
+
+  &__header {
+    background: var(--pav-surface-primary);
+    border-bottom: 1px solid var(--pav-border-primary);
+    overflow: hidden;
+
+    @media (prefers-color-scheme: dark) {
+      background: var(--pav-color-stone-900);
+      border-bottom-color: var(--pav-color-stone-800);
+    }
+  }
+
+  &__header-content {
+    max-width: 56rem; // max-w-4xl
+    margin: 0 auto;
+    padding: 0 var(--pav-space-4);
+    min-width: 0;
+  }
+
+  &__header-top {
+    padding: var(--pav-space-4) 0;
+
+    @media (min-width: 640px) {
+      padding: var(--pav-space-6) 0;
+    }
+  }
+
+  &__breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: var(--pav-space-2);
+    color: var(--pav-color-stone-500);
+    font-size: 0.875rem;
+    margin-bottom: var(--pav-space-2);
+    min-width: 0;
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-400);
+    }
+
+    @media (min-width: 640px) {
+      font-size: 0.875rem;
+    }
+  }
+
+  &__breadcrumb-item {
+    color: var(--pav-color-stone-500);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-400);
+    }
+  }
+
+  &__breadcrumb-separator {
+    color: var(--pav-color-stone-400);
+    flex-shrink: 0;
+  }
+
+  &__title {
+    font-size: 1.25rem;
+    font-weight: 300;
+    color: var(--pav-color-stone-900);
+    margin: 0;
+
+    @media (min-width: 640px) {
+      font-size: 1.5rem;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-100);
+    }
+  }
+
+  &__tabs {
+    @include tab-navigation;
+    margin-bottom: 0;
+  }
+
+  &__tab {
+    @include tab-button;
+  }
+
+  &__main {
+    max-width: 56rem; // max-w-4xl
+    margin: 0 auto;
+    padding: 0 var(--pav-space-4);
+    min-width: 0;
+  }
+
+  &__panel {
+    // Panel styles (individual tabs will style their content)
+  }
+
+  .loading-message,
+  .error-message {
+    padding: var(--pav-space-4);
+    text-align: center;
+    color: var(--pav-text-secondary);
+  }
+
+  .error-message {
+    color: var(--pav-color-red-600);
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-red-400);
+    }
+  }
+}
+</style>

@@ -1,0 +1,84 @@
+/**
+ * Tab Navigation Mixins
+ * Reusable mixins for consistent tab styling across the application
+ */
+
+/**
+ * Tab navigation container styles
+ * Creates the horizontal tab bar with bottom border
+ *
+ * Usage:
+ *   .my-tabs {
+ *     @include tab-navigation;
+ *   }
+ */
+@mixin tab-navigation {
+  display: flex;
+  gap: var(--pav-space-6);
+  border-bottom: 1px solid var(--pav-border-primary);
+  margin-bottom: var(--pav-space-6);
+}
+
+/**
+ * Individual tab button styles with active indicator
+ * Includes hover, focus, and active states with bottom indicator bar
+ *
+ * Usage:
+ *   .my-tab-button {
+ *     @include tab-button;
+ *   }
+ *
+ * Apply [aria-selected="true"] to indicate active tab
+ */
+@mixin tab-button {
+  position: relative;
+  padding: var(--pav-space-3) 0;
+  background: none;
+  border: none;
+  color: var(--pav-color-stone-500);
+  font-weight: var(--pav-font-weight-medium);
+  font-size: var(--pav-font-size-xs);
+  cursor: pointer;
+  transition: color 0.2s ease;
+
+  // Hover state (not active)
+  &:hover:not([aria-selected="true"]) {
+    color: var(--pav-color-stone-900);
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-200);
+    }
+  }
+
+  // Focus state for keyboard navigation
+  &:focus-visible {
+    outline: 2px solid var(--pav-color-orange-500);
+    outline-offset: var(--pav-space-0_5);
+    border-radius: var(--pav-border-radius-xs);
+  }
+
+  // Active tab state with bottom indicator
+  &[aria-selected="true"] {
+    color: var(--pav-color-orange-600);
+
+    // 3px bottom indicator bar
+    &::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: var(--pav-color-orange-500);
+      transition: background 0.2s ease;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-orange-400);
+
+      &::after {
+        background: var(--pav-color-orange-400);
+      }
+    }
+  }
+}

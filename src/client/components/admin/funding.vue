@@ -485,7 +485,6 @@ onMounted(async () => {
             :aria-selected="activeSubTab === 'subscriptions' ? 'true' : 'false'"
             aria-controls="subscriptions-panel"
             class="subtab"
-            :class="{ 'subtab--active': activeSubTab === 'subscriptions' }"
             @click="activeSubTab = 'subscriptions'"
           >
             {{ t("subscriptions_section_title") }}
@@ -503,7 +502,6 @@ onMounted(async () => {
             :aria-selected="activeSubTab === 'settings' ? 'true' : 'false'"
             aria-controls="settings-panel"
             class="subtab"
-            :class="{ 'subtab--active': activeSubTab === 'settings' }"
             @click="activeSubTab = 'settings'"
           >
             {{ t("settings_section_title") }}
@@ -515,6 +513,7 @@ onMounted(async () => {
       <section
         id="subscriptions-panel"
         role="tabpanel"
+        tabindex="-1"
         :aria-hidden="activeSubTab !== 'subscriptions' ? 'true' : 'false'"
         :hidden="activeSubTab !== 'subscriptions'"
         class="tab-panel"
@@ -531,7 +530,7 @@ onMounted(async () => {
             <path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
           </svg>
           <p class="empty-title">{{ t("no_subscriptions") }}</p>
-          <p class="empty-description">Subscriptions will appear here when users subscribe to your instance</p>
+          <p class="empty-description">{{ t("subscriptions_empty_state") }}</p>
         </div>
 
         <!-- Subscriptions list -->
@@ -598,7 +597,7 @@ onMounted(async () => {
               </div>
               <div class="subscription-card-footer">
                 <p class="subscription-card-period">
-                  Period ends {{ formatDate(sub.current_period_end) }}
+                  {{ t("subscription_period_end") }} {{ formatDate(sub.current_period_end) }}
                 </p>
                 <button
                   v-if="sub.status === 'active'"
@@ -641,6 +640,7 @@ onMounted(async () => {
       <section
         id="settings-panel"
         role="tabpanel"
+        tabindex="-1"
         :aria-hidden="activeSubTab !== 'settings' ? 'true' : 'false'"
         :hidden="activeSubTab !== 'settings'"
         class="tab-panel"
@@ -676,7 +676,7 @@ onMounted(async () => {
             </svg>
             <div>
               <p class="alert-title">{{ t("setup_provider_message") }}</p>
-              <p class="alert-description">Add a payment provider below to start accepting subscriptions.</p>
+              <p class="alert-description">{{ t("add_first_provider_description") }}</p>
             </div>
           </div>
 
@@ -731,7 +731,7 @@ onMounted(async () => {
                        stroke-linejoin="round">
                     <path d="M12 4v16m8-8H4" />
                   </svg>
-                  Add your first provider
+                  {{ t("add_first_provider") }}
                 </button>
               </div>
 
@@ -771,7 +771,7 @@ onMounted(async () => {
           <template v-if="enabled && hasConfiguredProvider">
             <section class="pricing-card">
               <div class="card-header card-header--border-only">
-                <h2 class="card-title">Subscription Pricing</h2>
+                <h2 class="card-title">{{ t("subscription_pricing_title") }}</h2>
               </div>
 
               <form class="pricing-form" @submit.prevent="updateSettings">
@@ -889,6 +889,7 @@ onMounted(async () => {
 
 <style scoped lang="scss">
 @use '../../assets/style/tokens/breakpoints' as *;
+@use '../../assets/style/mixins/tabs' as *;
 
 .funding-page {
   display: flex;
@@ -979,7 +980,6 @@ onMounted(async () => {
 
   /* Sub-Tab Navigation */
   .subtab-border {
-    border-bottom: 1px solid var(--pav-border-color-light);
     margin: 0 calc(-1 * var(--pav-space-4));
     padding: 0 var(--pav-space-4);
 
@@ -989,36 +989,13 @@ onMounted(async () => {
     }
 
     .subtab-nav {
-      display: flex;
-      gap: var(--pav-space-4);
+      @include tab-navigation;
       overflow-x: auto;
 
-      @include pav-media(sm) {
-        gap: var(--pav-space-6);
-      }
-
       .subtab {
-        padding-bottom: var(--pav-space-3);
-        font-size: var(--pav-font-size-xs);
-        font-weight: var(--pav-font-weight-medium);
-        font-family: inherit;
-        border: none;
-        border-bottom: 2px solid transparent;
-        background: none;
-        color: var(--pav-color-text-muted);
-        cursor: pointer;
+        @include tab-button;
         white-space: nowrap;
         flex-shrink: 0;
-        transition: color 0.2s ease, border-color 0.2s ease;
-
-        &:hover {
-          color: var(--pav-color-text-secondary);
-        }
-
-        &--active {
-          border-bottom-color: var(--pav-color-orange-500);
-          color: var(--pav-color-orange-600);
-        }
 
         .subtab-badge {
           margin-left: var(--pav-space-2);
@@ -1691,14 +1668,6 @@ onMounted(async () => {
     .subtab-border {
       .subtab-nav {
         .subtab {
-          &--active {
-            color: var(--pav-color-orange-400);
-          }
-
-          &:hover {
-            color: var(--pav-color-stone-300);
-          }
-
           .subtab-badge {
             background: var(--pav-color-stone-800);
             color: var(--pav-color-stone-400);
