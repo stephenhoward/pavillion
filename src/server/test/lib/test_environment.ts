@@ -19,8 +19,14 @@ import '@/server/calendar/entity/event_repost';
 import '@/server/calendar/entity/location';
 import '@/server/activitypub/entity/activitypub';
 import '@/server/activitypub/entity/event_object';
+import '@/server/activitypub/entity/calendar_actor';
 import '@/server/media/entity/media';
 import '@/server/configuration/entity/settings';
+import '@/server/moderation/entity/report';
+import '@/server/moderation/entity/report_escalation';
+import '@/server/moderation/entity/blocked_reporter';
+import '@/server/moderation/entity/blocked_instance';
+import '@/server/moderation/entity/event_reporter';
 
 export class TestEnvironment {
   app: express.Application;

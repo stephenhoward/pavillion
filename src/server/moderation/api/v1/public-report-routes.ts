@@ -4,7 +4,7 @@ import { ReportCategory } from '@/common/model/report';
 import { EventNotFoundError } from '@/common/exceptions/calendar';
 import { DuplicateReportError, ReportValidationError } from '@/common/exceptions/report';
 import ModerationInterface from '@/server/moderation/interface';
-import { EmailRateLimitError } from '@/server/moderation/exceptions';
+import { EmailRateLimitError, ReporterBlockedError } from '@/server/moderation/exceptions';
 import {
   reportSubmissionByIp,
   reportSubmissionByEmail,
@@ -95,6 +95,14 @@ export default class PublicReportRoutes {
 
       if (error instanceof EmailRateLimitError) {
         res.status(429).json({
+          error: error.message,
+          errorName: error.name,
+        });
+        return;
+      }
+
+      if (error instanceof ReporterBlockedError) {
+        res.status(403).json({
           error: error.message,
           errorName: error.name,
         });

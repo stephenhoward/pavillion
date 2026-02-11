@@ -175,11 +175,61 @@ class ServiceSettings {
    * Extension parameters (e.g. moderation.*) are not tracked in the
    * in-memory Config but are stored in the service_config table.
    *
+   * Validates moderation-specific parameters before persisting.
+   *
    * @param parameter - Extension setting key
    * @param value - The value to store
    * @returns Promise resolving to true if persisted successfully
    */
   private async setExtensionParameter(parameter: string, value: string|number): Promise<boolean> {
+    // Validate moderation.autoEscalationThreshold
+    if (parameter === 'moderation.autoEscalationThreshold') {
+      if (typeof value !== 'number') {
+        console.error('Invalid moderation.autoEscalationThreshold: must be a number, got', typeof value);
+        return false;
+      }
+      if (!Number.isInteger(value)) {
+        console.error('Invalid moderation.autoEscalationThreshold: must be an integer, got', value);
+        return false;
+      }
+      if (value < 0) {
+        console.error('Invalid moderation.autoEscalationThreshold: must be >= 0, got', value);
+        return false;
+      }
+    }
+
+    // Validate moderation.ipHashRetentionDays
+    if (parameter === 'moderation.ipHashRetentionDays') {
+      if (typeof value !== 'number') {
+        console.error('Invalid moderation.ipHashRetentionDays: must be a number, got', typeof value);
+        return false;
+      }
+      if (!Number.isInteger(value)) {
+        console.error('Invalid moderation.ipHashRetentionDays: must be an integer, got', value);
+        return false;
+      }
+      if (value <= 0) {
+        console.error('Invalid moderation.ipHashRetentionDays: must be > 0, got', value);
+        return false;
+      }
+    }
+
+    // Validate moderation.ipSubnetRetentionDays
+    if (parameter === 'moderation.ipSubnetRetentionDays') {
+      if (typeof value !== 'number') {
+        console.error('Invalid moderation.ipSubnetRetentionDays: must be a number, got', typeof value);
+        return false;
+      }
+      if (!Number.isInteger(value)) {
+        console.error('Invalid moderation.ipSubnetRetentionDays: must be an integer, got', value);
+        return false;
+      }
+      if (value <= 0) {
+        console.error('Invalid moderation.ipSubnetRetentionDays: must be > 0, got', value);
+        return false;
+      }
+    }
+
     const [entity, created] = await ServiceSettingEntity.findOrCreate({
       where: { parameter },
       defaults: { parameter, value: String(value) },

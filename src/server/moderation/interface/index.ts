@@ -3,8 +3,10 @@ import { EventEmitter } from 'events';
 import { Account } from '@/common/model/account';
 import { Report } from '@/common/model/report';
 import { BlockedInstance } from '@/common/model/blocked_instance';
+import { BlockedReporter } from '@/common/model/blocked_reporter';
 import { CalendarEvent } from '@/common/model/events';
 import ModerationService from '../service/moderation';
+import AnalyticsService from '../service/analytics';
 import type { CreateReportData, CreateReportForEventData, CreateAdminReportData, ReportFilters, PaginatedReports, EscalationRecord, ModerationSettings, ReceiveRemoteReportData } from '../service/moderation';
 import CalendarInterface from '@/server/calendar/interface';
 import AccountsInterface from '@/server/accounts/interface';
@@ -21,6 +23,7 @@ import ActivityPubInterface from '@/server/activitypub/interface';
  */
 export default class ModerationInterface {
   private moderationService: ModerationService;
+  private analyticsService: AnalyticsService;
   private calendarInterface: CalendarInterface;
   private accountsInterface: AccountsInterface;
   private emailInterface: EmailInterface;
@@ -41,6 +44,7 @@ export default class ModerationInterface {
     this.configurationInterface = configurationInterface;
     this.activityPubInterface = activityPubInterface;
     this.moderationService = new ModerationService(eventBus, calendarInterface, configurationInterface, activityPubInterface);
+    this.analyticsService = new AnalyticsService();
   }
 
   /**
@@ -51,6 +55,16 @@ export default class ModerationInterface {
    */
   getModerationService(): ModerationService {
     return this.moderationService;
+  }
+
+  /**
+   * Returns the AnalyticsService instance.
+   * Used by API handlers to retrieve analytics metrics.
+   *
+   * @returns The AnalyticsService instance
+   */
+  getAnalyticsService(): AnalyticsService {
+    return this.analyticsService;
   }
 
   /**
@@ -375,6 +389,47 @@ export default class ModerationInterface {
    */
   async isInstanceBlocked(domain: string): Promise<boolean> {
     return this.moderationService.isInstanceBlocked(domain);
+  }
+
+  /**
+   * Checks if an email hash is blocked from submitting reports.
+   *
+   * @param emailHash - The hashed email address to check
+   * @returns True if the email is blocked
+   */
+  async isEmailBlocked(emailHash: string): Promise<boolean> {
+    return this.moderationService.isEmailBlocked(emailHash);
+  }
+
+  /**
+   * Blocks a reporter email address from submitting reports.
+   *
+   * @param email - The reporter's email address (will be hashed)
+   * @param adminAccount - The admin account performing the block
+   * @param reason - Reason for blocking the reporter
+   * @returns The created BlockedReporter domain model
+   */
+  async blockReporter(email: string, adminAccount: Account, reason: string): Promise<BlockedReporter> {
+    return this.moderationService.blockReporter(email, adminAccount, reason);
+  }
+
+  /**
+   * Unblocks a reporter email address.
+   * Silent if the email was not blocked (idempotent operation).
+   *
+   * @param emailHash - The hashed email address to unblock
+   */
+  async unblockReporter(emailHash: string): Promise<void> {
+    return this.moderationService.unblockReporter(emailHash);
+  }
+
+  /**
+   * Lists all blocked reporters, sorted by creation date DESC.
+   *
+   * @returns Array of BlockedReporter domain models
+   */
+  async listBlockedReporters(): Promise<BlockedReporter[]> {
+    return this.moderationService.listBlockedReporters();
   }
 
   /**

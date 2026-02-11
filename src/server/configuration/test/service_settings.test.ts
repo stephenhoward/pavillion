@@ -217,5 +217,211 @@ describe('ServiceSettings', () => {
       expect(instanceBeforeUpdate.get('registrationMode')).toBe('apply');
       expect(instanceAfterUpdate.get('registrationMode')).toBe('apply');
     });
+
+    describe('moderation.autoEscalationThreshold', () => {
+      it('should persist moderation.autoEscalationThreshold with valid positive integer', async () => {
+        const mockSettingEntity = { parameter: 'moderation.autoEscalationThreshold', value: '5', save: sandbox.stub().resolves() };
+        sandbox.stub(ServiceSettingEntity, 'findOrCreate').resolves([
+          mockSettingEntity as unknown as ServiceSettingEntity,
+          true,
+        ]);
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.set('moderation.autoEscalationThreshold', 5);
+
+        expect(result).toBe(true);
+      });
+
+      it('should persist moderation.autoEscalationThreshold with zero to disable auto-escalation', async () => {
+        const mockSettingEntity = { parameter: 'moderation.autoEscalationThreshold', value: '0', save: sandbox.stub().resolves() };
+        sandbox.stub(ServiceSettingEntity, 'findOrCreate').resolves([
+          mockSettingEntity as unknown as ServiceSettingEntity,
+          true,
+        ]);
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.set('moderation.autoEscalationThreshold', 0);
+
+        expect(result).toBe(true);
+      });
+
+      it('should update existing moderation.autoEscalationThreshold', async () => {
+        const mockSettingEntity = { parameter: 'moderation.autoEscalationThreshold', value: '10', save: sandbox.stub().resolves() };
+        sandbox.stub(ServiceSettingEntity, 'findOrCreate').resolves([
+          mockSettingEntity as unknown as ServiceSettingEntity,
+          false,
+        ]);
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.set('moderation.autoEscalationThreshold', 5);
+
+        expect(result).toBe(true);
+        expect(mockSettingEntity.save.calledOnce).toBe(true);
+      });
+
+      it('should reject negative values for moderation.autoEscalationThreshold', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.set('moderation.autoEscalationThreshold', -5);
+
+        expect(result).toBe(false);
+      });
+
+      it('should reject non-integer values for moderation.autoEscalationThreshold', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.set('moderation.autoEscalationThreshold', 5.5);
+
+        expect(result).toBe(false);
+      });
+
+      it('should reject string values for moderation.autoEscalationThreshold', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.set('moderation.autoEscalationThreshold', 'invalid');
+
+        expect(result).toBe(false);
+      });
+    });
+
+    describe('moderation.ipHashRetentionDays', () => {
+      it('should persist moderation.ipHashRetentionDays with valid positive integer', async () => {
+        const mockSettingEntity = { parameter: 'moderation.ipHashRetentionDays', value: '30', save: sandbox.stub().resolves() };
+        sandbox.stub(ServiceSettingEntity, 'findOrCreate').resolves([
+          mockSettingEntity as unknown as ServiceSettingEntity,
+          true,
+        ]);
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.set('moderation.ipHashRetentionDays', 30);
+
+        expect(result).toBe(true);
+      });
+
+      it('should update existing moderation.ipHashRetentionDays', async () => {
+        const mockSettingEntity = { parameter: 'moderation.ipHashRetentionDays', value: '60', save: sandbox.stub().resolves() };
+        sandbox.stub(ServiceSettingEntity, 'findOrCreate').resolves([
+          mockSettingEntity as unknown as ServiceSettingEntity,
+          false,
+        ]);
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.set('moderation.ipHashRetentionDays', 30);
+
+        expect(result).toBe(true);
+        expect(mockSettingEntity.save.calledOnce).toBe(true);
+      });
+
+      it('should reject zero for moderation.ipHashRetentionDays', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.set('moderation.ipHashRetentionDays', 0);
+
+        expect(result).toBe(false);
+      });
+
+      it('should reject negative values for moderation.ipHashRetentionDays', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.set('moderation.ipHashRetentionDays', -5);
+
+        expect(result).toBe(false);
+      });
+
+      it('should reject non-integer values for moderation.ipHashRetentionDays', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.set('moderation.ipHashRetentionDays', 5.5);
+
+        expect(result).toBe(false);
+      });
+
+      it('should reject string values for moderation.ipHashRetentionDays', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.set('moderation.ipHashRetentionDays', 'invalid');
+
+        expect(result).toBe(false);
+      });
+    });
+
+    describe('moderation.ipSubnetRetentionDays', () => {
+      it('should persist moderation.ipSubnetRetentionDays with valid positive integer', async () => {
+        const mockSettingEntity = { parameter: 'moderation.ipSubnetRetentionDays', value: '90', save: sandbox.stub().resolves() };
+        sandbox.stub(ServiceSettingEntity, 'findOrCreate').resolves([
+          mockSettingEntity as unknown as ServiceSettingEntity,
+          true,
+        ]);
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.set('moderation.ipSubnetRetentionDays', 90);
+
+        expect(result).toBe(true);
+      });
+
+      it('should update existing moderation.ipSubnetRetentionDays', async () => {
+        const mockSettingEntity = { parameter: 'moderation.ipSubnetRetentionDays', value: '120', save: sandbox.stub().resolves() };
+        sandbox.stub(ServiceSettingEntity, 'findOrCreate').resolves([
+          mockSettingEntity as unknown as ServiceSettingEntity,
+          false,
+        ]);
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.set('moderation.ipSubnetRetentionDays', 90);
+
+        expect(result).toBe(true);
+        expect(mockSettingEntity.save.calledOnce).toBe(true);
+      });
+
+      it('should reject zero for moderation.ipSubnetRetentionDays', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.set('moderation.ipSubnetRetentionDays', 0);
+
+        expect(result).toBe(false);
+      });
+
+      it('should reject negative values for moderation.ipSubnetRetentionDays', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.set('moderation.ipSubnetRetentionDays', -5);
+
+        expect(result).toBe(false);
+      });
+
+      it('should reject non-integer values for moderation.ipSubnetRetentionDays', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.set('moderation.ipSubnetRetentionDays', 5.5);
+
+        expect(result).toBe(false);
+      });
+
+      it('should reject string values for moderation.ipSubnetRetentionDays', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.set('moderation.ipSubnetRetentionDays', 'invalid');
+
+        expect(result).toBe(false);
+      });
+    });
   });
 });

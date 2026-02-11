@@ -50,6 +50,15 @@ class ReportEntity extends Model {
   @Column({ type: DataType.STRING, allowNull: false })
   declare reporter_type: string;
 
+  @Column({ type: DataType.STRING, allowNull: true })
+  declare ip_hash: string | null;
+
+  @Column({ type: DataType.STRING, allowNull: true })
+  declare ip_subnet: string | null;
+
+  @Column({ type: DataType.STRING, allowNull: true })
+  declare ip_region: string | null;
+
   @Column({ type: DataType.UUID, allowNull: true })
   declare admin_id: string | null;
 
@@ -99,6 +108,15 @@ class ReportEntity extends Model {
   })
   declare forward_status: string | null;
 
+  @Column({ type: DataType.BOOLEAN, allowNull: false, defaultValue: false })
+  declare has_source_flooding_pattern: boolean;
+
+  @Column({ type: DataType.BOOLEAN, allowNull: false, defaultValue: false })
+  declare has_event_targeting_pattern: boolean;
+
+  @Column({ type: DataType.BOOLEAN, allowNull: false, defaultValue: false })
+  declare has_instance_pattern: boolean;
+
   @CreatedAt
   declare created_at: Date;
 
@@ -134,6 +152,9 @@ class ReportEntity extends Model {
     report.forwardedFromInstance = this.forwarded_from_instance;
     report.forwardedReportId = this.forwarded_report_id;
     report.forwardStatus = this.forward_status as ForwardStatus | null;
+    report.hasSourceFloodingPattern = this.has_source_flooding_pattern;
+    report.hasEventTargetingPattern = this.has_event_targeting_pattern;
+    report.hasInstancePattern = this.has_instance_pattern;
     report.createdAt = this.created_at;
     report.updatedAt = this.updated_at;
     return report;
@@ -170,6 +191,11 @@ class ReportEntity extends Model {
       forwarded_from_instance: report.forwardedFromInstance,
       forwarded_report_id: report.forwardedReportId,
       forward_status: report.forwardStatus,
+      has_source_flooding_pattern: report.hasSourceFloodingPattern,
+      has_event_targeting_pattern: report.hasEventTargetingPattern,
+      has_instance_pattern: report.hasInstancePattern,
+      created_at: report.createdAt,
+      updated_at: report.updatedAt,
     });
   }
 }

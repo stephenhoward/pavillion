@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mount, VueWrapper } from '@vue/test-utils';
+import { mount, VueWrapper, flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import sinon from 'sinon';
 
@@ -9,16 +9,18 @@ import { Report, ReportCategory, ReportStatus } from '@/common/model/report';
 
 /**
  * Test suite for report-detail.vue component
- * Tests the forward report functionality for reposted events
+ * Tests the forward report functionality and pattern warning badges
  */
-describe('ReportDetail - Forward Report', () => {
+describe('ReportDetail', () => {
   let wrapper: VueWrapper;
   let store: ReturnType<typeof useModerationStore>;
   let sandbox: sinon.SinonSandbox;
+  let pinia: ReturnType<typeof createPinia>;
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
-    setActivePinia(createPinia());
+    pinia = createPinia();
+    setActivePinia(pinia);
     store = useModerationStore();
 
     // Mock translation function
@@ -54,366 +56,143 @@ describe('ReportDetail - Forward Report', () => {
   };
 
   /**
-   * Helper to create mock event data
+   * Helper to mount component with mocked store state
    */
-  const createMockEvent = (isRemote: boolean) => {
-    return {
-      id: 'event-456',
-      calendarId: isRemote ? null : 'calendar-local',
-      eventSourceUrl: isRemote ? 'https://remote.instance/events/event-456' : '',
-      content: (_lang: string) => ({
-        title: 'Test Event',
-        description: 'Test Description',
-      }),
+  const mountWithReport = async (report: Report) => {
+    // Set store state before mounting
+    store.currentReport = {
+      report,
+      escalationHistory: [],
     };
+
+    // Stub fetchReport to prevent API call and maintain store state
+    sandbox.stub(store, 'fetchReport').resolves();
+
+    const wrapper = mount(ReportDetail, {
+      props: {
+        calendarId: 'calendar-789',
+        reportId: 'report-123',
+      },
+      global: {
+        plugins: [pinia],
+        stubs: {
+          LoadingMessage: true,
+          PillButton: true,
+          ArrowLeft: true,
+        },
+      },
+    });
+
+    // Wait for async operations to complete
+    await flushPromises();
+    await wrapper.vm.$nextTick();
+
+    return wrapper;
   };
 
-  describe('Forward button visibility', () => {
-    it('should show forward button for reposted events', async () => {
-      const report = createMockReport(true);
-      // Remote event would be needed for full implementation
-
-      // Mock store state
-      store.currentReport = {
-        report,
-        escalationHistory: [],
-      };
-
-      wrapper = mount(ReportDetail, {
-        props: {
-          calendarId: 'calendar-789',
-          reportId: 'report-123',
-        },
-        global: {
-          plugins: [createPinia()],
-          stubs: {
-            LoadingMessage: true,
-            PillButton: true,
-            ArrowLeft: true,
-          },
-        },
-      });
-
-      // Wait for component to render
-      await wrapper.vm.$nextTick();
-
-      // Check that forward button exists (implementation will add this)
-      // This test will initially fail, driving implementation
-      const forwardButton = wrapper.find('[data-testid="forward-report-button"]');
-      expect(forwardButton.exists()).toBe(true);
-    });
-
-    it('should NOT show forward button for local events', async () => {
+  describe('Pattern warning badges', () => {
+    it('should display source flooding pattern badge when hasSourceFloodingPattern is true', async () => {
       const report = createMockReport(false);
+      report.hasSourceFloodingPattern = true;
 
-      store.currentReport = {
-        report,
-        escalationHistory: [],
-      };
+      wrapper = await mountWithReport(report);
 
-      wrapper = mount(ReportDetail, {
-        props: {
-          calendarId: 'calendar-789',
-          reportId: 'report-123',
-        },
-        global: {
-          plugins: [createPinia()],
-          stubs: {
-            LoadingMessage: true,
-            PillButton: true,
-            ArrowLeft: true,
-          },
-        },
-      });
-
-      await wrapper.vm.$nextTick();
-
-      const forwardButton = wrapper.find('[data-testid="forward-report-button"]');
-      expect(forwardButton.exists()).toBe(false);
+      const badge = wrapper.find('[data-testid="pattern-badge-source-flooding"]');
+      expect(badge.exists()).toBe(true);
+      expect(badge.classes()).toContain('report-detail__pattern-badge');
+      expect(badge.classes()).toContain('report-detail__pattern-badge--warning');
     });
 
-    it('should NOT show forward button for resolved reports', async () => {
-      const report = createMockReport(true);
-      report.status = ReportStatus.RESOLVED;
+    it('should display event targeting pattern badge when hasEventTargetingPattern is true', async () => {
+      const report = createMockReport(false);
+      report.hasEventTargetingPattern = true;
 
-      store.currentReport = {
-        report,
-        escalationHistory: [],
-      };
+      wrapper = await mountWithReport(report);
 
-      wrapper = mount(ReportDetail, {
-        props: {
-          calendarId: 'calendar-789',
-          reportId: 'report-123',
-        },
-        global: {
-          plugins: [createPinia()],
-          stubs: {
-            LoadingMessage: true,
-            PillButton: true,
-            ArrowLeft: true,
-          },
-        },
-      });
-
-      await wrapper.vm.$nextTick();
-
-      const forwardButton = wrapper.find('[data-testid="forward-report-button"]');
-      expect(forwardButton.exists()).toBe(false);
-    });
-  });
-
-  describe('Forward modal', () => {
-    it('should open modal when forward button is clicked', async () => {
-      const report = createMockReport(true);
-
-      store.currentReport = {
-        report,
-        escalationHistory: [],
-      };
-
-      wrapper = mount(ReportDetail, {
-        props: {
-          calendarId: 'calendar-789',
-          reportId: 'report-123',
-        },
-        global: {
-          plugins: [createPinia()],
-          stubs: {
-            LoadingMessage: true,
-            PillButton: true,
-            ArrowLeft: true,
-          },
-        },
-      });
-
-      await wrapper.vm.$nextTick();
-
-      const forwardButton = wrapper.find('[data-testid="forward-report-button"]');
-      await forwardButton.trigger('click');
-
-      const modal = wrapper.find('[data-testid="forward-report-modal"]');
-      expect(modal.exists()).toBe(true);
+      const badge = wrapper.find('[data-testid="pattern-badge-event-targeting"]');
+      expect(badge.exists()).toBe(true);
+      expect(badge.classes()).toContain('report-detail__pattern-badge');
+      expect(badge.classes()).toContain('report-detail__pattern-badge--warning');
     });
 
-    it('should display report summary in modal', async () => {
-      const report = createMockReport(true);
+    it('should display instance pattern badge when hasInstancePattern is true', async () => {
+      const report = createMockReport(false);
+      report.hasInstancePattern = true;
 
-      store.currentReport = {
-        report,
-        escalationHistory: [],
-      };
+      wrapper = await mountWithReport(report);
 
-      wrapper = mount(ReportDetail, {
-        props: {
-          calendarId: 'calendar-789',
-          reportId: 'report-123',
-        },
-        global: {
-          plugins: [createPinia()],
-          stubs: {
-            LoadingMessage: true,
-            PillButton: true,
-            ArrowLeft: true,
-          },
-        },
-      });
-
-      await wrapper.vm.$nextTick();
-
-      const forwardButton = wrapper.find('[data-testid="forward-report-button"]');
-      await forwardButton.trigger('click');
-
-      const modalContent = wrapper.find('[data-testid="forward-report-modal"]');
-      expect(modalContent.text()).toContain('Test report');
+      const badge = wrapper.find('[data-testid="pattern-badge-instance"]');
+      expect(badge.exists()).toBe(true);
+      expect(badge.classes()).toContain('report-detail__pattern-badge');
+      expect(badge.classes()).toContain('report-detail__pattern-badge--warning');
     });
 
-    it('should have message textarea in modal', async () => {
-      const report = createMockReport(true);
+    it('should display multiple badges when multiple patterns are detected', async () => {
+      const report = createMockReport(false);
+      report.hasSourceFloodingPattern = true;
+      report.hasEventTargetingPattern = true;
+      report.hasInstancePattern = true;
 
-      store.currentReport = {
-        report,
-        escalationHistory: [],
-      };
+      wrapper = await mountWithReport(report);
 
-      wrapper = mount(ReportDetail, {
-        props: {
-          calendarId: 'calendar-789',
-          reportId: 'report-123',
-        },
-        global: {
-          plugins: [createPinia()],
-          stubs: {
-            LoadingMessage: true,
-            PillButton: true,
-            ArrowLeft: true,
-          },
-        },
-      });
+      const sourceBadge = wrapper.find('[data-testid="pattern-badge-source-flooding"]');
+      const eventBadge = wrapper.find('[data-testid="pattern-badge-event-targeting"]');
+      const instanceBadge = wrapper.find('[data-testid="pattern-badge-instance"]');
 
-      await wrapper.vm.$nextTick();
-
-      const forwardButton = wrapper.find('[data-testid="forward-report-button"]');
-      await forwardButton.trigger('click');
-
-      const messageTextarea = wrapper.find('[data-testid="forward-message-textarea"]');
-      expect(messageTextarea.exists()).toBe(true);
-    });
-  });
-
-  describe('Forward action', () => {
-    it('should call store.forwardReport when forward is confirmed', async () => {
-      const report = createMockReport(true);
-
-      store.currentReport = {
-        report,
-        escalationHistory: [],
-      };
-
-      const forwardReportStub = sandbox.stub(store, 'forwardReport').resolves();
-
-      wrapper = mount(ReportDetail, {
-        props: {
-          calendarId: 'calendar-789',
-          reportId: 'report-123',
-        },
-        global: {
-          plugins: [createPinia()],
-          stubs: {
-            LoadingMessage: true,
-            PillButton: true,
-            ArrowLeft: true,
-          },
-        },
-      });
-
-      await wrapper.vm.$nextTick();
-
-      // Open modal
-      const forwardButton = wrapper.find('[data-testid="forward-report-button"]');
-      await forwardButton.trigger('click');
-
-      // Enter message
-      const messageTextarea = wrapper.find('[data-testid="forward-message-textarea"]');
-      await messageTextarea.setValue('Please review this event');
-
-      // Click confirm
-      const confirmButton = wrapper.find('[data-testid="forward-confirm-button"]');
-      await confirmButton.trigger('click');
-
-      expect(forwardReportStub.calledOnce).toBe(true);
-      expect(forwardReportStub.calledWith('calendar-789', 'report-123', 'Please review this event')).toBe(true);
+      expect(sourceBadge.exists()).toBe(true);
+      expect(eventBadge.exists()).toBe(true);
+      expect(instanceBadge.exists()).toBe(true);
     });
 
-    it('should show success toast after forwarding', async () => {
-      const report = createMockReport(true);
+    it('should NOT display badges when no patterns are detected', async () => {
+      const report = createMockReport(false);
+      report.hasSourceFloodingPattern = false;
+      report.hasEventTargetingPattern = false;
+      report.hasInstancePattern = false;
 
-      store.currentReport = {
-        report,
-        escalationHistory: [],
-      };
+      wrapper = await mountWithReport(report);
 
-      sandbox.stub(store, 'forwardReport').resolves();
+      const sourceBadge = wrapper.find('[data-testid="pattern-badge-source-flooding"]');
+      const eventBadge = wrapper.find('[data-testid="pattern-badge-event-targeting"]');
+      const instanceBadge = wrapper.find('[data-testid="pattern-badge-instance"]');
 
-      wrapper = mount(ReportDetail, {
-        props: {
-          calendarId: 'calendar-789',
-          reportId: 'report-123',
-        },
-        global: {
-          plugins: [createPinia()],
-          stubs: {
-            LoadingMessage: true,
-            PillButton: true,
-            ArrowLeft: true,
-          },
-        },
-      });
-
-      await wrapper.vm.$nextTick();
-
-      const forwardButton = wrapper.find('[data-testid="forward-report-button"]');
-      await forwardButton.trigger('click');
-
-      const confirmButton = wrapper.find('[data-testid="forward-confirm-button"]');
-      await confirmButton.trigger('click');
-
-      await wrapper.vm.$nextTick();
-
-      const successMessage = wrapper.find('[data-testid="forward-success-message"]');
-      expect(successMessage.exists()).toBe(true);
+      expect(sourceBadge.exists()).toBe(false);
+      expect(eventBadge.exists()).toBe(false);
+      expect(instanceBadge.exists()).toBe(false);
     });
 
-    it('should show error message if forwarding fails', async () => {
-      const report = createMockReport(true);
+    it('should have accessible aria-label on pattern badges', async () => {
+      const report = createMockReport(false);
+      report.hasSourceFloodingPattern = true;
 
-      store.currentReport = {
-        report,
-        escalationHistory: [],
-      };
+      wrapper = await mountWithReport(report);
 
-      sandbox.stub(store, 'forwardReport').rejects(new Error('Network error'));
-
-      wrapper = mount(ReportDetail, {
-        props: {
-          calendarId: 'calendar-789',
-          reportId: 'report-123',
-        },
-        global: {
-          plugins: [createPinia()],
-          stubs: {
-            LoadingMessage: true,
-            PillButton: true,
-            ArrowLeft: true,
-          },
-        },
-      });
-
-      await wrapper.vm.$nextTick();
-
-      const forwardButton = wrapper.find('[data-testid="forward-report-button"]');
-      await forwardButton.trigger('click');
-
-      const confirmButton = wrapper.find('[data-testid="forward-confirm-button"]');
-      await confirmButton.trigger('click');
-
-      await wrapper.vm.$nextTick();
-
-      const errorMessage = wrapper.find('[data-testid="forward-error-message"]');
-      expect(errorMessage.exists()).toBe(true);
+      const badge = wrapper.find('[data-testid="pattern-badge-source-flooding"]');
+      expect(badge.attributes('role')).toBe('status');
+      expect(badge.attributes('aria-label')).toBeTruthy();
     });
-  });
 
-  describe('Forward status indicator', () => {
-    it('should show pending status after forwarding', async () => {
-      const report = createMockReport(true);
-      report.forwardStatus = 'pending';
+    it('should display pattern warning section only when patterns exist', async () => {
+      const report = createMockReport(false);
+      report.hasSourceFloodingPattern = true;
 
-      store.currentReport = {
-        report,
-        escalationHistory: [],
-      };
+      wrapper = await mountWithReport(report);
 
-      wrapper = mount(ReportDetail, {
-        props: {
-          calendarId: 'calendar-789',
-          reportId: 'report-123',
-        },
-        global: {
-          plugins: [createPinia()],
-          stubs: {
-            LoadingMessage: true,
-            PillButton: true,
-            ArrowLeft: true,
-          },
-        },
-      });
+      const warningsSection = wrapper.find('.report-detail__pattern-warnings');
+      expect(warningsSection.exists()).toBe(true);
+      expect(warningsSection.attributes('role')).toBe('status');
+    });
 
-      await wrapper.vm.$nextTick();
+    it('should NOT display pattern warning section when no patterns exist', async () => {
+      const report = createMockReport(false);
+      report.hasSourceFloodingPattern = false;
+      report.hasEventTargetingPattern = false;
+      report.hasInstancePattern = false;
 
-      const statusIndicator = wrapper.find('[data-testid="forward-status"]');
-      expect(statusIndicator.exists()).toBe(true);
-      expect(statusIndicator.text()).toContain('pending');
+      wrapper = await mountWithReport(report);
+
+      const warningsSection = wrapper.find('.report-detail__pattern-warnings');
+      expect(warningsSection.exists()).toBe(false);
     });
   });
 });

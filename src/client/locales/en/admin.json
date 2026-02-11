@@ -50,7 +50,38 @@
       "success": "Settings saved successfully",
       "error": {
         "must_be_positive": "Value must be greater than 0",
-        "save_failed": "Failed to save settings"
+        "save_failed": "Failed to save settings",
+        "must_be_non_negative": "Value must be 0 or greater"
+      },
+      "auto_escalation_threshold": "Auto-Escalation Report Threshold",
+      "auto_escalation_threshold_help": "Number of reports before automatic escalation to admin (0 to disable, default: 5)",
+      "ip_hash_retention_days": "IP Hash Retention (days)",
+      "ip_hash_retention_help": "Days to retain hashed IP addresses for pattern detection (default: 30)",
+      "ip_subnet_retention_days": "IP Subnet Retention (days)",
+      "ip_subnet_retention_help": "Days to retain IP subnet data for abuse detection (default: 90)"
+    },
+    "analytics": {
+      "loading": "Loading analytics...",
+      "error": "Failed to load analytics data",
+      "overview": "Overview Metrics",
+      "total_reports": "Total Reports",
+      "resolution_rate": "Resolution Rate",
+      "avg_resolution_time": "Avg. Resolution Time",
+      "reports_by_status": "Reports by Status",
+      "reporter_volume": "Reports by Reporter Type",
+      "trends": "Trends & Patterns",
+      "charts_coming_soon": "Charts and visualizations coming soon",
+      "status": {
+        "submitted": "Submitted",
+        "under_review": "Under Review",
+        "escalated": "Escalated",
+        "resolved": "Resolved",
+        "dismissed": "Dismissed"
+      },
+      "reporter_type": {
+        "calendar_owner": "Calendar Owners",
+        "calendar_editor": "Calendar Editors",
+        "administrator": "Administrators"
       }
     },
     "filters": {
@@ -229,7 +260,7 @@
     "noAccounts": "No accounts yet",
     "noAccountsDescription": "There are no accounts on this server yet.",
     "inviteNewAccount": "Invite New Account",
-    "no_role": "\u2014"
+    "no_role": "—"
   },
   "applications": {
     "title": "Account Applications",
@@ -284,7 +315,7 @@
     "status_expired": "Expired",
     "status_revoked": "Revoked",
     "expired_date": "Expired {{date}}",
-    "invited_by_expires": "Invited by {{username}} \u00b7 Expires {{date}}",
+    "invited_by_expires": "Invited by {{username}} · Expires {{date}}",
     "no_invitations": "No active invitations",
     "no_invitations_description": "No invitations have been sent yet",
     "send_invitation_link": "Send an invitation",

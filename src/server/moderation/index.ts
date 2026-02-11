@@ -9,10 +9,13 @@ import OwnerReportRoutes from './api/v1/owner-report-routes';
 import AdminReportRoutes from './api/v1/admin-report-routes';
 import AdminSettingsRoutes from './api/v1/admin-settings-routes';
 import AdminInstanceRoutes from './api/v1/admin-instance-routes';
+import BlockedReportersRoutes from './api/v1/blocked-reporters-routes';
+import AnalyticsRoutes from './api/v1/analytics-routes';
 import CalendarInterface from '@/server/calendar/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import EmailInterface from '@/server/email/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
+import ActivityPubInterface from '@/server/activitypub/interface';
 import { EventEmitter } from 'events';
 
 /**
@@ -44,6 +47,16 @@ export default class ModerationDomain {
     this.emailInterface = emailInterface;
     this.configurationInterface = configurationInterface;
     this.interface = new ModerationInterface(eventBus, calendarInterface, accountsInterface, emailInterface, configurationInterface);
+  }
+
+  /**
+   * Sets the ActivityPub interface after construction.
+   * Necessary due to circular dependency between Moderation and ActivityPub domains.
+   *
+   * @param activityPubInterface - The ActivityPub domain interface
+   */
+  public setActivityPubInterface(activityPubInterface: ActivityPubInterface): void {
+    this.interface.setActivityPubInterface(activityPubInterface);
   }
 
   public initialize(app: Application): void {
@@ -84,6 +97,12 @@ export default class ModerationDomain {
 
     const adminInstanceRoutes = new AdminInstanceRoutes(this.interface);
     adminInstanceRoutes.installHandlers(app, '/api/v1');
+
+    const blockedReportersRoutes = new BlockedReportersRoutes(this.interface);
+    blockedReportersRoutes.installHandlers(app, '/api/v1');
+
+    const analyticsRoutes = new AnalyticsRoutes(this.interface);
+    analyticsRoutes.installHandlers(app, '/api/v1');
   }
 
   /**

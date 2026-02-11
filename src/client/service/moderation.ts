@@ -54,6 +54,9 @@ export interface ModerationSettings {
   autoEscalationHours: number;
   adminReportEscalationHours: number;
   reminderBeforeEscalationHours: number;
+  autoEscalationThreshold: number;
+  ipHashRetentionDays: number;
+  ipSubnetRetentionDays: number;
 }
 
 /**

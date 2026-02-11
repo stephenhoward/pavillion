@@ -9,6 +9,9 @@ const VALID_SETTING_KEYS = [
   'autoEscalationHours',
   'adminReportEscalationHours',
   'reminderBeforeEscalationHours',
+  'autoEscalationThreshold',
+  'ipHashRetentionDays',
+  'ipSubnetRetentionDays',
 ] as const;
 
 /**
@@ -82,11 +85,24 @@ export default class AdminSettingsRoutes {
     for (const key of VALID_SETTING_KEYS) {
       if (key in body) {
         const value = body[key];
-        if (typeof value !== 'number' || !isFinite(value) || value <= 0) {
-          errors.push(`${key} must be a positive number`);
+
+        // For autoEscalationThreshold, allow 0 to disable auto-escalation
+        if (key === 'autoEscalationThreshold') {
+          if (typeof value !== 'number' || !isFinite(value) || value < 0) {
+            errors.push(`${key} must be a non-negative number`);
+          }
+          else {
+            updates[key] = value;
+          }
         }
         else {
-          updates[key] = value;
+          // For other settings, require positive values
+          if (typeof value !== 'number' || !isFinite(value) || value <= 0) {
+            errors.push(`${key} must be a positive number`);
+          }
+          else {
+            updates[key] = value;
+          }
         }
       }
     }

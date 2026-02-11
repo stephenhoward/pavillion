@@ -15,7 +15,6 @@ import { ReportStatus } from '@/common/model/report';
 import { useReportFormatting } from '@/client/composables/useReportFormatting';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
 import PillButton from '@/client/components/common/PillButton.vue';
-import Modal from '@/client/components/common/modal.vue';
 
 const props = defineProps<{
   calendarId: string;
@@ -54,11 +53,6 @@ const state = reactive({
   actionSuccess: '',
   actionError: '',
   notesSuccess: '',
-  showForwardModal: false,
-  forwardMessage: '',
-  isForwarding: false,
-  forwardSuccess: '',
-  forwardError: '',
 });
 
 /**
@@ -79,6 +73,17 @@ const canAct = computed(() => {
   return report.value.status !== ReportStatus.RESOLVED
     && report.value.status !== ReportStatus.DISMISSED;
 });
+
+/**
+ * Whether the report has any detected abuse patterns.
+ */
+const hasAbusePatterns = computed(() => {
+  if (!report.value) return false;
+  return report.value.hasSourceFloodingPattern
+    || report.value.hasEventTargetingPattern
+    || report.value.hasInstancePattern;
+});
+
 
 /**
  * Navigates back to the reports dashboard.
@@ -257,6 +262,42 @@ onMounted(async () => {
         </span>
       </header>
 
+      <!-- Pattern Warning Badges -->
+      <div v-if="hasAbusePatterns" class="report-detail__pattern-warnings" role="status">
+        <div
+          v-if="report.hasSourceFloodingPattern"
+          class="report-detail__pattern-badge report-detail__pattern-badge--warning"
+          data-testid="pattern-badge-source-flooding"
+          role="status"
+          :aria-label="t('patterns.source_flooding_aria')"
+        >
+          <span class="report-detail__pattern-badge-title">{{ t('patterns.source_flooding') }}</span>
+          <span class="report-detail__pattern-badge-description">{{ t('patterns.source_flooding_description') }}</span>
+        </div>
+
+        <div
+          v-if="report.hasEventTargetingPattern"
+          class="report-detail__pattern-badge report-detail__pattern-badge--warning"
+          data-testid="pattern-badge-event-targeting"
+          role="status"
+          :aria-label="t('patterns.event_targeting_aria')"
+        >
+          <span class="report-detail__pattern-badge-title">{{ t('patterns.event_targeting') }}</span>
+          <span class="report-detail__pattern-badge-description">{{ t('patterns.event_targeting_description') }}</span>
+        </div>
+
+        <div
+          v-if="report.hasInstancePattern"
+          class="report-detail__pattern-badge report-detail__pattern-badge--warning"
+          data-testid="pattern-badge-instance"
+          role="status"
+          :aria-label="t('patterns.instance_pattern_aria')"
+        >
+          <span class="report-detail__pattern-badge-title">{{ t('patterns.instance_pattern') }}</span>
+          <span class="report-detail__pattern-badge-description">{{ t('patterns.instance_pattern_description') }}</span>
+        </div>
+      </div>
+
       <!-- Success Messages -->
       <div v-if="state.actionSuccess" class="report-detail__alert report-detail__alert--success" role="status">
         {{ state.actionSuccess }}
@@ -409,39 +450,6 @@ onMounted(async () => {
             </PillButton>
           </div>
         </div>
-        <!-- Forward Report Section -->
-        <section v-if="canForward && report.forwardStatus === null" class="report-detail__section" :aria-label="t('forward.button')">
-          <h3 class="report-detail__section-title">{{ t('forward.button') }}</h3>
-          <p class="report-detail__forward-description">
-            {{ t('forward.modal_description') }}
-          </p>
-          <div class="report-detail__forward-actions">
-            <PillButton
-              variant="secondary"
-              data-testid="forward-report-button"
-              @click="showForward"
-            >
-              {{ t('forward.button') }}
-            </PillButton>
-          </div>
-        </section>
-
-        <!-- Forward Status Display -->
-        <section v-if="report && report.forwardStatus" class="report-detail__section" data-testid="forward-status">
-          <h3 class="report-detail__section-title">{{ t('detail.forward_status') }}</h3>
-          <div class="report-detail__forward-status">
-            <span
-              class="report-detail__forward-status-badge"
-              :class="`report-detail__forward-status-badge--${report.forwardStatus}`"
-            >
-              {{ t(`forward.status_${report.forwardStatus}`) }}
-            </span>
-            <p v-if="remoteInstance" class="report-detail__forward-instance">
-              {{ t('forward.remote_instance') }}: {{ remoteInstance }}
-            </p>
-          </div>
-        </section>
-
       </section>
 
       <!-- Escalation History -->
@@ -487,87 +495,6 @@ onMounted(async () => {
         </ol>
       </section>
     </template>
-
-    <!-- Forward Report Modal -->
-    <Modal
-      v-if="state.showForwardModal"
-      :title="t('forward.modal_title')"
-      data-testid="forward-report-modal"
-      @close="closeForward"
-    >
-      <div class="forward-modal__content">
-        <p class="forward-modal__description">
-          {{ t('forward.modal_description') }}
-        </p>
-
-        <!-- Report Summary -->
-        <div class="forward-modal__summary">
-          <div class="forward-modal__field">
-            <span class="forward-modal__label">{{ t('forward.report_category') }}:</span>
-            <span>{{ categoryLabel(report.category) }}</span>
-          </div>
-          <div v-if="remoteInstance" class="forward-modal__field">
-            <span class="forward-modal__label">{{ t('forward.remote_instance') }}:</span>
-            <span>{{ remoteInstance }}</span>
-          </div>
-          <div v-if="report.description" class="forward-modal__field forward-modal__field--full">
-            <span class="forward-modal__label">{{ t('forward.report_description') }}:</span>
-            <p class="forward-modal__description-text">{{ report.description }}</p>
-          </div>
-        </div>
-
-        <!-- Success/Error Messages -->
-        <div v-if="state.forwardSuccess"
-             class="forward-modal__alert forward-modal__alert--success"
-             role="status"
-             data-testid="forward-success-message">
-          {{ state.forwardSuccess }}
-        </div>
-        <div v-if="state.forwardError"
-             class="forward-modal__alert forward-modal__alert--error"
-             role="alert"
-             data-testid="forward-error-message">
-          {{ state.forwardError }}
-        </div>
-
-        <!-- Message Textarea -->
-        <div class="forward-modal__message">
-          <label :for="`forward-message-${report.id}`" class="forward-modal__label">
-            {{ t('forward.message_label') }}
-          </label>
-          <textarea
-            :id="`forward-message-${report.id}`"
-            v-model="state.forwardMessage"
-            class="forward-modal__textarea"
-            :placeholder="t('forward.message_placeholder')"
-            rows="4"
-            data-testid="forward-message-textarea"
-          />
-        </div>
-
-        <!-- Action Buttons -->
-        <div class="forward-modal__actions">
-          <PillButton
-            variant="ghost"
-            size="sm"
-            :disabled="state.isForwarding"
-            @click="closeForward"
-          >
-            {{ t('forward.cancel') }}
-          </PillButton>
-          <PillButton
-            variant="primary"
-            size="sm"
-            :disabled="state.isForwarding"
-            data-testid="forward-confirm-button"
-            @click="forwardToRemote"
-          >
-            {{ state.isForwarding ? t('forward.forwarding') : t('forward.forward_button') }}
-          </PillButton>
-        </div>
-      </div>
-    </Modal>
-
   </div>
 </template>
 
@@ -667,6 +594,46 @@ onMounted(async () => {
       }
     }
   }
+  &__pattern-warnings {
+    display: flex;
+    flex-direction: column;
+    gap: var(--pav-space-3);
+  }
+
+  &__pattern-badge {
+    display: flex;
+    flex-direction: column;
+    gap: var(--pav-space-1);
+    padding: var(--pav-space-3);
+    border-radius: 0.75rem;
+    border-width: 2px;
+    border-style: solid;
+
+    &--warning {
+      background-color: var(--pav-color-amber-50);
+      border-color: var(--pav-color-amber-400);
+      color: var(--pav-color-amber-800);
+
+      @media (prefers-color-scheme: dark) {
+        background-color: oklch(0.769 0.188 70.08 / 0.15);
+        border-color: oklch(0.769 0.188 70.08 / 0.5);
+        color: var(--pav-color-amber-200);
+      }
+    }
+  }
+
+  &__pattern-badge-title {
+    font-weight: var(--pav-font-weight-semibold);
+    font-size: var(--pav-font-size-body);
+    line-height: var(--pav-line-height-tight);
+  }
+
+  &__pattern-badge-description {
+    font-size: var(--pav-font-size-small);
+    line-height: var(--pav-line-height-normal);
+    opacity: 0.9;
+  }
+
 
   &__section {
     @include admin-section;
@@ -926,199 +893,3 @@ onMounted(async () => {
   }
 }
 </style>
-
-  // Forward section styles
-  &__forward-description {
-    margin: var(--pav-space-2) 0;
-    font-size: var(--pav-font-size-small);
-    color: var(--pav-color-stone-600);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-400);
-    }
-  }
-
-  &__forward-actions {
-    display: flex;
-    gap: var(--pav-space-3);
-    margin-top: var(--pav-space-4);
-  }
-
-  &__forward-status {
-    display: flex;
-    flex-direction: column;
-    gap: var(--pav-space-2);
-  }
-
-  &__forward-status-badge {
-    display: inline-flex;
-    align-items: center;
-    padding: var(--pav-space-1) var(--pav-space-3);
-    border-radius: var(--pav-border-radius-full);
-    font-size: var(--pav-font-size-caption);
-    font-weight: var(--pav-font-weight-medium);
-    text-transform: uppercase;
-    letter-spacing: var(--pav-letter-spacing-wide);
-    width: fit-content;
-
-    &--pending {
-      background-color: var(--pav-color-amber-100);
-      color: var(--pav-color-amber-800);
-
-      @media (prefers-color-scheme: dark) {
-        background-color: oklch(0.769 0.188 70.08 / 0.2);
-        color: var(--pav-color-amber-300);
-      }
-    }
-
-    &--acknowledged {
-      background-color: var(--pav-color-emerald-100);
-      color: var(--pav-color-emerald-800);
-
-      @media (prefers-color-scheme: dark) {
-        background-color: oklch(0.765 0.177 163.223 / 0.2);
-        color: var(--pav-color-emerald-300);
-      }
-    }
-
-    &--no_response {
-      background-color: var(--pav-color-stone-200);
-      color: var(--pav-color-stone-700);
-
-      @media (prefers-color-scheme: dark) {
-        background-color: var(--pav-color-stone-800);
-        color: var(--pav-color-stone-300);
-      }
-    }
-  }
-
-  &__forward-instance {
-    margin: 0;
-    font-size: var(--pav-font-size-small);
-    color: var(--pav-color-stone-600);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-400);
-    }
-  }
-}
-
-// Forward modal styles
-.forward-modal {
-  &__content {
-    display: flex;
-    flex-direction: column;
-    gap: var(--pav-space-4);
-  }
-
-  &__description {
-    margin: 0;
-    font-size: var(--pav-font-size-small);
-    color: var(--pav-color-stone-600);
-    line-height: var(--pav-line-height-relaxed);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-400);
-    }
-  }
-
-  &__summary {
-    padding: var(--pav-space-4);
-    background-color: var(--pav-color-stone-50);
-    border-radius: 0.5rem;
-    display: flex;
-    flex-direction: column;
-    gap: var(--pav-space-3);
-
-    @media (prefers-color-scheme: dark) {
-      background-color: var(--pav-color-stone-900);
-    }
-  }
-
-  &__field {
-    display: flex;
-    gap: var(--pav-space-2);
-    font-size: var(--pav-font-size-small);
-
-    &--full {
-      flex-direction: column;
-      gap: var(--pav-space-1);
-    }
-  }
-
-  &__label {
-    font-weight: var(--pav-font-weight-medium);
-    color: var(--pav-color-stone-700);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-300);
-    }
-  }
-
-  &__description-text {
-    margin: 0;
-    font-size: var(--pav-font-size-small);
-    color: var(--pav-color-stone-600);
-    white-space: pre-wrap;
-    line-height: var(--pav-line-height-relaxed);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-400);
-    }
-  }
-
-  &__alert {
-    padding: var(--pav-space-3);
-    border-radius: 0.5rem;
-    font-size: var(--pav-font-size-small);
-
-    &--success {
-      background-color: var(--pav-color-emerald-50);
-      border: 1px solid var(--pav-color-emerald-200);
-      color: var(--pav-color-emerald-700);
-
-      @media (prefers-color-scheme: dark) {
-        background-color: oklch(0.765 0.177 163.223 / 0.1);
-        border-color: oklch(0.765 0.177 163.223 / 0.2);
-        color: var(--pav-color-emerald-400);
-      }
-    }
-
-    &--error {
-      background-color: var(--pav-color-red-50);
-      border: 1px solid var(--pav-color-red-200);
-      color: var(--pav-color-red-700);
-
-      @media (prefers-color-scheme: dark) {
-        background-color: oklch(0.637 0.237 25.331 / 0.1);
-        border-color: oklch(0.637 0.237 25.331 / 0.2);
-        color: var(--pav-color-red-400);
-      }
-    }
-  }
-
-  &__message {
-    display: flex;
-    flex-direction: column;
-    gap: var(--pav-space-2);
-  }
-
-  &__textarea {
-    @include admin-form-input;
-    resize: vertical;
-    min-height: 6rem;
-    font-family: inherit;
-    font-size: var(--pav-font-size-body);
-    line-height: var(--pav-line-height-normal);
-  }
-
-  &__actions {
-    display: flex;
-    gap: var(--pav-space-3);
-    justify-content: flex-end;
-    padding-top: var(--pav-space-4);
-    border-top: 1px solid var(--pav-border-primary);
-  }
-}
-
-// Status badge styles (shared mixin from calendar-admin)

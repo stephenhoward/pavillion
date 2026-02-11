@@ -142,6 +142,43 @@ describe('Report Model', () => {
     expect(report.updatedAt).toBe(sampleDate);
   });
 
+  describe('pattern indicator flags', () => {
+
+    it('should have default false values for pattern flags', () => {
+      const report = new Report();
+
+      expect(report.hasSourceFloodingPattern).toBe(false);
+      expect(report.hasEventTargetingPattern).toBe(false);
+      expect(report.hasInstancePattern).toBe(false);
+    });
+
+    it('should allow setting pattern flags to true', () => {
+      const report = new Report();
+
+      report.hasSourceFloodingPattern = true;
+      report.hasEventTargetingPattern = true;
+      report.hasInstancePattern = true;
+
+      expect(report.hasSourceFloodingPattern).toBe(true);
+      expect(report.hasEventTargetingPattern).toBe(true);
+      expect(report.hasInstancePattern).toBe(true);
+    });
+
+    it('should allow individual pattern flags to be set independently', () => {
+      const report = new Report();
+
+      report.hasSourceFloodingPattern = true;
+      expect(report.hasSourceFloodingPattern).toBe(true);
+      expect(report.hasEventTargetingPattern).toBe(false);
+      expect(report.hasInstancePattern).toBe(false);
+
+      report.hasEventTargetingPattern = true;
+      expect(report.hasSourceFloodingPattern).toBe(true);
+      expect(report.hasEventTargetingPattern).toBe(true);
+      expect(report.hasInstancePattern).toBe(false);
+    });
+  });
+
   describe('toObject', () => {
 
     it('should serialize all properties to a plain object', () => {
@@ -171,6 +208,13 @@ describe('Report Model', () => {
         escalationType: null,
         forwardedFromInstance: null,
         forwardedReportId: null,
+        forwardStatus: null,
+        reporterIpHash: null,
+        reporterIpSubnet: null,
+        reporterIpRegion: null,
+        hasSourceFloodingPattern: false,
+        hasEventTargetingPattern: false,
+        hasInstancePattern: false,
         createdAt: sampleDate.toISOString(),
         updatedAt: sampleDate.toISOString(),
       });
@@ -209,6 +253,32 @@ describe('Report Model', () => {
       expect(obj.escalationType).toBe('manual');
       expect(obj.forwardedFromInstance).toBe('remote.example.com');
       expect(obj.forwardedReportId).toBe('remote-report-123');
+    });
+
+    it('should serialize pattern flags when set to true', () => {
+      const report = createFullReport();
+      report.hasSourceFloodingPattern = true;
+      report.hasEventTargetingPattern = true;
+      report.hasInstancePattern = true;
+
+      const obj = report.toObject();
+
+      expect(obj.hasSourceFloodingPattern).toBe(true);
+      expect(obj.hasEventTargetingPattern).toBe(true);
+      expect(obj.hasInstancePattern).toBe(true);
+    });
+
+    it('should serialize pattern flags when set to false', () => {
+      const report = createFullReport();
+      report.hasSourceFloodingPattern = false;
+      report.hasEventTargetingPattern = false;
+      report.hasInstancePattern = false;
+
+      const obj = report.toObject();
+
+      expect(obj.hasSourceFloodingPattern).toBe(false);
+      expect(obj.hasEventTargetingPattern).toBe(false);
+      expect(obj.hasInstancePattern).toBe(false);
     });
   });
 
@@ -284,6 +354,7 @@ describe('Report Model', () => {
         reviewerTimestamp: null,
         escalationType: null,
         forwardedFromInstance: null,
+        forwardStatus: null,
         createdAt: sampleDate.toISOString(),
         updatedAt: sampleDate.toISOString(),
       });
@@ -310,7 +381,7 @@ describe('Report Model', () => {
       expect(keys).toEqual([
         'id', 'eventId', 'calendarId', 'category', 'description', 'status',
         'reporterType', 'ownerNotes', 'reviewerNotes', 'reviewerTimestamp',
-        'escalationType', 'forwardedFromInstance', 'createdAt', 'updatedAt',
+        'escalationType', 'forwardedFromInstance', 'forwardStatus', 'createdAt', 'updatedAt',
       ]);
 
       // Explicitly verify no sensitive fields
@@ -377,9 +448,29 @@ describe('Report Model', () => {
         escalationType: 'manual',
         forwardedFromInstance: null,
         forwardedReportId: null,
+        forwardStatus: null,
+        reporterIpHash: null,
+        reporterIpSubnet: null,
+        reporterIpRegion: null,
+        hasSourceFloodingPattern: false,
+        hasEventTargetingPattern: false,
+        hasInstancePattern: false,
         createdAt: sampleDate.toISOString(),
         updatedAt: sampleDate2.toISOString(),
       });
+    });
+
+    it('should include pattern flags when populated', () => {
+      const report = createFullyPopulatedReport();
+      report.hasSourceFloodingPattern = true;
+      report.hasEventTargetingPattern = true;
+      report.hasInstancePattern = false;
+
+      const obj = report.toAdminObject();
+
+      expect(obj.hasSourceFloodingPattern).toBe(true);
+      expect(obj.hasEventTargetingPattern).toBe(true);
+      expect(obj.hasInstancePattern).toBe(false);
     });
 
     it('should never include verificationToken or verificationExpiration', () => {
@@ -444,6 +535,13 @@ describe('Report Model', () => {
         escalationType: null,
         forwardedFromInstance: null,
         forwardedReportId: null,
+        forwardStatus: null,
+        reporterIpHash: null,
+        reporterIpSubnet: null,
+        reporterIpRegion: null,
+        hasSourceFloodingPattern: false,
+        hasEventTargetingPattern: false,
+        hasInstancePattern: false,
         createdAt: sampleDate.toISOString(),
         updatedAt: sampleDate.toISOString(),
       };
@@ -462,6 +560,9 @@ describe('Report Model', () => {
       expect(report.status).toBe(ReportStatus.SUBMITTED);
       expect(report.forwardedFromInstance).toBe(null);
       expect(report.forwardedReportId).toBe(null);
+      expect(report.hasSourceFloodingPattern).toBe(false);
+      expect(report.hasEventTargetingPattern).toBe(false);
+      expect(report.hasInstancePattern).toBe(false);
       expect(report.createdAt).toEqual(sampleDate);
       expect(report.updatedAt).toEqual(sampleDate);
     });
@@ -490,6 +591,9 @@ describe('Report Model', () => {
         escalationType: 'automatic',
         forwardedFromInstance: 'remote.example.com',
         forwardedReportId: 'remote-123',
+        hasSourceFloodingPattern: true,
+        hasEventTargetingPattern: false,
+        hasInstancePattern: true,
         createdAt: sampleDate.toISOString(),
         updatedAt: sampleDate2.toISOString(),
       };
@@ -503,6 +607,9 @@ describe('Report Model', () => {
       expect(report.adminPriority).toBe('high');
       expect(report.forwardedFromInstance).toBe('remote.example.com');
       expect(report.forwardedReportId).toBe('remote-123');
+      expect(report.hasSourceFloodingPattern).toBe(true);
+      expect(report.hasEventTargetingPattern).toBe(false);
+      expect(report.hasInstancePattern).toBe(true);
     });
 
     it('should handle missing optional fields gracefully', () => {
@@ -535,6 +642,32 @@ describe('Report Model', () => {
       expect(report.escalationType).toBe(null);
       expect(report.forwardedFromInstance).toBe(null);
       expect(report.forwardedReportId).toBe(null);
+      expect(report.hasSourceFloodingPattern).toBe(false);
+      expect(report.hasEventTargetingPattern).toBe(false);
+      expect(report.hasInstancePattern).toBe(false);
+    });
+
+    it('should handle pattern flags when provided as boolean', () => {
+      const obj = {
+        id: 'report-id-4',
+        eventId: 'event-id-4',
+        calendarId: 'calendar-id-4',
+        category: 'spam',
+        description: 'Pattern test',
+        reporterType: 'anonymous',
+        status: 'submitted',
+        hasSourceFloodingPattern: true,
+        hasEventTargetingPattern: false,
+        hasInstancePattern: true,
+        createdAt: sampleDate.toISOString(),
+        updatedAt: sampleDate.toISOString(),
+      };
+
+      const report = Report.fromObject(obj);
+
+      expect(report.hasSourceFloodingPattern).toBe(true);
+      expect(report.hasEventTargetingPattern).toBe(false);
+      expect(report.hasInstancePattern).toBe(true);
     });
   });
 
@@ -618,6 +751,28 @@ describe('Report Model', () => {
       expect(roundTrip.forwardedReportId).toBe(original.forwardedReportId);
       expect(roundTrip.createdAt).toEqual(original.createdAt);
       expect(roundTrip.updatedAt).toEqual(original.updatedAt);
+    });
+
+    it('should maintain pattern flags through round-trip serialization', () => {
+      const original = new Report('round-trip-3');
+      original.eventId = 'event-3';
+      original.calendarId = 'calendar-3';
+      original.category = ReportCategory.SPAM;
+      original.description = 'Pattern test';
+      original.reporterType = 'anonymous';
+      original.status = ReportStatus.SUBMITTED;
+      original.hasSourceFloodingPattern = true;
+      original.hasEventTargetingPattern = false;
+      original.hasInstancePattern = true;
+      original.createdAt = sampleDate;
+      original.updatedAt = sampleDate;
+
+      const obj = original.toObject();
+      const roundTrip = Report.fromObject(obj);
+
+      expect(roundTrip.hasSourceFloodingPattern).toBe(true);
+      expect(roundTrip.hasEventTargetingPattern).toBe(false);
+      expect(roundTrip.hasInstancePattern).toBe(true);
     });
   });
 

@@ -63,3 +63,16 @@ export class InstanceAlreadyBlockedError extends Error {
     Object.setPrototypeOf(this, InstanceAlreadyBlockedError.prototype);
   }
 }
+
+/**
+ * Custom error class for blocked reporter attempting to submit a report.
+ * Thrown when a reporter's email hash is in the blocked reporters list.
+ */
+export class ReporterBlockedError extends Error {
+  constructor(public readonly reason: string = 'This email address has been blocked from submitting reports') {
+    super(reason);
+    this.name = 'ReporterBlockedError';
+    // Maintaining proper prototype chain in ES5+
+    Object.setPrototypeOf(this, ReporterBlockedError.prototype);
+  }
+}

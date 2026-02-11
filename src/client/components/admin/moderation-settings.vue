@@ -14,11 +14,13 @@ const state = reactive({
   autoEscalationHours: 72,
   adminReportEscalationHours: 24,
   reminderBeforeEscalationHours: 12,
+  autoEscalationThreshold: 5,
   isSaving: false,
   validationErrors: {
     autoEscalationHours: '',
     adminReportEscalationHours: '',
     reminderBeforeEscalationHours: '',
+    autoEscalationThreshold: '',
   },
   successMessage: '',
   errorMessage: '',
@@ -31,6 +33,9 @@ onMounted(async () => {
     state.autoEscalationHours = settings.autoEscalationHours;
     state.adminReportEscalationHours = settings.adminReportEscalationHours;
     state.reminderBeforeEscalationHours = settings.reminderBeforeEscalationHours;
+    state.autoEscalationThreshold = settings.autoEscalationThreshold;
+    state.ipHashRetentionDays = settings.ipHashRetentionDays;
+    state.ipSubnetRetentionDays = settings.ipSubnetRetentionDays;
   }
 });
 
@@ -42,6 +47,9 @@ function validateForm(): boolean {
     autoEscalationHours: '',
     adminReportEscalationHours: '',
     reminderBeforeEscalationHours: '',
+    autoEscalationThreshold: '',
+    ipHashRetentionDays: '',
+    ipSubnetRetentionDays: '',
   };
 
   // Validate auto escalation hours
@@ -62,6 +70,25 @@ function validateForm(): boolean {
     isValid = false;
   }
 
+  // Validate auto-escalation threshold (allow 0 to disable)
+  if (state.autoEscalationThreshold < 0) {
+    state.validationErrors.autoEscalationThreshold = t('error.must_be_non_negative');
+    isValid = false;
+  }
+
+
+  // Validate IP hash retention days
+  if (!state.ipHashRetentionDays || state.ipHashRetentionDays < 1) {
+    state.validationErrors.ipHashRetentionDays = t('error.must_be_positive');
+    isValid = false;
+  }
+
+  // Validate IP subnet retention days
+  if (!state.ipSubnetRetentionDays || state.ipSubnetRetentionDays < 1) {
+    state.validationErrors.ipSubnetRetentionDays = t('error.must_be_positive');
+    isValid = false;
+  }
+
   return isValid;
 }
 
@@ -79,6 +106,9 @@ async function saveSettings() {
       autoEscalationHours: state.autoEscalationHours,
       adminReportEscalationHours: state.adminReportEscalationHours,
       reminderBeforeEscalationHours: state.reminderBeforeEscalationHours,
+      autoEscalationThreshold: state.autoEscalationThreshold,
+      ipHashRetentionDays: state.ipHashRetentionDays,
+      ipSubnetRetentionDays: state.ipSubnetRetentionDays,
     });
 
     state.successMessage = t('success');
@@ -248,6 +278,91 @@ async function saveSettings() {
             </div>
 
             <!-- Save Button -->
+
+            <!-- Auto Escalation Threshold -->
+            <div class="form-group">
+              <label for="auto-escalation-threshold" class="form-label">
+                {{ t('auto_escalation_threshold') }}
+              </label>
+              <input
+                id="auto-escalation-threshold"
+                type="number"
+                v-model.number="state.autoEscalationThreshold"
+                class="form-input"
+                :class="{ 'has-error': state.validationErrors.autoEscalationThreshold }"
+                min="0"
+                step="1"
+                :disabled="state.isSaving"
+                :aria-invalid="!!state.validationErrors.autoEscalationThreshold"
+                :aria-describedby="state.validationErrors.autoEscalationThreshold ? 'auto-escalation-threshold-error' : 'auto-escalation-threshold-help'"
+              />
+              <p v-if="state.validationErrors.autoEscalationThreshold"
+                 id="auto-escalation-threshold-error"
+                 class="error-text"
+                 role="alert">
+                {{ state.validationErrors.autoEscalationThreshold }}
+              </p>
+              <p v-else id="auto-escalation-threshold-help" class="help-text">
+                {{ t('auto_escalation_threshold_help') }}
+              </p>
+            </div>
+
+            <!-- IP Hash Retention Days -->
+            <div class="form-group">
+              <label for="ip-hash-retention" class="form-label">
+                {{ t('ip_hash_retention_days') }}
+              </label>
+              <input
+                id="ip-hash-retention"
+                type="number"
+                v-model.number="state.ipHashRetentionDays"
+                class="form-input"
+                :class="{ 'has-error': state.validationErrors.ipHashRetentionDays }"
+                min="1"
+                step="1"
+                :disabled="state.isSaving"
+                :aria-invalid="!!state.validationErrors.ipHashRetentionDays"
+                :aria-describedby="state.validationErrors.ipHashRetentionDays ? 'ip-hash-retention-error' : 'ip-hash-retention-help'"
+              />
+              <p v-if="state.validationErrors.ipHashRetentionDays"
+                 id="ip-hash-retention-error"
+                 class="error-text"
+                 role="alert">
+                {{ state.validationErrors.ipHashRetentionDays }}
+              </p>
+              <p v-else id="ip-hash-retention-help" class="help-text">
+                {{ t('ip_hash_retention_help') }}
+              </p>
+            </div>
+
+            <!-- IP Subnet Retention Days -->
+            <div class="form-group">
+              <label for="ip-subnet-retention" class="form-label">
+                {{ t('ip_subnet_retention_days') }}
+              </label>
+              <input
+                id="ip-subnet-retention"
+                type="number"
+                v-model.number="state.ipSubnetRetentionDays"
+                class="form-input"
+                :class="{ 'has-error': state.validationErrors.ipSubnetRetentionDays }"
+                min="1"
+                step="1"
+                :disabled="state.isSaving"
+                :aria-invalid="!!state.validationErrors.ipSubnetRetentionDays"
+                :aria-describedby="state.validationErrors.ipSubnetRetentionDays ? 'ip-subnet-retention-error' : 'ip-subnet-retention-help'"
+              />
+              <p v-if="state.validationErrors.ipSubnetRetentionDays"
+                 id="ip-subnet-retention-error"
+                 class="error-text"
+                 role="alert">
+                {{ state.validationErrors.ipSubnetRetentionDays }}
+              </p>
+              <p v-else id="ip-subnet-retention-help" class="help-text">
+                {{ t('ip_subnet_retention_help') }}
+              </p>
+            </div>
+
             <div class="form-actions">
               <button
                 type="submit"

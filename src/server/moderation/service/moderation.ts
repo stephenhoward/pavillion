@@ -7,6 +7,7 @@ import { Account } from '@/common/model/account';
 import { Report, ReportCategory, ReportStatus } from '@/common/model/report';
 import type { ReporterType, EscalationType, ForwardStatus } from '@/common/model/report';
 import { BlockedInstance } from '@/common/model/blocked_instance';
+import { BlockedReporter } from '@/common/model/blocked_reporter';
 import { EventNotFoundError } from '@/common/exceptions/calendar';
 import { DuplicateReportError, ReportValidationError } from '@/common/exceptions/report';
 import { ReportEntity } from '@/server/moderation/entity/report';
@@ -19,11 +20,15 @@ import {
   ReportAlreadyResolvedError,
   EmailRateLimitError,
   InstanceAlreadyBlockedError,
+  ReporterBlockedError,
 } from '@/server/moderation/exceptions';
 import CalendarInterface from '@/server/calendar/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import FlagActivityBuilder from '@/server/moderation/service/flag-activity-builder';
+import EmailBlockingService from '@/server/moderation/service/email-blocking';
+import { PatternDetectionService } from '@/server/moderation/service/pattern-detection';
+import { hashIp } from '@/server/moderation/service/ip-utils';
 
 /** Token expiration duration in hours. */
 const VERIFICATION_TOKEN_EXPIRY_HOURS = 24;
@@ -72,6 +77,9 @@ const MODERATION_SETTING_DEFAULTS: Record<string, number> = {
   'moderation.autoEscalationHours': 72,
   'moderation.adminReportEscalationHours': 24,
   'moderation.reminderBeforeEscalationHours': 12,
+  'moderation.autoEscalationThreshold': 5,
+  'moderation.ipHashRetentionDays': 30,
+  'moderation.ipSubnetRetentionDays': 90,
 };
 
 /**
@@ -89,6 +97,9 @@ interface CreateReportData {
   adminPriority?: 'low' | 'medium' | 'high';
   adminDeadline?: Date;
   adminNotes?: string;
+  reporterIp?: string;
+  reporterIpSubnet?: string;
+  reporterIpRegion?: string;
 }
 
 /**
@@ -106,6 +117,9 @@ interface CreateReportForEventData {
   adminPriority?: 'low' | 'medium' | 'high';
   adminDeadline?: Date;
   adminNotes?: string;
+  reporterIp?: string;
+  reporterIpSubnet?: string;
+  reporterIpRegion?: string;
 }
 
 /**
@@ -120,6 +134,9 @@ interface CreateAdminReportData {
   priority: 'low' | 'medium' | 'high';
   deadline?: Date;
   adminNotes?: string;
+  reporterIp?: string;
+  reporterIpSubnet?: string;
+  reporterIpRegion?: string;
 }
 
 
@@ -187,6 +204,8 @@ interface ModerationSettings {
   autoEscalationHours: number;
   adminReportEscalationHours: number;
   reminderBeforeEscalationHours: number;
+  ipHashRetentionDays: number;
+  ipSubnetRetentionDays: number;
 }
 
 /**
@@ -196,14 +215,18 @@ interface ModerationSettings {
  */
 class ModerationService {
   private eventBus?: EventEmitter;
+  private patternDetectionService: PatternDetectionService;
   private calendarInterface?: CalendarInterface;
+  private emailBlockingService: EmailBlockingService;
   private configurationInterface?: ConfigurationInterface;
   private activityPubInterface?: ActivityPubInterface;
 
   constructor(eventBus?: EventEmitter, calendarInterface?: CalendarInterface, configurationInterface?: ConfigurationInterface, activityPubInterface?: ActivityPubInterface) {
     this.eventBus = eventBus;
+    this.patternDetectionService = new PatternDetectionService();
     this.calendarInterface = calendarInterface;
     this.configurationInterface = configurationInterface;
+    this.emailBlockingService = new EmailBlockingService();
     this.activityPubInterface = activityPubInterface;
   }
 
@@ -339,6 +362,7 @@ class ModerationService {
    * @throws EventNotFoundError if the event does not exist or has no calendarId
    * @throws DuplicateReportError if the reporter has already reported this event
    * @throws EmailRateLimitError if the email has exceeded the verification email limit
+   * @throws ReporterBlockedError if the email is blocked from submitting reports
    */
   async createReportForEvent(data: CreateReportForEventData): Promise<Report> {
     if (!this.calendarInterface) {
@@ -403,6 +427,9 @@ class ModerationService {
       adminPriority: data.priority,
       adminDeadline: data.deadline,
       adminNotes: data.adminNotes,
+      reporterIp: data.reporterIp,
+      reporterIpSubnet: data.reporterIpSubnet,
+      reporterIpRegion: data.reporterIpRegion,
     });
   }
 
@@ -423,6 +450,10 @@ class ModerationService {
    * Checks for duplicate reports before creation.
    * For anonymous reporters, enforces per-email rate limiting on verification emails.
    *
+   * If IP data is provided (reporterIp, reporterIpSubnet, reporterIpRegion),
+   * it will be captured and stored with the report. The IP address is hashed
+   * for privacy preservation.
+   *
    * If a concurrent request creates the EventReporter record between the
    * duplicate check and the save, the DB unique constraint will reject the
    * second insert. In that case the orphaned ReportEntity is cleaned up and
@@ -433,6 +464,7 @@ class ModerationService {
    * @returns The created Report domain model
    * @throws DuplicateReportError if the reporter has already reported this event
    * @throws EmailRateLimitError if the email has exceeded the verification email limit
+   * @throws ReporterBlockedError if the email is blocked from submitting reports
    */
   async createReport(data: CreateReportData): Promise<Report> {
     const report = new Report();
@@ -441,6 +473,19 @@ class ModerationService {
     report.category = data.category;
     report.description = data.description;
     report.reporterType = data.reporterType;
+
+    // Capture IP data if provided
+    if (data.reporterIp && data.reporterIp !== 'unknown') {
+      report.reporterIpHash = hashIp(data.reporterIp);
+      report.reporterIpSubnet = data.reporterIpSubnet ?? null;
+      report.reporterIpRegion = data.reporterIpRegion ?? null;
+    }
+    else if (data.reporterIp === 'unknown') {
+      // Hash "unknown" so we can track it, but don't set subnet/region
+      report.reporterIpHash = hashIp(data.reporterIp);
+      report.reporterIpSubnet = null;
+      report.reporterIpRegion = null;
+    }
 
     let reporterIdentifier: string;
 
@@ -451,6 +496,12 @@ class ModerationService {
       const emailHash = this.hashEmail(data.reporterEmail);
       report.reporterEmailHash = emailHash;
       reporterIdentifier = emailHash;
+
+      // Check if email is blocked before proceeding
+      const isBlocked = await this.isEmailBlocked(emailHash);
+      if (isBlocked) {
+        throw new ReporterBlockedError();
+      }
 
       // Check per-email rate limit before proceeding
       const emailExceedsLimit = await this.hasExceededEmailRateLimit(emailHash);
@@ -516,6 +567,9 @@ class ModerationService {
       throw error;
     }
 
+
+    // Run pattern detection and update flags
+    await this.detectAndSetPatternFlags(createdReport);
     // Emit domain event with reporter email for verification email sending
     this.emit('reportCreated', {
       report: createdReport,
@@ -1228,6 +1282,8 @@ class ModerationService {
     const autoEscalation = await this.configurationInterface.getSetting('moderation.autoEscalationHours');
     const adminReportEscalation = await this.configurationInterface.getSetting('moderation.adminReportEscalationHours');
     const reminderBefore = await this.configurationInterface.getSetting('moderation.reminderBeforeEscalationHours');
+    const ipHashRetention = await this.configurationInterface.getSetting('moderation.ipHashRetentionDays');
+    const ipSubnetRetention = await this.configurationInterface.getSetting('moderation.ipSubnetRetentionDays');
 
     return {
       autoEscalationHours: autoEscalation
@@ -1239,8 +1295,15 @@ class ModerationService {
       reminderBeforeEscalationHours: reminderBefore
         ? parseFloat(reminderBefore)
         : MODERATION_SETTING_DEFAULTS['moderation.reminderBeforeEscalationHours'],
+      ipHashRetentionDays: ipHashRetention
+        ? parseFloat(ipHashRetention)
+        : MODERATION_SETTING_DEFAULTS['moderation.ipHashRetentionDays'],
+      ipSubnetRetentionDays: ipSubnetRetention
+        ? parseFloat(ipSubnetRetention)
+        : MODERATION_SETTING_DEFAULTS['moderation.ipSubnetRetentionDays'],
     };
   }
+
 
   /**
    * Updates moderation settings via the Configuration domain.
@@ -1276,7 +1339,110 @@ class ModerationService {
       );
     }
 
+    if (updates.ipHashRetentionDays !== undefined) {
+      await this.configurationInterface.setSetting(
+        'moderation.ipHashRetentionDays',
+        String(updates.ipHashRetentionDays),
+      );
+    }
+
+    if (updates.ipSubnetRetentionDays !== undefined) {
+      await this.configurationInterface.setSetting(
+        'moderation.ipSubnetRetentionDays',
+        String(updates.ipSubnetRetentionDays),
+      );
+    }
+
     return this.getModerationSettings();
+  }
+
+  /**
+   * Checks if an event has exceeded the auto-escalation threshold and automatically
+   * escalates pending reports if the threshold is met.
+   *
+   * The auto-escalation threshold is configurable via the Configuration domain
+   * ('moderation.autoEscalationThreshold'). A threshold of 0 disables auto-escalation.
+   *
+   * Only reports in 'submitted' or 'under_review' status are eligible for auto-escalation.
+   * Already escalated, resolved, or dismissed reports are not affected.
+   *
+   * @param eventId - Event UUID to check
+   * @returns Count of reports that were auto-escalated (0 if disabled or threshold not met)
+   */
+  async checkAutoEscalation(eventId: string): Promise<number> {
+    if (!this.configurationInterface) {
+      throw new Error('ConfigurationInterface is required for checkAutoEscalation');
+    }
+
+    // Get the auto-escalation threshold from configuration
+    const thresholdSetting = await this.configurationInterface.getSetting('moderation.autoEscalationThreshold');
+    const threshold = thresholdSetting
+      ? parseInt(thresholdSetting, 10)
+      : MODERATION_SETTING_DEFAULTS['moderation.autoEscalationThreshold'];
+
+    // If threshold is 0, auto-escalation is disabled
+    if (threshold === 0) {
+      return 0;
+    }
+
+    // Count total reports for this event
+    const totalReports = await ReportEntity.count({
+      where: { event_id: eventId },
+    });
+
+    // If total reports haven't reached the threshold, do nothing
+    if (totalReports < threshold) {
+      return 0;
+    }
+
+    // Get all reports in pending or owner_review status that can be escalated
+    const reportsToEscalate = await ReportEntity.findAll({
+      where: {
+        event_id: eventId,
+        status: {
+          [Op.in]: [ReportStatus.SUBMITTED, ReportStatus.UNDER_REVIEW],
+        },
+      },
+    });
+
+    // If no reports to escalate, return 0
+    if (reportsToEscalate.length === 0) {
+      return 0;
+    }
+
+    // Escalate each report
+    let escalatedCount = 0;
+    for (const entity of reportsToEscalate) {
+      const currentStatus = entity.status as ReportStatus;
+
+      // Update report status to escalated
+      await entity.update({
+        status: ReportStatus.ESCALATED,
+        escalation_type: 'automatic' as EscalationType,
+      });
+
+      // Create escalation record for audit trail
+      const escalationRecord = ReportEscalationEntity.fromModel({
+        reportId: entity.id,
+        fromStatus: currentStatus,
+        toStatus: ReportStatus.ESCALATED,
+        reviewerRole: 'system',
+        decision: 'auto-escalated',
+        notes: `Automatically escalated: event exceeded report threshold of ${threshold}`,
+      });
+      await escalationRecord.save();
+
+      // Emit domain event
+      const report = entity.toModel();
+      this.emit('reportEscalated', {
+        report,
+        reason: `Auto-escalated: event exceeded report threshold of ${threshold}`,
+      });
+
+      escalatedCount++;
+    }
+
+    return escalatedCount;
   }
 
   /**
@@ -1348,6 +1514,47 @@ class ModerationService {
     });
 
     return entity !== null;
+  }
+
+  /**
+   * Checks if an email hash is blocked from submitting reports.
+   *
+   * @param emailHash - The hashed email address to check
+   * @returns True if the email is blocked
+   */
+  async isEmailBlocked(emailHash: string): Promise<boolean> {
+    return this.emailBlockingService.isEmailBlocked(emailHash);
+  }
+
+  /**
+   * Blocks a reporter email address from submitting reports.
+   *
+   * @param email - The reporter's email address (will be hashed)
+   * @param adminAccount - The admin account performing the block
+   * @param reason - Reason for blocking the reporter
+   * @returns The created BlockedReporter domain model
+   */
+  async blockReporter(email: string, adminAccount: Account, reason: string): Promise<BlockedReporter> {
+    return this.emailBlockingService.blockReporter(email, adminAccount, reason);
+  }
+
+  /**
+   * Unblocks a reporter email address.
+   * Silent if the email was not blocked (idempotent operation).
+   *
+   * @param emailHash - The hashed email address to unblock
+   */
+  async unblockReporter(emailHash: string): Promise<void> {
+    return this.emailBlockingService.unblockReporter(emailHash);
+  }
+
+  /**
+   * Lists all blocked reporters, sorted by creation date DESC.
+   *
+   * @returns Array of BlockedReporter domain models
+   */
+  async listBlockedReporters(): Promise<BlockedReporter[]> {
+    return this.emailBlockingService.listBlockedReporters();
   }
 
   /**
@@ -1436,6 +1643,9 @@ class ModerationService {
     const entity = ReportEntity.fromModel(report);
     const saved = await entity.save();
     const createdReport = saved.toModel();
+
+    // Run pattern detection for federation reports
+    await this.detectAndSetPatternFlagsForFederation(createdReport);
     // Emit domain event for notification
     this.emit('reportReceived', { report: createdReport });
     return createdReport;
@@ -1499,6 +1709,76 @@ class ModerationService {
    * @param event - Event name
    * @param payload - Event payload
    */
+  /**
+   * Detects abuse patterns and sets flags on a report.
+   * Runs source flooding and event targeting detection.
+   * Does not fail report creation if pattern detection errors.
+   *
+   * @param report - The report to analyze
+   */
+  private async detectAndSetPatternFlags(report: Report): Promise<void> {
+    try {
+      // Detect source flooding pattern
+      const floodingResult = await this.patternDetectionService.detectSourceFlooding(report.id);
+      if (floodingResult && floodingResult.severity === 'high') {
+        report.hasSourceFloodingPattern = true;
+        await ReportEntity.update(
+          { has_source_flooding_pattern: true },
+          { where: { id: report.id } },
+        );
+      }
+
+      // Detect event targeting pattern
+      const targetingResult = await this.patternDetectionService.detectEventTargeting(report.eventId);
+      if (targetingResult && targetingResult.severity === 'high') {
+        report.hasEventTargetingPattern = true;
+        await ReportEntity.update(
+          { has_event_targeting_pattern: true },
+          { where: { id: report.id } },
+        );
+      }
+    }
+    catch (error) {
+      // Silently handle errors - pattern detection should not fail report creation
+    }
+  }
+
+  /**
+   * Detects patterns for federation reports and sets flags.
+   * Runs event targeting and instance pattern detection.
+   * Does not fail report creation if pattern detection errors.
+   *
+   * @param report - The federation report to analyze
+   */
+  private async detectAndSetPatternFlagsForFederation(report: Report): Promise<void> {
+    try {
+      // Detect event targeting pattern
+      const targetingResult = await this.patternDetectionService.detectEventTargeting(report.eventId);
+      if (targetingResult && targetingResult.severity === 'high') {
+        report.hasEventTargetingPattern = true;
+        await ReportEntity.update(
+          { has_event_targeting_pattern: true },
+          { where: { id: report.id } },
+        );
+      }
+
+      // Detect instance pattern (only for federation reports)
+      if (report.forwardedFromInstance) {
+        const instanceResult = await this.patternDetectionService.detectInstancePatterns(report.forwardedFromInstance);
+        if (instanceResult && instanceResult.severity === 'high') {
+          report.hasInstancePattern = true;
+          await ReportEntity.update(
+            { has_instance_pattern: true },
+            { where: { id: report.id } },
+          );
+        }
+      }
+    }
+    catch (error) {
+      // Silently handle errors - pattern detection should not fail report creation
+    }
+  }
+
   private emit(event: string, payload: Record<string, any>): void {
     if (this.eventBus) {
       this.eventBus.emit(event, payload);

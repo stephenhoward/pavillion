@@ -71,6 +71,12 @@ class Report extends PrimaryModel {
   forwardedFromInstance: string | null = null;
   forwardedReportId: string | null = null;
   forwardStatus: ForwardStatus | null = null;
+  reporterIpHash: string | null = null;
+  reporterIpSubnet: string | null = null;
+  reporterIpRegion: string | null = null;
+  hasSourceFloodingPattern: boolean = false;
+  hasEventTargetingPattern: boolean = false;
+  hasInstancePattern: boolean = false;
   createdAt: Date = new Date();
   updatedAt: Date = new Date();
 
@@ -188,6 +194,12 @@ class Report extends PrimaryModel {
       forwardedFromInstance: this.forwardedFromInstance,
       forwardedReportId: this.forwardedReportId,
       forwardStatus: this.forwardStatus,
+      reporterIpHash: this.reporterIpHash,
+      reporterIpSubnet: this.reporterIpSubnet,
+      reporterIpRegion: this.reporterIpRegion,
+      hasSourceFloodingPattern: this.hasSourceFloodingPattern,
+      hasEventTargetingPattern: this.hasEventTargetingPattern,
+      hasInstancePattern: this.hasInstancePattern,
       createdAt: this.createdAt.toISOString(),
       updatedAt: this.updatedAt.toISOString(),
     };
@@ -225,6 +237,12 @@ class Report extends PrimaryModel {
       forwardedFromInstance: this.forwardedFromInstance,
       forwardedReportId: this.forwardedReportId,
       forwardStatus: this.forwardStatus,
+      reporterIpHash: this.reporterIpHash,
+      reporterIpSubnet: this.reporterIpSubnet,
+      reporterIpRegion: this.reporterIpRegion,
+      hasSourceFloodingPattern: this.hasSourceFloodingPattern,
+      hasEventTargetingPattern: this.hasEventTargetingPattern,
+      hasInstancePattern: this.hasInstancePattern,
       createdAt: this.createdAt.toISOString(),
       updatedAt: this.updatedAt.toISOString(),
     };
@@ -261,6 +279,12 @@ class Report extends PrimaryModel {
     report.forwardedFromInstance = obj.forwardedFromInstance ?? null;
     report.forwardedReportId = obj.forwardedReportId ?? null;
     report.forwardStatus = obj.forwardStatus ?? null;
+    report.reporterIpHash = obj.reporterIpHash ?? null;
+    report.reporterIpSubnet = obj.reporterIpSubnet ?? null;
+    report.reporterIpRegion = obj.reporterIpRegion ?? null;
+    report.hasSourceFloodingPattern = obj.hasSourceFloodingPattern ?? false;
+    report.hasEventTargetingPattern = obj.hasEventTargetingPattern ?? false;
+    report.hasInstancePattern = obj.hasInstancePattern ?? false;
     report.createdAt = obj.createdAt ? new Date(obj.createdAt) : new Date();
     report.updatedAt = obj.updatedAt ? new Date(obj.updatedAt) : new Date();
     return report;
