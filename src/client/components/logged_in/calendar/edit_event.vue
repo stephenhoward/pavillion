@@ -603,16 +603,16 @@ button {
     <header class="page-header">
       <button type="button"
               class="back-button"
-              @click="handleBack"
+              @click="handleBackClick"
               :aria-label="t('back_button', 'Go back')">
         <ArrowLeft :size="20" aria-hidden="true" />
       </button>
-      <h1>{{ pageTitle }}</h1>
+      <h1>{{ translatedPageTitle }}</h1>
       <div class="header-actions">
         <button
           type="button"
           class="btn-cancel"
-          @click="handleBack"
+          @click="handleBackClick"
         >
           Cancel
         </button>
@@ -628,7 +628,7 @@ button {
 
     <!-- Loading State -->
     <div
-      v-if="state.isLoading"
+      v-if="editorState.isLoading"
       class="loading-container"
       role="status"
       aria-live="polite"
@@ -639,26 +639,26 @@ button {
 
     <!-- Main Content - only render when event is loaded -->
     <main
-      v-else-if="state.event"
+      v-else-if="editorState.event"
       role="main"
       aria-label="Event Editor"
       class="editor-main"
     >
-      <form id="event-form" @submit.prevent="saveModel()" aria-label="Event Information Form">
+      <form id="event-form" @submit.prevent="handleSaveEvent()" aria-label="Event Information Form">
 
         <!-- Error Display -->
-        <div v-if="state.err"
+        <div v-if="editorState.err"
              ref="errorContainer"
              class="error"
              role="alert"
              aria-live="polite">
-          <div v-if="Array.isArray(state.err)">
+          <div v-if="Array.isArray(editorState.err)">
             <ul>
-              <li v-for="(error, index) in state.err" :key="index">{{ error }}</li>
+              <li v-for="(error, index) in editorState.err" :key="index">{{ error }}</li>
             </ul>
           </div>
           <div v-else>
-            {{ state.err }}
+            {{ editorState.err }}
           </div>
         </div>
 
@@ -672,49 +672,49 @@ button {
             <div class="section-card">
               <!-- Language Tabs -->
               <LanguageTabSelector
-                v-model="state.lang"
+                v-model="currentLanguage"
                 :languages="languages"
-                @add-language="state.showLanguagePicker = true"
-                @remove-language="removeLanguage"
+                @add-language="openLanguagePicker"
+                @remove-language="handleRemoveLanguage"
               />
 
               <!-- Event Content Fields (for selected language) -->
               <div
-                :dir="iso6391.getDir(state.lang) === 'rtl' ? 'rtl' : 'ltr'"
+                :dir="iso6391.getDir(currentLanguage) === 'rtl' ? 'rtl' : 'ltr'"
                 class="event-fields"
               >
                 <div class="form-field">
-                  <label :for="`event-name-${state.lang}`" class="field-label">Event Title</label>
+                  <label :for="`event-name-${currentLanguage}`" class="field-label">Event Title</label>
                   <input
-                    :id="`event-name-${state.lang}`"
+                    :id="`event-name-${currentLanguage}`"
                     type="text"
                     name="name"
-                    v-model="state.event.content(state.lang).name"
+                    v-model="editorState.event.content(currentLanguage).name"
                     class="field-input"
                     required
                   />
                 </div>
 
                 <div class="form-field">
-                  <label :for="`event-description-${state.lang}`" class="field-label">Description</label>
+                  <label :for="`event-description-${currentLanguage}`" class="field-label">Description</label>
                   <textarea
-                    :id="`event-description-${state.lang}`"
+                    :id="`event-description-${currentLanguage}`"
                     name="description"
-                    v-model="state.event.content(state.lang).description"
+                    v-model="editorState.event.content(currentLanguage).description"
                     class="field-textarea"
                     rows="4"
                   />
                 </div>
 
                 <div class="form-field">
-                  <label :for="`event-accessibility-${state.lang}`" class="field-label">
+                  <label :for="`event-accessibility-${currentLanguage}`" class="field-label">
                     Accessibility Information
                     <span class="info-icon" title="Information about accessibility features">ⓘ</span>
                   </label>
                   <textarea
-                    :id="`event-accessibility-${state.lang}`"
+                    :id="`event-accessibility-${currentLanguage}`"
                     name="accessibility"
-                    v-model="state.event.content(state.lang).accessibilityInfo"
+                    v-model="editorState.event.content(currentLanguage).accessibilityInfo"
                     class="field-textarea"
                     rows="3"
                   />
@@ -724,9 +724,9 @@ button {
                   v-if="languages.length > 1"
                   type="button"
                   class="remove-translation-link"
-                  @click="removeLanguage(state.lang)"
+                  @click="handleRemoveLanguage(currentLanguage)"
                 >
-                  Remove {{ iso6391.getName(state.lang) }} translation
+                  Remove {{ iso6391.getName(currentLanguage) }} translation
                 </button>
               </div>
             </div>
@@ -737,7 +737,7 @@ button {
             <h2 class="section-header">LOCATION</h2>
 
             <LocationDisplayCard
-              :location="state.event.location"
+              :location="editorState.event.location"
               @change-location="handleOpenLocationPicker"
               @add-location="handleOpenLocationPicker"
             />
@@ -749,7 +749,7 @@ button {
 
             <div class="section-card">
               <ImageUpload
-                :calendar-id="state.event.calendarId || 'default'"
+                :calendar-id="editorState.event.calendarId || 'default'"
                 :multiple="false"
                 @upload-complete="handleImageUpload"
                 aria-label="Event Image Upload"
@@ -763,8 +763,8 @@ button {
 
             <div class="section-card">
               <CategorySelector
-                :calendar-id="state.event.calendarId"
-                :selected-categories="state.selectedCategories"
+                :calendar-id="editorState.event.calendarId"
+                :selected-categories="selectedCategories"
                 @categories-changed="handleCategoriesChanged"
                 aria-label="Select Event Categories"
               />
@@ -778,13 +778,13 @@ button {
             <div class="section-card">
               <div class="schedule-list" role="group" aria-label="Event Schedules">
                 <div
-                  v-for="(schedule, index) in state.event.schedules"
+                  v-for="(schedule, index) in editorState.event.schedules"
                   :key="index"
                   class="schedule-item"
                 >
                   <EventRecurrenceView
                     :schedule="schedule"
-                    @remove-schedule="state.event.dropSchedule(index)"
+                    @remove-schedule="editorState.event.dropSchedule(index)"
                   />
                 </div>
               </div>
@@ -792,7 +792,7 @@ button {
               <button
                 type="button"
                 class="add-schedule-btn"
-                @click="state.event.addSchedule()"
+                @click="editorState.event.addSchedule()"
               >
                 <Plus :size="16" aria-hidden="true" />
                 Add another schedule
@@ -811,43 +811,43 @@ button {
     <!-- Error state when event failed to load -->
     <main v-else role="main" aria-label="Event Editor Error">
       <div class="error" role="alert">
-        {{ state.err || 'Failed to load event' }}
+        {{ editorState.err || 'Failed to load event' }}
       </div>
     </main>
   </div>
 
-  <div v-if="state.showLanguagePicker">
+  <div v-if="showLanguagePicker">
     <language-picker :languages="availableLanguages"
                      :selectedLanguages="languages"
-                     @close="state.showLanguagePicker = false"
-                     @select="(lang) => addLanguage(lang)" />
+                     @close="closeLanguagePicker"
+                     @select="handleAddLanguage" />
   </div>
 
   <!-- Location Picker Modal -->
   <LocationPickerModal
-    v-if="state.showLocationPicker"
+    v-if="showLocationPicker"
     ref="locationPickerRef"
-    :locations="state.availableLocations"
-    :selected-location-id="state.event?.locationId || null"
+    :locations="availableLocations"
+    :selected-location-id="editorState.event?.locationId || null"
     @location-selected="handleLocationSelected"
-    @create-new="handleCreateNewLocation"
+    @create-new="createNewLocation"
     @remove-location="handleRemoveLocation"
-    @close="state.showLocationPicker = false"
+    @close="showLocationPicker = false"
   />
 
   <!-- Create Location Form Modal -->
   <CreateLocationForm
-    v-if="state.showCreateLocationForm"
+    v-if="showCreateLocationForm"
     ref="createLocationFormRef"
     :languages="languages"
     @create-location="handleLocationCreated"
-    @back-to-search="handleBackToSearch"
-    @close="state.showCreateLocationForm = false"
+    @back-to-search="backToSearch"
+    @close="showCreateLocationForm = false"
   />
 
   <!-- Unsaved Changes Confirmation Dialog -->
   <ModalLayout
-    v-if="state.showUnsavedChangesDialog"
+    v-if="showUnsavedChangesDialog"
     :title="t('unsaved_changes_title', 'Unsaved Changes')"
     @close="cancelLeave"
   >
@@ -875,19 +875,10 @@ button {
 </template>
 
 <script setup>
-import { reactive, ref, onBeforeMount, onMounted, computed, watch, nextTick } from 'vue';
-import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router';
+import { ref, onBeforeMount, onMounted, computed, watch, nextTick } from 'vue';
+import { useRouter, onBeforeRouteLeave } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
-import { ArrowLeft, Plus, X, MapPin, Image, Calendar, Clock, Repeat, Trash2, Tag } from 'lucide-vue-next';
-import { CalendarEvent } from '@/common/model/events';
-import { EventLocation } from '@/common/model/location';
-import { validateLocationHierarchy } from '@/common/model/location';
-import { useCalendarStore } from '@/client/stores/calendarStore';
-import CalendarService from '@/client/service/calendar';
-import EventService from '@/client/service/event';
-import CategoryService from '@/client/service/category';
-import LocationService from '@/client/service/location';
-import ModelService from '@/client/service/models';
+import { ArrowLeft, Plus } from 'lucide-vue-next';
 import EventRecurrenceView from './event_recurrence.vue';
 import languagePicker from '@/client/components/common/languagePicker.vue';
 import ImageUpload from '@/client/components/common/media/ImageUpload.vue';
@@ -898,14 +889,13 @@ import LanguageTabSelector from '@/client/components/common/LanguageTabSelector.
 import LocationDisplayCard from '@/client/components/common/LocationDisplayCard.vue';
 import LocationPickerModal from '@/client/components/common/LocationPickerModal.vue';
 import CreateLocationForm from '@/client/components/common/CreateLocationForm.vue';
-import EditorPanel from './EditorPanel.vue';
 import iso6391 from 'iso-639-1-dir';
-import { useEventDuplication } from '@/client/composables/useEventDuplication';
 
-// Icon aliases for template use
-const CalendarIcon = Calendar;
-const ImageIcon = Image;
-const TagIcon = Tag;
+// Composables
+import { useEventEditor } from '@/client/composables/useEventEditor';
+import { useLocationManagement } from '@/client/composables/useLocationManagement';
+import { useUnsavedChanges } from '@/client/composables/useUnsavedChanges';
+import { useLanguageManagement } from '@/client/composables/useLanguageManagement';
 
 // Props for edit mode (eventId passed from route)
 const props = defineProps({
@@ -915,28 +905,66 @@ const props = defineProps({
   },
 });
 
-// Router and route
-const route = useRoute();
+// Router
 const router = useRouter();
-
-// Services
-const eventService = new EventService();
-const calendarService = new CalendarService();
-const categoryService = new CategoryService();
-const locationService = new LocationService();
-const calendarStore = useCalendarStore();
-const { stripEventForDuplication } = useEventDuplication();
 
 // Translation
 const { t } = useTranslation('event_editor', {
   keyPrefix: 'editor',
 });
 
-// Default language setup
+// Initialize composables
 const defaultLanguage = 'en';
-const languages = ref([defaultLanguage]);
-const allLanguages = iso6391.getAllCodes();
-const availableLanguages = ref([...new Set([defaultLanguage, ...allLanguages])]);
+
+// Event editor composable
+const {
+  state: editorState,
+  selectedCategories,
+  mediaId,
+  initializeEvent,
+  saveEvent,
+  pageTitle,
+} = useEventEditor(defaultLanguage);
+
+// Location management composable
+const {
+  availableLocations,
+  showLocationPicker,
+  showCreateLocationForm,
+  fetchLocations,
+  openLocationPicker,
+  selectLocation,
+  createNewLocation,
+  createLocation,
+  removeLocation,
+  backToSearch,
+} = useLocationManagement();
+
+// Unsaved changes composable
+const {
+  isDirty,
+  snapshotReady,
+  showUnsavedChangesDialog,
+  initializeSnapshot,
+  resetSnapshot,
+  checkDirtyState,
+  handleBack,
+  confirmLeave,
+  cancelLeave,
+  setupNavigationGuard,
+} = useUnsavedChanges();
+
+// Language management composable
+const {
+  languages,
+  availableLanguages,
+  currentLanguage,
+  showLanguagePicker,
+  addLanguage,
+  removeLanguage,
+  openLanguagePicker,
+  closeLanguagePicker,
+} = useLanguageManagement();
 
 // Error container ref for scrolling
 const errorContainer = ref(null);
@@ -945,182 +973,19 @@ const errorContainer = ref(null);
 const locationPickerRef = ref(null);
 const createLocationFormRef = ref(null);
 
-// Dirty state tracking
-const isDirty = ref(false);
-const originalEventSnapshot = ref(null);
-const snapshotReady = ref(false);
-
-// Pending navigation for unsaved changes confirmation
-const pendingNavigation = ref(null);
-
-// Component state
-const state = reactive({
-  isLoading: true,
-  err: '',
-  showLanguagePicker: false,
-  showLocationPicker: false,
-  showCreateLocationForm: false,
-  showUnsavedChangesDialog: false,
-  lang: defaultLanguage,
-  availableCalendars: [],
-  availableLocations: [],
-  mediaId: null,
-  calendar: null,
-  selectedCategories: [],
-  invalidFields: [],
-  event: null,
-  isDuplicationMode: false,
-  mode: 'create', // 'create', 'edit', 'duplicate'
+/**
+ * Translated page title
+ */
+const translatedPageTitle = computed(() => {
+  const titleKey = pageTitle.value;
+  return t(titleKey + '_title', titleKey.replace(/_/g, ' '));
 });
 
 /**
- * Create a snapshot of the current event state for comparison
- * Uses _content (Record) from the TranslatedModel base class
+ * Handle back button click
  */
-const createEventSnapshot = () => {
-  if (!state.event) return null;
-
-  // Get content from _content Record and convert to a sorted array for consistent comparison
-  const contentEntries = state.event._content
-    ? Object.entries(state.event._content).sort(([a], [b]) => a.localeCompare(b)).map(([lang, c]) => ({
-      language: lang,
-      name: c.name || '',
-      description: c.description || '',
-    }))
-    : [];
-
-  // Create a serializable snapshot of the event data
-  return JSON.stringify({
-    calendarId: state.event.calendarId,
-    contents: contentEntries,
-    location: state.event.location ? {
-      name: state.event.location.name || '',
-      address: state.event.location.address || '',
-      city: state.event.location.city || '',
-      state: state.event.location.state || '',
-      postalCode: state.event.location.postalCode || '',
-    } : {},
-    schedules: state.event.schedules?.map(s => ({
-      startDate: s.startDate,
-      endDate: s.endDate,
-      allDay: s.allDay,
-      rrule: s.rrule,
-    })) || [],
-    categories: [...state.selectedCategories].sort(),
-    mediaId: state.mediaId,
-  });
-};
-
-/**
- * Check if the current event state differs from the original snapshot
- */
-const checkDirtyState = () => {
-  if (!originalEventSnapshot.value || !state.event || !snapshotReady.value) {
-    return false;
-  }
-
-  const currentSnapshot = createEventSnapshot();
-  return currentSnapshot !== originalEventSnapshot.value;
-};
-
-/**
- * Computed property to determine the page title based on mode
- */
-const pageTitle = computed(() => {
-  if (state.isDuplicationMode || state.mode === 'duplicate') {
-    return t('duplicate_event_title');
-  }
-  if (state.mode === 'edit' && state.event?.id) {
-    return t('edit_event_title');
-  }
-  return t('create_event_title');
-});
-
-/**
- * Handle back button navigation with unsaved changes check
- */
-const handleBack = async () => {
-  if (isDirty.value) {
-    // Show confirmation dialog
-    state.showUnsavedChangesDialog = true;
-    pendingNavigation.value = () => {
-      if (window.history.length > 1) {
-        router.back();
-      }
-      else {
-        router.push({ name: 'calendars' });
-      }
-    };
-  }
-  else {
-    // Navigate back directly
-    if (window.history.length > 1) {
-      router.back();
-    }
-    else {
-      router.push({ name: 'calendars' });
-    }
-  }
-};
-
-/**
- * Confirm leaving with unsaved changes
- */
-const confirmLeave = () => {
-  state.showUnsavedChangesDialog = false;
-  isDirty.value = false; // Reset dirty state to allow navigation
-
-  if (pendingNavigation.value) {
-    pendingNavigation.value();
-    pendingNavigation.value = null;
-  }
-};
-
-/**
- * Cancel leaving and stay on the page
- */
-const cancelLeave = () => {
-  state.showUnsavedChangesDialog = false;
-  pendingNavigation.value = null;
-};
-
-/**
- * Navigation guard to check for unsaved changes
- */
-onBeforeRouteLeave((to, from, next) => {
-  if (isDirty.value && !state.showUnsavedChangesDialog) {
-    // Show confirmation dialog and block navigation
-    state.showUnsavedChangesDialog = true;
-    pendingNavigation.value = () => next();
-    next(false);
-  }
-  else if (state.showUnsavedChangesDialog) {
-    // Already showing dialog, block navigation
-    next(false);
-  }
-  else {
-    // No unsaved changes, allow navigation
-    next();
-  }
-});
-
-/**
- * Add a language to the event
- */
-const addLanguage = (language) => {
-  languages.value = [...new Set(languages.value.concat(language))];
-  state.lang = language;
-};
-
-/**
- * Remove a language from the event
- */
-const removeLanguage = (language) => {
-  if (state.event) {
-    state.event.dropContent(language);
-  }
-  languages.value = languages.value.filter(l => l != language);
-  state.lang = languages.value[0];
+const handleBackClick = () => {
+  handleBack(router);
 };
 
 /**
@@ -1128,7 +993,7 @@ const removeLanguage = (language) => {
  */
 const handleImageUpload = (results) => {
   if (results && results.length > 0 && results[0].success) {
-    state.mediaId = results[0].media.id;
+    mediaId.value = results[0].media.id;
   }
 };
 
@@ -1136,77 +1001,39 @@ const handleImageUpload = (results) => {
  * Handle category selection changes
  */
 const handleCategoriesChanged = (categories) => {
-  state.selectedCategories = categories;
-};
-
-/**
- * Fetch locations for the current calendar
- */
-const fetchLocations = async (calendarId) => {
-  if (!calendarId) return;
-
-  try {
-    state.availableLocations = await locationService.getLocations(calendarId);
-  }
-  catch (error) {
-    console.error('Error fetching locations:', error);
-    state.availableLocations = [];
-  }
+  selectedCategories.value = categories;
 };
 
 /**
  * Handle opening the location picker modal
  */
 const handleOpenLocationPicker = async () => {
-  // Fetch latest locations before showing picker
-  await fetchLocations(state.event.calendarId);
-  state.showLocationPicker = true;
+  if (editorState.event) {
+    await openLocationPicker(editorState.event.calendarId);
+  }
 };
 
 /**
  * Handle location selection from the picker
  */
 const handleLocationSelected = async (location) => {
-  // Set the locationId on the event
-  state.event.locationId = location.id;
-
-  // Also set the location object for display purposes
-  state.event.location = location;
-
-  // Close the picker
-  state.showLocationPicker = false;
-};
-
-/**
- * Handle "Create New" button click from location picker
- */
-const handleCreateNewLocation = () => {
-  // Close picker and open create form
-  state.showLocationPicker = false;
-  state.showCreateLocationForm = true;
+  if (editorState.event) {
+    selectLocation(location, editorState.event);
+  }
 };
 
 /**
  * Handle location creation from the create form
  */
 const handleLocationCreated = async (locationData) => {
-  try {
-    // Create the location via API
-    const newLocation = await locationService.createLocation(state.event.calendarId, locationData);
-
-    // Add to available locations
-    state.availableLocations.push(newLocation);
-
-    // Auto-select the newly created location
-    state.event.locationId = newLocation.id;
-    state.event.location = newLocation;
-
-    // Close the create form
-    state.showCreateLocationForm = false;
-  }
-  catch (error) {
-    console.error('Error creating location:', error);
-    state.err = 'Failed to create location';
+  if (editorState.event) {
+    try {
+      await createLocation(editorState.event.calendarId, locationData, editorState.event);
+    }
+    catch (error) {
+      console.error('Error creating location:', error);
+      editorState.err = 'Failed to create location';
+    }
   }
 };
 
@@ -1214,24 +1041,41 @@ const handleLocationCreated = async (locationData) => {
  * Handle "Remove location" button click
  */
 const handleRemoveLocation = () => {
-  // Clear the location reference
-  state.event.locationId = null;
-  state.event.location = new EventLocation();
-
-  // Close the picker
-  state.showLocationPicker = false;
+  if (editorState.event) {
+    removeLocation(editorState.event);
+  }
 };
 
 /**
- * Handle "Back to search" from create location form
+ * Handle adding a language
  */
-const handleBackToSearch = () => {
-  state.showCreateLocationForm = false;
-  state.showLocationPicker = true;
+const handleAddLanguage = (language) => {
+  if (editorState.event) {
+    addLanguage(language, editorState.event);
+  }
+  closeLanguagePicker();
+};
+
+/**
+ * Handle removing a language
+ */
+const handleRemoveLanguage = (language) => {
+  if (editorState.event) {
+    removeLanguage(language, editorState.event);
+  }
+};
+
+/**
+ * Handle save event
+ */
+const handleSaveEvent = async () => {
+  await saveEvent(t, () => {
+    resetSnapshot(editorState.event, selectedCategories.value, mediaId.value);
+  });
 };
 
 // Watch for location picker visibility and show/hide the modal
-watch(() => state.showLocationPicker, async (newValue) => {
+watch(() => showLocationPicker.value, async (newValue) => {
   if (newValue) {
     await nextTick();
     locationPickerRef.value?.dialogRef?.showModal();
@@ -1239,7 +1083,7 @@ watch(() => state.showLocationPicker, async (newValue) => {
 });
 
 // Watch for create location form visibility and show/hide the modal
-watch(() => state.showCreateLocationForm, async (newValue) => {
+watch(() => showCreateLocationForm.value, async (newValue) => {
   if (newValue) {
     await nextTick();
     createLocationFormRef.value?.dialogRef?.showModal();
@@ -1247,7 +1091,7 @@ watch(() => state.showCreateLocationForm, async (newValue) => {
 });
 
 // Watch for error changes and scroll into view
-watch(() => state.err, async (newError) => {
+watch(() => editorState.err, async (newError) => {
   if (newError) {
     await nextTick();
     await nextTick();
@@ -1266,11 +1110,34 @@ watch(() => state.err, async (newError) => {
 }, { deep: true });
 
 // Watch for changes in event data and update dirty state
+// Watch the state object to catch changes to the event and its nested properties
 watch(
-  () => state.event,
+  () => editorState.event?._content,
   () => {
-    if (snapshotReady.value && originalEventSnapshot.value) {
-      isDirty.value = checkDirtyState();
+    if (snapshotReady.value && editorState.event) {
+      isDirty.value = checkDirtyState(editorState.event, selectedCategories.value, mediaId.value);
+    }
+  },
+  { deep: true },
+);
+
+// Also watch location changes
+watch(
+  () => editorState.event?.location,
+  () => {
+    if (snapshotReady.value && editorState.event) {
+      isDirty.value = checkDirtyState(editorState.event, selectedCategories.value, mediaId.value);
+    }
+  },
+  { deep: true },
+);
+
+// Also watch schedule changes
+watch(
+  () => editorState.event?.schedules,
+  () => {
+    if (snapshotReady.value && editorState.event) {
+      isDirty.value = checkDirtyState(editorState.event, selectedCategories.value, mediaId.value);
     }
   },
   { deep: true },
@@ -1278,10 +1145,10 @@ watch(
 
 // Watch for changes in selected categories
 watch(
-  () => state.selectedCategories,
+  () => selectedCategories.value,
   () => {
-    if (snapshotReady.value && originalEventSnapshot.value) {
-      isDirty.value = checkDirtyState();
+    if (snapshotReady.value) {
+      isDirty.value = checkDirtyState(editorState.event, selectedCategories.value, mediaId.value);
     }
   },
   { deep: true },
@@ -1289,283 +1156,51 @@ watch(
 
 // Watch for changes in media
 watch(
-  () => state.mediaId,
+  () => mediaId.value,
   () => {
-    if (snapshotReady.value && originalEventSnapshot.value) {
-      isDirty.value = checkDirtyState();
+    if (snapshotReady.value) {
+      isDirty.value = checkDirtyState(editorState.event, selectedCategories.value, mediaId.value);
     }
   },
 );
 
 /**
- * Determine the mode based on route parameters
- * - Edit mode: /event/:eventId
- * - Duplicate mode: /event?from=:eventId
- * - Create mode: /event (default)
- */
-const determineMode = () => {
-  const eventIdParam = props.eventId || route.params.eventId;
-  const fromParam = route.query.from;
-
-  if (eventIdParam) {
-    return 'edit';
-  }
-  if (fromParam) {
-    return 'duplicate';
-  }
-  return 'create';
-};
-
-/**
- * Initialize a new event for create mode
- */
-const initializeNewEvent = (calendar) => {
-  const event = new CalendarEvent();
-  event.location = new EventLocation();
-  event.addSchedule();
-  if (calendar) {
-    event.calendarId = calendar.id;
-  }
-  // Pre-populate default language content to avoid triggering dirty state when template renders
-  event.content(defaultLanguage);
-  return event;
-};
-
-/**
- * Load event for edit or duplicate mode
- * Uses ModelService which includes JWT authentication via axios interceptor
- */
-const loadEvent = async (eventId) => {
-  try {
-    const eventData = await ModelService.getModel(`/api/v1/events/${eventId}`);
-
-    if (!eventData) {
-      // Event not found
-      state.err = 'Event not found';
-      router.push({ name: 'calendars' });
-      return null;
-    }
-
-    return CalendarEvent.fromObject(eventData);
-  }
-  catch (error) {
-    console.error('Error loading event:', error);
-
-    // Check for axios error with response status
-    if (error.response) {
-      if (error.response.status === 401) {
-        // Not authenticated
-        router.push({ name: 'login' });
-        return null;
-      }
-      if (error.response.status === 403) {
-        // No permission
-        router.push({ name: 'calendars' });
-        return null;
-      }
-    }
-
-    state.err = 'Failed to load event';
-    return null;
-  }
-};
-
-/**
- * Main initialization logic
+ * Initialize event editor and then take snapshot
  */
 onBeforeMount(async () => {
-  try {
-    state.isLoading = true;
+  await initializeEvent(
+    props.eventId,
+    (updatedLanguages) => {
+      languages.value = updatedLanguages;
+    },
+    fetchLocations,
+  );
 
-    // Determine mode from route
-    state.mode = determineMode();
-    state.isDuplicationMode = state.mode === 'duplicate';
-
-    // Load available calendars
-    state.availableCalendars = await calendarService.loadCalendars();
-
-    if (state.availableCalendars.length === 0) {
-      // No calendars, redirect to calendar creation
-      router.push({ name: 'calendars' });
-      return;
-    }
-
-    // Handle different modes
-    if (state.mode === 'edit') {
-      // Edit mode: Load existing event
-      const eventId = props.eventId || route.params.eventId;
-      const loadedEvent = await loadEvent(eventId);
-
-      if (!loadedEvent) {
-        return; // Redirect handled in loadEvent
-      }
-
-      state.event = loadedEvent;
-      // Ensure default language content exists
-      state.event.content(defaultLanguage);
-
-      // Load categories for existing event
-      try {
-        const eventCategories = await categoryService.getEventCategories(loadedEvent.id);
-        state.selectedCategories = eventCategories.map(cat => cat.id);
-      }
-      catch (error) {
-        console.error('Error loading event categories:', error);
-      }
-    }
-    else if (state.mode === 'duplicate') {
-      // Duplicate mode: Load source event and strip IDs
-      const sourceEventId = route.query.from;
-      const sourceEvent = await loadEvent(sourceEventId);
-
-      if (!sourceEvent) {
-        return; // Redirect handled in loadEvent
-      }
-
-      // Strip the event for duplication
-      state.event = stripEventForDuplication(sourceEvent);
-      // Ensure default language content exists
-      state.event.content(defaultLanguage);
-
-      // Preserve categories from source event
-      if (sourceEvent.categories && sourceEvent.categories.length > 0) {
-        state.selectedCategories = sourceEvent.categories.map(cat => cat.id);
-      }
-
-      // Preserve media reference
-      if (sourceEvent.mediaId) {
-        state.mediaId = sourceEvent.mediaId;
-      }
-    }
-    else {
-      // Create mode: Initialize new event
-      // Check for pre-selected calendar from store
-      const preSelectedCalendar = calendarStore.getLastInteractedCalendar;
-
-      if (preSelectedCalendar) {
-        state.event = initializeNewEvent(preSelectedCalendar);
-      }
-      else if (state.availableCalendars.length === 1) {
-        state.event = initializeNewEvent(state.availableCalendars[0]);
-      }
-      else {
-        // Multiple calendars, use first one as default
-        state.event = initializeNewEvent(state.availableCalendars[0]);
-      }
-    }
-
-    // Update languages from event
-    if (state.event) {
-      const eventLanguages = state.event.getLanguages();
-      eventLanguages.unshift(defaultLanguage);
-      languages.value = [...new Set(eventLanguages)];
-
-      // Set current calendar
-      state.calendar = state.availableCalendars.find(c => c.id === state.event.calendarId);
-
-      // Fetch locations for the calendar
-      await fetchLocations(state.event.calendarId);
-    }
-  }
-  catch (error) {
-    console.error('Error initializing event editor:', error);
-    state.err = t('error_loading_calendars');
-  }
-  finally {
-    state.isLoading = false;
-  }
+  // After event is loaded, take the initial snapshot
+  // initializeSnapshot already includes nextTick() waits internally
+  await initializeSnapshot(editorState.event, selectedCategories.value, mediaId.value);
 });
 
 /**
- * After component is mounted and rendered, take the initial snapshot
+ * Navigation guard to check for unsaved changes
  */
-onMounted(async () => {
-  // Wait for the next tick(s) to ensure the template has rendered
-  // and any v-model bindings have initialized the content
-  await nextTick();
-  await nextTick();
-  await nextTick();
-
-  // Now take the snapshot - this captures the state after template rendering
-  originalEventSnapshot.value = createEventSnapshot();
-  snapshotReady.value = true;
+onBeforeRouteLeave((to, from, next) => {
+  setupNavigationGuard(to, from, next);
 });
 
-/**
- * Save the event (create or update)
- */
-const saveModel = async () => {
-  const model = state.event;
-
-  // Clear previous validation errors
-  state.err = '';
-  state.invalidFields = [];
-
-  // Ensure we have a calendarId
-  if (!model.calendarId && state.availableCalendars.length > 0) {
-    model.calendarId = state.availableCalendars[0].id;
-  }
-
-  if (!model.calendarId) {
-    state.err = t('error_no_calendar');
-    return;
-  }
-
-  try {
-    if (state.mediaId) {
-      model.mediaId = state.mediaId;
-    }
-
-    // Set locationId if a location has been selected
-    // (The location object is only for display purposes in the UI)
-    if (state.event.locationId) {
-      model.locationId = state.event.locationId;
-    }
-
-    // Save the event
-    const savedEvent = await eventService.saveEvent(model);
-
-    // Save category assignments if any categories are selected
-    if (state.selectedCategories.length > 0) {
-      try {
-        await categoryService.assignCategoriesToEvent(savedEvent.id, state.selectedCategories);
-      }
-      catch (categoryError) {
-        console.error('Error saving event categories:', categoryError);
-        // Don't fail the entire save for category errors
-      }
-    }
-
-    // Update selected calendar
-    calendarStore.setSelectedCalendar(model.calendarId);
-
-    // Reset dirty state after successful save to allow navigation
-    isDirty.value = false;
-    originalEventSnapshot.value = createEventSnapshot();
-
-    // Navigate to the calendar view for this event's calendar
-    const calendar = state.availableCalendars.find(c => c.id === model.calendarId);
-    if (calendar) {
-      router.push({
-        name: 'calendar',
-        params: { calendar: calendar.urlName },
-      });
-    }
-    else {
-      router.push({ name: 'calendars' });
-    }
-  }
-  catch (error) {
-    console.error('Error saving event:', error);
-    state.err = t('error_saving_event');
-  }
-};
-
-// Expose isDirty for testing
+// Expose properties for testing
 defineExpose({
   isDirty,
-  state,
+  snapshotReady,
+  showUnsavedChangesDialog,
+  state: editorState,
+  selectedCategories,
+  mediaId,
   confirmLeave,
   cancelLeave,
+  // Expose checkDirtyState for manual triggering in tests
+  checkDirtyState: () => {
+    isDirty.value = checkDirtyState(editorState.event, selectedCategories.value, mediaId.value);
+  },
 });
 </script>

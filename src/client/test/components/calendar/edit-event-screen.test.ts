@@ -194,8 +194,8 @@ describe('EditEventView - Component Refactoring', () => {
       // In create mode, the page title should indicate new event creation
       const header = wrapper.find('.page-header h1');
       expect(header.exists()).toBe(true);
-      // The title should contain the create event translation key
-      expect(header.text()).toContain('create_event_title');
+      // The title should contain the create event text (fallback from t function mock)
+      expect(header.text()).toContain('create event');
     });
 
     it('should initialize a new event in create mode', async () => {
@@ -256,9 +256,9 @@ describe('EditEventView - Component Refactoring', () => {
       // In duplicate mode, the from query param should be accessible
       expect(router.currentRoute.value.query.from).toBe(sourceEventId);
 
-      // The title should indicate duplication
+      // The title should indicate duplication (fallback from t function mock)
       const header = wrapper.find('.page-header h1');
-      expect(header.text()).toContain('duplicate_event_title');
+      expect(header.text()).toContain('duplicate event');
     });
   });
 
