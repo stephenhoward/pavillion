@@ -22,6 +22,10 @@ const state = reactive({
   showValidationError: false,
   successMessage: '',
   isSubmitting: false,
+  showForwardModal: false,
+  forwardSuccess: false,
+  forwardError: false,
+  isForwarding: false,
 });
 
 onMounted(async () => {
@@ -30,6 +34,25 @@ onMounted(async () => {
 
 const report = computed(() => moderationStore.currentAdminReport?.report);
 const escalationHistory = computed(() => moderationStore.currentAdminReport?.escalationHistory ?? []);
+
+/**
+ * Determines if this report is for a remote (federated) event.
+ * Remote events have calendarId set to null.
+ */
+const isRemoteEvent = computed(() => {
+  return report.value && report.value.calendarId === null;
+});
+
+/**
+ * Determines if the forward button should be shown.
+ * Only show for remote events that haven't been resolved or dismissed.
+ */
+const shouldShowForwardButton = computed(() => {
+  if (!isRemoteEvent.value) return false;
+  if (!report.value) return false;
+  return report.value.status !== ReportStatus.RESOLVED &&
+         report.value.status !== ReportStatus.DISMISSED;
+});
 
 const formatDate = (date: Date | string | null): string => {
   if (!date) return '—';
@@ -111,6 +134,45 @@ async function handleAction(action: 'override' | 'resolve' | 'dismiss') {
 function goBack() {
   router.push({ name: 'moderation' });
 }
+
+/**
+ * Opens the forward confirmation modal.
+ */
+function openForwardModal() {
+  state.showForwardModal = true;
+  state.forwardSuccess = false;
+  state.forwardError = false;
+}
+
+/**
+ * Closes the forward confirmation modal.
+ */
+function closeForwardModal() {
+  state.showForwardModal = false;
+}
+
+/**
+ * Forwards the report to the remote instance's administrator.
+ */
+async function handleForward() {
+  state.isForwarding = true;
+  state.forwardSuccess = false;
+  state.forwardError = false;
+
+  try {
+    await moderationStore.adminForwardToRemoteAdmin(reportId);
+    state.forwardSuccess = true;
+    state.showForwardModal = false;
+  }
+  catch (error) {
+    console.error('Error forwarding report to remote admin:', error);
+    state.forwardError = true;
+    state.showForwardModal = false;
+  }
+  finally {
+    state.isForwarding = false;
+  }
+}
 </script>
 
 <template>
@@ -162,6 +224,31 @@ function goBack() {
         <polyline points="20 6 9 17 4 12"/>
       </svg>
       {{ state.successMessage }}
+    </div>
+
+    <!-- Forward Success Toast -->
+    <div v-if="state.forwardSuccess"
+         class="success-message"
+         data-testid="forward-success-toast"
+         role="status">
+      <svg class="message-icon"
+           width="20"
+           height="20"
+           viewBox="0 0 24 24"
+           fill="none"
+           stroke="currentColor"
+           stroke-width="2">
+        <polyline points="20 6 9 17 4 12"/>
+      </svg>
+      {{ t('forward_success') }}
+    </div>
+
+    <!-- Forward Error Toast -->
+    <div v-if="state.forwardError"
+         class="error-message"
+         data-testid="forward-error-toast"
+         role="alert">
+      {{ t('forward_error') }}
     </div>
 
     <!-- Report Content -->
@@ -276,6 +363,26 @@ function goBack() {
         </ol>
       </section>
 
+      <!-- Forward to Remote Admin Section -->
+      <section
+        v-if="shouldShowForwardButton"
+        class="info-card"
+        aria-labelledby="forward-section-heading"
+      >
+        <h2 id="forward-section-heading" class="section-heading">{{ t('federation_actions') }}</h2>
+        <p class="section-description">{{ t('forward_description') }}</p>
+
+        <button
+          type="button"
+          class="forward-button"
+          data-testid="forward-to-admin-button"
+          @click="openForwardModal"
+          :disabled="state.isForwarding"
+        >
+          {{ t('forward_to_admin') }}
+        </button>
+      </section>
+
       <!-- Admin Action Section -->
       <section
         v-if="report.status !== ReportStatus.RESOLVED && report.status !== ReportStatus.DISMISSED"
@@ -337,6 +444,52 @@ function goBack() {
           </div>
         </div>
       </section>
+    </div>
+
+    <!-- Forward Confirmation Modal -->
+    <div v-if="state.showForwardModal"
+         class="modal-overlay"
+         data-testid="forward-confirmation-modal"
+         @click.self="closeForwardModal">
+      <div class="modal-content" role="dialog" aria-labelledby="forward-modal-title">
+        <h2 id="forward-modal-title" class="modal-title">{{ t('forward_confirm_title') }}</h2>
+
+        <div class="modal-body">
+          <p>{{ t('forward_confirm_message') }}</p>
+
+          <div class="report-summary">
+            <div class="summary-item">
+              <span class="summary-label">{{ t('category') }}:</span>
+              <span class="category-badge">{{ t(`category.${report?.category}`) }}</span>
+            </div>
+            <div class="summary-item">
+              <span class="summary-label">{{ t('description') }}:</span>
+              <p class="summary-text">{{ report?.description }}</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button
+            type="button"
+            class="modal-button modal-button-cancel"
+            data-testid="forward-cancel-button"
+            @click="closeForwardModal"
+            :disabled="state.isForwarding"
+          >
+            {{ t('cancel') }}
+          </button>
+          <button
+            type="button"
+            class="modal-button modal-button-confirm"
+            data-testid="forward-confirm-button"
+            @click="handleForward"
+            :disabled="state.isForwarding"
+          >
+            {{ state.isForwarding ? t('forwarding') : t('confirm_forward') }}
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -762,6 +915,158 @@ function goBack() {
             background: var(--pav-color-red-700);
           }
         }
+      }
+    }
+  }
+
+  // Forward to Admin Section
+  .section-description {
+    margin: 0 0 var(--pav-space-4) 0;
+    font-size: var(--pav-font-size-xs);
+    color: var(--pav-color-text-secondary);
+    line-height: 1.5;
+  }
+
+  .forward-button {
+    padding: var(--pav-space-2_5) var(--pav-space-5);
+    font-size: var(--pav-font-size-xs);
+    font-weight: var(--pav-font-weight-medium);
+    font-family: inherit;
+    background: var(--pav-color-blue-600);
+    color: #fff;
+    border: none;
+    border-radius: var(--pav-border-radius-full);
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    &:hover:not(:disabled) {
+      background: var(--pav-color-blue-700);
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--pav-color-brand-primary);
+      outline-offset: 2px;
+    }
+  }
+
+  // Modal styles
+  .modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: var(--pav-space-4);
+  }
+
+  .modal-content {
+    background: var(--pav-color-surface-primary);
+    border-radius: var(--pav-border-radius-xl);
+    padding: var(--pav-space-6);
+    max-width: 500px;
+    width: 100%;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  }
+
+  .modal-title {
+    margin: 0 0 var(--pav-space-4) 0;
+    font-size: var(--pav-font-size-lg);
+    font-weight: var(--pav-font-weight-medium);
+    color: var(--pav-color-text-primary);
+  }
+
+  .modal-body {
+    margin-bottom: var(--pav-space-6);
+
+    p {
+      margin: 0 0 var(--pav-space-4) 0;
+      font-size: var(--pav-font-size-xs);
+      color: var(--pav-color-text-secondary);
+      line-height: 1.5;
+    }
+  }
+
+  .report-summary {
+    background: var(--pav-color-surface-secondary);
+    padding: var(--pav-space-4);
+    border-radius: var(--pav-border-radius-md);
+    display: flex;
+    flex-direction: column;
+    gap: var(--pav-space-3);
+
+    .summary-item {
+      display: flex;
+      flex-direction: column;
+      gap: var(--pav-space-1);
+    }
+
+    .summary-label {
+      font-size: var(--pav-font-size-2xs);
+      font-weight: var(--pav-font-weight-medium);
+      color: var(--pav-color-text-muted);
+      text-transform: uppercase;
+      letter-spacing: var(--pav-letter-spacing-wider);
+    }
+
+    .summary-text {
+      margin: 0;
+      font-size: var(--pav-font-size-xs);
+      color: var(--pav-color-text-primary);
+      line-height: 1.5;
+    }
+  }
+
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--pav-space-3);
+  }
+
+  .modal-button {
+    padding: var(--pav-space-2_5) var(--pav-space-5);
+    font-size: var(--pav-font-size-xs);
+    font-weight: var(--pav-font-weight-medium);
+    font-family: inherit;
+    border: none;
+    border-radius: var(--pav-border-radius-full);
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--pav-color-brand-primary);
+      outline-offset: 2px;
+    }
+
+    &.modal-button-cancel {
+      background: var(--pav-color-stone-200);
+      color: var(--pav-color-stone-700);
+
+      &:hover:not(:disabled) {
+        background: var(--pav-color-stone-300);
+      }
+    }
+
+    &.modal-button-confirm {
+      background: var(--pav-color-blue-600);
+      color: #fff;
+
+      &:hover:not(:disabled) {
+        background: var(--pav-color-blue-700);
       }
     }
   }

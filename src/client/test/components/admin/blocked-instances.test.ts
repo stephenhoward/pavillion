@@ -10,10 +10,11 @@ import { BlockedInstance } from '@/common/model/blocked_instance';
 vi.mock('i18next-vue', () => ({
   useTranslation: () => ({
     t: (key: string, params?: Record<string, any>) => {
+      const fullKey = `blocked_instances.${key}`;
       if (params) {
-        return `${key}:${JSON.stringify(params)}`;
+        return `${fullKey}:${JSON.stringify(params)}`;
       }
-      return key;
+      return fullKey;
     },
   }),
 }));
@@ -23,9 +24,15 @@ describe('BlockedInstances', () => {
   let sandbox: sinon.SinonSandbox;
   let moderationStore: ReturnType<typeof useModerationStore>;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     sandbox = sinon.createSandbox();
     const pinia = createPinia();
+
+    // Get the store instance before mounting
+    moderationStore = useModerationStore(pinia);
+
+    // Stub fetchBlockedInstances to prevent API calls during mount
+    sandbox.stub(moderationStore, 'fetchBlockedInstances').resolves();
 
     wrapper = mount(BlockedInstances, {
       global: {
@@ -39,7 +46,7 @@ describe('BlockedInstances', () => {
       },
     });
 
-    moderationStore = useModerationStore();
+    await wrapper.vm.$nextTick();
   });
 
   afterEach(() => {
@@ -292,8 +299,7 @@ describe('BlockedInstances', () => {
 
   it('should display error message when blocking fails', async () => {
     moderationStore.loadingBlockedInstances = false;
-    sandbox.stub(moderationStore, 'blockInstance').rejects(new Error('API Error'));
-    moderationStore.blockingError = 'Failed to block instance';
+    const blockStub = sandbox.stub(moderationStore, 'blockInstance').rejects(new Error('API Error'));
 
     await wrapper.vm.$nextTick();
 
@@ -303,12 +309,16 @@ describe('BlockedInstances', () => {
     const reasonInput = wrapper.find('#reason-input');
     await reasonInput.setValue('Bad behavior');
 
+    // Set the error after we have the form visible
+    moderationStore.blockingError = 'Failed to block instance';
+
     const form = wrapper.find('.block-form');
     await form.trigger('submit');
 
     await wrapper.vm.$nextTick();
     await wrapper.vm.$nextTick();
 
+    expect(blockStub.calledOnce).toBe(true);
     expect(wrapper.find('.message-error').exists()).toBe(true);
   });
 

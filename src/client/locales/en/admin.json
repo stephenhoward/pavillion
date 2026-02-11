@@ -184,10 +184,13 @@
       "forward_confirm_title": "Forward Report to Remote Admin?",
       "forward_confirm_message": "This will send the report to the administrator of the remote instance where this event originated. The remote admin will be notified about this issue.",
       "forward_confirm_warning": "This action escalates the report to the remote instance administrators and cannot be undone.",
-      "forward_confirm_button": "Forward Report",
-      "forward_cancel_button": "Cancel",
+      "confirm_forward": "Forward Report",
+      "cancel": "Cancel",
+      "forwarding": "Forwarding...",
       "forward_success": "Report forwarded to remote admin successfully",
-      "forward_error": "Failed to forward report to remote admin"
+      "forward_error": "Failed to forward report to remote admin",
+      "federation_actions": "Federation Actions",
+      "forward_description": "This report is for a remote event. You can forward it to the remote instance's administrator for review."
     },
     "create": {
       "title": "Create Admin Report",

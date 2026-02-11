@@ -97,7 +97,7 @@ describe('Report Model', () => {
 
     expect(report.id).toBe('');
     expect(report.eventId).toBe('');
-    expect(report.calendarId).toBe('');
+    expect(report.calendarId).toBe(null);
     expect(report.category).toBe(ReportCategory.OTHER);
     expect(report.description).toBe('');
     expect(report.reporterEmailHash).toBe(null);

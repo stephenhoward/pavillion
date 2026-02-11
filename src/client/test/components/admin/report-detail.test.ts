@@ -40,6 +40,9 @@ describe('ReportDetail - Forward to Admin Button', () => {
     pinia = createPinia();
     setActivePinia(pinia);
     moderationStore = useModerationStore();
+
+    // Stub fetchAdminReport to prevent API calls during tests
+    vi.spyOn(moderationStore, 'fetchAdminReport').mockResolvedValue();
   });
 
   afterEach(() => {
@@ -320,8 +323,8 @@ describe('ReportDetail - Forward to Admin Button', () => {
       await confirmButton.trigger('click');
       await nextTick();
 
-      // Should have called the store action
-      expect(forwardSpy).toHaveBeenCalledWith('report-1');
+      // Should have called the store action with the route param ID
+      expect(forwardSpy).toHaveBeenCalledWith('test-report-id');
     });
 
     it('should show success message after forwarding', async () => {

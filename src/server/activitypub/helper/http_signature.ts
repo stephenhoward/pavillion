@@ -165,6 +165,11 @@ export async function verifyHttpSignature(req: Request, res: Response, next: Nex
     next();
   }
   catch(error) {
+    // Handle missing signature header as a 400 Bad Request
+    if (error instanceof Error && error.name === 'MissingHeaderError') {
+      return res.status(400).json({ error: 'Missing required signature header' });
+    }
+
     console.error('Error verifying HTTP signature', error);
     res.status(500).json({error: 'Error verifying HTTP signature'});
   }

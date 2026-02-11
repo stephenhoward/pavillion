@@ -50,7 +50,7 @@ type ForwardStatus = 'pending' | 'acknowledged' | 'no_response';
  */
 class Report extends PrimaryModel {
   eventId: string = '';
-  calendarId: string = '';
+  calendarId: string | null = null;
   category: ReportCategory = ReportCategory.OTHER;
   description: string = '';
   reporterEmailHash: string | null = null;
@@ -258,7 +258,7 @@ class Report extends PrimaryModel {
   static fromObject(obj: Record<string, any>): Report {
     const report = new Report(obj.id);
     report.eventId = obj.eventId ?? '';
-    report.calendarId = obj.calendarId ?? '';
+    report.calendarId = obj.calendarId !== undefined ? obj.calendarId : null;
     report.category = obj.category ?? ReportCategory.OTHER;
     report.description = obj.description ?? '';
     report.reporterEmailHash = obj.reporterEmailHash ?? null;

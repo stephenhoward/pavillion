@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 
 import { Report } from '@/common/model/report';
+import { BlockedInstance } from '@/common/model/blocked_instance';
 import ModerationService from '@/client/service/moderation';
 import type {
   ReportFilters,
@@ -42,6 +43,11 @@ interface ModerationState {
   moderationSettings: ModerationSettings | null;
   loadingSettings: boolean;
   adminError: string | null;
+
+  // Blocked instances state
+  blockedInstances: BlockedInstance[];
+  loadingBlockedInstances: boolean;
+  blockingError: string | null;
 }
 
 /** Shared service instance for all store actions. */
@@ -87,6 +93,11 @@ export const useModerationStore = defineStore('moderation', {
       moderationSettings: null,
       loadingSettings: false,
       adminError: null,
+
+      // Blocked instances state
+      blockedInstances: [],
+      loadingBlockedInstances: false,
+      blockingError: null,
     };
   },
 
@@ -129,6 +140,11 @@ export const useModerationStore = defineStore('moderation', {
       if (state.adminFilters.sortOrder) count++;
       return count;
     },
+
+    /**
+     * Whether the blocked instances array contains any instances.
+     */
+    hasBlockedInstances: (state) => state.blockedInstances.length > 0,
   },
 
   actions: {
@@ -510,6 +526,24 @@ export const useModerationStore = defineStore('moderation', {
     },
 
     /**
+     * Forwards a report to the remote admin of the federated instance
+     * that owns the event.
+     *
+     * @param reportId - The report UUID to forward
+     */
+    async adminForwardToRemoteAdmin(reportId: string) {
+      this.adminError = null;
+
+      try {
+        await moderationService.adminForwardToRemoteAdmin(reportId);
+      }
+      catch (error) {
+        this.adminError = error instanceof Error ? error.message : 'Failed to forward report';
+        throw error;
+      }
+    },
+
+    /**
      * Fetches instance-wide moderation settings.
      */
     async fetchModerationSettings() {
@@ -543,6 +577,62 @@ export const useModerationStore = defineStore('moderation', {
       }
       catch (error) {
         this.adminError = error instanceof Error ? error.message : 'Failed to save settings';
+        throw error;
+      }
+    },
+
+    /**
+     * Fetches the list of blocked instances.
+     */
+    async fetchBlockedInstances() {
+      this.loadingBlockedInstances = true;
+      this.blockingError = null;
+
+      try {
+        this.blockedInstances = await moderationService.listBlockedInstances();
+      }
+      catch (error) {
+        this.blockingError = error instanceof Error ? error.message : 'Failed to load blocked instances';
+        throw error;
+      }
+      finally {
+        this.loadingBlockedInstances = false;
+      }
+    },
+
+    /**
+     * Blocks a federated instance.
+     *
+     * @param domain - The domain to block
+     * @param reason - Reason for blocking
+     */
+    async blockInstance(domain: string, reason: string) {
+      this.blockingError = null;
+
+      try {
+        const blockedInstance = await moderationService.blockInstance(domain, reason);
+        this.blockedInstances.push(blockedInstance);
+      }
+      catch (error) {
+        this.blockingError = error instanceof Error ? error.message : 'Failed to block instance';
+        throw error;
+      }
+    },
+
+    /**
+     * Unblocks a federated instance.
+     *
+     * @param domain - The domain to unblock
+     */
+    async unblockInstance(domain: string) {
+      this.blockingError = null;
+
+      try {
+        await moderationService.unblockInstance(domain);
+        this.blockedInstances = this.blockedInstances.filter((instance) => instance.domain !== domain);
+      }
+      catch (error) {
+        this.blockingError = error instanceof Error ? error.message : 'Failed to unblock instance';
         throw error;
       }
     },

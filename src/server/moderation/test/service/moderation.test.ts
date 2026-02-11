@@ -10,7 +10,12 @@ import { EventReporterEntity } from '@/server/moderation/entity/event_reporter';
 import { ReportEscalationEntity } from '@/server/moderation/entity/report_escalation';
 import ModerationService from '@/server/moderation/service/moderation';
 import { EventNotFoundError } from '@/common/exceptions/calendar';
-import { ReportNotFoundError } from '@/server/moderation/exceptions';
+import {
+  ReportNotFoundError,
+  InvalidVerificationTokenError,
+  ReportAlreadyResolvedError,
+  EmailRateLimitError,
+} from '@/server/moderation/exceptions';
 import CalendarInterface from '@/server/calendar/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
 import ActivityPubInterface from '@/server/activitypub/interface';
@@ -418,6 +423,7 @@ describe('ModerationService', () => {
 
     it('should create a report for an anonymous reporter with hashed email and verification token', async () => {
       const hasReporterStub = sandbox.stub(service, 'hasReporterAlreadyReported').resolves(false);
+      sandbox.stub(service, 'isEmailBlocked').resolves(false);
       sandbox.stub(service, 'hasExceededEmailRateLimit').resolves(false);
 
       // Stub the entity save to return a model-like entity
@@ -462,6 +468,7 @@ describe('ModerationService', () => {
 
     it('should set verification token and expiration for anonymous reporters', async () => {
       sandbox.stub(service, 'hasReporterAlreadyReported').resolves(false);
+      sandbox.stub(service, 'isEmailBlocked').resolves(false);
       sandbox.stub(service, 'hasExceededEmailRateLimit').resolves(false);
 
       let capturedReport: Report | null = null;
@@ -494,6 +501,7 @@ describe('ModerationService', () => {
 
     it('should hash the email for anonymous reporters', async () => {
       sandbox.stub(service, 'hasReporterAlreadyReported').resolves(false);
+      sandbox.stub(service, 'isEmailBlocked').resolves(false);
       sandbox.stub(service, 'hasExceededEmailRateLimit').resolves(false);
 
       let capturedReport: Report | null = null;
@@ -590,6 +598,7 @@ describe('ModerationService', () => {
 
     it('should throw DuplicateReportError if reporter already reported the event', async () => {
       sandbox.stub(service, 'hasReporterAlreadyReported').resolves(true);
+      sandbox.stub(service, 'isEmailBlocked').resolves(false);
       sandbox.stub(service, 'hasExceededEmailRateLimit').resolves(false);
 
       await expect(service.createReport({
@@ -613,6 +622,7 @@ describe('ModerationService', () => {
     });
 
     it('should throw EmailRateLimitError when email exceeds rate limit', async () => {
+      sandbox.stub(service, 'isEmailBlocked').resolves(false);
       sandbox.stub(service, 'hasExceededEmailRateLimit').resolves(true);
 
       await expect(service.createReport({
@@ -626,6 +636,7 @@ describe('ModerationService', () => {
     });
 
     it('should check email rate limit before duplicate check for anonymous reporters', async () => {
+      sandbox.stub(service, 'isEmailBlocked').resolves(false);
       const emailRateLimitStub = sandbox.stub(service, 'hasExceededEmailRateLimit').resolves(true);
       const duplicateStub = sandbox.stub(service, 'hasReporterAlreadyReported').resolves(false);
 

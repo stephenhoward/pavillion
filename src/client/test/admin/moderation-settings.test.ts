@@ -35,6 +35,8 @@ describe('ModerationSettings.vue', () => {
         adminReportEscalationHours: 24,
         reminderBeforeEscalationHours: 12,
         autoEscalationThreshold: 3,
+        ipHashRetentionDays: 30,
+        ipSubnetRetentionDays: 90,
       };
 
       const wrapper = mount(ModerationSettings, {
@@ -61,6 +63,8 @@ describe('ModerationSettings.vue', () => {
         adminReportEscalationHours: 24,
         reminderBeforeEscalationHours: 12,
         autoEscalationThreshold: 5,
+        ipHashRetentionDays: 30,
+        ipSubnetRetentionDays: 90,
       };
 
       const wrapper = mount(ModerationSettings, {
@@ -86,6 +90,8 @@ describe('ModerationSettings.vue', () => {
         adminReportEscalationHours: 24,
         reminderBeforeEscalationHours: 12,
         autoEscalationThreshold: 3,
+        ipHashRetentionDays: 30,
+        ipSubnetRetentionDays: 90,
       };
 
       const wrapper = mount(ModerationSettings, {
@@ -115,6 +121,8 @@ describe('ModerationSettings.vue', () => {
         adminReportEscalationHours: 24,
         reminderBeforeEscalationHours: 12,
         autoEscalationThreshold: 3,
+        ipHashRetentionDays: 30,
+        ipSubnetRetentionDays: 90,
       };
 
       const wrapper = mount(ModerationSettings, {
@@ -152,6 +160,8 @@ describe('ModerationSettings.vue', () => {
         adminReportEscalationHours: 24,
         reminderBeforeEscalationHours: 12,
         autoEscalationThreshold: 3,
+        ipHashRetentionDays: 30,
+        ipSubnetRetentionDays: 90,
       };
 
       const wrapper = mount(ModerationSettings, {
@@ -189,6 +199,8 @@ describe('ModerationSettings.vue', () => {
         adminReportEscalationHours: 24,
         reminderBeforeEscalationHours: 12,
         autoEscalationThreshold: 3,
+        ipHashRetentionDays: 30,
+        ipSubnetRetentionDays: 90,
       };
 
       const wrapper = mount(ModerationSettings, {
@@ -227,6 +239,8 @@ describe('ModerationSettings.vue', () => {
         adminReportEscalationHours: 24,
         reminderBeforeEscalationHours: 12,
         autoEscalationThreshold: 3,
+        ipHashRetentionDays: 30,
+        ipSubnetRetentionDays: 90,
       };
 
       const wrapper = mount(ModerationSettings, {
@@ -243,8 +257,8 @@ describe('ModerationSettings.vue', () => {
       const thresholdInput = wrapper.find('#auto-escalation-threshold');
       await thresholdInput.setValue(10);
 
-      const saveButton = wrapper.find('button[type="submit"]');
-      await saveButton.trigger('click');
+      const form = wrapper.find('form');
+      await form.trigger('submit');
 
       await wrapper.vm.$nextTick();
 
@@ -266,6 +280,8 @@ describe('ModerationSettings.vue', () => {
         adminReportEscalationHours: 24,
         reminderBeforeEscalationHours: 12,
         autoEscalationThreshold: 3,
+        ipHashRetentionDays: 30,
+        ipSubnetRetentionDays: 90,
       };
 
       const wrapper = mount(ModerationSettings, {
@@ -283,7 +299,7 @@ describe('ModerationSettings.vue', () => {
       await thresholdInput.setValue(7);
 
       const form = wrapper.find('form');
-      form.trigger('submit');
+      await form.trigger('submit');
 
       await wrapper.vm.$nextTick();
 
@@ -300,6 +316,8 @@ describe('ModerationSettings.vue', () => {
         adminReportEscalationHours: 24,
         reminderBeforeEscalationHours: 12,
         autoEscalationThreshold: 3,
+        ipHashRetentionDays: 30,
+        ipSubnetRetentionDays: 90,
       };
 
       const wrapper = mount(ModerationSettings, {
@@ -328,14 +346,14 @@ describe('ModerationSettings.vue', () => {
     it('should show error feedback if save fails', async () => {
       vi.spyOn(moderationStore, 'fetchModerationSettings').mockResolvedValue(undefined);
       vi.spyOn(moderationStore, 'saveModerationSettings').mockRejectedValue(new Error('Network error'));
-      moderationStore.adminError = 'Network error';
-      moderationStore.loadingSettings = false;
       moderationStore.loadingSettings = false;
       moderationStore.moderationSettings = {
         autoEscalationHours: 72,
         adminReportEscalationHours: 24,
         reminderBeforeEscalationHours: 12,
         autoEscalationThreshold: 3,
+        ipHashRetentionDays: 30,
+        ipSubnetRetentionDays: 90,
       };
 
       const wrapper = mount(ModerationSettings, {

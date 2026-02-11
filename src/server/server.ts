@@ -63,8 +63,23 @@ async function initializeDatabase(): Promise<void> {
       console.log('Database schema synced (data preserved).');
     }
     else if (process.env.NODE_ENV === 'test') {
-      // Test mode: schema is managed by test environment, skip sync
-      console.log('Test mode: Skipping database sync (managed by test environment).');
+      // Test mode: sync database schema without seeding
+      // This creates all tables defined by registered entities (including new ones like blocked_reporter)
+      console.log('Test mode: Syncing database schema without seeding...');
+      try {
+        await db.sync({ force: true });
+        console.log('Test database schema synced successfully.');
+      }
+      catch (error: any) {
+        // In test mode, if sync fails due to existing indexes/tables (SQLite race condition),
+        // the database is already initialized from a previous test run - skip sync
+        if (error.parent?.code === 'SQLITE_ERROR' && error.message.includes('already exists')) {
+          console.log('Database already initialized, skipping sync...');
+        }
+        else {
+          throw error;
+        }
+      }
     }
     else {
       // Default development/federation behavior: reset and re-seed database

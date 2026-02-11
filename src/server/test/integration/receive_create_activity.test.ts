@@ -90,7 +90,7 @@ describe('ActivityPub Create Activity', async () => {
       });
     const entity = await EventEntity.findOne({ where: { id: remoteEventUrl } });
 
-    expect(response.status).toBe(500);
+    expect(response.status).toBe(400);
     expect(entity).toBe(null);
   });
 
