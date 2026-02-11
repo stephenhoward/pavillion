@@ -6,21 +6,24 @@ import { Account } from '@/common/model/account';
 import ActivityPubService from '@/server/activitypub/service/members';
 import { Calendar } from '@/common/model/calendar';
 import { FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
+import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import { InvalidRemoteCalendarIdentifierError } from '@/common/exceptions/activitypub';
+import { setupActivityPubSchema, teardownActivityPubSchema } from '../helpers/database';
 
 // Mock CalendarActor model for testing (remote type)
+// Note: Uses snake_case property names to match database entity schema
 const mockRemoteCalendar = {
   id: 'mock-calendar-actor-uuid',
-  actorType: 'remote',
-  calendarId: null,
-  actorUri: 'https://testdomain.com/calendars/testcalendar',
-  remoteDisplayName: null,
-  remoteDomain: 'testdomain.com',
-  inboxUrl: null,
-  sharedInboxUrl: null,
-  publicKey: null,
-  privateKey: null,
-  lastFetched: null,
+  actor_type: 'remote',
+  calendar_id: null,
+  actor_uri: 'https://testdomain.com/calendars/testcalendar',
+  remote_display_name: null,
+  remote_domain: 'testdomain.com',
+  inbox_url: null,
+  shared_inbox_url: null,
+  public_key: null,
+  private_key: null,
+  last_fetched: null,
   createdAt: new Date(),
   updatedAt: new Date(),
 };
@@ -175,7 +178,10 @@ describe("unfollowCalendar", () => {
   let userCanEditCalendarStub: sinon.SinonStub;
   let account: Account = Account.fromObject({ id: 'testAccountId' });
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    // Setup ephemeral ActivityPub database schema
+    await setupActivityPubSchema();
+
     const eventBus = new EventEmitter();
     service = new ActivityPubService(eventBus);
     getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
@@ -184,8 +190,11 @@ describe("unfollowCalendar", () => {
     userCanEditCalendarStub.resolves(true);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     sandbox.restore();
+
+    // Teardown ephemeral database schema
+    await teardownActivityPubSchema();
   });
 
   it('should unfollow the calendar', async () => {
@@ -202,9 +211,9 @@ describe("unfollowCalendar", () => {
       calendarId: undefined,
     });
 
-    // Mock RemoteCalendarService to return the CalendarActor for the AP URL
-    let getByActorUriStub = sandbox.stub(service.remoteCalendarService, 'getByActorUri');
-    getByActorUriStub.resolves(mockRemoteCalendar);
+    // Mock CalendarActorEntity.findOne to return the CalendarActor for the AP URL
+    let findCalendarActorStub = sandbox.stub(CalendarActorEntity, 'findOne');
+    findCalendarActorStub.resolves(mockRemoteCalendar as any);
 
     let getExistingFollowStub = sandbox.stub(FollowingCalendarEntity, 'findAll');
     getExistingFollowStub.resolves([
@@ -235,7 +244,7 @@ describe("unfollowCalendar", () => {
       expect(outboxCall.args[1].actor).toBe('https://testdomain.com/calendars/testcalendar');
       expect(outboxCall.args[1].object).toBe('testfollowid');
       // Verify the recipient is set to the AP URL, not the UUID
-      expect(outboxCall.args[1].to).toContain(mockRemoteCalendar.actorUri);
+      expect(outboxCall.args[1].to).toContain(mockRemoteCalendar.actor_uri);
     }
   });
 
@@ -253,9 +262,9 @@ describe("unfollowCalendar", () => {
       calendarId: undefined,
     });
 
-    // Mock RemoteCalendarService - no RemoteCalendar found for this URL
-    let getByActorUriStub = sandbox.stub(service.remoteCalendarService, 'getByActorUri');
-    getByActorUriStub.resolves(null);
+    // Mock CalendarActorEntity.findOne - no CalendarActor found for this URL
+    let findCalendarActorStub = sandbox.stub(CalendarActorEntity, 'findOne');
+    findCalendarActorStub.resolves(null);
 
     let getExistingFollowStub = sandbox.stub(FollowingCalendarEntity, 'findAll');
     getExistingFollowStub.resolves([]);

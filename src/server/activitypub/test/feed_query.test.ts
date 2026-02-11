@@ -90,13 +90,22 @@ describe('ActivityPubService - getFeed with EventObjectEntity Join', () => {
     // Verify the query structure for the new design
     const queryOptions = findAllStub.firstCall.args[0] as any;
 
-    // Check that the where clause filters for remote events (calendar_id = null)
+    // Check that the where clause uses Op.or with both remote and local conditions
     expect(queryOptions.where).toBeDefined();
-    expect(queryOptions.where.calendar_id).toBeNull();
+    expect(queryOptions.where[Op.or]).toBeDefined();
+    expect(Array.isArray(queryOptions.where[Op.or])).toBe(true);
+    expect(queryOptions.where[Op.or].length).toBe(2);
 
-    // Check that it uses a subquery to join via EventObjectEntity
-    expect(queryOptions.where.id).toBeDefined();
-    expect(queryOptions.where.id[Op.in]).toBeDefined();
+    // First condition: remote events (calendar_id = null with EventObjectEntity subquery)
+    const remoteCondition = queryOptions.where[Op.or][0];
+    expect(remoteCondition.calendar_id).toBeNull();
+    expect(remoteCondition.id).toBeDefined();
+    expect(remoteCondition.id[Op.in]).toBeDefined();
+
+    // Second condition: local events (calendar_id from followed local calendars)
+    const localCondition = queryOptions.where[Op.or][1];
+    expect(localCondition.calendar_id).toBeDefined();
+    expect(localCondition.calendar_id[Op.in]).toBeDefined();
   });
 
   it('should order results by createdAt DESC', async () => {

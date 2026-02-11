@@ -1,13 +1,38 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
+import i18next from 'i18next';
+import I18NextVue from 'i18next-vue';
 import CreateLocationForm from '@/client/components/common/CreateLocationForm.vue';
 import PillButton from '@/client/components/common/PillButton.vue';
 import LanguageTabSelector from '@/client/components/common/LanguageTabSelector.vue';
+import enSystem from '@/client/locales/en/system.json';
 
 describe('CreateLocationForm', () => {
+  beforeEach(async () => {
+    // Initialize i18next for tests
+    await i18next.init({
+      lng: 'en',
+      resources: {
+        en: {
+          system: enSystem,
+        },
+      },
+    });
+  });
+
+  function mountWithI18n(options: any = {}) {
+    return mount(CreateLocationForm, {
+      ...options,
+      global: {
+        plugins: [[I18NextVue, { i18next }]],
+        components: options.global?.components,
+      },
+    });
+  }
+
   describe('rendering', () => {
     it('should render dialog with title', () => {
-      const wrapper = mount(CreateLocationForm, {
+      const wrapper = mountWithI18n({
         props: {
           languages: ['en'],
         },
@@ -18,7 +43,7 @@ describe('CreateLocationForm', () => {
     });
 
     it('should render all form fields', () => {
-      const wrapper = mount(CreateLocationForm, {
+      const wrapper = mountWithI18n({
         props: {
           languages: ['en'],
         },
@@ -32,7 +57,7 @@ describe('CreateLocationForm', () => {
     });
 
     it('should render accessibility section with language tabs', () => {
-      const wrapper = mount(CreateLocationForm, {
+      const wrapper = mountWithI18n({
         props: {
           languages: ['en', 'es'],
         },
@@ -47,7 +72,7 @@ describe('CreateLocationForm', () => {
     });
 
     it('should render accessibility textarea', () => {
-      const wrapper = mount(CreateLocationForm, {
+      const wrapper = mountWithI18n({
         props: {
           languages: ['en'],
         },
@@ -58,7 +83,7 @@ describe('CreateLocationForm', () => {
     });
 
     it('should render footer buttons', () => {
-      const wrapper = mount(CreateLocationForm, {
+      const wrapper = mountWithI18n({
         props: {
           languages: ['en'],
         },
@@ -82,7 +107,7 @@ describe('CreateLocationForm', () => {
 
   describe('validation', () => {
     it('should disable Create button when name is empty', () => {
-      const wrapper = mount(CreateLocationForm, {
+      const wrapper = mountWithI18n({
         props: {
           languages: ['en'],
         },
@@ -98,7 +123,7 @@ describe('CreateLocationForm', () => {
     });
 
     it('should enable Create button when name is filled', async () => {
-      const wrapper = mount(CreateLocationForm, {
+      const wrapper = mountWithI18n({
         props: {
           languages: ['en'],
         },
@@ -117,7 +142,7 @@ describe('CreateLocationForm', () => {
     });
 
     it('should show required indicator on name field', () => {
-      const wrapper = mount(CreateLocationForm, {
+      const wrapper = mountWithI18n({
         props: {
           languages: ['en'],
         },
@@ -130,7 +155,7 @@ describe('CreateLocationForm', () => {
 
   describe('language selector', () => {
     it('should switch accessibility language when tab selected', async () => {
-      const wrapper = mount(CreateLocationForm, {
+      const wrapper = mountWithI18n({
         props: {
           languages: ['en', 'es'],
         },
@@ -153,7 +178,7 @@ describe('CreateLocationForm', () => {
     });
 
     it('should preserve accessibility info when switching languages', async () => {
-      const wrapper = mount(CreateLocationForm, {
+      const wrapper = mountWithI18n({
         props: {
           languages: ['en', 'es'],
         },
@@ -182,7 +207,7 @@ describe('CreateLocationForm', () => {
     });
 
     it('should handle add language event', async () => {
-      const wrapper = mount(CreateLocationForm, {
+      const wrapper = mountWithI18n({
         props: {
           languages: ['en'],
         },
@@ -200,7 +225,7 @@ describe('CreateLocationForm', () => {
 
   describe('form submission', () => {
     it('should emit create-location with form data', async () => {
-      const wrapper = mount(CreateLocationForm, {
+      const wrapper = mountWithI18n({
         props: {
           languages: ['en'],
         },
@@ -232,7 +257,7 @@ describe('CreateLocationForm', () => {
     });
 
     it('should include accessibility info in submission', async () => {
-      const wrapper = mount(CreateLocationForm, {
+      const wrapper = mountWithI18n({
         props: {
           languages: ['en', 'es'],
         },
@@ -267,7 +292,7 @@ describe('CreateLocationForm', () => {
     });
 
     it('should omit empty optional fields', async () => {
-      const wrapper = mount(CreateLocationForm, {
+      const wrapper = mountWithI18n({
         props: {
           languages: ['en'],
         },
@@ -296,7 +321,7 @@ describe('CreateLocationForm', () => {
 
   describe('navigation', () => {
     it('should emit back-to-search when Back button clicked', async () => {
-      const wrapper = mount(CreateLocationForm, {
+      const wrapper = mountWithI18n({
         props: {
           languages: ['en'],
         },
