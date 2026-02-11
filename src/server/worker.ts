@@ -8,6 +8,7 @@ import DiskMonitorService from '@/server/housekeeping/service/disk-monitor';
 import AlertsService from '@/server/housekeeping/service/alerts';
 import EmailInterface from '@/server/email/interface';
 import AccountsInterface from '@/server/accounts/interface';
+import IpCleanupService from '@/server/moderation/service/ip-cleanup';
 
 /**
  * Worker mode entrypoint for Pavillion.
@@ -31,6 +32,7 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
   const emailInterface = new EmailInterface();
   const accountsInterface = new AccountsInterface();
   const alertsService = new AlertsService(emailInterface, accountsInterface);
+  const ipCleanupService = new IpCleanupService();
 
   // Manual backup job handler (triggered via API/CLI)
   await queue.subscribe('backup:create', async (data: any) => {
@@ -112,6 +114,27 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
       // Don't throw - allow monitoring to continue on next scheduled check
     }
   });
+
+  // IP cleanup job handler (runs daily at 3 AM)
+  await queue.schedule('moderation:ip-cleanup', '0 3 * * *', async (data) => {
+    console.log('[Worker] Executing moderation:ip-cleanup job');
+    try {
+      // Get retention configuration
+      const hashRetentionDays = config.get<number>('moderation.retention.ipHash');
+      const subnetRetentionDays = config.get<number>('moderation.retention.ipSubnet');
+
+      console.log(`[Worker] IP cleanup policy: ${hashRetentionDays} days for hashes, ${subnetRetentionDays} days for subnets`);
+
+      // Execute cleanup
+      const result = await ipCleanupService.cleanupExpiredIpData(hashRetentionDays, subnetRetentionDays);
+
+      console.log(`[Worker] IP cleanup completed: ${result.hashCleared} hashes cleared, ${result.subnetCleared} subnets cleared`);
+    }
+    catch (error) {
+      console.error('[Worker] IP cleanup failed:', error);
+      throw error;
+    }
+  });
 }
 
 /**
@@ -124,6 +147,10 @@ function getNextRunTime(cronExpression: string): string {
   // Simple approximation based on cron patterns
   if (cronExpression === '0 2 * * *') {
     const next = DateTime.now().plus({ days: 1 }).set({ hour: 2, minute: 0, second: 0 });
+    return next.toFormat('MMM dd, yyyy h:mm a');
+  }
+  else if (cronExpression === '0 3 * * *') {
+    const next = DateTime.now().plus({ days: 1 }).set({ hour: 3, minute: 0, second: 0 });
     return next.toFormat('MMM dd, yyyy h:mm a');
   }
   else if (cronExpression === '0 * * * *') {
@@ -141,6 +168,7 @@ function logStartupMessages(): void {
   console.log('[Pavillion] pg-boss queue: connected');
   console.log('[Pavillion] Scheduled jobs registered:');
   console.log(`  - backup:daily at 2:00 AM (next: ${getNextRunTime('0 2 * * *')})`);
+  console.log(`  - moderation:ip-cleanup at 3:00 AM (next: ${getNextRunTime('0 3 * * *')})`);
   console.log(`  - disk:check hourly (next: ${getNextRunTime('0 * * * *')})`);
   console.log('  - backup:create (manual backups via CLI/API)');
   console.log('[Pavillion] Worker ready, processing jobs...');

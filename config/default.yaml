@@ -40,6 +40,10 @@ moderation:
   # HMAC secret for hashing reporter email addresses
   # In production, this MUST be changed to a unique, random secret
   emailHashSecret: 'development-only-email-hash-secret-do-not-use-in-production'
+  # IP data retention policy (in days)
+  retention:
+    ipHash: 30  # Days to retain full IP hashes
+    ipSubnet: 90  # Days to retain subnet information
 
 # Rate limiting configuration
 rateLimit:
