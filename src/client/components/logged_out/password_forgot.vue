@@ -53,7 +53,7 @@
   </form>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { reactive, inject } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
@@ -78,20 +78,30 @@ async function startReset() {
     await authentication.reset_password( state.email );
     state.showSuccess = true;
   }
-  catch(error) {
-    let error_text = "unknown_error";
+  catch (error: unknown) {
+    let errorKey = 'unknown_error';
 
-    if ( typeof error  == "object" && "response" in error ) {
-      error_text = error.response.data || error.response.status;
+    // Type guard - check if error is an object with response property
+    if (error && typeof error === 'object' && 'response' in error) {
+      const responseError = error as any;
+      if (responseError.response && responseError.response.data) {
+        const data = responseError.response.data;
+        // Prefer errorName field for structured errors
+        if (data.errorName && typeof data.errorName === 'string') {
+          errorKey = data.errorName;
+        }
+        // Fallback to error field for legacy responses
+        else if (data.error && typeof data.error === 'string') {
+          errorKey = data.error;
+        }
+      }
     }
-    else if ( typeof error == "string" ) {
-      error_text = error;
-    }
-    else {
-      console.log(error);
+    // Handle string errors
+    else if (typeof error === 'string') {
+      errorKey = error;
     }
 
-    state.error = t( error_text ) || error_text;
+    state.error = t(errorKey);
   }
 }
 </script>

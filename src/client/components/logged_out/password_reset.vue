@@ -95,7 +95,7 @@
 }
 </style>
 
-<script setup>
+<script setup lang="ts">
 import { reactive, onBeforeMount, inject } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
@@ -161,9 +161,9 @@ function validatePasswordField() {
 /**
  * Translates error keys to user-facing messages.
  */
-function translateError(errorKey) {
+function translateError(errorKey: string) {
   // Map known error keys to translation keys
-  const errorMap = {
+  const errorMap: Record<string, string> = {
     'password_too_short': 'password_too_short',
     'password_needs_variety': 'password_needs_variety',
   };
@@ -198,20 +198,30 @@ async function setPassword() {
       await authn.use_password_reset_token(state.reset_code, state.password);
       router.push('/auth/login');
     }
-    catch (error) {
-      let error_text = "unknown_error";
+    catch (error: unknown) {
+      let errorKey = 'unknown_error';
 
-      if ( typeof error  == "object" && "response" in error ) {
-        error_text = error.response.data || error.response.status;
+      // Type guard - check if error is an object with response property
+      if (error && typeof error === 'object' && 'response' in error) {
+        const responseError = error as any;
+        if (responseError.response && responseError.response.data) {
+          const data = responseError.response.data;
+          // Prefer errorName field for structured errors
+          if (data.errorName && typeof data.errorName === 'string') {
+            errorKey = data.errorName;
+          }
+          // Fallback to error field for legacy responses
+          else if (data.error && typeof data.error === 'string') {
+            errorKey = data.error;
+          }
+        }
       }
-      else if ( typeof error == "string" ) {
-        error_text = error;
-      }
-      else {
-        console.log(error);
+      // Handle string errors
+      else if (typeof error === 'string') {
+        errorKey = error;
       }
 
-      state.form_error = t( error_text ) || error_text;
+      state.form_error = t(errorKey);
     }
   }
 }

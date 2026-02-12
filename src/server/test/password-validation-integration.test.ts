@@ -45,7 +45,8 @@ describe('Server-side Password Validation Integration', () => {
 
       // Password validation should reject before service is called
       expect(response.status).toBe(400);
-      expect(response.body.message).toBe('password_too_short');
+      expect(response.body.error).toBe('password_too_short');
+      expect(response.body.errorName).toBe('password_too_short');
       // Service should NOT have been called since validation failed
       expect(resetPasswordStub.called).toBe(false);
     });
@@ -71,7 +72,8 @@ describe('Server-side Password Validation Integration', () => {
         .send({ password: 'onlyletters' });
 
       expect(response.status).toBe(400);
-      expect(response.body.message).toBe('password_needs_variety');
+      expect(response.body.error).toBe('password_needs_variety');
+      expect(response.body.errorName).toBe('password_needs_variety');
       expect(resetPasswordStub.called).toBe(false);
     });
   });
@@ -96,7 +98,8 @@ describe('Server-side Password Validation Integration', () => {
         .send({ password: 'short1!' });
 
       expect(response.status).toBe(400);
-      expect(response.body.message).toBe('password_too_short');
+      expect(response.body.error).toBe('password_too_short');
+      expect(response.body.errorName).toBe('password_too_short');
       // Service should NOT have been called since validation failed
       expect(acceptAccountInviteStub.called).toBe(false);
     });
@@ -120,7 +123,8 @@ describe('Server-side Password Validation Integration', () => {
         .send({ password: '12345678' });
 
       expect(response.status).toBe(400);
-      expect(response.body.message).toBe('password_needs_variety');
+      expect(response.body.error).toBe('password_needs_variety');
+      expect(response.body.errorName).toBe('password_needs_variety');
       expect(acceptAccountInviteStub.called).toBe(false);
     });
   });

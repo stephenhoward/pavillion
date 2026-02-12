@@ -69,7 +69,10 @@ export default class AccountInvitationRouteHandlers {
     // Validate password before processing
     const passwordValidation = validatePassword(req.body.password || '');
     if (!passwordValidation.valid) {
-      res.status(400).json({ message: passwordValidation.errors[0] });
+      res.status(400).json({
+        error: passwordValidation.errors[0],
+        errorName: passwordValidation.errors[0],
+      });
       return;
     }
 

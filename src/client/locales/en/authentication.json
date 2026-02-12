@@ -23,7 +23,9 @@
     "error_400": "There is a problem with the email you submitted",
     "error_404": "We could not find an account with that email address",
     "error_500": "Oops. The server ran into an error. Please contact support",
-    "no_email_provided": "Please enter your email address"
+    "no_email_provided": "Please enter your email address",
+    "unknown_error": "An error occurred. Please try again.",
+    "PasswordResetGenerationError": "Unable to send reset email. Please try again later."
   },
   "reset_password": {
     "check_email_title": "Password Reset Sent",
@@ -48,6 +50,8 @@
     "no_password_provided": "Must provide a password",
     "unknown_error": "An unknown error occurred",
     "password_too_short": "Password must be at least 8 characters",
-    "password_needs_variety": "Password must include at least two of: letters, numbers, special characters"
+    "password_needs_variety": "Password must include at least two of: letters, numbers, special characters",
+    "PasswordResetError": "Unable to reset password. The code may be invalid or expired.",
+    "TokenRefreshError": "Session expired. Please log in again."
   }
 }

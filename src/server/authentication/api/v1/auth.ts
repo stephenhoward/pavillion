@@ -58,11 +58,17 @@ export default class AuthenticationRouteHandlers {
         res.send(ExpressHelper.generateJWT(account));
       }
       else {
-        res.status(400).json({message: 'error refreshing token'});
+        res.status(400).json({
+          error: 'error refreshing token',
+          errorName: 'TokenRefreshError',
+        });
       }
     }
     else {
-      res.status(400).json({message: 'error refreshing token'});
+      res.status(400).json({
+        error: 'error refreshing token',
+        errorName: 'TokenRefreshError',
+      });
     }
   }
 
@@ -87,7 +93,10 @@ export default class AuthenticationRouteHandlers {
       }
       else {
         logError(error, 'Error generating password reset code');
-        res.status(500).json({message: 'error generating password reset code'});
+        res.status(500).json({
+          error: 'error generating password reset code',
+          errorName: 'PasswordResetGenerationError',
+        });
         return;
       }
     }
@@ -98,7 +107,10 @@ export default class AuthenticationRouteHandlers {
     // Validate password before processing
     const passwordValidation = validatePassword(req.body.password || '');
     if (!passwordValidation.valid) {
-      res.status(400).json({ message: passwordValidation.errors[0] });
+      res.status(400).json({
+        error: passwordValidation.errors[0],
+        errorName: passwordValidation.errors[0],
+      });
       return;
     }
 
@@ -107,7 +119,10 @@ export default class AuthenticationRouteHandlers {
       res.send(ExpressHelper.generateJWT(account));
     }
     else {
-      res.status(400).json({message: 'error resetting password' });
+      res.status(400).json({
+        error: 'error resetting password',
+        errorName: 'PasswordResetError',
+      });
     }
   }
 
