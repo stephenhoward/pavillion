@@ -16,6 +16,7 @@ import AccountInvitationEmail from '@/server/accounts/model/invitation_email';
 import ApplicationAcceptedEmail from '@/server/accounts/model/application_accepted_email';
 import ApplicationRejectedEmail from '@/server/accounts/model/application_rejected_email';
 import ApplicationAcknowledgmentEmail from '@/server/accounts/model/application_acknowledgment_email';
+import AccountAlreadyExistsEmail from '@/server/accounts/model/account_already_exists_email';
 import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
 import CalendarInterface from '@/server/calendar/interface';
@@ -155,7 +156,22 @@ export default class AccountService {
     if ( settings.registrationMode != 'open' ) {
       throw new AccountRegistrationClosedError();
     }
-    const accountInfo = await this._setupAccount(email);
+
+    let accountInfo;
+    try {
+      accountInfo = await this._setupAccount(email);
+    }
+    catch (error) {
+      if (error instanceof AccountAlreadyExistsError) {
+        const existingAccount = await this.getAccountByEmail(email);
+        if (existingAccount) {
+          const message = new AccountAlreadyExistsEmail(existingAccount);
+          this.emailInterface.sendEmail(message.buildMessage(existingAccount.language));
+        }
+        throw error;
+      }
+      throw error;
+    }
 
     const message = new AccountRegistrationEmail(accountInfo.account, accountInfo.password_code);
     this.emailInterface.sendEmail(message.buildMessage(accountInfo.account.language));

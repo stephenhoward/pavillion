@@ -176,6 +176,27 @@ describe('registerNewAccount', () => {
     expect(account.email).toBe('test_email');
     expect(emailStub.called).toBe(true);
   });
+
+  it('sends notification email when account already exists', async () => {
+    let getSettingStub = sandbox.stub(ServiceSettings.prototype, 'get');
+    let setupAccountStub = sandbox.stub(accountService, '_setupAccount');
+    let getAccountStub = sandbox.stub(accountService, 'getAccountByEmail');
+    let emailStub = sandbox.stub(emailInterface, 'sendEmail');
+
+    getSettingStub.withArgs('registrationMode').returns('open');
+    setupAccountStub.rejects(new AccountAlreadyExistsError());
+
+    const existingAccount = new Account('existing-id', 'existinguser', 'test_email');
+    existingAccount.language = 'fr';
+    getAccountStub.resolves(existingAccount);
+
+    await expect(accountService.registerNewAccount('test_email')).rejects
+      .toThrow(AccountAlreadyExistsError);
+
+    expect(emailStub.calledOnce).toBe(true);
+    const mailData = emailStub.firstCall.args[0];
+    expect(mailData.emailAddress).toBe('test_email');
+  });
 });
 
 describe('applyForNewAccount', () => {

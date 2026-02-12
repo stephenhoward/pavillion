@@ -1,0 +1,14 @@
+{
+    "subject": "Registration Attempt",
+    "title": "Account Already Registered",
+    "greeting": "Hello,",
+    "instructions": "Someone attempted to register an account using your email address. If this was you, you already have an account. You can log in or reset your password using the links below.",
+    "login_label": "Log in to your account:",
+    "login_button": "Log In",
+    "forgot_password_text": "If you've forgotten your password, you can reset it:",
+    "forgot_password_label": "Reset your password:",
+    "forgot_password_button": "Reset Password",
+    "signature": "Thank you,",
+    "team_name": "The Pavillion Team",
+    "footer_text": "This is an automated message, please do not reply to this email."
+}
