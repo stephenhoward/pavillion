@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { EventEmitter } from "events";
 import axios from "axios";
 import { logError } from '@/server/common/helper/error-logger';
+import { logActivityRejection } from '../helper/rejection-logger';
 
 import CreateActivity from "@/server/activitypub/model/action/create";
 import UpdateActivity from "@/server/activitypub/model/action/update";
@@ -190,6 +191,23 @@ class ProcessInboxService {
   }
 
   /**
+   * Extracts the domain from an actor URI for logging purposes.
+   * Returns 'unknown' for invalid URIs.
+   *
+   * @param actorUri - The actor URI to parse
+   * @returns The domain name or 'unknown'
+   */
+  private extractDomain(actorUri: string): string {
+    try {
+      const url = new URL(actorUri);
+      return url.hostname;
+    }
+    catch {
+      return 'unknown';
+    }
+  }
+
+  /**
    * Processes all unprocessed inbox messages in batches.
    *
    * @returns {Promise<void>}
@@ -238,6 +256,18 @@ class ProcessInboxService {
           if (isBlocked) {
             console.log(`[INBOX] Rejected activity from blocked instance: ${domain} (actor: ${actorUri})`);
 
+            // Log the rejection
+            logActivityRejection({
+              rejection_type: 'blocked_instance',
+              activity_type: message.type || 'unknown',
+              actor_uri: actorUri,
+              actor_domain: domain,
+              calendar_id: calendar.id,
+              calendar_url_name: calendar.urlName,
+              reason: `Activity rejected from blocked instance: ${domain}`,
+              message_id: message.id,
+            });
+
             // Mark message as processed with 'blocked' status
             await message.update({
               processed_time: DateTime.now().toJSDate(),
@@ -254,6 +284,17 @@ class ProcessInboxService {
           {
             const activity = CreateActivity.fromObject(message.message);
             if (!activity) {
+              const actorUri = (message.message as any)?.actor || 'unknown';
+              logActivityRejection({
+                rejection_type: 'parse_failure',
+                activity_type: 'Create',
+                actor_uri: actorUri,
+                actor_domain: this.extractDomain(actorUri),
+                calendar_id: calendar.id,
+                calendar_url_name: calendar.urlName,
+                reason: 'Failed to parse Create activity',
+                message_id: message.id,
+              });
               throw new Error('Failed to parse Create activity');
             }
             await this.processCreateEvent(calendar, activity);
@@ -263,6 +304,17 @@ class ProcessInboxService {
           {
             const activity = UpdateActivity.fromObject(message.message);
             if (!activity) {
+              const actorUri = (message.message as any)?.actor || 'unknown';
+              logActivityRejection({
+                rejection_type: 'parse_failure',
+                activity_type: 'Update',
+                actor_uri: actorUri,
+                actor_domain: this.extractDomain(actorUri),
+                calendar_id: calendar.id,
+                calendar_url_name: calendar.urlName,
+                reason: 'Failed to parse Update activity',
+                message_id: message.id,
+              });
               throw new Error('Failed to parse Update activity');
             }
             await this.processUpdateEvent(calendar, activity);
@@ -272,6 +324,17 @@ class ProcessInboxService {
           {
             const activity = DeleteActivity.fromObject(message.message);
             if (!activity) {
+              const actorUri = (message.message as any)?.actor || 'unknown';
+              logActivityRejection({
+                rejection_type: 'parse_failure',
+                activity_type: 'Delete',
+                actor_uri: actorUri,
+                actor_domain: this.extractDomain(actorUri),
+                calendar_id: calendar.id,
+                calendar_url_name: calendar.urlName,
+                reason: 'Failed to parse Delete activity',
+                message_id: message.id,
+              });
               throw new Error('Failed to parse Delete activity');
             }
             await this.processDeleteEvent(calendar, activity);
@@ -281,6 +344,17 @@ class ProcessInboxService {
           {
             const activity = FollowActivity.fromObject(message.message);
             if (!activity) {
+              const actorUri = (message.message as any)?.actor || 'unknown';
+              logActivityRejection({
+                rejection_type: 'parse_failure',
+                activity_type: 'Follow',
+                actor_uri: actorUri,
+                actor_domain: this.extractDomain(actorUri),
+                calendar_id: calendar.id,
+                calendar_url_name: calendar.urlName,
+                reason: 'Failed to parse Follow activity',
+                message_id: message.id,
+              });
               throw new Error('Failed to parse Follow activity');
             }
             await this.processFollowAccount(calendar, activity);
@@ -290,6 +364,17 @@ class ProcessInboxService {
           {
             const activity = AcceptActivity.fromObject(message.message);
             if (!activity) {
+              const actorUri = (message.message as any)?.actor || 'unknown';
+              logActivityRejection({
+                rejection_type: 'parse_failure',
+                activity_type: 'Accept',
+                actor_uri: actorUri,
+                actor_domain: this.extractDomain(actorUri),
+                calendar_id: calendar.id,
+                calendar_url_name: calendar.urlName,
+                reason: 'Failed to parse Accept activity',
+                message_id: message.id,
+              });
               throw new Error('Failed to parse Accept activity');
             }
             await this.processAcceptActivity(calendar, activity);
@@ -299,6 +384,17 @@ class ProcessInboxService {
           {
             const activity = AnnounceActivity.fromObject(message.message);
             if (!activity) {
+              const actorUri = (message.message as any)?.actor || 'unknown';
+              logActivityRejection({
+                rejection_type: 'parse_failure',
+                activity_type: 'Announce',
+                actor_uri: actorUri,
+                actor_domain: this.extractDomain(actorUri),
+                calendar_id: calendar.id,
+                calendar_url_name: calendar.urlName,
+                reason: 'Failed to parse Announce activity',
+                message_id: message.id,
+              });
               throw new Error('Failed to parse Announce activity');
             }
             await this.processShareEvent(calendar, activity);
@@ -311,6 +407,17 @@ class ProcessInboxService {
           break;
         case 'Undo':
           if (!message.message || typeof message.message !== 'object' || !message.message.object) {
+            const actorUri = (message.message as any)?.actor || 'unknown';
+            logActivityRejection({
+              rejection_type: 'invalid_object',
+              activity_type: 'Undo',
+              actor_uri: actorUri,
+              actor_domain: this.extractDomain(actorUri),
+              calendar_id: calendar.id,
+              calendar_url_name: calendar.urlName,
+              reason: 'Invalid Undo activity: missing message object',
+              message_id: message.id,
+            });
             throw new Error('Invalid Undo activity: missing message object');
           }
 
@@ -513,6 +620,15 @@ class ProcessInboxService {
   async processCreateEvent(calendar: Calendar, message: CreateActivity): Promise<CalendarEvent | null> {
     if (!message.object || !message.object.id) {
       console.warn(`[INBOX] Create activity missing object or object.id`);
+      logActivityRejection({
+        rejection_type: 'invalid_object',
+        activity_type: 'Create',
+        actor_uri: message.actor,
+        actor_domain: this.extractDomain(message.actor),
+        calendar_id: calendar.id,
+        calendar_url_name: calendar.urlName,
+        reason: 'Create activity missing object or object.id',
+      });
       return null;
     }
 
@@ -538,6 +654,15 @@ class ProcessInboxService {
 
       if (!isAuthorizedEditor) {
         console.warn(`[INBOX] Person actor ${actorUri} is not authorized to create events on calendar ${calendar.urlName}`);
+        logActivityRejection({
+          rejection_type: 'unauthorized_editor',
+          activity_type: 'Create',
+          actor_uri: actorUri,
+          actor_domain: this.extractDomain(actorUri),
+          calendar_id: calendar.id,
+          calendar_url_name: calendar.urlName,
+          reason: `Person actor is not an authorized editor of calendar ${calendar.urlName}`,
+        });
         throw new Error('Actor is not an authorized editor of this calendar');
       }
 
@@ -548,6 +673,15 @@ class ProcessInboxService {
       const ok = await this.actorOwnsObject(message);
       if (!ok) {
         console.warn(`[INBOX] Actor ownership verification failed for event ${apObjectId}`);
+        logActivityRejection({
+          rejection_type: 'ownership_verification_failed',
+          activity_type: 'Create',
+          actor_uri: actorUri,
+          actor_domain: this.extractDomain(actorUri),
+          calendar_id: calendar.id,
+          calendar_url_name: calendar.urlName,
+          reason: `Actor ownership verification failed for event ${apObjectId}`,
+        });
         return null;
       }
     }
@@ -766,6 +900,15 @@ class ProcessInboxService {
   async processUpdateEvent(calendar: Calendar, message: UpdateActivity): Promise<CalendarEvent | null> {
     if (!message.object || !message.object.id) {
       console.warn(`[INBOX] Update activity missing object or object.id`);
+      logActivityRejection({
+        rejection_type: 'invalid_object',
+        activity_type: 'Update',
+        actor_uri: message.actor,
+        actor_domain: this.extractDomain(message.actor),
+        calendar_id: calendar.id,
+        calendar_url_name: calendar.urlName,
+        reason: 'Update activity missing object or object.id',
+      });
       return null;
     }
 
@@ -812,6 +955,15 @@ class ProcessInboxService {
 
       if (!isAuthorizedEditor) {
         console.warn(`[INBOX] Person actor ${actorUri} is not authorized to update events on calendar ${calendar.urlName}`);
+        logActivityRejection({
+          rejection_type: 'unauthorized_editor',
+          activity_type: 'Update',
+          actor_uri: actorUri,
+          actor_domain: this.extractDomain(actorUri),
+          calendar_id: calendar.id,
+          calendar_url_name: calendar.urlName,
+          reason: `Person actor is not an authorized editor of calendar ${calendar.urlName}`,
+        });
         throw new Error('Actor is not an authorized editor of this calendar');
       }
 
@@ -826,6 +978,15 @@ class ProcessInboxService {
 
       const ok = await this.actorOwnsObject(message);
       if (!ok) {
+        logActivityRejection({
+          rejection_type: 'ownership_verification_failed',
+          activity_type: 'Update',
+          actor_uri: actorUri,
+          actor_domain: this.extractDomain(actorUri),
+          calendar_id: calendar.id,
+          calendar_url_name: calendar.urlName,
+          reason: `Actor ownership verification failed for event ${apObjectId}`,
+        });
         return null;
       }
     }
@@ -863,6 +1024,15 @@ class ProcessInboxService {
   async processDeleteEvent(calendar: Calendar, message: DeleteActivity) {
     if (!message.object || !message.object.id) {
       console.warn(`[INBOX] Delete activity missing object or object.id`);
+      logActivityRejection({
+        rejection_type: 'invalid_object',
+        activity_type: 'Delete',
+        actor_uri: message.actor,
+        actor_domain: this.extractDomain(message.actor),
+        calendar_id: calendar.id,
+        calendar_url_name: calendar.urlName,
+        reason: 'Delete activity missing object or object.id',
+      });
       return;
     }
 
@@ -912,6 +1082,15 @@ class ProcessInboxService {
 
       if (!isAuthorizedEditor) {
         console.warn(`[INBOX] Person actor ${actorUri} is not authorized to delete events on calendar ${calendar.urlName}`);
+        logActivityRejection({
+          rejection_type: 'unauthorized_editor',
+          activity_type: 'Delete',
+          actor_uri: actorUri,
+          actor_domain: this.extractDomain(actorUri),
+          calendar_id: calendar.id,
+          calendar_url_name: calendar.urlName,
+          reason: `Person actor is not an authorized editor of calendar ${calendar.urlName}`,
+        });
         throw new Error('Actor is not an authorized editor of this calendar');
       }
 
@@ -926,6 +1105,15 @@ class ProcessInboxService {
 
       const ok = await this.actorOwnsObject(message);
       if (!ok) {
+        logActivityRejection({
+          rejection_type: 'ownership_verification_failed',
+          activity_type: 'Delete',
+          actor_uri: actorUri,
+          actor_domain: this.extractDomain(actorUri),
+          calendar_id: calendar.id,
+          calendar_url_name: calendar.urlName,
+          reason: `Actor ownership verification failed for event ${apObjectId}`,
+        });
         return;
       }
     }

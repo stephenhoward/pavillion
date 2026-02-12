@@ -230,10 +230,11 @@ describe('ProcessInboxService - Blocked Instance Filtering', () => {
       sandbox.stub(moderationService, 'isInstanceBlocked').resolves(true);
 
       const calendar = new Calendar('test-cal-id', 'test-calendar');
+      calendar.urlName = 'test-calendar';
       (calendarInterface.getCalendar as sinon.SinonStub).resolves(calendar);
 
-      // Spy on console.log to verify audit logging
-      const consoleLogSpy = sandbox.spy(console, 'log');
+      // Spy on console.warn to verify structured audit logging
+      const consoleWarnSpy = sandbox.spy(console, 'warn');
 
       const objectData = {
         id: 'https://malicious.example.com/events/spam',
@@ -255,14 +256,24 @@ describe('ProcessInboxService - Blocked Instance Filtering', () => {
 
       await inboxService.processInboxMessage(mockMessage);
 
-      // Verify audit log was written
-      const logCalls = consoleLogSpy.getCalls();
-      const blockedLogCall = logCalls.find((call) =>
-        call.args.some((arg) => typeof arg === 'string' && arg.includes('[INBOX]') && arg.includes('blocked')),
-      );
+      // Verify structured audit log was written
+      expect(consoleWarnSpy.calledOnce).toBe(true);
+      const logCall = consoleWarnSpy.getCall(0);
+      const logOutput = logCall.args[0];
 
-      expect(blockedLogCall).toBeDefined();
-      expect(blockedLogCall?.args.join(' ')).toContain(blockedDomain);
+      // Parse the JSON log output
+      const logEntry = JSON.parse(logOutput);
+
+      // Verify structured log contains expected fields
+      expect(logEntry.context).toBe('activitypub.inbox.rejection');
+      expect(logEntry.rejection_type).toBe('blocked_instance');
+      expect(logEntry.activity_type).toBe('Create');
+      expect(logEntry.actor_uri).toBe(actorUri);
+      expect(logEntry.actor_domain).toBe(blockedDomain);
+      expect(logEntry.calendar_id).toBe('test-cal-id');
+      expect(logEntry.calendar_url_name).toBe('test-calendar');
+      expect(logEntry.message_id).toBe('msg-spam');
+      expect(logEntry.reason).toContain(blockedDomain);
     });
   });
 });

@@ -1075,3 +1075,338 @@ describe('isAuthorizedRemoteEditor caching', () => {
     expect(userActorFindStub.callCount).toBe(3); // Still 3, used cache
   });
 });
+
+describe('Structured Logging for Activity Rejections', () => {
+  let service: ProcessInboxService;
+  let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+  let consoleWarnStub: sinon.SinonStub;
+  let consoleErrorStub: sinon.SinonStub;
+
+  const TEST_CALENDAR_ID = 'test-calendar-id';
+  const TEST_CALENDAR_URL_NAME = 'testcalendar';
+  const REMOTE_ACTOR_URL = 'https://remote.federation.test/users/alice';
+  const REMOTE_EVENT_URL = 'https://remote.federation.test/events/123';
+  const BLOCKED_DOMAIN = 'blocked.example.com';
+  const BLOCKED_ACTOR_URL = `https://${BLOCKED_DOMAIN}/users/badactor`;
+
+  beforeEach(() => {
+    const eventBus = new EventEmitter();
+    const calendarInterface = new CalendarInterface(eventBus);
+    service = new ProcessInboxService(eventBus, calendarInterface);
+    consoleWarnStub = sandbox.stub(console, 'warn');
+    consoleErrorStub = sandbox.stub(console, 'error');
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  // Helper to find JSON log entries from console.warn calls
+  const findJsonLogEntry = (stub: sinon.SinonStub) => {
+    for (let i = 0; i < stub.callCount; i++) {
+      try {
+        const arg = stub.getCall(i).args[0];
+        if (typeof arg === 'string' && arg.includes('"rejection_type"')) {
+          return JSON.parse(arg);
+        }
+      }
+      catch (e) {
+        // Not JSON, skip
+      }
+    }
+    return null;
+  };
+
+  describe('Blocked Instance Rejection', () => {
+    it('should log structured output when instance is blocked', async () => {
+      sandbox.stub(service.calendarInterface, 'getCalendar')
+        .resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME }));
+
+      if (service.moderationInterface) {
+        sandbox.stub(service.moderationInterface, 'isInstanceBlocked').resolves(true);
+      }
+
+      const activityMessage = createMockCreateActivity(BLOCKED_ACTOR_URL, {
+        type: 'Event',
+        id: REMOTE_EVENT_URL,
+        name: 'Blocked Event',
+      });
+
+      const message = ActivityPubInboxMessageEntity.build({
+        id: 'test-message-id',
+        calendar_id: TEST_CALENDAR_ID,
+        type: 'Create',
+        message: activityMessage,
+      });
+
+      sandbox.stub(ActivityPubInboxMessageEntity.prototype, 'update').resolves();
+
+      await service.processInboxMessage(message);
+
+      const logEntry = findJsonLogEntry(consoleWarnStub);
+      expect(logEntry).toBeDefined();
+      expect(logEntry.rejection_type).toBe('blocked_instance');
+      expect(logEntry.activity_type).toBe('Create');
+      expect(logEntry.actor_uri).toBe(BLOCKED_ACTOR_URL);
+      expect(logEntry.actor_domain).toBe(BLOCKED_DOMAIN);
+      expect(logEntry.calendar_id).toBe(TEST_CALENDAR_ID);
+      expect(logEntry.message_id).toBe('test-message-id');
+    });
+
+    it('should set processed_status to blocked for blocked instances', async () => {
+      sandbox.stub(service.calendarInterface, 'getCalendar')
+        .resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME }));
+
+      if (service.moderationInterface) {
+        sandbox.stub(service.moderationInterface, 'isInstanceBlocked').resolves(true);
+      }
+
+      const activityMessage = createMockCreateActivity(BLOCKED_ACTOR_URL, {
+        type: 'Event',
+        id: REMOTE_EVENT_URL,
+        name: 'Blocked Event',
+      });
+
+      const message = ActivityPubInboxMessageEntity.build({
+        calendar_id: TEST_CALENDAR_ID,
+        type: 'Create',
+        message: activityMessage,
+      });
+
+      const updateStub = sandbox.stub(ActivityPubInboxMessageEntity.prototype, 'update');
+
+      await service.processInboxMessage(message);
+
+      expect(updateStub.calledOnce).toBe(true);
+      const updateArgs = updateStub.firstCall.args[0];
+      expect(updateArgs.processed_status).toBe('blocked');
+      expect(updateArgs.processed_time).toBeDefined();
+    });
+  });
+
+  describe('Unauthorized Create Rejection', () => {
+    it('should log before throwing exception for unauthorized Create', async () => {
+      // Mock to indicate this is a Person actor
+      sandbox.stub(service as any, 'isPersonActorUri').resolves(true);
+      sandbox.stub(service as any, 'isAuthorizedRemoteEditor').resolves(false);
+
+      const activityMessage = createMockCreateActivity(REMOTE_ACTOR_URL, {
+        type: 'Event',
+        id: REMOTE_EVENT_URL,
+        name: 'Unauthorized Event',
+      });
+
+      const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME });
+
+      try {
+        await service.processCreateEvent(calendar, activityMessage);
+      }
+      catch (error: any) {
+        // Expected to throw
+      }
+
+      const logEntry = findJsonLogEntry(consoleWarnStub);
+      expect(logEntry).toBeDefined();
+      expect(logEntry.rejection_type).toBe('unauthorized_editor');
+      expect(logEntry.activity_type).toBe('Create');
+      expect(logEntry.actor_uri).toBe(REMOTE_ACTOR_URL);
+    });
+  });
+
+  describe('Ownership Verification Failure', () => {
+    it('should log ownership verification failure for Create', async () => {
+      const mockFetchRemoteObject = vi.mocked(fetchRemoteObject);
+
+      // Mock as calendar actor (not person)
+      sandbox.stub(service as any, 'isPersonActorUri').resolves(false);
+
+      // Mock failed ownership check
+      mockFetchRemoteObject.mockResolvedValue({
+        id: REMOTE_EVENT_URL,
+        type: 'Event',
+        attributedTo: 'https://different-owner.example/users/realowner',
+      });
+
+      const activityMessage = createMockCreateActivity(REMOTE_ACTOR_URL, {
+        type: 'Event',
+        id: REMOTE_EVENT_URL,
+        name: 'Event',
+      });
+
+      const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME });
+
+      try {
+        await service.processCreateEvent(calendar, activityMessage);
+      }
+      catch (error: any) {
+        // Expected to throw
+      }
+
+      const logEntry = findJsonLogEntry(consoleWarnStub);
+      expect(logEntry).toBeDefined();
+      expect(logEntry.rejection_type).toBe('ownership_verification_failed');
+      expect(logEntry.activity_type).toBe('Create');
+    });
+  });
+
+  describe('Unauthorized Update Rejection', () => {
+    it('should log before throwing exception for unauthorized Update', async () => {
+      sandbox.stub(service as any, 'isPersonActorUri').resolves(true);
+      sandbox.stub(service as any, 'isAuthorizedRemoteEditor').resolves(false);
+
+      const activityMessage = createMockUpdateActivity(REMOTE_ACTOR_URL, {
+        type: 'Event',
+        id: REMOTE_EVENT_URL,
+        name: 'Unauthorized Update',
+      });
+
+      const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME });
+
+      try {
+        await service.processUpdateEvent(calendar, activityMessage);
+      }
+      catch (error: any) {
+        // Expected to throw
+      }
+
+      const logEntry = findJsonLogEntry(consoleWarnStub);
+      expect(logEntry).toBeDefined();
+      expect(logEntry.rejection_type).toBe('unauthorized_editor');
+      expect(logEntry.activity_type).toBe('Update');
+    });
+  });
+
+  describe('Unauthorized Delete Rejection', () => {
+    it('should log before throwing exception for unauthorized Delete', async () => {
+      sandbox.stub(service as any, 'isPersonActorUri').resolves(true);
+      sandbox.stub(service as any, 'isAuthorizedRemoteEditor').resolves(false);
+
+      const activityMessage = createMockDeleteActivity(REMOTE_ACTOR_URL, REMOTE_EVENT_URL);
+
+      const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME });
+
+      try {
+        await service.processDeleteEvent(calendar, activityMessage);
+      }
+      catch (error: any) {
+        // Expected to throw
+      }
+
+      const logEntry = findJsonLogEntry(consoleWarnStub);
+      expect(logEntry).toBeDefined();
+      expect(logEntry.rejection_type).toBe('unauthorized_editor');
+      expect(logEntry.activity_type).toBe('Delete');
+    });
+  });
+
+  describe('Parse Failure Scenarios', () => {
+    it('should log parse failures with error level', async () => {
+      // Test directly at processInboxMessage level with malformed activity
+      sandbox.stub(service.calendarInterface, 'getCalendar')
+        .resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME }));
+
+      const malformedActivity = {
+        type: 'Create',
+        actor: REMOTE_ACTOR_URL,
+        // Missing required object field
+      };
+
+      const message = ActivityPubInboxMessageEntity.build({
+        calendar_id: TEST_CALENDAR_ID,
+        type: 'Create',
+        message: malformedActivity,
+      });
+
+      sandbox.stub(ActivityPubInboxMessageEntity.prototype, 'update').resolves();
+
+      await service.processInboxMessage(message);
+
+      // Parse failures should use console.error
+      const logEntry = findJsonLogEntry(consoleErrorStub);
+      expect(logEntry).toBeDefined();
+      expect(logEntry.level).toBe('error');
+      expect(logEntry.rejection_type).toBe('parse_failure');
+      expect(logEntry.activity_type).toBe('Create');
+    });
+  });
+
+  describe('Log Format Consistency', () => {
+    it('should include all required fields in every log entry', async () => {
+      sandbox.stub(service.calendarInterface, 'getCalendar')
+        .resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME }));
+
+      if (service.moderationInterface) {
+        sandbox.stub(service.moderationInterface, 'isInstanceBlocked').resolves(true);
+      }
+
+      const message = ActivityPubInboxMessageEntity.build({
+        id: 'test-id',
+        calendar_id: TEST_CALENDAR_ID,
+        type: 'Create',
+        message: createMockCreateActivity(BLOCKED_ACTOR_URL, {
+          type: 'Event',
+          id: REMOTE_EVENT_URL,
+          name: 'Test',
+        }),
+      });
+
+      sandbox.stub(ActivityPubInboxMessageEntity.prototype, 'update').resolves();
+
+      await service.processInboxMessage(message);
+
+      const logEntry = findJsonLogEntry(consoleWarnStub);
+      expect(logEntry).toBeDefined();
+      expect(logEntry.timestamp).toBeDefined();
+      expect(logEntry.level).toBeDefined();
+      expect(logEntry.context).toBe('activitypub.inbox.rejection');
+      expect(logEntry.rejection_type).toBeDefined();
+      expect(logEntry.activity_type).toBeDefined();
+      expect(logEntry.actor_uri).toBeDefined();
+      expect(logEntry.actor_domain).toBeDefined();
+      expect(logEntry.reason).toBeDefined();
+    });
+  });
+
+  describe('Exception Behavior Verification', () => {
+    it('should still throw exception after logging for Create', async () => {
+      sandbox.stub(service as any, 'isPersonActorUri').resolves(true);
+      sandbox.stub(service as any, 'isAuthorizedRemoteEditor').resolves(false);
+
+      const activityMessage = createMockCreateActivity(REMOTE_ACTOR_URL, {
+        type: 'Event',
+        id: REMOTE_EVENT_URL,
+        name: 'Test',
+      });
+
+      const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME });
+
+      await expect(service.processCreateEvent(calendar, activityMessage)).rejects.toThrow();
+    });
+
+    it('should still throw exception after logging for Update', async () => {
+      sandbox.stub(service as any, 'isPersonActorUri').resolves(true);
+      sandbox.stub(service as any, 'isAuthorizedRemoteEditor').resolves(false);
+
+      const activityMessage = createMockUpdateActivity(REMOTE_ACTOR_URL, {
+        type: 'Event',
+        id: REMOTE_EVENT_URL,
+        name: 'Test',
+      });
+
+      const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME });
+
+      await expect(service.processUpdateEvent(calendar, activityMessage)).rejects.toThrow();
+    });
+
+    it('should still throw exception after logging for Delete', async () => {
+      sandbox.stub(service as any, 'isPersonActorUri').resolves(true);
+      sandbox.stub(service as any, 'isAuthorizedRemoteEditor').resolves(false);
+
+      const activityMessage = createMockDeleteActivity(REMOTE_ACTOR_URL, REMOTE_EVENT_URL);
+
+      const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME });
+
+      await expect(service.processDeleteEvent(calendar, activityMessage)).rejects.toThrow();
+    });
+  });
+});
