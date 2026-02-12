@@ -24,8 +24,10 @@ import { Calendar } from '@/common/model/calendar';
 import ProcessInboxService from '@/server/activitypub/service/inbox';
 import { ActivityPubInboxMessageEntity, ActivityPubOutboxMessageEntity, FollowerCalendarEntity } from '@/server/activitypub/entity/activitypub';
 import CalendarInterface from '@/server/calendar/interface';
+import ModerationInterface from '@/server/moderation/interface';
 import { UserActorEntity } from '@/server/activitypub/entity/user_actor';
 import { CalendarMemberEntity } from '@/server/calendar/entity/calendar_member';
+import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 
 // Import Fedify mock helpers for creating well-formed ActivityPub activities
 import {
@@ -1092,7 +1094,8 @@ describe('Structured Logging for Activity Rejections', () => {
   beforeEach(() => {
     const eventBus = new EventEmitter();
     const calendarInterface = new CalendarInterface(eventBus);
-    service = new ProcessInboxService(eventBus, calendarInterface);
+    const moderationInterface = new ModerationInterface(eventBus);
+    service = new ProcessInboxService(eventBus, calendarInterface, moderationInterface);
     consoleWarnStub = sandbox.stub(console, 'warn');
     consoleErrorStub = sandbox.stub(console, 'error');
   });
@@ -1122,9 +1125,7 @@ describe('Structured Logging for Activity Rejections', () => {
       sandbox.stub(service.calendarInterface, 'getCalendar')
         .resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME }));
 
-      if (service.moderationInterface) {
-        sandbox.stub(service.moderationInterface, 'isInstanceBlocked').resolves(true);
-      }
+      sandbox.stub(service.moderationInterface!, 'isInstanceBlocked').resolves(true);
 
       const activityMessage = createMockCreateActivity(BLOCKED_ACTOR_URL, {
         type: 'Event',
@@ -1157,9 +1158,7 @@ describe('Structured Logging for Activity Rejections', () => {
       sandbox.stub(service.calendarInterface, 'getCalendar')
         .resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME }));
 
-      if (service.moderationInterface) {
-        sandbox.stub(service.moderationInterface, 'isInstanceBlocked').resolves(true);
-      }
+      sandbox.stub(service.moderationInterface!, 'isInstanceBlocked').resolves(true);
 
       const activityMessage = createMockCreateActivity(BLOCKED_ACTOR_URL, {
         type: 'Event',
@@ -1190,6 +1189,9 @@ describe('Structured Logging for Activity Rejections', () => {
       sandbox.stub(service as any, 'isPersonActorUri').resolves(true);
       sandbox.stub(service as any, 'isAuthorizedRemoteEditor').resolves(false);
 
+      // Stub EventObjectEntity.findOne to simulate no existing event
+      sandbox.stub(EventObjectEntity, 'findOne').resolves(null);
+
       const activityMessage = createMockCreateActivity(REMOTE_ACTOR_URL, {
         type: 'Event',
         id: REMOTE_EVENT_URL,
@@ -1219,6 +1221,9 @@ describe('Structured Logging for Activity Rejections', () => {
 
       // Mock as calendar actor (not person)
       sandbox.stub(service as any, 'isPersonActorUri').resolves(false);
+
+      // Stub EventObjectEntity.findOne to simulate no existing event
+      sandbox.stub(EventObjectEntity, 'findOne').resolves(null);
 
       // Mock failed ownership check
       mockFetchRemoteObject.mockResolvedValue({
@@ -1254,6 +1259,16 @@ describe('Structured Logging for Activity Rejections', () => {
       sandbox.stub(service as any, 'isPersonActorUri').resolves(true);
       sandbox.stub(service as any, 'isAuthorizedRemoteEditor').resolves(false);
 
+      // Stub EventObjectEntity.findOne to return a mock event object
+      const mockEventId = 'mock-event-id';
+      sandbox.stub(EventObjectEntity, 'findOne').resolves(
+        EventObjectEntity.build({ event_id: mockEventId, ap_id: REMOTE_EVENT_URL }),
+      );
+
+      // Stub getEventById to return a mock event (required for Update to proceed to auth check)
+      const mockEvent = { id: mockEventId, calendarId: TEST_CALENDAR_ID };
+      sandbox.stub(service.calendarInterface, 'getEventById').resolves(mockEvent as any);
+
       const activityMessage = createMockUpdateActivity(REMOTE_ACTOR_URL, {
         type: 'Event',
         id: REMOTE_EVENT_URL,
@@ -1281,7 +1296,18 @@ describe('Structured Logging for Activity Rejections', () => {
       sandbox.stub(service as any, 'isPersonActorUri').resolves(true);
       sandbox.stub(service as any, 'isAuthorizedRemoteEditor').resolves(false);
 
-      const activityMessage = createMockDeleteActivity(REMOTE_ACTOR_URL, REMOTE_EVENT_URL);
+      // Stub EventObjectEntity.findOne to return a mock event object
+      const mockEventId = 'mock-event-id';
+      sandbox.stub(EventObjectEntity, 'findOne').resolves(
+        EventObjectEntity.build({ event_id: mockEventId, ap_id: REMOTE_EVENT_URL }),
+      );
+
+      // Stub getEventById to return a mock event (required for Delete to proceed to auth check)
+      const mockEvent = { id: mockEventId, calendarId: TEST_CALENDAR_ID };
+      sandbox.stub(service.calendarInterface, 'getEventById').resolves(mockEvent as any);
+
+      // Create Delete activity with object as an object with id property (not just a string)
+      const activityMessage = createMockDeleteActivity(REMOTE_ACTOR_URL, { id: REMOTE_EVENT_URL });
 
       const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME });
 
@@ -1305,10 +1331,15 @@ describe('Structured Logging for Activity Rejections', () => {
       sandbox.stub(service.calendarInterface, 'getCalendar')
         .resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME }));
 
+      // Stub EventObjectEntity.findOne in case the activity parses but needs validation
+      sandbox.stub(EventObjectEntity, 'findOne').resolves(null);
+
+      // Create a truly malformed activity that will fail CreateActivity.fromObject()
+      // by providing invalid data that doesn't match ActivityPub schema
       const malformedActivity = {
         type: 'Create',
-        actor: REMOTE_ACTOR_URL,
-        // Missing required object field
+        // Missing actor field (required by ActivityPub spec)
+        object: null, // Explicitly null
       };
 
       const message = ActivityPubInboxMessageEntity.build({
@@ -1372,6 +1403,9 @@ describe('Structured Logging for Activity Rejections', () => {
       sandbox.stub(service as any, 'isPersonActorUri').resolves(true);
       sandbox.stub(service as any, 'isAuthorizedRemoteEditor').resolves(false);
 
+      // Stub EventObjectEntity.findOne to simulate no existing event
+      sandbox.stub(EventObjectEntity, 'findOne').resolves(null);
+
       const activityMessage = createMockCreateActivity(REMOTE_ACTOR_URL, {
         type: 'Event',
         id: REMOTE_EVENT_URL,
@@ -1386,6 +1420,16 @@ describe('Structured Logging for Activity Rejections', () => {
     it('should still throw exception after logging for Update', async () => {
       sandbox.stub(service as any, 'isPersonActorUri').resolves(true);
       sandbox.stub(service as any, 'isAuthorizedRemoteEditor').resolves(false);
+
+      // Stub EventObjectEntity.findOne to return a mock event object
+      const mockEventId = 'mock-event-id';
+      sandbox.stub(EventObjectEntity, 'findOne').resolves(
+        EventObjectEntity.build({ event_id: mockEventId, ap_id: REMOTE_EVENT_URL }),
+      );
+
+      // Stub getEventById to return a mock event (required for Update to proceed to auth check)
+      const mockEvent = { id: mockEventId, calendarId: TEST_CALENDAR_ID };
+      sandbox.stub(service.calendarInterface, 'getEventById').resolves(mockEvent as any);
 
       const activityMessage = createMockUpdateActivity(REMOTE_ACTOR_URL, {
         type: 'Event',
@@ -1402,7 +1446,18 @@ describe('Structured Logging for Activity Rejections', () => {
       sandbox.stub(service as any, 'isPersonActorUri').resolves(true);
       sandbox.stub(service as any, 'isAuthorizedRemoteEditor').resolves(false);
 
-      const activityMessage = createMockDeleteActivity(REMOTE_ACTOR_URL, REMOTE_EVENT_URL);
+      // Stub EventObjectEntity.findOne to return a mock event object
+      const mockEventId = 'mock-event-id';
+      sandbox.stub(EventObjectEntity, 'findOne').resolves(
+        EventObjectEntity.build({ event_id: mockEventId, ap_id: REMOTE_EVENT_URL }),
+      );
+
+      // Stub getEventById to return a mock event (required for Delete to proceed to auth check)
+      const mockEvent = { id: mockEventId, calendarId: TEST_CALENDAR_ID };
+      sandbox.stub(service.calendarInterface, 'getEventById').resolves(mockEvent as any);
+
+      // Create Delete activity with object as an object with id property (not just a string)
+      const activityMessage = createMockDeleteActivity(REMOTE_ACTOR_URL, { id: REMOTE_EVENT_URL });
 
       const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME });
 
