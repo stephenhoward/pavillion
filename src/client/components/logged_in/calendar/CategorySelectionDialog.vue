@@ -4,6 +4,7 @@ import { useTranslation } from 'i18next-vue';
 import { X } from 'lucide-vue-next';
 import CalendarService from '@/client/service/calendar';
 import { useEventStore } from '@/client/stores/eventStore';
+import { useCategoryStore } from '@/client/stores/categoryStore';
 import PillButton from '@/client/components/common/PillButton.vue';
 import ToggleChip from '@/client/components/common/ToggleChip.vue';
 
@@ -25,6 +26,7 @@ const props = defineProps({
 const emit = defineEmits(['close', 'assign-complete']);
 
 const eventStore = useEventStore();
+const categoryStore = useCategoryStore();
 const calendarService = new CalendarService();
 const selectedCategoryIds = ref([]);
 const isLoading = ref(false);
@@ -32,9 +34,26 @@ const errorMessage = ref('');
 const dialogTitleId = 'category-dialog-title';
 
 // Get available categories from the current calendar
+// Note: Since selectedEventIds contains events, we need to extract their calendarId
+// All selected events should be from the same calendar (validated by the API)
 const availableCategories = computed(() => {
-  if (!eventStore.categories) return [];
-  return eventStore.categories;
+  // Get the first event's calendarId to find categories for that calendar
+  if (!props.selectedEventIds || props.selectedEventIds.length === 0) return [];
+
+  // Get a sample event from the store to determine calendar
+  let calendarId = null;
+  for (const [calId, events] of Object.entries(eventStore.events)) {
+    for (const event of events) {
+      if (props.selectedEventIds.includes(event.id)) {
+        calendarId = calId;
+        break;
+      }
+    }
+    if (calendarId) break;
+  }
+
+  if (!calendarId) return [];
+  return categoryStore.categories[calendarId] || [];
 });
 
 const isFormValid = computed(() => {
@@ -64,7 +83,7 @@ const handleAssignCategories = async () => {
 
     // Update the event store with updated events
     updatedEvents.forEach(event => {
-      eventStore.updateEvent(event);
+      eventStore.updateEvent(event.calendarId, event);
     });
 
     emit('assign-complete', {

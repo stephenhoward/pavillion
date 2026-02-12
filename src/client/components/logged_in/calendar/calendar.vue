@@ -49,6 +49,9 @@ const calendarId = computed(() => route.params.calendar);
 const store = useEventStore();
 const calendarService = new CalendarService();
 
+// Computed property to get events for the current calendar
+const calendarEvents = computed(() => store.eventsForCalendar(state.calendar?.id));
+
 // Bulk selection functionality
 const {
   selectedEvents,
@@ -316,7 +319,7 @@ const handleDeleteEvents = async () => {
     const deleteCount = selectedEvents.value.length;
     try {
       // Get the actual event objects from the selected IDs
-      const eventsToDelete = getSelectedEventObjects(store.events || []);
+      const eventsToDelete = getSelectedEventObjects(calendarEvents.value || []);
 
       for (const event of eventsToDelete) {
         await eventService.deleteEvent(event);
@@ -455,7 +458,7 @@ const hasActiveFilters = computed(() => {
 
           <!-- Search and Filter Controls -->
           <SearchFilter
-            v-if="state.calendar && (store.events?.length > 0 || hasActiveFilters)"
+            v-if="state.calendar && (calendarEvents.length > 0 || hasActiveFilters)"
             :calendar-id="calendarId"
             :initial-filters="initialFilters"
             @filters-changed="handleFiltersChanged"
@@ -469,7 +472,7 @@ const hasActiveFilters = computed(() => {
       </div>
 
       <!-- Events Display Section -->
-      <section v-if="!state.isLoading && store.events && store.events.length > 0" aria-label="Calendar Events">
+      <section v-if="!state.isLoading && calendarEvents && calendarEvents.length > 0" aria-label="Calendar Events">
         <h2 class="sr-only">Events in this Calendar</h2>
 
         <!-- Select All Controls -->
@@ -477,9 +480,9 @@ const hasActiveFilters = computed(() => {
           <label class="select-all-control">
             <input
               type="checkbox"
-              :checked="selectAllState(store.events).checked"
-              :indeterminate="selectAllState(store.events).indeterminate"
-              @change="toggleSelectAll(store.events)"
+              :checked="selectAllState(calendarEvents).checked"
+              :indeterminate="selectAllState(calendarEvents).indeterminate"
+              @change="toggleSelectAll(calendarEvents)"
               :aria-label="tBulk('select_all_events')"
             />
             <span>{{ tBulk('select_all') }}</span>
@@ -487,7 +490,7 @@ const hasActiveFilters = computed(() => {
         </div>
 
         <ul class="event-list" role="list">
-          <li v-for="event in store.events"
+          <li v-for="event in calendarEvents"
               :key="event.id"
               class="event-item"
               :class="{ selected: isEventSelected(event) }"
@@ -559,12 +562,12 @@ const hasActiveFilters = computed(() => {
       </section>
 
       <!-- Empty State: No results from filters -->
-      <EmptyLayout v-else-if="!state.isLoading && hasActiveFilters && (!store.events || store.events.length === 0)"
+      <EmptyLayout v-else-if="!state.isLoading && hasActiveFilters && (!calendarEvents || calendarEvents.length === 0)"
                    title="No events found"
                    description="No events match your current search criteria. Try adjusting your filters or clearing them to see all events." />
 
       <!-- Empty State: No events at all -->
-      <EmptyLayout v-else-if="!state.isLoading && !hasActiveFilters && (!store.events || store.events.length === 0)"
+      <EmptyLayout v-else-if="!state.isLoading && !hasActiveFilters && (!calendarEvents || calendarEvents.length === 0)"
                    :title="t('noEvents')"
                    :description="t('noEventsDescription')">
         <PillButton variant="primary" @click="newEvent()">

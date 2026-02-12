@@ -15,9 +15,9 @@ describe('initEvent', () => {
   beforeEach(() => {
     // Create a mock store before each test
     mockStore = {
-      setEvents: sandbox.stub(),
+      setEventsForCalendar: sandbox.stub(),
       loaded: false,
-    };
+    } as any;
     // Stub the useCalendarStore function to always return our mock
     service = new EventService(mockStore);
   });
@@ -51,8 +51,9 @@ describe('loadCalendarEvents', () => {
   beforeEach(() => {
     // Create a mock store before each test
     mockStore = {
-      events: [],
-    };
+      events: {},
+      setEventsForCalendar: sandbox.stub(),
+    } as any;
 
     // Stub the listModels method
     mockListModels = sandbox.stub(ModelService, 'listModels');
@@ -68,8 +69,8 @@ describe('loadCalendarEvents', () => {
   it('should load events for a calendar and update the store', async () => {
     // Arrange
     const mockEvents = [
-      { calendar_id: 'c1', id: 'evt1', date: '2023-01-01' },
-      { calendar_id: 'c1', id: 'evt2', date: '2023-01-02' },
+      { calendarId: 'c1', id: 'evt1', date: '2023-01-01' },
+      { calendarId: 'c1', id: 'evt2', date: '2023-01-02' },
     ];
     mockListModels.resolves(ListResult.fromArray(mockEvents));
 
@@ -79,7 +80,8 @@ describe('loadCalendarEvents', () => {
     // Assert
     expect(mockListModels.calledWith('/api/v1/calendars/test-calendar/events')).toBe(true);
     expect(result.length).toBe(2);
-    expect(mockStore.events).toEqual(result);
+    // Verify setEventsForCalendar was called with the calendar ID and events
+    expect((mockStore.setEventsForCalendar as sinon.SinonStub).calledWith('c1')).toBe(true);
   });
 
   it('should throw an error when loading events fails', async () => {
@@ -103,7 +105,7 @@ describe('createEvent', () => {
     mockStore = {
       addEvent: sandbox.stub(),
       updateEvent: sandbox.stub(),
-    };
+    } as any;
 
     // Stub the ModelService methods
     mockCreateModel = sandbox.stub(ModelService, 'createModel');
@@ -141,7 +143,8 @@ describe('createEvent', () => {
     expect(mockCreateModel.calledWith(event, '/api/v1/events')).toBe(true);
     expect(result).toBeInstanceOf(CalendarEvent);
     expect(result.id).toBe('evt1');
-    expect(mockStore.addEvent.calledWith(result)).toBe(true);
+    // Verify addEvent was called with calendarId and event
+    expect((mockStore.addEvent as sinon.SinonStub).calledWith('cal123', sinon.match.instanceOf(CalendarEvent))).toBe(true);
   });
 
   it('should update an existing event when the event has an ID', async () => {
@@ -169,7 +172,8 @@ describe('createEvent', () => {
     expect(mockUpdateModel.calledWith(event, '/api/v1/events')).toBe(true);
     expect(result).toBeInstanceOf(CalendarEvent);
     expect(result.id).toBe('evt1');
-    expect(mockStore.updateEvent.calledWith(result)).toBe(true);
+    // Verify updateEvent was called with calendarId and event
+    expect((mockStore.updateEvent as sinon.SinonStub).calledWith('cal123', sinon.match.instanceOf(CalendarEvent))).toBe(true);
   });
 
   it('should throw an error when the event has no calendarId', async () => {

@@ -78,8 +78,9 @@ vi.mock('@/client/stores/calendarStore', () => ({
 // Mock useEventStore
 vi.mock('@/client/stores/eventStore', () => ({
   useEventStore: () => ({
-    events: [],
-    setEvents: vi.fn(),
+    events: {},
+    setEventsForCalendar: vi.fn(),
+    eventsForCalendar: vi.fn().mockReturnValue([]),
   }),
 }));
 
@@ -176,8 +177,9 @@ describe('Navigation Integration - Task Group 4', () => {
       // Mock event store with event
       vi.doMock('@/client/stores/eventStore', () => ({
         useEventStore: () => ({
-          events: [testEvent],
-          setEvents: vi.fn(),
+          events: { 'cal-1': [testEvent] },
+          setEventsForCalendar: vi.fn(),
+          eventsForCalendar: vi.fn().mockReturnValue([testEvent]),
         }),
       }));
 

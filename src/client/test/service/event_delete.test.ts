@@ -40,8 +40,8 @@ describe('EventService - Delete Functionality', () => {
 
   describe('deleteEvent', () => {
     it('should successfully delete an event and remove it from store', async () => {
-      const testEvent = new CalendarEvent('calendar-123', 'event-123');
-      mockEventStore.addEvent(testEvent);
+      const testEvent = new CalendarEvent('event-123', 'calendar-123');
+      mockEventStore.addEvent('calendar-123', testEvent);
 
       // Setup mock to resolve successfully
       mockDeleteModel.mockResolvedValue(undefined);
@@ -53,16 +53,16 @@ describe('EventService - Delete Functionality', () => {
       expect(mockDeleteModel).toHaveBeenCalledTimes(1);
 
       // Verify event was removed from store
-      expect(mockEventStore.removeEvent).toHaveBeenCalledWith(testEvent);
+      expect(mockEventStore.removeEvent).toHaveBeenCalledWith('calendar-123', testEvent);
       expect(mockEventStore.removeEvent).toHaveBeenCalledTimes(1);
-      expect(mockEventStore.events).not.toContain(testEvent);
+      expect(mockEventStore.events['calendar-123']).not.toContain(testEvent);
     });
 
     it('should handle API errors gracefully', async () => {
-      const testEvent = new CalendarEvent('calendar-123', 'event-123');
+      const testEvent = new CalendarEvent('event-123', 'calendar-123');
       const apiError = new Error('API Error: Event not found');
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      mockEventStore.addEvent(testEvent);
+      mockEventStore.addEvent('calendar-123', testEvent);
 
       // Setup mock to reject
       mockDeleteModel.mockRejectedValue(apiError);
@@ -75,7 +75,7 @@ describe('EventService - Delete Functionality', () => {
 
       // Verify store method was NOT called due to error
       expect(mockEventStore.removeEvent).not.toHaveBeenCalled();
-      expect(mockEventStore.events.some((event: CalendarEvent) => event.id === testEvent.id)).toBe(true);
+      expect(mockEventStore.events['calendar-123'].some((event: CalendarEvent) => event.id === testEvent.id)).toBe(true);
 
       // Verify error was logged
       expect(consoleErrorSpy).toHaveBeenCalledWith('Error deleting event:', apiError);
@@ -83,10 +83,15 @@ describe('EventService - Delete Functionality', () => {
 
     it('should work with different event instances', async () => {
       const events = [
-        new CalendarEvent('calendar-1', 'event-1'),
-        new CalendarEvent('calendar-2', 'event-2'),
-        new CalendarEvent('calendar-3', 'event-3'),
+        new CalendarEvent('event-1', 'calendar-1'),
+        new CalendarEvent('event-2', 'calendar-2'),
+        new CalendarEvent('event-3', 'calendar-3'),
       ];
+
+      // Add events to store
+      events.forEach(event => {
+        mockEventStore.addEvent(event.calendarId!, event);
+      });
 
       mockDeleteModel.mockResolvedValue(undefined);
 
@@ -102,16 +107,21 @@ describe('EventService - Delete Functionality', () => {
       // Verify each specific call
       events.forEach((event, index) => {
         expect(mockDeleteModel).toHaveBeenNthCalledWith(index + 1, event, '/api/v1/events');
-        expect(mockEventStore.removeEvent).toHaveBeenNthCalledWith(index + 1, event);
+        expect(mockEventStore.removeEvent).toHaveBeenNthCalledWith(index + 1, event.calendarId, event);
       });
     });
 
     it('should handle concurrent deletions correctly', async () => {
       const events = [
-        new CalendarEvent('calendar-a', 'event-a'),
-        new CalendarEvent('calendar-b', 'event-b'),
-        new CalendarEvent('calendar-c', 'event-c'),
+        new CalendarEvent('event-a', 'calendar-a'),
+        new CalendarEvent('event-b', 'calendar-b'),
+        new CalendarEvent('event-c', 'calendar-c'),
       ];
+
+      // Add events to store
+      events.forEach(event => {
+        mockEventStore.addEvent(event.calendarId!, event);
+      });
 
       mockDeleteModel.mockResolvedValue(undefined);
 
@@ -126,16 +136,21 @@ describe('EventService - Delete Functionality', () => {
       // Verify each event was processed
       events.forEach(event => {
         expect(mockDeleteModel).toHaveBeenCalledWith(event, '/api/v1/events');
-        expect(mockEventStore.removeEvent).toHaveBeenCalledWith(event);
+        expect(mockEventStore.removeEvent).toHaveBeenCalledWith(event.calendarId, event);
       });
     });
 
     it('should handle partial failures in concurrent deletions', async () => {
       const events = [
-        new CalendarEvent('calendar-success', 'event-success'),
-        new CalendarEvent('calendar-fail', 'event-fail'),
-        new CalendarEvent('calendar-success2', 'event-success2'),
+        new CalendarEvent('event-success', 'calendar-success'),
+        new CalendarEvent('event-fail', 'calendar-fail'),
+        new CalendarEvent('event-success2', 'calendar-success2'),
       ];
+
+      // Add events to store
+      events.forEach(event => {
+        mockEventStore.addEvent(event.calendarId!, event);
+      });
 
       // Setup mixed success/failure responses
       mockDeleteModel
@@ -154,8 +169,8 @@ describe('EventService - Delete Functionality', () => {
 
       // Verify store updates only for successful deletions
       expect(mockEventStore.removeEvent).toHaveBeenCalledTimes(2);
-      expect(mockEventStore.removeEvent).toHaveBeenCalledWith(events[0]);
-      expect(mockEventStore.removeEvent).toHaveBeenCalledWith(events[2]);
+      expect(mockEventStore.removeEvent).toHaveBeenCalledWith(events[0].calendarId, events[0]);
+      expect(mockEventStore.removeEvent).toHaveBeenCalledWith(events[2].calendarId, events[2]);
 
       // Check results contain the expected error
       const failedResult = results.find(result => result && 'error' in result);

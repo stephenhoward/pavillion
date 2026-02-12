@@ -65,7 +65,15 @@ export default class EventService {
 
       const events = await ModelService.listModels(url);
       const calendarEvents = events.items.map(event => CalendarEvent.fromObject(event));
-      this.store.events = calendarEvents;
+
+      // Store events by calendar ID
+      if (calendarEvents.length > 0) {
+        const calendarId = calendarEvents[0].calendarId;
+        if (calendarId) {
+          this.store.setEventsForCalendar(calendarId, calendarEvents);
+        }
+      }
+
       return calendarEvents;
     }
     catch (error) {
@@ -93,12 +101,12 @@ export default class EventService {
       if (isNew) {
         const responseData = await ModelService.createModel(event, url);
         savedEvent = CalendarEvent.fromObject(responseData);
-        this.store.addEvent(savedEvent);
+        this.store.addEvent(savedEvent.calendarId!, savedEvent);
       }
       else {
         const responseData = await ModelService.updateModel(event, url);
         savedEvent = CalendarEvent.fromObject(responseData);
-        this.store.updateEvent(savedEvent);
+        this.store.updateEvent(savedEvent.calendarId!, savedEvent);
       }
 
       return savedEvent;
@@ -117,7 +125,9 @@ export default class EventService {
   async deleteEvent(event: CalendarEvent): Promise<void> {
     try {
       await ModelService.deleteModel(event, '/api/v1/events');
-      this.store.removeEvent(event);
+      if (event.calendarId) {
+        this.store.removeEvent(event.calendarId, event);
+      }
     }
     catch (error) {
       console.error('Error deleting event:', error);
