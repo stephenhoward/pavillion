@@ -45,7 +45,7 @@ describe('EventService.deleteEvent', () => {
   it('should successfully delete an event with all related data', async () => {
     const account = new Account('account-123', 'test@example.com', 'test@example.com');
     const calendar = new Calendar('calendar-123', 'test-calendar');
-    const eventId = 'event-123';
+    const eventId = '11111111-1111-4111-8111-111111111111'; // Valid UUID
 
     // Mock the event entity
     const mockEventEntity = {
@@ -94,7 +94,7 @@ describe('EventService.deleteEvent', () => {
 
   it('should throw EventNotFoundError when event does not exist', async () => {
     const account = new Account('account-123', 'test@example.com', 'test@example.com');
-    const eventId = 'nonexistent-event';
+    const eventId = '00000000-0000-4000-8000-000000000000'; // Valid UUID but doesn't exist
 
     sandbox.stub(EventEntity, 'findByPk').resolves(null);
 
@@ -106,7 +106,7 @@ describe('EventService.deleteEvent', () => {
 
   it('should throw EventNotFoundError when event not found and calendarId provided but no remote membership', async () => {
     const account = new Account('account-123', 'test@example.com', 'test@example.com');
-    const eventId = 'remote-event-123';
+    const eventId = '22222222-2222-4222-8222-222222222222'; // Valid UUID for remote event
     const calendarId = 'remote-calendar-actor-123';
 
     // Mock event not found locally
@@ -123,7 +123,7 @@ describe('EventService.deleteEvent', () => {
 
   it('should throw CalendarNotFoundError when calendar does not exist', async () => {
     const account = new Account('account-123', 'test@example.com', 'test@example.com');
-    const eventId = 'event-123';
+    const eventId = '11111111-1111-4111-8111-111111111111'; // Valid UUID
 
     const mockEventEntity = {
       calendar_id: 'nonexistent-calendar',
@@ -141,7 +141,7 @@ describe('EventService.deleteEvent', () => {
   it('should throw InsufficientCalendarPermissionsError when user cannot modify calendar', async () => {
     const account = new Account('account-123', 'test@example.com', 'test@example.com');
     const calendar = new Calendar('calendar-123', 'test-calendar');
-    const eventId = 'event-123';
+    const eventId = '11111111-1111-4111-8111-111111111111'; // Valid UUID
 
     const mockEventEntity = {
       calendar_id: 'calendar-123',
@@ -159,7 +159,7 @@ describe('EventService.deleteEvent', () => {
 
   it('should throw InsufficientCalendarPermissionsError when trying to delete remote event', async () => {
     const account = new Account('account-123', 'test@example.com', 'test@example.com');
-    const eventId = 'remote-event-123';
+    const eventId = '22222222-2222-4222-8222-222222222222'; // Valid UUID for remote event
 
     // Mock a remote event (calendar_id is null for remote events stored locally)
     const mockEventEntity = {
@@ -177,7 +177,7 @@ describe('EventService.deleteEvent', () => {
   it('should rollback transaction on database error', async () => {
     const account = new Account('account-123', 'test@example.com', 'test@example.com');
     const calendar = new Calendar('calendar-123', 'test-calendar');
-    const eventId = 'event-123';
+    const eventId = '11111111-1111-4111-8111-111111111111'; // Valid UUID
 
     const mockEventEntity = {
       calendar_id: 'calendar-123',
@@ -197,7 +197,7 @@ describe('EventService.deleteEvent', () => {
 
   it('should include all related entities when finding the event', async () => {
     const account = new Account('account-123', 'test@example.com', 'test@example.com');
-    const eventId = 'event-123';
+    const eventId = '11111111-1111-4111-8111-111111111111'; // Valid UUID
 
     const findByPkStub = sandbox.stub(EventEntity, 'findByPk').resolves(null);
 
@@ -212,7 +212,7 @@ describe('EventService.deleteEvent', () => {
   it('should handle deletion of event with no related data', async () => {
     const account = new Account('account-123', 'test@example.com', 'test@example.com');
     const calendar = new Calendar('calendar-123', 'test-calendar');
-    const eventId = 'event-123';
+    const eventId = '11111111-1111-4111-8111-111111111111'; // Valid UUID
 
     const mockEventEntity = {
       calendar_id: 'calendar-123',
@@ -238,7 +238,7 @@ describe('EventService.deleteEvent', () => {
   it('should verify calendar service calls with correct parameters', async () => {
     const account = new Account('account-123', 'test@example.com', 'test@example.com');
     const calendar = new Calendar('calendar-123', 'test-calendar');
-    const eventId = 'event-123';
+    const eventId = '11111111-1111-4111-8111-111111111111'; // Valid UUID
 
     const mockEventEntity = {
       calendar_id: 'calendar-123',
@@ -257,7 +257,7 @@ describe('EventService.deleteEvent', () => {
 
   it('should call deleteRemoteEventViaActivityPub when event not found locally but valid remote membership exists', async () => {
     const account = new Account('account-123', 'test@example.com', 'test@example.com');
-    const eventId = 'remote-event-123';
+    const eventId = '22222222-2222-4222-8222-222222222222'; // Valid UUID for remote event
     const calendarId = 'remote-calendar-actor-456';
 
     // Mock event not found locally

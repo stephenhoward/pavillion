@@ -26,24 +26,28 @@ describe ('followCalendar', () => {
 
   it('should fail without current user', async () => {
     let req = { body: {} };
-    let res = { status: sinon.stub(), send: sinon.stub() };
+    let res = { status: sinon.stub(), json: sinon.stub() };
     res.status.returns(res);
 
     await routes.followCalendar(req as any, res as any);
 
     expect(res.status.calledWith(403)).toBe(true);
-    expect(res.send.calledWith('Not logged in')).toBe(true);
+    expect(res.json.calledOnce).toBe(true);
+    const response = res.json.firstCall.args[0];
+    expect(response.errorName).toBe('UnauthenticatedError');
   });
 
   it('should fail without remote account', async () => {
     let req = { body: {}, user: {} };
-    let res = { status: sinon.stub(), send: sinon.stub() };
+    let res = { status: sinon.stub(), json: sinon.stub() };
     res.status.returns(res);
 
     await routes.followCalendar(req as any, res as any);
 
     expect(res.status.calledWith(400)).toBe(true);
-    expect(res.send.calledWith('Invalid request')).toBe(true);
+    expect(res.json.calledOnce).toBe(true);
+    const response = res.json.firstCall.args[0];
+    expect(response.errorName).toBe('InvalidRequestError');
   });
 
   it('should succeed with remote account', async () => {
@@ -81,13 +85,15 @@ describe('unfollowCalendar', () => {
 
   it('should fail without current user', async () => {
     let req = { body: {}, params: { id: 'testfollowid' } };
-    let res = { status: sinon.stub(), send: sinon.stub() };
+    let res = { status: sinon.stub(), json: sinon.stub() };
     res.status.returns(res);
 
     await routes.unfollowCalendar(req as any, res as any);
 
     expect(res.status.calledWith(403)).toBe(true);
-    expect(res.send.calledWith('Not logged in')).toBe(true);
+    expect(res.json.calledOnce).toBe(true);
+    const response = res.json.firstCall.args[0];
+    expect(response.errorName).toBe('UnauthenticatedError');
   });
 
   it('should fail without follow ID', async () => {
@@ -99,14 +105,16 @@ describe('unfollowCalendar', () => {
       params: {},  // Missing 'id' parameter - will result in undefined
       user: Account.fromObject({ id: 'testAccountId' }),
     };
-    let res = { status: sinon.stub(), send: sinon.stub(), json: sinon.stub() };
+    let res = { status: sinon.stub(), json: sinon.stub() };
     res.status.returns(res);
 
     await routes.unfollowCalendar(req as any, res as any);
 
-    // The route should detect undefined followId and return 400 with 'Invalid follow ID'
+    // The route should detect undefined followId and return 400
     expect(res.status.calledWith(400)).toBe(true);
-    expect(res.send.calledWith('Invalid follow ID')).toBe(true);
+    expect(res.json.calledOnce).toBe(true);
+    const response = res.json.firstCall.args[0];
+    expect(response.errorName).toBe('InvalidRequestError');
   });
 
   it('should succeed with follow ID', async () => {
@@ -166,24 +174,28 @@ describe('shareEvent', () => {
 
   it('should fail without current user', async () => {
     let req = { body: {} };
-    let res = { status: sinon.stub(), send: sinon.stub() };
+    let res = { status: sinon.stub(), json: sinon.stub() };
     res.status.returns(res);
 
     await routes.shareEvent(req as any, res as any);
 
     expect(res.status.calledWith(403)).toBe(true);
-    expect(res.send.calledWith('Not logged in')).toBe(true);
+    expect(res.json.calledOnce).toBe(true);
+    const response = res.json.firstCall.args[0];
+    expect(response.errorName).toBe('UnauthenticatedError');
   });
 
   it('should fail without event id', async () => {
     let req = { body: {}, user: {} };
-    let res = { status: sinon.stub(), send: sinon.stub() };
+    let res = { status: sinon.stub(), json: sinon.stub() };
     res.status.returns(res);
 
     await routes.shareEvent(req as any, res as any);
 
     expect(res.status.calledWith(400)).toBe(true);
-    expect(res.send.calledWith('Invalid request')).toBe(true);
+    expect(res.json.calledOnce).toBe(true);
+    const response = res.json.firstCall.args[0];
+    expect(response.errorName).toBe('InvalidRequestError');
   });
 
   it('should succeed with event id', async () => {
@@ -221,24 +233,28 @@ describe('unshareEvent', () => {
 
   it('should fail without current user', async () => {
     let req = { body: {} };
-    let res = { status: sinon.stub(), send: sinon.stub() };
+    let res = { status: sinon.stub(), json: sinon.stub() };
     res.status.returns(res);
 
     await routes.unshareEvent(req as any, res as any);
 
     expect(res.status.calledWith(403)).toBe(true);
-    expect(res.send.calledWith('Not logged in')).toBe(true);
+    expect(res.json.calledOnce).toBe(true);
+    const response = res.json.firstCall.args[0];
+    expect(response.errorName).toBe('UnauthenticatedError');
   });
 
   it('should fail without event id', async () => {
     let req = { body: {}, user: {} };
-    let res = { status: sinon.stub(), send: sinon.stub() };
+    let res = { status: sinon.stub(), json: sinon.stub() };
     res.status.returns(res);
 
     await routes.unshareEvent(req as any, res as any);
 
     expect(res.status.calledWith(400)).toBe(true);
-    expect(res.send.calledWith('Invalid request')).toBe(true);
+    expect(res.json.calledOnce).toBe(true);
+    const response = res.json.firstCall.args[0];
+    expect(response.errorName).toBe('InvalidRequestError');
   });
 
   it('should succeed with event id', async () => {

@@ -61,7 +61,7 @@ export default class SetupRouteHandlers {
       // Check if setup is still required
       const setupRequired = await this.service.isSetupModeActive();
       if (!setupRequired) {
-        res.status(404).json({ error: 'Setup already completed' });
+        res.status(404).json({ error: 'Setup already completed', errorName: 'NotFoundError' });
         return;
       }
 
@@ -71,14 +71,14 @@ export default class SetupRouteHandlers {
 
       // Validate required fields
       if (!email || !password || !siteTitle || !registrationMode) {
-        res.status(400).json({ error: 'All fields are required' });
+        res.status(400).json({ error: 'All fields are required', errorName: 'ValidationError' });
         return;
       }
 
       // Validate email format
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(email)) {
-        res.status(400).json({ error: 'Invalid email format' });
+        res.status(400).json({ error: 'Invalid email format', errorName: 'ValidationError' });
         return;
       }
 
@@ -88,6 +88,7 @@ export default class SetupRouteHandlers {
         res.status(400).json({
           error: 'Invalid password',
           passwordErrors: passwordValidation.errors,
+          errorName: 'ValidationError',
         });
         return;
       }
@@ -98,6 +99,7 @@ export default class SetupRouteHandlers {
         res.status(400).json({
           error: 'Invalid registration mode',
           validModes,
+          errorName: 'ValidationError',
         });
         return;
       }
@@ -106,6 +108,7 @@ export default class SetupRouteHandlers {
       if (!isValidLanguageCode(defaultLanguage)) {
         res.status(400).json({
           error: 'Invalid language code',
+          errorName: 'ValidationError',
         });
         return;
       }

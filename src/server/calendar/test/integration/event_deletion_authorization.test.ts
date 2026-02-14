@@ -188,7 +188,7 @@ describe('Event Deletion and Update Authorization - IDOR Prevention', () => {
       });
 
       it('should reject deletion with non-existent event ID', async () => {
-        const fakeEventId = 'non-existent-event-id';
+        const fakeEventId = '00000000-0000-4000-8000-000000000000'; // Valid UUID format but doesn't exist
         await expect(
           calendarInterface.deleteEvent(ownerAccount, fakeEventId, ownerCalendar.id),
         ).rejects.toThrow(EventNotFoundError);
@@ -292,7 +292,7 @@ describe('Event Deletion and Update Authorization - IDOR Prevention', () => {
       });
 
       it('should reject update with non-existent event ID', async () => {
-        const fakeEventId = 'non-existent-event-id';
+        const fakeEventId = '00000000-0000-4000-8000-000000000000'; // Valid UUID format but doesn't exist
         await expect(
           calendarInterface.updateEvent(ownerAccount, fakeEventId, {
             content: {

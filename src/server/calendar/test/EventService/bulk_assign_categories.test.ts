@@ -29,8 +29,8 @@ describe('EventService.bulkAssignCategories', () => {
 
   it('should assign categories to multiple events successfully', async () => {
     // Arrange
-    const eventIds = ['event1', 'event2', 'event3'];
-    const categoryIds = ['cat1', 'cat2'];
+    const eventIds = ['11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222', '33333333-3333-4333-8333-333333333333'];
+    const categoryIds = ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'];
     const calendarId = 'calendar1';
 
     // Mock events - use UUID for calendar_id (local events)
@@ -94,17 +94,17 @@ describe('EventService.bulkAssignCategories', () => {
     // Assert
     expect(Array.isArray(result)).toBe(true);
     expect(result).toHaveLength(3);
-    expect(result[0].id).toBe('event1');
-    expect(result[1].id).toBe('event2');
-    expect(result[2].id).toBe('event3');
+    expect(result[0].id).toBe('11111111-1111-4111-8111-111111111111');
+    expect(result[1].id).toBe('22222222-2222-4222-8222-222222222222');
+    expect(result[2].id).toBe('33333333-3333-4333-8333-333333333333');
     expect(bulkCreateStub.calledOnce).toBe(true);
     expect(mockTransaction.commit.calledOnce).toBe(true);
   });
 
   it('should handle events not found error', async () => {
     // Arrange
-    const eventIds = ['nonexistent1', 'nonexistent2'];
-    const categoryIds = ['cat1'];
+    const eventIds = ['99999999-9999-4999-8999-999999999991', '99999999-9999-4999-8999-999999999992'];
+    const categoryIds = ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'];
 
     const findEventsStub = sandbox.stub(EventEntity, 'findAll');
     findEventsStub.resolves([]);
@@ -116,12 +116,12 @@ describe('EventService.bulkAssignCategories', () => {
 
   it('should handle categories not found error', async () => {
     // Arrange
-    const eventIds = ['event1'];
-    const categoryIds = ['nonexistent-cat'];
+    const eventIds = ['11111111-1111-4111-8111-111111111111'];
+    const categoryIds = ['99999999-9999-4999-8999-999999999999'];
     const calendarId = 'calendar1';
 
     const mockEvents = [EventEntity.build({
-      id: 'event1',
+      id: '11111111-1111-4111-8111-111111111111',
       calendar_id: calendarId,
       account_id: 'test-account-id',
     })];
@@ -146,13 +146,13 @@ describe('EventService.bulkAssignCategories', () => {
 
   it('should handle mixed calendar events error', async () => {
     // Arrange
-    const eventIds = ['event1', 'event2'];
-    const categoryIds = ['cat1'];
+    const eventIds = ['11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222'];
+    const categoryIds = ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'];
 
     // Events with DIFFERENT calendar UUIDs to trigger mixed calendar error
     const mockEvents = [
-      EventEntity.build({ id: 'event1', calendar_id: 'calendar1', account_id: 'test-account-id' }),
-      EventEntity.build({ id: 'event2', calendar_id: 'calendar2', account_id: 'test-account-id' }),
+      EventEntity.build({ id: '11111111-1111-4111-8111-111111111111', calendar_id: 'calendar1', account_id: 'test-account-id' }),
+      EventEntity.build({ id: '22222222-2222-4222-8222-222222222222', calendar_id: 'calendar2', account_id: 'test-account-id' }),
     ];
 
     const findEventsStub = sandbox.stub(EventEntity, 'findAll');
@@ -171,12 +171,12 @@ describe('EventService.bulkAssignCategories', () => {
 
   it('should skip already assigned categories and report success', async () => {
     // Arrange
-    const eventIds = ['event1'];
-    const categoryIds = ['cat1', 'cat2'];
+    const eventIds = ['11111111-1111-4111-8111-111111111111'];
+    const categoryIds = ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'];
     const calendarId = 'calendar1';
 
     const mockEvents = [EventEntity.build({
-      id: 'event1',
+      id: '11111111-1111-4111-8111-111111111111',
       calendar_id: calendarId,
       account_id: 'test-account-id',
     })];
@@ -190,8 +190,8 @@ describe('EventService.bulkAssignCategories', () => {
     const existingAssignments = [
       EventCategoryAssignmentEntity.build({
         id: 'assign1',
-        event_id: 'event1',
-        category_id: 'cat1',
+        event_id: '11111111-1111-4111-8111-111111111111',
+        category_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
       }),
     ];
 
@@ -225,8 +225,8 @@ describe('EventService.bulkAssignCategories', () => {
 
     // Mock getEventById for the return values
     const getEventByIdStub = sandbox.stub(service, 'getEventById');
-    getEventByIdStub.withArgs('event1').resolves({
-      id: 'event1',
+    getEventByIdStub.withArgs('11111111-1111-4111-8111-111111111111').resolves({
+      id: '11111111-1111-4111-8111-111111111111',
       calendarId,
       categories: mockCategories.map(cat => cat.toModel()),
     } as any);
@@ -237,25 +237,25 @@ describe('EventService.bulkAssignCategories', () => {
     // Assert
     expect(Array.isArray(result)).toBe(true);
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe('event1');
+    expect(result[0].id).toBe('11111111-1111-4111-8111-111111111111');
     expect(mockTransaction.commit.calledOnce).toBe(true);
     // Only cat2 should be newly assigned (cat1 was already assigned)
   });
 
   it('should rollback transaction on error', async () => {
     // Arrange
-    const eventIds = ['event1'];
-    const categoryIds = ['cat1'];
+    const eventIds = ['11111111-1111-4111-8111-111111111111'];
+    const categoryIds = ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'];
     const calendarId = 'calendar1';
 
     const mockEvents = [EventEntity.build({
-      id: 'event1',
+      id: '11111111-1111-4111-8111-111111111111',
       calendar_id: calendarId,
       account_id: 'test-account-id',
     })];
 
     const mockCategories = [EventCategoryEntity.build({
-      id: 'cat1',
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
       calendar_id: calendarId,
     })];
 

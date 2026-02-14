@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import { DateTime } from 'luxon';
 
+import { ValidationError } from '@/common/exceptions/base';
 import { ReportEntity } from '@/server/moderation/entity/report';
-import { ReportEscalationEntity } from '@/server/moderation/entity/report_escalation';
 import AnalyticsService from '@/server/moderation/service/analytics';
 import { ReportStatus } from '@/common/model/report';
 
@@ -18,6 +18,52 @@ describe('AnalyticsService', () => {
 
   afterEach(() => {
     sandbox.restore();
+  });
+
+  describe('validateDateRange', () => {
+    it('should throw ValidationError when startDate is missing', () => {
+      expect(() => service.validateDateRange(undefined, new Date())).toThrow(ValidationError);
+      expect(() => service.validateDateRange(undefined, new Date())).toThrow('startDate is required');
+    });
+
+    it('should throw ValidationError when endDate is missing', () => {
+      expect(() => service.validateDateRange(new Date(), undefined)).toThrow(ValidationError);
+      expect(() => service.validateDateRange(new Date(), undefined)).toThrow('endDate is required');
+    });
+
+    it('should throw ValidationError when startDate is invalid', () => {
+      const invalidDate = new Date('invalid');
+      expect(() => service.validateDateRange(invalidDate, new Date())).toThrow(ValidationError);
+      expect(() => service.validateDateRange(invalidDate, new Date())).toThrow('Invalid startDate format');
+    });
+
+    it('should throw ValidationError when endDate is invalid', () => {
+      const invalidDate = new Date('invalid');
+      expect(() => service.validateDateRange(new Date(), invalidDate)).toThrow(ValidationError);
+      expect(() => service.validateDateRange(new Date(), invalidDate)).toThrow('Invalid endDate format');
+    });
+
+    it('should throw ValidationError when endDate is before or equal to startDate', () => {
+      const startDate = DateTime.fromISO('2026-01-15').toJSDate();
+      const endDate = DateTime.fromISO('2026-01-10').toJSDate();
+
+      expect(() => service.validateDateRange(startDate, endDate)).toThrow(ValidationError);
+      expect(() => service.validateDateRange(startDate, endDate)).toThrow('endDate must be after startDate');
+    });
+
+    it('should throw ValidationError when endDate equals startDate', () => {
+      const date = DateTime.fromISO('2026-01-15').toJSDate();
+
+      expect(() => service.validateDateRange(date, date)).toThrow(ValidationError);
+      expect(() => service.validateDateRange(date, date)).toThrow('endDate must be after startDate');
+    });
+
+    it('should not throw when dates are valid and in correct order', () => {
+      const startDate = DateTime.fromISO('2026-01-01').toJSDate();
+      const endDate = DateTime.fromISO('2026-01-31').toJSDate();
+
+      expect(() => service.validateDateRange(startDate, endDate)).not.toThrow();
+    });
   });
 
   describe('getTotalReportsByStatus', () => {

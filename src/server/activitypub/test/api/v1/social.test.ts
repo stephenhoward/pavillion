@@ -73,14 +73,16 @@ describe('ActivityPub Social API Routes', () => {
       };
       const res = {
         status: sinon.stub(),
-        send: sinon.stub(),
+        json: sinon.stub(),
       };
       res.status.returns(res);
 
       await routes.getFollows(req as any, res as any);
 
       expect(res.status.calledWith(403)).toBe(true);
-      expect(res.send.calledWith('Not logged in')).toBe(true);
+      expect(res.json.calledOnce).toBe(true);
+      const response = res.json.firstCall.args[0];
+      expect(response.errorName).toBe('UnauthenticatedError');
     });
 
     it('should verify user has calendar access', async () => {
@@ -94,14 +96,16 @@ describe('ActivityPub Social API Routes', () => {
       };
       const res = {
         status: sinon.stub(),
-        send: sinon.stub(),
+        json: sinon.stub(),
       };
       res.status.returns(res);
 
       await routes.getFollows(req as any, res as any);
 
       expect(res.status.calledWith(403)).toBe(true);
-      expect(res.send.calledWith('Permission denied')).toBe(true);
+      expect(res.json.calledOnce).toBe(true);
+      const response = res.json.firstCall.args[0];
+      expect(response.errorName).toBe('InsufficientPermissionsError');
     });
   });
 
@@ -142,14 +146,16 @@ describe('ActivityPub Social API Routes', () => {
       };
       const res = {
         status: sinon.stub(),
-        send: sinon.stub(),
+        json: sinon.stub(),
       };
       res.status.returns(res);
 
       await routes.getFollowers(req as any, res as any);
 
       expect(res.status.calledWith(403)).toBe(true);
-      expect(res.send.calledWith('Not logged in')).toBe(true);
+      expect(res.json.calledOnce).toBe(true);
+      const response = res.json.firstCall.args[0];
+      expect(response.errorName).toBe('UnauthenticatedError');
     });
   });
 
@@ -224,14 +230,16 @@ describe('ActivityPub Social API Routes', () => {
       };
       const res = {
         status: sinon.stub(),
-        send: sinon.stub(),
+        json: sinon.stub(),
       };
       res.status.returns(res);
 
       await routes.updateFollowPolicy(req as any, res as any);
 
       expect(res.status.calledWith(403)).toBe(true);
-      expect(res.send.calledWith('Not logged in')).toBe(true);
+      expect(res.json.calledOnce).toBe(true);
+      const response = res.json.firstCall.args[0];
+      expect(response.errorName).toBe('UnauthenticatedError');
     });
   });
 
@@ -322,14 +330,16 @@ describe('ActivityPub Social API Routes', () => {
       };
       const res = {
         status: sinon.stub(),
-        send: sinon.stub(),
+        json: sinon.stub(),
       };
       res.status.returns(res);
 
       await routes.getFeed(req as any, res as any);
 
       expect(res.status.calledWith(403)).toBe(true);
-      expect(res.send.calledWith('Not logged in')).toBe(true);
+      expect(res.json.calledOnce).toBe(true);
+      const response = res.json.firstCall.args[0];
+      expect(response.errorName).toBe('UnauthenticatedError');
     });
   });
 
@@ -400,14 +410,16 @@ describe('ActivityPub Social API Routes', () => {
       };
       const res = {
         status: sinon.stub(),
-        send: sinon.stub(),
+        json: sinon.stub(),
       };
       res.status.returns(res);
 
       await routes.followCalendar(req as any, res as any);
 
       expect(res.status.calledWith(403)).toBe(true);
-      expect(res.send.calledWith('Not logged in')).toBe(true);
+      expect(res.json.calledOnce).toBe(true);
+      const response = res.json.firstCall.args[0];
+      expect(response.errorName).toBe('UnauthenticatedError');
     });
   });
 });

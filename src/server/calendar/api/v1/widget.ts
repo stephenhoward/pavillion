@@ -42,6 +42,7 @@ class WidgetRoutes {
     if (!origin) {
       res.status(403).json({
         "error": "Origin header is required for widget requests",
+        errorName: 'ForbiddenError',
       });
       return;
     }
@@ -72,6 +73,7 @@ class WidgetRoutes {
       if (!isAllowed) {
         res.status(403).json({
           "error": `Domain '${origin}' is not authorized to embed this calendar widget. Please add your domain to the widget allowlist in calendar settings.`,
+          errorName: 'ForbiddenError',
         });
         return;
       }
@@ -111,6 +113,7 @@ class WidgetRoutes {
       if (!calendar) {
         res.status(404).json({
           "error": "Calendar not found",
+          errorName: 'CalendarNotFoundError',
         });
         return;
       }

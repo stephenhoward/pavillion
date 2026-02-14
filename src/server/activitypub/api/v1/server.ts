@@ -205,6 +205,7 @@ export default class ActivityPubServerRoutes {
       res.status(400).json({
         error: 'Invalid actor URI',
         details: actorValidation.error.issues,
+        errorName: 'ValidationError',
       });
       return;
     }
@@ -237,6 +238,7 @@ export default class ActivityPubServerRoutes {
         res.status(400).json({
           error: 'Unsupported activity type',
           details: `Activity type '${req.body.type}' is not supported`,
+          errorName: 'ValidationError',
         });
         return;
     }
@@ -246,6 +248,7 @@ export default class ActivityPubServerRoutes {
       res.status(400).json({
         error: `Invalid ${req.body.type} activity`,
         details: activityValidation.error.issues,
+        errorName: 'ValidationError',
       });
       return;
     }

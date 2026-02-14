@@ -1,6 +1,7 @@
 import { Op, fn, col, literal } from 'sequelize';
 import { DateTime } from 'luxon';
 
+import { ValidationError } from '@/common/exceptions/base';
 import { ReportEntity } from '@/server/moderation/entity/report';
 import { ReportStatus } from '@/common/model/report';
 import type { ReporterType } from '@/common/model/report';
@@ -65,6 +66,48 @@ interface ReporterVolumeResult {
  * Provides aggregated data about reports, resolution rates, and trends.
  */
 class AnalyticsService {
+
+  /**
+   * Validates date range parameters for analytics queries.
+   *
+   * @param startDate - Start of date range
+   * @param endDate - End of date range
+   * @throws ValidationError if dates are invalid or in wrong order
+   */
+  validateDateRange(startDate: Date | undefined, endDate: Date | undefined): void {
+    const errors: string[] = [];
+
+    if (!startDate) {
+      errors.push('startDate is required');
+    }
+
+    if (!endDate) {
+      errors.push('endDate is required');
+    }
+
+    if (errors.length > 0) {
+      throw new ValidationError(errors);
+    }
+
+    // Now we know both dates exist, check if they're valid
+    if (isNaN(startDate!.getTime())) {
+      errors.push('Invalid startDate format');
+    }
+
+    if (isNaN(endDate!.getTime())) {
+      errors.push('Invalid endDate format');
+    }
+
+    if (errors.length > 0) {
+      throw new ValidationError(errors);
+    }
+
+    // Check date ordering
+    if (endDate!.getTime() <= startDate!.getTime()) {
+      errors.push('endDate must be after startDate');
+      throw new ValidationError(errors);
+    }
+  }
 
   /**
    * Gets total reports grouped by status within a date range.

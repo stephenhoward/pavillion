@@ -37,18 +37,18 @@ export default class AccountApplicationRouteHandlers {
       }
       else if (error instanceof AccountApplicationsClosedError) {
         // This is a system state error, not an enumeration risk, so reveal it
-        res.status(400).json({message: 'account_applications_closed'});
+        res.status(400).json({ error: 'account_applications_closed', errorName: 'AccountApplicationsClosedError' });
         return;
       }
       else {
         // Unexpected error - log and return generic error
         console.error('Error processing application:', error);
-        res.status(500).json({message: 'application_processing_error'});
+        res.status(500).json({ error: 'application_processing_error', errorName: 'ApplicationProcessingError' });
         return;
       }
     }
     // Always return success response to prevent account enumeration
-    res.json({message: 'application_submitted'});
+    res.json({ success: true, message: 'application_submitted' });
   }
 
   async listApplications(req: Request, res: Response) {
@@ -68,20 +68,20 @@ export default class AccountApplicationRouteHandlers {
     try {
       if (req.body.accepted === true) {
         const account = await this.service.acceptAccountApplication(req.params.id);
-        res.json({message: 'application_accepted', account});
+        res.json({ success: true, message: 'application_accepted', account });
       }
       else if (req.body.accepted === false) {
         await this.service.rejectAccountApplication(req.params.id, req.body.silent === true);
-        res.json({message: 'application_rejected'});
+        res.json({ success: true, message: 'application_rejected' });
       }
       else {
-        res.status(400).json({message: 'invalid_request'});
+        res.status(400).json({ error: 'invalid_request', errorName: 'ValidationError' });
       }
     }
     catch (error) {
       // Don't expose internal error details - use generic translation key
       console.error('Error processing application:', error);
-      res.status(400).json({message: 'application_processing_error'});
+      res.status(400).json({ error: 'application_processing_error', errorName: 'ApplicationProcessingError' });
     }
   }
 }

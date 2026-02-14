@@ -24,7 +24,7 @@ export default class AccountRouteHandlers {
     try {
       let account = await this.service.registerNewAccount(req.body.email);
       if ( !account ) {
-        res.status(400).json({message: 'error_creating_account'});
+        res.status(400).json({ error: 'error_creating_account', errorName: 'AccountCreationError' });
         return;
       }
     }
@@ -33,16 +33,16 @@ export default class AccountRouteHandlers {
         console.info('Registration attempt for existing account');
       }
       else if ( error instanceof AccountRegistrationClosedError ) {
-        res.status(400).json({message: 'registration_closed'});
+        res.status(400).json({ error: 'registration_closed', errorName: 'AccountRegistrationClosedError' });
         return;
       }
       else {
         logError(error, 'Error creating account');
-        res.status(500).json({message: 'error_creating_account'});
+        res.status(500).json({ error: 'error_creating_account', errorName: 'AccountCreationError' });
         return;
       }
     }
-    res.json({message: 'registration_submitted'});
+    res.json({ success: true, message: 'registration_submitted' });
   }
 
   async getCurrentUser(req: Request, res: Response): Promise<void> {
@@ -51,6 +51,7 @@ export default class AccountRouteHandlers {
     if (!account) {
       res.status(400).json({
         error: 'User not authenticated',
+        errorName: 'AuthenticationError',
       });
       return;
     }
@@ -64,6 +65,7 @@ export default class AccountRouteHandlers {
     if (!account) {
       res.status(400).json({
         error: 'User not authenticated',
+        errorName: 'AuthenticationError',
       });
       return;
     }
@@ -73,6 +75,7 @@ export default class AccountRouteHandlers {
     if (displayName === undefined) {
       res.status(400).json({
         error: 'displayName is required',
+        errorName: 'ValidationError',
       });
       return;
     }
@@ -85,6 +88,7 @@ export default class AccountRouteHandlers {
       logError(error, 'Error updating profile');
       res.status(500).json({
         error: 'An error occurred while updating the profile',
+        errorName: 'ProfileUpdateError',
       });
     }
   }

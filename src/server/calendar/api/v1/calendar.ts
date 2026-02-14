@@ -4,7 +4,7 @@ import { Account } from '@/common/model/account';
 import ExpressHelper from '@/server/common/helper/express';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
-import { DefaultDateRange } from '@/common/model/calendar';
+import { ValidationError } from '@/common/exceptions/base';
 import CalendarInterface from '../../interface';
 
 class CalendarRoutes {
@@ -28,6 +28,7 @@ class CalendarRoutes {
     if (!account) {
       res.status(400).json({
         "error": "missing account for calendars. Not logged in?",
+        errorName: 'AuthenticationError',
       });
       return;
     }
@@ -45,13 +46,7 @@ class CalendarRoutes {
     if (!account) {
       res.status(400).json({
         "error": "missing account for calendar creation. Not logged in?",
-      });
-      return;
-    }
-
-    if (!req.body.urlName) {
-      res.status(400).json({
-        "error": "missing urlName",
+        errorName: 'AuthenticationError',
       });
       return;
     }
@@ -67,7 +62,10 @@ class CalendarRoutes {
       res.json(calendar.toObject());
     }
     catch (error) {
-      if (error instanceof InvalidUrlNameError) {
+      if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
+      }
+      else if (error instanceof InvalidUrlNameError) {
         res.status(400).json({
           "error": "Invalid URL name format",
           "errorName": error.name,
@@ -95,27 +93,12 @@ class CalendarRoutes {
     if (!account) {
       res.status(400).json({
         "error": "missing account for settings update. Not logged in?",
-      });
-      return;
-    }
-
-    if (!calendarId) {
-      res.status(400).json({
-        "error": "missing calendarId",
+        errorName: 'AuthenticationError',
       });
       return;
     }
 
     const { defaultDateRange } = req.body;
-
-    // Validate defaultDateRange if provided
-    const validRanges: DefaultDateRange[] = ['1week', '2weeks', '1month'];
-    if (defaultDateRange && !validRanges.includes(defaultDateRange)) {
-      res.status(400).json({
-        "error": "Invalid defaultDateRange. Must be one of: 1week, 2weeks, 1month",
-      });
-      return;
-    }
 
     try {
       const calendar = await this.service.updateCalendarSettings(
@@ -127,7 +110,10 @@ class CalendarRoutes {
       res.json(calendar.toObject());
     }
     catch (error) {
-      if (error instanceof CalendarNotFoundError) {
+      if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
+      }
+      else if (error instanceof CalendarNotFoundError) {
         res.status(404).json({
           "error": "Calendar not found",
           "errorName": error.name,

@@ -97,17 +97,17 @@ export default class SubscriptionRouteHandlers {
     catch (error) {
       console.error('Error creating subscription:', error);
       if (error instanceof MissingRequiredFieldError) {
-        res.status(400).json({ error: error.message });
+        res.status(400).json({ error: error.message, errorName: 'ValidationError' });
       }
       else if (error instanceof InvalidBillingCycleError) {
-        res.status(400).json({ error: error.message });
+        res.status(400).json({ error: error.message, errorName: 'ValidationError' });
       }
       else if (error instanceof InvalidAmountError) {
-        res.status(400).json({ error: error.message });
+        res.status(400).json({ error: error.message, errorName: 'ValidationError' });
       }
       else if (error instanceof Error) {
         if (error.message.includes('not found') || error.message.includes('not enabled')) {
-          res.status(400).json({ error: error.message });
+          res.status(400).json({ error: error.message, errorName: 'ValidationError' });
         }
         else {
           res.status(500).json({ error: 'Internal server error' });
@@ -135,7 +135,7 @@ export default class SubscriptionRouteHandlers {
       const subscription = await this.interface.getStatus(account.id);
 
       if (!subscription) {
-        res.status(404).json({ error: 'No subscription found' });
+        res.status(404).json({ error: 'No subscription found', errorName: 'SubscriptionNotFoundError' });
         return;
       }
 
@@ -164,7 +164,7 @@ export default class SubscriptionRouteHandlers {
       const subscription = await this.interface.getStatus(account.id);
 
       if (!subscription) {
-        res.status(404).json({ error: 'No subscription found' });
+        res.status(404).json({ error: 'No subscription found', errorName: 'SubscriptionNotFoundError' });
         return;
       }
 
@@ -176,7 +176,7 @@ export default class SubscriptionRouteHandlers {
     catch (error) {
       console.error('Error canceling subscription:', error);
       if (error instanceof Error && error.message.includes('not found')) {
-        res.status(404).json({ error: error.message });
+        res.status(404).json({ error: error.message, errorName: 'NotFoundError' });
       }
       else {
         res.status(500).json({ error: 'Internal server error' });
@@ -206,10 +206,10 @@ export default class SubscriptionRouteHandlers {
     catch (error) {
       console.error('Error getting billing portal URL:', error);
       if (error instanceof MissingRequiredFieldError) {
-        res.status(400).json({ error: error.message });
+        res.status(400).json({ error: error.message, errorName: 'ValidationError' });
       }
       else if (error instanceof Error && error.message.includes('not found')) {
-        res.status(404).json({ error: error.message });
+        res.status(404).json({ error: error.message, errorName: 'NotFoundError' });
       }
       else {
         res.status(500).json({ error: 'Internal server error' });

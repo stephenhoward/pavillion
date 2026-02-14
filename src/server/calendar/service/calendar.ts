@@ -14,6 +14,7 @@ import { AccountEntity } from '@/server/common/entity/account';
 import { UserActorEntity } from '@/server/activitypub/entity/user_actor';
 import AccountInvitation from '@/common/model/invitation';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
+import { ValidationError } from '@/common/exceptions/base';
 import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/common/exceptions/editor';
 import { noAccountExistsError } from '@/server/accounts/exceptions';
 import AccountsInterface from '@/server/accounts/interface';
@@ -952,6 +953,11 @@ class CalendarService {
    * @throws UrlNameAlreadyExistsError if the URL name is already taken
    */
   async createCalendar(account: Account, urlName: string, name?: string): Promise<Calendar> {
+    // Validate required fields
+    if (!urlName || urlName.trim().length === 0) {
+      throw new ValidationError('urlName is required');
+    }
+
     // Validate URL name format
     if (!this.isValidUrlName(urlName)) {
       throw new InvalidUrlNameError();
@@ -1079,6 +1085,18 @@ class CalendarService {
     calendarId: string,
     settings: { defaultDateRange?: DefaultDateRange },
   ): Promise<Calendar> {
+    // Validate required fields
+    if (!calendarId || calendarId.trim().length === 0) {
+      throw new ValidationError('calendarId is required');
+    }
+
+    // Validate defaultDateRange if provided
+    if (settings.defaultDateRange) {
+      const validRanges: DefaultDateRange[] = ['1week', '2weeks', '1month'];
+      if (!validRanges.includes(settings.defaultDateRange)) {
+        throw new ValidationError('Invalid defaultDateRange. Must be one of: 1week, 2weeks, 1month');
+      }
+    }
     const calendar = await this.getCalendar(calendarId);
     if (!calendar) {
       throw new CalendarNotFoundError();

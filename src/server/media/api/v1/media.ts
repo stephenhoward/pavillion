@@ -55,12 +55,12 @@ export default class MediaRouteHandlers {
       const file = req.file;
 
       if (!file) {
-        res.status(400).json({ error: 'No file provided' });
+        res.status(400).json({ error: 'No file provided', errorName: 'ValidationError' });
         return;
       }
 
       if (!calendarId) {
-        res.status(400).json({ error: 'Calendar ID is required' });
+        res.status(400).json({ error: 'Calendar ID is required', errorName: 'ValidationError' });
         return;
       }
 
@@ -82,6 +82,7 @@ export default class MediaRouteHandlers {
       console.error('File upload error:', error);
       res.status(400).json({
         error: error instanceof Error ? error.message : 'Upload failed',
+        errorName: 'ValidationError',
       });
     }
   }
@@ -94,14 +95,14 @@ export default class MediaRouteHandlers {
       const { mediaId } = req.params;
 
       if (!mediaId) {
-        res.status(400).json({ error: 'Media ID is required' });
+        res.status(400).json({ error: 'Media ID is required', errorName: 'ValidationError' });
         return;
       }
 
       const fileData = await this.mediaInterface.getFile(mediaId);
 
       if (!fileData) {
-        res.status(404).json({ error: 'Media not found' });
+        res.status(404).json({ error: 'Media not found', errorName: 'MediaNotFoundError' });
         return;
       }
 
@@ -132,6 +133,7 @@ export default class MediaRouteHandlers {
         res.status(404).json({
           error: error.message,
           mediaId: error.mediaId,
+          errorName: 'NotFoundError',
         });
         return;
       }

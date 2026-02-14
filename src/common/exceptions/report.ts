@@ -1,3 +1,5 @@
+import { ValidationError } from './base';
+
 /**
  * Thrown when a user attempts to file a duplicate report for the same event.
  */
@@ -23,19 +25,18 @@ export class RateLimitError extends Error {
 /**
  * Thrown when report submission fails due to invalid input data.
  * Contains an array of validation error messages.
+ * Extends the base ValidationError for consistent validation error handling.
  *
  * Accepts either a string message (for frontend use when reconstructing
  * from API error responses) or a string array of individual validation
  * errors (for backend service-layer validation).
  */
-export class ReportValidationError extends Error {
-  public errors: string[];
-
+export class ReportValidationError extends ValidationError {
   constructor(errors: string[] | string = 'Invalid report data') {
     const errorArray = typeof errors === 'string' ? [errors] : errors;
-    super(errorArray.join('; ') || 'Invalid report data');
+    super(errorArray.length > 0 ? errorArray : ['Invalid report data']);
     this.name = 'ReportValidationError';
-    this.errors = errorArray;
+    // Maintaining proper prototype chain in ES5+
     Object.setPrototypeOf(this, ReportValidationError.prototype);
   }
 }

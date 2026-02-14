@@ -5,6 +5,7 @@ import ExpressHelper from '@/server/common/helper/express';
 import CalendarInterface from '../../interface';
 import { CalendarEditorPermissionError, EditorNotFoundError } from '@/common/exceptions/editor';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
+import { ValidationError } from '@/common/exceptions/base';
 import { logError } from '@/server/common/helper/error-logger';
 
 class EditorPermissionRoutes {
@@ -44,11 +45,12 @@ class EditorPermissionRoutes {
 
     const { canReviewReports } = req.body;
 
+    // Validate request format
     if (typeof canReviewReports !== 'boolean') {
-      res.status(400).json({
-        "error": "Missing or invalid 'canReviewReports' in request body. Must be a boolean.",
-        "errorName": "ValidationError",
-      });
+      const validationError = new ValidationError(
+        "Missing or invalid 'canReviewReports' in request body. Must be a boolean.",
+      );
+      ExpressHelper.sendValidationError(res, validationError);
       return;
     }
 
@@ -63,7 +65,10 @@ class EditorPermissionRoutes {
       res.json(updatedMember.toObject());
     }
     catch (error) {
-      if (error instanceof CalendarEditorPermissionError) {
+      if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
+      }
+      else if (error instanceof CalendarEditorPermissionError) {
         res.status(403).json({
           "error": error.message,
           "errorName": "CalendarEditorPermissionError",

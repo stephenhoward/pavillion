@@ -334,7 +334,7 @@ describe('Event API', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error).toBe('invalid UUID format in eventIds');
-    expect(response.body.invalidIds).toEqual(['not-a-uuid', '12345']);
+    expect(response.body.fields.invalidIds).toEqual(['not-a-uuid', '12345']);
   });
 
   it('bulkAssignCategories: should fail with invalid UUID in categoryIds', async () => {
@@ -349,7 +349,7 @@ describe('Event API', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error).toBe('invalid UUID format in categoryIds');
-    expect(response.body.invalidIds).toEqual(['invalid-uuid', 'also-bad']);
+    expect(response.body.fields.invalidIds).toEqual(['invalid-uuid', 'also-bad']);
   });
 
   it('bulkAssignCategories: should fail with mixed valid and invalid UUIDs', async () => {
@@ -364,7 +364,7 @@ describe('Event API', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error).toBe('invalid UUID format in eventIds');
-    expect(response.body.invalidIds).toEqual(['bad-uuid']);
+    expect(response.body.fields.invalidIds).toEqual(['bad-uuid']);
   });
 
   it('bulkAssignCategories: should succeed with valid request', async () => {

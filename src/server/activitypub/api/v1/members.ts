@@ -1,6 +1,7 @@
 import express, { Request, Response, Application } from 'express';
 
 import { Account } from '@/common/model/account';
+import { ValidationError } from '@/common/exceptions/base';
 import ExpressHelper from '@/server/common/helper/express';
 import CalendarService from '@/server/calendar/service/calendar';
 import ActivityPubInterface from '@/server/activitypub/interface';
@@ -50,11 +51,17 @@ export default class ActivityPubMemberRoutes {
         next();
       }
       else {
-        res.status(400).send('Invalid calendar');
+        res.status(400).json({
+          error: 'Invalid calendar',
+          errorName: 'InvalidCalendarError',
+        });
       }
     }
     else {
-      res.status(400).send('Invalid request');
+      res.status(400).json({
+        error: 'Invalid request: calendarId is required',
+        errorName: 'InvalidRequestError',
+      });
     }
   }
 
@@ -66,11 +73,17 @@ export default class ActivityPubMemberRoutes {
         next();
       }
       else {
-        res.status(400).send('Invalid calendar');
+        res.status(400).json({
+          error: 'Invalid calendar',
+          errorName: 'InvalidCalendarError',
+        });
       }
     }
     else {
-      res.status(400).send('Invalid request');
+      res.status(400).json({
+        error: 'Invalid request: calendarId is required',
+        errorName: 'InvalidRequestError',
+      });
     }
   }
 
@@ -78,14 +91,20 @@ export default class ActivityPubMemberRoutes {
     const account = req.user as Account;
 
     if (!account) {
-      res.status(403).send("Not logged in");
+      res.status(403).json({
+        error: 'Not logged in',
+        errorName: 'UnauthenticatedError',
+      });
       return;
     }
 
     const identifier = req.query.identifier as string;
 
     if (!identifier || typeof identifier !== 'string') {
-      res.status(400).json({ error: 'Missing identifier parameter' });
+      res.status(400).json({
+        error: 'Missing identifier parameter',
+        errorName: 'InvalidRequestError',
+      });
       return;
     }
 
@@ -128,6 +147,7 @@ export default class ActivityPubMemberRoutes {
         console.error('Unexpected error in lookupRemoteCalendar:', error);
         res.status(500).json({
           error: 'An unexpected error occurred',
+          errorName: 'UnknownError',
         });
       }
     }
@@ -137,7 +157,10 @@ export default class ActivityPubMemberRoutes {
     const account = req.user as Account;
 
     if (!account) {
-      res.status(403).send("Not logged in");
+      res.status(403).json({
+        error: 'Not logged in',
+        errorName: 'UnauthenticatedError',
+      });
       return;
     }
 
@@ -147,7 +170,10 @@ export default class ActivityPubMemberRoutes {
     const hasAccess = await this.calendarService.userCanModifyCalendar(account, calendar);
 
     if (!hasAccess) {
-      res.status(403).send("Permission denied");
+      res.status(403).json({
+        error: 'Permission denied',
+        errorName: 'InsufficientPermissionsError',
+      });
       return;
     }
 
@@ -159,7 +185,10 @@ export default class ActivityPubMemberRoutes {
     const account = req.user as Account;
 
     if (!account) {
-      res.status(403).send("Not logged in");
+      res.status(403).json({
+        error: 'Not logged in',
+        errorName: 'UnauthenticatedError',
+      });
       return;
     }
 
@@ -169,7 +198,10 @@ export default class ActivityPubMemberRoutes {
     const hasAccess = await this.calendarService.userCanModifyCalendar(account, calendar);
 
     if (!hasAccess) {
-      res.status(403).send("Permission denied");
+      res.status(403).json({
+        error: 'Permission denied',
+        errorName: 'InsufficientPermissionsError',
+      });
       return;
     }
 
@@ -181,7 +213,10 @@ export default class ActivityPubMemberRoutes {
     const account = req.user as Account;
 
     if (!account) {
-      res.status(403).send("Not logged in");
+      res.status(403).json({
+        error: 'Not logged in',
+        errorName: 'UnauthenticatedError',
+      });
       return;
     }
 
@@ -190,30 +225,33 @@ export default class ActivityPubMemberRoutes {
     const autoRepostOriginals = req.body.autoRepostOriginals ?? false;
     const autoRepostReposts = req.body.autoRepostReposts ?? false;
 
-    // Validate types
-    if (typeof autoRepostOriginals !== 'boolean' || typeof autoRepostReposts !== 'boolean') {
-      res.status(400).send('Invalid repost policy settings: expected boolean values');
-      return;
-    }
-
-    // Validate dependency rule
-    if (autoRepostReposts && !autoRepostOriginals) {
-      res.status(400).json({
-        error: 'Invalid auto-repost policy settings: auto-repost reposts cannot be enabled without enabling auto-repost originals',
-        errorName: 'InvalidRepostPolicySettingsError',
-      });
-      return;
-    }
-
-    // Verify user has access to this calendar
-    const hasAccess = await this.calendarService.userCanModifyCalendar(account, calendar);
-
-    if (!hasAccess) {
-      res.status(403).send("Permission denied");
-      return;
-    }
-
     try {
+      // Validate types - protocol-specific format check
+      if (typeof autoRepostOriginals !== 'boolean' || typeof autoRepostReposts !== 'boolean') {
+        throw new ValidationError('Invalid repost policy settings: expected boolean values');
+      }
+
+      // Validate dependency rule - protocol-specific business rule
+      // Use specific error name for API compatibility
+      if (autoRepostReposts && !autoRepostOriginals) {
+        res.status(400).json({
+          error: 'Invalid auto-repost policy settings: auto-repost reposts cannot be enabled without enabling auto-repost originals',
+          errorName: 'InvalidRepostPolicySettingsError',
+        });
+        return;
+      }
+
+      // Verify user has access to this calendar
+      const hasAccess = await this.calendarService.userCanModifyCalendar(account, calendar);
+
+      if (!hasAccess) {
+        res.status(403).json({
+          error: 'Permission denied',
+          errorName: 'InsufficientPermissionsError',
+        });
+        return;
+      }
+
       await this.service.updateFollowPolicy(calendar, followId, autoRepostOriginals, autoRepostReposts);
 
       // Fetch and return updated relationship
@@ -224,11 +262,17 @@ export default class ActivityPubMemberRoutes {
         res.json(updatedFollow.toObject());
       }
       else {
-        res.status(404).send('Follow relationship not found');
+        res.status(404).json({
+          error: 'Follow relationship not found',
+          errorName: 'FollowRelationshipNotFoundError',
+        });
       }
     }
     catch (error: any) {
-      if (error instanceof InvalidRepostPolicySettingsError) {
+      if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
+      }
+      else if (error instanceof InvalidRepostPolicySettingsError) {
         res.status(400).json({
           error: error.message,
           errorName: 'InvalidRepostPolicySettingsError',
@@ -244,6 +288,7 @@ export default class ActivityPubMemberRoutes {
         console.error('Unexpected error in updateFollowPolicy:', error);
         res.status(500).json({
           error: 'An unexpected error occurred',
+          errorName: 'UnknownError',
         });
       }
     }
@@ -253,7 +298,10 @@ export default class ActivityPubMemberRoutes {
     const account = req.user as Account;
 
     if (!account) {
-      res.status(403).send("Not logged in");
+      res.status(403).json({
+        error: 'Not logged in',
+        errorName: 'UnauthenticatedError',
+      });
       return;
     }
 
@@ -265,7 +313,10 @@ export default class ActivityPubMemberRoutes {
     const hasAccess = await this.calendarService.userCanModifyCalendar(account, calendar);
 
     if (!hasAccess) {
-      res.status(403).send("Permission denied");
+      res.status(403).json({
+        error: 'Permission denied',
+        errorName: 'InsufficientPermissionsError',
+      });
       return;
     }
 
@@ -282,7 +333,11 @@ export default class ActivityPubMemberRoutes {
     }
     catch (error: any) {
       console.error('Error fetching feed:', error.message);
-      res.status(500).json({ error: 'Failed to load feed', message: error.message });
+      res.status(500).json({
+        error: 'Failed to load feed',
+        errorName: 'UnknownError',
+        message: error.message,
+      });
     }
   }
 
@@ -290,7 +345,10 @@ export default class ActivityPubMemberRoutes {
     const account = req.user as Account;
 
     if (!account) {
-      res.status(403).send("Not logged in");
+      res.status(403).json({
+        error: 'Not logged in',
+        errorName: 'UnauthenticatedError',
+      });
       return;
     }
 
@@ -302,7 +360,10 @@ export default class ActivityPubMemberRoutes {
         res.status(200).send('Followed');
       }
       catch (error: any) {
-        if (error instanceof InvalidRemoteCalendarIdentifierError) {
+        if (error instanceof ValidationError) {
+          ExpressHelper.sendValidationError(res, error);
+        }
+        else if (error instanceof InvalidRemoteCalendarIdentifierError) {
           res.status(400).json({
             error: error.message,
             errorName: 'InvalidRemoteCalendarIdentifierError',
@@ -330,12 +391,16 @@ export default class ActivityPubMemberRoutes {
           console.error('Unexpected error in followCalendar:', error);
           res.status(500).json({
             error: 'An unexpected error occurred',
+            errorName: 'UnknownError',
           });
         }
       }
     }
     else {
-      res.status(400).send('Invalid request');
+      res.status(400).json({
+        error: 'Invalid request: remoteCalendar is required',
+        errorName: 'InvalidRequestError',
+      });
     }
   }
 
@@ -343,7 +408,10 @@ export default class ActivityPubMemberRoutes {
     const account = req.user as Account;
 
     if (!account) {
-      res.status(403).send("Not logged in");
+      res.status(403).json({
+        error: 'Not logged in',
+        errorName: 'UnauthenticatedError',
+      });
       return;
     }
 
@@ -353,7 +421,10 @@ export default class ActivityPubMemberRoutes {
 
     // Validate required parameters
     if (!followId || typeof followId !== 'string') {
-      res.status(400).send('Invalid follow ID');
+      res.status(400).json({
+        error: 'Invalid follow ID',
+        errorName: 'InvalidRequestError',
+      });
       return;
     }
 
@@ -361,7 +432,10 @@ export default class ActivityPubMemberRoutes {
     const hasAccess = await this.calendarService.userCanModifyCalendar(account, calendar);
 
     if (!hasAccess) {
-      res.status(403).send("Permission denied");
+      res.status(403).json({
+        error: 'Permission denied',
+        errorName: 'InsufficientPermissionsError',
+      });
       return;
     }
 
@@ -376,14 +450,20 @@ export default class ActivityPubMemberRoutes {
       });
 
       if (!followEntity) {
-        res.status(404).send('Follow relationship not found');
+        res.status(404).json({
+          error: 'Follow relationship not found',
+          errorName: 'FollowRelationshipNotFoundError',
+        });
         return;
       }
 
       // Get the actor URI from the CalendarActorEntity
       const actorUri = followEntity.calendarActor?.actor_uri;
       if (!actorUri) {
-        res.status(500).send('Calendar actor not found');
+        res.status(500).json({
+          error: 'Calendar actor not found',
+          errorName: 'UnknownError',
+        });
         return;
       }
 
@@ -391,7 +471,10 @@ export default class ActivityPubMemberRoutes {
       res.status(200).send('Unfollowed');
     }
     catch (error: any) {
-      if (error instanceof InsufficientCalendarPermissionsError) {
+      if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
+      }
+      else if (error instanceof InsufficientCalendarPermissionsError) {
         res.status(403).json({
           error: error.message,
           errorName: 'InsufficientCalendarPermissionsError',
@@ -401,6 +484,7 @@ export default class ActivityPubMemberRoutes {
         console.error('Unexpected error in unfollowCalendar:', error);
         res.status(500).json({
           error: 'An unexpected error occurred',
+          errorName: 'UnknownError',
         });
       }
     }
@@ -410,7 +494,10 @@ export default class ActivityPubMemberRoutes {
     const account = req.user as Account;
 
     if (!account) {
-      res.status(403).send("Not logged in");
+      res.status(403).json({
+        error: 'Not logged in',
+        errorName: 'UnauthenticatedError',
+      });
       return;
     }
 
@@ -420,7 +507,10 @@ export default class ActivityPubMemberRoutes {
         res.status(200).send('Shared');
       }
       catch (error: any) {
-        if (error instanceof InvalidSharedEventUrlError) {
+        if (error instanceof ValidationError) {
+          ExpressHelper.sendValidationError(res, error);
+        }
+        else if (error instanceof InvalidSharedEventUrlError) {
           res.status(400).json({
             error: error.message,
             errorName: 'InvalidSharedEventUrlError',
@@ -436,12 +526,16 @@ export default class ActivityPubMemberRoutes {
           console.error('Unexpected error in shareEvent:', error);
           res.status(500).json({
             error: 'An unexpected error occurred',
+            errorName: 'UnknownError',
           });
         }
       }
     }
     else {
-      res.status(400).send('Invalid request');
+      res.status(400).json({
+        error: 'Invalid request: eventId is required',
+        errorName: 'InvalidRequestError',
+      });
     }
   }
 
@@ -449,7 +543,10 @@ export default class ActivityPubMemberRoutes {
     const account = req.user as Account;
 
     if (!account) {
-      res.status(403).send("Not logged in");
+      res.status(403).json({
+        error: 'Not logged in',
+        errorName: 'UnauthenticatedError',
+      });
       return;
     }
 
@@ -459,7 +556,10 @@ export default class ActivityPubMemberRoutes {
         res.status(200).send('Unshared');
       }
       catch (error: any) {
-        if (error instanceof InsufficientCalendarPermissionsError) {
+        if (error instanceof ValidationError) {
+          ExpressHelper.sendValidationError(res, error);
+        }
+        else if (error instanceof InsufficientCalendarPermissionsError) {
           res.status(403).json({
             error: error.message,
             errorName: 'InsufficientCalendarPermissionsError',
@@ -469,12 +569,16 @@ export default class ActivityPubMemberRoutes {
           console.error('Unexpected error in unshareEvent:', error);
           res.status(500).json({
             error: 'An unexpected error occurred',
+            errorName: 'UnknownError',
           });
         }
       }
     }
     else {
-      res.status(400).send('Invalid request');
+      res.status(400).json({
+        error: 'Invalid request: eventId is required',
+        errorName: 'InvalidRequestError',
+      });
     }
   }
 }

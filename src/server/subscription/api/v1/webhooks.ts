@@ -52,7 +52,7 @@ export default class WebhookRouteHandlers {
     const signature = req.headers['stripe-signature'] as string;
 
     if (!signature) {
-      res.status(400).json({ error: 'Missing Stripe signature header' });
+      res.status(400).json({ error: 'Missing Stripe signature header', errorName: 'ValidationError' });
       return;
     }
 
@@ -66,7 +66,7 @@ export default class WebhookRouteHandlers {
       });
 
       if (!stripeConfig) {
-        res.status(400).json({ error: 'Stripe provider not configured' });
+        res.status(400).json({ error: 'Stripe provider not configured', errorName: 'ValidationError' });
         return;
       }
 
@@ -80,7 +80,7 @@ export default class WebhookRouteHandlers {
         event = Stripe.Webhook.constructEvent(rawBody, signature, webhookSecret);
       }
       catch (err) {
-        res.status(400).json({ error: `Invalid signature: ${err instanceof Error ? err.message : 'Unknown error'}` });
+        res.status(400).json({ error: `Invalid signature: ${err instanceof Error ? err.message : 'Unknown error'}`, errorName: 'ValidationError' });
         return;
       }
 
@@ -109,7 +109,7 @@ export default class WebhookRouteHandlers {
     const signature = req.headers['paypal-transmission-sig'] as string;
 
     if (!signature) {
-      res.status(400).json({ error: 'Missing PayPal signature header' });
+      res.status(400).json({ error: 'Missing PayPal signature header', errorName: 'ValidationError' });
       return;
     }
 
@@ -123,7 +123,7 @@ export default class WebhookRouteHandlers {
       });
 
       if (!paypalConfig) {
-        res.status(400).json({ error: 'PayPal provider not configured' });
+        res.status(400).json({ error: 'PayPal provider not configured', errorName: 'ValidationError' });
         return;
       }
 
@@ -133,7 +133,7 @@ export default class WebhookRouteHandlers {
       const isValid = this.verifyPayPalSignature(rawBody, signature);
 
       if (!isValid) {
-        res.status(400).json({ error: 'Invalid PayPal signature' });
+        res.status(400).json({ error: 'Invalid PayPal signature', errorName: 'ValidationError' });
         return;
       }
 

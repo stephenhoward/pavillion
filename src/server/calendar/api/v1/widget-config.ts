@@ -35,6 +35,7 @@ class WidgetConfigRoutes {
     if (!account) {
       res.status(400).json({
         "error": "missing account. Not logged in?",
+        errorName: 'AuthenticationError',
       });
       return;
     }
@@ -42,6 +43,7 @@ class WidgetConfigRoutes {
     if (!calendarId) {
       res.status(400).json({
         "error": "missing calendarId",
+        errorName: 'ValidationError',
       });
       return;
     }
@@ -86,6 +88,7 @@ class WidgetConfigRoutes {
     if (!account) {
       res.status(400).json({
         "error": "missing account. Not logged in?",
+        errorName: 'AuthenticationError',
       });
       return;
     }
@@ -93,6 +96,7 @@ class WidgetConfigRoutes {
     if (!calendarId) {
       res.status(400).json({
         "error": "missing calendarId",
+        errorName: 'ValidationError',
       });
       return;
     }
@@ -100,6 +104,7 @@ class WidgetConfigRoutes {
     if (!domain || typeof domain !== 'string') {
       res.status(400).json({
         "error": "missing or invalid domain",
+        errorName: 'ValidationError',
       });
       return;
     }
@@ -149,6 +154,7 @@ class WidgetConfigRoutes {
     if (!account) {
       res.status(400).json({
         "error": "missing account. Not logged in?",
+        errorName: 'AuthenticationError',
       });
       return;
     }
@@ -156,6 +162,7 @@ class WidgetConfigRoutes {
     if (!calendarId) {
       res.status(400).json({
         "error": "missing calendarId",
+        errorName: 'ValidationError',
       });
       return;
     }

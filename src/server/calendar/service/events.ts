@@ -16,6 +16,7 @@ import { MediaEntity } from "@/server/media/entity/media";
 import LocationService from "@/server/calendar/service/locations";
 import { EventEmitter } from 'events';
 import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError, BulkEventsNotFoundError, MixedCalendarEventsError, CategoriesNotFoundError, LocationValidationError } from '@/common/exceptions/calendar';
+import { ValidationError } from '@/common/exceptions/base';
 import CategoryService from './categories';
 import { EventCategoryEntity } from '@/server/calendar/entity/event_category';
 import { EventCategoryContentEntity } from '@/server/calendar/entity/event_category_content';
@@ -42,6 +43,15 @@ class EventService {
     this.calendarService = new CalendarService();
     this.categoryService = new CategoryService();
     this.eventBus = eventBus;
+  }
+
+  /**
+   * Validates if a string is a valid UUID v4
+   * @private
+   */
+  private isValidUUID(uuid: string): boolean {
+    const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    return typeof uuid === 'string' && UUID_V4_REGEX.test(uuid);
   }
 
   /**
@@ -595,6 +605,15 @@ class EventService {
      * @returns a promise that resolves to the Event
      */
   async updateEvent(account: Account, eventId: string, eventParams:Record<string,any>): Promise<CalendarEvent> {
+    // Validate eventId parameter
+    if (!eventId || (typeof eventId === 'string' && eventId.trim() === '')) {
+      throw new ValidationError('Event ID is required');
+    }
+
+    if (!this.isValidUUID(eventId)) {
+      throw new ValidationError('Invalid UUID format in event ID');
+    }
+
     const eventEntity = await EventEntity.findByPk(eventId);
 
     // If event not found locally, check if this is a remote event the user can update
@@ -1017,6 +1036,11 @@ class EventService {
   }
 
   async getEventById(eventId: string): Promise<CalendarEvent> {
+    // Validate eventId parameter
+    if (!eventId || (typeof eventId === 'string' && eventId.trim() === '')) {
+      throw new ValidationError('eventId is required');
+    }
+
 
     const event = await EventEntity.findOne({
       where: { id: eventId },
@@ -1062,6 +1086,36 @@ class EventService {
     eventIds: string[],
     categoryIds: string[],
   ): Promise<CalendarEvent[]> {
+    // Validate required array fields
+    if (!Array.isArray(eventIds) || eventIds.length === 0) {
+      throw new ValidationError('eventIds must be a non-empty array');
+    }
+
+    if (!Array.isArray(categoryIds) || categoryIds.length === 0) {
+      throw new ValidationError('categoryIds must be a non-empty array');
+    }
+
+    // Validate that all IDs are strings
+    if (!eventIds.every(id => typeof id === 'string')) {
+      throw new ValidationError('all eventIds must be strings');
+    }
+
+    if (!categoryIds.every(id => typeof id === 'string')) {
+      throw new ValidationError('all categoryIds must be strings');
+    }
+
+    // Validate that all IDs are valid UUIDs
+    const invalidEventIds = eventIds.filter(id => !this.isValidUUID(id));
+    if (invalidEventIds.length > 0) {
+      throw new ValidationError('invalid UUID format in eventIds', { invalidIds: invalidEventIds });
+    }
+
+    const invalidCategoryIds = categoryIds.filter(id => !this.isValidUUID(id));
+    if (invalidCategoryIds.length > 0) {
+      throw new ValidationError('invalid UUID format in categoryIds', { invalidIds: invalidCategoryIds });
+    }
+
+
     const transaction = await db.transaction();
 
     try {
@@ -1175,6 +1229,15 @@ class EventService {
    * @throws InsufficientCalendarPermissionsError if the user can't modify the calendar
    */
   async deleteEvent(account: Account, eventId: string, calendarId?: string): Promise<void> {
+    // Validate eventId parameter
+    if (!eventId || (typeof eventId === 'string' && eventId.trim() === '')) {
+      throw new ValidationError('Event ID is required');
+    }
+
+    if (!this.isValidUUID(eventId)) {
+      throw new ValidationError('Invalid UUID format in event ID');
+    }
+
     const eventEntity = await EventEntity.findByPk(eventId, {
       include: [EventContentEntity, LocationEntity, EventScheduleEntity, MediaEntity],
     });

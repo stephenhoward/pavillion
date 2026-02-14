@@ -136,7 +136,7 @@ describe('CalendarInterface.bulkAssignCategories', () => {
 
   describe('validation errors', () => {
     it('should throw BulkEventsNotFoundError for non-existent events', async () => {
-      const eventIds = ['00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002'];
+      const eventIds = ['00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002'];
       const categoryIds = [testCategories[0].id];
 
       await expect(
@@ -146,7 +146,7 @@ describe('CalendarInterface.bulkAssignCategories', () => {
 
     it('should throw CategoriesNotFoundError for non-existent categories', async () => {
       const eventIds = [testEvents[0].id];
-      const categoryIds = ['00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002'];
+      const categoryIds = ['00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002'];
 
       await expect(
         calendarInterface.bulkAssignCategories(testAccount, eventIds, categoryIds),

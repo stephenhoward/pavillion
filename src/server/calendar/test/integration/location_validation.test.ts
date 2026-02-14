@@ -74,6 +74,7 @@ describe('Location Validation - API Integration', () => {
     expect(response.status).toBe(400);
     expect(response.body.error).toBeDefined();
     expect(response.body.error).toContain('LOCATION_CITY_REQUIRES_ADDRESS');
+    expect(response.body.errorName).toBe('LocationValidationError');
   });
 
   it('should reject event with state but no city and address (400 status)', async () => {
@@ -107,6 +108,7 @@ describe('Location Validation - API Integration', () => {
     expect(response.body.error).toBeDefined();
     expect(response.body.error).toContain('LOCATION_STATE_REQUIRES_CITY');
     expect(response.body.error).toContain('LOCATION_STATE_REQUIRES_ADDRESS');
+    expect(response.body.errorName).toBe('LocationValidationError');
   });
 
   it('should accept event with valid location hierarchy', async () => {

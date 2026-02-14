@@ -352,6 +352,34 @@ class ModerationService {
   }
 
   /**
+   * Validates admin action update parameters (action and notes).
+   * Does not throw - returns an array of error messages for aggregation.
+   *
+   * @param action - Admin action to perform
+   * @param notes - Notes describing the action
+   * @returns Array of validation error messages (empty if valid)
+   */
+  validateAdminActionFields(action: any, notes: any): string[] {
+    const errors: string[] = [];
+
+    if (!action) {
+      errors.push('Action is required');
+    }
+    else if (!VALID_ADMIN_ACTIONS.includes(action)) {
+      errors.push(`Invalid action. Must be one of: ${VALID_ADMIN_ACTIONS.join(', ')}`);
+    }
+
+    if (!notes || (typeof notes === 'string' && notes.trim().length === 0)) {
+      errors.push('Notes are required for admin actions');
+    }
+    else if (typeof notes !== 'string') {
+      errors.push('Notes must be a string');
+    }
+
+    return errors;
+  }
+
+  /**
    * Creates a new report for an event, resolving the calendarId internally.
    * Validates all input fields before proceeding with event lookup and
    * report creation.

@@ -26,7 +26,7 @@ export default class AccountInvitationRouteHandlers {
     const account = req.user as Account;
 
     if (!account) {
-      res.status(400).json({ error: 'User not authenticated' });
+      res.status(400).json({ error: 'User not authenticated', errorName: 'AuthenticationError' });
       return;
     }
 
@@ -50,18 +50,18 @@ export default class AccountInvitationRouteHandlers {
     }
     else {
       res.status(400);
-      res.json({message: 'not ok'});
+      res.json({ error: 'Failed to create invitation', errorName: 'InvitationCreationError' });
     }
   }
 
   async checkInviteCode(req: Request, res: Response) {
     try {
       await this.service.validateInviteCode(req.params.code);
-      res.json({ message: 'ok' });
+      res.json({ valid: true });
     }
     catch {
       res.status(404);
-      res.json({message: 'not ok'});
+      res.json({ error: 'Invalid or expired invitation code', errorName: 'InvalidInviteCodeError' });
     }
   }
 
@@ -96,13 +96,13 @@ export default class AccountInvitationRouteHandlers {
       }
       else {
         res.status(400);
-        res.json({message: 'not ok'});
+        res.json({ error: 'Failed to accept invitation', errorName: 'InvitationAcceptanceError' });
       }
     }
     catch (error) {
       console.error('Error accepting invitation:', error);
       res.status(400);
-      res.json({message: 'not ok'});
+      res.json({ error: 'Failed to accept invitation', errorName: 'InvitationAcceptanceError' });
     }
   }
 
@@ -110,11 +110,11 @@ export default class AccountInvitationRouteHandlers {
     const result = await this.service.cancelInvite(req.params.id);
     if (result) {
       res.status(200);
-      res.json({ message: 'invitation cancelled successfully' });
+      res.json({ success: true });
     }
     else {
       res.status(404);
-      res.json({ message: 'invitation not found' });
+      res.json({ error: 'Invitation not found', errorName: 'InvitationNotFoundError' });
     }
   }
 
@@ -126,7 +126,7 @@ export default class AccountInvitationRouteHandlers {
     }
     else {
       res.status(404);
-      res.json({ message: 'invitation not found' });
+      res.json({ error: 'Invitation not found', errorName: 'InvitationNotFoundError' });
     }
   }
 }

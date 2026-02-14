@@ -41,8 +41,8 @@ export default class AuthenticationRouteHandlers {
     passport.authenticate('local', {session: false}, (err: any, account: Account) => {
       if (err || !account) {
         return res.status(400).json({
-          message: 'Something is not right',
-          user   : account,
+          error: 'Invalid credentials',
+          errorName: 'AuthenticationError',
         });
       }
 
@@ -76,10 +76,10 @@ export default class AuthenticationRouteHandlers {
     const account = await this.service.validatePasswordResetCode(req.params.code);
     if ( account ) {
       const isNewAccount = await this.accountService.isRegisteringAccount(account);
-      res.json({ message: 'ok', isNewAccount: isNewAccount });
+      res.json({ valid: true, isNewAccount: isNewAccount });
     }
     else {
-      res.json({message: 'not ok'});
+      res.json({ error: 'Invalid or expired password reset code', errorName: 'InvalidPasswordResetCodeError' });
     }
   }
 
@@ -100,7 +100,7 @@ export default class AuthenticationRouteHandlers {
         return;
       }
     }
-    res.json({ message: 'ok' });
+    res.json({ success: true });
   }
 
   async setPassword(req: Request, res: Response) {
@@ -128,30 +128,30 @@ export default class AuthenticationRouteHandlers {
 
   async changeEmail(req: Request, res: Response) {
     if (!req.user) {
-      res.status(401).json({ message: 'Unauthorized' });
+      res.status(401).json({ error: 'Unauthorized', errorName: 'AuthenticationError' });
       return;
     }
     const { email, password } = req.body;
 
     if (!email || !password) {
-      res.status(400).json({ message: 'Email and password are required' });
+      res.status(400).json({ error: 'Email and password are required', errorName: 'ValidationError' });
       return;
     }
 
     try {
       await this.service.changeEmail(req.user as Account, email, password);
-      res.json({ message: 'ok' });
+      res.json({ success: true });
     }
     catch (error) {
       if (error instanceof EmailAlreadyExistsError) {
-        res.status(409).json({ message: 'email_exists' });
+        res.status(409).json({ error: 'email_exists', errorName: 'EmailAlreadyExistsError' });
       }
       else if (error instanceof InvalidPasswordError) {
-        res.status(401).json({ message: 'invalid_password' });
+        res.status(401).json({ error: 'invalid_password', errorName: 'InvalidPasswordError' });
       }
       else {
         logError(error, 'Error changing email');
-        res.status(500).json({ message: 'server_error' });
+        res.status(500).json({ error: 'server_error', errorName: 'UnknownError' });
       }
     }
   }

@@ -91,7 +91,7 @@ describe('Account API', () => {
       .send({email: 'testme'});
 
     expect(response.status).toBe(400);
-    expect(response.body.message).toBe('registration_closed');
+    expect(response.body.error).toBe('registration_closed');
     expect(stub.called).toBe(true);
   });
 
@@ -104,7 +104,7 @@ describe('Account API', () => {
       .send({email: 'testme'});
 
     expect(response.status).toBe(400);
-    expect(response.body.message).toBe('error_creating_account');
+    expect(response.body.error).toBe('error_creating_account');
     expect(stub.called).toBe(true);
   });
 
@@ -117,7 +117,7 @@ describe('Account API', () => {
       .send({email: 'testme'});
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toBe('error_creating_account');
+    expect(response.body.error).toBe('error_creating_account');
     expect(stub.called).toBe(true);
   });
 
@@ -574,7 +574,7 @@ describe ('Invitations API', () => {
     const response = await request(testApp(router)).get('/handler');
 
     expect(response.status).toBe(200);
-    expect(response.body.message).toBe('ok');
+    expect(response.body.valid).toBe(true);
     expect(stub2.called).toBe(true);
   });
 
@@ -586,7 +586,7 @@ describe ('Invitations API', () => {
     const response = await request(testApp(router)).get('/handler');
 
     expect(response.status).toBe(404);
-    expect(response.body.message).toBe('not ok');
+    expect(response.body.error).toBe('Invalid or expired invitation code');
     expect(stub2.called).toBe(true);
   });
 
@@ -694,7 +694,7 @@ describe('Applications API', () => {
       .send({email: 'testme', message: 'I want to join'});
 
     expect(response.status).toBe(400);
-    expect(response.body.message).toBe('account_applications_closed');
+    expect(response.body.error).toBe('account_applications_closed');
     expect(stub2.called).toBe(true);
   });
 
@@ -708,7 +708,7 @@ describe('Applications API', () => {
       .send({email: 'testme', message: 'I want to join'});
 
     expect(response.status).toBe(500);
-    expect(response.body.message).toBe('application_processing_error');
+    expect(response.body.error).toBe('application_processing_error');
     expect(stub2.called).toBe(true);
   });
 

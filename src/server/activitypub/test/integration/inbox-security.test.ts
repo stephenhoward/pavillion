@@ -106,6 +106,7 @@ describe('ActivityPub Inbox Security Pipeline', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBeDefined();
+      expect(response.body.errorName).toBe('ValidationError');
     });
 
     it('should reject activity with invalid actor URI', async () => {
@@ -131,6 +132,7 @@ describe('ActivityPub Inbox Security Pipeline', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('Invalid actor URI');
+      expect(response.body.errorName).toBe('ValidationError');
     });
 
     it('should reject activity with missing required type', async () => {
@@ -156,6 +158,7 @@ describe('ActivityPub Inbox Security Pipeline', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBeDefined();
+      expect(response.body.errorName).toBe('ValidationError');
     });
 
     it('should reject unsupported activity type', async () => {
@@ -177,6 +180,7 @@ describe('ActivityPub Inbox Security Pipeline', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('Unsupported activity type');
+      expect(response.body.errorName).toBe('ValidationError');
     });
 
     it('should reject Create activity with malformed object', async () => {
@@ -198,6 +202,7 @@ describe('ActivityPub Inbox Security Pipeline', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBeDefined();
+      expect(response.body.errorName).toBe('ValidationError');
     });
   });
 

@@ -471,6 +471,9 @@ describe('Category Management Integration Tests', () => {
       );
 
       expect(response.status).toBe(400);
+      expect(response.body.error).toBeDefined();
+      expect(response.body.error).toContain("Target category cannot be in source categories");
+      expect(response.body.errorName).toBe('ValidationError');
 
       // Verify both categories still exist
       const categoriesResponse = await env.authGet(

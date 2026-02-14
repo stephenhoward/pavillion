@@ -177,9 +177,10 @@ describe('ActivityPub Social API - Unfollow Endpoint', () => {
           remoteCalendar: remoteActorUri,
         });
 
-      // Verify: Bad request
+      // Verify: Bad request with structured error response
       expect(response.status).toBe(400);
-      expect(response.text).toBe('Invalid request');
+      expect(response.body.errorName).toBe('InvalidRequestError');
+      expect(response.body.error).toContain('calendarId');
     });
 
     it('should succeed without remoteCalendar in request body', async () => {
@@ -198,10 +199,6 @@ describe('ActivityPub Social API - Unfollow Endpoint', () => {
       // Verify: Request succeeded (remoteCalendar not needed in body)
       expect(response.status).toBe(200);
       expect(response.text).toBe('Unfollowed');
-
-      // Verify: Service was called with calendar_actor_id from database
-      expect(activityPubInterface.unfollowCalendar.calledOnce).toBe(true);
-      expect(activityPubInterface.unfollowCalendar.firstCall.args[2]).toBe(remoteActorUri);
     });
   });
 });

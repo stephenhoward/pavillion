@@ -4,6 +4,7 @@ import { Account } from '@/common/model/account';
 import ExpressHelper from '@/server/common/helper/express';
 import CalendarInterface from '@/server/calendar/interface';
 import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError, BulkEventsNotFoundError, MixedCalendarEventsError, CategoriesNotFoundError, LocationValidationError } from '@/common/exceptions/calendar';
+import { ValidationError } from '@/common/exceptions/base';
 import { logError } from '@/server/common/helper/error-logger';
 
 export default class EventRoutes {
@@ -29,6 +30,7 @@ export default class EventRoutes {
     if ( !req.params.calendar ) {
       res.status(400).json({
         "error": "missing calendar name",
+        errorName: 'ValidationError',
       });
       return;
     }
@@ -37,6 +39,7 @@ export default class EventRoutes {
     if (!calendar) {
       res.status(404).json({
         "error": "calendar not found",
+        errorName: 'CalendarNotFoundError',
       });
       return;
     }
@@ -78,17 +81,12 @@ export default class EventRoutes {
     }
 
     const eventId = req.params.id;
-    if (!eventId) {
-      res.status(400).json({
-        "error": "missing event ID",
-      });
-      return;
-    }
 
     // Validate UUID format
     if (!ExpressHelper.isValidUUID(eventId)) {
       res.status(400).json({
         "error": "invalid UUID format in event ID",
+        errorName: 'ValidationError',
       });
       return;
     }
@@ -107,7 +105,10 @@ export default class EventRoutes {
       res.json(event.toObject());
     }
     catch (error) {
-      if (error instanceof EventNotFoundError) {
+      if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
+      }
+      else if (error instanceof EventNotFoundError) {
         res.status(404).json({
           "error": error.message,
           "errorName": error.name,
@@ -134,6 +135,7 @@ export default class EventRoutes {
     if (!account) {
       res.status(400).json({
         "error": "missing account for events. Not logged in?",
+        errorName: 'AuthenticationError',
       });
       return;
     }
@@ -143,11 +145,8 @@ export default class EventRoutes {
       res.status(201).json(event.toObject());
     }
     catch (error) {
-      if (error instanceof LocationValidationError) {
-        res.status(400).json({
-          "error": error.message,
-          "errorName": error.name,
-        });
+      if (error instanceof ValidationError || error instanceof LocationValidationError) {
+        ExpressHelper.sendValidationError(res, error);
       }
       else if (error instanceof InsufficientCalendarPermissionsError) {
         res.status(403).json({
@@ -176,6 +175,7 @@ export default class EventRoutes {
     if (!account) {
       res.status(400).json({
         "error": "missing account for events. Not logged in?",
+        errorName: 'AuthenticationError',
       });
       return;
     }
@@ -184,6 +184,7 @@ export default class EventRoutes {
     if (!req.params.id) {
       res.status(400).json({
         "error": "missing event ID",
+        errorName: 'ValidationError',
       });
       return;
     }
@@ -195,6 +196,7 @@ export default class EventRoutes {
     if (!ExpressHelper.isValidUUID(eventId)) {
       res.status(400).json({
         "error": "invalid UUID format in event ID",
+        errorName: 'ValidationError',
       });
       return;
     }
@@ -204,11 +206,8 @@ export default class EventRoutes {
       res.json(updatedEvent.toObject());
     }
     catch (error) {
-      if (error instanceof LocationValidationError) {
-        res.status(400).json({
-          "error": error.message,
-          "errorName": error.name,
-        });
+      if (error instanceof ValidationError || error instanceof LocationValidationError) {
+        ExpressHelper.sendValidationError(res, error);
       }
       else if (error instanceof EventNotFoundError) {
         res.status(404).json({
@@ -237,73 +236,29 @@ export default class EventRoutes {
     }
   }
 
+
   async bulkAssignCategories(req: Request, res: Response) {
     const account = req.user as Account;
 
     if (!account) {
       res.status(400).json({
         "error": "missing account for bulk category assignment. Not logged in?",
+        errorName: 'AuthenticationError',
       });
       return;
     }
 
     const { eventIds, categoryIds } = req.body;
 
-    // Validate request body
-    if (!Array.isArray(eventIds) || eventIds.length === 0) {
-      res.status(400).json({
-        "error": "eventIds must be a non-empty array",
-      });
-      return;
-    }
-
-    if (!Array.isArray(categoryIds) || categoryIds.length === 0) {
-      res.status(400).json({
-        "error": "categoryIds must be a non-empty array",
-      });
-      return;
-    }
-
-    // Validate that all IDs are strings
-    if (!eventIds.every(id => typeof id === 'string')) {
-      res.status(400).json({
-        "error": "all eventIds must be strings",
-      });
-      return;
-    }
-
-    if (!categoryIds.every(id => typeof id === 'string')) {
-      res.status(400).json({
-        "error": "all categoryIds must be strings",
-      });
-      return;
-    }
-
-    // Validate that all IDs are valid UUIDs
-    const invalidEventIds = ExpressHelper.findInvalidUUIDs(eventIds);
-    if (invalidEventIds.length > 0) {
-      res.status(400).json({
-        "error": "invalid UUID format in eventIds",
-        "invalidIds": invalidEventIds,
-      });
-      return;
-    }
-
-    const invalidCategoryIds = ExpressHelper.findInvalidUUIDs(categoryIds);
-    if (invalidCategoryIds.length > 0) {
-      res.status(400).json({
-        "error": "invalid UUID format in categoryIds",
-        "invalidIds": invalidCategoryIds,
-      });
-      return;
-    }
-
     try {
       const events = await this.service.bulkAssignCategories(account, eventIds, categoryIds);
       res.json(events.map(event => event.toObject()));
     }
     catch (error) {
-      if (error instanceof InsufficientCalendarPermissionsError) {
+      if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
+      }
+      else if (error instanceof InsufficientCalendarPermissionsError) {
         res.status(403).json({
           "error": error.message,
           "errorName": error.name,
@@ -348,12 +303,14 @@ export default class EventRoutes {
     }
   }
 
+
   async deleteEvent(req: Request, res: Response) {
     const account = req.user as Account;
 
     if (!account) {
       res.status(400).json({
         "error": "missing account for event deletion. Not logged in?",
+        errorName: 'AuthenticationError',
       });
       return;
     }
@@ -362,6 +319,7 @@ export default class EventRoutes {
     if (!eventId) {
       res.status(400).json({
         "error": "missing event ID",
+        errorName: 'ValidationError',
       });
       return;
     }
@@ -370,6 +328,7 @@ export default class EventRoutes {
     if (!ExpressHelper.isValidUUID(eventId)) {
       res.status(400).json({
         "error": "invalid UUID format in event ID",
+        errorName: 'ValidationError',
       });
       return;
     }
@@ -382,7 +341,10 @@ export default class EventRoutes {
       res.status(204).send(); // No content response for successful deletion
     }
     catch (error) {
-      if (error instanceof EventNotFoundError) {
+      if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
+      }
+      else if (error instanceof EventNotFoundError) {
         res.status(404).json({
           "error": error.message,
           "errorName": error.name,

@@ -80,7 +80,7 @@ export default class AdminAccountRouteHandlers {
       const applicationId = req.params.id;
 
       if (!applicationId) {
-        res.status(400).json({ error: 'Application ID is required' });
+        res.status(400).json({ error: 'Application ID is required', errorName: 'ValidationError' });
         return;
       }
 
@@ -107,7 +107,7 @@ export default class AdminAccountRouteHandlers {
       const silent = req.body.silent === true;
 
       if (!applicationId) {
-        res.status(400).json({ error: 'Application ID is required' });
+        res.status(400).json({ error: 'Application ID is required', errorName: 'ValidationError' });
         return;
       }
 
@@ -134,7 +134,7 @@ export default class AdminAccountRouteHandlers {
       const { email, message } = req.body;
 
       if (!email) {
-        res.status(400).json({ error: 'Email is required' });
+        res.status(400).json({ error: 'Email is required', errorName: 'ValidationError' });
         return;
       }
 

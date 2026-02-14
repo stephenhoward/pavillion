@@ -1,6 +1,7 @@
 import express, { Request, Response, Application } from 'express';
 
 import { Account } from '@/common/model/account';
+import { ValidationError } from '@/common/exceptions/base';
 import ExpressHelper from '@/server/common/helper/express';
 import ModerationInterface from '@/server/moderation/interface';
 import { logError } from '@/server/common/helper/error-logger';
@@ -63,53 +64,15 @@ export default class AnalyticsRoutes {
 
     const { startDate: startDateStr, endDate: endDateStr } = req.query;
 
-    // Validate required parameters
-    if (!startDateStr) {
-      res.status(400).json({
-        error: 'startDate query parameter is required',
-        errorName: 'ValidationError',
-      });
-      return;
-    }
-
-    if (!endDateStr) {
-      res.status(400).json({
-        error: 'endDate query parameter is required',
-        errorName: 'ValidationError',
-      });
-      return;
-    }
-
-    // Parse and validate dates
-    const startDate = new Date(startDateStr as string);
-    const endDate = new Date(endDateStr as string);
-
-    if (isNaN(startDate.getTime())) {
-      res.status(400).json({
-        error: 'Invalid startDate format',
-        errorName: 'ValidationError',
-      });
-      return;
-    }
-
-    if (isNaN(endDate.getTime())) {
-      res.status(400).json({
-        error: 'Invalid endDate format',
-        errorName: 'ValidationError',
-      });
-      return;
-    }
-
-    if (endDate <= startDate) {
-      res.status(400).json({
-        error: 'endDate must be after startDate',
-        errorName: 'ValidationError',
-      });
-      return;
-    }
+    // Parse dates
+    const startDate = startDateStr ? new Date(startDateStr as string) : undefined;
+    const endDate = endDateStr ? new Date(endDateStr as string) : undefined;
 
     try {
       const analyticsService = this.moderationInterface.getAnalyticsService();
+
+      // Validate date range in service layer
+      analyticsService.validateDateRange(startDate, endDate);
 
       // Gather all analytics data
       const [
@@ -120,12 +83,12 @@ export default class AnalyticsRoutes {
         topReportedEvents,
         reporterVolume,
       ] = await Promise.all([
-        analyticsService.getTotalReportsByStatus(startDate, endDate),
-        analyticsService.getResolutionRate(startDate, endDate),
-        analyticsService.getAverageResolutionTime(startDate, endDate),
-        analyticsService.getReportsTrend(startDate, endDate),
-        analyticsService.getTopReportedEvents(startDate, endDate),
-        analyticsService.getReporterVolume(startDate, endDate),
+        analyticsService.getTotalReportsByStatus(startDate!, endDate!),
+        analyticsService.getResolutionRate(startDate!, endDate!),
+        analyticsService.getAverageResolutionTime(startDate!, endDate!),
+        analyticsService.getReportsTrend(startDate!, endDate!),
+        analyticsService.getTopReportedEvents(startDate!, endDate!),
+        analyticsService.getReporterVolume(startDate!, endDate!),
       ]);
 
       res.json({
@@ -138,6 +101,11 @@ export default class AnalyticsRoutes {
       });
     }
     catch (error: any) {
+      if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
+        return;
+      }
+
       logError(error, 'Failed to retrieve moderation analytics');
       res.status(500).json({
         error: 'Failed to retrieve analytics',

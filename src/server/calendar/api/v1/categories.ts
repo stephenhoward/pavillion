@@ -56,7 +56,7 @@ class CategoryRoutes {
       }
 
       if (!calendar) {
-        res.status(404).json({ "error": "calendar not found" });
+        res.status(404).json({ "error": "calendar not found", errorName: 'CalendarNotFoundError' });
         return;
       }
 
@@ -93,6 +93,7 @@ class CategoryRoutes {
       if (!account) {
         res.status(400).json({
           "error": "missing account for category creation. Not logged in?",
+          errorName: 'AuthenticationError',
         });
         return;
       }
@@ -134,7 +135,7 @@ class CategoryRoutes {
       }
 
       if (!calendar) {
-        res.status(404).json({ "error": "calendar not found" });
+        res.status(404).json({ "error": "calendar not found", errorName: 'CalendarNotFoundError' });
         return;
       }
 
@@ -171,6 +172,7 @@ class CategoryRoutes {
       if (!account) {
         res.status(400).json({
           "error": "missing account for category update. Not logged in?",
+          errorName: 'AuthenticationError',
         });
         return;
       }
@@ -183,7 +185,7 @@ class CategoryRoutes {
       }
 
       if (!calendar) {
-        res.status(404).json({ "error": "calendar not found" });
+        res.status(404).json({ "error": "calendar not found", errorName: 'CalendarNotFoundError' });
         return;
       }
 
@@ -227,6 +229,7 @@ class CategoryRoutes {
       if (!account) {
         res.status(400).json({
           "error": "missing account for category deletion. Not logged in?",
+          errorName: 'AuthenticationError',
         });
         return;
       }
@@ -235,6 +238,7 @@ class CategoryRoutes {
       if (action && action !== 'remove' && action !== 'migrate') {
         res.status(400).json({
           "error": "Invalid action parameter. Must be 'remove' or 'migrate'",
+          errorName: 'ValidationError',
         });
         return;
       }
@@ -243,6 +247,7 @@ class CategoryRoutes {
       if (action === 'migrate' && !targetCategoryId) {
         res.status(400).json({
           "error": "targetCategoryId is required when action is 'migrate'",
+          errorName: 'ValidationError',
         });
         return;
       }
@@ -255,7 +260,7 @@ class CategoryRoutes {
       }
 
       if (!calendar) {
-        res.status(404).json({ "error": "calendar not found" });
+        res.status(404).json({ "error": "calendar not found", errorName: 'CalendarNotFoundError' });
         return;
       }
 
@@ -306,18 +311,19 @@ class CategoryRoutes {
       if (!account) {
         res.status(400).json({
           "error": "missing account for category merge. Not logged in?",
+          errorName: 'AuthenticationError',
         });
         return;
       }
 
       // Validate request body
       if (!targetCategoryId) {
-        res.status(400).json({ "error": "targetCategoryId is required" });
+        res.status(400).json({ "error": "targetCategoryId is required", errorName: 'ValidationError' });
         return;
       }
 
       if (!Array.isArray(sourceCategoryIds) || sourceCategoryIds.length === 0) {
-        res.status(400).json({ "error": "sourceCategoryIds must be a non-empty array" });
+        res.status(400).json({ "error": "sourceCategoryIds must be a non-empty array", errorName: 'ValidationError' });
         return;
       }
 
@@ -329,7 +335,7 @@ class CategoryRoutes {
       }
 
       if (!calendar) {
-        res.status(404).json({ "error": "calendar not found" });
+        res.status(404).json({ "error": "calendar not found", errorName: 'CalendarNotFoundError' });
         return;
       }
 
@@ -364,11 +370,11 @@ class CategoryRoutes {
       // Handle validation errors from service
       if (error instanceof Error) {
         if (error.message.includes('Target category cannot be in source categories')) {
-          res.status(400).json({ "error": error.message });
+          res.status(400).json({ "error": error.message, errorName: 'ValidationError' });
           return;
         }
         if (error.message.includes('All categories must belong to the same calendar')) {
-          res.status(400).json({ "error": error.message });
+          res.status(400).json({ "error": error.message, errorName: 'ValidationError' });
           return;
         }
       }
@@ -389,6 +395,7 @@ class CategoryRoutes {
       if (!account) {
         res.status(400).json({
           "error": "missing account for category assignment. Not logged in?",
+          errorName: 'AuthenticationError',
         });
         return;
       }
@@ -397,6 +404,7 @@ class CategoryRoutes {
       if (!ExpressHelper.isValidUUID(eventId)) {
         res.status(400).json({
           "error": "invalid UUID format in event ID",
+          errorName: 'ValidationError',
         });
         return;
       }
@@ -404,6 +412,7 @@ class CategoryRoutes {
       if (!ExpressHelper.isValidUUID(categoryId)) {
         res.status(400).json({
           "error": "invalid UUID format in category ID",
+          errorName: 'ValidationError',
         });
         return;
       }
@@ -460,6 +469,7 @@ class CategoryRoutes {
       if (!account) {
         res.status(400).json({
           "error": "missing account for category unassignment. Not logged in?",
+          errorName: 'AuthenticationError',
         });
         return;
       }
@@ -468,6 +478,7 @@ class CategoryRoutes {
       if (!ExpressHelper.isValidUUID(eventId)) {
         res.status(400).json({
           "error": "invalid UUID format in event ID",
+          errorName: 'ValidationError',
         });
         return;
       }
@@ -475,6 +486,7 @@ class CategoryRoutes {
       if (!ExpressHelper.isValidUUID(categoryId)) {
         res.status(400).json({
           "error": "invalid UUID format in category ID",
+          errorName: 'ValidationError',
         });
         return;
       }
@@ -549,6 +561,7 @@ class CategoryRoutes {
       if (!account) {
         res.status(400).json({
           "error": "missing account for category assignment. Not logged in?",
+          errorName: 'AuthenticationError',
         });
         return;
       }
@@ -556,6 +569,7 @@ class CategoryRoutes {
       if (!Array.isArray(categoryIds)) {
         res.status(400).json({
           "error": "categoryIds must be an array",
+          errorName: 'ValidationError',
         });
         return;
       }
@@ -611,7 +625,7 @@ class CategoryRoutes {
       }
 
       if (!calendar) {
-        res.status(404).json({ "error": "Calendar not found" });
+        res.status(404).json({ "error": "Calendar not found", errorName: 'CalendarNotFoundError' });
         return;
       }
 

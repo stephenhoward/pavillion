@@ -2,7 +2,7 @@ import express, { Request, Response, Application } from 'express';
 
 import { Account } from '@/common/model/account';
 import type { ReporterType } from '@/common/model/report';
-import { ReportValidationError } from '@/common/exceptions/report';
+import { ValidationError } from '@/common/exceptions/base';
 import { EventNotFoundError } from '@/common/exceptions/calendar';
 import ExpressHelper from '@/server/common/helper/express';
 import ModerationInterface from '@/server/moderation/interface';
@@ -176,11 +176,8 @@ export default class OwnerReportRoutes {
       });
     }
     catch (error: any) {
-      if (error instanceof ReportValidationError) {
-        res.status(400).json({
-          error: error.message,
-          errorName: 'ValidationError',
-        });
+      if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
         return;
       }
 

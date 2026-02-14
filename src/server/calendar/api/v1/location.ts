@@ -100,7 +100,7 @@ export default class LocationRoutes {
         res.status(403).json({ error: 'Insufficient permissions to modify this calendar', errorName: 'InsufficientCalendarPermissionsError' });
       }
       else if (error instanceof Error && error.message === 'Location name is required') {
-        res.status(400).json({ error: error.message });
+        res.status(400).json({ error: error.message, errorName: 'ValidationError' });
       }
       else {
         res.status(500).json({ error: 'Internal server error' });
@@ -125,7 +125,7 @@ export default class LocationRoutes {
 
       const location = await this.service.getLocationById(calendar, decodedLocationId);
       if (!location) {
-        res.status(404).json({ error: 'Location not found' });
+        res.status(404).json({ error: 'Location not found', errorName: 'LocationNotFoundError' });
         return;
       }
 

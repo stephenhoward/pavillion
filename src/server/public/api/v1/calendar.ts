@@ -27,6 +27,7 @@ export default class CalendarRoutes {
     else {
       res.status(404).json({
         "error": "calendar not found",
+        errorName: 'CalendarNotFoundError',
       });
     }
   }
@@ -38,6 +39,7 @@ export default class CalendarRoutes {
     if (!calendar) {
       res.status(404).json({
         "error": "calendar not found",
+        errorName: 'CalendarNotFoundError',
       });
       return;
     }
@@ -65,6 +67,7 @@ export default class CalendarRoutes {
     if ( !req.params.calendar ) {
       res.status(400).json({
         "error": "missing calendar name",
+        errorName: 'ValidationError',
       });
       return;
     }
@@ -73,6 +76,7 @@ export default class CalendarRoutes {
     if (!calendar) {
       res.status(404).json({
         "error": "calendar not found",
+        errorName: 'CalendarNotFoundError',
       });
       return;
     }
@@ -145,11 +149,13 @@ export default class CalendarRoutes {
       if (error.message === 'Invalid date format') {
         res.status(400).json({
           "error": "Invalid date format. Please use YYYY-MM-DD format.",
+          errorName: 'ValidationError',
         });
       }
       else if (error.message === 'Invalid category IDs provided') {
         res.status(400).json({
           "error": "Invalid category IDs provided",
+          errorName: 'ValidationError',
         });
       }
       else {
@@ -170,6 +176,7 @@ export default class CalendarRoutes {
     else {
       res.status(404).json({
         "error": "event not found",
+        errorName: 'EventNotFoundError',
       });
     }
   }
@@ -183,6 +190,7 @@ export default class CalendarRoutes {
     else {
       res.status(404).json({
         "error": "instance not found",
+        errorName: 'NotFoundError',
       });
     }
   }

@@ -129,19 +129,19 @@ export default class AdminRouteHandlers {
         monthlyPrice < 0 ||
         yearlyPrice < 0
       ) {
-        res.status(400).json({ error: 'Prices must be non-negative integers' });
+        res.status(400).json({ error: 'Prices must be non-negative integers', errorName: 'ValidationError' });
         return;
       }
 
       // Validate currency is valid ISO 4217 code (basic check - 3 uppercase letters)
       if (typeof currency !== 'string' || !/^[A-Z]{3}$/.test(currency)) {
-        res.status(400).json({ error: 'Invalid currency code (must be 3 uppercase letters)' });
+        res.status(400).json({ error: 'Invalid currency code (must be 3 uppercase letters)', errorName: 'ValidationError' });
         return;
       }
 
       // Validate grace period
       if (typeof gracePeriodDays !== 'number' || gracePeriodDays < 0) {
-        res.status(400).json({ error: 'Grace period must be non-negative' });
+        res.status(400).json({ error: 'Grace period must be non-negative', errorName: 'ValidationError' });
         return;
       }
 
@@ -207,13 +207,13 @@ export default class AdminRouteHandlers {
       const { returnUrl } = req.body;
 
       if (!returnUrl) {
-        res.status(400).json({ error: 'returnUrl is required' });
+        res.status(400).json({ error: 'returnUrl is required', errorName: 'ValidationError' });
         return;
       }
 
       // Validate provider type (would be done in service if this was implemented)
       if (providerType !== 'stripe' && providerType !== 'paypal') {
-        res.status(400).json({ error: 'Invalid provider type' });
+        res.status(400).json({ error: 'Invalid provider type', errorName: 'ValidationError' });
         return;
       }
 
@@ -228,7 +228,7 @@ export default class AdminRouteHandlers {
     catch (error) {
       console.error('Error initiating provider connection:', error);
       if (error instanceof InvalidProviderTypeError) {
-        res.status(400).json({ error: error.message });
+        res.status(400).json({ error: error.message, errorName: 'ValidationError' });
       }
       else {
         res.status(500).json({ error: 'Internal server error' });
@@ -246,13 +246,13 @@ export default class AdminRouteHandlers {
       const { code } = req.query;
 
       if (!code || typeof code !== 'string') {
-        res.status(400).json({ error: 'OAuth code is required' });
+        res.status(400).json({ error: 'OAuth code is required', errorName: 'ValidationError' });
         return;
       }
 
       // Validate provider type (would be done in service if this was implemented)
       if (providerType !== 'stripe' && providerType !== 'paypal') {
-        res.status(400).json({ error: 'Invalid provider type' });
+        res.status(400).json({ error: 'Invalid provider type', errorName: 'ValidationError' });
         return;
       }
 
@@ -264,7 +264,7 @@ export default class AdminRouteHandlers {
     catch (error) {
       console.error('Error handling OAuth callback:', error);
       if (error instanceof InvalidProviderTypeError) {
-        res.status(400).json({ error: error.message });
+        res.status(400).json({ error: error.message, errorName: 'ValidationError' });
       }
       else {
         res.status(500).json({ error: 'Internal server error' });
@@ -288,13 +288,13 @@ export default class AdminRouteHandlers {
     catch (error) {
       console.error('Error updating provider:', error);
       if (error instanceof InvalidProviderTypeError) {
-        res.status(400).json({ error: error.message });
+        res.status(400).json({ error: error.message, errorName: 'ValidationError' });
       }
       else if (error instanceof MissingRequiredFieldError) {
-        res.status(400).json({ error: error.message });
+        res.status(400).json({ error: error.message, errorName: 'ValidationError' });
       }
       else if (error instanceof Error && error.message.includes('not found')) {
-        res.status(404).json({ error: error.message });
+        res.status(404).json({ error: error.message, errorName: 'NotFoundError' });
       }
       else {
         res.status(500).json({ error: 'Internal server error' });
@@ -317,10 +317,10 @@ export default class AdminRouteHandlers {
     catch (error) {
       console.error('Error disconnecting provider:', error);
       if (error instanceof InvalidProviderTypeError) {
-        res.status(400).json({ error: error.message });
+        res.status(400).json({ error: error.message, errorName: 'ValidationError' });
       }
       else if (error instanceof Error && error.message.includes('active subscription')) {
-        res.status(400).json({ error: error.message });
+        res.status(400).json({ error: error.message, errorName: 'ValidationError' });
       }
       else {
         res.status(500).json({ error: 'Internal server error' });
@@ -362,7 +362,7 @@ export default class AdminRouteHandlers {
     catch (error) {
       console.error('Error force canceling subscription:', error);
       if (error instanceof Error && error.message.includes('not found')) {
-        res.status(404).json({ error: error.message });
+        res.status(404).json({ error: error.message, errorName: 'NotFoundError' });
       }
       else {
         res.status(500).json({ error: 'Internal server error' });
@@ -398,6 +398,7 @@ export default class AdminRouteHandlers {
       if (!stripeClientId || !stripeClientSecret) {
         res.status(400).json({
           error: 'Missing required fields: stripeClientId and stripeClientSecret are required',
+          errorName: 'ValidationError',
         });
         return;
       }

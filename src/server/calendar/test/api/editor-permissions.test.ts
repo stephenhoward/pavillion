@@ -171,6 +171,7 @@ describe('Editor Permissions API - PUT /calendars/:calendarId/editors/:editorId/
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('canReviewReports');
+      expect(response.body.errorName).toBe('ValidationError');
     });
 
     it('should return 400 when canReviewReports is not a boolean (string)', async () => {
@@ -184,6 +185,7 @@ describe('Editor Permissions API - PUT /calendars/:calendarId/editors/:editorId/
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('canReviewReports');
+      expect(response.body.errorName).toBe('ValidationError');
     });
 
     it('should return 400 when canReviewReports is not a boolean (number)', async () => {
@@ -197,6 +199,7 @@ describe('Editor Permissions API - PUT /calendars/:calendarId/editors/:editorId/
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('canReviewReports');
+      expect(response.body.errorName).toBe('ValidationError');
     });
 
     it('should return 400 when canReviewReports is null', async () => {
@@ -210,6 +213,7 @@ describe('Editor Permissions API - PUT /calendars/:calendarId/editors/:editorId/
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('canReviewReports');
+      expect(response.body.errorName).toBe('ValidationError');
     });
   });
 

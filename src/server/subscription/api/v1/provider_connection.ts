@@ -156,13 +156,13 @@ export default class ProviderConnectionRoutes {
       console.error('Error configuring PayPal:', error);
 
       if (error instanceof MissingRequiredFieldError) {
-        res.status(400).json({ error: error.message });
+        res.status(400).json({ error: error.message, errorName: 'ValidationError' });
       }
       else if (error instanceof InvalidEnvironmentError) {
-        res.status(400).json({ error: error.message });
+        res.status(400).json({ error: error.message, errorName: 'ValidationError' });
       }
       else if (error instanceof InvalidCredentialsError) {
-        res.status(400).json({ error: error.message });
+        res.status(400).json({ error: error.message, errorName: 'ValidationError' });
       }
       else {
         res.status(500).json({ error: 'Internal server error' });
@@ -199,10 +199,10 @@ export default class ProviderConnectionRoutes {
       console.error('Error disconnecting provider:', error);
 
       if (error instanceof InvalidProviderTypeError) {
-        res.status(400).json({ error: error.message });
+        res.status(400).json({ error: error.message, errorName: 'ValidationError' });
       }
       else if (error instanceof Error && error.message.includes('not found')) {
-        res.status(404).json({ error: error.message });
+        res.status(404).json({ error: error.message, errorName: 'NotFoundError' });
       }
       else {
         res.status(500).json({ error: 'Internal server error' });

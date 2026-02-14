@@ -3,6 +3,7 @@ import express, { Request, Response, Application } from 'express';
 import { Account } from '@/common/model/account';
 import type { ReporterType, EscalationType } from '@/common/model/report';
 import { ReportValidationError, DuplicateReportError } from '@/common/exceptions/report';
+import { ValidationError } from '@/common/exceptions/base';
 import { EventNotFoundError } from '@/common/exceptions/calendar';
 import ExpressHelper from '@/server/common/helper/express';
 import ModerationInterface from '@/server/moderation/interface';
@@ -10,7 +11,7 @@ import {
   ReportNotFoundError,
   ReportAlreadyResolvedError,
 } from '@/server/moderation/exceptions';
-import { VALID_ADMIN_ACTIONS } from '@/server/moderation/service/moderation';
+
 import { logError } from '@/server/common/helper/error-logger';
 import { ReportEscalationEntity } from '@/server/moderation/entity/report_escalation';
 
@@ -127,10 +128,7 @@ export default class AdminReportRoutes {
     }
     catch (error: any) {
       if (error instanceof ReportValidationError) {
-        res.status(400).json({
-          error: error.message,
-          errorName: 'ValidationError',
-        });
+        ExpressHelper.sendValidationError(res, error);
         return;
       }
 
@@ -186,10 +184,7 @@ export default class AdminReportRoutes {
     }
     catch (error: any) {
       if (error instanceof ReportValidationError) {
-        res.status(400).json({
-          error: error.message,
-          errorName: 'ValidationError',
-        });
+        ExpressHelper.sendValidationError(res, error);
         return;
       }
 
@@ -312,39 +307,16 @@ export default class AdminReportRoutes {
 
     const { action, notes } = req.body ?? {};
 
-    if (!action) {
-      res.status(400).json({
-        error: 'Action is required',
-        errorName: 'ValidationError',
-      });
-      return;
-    }
-
-    if (!VALID_ADMIN_ACTIONS.includes(action)) {
-      res.status(400).json({
-        error: `Invalid action. Must be one of: ${VALID_ADMIN_ACTIONS.join(', ')}`,
-        errorName: 'ValidationError',
-      });
-      return;
-    }
-
-    if (!notes || (typeof notes === 'string' && notes.trim().length === 0)) {
-      res.status(400).json({
-        error: 'Notes are required for admin actions',
-        errorName: 'ValidationError',
-      });
-      return;
-    }
-
-    if (typeof notes !== 'string') {
-      res.status(400).json({
-        error: 'Notes must be a string',
-        errorName: 'ValidationError',
-      });
-      return;
-    }
-
     try {
+      // Validate action and notes in service layer
+      const moderationService = this.moderationInterface.getModerationService();
+      const validationErrors = moderationService.validateAdminActionFields(action, notes);
+
+      if (validationErrors.length > 0) {
+        ExpressHelper.sendValidationError(res, new ValidationError(validationErrors));
+        return;
+      }
+
       let updatedReport;
 
       switch (action) {
@@ -492,14 +464,6 @@ export default class AdminReportRoutes {
         res.status(404).json({
           error: 'Report not found',
           errorName: 'ReportNotFoundError',
-        });
-        return;
-      }
-
-      if (error instanceof EventNotFoundError) {
-        res.status(404).json({
-          error: 'Event not found',
-          errorName: 'EventNotFoundError',
         });
         return;
       }

@@ -46,3 +46,36 @@ export class AccountInviteAlreadyExistsError extends Error {
   }
 }
 
+/**
+ * Base validation error class for validation failures.
+ * Supports multiple error messages and optional field-level error mapping.
+ *
+ * @example
+ * // Single error message
+ * throw new ValidationError('Email is required');
+ *
+ * @example
+ * // Multiple error messages
+ * throw new ValidationError(['Email is required', 'Password too short']);
+ *
+ * @example
+ * // With field-level validation errors
+ * throw new ValidationError('Validation failed', {
+ *   email: ['Invalid format', 'Already exists'],
+ *   password: ['Too short']
+ * });
+ */
+export class ValidationError extends Error {
+  public errors: string[];
+  public fields?: Record<string, string[]>;
+
+  constructor(errors: string | string[], fields?: Record<string, string[]>) {
+    const errorArray = typeof errors === 'string' ? [errors] : errors;
+    super(errorArray.join('; '));
+    this.name = 'ValidationError';
+    this.errors = errorArray;
+    this.fields = fields;
+    // Maintaining proper prototype chain in ES5+
+    Object.setPrototypeOf(this, ValidationError.prototype);
+  }
+}

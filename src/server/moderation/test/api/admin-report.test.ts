@@ -331,7 +331,7 @@ describe('Admin Report API', () => {
           .get('/admin/reports?status=invalid_status');
 
         expect(response.status).toBe(400);
-        expect(response.body.errorName).toBe('ValidationError');
+        expect(response.body.errorName).toBe('ReportValidationError');
       });
 
       it('should return 400 for invalid category filter', async () => {
@@ -347,7 +347,7 @@ describe('Admin Report API', () => {
           .get('/admin/reports?category=invalid_category');
 
         expect(response.status).toBe(400);
-        expect(response.body.errorName).toBe('ValidationError');
+        expect(response.body.errorName).toBe('ReportValidationError');
       });
 
       it('should return 400 for invalid source filter', async () => {
@@ -363,7 +363,7 @@ describe('Admin Report API', () => {
           .get('/admin/reports?source=invalid_source');
 
         expect(response.status).toBe(400);
-        expect(response.body.errorName).toBe('ValidationError');
+        expect(response.body.errorName).toBe('ReportValidationError');
       });
 
       it('should return 400 for invalid sortBy field', async () => {
@@ -379,7 +379,7 @@ describe('Admin Report API', () => {
           .get('/admin/reports?sortBy=invalid_field');
 
         expect(response.status).toBe(400);
-        expect(response.body.errorName).toBe('ValidationError');
+        expect(response.body.errorName).toBe('ReportValidationError');
       });
 
       it('should return 400 for invalid sortOrder', async () => {
@@ -395,7 +395,7 @@ describe('Admin Report API', () => {
           .get('/admin/reports?sortOrder=INVALID');
 
         expect(response.status).toBe(400);
-        expect(response.body.errorName).toBe('ValidationError');
+        expect(response.body.errorName).toBe('ReportValidationError');
       });
 
       it('should return 400 for invalid page number', async () => {
@@ -411,7 +411,7 @@ describe('Admin Report API', () => {
           .get('/admin/reports?page=0');
 
         expect(response.status).toBe(400);
-        expect(response.body.errorName).toBe('ValidationError');
+        expect(response.body.errorName).toBe('ReportValidationError');
       });
 
       it('should return 400 for non-numeric page', async () => {
@@ -427,7 +427,7 @@ describe('Admin Report API', () => {
           .get('/admin/reports?page=abc');
 
         expect(response.status).toBe(400);
-        expect(response.body.errorName).toBe('ValidationError');
+        expect(response.body.errorName).toBe('ReportValidationError');
       });
 
       it('should return 400 for limit exceeding 100', async () => {
@@ -443,7 +443,7 @@ describe('Admin Report API', () => {
           .get('/admin/reports?limit=101');
 
         expect(response.status).toBe(400);
-        expect(response.body.errorName).toBe('ValidationError');
+        expect(response.body.errorName).toBe('ReportValidationError');
       });
 
       it('should return 400 for invalid escalationType filter', async () => {
@@ -459,7 +459,7 @@ describe('Admin Report API', () => {
           .get('/admin/reports?escalationType=invalid');
 
         expect(response.status).toBe(400);
-        expect(response.body.errorName).toBe('ValidationError');
+        expect(response.body.errorName).toBe('ReportValidationError');
       });
     });
 
@@ -659,7 +659,7 @@ describe('Admin Report API', () => {
           });
 
         expect(response.status).toBe(400);
-        expect(response.body.errorName).toBe('ValidationError');
+        expect(response.body.errorName).toBe('ReportValidationError');
       });
 
       it('should return 400 when category is missing', async () => {
@@ -680,7 +680,7 @@ describe('Admin Report API', () => {
           });
 
         expect(response.status).toBe(400);
-        expect(response.body.errorName).toBe('ValidationError');
+        expect(response.body.errorName).toBe('ReportValidationError');
       });
 
       it('should return 400 when description is missing', async () => {
@@ -701,7 +701,7 @@ describe('Admin Report API', () => {
           });
 
         expect(response.status).toBe(400);
-        expect(response.body.errorName).toBe('ValidationError');
+        expect(response.body.errorName).toBe('ReportValidationError');
       });
 
       it('should return 400 when priority is missing', async () => {
@@ -722,7 +722,7 @@ describe('Admin Report API', () => {
           });
 
         expect(response.status).toBe(400);
-        expect(response.body.errorName).toBe('ValidationError');
+        expect(response.body.errorName).toBe('ReportValidationError');
       });
 
       it('should return 400 when priority is invalid', async () => {
@@ -744,7 +744,7 @@ describe('Admin Report API', () => {
           });
 
         expect(response.status).toBe(400);
-        expect(response.body.errorName).toBe('ValidationError');
+        expect(response.body.errorName).toBe('ReportValidationError');
         expect(response.body.error).toContain('priority');
       });
 
@@ -764,7 +764,7 @@ describe('Admin Report API', () => {
           });
 
         expect(response.status).toBe(400);
-        expect(response.body.errorName).toBe('ValidationError');
+        expect(response.body.errorName).toBe('ReportValidationError');
         expect(response.body.error).toContain('Event ID is required');
         expect(response.body.error).toContain('Category is required');
         expect(response.body.error).toContain('Priority is required');

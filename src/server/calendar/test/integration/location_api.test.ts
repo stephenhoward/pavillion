@@ -93,6 +93,7 @@ describe('Location API Integration Tests', () => {
         .expect(404);
 
       expect(response.body.error).toContain('Calendar not found');
+      expect(response.body.errorName).toBe('CalendarNotFoundError');
     });
 
     it('should return empty array when calendar has no locations', async () => {
@@ -203,6 +204,7 @@ describe('Location API Integration Tests', () => {
         .expect(404);
 
       expect(response.body.error).toContain('Calendar not found');
+      expect(response.body.errorName).toBe('CalendarNotFoundError');
     });
 
     it('should return 403 when user lacks permissions', async () => {
@@ -215,6 +217,7 @@ describe('Location API Integration Tests', () => {
         .expect(403);
 
       expect(response.body.error).toContain('Insufficient permissions');
+      expect(response.body.errorName).toBe('InsufficientCalendarPermissionsError');
     });
 
     it('should return 400 when location name is missing', async () => {
@@ -230,6 +233,7 @@ describe('Location API Integration Tests', () => {
         .expect(400);
 
       expect(response.body.error).toBe('Location name is required');
+      expect(response.body.errorName).toBe('ValidationError');
     });
   });
 
@@ -287,6 +291,7 @@ describe('Location API Integration Tests', () => {
         .expect(404);
 
       expect(response.body.error).toContain('Calendar not found');
+      expect(response.body.errorName).toBe('CalendarNotFoundError');
     });
 
     it('should return 404 when location does not exist', async () => {
@@ -298,6 +303,7 @@ describe('Location API Integration Tests', () => {
         .expect(404);
 
       expect(response.body.error).toBe('Location not found');
+      expect(response.body.errorName).toBe('LocationNotFoundError');
     });
 
     it('should return 404 when location belongs to different calendar', async () => {
@@ -309,6 +315,7 @@ describe('Location API Integration Tests', () => {
         .expect(404);
 
       expect(response.body.error).toBe('Location not found');
+      expect(response.body.errorName).toBe('LocationNotFoundError');
     });
   });
 });

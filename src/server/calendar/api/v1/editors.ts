@@ -61,11 +61,13 @@ class EditorRoutes {
       if (error instanceof CalendarEditorPermissionError) {
         res.status(403).json({
           "error": error.message,
+          errorName: 'ForbiddenError',
         });
       }
       else if (error instanceof CalendarNotFoundError) {
         res.status(404).json({
           "error": error.message,
+          errorName: 'NotFoundError',
         });
       }
       else {
@@ -98,6 +100,7 @@ class EditorRoutes {
     if (!email) {
       res.status(400).json({
         "error": "Missing email in request body",
+        errorName: 'ValidationError',
       });
       return;
     }
@@ -111,6 +114,7 @@ class EditorRoutes {
       if (error instanceof CalendarEditorPermissionError) {
         res.status(403).json({
           "error": error.message,
+          errorName: 'ForbiddenError',
         });
       }
       else if (error instanceof EditorAlreadyExistsError) {
@@ -127,6 +131,7 @@ class EditorRoutes {
       else if (error instanceof CalendarNotFoundError || error instanceof noAccountExistsError) {
         res.status(404).json({
           "error": error.message,
+          errorName: 'NotFoundError',
         });
       }
       else {
@@ -162,16 +167,19 @@ class EditorRoutes {
       if (error instanceof CalendarEditorPermissionError) {
         res.status(403).json({
           "error": error.message,
+          errorName: 'ForbiddenError',
         });
       }
       else if (error instanceof EditorNotFoundError) {
         res.status(404).json({
           "error": error.message,
+          errorName: 'NotFoundError',
         });
       }
       else if (error instanceof CalendarNotFoundError || error instanceof noAccountExistsError) {
         res.status(404).json({
           "error": error.message,
+          errorName: 'NotFoundError',
         });
       }
       else {
@@ -203,6 +211,7 @@ class EditorRoutes {
     if (!actorUri) {
       res.status(400).json({
         "error": "Missing actorUri in request body",
+        errorName: 'ValidationError',
       });
       return;
     }
@@ -215,16 +224,19 @@ class EditorRoutes {
       if (error instanceof CalendarEditorPermissionError) {
         res.status(403).json({
           "error": error.message,
+          errorName: 'ForbiddenError',
         });
       }
       else if (error instanceof EditorNotFoundError) {
         res.status(404).json({
           "error": error.message,
+          errorName: 'NotFoundError',
         });
       }
       else if (error instanceof CalendarNotFoundError) {
         res.status(404).json({
           "error": error.message,
+          errorName: 'NotFoundError',
         });
       }
       else {
@@ -265,16 +277,19 @@ class EditorRoutes {
       if (error instanceof CalendarEditorPermissionError) {
         res.status(403).json({
           "error": error.message,
+          errorName: 'ForbiddenError',
         });
       }
       else if (error instanceof CalendarNotFoundError) {
         res.status(404).json({
           "error": error.message,
+          errorName: 'NotFoundError',
         });
       }
       else if (error.message === 'Invitation not found or not associated with this calendar') {
         res.status(404).json({
           "error": "Invitation not found",
+          errorName: 'NotFoundError',
         });
       }
       else {
@@ -322,16 +337,19 @@ class EditorRoutes {
       if (error instanceof CalendarEditorPermissionError) {
         res.status(403).json({
           "error": error.message,
+          errorName: 'ForbiddenError',
         });
       }
       else if (error instanceof CalendarNotFoundError) {
         res.status(404).json({
           "error": error.message,
+          errorName: 'NotFoundError',
         });
       }
       else if (error.message === 'Invitation not found or not associated with this calendar') {
         res.status(404).json({
           "error": "Invitation not found",
+          errorName: 'NotFoundError',
         });
       }
       else {

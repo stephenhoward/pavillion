@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import passport from 'passport';
 
 import { Account } from '@/common/model/account';
+import { ValidationError } from '@/common/exceptions/base';
 
 interface User {
   id: string;
@@ -38,6 +39,31 @@ export default {
   findInvalidUUIDs(uuids: string[]): string[] {
     return uuids.filter(uuid => !this.isValidUUID(uuid));
   },
+
+  /**
+   * Sends a standardized validation error response
+   *
+   * @param res - Express response object
+   * @param error - ValidationError instance or subclass
+   */
+  sendValidationError(res: Response, error: ValidationError): void {
+    const responseBody: {
+      error: string;
+      errorName: string;
+      fields?: Record<string, string[]>;
+    } = {
+      error: error.message,
+      errorName: error.name,
+    };
+
+    // Include fields if present
+    if (error.fields) {
+      responseBody.fields = error.fields;
+    }
+
+    res.status(400).json(responseBody);
+  },
+
   adminOnly: [
     passport.authenticate('jwt', {session: false}),
     async (req: Request, res: Response, next: (err?: any) => void) => {
