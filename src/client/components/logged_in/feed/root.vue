@@ -36,7 +36,8 @@ const activateTab = (tab) => {
 };
 
 const handleCalendarChange = async (calendarId) => {
-  feedStore.setSelectedCalendar(calendarId);
+  calendarStore.setSelectedCalendar(calendarId);
+  feedStore.clearFeedData();
   await loadFeedData();
 };
 
@@ -75,7 +76,8 @@ const handleFollowCalendarRequest = () => {
 onMounted(async () => {
   // Auto-select first calendar if only one exists
   if (calendarStore.calendars.length === 1) {
-    feedStore.setSelectedCalendar(calendarStore.calendars[0].id);
+    calendarStore.setSelectedCalendar(calendarStore.calendars[0].id);
+    feedStore.clearFeedData();
     await loadFeedData();
   }
   else if (calendarStore.calendars.length > 1 && !calendarStore.selectedCalendarId) {

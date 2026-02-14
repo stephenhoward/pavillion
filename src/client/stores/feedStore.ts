@@ -90,25 +90,26 @@ export const useFeedStore = defineStore('feed', {
 
   actions: {
     /**
-     * Set the selected calendar and clear cached feed data
-     *
-     * @param calendarId - The ID of the calendar to select
+     * Clear all cached feed data, resetting follows, followers, events,
+     * and pagination state to their initial values.
      */
-    setSelectedCalendar(calendarId: string) {
-      const calendarStore = useCalendarStore();
-      const previousCalendarId = calendarStore.selectedCalendarId;
+    clearFeedData() {
+      this.follows = [];
+      this.followers = [];
+      this.events = [];
+      this.eventsPage = 0;
+      this.eventsHasMore = false;
+    },
 
-      if (previousCalendarId !== calendarId) {
-        // Update the calendar store's selected calendar
-        calendarStore.setSelectedCalendar(calendarId);
-
-        // Clear cached feed data when calendar changes
-        this.follows = [];
-        this.followers = [];
-        this.events = [];
-        this.eventsPage = 0;
-        this.eventsHasMore = false;
-      }
+    /**
+     * Clear cached feed data when the selected calendar changes.
+     * Does not mutate the calendar store; calendar selection is
+     * handled by the calendar store directly.
+     *
+     * @param _calendarId - The ID of the calendar being selected (unused, retained for caller compatibility)
+     */
+    setSelectedCalendar(_calendarId: string) {
+      this.clearFeedData();
     },
 
     /**

@@ -47,16 +47,16 @@ describe('FeedStore', () => {
   });
 
   describe('selectedCalendarId selection and persistence', () => {
-    it('should set and persist selected calendar ID', () => {
+    it('should delegate selectedCalendarId to calendarStore', () => {
       expect(feedStore.selectedCalendarId).toBeNull();
 
-      feedStore.setSelectedCalendar('cal-1');
+      calendarStore.setSelectedCalendar('cal-1');
 
       expect(feedStore.selectedCalendarId).toBe('cal-1');
     });
 
     it('should get selected calendar from calendar store', () => {
-      feedStore.setSelectedCalendar('cal-1');
+      calendarStore.setSelectedCalendar('cal-1');
 
       const calendar = feedStore.selectedCalendar;
 
@@ -64,7 +64,23 @@ describe('FeedStore', () => {
       expect(calendar?.id).toBe('cal-1');
     });
 
-    it('should clear cached data when calendar selection changes', () => {
+    it('should not call calendarStore.setSelectedCalendar', () => {
+      const spy = vi.spyOn(calendarStore, 'setSelectedCalendar');
+
+      feedStore.setSelectedCalendar('cal-1');
+
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('should call clearFeedData when setSelectedCalendar is called', () => {
+      const spy = vi.spyOn(feedStore, 'clearFeedData');
+
+      feedStore.setSelectedCalendar('cal-2');
+
+      expect(spy).toHaveBeenCalled();
+    });
+
+    it('should clear cached data when setSelectedCalendar is called', () => {
       feedStore.follows = [
         { id: 'follow-1', calendarActorId: 'remote@example.com', calendarId: 'cal-1', autoRepostOriginals: false, autoRepostReposts: false },
       ];
@@ -78,6 +94,51 @@ describe('FeedStore', () => {
       expect(feedStore.follows).toEqual([]);
       expect(feedStore.events).toEqual([]);
       expect(feedStore.eventsPage).toBe(0);
+    });
+  });
+
+  describe('clearFeedData action', () => {
+    it('should clear all feed state when data is populated', () => {
+      // Populate all state fields
+      feedStore.follows = [
+        { id: 'follow-1', calendarActorId: 'remote@example.com', calendarId: 'cal-1', autoRepostOriginals: true, autoRepostReposts: false },
+        { id: 'follow-2', calendarActorId: 'remote2@example.com', calendarId: 'cal-1', autoRepostOriginals: false, autoRepostReposts: true },
+      ];
+      feedStore.followers = [
+        { id: 'follower-1', calendarActorId: 'follower1@example.com' },
+        { id: 'follower-2', calendarActorId: 'follower2@example.com' },
+      ];
+      feedStore.events = [
+        { id: 'event-1', title: 'Event 1', repostStatus: 'none' },
+        { id: 'event-2', title: 'Event 2', repostStatus: 'manual' },
+      ];
+      feedStore.eventsPage = 3;
+      feedStore.eventsHasMore = true;
+
+      feedStore.clearFeedData();
+
+      expect(feedStore.follows).toEqual([]);
+      expect(feedStore.followers).toEqual([]);
+      expect(feedStore.events).toEqual([]);
+      expect(feedStore.eventsPage).toBe(0);
+      expect(feedStore.eventsHasMore).toBe(false);
+    });
+
+    it('should be idempotent when state is already empty', () => {
+      // State starts empty by default from beforeEach
+      expect(feedStore.follows).toEqual([]);
+      expect(feedStore.followers).toEqual([]);
+      expect(feedStore.events).toEqual([]);
+      expect(feedStore.eventsPage).toBe(0);
+      expect(feedStore.eventsHasMore).toBe(false);
+
+      feedStore.clearFeedData();
+
+      expect(feedStore.follows).toEqual([]);
+      expect(feedStore.followers).toEqual([]);
+      expect(feedStore.events).toEqual([]);
+      expect(feedStore.eventsPage).toBe(0);
+      expect(feedStore.eventsHasMore).toBe(false);
     });
   });
 
@@ -121,7 +182,7 @@ describe('FeedStore', () => {
 
   describe('loadFeed action fetches and stores events', () => {
     beforeEach(() => {
-      feedStore.setSelectedCalendar('cal-1');
+      calendarStore.setSelectedCalendar('cal-1');
     });
 
     it('should fetch and store feed events', async () => {
@@ -173,7 +234,7 @@ describe('FeedStore', () => {
 
   describe('optimistic updates for repost actions with rollback', () => {
     beforeEach(() => {
-      feedStore.setSelectedCalendar('cal-1');
+      calendarStore.setSelectedCalendar('cal-1');
       feedStore.events = [
         { id: 'event-1', title: 'Event 1', repostStatus: 'none' },
         { id: 'event-2', title: 'Event 2', repostStatus: 'manual' },
