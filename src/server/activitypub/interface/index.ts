@@ -61,6 +61,18 @@ export default class ActivityPubInterface {
     return this.memberService.unfollowCalendar(account, calendar, orgIdentifier);
   }
 
+  /**
+   * Unfollow a calendar by follow relationship ID.
+   * Resolves the actor URI from the follow entity and delegates to unfollowCalendar.
+   *
+   * @param account The account performing the unfollow
+   * @param calendar The local calendar that owns the follow relationship
+   * @param followId The ID of the follow relationship to remove
+   */
+  async unfollowCalendarById(account: Account, calendar: Calendar, followId: string): Promise<void> {
+    return this.memberService.unfollowCalendarById(account, calendar, followId);
+  }
+
   async shareEvent(account: Account, calendar: Calendar, eventUrl: string): Promise<void> {
     return this.memberService.shareEvent(account, calendar, eventUrl);
   }

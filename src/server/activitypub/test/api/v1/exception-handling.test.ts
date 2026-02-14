@@ -6,7 +6,6 @@ import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import ActivityPubMemberRoutes from '@/server/activitypub/api/v1/members';
 import ActivityPubInterface from '@/server/activitypub/interface';
-import CalendarService from '@/server/calendar/service/calendar';
 import {
   InvalidRemoteCalendarIdentifierError,
   InvalidRepostPolicySettingsError,
@@ -19,6 +18,16 @@ import {
 } from '@/common/exceptions/activitypub';
 import { InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
 
+/**
+ * Creates a mock CalendarInterface with stubbed methods needed by member routes.
+ */
+function createMockCalendarInterface() {
+  return {
+    getCalendar: sinon.stub().resolves(null),
+    userCanModifyCalendar: sinon.stub().resolves(true),
+  };
+}
+
 describe('ActivityPub API Exception Handling', () => {
   let routes: ActivityPubMemberRoutes;
   let sandbox: sinon.SinonSandbox;
@@ -30,12 +39,10 @@ describe('ActivityPub API Exception Handling', () => {
   beforeEach(() => {
     sandbox = sinon.createSandbox();
     const eventBus = new EventEmitter();
-    activityPubInterface = new ActivityPubInterface(eventBus);
+    activityPubInterface = new ActivityPubInterface(eventBus) as any;
 
-    // Stub CalendarService prototype methods
-    sandbox.stub(CalendarService.prototype, 'userCanModifyCalendar').resolves(true);
-
-    routes = new ActivityPubMemberRoutes(activityPubInterface);
+    const mockCalendarAPI = createMockCalendarInterface();
+    routes = new ActivityPubMemberRoutes(activityPubInterface, mockCalendarAPI as any);
   });
 
   afterEach(() => {

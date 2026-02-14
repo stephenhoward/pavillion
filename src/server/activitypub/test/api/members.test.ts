@@ -4,10 +4,18 @@ import { EventEmitter } from 'events';
 
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
-import CalendarService from '@/server/calendar/service/calendar';
 import ActivityPubMemberRoutes from '@/server/activitypub/api/v1/members';
 import ActivityPubInterface from '@/server/activitypub/interface';
-import { FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
+
+/**
+ * Creates a mock CalendarInterface with stubbed methods needed by member routes.
+ */
+function createMockCalendarInterface() {
+  return {
+    getCalendar: sinon.stub().resolves(null),
+    userCanModifyCalendar: sinon.stub().resolves(true),
+  };
+}
 
 describe ('followCalendar', () => {
   let routes: ActivityPubMemberRoutes;
@@ -16,8 +24,9 @@ describe ('followCalendar', () => {
 
   beforeEach(() => {
     const eventBus = new EventEmitter();
-    activityPubInterface = new ActivityPubInterface(eventBus);
-    routes = new ActivityPubMemberRoutes(activityPubInterface);
+    activityPubInterface = new ActivityPubInterface(eventBus) as any;
+    const mockCalendarAPI = createMockCalendarInterface();
+    routes = new ActivityPubMemberRoutes(activityPubInterface, mockCalendarAPI as any);
   });
 
   afterEach(() => {
@@ -72,11 +81,13 @@ describe('unfollowCalendar', () => {
   let routes: ActivityPubMemberRoutes;
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
   let activityPubInterface: ActivityPubInterface;
+  let mockCalendarAPI: ReturnType<typeof createMockCalendarInterface>;
 
   beforeEach(() => {
     const eventBus = new EventEmitter();
-    activityPubInterface = new ActivityPubInterface(eventBus);
-    routes = new ActivityPubMemberRoutes(activityPubInterface);
+    activityPubInterface = new ActivityPubInterface(eventBus) as any;
+    mockCalendarAPI = createMockCalendarInterface();
+    routes = new ActivityPubMemberRoutes(activityPubInterface, mockCalendarAPI as any);
   });
 
   afterEach(() => {
@@ -129,26 +140,9 @@ describe('unfollowCalendar', () => {
     let res = { status: sinon.stub(), send: sinon.stub() };
     res.status.returns(res);
 
-    // Stub CalendarService.prototype to avoid database calls
-    let userCanModifyStub = sandbox.stub(CalendarService.prototype, 'userCanModifyCalendar');
-    userCanModifyStub.resolves(true);
-
-    // Mock follow entity lookup - now includes calendarActor association
-    let findOneStub = sandbox.stub(FollowingCalendarEntity, 'findOne');
-    const mockFollowEntity = {
-      id: 'testfollowid',
-      calendar_actor_id: 'mock-calendar-actor-uuid',
-      calendar_id: 'testcalendarid',
-      calendarActor: {
-        id: 'mock-calendar-actor-uuid',
-        actor_uri: 'https://remote.example/calendars/remotecal',
-      },
-    };
-    findOneStub.resolves(mockFollowEntity as any);
-
-    // Mock the interface method, not the internal service
-    let unfollowMock = sandbox.stub(activityPubInterface, 'unfollowCalendar');
-    unfollowMock.resolves();
+    // Mock the interface method for unfollowing by ID
+    let unfollowByIdMock = sandbox.stub(activityPubInterface, 'unfollowCalendarById');
+    unfollowByIdMock.resolves();
 
     await routes.unfollowCalendar(req as any, res as any);
 
@@ -164,8 +158,9 @@ describe('shareEvent', () => {
 
   beforeEach(() => {
     const eventBus = new EventEmitter();
-    activityPubInterface = new ActivityPubInterface(eventBus);
-    routes = new ActivityPubMemberRoutes(activityPubInterface);
+    activityPubInterface = new ActivityPubInterface(eventBus) as any;
+    const mockCalendarAPI = createMockCalendarInterface();
+    routes = new ActivityPubMemberRoutes(activityPubInterface, mockCalendarAPI as any);
   });
 
   afterEach(() => {
@@ -223,8 +218,9 @@ describe('unshareEvent', () => {
 
   beforeEach(() => {
     const eventBus = new EventEmitter();
-    activityPubInterface = new ActivityPubInterface(eventBus);
-    routes = new ActivityPubMemberRoutes(activityPubInterface);
+    activityPubInterface = new ActivityPubInterface(eventBus) as any;
+    const mockCalendarAPI = createMockCalendarInterface();
+    routes = new ActivityPubMemberRoutes(activityPubInterface, mockCalendarAPI as any);
   });
 
   afterEach(() => {

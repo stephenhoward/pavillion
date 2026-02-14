@@ -249,6 +249,35 @@ class ActivityPubService {
   }
 
   /**
+   * Unfollow a calendar by follow relationship ID.
+   * Resolves the actor URI from the follow entity and delegates to unfollowCalendar.
+   *
+   * @param account The account performing the unfollow
+   * @param calendar The local calendar that owns the follow relationship
+   * @param followId The ID of the follow relationship to remove
+   */
+  async unfollowCalendarById(account: Account, calendar: Calendar, followId: string): Promise<void> {
+    const followEntity = await FollowingCalendarEntity.findOne({
+      where: {
+        id: followId,
+        calendar_id: calendar.id,
+      },
+      include: [{ model: CalendarActorEntity, as: 'calendarActor' }],
+    });
+
+    if (!followEntity) {
+      throw new FollowRelationshipNotFoundError('Follow relationship not found: ' + followId);
+    }
+
+    const actorUri = followEntity.calendarActor?.actor_uri;
+    if (!actorUri) {
+      throw new FollowRelationshipNotFoundError('Calendar actor not found for follow relationship: ' + followId);
+    }
+
+    await this.unfollowCalendar(account, calendar, actorUri);
+  }
+
+  /**
      * user on this server shares an event from someone else
      * @param account The account performing the sharing
      * @param calendar The calendar to share to

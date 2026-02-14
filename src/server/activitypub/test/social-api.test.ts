@@ -41,12 +41,14 @@ describe('ActivityPub Social API - Unfollow Endpoint', () => {
     // Create stubbed ActivityPub interface
     activityPubInterface = sandbox.createStubInstance(ActivityPubInterface);
 
-    // Create member routes with mocked dependencies
-    memberRoutes = new ActivityPubMemberRoutes(activityPubInterface as any);
+    // Create mock CalendarInterface for constructor injection
+    const mockCalendarAPI = {
+      getCalendar: sandbox.stub().resolves(testCalendar),
+      userCanModifyCalendar: sandbox.stub().resolves(true),
+    };
 
-    // Stub the calendarService instance methods directly on the memberRoutes instance
-    sandbox.stub(memberRoutes['calendarService'], 'getCalendar').resolves(testCalendar);
-    sandbox.stub(memberRoutes['calendarService'], 'userCanModifyCalendar').resolves(true);
+    // Create member routes with mocked dependencies
+    memberRoutes = new ActivityPubMemberRoutes(activityPubInterface as any, mockCalendarAPI as any);
 
     // Install routes manually without ExpressHelper.loggedInOnly middleware
     const router = express.Router();
@@ -89,8 +91,8 @@ describe('ActivityPub Social API - Unfollow Endpoint', () => {
 
   describe('DELETE /api/v1/social/follows/:id', () => {
     it('should accept URL-encoded fully qualified activity IDs', async () => {
-      // Setup: Mock unfollow service call
-      activityPubInterface.unfollowCalendar.resolves();
+      // Setup: Mock unfollowCalendarById service call
+      activityPubInterface.unfollowCalendarById.resolves();
 
       // Execute: Call unfollow endpoint with URL-encoded follow ID
       const encodedFollowId = encodeURIComponent(followId);
@@ -107,11 +109,11 @@ describe('ActivityPub Social API - Unfollow Endpoint', () => {
       expect(response.text).toBe('Unfollowed');
 
       // Verify: Service was called with correct parameters
-      expect(activityPubInterface.unfollowCalendar.calledOnce).toBe(true);
-      expect(activityPubInterface.unfollowCalendar.firstCall.args).toEqual([
+      expect(activityPubInterface.unfollowCalendarById.calledOnce).toBe(true);
+      expect(activityPubInterface.unfollowCalendarById.firstCall.args).toEqual([
         testAccount,
         testCalendar,
-        remoteActorUri,
+        followId,
       ]);
     });
 
@@ -124,8 +126,8 @@ describe('ActivityPub Social API - Unfollow Endpoint', () => {
         destroy: sandbox.stub().resolves(),
       };
 
-      // Mock the unfollowCalendar to simulate entity deletion
-      activityPubInterface.unfollowCalendar.callsFake(async () => {
+      // Mock the unfollowCalendarById to simulate entity deletion
+      activityPubInterface.unfollowCalendarById.callsFake(async () => {
         await mockFollowingEntity.destroy();
       });
 
@@ -164,7 +166,7 @@ describe('ActivityPub Social API - Unfollow Endpoint', () => {
       expect(response.status).toBe(403);
 
       // Verify: Service was not called
-      expect(activityPubInterface.unfollowCalendar.called).toBe(false);
+      expect(activityPubInterface.unfollowCalendarById.called).toBe(false);
     });
 
     it('should return 400 if calendarId is missing', async () => {
@@ -184,10 +186,10 @@ describe('ActivityPub Social API - Unfollow Endpoint', () => {
     });
 
     it('should succeed without remoteCalendar in request body', async () => {
-      // Setup: Mock unfollow service call
-      activityPubInterface.unfollowCalendar.resolves();
+      // Setup: Mock unfollowCalendarById service call
+      activityPubInterface.unfollowCalendarById.resolves();
 
-      // Execute: Call without remoteCalendar (route gets it from database entity)
+      // Execute: Call without remoteCalendar (route gets it from service layer via followId)
       const encodedFollowId = encodeURIComponent(followId);
       const response = await request(app)
         .delete(`/api/v1/social/follows/${encodedFollowId}`)

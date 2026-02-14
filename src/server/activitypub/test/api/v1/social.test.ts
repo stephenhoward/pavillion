@@ -6,13 +6,23 @@ import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import ActivityPubMemberRoutes from '@/server/activitypub/api/v1/members';
 import ActivityPubInterface from '@/server/activitypub/interface';
-import CalendarService from '@/server/calendar/service/calendar';
 import { FollowingCalendar, FollowerCalendar } from '@/common/model/follow';
+
+/**
+ * Creates a mock CalendarInterface with stubbed methods needed by member routes.
+ */
+function createMockCalendarInterface() {
+  return {
+    getCalendar: sinon.stub().resolves(null),
+    userCanModifyCalendar: sinon.stub().resolves(true),
+  };
+}
 
 describe('ActivityPub Social API Routes', () => {
   let routes: ActivityPubMemberRoutes;
   let sandbox: sinon.SinonSandbox;
   let activityPubInterface: ActivityPubInterface;
+  let mockCalendarAPI: ReturnType<typeof createMockCalendarInterface>;
 
   const testAccount = Account.fromObject({ id: 'test-account-id', email: 'test@example.com' });
   const testCalendar = new Calendar('test-calendar-id', 'testcalendar');
@@ -20,12 +30,10 @@ describe('ActivityPub Social API Routes', () => {
   beforeEach(() => {
     sandbox = sinon.createSandbox();
     const eventBus = new EventEmitter();
-    activityPubInterface = new ActivityPubInterface(eventBus);
+    activityPubInterface = new ActivityPubInterface(eventBus) as any;
 
-    // Stub CalendarService prototype methods before creating routes
-    sandbox.stub(CalendarService.prototype, 'userCanModifyCalendar').resolves(true);
-
-    routes = new ActivityPubMemberRoutes(activityPubInterface);
+    mockCalendarAPI = createMockCalendarInterface();
+    routes = new ActivityPubMemberRoutes(activityPubInterface, mockCalendarAPI as any);
   });
 
   afterEach(() => {
@@ -87,7 +95,7 @@ describe('ActivityPub Social API Routes', () => {
 
     it('should verify user has calendar access', async () => {
       // Override the default stub for this test
-      (CalendarService.prototype.userCanModifyCalendar as any).resolves(false);
+      mockCalendarAPI.userCanModifyCalendar.resolves(false);
 
       const req = {
         user: testAccount,

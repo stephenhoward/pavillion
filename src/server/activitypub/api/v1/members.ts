@@ -3,10 +3,8 @@ import express, { Request, Response, Application } from 'express';
 import { Account } from '@/common/model/account';
 import { ValidationError } from '@/common/exceptions/base';
 import ExpressHelper from '@/server/common/helper/express';
-import CalendarService from '@/server/calendar/service/calendar';
+import CalendarInterface from '@/server/calendar/interface';
 import ActivityPubInterface from '@/server/activitypub/interface';
-import { FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
-import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import {
   InvalidRemoteCalendarIdentifierError,
   InvalidRepostPolicySettingsError,
@@ -22,11 +20,11 @@ import { InsufficientCalendarPermissionsError } from '@/common/exceptions/calend
 
 export default class ActivityPubMemberRoutes {
   private service: ActivityPubInterface;
-  private calendarService: CalendarService;
+  private calendarService: CalendarInterface;
 
-  constructor(internalAPI: ActivityPubInterface) {
+  constructor(internalAPI: ActivityPubInterface, calendarAPI: CalendarInterface) {
     this.service = internalAPI;
-    this.calendarService = new CalendarService();
+    this.calendarService = calendarAPI;
   }
 
   installHandlers(app: Application, routePrefix: string): void {
@@ -231,16 +229,6 @@ export default class ActivityPubMemberRoutes {
         throw new ValidationError('Invalid repost policy settings: expected boolean values');
       }
 
-      // Validate dependency rule - protocol-specific business rule
-      // Use specific error name for API compatibility
-      if (autoRepostReposts && !autoRepostOriginals) {
-        res.status(400).json({
-          error: 'Invalid auto-repost policy settings: auto-repost reposts cannot be enabled without enabling auto-repost originals',
-          errorName: 'InvalidRepostPolicySettingsError',
-        });
-        return;
-      }
-
       // Verify user has access to this calendar
       const hasAccess = await this.calendarService.userCanModifyCalendar(account, calendar);
 
@@ -440,39 +428,18 @@ export default class ActivityPubMemberRoutes {
     }
 
     try {
-      // Look up the follow relationship by ID with CalendarActorEntity to get the actor URI
-      const followEntity = await FollowingCalendarEntity.findOne({
-        where: {
-          id: followId,
-          calendar_id: calendar.id,
-        },
-        include: [{ model: CalendarActorEntity, as: 'calendarActor' }],
-      });
-
-      if (!followEntity) {
-        res.status(404).json({
-          error: 'Follow relationship not found',
-          errorName: 'FollowRelationshipNotFoundError',
-        });
-        return;
-      }
-
-      // Get the actor URI from the CalendarActorEntity
-      const actorUri = followEntity.calendarActor?.actor_uri;
-      if (!actorUri) {
-        res.status(500).json({
-          error: 'Calendar actor not found',
-          errorName: 'UnknownError',
-        });
-        return;
-      }
-
-      await this.service.unfollowCalendar(account, calendar, actorUri);
+      await this.service.unfollowCalendarById(account, calendar, followId);
       res.status(200).send('Unfollowed');
     }
     catch (error: any) {
       if (error instanceof ValidationError) {
         ExpressHelper.sendValidationError(res, error);
+      }
+      else if (error instanceof FollowRelationshipNotFoundError) {
+        res.status(404).json({
+          error: error.message,
+          errorName: 'FollowRelationshipNotFoundError',
+        });
       }
       else if (error instanceof InsufficientCalendarPermissionsError) {
         res.status(403).json({
