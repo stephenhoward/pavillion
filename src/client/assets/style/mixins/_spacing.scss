@@ -1,0 +1,312 @@
+/**
+ * Spacing Mixins
+ * Margin and padding mixins using logical CSS properties and design tokens.
+ * All directional properties use logical equivalents for RTL/LTR support.
+ *
+ * Naming conventions:
+ *   Block direction (unchanged): mt-* (block-start), mb-* (block-end), my-* (block)
+ *   Inline direction (renamed):  ms-* (inline-start), me-* (inline-end), mi-* (inline)
+ *
+ * Scale: 0, px, 0_5, 1, 1_5, 2, 2_5, 3, 3_5, 4, 5, 6, 8, 10, 12, 16, 20, 24
+ */
+
+/* ===== MARGIN: ALL SIDES ===== */
+
+@mixin m-0 { margin: var(--pav-space-0); }
+@mixin m-px { margin: var(--pav-space-px); }
+@mixin m-0_5 { margin: var(--pav-space-0_5); }
+@mixin m-1 { margin: var(--pav-space-1); }
+@mixin m-1_5 { margin: var(--pav-space-1_5); }
+@mixin m-2 { margin: var(--pav-space-2); }
+@mixin m-2_5 { margin: var(--pav-space-2_5); }
+@mixin m-3 { margin: var(--pav-space-3); }
+@mixin m-3_5 { margin: var(--pav-space-3_5); }
+@mixin m-4 { margin: var(--pav-space-4); }
+@mixin m-5 { margin: var(--pav-space-5); }
+@mixin m-6 { margin: var(--pav-space-6); }
+@mixin m-8 { margin: var(--pav-space-8); }
+@mixin m-10 { margin: var(--pav-space-10); }
+@mixin m-12 { margin: var(--pav-space-12); }
+@mixin m-16 { margin: var(--pav-space-16); }
+@mixin m-20 { margin: var(--pav-space-20); }
+@mixin m-24 { margin: var(--pav-space-24); }
+@mixin m-auto { margin: auto; }
+
+/* ===== MARGIN: BLOCK-START (top) ===== */
+
+@mixin mt-0 { margin-block-start: var(--pav-space-0); }
+@mixin mt-px { margin-block-start: var(--pav-space-px); }
+@mixin mt-0_5 { margin-block-start: var(--pav-space-0_5); }
+@mixin mt-1 { margin-block-start: var(--pav-space-1); }
+@mixin mt-1_5 { margin-block-start: var(--pav-space-1_5); }
+@mixin mt-2 { margin-block-start: var(--pav-space-2); }
+@mixin mt-2_5 { margin-block-start: var(--pav-space-2_5); }
+@mixin mt-3 { margin-block-start: var(--pav-space-3); }
+@mixin mt-3_5 { margin-block-start: var(--pav-space-3_5); }
+@mixin mt-4 { margin-block-start: var(--pav-space-4); }
+@mixin mt-5 { margin-block-start: var(--pav-space-5); }
+@mixin mt-6 { margin-block-start: var(--pav-space-6); }
+@mixin mt-8 { margin-block-start: var(--pav-space-8); }
+@mixin mt-10 { margin-block-start: var(--pav-space-10); }
+@mixin mt-12 { margin-block-start: var(--pav-space-12); }
+@mixin mt-16 { margin-block-start: var(--pav-space-16); }
+@mixin mt-20 { margin-block-start: var(--pav-space-20); }
+@mixin mt-24 { margin-block-start: var(--pav-space-24); }
+@mixin mt-auto { margin-block-start: auto; }
+
+/* ===== MARGIN: BLOCK-END (bottom) ===== */
+
+@mixin mb-0 { margin-block-end: var(--pav-space-0); }
+@mixin mb-px { margin-block-end: var(--pav-space-px); }
+@mixin mb-0_5 { margin-block-end: var(--pav-space-0_5); }
+@mixin mb-1 { margin-block-end: var(--pav-space-1); }
+@mixin mb-1_5 { margin-block-end: var(--pav-space-1_5); }
+@mixin mb-2 { margin-block-end: var(--pav-space-2); }
+@mixin mb-2_5 { margin-block-end: var(--pav-space-2_5); }
+@mixin mb-3 { margin-block-end: var(--pav-space-3); }
+@mixin mb-3_5 { margin-block-end: var(--pav-space-3_5); }
+@mixin mb-4 { margin-block-end: var(--pav-space-4); }
+@mixin mb-5 { margin-block-end: var(--pav-space-5); }
+@mixin mb-6 { margin-block-end: var(--pav-space-6); }
+@mixin mb-8 { margin-block-end: var(--pav-space-8); }
+@mixin mb-10 { margin-block-end: var(--pav-space-10); }
+@mixin mb-12 { margin-block-end: var(--pav-space-12); }
+@mixin mb-16 { margin-block-end: var(--pav-space-16); }
+@mixin mb-20 { margin-block-end: var(--pav-space-20); }
+@mixin mb-24 { margin-block-end: var(--pav-space-24); }
+@mixin mb-auto { margin-block-end: auto; }
+
+/* ===== MARGIN: BLOCK (top + bottom) ===== */
+
+@mixin my-0 { margin-block: var(--pav-space-0); }
+@mixin my-px { margin-block: var(--pav-space-px); }
+@mixin my-0_5 { margin-block: var(--pav-space-0_5); }
+@mixin my-1 { margin-block: var(--pav-space-1); }
+@mixin my-1_5 { margin-block: var(--pav-space-1_5); }
+@mixin my-2 { margin-block: var(--pav-space-2); }
+@mixin my-2_5 { margin-block: var(--pav-space-2_5); }
+@mixin my-3 { margin-block: var(--pav-space-3); }
+@mixin my-3_5 { margin-block: var(--pav-space-3_5); }
+@mixin my-4 { margin-block: var(--pav-space-4); }
+@mixin my-5 { margin-block: var(--pav-space-5); }
+@mixin my-6 { margin-block: var(--pav-space-6); }
+@mixin my-8 { margin-block: var(--pav-space-8); }
+@mixin my-10 { margin-block: var(--pav-space-10); }
+@mixin my-12 { margin-block: var(--pav-space-12); }
+@mixin my-16 { margin-block: var(--pav-space-16); }
+@mixin my-20 { margin-block: var(--pav-space-20); }
+@mixin my-24 { margin-block: var(--pav-space-24); }
+@mixin my-auto { margin-block: auto; }
+
+/* ===== MARGIN: INLINE-START (was ml-*) ===== */
+
+@mixin ms-0 { margin-inline-start: var(--pav-space-0); }
+@mixin ms-px { margin-inline-start: var(--pav-space-px); }
+@mixin ms-0_5 { margin-inline-start: var(--pav-space-0_5); }
+@mixin ms-1 { margin-inline-start: var(--pav-space-1); }
+@mixin ms-1_5 { margin-inline-start: var(--pav-space-1_5); }
+@mixin ms-2 { margin-inline-start: var(--pav-space-2); }
+@mixin ms-2_5 { margin-inline-start: var(--pav-space-2_5); }
+@mixin ms-3 { margin-inline-start: var(--pav-space-3); }
+@mixin ms-3_5 { margin-inline-start: var(--pav-space-3_5); }
+@mixin ms-4 { margin-inline-start: var(--pav-space-4); }
+@mixin ms-5 { margin-inline-start: var(--pav-space-5); }
+@mixin ms-6 { margin-inline-start: var(--pav-space-6); }
+@mixin ms-8 { margin-inline-start: var(--pav-space-8); }
+@mixin ms-10 { margin-inline-start: var(--pav-space-10); }
+@mixin ms-12 { margin-inline-start: var(--pav-space-12); }
+@mixin ms-16 { margin-inline-start: var(--pav-space-16); }
+@mixin ms-20 { margin-inline-start: var(--pav-space-20); }
+@mixin ms-24 { margin-inline-start: var(--pav-space-24); }
+@mixin ms-auto { margin-inline-start: auto; }
+
+/* ===== MARGIN: INLINE-END (was mr-*) ===== */
+
+@mixin me-0 { margin-inline-end: var(--pav-space-0); }
+@mixin me-px { margin-inline-end: var(--pav-space-px); }
+@mixin me-0_5 { margin-inline-end: var(--pav-space-0_5); }
+@mixin me-1 { margin-inline-end: var(--pav-space-1); }
+@mixin me-1_5 { margin-inline-end: var(--pav-space-1_5); }
+@mixin me-2 { margin-inline-end: var(--pav-space-2); }
+@mixin me-2_5 { margin-inline-end: var(--pav-space-2_5); }
+@mixin me-3 { margin-inline-end: var(--pav-space-3); }
+@mixin me-3_5 { margin-inline-end: var(--pav-space-3_5); }
+@mixin me-4 { margin-inline-end: var(--pav-space-4); }
+@mixin me-5 { margin-inline-end: var(--pav-space-5); }
+@mixin me-6 { margin-inline-end: var(--pav-space-6); }
+@mixin me-8 { margin-inline-end: var(--pav-space-8); }
+@mixin me-10 { margin-inline-end: var(--pav-space-10); }
+@mixin me-12 { margin-inline-end: var(--pav-space-12); }
+@mixin me-16 { margin-inline-end: var(--pav-space-16); }
+@mixin me-20 { margin-inline-end: var(--pav-space-20); }
+@mixin me-24 { margin-inline-end: var(--pav-space-24); }
+@mixin me-auto { margin-inline-end: auto; }
+
+/* ===== MARGIN: INLINE (was mx-*, both inline directions) ===== */
+
+@mixin mi-0 { margin-inline: var(--pav-space-0); }
+@mixin mi-px { margin-inline: var(--pav-space-px); }
+@mixin mi-0_5 { margin-inline: var(--pav-space-0_5); }
+@mixin mi-1 { margin-inline: var(--pav-space-1); }
+@mixin mi-1_5 { margin-inline: var(--pav-space-1_5); }
+@mixin mi-2 { margin-inline: var(--pav-space-2); }
+@mixin mi-2_5 { margin-inline: var(--pav-space-2_5); }
+@mixin mi-3 { margin-inline: var(--pav-space-3); }
+@mixin mi-3_5 { margin-inline: var(--pav-space-3_5); }
+@mixin mi-4 { margin-inline: var(--pav-space-4); }
+@mixin mi-5 { margin-inline: var(--pav-space-5); }
+@mixin mi-6 { margin-inline: var(--pav-space-6); }
+@mixin mi-8 { margin-inline: var(--pav-space-8); }
+@mixin mi-10 { margin-inline: var(--pav-space-10); }
+@mixin mi-12 { margin-inline: var(--pav-space-12); }
+@mixin mi-16 { margin-inline: var(--pav-space-16); }
+@mixin mi-20 { margin-inline: var(--pav-space-20); }
+@mixin mi-24 { margin-inline: var(--pav-space-24); }
+@mixin mi-auto { margin-inline: auto; }
+
+/* ===== PADDING: ALL SIDES ===== */
+
+@mixin p-0 { padding: var(--pav-space-0); }
+@mixin p-px { padding: var(--pav-space-px); }
+@mixin p-0_5 { padding: var(--pav-space-0_5); }
+@mixin p-1 { padding: var(--pav-space-1); }
+@mixin p-1_5 { padding: var(--pav-space-1_5); }
+@mixin p-2 { padding: var(--pav-space-2); }
+@mixin p-2_5 { padding: var(--pav-space-2_5); }
+@mixin p-3 { padding: var(--pav-space-3); }
+@mixin p-3_5 { padding: var(--pav-space-3_5); }
+@mixin p-4 { padding: var(--pav-space-4); }
+@mixin p-5 { padding: var(--pav-space-5); }
+@mixin p-6 { padding: var(--pav-space-6); }
+@mixin p-8 { padding: var(--pav-space-8); }
+@mixin p-10 { padding: var(--pav-space-10); }
+@mixin p-12 { padding: var(--pav-space-12); }
+@mixin p-16 { padding: var(--pav-space-16); }
+@mixin p-20 { padding: var(--pav-space-20); }
+@mixin p-24 { padding: var(--pav-space-24); }
+
+/* ===== PADDING: BLOCK-START (top) ===== */
+
+@mixin pt-0 { padding-block-start: var(--pav-space-0); }
+@mixin pt-px { padding-block-start: var(--pav-space-px); }
+@mixin pt-0_5 { padding-block-start: var(--pav-space-0_5); }
+@mixin pt-1 { padding-block-start: var(--pav-space-1); }
+@mixin pt-1_5 { padding-block-start: var(--pav-space-1_5); }
+@mixin pt-2 { padding-block-start: var(--pav-space-2); }
+@mixin pt-2_5 { padding-block-start: var(--pav-space-2_5); }
+@mixin pt-3 { padding-block-start: var(--pav-space-3); }
+@mixin pt-3_5 { padding-block-start: var(--pav-space-3_5); }
+@mixin pt-4 { padding-block-start: var(--pav-space-4); }
+@mixin pt-5 { padding-block-start: var(--pav-space-5); }
+@mixin pt-6 { padding-block-start: var(--pav-space-6); }
+@mixin pt-8 { padding-block-start: var(--pav-space-8); }
+@mixin pt-10 { padding-block-start: var(--pav-space-10); }
+@mixin pt-12 { padding-block-start: var(--pav-space-12); }
+@mixin pt-16 { padding-block-start: var(--pav-space-16); }
+@mixin pt-20 { padding-block-start: var(--pav-space-20); }
+@mixin pt-24 { padding-block-start: var(--pav-space-24); }
+
+/* ===== PADDING: BLOCK-END (bottom) ===== */
+
+@mixin pb-0 { padding-block-end: var(--pav-space-0); }
+@mixin pb-px { padding-block-end: var(--pav-space-px); }
+@mixin pb-0_5 { padding-block-end: var(--pav-space-0_5); }
+@mixin pb-1 { padding-block-end: var(--pav-space-1); }
+@mixin pb-1_5 { padding-block-end: var(--pav-space-1_5); }
+@mixin pb-2 { padding-block-end: var(--pav-space-2); }
+@mixin pb-2_5 { padding-block-end: var(--pav-space-2_5); }
+@mixin pb-3 { padding-block-end: var(--pav-space-3); }
+@mixin pb-3_5 { padding-block-end: var(--pav-space-3_5); }
+@mixin pb-4 { padding-block-end: var(--pav-space-4); }
+@mixin pb-5 { padding-block-end: var(--pav-space-5); }
+@mixin pb-6 { padding-block-end: var(--pav-space-6); }
+@mixin pb-8 { padding-block-end: var(--pav-space-8); }
+@mixin pb-10 { padding-block-end: var(--pav-space-10); }
+@mixin pb-12 { padding-block-end: var(--pav-space-12); }
+@mixin pb-16 { padding-block-end: var(--pav-space-16); }
+@mixin pb-20 { padding-block-end: var(--pav-space-20); }
+@mixin pb-24 { padding-block-end: var(--pav-space-24); }
+
+/* ===== PADDING: BLOCK (top + bottom) ===== */
+
+@mixin py-0 { padding-block: var(--pav-space-0); }
+@mixin py-px { padding-block: var(--pav-space-px); }
+@mixin py-0_5 { padding-block: var(--pav-space-0_5); }
+@mixin py-1 { padding-block: var(--pav-space-1); }
+@mixin py-1_5 { padding-block: var(--pav-space-1_5); }
+@mixin py-2 { padding-block: var(--pav-space-2); }
+@mixin py-2_5 { padding-block: var(--pav-space-2_5); }
+@mixin py-3 { padding-block: var(--pav-space-3); }
+@mixin py-3_5 { padding-block: var(--pav-space-3_5); }
+@mixin py-4 { padding-block: var(--pav-space-4); }
+@mixin py-5 { padding-block: var(--pav-space-5); }
+@mixin py-6 { padding-block: var(--pav-space-6); }
+@mixin py-8 { padding-block: var(--pav-space-8); }
+@mixin py-10 { padding-block: var(--pav-space-10); }
+@mixin py-12 { padding-block: var(--pav-space-12); }
+@mixin py-16 { padding-block: var(--pav-space-16); }
+@mixin py-20 { padding-block: var(--pav-space-20); }
+@mixin py-24 { padding-block: var(--pav-space-24); }
+
+/* ===== PADDING: INLINE-START (was pl-*) ===== */
+
+@mixin ps-0 { padding-inline-start: var(--pav-space-0); }
+@mixin ps-px { padding-inline-start: var(--pav-space-px); }
+@mixin ps-0_5 { padding-inline-start: var(--pav-space-0_5); }
+@mixin ps-1 { padding-inline-start: var(--pav-space-1); }
+@mixin ps-1_5 { padding-inline-start: var(--pav-space-1_5); }
+@mixin ps-2 { padding-inline-start: var(--pav-space-2); }
+@mixin ps-2_5 { padding-inline-start: var(--pav-space-2_5); }
+@mixin ps-3 { padding-inline-start: var(--pav-space-3); }
+@mixin ps-3_5 { padding-inline-start: var(--pav-space-3_5); }
+@mixin ps-4 { padding-inline-start: var(--pav-space-4); }
+@mixin ps-5 { padding-inline-start: var(--pav-space-5); }
+@mixin ps-6 { padding-inline-start: var(--pav-space-6); }
+@mixin ps-8 { padding-inline-start: var(--pav-space-8); }
+@mixin ps-10 { padding-inline-start: var(--pav-space-10); }
+@mixin ps-12 { padding-inline-start: var(--pav-space-12); }
+@mixin ps-16 { padding-inline-start: var(--pav-space-16); }
+@mixin ps-20 { padding-inline-start: var(--pav-space-20); }
+@mixin ps-24 { padding-inline-start: var(--pav-space-24); }
+
+/* ===== PADDING: INLINE-END (was pr-*) ===== */
+
+@mixin pe-0 { padding-inline-end: var(--pav-space-0); }
+@mixin pe-px { padding-inline-end: var(--pav-space-px); }
+@mixin pe-0_5 { padding-inline-end: var(--pav-space-0_5); }
+@mixin pe-1 { padding-inline-end: var(--pav-space-1); }
+@mixin pe-1_5 { padding-inline-end: var(--pav-space-1_5); }
+@mixin pe-2 { padding-inline-end: var(--pav-space-2); }
+@mixin pe-2_5 { padding-inline-end: var(--pav-space-2_5); }
+@mixin pe-3 { padding-inline-end: var(--pav-space-3); }
+@mixin pe-3_5 { padding-inline-end: var(--pav-space-3_5); }
+@mixin pe-4 { padding-inline-end: var(--pav-space-4); }
+@mixin pe-5 { padding-inline-end: var(--pav-space-5); }
+@mixin pe-6 { padding-inline-end: var(--pav-space-6); }
+@mixin pe-8 { padding-inline-end: var(--pav-space-8); }
+@mixin pe-10 { padding-inline-end: var(--pav-space-10); }
+@mixin pe-12 { padding-inline-end: var(--pav-space-12); }
+@mixin pe-16 { padding-inline-end: var(--pav-space-16); }
+@mixin pe-20 { padding-inline-end: var(--pav-space-20); }
+@mixin pe-24 { padding-inline-end: var(--pav-space-24); }
+
+/* ===== PADDING: INLINE (was px-*, both inline directions) ===== */
+
+@mixin pi-0 { padding-inline: var(--pav-space-0); }
+@mixin pi-px { padding-inline: var(--pav-space-px); }
+@mixin pi-0_5 { padding-inline: var(--pav-space-0_5); }
+@mixin pi-1 { padding-inline: var(--pav-space-1); }
+@mixin pi-1_5 { padding-inline: var(--pav-space-1_5); }
+@mixin pi-2 { padding-inline: var(--pav-space-2); }
+@mixin pi-2_5 { padding-inline: var(--pav-space-2_5); }
+@mixin pi-3 { padding-inline: var(--pav-space-3); }
+@mixin pi-3_5 { padding-inline: var(--pav-space-3_5); }
+@mixin pi-4 { padding-inline: var(--pav-space-4); }
+@mixin pi-5 { padding-inline: var(--pav-space-5); }
+@mixin pi-6 { padding-inline: var(--pav-space-6); }
+@mixin pi-8 { padding-inline: var(--pav-space-8); }
+@mixin pi-10 { padding-inline: var(--pav-space-10); }
+@mixin pi-12 { padding-inline: var(--pav-space-12); }
+@mixin pi-16 { padding-inline: var(--pav-space-16); }
+@mixin pi-20 { padding-inline: var(--pav-space-20); }
+@mixin pi-24 { padding-inline: var(--pav-space-24); }

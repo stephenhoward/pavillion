@@ -7,7 +7,7 @@
 @import './mixins/index';
 
 // Establish CSS layer ordering (most important: layers load in the order declared)
-@layer reset, tokens, base, layout, components, utilities;
+@layer reset, tokens, base, layout, components;
 
 // Base & Reset Styles (lowest specificity, foundational)
 @layer reset {
@@ -65,13 +65,4 @@
   @import './components/event-management';  // Event Management UI patterns
   @import './components/calendar-admin';  // Calendar Administration UI patterns
   @import './layout/logged-out';  // Auth screens with component-specific styling
-}
-
-// 6. Utility Classes (highest specificity, overrides)
-@layer utilities {
-  @import './utilities/spacing';
-  @import './utilities/typography';
-  @import './utilities/layout';
-  @import './utilities/visibility';
-  @import './utilities/debug';
 }

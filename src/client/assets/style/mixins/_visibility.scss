@@ -1,0 +1,52 @@
+/**
+ * Visibility Mixins
+ * Visibility, opacity, and screen reader utility mixins
+ */
+
+/* ===== VISIBILITY MIXINS ===== */
+
+@mixin visible { visibility: visible; }
+@mixin invisible { visibility: hidden; }
+
+/* ===== OPACITY MIXINS ===== */
+
+@mixin opacity-0 { opacity: 0; }
+@mixin opacity-5 { opacity: 0.05; }
+@mixin opacity-10 { opacity: 0.1; }
+@mixin opacity-20 { opacity: 0.2; }
+@mixin opacity-25 { opacity: 0.25; }
+@mixin opacity-30 { opacity: 0.3; }
+@mixin opacity-40 { opacity: 0.4; }
+@mixin opacity-50 { opacity: 0.5; }
+@mixin opacity-60 { opacity: 0.6; }
+@mixin opacity-70 { opacity: 0.7; }
+@mixin opacity-75 { opacity: 0.75; }
+@mixin opacity-80 { opacity: 0.8; }
+@mixin opacity-90 { opacity: 0.9; }
+@mixin opacity-95 { opacity: 0.95; }
+@mixin opacity-100 { opacity: 1; }
+
+/* ===== SCREEN READER MIXINS ===== */
+
+@mixin sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+@mixin not-sr-only {
+  position: static;
+  width: auto;
+  height: auto;
+  padding: 0;
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+}

@@ -1,0 +1,71 @@
+/**
+ * Typography Mixins
+ * SCSS mixins for text styling: alignment, transform, decoration,
+ * whitespace, word break, line height, and letter spacing.
+ */
+
+/* ===== TEXT ALIGNMENT ===== */
+
+@mixin text-start { text-align: start; }
+@mixin text-center { text-align: center; }
+@mixin text-end { text-align: end; }
+@mixin text-justify { text-align: justify; }
+
+/* ===== TEXT TRANSFORM ===== */
+
+@mixin uppercase { text-transform: uppercase; }
+@mixin lowercase { text-transform: lowercase; }
+@mixin capitalize { text-transform: capitalize; }
+@mixin normal-case { text-transform: none; }
+
+/* ===== TEXT DECORATION ===== */
+
+@mixin underline { text-decoration-line: underline; }
+@mixin line-through { text-decoration-line: line-through; }
+@mixin no-underline { text-decoration-line: none; }
+
+/* ===== FONT STYLE ===== */
+
+@mixin italic { font-style: italic; }
+@mixin not-italic { font-style: normal; }
+
+/* ===== WHITESPACE ===== */
+
+@mixin whitespace-normal { white-space: normal; }
+@mixin whitespace-nowrap { white-space: nowrap; }
+@mixin whitespace-pre-wrap { white-space: pre-wrap; }
+
+/* ===== WORD BREAK ===== */
+
+@mixin break-normal {
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+@mixin break-words { overflow-wrap: break-word; }
+@mixin break-all { word-break: break-all; }
+
+/* ===== TRUNCATE ===== */
+
+@mixin truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ===== LINE HEIGHT ===== */
+
+@mixin leading-none { line-height: 1; }
+@mixin leading-tight { line-height: var(--pav-line-height-tight); }
+@mixin leading-snug { line-height: var(--pav-line-height-snug); }
+@mixin leading-normal { line-height: var(--pav-line-height-normal); }
+@mixin leading-relaxed { line-height: var(--pav-line-height-relaxed); }
+@mixin leading-loose { line-height: var(--pav-line-height-loose); }
+
+/* ===== LETTER SPACING ===== */
+
+@mixin tracking-tighter { letter-spacing: var(--pav-letter-spacing-tighter); }
+@mixin tracking-tight { letter-spacing: var(--pav-letter-spacing-tight); }
+@mixin tracking-normal { letter-spacing: var(--pav-letter-spacing-normal); }
+@mixin tracking-wide { letter-spacing: var(--pav-letter-spacing-wide); }
+@mixin tracking-wider { letter-spacing: var(--pav-letter-spacing-wider); }
