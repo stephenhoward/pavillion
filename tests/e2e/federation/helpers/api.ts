@@ -182,7 +182,16 @@ export async function createCalendar(
     throw new Error(`Failed to create calendar: ${response.status} ${errorText}`);
   }
 
-  return await response.json();
+  const calendar = await response.json();
+
+  // Wait for CalendarActor to be created asynchronously
+  // The calendar.created event triggers CalendarActorEntity creation via event bus
+  // CalendarActor creation includes RSA keypair generation which can take time
+  // In real usage, there's enough time between calendar creation and federation operations
+  // In tests, we need to wait for the async event handler to complete
+  await new Promise(resolve => setTimeout(resolve, 2000));
+
+  return calendar;
 }
 
 /**
