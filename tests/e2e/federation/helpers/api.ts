@@ -393,7 +393,7 @@ export async function getFeed(
   instance: InstanceConfig,
   token: string,
   calendarId: string,
-): Promise<{ events: Array<{ id: string; content: Record<string, { title: string }> }>; hasMore: boolean }> {
+): Promise<{ events: Array<{ id: string; event_source_url?: string; content: Record<string, { title: string }> }>; hasMore: boolean }> {
   const response = await fetch(
     `${instance.baseUrl}/api/v1/social/feed?calendarId=${calendarId}`,
     {
@@ -570,4 +570,97 @@ export async function grantEditorAccessByEmail(
       agent: httpsAgent,
     },
   );
+}
+
+/**
+ * Update auto-repost policy for an existing follow relationship
+ *
+ * @param instance - The instance where the follow relationship exists
+ * @param token - Authentication token for the calendar owner
+ * @param followId - ID of the follow relationship to update (full ActivityPub URL)
+ * @param calendarId - ID of the local calendar
+ * @param autoRepostOriginals - Whether to auto-repost original events
+ * @param autoRepostReposts - Whether to auto-repost reposts
+ * @returns Response object
+ */
+export async function updateFollowPolicy(
+  instance: InstanceConfig,
+  token: string,
+  followId: string,
+  calendarId: string,
+  autoRepostOriginals: boolean,
+  autoRepostReposts: boolean
+): Promise<FollowResponse> {
+  const response = await fetch(
+    `${instance.baseUrl}/api/v1/social/follows/${encodeURIComponent(followId)}`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        calendarId,
+        autoRepostOriginals,
+        autoRepostReposts,
+      }),
+      // @ts-ignore - agent is not in the TypeScript types but works at runtime
+      agent: httpsAgent,
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to update follow policy: ${response.status} ${errorText}`);
+  }
+
+  return await response.json();
+}
+
+/**
+ * Share an event to a calendar (creates an Announce activity)
+ *
+ * Makes the local calendar share/repost an event from the feed to its own calendar.
+ * This is used to manually share events, similar to how auto-repost works automatically.
+ *
+ * @param instance - The instance where the calendar exists
+ * @param token - Authentication token for the calendar owner
+ * @param calendarId - ID of the calendar to share the event to
+ * @param eventId - ID of the event to share (from feed)
+ * @returns Response object
+ * @throws Error if the share operation fails
+ *
+ * @example
+ * const event = feed.events.find(e => e.content?.en?.title === 'Event Title');
+ * await shareEvent(INSTANCE_ALPHA, token, calendar.id, event!.id);
+ */
+export async function shareEvent(
+  instance: InstanceConfig,
+  token: string,
+  calendarId: string,
+  eventId: string,
+): Promise<Response> {
+  const response = await fetch(
+    `${instance.baseUrl}/api/v1/social/shares`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        calendarId,
+        eventId,
+      }),
+      // @ts-ignore - agent is not in the TypeScript types but works at runtime
+      agent: httpsAgent,
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to share event: ${response.status} ${errorText}`);
+  }
+
+  return response;
 }
