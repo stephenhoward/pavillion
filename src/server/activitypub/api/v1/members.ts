@@ -375,6 +375,12 @@ export default class ActivityPubMemberRoutes {
             errorName: 'InvalidRepostPolicySettingsError',
           });
         }
+        else if (error instanceof RemoteCalendarNotFoundError) {
+          res.status(404).json({
+            error: error.message,
+            errorName: 'RemoteCalendarNotFoundError',
+          });
+        }
         else {
           console.error('Unexpected error in followCalendar:', error);
           res.status(500).json({
