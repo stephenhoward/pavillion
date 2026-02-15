@@ -112,7 +112,8 @@ generate_secret() {
 create_env_file() {
   local jwt_secret="$1"
   local session_secret="$2"
-  local db_password="$3"
+  local email_hash_secret="$3"
+  local db_password="$4"
 
   cat > .env << EOF
 # Pavillion Environment Variables
@@ -135,6 +136,9 @@ JWT_SECRET=${jwt_secret}
 
 # Session secret for cookie signing
 SESSION_SECRET=${session_secret}
+
+# Email hash secret for anonymous reporter privacy
+EMAIL_HASH_SECRET=${email_hash_secret}
 
 # Database password for PostgreSQL
 DB_PASSWORD=${db_password}
@@ -187,7 +191,8 @@ EOF
 create_secrets_directory() {
   local jwt_secret="$1"
   local session_secret="$2"
-  local db_password="$3"
+  local email_hash_secret="$3"
+  local db_password="$4"
 
   # Create secrets directory if it doesn't exist
   mkdir -p secrets
@@ -202,6 +207,9 @@ create_secrets_directory() {
   echo -n "${session_secret}" > secrets/session_secret.txt
   chmod 600 secrets/session_secret.txt
 
+  echo -n "${email_hash_secret}" > secrets/email_hash_secret.txt
+  chmod 600 secrets/email_hash_secret.txt
+
   print_success "Created secrets/ directory with individual secret files"
 }
 
@@ -209,7 +217,8 @@ create_secrets_directory() {
 display_secrets() {
   local jwt_secret="$1"
   local session_secret="$2"
-  local db_password="$3"
+  local email_hash_secret="$3"
+  local db_password="$4"
 
   echo ""
   echo -e "${BOLD}${BLUE}========================================${NC}"
@@ -224,6 +233,9 @@ display_secrets() {
   echo ""
   echo -e "${BOLD}SESSION_SECRET:${NC}"
   echo "  ${session_secret}"
+  echo ""
+  echo -e "${BOLD}EMAIL_HASH_SECRET:${NC}"
+  echo "  ${email_hash_secret}"
   echo ""
   echo -e "${BOLD}DB_PASSWORD:${NC}"
   echo "  ${db_password}"
@@ -278,21 +290,23 @@ main() {
   print_info "Generating cryptographically secure secrets..."
   local jwt_secret
   local session_secret
+  local email_hash_secret
   local db_password
 
   jwt_secret=$(generate_secret)
   session_secret=$(generate_secret)
+  email_hash_secret=$(generate_secret)
   db_password=$(generate_secret)
 
-  print_success "Generated 3 unique secrets"
+  print_success "Generated 4 unique secrets"
 
   # Create configuration files
   print_info "Creating configuration files..."
-  create_env_file "$jwt_secret" "$session_secret" "$db_password"
-  create_secrets_directory "$jwt_secret" "$session_secret" "$db_password"
+  create_env_file "$jwt_secret" "$session_secret" "$email_hash_secret" "$db_password"
+  create_secrets_directory "$jwt_secret" "$session_secret" "$email_hash_secret" "$db_password"
 
   # Display secrets for backup
-  display_secrets "$jwt_secret" "$session_secret" "$db_password"
+  display_secrets "$jwt_secret" "$session_secret" "$email_hash_secret" "$db_password"
 
   # Display next steps
   display_next_steps

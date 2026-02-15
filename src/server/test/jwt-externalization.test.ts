@@ -99,6 +99,7 @@ describe('JWT Externalization and Production Validation', () => {
     const configGetStub = sandbox.stub(config, 'get');
     configGetStub.withArgs('jwt.secret').returns('development-only-jwt-secret-do-not-use-in-production');
     configGetStub.withArgs('session.secret').returns('custom-session-secret');
+    configGetStub.withArgs('moderation.emailHashSecret').returns('custom-email-hash-secret');
 
     expect(() => {
       validateProductionSecrets();
@@ -110,10 +111,23 @@ describe('JWT Externalization and Production Validation', () => {
     const configGetStub2 = sandbox.stub(config, 'get');
     configGetStub2.withArgs('jwt.secret').returns('custom-jwt-secret');
     configGetStub2.withArgs('session.secret').returns('development-only-session-secret-do-not-use-in-production');
+    configGetStub2.withArgs('moderation.emailHashSecret').returns('custom-email-hash-secret');
 
     expect(() => {
       validateProductionSecrets();
     }).toThrow(/SESSION_SECRET must be set in production/);
+
+    sandbox.restore();
+
+    // Test email hash secret validation
+    const configGetStub3 = sandbox.stub(config, 'get');
+    configGetStub3.withArgs('jwt.secret').returns('custom-jwt-secret');
+    configGetStub3.withArgs('session.secret').returns('custom-session-secret');
+    configGetStub3.withArgs('moderation.emailHashSecret').returns('development-only-email-hash-secret-do-not-use-in-production');
+
+    expect(() => {
+      validateProductionSecrets();
+    }).toThrow(/EMAIL_HASH_SECRET must be set in production/);
   });
 
   // Test 5: Production validation passes with custom secrets
@@ -121,6 +135,7 @@ describe('JWT Externalization and Production Validation', () => {
     const configGetStub = sandbox.stub(config, 'get');
     configGetStub.withArgs('jwt.secret').returns('custom-jwt-secret-xyzabc123');
     configGetStub.withArgs('session.secret').returns('custom-session-secret-xyzabc123');
+    configGetStub.withArgs('moderation.emailHashSecret').returns('custom-email-hash-secret-xyzabc123');
 
     // Should not throw
     expect(() => {

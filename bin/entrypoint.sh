@@ -20,11 +20,12 @@
 # Docker Secrets Support (Production only):
 #   The following environment variables support the _FILE suffix pattern
 #   for Docker secrets integration:
-#   - DB_PASSWORD_FILE      -> DB_PASSWORD
-#   - JWT_SECRET_FILE       -> JWT_SECRET
-#   - SESSION_SECRET_FILE   -> SESSION_SECRET
-#   - S3_SECRET_KEY_FILE    -> S3_SECRET_KEY
-#   - SMTP_PASSWORD_FILE    -> SMTP_PASSWORD
+#   - DB_PASSWORD_FILE        -> DB_PASSWORD
+#   - JWT_SECRET_FILE         -> JWT_SECRET
+#   - SESSION_SECRET_FILE     -> SESSION_SECRET
+#   - EMAIL_HASH_SECRET_FILE  -> EMAIL_HASH_SECRET
+#   - S3_SECRET_KEY_FILE      -> S3_SECRET_KEY
+#   - SMTP_PASSWORD_FILE      -> SMTP_PASSWORD
 #
 # Worker Mode:
 #   When the --worker flag is present in the command, the container runs in
@@ -279,6 +280,7 @@ main() {
     file_env 'DB_PASSWORD'
     file_env 'JWT_SECRET'
     file_env 'SESSION_SECRET'
+    file_env 'EMAIL_HASH_SECRET'
     file_env 'S3_SECRET_KEY'
     file_env 'SMTP_PASSWORD'
   fi
