@@ -1,0 +1,10 @@
+# Production configuration overrides
+# Secrets (jwt.secret, session.secret, moderation.emailHashSecret) MUST be
+# provided via environment variables - see custom-environment-variables.yaml
+
+database:
+  dialect: postgres
+  logging: false
+
+mail:
+  transport: smtp
