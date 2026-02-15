@@ -4,7 +4,7 @@ import vue from '@vitejs/plugin-vue';
 export default defineConfig({
   plugins: [vue()],
   test: {
-    environment: 'happy-dom',
+    environment: 'node',
     globals: true,
     // Integration tests use forks pool because:
     // 1. They have fewer files, so RPC timeout issues don't occur
@@ -29,6 +29,8 @@ export default defineConfig({
       '**/*.e2e.test.ts',
       // Exclude rate limiting tests - run separately with test:ratelimiting
       '**/authentication/test/integration/rate_limiting.test.ts',
+      // Exclude widget tests - they need DOM and run with unit tests
+      '**/widget/test/integration/**',
     ],
     coverage: {
       reportOnFailure: true,

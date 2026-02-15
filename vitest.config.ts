@@ -32,6 +32,9 @@ export default defineConfig({
       '**/entrypoint.test.ts', // Docker/container tests - run separately with federation tests
       '**/docker-build.test.ts', // Docker build tests - require Docker environment
       '**/docker-compose.test.ts', // Docker compose tests - require Docker environment
+      // Exclude server integration tests - run separately with test:integration
+      '**/server/test/integration/**',
+      '**/server/**/test/integration/**',
     ],
     coverage: {
       reportOnFailure: true,
