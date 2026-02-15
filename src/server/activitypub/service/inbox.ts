@@ -11,7 +11,7 @@ import DeleteActivity from "@/server/activitypub/model/action/delete";
 import FollowActivity from "@/server/activitypub/model/action/follow";
 import AcceptActivity from "@/server/activitypub/model/action/accept";
 import AnnounceActivity from "@/server/activitypub/model/action/announce";
-import { ActivityPubInboxMessageEntity, EventActivityEntity, FollowerCalendarEntity, FollowingCalendarEntity } from "@/server/activitypub/entity/activitypub";
+import { ActivityPubInboxMessageEntity, EventActivityEntity, FollowerCalendarEntity, FollowingCalendarEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
 import { EventObjectEntity } from "@/server/activitypub/entity/event_object";
 import RemoteCalendarService from "@/server/activitypub/service/remote_calendar";
 import { ActivityPubActor } from "@/server/activitypub/model/base";
@@ -715,7 +715,115 @@ class ProcessInboxService {
 
     console.log(`[INBOX] Created event ${localEventId} from ${isPersonActor ? 'Person' : 'Calendar'} actor ${actorUri}`);
 
+    // Check for auto-repost (skip if Person actor or no event created)
+    if (!isPersonActor && createdEvent) {
+      await this.checkAndPerformAutoRepost(calendar, actorUri, apObjectId, true);
+    }
+
     return createdEvent;
+  }
+
+  /**
+   * Checks auto-repost policy and performs automatic repost if conditions are met.
+   * Enforces loop prevention and security guards.
+   *
+   * @param calendar - The local calendar receiving the event
+   * @param sourceActorUri - The actor URI of the event source
+   * @param eventApId - The ActivityPub ID of the event
+   * @param isOriginal - True for Create activities, false for Announce activities
+   * @returns Promise<void>
+   */
+  private async checkAndPerformAutoRepost(
+    calendar: Calendar,
+    sourceActorUri: string,
+    eventApId: string,
+    isOriginal: boolean,
+  ): Promise<void> {
+    console.log('[AUTO-REPOST] Called with:', { calendarId: calendar.id, sourceActorUri, eventApId, isOriginal });
+
+    // Find CalendarActorEntity for sourceActorUri
+    const remoteCalendar = await this.remoteCalendarService.findOrCreateByActorUri(sourceActorUri);
+
+    // Find FollowingCalendarEntity
+    const follow = await FollowingCalendarEntity.findOne({
+      where: {
+        calendar_actor_id: remoteCalendar.id,
+        calendar_id: calendar.id,
+      },
+    });
+
+    if (!follow) {
+      console.log('[AUTO-REPOST] Skip: Not following source', { sourceActorUri, calendarId: calendar.id });
+      // Not following this source, skip
+      return;
+    }
+
+    console.log('[AUTO-REPOST] Follow found:', {
+      followId: follow.id,
+      autoRepostOriginals: follow.auto_repost_originals,
+      autoRepostReposts: follow.auto_repost_reposts,
+      isOriginal,
+    });
+
+    // Check policy
+    const shouldRepost = isOriginal ? follow.auto_repost_originals : follow.auto_repost_reposts;
+    console.log('[AUTO-REPOST] Policy check:', { shouldRepost, isOriginal, policy: isOriginal ? 'originals' : 'reposts' });
+    if (!shouldRepost) {
+      console.log('[AUTO-REPOST] Skip: Policy disabled');
+      return;
+    }
+
+    // SECURITY: Verify EventObjectEntity.attributed_to matches sourceActorUri
+    const eventObject = await EventObjectEntity.findOne({
+      where: { ap_id: eventApId },
+    });
+
+    if (!eventObject) {
+      console.warn(`[INBOX] Auto-repost skipped: EventObjectEntity not found for ${eventApId}`);
+      return;
+    }
+
+    if (eventObject.attributed_to !== sourceActorUri) {
+      console.warn(`[AUTO-REPOST] Skip: attributed_to mismatch - expected ${sourceActorUri}, got ${eventObject.attributed_to}`);
+      return;
+    }
+    console.log('[AUTO-REPOST] Attribution verified:', { attributed_to: eventObject.attributed_to });
+
+    // LOOP GUARD: Never repost own events
+    const localActorUrl = ActivityPubActor.actorUrl(calendar);
+    if (eventObject.attributed_to === localActorUrl) {
+      console.log('[AUTO-REPOST] Skip: Loop prevention - event originated from this calendar');
+      return;
+    }
+
+    // LOOP GUARD: Check SharedEventEntity for duplicates
+    const existingShare = await SharedEventEntity.findOne({
+      where: {
+        event_id: eventApId,
+        calendar_id: calendar.id,
+      },
+    });
+
+    if (existingShare) {
+      console.log('[AUTO-REPOST] Skip: Already shared', { existingShareId: existingShare.id, autoPosted: existingShare.auto_posted });
+      // Already shared, skip
+      return;
+    }
+    console.log('[AUTO-REPOST] Creating SharedEventEntity and adding to outbox...');
+
+    // Create SharedEventEntity with auto_posted: true
+    const announceActivity = new AnnounceActivity(localActorUrl, eventApId);
+    await SharedEventEntity.create({
+      id: announceActivity.id,
+      event_id: eventObject.event_id,  // Use local event UUID, not AP URL
+      calendar_id: calendar.id,
+      auto_posted: true,
+    });
+
+    // Add to outbox
+    await addToOutbox(this.eventBus, calendar, announceActivity);
+
+    console.log(`[AUTO-REPOST] ✅ SUCCESS: Auto-reposted event ${eventApId} from ${sourceActorUri} (isOriginal: ${isOriginal})`);
   }
 
   /**
@@ -1388,6 +1496,11 @@ class ProcessInboxService {
         type: 'share',
       });
     }
+
+    // Check for auto-repost
+    // Determine if this is an original (announcer is author) or a repost (announcer is sharing)
+    const isOriginal = apObject?.attributed_to === message.actor;
+    await this.checkAndPerformAutoRepost(calendar, message.actor, apObjectId, isOriginal);
   }
 
   /**

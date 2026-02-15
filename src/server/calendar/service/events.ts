@@ -23,6 +23,7 @@ import { EventCategoryContentEntity } from '@/server/calendar/entity/event_categ
 import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_category_assignment';
 import { EventInstanceEntity } from '@/server/calendar/entity/event_instance';
 import { EventRepostEntity } from '@/server/calendar/entity/event_repost';
+import { SharedEventEntity } from '@/server/activitypub/entity/activitypub';
 import db from '@/server/common/entity/db';
 import { Op, literal, where, fn, col } from 'sequelize';
 
@@ -59,6 +60,7 @@ class EventService {
    * Returns events that are either:
    * - Owned by the calendar (calendar_id matches)
    * - Reposted by the calendar (via EventRepostEntity)
+   * - Shared by the calendar (via SharedEventEntity - auto-repost or manual share)
    *
    * @param calendar - the calendar to retrieve events for
    * @param options - optional search and filter parameters
@@ -69,12 +71,28 @@ class EventService {
     categories?: string[];
   }): Promise<CalendarEvent[]> {
 
-    // Get event IDs that are reposted by this calendar
+    // Get event IDs that are reposted or shared by this calendar
     const reposts = await EventRepostEntity.findAll({
       where: { calendar_id: calendar.id },
       attributes: ['event_id'],
     });
-    const repostedEventIds = reposts.map(r => r.event_id);
+    const shares = await SharedEventEntity.findAll({
+      where: { calendar_id: calendar.id },
+      attributes: ['event_id'],
+    });
+
+    // Combine reposts and shares into a single list of event UUIDs
+    // SharedEventEntity.event_id stores local UUIDs after our inbox.ts fix,
+    // but old records may still have AP URLs. Filter to only include valid UUIDs.
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const shareEventIds = shares
+      .map(s => s.event_id)
+      .filter(id => UUID_REGEX.test(id));
+
+    const repostedEventIds = [
+      ...reposts.map(r => r.event_id),
+      ...shareEventIds,
+    ];
 
     // Query events owned by calendar OR reposted by calendar
     const queryOptions: any = {
