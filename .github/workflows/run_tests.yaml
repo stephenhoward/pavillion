@@ -1,0 +1,34 @@
+name: Run Tests
+on:
+  workflow_call:
+    inputs:
+      platform:
+        description: 'The platform to run the tests on'
+        required: true
+        type: string
+      runner:
+        description: 'The runner to run the tests on'
+        required: true
+        type: string
+jobs:
+  build: 
+    runs-on: ${{ inputs.runner }}
+
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.node-version'
+          cache: 'npm'
+      - run: npm install
+      - run: npm run test:unit
+        if: ${{ !cancelled() }}
+      - run: npm run test:integration
+        if: ${{ !cancelled() }}
+      - run: npx playwright install --with-deps chromium
+        if: ${{ !cancelled() }}
+      - run: npm run test:e2e
+        if: ${{ !cancelled() }}
+      - run: npm run test:ratelimiting
+        if: ${{ !cancelled() }}

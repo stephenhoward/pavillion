@@ -5,6 +5,9 @@
   "license": "MIT",
   "type": "module",
   "private": true,
+  "engines": {
+    "node": "22"
+  },
   "main": "src/server/app.ts",
   "bin": {
     "pavillion": "./bin/pavillion"

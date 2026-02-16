@@ -1,0 +1,64 @@
+name: Run Federation Tests
+on:
+  workflow_call:
+
+jobs:
+  federation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.node-version'
+          cache: 'npm'
+
+      - run: npm install
+
+      - name: Install Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Add federation hostnames
+        run: sudo sh -c 'echo "127.0.0.1 alpha.federation.local beta.federation.local" >> /etc/hosts'
+
+      - name: Generate SSL certificates
+        run: |
+          chmod +x docker/federation/ssl/generate-certs.sh
+          docker/federation/ssl/generate-certs.sh
+
+      - name: Build and start federation environment
+        run: docker compose -f docker-compose.federation.yml up -d --build
+
+      - name: Wait for services to be healthy
+        run: |
+          echo "Waiting for federation services to become healthy..."
+          for container in pavillion-federation-alpha pavillion-federation-beta pavillion-federation-db-alpha pavillion-federation-db-beta; do
+            echo "Waiting for $container..."
+            timeout 180 bash -c "until [ \"\$(docker inspect --format='{{.State.Health.Status}}' $container 2>/dev/null)\" = 'healthy' ]; do sleep 5; echo '  still waiting...'; done"
+            echo "$container is healthy"
+          done
+          echo "All services healthy"
+
+      - name: Run federation tests
+        run: npm run test:federation
+
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: federation-test-results
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+      - name: Print federation logs
+        if: failure()
+        run: docker compose -f docker-compose.federation.yml logs --tail=200
+
+      - name: Stop federation environment
+        if: always()
+        run: docker compose -f docker-compose.federation.yml down -v

@@ -1,0 +1,24 @@
+name: CI Pipeline
+on:
+  push:
+    branches:
+      - main
+jobs:
+  arm_tests:
+    uses: ./.github/workflows/run_tests.yaml
+    with:
+      platform: linux/arm64
+      runner: ubuntu-24.04-arm
+  x86_tests:
+    uses: ./.github/workflows/run_tests.yaml
+    with:
+      platform: linux/amd64
+      runner: ubuntu-latest
+  federation_tests:
+    uses: ./.github/workflows/run_federation_tests.yaml
+  publish_images:
+    uses: ./.github/workflows/release_docker_images.yaml
+    needs: [arm_tests, x86_tests, federation_tests]
+    permissions:
+      contents: read
+      packages: write
