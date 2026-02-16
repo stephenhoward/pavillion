@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
+import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
  * E2E Tests: Event Location Management
@@ -11,18 +12,37 @@ import { loginAsAdmin } from './helpers/auth';
  * - Creating new locations
  * - Removing and changing locations
  * - Accessibility features
+ *
+ * UPDATED: Uses isolated test server with in-memory database for true test isolation
+ * Tests run serially within this file since they create locations that may be shared.
  */
 
+let env: TestEnvironment;
+
+// Configure tests to run serially within this file
+// This ensures they share the same test server instance
+test.describe.configure({ mode: 'serial' });
+
 test.describe('Event Location Management End-to-End', () => {
+  test.beforeAll(async () => {
+    // Start isolated test server for this test file
+    env = await startTestServer();
+  });
+
+  test.afterAll(async () => {
+    // Clean up test server
+    await env.cleanup();
+  });
+
   test.beforeEach(async ({ page }) => {
     // Log in as admin
-    await loginAsAdmin(page);
+    await loginAsAdmin(page, env.baseURL);
   });
 
   // Task 12.1: Test user can create event and add location via picker
   test('should allow user to create event and add location via picker', async ({ page }) => {
     // Navigate directly to event editor
-    await page.goto('/event');
+    await page.goto(env.baseURL + '/event');
     await page.waitForTimeout(1000);
 
     // Find and click the "Add Location" button on LocationDisplayCard
@@ -44,7 +64,7 @@ test.describe('Event Location Management End-to-End', () => {
   // Task 12.2 & 12.3: Test user can search for locations by name and address
   test('should allow user to search for locations', async ({ page }) => {
     // Navigate to event editor
-    await page.goto('/event');
+    await page.goto(env.baseURL + '/event');
     await page.waitForTimeout(1000);
 
     // Open location picker
@@ -67,7 +87,7 @@ test.describe('Event Location Management End-to-End', () => {
   // Task 12.4 & 12.5: Test user can select location from list and it appears in editor
   test('should allow user to select location and see it in editor', async ({ page }) => {
     // First create a location to select
-    await page.goto('/event');
+    await page.goto(env.baseURL + '/event');
     await page.waitForTimeout(1000);
 
     // Open location picker
@@ -105,7 +125,7 @@ test.describe('Event Location Management End-to-End', () => {
 
   // Task 12.6, 12.7, 12.8: Test user can create new location via form
   test('should allow user to create new location and see it selected', async ({ page }) => {
-    await page.goto('/event');
+    await page.goto(env.baseURL + '/event');
     await page.waitForTimeout(1000);
 
     // Open location picker
@@ -150,7 +170,7 @@ test.describe('Event Location Management End-to-End', () => {
   // Task 12.9: Test new location appears in picker for future events
   test('should show newly created location in picker for future events', async ({ page }) => {
     // Create a location in first event
-    await page.goto('/event');
+    await page.goto(env.baseURL + '/event');
     await page.waitForTimeout(1000);
 
     const addLocationButton1 = page.getByRole('button', { name: /add location/i });
@@ -170,7 +190,7 @@ test.describe('Event Location Management End-to-End', () => {
     await page.waitForTimeout(1000);
 
     // Navigate to create another event
-    await page.goto('/event');
+    await page.goto(env.baseURL + '/event');
     await page.waitForTimeout(1000);
 
     // Open location picker
@@ -199,7 +219,7 @@ test.describe('Event Location Management End-to-End', () => {
   // Task 12.10: Test user can remove location from event
   test('should allow user to remove location from event', async ({ page }) => {
     // Create event with location
-    await page.goto('/event');
+    await page.goto(env.baseURL + '/event');
     await page.waitForTimeout(1000);
 
     // Add a location first
@@ -242,7 +262,7 @@ test.describe('Event Location Management End-to-End', () => {
   // Task 12.11: Test user can change location to different saved location
   test('should allow user to change to different saved location', async ({ page }) => {
     // Create first location
-    await page.goto('/event');
+    await page.goto(env.baseURL + '/event');
     await page.waitForTimeout(1000);
 
     const addLocationButton1 = page.getByRole('button', { name: /add location/i });
@@ -284,7 +304,7 @@ test.describe('Event Location Management End-to-End', () => {
 
   // Task 12.12: Test accessibility features
   test('should support keyboard navigation and ARIA labels', async ({ page }) => {
-    await page.goto('/event');
+    await page.goto(env.baseURL + '/event');
     await page.waitForTimeout(1000);
 
     // Open location picker
@@ -312,7 +332,7 @@ test.describe('Event Location Management End-to-End', () => {
   });
 
   test('should have accessible create location form', async ({ page }) => {
-    await page.goto('/event');
+    await page.goto(env.baseURL + '/event');
     await page.waitForTimeout(1000);
 
     // Open location picker and then create form

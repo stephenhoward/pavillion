@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
+import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
  * E2E Tests: Recurring Event Management
@@ -10,14 +11,26 @@ import { loginAsAdmin } from './helpers/auth';
  *
  * Covers workflow audit gap:
  * - 1.3 Recurring Event Management
+ *
+ * UPDATED: Uses isolated test server with in-memory database for true test isolation
  */
 
+let env: TestEnvironment;
+
 test.describe('Recurring Event Management', () => {
+  test.beforeAll(async () => {
+    env = await startTestServer();
+  });
+
+  test.afterAll(async () => {
+    await env.cleanup();
+  });
+
   test.beforeEach(async ({ page }) => {
-    await loginAsAdmin(page);
+    await loginAsAdmin(page, env.baseURL);
 
     // Navigate to event editor via "Create an Event" button
-    await page.goto('/calendar');
+    await page.goto(env.baseURL + '/calendar');
     await page.waitForSelector('.event-list', { timeout: 10000 });
     await page.getByRole('button', { name: 'Create an Event' }).click();
     await page.waitForSelector('[role="group"][aria-label="Event Schedules"]', { timeout: 10000 });
@@ -127,7 +140,7 @@ test.describe('Recurring Event Management', () => {
 
   test('should show end date options on existing recurring event', async ({ page }) => {
     // Navigate to calendar list (skip the beforeEach event editor)
-    await page.goto('/calendar');
+    await page.goto(env.baseURL + '/calendar');
     await page.waitForSelector('.event-list', { timeout: 10000 });
 
     // Find a recurring event (one that shows "Repeats")

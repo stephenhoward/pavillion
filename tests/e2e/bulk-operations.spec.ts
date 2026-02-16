@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
+import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
  * E2E Tests: Bulk Event Operations & Event Duplication
@@ -10,16 +11,31 @@ import { loginAsAdmin } from './helpers/auth';
  * Covers workflow audit gaps:
  * - 1.6 Bulk Event Operations
  * - 1.7 Event Duplication
+ *
+ * UPDATED: Uses isolated test server with in-memory database for true test isolation
  */
 
+let env: TestEnvironment;
+
+// Configure tests to run serially within this file since they share state
+test.describe.configure({ mode: 'serial' });
+
 test.describe('Bulk Event Operations', () => {
+  test.beforeAll(async () => {
+    env = await startTestServer();
+  });
+
+  test.afterAll(async () => {
+    await env.cleanup();
+  });
+
   test.beforeEach(async ({ page }) => {
-    await loginAsAdmin(page);
+    await loginAsAdmin(page, env.baseURL);
   });
 
   test('should show bulk operations menu when events are selected', async ({ page }) => {
     // Navigate to the calendar event list
-    await page.goto('/calendar');
+    await page.goto(env.baseURL + '/calendar');
     await page.waitForSelector('.event-list', { timeout: 10000 });
 
     // Verify bulk menu is hidden initially
@@ -47,7 +63,7 @@ test.describe('Bulk Event Operations', () => {
   });
 
   test('should deselect all events via deselect button', async ({ page }) => {
-    await page.goto('/calendar');
+    await page.goto(env.baseURL + '/calendar');
     await page.waitForSelector('.event-list', { timeout: 10000 });
 
     // Select multiple events
@@ -77,7 +93,7 @@ test.describe('Bulk Event Operations', () => {
   });
 
   test('should bulk delete selected events with confirmation', async ({ page }) => {
-    await page.goto('/calendar');
+    await page.goto(env.baseURL + '/calendar');
     await page.waitForSelector('.event-list', { timeout: 10000 });
 
     // Count initial events
@@ -111,7 +127,7 @@ test.describe('Bulk Event Operations', () => {
   });
 
   test('should open category assignment dialog for selected events', async ({ page }) => {
-    await page.goto('/calendar');
+    await page.goto(env.baseURL + '/calendar');
     await page.waitForSelector('.event-list', { timeout: 10000 });
 
     // Select first event
@@ -156,12 +172,20 @@ test.describe('Bulk Event Operations', () => {
 });
 
 test.describe('Event Duplication', () => {
+  test.beforeAll(async () => {
+    env = await startTestServer();
+  });
+
+  test.afterAll(async () => {
+    await env.cleanup();
+  });
+
   test.beforeEach(async ({ page }) => {
-    await loginAsAdmin(page);
+    await loginAsAdmin(page, env.baseURL);
   });
 
   test('should duplicate an event via duplicate button', async ({ page }) => {
-    await page.goto('/calendar');
+    await page.goto(env.baseURL + '/calendar');
     await page.waitForSelector('.event-list', { timeout: 10000 });
 
     const eventCount = await page.locator('.event-item').count();

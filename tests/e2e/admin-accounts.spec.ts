@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
+import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
  * E2E Regression Tests: Admin Account Management
@@ -12,12 +13,27 @@ import { loginAsAdmin } from './helpers/auth';
  * - Account search and filtering
  *
  * UPDATED: Selectors based on actual Vue component DOM structure
+ * UPDATED: Uses isolated test server with in-memory database for true test isolation
  */
 
+let env: TestEnvironment;
+
+test.describe.configure({ mode: 'serial' });
+
 test.describe('Admin Account Management', () => {
+  test.beforeAll(async () => {
+    // Start isolated test server for this test file
+    env = await startTestServer();
+  });
+
+  test.afterAll(async () => {
+    // Clean up test server
+    await env.cleanup();
+  });
+
   test.beforeEach(async ({ page }) => {
     // Log in as admin before each test
-    await loginAsAdmin(page);
+    await loginAsAdmin(page, env.baseURL);
   });
 
   test('should load account list without 404 errors', async ({ page }) => {
@@ -30,7 +46,7 @@ test.describe('Admin Account Management', () => {
     });
 
     // Navigate to Admin > Accounts
-    await page.goto('/admin/accounts');
+    await page.goto(env.baseURL + '/admin/accounts');
 
     // Wait for accounts section to load (using semantic HTML)
     await page.waitForSelector('section#accounts', { timeout: 10000 });
@@ -44,7 +60,7 @@ test.describe('Admin Account Management', () => {
 
   test('should display admin account in list (not "No accounts")', async ({ page }) => {
     // Navigate to Admin > Accounts
-    await page.goto('/admin/accounts');
+    await page.goto(env.baseURL + '/admin/accounts');
 
     // Wait for accounts section
     await page.waitForSelector('section#accounts', { timeout: 10000 });
@@ -73,7 +89,7 @@ test.describe('Admin Account Management', () => {
     });
 
     // Navigate to Admin > Accounts
-    await page.goto('/admin/accounts');
+    await page.goto(env.baseURL + '/admin/accounts');
 
     // Click on Applications tab using role and aria-controls
     const applicationsTab = page.locator('button[role="tab"][aria-controls="applications-panel"]');
@@ -101,7 +117,7 @@ test.describe('Admin Account Management', () => {
     });
 
     // Navigate to Admin > Accounts
-    await page.goto('/admin/accounts');
+    await page.goto(env.baseURL + '/admin/accounts');
 
     // Click on Invitations tab using role and aria-controls
     const invitationsTab = page.locator('button[role="tab"][aria-controls="invitations-panel"]');
@@ -125,7 +141,7 @@ test.describe('Admin Account Management', () => {
 
   test('should send invitation successfully', async ({ page }) => {
     // Navigate to Admin > Accounts
-    await page.goto('/admin/accounts');
+    await page.goto(env.baseURL + '/admin/accounts');
 
     // Click on Invitations tab
     const invitationsTab = page.locator('button[role="tab"][aria-controls="invitations-panel"]');

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
+import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
  * E2E Tests: Admin Funding & Subscription Management
@@ -9,15 +10,31 @@ import { loginAsAdmin } from './helpers/auth';
  *
  * Covers workflow audit gap:
  * - 5.5 Subscription/Funding Management
+ *
+ * UPDATED: Uses isolated test server with in-memory database for true test isolation
  */
 
+let env: TestEnvironment;
+
+test.describe.configure({ mode: 'serial' });
+
 test.describe('Admin Funding Management', () => {
+  test.beforeAll(async () => {
+    // Start isolated test server for this test file
+    env = await startTestServer();
+  });
+
+  test.afterAll(async () => {
+    // Clean up test server
+    await env.cleanup();
+  });
+
   test.beforeEach(async ({ page }) => {
-    await loginAsAdmin(page);
+    await loginAsAdmin(page, env.baseURL);
   });
 
   test('should display funding page with tab navigation', async ({ page }) => {
-    await page.goto('/admin/funding');
+    await page.goto(env.baseURL + '/admin/funding');
 
     // Wait for page to load (loading state disappears)
     await page.waitForSelector('.funding-page', { timeout: 10000 });
@@ -43,7 +60,7 @@ test.describe('Admin Funding Management', () => {
   });
 
   test('should show empty subscription state', async ({ page }) => {
-    await page.goto('/admin/funding');
+    await page.goto(env.baseURL + '/admin/funding');
 
     // Wait for loading to complete
     await page.waitForSelector('.loading-state', { state: 'hidden', timeout: 15000 });
@@ -71,7 +88,7 @@ test.describe('Admin Funding Management', () => {
   });
 
   test('should switch to settings tab and display enable toggle', async ({ page }) => {
-    await page.goto('/admin/funding');
+    await page.goto(env.baseURL + '/admin/funding');
 
     // Wait for loading to complete
     await page.waitForSelector('.loading-state', { state: 'hidden', timeout: 15000 });
@@ -151,7 +168,7 @@ test.describe('Admin Funding Management', () => {
       });
     });
 
-    await page.goto('/admin/funding');
+    await page.goto(env.baseURL + '/admin/funding');
 
     // Wait for page to load
     await page.waitForSelector('.loading-state', { state: 'hidden', timeout: 15000 });

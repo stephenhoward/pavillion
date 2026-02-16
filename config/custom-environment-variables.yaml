@@ -17,6 +17,11 @@
 # For other deployments, set them in your environment before starting the app
 #
 
+# Host configuration overrides
+# HOST_PORT: Override the port the server listens on (used in e2e tests)
+host:
+  port: HOST_PORT
+
 # Instance domain configuration
 # Used in federation testing to set unique domain per instance
 domain: LOCAL_DOMAIN

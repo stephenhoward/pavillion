@@ -1,0 +1,17 @@
+# E2E Testing Configuration
+# Inherits from default.yaml with test-specific overrides
+
+# Use in-memory database for fast, isolated tests
+database:
+  dialect: sqlite
+  storage: ':memory:'
+  logging: false
+
+# Test mail transport
+mail:
+  transport: test
+  from: test@pavillion.test
+
+# Disable rate limiting for tests
+rateLimit:
+  enabled: false

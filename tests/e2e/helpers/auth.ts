@@ -19,11 +19,24 @@ export const TEST_FRESH_USER = {
 };
 
 /**
+ * Test credentials for calendar creator user
+ * This user is used specifically for tests that create calendars
+ * to avoid polluting fresh user state
+ */
+export const TEST_CALENDAR_CREATOR = {
+  email: 'calendar-creator@example.com',
+  password: 'test',
+};
+
+/**
  * Log in as admin user
  * Navigates to login page and performs login
+ *
+ * @param page - Playwright page instance
+ * @param baseURL - Base URL of the test server (e.g., http://localhost:3124)
  */
-export async function loginAsAdmin(page: Page) {
-  await page.goto('/auth/login');
+export async function loginAsAdmin(page: Page, baseURL: string) {
+  await page.goto(baseURL + '/auth/login');
 
   // Fill in login form using accessible name selectors
   await page.getByRole('textbox', { name: 'email' }).fill(TEST_ADMIN.email);
@@ -40,9 +53,12 @@ export async function loginAsAdmin(page: Page) {
  * Log in as fresh user (no calendars)
  * Navigates to login page and performs login
  * This user has no calendars, perfect for calendar creation tests
+ *
+ * @param page - Playwright page instance
+ * @param baseURL - Base URL of the test server (e.g., http://localhost:3124)
  */
-export async function loginAsFreshUser(page: Page) {
-  await page.goto('/auth/login');
+export async function loginAsFreshUser(page: Page, baseURL: string) {
+  await page.goto(baseURL + '/auth/login');
 
   // Fill in login form using accessible name selectors
   await page.getByRole('textbox', { name: 'email' }).fill(TEST_FRESH_USER.email);

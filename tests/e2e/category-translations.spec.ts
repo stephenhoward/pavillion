@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
+import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
  * E2E Tests: Category Translation Management
@@ -11,14 +12,44 @@ import { loginAsAdmin } from './helpers/auth';
  * - Language picker search functionality
  * - Cancel/close without saving
  * - Validation scenarios
+ *
+ * UPDATED: Uses isolated test server with in-memory database for true test isolation
+ * Tests run serially within this file to share the same test server instance.
  */
 
+let env: TestEnvironment;
+
+// Configure tests to run serially within this file
+// This ensures they share the same test server instance
+test.describe.configure({ mode: 'serial' });
+
 test.describe('Category Translation Management', () => {
+  test.beforeAll(async () => {
+    // Start isolated test server for this test file
+    console.log('[Test] Starting test server...');
+    try {
+      env = await startTestServer();
+      console.log(`[Test] Server started successfully at ${env.baseURL}`);
+    }
+    catch (error) {
+      console.error('[Test] Failed to start server:', error);
+      throw error;
+    }
+  });
+
+  test.afterAll(async () => {
+    // Clean up test server
+    console.log('[Test] Cleaning up test server...');
+    if (env?.cleanup) {
+      await env.cleanup();
+    }
+  });
+
   test.beforeEach(async ({ page }) => {
-    await loginAsAdmin(page);
+    await loginAsAdmin(page, env.baseURL);
 
     // Navigate to category management
-    await page.goto('/calendar');
+    await page.goto(env.baseURL + '/calendar');
     await page.waitForTimeout(2000);
 
     // Click "Manage Calendar" button

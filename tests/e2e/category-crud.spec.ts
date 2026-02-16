@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
+import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
  * E2E Regression Tests: Category CRUD Workflow
@@ -12,17 +13,45 @@ import { loginAsAdmin } from './helpers/auth';
  * - Category deletion
  *
  * UPDATED: Selectors based on actual Vue component DOM structure
+ * UPDATED: Uses isolated test server with in-memory database for true test isolation
  */
 
+let env: TestEnvironment;
+
+// Configure tests to run serially within this file
+// This ensures they share the same test server instance
+test.describe.configure({ mode: 'serial' });
+
 test.describe('Category CRUD Workflow', () => {
+  test.beforeAll(async () => {
+    // Start isolated test server for this test file
+    console.log('[Test] Starting test server...');
+    try {
+      env = await startTestServer();
+      console.log(`[Test] Server started successfully at ${env.baseURL}`);
+    }
+    catch (error) {
+      console.error('[Test] Failed to start server:', error);
+      throw error;
+    }
+  });
+
+  test.afterAll(async () => {
+    // Clean up test server
+    console.log('[Test] Cleaning up test server...');
+    if (env?.cleanup) {
+      await env.cleanup();
+    }
+  });
+
   test.beforeEach(async ({ page }) => {
     // Log in as admin before each test
-    await loginAsAdmin(page);
+    await loginAsAdmin(page, env.baseURL);
   });
 
   test('should load category list without 404 errors', async ({ page }) => {
     // Navigate to calendar - this will redirect to the user's calendar
-    await page.goto('/calendar');
+    await page.goto(env.baseURL + '/calendar');
 
     // Wait for calendar view to load
     await page.waitForTimeout(2000);
@@ -57,7 +86,7 @@ test.describe('Category CRUD Workflow', () => {
 
   test('should create a new category successfully', async ({ page }) => {
     // Navigate to calendar
-    await page.goto('/calendar');
+    await page.goto(env.baseURL + '/calendar');
     await page.waitForTimeout(2000);
 
     // Click "Manage" button to access calendar management (PillButton rendered as <button>)
@@ -114,7 +143,7 @@ test.describe('Category CRUD Workflow', () => {
 
   test('should edit an existing category', async ({ page }) => {
     // Navigate to calendar
-    await page.goto('/calendar');
+    await page.goto(env.baseURL + '/calendar');
     await page.waitForTimeout(2000);
 
     // Click "Manage" button to access calendar management (PillButton rendered as <button>)
@@ -188,7 +217,7 @@ test.describe('Category CRUD Workflow', () => {
 
   test('should delete a category', async ({ page }) => {
     // Navigate to calendar
-    await page.goto('/calendar');
+    await page.goto(env.baseURL + '/calendar');
     await page.waitForTimeout(2000);
 
     // Click "Manage" button to access calendar management (PillButton rendered as <button>)

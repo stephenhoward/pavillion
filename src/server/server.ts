@@ -1,4 +1,5 @@
 import express, { Request, Response } from 'express';
+import { Server } from 'http';
 import path from "path";
 import handlebars from 'handlebars';
 import i18next from 'i18next';
@@ -51,8 +52,8 @@ function validateProductionEnvironment(): void {
  * @returns Promise that resolves when database is ready
  */
 async function initializeDatabase(): Promise<void> {
-  // Development, test, and federation environments use sync; production uses migrations
-  if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'federation') {
+  // Development, test, e2e, and federation environments use sync; production uses migrations
+  if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'e2e' || process.env.NODE_ENV === 'federation') {
     // Check if database reset is disabled (for containerized development with persistent data)
     const skipReset = process.env.DB_RESET === 'false';
 
@@ -82,8 +83,11 @@ async function initializeDatabase(): Promise<void> {
       }
     }
     else {
-      // Default development/federation behavior: reset and re-seed database
-      const envLabel = process.env.NODE_ENV === 'federation' ? 'Federation' : 'Development';
+      // Default development/federation/e2e behavior: reset and re-seed database
+      let envLabel = 'Development';
+      if (process.env.NODE_ENV === 'federation') envLabel = 'Federation';
+      if (process.env.NODE_ENV === 'e2e') envLabel = 'E2E';
+
       console.log(`${envLabel} mode: Syncing database schema...`);
       await db.sync({ force: true });
       await seedDB();
@@ -161,8 +165,10 @@ function setupHealthCheck(app: express.Application): void {
  * Sets up view templates, internationalization, API routes and starts the server listener.
  *
  * @param {express.Application} app - The Express application instance to configure
+ * @param {number} port - Port number to listen on
+ * @returns {Promise<Server | null>} HTTP server instance for cleanup, or null in test mode
  */
-const initPavillionServer = async (app: express.Application, port: number) => {
+const initPavillionServer = async (app: express.Application, port: number): Promise<Server | null> => {
 
   // Validate production environment configuration before starting
   validateProductionEnvironment();
@@ -190,8 +196,9 @@ const initPavillionServer = async (app: express.Application, port: number) => {
     return i18next.t(key, { lng, ...options.hash });
   });
 
-  // Serve static assets in production from the Vite build output
-  if (process.env.NODE_ENV === "production") {
+  // Serve static assets in production or e2e mode from the Vite build output
+  // E2E mode needs built assets since Vite dev server isn't running
+  if (process.env.NODE_ENV === "production" || process.env.NODE_ENV === "e2e") {
     const distPath = path.join(path.resolve(), "dist");
     app.use("/assets", express.static(path.join(distPath, "assets")));
   }
@@ -253,18 +260,21 @@ const initPavillionServer = async (app: express.Application, port: number) => {
   try {
     await initializeDatabase();
 
-    // Refresh event instances after database is ready (only in development)
-    if (process.env.NODE_ENV === 'development') {
+    // Refresh event instances after database is ready (only in development and e2e)
+    if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'e2e') {
       await calendarDomain.interface.refreshAllEventInstances();
     }
 
     // In test mode, supertest works directly with the Express app object
     // without needing the server to actually listen on a port
     if (process.env.NODE_ENV !== 'test') {
-      app.listen(port, () => {
+      const server = app.listen(port, () => {
         console.log(`Pavillion listening at http://localhost:${port}/`);
       });
+      return server;
     }
+
+    return null;
   }
   catch (error) {
     console.error('Failed to initialize database:', error);

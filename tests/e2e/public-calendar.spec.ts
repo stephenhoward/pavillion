@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
  * E2E Tests: Public Calendar Browsing & Event Detail Viewing
@@ -11,12 +12,32 @@ import { test, expect } from '@playwright/test';
  * Covers workflow audit gaps:
  * - 3.1 Browse Public Calendar
  * - 3.2 View Event Details
+ *
+ * UPDATED: Uses isolated test server with in-memory database for true test isolation
  */
 
+let env: TestEnvironment;
+
+// Configure tests to run serially within this file
+// This ensures they share the same test server instance
+test.describe.configure({ mode: 'serial' });
+
 test.describe('Public Calendar', () => {
+  test.beforeAll(async () => {
+    // Start isolated test server for this test file
+    env = await startTestServer();
+  });
+
+  test.afterAll(async () => {
+    // Clean up test server
+    if (env?.cleanup) {
+      await env.cleanup();
+    }
+  });
+
   test.beforeEach(async ({ page }) => {
     // Navigate to the public calendar for test_calendar
-    await page.goto('/@test_calendar');
+    await page.goto(env.baseURL + '/@test_calendar');
 
     // Conditional skip if public site isn't rendering
     const appContent = await page.locator('#app').textContent({ timeout: 10000 }).catch(() => '');
@@ -144,7 +165,7 @@ test.describe('Public Calendar', () => {
     await eventLinks.first().click();
 
     // Wait for navigation to event detail page
-    await page.waitForURL(/@test_calendar\/events\//, { timeout: 10000 });
+    await page.waitForURL(new RegExp(`${env.baseURL}/@test_calendar/events/`), { timeout: 10000 });
 
     // Verify event detail page renders
     const detailTitle = page.locator('h1');

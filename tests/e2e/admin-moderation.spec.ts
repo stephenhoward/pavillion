@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
+import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
  * E2E Tests: Admin Moderation Features
@@ -16,16 +17,32 @@ import { loginAsAdmin } from './helpers/auth';
  *
  * NOTE: Some features (analytics, blocked reporters) may be embedded
  * in existing views or accessed via tabs/sections rather than separate routes.
+ *
+ * UPDATED: Uses isolated test server with in-memory database for true test isolation
  */
+
+let env: TestEnvironment;
+
+// Configure tests to run serially since they may share state
+test.describe.configure({ mode: 'serial' });
+
+// Start server once for entire file
+test.beforeAll(async () => {
+  env = await startTestServer();
+});
+
+test.afterAll(async () => {
+  await env.cleanup();
+});
 
 test.describe('Admin Moderation Dashboard', () => {
   test.beforeEach(async ({ page }) => {
-    await loginAsAdmin(page);
+    await loginAsAdmin(page, env.baseURL);
   });
 
   test('should display moderation dashboard with reports', async ({ page }) => {
     // Navigate to moderation dashboard
-    await page.goto('/admin/moderation');
+    await page.goto(env.baseURL + '/admin/moderation');
 
     // Wait for the moderation dashboard to load
     await page.waitForSelector('h1', { timeout: 10000 });
@@ -47,7 +64,7 @@ test.describe('Admin Moderation Dashboard', () => {
 
   test('should filter reports by status', async ({ page }) => {
     // Navigate to moderation dashboard
-    await page.goto('/admin/moderation');
+    await page.goto(env.baseURL + '/admin/moderation');
     await page.waitForSelector('h1', { timeout: 10000 });
 
     // Find and use the status filter
@@ -64,7 +81,7 @@ test.describe('Admin Moderation Dashboard', () => {
 
   test('should navigate to report detail', async ({ page }) => {
     // Navigate to moderation dashboard
-    await page.goto('/admin/moderation');
+    await page.goto(env.baseURL + '/admin/moderation');
     await page.waitForSelector('h1', { timeout: 10000 });
 
     // Look for a View button or report link
@@ -86,12 +103,12 @@ test.describe('Admin Moderation Dashboard', () => {
 
 test.describe('Admin Pattern Warning Indicators', () => {
   test.beforeEach(async ({ page }) => {
-    await loginAsAdmin(page);
+    await loginAsAdmin(page, env.baseURL);
   });
 
   test('should support pattern warning display on reports', async ({ page }) => {
     // Navigate to moderation dashboard
-    await page.goto('/admin/moderation');
+    await page.goto(env.baseURL + '/admin/moderation');
     await page.waitForSelector('h1', { timeout: 10000 });
 
     // The UI should support displaying pattern warnings even if none exist
@@ -125,7 +142,7 @@ test.describe('Admin Pattern Warning Indicators', () => {
 
   test('should display report details with metadata', async ({ page }) => {
     // Navigate to moderation dashboard
-    await page.goto('/admin/moderation');
+    await page.goto(env.baseURL + '/admin/moderation');
     await page.waitForSelector('h1', { timeout: 10000 });
 
     // Try to access a report detail
@@ -151,12 +168,12 @@ test.describe('Admin Pattern Warning Indicators', () => {
 
 test.describe('Admin Moderation Settings', () => {
   test.beforeEach(async ({ page }) => {
-    await loginAsAdmin(page);
+    await loginAsAdmin(page, env.baseURL);
   });
 
   test('should access moderation settings page', async ({ page }) => {
     // Navigate directly to moderation settings
-    await page.goto('/admin/moderation/settings');
+    await page.goto(env.baseURL + '/admin/moderation/settings');
 
     // Wait for page to load (give more time for loading state)
     await page.waitForSelector('h1, h2', { timeout: 10000 });
@@ -175,7 +192,7 @@ test.describe('Admin Moderation Settings', () => {
 
   test('should display IP retention settings', async ({ page }) => {
     // Navigate to moderation settings
-    await page.goto('/admin/moderation/settings');
+    await page.goto(env.baseURL + '/admin/moderation/settings');
     await page.waitForSelector('h1, h2', { timeout: 10000 });
 
     // Wait for loading to complete
@@ -187,7 +204,7 @@ test.describe('Admin Moderation Settings', () => {
 
     // Wait for at least one field to be visible
     try {
-      await ipHashField.waitForSelector({ timeout: 5000 });
+      await ipHashField.waitFor({ timeout: 5000 });
     } catch {
       // Field might not be visible yet
     }
@@ -201,7 +218,7 @@ test.describe('Admin Moderation Settings', () => {
 
   test('should display escalation threshold settings', async ({ page }) => {
     // Navigate to moderation settings
-    await page.goto('/admin/moderation/settings');
+    await page.goto(env.baseURL + '/admin/moderation/settings');
     await page.waitForSelector('h1, h2', { timeout: 10000 });
 
     // Wait for loading to complete
@@ -212,7 +229,7 @@ test.describe('Admin Moderation Settings', () => {
     const autoEscalationField = page.locator('input#auto-escalation');
 
     try {
-      await thresholdField.waitForSelector({ timeout: 5000 });
+      await thresholdField.waitFor({ timeout: 5000 });
     } catch {
       // Field might not be visible yet
     }
@@ -226,7 +243,7 @@ test.describe('Admin Moderation Settings', () => {
 
   test('should update and save moderation settings', async ({ page }) => {
     // Navigate to moderation settings
-    await page.goto('/admin/moderation/settings');
+    await page.goto(env.baseURL + '/admin/moderation/settings');
     await page.waitForSelector('h1, h2', { timeout: 10000 });
 
     // Wait for loading to complete
@@ -261,7 +278,7 @@ test.describe('Admin Moderation Settings', () => {
 
   test('should persist settings across page reload', async ({ page }) => {
     // Navigate to moderation settings
-    await page.goto('/admin/moderation/settings');
+    await page.goto(env.baseURL + '/admin/moderation/settings');
     await page.waitForSelector('h1, h2', { timeout: 10000 });
 
     // Wait for loading to complete
@@ -300,7 +317,7 @@ test.describe('Admin Moderation Settings', () => {
 
   test('should validate IP retention day inputs', async ({ page }) => {
     // Navigate to moderation settings
-    await page.goto('/admin/moderation/settings');
+    await page.goto(env.baseURL + '/admin/moderation/settings');
     await page.waitForSelector('h1, h2', { timeout: 10000 });
     await page.waitForTimeout(2000);
 
@@ -342,12 +359,12 @@ test.describe('Admin Moderation Settings', () => {
 
 test.describe('Admin Create Report', () => {
   test.beforeEach(async ({ page }) => {
-    await loginAsAdmin(page);
+    await loginAsAdmin(page, env.baseURL);
   });
 
   test('should open create report modal', async ({ page }) => {
     // Navigate to moderation dashboard
-    await page.goto('/admin/moderation');
+    await page.goto(env.baseURL + '/admin/moderation');
     await page.waitForSelector('h1', { timeout: 10000 });
 
     // Look for "Create Report" button
@@ -368,12 +385,12 @@ test.describe('Admin Create Report', () => {
 
 test.describe('Admin Moderation Integration', () => {
   test.beforeEach(async ({ page }) => {
-    await loginAsAdmin(page);
+    await loginAsAdmin(page, env.baseURL);
   });
 
   test('should navigate between moderation dashboard and settings', async ({ page }) => {
     // Start at moderation dashboard
-    await page.goto('/admin/moderation');
+    await page.goto(env.baseURL + '/admin/moderation');
     await page.waitForSelector('h1', { timeout: 10000 });
 
     // Find settings button (gear icon)
@@ -398,7 +415,7 @@ test.describe('Admin Moderation Integration', () => {
         await moderationLink.click();
       } else {
         // Navigate directly
-        await page.goto('/admin/moderation');
+        await page.goto(env.baseURL + '/admin/moderation');
       }
 
       await page.waitForTimeout(1000);
@@ -412,7 +429,7 @@ test.describe('Admin Moderation Integration', () => {
 
   test('should maintain admin context across navigation', async ({ page }) => {
     // Start at moderation dashboard
-    await page.goto('/admin/moderation');
+    await page.goto(env.baseURL + '/admin/moderation');
     await page.waitForSelector('h1', { timeout: 10000 });
 
     // Navigate to admin accounts
@@ -436,7 +453,7 @@ test.describe('Admin Moderation Integration', () => {
 
   test('should apply and reset filters', async ({ page }) => {
     // Navigate to moderation dashboard
-    await page.goto('/admin/moderation');
+    await page.goto(env.baseURL + '/admin/moderation');
     await page.waitForSelector('h1', { timeout: 10000 });
 
     // Apply a filter
@@ -460,12 +477,12 @@ test.describe('Admin Moderation Integration', () => {
 
 test.describe('Admin Moderation Pagination', () => {
   test.beforeEach(async ({ page }) => {
-    await loginAsAdmin(page);
+    await loginAsAdmin(page, env.baseURL);
   });
 
   test('should display pagination if many reports exist', async ({ page }) => {
     // Navigate to moderation dashboard
-    await page.goto('/admin/moderation');
+    await page.goto(env.baseURL + '/admin/moderation');
     await page.waitForSelector('h1', { timeout: 10000 });
 
     // Look for pagination controls

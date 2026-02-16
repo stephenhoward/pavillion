@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
+import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
  * E2E Tests: Event Search Functionality
@@ -10,21 +11,34 @@ import { loginAsAdmin } from './helpers/auth';
  * - Revisiting bookmarked URLs restores search state
  * - Search works alongside category filtering
  *
- * These tests are designed to be resilient to parallel test execution.
- * Instead of relying on specific hardcoded event names, they read actual
- * event data from the page to construct search queries, avoiding flakiness
- * caused by other tests deleting events concurrently.
+ * UPDATED: Uses isolated test server with in-memory database for true test isolation
+ * Tests run serially within this file to share the same test server instance.
  */
 
+let env: TestEnvironment;
+
+// Configure tests to run serially within this file
+test.describe.configure({ mode: 'serial' });
+
 test.describe('Event Search End-to-End', () => {
+  test.beforeAll(async () => {
+    // Start isolated test server for this test file
+    env = await startTestServer();
+  });
+
+  test.afterAll(async () => {
+    // Clean up test server
+    await env.cleanup();
+  });
+
   test.beforeEach(async ({ page }) => {
     // Log in as admin
-    await loginAsAdmin(page);
+    await loginAsAdmin(page, env.baseURL);
   });
 
   test('should allow user to search for events by text', async ({ page }) => {
     // Navigate directly to the test calendar which has events and categories
-    await page.goto('/calendar/test_calendar');
+    await page.goto(env.baseURL + '/calendar/test_calendar');
 
     // Wait for events to load (the search input only appears when events exist)
     const searchInput = page.locator('#event-search');
@@ -62,7 +76,7 @@ test.describe('Event Search End-to-End', () => {
 
   test('should restore search from URL on page load', async ({ page }) => {
     // First, navigate to the calendar to find an event name we can use
-    await page.goto('/calendar/test_calendar');
+    await page.goto(env.baseURL + '/calendar/test_calendar');
 
     const eventItems = page.locator('.event-item');
     await expect(eventItems.first()).toBeVisible({ timeout: 15000 });
@@ -73,7 +87,7 @@ test.describe('Event Search End-to-End', () => {
     const searchTerm = words[words.length - 1].toLowerCase();
 
     // Navigate with that search term as a URL parameter
-    await page.goto(`/calendar/test_calendar?search=${encodeURIComponent(searchTerm)}`);
+    await page.goto(env.baseURL + `/calendar/test_calendar?search=${encodeURIComponent(searchTerm)}`);
 
     // Wait for the search input to appear and verify it's populated
     const searchInput = page.locator('#event-search');
@@ -86,7 +100,7 @@ test.describe('Event Search End-to-End', () => {
 
   test('should combine search with category filters', async ({ page }) => {
     // Navigate directly to test_calendar which has both events and categories
-    await page.goto('/calendar/test_calendar');
+    await page.goto(env.baseURL + '/calendar/test_calendar');
 
     // Wait for events and categories to load
     const eventItems = page.locator('.event-item');
@@ -127,7 +141,7 @@ test.describe('Event Search End-to-End', () => {
 
   test('should clear search when clear button is clicked', async ({ page }) => {
     // Navigate directly to test_calendar
-    await page.goto('/calendar/test_calendar');
+    await page.goto(env.baseURL + '/calendar/test_calendar');
 
     // Wait for events to load
     const eventItems = page.locator('.event-item');
@@ -170,7 +184,7 @@ test.describe('Event Search End-to-End', () => {
 
   test('should clear all filters when clear all button is clicked', async ({ page }) => {
     // Navigate directly to test_calendar
-    await page.goto('/calendar/test_calendar');
+    await page.goto(env.baseURL + '/calendar/test_calendar');
 
     // Wait for events to load
     const eventItems = page.locator('.event-item');

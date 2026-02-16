@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
+import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
  * E2E Tests: Profile Display Name Feature
@@ -12,22 +13,35 @@ import { loginAsAdmin } from './helpers/auth';
  * - Display name saves on blur with feedback
  * - Display name appears in admin accounts list
  *
+ * UPDATED: Uses isolated test server with in-memory database for true test isolation
  * These tests run serially because they all modify the same admin
  * account's display name and would cause state pollution if run
  * in parallel.
  */
 
+let env: TestEnvironment;
+
 test.describe.configure({ mode: 'serial' });
 
 test.describe('Profile Display Name', () => {
+  test.beforeAll(async () => {
+    // Start isolated test server for this test file
+    env = await startTestServer();
+  });
+
+  test.afterAll(async () => {
+    // Clean up test server
+    await env.cleanup();
+  });
+
   test.beforeEach(async ({ page }) => {
     // Log in as admin before each test
-    await loginAsAdmin(page);
+    await loginAsAdmin(page, env.baseURL);
   });
 
   test('should load profile with display name field', async ({ page }) => {
     // Navigate to profile settings
-    await page.goto('/profile');
+    await page.goto(env.baseURL + '/profile');
 
     // Wait for settings page to load
     await page.waitForSelector('h1:has-text("Settings")', { timeout: 5000 });
@@ -46,7 +60,7 @@ test.describe('Profile Display Name', () => {
 
   test('should update display name successfully', async ({ page }) => {
     // Navigate to profile settings
-    await page.goto('/profile');
+    await page.goto(env.baseURL + '/profile');
     await page.waitForSelector('#display-name:not([disabled])', { timeout: 5000 });
 
     // Get the display name input
@@ -69,7 +83,7 @@ test.describe('Profile Display Name', () => {
 
   test('should persist display name after page reload', async ({ page }) => {
     // Navigate to profile settings
-    await page.goto('/profile');
+    await page.goto(env.baseURL + '/profile');
     await page.waitForSelector('#display-name:not([disabled])', { timeout: 5000 });
 
     // Set a unique display name
@@ -93,7 +107,7 @@ test.describe('Profile Display Name', () => {
 
   test('should allow clearing display name', async ({ page }) => {
     // First set a display name
-    await page.goto('/profile');
+    await page.goto(env.baseURL + '/profile');
     await page.waitForSelector('#display-name:not([disabled])', { timeout: 5000 });
 
     const displayNameInput = page.locator('#display-name');
@@ -121,7 +135,7 @@ test.describe('Profile Display Name', () => {
   });
 
   test('should show save feedback on blur', async ({ page }) => {
-    await page.goto('/profile');
+    await page.goto(env.baseURL + '/profile');
     await page.waitForSelector('#display-name:not([disabled])', { timeout: 5000 });
 
     const displayNameInput = page.locator('#display-name');
@@ -146,7 +160,7 @@ test.describe('Profile Display Name', () => {
   });
 
   test('should disable input while saving', async ({ page }) => {
-    await page.goto('/profile');
+    await page.goto(env.baseURL + '/profile');
     await page.waitForSelector('#display-name:not([disabled])', { timeout: 5000 });
 
     const displayNameInput = page.locator('#display-name');
@@ -174,7 +188,7 @@ test.describe('Profile Display Name', () => {
     // First, set a unique display name
     const uniqueDisplayName = `Admin DisplayName ${Date.now()}`;
 
-    await page.goto('/profile');
+    await page.goto(env.baseURL + '/profile');
     await page.waitForSelector('#display-name:not([disabled])', { timeout: 5000 });
 
     const displayNameInput = page.locator('#display-name');
@@ -184,7 +198,7 @@ test.describe('Profile Display Name', () => {
     await expect(page.locator('.save-feedback:not(.is-error)')).toBeVisible({ timeout: 5000 });
 
     // Now navigate to admin accounts list
-    await page.goto('/admin/accounts');
+    await page.goto(env.baseURL + '/admin/accounts');
     await page.waitForSelector('section#accounts', { timeout: 10000 });
 
     // Wait for accounts table or cards to load
@@ -196,7 +210,7 @@ test.describe('Profile Display Name', () => {
   });
 
   test('should handle empty string vs null correctly', async ({ page }) => {
-    await page.goto('/profile');
+    await page.goto(env.baseURL + '/profile');
     await page.waitForSelector('#display-name:not([disabled])', { timeout: 5000 });
 
     const displayNameInput = page.locator('#display-name');
@@ -217,7 +231,7 @@ test.describe('Profile Display Name', () => {
     // Set a display name
     const testName = `Nav Test ${Date.now()}`;
 
-    await page.goto('/profile');
+    await page.goto(env.baseURL + '/profile');
     await page.waitForSelector('#display-name:not([disabled])', { timeout: 5000 });
 
     const displayNameInput = page.locator('#display-name');
@@ -226,11 +240,11 @@ test.describe('Profile Display Name', () => {
     await expect(page.locator('.save-feedback:not(.is-error)')).toBeVisible({ timeout: 5000 });
 
     // Navigate away to dashboard
-    await page.goto('/');
+    await page.goto(env.baseURL + '/');
     await page.waitForSelector('body', { timeout: 5000 });
 
     // Navigate back to profile
-    await page.goto('/profile');
+    await page.goto(env.baseURL + '/profile');
     await page.waitForSelector('#display-name:not([disabled])', { timeout: 5000 });
 
     // Verify the display name is still there

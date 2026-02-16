@@ -3,14 +3,19 @@ import { defineConfig, devices } from '@playwright/test';
 /**
  * Playwright configuration for single-instance E2E testing
  *
- * This config runs tests for a single Pavillion instance against localhost:3000.
+ * This config runs tests with isolated test environments:
+ * - Each test file gets its own server instance
+ * - Each server runs on a unique port (auto-allocated 3100-3200)
+ * - Each server has its own in-memory database
+ * - Tests can run in parallel without conflicts
+ *
  * Federation tests are in a separate config (playwright.federation.config.ts).
  *
  * Key features:
  * - testDir: ./tests/e2e (excludes ./tests/e2e/federation via testIgnore)
- * - Starts local dev server automatically
- * - Tests basic calendar, event, and admin functionality
- * - No Docker infrastructure required
+ * - Test files manage their own server lifecycle (beforeAll/afterAll)
+ * - True test isolation with no shared state
+ * - Full parallelization support
  *
  * Usage:
  *   npm run test:e2e
@@ -36,15 +41,16 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
 
   // Opt out of parallel tests on CI
-  workers: process.env.CI ? 1 : undefined,
+  // Use 2 workers locally to reduce port allocation race conditions
+  workers: process.env.CI ? 1 : 2,
 
   // Reporter to use - prevent browser from opening after tests
   reporter: [['html', { open: 'never' }]],
 
   // Shared settings for all the projects below
   use: {
-    // Base URL to use in actions like `await page.goto('/')`
-    baseURL: 'http://localhost:3000',
+    // Note: baseURL is NOT set globally - each test file provides its own
+    // via the test server helper (tests/e2e/helpers/test-server.ts)
 
     // Run in headless mode to prevent browser windows staying open
     headless: true,
@@ -67,11 +73,7 @@ export default defineConfig({
     },
   ],
 
-  // Run your local dev server before starting the tests
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120000, // 2 minutes to start server
-  },
+  // Note: No global webServer configuration
+  // Each test file manages its own isolated server instance
+  // See tests/e2e/helpers/test-server.ts for implementation
 });

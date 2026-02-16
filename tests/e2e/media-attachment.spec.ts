@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
+import { startTestServer, TestEnvironment } from './helpers/test-server';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -11,18 +12,32 @@ import { fileURLToPath } from 'url';
  *
  * Covers workflow audit gap:
  * - 1.8 Media Attachment
+ *
+ * UPDATED: Uses isolated test server with in-memory database for true test isolation
  */
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const TEST_IMAGE_PATH = path.resolve(__dirname, 'fixtures/test-image.png');
 
+let env: TestEnvironment;
+
 test.describe('Media Attachment', () => {
+  test.beforeAll(async () => {
+    // Start isolated test server for this test file
+    env = await startTestServer();
+  });
+
+  test.afterAll(async () => {
+    // Clean up test server
+    await env.cleanup();
+  });
+
   test.beforeEach(async ({ page }) => {
-    await loginAsAdmin(page);
+    await loginAsAdmin(page, env.baseURL);
 
     // Navigate to event editor via "Create an Event" button
-    await page.goto('/calendar');
+    await page.goto(env.baseURL + '/calendar');
     await page.waitForSelector('.event-list', { timeout: 10000 });
     await page.getByRole('button', { name: 'Create an Event' }).click();
     await page.waitForSelector('.upload-zone', { timeout: 10000 });

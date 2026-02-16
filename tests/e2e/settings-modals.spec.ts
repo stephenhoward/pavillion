@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
+import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
  * E2E Tests: Settings Page Modals
@@ -11,15 +12,40 @@ import { loginAsAdmin } from './helpers/auth';
  * - Change Password modal sends reset link
  * - Modals use the shared dialog component
  * - Focus management works correctly
+ *
+ * UPDATED: Uses isolated test server with in-memory database for true test isolation
  */
+
+let env: TestEnvironment;
 
 test.describe.configure({ mode: 'serial' });
 
 test.describe('Settings Page Modals', () => {
+  test.beforeAll(async () => {
+    // Start isolated test server for this test file
+    console.log('[Test] Starting test server...');
+    try {
+      env = await startTestServer();
+      console.log(`[Test] Server started successfully at ${env.baseURL}`);
+    }
+    catch (error) {
+      console.error('[Test] Failed to start server:', error);
+      throw error;
+    }
+  });
+
+  test.afterAll(async () => {
+    // Clean up test server
+    console.log('[Test] Cleaning up test server...');
+    if (env?.cleanup) {
+      await env.cleanup();
+    }
+  });
+
   test.beforeEach(async ({ page }) => {
     // Log in as admin and navigate to settings
-    await loginAsAdmin(page);
-    await page.goto('/profile');
+    await loginAsAdmin(page, env.baseURL);
+    await page.goto(env.baseURL + '/profile');
 
     // Wait for settings page to load
     await page.waitForSelector('h1:has-text("Settings")', { timeout: 5000 });

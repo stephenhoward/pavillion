@@ -17,12 +17,13 @@ const assetExtensionRegex = () => {
 };
 
 /**
- * Parses the asset manifest file in production environment.
+ * Parses the asset manifest file in production and e2e environments.
  *
- * @returns {Promise<Record<string, any>>} Manifest data as an object, or empty object in non-production environments
+ * @returns {Promise<Record<string, any>>} Manifest data as an object, or empty object in development
  */
 const parseManifest = async () => {
-  if (environment !== "production") return {};
+  // Parse manifest in production and e2e (both serve built assets)
+  if (environment !== "production" && environment !== "e2e") return {};
 
   const manifestPath = path.join(path.resolve(), "dist", ".vite", "manifest.json");
   const manifestFile = await fs.readFile(manifestPath, 'utf-8');
@@ -106,7 +107,9 @@ const handlers = {
 /* GET home page. */
 router.get('/', handlers.client_index);
 
-if (environment !== "production") {
+// In development, redirect assets to Vite dev server
+// In e2e mode, serve assets from dist folder (like production)
+if (environment === "development") {
   /* redirect to assets server */
   router.get(assetExtensionRegex(), handlers.assets);
 

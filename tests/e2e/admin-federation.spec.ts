@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers/auth';
+import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
  * E2E Tests: Admin Federation & Instance Blocking
@@ -12,15 +13,31 @@ import { loginAsAdmin } from './helpers/auth';
  * - 5.7 Instance Blocking (frontend-only)
  * - 5.8 Federation Settings Overview
  * - 2.4 Auto-Repost Policy (smoke test only — requires federation for full test)
+ *
+ * UPDATED: Uses isolated test server with in-memory database for true test isolation
  */
+
+let env: TestEnvironment;
+
+// Configure tests to run serially within this file
+test.describe.configure({ mode: 'serial' });
+
+// Start server once for entire file
+test.beforeAll(async () => {
+  env = await startTestServer();
+});
+
+test.afterAll(async () => {
+  await env.cleanup();
+});
 
 test.describe('Admin Federation Settings', () => {
   test.beforeEach(async ({ page }) => {
-    await loginAsAdmin(page);
+    await loginAsAdmin(page, env.baseURL);
   });
 
   test('should display federation settings page with header and info panel', async ({ page }) => {
-    await page.goto('/admin/federation');
+    await page.goto(env.baseURL + '/admin/federation');
 
     // Verify page header
     const heading = page.locator('.federation-header h1');
@@ -40,7 +57,7 @@ test.describe('Admin Federation Settings', () => {
   });
 
   test('should show empty state for blocked instances', async ({ page }) => {
-    await page.goto('/admin/federation');
+    await page.goto(env.baseURL + '/admin/federation');
 
     // Wait for card to render
     const card = page.locator('.federation-card');
@@ -59,7 +76,7 @@ test.describe('Admin Federation Settings', () => {
   });
 
   test('should open block instance modal and fill form', async ({ page }) => {
-    await page.goto('/admin/federation');
+    await page.goto(env.baseURL + '/admin/federation');
 
     // Click Block Instance button
     const blockButton = page.locator('.block-instance-button');
@@ -92,7 +109,7 @@ test.describe('Admin Federation Settings', () => {
   });
 
   test('should block an instance and display it in the list', async ({ page }) => {
-    await page.goto('/admin/federation');
+    await page.goto(env.baseURL + '/admin/federation');
 
     const testDomain = `test-${Date.now()}.example.com`;
     const testReason = 'E2E test block reason';
@@ -128,7 +145,7 @@ test.describe('Admin Federation Settings', () => {
   });
 
   test('should unblock an instance via confirmation modal', async ({ page }) => {
-    await page.goto('/admin/federation');
+    await page.goto(env.baseURL + '/admin/federation');
 
     const testDomain = `unblock-test-${Date.now()}.example.com`;
 
@@ -170,7 +187,7 @@ test.describe('Admin Federation Settings', () => {
 
 test.describe('Feed Page (Auto-Repost Smoke Test)', () => {
   test.beforeEach(async ({ page }) => {
-    await loginAsAdmin(page);
+    await loginAsAdmin(page, env.baseURL);
   });
 
   test('should load feed page without errors', async ({ page }) => {
@@ -181,7 +198,7 @@ test.describe('Feed Page (Auto-Repost Smoke Test)', () => {
       }
     });
 
-    await page.goto('/feed');
+    await page.goto(env.baseURL + '/feed');
 
     // Wait for the feed page to load — look for the page root or tab navigation
     await page.waitForSelector('.feed-root, .feed-page, [class*="feed"]', { timeout: 10000 });
