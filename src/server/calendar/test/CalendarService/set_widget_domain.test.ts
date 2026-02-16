@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 
-import { Calendar } from '@/common/model/calendar';
 import { Account } from '@/common/model/account';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { SubscriptionRequiredError } from '@/common/exceptions/subscription';
@@ -9,11 +8,12 @@ import CalendarService from '@/server/calendar/service/calendar';
 import SubscriptionInterface from '@/server/subscription/interface';
 import AccountsInterface from '@/server/accounts/interface';
 
-describe('CalendarService.getCalendarForWidget', () => {
+describe('CalendarService.setWidgetDomain', () => {
   let sandbox: sinon.SinonSandbox;
   let service: CalendarService;
   let mockSubscriptionInterface: SubscriptionInterface;
   let mockAccountsInterface: AccountsInterface;
+  let account: Account;
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
@@ -36,34 +36,24 @@ describe('CalendarService.getCalendarForWidget', () => {
       undefined,
       mockSubscriptionInterface,
     );
+
+    account = new Account('account-id', 'testuser', 'test@example.com');
   });
 
   afterEach(() => {
     sandbox.restore();
   });
 
-  describe('when calendar does not exist', () => {
-    it('should throw CalendarNotFoundError', async () => {
-      sandbox.stub(service, 'getCalendarByName').resolves(null);
-
-      await expect(
-        service.getCalendarForWidget('nonexistent'),
-      ).rejects.toThrow(CalendarNotFoundError);
-    });
-  });
-
   describe('when subscriptions are disabled (free instance)', () => {
-    it('should return calendar without subscription check', async () => {
-      const calendar = new Calendar('calendar-id', 'test-calendar');
-      sandbox.stub(service, 'getCalendarByName').resolves(calendar);
+    it('should succeed without subscription check', async () => {
+      const calendarId = 'calendar-id';
+      const domain = 'example.com';
 
       const settingsStub = mockSubscriptionInterface.getSettings as sinon.SinonStub;
       settingsStub.resolves({ enabled: false });
 
-      const result = await service.getCalendarForWidget('test-calendar');
+      await service.setWidgetDomain(account, calendarId, domain);
 
-      expect(result).toBe(calendar);
-      expect(settingsStub.calledOnce).toBe(true);
       // Should not check subscription when disabled
       const hasSubscriptionStub = mockSubscriptionInterface.hasActiveSubscription as sinon.SinonStub;
       expect(hasSubscriptionStub.called).toBe(false);
@@ -71,24 +61,25 @@ describe('CalendarService.getCalendarForWidget', () => {
   });
 
   describe('when subscriptions are enabled', () => {
-    it('should throw SubscriptionRequiredError if calendar has no owner', async () => {
-      const calendar = new Calendar('calendar-id', 'test-calendar');
-      sandbox.stub(service, 'getCalendarByName').resolves(calendar);
+    it('should throw CalendarNotFoundError if calendar has no owner', async () => {
+      const calendarId = 'calendar-id';
+      const domain = 'example.com';
+
       sandbox.stub(service, 'getCalendarOwnerAccountId').resolves(null);
 
       const settingsStub = mockSubscriptionInterface.getSettings as sinon.SinonStub;
       settingsStub.resolves({ enabled: true });
 
       await expect(
-        service.getCalendarForWidget('test-calendar'),
+        service.setWidgetDomain(account, calendarId, domain),
       ).rejects.toThrow(CalendarNotFoundError);
     });
 
     it('should throw SubscriptionRequiredError if owner lacks active subscription', async () => {
-      const calendar = new Calendar('calendar-id', 'test-calendar');
+      const calendarId = 'calendar-id';
       const ownerId = 'owner-account-id';
+      const domain = 'example.com';
 
-      sandbox.stub(service, 'getCalendarByName').resolves(calendar);
       sandbox.stub(service, 'getCalendarOwnerAccountId').resolves(ownerId);
 
       const settingsStub = mockSubscriptionInterface.getSettings as sinon.SinonStub;
@@ -98,21 +89,21 @@ describe('CalendarService.getCalendarForWidget', () => {
       hasSubscriptionStub.resolves(false);
 
       await expect(
-        service.getCalendarForWidget('test-calendar'),
+        service.setWidgetDomain(account, calendarId, domain),
       ).rejects.toThrow(SubscriptionRequiredError);
 
       await expect(
-        service.getCalendarForWidget('test-calendar'),
+        service.setWidgetDomain(account, calendarId, domain),
       ).rejects.toThrow('widget_embedding requires an active subscription');
 
       expect(hasSubscriptionStub.calledWith(ownerId)).toBe(true);
     });
 
-    it('should return calendar if owner has active subscription', async () => {
-      const calendar = new Calendar('calendar-id', 'test-calendar');
+    it('should succeed if owner has active subscription', async () => {
+      const calendarId = 'calendar-id';
       const ownerId = 'owner-account-id';
+      const domain = 'example.com';
 
-      sandbox.stub(service, 'getCalendarByName').resolves(calendar);
       sandbox.stub(service, 'getCalendarOwnerAccountId').resolves(ownerId);
 
       const settingsStub = mockSubscriptionInterface.getSettings as sinon.SinonStub;
@@ -121,17 +112,16 @@ describe('CalendarService.getCalendarForWidget', () => {
       const hasSubscriptionStub = mockSubscriptionInterface.hasActiveSubscription as sinon.SinonStub;
       hasSubscriptionStub.resolves(true);
 
-      const result = await service.getCalendarForWidget('test-calendar');
+      await service.setWidgetDomain(account, calendarId, domain);
 
-      expect(result).toBe(calendar);
       expect(hasSubscriptionStub.calledWith(ownerId)).toBe(true);
     });
 
     it('should include feature name in SubscriptionRequiredError', async () => {
-      const calendar = new Calendar('calendar-id', 'test-calendar');
+      const calendarId = 'calendar-id';
       const ownerId = 'owner-account-id';
+      const domain = 'example.com';
 
-      sandbox.stub(service, 'getCalendarByName').resolves(calendar);
       sandbox.stub(service, 'getCalendarOwnerAccountId').resolves(ownerId);
 
       const settingsStub = mockSubscriptionInterface.getSettings as sinon.SinonStub;
@@ -141,7 +131,7 @@ describe('CalendarService.getCalendarForWidget', () => {
       hasSubscriptionStub.resolves(false);
 
       try {
-        await service.getCalendarForWidget('test-calendar');
+        await service.setWidgetDomain(account, calendarId, domain);
         expect.fail('Should have thrown SubscriptionRequiredError');
       }
       catch (error) {
@@ -152,12 +142,12 @@ describe('CalendarService.getCalendarForWidget', () => {
 
     describe('admin bypass', () => {
       it('should bypass subscription check if calendar owner is admin', async () => {
-        const calendar = new Calendar('calendar-id', 'test-calendar');
+        const calendarId = 'calendar-id';
         const ownerId = 'admin-account-id';
+        const domain = 'example.com';
         const adminAccount = new Account('admin-account-id', 'admin', 'admin@example.com');
         adminAccount.roles = ['admin'];
 
-        sandbox.stub(service, 'getCalendarByName').resolves(calendar);
         sandbox.stub(service, 'getCalendarOwnerAccountId').resolves(ownerId);
 
         const settingsStub = mockSubscriptionInterface.getSettings as sinon.SinonStub;
@@ -171,20 +161,19 @@ describe('CalendarService.getCalendarForWidget', () => {
 
         const hasSubscriptionStub = mockSubscriptionInterface.hasActiveSubscription as sinon.SinonStub;
 
-        const result = await service.getCalendarForWidget('test-calendar');
+        await service.setWidgetDomain(account, calendarId, domain);
 
-        expect(result).toBe(calendar);
         // Should not check subscription for admin
         expect(hasSubscriptionStub.called).toBe(false);
       });
 
       it('should require subscription if calendar owner is not admin', async () => {
-        const calendar = new Calendar('calendar-id', 'test-calendar');
+        const calendarId = 'calendar-id';
         const ownerId = 'regular-account-id';
+        const domain = 'example.com';
         const regularAccount = new Account('regular-account-id', 'user', 'user@example.com');
         regularAccount.roles = ['user'];
 
-        sandbox.stub(service, 'getCalendarByName').resolves(calendar);
         sandbox.stub(service, 'getCalendarOwnerAccountId').resolves(ownerId);
 
         const settingsStub = mockSubscriptionInterface.getSettings as sinon.SinonStub;
@@ -200,7 +189,7 @@ describe('CalendarService.getCalendarForWidget', () => {
         hasSubscriptionStub.resolves(false);
 
         await expect(
-          service.getCalendarForWidget('test-calendar'),
+          service.setWidgetDomain(account, calendarId, domain),
         ).rejects.toThrow(SubscriptionRequiredError);
 
         // Should check subscription for non-admin
@@ -208,10 +197,10 @@ describe('CalendarService.getCalendarForWidget', () => {
       });
 
       it('should require subscription if account not found (fail-secure)', async () => {
-        const calendar = new Calendar('calendar-id', 'test-calendar');
+        const calendarId = 'calendar-id';
         const ownerId = 'unknown-account-id';
+        const domain = 'example.com';
 
-        sandbox.stub(service, 'getCalendarByName').resolves(calendar);
         sandbox.stub(service, 'getCalendarOwnerAccountId').resolves(ownerId);
 
         const settingsStub = mockSubscriptionInterface.getSettings as sinon.SinonStub;
@@ -224,7 +213,7 @@ describe('CalendarService.getCalendarForWidget', () => {
         hasSubscriptionStub.resolves(false);
 
         await expect(
-          service.getCalendarForWidget('test-calendar'),
+          service.setWidgetDomain(account, calendarId, domain),
         ).rejects.toThrow(SubscriptionRequiredError);
 
         // Should check subscription when account lookup fails
@@ -232,29 +221,29 @@ describe('CalendarService.getCalendarForWidget', () => {
       });
 
       it('should require subscription if roles cannot be loaded (fail-secure)', async () => {
-        const calendar = new Calendar('calendar-id', 'test-calendar');
+        const calendarId = 'calendar-id';
         const ownerId = 'account-id';
-        const account = new Account('account-id', 'user', 'user@example.com');
+        const domain = 'example.com';
+        const ownerAccount = new Account('account-id', 'user', 'user@example.com');
         // No roles loaded
 
-        sandbox.stub(service, 'getCalendarByName').resolves(calendar);
         sandbox.stub(service, 'getCalendarOwnerAccountId').resolves(ownerId);
 
         const settingsStub = mockSubscriptionInterface.getSettings as sinon.SinonStub;
         settingsStub.resolves({ enabled: true });
 
         const getAccountStub = mockAccountsInterface.getAccountById as sinon.SinonStub;
-        getAccountStub.withArgs(ownerId).resolves(account);
+        getAccountStub.withArgs(ownerId).resolves(ownerAccount);
 
         const loadRolesStub = mockAccountsInterface.loadAccountRoles as sinon.SinonStub;
         // Return account with no roles (null/undefined)
-        loadRolesStub.withArgs(account).resolves(account);
+        loadRolesStub.withArgs(ownerAccount).resolves(ownerAccount);
 
         const hasSubscriptionStub = mockSubscriptionInterface.hasActiveSubscription as sinon.SinonStub;
         hasSubscriptionStub.resolves(false);
 
         await expect(
-          service.getCalendarForWidget('test-calendar'),
+          service.setWidgetDomain(account, calendarId, domain),
         ).rejects.toThrow(SubscriptionRequiredError);
 
         // Should check subscription when roles can't be determined

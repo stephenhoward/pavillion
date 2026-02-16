@@ -232,9 +232,13 @@ class CalendarService {
         throw new CalendarNotFoundError();
       }
 
-      const hasSubscription = await this.subscriptionInterface?.hasActiveSubscription(ownerId);
-      if (!hasSubscription) {
-        throw new SubscriptionRequiredError('widget_embedding');
+      // Admin-owned calendars bypass subscription checks
+      const isAdmin = await this.isCalendarOwnerAdmin(ownerId);
+      if (!isAdmin) {
+        const hasSubscription = await this.subscriptionInterface?.hasActiveSubscription(ownerId);
+        if (!hasSubscription) {
+          throw new SubscriptionRequiredError('widget_embedding');
+        }
       }
     }
 
@@ -274,6 +278,34 @@ class CalendarService {
       },
     });
     return membership?.account_id ?? null;
+  }
+
+  /**
+   * Check if the calendar owner account has admin role.
+   * Returns false (fail-secure) if the account is not found or roles cannot be loaded.
+   *
+   * @param ownerId - The account ID of the calendar owner
+   * @returns True if the owner is an admin, false otherwise
+   * @private
+   */
+  private async isCalendarOwnerAdmin(ownerId: string): Promise<boolean> {
+    if (!this.accountsInterface) {
+      return false;
+    }
+
+    try {
+      const account = await this.accountsInterface.getAccountById(ownerId);
+      if (!account) {
+        return false;
+      }
+
+      const accountWithRoles = await this.accountsInterface.loadAccountRoles(account);
+      return accountWithRoles.hasRole('admin');
+    }
+    catch (error) {
+      // Fail-secure: if we can't determine admin status, treat as non-admin
+      return false;
+    }
   }
 
   /**
@@ -1394,10 +1426,14 @@ class CalendarService {
         throw new CalendarNotFoundError();
       }
 
-      // Check subscription status
-      const hasSubscription = await this.subscriptionInterface?.hasActiveSubscription(ownerId);
-      if (!hasSubscription) {
-        throw new SubscriptionRequiredError('widget_embedding');
+      // Admin-owned calendars bypass subscription checks
+      const isAdmin = await this.isCalendarOwnerAdmin(ownerId);
+      if (!isAdmin) {
+        // Check subscription status
+        const hasSubscription = await this.subscriptionInterface?.hasActiveSubscription(ownerId);
+        if (!hasSubscription) {
+          throw new SubscriptionRequiredError('widget_embedding');
+        }
       }
     }
 

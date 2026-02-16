@@ -59,12 +59,15 @@
 </template>
 
 <script setup>
-import { reactive, onMounted } from 'vue';
+import { reactive, onMounted, inject } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import axios from 'axios';
 import PillButton from '@/client/components/common/PillButton.vue';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
 import { validateAndEncodeId } from '@/client/service/utils';
+
+// Injected dependencies
+const authn = inject('authn');
 
 // Props
 const props = defineProps({
@@ -194,11 +197,21 @@ const addDomain = async () => {
     console.error('Error setting domain:', error);
 
     // Check for subscription required error (402 Payment Required)
+    // Admin users should not see subscription errors (they bypass subscription checks)
     if (error.response?.status === 402 && error.response?.data?.errorName === 'SubscriptionRequiredError') {
-      state.error = t('subscription_required');
-      state.isSubscriptionError = true;
-      // Don't auto-clear subscription errors - user needs to see them
-      clearMessages(10000); // Longer timeout for subscription errors
+      if (!authn.isAdmin()) {
+        state.error = t('subscription_required');
+        state.isSubscriptionError = true;
+        // Don't auto-clear subscription errors - user needs to see them
+        clearMessages(10000); // Longer timeout for subscription errors
+      }
+      else {
+        // Admin got subscription error - this shouldn't happen, treat as generic error
+        console.error('Admin user received subscription error - this is unexpected');
+        state.error = t('error_adding');
+        state.isSubscriptionError = false;
+        clearMessages();
+      }
     }
     else if (error.response?.data?.errorName === 'InvalidDomainFormatError') {
       state.error = t('error_invalid_domain');
