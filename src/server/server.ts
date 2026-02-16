@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import { Server } from 'http';
 import path from "path";
+import helmet from 'helmet';
 import handlebars from 'handlebars';
 import i18next from 'i18next';
 import Backend from 'i18next-fs-backend';
@@ -179,6 +180,38 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
 
   // Set up health check endpoint first (before other routes and middleware)
   setupHealthCheck(app);
+
+  // Add comprehensive security headers middleware using helmet
+  // Provides protection against clickjacking, MIME sniffing, XSS, and other vulnerabilities
+  app.use(helmet({
+    // Production-only HSTS: only enable in production with HTTPS to avoid locking out local development
+    hsts: process.env.NODE_ENV === 'production' ? {
+      maxAge: 31536000, // 1 year in seconds
+      includeSubDomains: true,
+      preload: false, // Don't preload by default
+    } : false,
+    // Explicit referrer policy: balanced approach - full URL to same origin, only origin to cross-origin
+    referrerPolicy: {
+      policy: 'strict-origin-when-cross-origin',
+    },
+    // Dual-header clickjacking protection for maximum browser compatibility
+    frameguard: {
+      action: 'deny', // Default deny for all routes (widget routes will override)
+    },
+    // Disable helmet's CSP - we'll set frame-ancestors manually below
+    contentSecurityPolicy: false,
+  }));
+
+  // Set frame-ancestors CSP header manually for clickjacking protection
+  // This works alongside X-Frame-Options for dual-header defense
+  app.use((req, res, next) => {
+    // Only set if not already set by route-specific middleware (e.g., widget routes)
+    const existingCSP = res.getHeader('Content-Security-Policy');
+    if (!existingCSP) {
+      res.setHeader('Content-Security-Policy', "frame-ancestors 'none'");
+    }
+    next();
+  });
 
   app.set("views", path.join(path.resolve(), "src/server/templates"));
   // Initialize i18next with default configuration
