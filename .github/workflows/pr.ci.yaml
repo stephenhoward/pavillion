@@ -1,0 +1,31 @@
+name: PR Pipeline
+on:
+  pull_request:
+    types: [opened,reopened]
+    branches:
+      - main
+jobs:
+  arm_tests:
+    uses: ./.github/workflows/run_tests.yaml
+    with:
+      platform: linux/arm64
+      runner: ubuntu-24.04-arm
+  x86_tests:
+    uses: ./.github/workflows/run_tests.yaml
+    with:
+      platform: linux/amd64
+      runner: ubuntu-latest
+  arm_e2e:
+    needs: arm_tests
+    uses: ./.github/workflows/run_e2e_tests.yaml
+    with:
+      platform: linux/arm64
+      runner: ubuntu-24.04-arm
+  x86_e2e:
+    needs: x86_tests
+    uses: ./.github/workflows/run_e2e_tests.yaml
+    with:
+      platform: linux/amd64
+      runner: ubuntu-latest
+  federation_tests:
+    uses: ./.github/workflows/run_federation_tests.yaml
