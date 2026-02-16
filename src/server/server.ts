@@ -274,27 +274,30 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
 
       // Add graceful shutdown handlers for clean server termination
       const gracefulShutdown = async (signal: string) => {
-        console.log(`\n${signal} received. Starting graceful shutdown...`);
+        console.log(`${signal} received. Starting graceful shutdown...`);
 
-        server.close(async () => {
-          console.log('HTTP server closed.');
+        try {
+          // Close database connections first
+          await db.close();
+          console.log('Database connection closed.');
 
-          try {
-            await db.close();
-            console.log('Database connection closed.');
+          // Then close the HTTP server
+          server.close(() => {
+            console.log('HTTP server closed.');
             process.exit(0);
-          }
-          catch (error) {
-            console.error('Error during shutdown:', error);
-            process.exit(1);
-          }
-        });
+          });
 
-        // Force exit if shutdown takes too long (10 seconds)
-        setTimeout(() => {
-          console.error('Forced shutdown after timeout');
+          // Force exit if server.close() doesn't complete quickly (3 seconds)
+          // This is shorter than test helper's 5-second timeout
+          setTimeout(() => {
+            console.log('Server close timeout - forcing exit');
+            process.exit(0);
+          }, 3000).unref();
+        }
+        catch (error) {
+          console.error('Error during shutdown:', error);
           process.exit(1);
-        }, 10000);
+        }
       };
 
       process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
