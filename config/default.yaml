@@ -83,6 +83,10 @@ rateLimit:
     byAccount:
       windowMs: 3600000  # 1 hour in milliseconds
       max: 20  # 20 report submissions per account per hour
+  publicWidget:
+    byIp:
+      windowMs: 900000  # 15 minutes in milliseconds
+      max: 300  # 300 requests per IP per 15 minutes (higher for embedded widgets)
 
 # Housekeeping configuration for automated server maintenance
 housekeeping:

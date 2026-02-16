@@ -17,6 +17,9 @@ import EventInstanceService from '../service/event_instance';
 import CalendarEventInstance from '@/common/model/event_instance';
 import AccountsInterface from '@/server/accounts/interface';
 import EmailInterface from '@/server/email/interface';
+import SubscriptionInterface from '@/server/subscription/interface';
+import { CalendarNotFoundError } from '@/common/exceptions/calendar';
+import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
 
 export interface CalendarWithRole {
   calendar: Calendar;
@@ -40,8 +43,9 @@ export default class CalendarInterface {
     eventBus: EventEmitter,
     accountsInterface?: AccountsInterface,
     emailInterface?: EmailInterface,
+    subscriptionInterface?: SubscriptionInterface,
   ) {
-    this.calendarService = new CalendarService(accountsInterface, emailInterface, eventBus);
+    this.calendarService = new CalendarService(accountsInterface, emailInterface, eventBus, subscriptionInterface);
     this.eventService = new EventService(eventBus);
     this.locationService = new LocationService();
     this.eventInstanceService = new EventInstanceService(eventBus);
@@ -56,6 +60,10 @@ export default class CalendarInterface {
 
   async getCalendarByName(name: string): Promise<Calendar | null> {
     return this.calendarService.getCalendarByName(name);
+  }
+
+  async getCalendarForWidget(urlName: string): Promise<Calendar> {
+    return this.calendarService.getCalendarForWidget(urlName);
   }
 
   async createCalendar(account: Account, urlName: string, name?: string): Promise<Calendar> {
@@ -325,40 +333,45 @@ export default class CalendarInterface {
   async getWidgetDomain(account: Account, calendarId: string): Promise<string | null> {
     const calendar = await this.calendarService.getCalendar(calendarId);
     if (!calendar) {
-      throw new Error('Calendar not found');
+      throw new CalendarNotFoundError();
     }
 
     const canModify = await this.calendarService.userCanModifyCalendar(account, calendar);
     if (!canModify) {
-      throw new Error('Permission denied');
+      throw new CalendarEditorPermissionError();
     }
 
     return this.widgetDomainService.getAllowedDomain(calendar);
   }
 
   async setWidgetDomain(account: Account, calendarId: string, domain: string): Promise<void> {
+    // Get calendar and check permissions
     const calendar = await this.calendarService.getCalendar(calendarId);
     if (!calendar) {
-      throw new Error('Calendar not found');
+      throw new CalendarNotFoundError();
     }
 
     const canModify = await this.calendarService.userCanModifyCalendar(account, calendar);
     if (!canModify) {
-      throw new Error('Permission denied');
+      throw new CalendarEditorPermissionError();
     }
 
+    // Call service method for subscription check
+    await this.calendarService.setWidgetDomain(account, calendarId, domain);
+
+    // Set the domain using widget domain service
     return this.widgetDomainService.setAllowedDomain(calendar, domain);
   }
 
   async clearWidgetDomain(account: Account, calendarId: string): Promise<void> {
     const calendar = await this.calendarService.getCalendar(calendarId);
     if (!calendar) {
-      throw new Error('Calendar not found');
+      throw new CalendarNotFoundError();
     }
 
     const canModify = await this.calendarService.userCanModifyCalendar(account, calendar);
     if (!canModify) {
-      throw new Error('Permission denied');
+      throw new CalendarEditorPermissionError();
     }
 
     return this.widgetDomainService.clearAllowedDomain(calendar);

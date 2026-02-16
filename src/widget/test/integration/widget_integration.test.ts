@@ -79,6 +79,7 @@ describe('Widget Integration Tests', () => {
     calendar = new Calendar('test-id', 'my-calendar');
     mockInterface = {
       getCalendarByName: sandbox.stub(),
+      getCalendarForWidget: sandbox.stub(),
     } as any;
     mockWidgetService = new WidgetDomainService();
 
@@ -88,6 +89,7 @@ describe('Widget Integration Tests', () => {
 
     // Stub the calendar lookup
     (mockInterface.getCalendarByName as sinon.SinonStub).resolves(calendar);
+    (mockInterface.getCalendarForWidget as sinon.SinonStub).resolves(calendar);
   });
 
   afterEach(() => {

@@ -220,7 +220,11 @@ const initPavillionServer = async (app: express.Application, port: number) => {
   const authenticationDomain = new AuthenticationDomain(eventBus, accountsDomain.interface, emailDomain.interface);
   authenticationDomain.initialize(app);
 
-  const calendarDomain = new CalendarDomain(eventBus, accountsDomain.interface, emailDomain.interface);
+  // Initialize subscription domain before calendar domain (calendar needs subscription interface)
+  const subscriptionDomain = new SubscriptionDomain(eventBus);
+  subscriptionDomain.initialize(app);
+
+  const calendarDomain = new CalendarDomain(eventBus, accountsDomain.interface, emailDomain.interface, subscriptionDomain.interface);
   calendarDomain.initialize(app);
 
   // Initialize moderation domain before ActivityPub (ActivityPub inbox needs ModerationInterface)
@@ -237,10 +241,6 @@ const initPavillionServer = async (app: express.Application, port: number) => {
   new PublicCalendarDomain(eventBus,calendarDomain).initialize(app);
 
   new MediaDomain(eventBus,calendarDomain.interface).initialize(app);
-
-  // Initialize subscription domain (after accounts domain)
-  const subscriptionDomain = new SubscriptionDomain(eventBus);
-  subscriptionDomain.initialize(app);
 
   // Initialize housekeeping domain (for automated server maintenance)
   const housekeepingDomain = new HousekeepingDomain(eventBus, emailDomain.interface, accountsDomain.interface);

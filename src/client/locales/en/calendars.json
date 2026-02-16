@@ -216,7 +216,10 @@
       "error_adding": "Failed to add domain",
       "error_removing": "Failed to remove domain",
       "error_invalid_domain": "Invalid domain format. Domain must not include protocol or path (e.g., use 'example.com' instead of 'https://example.com/').",
-      "error_duplicate": "This domain is already in the allowed list"
+      "error_duplicate": "This domain is already in the allowed list",
+      "subscription_required": "Widget embedding requires an active subscription",
+      "subscribe_action": "View Subscription Plans",
+      "subscribe_action_full_context": "View subscription plans to enable widget embedding"
     },
     "config": {
       "configuration_title": "Widget Settings",

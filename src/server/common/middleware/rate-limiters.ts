@@ -130,3 +130,29 @@ export const reportSubmissionByAccount: RequestHandler = isRateLimitEnabled()
     'report-submission',
   )
   : noOpMiddleware;
+
+/**
+ * Public widget data rate limiter by IP address.
+ * Limits: 300 requests per IP per 15 minutes (default config).
+ * More permissive than auth endpoints due to legitimate embedded widget traffic.
+ */
+export const publicWidgetByIp: RequestHandler = isRateLimitEnabled()
+  ? createIpRateLimiter(
+    config.get<number>('rateLimit.publicWidget.byIp.max'),
+    config.get<number>('rateLimit.publicWidget.byIp.windowMs'),
+    'public-widget',
+  )
+  : noOpMiddleware;
+
+/**
+ * Widget configuration rate limiter for authenticated users.
+ * Limits: 100 requests per account per 15 minutes.
+ * Prevents abuse of widget configuration endpoints.
+ */
+export const widgetConfigByAccount: RequestHandler = isRateLimitEnabled()
+  ? createAccountRateLimiter(
+    100,
+    15 * 60 * 1000, // 15 minutes
+    'widget-config',
+  )
+  : noOpMiddleware;

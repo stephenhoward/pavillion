@@ -2,6 +2,8 @@ import express, { Request, Response, Application, NextFunction } from 'express';
 
 import CalendarInterface from '../../interface';
 import WidgetDomainService from '../../service/widget_domain';
+import { SubscriptionRequiredError } from '@/common/exceptions/subscription';
+import { publicWidgetByIp } from '@/server/common/middleware/rate-limiters';
 
 /**
  * Widget-specific API routes with Origin validation and dynamic CSP headers.
@@ -22,8 +24,8 @@ class WidgetRoutes {
     // Apply Origin validation middleware to all widget routes
     router.use(this.validateOrigin.bind(this));
 
-    // Widget calendar metadata endpoint
-    router.get('/calendars/:urlName', this.getCalendar.bind(this));
+    // Widget calendar metadata endpoint with rate limiting
+    router.get('/calendars/:urlName', publicWidgetByIp, this.getCalendar.bind(this));
 
     app.use(routePrefix, router);
   }
@@ -108,7 +110,8 @@ class WidgetRoutes {
     const calendarUrlName = req.params.urlName;
 
     try {
-      const calendar = await this.service.getCalendarByName(calendarUrlName);
+      // Use getCalendarForWidget which includes subscription check
+      const calendar = await this.service.getCalendarForWidget(calendarUrlName);
 
       if (!calendar) {
         res.status(404).json({
@@ -122,6 +125,18 @@ class WidgetRoutes {
       res.json(calendar.toObject());
     }
     catch (error: any) {
+      if (error instanceof SubscriptionRequiredError) {
+        // Return 402 with Cache-Control: no-store header
+        res.set('Cache-Control', 'no-store');
+        res.status(402).json({
+          error: 'subscription_required',
+          errorName: error.name,
+          message: error.message,
+          feature: error.feature,
+        });
+        return;
+      }
+
       console.error('Error fetching calendar for widget:', error);
       res.status(500).json({
         "error": "Failed to fetch calendar",

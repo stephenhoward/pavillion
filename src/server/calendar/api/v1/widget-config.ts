@@ -4,6 +4,8 @@ import { Account } from '@/common/model/account';
 import ExpressHelper from '@/server/common/helper/express';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
+import { SubscriptionRequiredError } from '@/common/exceptions/subscription';
+import { widgetConfigByAccount } from '@/server/common/middleware/rate-limiters';
 import CalendarInterface from '../../interface';
 
 /**
@@ -19,9 +21,9 @@ class WidgetConfigRoutes {
 
   installHandlers(app: Application, routePrefix: string): void {
     const router = express.Router();
-    router.get('/calendars/:calendarId/widget/domain', ExpressHelper.loggedInOnly, this.getDomain.bind(this));
-    router.put('/calendars/:calendarId/widget/domain', ExpressHelper.loggedInOnly, this.setDomain.bind(this));
-    router.delete('/calendars/:calendarId/widget/domain', ExpressHelper.loggedInOnly, this.clearDomain.bind(this));
+    router.get('/calendars/:calendarId/widget/domain', ExpressHelper.loggedInOnly, widgetConfigByAccount, this.getDomain.bind(this));
+    router.put('/calendars/:calendarId/widget/domain', ExpressHelper.loggedInOnly, widgetConfigByAccount, this.setDomain.bind(this));
+    router.delete('/calendars/:calendarId/widget/domain', ExpressHelper.loggedInOnly, widgetConfigByAccount, this.clearDomain.bind(this));
     app.use(routePrefix, router);
   }
 
@@ -43,6 +45,15 @@ class WidgetConfigRoutes {
     if (!calendarId) {
       res.status(400).json({
         "error": "missing calendarId",
+        errorName: 'ValidationError',
+      });
+      return;
+    }
+
+    // Validate UUID format
+    if (!ExpressHelper.isValidUUID(calendarId)) {
+      res.status(400).json({
+        "error": "invalid calendarId format",
         errorName: 'ValidationError',
       });
       return;
@@ -101,6 +112,15 @@ class WidgetConfigRoutes {
       return;
     }
 
+    // Validate UUID format
+    if (!ExpressHelper.isValidUUID(calendarId)) {
+      res.status(400).json({
+        "error": "invalid calendarId format",
+        errorName: 'ValidationError',
+      });
+      return;
+    }
+
     if (!domain || typeof domain !== 'string') {
       res.status(400).json({
         "error": "missing or invalid domain",
@@ -117,7 +137,15 @@ class WidgetConfigRoutes {
       });
     }
     catch (error) {
-      if (error instanceof CalendarNotFoundError) {
+      if (error instanceof SubscriptionRequiredError) {
+        res.status(402).json({
+          "error": "subscription_required",
+          "errorName": error.name,
+          "message": error.message,
+          "feature": error.feature,
+        });
+      }
+      else if (error instanceof CalendarNotFoundError) {
         res.status(404).json({
           "error": "Calendar not found",
           "errorName": error.name,
@@ -162,6 +190,15 @@ class WidgetConfigRoutes {
     if (!calendarId) {
       res.status(400).json({
         "error": "missing calendarId",
+        errorName: 'ValidationError',
+      });
+      return;
+    }
+
+    // Validate UUID format
+    if (!ExpressHelper.isValidUUID(calendarId)) {
+      res.status(400).json({
+        "error": "invalid calendarId format",
         errorName: 'ValidationError',
       });
       return;

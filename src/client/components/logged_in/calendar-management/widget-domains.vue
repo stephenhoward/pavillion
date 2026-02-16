@@ -1,12 +1,29 @@
 <template>
   <div class="widget-domains">
     <!-- Error Display -->
-    <div v-if="state.error" class="alert alert--error">
-      {{ state.error }}
+    <div
+      v-if="state.error"
+      class="alert alert--error"
+      role="alert"
+      aria-live="polite">
+      <span v-if="!state.isSubscriptionError">{{ state.error }}</span>
+      <span v-else>
+        {{ state.error }}
+        <router-link
+          to="/subscription"
+          class="subscription-link"
+          :aria-label="t('subscribe_action_full_context')">
+          {{ t('subscribe_action') }}
+        </router-link>
+      </span>
     </div>
 
     <!-- Success Display -->
-    <div v-if="state.success" class="alert alert--success">
+    <div
+      v-if="state.success"
+      class="alert alert--success"
+      role="alert"
+      aria-live="polite">
       {{ state.success }}
     </div>
 
@@ -71,6 +88,7 @@ const state = reactive({
   success: '',
   newDomain: '',
   currentDomain: null, // Changed from domains array to single domain
+  isSubscriptionError: false,
 });
 
 /**
@@ -117,6 +135,7 @@ const clearMessages = (delay = 5000) => {
   setTimeout(() => {
     state.error = '';
     state.success = '';
+    state.isSubscriptionError = false;
   }, delay);
 };
 
@@ -150,6 +169,7 @@ const addDomain = async () => {
 
   if (!isValidDomain(domain)) {
     state.error = t('error_invalid_domain');
+    state.isSubscriptionError = false;
     clearMessages();
     return;
   }
@@ -158,6 +178,7 @@ const addDomain = async () => {
     state.isAdding = true;
     state.error = '';
     state.success = '';
+    state.isSubscriptionError = false;
 
     const encodedId = validateAndEncodeId(props.calendarId, 'Calendar ID');
     const response = await axios.put(`/api/v1/calendars/${encodedId}/widget/domain`, {
@@ -171,13 +192,24 @@ const addDomain = async () => {
   }
   catch (error) {
     console.error('Error setting domain:', error);
-    if (error.response?.data?.errorName === 'InvalidDomainFormatError') {
+
+    // Check for subscription required error (402 Payment Required)
+    if (error.response?.status === 402 && error.response?.data?.errorName === 'SubscriptionRequiredError') {
+      state.error = t('subscription_required');
+      state.isSubscriptionError = true;
+      // Don't auto-clear subscription errors - user needs to see them
+      clearMessages(10000); // Longer timeout for subscription errors
+    }
+    else if (error.response?.data?.errorName === 'InvalidDomainFormatError') {
       state.error = t('error_invalid_domain');
+      state.isSubscriptionError = false;
+      clearMessages();
     }
     else {
       state.error = t('error_adding');
+      state.isSubscriptionError = false;
+      clearMessages();
     }
-    clearMessages();
   }
   finally {
     state.isAdding = false;
@@ -196,6 +228,7 @@ const removeDomain = async () => {
     state.removingId = true;
     state.error = '';
     state.success = '';
+    state.isSubscriptionError = false;
 
     const encodedCalendarId = validateAndEncodeId(props.calendarId, 'Calendar ID');
     await axios.delete(`/api/v1/calendars/${encodedCalendarId}/widget/domain`);
@@ -207,6 +240,7 @@ const removeDomain = async () => {
   catch (error) {
     console.error('Error clearing domain:', error);
     state.error = t('error_removing');
+    state.isSubscriptionError = false;
     clearMessages();
   }
   finally {
@@ -294,6 +328,21 @@ onMounted(loadDomains);
     @media (prefers-color-scheme: dark) {
       color: var(--pav-color-green-400);
     }
+  }
+}
+
+.subscription-link {
+  margin-left: 0.5rem;
+  color: var(--pav-color-red-700);
+  text-decoration: underline;
+  font-weight: 500;
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-red-400);
+  }
+
+  &:hover {
+    text-decoration: none;
   }
 }
 </style>
