@@ -110,6 +110,9 @@ describe('CalendarService.grantEditAccessByEmail - Remote Editors', () => {
         },
       });
 
+      // Mock the Add activity notification POST (best-effort, won't fail if it errors)
+      sandbox.stub(axios, 'post').resolves({ status: 200 });
+
       // Federated email (beta.federation.local is different from pavillion.dev)
       const result = await service.grantEditAccessByEmail(
         testAccount,
@@ -175,6 +178,9 @@ describe('CalendarService.grantEditAccessByEmail - Remote Editors', () => {
           },
         },
       });
+
+      // Mock the Add activity notification POST (best-effort, won't fail if it errors)
+      sandbox.stub(axios, 'post').resolves({ status: 200 });
 
       const result = await service.grantEditAccessByEmail(
         testAccount,
