@@ -67,23 +67,21 @@ export default class RemoteCalendarService {
    * entry with minimal information. The caller can then update the metadata
    * after fetching the full actor profile.
    *
+   * Uses atomic findOrCreate to avoid race conditions with concurrent requests.
+   *
    * @param actorUri - The ActivityPub actor URI
    * @returns The existing or newly created CalendarActor
    */
   async findOrCreateByActorUri(actorUri: string): Promise<CalendarActor> {
-    // Check if already exists
-    const existing = await this.getByActorUri(actorUri);
-    if (existing) {
-      return existing;
-    }
-
-    // Create new entry with minimal information
-    const entity = await CalendarActorEntity.create({
-      actor_type: 'remote',
-      calendar_id: null,
-      actor_uri: actorUri,
-      remote_domain: this.extractDomain(actorUri),
-      private_key: null,
+    const [entity] = await CalendarActorEntity.findOrCreate({
+      where: { actor_uri: actorUri },
+      defaults: {
+        actor_type: 'remote',
+        calendar_id: null,
+        actor_uri: actorUri,
+        remote_domain: this.extractDomain(actorUri),
+        private_key: null,
+      },
     });
 
     return entity.toModel();

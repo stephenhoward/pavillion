@@ -686,13 +686,21 @@ class ProcessInboxService {
       }
     }
 
-    // Check if EventObjectEntity already exists for this ap_id
-    const existingEventObject = await EventObjectEntity.findOne({
+    // Atomically find or create the EventObjectEntity to avoid race conditions
+    const localEventId = uuidv4();
+    const [, created] = await EventObjectEntity.findOrCreate({
       where: { ap_id: apObjectId },
+      defaults: {
+        event_id: localEventId,
+        ap_id: apObjectId,
+        attributed_to: actorUri,
+      },
     });
 
-    // Use existing event_id or generate a new UUID
-    const localEventId = existingEventObject?.event_id || uuidv4();
+    if (!created) {
+      // Another concurrent request already created this record, skip
+      return null;
+    }
 
     // Create the event
     const eventParams = {
@@ -710,15 +718,6 @@ class ProcessInboxService {
     }
 
     const createdEvent = await this.calendarInterface.addRemoteEvent(calendar, eventParams);
-
-    // Create EventObjectEntity to track the AP identity (if it doesn't already exist)
-    if (!existingEventObject) {
-      await EventObjectEntity.create({
-        event_id: localEventId,
-        ap_id: apObjectId,
-        attributed_to: actorUri,
-      });
-    }
 
     console.log(`[INBOX] Created event ${localEventId} from ${isPersonActor ? 'Person' : 'Calendar'} actor ${actorUri}`);
 

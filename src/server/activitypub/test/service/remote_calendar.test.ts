@@ -162,13 +162,12 @@ describe('RemoteCalendarService', () => {
         },
       };
 
-      sandbox.stub(CalendarActorEntity, 'findOne').resolves(mockEntity as any);
-      const createStub = sandbox.stub(CalendarActorEntity, 'create');
+      sandbox.stub(CalendarActorEntity, 'findOrCreate').resolves([mockEntity as any, false]);
 
       const result = await service.findOrCreateByActorUri(actorUri);
 
       expect(result.actorUri).toBe(actorUri);
-      expect(createStub.called).toBe(false); // Should not create since it exists
+      expect(result.remoteDisplayName).toBe('Existing Calendar');
     });
 
     it('should create new remote calendar if not found', async () => {
@@ -206,8 +205,7 @@ describe('RemoteCalendarService', () => {
         },
       };
 
-      sandbox.stub(CalendarActorEntity, 'findOne').resolves(null);
-      sandbox.stub(CalendarActorEntity, 'create').resolves(mockCreatedEntity as any);
+      sandbox.stub(CalendarActorEntity, 'findOrCreate').resolves([mockCreatedEntity as any, true]);
 
       const result = await service.findOrCreateByActorUri(actorUri);
 

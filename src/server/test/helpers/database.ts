@@ -77,7 +77,8 @@ export async function teardownActivityPubSchema(): Promise<void> {
 }
 
 /**
- * Create or retrieve a CalendarActorEntity (remote type) for the given actor URI
+ * Create or retrieve a CalendarActorEntity (remote type) for the given actor URI.
+ * Uses atomic findOrCreate to avoid race conditions with concurrent requests.
  *
  * @param actorUri - The ActivityPub actor URI
  * @param displayName - Optional display name for the remote calendar
@@ -87,20 +88,17 @@ export async function getOrCreateRemoteCalendarActor(
   actorUri: string,
   displayName?: string,
 ): Promise<CalendarActorEntity> {
-  let calendarActor = await CalendarActorEntity.findOne({
-    where: { actor_uri: actorUri, actor_type: 'remote' },
-  });
-
-  if (!calendarActor) {
-    calendarActor = await CalendarActorEntity.create({
+  const [calendarActor] = await CalendarActorEntity.findOrCreate({
+    where: { actor_uri: actorUri },
+    defaults: {
       actor_type: 'remote',
       actor_uri: actorUri,
       calendar_id: null,
       remote_display_name: displayName || null,
       remote_domain: new URL(actorUri).hostname,
       private_key: null,
-    });
-  }
+    },
+  });
 
   return calendarActor;
 }
