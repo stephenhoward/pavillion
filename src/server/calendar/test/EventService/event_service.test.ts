@@ -6,6 +6,7 @@ import { Calendar } from '@/common/model/calendar';
 import { EventEntity, EventContentEntity } from '@/server/calendar/entity/event';
 import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_category_assignment';
 import { EventRepostEntity } from '@/server/calendar/entity/event_repost';
+import { SharedEventEntity } from '@/server/activitypub/entity/activitypub';
 import EventService from '@/server/calendar/service/events';
 
 describe('listEvents', () => {
@@ -16,6 +17,8 @@ describe('listEvents', () => {
     service = new EventService(new EventEmitter());
     // Stub EventRepostEntity.findAll to return empty array (no reposts)
     sandbox.stub(EventRepostEntity, 'findAll').resolves([]);
+    // Stub SharedEventEntity.findAll to return empty array (no auto-reposted events)
+    sandbox.stub(SharedEventEntity, 'findAll').resolves([]);
   });
   afterEach(() => {
     sandbox.restore();

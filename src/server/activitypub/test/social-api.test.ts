@@ -10,7 +10,7 @@ import ActivityPubMemberRoutes from '@/server/activitypub/api/v1/members';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
-import { setupActivityPubSchema, teardownActivityPubSchema, getOrCreateRemoteCalendarActor } from './helpers/database';
+import { setupActivityPubSchema, teardownActivityPubSchema, getOrCreateRemoteCalendarActor } from '@/server/test/helpers/database';
 
 describe('ActivityPub Social API - Unfollow Endpoint', () => {
   let sandbox: sinon.SinonSandbox;

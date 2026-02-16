@@ -6,7 +6,7 @@ import ActivityPubService from '@/server/activitypub/service/members';
 import { Calendar } from '@/common/model/calendar';
 import { EventEntity } from '@/server/calendar/entity/event';
 import { FollowingCalendarEntity, SharedEventEntity } from '@/server/activitypub/entity/activitypub';
-import { setupActivityPubSchema, teardownActivityPubSchema } from './helpers/database';
+import { setupActivityPubSchema, teardownActivityPubSchema } from '@/server/test/helpers/database';
 
 describe('ActivityPubService - getFeed with EventObjectEntity Join', () => {
   let sandbox: sinon.SinonSandbox;

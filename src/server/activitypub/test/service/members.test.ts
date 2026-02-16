@@ -8,7 +8,7 @@ import { Calendar } from '@/common/model/calendar';
 import { FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import { InvalidRemoteCalendarIdentifierError } from '@/common/exceptions/activitypub';
-import { setupActivityPubSchema, teardownActivityPubSchema } from '../helpers/database';
+import { setupActivityPubSchema, teardownActivityPubSchema } from '@/server/test/helpers/database';
 
 // Mock CalendarActor model for testing (remote type)
 // Note: Uses snake_case property names to match database entity schema

@@ -9,6 +9,7 @@ import CalendarInterface from '@/server/calendar/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import EmailInterface from '@/server/email/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
+import RemoteCalendarService from '@/server/activitypub/service/remote_calendar';
 import { ActivityPubInboxMessageEntity } from '@/server/activitypub/entity/activitypub';
 import { Calendar } from '@/common/model/calendar';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
@@ -42,6 +43,13 @@ describe('ProcessInboxService - Blocked Instance Filtering', () => {
 
     // Create ProcessInboxService with ModerationInterface
     inboxService = new ProcessInboxService(eventBus, calendarInterface, moderationInterface);
+
+    // Stub RemoteCalendarService methods that need database access
+    const remoteCalendarService = (inboxService as any).remoteCalendarService as RemoteCalendarService;
+    sandbox.stub(remoteCalendarService, 'findOrCreateByActorUri').resolves({
+      id: 'remote-calendar-id',
+      actor_uri: 'https://remote.example.com/calendars/testcal',
+    } as any);
   });
 
   afterEach(() => {
@@ -114,7 +122,7 @@ describe('ProcessInboxService - Blocked Instance Filtering', () => {
       (calendarInterface.getCalendar as sinon.SinonStub).resolves(calendar);
 
       // Stub actorOwnsObject to return true (for ownership verification)
-      sandbox.stub(inboxService, 'actorOwnsObject').resolves(true);
+      sandbox.stub(inboxService as any, 'actorOwnsObject').resolves(true);
 
       // Stub EventObjectEntity database operations
       vi.spyOn(EventObjectEntity, 'findOne').mockResolvedValue(null);
@@ -124,6 +132,9 @@ describe('ProcessInboxService - Blocked Instance Filtering', () => {
       (calendarInterface.addRemoteEvent as sinon.SinonStub).resolves({
         id: 'new-event-id',
       } as any);
+
+      // Stub checkAndPerformAutoRepost to avoid database complexity
+      sandbox.stub(inboxService as any, 'checkAndPerformAutoRepost').resolves();
 
       // Create a mock inbox message
       const objectData = {
@@ -191,6 +202,13 @@ describe('ProcessInboxService - Blocked Instance Filtering', () => {
 
         // Recreate inboxService with new interfaces
         inboxService = new ProcessInboxService(eventBus, calendarInterface, moderationInterface);
+
+        // Stub RemoteCalendarService for this iteration
+        const remoteCalendarService = (inboxService as any).remoteCalendarService as RemoteCalendarService;
+        sandbox.stub(remoteCalendarService, 'findOrCreateByActorUri').resolves({
+          id: 'remote-calendar-id',
+          actor_uri: testCase.actorUri,
+        } as any);
 
         const calendar = new Calendar('test-cal-id', 'test-calendar');
         (calendarInterface.getCalendar as sinon.SinonStub).resolves(calendar);

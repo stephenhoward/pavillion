@@ -686,8 +686,13 @@ class ProcessInboxService {
       }
     }
 
-    // Generate a new UUID for the local event record
-    const localEventId = uuidv4();
+    // Check if EventObjectEntity already exists for this ap_id
+    const existingEventObject = await EventObjectEntity.findOne({
+      where: { ap_id: apObjectId },
+    });
+
+    // Use existing event_id or generate a new UUID
+    const localEventId = existingEventObject?.event_id || uuidv4();
 
     // Create the event
     const eventParams = {
@@ -706,12 +711,14 @@ class ProcessInboxService {
 
     const createdEvent = await this.calendarInterface.addRemoteEvent(calendar, eventParams);
 
-    // Create EventObjectEntity to track the AP identity
-    await EventObjectEntity.create({
-      event_id: localEventId,
-      ap_id: apObjectId,
-      attributed_to: actorUri,
-    });
+    // Create EventObjectEntity to track the AP identity (if it doesn't already exist)
+    if (!existingEventObject) {
+      await EventObjectEntity.create({
+        event_id: localEventId,
+        ap_id: apObjectId,
+        attributed_to: actorUri,
+      });
+    }
 
     console.log(`[INBOX] Created event ${localEventId} from ${isPersonActor ? 'Person' : 'Calendar'} actor ${actorUri}`);
 
@@ -799,7 +806,7 @@ class ProcessInboxService {
     // LOOP GUARD: Check SharedEventEntity for duplicates
     const existingShare = await SharedEventEntity.findOne({
       where: {
-        event_id: eventApId,
+        event_id: eventObject.event_id,  // Query by local UUID, not AP URL
         calendar_id: calendar.id,
       },
     });

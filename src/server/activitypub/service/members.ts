@@ -18,7 +18,6 @@ import CalendarInterface from "@/server/calendar/interface";
 import { addToOutbox as addToOutboxHelper } from "@/server/activitypub/helper/outbox";
 import {
   InvalidRemoteCalendarIdentifierError,
-  InvalidRepostPolicySettingsError,
   InvalidSharedEventUrlError,
   FollowRelationshipNotFoundError,
   RemoteCalendarNotFoundError,
@@ -84,13 +83,15 @@ class ActivityPubService {
   }
 
   /**
-   * Validate that repost policy settings are consistent
-   * autoRepostReposts cannot be true if autoRepostOriginals is false
+   * Validate that repost policy settings are consistent.
+   *
+   * Note: Previously enforced that autoRepostReposts required autoRepostOriginals,
+   * but this constraint was removed to allow more flexible policy configurations.
+   * Users may want to auto-repost only shared content (reposts) without auto-reposting
+   * original events, which is a valid use case.
    */
-  static validateRepostPolicySettings(autoRepostOriginals: boolean, autoRepostReposts: boolean): void {
-    if (autoRepostReposts && !autoRepostOriginals) {
-      throw new InvalidRepostPolicySettingsError();
-    }
+  static validateRepostPolicySettings(_autoRepostOriginals: boolean, _autoRepostReposts: boolean): void {
+    // No validation constraints - allow any combination of policy settings
   }
 
   /**

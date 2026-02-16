@@ -10,6 +10,7 @@ import { Calendar } from '@/common/model/calendar';
 import { EventEntity } from '@/server/calendar/entity/event';
 import { EventContentEntity, EventScheduleEntity } from '@/server/calendar/entity/event';
 import { EventRepostEntity } from '@/server/calendar/entity/event_repost';
+import { SharedEventEntity } from '@/server/activitypub/entity/activitypub';
 
 describe('EventService - Calendar ID Storage', () => {
   let sandbox: sinon.SinonSandbox;
@@ -76,6 +77,8 @@ describe('EventService - Calendar ID Storage', () => {
   it('should use calendar UUID for listEvents filtering with reposts support', async () => {
     // Stub EventRepostEntity.findAll to simulate no reposts
     sandbox.stub(EventRepostEntity, 'findAll').resolves([]);
+    // Stub SharedEventEntity.findAll to simulate no auto-reposted events
+    sandbox.stub(SharedEventEntity, 'findAll').resolves([]);
 
     // Stub EventEntity.findAll to capture where clause
     const findAllStub = sandbox.stub(EventEntity, 'findAll').resolves([]);
@@ -100,6 +103,8 @@ describe('EventService - Calendar ID Storage', () => {
     sandbox.stub(EventRepostEntity, 'findAll').resolves([
       { event_id: repostedEventId } as any,
     ]);
+    // Stub SharedEventEntity.findAll to simulate no auto-reposted events
+    sandbox.stub(SharedEventEntity, 'findAll').resolves([]);
 
     // Stub EventEntity.findAll to capture where clause
     const findAllStub = sandbox.stub(EventEntity, 'findAll').resolves([]);
