@@ -4,6 +4,11 @@ on:
     types: [opened,reopened]
     branches:
       - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   arm_tests:
     uses: ./.github/workflows/run_tests.yaml
