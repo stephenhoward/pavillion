@@ -1,4 +1,4 @@
-name: Run Tests
+name: Run E2E Tests
 on:
   workflow_call:
     inputs:
@@ -11,7 +11,7 @@ on:
         required: true
         type: string
 jobs:
-  build: 
+  e2e:
     runs-on: ${{ inputs.runner }}
 
     steps:
@@ -22,9 +22,5 @@ jobs:
           node-version-file: '.node-version'
           cache: 'npm'
       - run: npm install
-      - run: npm run test:unit
-        if: ${{ !cancelled() }}
-      - run: npm run test:integration
-        if: ${{ !cancelled() }}
-      - run: npm run test:ratelimiting
-        if: ${{ !cancelled() }}
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
