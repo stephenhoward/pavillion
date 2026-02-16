@@ -271,6 +271,35 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
       const server = app.listen(port, () => {
         console.log(`Pavillion listening at http://localhost:${port}/`);
       });
+
+      // Add graceful shutdown handlers for clean server termination
+      const gracefulShutdown = async (signal: string) => {
+        console.log(`\n${signal} received. Starting graceful shutdown...`);
+
+        server.close(async () => {
+          console.log('HTTP server closed.');
+
+          try {
+            await db.close();
+            console.log('Database connection closed.');
+            process.exit(0);
+          }
+          catch (error) {
+            console.error('Error during shutdown:', error);
+            process.exit(1);
+          }
+        });
+
+        // Force exit if shutdown takes too long (10 seconds)
+        setTimeout(() => {
+          console.error('Forced shutdown after timeout');
+          process.exit(1);
+        }, 10000);
+      };
+
+      process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+      process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
       return server;
     }
 
