@@ -273,35 +273,37 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
       });
 
       // Add graceful shutdown handlers for clean server termination
-      const gracefulShutdown = async (signal: string) => {
-        console.log(`${signal} received. Starting graceful shutdown...`);
+      // Skip in e2e/test modes since the test helper manages process lifecycle
+      if (process.env.NODE_ENV !== 'e2e' && process.env.NODE_ENV !== 'test') {
+        const gracefulShutdown = async (signal: string) => {
+          console.log(`${signal} received. Starting graceful shutdown...`);
 
-        try {
-          // Close database connections first
-          await db.close();
-          console.log('Database connection closed.');
+          try {
+            // Close database connections first
+            await db.close();
+            console.log('Database connection closed.');
 
-          // Then close the HTTP server
-          server.close(() => {
-            console.log('HTTP server closed.');
-            process.exit(0);
-          });
+            // Then close the HTTP server
+            server.close(() => {
+              console.log('HTTP server closed.');
+              process.exit(0);
+            });
 
-          // Force exit if server.close() doesn't complete quickly (3 seconds)
-          // This is shorter than test helper's 5-second timeout
-          setTimeout(() => {
-            console.log('Server close timeout - forcing exit');
-            process.exit(0);
-          }, 3000).unref();
-        }
-        catch (error) {
-          console.error('Error during shutdown:', error);
-          process.exit(1);
-        }
-      };
+            // Force exit if server.close() doesn't complete quickly (10 seconds)
+            setTimeout(() => {
+              console.log('Server close timeout - forcing exit');
+              process.exit(0);
+            }, 10000).unref();
+          }
+          catch (error) {
+            console.error('Error during shutdown:', error);
+            process.exit(1);
+          }
+        };
 
-      process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-      process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+        process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+        process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+      }
 
       return server;
     }
