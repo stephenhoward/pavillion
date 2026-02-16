@@ -121,20 +121,11 @@ describe('ProcessInboxService - Blocked Instance Filtering', () => {
       // Stub calendar lookup
       (calendarInterface.getCalendar as sinon.SinonStub).resolves(calendar);
 
-      // Stub actorOwnsObject to return true (for ownership verification)
-      sandbox.stub(inboxService as any, 'actorOwnsObject').resolves(true);
-
-      // Stub EventObjectEntity database operations
-      vi.spyOn(EventObjectEntity, 'findOne').mockResolvedValue(null);
-      vi.spyOn(EventObjectEntity, 'create').mockResolvedValue({} as any);
-
-      // Stub addRemoteEvent to prevent actual database operations
-      (calendarInterface.addRemoteEvent as sinon.SinonStub).resolves({
+      // Stub processCreateEvent to avoid complex database operations
+      // This test is focused on verifying blocking logic, not the full processing chain
+      sandbox.stub(inboxService, 'processCreateEvent').resolves({
         id: 'new-event-id',
       } as any);
-
-      // Stub checkAndPerformAutoRepost to avoid database complexity
-      sandbox.stub(inboxService as any, 'checkAndPerformAutoRepost').resolves();
 
       // Create a mock inbox message
       const objectData = {
