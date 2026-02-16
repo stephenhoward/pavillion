@@ -26,9 +26,19 @@ const parseManifest = async () => {
   if (environment !== "production" && environment !== "e2e") return {};
 
   const manifestPath = path.join(path.resolve(), "dist", ".vite", "manifest.json");
-  const manifestFile = await fs.readFile(manifestPath, 'utf-8');
 
-  return JSON.parse(manifestFile);
+  try {
+    const manifestFile = await fs.readFile(manifestPath, 'utf-8');
+    return JSON.parse(manifestFile);
+  }
+  catch (error: any) {
+    if (error.code === 'ENOENT') {
+      throw new Error(
+        `Vite manifest not found at ${manifestPath}. Run "npm run build:frontend" before starting the server in ${environment} mode.`,
+      );
+    }
+    throw error;
+  }
 };
 
 const handlers = {

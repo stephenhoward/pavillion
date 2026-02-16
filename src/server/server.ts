@@ -306,8 +306,17 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
       });
 
       // Add graceful shutdown handlers for clean server termination
-      // Skip in e2e/test modes since the test helper manages process lifecycle
-      if (process.env.NODE_ENV !== 'e2e' && process.env.NODE_ENV !== 'test') {
+      if (process.env.NODE_ENV === 'e2e') {
+        // Lightweight shutdown for e2e: close server and exit immediately
+        // The test helper sends SIGTERM and waits 5s before SIGKILL
+        const shutdownE2e = () => {
+          server.close(() => process.exit(0));
+          setTimeout(() => process.exit(0), 2000).unref();
+        };
+        process.on('SIGTERM', shutdownE2e);
+        process.on('SIGINT', shutdownE2e);
+      }
+      else if (process.env.NODE_ENV !== 'test') {
         const gracefulShutdown = async (signal: string) => {
           console.log(`${signal} received. Starting graceful shutdown...`);
 
