@@ -16,6 +16,7 @@ import RemoteCalendarService from "@/server/activitypub/service/remote_calendar"
 import UndoActivity from "../model/action/undo";
 import { EventEntity } from "@/server/calendar/entity/event";
 import CalendarInterface from "@/server/calendar/interface";
+import { EventObject } from "@/server/activitypub/model/object/event";
 import { addToOutbox as addToOutboxHelper } from "@/server/activitypub/helper/outbox";
 import {
   InvalidRemoteCalendarIdentifierError,
@@ -297,10 +298,33 @@ class ActivityPubService {
     }
 
     // Resolve AP URL to local event UUID for consistent storage
-    const eventObject = await EventObjectEntity.findOne({
+    // First try to find by ap_id (handles remote events and properly-formed local URLs)
+    let eventObject = await EventObjectEntity.findOne({
       where: { ap_id: eventUrl },
     });
-    const localEventId = eventObject?.event_id || eventUrl;
+
+    // If not found, this may be a local same-instance event URL.
+    // Extract a UUID from the URL and look up the local event to get its canonical AP URL.
+    let canonicalEventUrl = eventUrl;
+    if (!eventObject) {
+      const uuidMatch = eventUrl.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+      if (uuidMatch) {
+        const candidateId = uuidMatch[1];
+        const localEvent = await this.calendarService.getEventById(candidateId);
+        if (localEvent?.calendarId) {
+          const localCalendar = await this.calendarService.getCalendar(localEvent.calendarId);
+          if (localCalendar) {
+            canonicalEventUrl = EventObject.eventUrl(localCalendar, localEvent);
+            // Try EventObjectEntity lookup again with canonical URL
+            eventObject = await EventObjectEntity.findOne({
+              where: { ap_id: canonicalEventUrl },
+            });
+          }
+        }
+      }
+    }
+
+    const localEventId = eventObject?.event_id || canonicalEventUrl;
 
     let existingShareEntity = await SharedEventEntity.findOne({
       where: {
@@ -314,7 +338,7 @@ class ActivityPubService {
     }
 
     let actor = await this.actorUrl(calendar);
-    let shareActivity = new AnnounceActivity(actor, eventUrl);
+    let shareActivity = new AnnounceActivity(actor, canonicalEventUrl);
 
     SharedEventEntity.create({
       id: shareActivity.id,
