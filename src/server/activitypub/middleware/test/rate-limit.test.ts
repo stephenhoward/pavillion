@@ -847,6 +847,14 @@ describe('createCalendarRateLimiter', () => {
   });
 
   describe('independence from actor rate limiter', () => {
+    beforeEach(() => {
+      resetActorRateLimitStore();
+    });
+
+    afterEach(() => {
+      resetActorRateLimitStore();
+    });
+
     it('should use a separate store from actor rate limiter', async () => {
       const app = express();
       app.use(express.json());
@@ -874,7 +882,7 @@ describe('createCalendarRateLimiter', () => {
       expect(response2.body.error).toBe('Too many requests from this actor, please try again later.');
 
       // Request from bob should succeed (different actor, calendar still under limit)
-      resetActorRateLimitStore(); // Reset actor store to allow bob
+      // bob has not been rate limited by the actor limiter, and the calendar is still under its limit
       const response3 = await request(app)
         .post('/calendars/my-calendar/inbox')
         .send({ actor: 'https://remote.example/users/bob', type: 'Follow' });
@@ -884,9 +892,15 @@ describe('createCalendarRateLimiter', () => {
   });
 
   describe('LRU eviction', () => {
-    it('should evict oldest actors when exceeding max size', () => {
-      // Create a store with small max size
+    beforeEach(() => {
       resetActorRateLimitStore();
+    });
+
+    afterEach(() => {
+      resetActorRateLimitStore();
+    });
+
+    it('should evict oldest actors when exceeding max size', () => {
       const store = getActorRateLimitStore(60000);
 
       // Fill the store to max size (default 10000)
@@ -910,7 +924,6 @@ describe('createCalendarRateLimiter', () => {
     });
 
     it('should maintain cache size under limit during high load', () => {
-      resetActorRateLimitStore();
       const store = getActorRateLimitStore(60000);
 
       // Simulate high load with many different actors
