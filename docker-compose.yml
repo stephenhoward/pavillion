@@ -32,10 +32,7 @@
 services:
   # Pavillion application server (web mode)
   app:
-    image: pavillion/pavillion:latest
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/stephenhoward/pavillion:latest
     container_name: pavillion-app
     depends_on:
       db:
@@ -92,7 +89,7 @@ services:
   # Pavillion worker container (worker mode)
   # Processes background jobs including database backups and monitoring
   worker:
-    image: pavillion/pavillion:latest
+    image: ghcr.io/stephenhoward/pavillion:latest
     container_name: pavillion-worker
     # Pass --worker flag to unified entrypoint
     command: ["--worker"]
@@ -138,6 +135,32 @@ services:
         max-size: "10m"
         max-file: "5"
 
+  # Caddy reverse proxy with automatic HTTPS (standalone mode only)
+  # Enable with: docker compose --profile standalone up -d
+  # Or set COMPOSE_PROFILES=standalone in .env
+  caddy:
+    image: caddy:2-alpine
+    container_name: pavillion-caddy
+    profiles: ["standalone"]
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      - DOMAIN=${DOMAIN:-localhost}
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
   # PostgreSQL database
   db:
     image: postgres:17
@@ -166,6 +189,10 @@ volumes:
     name: pavillion-db
   pavillion-media:
     name: pavillion-media
+  caddy-data:
+    name: pavillion-caddy-data
+  caddy-config:
+    name: pavillion-caddy-config
   pavillion-backups:
     name: pavillion-backups
     # Operators can configure this volume to use different backing storage:

@@ -16,7 +16,7 @@ For experienced users who want to get running quickly:
 
 ```bash
 # 1. Clone the repository (or download release)
-git clone https://github.com/pavillion/pavillion.git
+git clone https://github.com/stephenhoward/pavillion.git
 cd pavillion
 
 # 2. Run the setup script to generate secure secrets
@@ -42,7 +42,7 @@ The application will be available at `http://localhost:3000` (configure your rev
 Clone the repository or download the latest release:
 
 ```bash
-git clone https://github.com/pavillion/pavillion.git
+git clone https://github.com/stephenhoward/pavillion.git
 cd pavillion
 ```
 
@@ -158,6 +158,48 @@ calendar.example.org {
 }
 ```
 
+### Standalone Mode (Built-in HTTPS)
+
+If you don't already have a reverse proxy, Pavillion includes an optional built-in [Caddy](https://caddyserver.com/) reverse proxy that provides automatic HTTPS via Let's Encrypt.
+
+**Enable standalone mode** by setting `COMPOSE_PROFILES` in your `.env` file:
+
+```bash
+DOMAIN=calendar.example.org
+COMPOSE_PROFILES=standalone
+```
+
+Or pass the profile flag directly:
+
+```bash
+docker compose --profile standalone up -d
+```
+
+**Configuration requirements:**
+
+1. **Set `DOMAIN`** in `.env` to your public domain name. This must match the `domain:` value in `config/local.yaml`.
+
+2. **Restrict direct app access** (recommended) so traffic goes through Caddy:
+   ```bash
+   APP_PORT=127.0.0.1:3000
+   ```
+
+3. **Ensure ports 80 and 443 are available** on your host. If another service already uses these ports, standalone mode won't work — use the default mode with your existing reverse proxy instead.
+
+**How it works:**
+
+- Caddy automatically obtains and renews Let's Encrypt certificates for your domain
+- Certificates are persisted in the `pavillion-caddy-data` volume — avoid `docker compose down -v` in routine operations or you'll lose cached certificates
+- When `DOMAIN=localhost`, Caddy automatically disables HTTPS, suitable for local development only
+
+**Verify standalone mode is running:**
+
+```bash
+docker compose ps
+```
+
+You should see four containers: `pavillion-app`, `pavillion-worker`, `pavillion-db`, and `pavillion-caddy`.
+
 ## Secrets Management
 
 ### How Secrets Work
@@ -241,6 +283,8 @@ chmod 600 secrets/*.txt
 | `S3_ACCESS_KEY` | No | - | S3 access key ID |
 | `S3_SECRET_KEY` | No | - | S3 secret access key |
 | `S3_ENDPOINT` | No | - | Custom S3 endpoint (for DigitalOcean Spaces, MinIO) |
+| `DOMAIN` | No | `localhost` | Public domain name (required for standalone mode) |
+| `COMPOSE_PROFILES` | No | - | Set to `standalone` to enable built-in Caddy proxy |
 | `SMTP_HOST` | No | - | SMTP server hostname |
 | `SMTP_PORT` | No | `587` | SMTP server port |
 | `SMTP_USER` | No | - | SMTP authentication username |
@@ -251,6 +295,8 @@ chmod 600 secrets/*.txt
 | Port | Service | Description |
 |------|---------|-------------|
 | 3000 | Application | HTTP application server (map to 80/443 via reverse proxy) |
+| 80 | Caddy | HTTP (standalone mode only, redirects to HTTPS) |
+| 443 | Caddy | HTTPS (standalone mode only, automatic Let's Encrypt) |
 | 5432 | PostgreSQL | Database (internal only, not exposed by default) |
 
 ## Volume Reference
@@ -260,6 +306,8 @@ chmod 600 secrets/*.txt
 | `pavillion-db` | `/var/lib/postgresql/data` | PostgreSQL database files |
 | `pavillion-media` | `/app/storage/media` | Uploaded media files (if using local storage) |
 | `./config/local.yaml` | `/app/config/local.yaml` | Instance configuration (bind mount) |
+| `pavillion-caddy-data` | `/data` | Caddy TLS certificates and state (standalone mode) |
+| `pavillion-caddy-config` | `/config` | Caddy runtime configuration (standalone mode) |
 
 ## Podman Compatibility
 
