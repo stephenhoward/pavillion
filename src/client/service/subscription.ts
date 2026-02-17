@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
 
 /**
  * Subscription settings returned from API
@@ -80,6 +81,15 @@ export type SubscribeParams = {
   provider_type: 'stripe' | 'paypal';
   billing_cycle: 'monthly' | 'yearly';
   amount?: number; // For PWYC
+};
+
+/**
+ * Account search result
+ */
+export type AccountSearchResult = {
+  id: string;
+  username: string;
+  email: string;
 };
 
 /**
@@ -312,6 +322,88 @@ export default class SubscriptionService {
     catch (error) {
       console.error('Failed to configure platform OAuth:', error);
       return false;
+    }
+  }
+
+  /**
+   * List complimentary grants (admin only)
+   *
+   * @param {boolean} includeRevoked - Whether to include revoked grants (default: false)
+   * @returns {Promise<ComplimentaryGrant[]>} List of complimentary grants
+   */
+  async listGrants(includeRevoked: boolean = false): Promise<ComplimentaryGrant[]> {
+    try {
+      const response = await axios.get('/api/subscription/v1/admin/grants', {
+        params: { includeRevoked },
+      });
+      return response.data.map((grant: Record<string, any>) => ComplimentaryGrant.fromObject(grant));
+    }
+    catch (error) {
+      console.error('Failed to list grants:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create a complimentary grant for an account (admin only)
+   *
+   * @param {string} accountId - The account ID to grant access to
+   * @param {string} reason - Optional reason for the grant
+   * @param {Date} expiresAt - Optional expiration date for the grant
+   * @returns {Promise<ComplimentaryGrant>} The created complimentary grant
+   */
+  async createGrant(accountId: string, reason?: string, expiresAt?: Date): Promise<ComplimentaryGrant> {
+    try {
+      const response = await axios.post('/api/subscription/v1/admin/grants', {
+        accountId,
+        reason,
+        expiresAt,
+      });
+      return ComplimentaryGrant.fromObject(response.data);
+    }
+    catch (error) {
+      console.error('Failed to create grant:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Revoke a complimentary grant (admin only)
+   *
+   * @param {string} grantId - The ID of the grant to revoke
+   * @returns {Promise<void>}
+   */
+  async revokeGrant(grantId: string): Promise<void> {
+    try {
+      await axios.delete(`/api/subscription/v1/admin/grants/${grantId}`);
+    }
+    catch (error) {
+      console.error(`Failed to revoke grant ${grantId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Search accounts by username or email (admin only)
+   *
+   * @param {string} query - Search query string
+   * @param {number} limit - Maximum number of results to return
+   * @returns {Promise<AccountSearchResult[]>} Matching accounts
+   */
+  async searchAccounts(query: string, limit: number = 10): Promise<AccountSearchResult[]> {
+    try {
+      const response = await axios.get('/api/v1/admin/accounts', {
+        params: { search: query, limit },
+      });
+      return (response.data || []).map((a: Record<string, any>) => ({
+        id: a.id,
+        username: a.username || a.name || '',
+        email: a.email || '',
+      }));
+    }
+    catch (error) {
+      console.error('Failed to search accounts:', error);
+      throw error;
     }
   }
 

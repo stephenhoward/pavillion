@@ -6,6 +6,8 @@ import SubscriptionService from '@/client/service/subscription';
 import PayPalConfigModal from './PayPalConfigModal.vue';
 import ConfirmDisconnectModal from './ConfirmDisconnectModal.vue';
 import AddProviderWizard from './AddProviderWizard.vue';
+import GrantForm from './GrantForm.vue';
+import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
 
 const { t } = useTranslation('admin', {
   keyPrefix: 'funding',
@@ -25,7 +27,7 @@ const successMessage = ref('');
 const errorMessage = ref('');
 
 // Sub-tab state
-const activeSubTab = ref<'subscriptions' | 'settings'>('subscriptions');
+const activeSubTab = ref<'subscriptions' | 'settings' | 'grants'>('subscriptions');
 
 // Settings form state
 const enabled = ref(false);
@@ -55,6 +57,14 @@ const subscriptions = ref([]);
 const subscriptionsPage = ref(1);
 const subscriptionsLimit = ref(20);
 const subscriptionsTotal = ref(0);
+
+// Grants state
+const grants = ref<ComplimentaryGrant[]>([]);
+const grantsLoading = ref(false);
+const includeRevoked = ref(false);
+
+// Grant form modal state
+const grantFormOpen = ref(false);
 
 // Currency options
 const currencyOptions = [
@@ -135,6 +145,87 @@ async function loadSubscriptions() {
   catch (error) {
     console.error('Failed to load subscriptions:', error);
   }
+}
+
+/**
+ * Load complimentary grants
+ */
+async function loadGrants() {
+  try {
+    grantsLoading.value = true;
+    grants.value = await subscriptionService.listGrants(includeRevoked.value);
+  }
+  catch (error) {
+    console.error('Failed to load grants:', error);
+    errorMessage.value = t('grants.load_error');
+  }
+  finally {
+    grantsLoading.value = false;
+  }
+}
+
+/**
+ * Handle tab switch to grants — load on first open
+ */
+async function switchToGrants() {
+  activeSubTab.value = 'grants';
+  if (grants.value.length === 0 && !grantsLoading.value) {
+    await loadGrants();
+  }
+}
+
+/**
+ * Toggle includeRevoked and reload grants
+ */
+async function toggleIncludeRevoked() {
+  await loadGrants();
+}
+
+/**
+ * Open the grant creation modal
+ */
+function openGrantForm() {
+  grantFormOpen.value = true;
+}
+
+/**
+ * Handle grant created event from modal
+ */
+async function onGrantCreated() {
+  grantFormOpen.value = false;
+  successMessage.value = t('grants.created');
+  await loadGrants();
+}
+
+/**
+ * Revoke a grant
+ */
+async function revokeGrant(grantId: string) {
+  errorMessage.value = '';
+  successMessage.value = '';
+
+  try {
+    await subscriptionService.revokeGrant(grantId);
+    successMessage.value = t('grants.revoked');
+    await loadGrants();
+  }
+  catch (error) {
+    console.error('Failed to revoke grant:', error);
+    errorMessage.value = t('grants.revoke_error');
+  }
+}
+
+/**
+ * Get grant status label
+ */
+function getGrantStatus(grant: ComplimentaryGrant): string {
+  if (grant.revokedAt) {
+    return t('grants.status.revoked');
+  }
+  if (grant.expiresAt && new Date(grant.expiresAt) < new Date()) {
+    return t('grants.status.expired');
+  }
+  return t('grants.status.active');
 }
 
 /**
@@ -366,6 +457,7 @@ function formatAmount(millicents, curr) {
  * Format date
  */
 function formatDate(dateString) {
+  if (!dateString) return t('grants.never_expires');
   return new Date(dateString).toLocaleDateString();
 }
 
@@ -437,6 +529,25 @@ onMounted(async () => {
         <h1 id="funding-heading">{{ t("title") }}</h1>
         <p class="page-subtitle">{{ t("settings_section_title") }}</p>
       </div>
+      <button
+        v-if="activeSubTab === 'grants'"
+        type="button"
+        class="create-grant-button"
+        @click="openGrantForm"
+      >
+        <svg width="20"
+             height="20"
+             viewBox="0 0 24 24"
+             fill="none"
+             stroke="currentColor"
+             stroke-width="2"
+             stroke-linecap="round"
+             stroke-linejoin="round"
+             aria-hidden="true">
+          <path d="M12 4v16m8-8H4" />
+        </svg>
+        {{ t("grants.create_new_grant") }}
+      </button>
     </div>
 
     <!-- Status Messages -->
@@ -446,7 +557,8 @@ onMounted(async () => {
              width="20"
              height="20"
              viewBox="0 0 20 20"
-             fill="currentColor">
+             fill="currentColor"
+             aria-hidden="true">
           <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
         </svg>
         {{ successMessage }}
@@ -458,7 +570,8 @@ onMounted(async () => {
              viewBox="0 0 24 24"
              fill="none"
              stroke="currentColor"
-             stroke-width="2">
+             stroke-width="2"
+             aria-hidden="true">
           <circle cx="12" cy="12" r="10" />
           <line x1="12"
                 y1="8"
@@ -478,7 +591,7 @@ onMounted(async () => {
     <template v-else>
       <!-- Sub-Tab Navigation -->
       <div class="subtab-border">
-        <nav role="tablist" aria-label="Funding sections" class="subtab-nav">
+        <nav role="tablist" :aria-label="t('subtab_nav_label')" class="subtab-nav">
           <button
             type="button"
             role="tab"
@@ -506,6 +619,23 @@ onMounted(async () => {
           >
             {{ t("settings_section_title") }}
           </button>
+          <button
+            type="button"
+            role="tab"
+            :aria-selected="activeSubTab === 'grants' ? 'true' : 'false'"
+            aria-controls="grants-panel"
+            class="subtab"
+            @click="switchToGrants"
+          >
+            {{ t("grants.tab_title") }}
+            <span
+              v-if="grants.length > 0"
+              class="subtab-badge"
+              :class="{ 'subtab-badge--active': activeSubTab === 'grants' }"
+            >
+              {{ grants.length }}
+            </span>
+          </button>
         </nav>
       </div>
 
@@ -526,7 +656,8 @@ onMounted(async () => {
                viewBox="0 0 24 24"
                fill="none"
                stroke="currentColor"
-               stroke-width="1.5">
+               stroke-width="1.5"
+               aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
           </svg>
           <p class="empty-title">{{ t("no_subscriptions") }}</p>
@@ -537,7 +668,7 @@ onMounted(async () => {
         <div v-else class="subscriptions-card">
           <!-- Desktop Table -->
           <div class="subscriptions-table-desktop">
-            <table class="subscriptions-table" role="table" aria-label="Subscriptions">
+            <table class="subscriptions-table" role="table" :aria-label="t('subscriptions_table_aria')">
               <thead>
                 <tr>
                   <th scope="col">{{ t("subscription_user_column") }}</th>
@@ -671,7 +802,8 @@ onMounted(async () => {
                  viewBox="0 0 24 24"
                  fill="none"
                  stroke="currentColor"
-                 stroke-width="2">
+                 stroke-width="2"
+                 aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
             <div>
@@ -698,7 +830,8 @@ onMounted(async () => {
                      stroke="currentColor"
                      stroke-width="2"
                      stroke-linecap="round"
-                     stroke-linejoin="round">
+                     stroke-linejoin="round"
+                     aria-hidden="true">
                   <path d="M12 4v16m8-8H4" />
                 </svg>
                 {{ t("add_provider_button") }}
@@ -716,7 +849,8 @@ onMounted(async () => {
                      viewBox="0 0 24 24"
                      fill="none"
                      stroke="currentColor"
-                     stroke-width="1.5">
+                     stroke-width="1.5"
+                     aria-hidden="true">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                 </svg>
                 <p class="empty-title">{{ t("no_providers") }}</p>
@@ -728,7 +862,8 @@ onMounted(async () => {
                        stroke="currentColor"
                        stroke-width="2"
                        stroke-linecap="round"
-                       stroke-linejoin="round">
+                       stroke-linejoin="round"
+                       aria-hidden="true">
                     <path d="M12 4v16m8-8H4" />
                   </svg>
                   {{ t("add_first_provider") }}
@@ -860,6 +995,149 @@ onMounted(async () => {
           </template>
         </div>
       </section>
+
+      <!-- Grants Tab Panel -->
+      <section
+        id="grants-panel"
+        role="tabpanel"
+        tabindex="-1"
+        :aria-hidden="activeSubTab !== 'grants' ? 'true' : 'false'"
+        :hidden="activeSubTab !== 'grants'"
+        class="tab-panel"
+      >
+        <div class="grants-content">
+          <!-- Grants List -->
+          <section class="grants-list-card" aria-labelledby="grants-list-heading">
+            <div class="card-header">
+              <h2 id="grants-list-heading" class="card-title">{{ t("grants.tab_title") }}</h2>
+              <label class="toggle-inline">
+                <input
+                  type="checkbox"
+                  v-model="includeRevoked"
+                  class="toggle-checkbox-small"
+                  @change="toggleIncludeRevoked"
+                />
+                <span class="toggle-inline-label">{{ t("grants.show_revoked") }}</span>
+              </label>
+            </div>
+
+            <div class="grants-live-region" aria-live="polite" :aria-busy="grantsLoading ? 'true' : 'false'">
+              <div v-if="grantsLoading" class="loading-state loading-state--card">{{ t("loading") }}</div>
+
+              <template v-else>
+                <!-- Empty state -->
+                <div v-if="grants.length === 0" class="empty-card-inline">
+                  <svg class="empty-icon-small"
+                       width="48"
+                       height="48"
+                       viewBox="0 0 24 24"
+                       fill="none"
+                       stroke="currentColor"
+                       stroke-width="1.5"
+                       aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p class="empty-title">{{ t("grants.empty_state") }}</p>
+                </div>
+
+                <!-- Desktop Table -->
+                <div v-else class="grants-table-desktop">
+                  <table class="grants-table" role="table" :aria-label="t('grants.tab_title')">
+                    <thead>
+                      <tr>
+                        <th scope="col">{{ t("grants.table.account") }}</th>
+                        <th scope="col">{{ t("grants.table.reason") }}</th>
+                        <th scope="col">{{ t("grants.table.expires") }}</th>
+                        <th scope="col">{{ t("grants.table.granted_by") }}</th>
+                        <th scope="col">{{ t("grants.table.created") }}</th>
+                        <th scope="col" class="col-actions">{{ t("grants.table.actions") }}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr
+                        v-for="grant in grants"
+                        :key="grant.id"
+                        :class="{ 'grant-row--revoked': grant.revokedAt }"
+                      >
+                        <td class="cell-account">{{ grant.accountEmail || grant.accountId }}</td>
+                        <td class="cell-reason">{{ grant.reason || '—' }}</td>
+                        <td class="cell-expires">
+                          {{ grant.expiresAt ? formatDate(grant.expiresAt) : t('grants.never_expires') }}
+                        </td>
+                        <td class="cell-granted-by">{{ grant.grantedByEmail || grant.grantedBy }}</td>
+                        <td class="cell-created">{{ formatDate(grant.createdAt?.toString()) }}</td>
+                        <td class="cell-actions">
+                          <span
+                            class="badge badge--sm"
+                            :class="{
+                              'badge--success': !grant.revokedAt && grant.isActive,
+                              'badge--subtle': grant.revokedAt,
+                              'badge--warning': !grant.revokedAt && !grant.isActive,
+                            }"
+                          >
+                            {{ getGrantStatus(grant) }}
+                          </span>
+                          <button
+                            v-if="grant.isActive"
+                            type="button"
+                            class="action-link action-link--danger"
+                            @click="revokeGrant(grant.id)"
+                            :aria-label="`${t('grants.revoke_button')} ${grant.accountEmail || grant.accountId}`"
+                          >
+                            {{ t("grants.revoke_button") }}
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <!-- Mobile Cards -->
+                <div v-if="grants.length > 0" class="grants-mobile">
+                  <div
+                    v-for="grant in grants"
+                    :key="grant.id"
+                    class="grant-card"
+                    :class="{ 'grant-card--revoked': grant.revokedAt }"
+                  >
+                    <div class="grant-card-header">
+                      <div class="grant-card-info">
+                        <p class="grant-card-account">{{ grant.accountEmail || grant.accountId }}</p>
+                        <p v-if="grant.reason" class="grant-card-reason">{{ grant.reason }}</p>
+                      </div>
+                      <span
+                        class="badge badge--sm"
+                        :class="{
+                          'badge--success': !grant.revokedAt && grant.isActive,
+                          'badge--subtle': grant.revokedAt,
+                          'badge--warning': !grant.revokedAt && !grant.isActive,
+                        }"
+                      >
+                        {{ getGrantStatus(grant) }}
+                      </span>
+                    </div>
+                    <div class="grant-card-footer">
+                      <p class="grant-card-meta">
+                        {{ t("grants.table.expires") }}:
+                        {{ grant.expiresAt ? formatDate(grant.expiresAt) : t('grants.never_expires') }}
+                      </p>
+                      <button
+                        v-if="grant.isActive"
+                        type="button"
+                        class="action-link-mobile action-link--danger"
+                        @click="revokeGrant(grant.id)"
+                        :aria-label="`${t('grants.revoke_button')} ${grant.accountEmail || grant.accountId}`"
+                      >
+                        {{ t("grants.revoke_button") }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </section>
+        </div>
+      </section>
     </template>
 
     <!-- PayPal Configuration Modal -->
@@ -883,6 +1161,13 @@ onMounted(async () => {
       :unconfigured-providers="unconfiguredProviders"
       @close="handleWizardClose"
       @provider-connected="handleProviderConnected"
+    />
+
+    <!-- Grant Form Modal -->
+    <GrantForm
+      v-if="grantFormOpen"
+      @close="grantFormOpen = false"
+      @created="onGrantCreated"
     />
   </section>
 </template>
@@ -920,6 +1205,37 @@ onMounted(async () => {
         margin: 0;
         font-size: var(--pav-font-size-xs);
         color: var(--pav-color-text-muted);
+      }
+    }
+
+    .create-grant-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--pav-space-2);
+      padding: var(--pav-space-2_5) var(--pav-space-6);
+      background: var(--pav-color-brand-primary);
+      color: var(--pav-color-text-inverse);
+      font-weight: var(--pav-font-weight-medium);
+      font-size: var(--pav-font-size-xs);
+      font-family: inherit;
+      border: none;
+      border-radius: var(--pav-border-radius-full);
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+      width: 100%;
+
+      @include pav-media(sm) {
+        width: auto;
+      }
+
+      &:hover {
+        background: var(--pav-color-brand-primary-dark);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--pav-color-brand-primary);
+        outline-offset: 2px;
       }
     }
   }
@@ -998,7 +1314,7 @@ onMounted(async () => {
         flex-shrink: 0;
 
         .subtab-badge {
-          margin-left: var(--pav-space-2);
+          margin-inline-start: var(--pav-space-2);
           padding: var(--pav-space-0_5) var(--pav-space-2);
           border-radius: var(--pav-border-radius-full);
           font-size: var(--pav-font-size-2xs);
@@ -1258,7 +1574,7 @@ onMounted(async () => {
       text-align: center;
 
       @include pav-media(sm) {
-        text-align: left;
+        text-align: start;
       }
     }
 
@@ -1286,52 +1602,12 @@ onMounted(async () => {
 
       &:hover:not(:disabled) {
         background: var(--pav-color-stone-50);
+        color: var(--pav-color-text-primary);
       }
 
       &:disabled {
-        opacity: 0.5;
+        opacity: 0.4;
         cursor: not-allowed;
-      }
-    }
-  }
-
-  /* Action Links */
-  .action-link {
-    background: none;
-    border: none;
-    font-size: var(--pav-font-size-xs);
-    font-weight: var(--pav-font-weight-medium);
-    font-family: inherit;
-    cursor: pointer;
-    padding: 0;
-    transition: color 0.2s ease;
-
-    &--danger {
-      color: var(--pav-color-red-600);
-
-      &:hover {
-        color: var(--pav-color-red-700);
-      }
-    }
-  }
-
-  .action-link-mobile {
-    flex-shrink: 0;
-    background: none;
-    border: none;
-    padding: var(--pav-space-1_5) var(--pav-space-3);
-    border-radius: var(--pav-border-radius-full);
-    font-size: var(--pav-font-size-xs);
-    font-weight: var(--pav-font-weight-medium);
-    font-family: inherit;
-    cursor: pointer;
-    transition: color 0.2s ease, background-color 0.2s ease;
-
-    &.action-link--danger {
-      color: var(--pav-color-red-600);
-
-      &:hover {
-        background: var(--pav-color-red-50);
       }
     }
   }
@@ -1347,10 +1623,10 @@ onMounted(async () => {
     background: var(--pav-color-surface-primary);
     border-radius: var(--pav-border-radius-xl);
     border: 1px solid var(--pav-border-color-light);
-    padding: var(--pav-space-6);
+    padding: var(--pav-space-5) var(--pav-space-6);
   }
 
-  /* Toggle Rows */
+  /* Toggle */
   .toggle-row {
     display: flex;
     align-items: flex-start;
@@ -1358,28 +1634,22 @@ onMounted(async () => {
     cursor: pointer;
 
     &--compact {
-      padding: 0;
+      margin-bottom: var(--pav-space-4);
     }
 
     .toggle-checkbox {
-      width: 1.25rem;
-      height: 1.25rem;
       margin-top: var(--pav-space-0_5);
-      border-radius: var(--pav-border-radius-xs);
-      border: 1px solid var(--pav-border-color-medium);
-      accent-color: var(--pav-color-orange-500);
-      cursor: pointer;
+      flex-shrink: 0;
     }
 
     .toggle-text {
       .toggle-label {
-        display: block;
         font-weight: var(--pav-font-weight-medium);
         color: var(--pav-color-text-primary);
       }
 
       .toggle-description {
-        margin: var(--pav-space-0_5) 0 0;
+        margin: var(--pav-space-1) 0 0;
         font-size: var(--pav-font-size-xs);
         color: var(--pav-color-text-muted);
       }
@@ -1392,12 +1662,8 @@ onMounted(async () => {
     gap: var(--pav-space-2);
     cursor: pointer;
 
-    input[type="checkbox"] {
-      width: 1rem;
-      height: 1rem;
-      border-radius: var(--pav-border-radius-xs);
-      accent-color: var(--pav-color-orange-500);
-      cursor: pointer;
+    .toggle-checkbox-small {
+      flex-shrink: 0;
     }
 
     .toggle-inline-label {
@@ -1406,7 +1672,7 @@ onMounted(async () => {
     }
   }
 
-  /* Provider Card */
+  /* Providers */
   .providers-card {
     background: var(--pav-color-surface-primary);
     border-radius: var(--pav-border-radius-xl);
@@ -1416,16 +1682,10 @@ onMounted(async () => {
 
   .card-header {
     display: flex;
-    flex-direction: column;
-    gap: var(--pav-space-3);
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--pav-space-4);
     padding: var(--pav-space-4) var(--pav-space-6);
-    border-bottom: 1px solid var(--pav-border-color-light);
-
-    @include pav-media(sm) {
-      flex-direction: row;
-      align-items: center;
-      justify-content: space-between;
-    }
 
     &--border-only {
       border-bottom: 1px solid var(--pav-border-color-light);
@@ -1434,55 +1694,19 @@ onMounted(async () => {
     .card-title {
       margin: 0;
       font-size: var(--pav-font-size-base);
-      font-weight: var(--pav-font-weight-medium);
+      font-weight: var(--pav-font-weight-semibold);
       color: var(--pav-color-text-primary);
-    }
-  }
-
-  .btn-text-orange {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--pav-space-2);
-    padding: var(--pav-space-2) var(--pav-space-6);
-    background: none;
-    border: none;
-    border-radius: var(--pav-border-radius-full);
-    font-size: var(--pav-font-size-xs);
-    font-weight: var(--pav-font-weight-medium);
-    font-family: inherit;
-    color: var(--pav-color-orange-600);
-    cursor: pointer;
-    transition: background-color 0.2s ease;
-    width: 100%;
-
-    @include pav-media(sm) {
-      width: auto;
-    }
-
-    &:hover {
-      background: var(--pav-color-orange-50);
-    }
-
-    &:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
     }
   }
 
   .providers-list {
     .provider-item {
       display: flex;
-      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
       gap: var(--pav-space-4);
       padding: var(--pav-space-4) var(--pav-space-6);
       border-bottom: 1px solid var(--pav-border-color-light);
-
-      @include pav-media(sm) {
-        flex-direction: row;
-        align-items: center;
-        justify-content: space-between;
-      }
 
       &:last-child {
         border-bottom: none;
@@ -1491,7 +1715,6 @@ onMounted(async () => {
       .provider-info {
         .provider-name-row {
           display: flex;
-          flex-wrap: wrap;
           align-items: center;
           gap: var(--pav-space-2);
 
@@ -1503,33 +1726,32 @@ onMounted(async () => {
           }
 
           .connected-badge {
-            display: inline-block;
             padding: var(--pav-space-0_5) var(--pav-space-2);
+            border-radius: var(--pav-border-radius-full);
             font-size: var(--pav-font-size-2xs);
             font-weight: var(--pav-font-weight-medium);
             background: var(--pav-color-emerald-100);
             color: var(--pav-color-emerald-700);
-            border-radius: var(--pav-border-radius-xs);
           }
         }
 
         .provider-type {
-          display: block;
-          margin-top: var(--pav-space-0_5);
           font-size: var(--pav-font-size-xs);
           color: var(--pav-color-text-muted);
+          text-transform: capitalize;
         }
       }
 
       .provider-actions {
         display: flex;
-        gap: var(--pav-space-4);
         align-items: center;
+        gap: var(--pav-space-4);
+        flex-shrink: 0;
       }
     }
   }
 
-  /* Pricing Card */
+  /* Pricing Form */
   .pricing-card {
     background: var(--pav-color-surface-primary);
     border-radius: var(--pav-border-radius-xl);
@@ -1539,293 +1761,385 @@ onMounted(async () => {
 
   .pricing-form {
     padding: var(--pav-space-6);
-    display: flex;
-    flex-direction: column;
-    gap: var(--pav-space-6);
   }
 
   .pricing-grid {
     display: grid;
     grid-template-columns: 1fr;
-    gap: var(--pav-space-6);
+    gap: var(--pav-space-4);
 
-    @include pav-media(md) {
+    @include pav-media(sm) {
       grid-template-columns: repeat(3, 1fr);
     }
   }
 
   .pricing-options {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: var(--pav-space-6);
-
-    @include pav-media(md) {
-      grid-template-columns: repeat(2, 1fr);
-    }
+    margin-top: var(--pav-space-6);
+    padding-top: var(--pav-space-6);
+    border-top: 1px solid var(--pav-border-color-light);
   }
 
   .pricing-actions {
-    padding-top: var(--pav-space-2);
+    margin-top: var(--pav-space-6);
+    display: flex;
+    justify-content: flex-end;
   }
 
   /* Form Elements */
   .form-group {
-    display: flex;
-    flex-direction: column;
-
     &--inline {
-      gap: var(--pav-space-2);
-    }
-
-    .form-label {
-      display: block;
-      font-size: var(--pav-font-size-xs);
-      font-weight: var(--pav-font-weight-medium);
-      color: var(--pav-color-text-secondary);
-      margin-bottom: var(--pav-space-2);
-    }
-
-    .form-hint {
-      margin: var(--pav-space-1) 0 0;
-      font-size: var(--pav-font-size-2xs);
-      color: var(--pav-color-text-muted);
+      display: flex;
+      align-items: center;
+      gap: var(--pav-space-3);
+      flex-wrap: wrap;
     }
   }
 
-  .form-input,
-  .form-select {
-    width: 100%;
-    padding: var(--pav-space-2_5) var(--pav-space-5);
-    background: var(--pav-color-surface-primary);
-    border: 1px solid var(--pav-border-color-medium);
-    border-radius: var(--pav-border-radius-full);
+  .form-label {
+    display: block;
+    margin-bottom: var(--pav-space-1_5);
     font-size: var(--pav-font-size-xs);
+    font-weight: var(--pav-font-weight-medium);
+    color: var(--pav-color-text-secondary);
+  }
+
+  .form-required {
+    color: var(--pav-color-red-500);
+    margin-inline-start: var(--pav-space-1);
+  }
+
+  .form-input {
+    width: 100%;
+    padding: var(--pav-space-2) var(--pav-space-3);
+    border: 1px solid var(--pav-border-color-medium);
+    border-radius: var(--pav-border-radius-md);
+    background: var(--pav-color-surface-primary);
+    font-size: var(--pav-font-size-sm);
     font-family: inherit;
     color: var(--pav-color-text-primary);
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    box-sizing: border-box;
 
     &:focus {
       outline: none;
-      border-color: var(--pav-color-orange-500);
-      box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.2);
+      border-color: var(--pav-color-orange-400);
+      box-shadow: 0 0 0 3px var(--pav-color-orange-100);
     }
 
-    &:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
+    &--error {
+      border-color: var(--pav-color-red-400);
+
+      &:focus {
+        box-shadow: 0 0 0 3px var(--pav-color-red-100);
+      }
+    }
+
+    &--narrow {
+      width: auto;
+      min-width: 80px;
+    }
+
+    &--date {
+      cursor: pointer;
     }
   }
 
   .form-select {
-    appearance: none;
-    cursor: pointer;
-    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
-    background-position: right 0.75rem center;
-    background-repeat: no-repeat;
-    background-size: 1.25rem;
-    padding-right: var(--pav-space-10);
-  }
-
-  .form-input--narrow {
-    max-width: 120px;
-  }
-
-  /* Primary Button */
-  .btn-primary {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: var(--pav-space-2_5) var(--pav-space-6);
-    background: var(--pav-color-orange-500);
-    color: var(--pav-color-text-inverse);
-    font-weight: var(--pav-font-weight-medium);
-    font-size: var(--pav-font-size-xs);
+    width: 100%;
+    padding: var(--pav-space-2) var(--pav-space-3);
+    border: 1px solid var(--pav-border-color-medium);
+    border-radius: var(--pav-border-radius-md);
+    background: var(--pav-color-surface-primary);
+    font-size: var(--pav-font-size-sm);
     font-family: inherit;
+    color: var(--pav-color-text-primary);
+    cursor: pointer;
+
+    &:focus {
+      outline: none;
+      border-color: var(--pav-color-orange-400);
+      box-shadow: 0 0 0 3px var(--pav-color-orange-100);
+    }
+  }
+
+  .form-textarea {
+    width: 100%;
+    padding: var(--pav-space-2) var(--pav-space-3);
+    border: 1px solid var(--pav-border-color-medium);
+    border-radius: var(--pav-border-radius-md);
+    background: var(--pav-color-surface-primary);
+    font-size: var(--pav-font-size-sm);
+    font-family: inherit;
+    color: var(--pav-color-text-primary);
+    resize: vertical;
+    box-sizing: border-box;
+
+    &:focus {
+      outline: none;
+      border-color: var(--pav-color-orange-400);
+      box-shadow: 0 0 0 3px var(--pav-color-orange-100);
+    }
+  }
+
+  .form-hint {
+    margin: var(--pav-space-1) 0 0;
+    font-size: var(--pav-font-size-xs);
+    color: var(--pav-color-text-muted);
+  }
+
+  .form-error {
+    margin: var(--pav-space-1) 0 0;
+    font-size: var(--pav-font-size-xs);
+    color: var(--pav-color-red-600);
+  }
+
+  /* Buttons */
+  .btn-primary {
+    padding: var(--pav-space-2) var(--pav-space-5);
     border: none;
     border-radius: var(--pav-border-radius-full);
+    background: var(--pav-color-orange-500);
+    font-size: var(--pav-font-size-sm);
+    font-weight: var(--pav-font-weight-medium);
+    font-family: inherit;
+    color: var(--pav-text-inverse);
     cursor: pointer;
     transition: background-color 0.2s ease;
 
-    &:hover {
+    &:hover:not(:disabled) {
       background: var(--pav-color-orange-600);
     }
 
-    &:focus-visible {
-      outline: 2px solid var(--pav-color-orange-500);
-      outline-offset: 2px;
-    }
-
     &:disabled {
-      opacity: 0.6;
+      opacity: 0.5;
       cursor: not-allowed;
     }
   }
-}
 
-/* Dark Mode */
-@media (prefers-color-scheme: dark) {
-  .funding-page {
-    .subtab-border {
-      .subtab-nav {
-        .subtab {
-          .subtab-badge {
-            background: var(--pav-color-stone-800);
-            color: var(--pav-color-stone-400);
+  .btn-text-orange {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--pav-space-1_5);
+    padding: var(--pav-space-1_5) var(--pav-space-3);
+    border: none;
+    border-radius: var(--pav-border-radius-full);
+    background: none;
+    font-size: var(--pav-font-size-xs);
+    font-weight: var(--pav-font-weight-medium);
+    font-family: inherit;
+    color: var(--pav-color-orange-600);
+    cursor: pointer;
+    transition: background-color 0.2s ease;
 
-            &--active {
-              background: rgba(249, 115, 22, 0.15);
-              color: var(--pav-color-orange-300);
-            }
-          }
-        }
-      }
+    &:hover:not(:disabled) {
+      background: var(--pav-color-orange-50);
     }
 
-    .empty-card {
-      .empty-icon {
-        color: var(--pav-color-stone-600);
-      }
-
-      .empty-description {
-        color: var(--pav-color-stone-500);
-      }
+    &:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
     }
+  }
 
-    .empty-card-inline {
-      .empty-icon-small {
-        color: var(--pav-color-stone-600);
-      }
-    }
+  .action-link {
+    padding: var(--pav-space-1) var(--pav-space-2_5);
+    border: none;
+    border-radius: var(--pav-border-radius-md);
+    background: none;
+    font-size: var(--pav-font-size-xs);
+    font-weight: var(--pav-font-weight-medium);
+    font-family: inherit;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
 
-    .alert {
-      &--success {
-        background: rgba(16, 185, 129, 0.1);
-        border-color: var(--pav-color-emerald-800);
-        color: var(--pav-color-emerald-300);
-      }
-
-      &--error {
-        background: rgba(239, 68, 68, 0.1);
-        border-color: var(--pav-color-red-800);
-        color: var(--pav-color-red-300);
-      }
-
-      &--warning {
-        background: rgba(245, 158, 11, 0.1);
-        border-color: var(--pav-color-amber-800);
-        color: var(--pav-color-amber-200);
-      }
-    }
-
-    .status-badge {
-      &--active {
-        background: rgba(16, 185, 129, 0.15);
-        color: var(--pav-color-emerald-300);
-      }
-
-      &--past_due {
-        background: rgba(245, 158, 11, 0.15);
-        color: var(--pav-color-amber-300);
-      }
-
-      &--suspended {
-        background: rgba(239, 68, 68, 0.15);
-        color: var(--pav-color-red-300);
-      }
-
-      &--cancelled {
-        background: var(--pav-color-stone-800);
-        color: var(--pav-color-stone-400);
-      }
-    }
-
-    .subscriptions-card {
-      .subscriptions-table-desktop {
-        .subscriptions-table {
-          thead tr {
-            background: rgba(41, 37, 36, 0.5);
-          }
-
-          tbody tr:hover {
-            background: rgba(41, 37, 36, 0.3);
-          }
-        }
-      }
-    }
-
-    .pagination-btn {
-      &:hover:not(:disabled) {
-        background: var(--pav-color-stone-800);
-      }
-    }
-
-    .action-link {
-      &--danger {
-        color: var(--pav-color-red-400);
-
-        &:hover {
-          color: var(--pav-color-red-300);
-        }
-      }
-    }
-
-    .action-link-mobile {
-      &.action-link--danger {
-        color: var(--pav-color-red-400);
-
-        &:hover {
-          background: rgba(239, 68, 68, 0.1);
-        }
-      }
-    }
-
-    .toggle-row {
-      .toggle-text {
-        .toggle-label {
-          color: var(--pav-color-stone-100);
-        }
-      }
-    }
-
-    .toggle-inline {
-      .toggle-inline-label {
-        color: var(--pav-color-stone-400);
-      }
-    }
-
-    .providers-list {
-      .provider-item {
-        .provider-info {
-          .connected-badge {
-            background: rgba(16, 185, 129, 0.15);
-            color: var(--pav-color-emerald-300);
-          }
-        }
-      }
-    }
-
-    .btn-text-orange {
-      color: var(--pav-color-orange-400);
+    &--danger {
+      color: var(--pav-color-red-600);
 
       &:hover {
-        background: rgba(249, 115, 22, 0.1);
+        background: var(--pav-color-red-50);
       }
     }
+  }
 
-    .form-input,
-    .form-select {
-      background: var(--pav-color-stone-800);
-      border-color: var(--pav-color-stone-600);
-      color: var(--pav-color-stone-100);
+  .action-link-mobile {
+    padding: var(--pav-space-1_5) var(--pav-space-3);
+    border: 1px solid currentColor;
+    border-radius: var(--pav-border-radius-full);
+    background: none;
+    font-size: var(--pav-font-size-xs);
+    font-weight: var(--pav-font-weight-medium);
+    font-family: inherit;
+    cursor: pointer;
 
-      &:focus {
-        border-color: var(--pav-color-orange-400);
-        box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.15);
+    &--danger {
+      color: var(--pav-color-red-600);
+
+      &:hover {
+        background: var(--pav-color-red-50);
       }
     }
+  }
 
-    .form-select {
-      background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23a8a29e' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  /* Grants */
+  .grants-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--pav-space-6);
+  }
+
+  .grants-live-region {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+  }
+
+  .grants-list-card {
+    background: var(--pav-color-surface-primary);
+    border-radius: var(--pav-border-radius-xl);
+    border: 1px solid var(--pav-border-color-light);
+    overflow: hidden;
+  }
+
+  /* Grants Table */
+  .grants-table-desktop {
+    display: none;
+
+    @include pav-media(md) {
+      display: block;
+    }
+
+    .grants-table {
+      width: 100%;
+      border-collapse: collapse;
+
+      thead {
+        tr {
+          border-bottom: 1px solid var(--pav-border-color-light);
+          background: var(--pav-color-stone-50);
+        }
+
+        th {
+          padding: var(--pav-space-3) var(--pav-space-6);
+          text-align: start;
+          font-size: var(--pav-font-size-2xs);
+          font-weight: var(--pav-font-weight-semibold);
+          color: var(--pav-color-text-muted);
+          text-transform: uppercase;
+          letter-spacing: var(--pav-letter-spacing-wider);
+
+          &.col-actions {
+            text-align: end;
+          }
+        }
+      }
+
+      tbody {
+        tr {
+          border-bottom: 1px solid var(--pav-border-color-light);
+
+          &:last-child {
+            border-bottom: none;
+          }
+
+          &.grant-row--revoked {
+            opacity: 0.6;
+          }
+        }
+
+        td {
+          padding: var(--pav-space-4) var(--pav-space-6);
+          font-size: var(--pav-font-size-sm);
+        }
+
+        .cell-account {
+          font-weight: var(--pav-font-weight-medium);
+          color: var(--pav-color-text-primary);
+        }
+
+        .cell-reason {
+          color: var(--pav-color-text-secondary);
+          max-width: 200px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .cell-expires,
+        .cell-granted-by,
+        .cell-created {
+          color: var(--pav-color-text-muted);
+          font-size: var(--pav-font-size-xs);
+        }
+
+        .cell-actions {
+          text-align: end;
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: var(--pav-space-2);
+        }
+      }
+    }
+  }
+
+  /* Grants Mobile */
+  .grants-mobile {
+    display: block;
+
+    @include pav-media(md) {
+      display: none;
+    }
+
+    .grant-card {
+      padding: var(--pav-space-4);
+      border-bottom: 1px solid var(--pav-border-color-light);
+
+      &:last-child {
+        border-bottom: none;
+      }
+
+      &--revoked {
+        opacity: 0.6;
+      }
+
+      .grant-card-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: var(--pav-space-3);
+
+        .grant-card-info {
+          min-width: 0;
+          flex: 1;
+
+          .grant-card-account {
+            margin: 0;
+            font-weight: var(--pav-font-weight-medium);
+            color: var(--pav-color-text-primary);
+            word-break: break-all;
+          }
+
+          .grant-card-reason {
+            margin: var(--pav-space-1) 0 0;
+            font-size: var(--pav-font-size-xs);
+            color: var(--pav-color-text-muted);
+          }
+        }
+      }
+
+      .grant-card-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--pav-space-3);
+        margin-top: var(--pav-space-3);
+
+        .grant-card-meta {
+          margin: 0;
+          font-size: var(--pav-font-size-xs);
+          color: var(--pav-color-text-muted);
+        }
+      }
     }
   }
 }

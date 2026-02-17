@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import SubscriptionService from '@/server/subscription/service/subscription';
 import { Subscription, SubscriptionSettings, ProviderConfig } from '@/common/model/subscription';
+import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
 import { ProviderSubscription, WebhookEvent } from '@/server/subscription/service/provider/adapter';
 
 /**
@@ -26,6 +27,17 @@ export default class SubscriptionInterface {
    */
   async hasActiveSubscription(accountId: string): Promise<boolean> {
     return this.subscriptionService.hasActiveSubscription(accountId);
+  }
+
+  /**
+   * Check if an account has access to subscription features
+   * (either via active subscription or complimentary grant)
+   *
+   * @param accountId - Account ID to check
+   * @returns True if account has subscription access, false otherwise
+   */
+  async hasSubscriptionAccess(accountId: string): Promise<boolean> {
+    return this.subscriptionService.hasSubscriptionAccess(accountId);
   }
 
   /**
@@ -108,6 +120,61 @@ export default class SubscriptionInterface {
 
   async forceCancel(subscriptionId: string): Promise<void> {
     return this.subscriptionService.forceCancel(subscriptionId);
+  }
+
+  // Complimentary grant operations
+
+  /**
+   * Create a complimentary grant for an account
+   *
+   * @param accountId - Account ID to grant access to
+   * @param grantedBy - Account ID of the admin granting access
+   * @param reason - Optional reason for the grant
+   * @param expiresAt - Optional expiration date for the grant
+   * @returns The created ComplimentaryGrant
+   */
+  async createGrant(accountId: string, grantedBy: string, reason?: string, expiresAt?: Date): Promise<ComplimentaryGrant> {
+    return this.subscriptionService.createGrant(accountId, grantedBy, reason, expiresAt);
+  }
+
+  /**
+   * Revoke a complimentary grant
+   *
+   * @param grantId - ID of the grant to revoke
+   * @param revokedBy - Account ID of the admin revoking the grant
+   */
+  async revokeGrant(grantId: string, revokedBy: string): Promise<void> {
+    return this.subscriptionService.revokeGrant(grantId, revokedBy);
+  }
+
+  /**
+   * List all complimentary grants
+   *
+   * @param includeRevoked - Whether to include revoked grants in the list
+   * @returns Array of ComplimentaryGrant objects
+   */
+  async listGrants(includeRevoked?: boolean): Promise<ComplimentaryGrant[]> {
+    return this.subscriptionService.listGrants(includeRevoked);
+  }
+
+  /**
+   * Check if an account has an active complimentary grant
+   *
+   * @param accountId - Account ID to check
+   * @returns True if account has an active grant, false otherwise
+   */
+  async hasActiveGrant(accountId: string): Promise<boolean> {
+    return this.subscriptionService.hasActiveGrant(accountId);
+  }
+
+  /**
+   * Get the complimentary grant for a specific account
+   *
+   * @param accountId - Account ID to look up
+   * @returns The ComplimentaryGrant if found, null otherwise
+   */
+  async getGrantForAccount(accountId: string): Promise<ComplimentaryGrant | null> {
+    return this.subscriptionService.getGrantForAccount(accountId);
   }
 
   // Platform OAuth configuration

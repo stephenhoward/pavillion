@@ -46,3 +46,24 @@ export class InvalidEnvironmentError extends Error {
     this.name = 'InvalidEnvironmentError';
   }
 }
+
+export class AccountNotFoundError extends Error {
+  constructor(accountId: string) {
+    super(`Account not found: ${accountId}`);
+    this.name = 'AccountNotFoundError';
+  }
+}
+
+export class DuplicateGrantError extends Error {
+  constructor(accountId: string) {
+    super(`An active grant already exists for account: ${accountId}`);
+    this.name = 'DuplicateGrantError';
+  }
+}
+
+export class GrantNotFoundError extends Error {
+  constructor(grantId: string) {
+    super(`Grant not found: ${grantId}`);
+    this.name = 'GrantNotFoundError';
+  }
+}

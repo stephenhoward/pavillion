@@ -381,6 +381,7 @@
     "loading": "Loading...",
     "load_settings_error": "Failed to load subscription settings.",
     "settings_section_title": "Subscription Configuration",
+    "subtab_nav_label": "Funding sections",
     "enabled_label": "Enable Subscriptions",
     "enabled_description": "Allow users to subscribe to support this instance.",
     "setup_provider_message": "Please set up at least one payment provider below before configuring subscription pricing.",
@@ -458,6 +459,7 @@
       }
     },
     "subscriptions_section_title": "Active Subscriptions",
+    "subscriptions_table_aria": "Subscriptions",
     "subscriptions_empty_state": "Subscriptions will appear here when users subscribe to your instance",
     "no_subscriptions": "No active subscriptions.",
     "subscription_user_column": "User",
@@ -539,6 +541,48 @@
     },
     "query_success": {
       "stripe_connected": "Stripe connected successfully!"
+    },
+    "grants": {
+      "tab_title": "Complimentary Grants",
+      "show_revoked": "Show revoked grants",
+      "create_button": "Grant Access",
+      "create_new_grant": "Create New Grant",
+      "revoke_button": "Revoke",
+      "created": "Complimentary grant created successfully.",
+      "revoked": "Complimentary grant revoked successfully.",
+      "load_error": "Failed to load grants.",
+      "create_error": "Failed to create grant.",
+      "revoke_error": "Failed to revoke grant.",
+      "empty_state": "No complimentary grants have been issued.",
+      "table": {
+        "account": "Account",
+        "reason": "Reason",
+        "expires": "Expires",
+        "granted_by": "Granted By",
+        "created": "Created",
+        "actions": "Actions"
+      },
+      "form": {
+        "account_label": "Account",
+        "account_placeholder": "Search by username or email",
+        "account_required": "An account is required",
+        "reason_label": "Reason (optional)",
+        "reason_placeholder": "Reason for granting access...",
+        "reason_max_length": "Reason must be 500 characters or less",
+        "expires_label": "Expiration Date (optional)",
+        "expires_future": "Expiration date must be in the future",
+        "section_title": "Create Complimentary Grant",
+        "no_results": "No accounts found",
+        "searching": "Searching...",
+        "char_count": "{{current}}/{{max}}",
+        "cancel_button": "Cancel"
+      },
+      "status": {
+        "active": "Active",
+        "revoked": "Revoked",
+        "expired": "Expired"
+      },
+      "never_expires": "Never"
     }
   },
   "blocked_instances": {
