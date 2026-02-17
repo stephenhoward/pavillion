@@ -7,9 +7,18 @@ import { SubscriptionSettingsEntity } from '@/server/subscription/entity/subscri
 import { ProviderConfigEntity } from '@/server/subscription/entity/provider_config';
 import { SubscriptionEntity } from '@/server/subscription/entity/subscription';
 import { SubscriptionEventEntity } from '@/server/subscription/entity/subscription_event';
+import { ComplimentaryGrantEntity } from '@/server/subscription/entity/complimentary_grant';
 import { ProviderFactory } from '@/server/subscription/service/provider/factory';
 import { SubscriptionSettings, ProviderConfig, Subscription } from '@/common/model/subscription';
+import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
 import { WebhookEvent } from '@/server/subscription/service/provider/adapter';
+import {
+  AccountNotFoundError,
+  DuplicateGrantError,
+  GrantNotFoundError,
+} from '@/server/subscription/exceptions';
+import { ValidationError } from '@/common/exceptions/base';
+import { AccountEntity } from '@/server/common/entity/account';
 import { v4 as uuidv4 } from 'uuid';
 
 describe('SubscriptionService', () => {
@@ -352,6 +361,416 @@ describe('SubscriptionService', () => {
       const hasActive = await service.hasActiveSubscription(accountId);
 
       expect(hasActive).toBe(false);
+    });
+  });
+
+  describe('createGrant', () => {
+    it('should create a grant with valid inputs', async () => {
+      const accountId = uuidv4();
+      const grantedBy = uuidv4();
+      const grantId = uuidv4();
+
+      const mockAccount = { id: accountId };
+      const mockGrantEntity = {
+        id: grantId,
+        account_id: accountId,
+        granted_by: grantedBy,
+        reason: null,
+        expires_at: null,
+        revoked_at: null,
+        revoked_by: null,
+        save: sandbox.stub().resolves(),
+        toModel: function() {
+          const grant = new ComplimentaryGrant(this.id);
+          grant.accountId = this.account_id;
+          grant.grantedBy = this.granted_by;
+          grant.reason = this.reason;
+          grant.expiresAt = this.expires_at;
+          grant.revokedAt = this.revoked_at;
+          grant.revokedBy = this.revoked_by;
+          return grant;
+        },
+      };
+
+      sandbox.stub(AccountEntity, 'findByPk').resolves(mockAccount as any);
+      sandbox.stub(ComplimentaryGrantEntity, 'findOne').resolves(null);
+      sandbox.stub(ComplimentaryGrantEntity, 'build').returns(mockGrantEntity as any);
+
+      const grant = await service.createGrant(accountId, grantedBy);
+
+      expect(grant).toBeDefined();
+      expect(grant.accountId).toBe(accountId);
+      expect(grant.grantedBy).toBe(grantedBy);
+      expect(mockGrantEntity.save.called).toBe(true);
+    });
+
+    it('should create a grant with optional reason and expiresAt', async () => {
+      const accountId = uuidv4();
+      const grantedBy = uuidv4();
+      const reason = 'Beta tester reward';
+      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+      const mockAccount = { id: accountId };
+      const mockGrantEntity = {
+        id: uuidv4(),
+        account_id: accountId,
+        granted_by: grantedBy,
+        reason: reason,
+        expires_at: expiresAt,
+        revoked_at: null,
+        revoked_by: null,
+        save: sandbox.stub().resolves(),
+        toModel: function() {
+          const grant = new ComplimentaryGrant(this.id);
+          grant.accountId = this.account_id;
+          grant.grantedBy = this.granted_by;
+          grant.reason = this.reason;
+          grant.expiresAt = this.expires_at;
+          grant.revokedAt = this.revoked_at;
+          grant.revokedBy = this.revoked_by;
+          return grant;
+        },
+      };
+
+      sandbox.stub(AccountEntity, 'findByPk').resolves(mockAccount as any);
+      sandbox.stub(ComplimentaryGrantEntity, 'findOne').resolves(null);
+      sandbox.stub(ComplimentaryGrantEntity, 'build').returns(mockGrantEntity as any);
+
+      const grant = await service.createGrant(accountId, grantedBy, reason, expiresAt);
+
+      expect(grant.reason).toBe(reason);
+      expect(grant.expiresAt).toEqual(expiresAt);
+    });
+
+    it('should throw AccountNotFoundError if account does not exist', async () => {
+      const accountId = uuidv4();
+      const grantedBy = uuidv4();
+
+      sandbox.stub(AccountEntity, 'findByPk').resolves(null);
+
+      await expect(service.createGrant(accountId, grantedBy)).rejects.toThrow(AccountNotFoundError);
+    });
+
+    it('should throw DuplicateGrantError if active grant already exists for account', async () => {
+      const accountId = uuidv4();
+      const grantedBy = uuidv4();
+      const existingGrantEntity = {
+        id: uuidv4(),
+        account_id: accountId,
+        revoked_at: null,
+        expires_at: null,
+      };
+
+      sandbox.stub(AccountEntity, 'findByPk').resolves({ id: accountId } as any);
+      sandbox.stub(ComplimentaryGrantEntity, 'findOne').resolves(existingGrantEntity as any);
+
+      await expect(service.createGrant(accountId, grantedBy)).rejects.toThrow(DuplicateGrantError);
+    });
+
+    it('should throw ValidationError for invalid accountId UUID', async () => {
+      await expect(
+        service.createGrant('not-a-uuid', uuidv4()),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('should throw ValidationError for invalid grantedBy UUID', async () => {
+      await expect(
+        service.createGrant(uuidv4(), 'not-a-uuid'),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('should throw ValidationError for reason exceeding 500 characters', async () => {
+      const accountId = uuidv4();
+      const grantedBy = uuidv4();
+      const longReason = 'a'.repeat(501);
+
+      await expect(
+        service.createGrant(accountId, grantedBy, longReason),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('should throw ValidationError for expiresAt in the past', async () => {
+      const accountId = uuidv4();
+      const grantedBy = uuidv4();
+      const pastDate = new Date(Date.now() - 1000);
+
+      await expect(
+        service.createGrant(accountId, grantedBy, undefined, pastDate),
+      ).rejects.toThrow(ValidationError);
+    });
+  });
+
+  describe('revokeGrant', () => {
+    it('should set revoked_at and revoked_by on the grant', async () => {
+      const grantId = uuidv4();
+      const revokedBy = uuidv4();
+
+      const mockGrantEntity = {
+        id: grantId,
+        revoked_at: null,
+        revoked_by: null,
+        save: sandbox.stub().resolves(),
+        toModel: function() {
+          const grant = new ComplimentaryGrant(this.id);
+          grant.revokedAt = this.revoked_at;
+          grant.revokedBy = this.revoked_by;
+          return grant;
+        },
+      };
+
+      sandbox.stub(ComplimentaryGrantEntity, 'findByPk').resolves(mockGrantEntity as any);
+
+      await service.revokeGrant(grantId, revokedBy);
+
+      expect(mockGrantEntity.revoked_at).toBeInstanceOf(Date);
+      expect(mockGrantEntity.revoked_by).toBe(revokedBy);
+      expect(mockGrantEntity.save.called).toBe(true);
+    });
+
+    it('should throw GrantNotFoundError if grant does not exist', async () => {
+      const grantId = uuidv4();
+      const revokedBy = uuidv4();
+
+      sandbox.stub(ComplimentaryGrantEntity, 'findByPk').resolves(null);
+
+      await expect(service.revokeGrant(grantId, revokedBy)).rejects.toThrow(GrantNotFoundError);
+    });
+
+    it('should throw ValidationError for invalid grantId UUID', async () => {
+      await expect(
+        service.revokeGrant('not-a-uuid', uuidv4()),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('should throw ValidationError for invalid revokedBy UUID', async () => {
+      await expect(
+        service.revokeGrant(uuidv4(), 'not-a-uuid'),
+      ).rejects.toThrow(ValidationError);
+    });
+  });
+
+  describe('listGrants', () => {
+    it('should return only active grants by default', async () => {
+      const activeGrant = {
+        id: uuidv4(),
+        account_id: uuidv4(),
+        revoked_at: null,
+        expires_at: null,
+        toModel: function() {
+          const grant = new ComplimentaryGrant(this.id);
+          grant.accountId = this.account_id;
+          grant.revokedAt = this.revoked_at;
+          return grant;
+        },
+      };
+
+      const findAllStub = sandbox.stub(ComplimentaryGrantEntity, 'findAll').resolves([activeGrant] as any);
+
+      const grants = await service.listGrants();
+
+      expect(grants).toHaveLength(1);
+      expect(findAllStub.called).toBe(true);
+      // Should have a where clause filtering revoked
+      const callArgs = findAllStub.firstCall.args[0];
+      expect(callArgs).toHaveProperty('where');
+    });
+
+    it('should return all grants including revoked when includeRevoked is true', async () => {
+      const activeGrant = {
+        id: uuidv4(),
+        account_id: uuidv4(),
+        revoked_at: null,
+        expires_at: null,
+        toModel: function() {
+          return new ComplimentaryGrant(this.id);
+        },
+      };
+      const revokedGrant = {
+        id: uuidv4(),
+        account_id: uuidv4(),
+        revoked_at: new Date(),
+        revoked_by: uuidv4(),
+        expires_at: null,
+        toModel: function() {
+          return new ComplimentaryGrant(this.id);
+        },
+      };
+
+      const findAllStub = sandbox.stub(ComplimentaryGrantEntity, 'findAll').resolves([activeGrant, revokedGrant] as any);
+
+      const grants = await service.listGrants(true);
+
+      expect(grants).toHaveLength(2);
+      expect(findAllStub.called).toBe(true);
+      // Should not have a where clause when including revoked
+      const callArgs = findAllStub.firstCall.args[0];
+      expect(callArgs).not.toHaveProperty('where');
+    });
+  });
+
+  describe('hasActiveGrant', () => {
+    it('should return true for account with active grant', async () => {
+      const accountId = uuidv4();
+      const mockGrant = {
+        id: uuidv4(),
+        account_id: accountId,
+        revoked_at: null,
+        expires_at: null,
+      };
+
+      sandbox.stub(ComplimentaryGrantEntity, 'findOne').resolves(mockGrant as any);
+
+      const result = await service.hasActiveGrant(accountId);
+
+      expect(result).toBe(true);
+    });
+
+    it('should return false for account with no grant', async () => {
+      const accountId = uuidv4();
+
+      sandbox.stub(ComplimentaryGrantEntity, 'findOne').resolves(null);
+
+      const result = await service.hasActiveGrant(accountId);
+
+      expect(result).toBe(false);
+    });
+
+    it('should return false for account with revoked grant', async () => {
+      const accountId = uuidv4();
+
+      // hasActiveGrant queries with WHERE revoked_at IS NULL, so it returns null for revoked grants
+      sandbox.stub(ComplimentaryGrantEntity, 'findOne').resolves(null);
+
+      const result = await service.hasActiveGrant(accountId);
+
+      expect(result).toBe(false);
+    });
+
+    it('should return false for account with expired grant', async () => {
+      const accountId = uuidv4();
+
+      // hasActiveGrant queries with WHERE expires_at > NOW(), so expired returns null
+      sandbox.stub(ComplimentaryGrantEntity, 'findOne').resolves(null);
+
+      const result = await service.hasActiveGrant(accountId);
+
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('getGrantForAccount', () => {
+    it('should return active grant for account', async () => {
+      const accountId = uuidv4();
+      const grantId = uuidv4();
+      const mockGrantEntity = {
+        id: grantId,
+        account_id: accountId,
+        revoked_at: null,
+        expires_at: null,
+        toModel: function() {
+          const grant = new ComplimentaryGrant(this.id);
+          grant.accountId = this.account_id;
+          grant.revokedAt = this.revoked_at;
+          grant.expiresAt = this.expires_at;
+          return grant;
+        },
+      };
+
+      sandbox.stub(ComplimentaryGrantEntity, 'findOne').resolves(mockGrantEntity as any);
+
+      const grant = await service.getGrantForAccount(accountId);
+
+      expect(grant).not.toBeNull();
+      expect(grant?.accountId).toBe(accountId);
+    });
+
+    it('should return null when no active grant exists for account', async () => {
+      const accountId = uuidv4();
+
+      sandbox.stub(ComplimentaryGrantEntity, 'findOne').resolves(null);
+
+      const grant = await service.getGrantForAccount(accountId);
+
+      expect(grant).toBeNull();
+    });
+  });
+
+  describe('hasSubscriptionAccess', () => {
+    it('should return true if hasActiveGrant returns true', async () => {
+      const accountId = uuidv4();
+
+      sandbox.stub(service, 'hasActiveGrant').resolves(true);
+      sandbox.stub(service, 'hasActiveSubscription').resolves(false);
+
+      const result = await service.hasSubscriptionAccess(accountId);
+
+      expect(result).toBe(true);
+    });
+
+    it('should return true if hasActiveSubscription returns true', async () => {
+      const accountId = uuidv4();
+
+      sandbox.stub(service, 'hasActiveGrant').resolves(false);
+      sandbox.stub(service, 'hasActiveSubscription').resolves(true);
+
+      const result = await service.hasSubscriptionAccess(accountId);
+
+      expect(result).toBe(true);
+    });
+
+    it('should return false if both hasActiveGrant and hasActiveSubscription return false', async () => {
+      const accountId = uuidv4();
+
+      sandbox.stub(service, 'hasActiveGrant').resolves(false);
+      sandbox.stub(service, 'hasActiveSubscription').resolves(false);
+
+      const result = await service.hasSubscriptionAccess(accountId);
+
+      expect(result).toBe(false);
+    });
+
+    it('should return false if grant check errors and subscription check returns false (fail-secure)', async () => {
+      const accountId = uuidv4();
+
+      sandbox.stub(service, 'hasActiveGrant').rejects(new Error('DB error'));
+      sandbox.stub(service, 'hasActiveSubscription').resolves(false);
+
+      const result = await service.hasSubscriptionAccess(accountId);
+
+      expect(result).toBe(false);
+    });
+
+    it('should return false if grant check returns false and subscription check errors (fail-secure)', async () => {
+      const accountId = uuidv4();
+
+      sandbox.stub(service, 'hasActiveGrant').resolves(false);
+      sandbox.stub(service, 'hasActiveSubscription').rejects(new Error('DB error'));
+
+      const result = await service.hasSubscriptionAccess(accountId);
+
+      expect(result).toBe(false);
+    });
+
+    it('should return false if both checks error (fail-secure)', async () => {
+      const accountId = uuidv4();
+
+      sandbox.stub(service, 'hasActiveGrant').rejects(new Error('Grant DB error'));
+      sandbox.stub(service, 'hasActiveSubscription').rejects(new Error('Sub DB error'));
+
+      const result = await service.hasSubscriptionAccess(accountId);
+
+      expect(result).toBe(false);
+    });
+
+    it('should not check subscription if grant check succeeds with true', async () => {
+      const accountId = uuidv4();
+
+      sandbox.stub(service, 'hasActiveGrant').resolves(true);
+      const subStub = sandbox.stub(service, 'hasActiveSubscription').resolves(false);
+
+      await service.hasSubscriptionAccess(accountId);
+
+      expect(subStub.called).toBe(false);
     });
   });
 });

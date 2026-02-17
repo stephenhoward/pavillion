@@ -235,7 +235,7 @@ class CalendarService {
       // Admin-owned calendars bypass subscription checks
       const isAdmin = await this.isCalendarOwnerAdmin(ownerId);
       if (!isAdmin) {
-        const hasSubscription = await this.subscriptionInterface?.hasActiveSubscription(ownerId);
+        const hasSubscription = await this.subscriptionInterface?.hasSubscriptionAccess(ownerId);
         if (!hasSubscription) {
           throw new SubscriptionRequiredError('widget_embedding');
         }
@@ -1437,7 +1437,7 @@ class CalendarService {
       const isAdmin = await this.isCalendarOwnerAdmin(ownerId);
       if (!isAdmin) {
         // Check subscription status
-        const hasSubscription = await this.subscriptionInterface?.hasActiveSubscription(ownerId);
+        const hasSubscription = await this.subscriptionInterface?.hasSubscriptionAccess(ownerId);
         if (!hasSubscription) {
           throw new SubscriptionRequiredError('widget_embedding');
         }

@@ -9,11 +9,14 @@ import {
   ProviderType,
   BillingCycle,
 } from '@/common/model/subscription';
+import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
 import { SubscriptionSettingsEntity } from '@/server/subscription/entity/subscription_settings';
 import { ProviderConfigEntity } from '@/server/subscription/entity/provider_config';
 import { SubscriptionEntity } from '@/server/subscription/entity/subscription';
 import { SubscriptionEventEntity } from '@/server/subscription/entity/subscription_event';
 import { PlatformOAuthConfigEntity } from '@/server/subscription/entity/platform_oauth_config';
+import { ComplimentaryGrantEntity } from '@/server/subscription/entity/complimentary_grant';
+import { AccountEntity } from '@/server/common/entity/account';
 import { ProviderFactory } from '@/server/subscription/service/provider/factory';
 import { WebhookEvent, CreateSubscriptionParams } from '@/server/subscription/service/provider/adapter';
 import {
@@ -22,7 +25,21 @@ import {
   InvalidCurrencyError,
   MissingRequiredFieldError,
   InvalidProviderTypeError,
+  AccountNotFoundError,
+  DuplicateGrantError,
+  GrantNotFoundError,
 } from '@/server/subscription/exceptions';
+import { ValidationError } from '@/common/exceptions/base';
+
+// UUID v4 validation regex
+const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * Validates if a string is a valid UUID v4
+ */
+function isValidUUID(id: string): boolean {
+  return typeof id === 'string' && UUID_V4_REGEX.test(id);
+}
 
 /**
  * Service for managing subscription operations
@@ -685,6 +702,224 @@ export default class SubscriptionService {
         credentials.stripeClientSecret,
       );
       await config.save();
+    }
+  }
+
+  /**
+   * Create a complimentary grant for an account
+   *
+   * @param accountId - Account ID to grant access to
+   * @param grantedBy - Admin account ID granting access
+   * @param reason - Optional reason for the grant (max 500 chars)
+   * @param expiresAt - Optional future expiry date
+   * @returns Created complimentary grant
+   */
+  async createGrant(
+    accountId: string,
+    grantedBy: string,
+    reason?: string,
+    expiresAt?: Date,
+  ): Promise<ComplimentaryGrant> {
+    // Validate UUIDs
+    if (!isValidUUID(accountId)) {
+      throw new ValidationError('Invalid accountId: must be a valid UUID');
+    }
+
+    if (!isValidUUID(grantedBy)) {
+      throw new ValidationError('Invalid grantedBy: must be a valid UUID');
+    }
+
+    // Validate reason length
+    if (reason !== undefined && reason.length > 500) {
+      throw new ValidationError('reason must not exceed 500 characters');
+    }
+
+    // Validate expiresAt is in the future
+    if (expiresAt !== undefined && expiresAt <= new Date()) {
+      throw new ValidationError('expiresAt must be a future date');
+    }
+
+    // Check account exists
+    const account = await AccountEntity.findByPk(accountId);
+    if (!account) {
+      throw new AccountNotFoundError(accountId);
+    }
+
+    // Check for existing active grant
+    const existingGrant = await ComplimentaryGrantEntity.findOne({
+      where: {
+        account_id: accountId,
+        revoked_at: { [Op.is]: null as any },
+        [Op.or]: [
+          { expires_at: { [Op.is]: null as any } },
+          { expires_at: { [Op.gt]: new Date() } },
+        ],
+      },
+    });
+
+    if (existingGrant) {
+      throw new DuplicateGrantError(accountId);
+    }
+
+    // Create the grant
+    const grant = new ComplimentaryGrant(uuidv4());
+    grant.accountId = accountId;
+    grant.grantedBy = grantedBy;
+    grant.reason = reason ?? null;
+    grant.expiresAt = expiresAt ?? null;
+
+    const entity = ComplimentaryGrantEntity.build({
+      id: grant.id,
+      account_id: grant.accountId,
+      granted_by: grant.grantedBy,
+      reason: grant.reason,
+      expires_at: grant.expiresAt,
+      revoked_at: null,
+      revoked_by: null,
+    });
+
+    await entity.save();
+
+    return entity.toModel();
+  }
+
+  /**
+   * Revoke a complimentary grant (soft delete)
+   *
+   * @param grantId - Grant ID to revoke
+   * @param revokedBy - Admin account ID revoking the grant
+   */
+  async revokeGrant(grantId: string, revokedBy: string): Promise<void> {
+    // Validate UUIDs
+    if (!isValidUUID(grantId)) {
+      throw new ValidationError('Invalid grantId: must be a valid UUID');
+    }
+
+    if (!isValidUUID(revokedBy)) {
+      throw new ValidationError('Invalid revokedBy: must be a valid UUID');
+    }
+
+    const entity = await ComplimentaryGrantEntity.findByPk(grantId);
+    if (!entity) {
+      throw new GrantNotFoundError(grantId);
+    }
+
+    entity.revoked_at = new Date();
+    entity.revoked_by = revokedBy;
+    await entity.save();
+  }
+
+  /**
+   * List all complimentary grants, including account email for display.
+   *
+   * Fetches account emails in a single batch query to avoid N+1 queries.
+   *
+   * @param includeRevoked - If true, include revoked grants; otherwise only active grants
+   * @returns List of complimentary grants with accountEmail populated
+   */
+  async listGrants(includeRevoked: boolean = false): Promise<ComplimentaryGrant[]> {
+    const queryOptions: Record<string, any> = {
+      order: [['created_at', 'DESC']],
+    };
+
+    if (!includeRevoked) {
+      queryOptions.where = {
+        revoked_at: { [Op.is]: null as any },
+      };
+    }
+
+    const entities = await ComplimentaryGrantEntity.findAll(queryOptions);
+
+    if (entities.length === 0) {
+      return [];
+    }
+
+    // Fetch account emails in a single batch query (for both accountId and grantedBy)
+    const allAccountIds = [...new Set([
+      ...entities.map((e) => e.account_id),
+      ...entities.map((e) => e.granted_by),
+    ])];
+    const accounts = await AccountEntity.findAll({
+      where: { id: { [Op.in]: allAccountIds } },
+      attributes: ['id', 'email'],
+    });
+    const emailByAccountId = new Map(accounts.map((a) => [a.id, a.email]));
+
+    return entities.map((entity) => {
+      const grant = entity.toModel();
+      grant.accountEmail = emailByAccountId.get(entity.account_id);
+      grant.grantedByEmail = emailByAccountId.get(entity.granted_by);
+      return grant;
+    });
+  }
+
+  /**
+   * Check if an account has an active complimentary grant
+   *
+   * @param accountId - Account ID to check
+   * @returns True if account has an active, non-expired grant
+   */
+  async hasActiveGrant(accountId: string): Promise<boolean> {
+    const grant = await ComplimentaryGrantEntity.findOne({
+      where: {
+        account_id: accountId,
+        revoked_at: { [Op.is]: null as any },
+        [Op.or]: [
+          { expires_at: { [Op.is]: null as any } },
+          { expires_at: { [Op.gt]: new Date() } },
+        ],
+      },
+    });
+
+    return !!grant;
+  }
+
+  /**
+   * Get the active complimentary grant for an account, if any
+   *
+   * @param accountId - Account ID to check
+   * @returns Active grant or null if none exists
+   */
+  async getGrantForAccount(accountId: string): Promise<ComplimentaryGrant | null> {
+    const entity = await ComplimentaryGrantEntity.findOne({
+      where: {
+        account_id: accountId,
+        revoked_at: { [Op.is]: null as any },
+        [Op.or]: [
+          { expires_at: { [Op.is]: null as any } },
+          { expires_at: { [Op.gt]: new Date() } },
+        ],
+      },
+    });
+
+    return entity ? entity.toModel() : null;
+  }
+
+  /**
+   * Check if an account has access via subscription or complimentary grant.
+   *
+   * Uses fail-secure error handling: if checks throw errors, access is denied.
+   * Grant check runs first (smaller table); subscription check runs second.
+   *
+   * @param accountId - Account ID to check
+   * @returns True if account has an active grant or active subscription
+   */
+  async hasSubscriptionAccess(accountId: string): Promise<boolean> {
+    try {
+      const hasGrant = await this.hasActiveGrant(accountId);
+      if (hasGrant) return true;
+    }
+    catch {
+      // Log error but continue to subscription check (fail-open for grant errors)
+    }
+
+    try {
+      const hasSub = await this.hasActiveSubscription(accountId);
+      return hasSub;
+    }
+    catch {
+      // Fail-secure: deny access on subscription check error
+      return false;
     }
   }
 }

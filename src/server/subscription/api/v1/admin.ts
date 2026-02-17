@@ -8,7 +8,11 @@ import {
   InvalidAmountError,
   InvalidCurrencyError,
   MissingRequiredFieldError,
+  AccountNotFoundError,
+  DuplicateGrantError,
+  GrantNotFoundError,
 } from '@/server/subscription/exceptions';
+import { ValidationError } from '@/common/exceptions/base';
 
 /**
  * Admin route handlers for subscription management
@@ -86,6 +90,11 @@ export default class AdminRouteHandlers {
       ...ExpressHelper.adminOnly,
       this.configurePlatformOAuth.bind(this),
     );
+
+    // Complimentary grant management endpoints
+    router.get('/admin/grants', ...ExpressHelper.adminOnly, this.listGrants.bind(this));
+    router.post('/admin/grants', ...ExpressHelper.adminOnly, this.createGrant.bind(this));
+    router.delete('/admin/grants/:id', ...ExpressHelper.adminOnly, this.revokeGrant.bind(this));
 
     app.use(routePrefix, router);
   }
@@ -413,6 +422,134 @@ export default class AdminRouteHandlers {
     catch (error) {
       console.error('Error configuring platform OAuth:', error);
       res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * GET /admin/grants
+   * List complimentary grants
+   *
+   * Query params:
+   *   - includeRevoked: boolean (default false) — when true, include revoked grants
+   */
+  async listGrants(req: Request, res: Response): Promise<void> {
+    try {
+      const includeRevoked = req.query.includeRevoked === 'true';
+
+      const grants = await this.interface.listGrants(includeRevoked);
+
+      res.json(grants.map((grant) => grant.toObject()));
+    }
+    catch (error) {
+      console.error('Error listing grants:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * POST /admin/grants
+   * Create a complimentary grant for an account
+   *
+   * Body: { accountId: string, reason?: string, expiresAt?: Date }
+   * Sets grantedBy from req.user.id — never from request body.
+   */
+  async createGrant(req: Request, res: Response): Promise<void> {
+    try {
+      const { accountId, reason, expiresAt } = req.body;
+      const adminUser = req.user!;
+
+      // Validate accountId is present
+      if (!accountId) {
+        res.status(400).json({ error: 'accountId is required', errorName: 'ValidationError' });
+        return;
+      }
+
+      // Validate accountId is a valid UUID
+      if (!ExpressHelper.isValidUUID(accountId)) {
+        res.status(400).json({ error: 'Invalid accountId: must be a valid UUID', errorName: 'ValidationError' });
+        return;
+      }
+
+      // Parse and validate expiresAt if provided
+      let expiresAtDate: Date | undefined;
+      if (expiresAt !== undefined && expiresAt !== null) {
+        expiresAtDate = new Date(expiresAt);
+        if (isNaN(expiresAtDate.getTime())) {
+          res.status(400).json({ error: 'Invalid expiresAt: must be a valid date', errorName: 'ValidationError' });
+          return;
+        }
+        if (expiresAtDate <= new Date()) {
+          res.status(400).json({ error: 'expiresAt must be a future date', errorName: 'ValidationError' });
+          return;
+        }
+      }
+
+      // Validate reason length
+      if (reason !== undefined && reason !== null && reason.length > 500) {
+        res.status(400).json({ error: 'reason must not exceed 500 characters', errorName: 'ValidationError' });
+        return;
+      }
+
+      // grantedBy is always set from the authenticated user — never from the request body
+      const grantedBy = adminUser.id;
+
+      const grant = await this.interface.createGrant(accountId, grantedBy, reason, expiresAtDate);
+
+      res.status(201).json(grant.toObject());
+    }
+    catch (error) {
+      console.error('Error creating grant:', error);
+      if (error instanceof AccountNotFoundError) {
+        res.status(404).json({ error: error.message, errorName: 'AccountNotFoundError' });
+      }
+      else if (error instanceof DuplicateGrantError) {
+        res.status(409).json({ error: error.message, errorName: 'DuplicateGrantError' });
+      }
+      else if (error instanceof ValidationError) {
+        res.status(400).json({ error: error.message, errorName: 'ValidationError' });
+      }
+      else {
+        res.status(500).json({ error: 'Internal server error' });
+      }
+    }
+  }
+
+  /**
+   * DELETE /admin/grants/:id
+   * Revoke a complimentary grant
+   *
+   * Sets revokedBy from req.user.id — never from request body.
+   * Returns 204 No Content on success.
+   */
+  async revokeGrant(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      const adminUser = req.user!;
+
+      // Validate grant ID is a valid UUID
+      if (!ExpressHelper.isValidUUID(id)) {
+        res.status(400).json({ error: 'Invalid grant ID: must be a valid UUID', errorName: 'ValidationError' });
+        return;
+      }
+
+      // revokedBy is always set from the authenticated user — never from the request body
+      const revokedBy = adminUser.id;
+
+      await this.interface.revokeGrant(id, revokedBy);
+
+      res.status(204).send();
+    }
+    catch (error) {
+      console.error('Error revoking grant:', error);
+      if (error instanceof GrantNotFoundError) {
+        res.status(404).json({ error: error.message, errorName: 'GrantNotFoundError' });
+      }
+      else if (error instanceof ValidationError) {
+        res.status(400).json({ error: error.message, errorName: 'ValidationError' });
+      }
+      else {
+        res.status(500).json({ error: 'Internal server error' });
+      }
     }
   }
 }
