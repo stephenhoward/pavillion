@@ -359,6 +359,39 @@ describe('Activity Model fromObject Null Checks', () => {
       expect(result?.actor).toBe('https://example.com/users/1');
       expect(result?.id).toBe('https://example.com/activities/accept/1');
     });
+
+    it('should properly serialize nested FollowActivity with @context', () => {
+      // Create a FollowActivity
+      const followActivity = new FollowActivity(
+        'https://beta.example.com/calendars/bx_6ztiy',
+        'https://alpha.example.com/calendars/ax_5eggn',
+      );
+
+      // Create an AcceptActivity with the FollowActivity as the object
+      const acceptActivity = new AcceptActivity(
+        'https://alpha.example.com/calendars/ax_5eggn',
+        followActivity,
+      );
+
+      // Serialize to object
+      const serialized = acceptActivity.toObject();
+
+      // Verify Accept has @context
+      expect(serialized).toHaveProperty('@context');
+      expect(serialized['@context']).toEqual(['https://www.w3.org/ns/activitystreams']);
+
+      // Verify the nested Follow object also has @context, not context
+      expect(serialized.object).toHaveProperty('@context');
+      expect(serialized.object['@context']).toEqual(['https://www.w3.org/ns/activitystreams']);
+
+      // Verify context property does NOT exist on nested object
+      expect(serialized.object).not.toHaveProperty('context');
+
+      // Verify the nested Follow has correct structure
+      expect(serialized.object.type).toBe('Follow');
+      expect(serialized.object.actor).toBe('https://beta.example.com/calendars/bx_6ztiy');
+      expect(serialized.object.object).toBe('https://alpha.example.com/calendars/ax_5eggn');
+    });
   });
 
   describe('UndoActivity', () => {
