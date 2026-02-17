@@ -11,6 +11,7 @@ const EXEMPT_PATHS = [
   '/api/config',
   '/health',
   '/assets',
+  '/widget', // Widget pages and API should be accessible for embedding
 ];
 
 /**

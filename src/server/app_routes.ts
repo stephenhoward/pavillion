@@ -112,6 +112,30 @@ const handlers = {
   coverage: async (req: Request, res: Response) => {
     res.redirect(303, `http://localhost:5173${req.path}`);
   },
+
+  /**
+   * Serves the widget JavaScript file from the dist folder.
+   * Sets proper CORS headers and content type for cross-origin embedding.
+   *
+   * @param {Request} req - Express request object
+   * @param {Response} res - Express response object
+   * @returns {Promise<void>}
+   */
+  widget_javascript: async (req: Request, res: Response) => {
+    const widgetPath = path.join(path.resolve(), "dist", "widget", "pavillion-widget.js");
+
+    try {
+      const widgetContent = await fs.readFile(widgetPath, 'utf-8');
+
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      res.setHeader('Content-Type', 'application/javascript');
+      res.send(widgetContent);
+    } catch (error) {
+      console.error('Error serving widget JavaScript:', error);
+      res.status(404).send('Widget JavaScript not found');
+    }
+  },
 };
 
 /* GET home page. */
@@ -128,6 +152,18 @@ if (environment === "development") {
 };
 
 // Widget routes (before site routes to ensure they match first)
+// Serve the widget JavaScript file (must come before catch-all widget route)
+router.get('/widget/pavillion-widget.js', handlers.widget_javascript);
+
+// Add middleware to allow widget pages to be framed
+// This overrides the default CSP frame-ancestors 'none' set in server.ts
+router.use(/^\/widget\/.+/i, (req, res, next) => {
+  // Allow framing from any origin for widget pages
+  // Widget pages need to be embeddable in iframes on external sites
+  res.setHeader('Content-Security-Policy', "frame-ancestors *");
+  next();
+});
+
 router.get(/^\/widget\/.*/i, handlers.widget_index);
 
 // Public site routes

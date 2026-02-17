@@ -43,10 +43,11 @@ class PavillionWidget {
   private widgetOrigin: string;
 
   constructor() {
-    // Determine widget origin from script tag
-    const scripts = document.getElementsByTagName('script');
-    const currentScript = scripts[scripts.length - 1];
-    const scriptSrc = currentScript?.getAttribute('src') || '';
+    // Determine widget origin from script tag by finding our widget script
+    // This works even with async loading, unlike relying on script order
+    const scripts = Array.from(document.getElementsByTagName('script'));
+    const widgetScript = scripts.find(s => s.src.includes('pavillion-widget.js'));
+    const scriptSrc = widgetScript?.src || '';
 
     if (scriptSrc) {
       try {
