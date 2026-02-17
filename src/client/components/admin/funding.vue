@@ -6,6 +6,7 @@ import SubscriptionService from '@/client/service/subscription';
 import PayPalConfigModal from './PayPalConfigModal.vue';
 import ConfirmDisconnectModal from './ConfirmDisconnectModal.vue';
 import AddProviderWizard from './AddProviderWizard.vue';
+import GrantForm from './GrantForm.vue';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
 
 const { t } = useTranslation('admin', {
@@ -62,20 +63,8 @@ const grants = ref<ComplimentaryGrant[]>([]);
 const grantsLoading = ref(false);
 const includeRevoked = ref(false);
 
-// Grant form state
-const grantFormAccountId = ref('');
-const grantFormAccountDisplay = ref('');
-const grantFormReason = ref('');
-const grantFormExpiresAt = ref('');
-const grantFormSubmitting = ref(false);
-const grantFormErrors = ref<Record<string, string>>({});
-
-// Account search state
-const accountSearchQuery = ref('');
-const accountSearchResults = ref<Array<{ id: string; username: string; email: string }>>([]);
-const accountSearchLoading = ref(false);
-const showAccountDropdown = ref(false);
-const activeDropdownIndex = ref(-1);
+// Grant form modal state
+const grantFormOpen = ref(false);
 
 // Currency options
 const currencyOptions = [
@@ -104,24 +93,6 @@ const unconfiguredProviders = computed(() => {
 // Computed property to check if all providers are configured
 const allProvidersConfigured = computed(() => {
   return unconfiguredProviders.value.length === 0;
-});
-
-// Computed: today's date string for date input min attribute
-const todayDateString = computed(() => {
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  return tomorrow.toISOString().split('T')[0];
-});
-
-// Computed: reason character count
-const reasonCharCount = computed(() => grantFormReason.value.length);
-
-// Computed: ID of the currently highlighted dropdown option for aria-activedescendant
-const activeDescendantId = computed(() => {
-  if (!showAccountDropdown.value || activeDropdownIndex.value < 0) {
-    return undefined;
-  }
-  return `account-option-${activeDropdownIndex.value}`;
 });
 
 /**
@@ -211,195 +182,19 @@ async function toggleIncludeRevoked() {
 }
 
 /**
- * Search accounts for autocomplete
+ * Open the grant creation modal
  */
-let searchTimeout: ReturnType<typeof setTimeout> | null = null;
-async function searchAccounts() {
-  const query = accountSearchQuery.value.trim();
-  if (query.length < 2) {
-    accountSearchResults.value = [];
-    showAccountDropdown.value = false;
-    activeDropdownIndex.value = -1;
-    return;
-  }
-
-  if (searchTimeout) {
-    clearTimeout(searchTimeout);
-  }
-
-  searchTimeout = setTimeout(async () => {
-    try {
-      accountSearchLoading.value = true;
-      showAccountDropdown.value = true;
-      activeDropdownIndex.value = -1;
-      accountSearchResults.value = await subscriptionService.searchAccounts(query);
-    }
-    catch (error) {
-      console.error('Failed to search accounts:', error);
-      accountSearchResults.value = [];
-    }
-    finally {
-      accountSearchLoading.value = false;
-    }
-  }, 300);
+function openGrantForm() {
+  grantFormOpen.value = true;
 }
 
 /**
- * Select account from dropdown
+ * Handle grant created event from modal
  */
-function selectAccount(account: { id: string; username: string; email: string }) {
-  grantFormAccountId.value = account.id;
-  grantFormAccountDisplay.value = account.username
-    ? `${account.username} (${account.email})`
-    : account.email;
-  accountSearchQuery.value = grantFormAccountDisplay.value;
-  showAccountDropdown.value = false;
-  activeDropdownIndex.value = -1;
-  accountSearchResults.value = [];
-  // Clear account error if set
-  if (grantFormErrors.value.account) {
-    delete grantFormErrors.value.account;
-  }
-}
-
-/**
- * Clear account selection
- */
-function clearAccountSelection() {
-  grantFormAccountId.value = '';
-  grantFormAccountDisplay.value = '';
-  accountSearchQuery.value = '';
-  accountSearchResults.value = [];
-  showAccountDropdown.value = false;
-  activeDropdownIndex.value = -1;
-}
-
-/**
- * Handle account search input changes (clear selection if user modifies)
- */
-function onAccountInputChange() {
-  if (grantFormAccountId.value && accountSearchQuery.value !== grantFormAccountDisplay.value) {
-    grantFormAccountId.value = '';
-    grantFormAccountDisplay.value = '';
-  }
-  searchAccounts();
-}
-
-/**
- * Handle keyboard navigation in the account search combobox.
- * Supports ArrowDown, ArrowUp, Enter, and Escape.
- */
-function handleAccountBlur() {
-  window.setTimeout(() => {
-    showAccountDropdown.value = false;
-    activeDropdownIndex.value = -1;
-  }, 200);
-}
-
-/**
- * Supports ArrowDown, ArrowUp, Enter, and Escape.
- */
-function handleAccountSearchKeydown(event: KeyboardEvent) {
-  const results = accountSearchResults.value;
-
-  if (event.key === 'Escape') {
-    showAccountDropdown.value = false;
-    activeDropdownIndex.value = -1;
-    event.preventDefault();
-    return;
-  }
-
-  if (!showAccountDropdown.value || results.length === 0) {
-    return;
-  }
-
-  if (event.key === 'ArrowDown') {
-    event.preventDefault();
-    activeDropdownIndex.value = Math.min(activeDropdownIndex.value + 1, results.length - 1);
-  }
-  else if (event.key === 'ArrowUp') {
-    event.preventDefault();
-    activeDropdownIndex.value = Math.max(activeDropdownIndex.value - 1, 0);
-  }
-  else if (event.key === 'Enter') {
-    if (activeDropdownIndex.value >= 0 && activeDropdownIndex.value < results.length) {
-      event.preventDefault();
-      selectAccount(results[activeDropdownIndex.value]);
-    }
-  }
-}
-
-/**
- * Validate grant form
- */
-function validateGrantForm(): boolean {
-  const errors: Record<string, string> = {};
-
-  if (!grantFormAccountId.value) {
-    errors.account = t('grants.form.account_required');
-  }
-
-  if (grantFormReason.value.length > 500) {
-    errors.reason = t('grants.form.reason_max_length');
-  }
-
-  if (grantFormExpiresAt.value) {
-    const expiresDate = new Date(grantFormExpiresAt.value);
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    if (expiresDate <= now) {
-      errors.expiresAt = t('grants.form.expires_future');
-    }
-  }
-
-  grantFormErrors.value = errors;
-  return Object.keys(errors).length === 0;
-}
-
-/**
- * Submit create grant form
- */
-async function submitCreateGrant() {
-  if (!validateGrantForm()) {
-    return;
-  }
-
-  grantFormSubmitting.value = true;
-  errorMessage.value = '';
-  successMessage.value = '';
-
-  try {
-    const expiresAt = grantFormExpiresAt.value ? new Date(grantFormExpiresAt.value) : undefined;
-    const reason = grantFormReason.value.trim() || undefined;
-
-    await subscriptionService.createGrant(grantFormAccountId.value, reason, expiresAt);
-
-    successMessage.value = t('grants.created');
-    clearGrantForm();
-    await loadGrants();
-  }
-  catch (error) {
-    console.error('Failed to create grant:', error);
-    errorMessage.value = t('grants.create_error');
-  }
-  finally {
-    grantFormSubmitting.value = false;
-  }
-}
-
-/**
- * Clear grant creation form
- */
-function clearGrantForm() {
-  grantFormAccountId.value = '';
-  grantFormAccountDisplay.value = '';
-  accountSearchQuery.value = '';
-  grantFormReason.value = '';
-  grantFormExpiresAt.value = '';
-  grantFormErrors.value = {};
-  accountSearchResults.value = [];
-  showAccountDropdown.value = false;
-  activeDropdownIndex.value = -1;
+async function onGrantCreated() {
+  grantFormOpen.value = false;
+  successMessage.value = t('grants.created');
+  await loadGrants();
 }
 
 /**
@@ -734,6 +529,25 @@ onMounted(async () => {
         <h1 id="funding-heading">{{ t("title") }}</h1>
         <p class="page-subtitle">{{ t("settings_section_title") }}</p>
       </div>
+      <button
+        v-if="activeSubTab === 'grants'"
+        type="button"
+        class="create-grant-button"
+        @click="openGrantForm"
+      >
+        <svg width="20"
+             height="20"
+             viewBox="0 0 24 24"
+             fill="none"
+             stroke="currentColor"
+             stroke-width="2"
+             stroke-linecap="round"
+             stroke-linejoin="round"
+             aria-hidden="true">
+          <path d="M12 4v16m8-8H4" />
+        </svg>
+        {{ t("grants.create_new_grant") }}
+      </button>
     </div>
 
     <!-- Status Messages -->
@@ -1192,152 +1006,6 @@ onMounted(async () => {
         class="tab-panel"
       >
         <div class="grants-content">
-          <!-- Create Grant Form -->
-          <section class="grants-form-card" aria-labelledby="grants-form-heading">
-            <div class="card-header card-header--border-only">
-              <h2 id="grants-form-heading" class="card-title">{{ t("grants.form.section_title") }}</h2>
-            </div>
-            <form class="grants-form" @submit.prevent="submitCreateGrant" novalidate>
-              <!-- Account Selector -->
-              <div class="form-group">
-                <label class="form-label" for="grant-account">
-                  {{ t("grants.form.account_label") }}
-                  <span class="form-required" aria-hidden="true">*</span>
-                </label>
-                <div class="account-search-wrapper">
-                  <input
-                    id="grant-account"
-                    type="text"
-                    v-model="accountSearchQuery"
-                    :placeholder="t('grants.form.account_placeholder')"
-                    class="form-input"
-                    :class="{ 'form-input--error': grantFormErrors.account }"
-                    autocomplete="off"
-                    role="combobox"
-                    aria-autocomplete="list"
-                    :aria-expanded="showAccountDropdown ? 'true' : 'false'"
-                    aria-controls="account-search-dropdown"
-                    :aria-activedescendant="activeDescendantId"
-                    :aria-invalid="grantFormErrors.account ? 'true' : 'false'"
-                    :aria-describedby="grantFormErrors.account ? 'grant-account-error' : undefined"
-                    @input="onAccountInputChange"
-                    @keydown="handleAccountSearchKeydown"
-                    @blur="handleAccountBlur"
-                    @focus="() => { if (accountSearchResults.length > 0) showAccountDropdown = true }"
-                  />
-                  <ul
-                    v-if="showAccountDropdown"
-                    id="account-search-dropdown"
-                    class="account-dropdown"
-                    role="listbox"
-                    :aria-label="t('grants.form.account_label')"
-                  >
-                    <li
-                      v-if="accountSearchLoading"
-                      class="account-dropdown-item account-dropdown-item--loading"
-                      role="option"
-                      aria-selected="false"
-                    >
-                      {{ t("grants.form.searching") }}
-                    </li>
-                    <li
-                      v-else-if="accountSearchResults.length === 0"
-                      class="account-dropdown-item account-dropdown-item--empty"
-                      role="option"
-                      aria-selected="false"
-                    >
-                      {{ t("grants.form.no_results") }}
-                    </li>
-                    <li
-                      v-for="(account, index) in accountSearchResults"
-                      :key="account.id"
-                      :id="`account-option-${index}`"
-                      class="account-dropdown-item"
-                      :class="{ 'account-dropdown-item--active': activeDropdownIndex === index }"
-                      role="option"
-                      :aria-selected="grantFormAccountId === account.id ? 'true' : 'false'"
-                      @mousedown.prevent="selectAccount(account)"
-                    >
-                      <span class="account-dropdown-username">{{ account.username }}</span>
-                      <span class="account-dropdown-email">{{ account.email }}</span>
-                    </li>
-                  </ul>
-                </div>
-                <p
-                  v-if="grantFormErrors.account"
-                  id="grant-account-error"
-                  class="form-error"
-                  role="alert"
-                >
-                  {{ grantFormErrors.account }}
-                </p>
-              </div>
-
-              <!-- Reason -->
-              <div class="form-group">
-                <label class="form-label" for="grant-reason">{{ t("grants.form.reason_label") }}</label>
-                <div class="textarea-wrapper">
-                  <textarea
-                    id="grant-reason"
-                    v-model="grantFormReason"
-                    :placeholder="t('grants.form.reason_placeholder')"
-                    class="form-textarea"
-                    :class="{ 'form-input--error': grantFormErrors.reason }"
-                    rows="3"
-                    maxlength="500"
-                    :aria-invalid="grantFormErrors.reason ? 'true' : 'false'"
-                    :aria-describedby="[grantFormErrors.reason ? 'grant-reason-error' : null, 'grant-reason-counter'].filter(Boolean).join(' ')"
-                  />
-                  <p id="grant-reason-counter" class="char-counter" :class="{ 'char-counter--warning': reasonCharCount > 450 }">
-                    {{ t('grants.form.char_count', { current: reasonCharCount, max: 500 }) }}
-                  </p>
-                </div>
-                <p
-                  v-if="grantFormErrors.reason"
-                  id="grant-reason-error"
-                  class="form-error"
-                  role="alert"
-                >
-                  {{ grantFormErrors.reason }}
-                </p>
-              </div>
-
-              <!-- Expiration Date -->
-              <div class="form-group">
-                <label class="form-label" for="grant-expires">{{ t("grants.form.expires_label") }}</label>
-                <input
-                  id="grant-expires"
-                  type="date"
-                  v-model="grantFormExpiresAt"
-                  :min="todayDateString"
-                  class="form-input form-input--date"
-                  :class="{ 'form-input--error': grantFormErrors.expiresAt }"
-                  :aria-invalid="grantFormErrors.expiresAt ? 'true' : 'false'"
-                  :aria-describedby="grantFormErrors.expiresAt ? 'grant-expires-error' : undefined"
-                />
-                <p
-                  v-if="grantFormErrors.expiresAt"
-                  id="grant-expires-error"
-                  class="form-error"
-                  role="alert"
-                >
-                  {{ grantFormErrors.expiresAt }}
-                </p>
-              </div>
-
-              <div class="grants-form-actions">
-                <button
-                  type="submit"
-                  class="btn-primary"
-                  :disabled="grantFormSubmitting"
-                  :aria-disabled="grantFormSubmitting ? 'true' : undefined"
-                >
-                  {{ t("grants.create_button") }}
-                </button>
-              </div>
-            </form>
-          </section>
-
           <!-- Grants List -->
           <section class="grants-list-card" aria-labelledby="grants-list-heading">
             <div class="card-header">
@@ -1494,6 +1162,13 @@ onMounted(async () => {
       @close="handleWizardClose"
       @provider-connected="handleProviderConnected"
     />
+
+    <!-- Grant Form Modal -->
+    <GrantForm
+      v-if="grantFormOpen"
+      @close="grantFormOpen = false"
+      @created="onGrantCreated"
+    />
   </section>
 </template>
 
@@ -1530,6 +1205,37 @@ onMounted(async () => {
         margin: 0;
         font-size: var(--pav-font-size-xs);
         color: var(--pav-color-text-muted);
+      }
+    }
+
+    .create-grant-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--pav-space-2);
+      padding: var(--pav-space-2_5) var(--pav-space-6);
+      background: var(--pav-color-brand-primary);
+      color: var(--pav-color-text-inverse);
+      font-weight: var(--pav-font-weight-medium);
+      font-size: var(--pav-font-size-xs);
+      font-family: inherit;
+      border: none;
+      border-radius: var(--pav-border-radius-full);
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+      width: 100%;
+
+      @include pav-media(sm) {
+        width: auto;
+      }
+
+      &:hover {
+        background: var(--pav-color-brand-primary-dark);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--pav-color-brand-primary);
+        outline-offset: 2px;
       }
     }
   }
@@ -2186,76 +1892,6 @@ onMounted(async () => {
     color: var(--pav-color-red-600);
   }
 
-  /* Char counter */
-  .textarea-wrapper {
-    position: relative;
-  }
-
-  .char-counter {
-    margin: var(--pav-space-1) 0 0;
-    font-size: var(--pav-font-size-xs);
-    color: var(--pav-color-text-muted);
-    text-align: end;
-
-    &--warning {
-      color: var(--pav-color-amber-600);
-    }
-  }
-
-  /* Account Search */
-  .account-search-wrapper {
-    position: relative;
-  }
-
-  .account-dropdown {
-    position: absolute;
-    top: calc(100% + var(--pav-space-1));
-    inset-inline-start: 0;
-    inset-inline-end: 0;
-    background: var(--pav-color-surface-primary);
-    border: 1px solid var(--pav-border-color-medium);
-    border-radius: var(--pav-border-radius-md);
-    box-shadow: var(--pav-shadow-md);
-    max-height: 240px;
-    overflow-y: auto;
-    z-index: 10;
-    padding: 0;
-    margin: 0;
-    list-style: none;
-
-    .account-dropdown-item {
-      display: flex;
-      flex-direction: column;
-      gap: var(--pav-space-0_5);
-      padding: var(--pav-space-2_5) var(--pav-space-3);
-      cursor: pointer;
-      transition: background-color 0.1s ease;
-
-      &:hover,
-      &--active {
-        background: var(--pav-color-stone-50);
-      }
-
-      &--loading,
-      &--empty {
-        color: var(--pav-color-text-muted);
-        font-size: var(--pav-font-size-xs);
-        cursor: default;
-      }
-
-      .account-dropdown-username {
-        font-size: var(--pav-font-size-sm);
-        font-weight: var(--pav-font-weight-medium);
-        color: var(--pav-color-text-primary);
-      }
-
-      .account-dropdown-email {
-        font-size: var(--pav-font-size-xs);
-        color: var(--pav-color-text-muted);
-      }
-    }
-  }
-
   /* Buttons */
   .btn-primary {
     padding: var(--pav-space-2) var(--pav-space-5);
@@ -2348,25 +1984,6 @@ onMounted(async () => {
     display: flex;
     flex-direction: column;
     gap: var(--pav-space-6);
-  }
-
-  .grants-form-card {
-    background: var(--pav-color-surface-primary);
-    border-radius: var(--pav-border-radius-xl);
-    border: 1px solid var(--pav-border-color-light);
-    overflow: hidden;
-  }
-
-  .grants-form {
-    padding: var(--pav-space-6);
-    display: flex;
-    flex-direction: column;
-    gap: var(--pav-space-4);
-  }
-
-  .grants-form-actions {
-    display: flex;
-    justify-content: flex-end;
   }
 
   .grants-live-region {

@@ -546,6 +546,7 @@
       "tab_title": "Complimentary Grants",
       "show_revoked": "Show revoked grants",
       "create_button": "Grant Access",
+      "create_new_grant": "Create New Grant",
       "revoke_button": "Revoke",
       "created": "Complimentary grant created successfully.",
       "revoked": "Complimentary grant revoked successfully.",
@@ -573,7 +574,8 @@
         "section_title": "Create Complimentary Grant",
         "no_results": "No accounts found",
         "searching": "Searching...",
-        "char_count": "{{current}}/{{max}}"
+        "char_count": "{{current}}/{{max}}",
+        "cancel_button": "Cancel"
       },
       "status": {
         "active": "Active",
