@@ -11,6 +11,7 @@ import FollowActivity from "@/server/activitypub/model/action/follow";
 import AnnounceActivity from "@/server/activitypub/model/action/announce";
 import { FollowingCalendarEntity, FollowerCalendarEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
 import { CalendarActorEntity } from "@/server/activitypub/entity/calendar_actor";
+import { EventObjectEntity } from "@/server/activitypub/entity/event_object";
 import RemoteCalendarService from "@/server/activitypub/service/remote_calendar";
 import UndoActivity from "../model/action/undo";
 import { EventEntity } from "@/server/calendar/entity/event";
@@ -295,9 +296,15 @@ class ActivityPubService {
       throw new InvalidSharedEventUrlError('Invalid shared event url: ' + eventUrl);
     }
 
+    // Resolve AP URL to local event UUID for consistent storage
+    const eventObject = await EventObjectEntity.findOne({
+      where: { ap_id: eventUrl },
+    });
+    const localEventId = eventObject?.event_id || eventUrl;
+
     let existingShareEntity = await SharedEventEntity.findOne({
       where: {
-        event_id: eventUrl,
+        event_id: localEventId,
         calendar_id: calendar.id,
       },
     });
@@ -311,7 +318,7 @@ class ActivityPubService {
 
     SharedEventEntity.create({
       id: shareActivity.id,
-      event_id: eventUrl,
+      event_id: localEventId,
       calendar_id: calendar.id,
       auto_posted: autoPosted,
     });

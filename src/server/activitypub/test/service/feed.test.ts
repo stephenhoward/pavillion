@@ -10,6 +10,7 @@ import {
   FollowerCalendarEntity,
   SharedEventEntity,
 } from '@/server/activitypub/entity/activitypub';
+import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 
 describe("ActivityPub Feed Service Methods", () => {
   let service: ActivityPubService;
@@ -43,6 +44,7 @@ describe("ActivityPub Feed Service Methods", () => {
         auto_posted: true,
       }) as any);
 
+      sandbox.stub(EventObjectEntity, 'findOne').resolves(null);
       sandbox.stub(SharedEventEntity, 'findOne').resolves(null);
       sandbox.stub(service, 'actorUrl').resolves('https://local.com/calendars/testcalendar');
       sandbox.stub(service, 'addToOutbox').resolves();
@@ -63,6 +65,7 @@ describe("ActivityPub Feed Service Methods", () => {
         auto_posted: false,
       }) as any);
 
+      sandbox.stub(EventObjectEntity, 'findOne').resolves(null);
       sandbox.stub(SharedEventEntity, 'findOne').resolves(null);
       sandbox.stub(service, 'actorUrl').resolves('https://local.com/calendars/testcalendar');
       sandbox.stub(service, 'addToOutbox').resolves();

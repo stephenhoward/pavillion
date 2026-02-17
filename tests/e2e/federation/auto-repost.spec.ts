@@ -512,7 +512,7 @@ test.describe('Auto-Repost Policy Enforcement', () => {
     const aliceCalendarEventsResponse = await getCalendarEvents(
       INSTANCE_ALPHA,
       aliceToken,
-      aliceCalendar.id
+      aliceCalendar.urlName
     );
     const aliceCalendarEvents = await aliceCalendarEventsResponse.json();
     const event1Occurrences = aliceCalendarEvents.filter(
@@ -622,7 +622,7 @@ test.describe('Auto-Repost Policy Enforcement', () => {
     const aliceCalendarEventsResponse = await getCalendarEvents(
       INSTANCE_ALPHA,
       aliceToken,
-      aliceCalendar.id
+      aliceCalendar.urlName
     );
     const aliceCalendarEvents = await aliceCalendarEventsResponse.json();
     const event1OnAlice = aliceCalendarEvents.find(

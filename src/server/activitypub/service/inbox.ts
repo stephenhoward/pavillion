@@ -708,7 +708,7 @@ class ProcessInboxService {
     const eventParams: Record<string, any> = {
       ...message.object,
       id: localEventId,
-      event_source_url: apObjectId,
+      eventSourceUrl: apObjectId,
     };
 
     // For Person actor creates, use the full event params from the object
@@ -1115,7 +1115,7 @@ class ProcessInboxService {
     const eventParams = {
       ...message.object,
       id: apObject.event_id,
-      event_source_url: apObjectId,
+      eventSourceUrl: apObjectId,
     };
 
     // For Person actor updates, use the full event params from the object
@@ -1471,7 +1471,7 @@ class ProcessInboxService {
           const eventParams = {
             ...response.data,
             id: localEventId,
-            event_source_url: apObjectId,
+            eventSourceUrl: apObjectId,
           };
 
           await this.calendarInterface.addRemoteEvent(calendar, eventParams);
