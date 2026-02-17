@@ -19,11 +19,26 @@ class DeleteActivity extends ActivityPubActivity {
       return null;
     }
 
-    if (!object.object || typeof object.object !== 'string') {
+    // object.object can be a string URL (standard federation) or a Tombstone object
+    // (cross-instance editor delete, where additional fields like eventId are needed)
+    if (!object.object) {
       return null;
     }
 
-    let activity = new DeleteActivity(object.actor, object.object);
+    const objectValue = object.object;
+
+    if (typeof objectValue !== 'string' && (typeof objectValue !== 'object' || !objectValue.id)) {
+      return null;
+    }
+
+    // Extract the canonical URL for the object (used to build the activity ID)
+    const objectUrl = typeof objectValue === 'string' ? objectValue : objectValue.id;
+
+    let activity = new DeleteActivity(object.actor, objectUrl);
+
+    // Preserve the full object (Tombstone or string) so processDeleteEvent can access fields
+    activity.object = objectValue;
+
     if ( object.id ) {
       activity.id = object.id;
     }

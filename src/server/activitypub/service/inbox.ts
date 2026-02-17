@@ -1145,7 +1145,15 @@ class ProcessInboxService {
    * @returns {Promise<void>}
    */
   async processDeleteEvent(calendar: Calendar, message: DeleteActivity) {
-    if (!message.object || !message.object.id) {
+    // Validate that the object field is present and has an identifiable AP ID.
+    // message.object can be a string URL (standard federation) or a Tombstone object
+    // with an 'id' field (cross-instance editor delete).
+    const objectPresent = message.object &&
+      (typeof message.object === 'string'
+        ? message.object.length > 0
+        : !!(message.object as any).id);
+
+    if (!objectPresent) {
       console.warn(`[INBOX] Delete activity missing object or object.id`);
       logActivityRejection({
         rejection_type: 'invalid_object',
@@ -1159,7 +1167,10 @@ class ProcessInboxService {
       return;
     }
 
-    const apObjectId = message.object.id;
+    // message.object can be a string URL (standard federation) or a Tombstone object
+    // (cross-instance editor delete). Extract the AP object ID from either format.
+    const objectValue = message.object as any;
+    const apObjectId = typeof objectValue === 'string' ? objectValue : objectValue.id;
     const actorUri = message.actor;
 
     // Look up the local event by its AP ID
@@ -1177,8 +1188,9 @@ class ProcessInboxService {
 
     // For Person actor deletes, also try looking up by local event ID
     // (the object.id path may contain the local event ID instead of the original AP ID)
-    if (!existingEvent && message.object.eventId) {
-      const localEventId = message.object.eventId;
+    const objectEventId = typeof objectValue === 'object' ? objectValue.eventId : undefined;
+    if (!existingEvent && objectEventId) {
+      const localEventId = objectEventId;
       existingEvent = await this.calendarInterface.getEventById(localEventId);
       eventIdToDelete = localEventId;
 

@@ -113,15 +113,15 @@ describe('Activity Model fromObject Null Checks', () => {
       expect(result).toBeNull();
     });
 
-    it('should return null when object is not a string', () => {
+    it('should return null when object is not a string and has no id', () => {
       const result = DeleteActivity.fromObject({
         actor: 'https://example.com/users/1',
-        object: { id: 'https://example.com/event/123' },
+        object: { type: 'Event' }, // object with no id field
       });
       expect(result).toBeNull();
     });
 
-    it('should create activity with valid input', () => {
+    it('should create activity with valid string object', () => {
       const result = DeleteActivity.fromObject({
         actor: 'https://example.com/users/1',
         object: 'https://example.com/event/123',
@@ -131,6 +131,25 @@ describe('Activity Model fromObject Null Checks', () => {
       expect(result?.type).toBe('Delete');
       expect(result?.actor).toBe('https://example.com/users/1');
       expect(result?.object).toBe('https://example.com/event/123');
+      expect(result?.id).toBe('https://example.com/activities/delete/1');
+    });
+
+    it('should create activity with Tombstone object (cross-instance editor delete)', () => {
+      const tombstone = {
+        type: 'Tombstone',
+        id: 'https://example.com/event/123',
+        formerType: 'Event',
+        eventId: 'abc-123',
+      };
+      const result = DeleteActivity.fromObject({
+        actor: 'https://example.com/users/1',
+        object: tombstone,
+        id: 'https://example.com/activities/delete/1',
+      });
+      expect(result).not.toBeNull();
+      expect(result?.type).toBe('Delete');
+      expect(result?.actor).toBe('https://example.com/users/1');
+      expect(result?.object).toEqual(tombstone);
       expect(result?.id).toBe('https://example.com/activities/delete/1');
     });
   });
