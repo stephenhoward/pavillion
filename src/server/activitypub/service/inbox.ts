@@ -1096,8 +1096,11 @@ class ProcessInboxService {
         return null;
       }
 
-      const ok = await this.actorOwnsObject(message);
-      if (!ok) {
+      // Verify ownership using locally-stored attributed_to field.
+      // This avoids a remote fetch (which would be blocked by SSRF protection in
+      // some environments) while still ensuring the actor owns the event.
+      // The attributed_to field was stored when the event was first received.
+      if (!apObject || apObject.attributed_to !== actorUri) {
         logActivityRejection({
           rejection_type: 'ownership_verification_failed',
           activity_type: 'Update',
