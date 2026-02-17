@@ -17,6 +17,11 @@ import { defineConfig, devices } from '@playwright/test';
  * - True test isolation with no shared state
  * - Full parallelization support
  *
+ * Widget embedding tests (forthcoming: widget-embedding.spec.ts, bead pv-p2nm.3) use:
+ * - A static file server on port 8080 (serves tests/e2e/ directory)
+ * - The embedding page accepts ?serverUrl= to point at the dynamic test server
+ * - This creates cross-origin testing (port 8080 vs port 3100-3200)
+ *
  * Usage:
  *   npm run test:e2e
  *
@@ -73,7 +78,17 @@ export default defineConfig({
     },
   ],
 
-  // Note: No global webServer configuration
-  // Each test file manages its own isolated server instance
-  // See tests/e2e/helpers/test-server.ts for implementation
+  // Static file server for widget embedding tests
+  // Serves tests/e2e/ directory on port 8080 for cross-origin widget testing.
+  // The embedding page (test-widget-embedding.html) accepts a ?serverUrl= query
+  // parameter pointing to the dynamic Pavillion test server instance.
+  // This creates a true cross-origin scenario: port 8080 (embedding page) vs
+  // port 3100-3200 (Pavillion app with widget).
+  // Note: Most test files use their own isolated server (see test-server.ts helper)
+  webServer: {
+    command: 'npx http-server tests/e2e -p 8080 --silent',
+    port: 8080,
+    reuseExistingServer: !process.env.CI,
+    timeout: 30000,
+  },
 });

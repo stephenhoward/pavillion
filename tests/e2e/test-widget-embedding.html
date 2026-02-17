@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Widget Embedding Test Page</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 1200px;
+      margin: 40px auto;
+      padding: 0 20px;
+      background: #f5f5f5;
+    }
+    h1 {
+      color: #333;
+    }
+    .widget-container {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+    #status {
+      background: white;
+      padding: 12px 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      border-left: 4px solid #ccc;
+      font-size: 14px;
+    }
+    #status.ready {
+      border-left-color: #4caf50;
+    }
+    #status.error {
+      border-left-color: #f44336;
+    }
+  </style>
+</head>
+<body>
+  <h1>Widget Embedding Test</h1>
+  <div id="status">Loading widget...</div>
+  <div class="widget-container">
+    <div id="calendar-widget"></div>
+  </div>
+
+  <script>
+    // Read widget server URL from query parameter, falling back to localhost:3000
+    // This allows tests to specify a dynamic server URL for isolated test environments
+    var params = new URLSearchParams(window.location.search);
+    var serverUrl = params.get('serverUrl') || 'http://localhost:3000';
+    var calendarName = params.get('calendar') || 'test_calendar';
+
+    console.log('[Test Page] Page origin:', window.location.origin);
+    console.log('[Test Page] Widget server URL:', serverUrl);
+
+    // Queue init command before widget script loads (async loading pattern)
+    window.Pavillion = window.Pavillion || function() {
+      window.Pavillion.q = window.Pavillion.q || [];
+      window.Pavillion.q.push(Array.prototype.slice.call(arguments));
+    };
+
+    Pavillion('init', {
+      calendar: calendarName,
+      container: '#calendar-widget',
+      view: 'list',
+      accentColor: '#ff9131',
+      colorMode: 'light',
+      onResize: function(height) {
+        console.log('[Test Page] Widget resized to:', height, 'px');
+      },
+      onEventClick: function(eventId) {
+        console.log('[Test Page] Event clicked:', eventId);
+      },
+      onNavigate: function(url) {
+        console.log('[Test Page] Navigate to:', url);
+      }
+    });
+
+    // Load widget script asynchronously from the configured server
+    var script = document.createElement('script');
+    script.src = serverUrl + '/widget/pavillion-widget.js';
+    script.async = true;
+    script.onload = function() {
+      console.log('[Test Page] Widget script loaded successfully');
+      document.getElementById('status').textContent = 'Widget script loaded';
+      document.getElementById('status').className = 'ready';
+    };
+    script.onerror = function(error) {
+      console.error('[Test Page] Widget script failed to load:', error);
+      document.getElementById('status').textContent = 'Widget script failed to load';
+      document.getElementById('status').className = 'error';
+    };
+    document.head.appendChild(script);
+
+    // Verify iframe creation and origin after widget initializes
+    setTimeout(function() {
+      var iframe = document.querySelector('#calendar-widget iframe');
+      if (iframe) {
+        console.log('[Test Page] Iframe src:', iframe.src);
+        var iframeUrl = new URL(iframe.src);
+        console.log('[Test Page] Iframe origin:', iframeUrl.origin);
+
+        if (iframeUrl.origin === serverUrl.replace(/\/$/, '')) {
+          console.log('[Test Page] SUCCESS: Widget iframe origin matches server URL');
+        } else {
+          console.error('[Test Page] MISMATCH: Iframe origin', iframeUrl.origin, 'does not match server', serverUrl);
+        }
+      } else {
+        console.warn('[Test Page] No iframe found yet (may still be loading)');
+      }
+    }, 2000);
+  </script>
+</body>
+</html>
