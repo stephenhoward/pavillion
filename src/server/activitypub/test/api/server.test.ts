@@ -221,6 +221,36 @@ describe('addToInbox', () => {
     expect(res.send.calledWith('Message received')).toBe(true);
   });
 
+  it('should succeed with a valid Accept activity', async () => {
+    let req = {
+      params: { urlname: 'testuser' },
+      body: {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'Accept',
+        id: 'https://remote.example.com/activities/accept-456',
+        actor: 'https://remote.example.com/calendars/remote',
+        object: {
+          type: 'Follow',
+          id: 'https://local.example.com/calendars/testuser/follows/789',
+          actor: 'https://local.example.com/calendars/testuser',
+          object: 'https://remote.example.com/calendars/remote',
+        },
+      },
+    };
+    let res = { status: sinon.stub(), send: sinon.stub() };
+    let userFindMock = sandbox.stub(calendarAPI, 'getCalendarByName');
+    let inboxMock = sandbox.stub(activityPubInterface, 'addToInbox');
+
+    res.status.returns(res);
+    userFindMock.resolves(new Calendar('testId', 'testuser'));
+    inboxMock.resolves();
+
+    await routes.addToInbox(req as any, res as any);
+
+    expect(res.status.calledWith(200)).toBe(true);
+    expect(res.send.calledWith('Message received')).toBe(true);
+  });
+
   it('should fail with missing @context field', async () => {
     let req = {
       params: { urlname: 'testuser' },

@@ -5,6 +5,7 @@ import { Account } from '@/common/model/account';
 import { UserActorEntity, UserActor } from '@/server/activitypub/entity/user_actor';
 import { AccountEntity } from '@/server/common/entity/account';
 import { CalendarMemberEntity } from '@/server/calendar/entity/calendar_member';
+import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import RemoteCalendarService from '@/server/activitypub/service/remote_calendar';
 
 /**
@@ -311,6 +312,7 @@ export default class UserActorService {
     // Extract calendar info from the actor (the calendar that sent the Add)
     const calendarActorUri = activity.actor; // e.g., "https://alpha.federation.local/calendars/events"
     const calendarInboxUrl = activity.calendarInboxUrl; // The calendar's inbox URL
+    const remoteCalendarId = activity.calendarId || null; // The remote calendar's UUID
 
     if (!calendarActorUri) {
       console.error('[USER INBOX] Missing calendar actor URI in Add activity');
@@ -330,6 +332,16 @@ export default class UserActorService {
     // Find or create the remote CalendarActorEntity
     const remoteCalendarService = new RemoteCalendarService();
     const remoteCalendarActor = await remoteCalendarService.findOrCreateByActorUri(calendarActorUri);
+
+    // Store the remote calendar's UUID so we can look it up by calendarId later.
+    // This allows users to create/update/delete events on the remote calendar
+    // using the remote calendar's UUID (which they know from the API).
+    if (remoteCalendarId && !remoteCalendarActor.remoteCalendarId) {
+      await CalendarActorEntity.update(
+        { remote_calendar_id: remoteCalendarId },
+        { where: { id: remoteCalendarActor.id } },
+      );
+    }
 
     // Update inbox URL if provided
     if (calendarInboxUrl) {

@@ -21,7 +21,9 @@ class ActivityPubActivity {
       id: this.id,
       type: this.type,
       actor: this.actor,
-      object: this.object,
+      object: typeof this.object === 'object' && this.object !== null && 'toObject' in this.object
+        ? this.object.toObject()
+        : this.object,
     };
 
     if (this.published) {

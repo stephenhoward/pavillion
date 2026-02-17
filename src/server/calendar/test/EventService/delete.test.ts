@@ -107,13 +107,13 @@ describe('EventService.deleteEvent', () => {
   it('should throw EventNotFoundError when event not found and calendarId provided but no remote membership', async () => {
     const account = new Account('account-123', 'test@example.com', 'test@example.com');
     const eventId = '22222222-2222-4222-8222-222222222222'; // Valid UUID for remote event
-    const calendarId = 'remote-calendar-actor-123';
+    const calendarId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'; // Valid UUID for remote calendar
 
     // Mock event not found locally
     sandbox.stub(EventEntity, 'findByPk').resolves(null);
 
-    // Mock no remote membership found
-    sandbox.stub(CalendarMemberEntity, 'findOne').resolves(null);
+    // Mock no calendar actor found (so no remote membership check is performed)
+    sandbox.stub(CalendarActorEntity, 'findOne').resolves(null);
 
     await expect(eventService.deleteEvent(account, eventId, calendarId))
       .rejects.toThrow(EventNotFoundError);
@@ -258,20 +258,22 @@ describe('EventService.deleteEvent', () => {
   it('should call deleteRemoteEventViaActivityPub when event not found locally but valid remote membership exists', async () => {
     const account = new Account('account-123', 'test@example.com', 'test@example.com');
     const eventId = '22222222-2222-4222-8222-222222222222'; // Valid UUID for remote event
-    const calendarId = 'remote-calendar-actor-456';
+    // calendarId is the remote calendar's UUID (e.g., Alpha's CalendarEntity.id)
+    const calendarId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
     // Mock event not found locally
     sandbox.stub(EventEntity, 'findByPk').resolves(null);
 
-    // Mock calendar actor with toModel method
+    // Mock calendar actor found by remote_calendar_id lookup
     const mockCalendarActor = {
-      id: 'remote-calendar-actor-456',
+      id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', // Beta's CalendarActorEntity.id (different from calendarId)
       actor_uri: 'https://remote.example.com/calendars/test-calendar',
       inbox_url: 'https://remote.example.com/inbox',
       toModel: sandbox.stub().returns({
-        id: 'remote-calendar-actor-456',
+        id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
         actorType: 'remote' as const,
         calendarId: null,
+        remoteCalendarId: calendarId,
         actorUri: 'https://remote.example.com/calendars/test-calendar',
         remoteDisplayName: 'Test Remote Calendar',
         remoteDomain: 'remote.example.com',
@@ -285,10 +287,13 @@ describe('EventService.deleteEvent', () => {
       }),
     };
 
-    // Mock remote membership found
+    // Stub CalendarActorEntity.findOne to return the actor when searching by remote_calendar_id
+    sandbox.stub(CalendarActorEntity, 'findOne').resolves(mockCalendarActor as any);
+
+    // Mock remote membership found using the CalendarActorEntity's id (not calendarId directly)
     const mockRemoteMembership = {
       account_id: 'account-123',
-      calendar_actor_id: 'remote-calendar-actor-456',
+      calendar_actor_id: mockCalendarActor.id,
       calendar_id: null,
       role: 'editor',
       calendarActor: mockCalendarActor,
@@ -299,14 +304,20 @@ describe('EventService.deleteEvent', () => {
     // Stub the private deleteRemoteEventViaActivityPub method
     const deleteRemoteStub = sandbox.stub(eventService as any, 'deleteRemoteEventViaActivityPub').resolves();
 
-    // Call deleteEvent with calendarId
+    // Call deleteEvent with calendarId (the remote calendar's UUID)
     await eventService.deleteEvent(account, eventId, calendarId);
 
-    // Verify findOne was called with correct parameters
+    // Verify CalendarActorEntity was looked up by remote_calendar_id first
+    expect((CalendarActorEntity.findOne as sinon.SinonStub).calledWith({
+      where: { remote_calendar_id: calendarId },
+    })).toBe(true);
+
+    // Verify CalendarMemberEntity.findOne was called with the CalendarActorEntity's id
+    // (not calendarId directly, which was the old buggy behavior)
     expect((CalendarMemberEntity.findOne as sinon.SinonStub).calledWith({
       where: {
         account_id: account.id,
-        calendar_actor_id: calendarId,
+        calendar_actor_id: mockCalendarActor.id,
         calendar_id: null,
       },
       include: [{ model: CalendarActorEntity, as: 'calendarActor' }],
