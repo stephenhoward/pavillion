@@ -4,6 +4,7 @@ import CreateActivity from '@/server/activitypub/model/action/create';
 import UpdateActivity from '@/server/activitypub/model/action/update';
 import DeleteActivity from '@/server/activitypub/model/action/delete';
 import FollowActivity from '@/server/activitypub/model/action/follow';
+import AcceptActivity from '@/server/activitypub/model/action/accept';
 import AnnounceActivity from '@/server/activitypub/model/action/announce';
 import UndoActivity from '@/server/activitypub/model/action/undo';
 import ActivityPubInterface from '@/server/activitypub/interface';
@@ -310,6 +311,9 @@ export default class ActivityPubServerRoutes {
         break;
       case 'Follow':
         message = FollowActivity.fromObject(req.body);
+        break;
+      case 'Accept':
+        message = AcceptActivity.fromObject(req.body);
         break;
       case 'Announce':
         message = AnnounceActivity.fromObject(req.body);

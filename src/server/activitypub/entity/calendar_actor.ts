@@ -12,6 +12,7 @@ export interface CalendarActor {
   id: string;
   actorType: 'local' | 'remote';
   calendarId: string | null;
+  remoteCalendarId: string | null;
   actorUri: string;
   remoteDisplayName: string | null;
   remoteDomain: string | null;
@@ -36,6 +37,7 @@ export interface CalendarActor {
  *
  * For remote calendars (actor_type='remote'):
  * - calendar_id is null
+ * - remote_calendar_id stores the UUID of the calendar on the remote instance
  * - private_key is null
  * - remote_display_name, remote_domain, inbox_url, shared_inbox_url are used
  * - last_fetched tracks metadata freshness
@@ -61,6 +63,16 @@ class CalendarActorEntity extends Model {
   @ForeignKey(() => CalendarEntity)
   @Column({ type: DataType.UUID, allowNull: true, unique: true })
   declare calendar_id: string | null;
+
+  /**
+   * For remote calendars: the UUID of the calendar on the remote instance.
+   * Populated from the calendarId field in ActivityPub Add activities.
+   * Enables looking up the correct CalendarActorEntity when a user provides
+   * the remote calendar's UUID (e.g., when creating an event on a remote calendar).
+   * For local calendars: null (use calendar_id instead).
+   */
+  @Column({ type: DataType.UUID, allowNull: true })
+  declare remote_calendar_id: string | null;
 
   /**
    * The ActivityPub actor URI - always required, unique across all actors
@@ -138,6 +150,7 @@ class CalendarActorEntity extends Model {
       id: this.id,
       actorType: this.actor_type,
       calendarId: this.calendar_id ?? null,
+      remoteCalendarId: this.remote_calendar_id ?? null,
       actorUri: this.actor_uri,
       remoteDisplayName: this.remote_display_name ?? null,
       remoteDomain: this.remote_domain ?? null,
@@ -159,6 +172,7 @@ class CalendarActorEntity extends Model {
       id: calendarActor.id,
       actor_type: calendarActor.actorType,
       calendar_id: calendarActor.calendarId,
+      remote_calendar_id: calendarActor.remoteCalendarId,
       actor_uri: calendarActor.actorUri,
       remote_display_name: calendarActor.remoteDisplayName,
       remote_domain: calendarActor.remoteDomain,

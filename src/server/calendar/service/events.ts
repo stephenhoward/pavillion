@@ -56,6 +56,32 @@ class EventService {
   }
 
   /**
+   * Finds the CalendarActorEntity for a given calendar ID.
+   * Checks remote_calendar_id first (for remote calendars whose UUID was sent
+   * in an Add activity), then falls back to calendar_id (for local actors).
+   * This enables looking up the correct actor when a user provides the remote
+   * calendar's UUID to identify the target calendar for event operations.
+   *
+   * @param calendarId - The calendar UUID to search for
+   * @returns The matching CalendarActorEntity, or null if not found
+   * @private
+   */
+  private async findCalendarActorByCalendarId(calendarId: string): Promise<CalendarActorEntity | null> {
+    // Check if there's a remote CalendarActorEntity that has this remote calendar UUID
+    const byRemoteId = await CalendarActorEntity.findOne({
+      where: { remote_calendar_id: calendarId },
+    });
+    if (byRemoteId) {
+      return byRemoteId;
+    }
+
+    // Fall back to local actors where calendar_id matches
+    return CalendarActorEntity.findOne({
+      where: { calendar_id: calendarId },
+    });
+  }
+
+  /**
    * Retrieves events for the provided calendar.
    * Returns events that are either:
    * - Owned by the calendar (calendar_id matches)
@@ -491,21 +517,24 @@ class EventService {
       // Continue with local event creation below
     }
     else {
-      // Calendar not found locally - check if it's a remote calendar we have access to
-      // Find membership on a remote calendar by calendar_actor_id
-      const remoteMembership = await CalendarMemberEntity.findOne({
-        where: {
-          account_id: account.id,
-          calendar_actor_id: eventParams.calendarId,
-          calendar_id: null, // Ensure this is remote calendar membership
-        },
-        include: [{ model: CalendarActorEntity, as: 'calendarActor' }],
-      });
+      // Calendar not found locally - check if it's a remote calendar we have access to.
+      // Look up the CalendarActorEntity by the provided calendar UUID, then find membership.
+      const calendarActor = await this.findCalendarActorByCalendarId(eventParams.calendarId);
+      if (calendarActor) {
+        const remoteMembership = await CalendarMemberEntity.findOne({
+          where: {
+            account_id: account.id,
+            calendar_actor_id: calendarActor.id,
+            calendar_id: null, // Ensure this is remote calendar membership
+          },
+          include: [{ model: CalendarActorEntity, as: 'calendarActor' }],
+        });
 
-      if (remoteMembership && remoteMembership.calendarActor) {
-        // This is a remote calendar - delegate to remote event creation
-        const remoteCalendarActor = remoteMembership.calendarActor.toModel();
-        return this.createRemoteEvent(account, remoteCalendarActor, eventParams);
+        if (remoteMembership && remoteMembership.calendarActor) {
+          // This is a remote calendar - delegate to remote event creation
+          const remoteCalendarActor = remoteMembership.calendarActor.toModel();
+          return this.createRemoteEvent(account, remoteCalendarActor, eventParams);
+        }
       }
 
       throw new CalendarNotFoundError('Calendar for event does not exist');
@@ -638,19 +667,22 @@ class EventService {
     if (!eventEntity) {
       // Check if the user has remote calendar membership for the specified calendarId
       if (eventParams.calendarId) {
-        const remoteMembership = await CalendarMemberEntity.findOne({
-          where: {
-            account_id: account.id,
-            calendar_actor_id: eventParams.calendarId,
-            calendar_id: null, // Ensure this is remote calendar membership
-          },
-          include: [{ model: CalendarActorEntity, as: 'calendarActor' }],
-        });
+        const calendarActor = await this.findCalendarActorByCalendarId(eventParams.calendarId);
+        if (calendarActor) {
+          const remoteMembership = await CalendarMemberEntity.findOne({
+            where: {
+              account_id: account.id,
+              calendar_actor_id: calendarActor.id,
+              calendar_id: null, // Ensure this is remote calendar membership
+            },
+            include: [{ model: CalendarActorEntity, as: 'calendarActor' }],
+          });
 
-        if (remoteMembership && remoteMembership.calendarActor) {
-          // This is a remote calendar event - delegate to remote update
-          const remoteCalendarActor = remoteMembership.calendarActor.toModel();
-          return this.updateRemoteEventViaActivityPub(account, remoteCalendarActor, eventId, eventParams);
+          if (remoteMembership && remoteMembership.calendarActor) {
+            // This is a remote calendar event - delegate to remote update
+            const remoteCalendarActor = remoteMembership.calendarActor.toModel();
+            return this.updateRemoteEventViaActivityPub(account, remoteCalendarActor, eventId, eventParams);
+          }
         }
       }
       throw new EventNotFoundError('Event not found');
@@ -1264,20 +1296,23 @@ class EventService {
     if (!eventEntity) {
       // Check if the user has remote calendar membership for the specified calendarId
       if (calendarId) {
-        const remoteMembership = await CalendarMemberEntity.findOne({
-          where: {
-            account_id: account.id,
-            calendar_actor_id: calendarId,
-            calendar_id: null, // Ensure this is remote calendar membership
-          },
-          include: [{ model: CalendarActorEntity, as: 'calendarActor' }],
-        });
+        const calendarActor = await this.findCalendarActorByCalendarId(calendarId);
+        if (calendarActor) {
+          const remoteMembership = await CalendarMemberEntity.findOne({
+            where: {
+              account_id: account.id,
+              calendar_actor_id: calendarActor.id,
+              calendar_id: null, // Ensure this is remote calendar membership
+            },
+            include: [{ model: CalendarActorEntity, as: 'calendarActor' }],
+          });
 
-        if (remoteMembership && remoteMembership.calendarActor) {
-          // This is a remote calendar event - delegate to remote delete
-          const remoteCalendarActor = remoteMembership.calendarActor.toModel();
-          await this.deleteRemoteEventViaActivityPub(account, remoteCalendarActor, eventId);
-          return;
+          if (remoteMembership && remoteMembership.calendarActor) {
+            // This is a remote calendar event - delegate to remote delete
+            const remoteCalendarActor = remoteMembership.calendarActor.toModel();
+            await this.deleteRemoteEventViaActivityPub(account, remoteCalendarActor, eventId);
+            return;
+          }
         }
       }
       throw new EventNotFoundError(`Event with ID ${eventId} not found`);

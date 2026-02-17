@@ -48,12 +48,14 @@ describe('FollowingCalendar Model', () => {
       const obj = follow.toObject();
 
       expect(obj.id).toBe('follow-3');
-      expect(obj.calendarActorId).toBe('calendar@other.net');
+      expect(obj.remoteCalendarId).toBe('calendar@other.net');
       expect(obj.calendarId).toBe('cal-789');
       expect(obj.autoRepostOriginals).toBe(true);
       expect(obj.autoRepostReposts).toBe(true);
       // Ensure old repostPolicy field is not present
       expect(obj.repostPolicy).toBeUndefined();
+      // Ensure old calendarActorId key is not present in serialized output
+      expect(obj.calendarActorId).toBeUndefined();
     });
   });
 
