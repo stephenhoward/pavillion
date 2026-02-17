@@ -780,6 +780,13 @@ class CalendarService {
       throw new EditorNotFoundError();
     }
 
+    if (this.eventBus) {
+      this.eventBus.emit('remoteEditorRevoked', {
+        calendarId: calendar.id,
+        actorUri,
+      });
+    }
+
     return true;
   }
 

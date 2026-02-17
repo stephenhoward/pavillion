@@ -131,7 +131,8 @@ const handlers = {
       res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
       res.setHeader('Content-Type', 'application/javascript');
       res.send(widgetContent);
-    } catch (error) {
+    }
+    catch (error) {
       console.error('Error serving widget JavaScript:', error);
       res.status(404).send('Widget JavaScript not found');
     }

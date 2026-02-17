@@ -86,8 +86,8 @@ test.describe('Auto-Repost Policy Enforcement', () => {
     // Update follow policy to auto-repost originals
     const follows = await getFollows(INSTANCE_BETA, bobToken, bobCalendar.id);
     const aliceFollow = follows.find(
-      f => f.calendarActorId === aliceCalendarId ||
-           f.calendarActorId?.includes(aliceCalendar.urlName)
+      f => f.remoteCalendarId === aliceCalendarId ||
+           f.remoteCalendarId?.includes(aliceCalendar.urlName)
     );
     expect(aliceFollow).toBeDefined();
 
@@ -165,8 +165,8 @@ test.describe('Auto-Repost Policy Enforcement', () => {
     // Update Bob's follow policy for Alice (auto-repost reposts)
     const bobFollows = await getFollows(INSTANCE_BETA, bobToken, bobCalendar.id);
     const bobFollowsAlice = bobFollows.find(
-      f => f.calendarActorId === aliceCalendarId ||
-           f.calendarActorId?.includes(aliceCalendar.urlName)
+      f => f.remoteCalendarId === aliceCalendarId ||
+           f.remoteCalendarId?.includes(aliceCalendar.urlName)
     );
     expect(bobFollowsAlice).toBeDefined();
 
@@ -275,8 +275,8 @@ test.describe('Auto-Repost Policy Enforcement', () => {
     // Verify follow policy is disabled (default)
     const follows = await getFollows(INSTANCE_BETA, bobToken, bobCalendar.id);
     const aliceFollow = follows.find(
-      f => f.calendarActorId === aliceCalendarId ||
-           f.calendarActorId?.includes(aliceCalendar.urlName)
+      f => f.remoteCalendarId === aliceCalendarId ||
+           f.remoteCalendarId?.includes(aliceCalendar.urlName)
     );
     expect(aliceFollow).toBeDefined();
     expect(aliceFollow!.autoRepostOriginals).toBe(false);
@@ -360,8 +360,8 @@ test.describe('Auto-Repost Policy Enforcement', () => {
     // Update Bob's follow policy to enable auto-repost originals
     const follows = await getFollows(INSTANCE_BETA, bobToken, bobCalendar.id);
     const aliceFollow = follows.find(
-      f => f.calendarActorId === aliceCalendarId ||
-           f.calendarActorId?.includes(aliceCalendar.urlName)
+      f => f.remoteCalendarId === aliceCalendarId ||
+           f.remoteCalendarId?.includes(aliceCalendar.urlName)
     );
     expect(aliceFollow).toBeDefined();
 
@@ -437,8 +437,8 @@ test.describe('Auto-Repost Policy Enforcement', () => {
     // Enable auto-repost for both
     let aliceFollows = await getFollows(INSTANCE_ALPHA, aliceToken, aliceCalendar.id);
     const aliceFollowsBob = aliceFollows.find(
-      f => f.calendarActorId === bobCalendarId ||
-           f.calendarActorId?.includes(bobCalendar.urlName)
+      f => f.remoteCalendarId === bobCalendarId ||
+           f.remoteCalendarId?.includes(bobCalendar.urlName)
     );
     expect(aliceFollowsBob).toBeDefined();
 
@@ -453,8 +453,8 @@ test.describe('Auto-Repost Policy Enforcement', () => {
 
     let bobFollows = await getFollows(INSTANCE_BETA, bobToken, bobCalendar.id);
     const bobFollowsAlice = bobFollows.find(
-      f => f.calendarActorId === aliceCalendarId ||
-           f.calendarActorId?.includes(aliceCalendar.urlName)
+      f => f.remoteCalendarId === aliceCalendarId ||
+           f.remoteCalendarId?.includes(aliceCalendar.urlName)
     );
     expect(bobFollowsAlice).toBeDefined();
 
@@ -512,7 +512,7 @@ test.describe('Auto-Repost Policy Enforcement', () => {
     const aliceCalendarEventsResponse = await getCalendarEvents(
       INSTANCE_ALPHA,
       aliceToken,
-      aliceCalendar.id
+      aliceCalendar.urlName
     );
     const aliceCalendarEvents = await aliceCalendarEventsResponse.json();
     const event1Occurrences = aliceCalendarEvents.filter(
@@ -600,8 +600,8 @@ test.describe('Auto-Repost Policy Enforcement', () => {
     // Now enable auto-repost policy
     const follows = await getFollows(INSTANCE_BETA, bobToken, bobCalendar.id);
     const aliceFollow = follows.find(
-      f => f.calendarActorId === aliceCalendarId ||
-           f.calendarActorId?.includes(aliceCalendar.urlName)
+      f => f.remoteCalendarId === aliceCalendarId ||
+           f.remoteCalendarId?.includes(aliceCalendar.urlName)
     );
     expect(aliceFollow).toBeDefined();
 
@@ -622,7 +622,7 @@ test.describe('Auto-Repost Policy Enforcement', () => {
     const aliceCalendarEventsResponse = await getCalendarEvents(
       INSTANCE_ALPHA,
       aliceToken,
-      aliceCalendar.id
+      aliceCalendar.urlName
     );
     const aliceCalendarEvents = await aliceCalendarEventsResponse.json();
     const event1OnAlice = aliceCalendarEvents.find(

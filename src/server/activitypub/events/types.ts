@@ -27,3 +27,8 @@ export interface CalendarCreatedPayload {
   urlName: string;
   domain: string;
 }
+
+export interface RemoteEditorRevokedPayload {
+  calendarId: string;
+  actorUri: string;
+}

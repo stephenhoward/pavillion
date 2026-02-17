@@ -703,17 +703,20 @@ class ProcessInboxService {
     }
 
     // Create the event
-    const eventParams = {
+    // calendarId is intentionally omitted for calendar-actor federation;
+    // addRemoteEvent will set it to null for remote federated events
+    const eventParams: Record<string, any> = {
       ...message.object,
       id: localEventId,
-      event_source_url: apObjectId,
-      calendarId: calendar.id,
+      eventSourceUrl: apObjectId,
     };
 
     // For Person actor creates, use the full event params from the object
-    if (isPersonActor && message.object.eventParams) {
-      Object.assign(eventParams, message.object.eventParams);
-      eventParams.id = localEventId;
+    if (isPersonActor) {
+      if (message.object.eventParams) {
+        Object.assign(eventParams, message.object.eventParams);
+        eventParams.id = localEventId;
+      }
       eventParams.calendarId = calendar.id;
     }
 
@@ -789,10 +792,13 @@ class ProcessInboxService {
       return;
     }
 
-    if (eventObject.attributed_to !== sourceActorUri) {
+    // For original events (Create), verify the actor owns the event.
+    // For reposts (Announce), the sharer intentionally differs from the original author.
+    if (isOriginal && eventObject.attributed_to !== sourceActorUri) {
       console.warn(`[AUTO-REPOST] Skip: attributed_to mismatch - expected ${sourceActorUri}, got ${eventObject.attributed_to}`);
       return;
     }
+
     console.log('[AUTO-REPOST] Attribution verified:', { attributed_to: eventObject.attributed_to });
 
     // LOOP GUARD: Never repost own events
@@ -1090,8 +1096,11 @@ class ProcessInboxService {
         return null;
       }
 
-      const ok = await this.actorOwnsObject(message);
-      if (!ok) {
+      // Verify ownership using locally-stored attributed_to field.
+      // This avoids a remote fetch (which would be blocked by SSRF protection in
+      // some environments) while still ensuring the actor owns the event.
+      // The attributed_to field was stored when the event was first received.
+      if (!apObject || apObject.attributed_to !== actorUri) {
         logActivityRejection({
           rejection_type: 'ownership_verification_failed',
           activity_type: 'Update',
@@ -1109,7 +1118,7 @@ class ProcessInboxService {
     const eventParams = {
       ...message.object,
       id: apObject.event_id,
-      event_source_url: apObjectId,
+      eventSourceUrl: apObjectId,
     };
 
     // For Person actor updates, use the full event params from the object
@@ -1136,7 +1145,15 @@ class ProcessInboxService {
    * @returns {Promise<void>}
    */
   async processDeleteEvent(calendar: Calendar, message: DeleteActivity) {
-    if (!message.object || !message.object.id) {
+    // Validate that the object field is present and has an identifiable AP ID.
+    // message.object can be a string URL (standard federation) or a Tombstone object
+    // with an 'id' field (cross-instance editor delete).
+    const objectPresent = message.object &&
+      (typeof message.object === 'string'
+        ? message.object.length > 0
+        : !!(message.object as any).id);
+
+    if (!objectPresent) {
       console.warn(`[INBOX] Delete activity missing object or object.id`);
       logActivityRejection({
         rejection_type: 'invalid_object',
@@ -1150,7 +1167,10 @@ class ProcessInboxService {
       return;
     }
 
-    const apObjectId = message.object.id;
+    // message.object can be a string URL (standard federation) or a Tombstone object
+    // (cross-instance editor delete). Extract the AP object ID from either format.
+    const objectValue = message.object as any;
+    const apObjectId = typeof objectValue === 'string' ? objectValue : objectValue.id;
     const actorUri = message.actor;
 
     // Look up the local event by its AP ID
@@ -1168,8 +1188,9 @@ class ProcessInboxService {
 
     // For Person actor deletes, also try looking up by local event ID
     // (the object.id path may contain the local event ID instead of the original AP ID)
-    if (!existingEvent && message.object.eventId) {
-      const localEventId = message.object.eventId;
+    const objectEventId = typeof objectValue === 'object' ? objectValue.eventId : undefined;
+    if (!existingEvent && objectEventId) {
+      const localEventId = objectEventId;
       existingEvent = await this.calendarInterface.getEventById(localEventId);
       eventIdToDelete = localEventId;
 
@@ -1465,7 +1486,7 @@ class ProcessInboxService {
           const eventParams = {
             ...response.data,
             id: localEventId,
-            event_source_url: apObjectId,
+            eventSourceUrl: apObjectId,
           };
 
           await this.calendarInterface.addRemoteEvent(calendar, eventParams);

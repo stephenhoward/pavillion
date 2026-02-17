@@ -180,4 +180,15 @@ export default class ActivityPubInterface {
   ): Promise<CalendarEvent | null> {
     return this.inboxSerivce.processPersonActorActivity(calendar, activity);
   }
+
+  /**
+   * Invalidates the authorization cache entry for a specific calendar and actor.
+   * Should be called when editor membership changes to ensure immediate effect.
+   *
+   * @param calendarId - The calendar ID
+   * @param actorUri - The Person actor URI
+   */
+  invalidateAuthorizationCache(calendarId: string, actorUri: string): void {
+    this.inboxSerivce.invalidateAuthorizationCache(calendarId, actorUri);
+  }
 }

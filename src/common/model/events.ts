@@ -257,6 +257,7 @@ class CalendarEventContent extends Model implements TranslatedContentModel {
   toObject(): Record<string, any> {
     return {
       language: this.language,
+      title: this.name,
       name: this.name,
       description: this.description,
     };

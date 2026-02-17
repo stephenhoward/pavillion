@@ -499,8 +499,8 @@ describe('Auto-Repost Integration Tests', () => {
     });
   });
 
-  describe('Test 7: attributed_to mismatch rejection', () => {
-    it('should not auto-repost when source actor does not match attributed_to', async () => {
+  describe('Test 7: repost of third-party event (Announce with different attributed_to)', () => {
+    it('should auto-repost when followed calendar shares a third-party event', async () => {
       // Setup: Calendar A follows Calendar B with auto_repost_reposts=true
       const calendarBActorUri = 'https://remote.example.com/calendars/calendarb7';
       await createFollowingRelationship(calendarA.id, calendarBActorUri, false, true);
@@ -536,29 +536,15 @@ describe('Auto-Repost Integration Tests', () => {
       // Process the Announce activity
       await inboxService['processShareEvent'](calendarA, announceActivity);
 
-      // Assert: No auto-repost (source actor B doesn't match attribution C)
+      // Assert: Auto-repost succeeds (B is sharing C's event, and A has autoRepostReposts=true for B)
       const sharedEvent = await SharedEventEntity.findOne({
         where: {
-          event_id: eventId,  // Query by local UUID, not AP URL
+          event_id: eventId,
           calendar_id: calendarA.id,
         },
       });
 
-      expect(sharedEvent).toBeNull();
-
-      // Assert: No Announce in outbox
-      const outboxMessages = await ActivityPubOutboxMessageEntity.findAll({
-        where: {
-          calendar_id: calendarA.id,
-          type: 'Announce',
-        },
-      });
-
-      const announceForEvent = outboxMessages.find((msg: any) => {
-        const activity = msg.toModel() as AnnounceActivity;
-        return activity.object === eventApId;
-      });
-      expect(announceForEvent).toBeUndefined();
+      expect(sharedEvent).not.toBeNull();
     });
   });
 });

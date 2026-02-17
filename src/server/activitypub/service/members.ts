@@ -11,10 +11,12 @@ import FollowActivity from "@/server/activitypub/model/action/follow";
 import AnnounceActivity from "@/server/activitypub/model/action/announce";
 import { FollowingCalendarEntity, FollowerCalendarEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
 import { CalendarActorEntity } from "@/server/activitypub/entity/calendar_actor";
+import { EventObjectEntity } from "@/server/activitypub/entity/event_object";
 import RemoteCalendarService from "@/server/activitypub/service/remote_calendar";
 import UndoActivity from "../model/action/undo";
 import { EventEntity } from "@/server/calendar/entity/event";
 import CalendarInterface from "@/server/calendar/interface";
+import { EventObject } from "@/server/activitypub/model/object/event";
 import { addToOutbox as addToOutboxHelper } from "@/server/activitypub/helper/outbox";
 import {
   InvalidRemoteCalendarIdentifierError,
@@ -295,9 +297,38 @@ class ActivityPubService {
       throw new InvalidSharedEventUrlError('Invalid shared event url: ' + eventUrl);
     }
 
+    // Resolve AP URL to local event UUID for consistent storage
+    // First try to find by ap_id (handles remote events and properly-formed local URLs)
+    let eventObject = await EventObjectEntity.findOne({
+      where: { ap_id: eventUrl },
+    });
+
+    // If not found, this may be a local same-instance event URL.
+    // Extract a UUID from the URL and look up the local event to get its canonical AP URL.
+    let canonicalEventUrl = eventUrl;
+    if (!eventObject) {
+      const uuidMatch = eventUrl.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+      if (uuidMatch) {
+        const candidateId = uuidMatch[1];
+        const localEvent = await this.calendarService.getEventById(candidateId);
+        if (localEvent?.calendarId) {
+          const localCalendar = await this.calendarService.getCalendar(localEvent.calendarId);
+          if (localCalendar) {
+            canonicalEventUrl = EventObject.eventUrl(localCalendar, localEvent);
+            // Try EventObjectEntity lookup again with canonical URL
+            eventObject = await EventObjectEntity.findOne({
+              where: { ap_id: canonicalEventUrl },
+            });
+          }
+        }
+      }
+    }
+
+    const localEventId = eventObject?.event_id || canonicalEventUrl;
+
     let existingShareEntity = await SharedEventEntity.findOne({
       where: {
-        event_id: eventUrl,
+        event_id: localEventId,
         calendar_id: calendar.id,
       },
     });
@@ -307,11 +338,11 @@ class ActivityPubService {
     }
 
     let actor = await this.actorUrl(calendar);
-    let shareActivity = new AnnounceActivity(actor, eventUrl);
+    let shareActivity = new AnnounceActivity(actor, canonicalEventUrl);
 
     SharedEventEntity.create({
       id: shareActivity.id,
-      event_id: eventUrl,
+      event_id: localEventId,
       calendar_id: calendar.id,
       auto_posted: autoPosted,
     });
@@ -540,13 +571,26 @@ class ActivityPubService {
     const events = await EventEntity.findAll({
       where: {
         [Op.or]: [
-          // Remote events from followed remote calendars
+          // Remote events originally authored by followed remote calendars
           {
             calendar_id: null,
             id: {
               [Op.in]: EventEntity.sequelize!.literal(
                 `(SELECT eo.event_id FROM ap_event_object eo
                   JOIN calendar_actor ca ON eo.attributed_to = ca.actor_uri AND ca.actor_type = 'remote'
+                  JOIN ap_following f ON f.calendar_actor_id = ca.id
+                  WHERE f.calendar_id = '${calendar.id}')`,
+              ),
+            },
+          },
+          // Remote events announced/shared by followed remote calendars
+          {
+            calendar_id: null,
+            id: {
+              [Op.in]: EventEntity.sequelize!.literal(
+                `(SELECT eo.event_id FROM ap_event_object eo
+                  JOIN ap_event_activity ea ON eo.ap_id = ea.event_id AND ea.type = 'share'
+                  JOIN calendar_actor ca ON ea.calendar_actor_id = ca.id AND ca.actor_type = 'remote'
                   JOIN ap_following f ON f.calendar_actor_id = ca.id
                   WHERE f.calendar_id = '${calendar.id}')`,
               ),

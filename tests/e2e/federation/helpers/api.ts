@@ -92,11 +92,11 @@ export interface FollowResponse {
 
 /**
  * Follower relationship - represents a calendar following the local calendar
- * The remoteCalendarId is in format: calendar_name@domain
+ * The calendarActorId is in format: calendar_name@domain
  */
 export interface FollowerResponse {
   id: string;
-  remoteCalendarId: string;
+  calendarActorId: string;
   calendarId: string;
 }
 
