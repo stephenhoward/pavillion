@@ -119,10 +119,10 @@ test.describe('Calendar Follow/Unfollow', () => {
     const followers = await getFollowers(INSTANCE_ALPHA, aliceToken, freshAlphaCalendar.id);
 
     // Check that Beta's calendar is in the followers list
-    // The remoteCalendarId format is: calendar_name@domain
+    // The calendarActorId format is: calendar_name@domain
     const hasFollower = followers.some(
-      (follower) => follower.remoteCalendarId.includes(INSTANCE_BETA.domain) ||
-                    follower.remoteCalendarId.includes(freshBetaCalendar.urlName)
+      (follower) => follower.calendarActorId.includes(INSTANCE_BETA.domain) ||
+                    follower.calendarActorId.includes(freshBetaCalendar.urlName)
     );
 
     expect(hasFollower).toBe(true);
@@ -282,8 +282,8 @@ test.describe('Calendar Follow/Unfollow', () => {
     followers = await getFollowers(INSTANCE_ALPHA, aliceToken, undoAlphaCalendar.id);
 
     const stillHasFollower = followers.some(
-      (follower) => follower.remoteCalendarId.includes(INSTANCE_BETA.domain) ||
-                    follower.remoteCalendarId.includes(undoBetaCalendar.urlName)
+      (follower) => follower.calendarActorId.includes(INSTANCE_BETA.domain) ||
+                    follower.calendarActorId.includes(undoBetaCalendar.urlName)
     );
 
     expect(stillHasFollower).toBe(false);
