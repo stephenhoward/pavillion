@@ -703,17 +703,20 @@ class ProcessInboxService {
     }
 
     // Create the event
-    const eventParams = {
+    // calendarId is intentionally omitted for calendar-actor federation;
+    // addRemoteEvent will set it to null for remote federated events
+    const eventParams: Record<string, any> = {
       ...message.object,
       id: localEventId,
       event_source_url: apObjectId,
-      calendarId: calendar.id,
     };
 
     // For Person actor creates, use the full event params from the object
-    if (isPersonActor && message.object.eventParams) {
-      Object.assign(eventParams, message.object.eventParams);
-      eventParams.id = localEventId;
+    if (isPersonActor) {
+      if (message.object.eventParams) {
+        Object.assign(eventParams, message.object.eventParams);
+        eventParams.id = localEventId;
+      }
       eventParams.calendarId = calendar.id;
     }
 
@@ -789,10 +792,13 @@ class ProcessInboxService {
       return;
     }
 
-    if (eventObject.attributed_to !== sourceActorUri) {
+    // For original events (Create), verify the actor owns the event.
+    // For reposts (Announce), the sharer intentionally differs from the original author.
+    if (isOriginal && eventObject.attributed_to !== sourceActorUri) {
       console.warn(`[AUTO-REPOST] Skip: attributed_to mismatch - expected ${sourceActorUri}, got ${eventObject.attributed_to}`);
       return;
     }
+
     console.log('[AUTO-REPOST] Attribution verified:', { attributed_to: eventObject.attributed_to });
 
     // LOOP GUARD: Never repost own events

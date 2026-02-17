@@ -540,13 +540,26 @@ class ActivityPubService {
     const events = await EventEntity.findAll({
       where: {
         [Op.or]: [
-          // Remote events from followed remote calendars
+          // Remote events originally authored by followed remote calendars
           {
             calendar_id: null,
             id: {
               [Op.in]: EventEntity.sequelize!.literal(
                 `(SELECT eo.event_id FROM ap_event_object eo
                   JOIN calendar_actor ca ON eo.attributed_to = ca.actor_uri AND ca.actor_type = 'remote'
+                  JOIN ap_following f ON f.calendar_actor_id = ca.id
+                  WHERE f.calendar_id = '${calendar.id}')`,
+              ),
+            },
+          },
+          // Remote events announced/shared by followed remote calendars
+          {
+            calendar_id: null,
+            id: {
+              [Op.in]: EventEntity.sequelize!.literal(
+                `(SELECT eo.event_id FROM ap_event_object eo
+                  JOIN ap_event_activity ea ON eo.ap_id = ea.event_id AND ea.type = 'share'
+                  JOIN calendar_actor ca ON ea.calendar_actor_id = ca.id AND ca.actor_type = 'remote'
                   JOIN ap_following f ON f.calendar_actor_id = ca.id
                   WHERE f.calendar_id = '${calendar.id}')`,
               ),

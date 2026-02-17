@@ -90,20 +90,26 @@ describe('ActivityPubService - getFeed with EventObjectEntity Join', () => {
     // Verify the query structure for the new design
     const queryOptions = findAllStub.firstCall.args[0] as any;
 
-    // Check that the where clause uses Op.or with both remote and local conditions
+    // Check that the where clause uses Op.or with remote (originals), remote (announcements), and local conditions
     expect(queryOptions.where).toBeDefined();
     expect(queryOptions.where[Op.or]).toBeDefined();
     expect(Array.isArray(queryOptions.where[Op.or])).toBe(true);
-    expect(queryOptions.where[Op.or].length).toBe(2);
+    expect(queryOptions.where[Op.or].length).toBe(3);
 
-    // First condition: remote events (calendar_id = null with EventObjectEntity subquery)
-    const remoteCondition = queryOptions.where[Op.or][0];
-    expect(remoteCondition.calendar_id).toBeNull();
-    expect(remoteCondition.id).toBeDefined();
-    expect(remoteCondition.id[Op.in]).toBeDefined();
+    // First condition: remote events originally authored by followed remote calendars (calendar_id = null)
+    const remoteOriginalsCondition = queryOptions.where[Op.or][0];
+    expect(remoteOriginalsCondition.calendar_id).toBeNull();
+    expect(remoteOriginalsCondition.id).toBeDefined();
+    expect(remoteOriginalsCondition.id[Op.in]).toBeDefined();
 
-    // Second condition: local events (calendar_id from followed local calendars)
-    const localCondition = queryOptions.where[Op.or][1];
+    // Second condition: remote events announced/shared by followed remote calendars (calendar_id = null)
+    const remoteAnnouncementsCondition = queryOptions.where[Op.or][1];
+    expect(remoteAnnouncementsCondition.calendar_id).toBeNull();
+    expect(remoteAnnouncementsCondition.id).toBeDefined();
+    expect(remoteAnnouncementsCondition.id[Op.in]).toBeDefined();
+
+    // Third condition: local events from followed local calendars
+    const localCondition = queryOptions.where[Op.or][2];
     expect(localCondition.calendar_id).toBeDefined();
     expect(localCondition.calendar_id[Op.in]).toBeDefined();
   });
