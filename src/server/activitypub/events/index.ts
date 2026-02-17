@@ -8,6 +8,7 @@ import {
   ActivityPubEventDeletedPayload,
   AccountCreatedPayload,
   CalendarCreatedPayload,
+  RemoteEditorRevokedPayload,
 } from './types';
 import ActivityPubInterface from '../interface';
 import CreateActivity from '../model/action/create';
@@ -40,6 +41,7 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
     eventBus.on('inboxMessageAdded', this.processInboxMessage.bind(this));
     eventBus.on('account.created', this.handleAccountCreated.bind(this));
     eventBus.on('calendar.created', this.handleCalendarCreated.bind(this));
+    eventBus.on('remoteEditorRevoked', this.handleRemoteEditorRevoked.bind(this));
   }
 
   private async handleEventCreated(payload: ActivityPubEventCreatedPayload): Promise<void> {
@@ -129,6 +131,11 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
       // Log error but don't throw - UserActor creation failure should not break account creation
       console.error(`[ActivityPub] Failed to create UserActor for account ${payload.accountId}:`, error);
     }
+  }
+
+  private handleRemoteEditorRevoked(payload: RemoteEditorRevokedPayload): void {
+    this.service.invalidateAuthorizationCache(payload.calendarId, payload.actorUri);
+    console.log(`[ActivityPub] Invalidated authorization cache for actor ${payload.actorUri} on calendar ${payload.calendarId}`);
   }
 
   private async handleCalendarCreated(payload: CalendarCreatedPayload): Promise<void> {

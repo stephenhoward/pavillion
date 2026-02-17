@@ -4,6 +4,7 @@ import { CalendarEvent } from '@/common/model/events';
 import { ActivityPubObject } from '@/server/activitypub/model/base';
 
 class EventObject extends ActivityPubObject {
+  type: string = 'Event';
   attributedTo: string;
   date: Date;
   location: LocationObject|string;
