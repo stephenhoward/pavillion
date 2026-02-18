@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, onMounted, onUnmounted } from 'vue';
+import { computed, ref, nextTick, onMounted, onUnmounted } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
 import { useFeedStore } from '@/client/stores/feedStore';
@@ -16,6 +16,7 @@ const hasMore = computed(() => feedStore.eventsHasMore);
 const isLoading = computed(() => feedStore.isLoadingEvents);
 const pendingRepost = computed(() => feedStore.pendingRepost);
 const sentinelRef = ref(null);
+const repostTriggerElement = ref(null);
 let observer = null;
 
 /**
@@ -90,7 +91,8 @@ const pendingRepostEventTitle = computed(() => {
 /**
  * Handle repost button click — delegates to the store which may set pendingRepost
  */
-const handleRepost = async (eventId) => {
+const handleRepost = async (eventId, event) => {
+  repostTriggerElement.value = (event?.currentTarget) ?? null;
   try {
     await feedStore.repostEvent(eventId);
   }
@@ -119,6 +121,7 @@ const handleUnrepost = async (eventId) => {
 const handleRepostConfirm = async (categoryIds) => {
   try {
     await feedStore.confirmPendingRepost(categoryIds);
+    nextTick(() => { repostTriggerElement.value?.focus(); });
   }
   catch (error) {
     console.error('Error confirming repost:', error);
@@ -131,6 +134,7 @@ const handleRepostConfirm = async (categoryIds) => {
  */
 const handleRepostCancel = () => {
   feedStore.cancelPendingRepost();
+  nextTick(() => { repostTriggerElement.value?.focus(); });
 };
 
 /**
@@ -213,9 +217,9 @@ onUnmounted(() => {
             type="button"
             class="repost-button"
             data-testid="repost-button"
-            @click="handleRepost(event.id)"
+            @click="handleRepost(event.id, $event)"
           >
-            Repost
+            {{ t('repost_button') }}
           </button>
 
           <!-- Manually reposted - show clickable label to unrepost -->
@@ -224,9 +228,10 @@ onUnmounted(() => {
             type="button"
             class="reposted-label"
             data-testid="reposted-label"
+            :aria-label="t('unrepost_aria_label')"
             @click="handleUnrepost(event.id)"
           >
-            Reposted
+            {{ t('reposted_button') }}
           </button>
 
           <!-- Auto-posted - show non-clickable label -->
@@ -235,7 +240,7 @@ onUnmounted(() => {
             class="auto-posted-label"
             data-testid="auto-posted-label"
           >
-            Auto-posted
+            {{ t('auto_posted_label') }}
           </span>
         </div>
       </div>
@@ -247,8 +252,13 @@ onUnmounted(() => {
       />
 
       <!-- Loading indicator -->
-      <div v-if="isLoading" class="loading-indicator">
-        <p>Loading more events...</p>
+      <div
+        v-if="isLoading"
+        class="loading-indicator"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        <p>{{ t('loading_more') }}</p>
       </div>
     </div>
 

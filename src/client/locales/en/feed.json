@@ -34,7 +34,12 @@
         "no_events": "No events",
         "follow_button": "Follow a Calendar",
         "repost_error": "Failed to repost event",
-        "unrepost_error": "Failed to remove repost"
+        "unrepost_error": "Failed to remove repost",
+        "repost_button": "Repost",
+        "reposted_button": "Reposted",
+        "unrepost_aria_label": "Remove repost",
+        "auto_posted_label": "Auto-posted",
+        "loading_more": "Loading more events..."
     },
     "categoryMapping": {
         "repostDialogTitle": "Repost with categories",
