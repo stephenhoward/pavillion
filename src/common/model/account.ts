@@ -1,4 +1,5 @@
 import { PrimaryModel } from '@/common/model/model';
+import { isValidLanguageCode } from '@/common/i18n/languages';
 
 /**
  * Represents a user account in the system.
@@ -49,6 +50,7 @@ class Account extends PrimaryModel {
       email: this.email,
       displayName: this.displayName,
       roles: this.roles,
+      language: this.language,
     };
   };
 
@@ -62,6 +64,7 @@ class Account extends PrimaryModel {
     let account = new Account(obj.id, obj.username, obj.email);
     account.displayName = obj.displayName ?? null;
     account.roles = obj.roles;
+    account.language = isValidLanguageCode(obj.language) ? obj.language : 'en';
     return account;
   }
 

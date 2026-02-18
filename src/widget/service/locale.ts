@@ -1,31 +1,30 @@
 import i18next from 'i18next';
-import LanguageDetector from 'i18next-browser-languagedetector';
+import { createI18nConfig } from '@/common/i18n/config';
 
 // Import English translation resources (widget shares system translations with site)
 import enSystem from '@/site/locales/en/system.json';
 
 /**
  * Initializes the i18next internationalization framework for the widget app.
- * Uses browser language detection and falls back to English.
+ * Uses the language resolved by the widget SDK (passed via URL parameter),
+ * with a fallback to English.
  *
+ * Language detection is handled by the widget SDK before the iframe is created.
+ * The resolved language is passed to the widget iframe via the `lang` URL parameter.
+ *
+ * @param language - The language code resolved by the widget SDK
  * @returns The configured i18next instance
  */
-export const initI18Next = () => {
+export const initI18Next = (language?: string) => {
   i18next
-    .use(LanguageDetector)
-    .init({
-      debug: process.env.NODE_ENV === 'development',
-      fallbackLng: 'en',
+    .init(createI18nConfig({
+      ...(language ? { lng: language } : {}),
       resources: {
         en: {
           system: enSystem,
         },
       },
-      detection: {
-        order: ['navigator'],
-        caches: ['localStorage'],
-      },
-    });
+    }));
 
   return i18next;
 };

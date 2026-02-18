@@ -26,6 +26,8 @@ import SubscriptionDomain from './subscription';
 import { createSetupModeMiddleware } from './setup/middleware/setup-mode';
 import { backfillUserActors } from '@/server/activitypub/scripts/backfill-user-actors';
 import { globalErrorHandler } from '@/server/common/middleware/error-handler';
+import { localeMiddleware } from '@/server/common/middleware/locale';
+import { createI18nConfig } from '@/common/i18n/config';
 
 /**
  * Validates production environment configuration.
@@ -213,15 +215,18 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
     next();
   });
 
+  // Resolve req.locale for every request using the detection chain:
+  // URL prefix → account language → cookie → Accept-Language → instance default → 'en'
+  app.use(localeMiddleware);
+
   app.set("views", path.join(path.resolve(), "src/server/templates"));
-  // Initialize i18next with default configuration
-  i18next.use(Backend).init({
-    fallbackLng: 'en',
+  // Initialize i18next with shared base config plus server-specific backend plugin
+  i18next.use(Backend).init(createI18nConfig({
     initAsync: false,
     backend: {
       loadPath: path.join(path.resolve(), "src/server/locales/{{lng}}/{{ns}}.json"),
     },
-  });
+  }));
 
   // Add a global translation helper to Handlebars
   handlebars.registerHelper('t', function(key: string, options: any) {

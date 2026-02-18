@@ -1,5 +1,6 @@
 import i18next from 'i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
+import { createI18nConfig } from '@/common/i18n/config';
 
 // Import English translation resources
 import enSystem from '@/site/locales/en/system.json';
@@ -11,12 +12,9 @@ import enSystem from '@/site/locales/en/system.json';
  * @returns {i18next.i18n} The configured i18next instance
  */
 export const initI18Next = () => {
-  // Initialize i18next with the standard initialization method
   i18next
     .use(LanguageDetector)
-    .init({
-      debug: process.env.NODE_ENV === 'development',
-      fallbackLng: 'en',
+    .init(createI18nConfig({
       resources: {
         en: {
           system: enSystem,
@@ -24,9 +22,8 @@ export const initI18Next = () => {
       },
       detection: {
         order: ['navigator'],
-        caches: ['localStorage'],
       },
-    });
+    }));
 
   return i18next;
 };

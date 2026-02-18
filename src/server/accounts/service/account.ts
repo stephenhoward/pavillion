@@ -22,6 +22,8 @@ import SetupInterface from '@/server/setup/interface';
 import CalendarInterface from '@/server/calendar/interface';
 import { EventEmitter } from 'events';
 import EditorInvitationEmail from '@/server/calendar/model/editor_invitation_email';
+import { isValidLanguageCode } from '@/common/i18n/languages';
+import { ValidationError } from '@/common/exceptions/base';
 
 type AccountInfo = {
   account: Account,
@@ -902,24 +904,32 @@ export default class AccountService {
   }
 
   /**
-   * Updates the display name for an account.
+   * Updates the display name and optionally the language preference for an account.
    *
    * @param account - The account to update
    * @param displayName - The new display name (or null to clear)
+   * @param language - Optional language preference code to update
    * @returns The updated account model
+   * @throws ValidationError if the provided language code is not supported
    */
-  async updateProfile(account: Account, displayName: string | null): Promise<Account> {
+  async updateProfile(account: Account, displayName: string | null, language?: string): Promise<Account> {
+    if (language !== undefined && !isValidLanguageCode(language)) {
+      throw new ValidationError('Invalid language code');
+    }
+
     const accountEntity = await AccountEntity.findByPk(account.id);
     if (!accountEntity) {
       throw new Error('Account not found');
     }
 
     accountEntity.display_name = displayName;
+    if (language !== undefined) {
+      accountEntity.language = language;
+    }
     await accountEntity.save();
 
     return accountEntity.toModel();
   }
-
   /**
    * Delete an account by its ID.
    * This will also delete all associated data (secrets, roles, invitations sent, etc.)

@@ -5,7 +5,7 @@
  * Implements async loading pattern with command queue.
  *
  * Usage:
- * <script async src="https://calendar.example.com/widget/pavillion-widget.js"></script>
+ * <script async src="https://calendar.example.com/widget/pavillion-widget.js" data-lang="es"></script>
  * <script>
  *   window.Pavillion = window.Pavillion || { q: [] };
  *   Pavillion('init', {
@@ -18,12 +18,15 @@
  * </script>
  */
 
+import { isValidLanguageCode, DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
+
 interface WidgetConfig {
   calendar: string;
   container: string;
   view?: 'week' | 'month' | 'list';
   accentColor?: string;
   colorMode?: 'auto' | 'light' | 'dark';
+  lang?: string;
   onResize?: (height: number) => void;
   onEventClick?: (eventId: string) => void;
   onNavigate?: (url: string) => void;
@@ -34,6 +37,52 @@ interface PavillionMessage {
   height?: number;
   url?: string;
   eventId?: string;
+}
+
+/**
+ * Detects the language to use for the widget.
+ *
+ * Detection chain:
+ * 1. `data-lang` attribute on the widget script tag
+ * 2. Parent page `<html lang="...">` attribute
+ * 3. Instance default language passed via config
+ * 4. English fallback ('en')
+ *
+ * @param configLang - Optional language code from widget init config
+ * @returns Validated language code to use for the widget
+ */
+export function detectWidgetLanguage(configLang?: string): string {
+  // 1. Check data-lang on the widget script tag
+  const scripts = Array.from(document.getElementsByTagName('script'));
+  const widgetScript = scripts.find(s => s.src.includes('pavillion-widget.js'));
+  if (widgetScript) {
+    const dataLang = widgetScript.getAttribute('data-lang');
+    if (dataLang && isValidLanguageCode(dataLang)) {
+      return dataLang;
+    }
+  }
+
+  // 2. Check parent page <html lang="..."> attribute
+  const htmlLang = document.documentElement.getAttribute('lang');
+  if (htmlLang) {
+    // Try exact match first (e.g., 'es')
+    if (isValidLanguageCode(htmlLang)) {
+      return htmlLang;
+    }
+    // Try base language (e.g., 'es' from 'es-MX')
+    const baseLang = htmlLang.split('-')[0];
+    if (isValidLanguageCode(baseLang)) {
+      return baseLang;
+    }
+  }
+
+  // 3. Instance default from widget init config
+  if (configLang && isValidLanguageCode(configLang)) {
+    return configLang;
+  }
+
+  // 4. English fallback
+  return DEFAULT_LANGUAGE_CODE;
 }
 
 class PavillionWidget {
@@ -136,6 +185,10 @@ class PavillionWidget {
     if (this.config.colorMode) {
       url.searchParams.set('colorMode', this.config.colorMode);
     }
+
+    // Detect and set widget language
+    const lang = detectWidgetLanguage(this.config.lang);
+    url.searchParams.set('lang', lang);
 
     return url.toString();
   }

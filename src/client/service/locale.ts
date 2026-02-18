@@ -1,5 +1,6 @@
 import i18next from 'i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
+import { createI18nConfig } from '@/common/i18n/config';
 
 // Import English translation resources
 import enSystem from '@/client/locales/en/system.json';
@@ -23,24 +24,17 @@ import esSetup from '@/client/locales/es/setup.json';
 
 /**
  * Initializes the i18next internationalization framework with all translation resources.
- * Sets up language detection with localStorage taking priority, then browser settings.
- * The server's configured default language can be passed to override detection.
+ * Sets up language detection from the browser, with an optional server-configured
+ * default language that takes priority over browser detection.
  *
  * @param serverLanguage - Optional language code from server settings (e.g., 'es', 'en')
  * @returns {i18next.i18n} The configured i18next instance
  */
 export const initI18Next = (serverLanguage?: string) => {
-  // If server provides a default language, store it in localStorage for future visits
-  if (serverLanguage) {
-    localStorage.setItem('i18nextLng', serverLanguage);
-  }
-
-  // Initialize i18next with the standard initialization method
   i18next
     .use(LanguageDetector)
-    .init({
-      debug: process.env.NODE_ENV === 'development',
-      fallbackLng: 'en',
+    .init(createI18nConfig({
+      ...(serverLanguage ? { lng: serverLanguage } : {}),
       resources: {
         en: {
           system: enSystem,
@@ -64,11 +58,9 @@ export const initI18Next = (serverLanguage?: string) => {
         },
       },
       detection: {
-        order: ['localStorage', 'navigator'],
-        caches: ['localStorage'],
-        lookupLocalStorage: 'i18nextLng',
+        order: ['navigator'],
       },
-    });
+    }));
 
   return i18next;
 };
