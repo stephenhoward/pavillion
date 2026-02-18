@@ -24,6 +24,7 @@ import MediaDomain from './media';
 import SetupDomain from './setup';
 import SubscriptionDomain from './subscription';
 import { createSetupModeMiddleware } from './setup/middleware/setup-mode';
+import { createLocaleMiddleware } from '@/server/common/middleware/locale';
 import { backfillUserActors } from '@/server/activitypub/scripts/backfill-user-actors';
 import { backfillCalendarActors } from '@/server/activitypub/scripts/backfill-calendar-actors';
 import { globalErrorHandler } from '@/server/common/middleware/error-handler';
@@ -262,6 +263,11 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
 
   const configurationDomain = new ConfigurationDomain(eventBus);
   configurationDomain.initialize(app);
+
+  // Add locale middleware after configuration domain is initialized so it can
+  // use the ConfigurationInterface to read instance language settings.
+  // This respects domain-driven design boundaries by going through the interface.
+  app.use(createLocaleMiddleware(configurationDomain.interface));
 
   // Initialize Email domain (no API routes, provides interface for cross-domain email sending)
   const emailDomain = new EmailDomain();
