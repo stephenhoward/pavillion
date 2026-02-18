@@ -26,7 +26,7 @@ class FollowingCalendar extends PrimaryModel {
   toObject(): Record<string, any> {
     return {
       id: this.id,
-      remoteCalendarId: this.calendarActorId,
+      calendarActorId: this.calendarActorId,
       calendarId: this.calendarId,
       autoRepostOriginals: this.autoRepostOriginals,
       autoRepostReposts: this.autoRepostReposts,

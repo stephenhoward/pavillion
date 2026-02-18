@@ -67,7 +67,7 @@ describe('ActivityPub Social API Routes', () => {
       const response = res.json.firstCall.args[0];
       expect(response).toHaveLength(2);
       expect(response[0].id).toBe('follow-1');
-      expect(response[0].remoteCalendarId).toBe('remote@example.com');
+      expect(response[0].calendarActorId).toBe('remote@example.com');
       expect(response[0].autoRepostOriginals).toBe(false);
       expect(response[0].autoRepostReposts).toBe(false);
       expect(response[1].autoRepostOriginals).toBe(true);
