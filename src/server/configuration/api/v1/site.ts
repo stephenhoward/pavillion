@@ -3,6 +3,9 @@ import express, { Request, Response } from 'express';
 import ExpressHelper from '../../../common/helper/express';
 import SettingsInterface from '@/server/configuration/interface';
 
+// Settings keys whose values are serialized as JSON strings for storage
+const JSON_SETTINGS = new Set(['enabledLanguages', 'localeDetectionMethods']);
+
 export default class SiteRouteHandlers {
   private service: SettingsInterface;
   constructor(serviceSettings: SettingsInterface) {
@@ -23,6 +26,9 @@ export default class SiteRouteHandlers {
       defaultDateRange: settings.get('defaultDateRange'),
       defaultLanguage: settings.get('defaultLanguage'),
       domain: config.get('domain'),
+      enabledLanguages: settings.getEnabledLanguages(),
+      forceLanguage: settings.getForceLanguage(),
+      localeDetectionMethods: settings.getLocaleDetectionMethods(),
     });
   }
 
@@ -31,7 +37,12 @@ export default class SiteRouteHandlers {
       const settings = await this.service.getInstance();
       // TODO: wrap this in a transaction so we don't update some settings but not others:
       for( const key in req.body ) {
-        const success = await settings.set(key, req.body[key]);
+        const rawValue = req.body[key];
+        // Serialize complex values (arrays, objects) to JSON strings for storage
+        const value = JSON_SETTINGS.has(key)
+          ? JSON.stringify(rawValue)
+          : rawValue;
+        const success = await settings.set(key, value);
         if (! success) {
           res.status(500).json({ error: 'Failed to update service setting: "'+key +'"' });
           return;
