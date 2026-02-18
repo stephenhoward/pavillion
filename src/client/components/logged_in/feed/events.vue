@@ -62,7 +62,7 @@ const getEventDescription = (event) => {
 const getCalendarIdentifier = (event) => {
   // For federated events, this would come from the event metadata
   // For now, just show the calendar ID
-  return event.calendarId || 'Unknown';
+  return event.calendarId || t('unknown_calendar');
 };
 
 /**

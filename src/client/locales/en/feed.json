@@ -39,7 +39,9 @@
         "reposted_button": "Reposted",
         "unrepost_aria_label": "Remove repost",
         "auto_posted_label": "Auto-posted",
-        "loading_more": "Loading more events..."
+        "loading_more": "Loading more events...",
+        "untitled_event": "Untitled Event",
+        "unknown_calendar": "Unknown"
     },
     "categoryMapping": {
         "repostDialogTitle": "Repost with categories",
