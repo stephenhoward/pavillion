@@ -4,7 +4,6 @@ import { LOCALE_COOKIE_NAME } from '@/common/i18n/cookie';
 import { parseAcceptLanguage } from '@/common/i18n/accept-language';
 import { detectLocaleFromPath } from '@/common/i18n/locale-url';
 import { isValidLanguageCode, DEFAULT_LANGUAGE_CODE, AVAILABLE_LANGUAGES, BETA_THRESHOLD } from '@/common/i18n/languages';
-import ServiceSettings from '@/server/configuration/service/settings';
 import type ConfigurationInterface from '@/server/configuration/interface';
 
 declare module 'express-serve-static-core' {
@@ -73,30 +72,6 @@ function resolveFromAcceptLanguage(req: Request): string | null {
 }
 
 /**
- * Resolves the instance default language from the settings service.
- *
- * Falls back gracefully if the settings service is unavailable.
- *
- * @param settingsService - The settings service instance
- * @returns Promise resolving to the instance default language code
- */
-async function resolveInstanceDefault(settingsService?: ServiceSettings): Promise<string> {
-  try {
-    const settings = settingsService ?? await ServiceSettings.getInstance();
-    const value = settings.get('defaultLanguage');
-
-    if (value && isValidLanguageCode(String(value))) {
-      return String(value);
-    }
-  }
-  catch {
-    // Settings service unavailable — fall through to hard-coded default
-  }
-
-  return DEFAULT_LANGUAGE_CODE;
-}
-
-/**
  * Returns the default set of enabled language codes.
  * Includes all languages meeting the BETA_THRESHOLD completeness threshold.
  */
@@ -115,7 +90,7 @@ function defaultEnabledLanguages(): string[] {
  *   2. Account language (req.user.language when authenticated)
  *   3. pavilion_locale cookie
  *   4. Accept-Language header (highest quality supported language)
- *   5. Instance default language (from configuration service)
+ *   5. Instance default language (from configuration interface)
  *   6. Hard-coded 'en' fallback
  *
  * If the detected locale is not in the instance's enabledLanguages list,
@@ -124,45 +99,31 @@ function defaultEnabledLanguages(): string[] {
  * Individual detection steps (URL prefix, cookie, Accept-Language) can be
  * disabled via the localeDetectionMethods admin setting.
  *
- * @param configInterface - Optional ConfigurationInterface for accessing settings.
+ * @param configInterface - ConfigurationInterface for reading language settings.
  *   When provided, settings are fetched via the interface (respects DDD boundaries).
- *   When omitted, falls back to direct ServiceSettings.getInstance() access.
+ *   When omitted, falls back to hardcoded defaults for all language settings.
  * @returns Express middleware function
  */
 export function createLocaleMiddleware(configInterface?: ConfigurationInterface) {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    // Resolve the settings service — via interface if provided, otherwise directly
-    let settingsService: ServiceSettings | undefined;
-
-    try {
-      settingsService = configInterface
-        ? await configInterface.getInstance()
-        : await ServiceSettings.getInstance();
-    }
-    catch {
-      // Settings unavailable — use defaults throughout
-    }
-
-    // Load admin language settings
+    // Load admin language settings via ConfigurationInterface
     let forceLanguage: string | null = null;
     let detectionMethods = { urlPrefix: true, cookie: true, acceptLanguage: true };
     let enabledLanguages: string[] = defaultEnabledLanguages();
+    let instanceDefault: string = DEFAULT_LANGUAGE_CODE;
 
-    try {
-      if (settingsService) {
-        forceLanguage = settingsService.getForceLanguage
-          ? settingsService.getForceLanguage()
-          : null;
-        detectionMethods = settingsService.getLocaleDetectionMethods
-          ? settingsService.getLocaleDetectionMethods()
-          : detectionMethods;
-        enabledLanguages = settingsService.getEnabledLanguages
-          ? settingsService.getEnabledLanguages()
-          : enabledLanguages;
+    if (configInterface) {
+      try {
+        [forceLanguage, detectionMethods, enabledLanguages, instanceDefault] = await Promise.all([
+          configInterface.getForceLanguage(),
+          configInterface.getLocaleDetectionMethods(),
+          configInterface.getEnabledLanguages(),
+          configInterface.getDefaultLanguage(),
+        ]);
       }
-    }
-    catch {
-      // Settings unavailable — use defaults (all methods enabled, no force)
+      catch {
+        // Settings unavailable — use defaults throughout
+      }
     }
 
     // 0. Admin forceLanguage override — always wins if set
@@ -210,18 +171,7 @@ export function createLocaleMiddleware(configInterface?: ConfigurationInterface)
     }
 
     // 5. Instance default language
-    const instanceDefault = await resolveInstanceDefault(settingsService);
-
     req.locale = instanceDefault;
     next();
   };
 }
-
-/**
- * Default locale middleware instance for backward compatibility.
- *
- * Uses ServiceSettings directly (no ConfigurationInterface injection).
- * Prefer createLocaleMiddleware(configInterface) in production server setup
- * to maintain domain-driven design boundaries.
- */
-export const localeMiddleware = createLocaleMiddleware();

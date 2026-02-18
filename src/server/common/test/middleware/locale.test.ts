@@ -1,10 +1,35 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import express, { Express, Request, Response } from 'express';
 import request from 'supertest';
 import sinon from 'sinon';
-import { localeMiddleware } from '@/server/common/middleware/locale';
-import ServiceSettings from '@/server/configuration/service/settings';
+import { createLocaleMiddleware } from '@/server/common/middleware/locale';
 import { Account } from '@/common/model/account';
+import { AVAILABLE_LANGUAGES, BETA_THRESHOLD } from '@/common/i18n/languages';
+
+type PartialConfigInterface = {
+  getDefaultLanguage: () => Promise<string>;
+  getEnabledLanguages: () => Promise<string[]>;
+  getForceLanguage: () => Promise<string | null>;
+  getLocaleDetectionMethods: () => Promise<{ urlPrefix: boolean; cookie: boolean; acceptLanguage: boolean }>;
+};
+
+function allEnabledLanguages(): string[] {
+  return AVAILABLE_LANGUAGES.filter(l => l.completeness >= BETA_THRESHOLD).map(l => l.code);
+}
+
+function makeConfigInterface(overrides: Partial<{
+  defaultLanguage: string;
+  enabledLanguages: string[];
+  forceLanguage: string | null;
+  detectionMethods: { urlPrefix: boolean; cookie: boolean; acceptLanguage: boolean };
+}> = {}): PartialConfigInterface {
+  return {
+    getDefaultLanguage: async () => overrides.defaultLanguage ?? 'en',
+    getEnabledLanguages: async () => overrides.enabledLanguages ?? allEnabledLanguages(),
+    getForceLanguage: async () => overrides.forceLanguage ?? null,
+    getLocaleDetectionMethods: async () => overrides.detectionMethods ?? { urlPrefix: true, cookie: true, acceptLanguage: true },
+  };
+}
 
 describe('localeMiddleware', () => {
   let app: Express;
@@ -13,7 +38,7 @@ describe('localeMiddleware', () => {
   beforeEach(() => {
     sandbox = sinon.createSandbox();
     app = express();
-    app.use(localeMiddleware);
+    app.use(createLocaleMiddleware(makeConfigInterface() as any));
     app.get('*', (req: Request, res: Response) => {
       res.json({ locale: req.locale });
     });
@@ -21,7 +46,6 @@ describe('localeMiddleware', () => {
 
   afterEach(() => {
     sandbox.restore();
-    vi.restoreAllMocks();
   });
 
   describe('detection chain priority', () => {
@@ -55,29 +79,25 @@ describe('localeMiddleware', () => {
     });
 
     it('should fall back to instance default when no URL prefix, cookie, or Accept-Language', async () => {
-      const mockSettings = {
-        get: (_key: string) => 'es',
-      } as unknown as ServiceSettings;
+      const testApp = express();
+      testApp.use(createLocaleMiddleware(makeConfigInterface({ defaultLanguage: 'es' }) as any));
+      testApp.get('*', (req: Request, res: Response) => {
+        res.json({ locale: req.locale });
+      });
 
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
-
-      const response = await request(app)
-        .get('/some-path');
-
+      const response = await request(testApp).get('/some-path');
       expect(response.status).toBe(200);
       expect(response.body.locale).toBe('es');
     });
 
     it('should fall back to en when all other sources fail', async () => {
-      const mockSettings = {
-        get: (_key: string) => undefined,
-      } as unknown as ServiceSettings;
+      const testApp = express();
+      testApp.use(createLocaleMiddleware(makeConfigInterface({ defaultLanguage: 'en' }) as any));
+      testApp.get('*', (req: Request, res: Response) => {
+        res.json({ locale: req.locale });
+      });
 
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
-
-      const response = await request(app)
-        .get('/some-path');
-
+      const response = await request(testApp).get('/some-path');
       expect(response.status).toBe(200);
       expect(response.body.locale).toBe('en');
     });
@@ -95,26 +115,25 @@ describe('localeMiddleware', () => {
     });
 
     it('should not detect locale from non-locale path segment', async () => {
-      // 'xx' is not a valid language code
-      const mockSettings = {
-        get: (_key: string) => 'en',
-      } as unknown as ServiceSettings;
+      const testApp = express();
+      testApp.use(createLocaleMiddleware(makeConfigInterface({ defaultLanguage: 'en' }) as any));
+      testApp.get('*', (req: Request, res: Response) => {
+        res.json({ locale: req.locale });
+      });
 
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
-
-      const response = await request(app).get('/xx/calendar');
+      const response = await request(testApp).get('/xx/calendar');
       // 'xx' is not a valid language, falls through to instance default
       expect(response.body.locale).toBe('en');
     });
 
     it('should handle root path without locale prefix', async () => {
-      const mockSettings = {
-        get: (_key: string) => 'en',
-      } as unknown as ServiceSettings;
+      const testApp = express();
+      testApp.use(createLocaleMiddleware(makeConfigInterface({ defaultLanguage: 'en' }) as any));
+      testApp.get('*', (req: Request, res: Response) => {
+        res.json({ locale: req.locale });
+      });
 
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
-
-      const response = await request(app).get('/');
+      const response = await request(testApp).get('/');
       expect(response.body.locale).toBe('en');
     });
   });
@@ -130,7 +149,7 @@ describe('localeMiddleware', () => {
         req.user = account as any;
         next();
       });
-      accountApp.use(localeMiddleware);
+      accountApp.use(createLocaleMiddleware(makeConfigInterface() as any));
       accountApp.get('*', (req: Request, res: Response) => {
         res.json({ locale: req.locale });
       });
@@ -152,7 +171,7 @@ describe('localeMiddleware', () => {
         req.user = account as any;
         next();
       });
-      accountApp.use(localeMiddleware);
+      accountApp.use(createLocaleMiddleware(makeConfigInterface() as any));
       accountApp.get('*', (req: Request, res: Response) => {
         res.json({ locale: req.locale });
       });
@@ -176,13 +195,13 @@ describe('localeMiddleware', () => {
     });
 
     it('should ignore invalid language code in cookie', async () => {
-      const mockSettings = {
-        get: (_key: string) => 'en',
-      } as unknown as ServiceSettings;
+      const testApp = express();
+      testApp.use(createLocaleMiddleware(makeConfigInterface({ defaultLanguage: 'en' }) as any));
+      testApp.get('*', (req: Request, res: Response) => {
+        res.json({ locale: req.locale });
+      });
 
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
-
-      const response = await request(app)
+      const response = await request(testApp)
         .get('/some-path')
         .set('Cookie', 'pavilion_locale=zz');
 
@@ -191,13 +210,13 @@ describe('localeMiddleware', () => {
     });
 
     it('should handle missing cookie gracefully', async () => {
-      const mockSettings = {
-        get: (_key: string) => 'en',
-      } as unknown as ServiceSettings;
+      const testApp = express();
+      testApp.use(createLocaleMiddleware(makeConfigInterface({ defaultLanguage: 'en' }) as any));
+      testApp.get('*', (req: Request, res: Response) => {
+        res.json({ locale: req.locale });
+      });
 
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
-
-      const response = await request(app).get('/some-path');
+      const response = await request(testApp).get('/some-path');
       expect(response.body.locale).toBe('en');
     });
 
@@ -229,13 +248,13 @@ describe('localeMiddleware', () => {
     });
 
     it('should fall through when Accept-Language contains only unsupported languages', async () => {
-      const mockSettings = {
-        get: (_key: string) => 'en',
-      } as unknown as ServiceSettings;
+      const testApp = express();
+      testApp.use(createLocaleMiddleware(makeConfigInterface({ defaultLanguage: 'en' }) as any));
+      testApp.get('*', (req: Request, res: Response) => {
+        res.json({ locale: req.locale });
+      });
 
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
-
-      const response = await request(app)
+      const response = await request(testApp)
         .get('/some-path')
         .set('Accept-Language', 'fr,de,it');
 
@@ -243,44 +262,55 @@ describe('localeMiddleware', () => {
     });
 
     it('should handle missing Accept-Language header', async () => {
-      const mockSettings = {
-        get: (_key: string) => 'en',
-      } as unknown as ServiceSettings;
+      const testApp = express();
+      testApp.use(createLocaleMiddleware(makeConfigInterface({ defaultLanguage: 'en' }) as any));
+      testApp.get('*', (req: Request, res: Response) => {
+        res.json({ locale: req.locale });
+      });
 
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
-
-      const response = await request(app).get('/some-path');
+      const response = await request(testApp).get('/some-path');
       expect(response.body.locale).toBe('en');
     });
   });
 
   describe('instance default detection', () => {
     it('should use instance default language from settings service', async () => {
-      const mockSettings = {
-        get: (_key: string) => 'es',
-      } as unknown as ServiceSettings;
+      const testApp = express();
+      testApp.use(createLocaleMiddleware(makeConfigInterface({ defaultLanguage: 'es' }) as any));
+      testApp.get('*', (req: Request, res: Response) => {
+        res.json({ locale: req.locale });
+      });
 
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
-
-      const response = await request(app).get('/some-path');
+      const response = await request(testApp).get('/some-path');
       expect(response.body.locale).toBe('es');
     });
 
     it('should fall back to en when settings service throws', async () => {
-      sandbox.stub(ServiceSettings, 'getInstance').rejects(new Error('DB error'));
+      const failingConfig = {
+        getDefaultLanguage: async () => { throw new Error('DB error'); },
+        getEnabledLanguages: async () => { throw new Error('DB error'); },
+        getForceLanguage: async () => { throw new Error('DB error'); },
+        getLocaleDetectionMethods: async () => { throw new Error('DB error'); },
+      };
 
-      const response = await request(app).get('/some-path');
+      const testApp = express();
+      testApp.use(createLocaleMiddleware(failingConfig as any));
+      testApp.get('*', (req: Request, res: Response) => {
+        res.json({ locale: req.locale });
+      });
+
+      const response = await request(testApp).get('/some-path');
       expect(response.body.locale).toBe('en');
     });
 
-    it('should fall back to en when settings service returns invalid language', async () => {
-      const mockSettings = {
-        get: (_key: string) => 'zz',
-      } as unknown as ServiceSettings;
+    it('should fall back to en when no config interface is provided', async () => {
+      const testApp = express();
+      testApp.use(createLocaleMiddleware());
+      testApp.get('*', (req: Request, res: Response) => {
+        res.json({ locale: req.locale });
+      });
 
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
-
-      const response = await request(app).get('/some-path');
+      const response = await request(testApp).get('/some-path');
       expect(response.body.locale).toBe('en');
     });
   });
@@ -290,7 +320,7 @@ describe('localeMiddleware', () => {
       const locales: string[] = [];
 
       const testApp = express();
-      testApp.use(localeMiddleware);
+      testApp.use(createLocaleMiddleware(makeConfigInterface() as any));
       testApp.use((req: Request, _res: Response, next) => {
         locales.push(req.locale);
         next();
@@ -308,12 +338,6 @@ describe('localeMiddleware', () => {
     });
 
     it('should always produce a non-empty string locale', async () => {
-      const mockSettings = {
-        get: (_key: string) => undefined,
-      } as unknown as ServiceSettings;
-
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
-
       const response = await request(app).get('/some-path');
       expect(typeof response.body.locale).toBe('string');
       expect(response.body.locale.length).toBeGreaterThan(0);
@@ -323,32 +347,28 @@ describe('localeMiddleware', () => {
 
 
 describe('localeMiddleware admin overrides', () => {
-  let app: Express;
   let sandbox: sinon.SinonSandbox;
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
-    app = express();
-    app.use(localeMiddleware);
-    app.get('*', (req: Request, res: Response) => {
-      res.json({ locale: req.locale });
-    });
   });
 
   afterEach(() => {
     sandbox.restore();
-    vi.restoreAllMocks();
   });
+
+  function makeApp(overrides: Parameters<typeof makeConfigInterface>[0] = {}) {
+    const app = express();
+    app.use(createLocaleMiddleware(makeConfigInterface(overrides) as any));
+    app.get('*', (req: Request, res: Response) => {
+      res.json({ locale: req.locale });
+    });
+    return app;
+  }
 
   describe('forceLanguage', () => {
     it('should use forceLanguage regardless of URL prefix', async () => {
-      const mockSettings = {
-        get: (_key: string) => 'en',
-        getForceLanguage: () => 'es',
-        getLocaleDetectionMethods: () => ({ urlPrefix: true, cookie: true, acceptLanguage: true }),
-      } as unknown as ServiceSettings;
-
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
+      const app = makeApp({ forceLanguage: 'es', defaultLanguage: 'en' });
 
       const response = await request(app)
         .get('/en/some-path')
@@ -359,13 +379,7 @@ describe('localeMiddleware admin overrides', () => {
     });
 
     it('should use forceLanguage regardless of cookie', async () => {
-      const mockSettings = {
-        get: (_key: string) => 'en',
-        getForceLanguage: () => 'es',
-        getLocaleDetectionMethods: () => ({ urlPrefix: true, cookie: true, acceptLanguage: true }),
-      } as unknown as ServiceSettings;
-
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
+      const app = makeApp({ forceLanguage: 'es', defaultLanguage: 'en' });
 
       const response = await request(app)
         .get('/some-path')
@@ -376,13 +390,7 @@ describe('localeMiddleware admin overrides', () => {
     });
 
     it('should fall through to detection chain when forceLanguage is null', async () => {
-      const mockSettings = {
-        get: (_key: string) => 'en',
-        getForceLanguage: () => null,
-        getLocaleDetectionMethods: () => ({ urlPrefix: true, cookie: true, acceptLanguage: true }),
-      } as unknown as ServiceSettings;
-
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
+      const app = makeApp({ forceLanguage: null, defaultLanguage: 'en' });
 
       const response = await request(app)
         .get('/some-path')
@@ -395,16 +403,12 @@ describe('localeMiddleware admin overrides', () => {
 
   describe('localeDetectionMethods', () => {
     it('should skip URL prefix detection when urlPrefix is disabled', async () => {
-      const mockSettings = {
-        get: (_key: string) => 'en',
-        getForceLanguage: () => null,
-        getLocaleDetectionMethods: () => ({ urlPrefix: false, cookie: true, acceptLanguage: true }),
-      } as unknown as ServiceSettings;
+      const app = makeApp({
+        defaultLanguage: 'en',
+        detectionMethods: { urlPrefix: false, cookie: true, acceptLanguage: true },
+      });
 
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
-
-      const response = await request(app)
-        .get('/es/some-path');
+      const response = await request(app).get('/es/some-path');
 
       // URL prefix disabled, should fall through to instance default
       expect(response.status).toBe(200);
@@ -412,13 +416,10 @@ describe('localeMiddleware admin overrides', () => {
     });
 
     it('should skip cookie detection when cookie is disabled', async () => {
-      const mockSettings = {
-        get: (_key: string) => 'en',
-        getForceLanguage: () => null,
-        getLocaleDetectionMethods: () => ({ urlPrefix: true, cookie: false, acceptLanguage: true }),
-      } as unknown as ServiceSettings;
-
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
+      const app = makeApp({
+        defaultLanguage: 'en',
+        detectionMethods: { urlPrefix: true, cookie: false, acceptLanguage: true },
+      });
 
       const response = await request(app)
         .get('/some-path')
@@ -430,13 +431,10 @@ describe('localeMiddleware admin overrides', () => {
     });
 
     it('should skip Accept-Language detection when acceptLanguage is disabled', async () => {
-      const mockSettings = {
-        get: (_key: string) => 'en',
-        getForceLanguage: () => null,
-        getLocaleDetectionMethods: () => ({ urlPrefix: true, cookie: true, acceptLanguage: false }),
-      } as unknown as ServiceSettings;
-
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
+      const app = makeApp({
+        defaultLanguage: 'en',
+        detectionMethods: { urlPrefix: true, cookie: true, acceptLanguage: false },
+      });
 
       const response = await request(app)
         .get('/some-path')
@@ -450,14 +448,7 @@ describe('localeMiddleware admin overrides', () => {
 
   describe('enabledLanguages', () => {
     it('should fall back to instance default when detected locale is not in enabledLanguages', async () => {
-      const mockSettings = {
-        get: (_key: string) => 'en',
-        getForceLanguage: () => null,
-        getLocaleDetectionMethods: () => ({ urlPrefix: true, cookie: true, acceptLanguage: true }),
-        getEnabledLanguages: () => ['en'], // only English enabled
-      } as unknown as ServiceSettings;
-
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
+      const app = makeApp({ defaultLanguage: 'en', enabledLanguages: ['en'] });
 
       const response = await request(app)
         .get('/some-path')
@@ -469,17 +460,9 @@ describe('localeMiddleware admin overrides', () => {
     });
 
     it('should fall back to instance default when URL prefix locale is not in enabledLanguages', async () => {
-      const mockSettings = {
-        get: (_key: string) => 'en',
-        getForceLanguage: () => null,
-        getLocaleDetectionMethods: () => ({ urlPrefix: true, cookie: true, acceptLanguage: true }),
-        getEnabledLanguages: () => ['en'], // only English enabled
-      } as unknown as ServiceSettings;
+      const app = makeApp({ defaultLanguage: 'en', enabledLanguages: ['en'] });
 
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
-
-      const response = await request(app)
-        .get('/es/some-path'); // Spanish not enabled
+      const response = await request(app).get('/es/some-path'); // Spanish not enabled
 
       // Spanish is not in enabledLanguages, falls through to instance default (en)
       expect(response.status).toBe(200);
@@ -487,14 +470,7 @@ describe('localeMiddleware admin overrides', () => {
     });
 
     it('should fall back to instance default when Accept-Language locale is not in enabledLanguages', async () => {
-      const mockSettings = {
-        get: (_key: string) => 'en',
-        getForceLanguage: () => null,
-        getLocaleDetectionMethods: () => ({ urlPrefix: true, cookie: true, acceptLanguage: true }),
-        getEnabledLanguages: () => ['en'], // only English enabled
-      } as unknown as ServiceSettings;
-
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
+      const app = makeApp({ defaultLanguage: 'en', enabledLanguages: ['en'] });
 
       const response = await request(app)
         .get('/some-path')
@@ -506,14 +482,7 @@ describe('localeMiddleware admin overrides', () => {
     });
 
     it('should allow enabled locale from cookie', async () => {
-      const mockSettings = {
-        get: (_key: string) => 'en',
-        getForceLanguage: () => null,
-        getLocaleDetectionMethods: () => ({ urlPrefix: true, cookie: true, acceptLanguage: true }),
-        getEnabledLanguages: () => ['en', 'es'], // both enabled
-      } as unknown as ServiceSettings;
-
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
+      const app = makeApp({ defaultLanguage: 'en', enabledLanguages: ['en', 'es'] });
 
       const response = await request(app)
         .get('/some-path')

@@ -4,6 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pavillion</title>
+    <% if (typeof hreflangLinks !== 'undefined' && hreflangLinks && hreflangLinks.length > 0) { %>
+    <% hreflangLinks.forEach(function(link) { %>
+    <link rel="alternate" hreflang="<%= link.hreflang %>" href="<%= link.href %>" />
+    <% }); %>
+    <% } %>
     <% if ((environment === 'production' || environment === 'e2e') && manifest['src/site/app.ts']?.css) { %>
     <% manifest['src/site/app.ts'].css.forEach(function(cssFile) { %>
     <link rel="stylesheet" href="/<%= cssFile %>" />
