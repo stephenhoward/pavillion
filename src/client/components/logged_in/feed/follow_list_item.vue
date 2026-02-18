@@ -7,6 +7,10 @@ const { t } = useTranslation('feed', {
   keyPrefix: 'follows',
 });
 
+const tMappings = useTranslation('calendars', {
+  keyPrefix: 'category_mapping',
+});
+
 const props = defineProps<{
   follow: FollowRelationship;
 }>();
@@ -59,13 +63,26 @@ const handleUnfollow = () => {
         />
       </div>
 
-      <button
-        type="button"
-        class="unfollow-button"
-        @click="handleUnfollow"
-      >
-        {{ t('unfollow_button') }}
-      </button>
+      <div class="item-links">
+        <router-link
+          :to="{
+            name: 'calendar_category_mappings',
+            params: { calendarId: follow.calendarId, actorId: follow.calendarActorId },
+          }"
+          class="mappings-link"
+          :aria-label="tMappings.t('category_mappings_link_for', { calendar: follow.calendarActorId })"
+        >
+          {{ tMappings.t('category_mappings_link') }}
+        </router-link>
+
+        <button
+          type="button"
+          class="unfollow-button"
+          @click="handleUnfollow"
+        >
+          {{ t('unfollow_button') }}
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -117,6 +134,35 @@ div.follow-list-item {
       flex-direction: column;
       gap: var(--pav-space-3);
       min-width: 240px;
+    }
+
+    div.item-links {
+      display: flex;
+      align-items: center;
+      gap: var(--pav-space-3);
+      flex-wrap: wrap;
+
+      @media (min-width: 768px) {
+        justify-content: flex-end;
+      }
+    }
+
+    a.mappings-link {
+      font-size: 0.875rem;
+      font-weight: var(--pav-font-weight-medium);
+      color: var(--pav-color-interactive-primary);
+      text-decoration: none;
+      white-space: nowrap;
+
+      &:hover {
+        text-decoration: underline;
+      }
+
+      &:focus {
+        outline: 2px solid var(--pav-color-interactive-primary);
+        outline-offset: 2px;
+        border-radius: 2px;
+      }
     }
 
     button.unfollow-button {

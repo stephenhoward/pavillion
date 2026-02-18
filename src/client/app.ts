@@ -30,6 +30,7 @@ import CalendarManagementView from '@/client/components/logged_in/calendar-manag
 import EditEventView from '@/client/components/logged_in/calendar/edit_event.vue';
 import FeedView from '@/client/components/logged_in/feed/root.vue';
 import ProfileView from '@/client/components/logged_in/settings/root.vue';
+import CalendarCategoryMappingsView from '@/client/components/logged_in/settings/calendar-category-mappings.vue';
 import InboxView from '@/client/components/logged_in/inbox.vue';
 import SubscriptionView from '@/client/components/account/subscription.vue';
 
@@ -138,6 +139,13 @@ checkSetupMode().then((setupRequired) => {
           { path: 'feed', component: FeedView, name: 'feed', beforeEnter: mustBeLoggedIn },
           { path: 'profile', component: ProfileView, name: 'profile', beforeEnter: mustBeLoggedIn },
           { path: 'subscription', component: SubscriptionView, name: 'subscription', beforeEnter: mustBeLoggedIn },
+          {
+            path: 'calendar/:calendarId/following/:actorId/category-mappings',
+            component: CalendarCategoryMappingsView,
+            name: 'calendar_category_mappings',
+            beforeEnter: mustBeLoggedIn,
+            props: true,
+          },
         ],
       },
       // Event routes are top-level to render fullscreen without navigation
