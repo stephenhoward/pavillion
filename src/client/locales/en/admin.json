@@ -350,7 +350,22 @@
     "registration_mode_closed": "Closed - No new users",
     "date_range_1week": "1 Week",
     "date_range_2weeks": "2 Weeks",
-    "date_range_1month": "1 Month"
+    "date_range_1month": "1 Month",
+    "language_settings": "Language Settings",
+    "language_settings_subtitle": "Configure which languages are available and how language detection works",
+    "enabled_languages": "Enabled Languages",
+    "enabled_languages_description": "Select which languages are available to users on this instance.",
+    "force_language": "Force Language",
+    "force_language_none": "No override (use detection)",
+    "force_language_description": "When set, all users will see the interface in this language regardless of their preferences.",
+    "detection_methods": "Detection Methods",
+    "detection_methods_description": "Choose which methods are used to determine a user's preferred language.",
+    "detection_url_prefix": "URL language prefix (e.g. /es/...)",
+    "detection_cookie": "Language cookie (saved preference)",
+    "detection_accept_language": "Accept-Language header (browser preference)",
+    "saving": "Saving...",
+    "settings_subtitle": "Monitor system health and configure instance settings",
+    "instance_settings": "Instance Settings"
   },
   "federation": {
     "title": "Federation",
