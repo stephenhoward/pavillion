@@ -36,6 +36,14 @@
         "repost_error": "Failed to repost event",
         "unrepost_error": "Failed to remove repost"
     },
+    "categoryMapping": {
+        "repostDialogTitle": "Repost with categories",
+        "repostDialogDescription": "Some categories from \"{{eventTitle}}\" are not mapped to local categories. Select the local categories to apply when reposting:",
+        "repostConfirm": "Repost",
+        "cancel": "Cancel",
+        "categoriesLabel": "Local categories",
+        "noLocalCategories": "No local categories available."
+    },
     "add_calendar_modal": {
         "title": "Add a Calendar",
         "identifier_label": "Calendar Identifier",
@@ -57,7 +65,12 @@
         "auto_repost_reposts_help": "Also share events this calendar has reposted from others",
         "cancel_button": "Cancel",
         "follow_button": "Follow",
-        "following_button": "Following..."
+        "following_button": "Following...",
+        "mapping_step_title": "Set up category mappings (optional)",
+        "mapping_step_description": "Map categories from this calendar to your own for automatic categorization of reposted events.",
+        "mapping_save_button": "Save mappings",
+        "mapping_saving_button": "Saving...",
+        "mapping_skip_button": "Skip for now"
     },
     "errors": {
         "InvalidRemoteCalendarIdentifierError": "Invalid calendar identifier format. Please use the format: calendar@domain.com",

@@ -5,6 +5,7 @@ import { DateTime } from 'luxon';
 import { useFeedStore } from '@/client/stores/feedStore';
 import { useToast } from '@/client/composables/useToast';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
+import RepostCategoriesModal from '@/client/components/logged_in/repost-categories-modal.vue';
 
 const { t } = useTranslation('feed', { keyPrefix: 'events' });
 const feedStore = useFeedStore();
@@ -13,6 +14,7 @@ const toast = useToast();
 const events = computed(() => feedStore.events);
 const hasMore = computed(() => feedStore.eventsHasMore);
 const isLoading = computed(() => feedStore.isLoadingEvents);
+const pendingRepost = computed(() => feedStore.pendingRepost);
 const sentinelRef = ref(null);
 let observer = null;
 
@@ -38,6 +40,9 @@ const formatEventDate = (event) => {
  * Get the event title in the appropriate language
  */
 const getEventTitle = (event) => {
+  if (!event || typeof event.content !== 'function') {
+    return '';
+  }
   const content = event.content('en'); // TODO: Use user's preferred language
   return content?.name || t('untitled_event');
 };
@@ -60,7 +65,30 @@ const getCalendarIdentifier = (event) => {
 };
 
 /**
- * Handle repost button click
+ * Derive the pre-selected category objects for the modal from pendingRepost state.
+ * Matches preSelectedIds against allLocalCategories to get proper { id, name } pairs.
+ */
+const pendingRepostPreSelected = computed(() => {
+  if (!pendingRepost.value) {
+    return [];
+  }
+  const { preSelectedIds, allLocalCategories } = pendingRepost.value;
+  return allLocalCategories.filter((cat) => preSelectedIds.includes(cat.id));
+});
+
+/**
+ * Derive the event title for the pending repost modal.
+ */
+const pendingRepostEventTitle = computed(() => {
+  if (!pendingRepost.value) {
+    return '';
+  }
+  const event = events.value.find((e) => e.id === pendingRepost.value.eventId);
+  return event ? getEventTitle(event) : '';
+});
+
+/**
+ * Handle repost button click — delegates to the store which may set pendingRepost
  */
 const handleRepost = async (eventId) => {
   try {
@@ -83,6 +111,26 @@ const handleUnrepost = async (eventId) => {
     console.error('Error unreposting event:', error);
     toast.error(t('unrepost_error'));
   }
+};
+
+/**
+ * Handle modal confirm: repost with the selected category IDs
+ */
+const handleRepostConfirm = async (categoryIds) => {
+  try {
+    await feedStore.confirmPendingRepost(categoryIds);
+  }
+  catch (error) {
+    console.error('Error confirming repost:', error);
+    toast.error(t('repost_error'));
+  }
+};
+
+/**
+ * Handle modal cancel: dismiss without reposting
+ */
+const handleRepostCancel = () => {
+  feedStore.cancelPendingRepost();
 };
 
 /**
@@ -214,6 +262,16 @@ onUnmounted(() => {
         {{ t("follow_button") }}
       </button>
     </EmptyLayout>
+
+    <!-- Repost categories modal — shown when pendingRepost is set -->
+    <RepostCategoriesModal
+      v-if="pendingRepost"
+      :event-title="pendingRepostEventTitle"
+      :pre-selected-categories="pendingRepostPreSelected"
+      :all-local-categories="pendingRepost.allLocalCategories"
+      @confirm="handleRepostConfirm"
+      @cancel="handleRepostCancel"
+    />
   </div>
 </template>
 
