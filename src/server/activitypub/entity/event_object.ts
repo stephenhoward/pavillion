@@ -62,6 +62,14 @@ export class EventObjectEntity extends Model {
   })
   declare attributed_to: string;
 
+  /**
+   * Source categories extracted from the incoming ActivityPub event payload.
+   * Stores an array of { id: string, name?: string } objects parsed from
+   * the categories[] URI array in the AP object, or null if not present.
+   */
+  @Column({ type: DataType.JSON, allowNull: true })
+  declare source_categories: Array<{ id: string; name?: string }> | null;
+
   @CreatedAt
   declare created_at: Date;
 
