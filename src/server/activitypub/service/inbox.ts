@@ -25,8 +25,6 @@ import { UserActorEntity } from "@/server/activitypub/entity/user_actor";
 import { ReportEntity } from "@/server/moderation/entity/report";
 import { CalendarMemberEntity } from "@/server/calendar/entity/calendar_member";
 import { fetchRemoteObject } from "@/server/activitypub/helper/remote-fetch";
-import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_category_assignment';
-import CategoryMappingService from '@/server/calendar/service/category_mapping';
 
 /**
  * Cache entry for authorization results
@@ -862,20 +860,12 @@ class ProcessInboxService {
     // Apply category mappings from stored AP payload (failure-safe)
     // remoteCalendar.id is the CalendarActorEntity UUID used as the source actor key
     try {
-      if (eventObject.source_categories && eventObject.source_categories.length > 0) {
-        const mappingService = new CategoryMappingService();
-        const localCategoryIds = await mappingService.applyMappings(
-          calendar.id,
-          remoteCalendar.id,
-          eventObject.source_categories,
-        );
-        if (localCategoryIds.length > 0) {
-          await EventCategoryAssignmentEntity.bulkCreate(
-            localCategoryIds.map(catId => ({ id: uuidv4(), event_id: eventObject.event_id, category_id: catId })),
-            { ignoreDuplicates: true },
-          );
-        }
-      }
+      await this.calendarInterface.categoryMappingService.assignAutoRepostCategories(
+        calendar.id,
+        remoteCalendar.id,
+        eventObject.event_id,
+        eventObject.source_categories ?? [],
+      );
     }
     catch (error) {
       console.warn('[AUTO-REPOST] Category mapping or assignment failed, proceeding without categories:', error);
