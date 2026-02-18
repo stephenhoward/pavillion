@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 
-import { CalendarCategoryMappingEntity, CalendarCategoryMapping } from '@/server/calendar/entity/category_mapping';
+import { CalendarCategoryMappingEntity } from '@/server/calendar/entity/category_mapping';
+import type { CalendarCategoryMapping } from '@/server/calendar/entity/category_mapping';
 import { EventCategoryEntity } from '@/server/calendar/entity/event_category';
 import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_category_assignment';
 import { CalendarActorEntity, CalendarActor } from '@/server/activitypub/entity/calendar_actor';
@@ -228,4 +229,4 @@ class CategoryMappingService {
 }
 
 export default CategoryMappingService;
-export { MappingInput, CalendarCategoryMapping };
+export type { MappingInput, CalendarCategoryMapping };
