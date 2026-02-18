@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { computed, ref, nextTick, onMounted, onUnmounted } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
@@ -6,6 +6,7 @@ import { useFeedStore } from '@/client/stores/feedStore';
 import { useToast } from '@/client/composables/useToast';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
 import RepostCategoriesModal from '@/client/components/logged_in/repost-categories-modal.vue';
+import { type FeedEvent } from '@/client/service/feed';
 
 const { t } = useTranslation('feed', { keyPrefix: 'events' });
 const feedStore = useFeedStore();
@@ -22,7 +23,7 @@ let observer = null;
 /**
  * Format event date and time for display
  */
-const formatEventDate = (event) => {
+const formatEventDate = (event: FeedEvent) => {
   if (!event.date) {
     return '';
   }
@@ -40,7 +41,7 @@ const formatEventDate = (event) => {
 /**
  * Get the event title in the appropriate language
  */
-const getEventTitle = (event) => {
+const getEventTitle = (event: FeedEvent) => {
   if (!event || typeof event.content !== 'function') {
     return '';
   }
@@ -51,7 +52,7 @@ const getEventTitle = (event) => {
 /**
  * Get the event description in the appropriate language
  */
-const getEventDescription = (event) => {
+const getEventDescription = (event: FeedEvent) => {
   const content = event.content('en'); // TODO: Use user's preferred language
   return content?.description || '';
 };
@@ -59,7 +60,7 @@ const getEventDescription = (event) => {
 /**
  * Get calendar identifier for display
  */
-const getCalendarIdentifier = (event) => {
+const getCalendarIdentifier = (event: FeedEvent) => {
   // For federated events, this would come from the event metadata
   // For now, just show the calendar ID
   return event.calendarId || t('unknown_calendar');
@@ -91,7 +92,7 @@ const pendingRepostEventTitle = computed(() => {
 /**
  * Handle repost button click — delegates to the store which may set pendingRepost
  */
-const handleRepost = async (eventId, event) => {
+const handleRepost = async (eventId: string, event: MouseEvent) => {
   repostTriggerElement.value = (event?.currentTarget) ?? null;
   try {
     await feedStore.repostEvent(eventId);
@@ -105,7 +106,7 @@ const handleRepost = async (eventId, event) => {
 /**
  * Handle unrepost action (clicking on reposted label)
  */
-const handleUnrepost = async (eventId) => {
+const handleUnrepost = async (eventId: string) => {
   try {
     await feedStore.unrepostEvent(eventId);
   }
@@ -318,20 +319,20 @@ div.events-container {
 
         h3.event-title {
           margin: 0 0 var(--pav-space-1) 0;
-          font-size: 18px;
+          font-size: var(--pav-font-size-base);
           font-weight: var(--pav-font-weight-medium);
           color: var(--pav-color-text-primary);
         }
 
         p.event-date {
           margin: 0 0 var(--pav-space-2) 0;
-          font-size: 14px;
+          font-size: var(--pav-font-size-xs);
           color: var(--pav-color-text-secondary);
         }
 
         p.event-description {
           margin: 0 0 var(--pav-space-2) 0;
-          font-size: 14px;
+          font-size: var(--pav-font-size-xs);
           line-height: 1.5;
           color: var(--pav-color-text-primary);
           overflow: hidden;
@@ -343,7 +344,7 @@ div.events-container {
 
         p.event-source {
           margin: 0;
-          font-size: 12px;
+          font-size: var(--pav-font-size-caption);
           color: var(--pav-color-text-secondary);
           font-style: italic;
         }
@@ -356,50 +357,50 @@ div.events-container {
 
         button.repost-button {
           padding: var(--pav-space-2) var(--pav-space-4);
-          background: #f97316;
-          color: white;
+          background: var(--pav-color-orange-500);
+          color: var(--pav-color-text-inverse);
           border: none;
           border-radius: var(--pav-border-radius-sm);
-          font-size: 14px;
+          font-size: var(--pav-font-size-xs);
           font-weight: var(--pav-font-weight-medium);
           cursor: pointer;
           transition: background 0.2s ease;
 
           &:hover {
-            background: #ea580c;
+            background: var(--pav-color-orange-600);
           }
 
           &:active {
-            background: #c2410c;
+            background: var(--pav-color-orange-700);
           }
         }
 
         button.reposted-label {
           padding: var(--pav-space-2) var(--pav-space-4);
-          background: #22c55e;
-          color: white;
+          background: var(--pav-color-success);
+          color: var(--pav-color-text-inverse);
           border: none;
           border-radius: var(--pav-border-radius-sm);
-          font-size: 14px;
+          font-size: var(--pav-font-size-xs);
           font-weight: var(--pav-font-weight-medium);
           cursor: pointer;
           transition: background 0.2s ease;
 
           &:hover {
-            background: #16a34a;
+            filter: brightness(0.85);
           }
 
           &:active {
-            background: #15803d;
+            filter: brightness(0.75);
           }
         }
 
         span.auto-posted-label {
           padding: var(--pav-space-2) var(--pav-space-4);
-          background: #6b7280;
-          color: white;
+          background: var(--pav-color-stone-500);
+          color: var(--pav-color-text-inverse);
           border-radius: var(--pav-border-radius-sm);
-          font-size: 14px;
+          font-size: var(--pav-font-size-xs);
           font-weight: var(--pav-font-weight-medium);
         }
       }
@@ -431,29 +432,29 @@ div.events-container {
 
       p {
         color: var(--pav-color-text-secondary);
-        font-size: 14px;
+        font-size: var(--pav-font-size-xs);
       }
     }
   }
 
   // Empty state styling (inherits from EmptyLayout component)
   button.primary {
-    background: #f97316;
-    color: white;
+    background: var(--pav-color-orange-500);
+    color: var(--pav-color-text-inverse);
     border: none;
     padding: var(--pav-space-3) var(--pav-space-6);
     border-radius: var(--pav-border-radius-md);
-    font-size: 16px;
+    font-size: var(--pav-font-size-sm);
     font-weight: var(--pav-font-weight-medium);
     cursor: pointer;
     transition: background 0.2s ease;
 
     &:hover {
-      background: #ea580c;
+      background: var(--pav-color-orange-600);
     }
 
     &:active {
-      background: #c2410c;
+      background: var(--pav-color-orange-700);
     }
   }
 }

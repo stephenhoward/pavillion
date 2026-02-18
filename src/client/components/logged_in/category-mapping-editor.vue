@@ -111,7 +111,7 @@ function onSelect(sourceCat: SourceCategory, localCategoryId: string) {
 
   .source-name {
     flex: 1;
-    font-weight: 500;
+    font-weight: var(--pav-font-weight-medium);
     color: var(--pav-color-stone-900);
     min-width: 0;
     overflow: hidden;

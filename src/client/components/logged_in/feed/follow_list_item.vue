@@ -169,7 +169,7 @@ div.follow-list-item {
       padding: var(--pav-space-2) var(--pav-space-3);
       border: 1px solid rgba(0, 0, 0, 0.2);
       border-radius: var(--pav-border-radius-pill);
-      background: white;
+      background: var(--pav-color-surface-primary);
       color: var(--pav-color-text-primary);
       font-size: 0.875rem;
       font-weight: var(--pav-font-weight-medium);

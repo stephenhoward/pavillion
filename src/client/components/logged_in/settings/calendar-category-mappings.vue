@@ -147,7 +147,7 @@ async function save() {
 
   h1 {
     font-size: 1.5rem;
-    font-weight: 700;
+    font-weight: var(--pav-font-weight-bold);
     color: var(--pav-color-stone-900);
     margin: 0;
 
@@ -196,7 +196,7 @@ async function save() {
   display: flex;
   flex-direction: column;
   gap: var(--pav-space-6);
-  background: white;
+  background: var(--pav-color-surface-primary);
   border-radius: 1rem;
   border: 1px solid var(--pav-color-stone-200);
   padding: var(--pav-space-6);
@@ -222,8 +222,8 @@ async function save() {
 .save-button {
   padding: 0.625rem 1.25rem;
   font-size: 0.875rem;
-  font-weight: 500;
-  color: white;
+  font-weight: var(--pav-font-weight-medium);
+  color: var(--pav-color-text-inverse);
   background: var(--pav-color-orange-500);
   border: none;
   border-radius: 9999px;
@@ -248,7 +248,7 @@ async function save() {
 
 .save-feedback {
   font-size: 0.875rem;
-  font-weight: 500;
+  font-weight: var(--pav-font-weight-medium);
 
   &.success {
     color: var(--pav-color-green-600);

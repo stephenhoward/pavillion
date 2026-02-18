@@ -170,12 +170,8 @@ div.repost-categories-modal {
   p.no-categories {
     margin: 0;
     font-size: 0.875rem;
-    color: rgba(0, 0, 0, 0.6);
+    color: var(--pav-color-text-secondary);
     font-style: italic;
-
-    @media (prefers-color-scheme: dark) {
-      color: rgba(255, 255, 255, 0.6);
-    }
   }
 
   div.modal-actions {
@@ -193,26 +189,18 @@ div.repost-categories-modal {
 
       &.secondary {
         background: transparent;
-        border: 1px solid rgba(0, 0, 0, 0.2);
+        border: 1px solid var(--pav-color-border-primary);
         color: var(--pav-color-text-primary);
 
-        @media (prefers-color-scheme: dark) {
-          border-color: rgba(255, 255, 255, 0.2);
-        }
-
         &:hover {
-          background: rgba(0, 0, 0, 0.05);
-
-          @media (prefers-color-scheme: dark) {
-            background: rgba(255, 255, 255, 0.05);
-          }
+          background: var(--pav-color-surface-secondary);
         }
       }
 
       &.primary {
         background: var(--pav-color-interactive-primary);
         border: none;
-        color: white;
+        color: var(--pav-color-text-inverse);
 
         &:hover {
           background: var(--pav-color-interactive-primary-hover);
