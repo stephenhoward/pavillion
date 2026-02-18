@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import request from 'supertest';
 import express from 'express';
-import { EventEmitter } from 'events';
 import { testApp } from '@/server/common/test/lib/express';
 import SiteRouteHandlers from '@/server/configuration/api/v1/site';
 import ConfigurationInterface from '@/server/configuration/interface';
@@ -15,8 +14,7 @@ describe('Site API', () => {
 
   beforeEach(() => {
     router = express.Router();
-    const eventBus = new EventEmitter();
-    configurationInterface = new ConfigurationInterface(eventBus);
+    configurationInterface = new ConfigurationInterface();
     siteHandlers = new SiteRouteHandlers(configurationInterface);
   });
 
@@ -25,14 +23,10 @@ describe('Site API', () => {
   });
 
   it('site: should succeed', async () => {
-    let mockSettings = {
-      get: sinon.stub().withArgs('registrationMode').returns('testValue'),
-      getEnabledLanguages: sinon.stub().returns(['en', 'es']),
-      getForceLanguage: sinon.stub().returns(null),
-      getLocaleDetectionMethods: sinon.stub().returns({ urlPrefix: true, cookie: true, acceptLanguage: true }),
-    };
-    let getInstanceStub = sandbox.stub(configurationInterface, 'getInstance');
-    getInstanceStub.resolves(mockSettings as any);
+    sandbox.stub(configurationInterface, 'getSetting').withArgs('registrationMode').resolves('testValue');
+    sandbox.stub(configurationInterface, 'getEnabledLanguages').resolves(['en', 'es']);
+    sandbox.stub(configurationInterface, 'getForceLanguage').resolves(null);
+    sandbox.stub(configurationInterface, 'getLocaleDetectionMethods').resolves({ urlPrefix: true, cookie: true, acceptLanguage: true });
 
     router.get('/handler', siteHandlers.getSettings.bind(siteHandlers));
 
@@ -40,18 +34,13 @@ describe('Site API', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.registrationMode).toBe('testValue');
-    expect(getInstanceStub.called).toBe(true);
   });
 
   it('site: should return language settings in response', async () => {
-    let mockSettings = {
-      get: sinon.stub().returns(undefined),
-      getEnabledLanguages: sinon.stub().returns(['en']),
-      getForceLanguage: sinon.stub().returns('es'),
-      getLocaleDetectionMethods: sinon.stub().returns({ urlPrefix: false, cookie: true, acceptLanguage: true }),
-    };
-    let getInstanceStub = sandbox.stub(configurationInterface, 'getInstance');
-    getInstanceStub.resolves(mockSettings as any);
+    sandbox.stub(configurationInterface, 'getSetting').resolves(undefined);
+    sandbox.stub(configurationInterface, 'getEnabledLanguages').resolves(['en']);
+    sandbox.stub(configurationInterface, 'getForceLanguage').resolves('es');
+    sandbox.stub(configurationInterface, 'getLocaleDetectionMethods').resolves({ urlPrefix: false, cookie: true, acceptLanguage: true });
 
     router.get('/handler', siteHandlers.getSettings.bind(siteHandlers));
 
@@ -65,15 +54,7 @@ describe('Site API', () => {
 
   describe('updateSettings', () => {
     it('should serialize enabledLanguages as JSON for storage', async () => {
-      const mockSaveStub = sinon.stub().resolves(true);
-      let mockSettings = {
-        set: mockSaveStub,
-        getEnabledLanguages: sinon.stub().returns(['en', 'es']),
-        getForceLanguage: sinon.stub().returns(null),
-        getLocaleDetectionMethods: sinon.stub().returns({ urlPrefix: true, cookie: true, acceptLanguage: true }),
-      };
-      let getInstanceStub = sandbox.stub(configurationInterface, 'getInstance');
-      getInstanceStub.resolves(mockSettings as any);
+      const mockSaveStub = sandbox.stub(configurationInterface, 'setSetting').resolves(true);
 
       router.post('/handler', siteHandlers.updateSettings.bind(siteHandlers));
 
@@ -86,15 +67,7 @@ describe('Site API', () => {
     });
 
     it('should serialize localeDetectionMethods as JSON for storage', async () => {
-      const mockSaveStub = sinon.stub().resolves(true);
-      let mockSettings = {
-        set: mockSaveStub,
-        getEnabledLanguages: sinon.stub().returns(['en']),
-        getForceLanguage: sinon.stub().returns(null),
-        getLocaleDetectionMethods: sinon.stub().returns({ urlPrefix: true, cookie: true, acceptLanguage: true }),
-      };
-      let getInstanceStub = sandbox.stub(configurationInterface, 'getInstance');
-      getInstanceStub.resolves(mockSettings as any);
+      const mockSaveStub = sandbox.stub(configurationInterface, 'setSetting').resolves(true);
 
       router.post('/handler', siteHandlers.updateSettings.bind(siteHandlers));
 
@@ -108,15 +81,7 @@ describe('Site API', () => {
     });
 
     it('should pass forceLanguage as a plain string', async () => {
-      const mockSaveStub = sinon.stub().resolves(true);
-      let mockSettings = {
-        set: mockSaveStub,
-        getEnabledLanguages: sinon.stub().returns(['en']),
-        getForceLanguage: sinon.stub().returns(null),
-        getLocaleDetectionMethods: sinon.stub().returns({ urlPrefix: true, cookie: true, acceptLanguage: true }),
-      };
-      let getInstanceStub = sandbox.stub(configurationInterface, 'getInstance');
-      getInstanceStub.resolves(mockSettings as any);
+      const mockSaveStub = sandbox.stub(configurationInterface, 'setSetting').resolves(true);
 
       router.post('/handler', siteHandlers.updateSettings.bind(siteHandlers));
 

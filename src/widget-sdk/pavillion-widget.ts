@@ -18,7 +18,7 @@
  * </script>
  */
 
-import { isValidLanguageCode, DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
+import { isValidLanguageCode } from '@/common/i18n/languages';
 
 interface WidgetConfig {
   calendar: string;
@@ -37,52 +37,6 @@ interface PavillionMessage {
   height?: number;
   url?: string;
   eventId?: string;
-}
-
-/**
- * Detects the language to use for the widget.
- *
- * Detection chain:
- * 1. `data-lang` attribute on the widget script tag
- * 2. Parent page `<html lang="...">` attribute
- * 3. Instance default language passed via config
- * 4. English fallback ('en')
- *
- * @param configLang - Optional language code from widget init config
- * @returns Validated language code to use for the widget
- */
-export function detectWidgetLanguage(configLang?: string): string {
-  // 1. Check data-lang on the widget script tag
-  const scripts = Array.from(document.getElementsByTagName('script'));
-  const widgetScript = scripts.find(s => s.src.includes('pavillion-widget.js'));
-  if (widgetScript) {
-    const dataLang = widgetScript.getAttribute('data-lang');
-    if (dataLang && isValidLanguageCode(dataLang)) {
-      return dataLang;
-    }
-  }
-
-  // 2. Check parent page <html lang="..."> attribute
-  const htmlLang = document.documentElement.getAttribute('lang');
-  if (htmlLang) {
-    // Try exact match first (e.g., 'es')
-    if (isValidLanguageCode(htmlLang)) {
-      return htmlLang;
-    }
-    // Try base language (e.g., 'es' from 'es-MX')
-    const baseLang = htmlLang.split('-')[0];
-    if (isValidLanguageCode(baseLang)) {
-      return baseLang;
-    }
-  }
-
-  // 3. Instance default from widget init config
-  if (configLang && isValidLanguageCode(configLang)) {
-    return configLang;
-  }
-
-  // 4. English fallback
-  return DEFAULT_LANGUAGE_CODE;
 }
 
 class PavillionWidget {
@@ -320,6 +274,48 @@ class PavillionWidget {
     }
   });
 })();
+
+/**
+ * Detects the appropriate display language for the widget.
+ *
+ * Priority order:
+ * 1. `data-lang` attribute on the widget's own script tag
+ * 2. The base language from the page's `<html lang>` attribute
+ * 3. The `configLang` parameter (instance default)
+ * 4. English ('en') as the ultimate fallback
+ *
+ * Each value is validated against supported language codes before use.
+ *
+ * @param configLang - Optional instance-configured default language code
+ * @returns A supported language code string
+ */
+export function detectWidgetLanguage(configLang?: string): string {
+  // Check data-lang on the widget script tag
+  const scripts = Array.from(document.getElementsByTagName('script'));
+  const widgetScript = scripts.find(s => s.src.includes('pavillion-widget.js'));
+  if (widgetScript) {
+    const dataLang = widgetScript.getAttribute('data-lang');
+    if (dataLang && isValidLanguageCode(dataLang)) {
+      return dataLang;
+    }
+  }
+
+  // Check <html lang> attribute, using only the base language code
+  const htmlLang = document.documentElement.lang;
+  if (htmlLang) {
+    const baseLang = htmlLang.split('-')[0];
+    if (baseLang && isValidLanguageCode(baseLang)) {
+      return baseLang;
+    }
+  }
+
+  // Fall back to instance-configured language
+  if (configLang && isValidLanguageCode(configLang)) {
+    return configLang;
+  }
+
+  return 'en';
+}
 
 // Export for TypeScript consumers
 export type { WidgetConfig, PavillionMessage };
