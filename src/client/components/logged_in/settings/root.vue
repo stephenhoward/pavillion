@@ -6,6 +6,8 @@ import EmailModal from '@/client/components/logged_in/settings/email_modal.vue';
 import PasswordModal from '@/client/components/logged_in/settings/password_modal.vue';
 import SubscriptionService from '@/client/service/subscription';
 import AccountService from '@/client/service/account';
+import { AVAILABLE_LANGUAGES } from '@/common/i18n/languages';
+import { changeLanguage, applyAccountLanguage } from '@/client/service/locale';
 
 const router = useRouter();
 const authn = inject('authn');
@@ -16,7 +18,7 @@ const state = reactive({
     email: authn.userEmail(),
     displayName: '',
     username: authn.userEmail()?.split('@')[0] || '',
-    preferredLanguage: 'en', // TODO: Get from user profile
+    preferredLanguage: 'en',
   },
   changeEmail: false,
   changePassword: false,
@@ -32,20 +34,6 @@ const subscriptionsEnabled = ref(false);
 const subscriptionService = new SubscriptionService();
 const accountService = new AccountService();
 
-// Available languages
-const languages = [
-  { code: 'en', name: 'English' },
-  { code: 'es', name: 'Español' },
-  { code: 'fr', name: 'Français' },
-  { code: 'de', name: 'Deutsch' },
-  { code: 'pt', name: 'Português' },
-  { code: 'it', name: 'Italiano' },
-  { code: 'nl', name: 'Nederlands' },
-  { code: 'pl', name: 'Polski' },
-  { code: 'ar', name: 'العربية' },
-  { code: 'he', name: 'עברית' },
-];
-
 /**
  * Load user profile data from server
  */
@@ -56,6 +44,10 @@ async function loadProfile() {
     state.userInfo.displayName = profile.displayName || '';
     state.userInfo.email = profile.email;
     state.userInfo.username = profile.username || profile.email.split('@')[0];
+    state.userInfo.preferredLanguage = profile.language || 'en';
+
+    // Apply account language to the UI after loading profile
+    await applyAccountLanguage(profile.language);
   }
   catch (error) {
     console.error('Error loading profile:', error);
@@ -80,11 +72,16 @@ async function checkSubscriptionsEnabled() {
 }
 
 /**
- * Handle language change
+ * Handle language change — updates i18next, writes cookie, and persists to API.
+ * Reads the selected language directly from the change event target.
  */
-function handleLanguageChange() {
-  // TODO: Implement language preference saving
-  console.log('Language changed to:', state.userInfo.preferredLanguage);
+async function handleLanguageChange(event) {
+  const language = event.target.value;
+  state.userInfo.preferredLanguage = language;
+
+  await changeLanguage(language, async (lang) => {
+    await accountService.updateLanguage(lang, { source: 'settings' });
+  });
 }
 
 /**
@@ -202,12 +199,17 @@ onMounted(async () => {
               </label>
               <select
                 id="language"
-                v-model="state.userInfo.preferredLanguage"
+                :value="state.userInfo.preferredLanguage"
                 class="select-input"
+                :disabled="state.isLoading || undefined"
                 @change="handleLanguageChange"
               >
-                <option v-for="lang in languages" :key="lang.code" :value="lang.code">
-                  {{ lang.name }}
+                <option
+                  v-for="lang in AVAILABLE_LANGUAGES"
+                  :key="lang.code"
+                  :value="lang.code"
+                >
+                  {{ lang.nativeName }}
                 </option>
               </select>
             </div>
@@ -553,6 +555,11 @@ onMounted(async () => {
     outline: none;
     box-shadow: 0 0 0 2px var(--pav-color-orange-500);
     border-color: transparent;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   @media (prefers-color-scheme: dark) {
