@@ -560,18 +560,6 @@ class ActivityPubService {
   async getFeed(calendar: Calendar, page?: number, pageSize?: number) {
     const defaultPageSize = pageSize || 20;
 
-    console.log(`[MemberService] getFeed called for calendar ID: ${calendar.id}`);
-
-    // First, let's see what we're following (with CalendarActor details)
-    const following = await FollowingCalendarEntity.findAll({
-      where: { calendar_id: calendar.id },
-      include: [{ model: CalendarActorEntity, as: 'calendarActor' }],
-    });
-    console.log(`[MemberService] This calendar is following ${following.length} remote calendars:`);
-    following.forEach(f => {
-      console.log(`[MemberService]   - ${f.calendarActor?.actor_uri || f.calendar_actor_id}`);
-    });
-
     // Query events from calendars this calendar is following.
     // This includes BOTH:
     // - Remote events (calendar_id = null) tracked via EventObjectEntity.attributed_to
@@ -633,12 +621,11 @@ class ActivityPubService {
       order: [['createdAt', 'DESC']],
     });
 
-    console.log(`[MemberService] Found ${events.length} events in feed`);
-
     // Batch fetch all shared events for these events in a single query
-    const eventUrls = events.map(event =>
-      event.event_source_url || `https://${config.get('domain')}/events/${event.id}`,
-    );
+    const eventUrls = events.map(event => {
+      const rawSourceUrl = event.event_source_url as string | null;
+      return rawSourceUrl?.startsWith('https://') ? rawSourceUrl : `https://${config.get('domain')}/events/${event.id}`;
+    });
 
     const sharedEvents = await SharedEventEntity.findAll({
       where: {
@@ -693,7 +680,8 @@ class ActivityPubService {
 
     // Map events with repost status and source calendar actor ID using the lookup maps
     const eventsWithRepostStatus = events.map((event) => {
-      const eventUrl = event.event_source_url || `https://${config.get('domain')}/events/${event.id}`;
+      const rawSourceUrl = event.event_source_url as string | null;
+      const eventUrl = rawSourceUrl?.startsWith('https://') ? rawSourceUrl : `https://${config.get('domain')}/events/${event.id}`;
       const sharedEvent = sharedEventMap.get(eventUrl);
 
       let repostStatus: 'none' | 'manual' | 'auto' = 'none';
@@ -755,14 +743,12 @@ class ActivityPubService {
         schedules,
         repostStatus,
         sourceCalendarActorId,
+        eventSourceUrl: eventUrl,
       };
-
-      console.log(`[MemberService] Transformed event:`, JSON.stringify(transformedEvent, null, 2));
 
       return transformedEvent;
     });
 
-    console.log(`[MemberService] Returning ${eventsWithRepostStatus.length} events with content`);
     return eventsWithRepostStatus;
   }
 }
