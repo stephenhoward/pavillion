@@ -189,12 +189,12 @@ export const seedFollowData = async () => {
   //   "Outdoors" and "Food & Drink" intentionally left unmapped
   const mappings = [
     {
-      source_category_id: 'd1000001-0000-0000-0000-000000000001',
+      source_category_id: 'd1000001-0000-4000-8000-000000000001',
       source_category_name: 'Music',
       local_category_id: '7ebf16ff-c570-4e5d-ab56-e289693cdb7e', // Entertainment
     },
     {
-      source_category_id: 'd1000001-0000-0000-0000-000000000002',
+      source_category_id: 'd1000001-0000-4000-8000-000000000002',
       source_category_name: 'Film',
       local_category_id: 'bd18b4d9-32a5-4c8b-a6e2-0ffd62e5535a', // Arts
     },
