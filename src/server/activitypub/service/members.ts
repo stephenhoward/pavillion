@@ -345,7 +345,7 @@ class ActivityPubService {
     let actor = await this.actorUrl(calendar);
     let shareActivity = new AnnounceActivity(actor, canonicalEventUrl);
 
-    SharedEventEntity.create({
+    await SharedEventEntity.create({
       id: shareActivity.id,
       event_id: localEventId,
       calendar_id: calendar.id,
