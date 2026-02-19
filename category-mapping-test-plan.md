@@ -24,14 +24,14 @@ The app runs locally:
 | pv-2l4h.15 | Feed event cards show 'Unknown' for source calendar — FIXED |
 | pv-idwd | Category mappings save fails with 400 Bad Request (seed UUIDs not v4) — FIXED |
 | pv-2l4h.12 | Manual repost fails with InvalidSharedEventUrlError (relative event_source_url) — FIXED |
+| pv-2l4h.13 | Category IDs from manual repost not passed to backend — FIXED |
+| pv-2l4h.8 | Feed page blank on direct URL navigation — FIXED |
+| pv-2l4h.9 | 'Follow a Calendar' button doesn't auto-open Add Calendar modal — FIXED |
+| pv-2l4h.16 | Re-following an already-followed calendar silently resets auto-repost settings — FIXED |
 
 **Known bugs (still open — skip if hit, don't re-file):**
-| Bug ID | Summary |
-|--------|---------|
-| pv-2l4h.8 | Feed page blank on direct URL navigation |
-| pv-2l4h.9 | 'Follow a Calendar' button doesn't auto-open Add Calendar modal |
-| pv-2l4h.13 | Category IDs from manual repost not passed to backend |
-| pv-2l4h.16 | Re-following an already-followed calendar silently resets auto-repost settings |
+
+All previously known bugs are now fixed. No skips required.
 
 ---
 
@@ -175,15 +175,15 @@ The app runs locally:
 
 ## Phase 9: Inline Mapping Step After Follow (Target Scenario)
 
-This phase can only be tested after pv-2l4h.10 is fixed.
+All blocking bugs (pv-2l4h.10, .16) are now fixed — this phase is fully testable.
 
-**Step 9.1** (When pv-2l4h.10 is fixed) Unfollow testuser_calendar first
+**Step 9.1** Unfollow testuser_calendar first
 - In the Following tab, click "Unfollow" on the testuser_calendar entry
 - Confirm the unfollow
 
 **Step 9.2** Re-follow testuser_calendar@pavillion.dev
 - Click "Add a Calendar", type `testuser_calendar@pavillion.dev`
-- After following, the mapping step SHOULD appear now that pv-2l4h.10 is fixed
+- After following, the mapping step SHOULD appear
 
 **Step 9.3** In the mapping step
 - Expected: Shows testuser_calendar's 4 categories: Music, Film, Outdoors, Food & Drink
@@ -254,6 +254,5 @@ After each phase, note:
 - A step gives an unexpected error that blocks further testing
 
 **Don't stop for:**
-- Known bugs (pv-2l4h.8, .9, .13, .16) — just note it and continue
-- Phase 9 — still blocked by pv-2l4h.16 (re-follow resets settings); skip
-- Phases 10, 11 — now unblocked, proceed with testing
+- All previously known bugs are fixed — no planned skips remain
+- Stop if something unexpected blocks you and report back
