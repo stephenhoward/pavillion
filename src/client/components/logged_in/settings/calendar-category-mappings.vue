@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
+import { ArrowLeft } from 'lucide-vue-next';
 import CategoryMappingEditor from '@/client/components/logged_in/category-mapping-editor.vue';
 import FeedService, { type CategoryEntry, type CategoryMappingEntry } from '@/client/service/feed';
 
@@ -9,6 +11,7 @@ const props = defineProps<{
   actorId: string;
 }>();
 
+const router = useRouter();
 const { t } = useTranslation('calendars', { keyPrefix: 'category_mapping' });
 
 const sourceCategories = ref<CategoryEntry[]>([]);
@@ -41,6 +44,13 @@ onMounted(async () => {
 });
 
 /**
+ * Navigate back to the Feed page.
+ */
+function goBack() {
+  router.push({ name: 'feed' });
+}
+
+/**
  * Save current mappings to the server.
  */
 async function save() {
@@ -69,6 +79,18 @@ async function save() {
     class="category-mappings-page"
     :aria-busy="loading ? 'true' : 'false'"
   >
+    <button
+      type="button"
+      class="back-button"
+      @click="goBack"
+    >
+      <ArrowLeft
+        :size="18"
+        aria-hidden="true"
+      />
+      {{ t('back_to_feed') }}
+    </button>
+
     <div class="page-header">
       <h1>{{ t('page_title') }}</h1>
       <p class="subtitle">{{ t('page_subtitle') }}</p>
@@ -139,6 +161,39 @@ async function save() {
 
   @media (min-width: 640px) {
     padding: var(--pav-space-6);
+  }
+}
+
+.back-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pav-space-2);
+  background: none;
+  border: none;
+  color: var(--pav-color-stone-600);
+  font-weight: var(--pav-font-weight-medium);
+  font-size: var(--pav-font-size-small);
+  cursor: pointer;
+  padding: var(--pav-space-2) 0;
+  margin-bottom: var(--pav-space-4);
+  transition: color 0.2s;
+
+  &:hover {
+    color: var(--pav-color-orange-600);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--pav-color-orange-500);
+    outline-offset: 2px;
+    border-radius: 0.25rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-stone-400);
+
+    &:hover {
+      color: var(--pav-color-orange-400);
+    }
   }
 }
 

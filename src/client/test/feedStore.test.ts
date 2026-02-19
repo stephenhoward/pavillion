@@ -239,8 +239,8 @@ describe('FeedStore', () => {
     beforeEach(() => {
       calendarStore.setSelectedCalendar('cal-1');
       feedStore.events = [
-        { id: 'event-1', calendarId: null, eventSourceUrl: '', categories: [], repostStatus: 'none' },
-        { id: 'event-2', calendarId: null, eventSourceUrl: '', categories: [], repostStatus: 'manual' },
+        { id: 'event-1', calendarId: null, eventSourceUrl: 'https://remote.example/events/event-1', categories: [], repostStatus: 'none' },
+        { id: 'event-2', calendarId: null, eventSourceUrl: 'https://remote.example/events/event-2', categories: [], repostStatus: 'manual' },
       ];
     });
 
@@ -255,7 +255,7 @@ describe('FeedStore', () => {
 
       await promise;
 
-      expect(mockFeedService.shareEvent).toHaveBeenCalledWith('cal-1', 'event-1', []);
+      expect(mockFeedService.shareEvent).toHaveBeenCalledWith('cal-1', 'https://remote.example/events/event-1', []);
       expect(feedStore.events[0].repostStatus).toBe('manual');
     });
 
@@ -299,6 +299,7 @@ describe('FeedStore', () => {
         {
           id: 'follow-1',
           calendarActorId: 'source@remote.example',
+          calendarActorUuid: 'uuid-follow-1',
           calendarId: 'cal-1',
           autoRepostOriginals: false,
           autoRepostReposts: false,
@@ -321,8 +322,8 @@ describe('FeedStore', () => {
 
       await feedStore.repostEvent('event-1');
 
-      expect(mockFeedService.getSourceCategories).toHaveBeenCalledWith('cal-1', 'source@remote.example');
-      expect(mockFeedService.shareEvent).toHaveBeenCalledWith('cal-1', 'event-1', []);
+      expect(mockFeedService.getSourceCategories).toHaveBeenCalledWith('cal-1', 'uuid-follow-1');
+      expect(mockFeedService.shareEvent).toHaveBeenCalledWith('cal-1', 'https://remote.example/events/abc', []);
       expect(feedStore.pendingRepost).toBeNull();
     });
 
@@ -342,7 +343,7 @@ describe('FeedStore', () => {
 
       await feedStore.repostEvent('event-1');
 
-      expect(mockFeedService.shareEvent).toHaveBeenCalledWith('cal-1', 'event-1', ['local-cat-1', 'local-cat-2']);
+      expect(mockFeedService.shareEvent).toHaveBeenCalledWith('cal-1', 'https://remote.example/events/abc', ['local-cat-1', 'local-cat-2']);
       expect(feedStore.pendingRepost).toBeNull();
     });
 
@@ -404,7 +405,7 @@ describe('FeedStore', () => {
 
       await feedStore.confirmPendingRepost(['local-cat-1', 'local-cat-2']);
 
-      expect(mockFeedService.shareEvent).toHaveBeenCalledWith('cal-1', 'event-1', ['local-cat-1', 'local-cat-2']);
+      expect(mockFeedService.shareEvent).toHaveBeenCalledWith('cal-1', 'https://remote.example/events/abc', ['local-cat-1', 'local-cat-2']);
       expect(feedStore.pendingRepost).toBeNull();
       expect(feedStore.events[0].repostStatus).toBe('manual');
     });
@@ -431,6 +432,7 @@ describe('FeedStore', () => {
         {
           id: 'follow-1',
           calendarActorId: 'source@remote.example',
+          calendarActorUuid: 'uuid-follow-1',
           calendarId: 'cal-1',
           autoRepostOriginals: false,
           autoRepostReposts: false,
@@ -438,6 +440,7 @@ describe('FeedStore', () => {
         {
           id: 'follow-2',
           calendarActorId: 'other@another.example',
+          calendarActorUuid: 'uuid-follow-2',
           calendarId: 'cal-1',
           autoRepostOriginals: false,
           autoRepostReposts: false,
@@ -459,7 +462,7 @@ describe('FeedStore', () => {
 
       // Should repost silently without checking categories
       expect(mockFeedService.getSourceCategories).not.toHaveBeenCalled();
-      expect(mockFeedService.shareEvent).toHaveBeenCalledWith('cal-1', 'event-1', []);
+      expect(mockFeedService.shareEvent).toHaveBeenCalledWith('cal-1', 'https://unknown.example/events/abc', []);
     });
 
     it('should repost silently when getSourceCategories fails', async () => {
@@ -468,7 +471,7 @@ describe('FeedStore', () => {
 
       await feedStore.repostEvent('event-1');
 
-      expect(mockFeedService.shareEvent).toHaveBeenCalledWith('cal-1', 'event-1', []);
+      expect(mockFeedService.shareEvent).toHaveBeenCalledWith('cal-1', 'https://remote.example/events/abc', []);
       expect(feedStore.pendingRepost).toBeNull();
     });
 
@@ -489,7 +492,7 @@ describe('FeedStore', () => {
       await feedStore.repostEvent('event-1');
 
       // Should still call getSourceCategories with the single follow's actorId
-      expect(mockFeedService.getSourceCategories).toHaveBeenCalledWith('cal-1', 'source@remote.example');
+      expect(mockFeedService.getSourceCategories).toHaveBeenCalledWith('cal-1', 'uuid-follow-1');
     });
   });
 

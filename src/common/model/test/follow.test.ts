@@ -32,6 +32,29 @@ describe('FollowingCalendar Model', () => {
       expect(follow.autoRepostOriginals).toBe(false);
       expect(follow.autoRepostReposts).toBe(false);
     });
+
+    it('should store calendarActorUuid when provided', () => {
+      const follow = new FollowingCalendar(
+        'follow-7',
+        'remote@example.com',
+        'calendar-123',
+        false,
+        false,
+        'uuid-1234-5678',
+      );
+
+      expect(follow.calendarActorUuid).toBe('uuid-1234-5678');
+    });
+
+    it('should default calendarActorUuid to empty string when not provided', () => {
+      const follow = new FollowingCalendar(
+        'follow-8',
+        'remote@example.com',
+        'calendar-123',
+      );
+
+      expect(follow.calendarActorUuid).toBe('');
+    });
   });
 
   describe('toObject() serialization', () => {
@@ -54,6 +77,21 @@ describe('FollowingCalendar Model', () => {
       expect(obj.autoRepostReposts).toBe(true);
       // Ensure old repostPolicy field is not present
       expect(obj.repostPolicy).toBeUndefined();
+    });
+
+    it('should serialize calendarActorUuid in toObject()', () => {
+      const follow = new FollowingCalendar(
+        'follow-9',
+        'calendar@other.net',
+        'cal-789',
+        false,
+        false,
+        'uuid-abcd-efgh',
+      );
+
+      const obj = follow.toObject();
+
+      expect(obj.calendarActorUuid).toBe('uuid-abcd-efgh');
     });
   });
 
@@ -88,6 +126,33 @@ describe('FollowingCalendar Model', () => {
 
       expect(follow.autoRepostOriginals).toBe(false);
       expect(follow.autoRepostReposts).toBe(false);
+    });
+
+    it('should deserialize calendarActorUuid from object', () => {
+      const obj = {
+        id: 'follow-10',
+        calendarActorId: 'events@domain.com',
+        calendarActorUuid: 'uuid-1234-abcd',
+        calendarId: 'my-calendar',
+        autoRepostOriginals: false,
+        autoRepostReposts: false,
+      };
+
+      const follow = FollowingCalendar.fromObject(obj);
+
+      expect(follow.calendarActorUuid).toBe('uuid-1234-abcd');
+    });
+
+    it('should default calendarActorUuid to empty string when not present in object', () => {
+      const obj = {
+        id: 'follow-11',
+        calendarActorId: 'test@test.com',
+        calendarId: 'test-cal',
+      };
+
+      const follow = FollowingCalendar.fromObject(obj);
+
+      expect(follow.calendarActorUuid).toBe('');
     });
   });
 

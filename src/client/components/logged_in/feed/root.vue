@@ -1,9 +1,10 @@
 <script setup>
-import { reactive, computed, onMounted, nextTick } from 'vue';
+import { reactive, ref, computed, onMounted, nextTick } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useFeedStore } from '@/client/stores/feedStore';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { useToast } from '@/client/composables/useToast';
+import CalendarService from '@/client/service/calendar';
 import CalendarSelector from './calendar_selector.vue';
 import FollowsView from './follows.vue';
 import FollowersView from './followers.vue';
@@ -12,12 +13,15 @@ import FollowedEventsView from './events.vue';
 const { t } = useTranslation('feed');
 const feedStore = useFeedStore();
 const calendarStore = useCalendarStore();
+const calendarService = new CalendarService();
 const toast = useToast();
 
 const state = reactive({
   activeTab: 'events',
   isInitialized: false,
 });
+
+const openAddCalendarModal = ref(false);
 
 const hasMultipleCalendars = computed(() => calendarStore.hasMultipleCalendars);
 const selectedCalendarId = computed(() => calendarStore.selectedCalendarId);
@@ -60,20 +64,36 @@ const loadFeedData = async () => {
 };
 
 /**
- * Handle request to follow a calendar from the Events tab
- * This switches to the Following tab, which will then open the Add Calendar modal
+ * Handle request to follow a calendar from the Events tab.
+ * Switches to the Following tab and signals follows.vue to open its modal.
  */
 const handleFollowCalendarRequest = () => {
+  openAddCalendarModal.value = true;
   activateTab('follows');
-  // The Following tab component will handle opening the modal
-  // We'll use an event or a shared state to trigger this
-  nextTick(() => {
-    // Emit a custom event that the Following tab can listen for
-    window.dispatchEvent(new CustomEvent('openAddCalendarModal'));
-  });
+};
+
+/**
+ * Reset the modal trigger flag after follows.vue has acknowledged it.
+ */
+const handleAddCalendarModalOpened = () => {
+  openAddCalendarModal.value = false;
 };
 
 onMounted(async () => {
+  // Ensure calendars are loaded from the server before proceeding.
+  // This handles direct navigation to the feed URL where the store may be empty.
+  if (!calendarStore.loaded) {
+    try {
+      await calendarService.loadCalendars();
+    }
+    catch (error) {
+      console.error('Error loading calendars:', error);
+      toast.error(t('load_error'));
+      state.isInitialized = true;
+      return;
+    }
+  }
+
   // Auto-select first calendar if only one exists
   if (calendarStore.calendars.length === 1) {
     calendarStore.setSelectedCalendar(calendarStore.calendars[0].id);
@@ -174,7 +194,10 @@ onMounted(async () => {
         class="tab-panel"
         tabindex="0"
       >
-        <FollowsView />
+        <FollowsView
+          :open-add-calendar-modal="openAddCalendarModal"
+          @add-calendar-modal-opened="handleAddCalendarModalOpened"
+        />
       </div>
       <div
         id="followers-panel"

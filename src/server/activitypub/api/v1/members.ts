@@ -15,6 +15,7 @@ import {
   ActivityPubNotSupportedError,
   RemoteProfileFetchError,
   SelfFollowError,
+  AlreadyFollowingError,
 } from '@/common/exceptions/activitypub';
 import { InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
 
@@ -369,6 +370,12 @@ export default class ActivityPubMemberRoutes {
             errorName: 'SelfFollowError',
           });
         }
+        else if (error instanceof AlreadyFollowingError) {
+          res.status(409).json({
+            error: error.message,
+            errorName: 'AlreadyFollowingError',
+          });
+        }
         else if (error instanceof InvalidRepostPolicySettingsError) {
           res.status(400).json({
             error: error.message,
@@ -476,7 +483,10 @@ export default class ActivityPubMemberRoutes {
 
     if (typeof req.body.eventId === 'string') {
       try {
-        await this.service.shareEvent(account, req.body.calendar, req.body.eventId);
+        const categoryIds: string[] | undefined = Array.isArray(req.body.categoryIds)
+          ? req.body.categoryIds
+          : undefined;
+        await this.service.shareEvent(account, req.body.calendar, req.body.eventId, false, categoryIds);
         res.status(200).send('Shared');
       }
       catch (error: any) {

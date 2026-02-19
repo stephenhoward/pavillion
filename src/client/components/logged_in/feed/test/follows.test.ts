@@ -263,4 +263,63 @@ describe('Following Tab', () => {
     expect(updatePolicySpy.calledOnce).toBe(true);
     expect(updatePolicySpy.calledWith('follow-1', false, false)).toBe(true);
   });
+
+  it('opens modal when openAddCalendarModal prop becomes true', async () => {
+    const feedStore = useFeedStore();
+    feedStore.follows = [];
+
+    const wrapper = mount(Follows, {
+      props: {
+        openAddCalendarModal: false,
+      },
+      global: {
+        plugins: [pinia, [I18NextVue, { i18next }]],
+        stubs: {
+          EmptyLayout: {
+            template: '<div class="empty-state"><div>{{ title }}</div><slot /></div>',
+            props: ['title'],
+          },
+          AddCalendarModal: true,
+        },
+      },
+    });
+
+    // Initially modal is closed
+    expect(wrapper.vm.showAddModal).toBe(false);
+
+    // Set the prop to true (simulating parent signalling to open)
+    await wrapper.setProps({ openAddCalendarModal: true });
+    await wrapper.vm.$nextTick();
+
+    // Modal should now be open
+    expect(wrapper.vm.showAddModal).toBe(true);
+  });
+
+  it('emits addCalendarModalOpened when openAddCalendarModal prop becomes true', async () => {
+    const feedStore = useFeedStore();
+    feedStore.follows = [];
+
+    const wrapper = mount(Follows, {
+      props: {
+        openAddCalendarModal: false,
+      },
+      global: {
+        plugins: [pinia, [I18NextVue, { i18next }]],
+        stubs: {
+          EmptyLayout: {
+            template: '<div class="empty-state"><div>{{ title }}</div><slot /></div>',
+            props: ['title'],
+          },
+          AddCalendarModal: true,
+        },
+      },
+    });
+
+    await wrapper.setProps({ openAddCalendarModal: true });
+    await wrapper.vm.$nextTick();
+
+    // Should emit addCalendarModalOpened to let parent reset the flag
+    expect(wrapper.emitted('addCalendarModalOpened')).toBeTruthy();
+    expect(wrapper.emitted('addCalendarModalOpened')).toHaveLength(1);
+  });
 });

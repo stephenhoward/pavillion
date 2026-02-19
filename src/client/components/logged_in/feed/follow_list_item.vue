@@ -67,7 +67,7 @@ const handleUnfollow = () => {
         <router-link
           :to="{
             name: 'calendar_category_mappings',
-            params: { calendarId: follow.calendarId, actorId: follow.calendarActorId },
+            params: { calendarId: follow.calendarId, actorId: follow.calendarActorUuid },
           }"
           class="mappings-link"
           :aria-label="tMappings.t('category_mappings_link_for', { calendar: follow.calendarActorId })"

@@ -13,6 +13,7 @@ import {
   ActivityPubNotSupportedError,
   RemoteProfileFetchError,
   SelfFollowError,
+  AlreadyFollowingError,
 } from '@/common/exceptions/activitypub';
 import { InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
 import { UnknownError } from '@/common/exceptions';
@@ -28,6 +29,7 @@ const errorMap = {
   ActivityPubNotSupportedError,
   RemoteProfileFetchError,
   SelfFollowError,
+  AlreadyFollowingError,
   InsufficientCalendarPermissionsError,
 };
 
@@ -37,6 +39,7 @@ const errorMap = {
 export interface FollowRelationship {
   id: string;
   calendarActorId: string;
+  calendarActorUuid: string;
   calendarId: string;
   autoRepostOriginals: boolean;
   autoRepostReposts: boolean;
@@ -52,10 +55,11 @@ export interface FollowerRelationship {
 }
 
 /**
- * Feed event extends CalendarEvent with repost status
+ * Feed event extends CalendarEvent with repost status and source calendar identifier
  */
 export type FeedEvent = CalendarEvent & {
   repostStatus: 'none' | 'manual' | 'auto';
+  sourceCalendarActorId: string | null;
 };
 
 /**
@@ -129,6 +133,7 @@ export default class FeedService {
       return data.items.map(item => ({
         id: item.id,
         calendarActorId: item.calendarActorId,
+        calendarActorUuid: item.calendarActorUuid ?? '',
         calendarId: item.calendarId,
         autoRepostOriginals: item.autoRepostOriginals ?? false,
         autoRepostReposts: item.autoRepostReposts ?? false,
@@ -173,10 +178,13 @@ export default class FeedService {
         return { events: [], hasMore: false };
       }
 
-      // Convert API response to CalendarEvent objects with repostStatus
+      // Convert API response to CalendarEvent objects with repostStatus and sourceCalendarActorId
       const events: FeedEvent[] = data.events.map((eventData: any) => {
         const event = CalendarEvent.fromObject(eventData);
-        return Object.assign(event, { repostStatus: eventData.repostStatus });
+        return Object.assign(event, {
+          repostStatus: eventData.repostStatus,
+          sourceCalendarActorId: eventData.sourceCalendarActorId ?? null,
+        });
       });
 
       return {
@@ -239,19 +247,19 @@ export default class FeedService {
   /**
    * Manually repost an event to the calendar, optionally tagging it with local category IDs.
    * @param calendarId The calendar ID to repost to
-   * @param eventId The event ID to repost
+   * @param eventSourceUrl The ActivityPub URL of the event to repost
    * @param categoryIds Optional list of local category IDs to assign when reposting
    * @returns Promise<void>
    */
-  async shareEvent(calendarId: string, eventId: string, categoryIds: string[] = []): Promise<void> {
+  async shareEvent(calendarId: string, eventSourceUrl: string, categoryIds: string[] = []): Promise<void> {
     try {
       // Using a simple object since SharedEvent isn't a PrimaryModel on the client
       await ModelService.createModel(
         {
           id: '',
           calendarId,
-          eventId,
-          toObject: () => ({ calendarId, eventId, categoryIds }),
+          eventId: eventSourceUrl,
+          toObject: () => ({ calendarId, eventId: eventSourceUrl, categoryIds }),
         } as any,
         '/api/v1/social/shares',
       );

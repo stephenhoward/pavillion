@@ -271,7 +271,7 @@ export const useFeedStore = defineStore('feed', {
 
       // Find the newly added follow by comparing with the previous set of IDs
       const newFollow = this.follows.find((f) => !previousFollowIds.has(f.id));
-      return newFollow?.calendarActorId ?? null;
+      return newFollow?.calendarActorUuid ?? null;
     },
 
     /**
@@ -361,13 +361,16 @@ export const useFeedStore = defineStore('feed', {
         return;
       }
 
+      // Use the event's ActivityPub source URL for the repost API call
+      const eventSourceUrl = this.events[eventIndex].eventSourceUrl;
+
       // Optimistic update
       const previousStatus = this.events[eventIndex].repostStatus;
       this.events[eventIndex].repostStatus = 'manual';
 
       try {
         const feedService = new FeedService();
-        await feedService.shareEvent(this.selectedCalendarId, eventId, categoryIds);
+        await feedService.shareEvent(this.selectedCalendarId, eventSourceUrl, categoryIds);
       }
       catch (error) {
         // Rollback on error
@@ -412,7 +415,7 @@ export const useFeedStore = defineStore('feed', {
       // Fetch source categories for this followed calendar
       let sourceCategories: CategoryEntry[] = [];
       try {
-        sourceCategories = await feedService.getSourceCategories(this.selectedCalendarId, follow.calendarActorId);
+        sourceCategories = await feedService.getSourceCategories(this.selectedCalendarId, follow.calendarActorUuid);
       }
       catch {
         // If we can't fetch source categories, repost silently
@@ -427,7 +430,7 @@ export const useFeedStore = defineStore('feed', {
       // Fetch existing category mappings
       let mappings: CategoryMappingEntry[] = [];
       try {
-        mappings = await feedService.getCategoryMappings(this.selectedCalendarId, follow.calendarActorId);
+        mappings = await feedService.getCategoryMappings(this.selectedCalendarId, follow.calendarActorUuid);
       }
       catch {
         // If we can't fetch mappings, fall through to show modal with empty pre-selection

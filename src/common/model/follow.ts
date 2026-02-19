@@ -5,6 +5,7 @@ import { PrimaryModel } from './model';
  */
 class FollowingCalendar extends PrimaryModel {
   calendarActorId: string;
+  calendarActorUuid: string;
   calendarId: string;
   autoRepostOriginals: boolean;
   autoRepostReposts: boolean;
@@ -15,9 +16,11 @@ class FollowingCalendar extends PrimaryModel {
     calendarId: string,
     autoRepostOriginals: boolean = false,
     autoRepostReposts: boolean = false,
+    calendarActorUuid: string = '',
   ) {
     super(id);
     this.calendarActorId = calendarActorId;
+    this.calendarActorUuid = calendarActorUuid;
     this.calendarId = calendarId;
     this.autoRepostOriginals = autoRepostOriginals;
     this.autoRepostReposts = autoRepostReposts;
@@ -27,6 +30,7 @@ class FollowingCalendar extends PrimaryModel {
     return {
       id: this.id,
       calendarActorId: this.calendarActorId,
+      calendarActorUuid: this.calendarActorUuid,
       calendarId: this.calendarId,
       autoRepostOriginals: this.autoRepostOriginals,
       autoRepostReposts: this.autoRepostReposts,
@@ -40,6 +44,7 @@ class FollowingCalendar extends PrimaryModel {
       obj.calendarId,
       obj.autoRepostOriginals ?? false,
       obj.autoRepostReposts ?? false,
+      obj.calendarActorUuid ?? '',
     );
   }
 }

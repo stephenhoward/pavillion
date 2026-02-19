@@ -7,7 +7,10 @@ import ActivityPubService from '@/server/activitypub/service/members';
 import { Calendar } from '@/common/model/calendar';
 import { FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
-import { InvalidRemoteCalendarIdentifierError } from '@/common/exceptions/activitypub';
+import {
+  InvalidRemoteCalendarIdentifierError,
+  AlreadyFollowingError,
+} from '@/common/exceptions/activitypub';
 import { setupActivityPubSchema, teardownActivityPubSchema } from '@/server/test/helpers/database';
 
 // Mock CalendarActor model for testing (remote type)
@@ -106,7 +109,7 @@ describe("followCalendar", () => {
     }
   });
 
-  it('already follows the calendar, do nothing', async () => {
+  it('should throw AlreadyFollowingError when calendar is already followed', async () => {
 
     let calendar = Calendar.fromObject({ id: 'testid' });
 
@@ -127,6 +130,7 @@ describe("followCalendar", () => {
     let updateMetadataStub = sandbox.stub(service.remoteCalendarService, 'updateMetadata');
     updateMetadataStub.resolves(mockRemoteCalendar);
 
+    // Simulate an existing follow record
     let getExistingFollowStub = sandbox.stub(FollowingCalendarEntity, 'findOne');
     getExistingFollowStub.resolves(FollowingCalendarEntity.build({
       auto_repost_originals: false,
@@ -144,9 +148,13 @@ describe("followCalendar", () => {
     let addToOutboxStub = sandbox.stub(service, 'addToOutbox');
     addToOutboxStub.resolves();
 
-    await service.followCalendar(account, calendar,'testcalendar@testdomain.com');
+    // Expect AlreadyFollowingError to be thrown
+    await expect(
+      service.followCalendar(account, calendar, 'testcalendar@testdomain.com'),
+    ).rejects.toThrow(AlreadyFollowingError);
 
-    expect( buildFollowStub.called ).toBe(false);
+    // Ensure no new follow record was created and no outbox activity was added
+    // (build is called by our stub setup, so we check save and addToOutbox)
     expect( saveFollowStub.called ).toBe(false);
     expect( addToOutboxStub.called ).toBe(false);
   });

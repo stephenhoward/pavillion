@@ -190,7 +190,8 @@
     "save_success": "Mappings saved",
     "save_error": "Failed to save mappings",
     "category_mappings_link": "Category mappings",
-    "category_mappings_link_for": "Category mappings for {{calendar}}"
+    "category_mappings_link_for": "Category mappings for {{calendar}}",
+    "back_to_feed": "Back to Feed"
   },
   "settings": {
     "title": "Calendar Settings",

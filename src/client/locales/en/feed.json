@@ -85,6 +85,7 @@
         "InvalidRepostPolicySettingsError": "Invalid auto-repost settings: cannot enable reposting of shared events without enabling reposting of original events.",
         "InvalidSharedEventUrlError": "Invalid event URL. Please check the event URL and try again.",
         "SelfFollowError": "A calendar cannot follow itself.",
+        "AlreadyFollowingError": "You are already following this calendar.",
         "InsufficientCalendarPermissionsError": "You don't have permission to perform this action on this calendar.",
         "FollowRelationshipNotFoundError": "Follow relationship not found. The calendar may have already been unfollowed.",
         "RemoteCalendarNotFoundError": "Calendar not found. Please check the identifier and try again.",

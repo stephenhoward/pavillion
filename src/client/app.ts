@@ -145,6 +145,7 @@ checkSetupMode().then((setupRequired) => {
             name: 'calendar_category_mappings',
             beforeEnter: mustBeLoggedIn,
             props: true,
+            meta: { activeNav: 'feed' },
           },
         ],
       },

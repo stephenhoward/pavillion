@@ -7,6 +7,7 @@ import { Calendar } from '@/common/model/calendar';
 import ActivityPubMemberRoutes from '@/server/activitypub/api/v1/members';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import { FollowingCalendar, FollowerCalendar } from '@/common/model/follow';
+import { AlreadyFollowingError } from '@/common/exceptions/activitypub';
 
 /**
  * Creates a mock CalendarInterface with stubbed methods needed by member routes.
@@ -407,6 +408,33 @@ describe('ActivityPub Social API Routes', () => {
       const [account, calendar, remoteId, originals, reposts] = followStub.firstCall.args;
       expect(originals).toBe(false);
       expect(reposts).toBe(false);
+    });
+
+    it('should return 409 Conflict when calendar is already followed', async () => {
+      sandbox.stub(activityPubInterface, 'followCalendar').rejects(new AlreadyFollowingError());
+
+      const req = {
+        user: testAccount,
+        body: {
+          calendarId: testCalendar.id,
+          calendar: testCalendar,
+          remoteCalendar: 'remote@example.com',
+          autoRepostOriginals: false,
+          autoRepostReposts: false,
+        },
+      };
+      const res = {
+        status: sinon.stub(),
+        json: sinon.stub(),
+      };
+      res.status.returns(res);
+
+      await routes.followCalendar(req as any, res as any);
+
+      expect(res.status.calledWith(409)).toBe(true);
+      expect(res.json.calledOnce).toBe(true);
+      const response = res.json.firstCall.args[0];
+      expect(response.errorName).toBe('AlreadyFollowingError');
     });
 
     it('should require authenticated user', async () => {

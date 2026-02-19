@@ -17,15 +17,22 @@ const route = useRoute();
 const itemsWithActiveState = computed<NavigationItemWithState[]>(() =>
   props.navigationItems.map(item => ({
     ...item,
-    isActive: isRouteActive(item.to),
+    isActive: isRouteActive(item),
   })),
 );
 
 /**
- * Check if a route destination matches the current route
+ * Check if a navigation item is active for the current route.
+ * If the route defines a meta.activeNav string, it takes precedence over
+ * the path-based matching so that routes living under a different URL prefix
+ * (e.g. /calendar/:id/following/:id/category-mappings) can still highlight
+ * the correct sidebar item (e.g. "feed").
  */
-function isRouteActive(to: NavigationItem['to']): boolean {
-  const path = typeof to === 'string' ? to : to.path || '';
+function isRouteActive(item: NavigationItem): boolean {
+  if (route.meta.activeNav && typeof route.meta.activeNav === 'string') {
+    return route.meta.activeNav === item.id;
+  }
+  const path = typeof item.to === 'string' ? item.to : (item.to as { path?: string }).path || '';
   return route.path.startsWith(path);
 }
 </script>

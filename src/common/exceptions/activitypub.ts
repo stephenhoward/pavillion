@@ -66,6 +66,12 @@ class SelfFollowError extends Error {
   }
 }
 
+class AlreadyFollowingError extends Error {
+  constructor(message?: string) {
+    super(message || 'Already following this calendar');
+  }
+}
+
 export {
   InvalidRemoteCalendarIdentifierError,
   InvalidRepostPolicyError,
@@ -77,4 +83,5 @@ export {
   ActivityPubNotSupportedError,
   RemoteProfileFetchError,
   SelfFollowError,
+  AlreadyFollowingError,
 };

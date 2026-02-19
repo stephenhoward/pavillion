@@ -73,8 +73,23 @@ export default class ActivityPubInterface {
     return this.memberService.unfollowCalendarById(account, calendar, followId);
   }
 
-  async shareEvent(account: Account, calendar: Calendar, eventUrl: string): Promise<void> {
-    return this.memberService.shareEvent(account, calendar, eventUrl);
+  /**
+   * Share (repost) an event to a calendar.
+   *
+   * @param account The account performing the sharing
+   * @param calendar The calendar to share to
+   * @param eventUrl The ActivityPub URL of the event to share
+   * @param autoPosted Whether this share was created automatically by the auto-post system
+   * @param categoryIds Optional local category IDs to assign to the shared event
+   */
+  async shareEvent(
+    account: Account,
+    calendar: Calendar,
+    eventUrl: string,
+    autoPosted: boolean = false,
+    categoryIds?: string[],
+  ): Promise<void> {
+    return this.memberService.shareEvent(account, calendar, eventUrl, autoPosted, categoryIds);
   }
 
   async unshareEvent(account: Account, calendar: Calendar, eventUrl: string): Promise<void> {

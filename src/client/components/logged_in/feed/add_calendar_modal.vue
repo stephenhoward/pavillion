@@ -13,6 +13,7 @@ import {
   ActivityPubNotSupportedError,
   RemoteProfileFetchError,
   SelfFollowError,
+  AlreadyFollowingError,
 } from '@/common/exceptions/activitypub';
 import { InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
 
@@ -163,6 +164,9 @@ const handleFollow = async () => {
         break;
       case SelfFollowError:
         lookupError.value = t('errors.SelfFollowError');
+        break;
+      case AlreadyFollowingError:
+        lookupError.value = t('errors.AlreadyFollowingError');
         break;
       default:
         lookupError.value = t('add_calendar_modal.follow_error');

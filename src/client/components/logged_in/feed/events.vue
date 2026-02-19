@@ -21,9 +21,26 @@ const repostTriggerElement = ref(null);
 let observer = null;
 
 /**
- * Format event date and time for display
+ * Format event date and time for display.
+ * Reads the start date from the first schedule, falling back to the legacy date field.
  */
 const formatEventDate = (event: FeedEvent) => {
+  // Prefer the start date from the first schedule (the canonical source of truth)
+  const scheduleStart = event.schedules?.[0]?.startDate;
+  if (scheduleStart) {
+    try {
+      // startDate is a Luxon DateTime; format it directly
+      const dt: DateTime = scheduleStart instanceof DateTime
+        ? scheduleStart
+        : DateTime.fromISO(String(scheduleStart));
+      return dt.toLocaleString(DateTime.DATETIME_MED);
+    }
+    catch (error) {
+      console.error('Error formatting schedule date:', error);
+    }
+  }
+
+  // Fall back to the legacy date field for backward compatibility
   if (!event.date) {
     return '';
   }
@@ -58,12 +75,12 @@ const getEventDescription = (event: FeedEvent) => {
 };
 
 /**
- * Get calendar identifier for display
+ * Get calendar identifier for display.
+ * Uses the human-readable source calendar actor ID (e.g., calendar@domain.com)
+ * included in each feed event by the backend.
  */
 const getCalendarIdentifier = (event: FeedEvent) => {
-  // For federated events, this would come from the event metadata
-  // For now, just show the calendar ID
-  return event.calendarId || t('unknown_calendar');
+  return event.sourceCalendarActorId || t('unknown_calendar');
 };
 
 /**
