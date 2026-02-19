@@ -60,7 +60,7 @@ describe('ActivityPub Social API - Unfollow Endpoint', () => {
     };
 
     router.post('/social/follows', testAuthMiddleware, memberRoutes.requireCalendarId.bind(memberRoutes), memberRoutes.followCalendar.bind(memberRoutes));
-    router.delete('/social/follows/:id', testAuthMiddleware, memberRoutes.requireCalendarId.bind(memberRoutes), memberRoutes.unfollowCalendar.bind(memberRoutes));
+    router.delete('/social/follows/:id', testAuthMiddleware, memberRoutes['requireCalendarIdQuery'].bind(memberRoutes), memberRoutes.unfollowCalendar.bind(memberRoutes));
     router.get('/social/follows', testAuthMiddleware, memberRoutes['requireCalendarIdQuery'].bind(memberRoutes), memberRoutes.getFollows.bind(memberRoutes));
 
     app.use('/api/v1', router);
@@ -94,15 +94,11 @@ describe('ActivityPub Social API - Unfollow Endpoint', () => {
       // Setup: Mock unfollowCalendarById service call
       activityPubInterface.unfollowCalendarById.resolves();
 
-      // Execute: Call unfollow endpoint with URL-encoded follow ID
+      // Execute: Call unfollow endpoint with URL-encoded follow ID and calendarId as query param
       const encodedFollowId = encodeURIComponent(followId);
       const response = await request(app)
-        .delete(`/api/v1/social/follows/${encodedFollowId}`)
-        .set('Content-Type', 'application/json')
-        .send({
-          calendarId: testCalendar.id,
-          remoteCalendar: remoteActorUri,
-        });
+        .delete(`/api/v1/social/follows/${encodedFollowId}?calendarId=${testCalendar.id}`)
+        .set('Content-Type', 'application/json');
 
       // Verify: Request succeeded
       expect(response.status).toBe(200);
@@ -131,15 +127,11 @@ describe('ActivityPub Social API - Unfollow Endpoint', () => {
         await mockFollowingEntity.destroy();
       });
 
-      // Execute: Call unfollow endpoint
+      // Execute: Call unfollow endpoint with calendarId as query param
       const encodedFollowId = encodeURIComponent(followId);
       const response = await request(app)
-        .delete(`/api/v1/social/follows/${encodedFollowId}`)
-        .set('Content-Type', 'application/json')
-        .send({
-          calendarId: testCalendar.id,
-          remoteCalendar: remoteActorUri,
-        });
+        .delete(`/api/v1/social/follows/${encodedFollowId}?calendarId=${testCalendar.id}`)
+        .set('Content-Type', 'application/json');
 
       // Verify: Request succeeded
       expect(response.status).toBe(200);
@@ -152,15 +144,11 @@ describe('ActivityPub Social API - Unfollow Endpoint', () => {
       // Setup: Override stub to return false for permission check
       (memberRoutes['calendarService'].userCanModifyCalendar as sinon.SinonStub).resolves(false);
 
-      // Execute: Call unfollow endpoint
+      // Execute: Call unfollow endpoint with calendarId as query param
       const encodedFollowId = encodeURIComponent(followId);
       const response = await request(app)
-        .delete(`/api/v1/social/follows/${encodedFollowId}`)
-        .set('Content-Type', 'application/json')
-        .send({
-          calendarId: testCalendar.id,
-          remoteCalendar: remoteActorUri,
-        });
+        .delete(`/api/v1/social/follows/${encodedFollowId}?calendarId=${testCalendar.id}`)
+        .set('Content-Type', 'application/json');
 
       // Verify: Permission denied
       expect(response.status).toBe(403);
@@ -170,14 +158,11 @@ describe('ActivityPub Social API - Unfollow Endpoint', () => {
     });
 
     it('should return 400 if calendarId is missing', async () => {
-      // Execute: Call without calendarId
+      // Execute: Call without calendarId query param
       const encodedFollowId = encodeURIComponent(followId);
       const response = await request(app)
         .delete(`/api/v1/social/follows/${encodedFollowId}`)
-        .set('Content-Type', 'application/json')
-        .send({
-          remoteCalendar: remoteActorUri,
-        });
+        .set('Content-Type', 'application/json');
 
       // Verify: Bad request with structured error response
       expect(response.status).toBe(400);
@@ -189,14 +174,11 @@ describe('ActivityPub Social API - Unfollow Endpoint', () => {
       // Setup: Mock unfollowCalendarById service call
       activityPubInterface.unfollowCalendarById.resolves();
 
-      // Execute: Call without remoteCalendar (route gets it from service layer via followId)
+      // Execute: Call with calendarId as query param (route gets remote info from service layer via followId)
       const encodedFollowId = encodeURIComponent(followId);
       const response = await request(app)
-        .delete(`/api/v1/social/follows/${encodedFollowId}`)
-        .set('Content-Type', 'application/json')
-        .send({
-          calendarId: testCalendar.id,
-        });
+        .delete(`/api/v1/social/follows/${encodedFollowId}?calendarId=${testCalendar.id}`)
+        .set('Content-Type', 'application/json');
 
       // Verify: Request succeeded (remoteCalendar not needed in body)
       expect(response.status).toBe(200);
