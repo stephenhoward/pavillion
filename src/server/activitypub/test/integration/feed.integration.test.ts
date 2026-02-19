@@ -369,12 +369,11 @@ describe('Event Feed Integration Tests', () => {
       const followId = followE.id;
 
       // Step 6: Account D unfollows E
-      // The DELETE endpoint requires calendarId in the body
-      // Note: Must use supertest's request directly with proper method chaining
+      // The DELETE endpoint requires calendarId as a query parameter (used by
+      // requireCalendarIdQuery middleware) not in the request body.
       const unfollowResponse = await request(env.app)
-        .delete(`/api/v1/social/follows/${encodeURIComponent(followId)}`)
-        .set('Authorization', 'Bearer ' + authKeyD)
-        .send({ calendarId: calendarD.id });
+        .delete(`/api/v1/social/follows/${encodeURIComponent(followId)}?calendarId=${calendarD.id}`)
+        .set('Authorization', 'Bearer ' + authKeyD);
 
       expect(unfollowResponse.status).toBe(200);
 
