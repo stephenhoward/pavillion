@@ -23,13 +23,13 @@ The app runs locally:
 | pv-2l4h.14 | Feed event cards show no date — FIXED |
 | pv-2l4h.15 | Feed event cards show 'Unknown' for source calendar — FIXED |
 | pv-idwd | Category mappings save fails with 400 Bad Request (seed UUIDs not v4) — FIXED |
+| pv-2l4h.12 | Manual repost fails with InvalidSharedEventUrlError (relative event_source_url) — FIXED |
 
 **Known bugs (still open — skip if hit, don't re-file):**
 | Bug ID | Summary |
 |--------|---------|
 | pv-2l4h.8 | Feed page blank on direct URL navigation |
 | pv-2l4h.9 | 'Follow a Calendar' button doesn't auto-open Add Calendar modal |
-| pv-2l4h.12 | Manual repost fails with InvalidSharedEventUrlError |
 | pv-2l4h.13 | Category IDs from manual repost not passed to backend |
 | pv-2l4h.16 | Re-following an already-followed calendar silently resets auto-repost settings |
 
@@ -59,20 +59,21 @@ The app runs locally:
 
 **Step 3.1** Look at the Events tab (should be default)
 - Note: Are events listed? (They should be — test_calendar follows testuser_calendar)
-- Note: Do event cards show dates? (Known bug pv-2l4h.14 = blank dates expected)
-- Note: Do event cards show source calendar? (Known bug pv-2l4h.15 = "Unknown" expected)
+- Note: Do event cards show dates? (Fixed pv-2l4h.14 — dates should be visible)
+- Note: Do event cards show source calendar? (Fixed pv-2l4h.15 — should show calendar name)
 - Take screenshot; continue regardless
 
 **Step 3.2** Attempt to repost an event
 - Click "Repost" on any visible event card
-- Known bug pv-2l4h.12: Expect "Failed to repost event" error toast
+- Expected (pv-2l4h.12 fixed): Category mapping modal appears OR event reposts silently
 - Take screenshot; continue regardless
 
-**Step 3.3** (Target: test unmapped category repost dialog)
-- Due to pv-2l4h.12, this flow is completely blocked. Skip for now.
-- When pv-2l4h.12 is fixed, revisit: reposts of events with Outdoors or Food & Drink
-  categories should show the repost-categories-modal with pre-selected mapped categories
-  and a prompt to add unmapped ones.
+**Step 3.3** Test unmapped category repost dialog (now unblocked — pv-2l4h.12 fixed)
+- Find events from testuser_calendar that have Outdoors or Food & Drink categories
+- Click "Repost" on such an event
+- Expected: repost-categories-modal opens showing mapped categories pre-selected and
+  unmapped ones (Outdoors/Food & Drink) available to add
+- Take screenshot
 
 ---
 
@@ -200,9 +201,9 @@ This phase can only be tested after pv-2l4h.10 is fixed.
 
 ## Phase 10: Manual Repost with Category Dialog (Target Scenario)
 
-This phase can only be tested after pv-2l4h.12 is fixed.
+pv-2l4h.12 is now fixed — this phase is unblocked.
 
-**Step 10.1** (When pv-2l4h.12 is fixed) Go to Events tab
+**Step 10.1** Go to Events tab
 - Find an event from testuser_calendar that has an Outdoors or Food & Drink category
   (these are intentionally unmapped in the seed data)
 
@@ -225,7 +226,7 @@ This phase can only be tested after pv-2l4h.12 is fixed.
 
 ## Phase 11: Manual Repost — All Categories Mapped (Silent Repost)
 
-This phase can only be tested after pv-2l4h.12 is fixed.
+pv-2l4h.12 is now fixed — this phase is unblocked.
 
 **Step 11.1** Find an event from testuser_calendar with only Music or Film category
   (these map to Entertainment and Arts respectively — fully mapped)
@@ -253,5 +254,6 @@ After each phase, note:
 - A step gives an unexpected error that blocks further testing
 
 **Don't stop for:**
-- Known bugs (pv-2l4h.8 through pv-2l4h.16) — just note it and continue
-- Phases 9, 10, 11 — these are explicitly blocked by known bugs, skip them
+- Known bugs (pv-2l4h.8, .9, .13, .16) — just note it and continue
+- Phase 9 — still blocked by pv-2l4h.16 (re-follow resets settings); skip
+- Phases 10, 11 — now unblocked, proceed with testing
