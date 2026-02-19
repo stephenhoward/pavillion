@@ -427,6 +427,27 @@ export const useFeedStore = defineStore('feed', {
         return this._doRepost(eventId, []);
       }
 
+      // Narrow to only the source categories assigned to this specific event.
+      // The feed response includes categoryIds when available. Three cases:
+      //   undefined — categoryIds not in feed response; fall back to checking all source categories
+      //   []        — event has no categories; repost silently
+      //   [ids]     — filter source categories to only those on this event
+      const eventCategoryIds = event.categoryIds;
+      let relevantSourceCategories: CategoryEntry[];
+      if (eventCategoryIds === undefined) {
+        relevantSourceCategories = sourceCategories;
+      }
+      else if (eventCategoryIds.length === 0) {
+        relevantSourceCategories = [];
+      }
+      else {
+        relevantSourceCategories = sourceCategories.filter((src) => eventCategoryIds.includes(src.id));
+      }
+
+      if (relevantSourceCategories.length === 0) {
+        return this._doRepost(eventId, []);
+      }
+
       // Fetch existing category mappings
       let mappings: CategoryMappingEntry[] = [];
       try {
@@ -437,11 +458,12 @@ export const useFeedStore = defineStore('feed', {
       }
 
       // Build the list of pre-selected local category IDs from existing mappings
-      const preSelectedIds = sourceCategories
+      // considering only the categories that are actually on this event.
+      const preSelectedIds = relevantSourceCategories
         .map((src) => mappings.find((m) => m.sourceCategoryId === src.id)?.localCategoryId)
         .filter((id): id is string => id !== undefined);
 
-      const allMapped = preSelectedIds.length === sourceCategories.length;
+      const allMapped = preSelectedIds.length === relevantSourceCategories.length;
 
       if (allMapped) {
         // All source categories are mapped: apply silently
@@ -462,7 +484,7 @@ export const useFeedStore = defineStore('feed', {
       this.pendingRepost = {
         eventId,
         preSelectedIds,
-        sourceCategories,
+        sourceCategories: relevantSourceCategories,
         allLocalCategories,
       };
     },

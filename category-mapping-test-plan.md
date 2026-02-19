@@ -30,6 +30,7 @@ The app runs locally:
 | pv-2l4h.16 | Re-following an already-followed calendar silently resets auto-repost settings — FIXED |
 | pv-2l4h.17 | Unfollow returns 400: DELETE endpoint used body middleware, frontend sends query param — FIXED |
 | pv-2l4h.18 | Reposted events never appeared in calendar event list (SharedEventEntity stored URL not UUID) — FIXED |
+| pv-2l4h.19 | Silent repost showed dialog for all events (getFeed didn't include categoryIds; FeedService didn't propagate them) — FIXED |
 
 **Known bugs (still open — skip if hit, don't re-file):**
 

@@ -619,6 +619,10 @@ class ActivityPubService {
           association: 'schedules',
           required: false,
         },
+        {
+          association: 'categoryAssignments',
+          required: false,
+        },
       ],
       limit: defaultPageSize,
       offset: page ? page * defaultPageSize : 0,
@@ -741,10 +745,15 @@ class ActivityPubService {
         }))
         : [];
 
+      const categoryIds = Array.isArray(plainEvent.categoryAssignments)
+        ? plainEvent.categoryAssignments.map((ca: any) => ca.category_id)
+        : [];
+
       const transformedEvent = {
         ...plainEvent,
         content: contentByLanguage,
         schedules,
+        categoryIds,
         repostStatus,
         sourceCalendarActorId,
         eventSourceUrl: eventUrl,

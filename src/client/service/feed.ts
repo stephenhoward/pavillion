@@ -60,6 +60,7 @@ export interface FollowerRelationship {
 export type FeedEvent = CalendarEvent & {
   repostStatus: 'none' | 'manual' | 'auto';
   sourceCalendarActorId: string | null;
+  categoryIds?: string[];
 };
 
 /**
@@ -184,6 +185,7 @@ export default class FeedService {
         return Object.assign(event, {
           repostStatus: eventData.repostStatus,
           sourceCalendarActorId: eventData.sourceCalendarActorId ?? null,
+          categoryIds: Array.isArray(eventData.categoryIds) ? eventData.categoryIds : undefined,
         });
       });
 
