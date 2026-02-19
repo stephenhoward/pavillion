@@ -28,6 +28,8 @@ The app runs locally:
 | pv-2l4h.8 | Feed page blank on direct URL navigation — FIXED |
 | pv-2l4h.9 | 'Follow a Calendar' button doesn't auto-open Add Calendar modal — FIXED |
 | pv-2l4h.16 | Re-following an already-followed calendar silently resets auto-repost settings — FIXED |
+| pv-2l4h.17 | Unfollow returns 400: DELETE endpoint used body middleware, frontend sends query param — FIXED |
+| pv-2l4h.18 | Reposted events never appeared in calendar event list (SharedEventEntity stored URL not UUID) — FIXED |
 
 **Known bugs (still open — skip if hit, don't re-file):**
 
