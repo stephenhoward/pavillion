@@ -308,12 +308,15 @@ class ActivityPubService {
     // If not found, this may be a local same-instance event URL.
     // Extract a UUID from the URL and look up the local event to get its canonical AP URL.
     let canonicalEventUrl = eventUrl;
+    let extractedLocalEventId: string | null = null;  // UUID extracted from URL for local events
+
     if (!eventObject) {
       const uuidMatch = eventUrl.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
       if (uuidMatch) {
         const candidateId = uuidMatch[1];
         const localEvent = await this.calendarService.getEventById(candidateId);
         if (localEvent?.calendarId) {
+          extractedLocalEventId = candidateId;  // keep the UUID as fallback
           const localCalendar = await this.calendarService.getCalendar(localEvent.calendarId);
           if (localCalendar) {
             canonicalEventUrl = EventObject.eventUrl(localCalendar, localEvent);
@@ -326,7 +329,7 @@ class ActivityPubService {
       }
     }
 
-    const localEventId = eventObject?.event_id || canonicalEventUrl;
+    const localEventId = eventObject?.event_id || extractedLocalEventId || canonicalEventUrl;
 
     let existingShareEntity = await SharedEventEntity.findOne({
       where: {
@@ -351,8 +354,9 @@ class ActivityPubService {
     this.addToOutbox(calendar, shareActivity);
 
     // Assign categories to the shared event if provided and the event has a local UUID
-    if (categoryIds && categoryIds.length > 0 && eventObject?.event_id) {
-      await this.calendarService.setCategoriesForEvent(account, eventObject.event_id, categoryIds);
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (categoryIds && categoryIds.length > 0 && UUID_REGEX.test(localEventId)) {
+      await this.calendarService.setCategoriesForEvent(account, localEventId, categoryIds);
     }
   }
 
