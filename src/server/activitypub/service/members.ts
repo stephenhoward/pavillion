@@ -356,7 +356,7 @@ class ActivityPubService {
     // Assign categories to the shared event if provided and the event has a local UUID
     const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (categoryIds && categoryIds.length > 0 && UUID_REGEX.test(localEventId)) {
-      await this.calendarService.setCategoriesForEvent(account, localEventId, categoryIds);
+      await this.calendarService.categoryMappingService.assignManualRepostCategories(localEventId, categoryIds);
     }
   }
 

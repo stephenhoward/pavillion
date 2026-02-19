@@ -226,6 +226,28 @@ class CategoryMappingService {
       { ignoreDuplicates: true },
     );
   }
+
+  /**
+   * Assigns explicitly selected local categories to a manually reposted event.
+   * Skips the permission check because shareEvent() already verified the user
+   * can modify the destination calendar before calling this.
+   *
+   * @param eventId - The local event ID to assign categories to
+   * @param categoryIds - Local category IDs selected by the user in the repost modal
+   */
+  async assignManualRepostCategories(
+    eventId: string,
+    categoryIds: string[],
+  ): Promise<void> {
+    if (categoryIds.length === 0) {
+      return;
+    }
+
+    await EventCategoryAssignmentEntity.bulkCreate(
+      categoryIds.map(catId => ({ id: uuidv4(), event_id: eventId, category_id: catId })),
+      { ignoreDuplicates: true },
+    );
+  }
 }
 
 export default CategoryMappingService;
