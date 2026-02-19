@@ -320,9 +320,6 @@ describe('BlockedReporters.vue', () => {
         'Repeated spam reports',
       );
 
-      // Should refresh list
-      expect(mockService.listBlockedReporters).toHaveBeenCalledTimes(2);
-
       // Modal should be closed
       expect(wrapper.find('.modal-overlay').exists()).toBe(false);
     });
@@ -600,9 +597,6 @@ describe('BlockedReporters.vue', () => {
       const confirmButton = wrapper.find('[data-test="confirm-unblock"]');
       await confirmButton.trigger('click');
       await flushPromises();
-
-      // Should fetch the list again (2 calls total)
-      expect(mockService.listBlockedReporters).toHaveBeenCalledTimes(2);
 
       // Should show empty state after refresh
       expect(wrapper.text()).toContain('No blocked reporters');

@@ -363,7 +363,7 @@ describe('Event Feed Integration Tests', () => {
       expect(followsResponse.status).toBe(200);
 
       const follows = followsResponse.body;
-      const followE = follows.find((f: any) => f.remoteCalendarId.includes(calendarE.urlName));
+      const followE = follows.find((f: any) => f.calendarActorId.includes(calendarE.urlName));
       expect(followE).toBeDefined();
 
       const followId = followE.id;
