@@ -27,6 +27,7 @@ import {
   ActivityPubNotSupportedError,
   RemoteProfileFetchError,
   SelfFollowError,
+  AlreadyFollowingError,
 } from '@/common/exceptions/activitypub';
 import { InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
 
@@ -178,15 +179,9 @@ class ActivityPubService {
       },
     });
 
-    // Update the repost policy if follow already exists
+    // Throw if a follow relationship already exists — do not silently modify it
     if (existingFollowEntity) {
-      if (existingFollowEntity.auto_repost_originals !== autoRepostOriginals ||
-          existingFollowEntity.auto_repost_reposts !== autoRepostReposts) {
-        existingFollowEntity.auto_repost_originals = autoRepostOriginals;
-        existingFollowEntity.auto_repost_reposts = autoRepostReposts;
-        await existingFollowEntity.save();
-      }
-      return;
+      throw new AlreadyFollowingError('Already following this calendar');
     }
 
     let actor = await this.actorUrl(calendar);
@@ -286,8 +281,15 @@ class ActivityPubService {
      * @param calendar The calendar to share to
      * @param eventUrl URL of remote event
      * @param autoPosted Whether this share was created automatically by the auto-post system
+     * @param categoryIds Optional local category IDs to assign to the shared event
      */
-  async shareEvent(account: Account, calendar: Calendar, eventUrl: string, autoPosted = false) {
+  async shareEvent(
+    account: Account,
+    calendar: Calendar,
+    eventUrl: string,
+    autoPosted = false,
+    categoryIds?: string[],
+  ) {
 
     if ( ! this.calendarService.userCanModifyCalendar(account, calendar) ) {
       throw new InsufficientCalendarPermissionsError('User does not have permission to modify calendar: ' + calendar.id);
@@ -306,12 +308,15 @@ class ActivityPubService {
     // If not found, this may be a local same-instance event URL.
     // Extract a UUID from the URL and look up the local event to get its canonical AP URL.
     let canonicalEventUrl = eventUrl;
+    let extractedLocalEventId: string | null = null;  // UUID extracted from URL for local events
+
     if (!eventObject) {
       const uuidMatch = eventUrl.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
       if (uuidMatch) {
         const candidateId = uuidMatch[1];
         const localEvent = await this.calendarService.getEventById(candidateId);
         if (localEvent?.calendarId) {
+          extractedLocalEventId = candidateId;  // keep the UUID as fallback
           const localCalendar = await this.calendarService.getCalendar(localEvent.calendarId);
           if (localCalendar) {
             canonicalEventUrl = EventObject.eventUrl(localCalendar, localEvent);
@@ -324,7 +329,7 @@ class ActivityPubService {
       }
     }
 
-    const localEventId = eventObject?.event_id || canonicalEventUrl;
+    const localEventId = eventObject?.event_id || extractedLocalEventId || canonicalEventUrl;
 
     let existingShareEntity = await SharedEventEntity.findOne({
       where: {
@@ -340,13 +345,19 @@ class ActivityPubService {
     let actor = await this.actorUrl(calendar);
     let shareActivity = new AnnounceActivity(actor, canonicalEventUrl);
 
-    SharedEventEntity.create({
+    await SharedEventEntity.create({
       id: shareActivity.id,
       event_id: localEventId,
       calendar_id: calendar.id,
       auto_posted: autoPosted,
     });
     this.addToOutbox(calendar, shareActivity);
+
+    // Assign categories to the shared event if provided and the event has a local UUID
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (categoryIds && categoryIds.length > 0 && UUID_REGEX.test(localEventId)) {
+      await this.calendarService.categoryMappingService.assignManualRepostCategories(localEventId, categoryIds);
+    }
   }
 
   /**
@@ -397,6 +408,7 @@ class ActivityPubService {
         entity.calendar_id,
         entity.auto_repost_originals,
         entity.auto_repost_reposts,
+        entity.calendar_actor_id,
       );
     });
   }
@@ -552,18 +564,6 @@ class ActivityPubService {
   async getFeed(calendar: Calendar, page?: number, pageSize?: number) {
     const defaultPageSize = pageSize || 20;
 
-    console.log(`[MemberService] getFeed called for calendar ID: ${calendar.id}`);
-
-    // First, let's see what we're following (with CalendarActor details)
-    const following = await FollowingCalendarEntity.findAll({
-      where: { calendar_id: calendar.id },
-      include: [{ model: CalendarActorEntity, as: 'calendarActor' }],
-    });
-    console.log(`[MemberService] This calendar is following ${following.length} remote calendars:`);
-    following.forEach(f => {
-      console.log(`[MemberService]   - ${f.calendarActor?.actor_uri || f.calendar_actor_id}`);
-    });
-
     // Query events from calendars this calendar is following.
     // This includes BOTH:
     // - Remote events (calendar_id = null) tracked via EventObjectEntity.attributed_to
@@ -619,18 +619,21 @@ class ActivityPubService {
           association: 'schedules',
           required: false,
         },
+        {
+          association: 'categoryAssignments',
+          required: false,
+        },
       ],
       limit: defaultPageSize,
       offset: page ? page * defaultPageSize : 0,
       order: [['createdAt', 'DESC']],
     });
 
-    console.log(`[MemberService] Found ${events.length} events in feed`);
-
     // Batch fetch all shared events for these events in a single query
-    const eventUrls = events.map(event =>
-      event.event_source_url || `https://${config.get('domain')}/events/${event.id}`,
-    );
+    const eventUrls = events.map(event => {
+      const rawSourceUrl = event.event_source_url as string | null;
+      return rawSourceUrl?.startsWith('https://') ? rawSourceUrl : `https://${config.get('domain')}/events/${event.id}`;
+    });
 
     const sharedEvents = await SharedEventEntity.findAll({
       where: {
@@ -644,14 +647,71 @@ class ActivityPubService {
       sharedEvents.map(shared => [shared.event_id, shared]),
     );
 
-    // Map events with repost status using the lookup map
+    // Batch fetch EventObjectEntity records to resolve source calendar actor URIs
+    // for remote events (calendar_id = null).
+    const remoteEventIds = events
+      .filter(event => event.calendar_id === null)
+      .map(event => event.id);
+
+    const eventObjects = remoteEventIds.length > 0
+      ? await EventObjectEntity.findAll({
+        where: { event_id: remoteEventIds },
+      })
+      : [];
+
+    // Build a map from event_id -> attributed_to (actor_uri) for remote events
+    const eventActorMap = new Map(
+      eventObjects.map(eo => [eo.event_id, eo.attributed_to]),
+    );
+
+    // Build a map from local calendar_id -> actor_uri for local events in the feed
+    // Only needed when there are local events (calendar_id != null)
+    const localCalendarIds = [...new Set(
+      events
+        .filter(event => event.calendar_id !== null)
+        .map(event => event.calendar_id as string),
+    )];
+
+    const localCalendarActors = localCalendarIds.length > 0
+      ? await CalendarActorEntity.findAll({
+        where: {
+          calendar_id: localCalendarIds,
+          actor_type: 'local',
+        },
+      })
+      : [];
+
+    // Build a map from calendar_id -> actor_uri for local calendars
+    const localCalendarActorMap = new Map(
+      localCalendarActors.map(ca => [ca.calendar_id as string, ca.actor_uri]),
+    );
+
+    // Map events with repost status and source calendar actor ID using the lookup maps
     const eventsWithRepostStatus = events.map((event) => {
-      const eventUrl = event.event_source_url || `https://${config.get('domain')}/events/${event.id}`;
+      const rawSourceUrl = event.event_source_url as string | null;
+      const eventUrl = rawSourceUrl?.startsWith('https://') ? rawSourceUrl : `https://${config.get('domain')}/events/${event.id}`;
       const sharedEvent = sharedEventMap.get(eventUrl);
 
       let repostStatus: 'none' | 'manual' | 'auto' = 'none';
       if (sharedEvent) {
         repostStatus = sharedEvent.auto_posted ? 'auto' : 'manual';
+      }
+
+      // Resolve the source calendar actor URI and convert to human-readable identifier
+      let sourceCalendarActorId: string | null = null;
+      if (event.calendar_id === null) {
+        // Remote event: look up actor_uri from EventObjectEntity
+        const actorUri = eventActorMap.get(event.id);
+        if (actorUri) {
+          sourceCalendarActorId = actorUriToIdentifier(actorUri);
+        }
+      }
+      else {
+        // Local event: look up actor_uri from CalendarActorEntity
+        const actorUri = localCalendarActorMap.get(event.calendar_id);
+        if (actorUri) {
+          sourceCalendarActorId = actorUriToIdentifier(actorUri);
+        }
       }
 
       // Transform content array to object keyed by language
@@ -668,18 +728,40 @@ class ActivityPubService {
         });
       }
 
+      // Transform schedules from Sequelize plain object format (snake_case Date fields)
+      // to the format expected by CalendarEventSchedule.fromObject() (camelCase ISO strings).
+      // The Sequelize plain object has start_date/end_date as JS Date objects; the model
+      // expects start/end as ISO string values (matching EventScheduleEntity.toModel()).
+      const schedules = Array.isArray(plainEvent.schedules)
+        ? plainEvent.schedules.map((s: any) => ({
+          id: s.id,
+          start: s.start_date ? new Date(s.start_date).toISOString() : null,
+          end: s.end_date ? new Date(s.end_date).toISOString() : null,
+          frequency: s.frequency,
+          interval: s.interval,
+          count: s.count,
+          byDay: s.by_day ? s.by_day.split(',') : [],
+          isException: s.is_exclusion,
+        }))
+        : [];
+
+      const categoryIds = Array.isArray(plainEvent.categoryAssignments)
+        ? plainEvent.categoryAssignments.map((ca: any) => ca.category_id)
+        : [];
+
       const transformedEvent = {
         ...plainEvent,
         content: contentByLanguage,
+        schedules,
+        categoryIds,
         repostStatus,
+        sourceCalendarActorId,
+        eventSourceUrl: eventUrl,
       };
-
-      console.log(`[MemberService] Transformed event:`, JSON.stringify(transformedEvent, null, 2));
 
       return transformedEvent;
     });
 
-    console.log(`[MemberService] Returning ${eventsWithRepostStatus.length} events with content`);
     return eventsWithRepostStatus;
   }
 }

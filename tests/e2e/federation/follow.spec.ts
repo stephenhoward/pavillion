@@ -80,10 +80,10 @@ test.describe('Calendar Follow/Unfollow', () => {
     const follows = await getFollows(INSTANCE_BETA, bobToken, bobCalendar.id);
 
     // Check that Alpha's calendar is in the follows list
-    // The remoteCalendarId format is: calendar_name@domain
+    // The calendarActorId format is: calendar_name@domain
     const isFollowing = follows.some(
-      (follow) => follow.remoteCalendarId === aliceCalendarRemoteId ||
-                  follow.remoteCalendarId.includes(aliceCalendar.urlName)
+      (follow) => follow.calendarActorId === aliceCalendarRemoteId ||
+                  follow.calendarActorId.includes(aliceCalendar.urlName)
     );
 
     expect(isFollowing).toBe(true);
@@ -160,8 +160,8 @@ test.describe('Calendar Follow/Unfollow', () => {
     const follows = await getFollows(INSTANCE_BETA, bobToken, acceptTestBetaCalendar.id);
 
     const followSucceeded = follows.some(
-      (follow) => follow.remoteCalendarId === aliceCalendarRemoteId ||
-                  follow.remoteCalendarId.includes(acceptTestAlphaCalendar.urlName)
+      (follow) => follow.calendarActorId === aliceCalendarRemoteId ||
+                  follow.calendarActorId.includes(acceptTestAlphaCalendar.urlName)
     );
 
     expect(followSucceeded).toBe(true);
@@ -198,8 +198,8 @@ test.describe('Calendar Follow/Unfollow', () => {
     // Verify the follow exists
     let follows = await getFollows(INSTANCE_BETA, bobToken, unfollowBetaCalendar.id);
     const followBefore = follows.find(
-      (follow) => follow.remoteCalendarId === aliceCalendarRemoteId ||
-                  follow.remoteCalendarId.includes(unfollowAlphaCalendar.urlName)
+      (follow) => follow.calendarActorId === aliceCalendarRemoteId ||
+                  follow.calendarActorId.includes(unfollowAlphaCalendar.urlName)
     );
     expect(followBefore).toBeDefined();
 
@@ -220,8 +220,8 @@ test.describe('Calendar Follow/Unfollow', () => {
     // Verify the follow no longer exists
     follows = await getFollows(INSTANCE_BETA, bobToken, unfollowBetaCalendar.id);
     const followAfter = follows.find(
-      (follow) => follow.remoteCalendarId === aliceCalendarRemoteId ||
-                  follow.remoteCalendarId.includes(unfollowAlphaCalendar.urlName)
+      (follow) => follow.calendarActorId === aliceCalendarRemoteId ||
+                  follow.calendarActorId.includes(unfollowAlphaCalendar.urlName)
     );
 
     expect(followAfter).toBeUndefined();
@@ -260,8 +260,8 @@ test.describe('Calendar Follow/Unfollow', () => {
     // Get the follow ID so we can unfollow
     const follows = await getFollows(INSTANCE_BETA, bobToken, undoBetaCalendar.id);
     const follow = follows.find(
-      (f) => f.remoteCalendarId === aliceCalendarRemoteId ||
-             f.remoteCalendarId.includes(undoAlphaCalendar.urlName)
+      (f) => f.calendarActorId === aliceCalendarRemoteId ||
+             f.calendarActorId.includes(undoAlphaCalendar.urlName)
     );
 
     if (follow) {

@@ -3,11 +3,10 @@ import JobQueueService from '@/server/housekeeping/service/job-queue';
 import BackupService from '@/server/housekeeping/service/backup';
 import RetentionService from '@/server/housekeeping/service/retention';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
-import * as child_process from 'child_process';
 import * as fs from 'fs';
 
-// Mock modules at top level
-vi.mock('child_process');
+// Note: child_process is a Node.js built-in and cannot be mocked via vi.mock() in
+// ESM environments. We spy on BackupService.executeCommand() instead.
 vi.mock('fs');
 vi.mock('@/server/housekeeping/entity/backup', () => ({
   BackupEntity: {
@@ -33,12 +32,6 @@ describe('End-to-End Backup Workflow', () => {
     vi.mocked(fs.statSync).mockReturnValue({ size: 5000 } as any);
     vi.mocked(fs.unlinkSync).mockImplementation(() => undefined);
 
-    // Setup pg_dump mock
-    vi.mocked(child_process.exec).mockImplementation((cmd, callback: any) => {
-      callback(null, '', '');
-      return {} as any;
-    });
-
     // Setup database mocks
     vi.mocked(BackupEntity.create).mockResolvedValue({} as any);
     vi.mocked(BackupEntity.findAll).mockResolvedValue([]);
@@ -51,6 +44,7 @@ describe('End-to-End Backup Workflow', () => {
   it('should complete full backup workflow from scheduling to retention', async () => {
     // Create services
     const backupService = new BackupService();
+    vi.spyOn(backupService as any, 'executeCommand').mockResolvedValue(undefined);
     const retentionService = new RetentionService();
 
     let backupCreated: any = null;
@@ -82,6 +76,7 @@ describe('End-to-End Backup Workflow', () => {
 
   it('should run retention after successful scheduled backup', async () => {
     const backupService = new BackupService();
+    vi.spyOn(backupService as any, 'executeCommand').mockResolvedValue(undefined);
     const retentionService = new RetentionService();
 
     // Create scheduled backup
@@ -99,6 +94,7 @@ describe('End-to-End Backup Workflow', () => {
 
   it('should maintain job order for sequential backups', async () => {
     const backupService = new BackupService();
+    vi.spyOn(backupService as any, 'executeCommand').mockResolvedValue(undefined);
     const processedBackups: any[] = [];
 
     // Simulate multiple sequential backups

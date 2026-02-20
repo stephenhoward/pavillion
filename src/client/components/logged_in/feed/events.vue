@@ -1,10 +1,12 @@
-<script setup>
-import { computed, ref, onMounted, onUnmounted } from 'vue';
+<script setup lang="ts">
+import { computed, ref, nextTick, onMounted, onUnmounted } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
 import { useFeedStore } from '@/client/stores/feedStore';
 import { useToast } from '@/client/composables/useToast';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
+import RepostCategoriesModal from '@/client/components/logged_in/repost-categories-modal.vue';
+import { type FeedEvent } from '@/client/service/feed';
 
 const { t } = useTranslation('feed', { keyPrefix: 'events' });
 const feedStore = useFeedStore();
@@ -13,13 +15,32 @@ const toast = useToast();
 const events = computed(() => feedStore.events);
 const hasMore = computed(() => feedStore.eventsHasMore);
 const isLoading = computed(() => feedStore.isLoadingEvents);
+const pendingRepost = computed(() => feedStore.pendingRepost);
 const sentinelRef = ref(null);
+const repostTriggerElement = ref(null);
 let observer = null;
 
 /**
- * Format event date and time for display
+ * Format event date and time for display.
+ * Reads the start date from the first schedule, falling back to the legacy date field.
  */
-const formatEventDate = (event) => {
+const formatEventDate = (event: FeedEvent) => {
+  // Prefer the start date from the first schedule (the canonical source of truth)
+  const scheduleStart = event.schedules?.[0]?.startDate;
+  if (scheduleStart) {
+    try {
+      // startDate is a Luxon DateTime; format it directly
+      const dt: DateTime = scheduleStart instanceof DateTime
+        ? scheduleStart
+        : DateTime.fromISO(String(scheduleStart));
+      return dt.toLocaleString(DateTime.DATETIME_MED);
+    }
+    catch (error) {
+      console.error('Error formatting schedule date:', error);
+    }
+  }
+
+  // Fall back to the legacy date field for backward compatibility
   if (!event.date) {
     return '';
   }
@@ -37,7 +58,10 @@ const formatEventDate = (event) => {
 /**
  * Get the event title in the appropriate language
  */
-const getEventTitle = (event) => {
+const getEventTitle = (event: FeedEvent) => {
+  if (!event || typeof event.content !== 'function') {
+    return '';
+  }
   const content = event.content('en'); // TODO: Use user's preferred language
   return content?.name || t('untitled_event');
 };
@@ -45,24 +69,48 @@ const getEventTitle = (event) => {
 /**
  * Get the event description in the appropriate language
  */
-const getEventDescription = (event) => {
+const getEventDescription = (event: FeedEvent) => {
   const content = event.content('en'); // TODO: Use user's preferred language
   return content?.description || '';
 };
 
 /**
- * Get calendar identifier for display
+ * Get calendar identifier for display.
+ * Uses the human-readable source calendar actor ID (e.g., calendar@domain.com)
+ * included in each feed event by the backend.
  */
-const getCalendarIdentifier = (event) => {
-  // For federated events, this would come from the event metadata
-  // For now, just show the calendar ID
-  return event.calendarId || 'Unknown';
+const getCalendarIdentifier = (event: FeedEvent) => {
+  return event.sourceCalendarActorId || t('unknown_calendar');
 };
 
 /**
- * Handle repost button click
+ * Derive the pre-selected category objects for the modal from pendingRepost state.
+ * Matches preSelectedIds against allLocalCategories to get proper { id, name } pairs.
  */
-const handleRepost = async (eventId) => {
+const pendingRepostPreSelected = computed(() => {
+  if (!pendingRepost.value) {
+    return [];
+  }
+  const { preSelectedIds, allLocalCategories } = pendingRepost.value;
+  return allLocalCategories.filter((cat) => preSelectedIds.includes(cat.id));
+});
+
+/**
+ * Derive the event title for the pending repost modal.
+ */
+const pendingRepostEventTitle = computed(() => {
+  if (!pendingRepost.value) {
+    return '';
+  }
+  const event = events.value.find((e) => e.id === pendingRepost.value.eventId);
+  return event ? getEventTitle(event) : '';
+});
+
+/**
+ * Handle repost button click — delegates to the store which may set pendingRepost
+ */
+const handleRepost = async (eventId: string, event: MouseEvent) => {
+  repostTriggerElement.value = (event?.currentTarget) ?? null;
   try {
     await feedStore.repostEvent(eventId);
   }
@@ -75,7 +123,7 @@ const handleRepost = async (eventId) => {
 /**
  * Handle unrepost action (clicking on reposted label)
  */
-const handleUnrepost = async (eventId) => {
+const handleUnrepost = async (eventId: string) => {
   try {
     await feedStore.unrepostEvent(eventId);
   }
@@ -83,6 +131,28 @@ const handleUnrepost = async (eventId) => {
     console.error('Error unreposting event:', error);
     toast.error(t('unrepost_error'));
   }
+};
+
+/**
+ * Handle modal confirm: repost with the selected category IDs
+ */
+const handleRepostConfirm = async (categoryIds) => {
+  try {
+    await feedStore.confirmPendingRepost(categoryIds);
+    nextTick(() => { repostTriggerElement.value?.focus(); });
+  }
+  catch (error) {
+    console.error('Error confirming repost:', error);
+    toast.error(t('repost_error'));
+  }
+};
+
+/**
+ * Handle modal cancel: dismiss without reposting
+ */
+const handleRepostCancel = () => {
+  feedStore.cancelPendingRepost();
+  nextTick(() => { repostTriggerElement.value?.focus(); });
 };
 
 /**
@@ -165,9 +235,9 @@ onUnmounted(() => {
             type="button"
             class="repost-button"
             data-testid="repost-button"
-            @click="handleRepost(event.id)"
+            @click="handleRepost(event.id, $event)"
           >
-            Repost
+            {{ t('repost_button') }}
           </button>
 
           <!-- Manually reposted - show clickable label to unrepost -->
@@ -176,9 +246,10 @@ onUnmounted(() => {
             type="button"
             class="reposted-label"
             data-testid="reposted-label"
+            :aria-label="t('unrepost_aria_label')"
             @click="handleUnrepost(event.id)"
           >
-            Reposted
+            {{ t('reposted_button') }}
           </button>
 
           <!-- Auto-posted - show non-clickable label -->
@@ -187,7 +258,7 @@ onUnmounted(() => {
             class="auto-posted-label"
             data-testid="auto-posted-label"
           >
-            Auto-posted
+            {{ t('auto_posted_label') }}
           </span>
         </div>
       </div>
@@ -199,8 +270,13 @@ onUnmounted(() => {
       />
 
       <!-- Loading indicator -->
-      <div v-if="isLoading" class="loading-indicator">
-        <p>Loading more events...</p>
+      <div
+        v-if="isLoading"
+        class="loading-indicator"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        <p>{{ t('loading_more') }}</p>
       </div>
     </div>
 
@@ -214,6 +290,16 @@ onUnmounted(() => {
         {{ t("follow_button") }}
       </button>
     </EmptyLayout>
+
+    <!-- Repost categories modal — shown when pendingRepost is set -->
+    <RepostCategoriesModal
+      v-if="pendingRepost"
+      :event-title="pendingRepostEventTitle"
+      :pre-selected-categories="pendingRepostPreSelected"
+      :all-local-categories="pendingRepost.allLocalCategories"
+      @confirm="handleRepostConfirm"
+      @cancel="handleRepostCancel"
+    />
   </div>
 </template>
 
@@ -250,20 +336,20 @@ div.events-container {
 
         h3.event-title {
           margin: 0 0 var(--pav-space-1) 0;
-          font-size: 18px;
+          font-size: var(--pav-font-size-base);
           font-weight: var(--pav-font-weight-medium);
           color: var(--pav-color-text-primary);
         }
 
         p.event-date {
           margin: 0 0 var(--pav-space-2) 0;
-          font-size: 14px;
+          font-size: var(--pav-font-size-xs);
           color: var(--pav-color-text-secondary);
         }
 
         p.event-description {
           margin: 0 0 var(--pav-space-2) 0;
-          font-size: 14px;
+          font-size: var(--pav-font-size-xs);
           line-height: 1.5;
           color: var(--pav-color-text-primary);
           overflow: hidden;
@@ -275,7 +361,7 @@ div.events-container {
 
         p.event-source {
           margin: 0;
-          font-size: 12px;
+          font-size: var(--pav-font-size-caption);
           color: var(--pav-color-text-secondary);
           font-style: italic;
         }
@@ -288,50 +374,50 @@ div.events-container {
 
         button.repost-button {
           padding: var(--pav-space-2) var(--pav-space-4);
-          background: #f97316;
-          color: white;
+          background: var(--pav-color-orange-500);
+          color: var(--pav-color-text-inverse);
           border: none;
           border-radius: var(--pav-border-radius-sm);
-          font-size: 14px;
+          font-size: var(--pav-font-size-xs);
           font-weight: var(--pav-font-weight-medium);
           cursor: pointer;
           transition: background 0.2s ease;
 
           &:hover {
-            background: #ea580c;
+            background: var(--pav-color-orange-600);
           }
 
           &:active {
-            background: #c2410c;
+            background: var(--pav-color-orange-700);
           }
         }
 
         button.reposted-label {
           padding: var(--pav-space-2) var(--pav-space-4);
-          background: #22c55e;
-          color: white;
+          background: var(--pav-color-success);
+          color: var(--pav-color-text-inverse);
           border: none;
           border-radius: var(--pav-border-radius-sm);
-          font-size: 14px;
+          font-size: var(--pav-font-size-xs);
           font-weight: var(--pav-font-weight-medium);
           cursor: pointer;
           transition: background 0.2s ease;
 
           &:hover {
-            background: #16a34a;
+            filter: brightness(0.85);
           }
 
           &:active {
-            background: #15803d;
+            filter: brightness(0.75);
           }
         }
 
         span.auto-posted-label {
           padding: var(--pav-space-2) var(--pav-space-4);
-          background: #6b7280;
-          color: white;
+          background: var(--pav-color-stone-500);
+          color: var(--pav-color-text-inverse);
           border-radius: var(--pav-border-radius-sm);
-          font-size: 14px;
+          font-size: var(--pav-font-size-xs);
           font-weight: var(--pav-font-weight-medium);
         }
       }
@@ -363,29 +449,29 @@ div.events-container {
 
       p {
         color: var(--pav-color-text-secondary);
-        font-size: 14px;
+        font-size: var(--pav-font-size-xs);
       }
     }
   }
 
   // Empty state styling (inherits from EmptyLayout component)
   button.primary {
-    background: #f97316;
-    color: white;
+    background: var(--pav-color-orange-500);
+    color: var(--pav-color-text-inverse);
     border: none;
     padding: var(--pav-space-3) var(--pav-space-6);
     border-radius: var(--pav-border-radius-md);
-    font-size: 16px;
+    font-size: var(--pav-font-size-sm);
     font-weight: var(--pav-font-weight-medium);
     cursor: pointer;
     transition: background 0.2s ease;
 
     &:hover {
-      background: #ea580c;
+      background: var(--pav-color-orange-600);
     }
 
     &:active {
-      background: #c2410c;
+      background: var(--pav-color-orange-700);
     }
   }
 }

@@ -4,6 +4,7 @@ import CalendarRoutes from '@/server/calendar/api/v1/calendar';
 import EditorRoutes from '@/server/calendar/api/v1/editors';
 import EditorPermissionRoutes from '@/server/calendar/api/v1/editor-permissions';
 import CategoryRoutes from '@/server/calendar/api/v1/categories';
+import CategoryMappingRoutes from '@/server/calendar/api/v1/category_mappings';
 import LocationRoutes from '@/server/calendar/api/v1/location';
 import WidgetRoutes from '@/server/calendar/api/v1/widget';
 import WidgetConfigRoutes from '@/server/calendar/api/v1/widget-config';
@@ -24,6 +25,8 @@ export default class CalendarAPI {
     editorPermissionRoutes.installHandlers(app, '/api/v1');
     let categoryRoutes = new CategoryRoutes(internalAPI);
     categoryRoutes.installHandlers(app, '/api/v1');
+    let categoryMappingRoutes = new CategoryMappingRoutes(internalAPI);
+    categoryMappingRoutes.installHandlers(app, '/api/v1');
     let locationRoutes = new LocationRoutes(internalAPI);
     locationRoutes.installHandlers(app, '/api/v1');
     // Widget configuration routes for admin interface

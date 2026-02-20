@@ -7,8 +7,6 @@ import * as path from 'path';
 import config from 'config';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
 
-const execAsync = promisify(exec);
-
 /**
  * Backup metadata returned after backup creation
  */
@@ -52,6 +50,19 @@ export default class BackupService {
   }
 
   /**
+   * Executes a shell command asynchronously.
+   *
+   * Exposed as a protected method so tests can spy on it without needing to
+   * mock Node.js built-in modules (which are non-configurable in ESM environments).
+   *
+   * @param command - The shell command to execute
+   */
+  protected async executeCommand(command: string): Promise<void> {
+    const execAsync = promisify(exec);
+    await execAsync(command);
+  }
+
+  /**
    * Creates a database backup using pg_dump.
    *
    * @param type - Type of backup ('manual' or 'scheduled')
@@ -69,7 +80,7 @@ export default class BackupService {
       const command = this.buildPgDumpCommand(fullPath);
 
       // Execute backup
-      await execAsync(command);
+      await this.executeCommand(command);
       console.log(`[Backup] pg_dump completed successfully`);
 
       // Verify backup

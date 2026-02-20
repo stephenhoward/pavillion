@@ -686,6 +686,25 @@ class ProcessInboxService {
       }
     }
 
+    // Extract source categories from AP payload (defensive parsing)
+    let sourceCategories: Array<{id: string, name?: string}> | null = null;
+    try {
+      if (Array.isArray(message.object?.categories) && message.object.categories.length > 0) {
+        const parsed = (message.object.categories as unknown[])
+          .filter((uri): uri is string => typeof uri === 'string')
+          .map((uri: string) => {
+            const parts = uri.split('/');
+            const id = parts[parts.length - 1];
+            return { id };
+          })
+          .filter((cat) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cat.id));
+        sourceCategories = parsed.length > 0 ? parsed : null;
+      }
+    }
+    catch {
+      // ignore parse failures - proceed without categories
+    }
+
     // Atomically find or create the EventObjectEntity to avoid race conditions
     const localEventId = uuidv4();
     const [, created] = await EventObjectEntity.findOrCreate({
@@ -694,6 +713,7 @@ class ProcessInboxService {
         event_id: localEventId,
         ap_id: apObjectId,
         attributed_to: actorUri,
+        source_categories: sourceCategories,
       },
     });
 
@@ -735,6 +755,8 @@ class ProcessInboxService {
   /**
    * Checks auto-repost policy and performs automatic repost if conditions are met.
    * Enforces loop prevention and security guards.
+   * After creating the SharedEventEntity, applies category mappings from the stored
+   * AP event data and creates EventCategoryAssignmentEntity records (failure-safe).
    *
    * @param calendar - The local calendar receiving the event
    * @param sourceActorUri - The actor URI of the event source
@@ -834,6 +856,20 @@ class ProcessInboxService {
 
     // Add to outbox
     await addToOutbox(this.eventBus, calendar, announceActivity);
+
+    // Apply category mappings from stored AP payload (failure-safe)
+    // remoteCalendar.id is the CalendarActorEntity UUID used as the source actor key
+    try {
+      await this.calendarInterface.categoryMappingService.assignAutoRepostCategories(
+        calendar.id,
+        remoteCalendar.id,
+        eventObject.event_id,
+        eventObject.source_categories ?? [],
+      );
+    }
+    catch (error) {
+      console.warn('[AUTO-REPOST] Category mapping or assignment failed, proceeding without categories:', error);
+    }
 
     console.log(`[AUTO-REPOST] ✅ SUCCESS: Auto-reposted event ${eventApId} from ${sourceActorUri} (isOriginal: ${isOriginal})`);
   }

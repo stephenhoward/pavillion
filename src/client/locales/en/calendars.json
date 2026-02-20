@@ -176,6 +176,23 @@
     "deselect_all": "Deselect All",
     "deselect_all_label": "Deselect all selected categories"
   },
+  "category_mapping": {
+    "no_mapping": "No mapping",
+    "no_source_categories": "Source calendar has no categories",
+    "dropdown_label": "Map \"{{name}}\" to local category",
+    "group_label": "Map source categories to local categories",
+    "page_title": "Category Mappings",
+    "page_subtitle": "Map categories from this followed calendar to your local categories.",
+    "loading": "Loading category data...",
+    "load_error": "Failed to load category data",
+    "save": "Save mappings",
+    "saving": "Saving...",
+    "save_success": "Mappings saved",
+    "save_error": "Failed to save mappings",
+    "category_mappings_link": "Category mappings",
+    "category_mappings_link_for": "Category mappings for {{calendar}}",
+    "back_to_feed": "Back to Feed"
+  },
   "settings": {
     "title": "Calendar Settings",
     "loading": "Loading settings...",

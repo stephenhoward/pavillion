@@ -11,6 +11,7 @@ import CalendarService from '../service/calendar';
 import EventService from '../service/events';
 import LocationService from '../service/locations';
 import CategoryService from '../service/categories';
+import CategoryMappingService from '@/server/calendar/service/category_mapping';
 import WidgetDomainService from '../service/widget_domain';
 import { EventEmitter } from 'events';
 import EventInstanceService from '../service/event_instance';
@@ -38,6 +39,7 @@ export default class CalendarInterface {
   private eventInstanceService: EventInstanceService;
   private categoryService: CategoryService;
   private widgetDomainService: WidgetDomainService;
+  public categoryMappingService: CategoryMappingService;
 
   constructor(
     eventBus: EventEmitter,
@@ -51,6 +53,7 @@ export default class CalendarInterface {
     this.eventInstanceService = new EventInstanceService(eventBus);
     this.categoryService = new CategoryService(this.calendarService);
     this.widgetDomainService = new WidgetDomainService();
+    this.categoryMappingService = new CategoryMappingService();
   }
 
   // Calendar operations

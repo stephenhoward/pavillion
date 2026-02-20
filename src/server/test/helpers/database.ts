@@ -29,6 +29,7 @@ import {
   ActivityPubOutboxMessageEntity,
 } from '@/server/activitypub/entity/activitypub';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
+import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { EventEntity } from '@/server/calendar/entity/event';
 
@@ -55,6 +56,9 @@ export async function setupActivityPubSchema(): Promise<void> {
 
   // Sync EventEntity last
   await EventEntity.sync({ force: true });
+
+  // Sync EventObjectEntity (ap_event_object) — links AP identity to local events
+  await EventObjectEntity.sync({ force: true });
 }
 
 /**
@@ -65,6 +69,7 @@ export async function setupActivityPubSchema(): Promise<void> {
  */
 export async function teardownActivityPubSchema(): Promise<void> {
   // Drop tables in reverse order of dependencies
+  await EventObjectEntity.drop();
   await EventActivityEntity.drop();
   await SharedEventEntity.drop();
   await ActivityPubOutboxMessageEntity.drop();

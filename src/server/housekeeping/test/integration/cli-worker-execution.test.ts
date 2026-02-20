@@ -2,11 +2,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import StorageService from '@/server/housekeeping/service/storage';
 import BackupService from '@/server/housekeeping/service/backup';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
-import * as child_process from 'child_process';
 import * as fs from 'fs';
 
-// Mock modules
-vi.mock('child_process');
+// Note: child_process is a Node.js built-in and cannot be mocked via vi.mock() in
+// ESM environments. We spy on BackupService.executeCommand() instead.
 vi.mock('fs');
 vi.mock('@/server/housekeeping/entity/backup', () => ({
   BackupEntity: {
@@ -36,12 +35,6 @@ describe('CLI to Worker Execution Integration', () => {
       bsize: 4096,
     } as any);
 
-    // Mock pg_dump
-    vi.mocked(child_process.exec).mockImplementation((cmd, callback: any) => {
-      callback(null, '', '');
-      return {} as any;
-    });
-
     // Mock database
     vi.mocked(BackupEntity.create).mockResolvedValue({
       id: 'backup-123',
@@ -61,6 +54,7 @@ describe('CLI to Worker Execution Integration', () => {
 
   it('should execute backup service layer that worker would call', async () => {
     const backupService = new BackupService();
+    vi.spyOn(backupService as any, 'executeCommand').mockResolvedValue(undefined);
 
     // Simulate worker executing backup (what would happen after CLI queues job)
     const backup = await backupService.createBackup('manual');

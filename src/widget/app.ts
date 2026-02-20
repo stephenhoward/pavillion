@@ -10,14 +10,20 @@ import Config from '@/client/service/config';
 
 /**
  * Widget app initialization
- * Loads configuration and initializes Vue app with router, i18n, and Pinia
+ * Loads configuration and initializes Vue app with router, i18n, and Pinia.
+ * The `lang` URL parameter is set by the widget SDK after detecting the language
+ * from the embedding page (data-lang attribute → <html lang> → instance default → 'en').
  */
 Config.init().then((config) => {
   const app: App = createApp(AppVue);
   const pinia = createPinia();
 
-  // Initialize i18next for translations
-  initI18Next();
+  // Read the resolved language from the URL parameter set by the widget SDK
+  const urlParams = new URLSearchParams(window.location.search);
+  const lang = urlParams.get('lang') || undefined;
+
+  // Initialize i18next with the resolved language
+  initI18Next(lang);
 
   // Install plugins
   app.use(pinia);

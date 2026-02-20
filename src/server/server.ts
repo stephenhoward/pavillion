@@ -7,7 +7,7 @@ import i18next from 'i18next';
 import Backend from 'i18next-fs-backend';
 import { EventEmitter } from 'events';
 
-import db, { seedDB } from '@/server/common/entity/db';
+import db, { seedDB, seedFollowData } from '@/server/common/entity/db';
 import { runMigrations } from '@/server/common/migrations/runner';
 import { router as indexRoutes } from '@/server/app_routes';
 import { validateProductionSecrets } from '@/server/common/helper/production-validation';
@@ -25,7 +25,10 @@ import SetupDomain from './setup';
 import SubscriptionDomain from './subscription';
 import { createSetupModeMiddleware } from './setup/middleware/setup-mode';
 import { backfillUserActors } from '@/server/activitypub/scripts/backfill-user-actors';
+import { backfillCalendarActors } from '@/server/activitypub/scripts/backfill-calendar-actors';
 import { globalErrorHandler } from '@/server/common/middleware/error-handler';
+import { localeMiddleware } from '@/server/common/middleware/locale';
+import { createI18nConfig } from '@/common/i18n/config';
 
 /**
  * Validates production environment configuration.
@@ -94,9 +97,15 @@ async function initializeDatabase(): Promise<void> {
       await seedDB();
       console.log('Database synced and seeded successfully.');
 
-      // Backfill UserActors for seeded accounts
+      // Backfill UserActors and CalendarActors for seeded accounts/calendars
       await backfillUserActors(undefined, false);
       console.log('User actors backfilled successfully.');
+      await backfillCalendarActors(undefined, false);
+      console.log('Calendar actors backfilled successfully.');
+
+      // Seed follow relationships and category mappings (needs actor IDs from backfill)
+      await seedFollowData();
+      console.log('Follow data seeded successfully.');
     }
   }
   else {
@@ -213,15 +222,18 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
     next();
   });
 
+  // Resolve req.locale for every request using the detection chain:
+  // URL prefix → account language → cookie → Accept-Language → instance default → 'en'
+  app.use(localeMiddleware);
+
   app.set("views", path.join(path.resolve(), "src/server/templates"));
-  // Initialize i18next with default configuration
-  i18next.use(Backend).init({
-    fallbackLng: 'en',
+  // Initialize i18next with shared base config plus server-specific backend plugin
+  i18next.use(Backend).init(createI18nConfig({
     initAsync: false,
     backend: {
       loadPath: path.join(path.resolve(), "src/server/locales/{{lng}}/{{ns}}.json"),
     },
-  });
+  }));
 
   // Add a global translation helper to Handlebars
   handlebars.registerHelper('t', function(key: string, options: any) {

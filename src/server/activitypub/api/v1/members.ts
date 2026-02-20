@@ -15,6 +15,7 @@ import {
   ActivityPubNotSupportedError,
   RemoteProfileFetchError,
   SelfFollowError,
+  AlreadyFollowingError,
 } from '@/common/exceptions/activitypub';
 import { InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
 
@@ -33,7 +34,7 @@ export default class ActivityPubMemberRoutes {
     router.post('/social/follows', ExpressHelper.loggedInOnly, this.requireCalendarId.bind(this), this.followCalendar.bind(this));
     router.get('/social/follows', ExpressHelper.loggedInOnly, this.requireCalendarIdQuery.bind(this), this.getFollows.bind(this));
     router.patch('/social/follows/:id', ExpressHelper.loggedInOnly, this.requireCalendarId.bind(this), this.updateFollowPolicy.bind(this));
-    router.delete('/social/follows/:id', ExpressHelper.loggedInOnly, this.requireCalendarId.bind(this), this.unfollowCalendar.bind(this));
+    router.delete('/social/follows/:id', ExpressHelper.loggedInOnly, this.requireCalendarIdQuery.bind(this), this.unfollowCalendar.bind(this));
     router.get('/social/followers', ExpressHelper.loggedInOnly, this.requireCalendarIdQuery.bind(this), this.getFollowers.bind(this));
     router.get('/social/feed', ExpressHelper.loggedInOnly, this.requireCalendarIdQuery.bind(this), this.getFeed.bind(this));
     router.post('/social/shares', ExpressHelper.loggedInOnly, this.requireCalendarId.bind(this), this.shareEvent.bind(this));
@@ -369,6 +370,12 @@ export default class ActivityPubMemberRoutes {
             errorName: 'SelfFollowError',
           });
         }
+        else if (error instanceof AlreadyFollowingError) {
+          res.status(409).json({
+            error: error.message,
+            errorName: 'AlreadyFollowingError',
+          });
+        }
         else if (error instanceof InvalidRepostPolicySettingsError) {
           res.status(400).json({
             error: error.message,
@@ -409,7 +416,7 @@ export default class ActivityPubMemberRoutes {
       return;
     }
 
-    const calendar = req.body.calendar;
+    const calendar = (req as any).calendar;
     // Decode the URL-encoded follow ID from the path parameter
     const followId = req.params.id ? decodeURIComponent(req.params.id) : undefined;
 
@@ -476,7 +483,10 @@ export default class ActivityPubMemberRoutes {
 
     if (typeof req.body.eventId === 'string') {
       try {
-        await this.service.shareEvent(account, req.body.calendar, req.body.eventId);
+        const categoryIds: string[] | undefined = Array.isArray(req.body.categoryIds)
+          ? req.body.categoryIds
+          : undefined;
+        await this.service.shareEvent(account, req.body.calendar, req.body.eventId, false, categoryIds);
         res.status(200).send('Shared');
       }
       catch (error: any) {

@@ -81,11 +81,11 @@ export interface EventResponse {
 
 /**
  * Follow relationship - represents a calendar the local calendar is following
- * The remoteCalendarId is in format: calendar_name@domain
+ * The calendarActorId is in format: calendar_name@domain
  */
 export interface FollowResponse {
   id: string;
-  remoteCalendarId: string;
+  calendarActorId: string;
   calendarId: string;
   repostPolicy: string;
 }
@@ -309,16 +309,11 @@ export async function unfollowCalendar(
   localCalendarId: string,
   remoteCalendarId: string,
 ): Promise<void> {
-  const response = await fetch(`${instance.baseUrl}/api/v1/social/follows/${encodeURIComponent(followId)}`, {
+  const response = await fetch(`${instance.baseUrl}/api/v1/social/follows/${encodeURIComponent(followId)}?calendarId=${encodeURIComponent(localCalendarId)}`, {
     method: 'DELETE',
     headers: {
-      'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
-    body: JSON.stringify({
-      calendarId: localCalendarId,
-      remoteCalendar: remoteCalendarId,
-    }),
   });
 
   if (!response.ok) {
@@ -333,7 +328,7 @@ export async function unfollowCalendar(
  * @param instance - The instance to query
  * @param token - Authentication token
  * @param calendarId - ID of the calendar to get follows for
- * @returns Array of follow objects with remoteCalendarId in format calendar@domain
+ * @returns Array of follow objects with calendarActorId in format calendar@domain
  * @throws Error if the request fails
  */
 export async function getFollows(
@@ -364,7 +359,7 @@ export async function getFollows(
  * @param instance - The instance to query
  * @param token - Authentication token
  * @param calendarId - ID of the calendar to get followers for
- * @returns Array of follower objects with remoteCalendarId in format calendar@domain
+ * @returns Array of follower objects with calendarActorId in format calendar@domain
  * @throws Error if the request fails
  */
 export async function getFollowers(

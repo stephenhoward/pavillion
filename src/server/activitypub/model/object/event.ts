@@ -38,6 +38,13 @@ class EventObject extends ActivityPubObject {
     if( event.parentEvent ) {
       this.parentEvent = event.parentEvent.id;
     }
+
+    // Serialize event categories as public API URIs
+    if (event.categories && event.categories.length > 0) {
+      this.categories = event.categories.map(cat =>
+        `https://${domain}/api/public/v1/calendar/${calendar.urlName}/categories/${cat.id}`,
+      );
+    }
   }
 }
 

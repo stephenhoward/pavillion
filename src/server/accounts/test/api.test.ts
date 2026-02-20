@@ -20,6 +20,7 @@ import {
   AccountApplicationAlreadyExistsError,
   AccountApplicationsClosedError,
 } from '../exceptions';
+import { ValidationError } from '../../../common/exceptions/base';
 
 describe('API v1', () => {
 
@@ -293,6 +294,90 @@ describe('Account API', () => {
     expect(response.status).toBe(200);
     expect(response.body.displayName).toBe('New Name');
     expect(updateStub.calledWith(testAccount, 'New Name')).toBe(true);
+  });
+
+  it('PATCH /me/profile: should update language preference', async () => {
+    const testAccount = new Account('user-id', 'testuser', 'test@example.com');
+    const updatedAccount = new Account('user-id', 'testuser', 'test@example.com');
+    updatedAccount.language = 'es';
+
+    const updateStub = sandbox.stub(accountsInterface, 'updateProfile');
+    updateStub.resolves(updatedAccount);
+
+    router.patch('/me/profile', (req, res, next) => {
+      req.user = testAccount;
+      next();
+    }, accountHandlers.updateProfile.bind(accountHandlers));
+
+    const response = await request(testApp(router))
+      .patch('/me/profile')
+      .send({ displayName: 'Test User', language: 'es' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.language).toBe('es');
+    expect(updateStub.called).toBe(true);
+    expect(updateStub.firstCall.args[2]).toBe('es');
+  });
+
+  it('PATCH /me/profile: should pass language to service when provided', async () => {
+    const testAccount = new Account('user-id', 'testuser', 'test@example.com');
+    const updatedAccount = new Account('user-id', 'testuser', 'test@example.com');
+
+    const updateStub = sandbox.stub(accountsInterface, 'updateProfile');
+    updateStub.resolves(updatedAccount);
+
+    router.patch('/me/profile', (req, res, next) => {
+      req.user = testAccount;
+      next();
+    }, accountHandlers.updateProfile.bind(accountHandlers));
+
+    await request(testApp(router))
+      .patch('/me/profile')
+      .send({ displayName: 'Test User', language: 'en' });
+
+    expect(updateStub.firstCall.args[1]).toBe('Test User');
+    expect(updateStub.firstCall.args[2]).toBe('en');
+  });
+
+  it('PATCH /me/profile: should pass undefined language to service when not provided', async () => {
+    const testAccount = new Account('user-id', 'testuser', 'test@example.com');
+    const updatedAccount = new Account('user-id', 'testuser', 'test@example.com');
+
+    const updateStub = sandbox.stub(accountsInterface, 'updateProfile');
+    updateStub.resolves(updatedAccount);
+
+    router.patch('/me/profile', (req, res, next) => {
+      req.user = testAccount;
+      next();
+    }, accountHandlers.updateProfile.bind(accountHandlers));
+
+    await request(testApp(router))
+      .patch('/me/profile')
+      .send({ displayName: 'Test User' });
+
+    expect(updateStub.firstCall.args[1]).toBe('Test User');
+    expect(updateStub.firstCall.args[2]).toBeUndefined();
+  });
+
+  it('PATCH /me/profile: should return 400 when service throws ValidationError for invalid language', async () => {
+    const testAccount = new Account('user-id', 'testuser', 'test@example.com');
+
+    const updateStub = sandbox.stub(accountsInterface, 'updateProfile');
+    updateStub.rejects(new ValidationError('Invalid language code'));
+
+    router.patch('/me/profile', (req, res, next) => {
+      req.user = testAccount;
+      next();
+    }, accountHandlers.updateProfile.bind(accountHandlers));
+
+    const response = await request(testApp(router))
+      .patch('/me/profile')
+      .send({ displayName: 'Test User', language: 'xx' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('Invalid language code');
+    expect(response.body.errorName).toBe('ValidationError');
+    expect(updateStub.called).toBe(true);
   });
 
 });

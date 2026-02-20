@@ -14,6 +14,9 @@ const mockFeedService = {
   shareEvent: vi.fn(),
   unshareEvent: vi.fn(),
   updateFollowPolicy: vi.fn(),
+  getSourceCategories: vi.fn(),
+  getCategoryMappings: vi.fn(),
+  getCalendarCategories: vi.fn(),
 };
 
 // Mock the FeedService module
@@ -236,12 +239,13 @@ describe('FeedStore', () => {
     beforeEach(() => {
       calendarStore.setSelectedCalendar('cal-1');
       feedStore.events = [
-        { id: 'event-1', title: 'Event 1', repostStatus: 'none' },
-        { id: 'event-2', title: 'Event 2', repostStatus: 'manual' },
+        { id: 'event-1', calendarId: null, eventSourceUrl: 'https://remote.example/events/event-1', categories: [], repostStatus: 'none' },
+        { id: 'event-2', calendarId: null, eventSourceUrl: 'https://remote.example/events/event-2', categories: [], repostStatus: 'manual' },
       ];
     });
 
-    it('should optimistically update repost status on shareEvent', async () => {
+    it('should optimistically update repost status when no follow is found', async () => {
+      // No follows set means _doRepost is called directly (silent path)
       mockFeedService.shareEvent.mockResolvedValue(undefined);
 
       const promise = feedStore.repostEvent('event-1');
@@ -251,7 +255,7 @@ describe('FeedStore', () => {
 
       await promise;
 
-      expect(mockFeedService.shareEvent).toHaveBeenCalledWith('cal-1', 'event-1');
+      expect(mockFeedService.shareEvent).toHaveBeenCalledWith('cal-1', 'https://remote.example/events/event-1', []);
       expect(feedStore.events[0].repostStatus).toBe('manual');
     });
 
@@ -285,6 +289,210 @@ describe('FeedStore', () => {
 
       // Should rollback to original status
       expect(feedStore.events[1].repostStatus).toBe('manual');
+    });
+  });
+
+  describe('smart repost flow', () => {
+    beforeEach(() => {
+      calendarStore.setSelectedCalendar('cal-1');
+      feedStore.follows = [
+        {
+          id: 'follow-1',
+          calendarActorId: 'source@remote.example',
+          calendarActorUuid: 'uuid-follow-1',
+          calendarId: 'cal-1',
+          autoRepostOriginals: false,
+          autoRepostReposts: false,
+        },
+      ];
+      feedStore.events = [
+        {
+          id: 'event-1',
+          calendarId: null,
+          eventSourceUrl: 'https://remote.example/events/abc',
+          categories: [],
+          repostStatus: 'none',
+        },
+      ];
+    });
+
+    it('should repost silently when source has no categories', async () => {
+      mockFeedService.getSourceCategories.mockResolvedValue([]);
+      mockFeedService.shareEvent.mockResolvedValue(undefined);
+
+      await feedStore.repostEvent('event-1');
+
+      expect(mockFeedService.getSourceCategories).toHaveBeenCalledWith('cal-1', 'uuid-follow-1');
+      expect(mockFeedService.shareEvent).toHaveBeenCalledWith('cal-1', 'https://remote.example/events/abc', []);
+      expect(feedStore.pendingRepost).toBeNull();
+    });
+
+    it('should repost silently when all source categories are mapped', async () => {
+      const sourceCategories = [
+        { id: 'src-cat-1', name: 'Music' },
+        { id: 'src-cat-2', name: 'Sports' },
+      ];
+      const mappings = [
+        { sourceCategoryId: 'src-cat-1', sourceCategoryName: 'Music', localCategoryId: 'local-cat-1' },
+        { sourceCategoryId: 'src-cat-2', sourceCategoryName: 'Sports', localCategoryId: 'local-cat-2' },
+      ];
+
+      mockFeedService.getSourceCategories.mockResolvedValue(sourceCategories);
+      mockFeedService.getCategoryMappings.mockResolvedValue(mappings);
+      mockFeedService.shareEvent.mockResolvedValue(undefined);
+
+      await feedStore.repostEvent('event-1');
+
+      expect(mockFeedService.shareEvent).toHaveBeenCalledWith('cal-1', 'https://remote.example/events/abc', ['local-cat-1', 'local-cat-2']);
+      expect(feedStore.pendingRepost).toBeNull();
+    });
+
+    it('should set pendingRepost when some source categories are unmapped', async () => {
+      const sourceCategories = [
+        { id: 'src-cat-1', name: 'Music' },
+        { id: 'src-cat-2', name: 'Sports' },
+      ];
+      const mappings = [
+        { sourceCategoryId: 'src-cat-1', sourceCategoryName: 'Music', localCategoryId: 'local-cat-1' },
+        // src-cat-2 is NOT mapped
+      ];
+      const localCategories = [
+        { id: 'local-cat-1', name: 'Arts' },
+        { id: 'local-cat-2', name: 'Recreation' },
+      ];
+
+      mockFeedService.getSourceCategories.mockResolvedValue(sourceCategories);
+      mockFeedService.getCategoryMappings.mockResolvedValue(mappings);
+      mockFeedService.getCalendarCategories.mockResolvedValue(localCategories);
+
+      await feedStore.repostEvent('event-1');
+
+      // Should NOT have called shareEvent yet
+      expect(mockFeedService.shareEvent).not.toHaveBeenCalled();
+
+      // Should have set pendingRepost
+      expect(feedStore.pendingRepost).not.toBeNull();
+      expect(feedStore.pendingRepost?.eventId).toBe('event-1');
+      expect(feedStore.pendingRepost?.preSelectedIds).toEqual(['local-cat-1']);
+      expect(feedStore.pendingRepost?.sourceCategories).toEqual(sourceCategories);
+      expect(feedStore.pendingRepost?.allLocalCategories).toEqual(localCategories);
+
+      // Should NOT have applied optimistic update yet
+      expect(feedStore.events[0].repostStatus).toBe('none');
+    });
+
+    it('should set pendingRepost with empty preSelectedIds when no mappings exist', async () => {
+      const sourceCategories = [{ id: 'src-cat-1', name: 'Music' }];
+
+      mockFeedService.getSourceCategories.mockResolvedValue(sourceCategories);
+      mockFeedService.getCategoryMappings.mockResolvedValue([]);
+      mockFeedService.getCalendarCategories.mockResolvedValue([{ id: 'local-cat-1', name: 'Arts' }]);
+
+      await feedStore.repostEvent('event-1');
+
+      expect(feedStore.pendingRepost?.preSelectedIds).toEqual([]);
+    });
+
+    it('confirmPendingRepost should call shareEvent with selected IDs and clear pendingRepost', async () => {
+      // Set up a pending repost
+      feedStore.pendingRepost = {
+        eventId: 'event-1',
+        preSelectedIds: ['local-cat-1'],
+        sourceCategories: [{ id: 'src-cat-1', name: 'Music' }],
+        allLocalCategories: [{ id: 'local-cat-1', name: 'Arts' }],
+      };
+      mockFeedService.shareEvent.mockResolvedValue(undefined);
+
+      await feedStore.confirmPendingRepost(['local-cat-1', 'local-cat-2']);
+
+      expect(mockFeedService.shareEvent).toHaveBeenCalledWith('cal-1', 'https://remote.example/events/abc', ['local-cat-1', 'local-cat-2']);
+      expect(feedStore.pendingRepost).toBeNull();
+      expect(feedStore.events[0].repostStatus).toBe('manual');
+    });
+
+    it('cancelPendingRepost should clear pendingRepost without calling shareEvent', () => {
+      feedStore.pendingRepost = {
+        eventId: 'event-1',
+        preSelectedIds: [],
+        sourceCategories: [{ id: 'src-cat-1', name: 'Music' }],
+        allLocalCategories: [],
+      };
+
+      feedStore.cancelPendingRepost();
+
+      expect(feedStore.pendingRepost).toBeNull();
+      expect(mockFeedService.shareEvent).not.toHaveBeenCalled();
+      // Event status should be unchanged
+      expect(feedStore.events[0].repostStatus).toBe('none');
+    });
+
+    it('should repost silently when follow cannot be determined (multiple follows, no domain match)', async () => {
+      // Add a second follow with different domain
+      feedStore.follows = [
+        {
+          id: 'follow-1',
+          calendarActorId: 'source@remote.example',
+          calendarActorUuid: 'uuid-follow-1',
+          calendarId: 'cal-1',
+          autoRepostOriginals: false,
+          autoRepostReposts: false,
+        },
+        {
+          id: 'follow-2',
+          calendarActorId: 'other@another.example',
+          calendarActorUuid: 'uuid-follow-2',
+          calendarId: 'cal-1',
+          autoRepostOriginals: false,
+          autoRepostReposts: false,
+        },
+      ];
+      // Event from a different domain not in follows
+      feedStore.events = [
+        {
+          id: 'event-1',
+          calendarId: null,
+          eventSourceUrl: 'https://unknown.example/events/abc',
+          categories: [],
+          repostStatus: 'none',
+        },
+      ];
+      mockFeedService.shareEvent.mockResolvedValue(undefined);
+
+      await feedStore.repostEvent('event-1');
+
+      // Should repost silently without checking categories
+      expect(mockFeedService.getSourceCategories).not.toHaveBeenCalled();
+      expect(mockFeedService.shareEvent).toHaveBeenCalledWith('cal-1', 'https://unknown.example/events/abc', []);
+    });
+
+    it('should repost silently when getSourceCategories fails', async () => {
+      mockFeedService.getSourceCategories.mockRejectedValue(new Error('API Error'));
+      mockFeedService.shareEvent.mockResolvedValue(undefined);
+
+      await feedStore.repostEvent('event-1');
+
+      expect(mockFeedService.shareEvent).toHaveBeenCalledWith('cal-1', 'https://remote.example/events/abc', []);
+      expect(feedStore.pendingRepost).toBeNull();
+    });
+
+    it('should use single follow as fallback when event domain does not match', async () => {
+      // Single follow, event has different domain
+      feedStore.events = [
+        {
+          id: 'event-1',
+          calendarId: null,
+          eventSourceUrl: 'https://different.example/events/abc',
+          categories: [],
+          repostStatus: 'none',
+        },
+      ];
+      mockFeedService.getSourceCategories.mockResolvedValue([]);
+      mockFeedService.shareEvent.mockResolvedValue(undefined);
+
+      await feedStore.repostEvent('event-1');
+
+      // Should still call getSourceCategories with the single follow's actorId
+      expect(mockFeedService.getSourceCategories).toHaveBeenCalledWith('cal-1', 'uuid-follow-1');
     });
   });
 

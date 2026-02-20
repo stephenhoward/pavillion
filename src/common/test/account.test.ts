@@ -43,6 +43,7 @@ describe('Account Model', () => {
       email: 'test@example.com',
       displayName: 'Test User Display',
       roles: ['user', 'admin'],
+      language: 'en',
     });
   });
 
@@ -58,7 +59,17 @@ describe('Account Model', () => {
       email: 'test@example.com',
       displayName: null,
       roles: ['user'],
+      language: 'en',
     });
+  });
+
+  it('toObject: should include language field', () => {
+    const account = new Account('test-id', 'testuser', 'test@example.com');
+    account.language = 'es';
+
+    const obj = account.toObject();
+
+    expect(obj.language).toBe('es');
   });
 
   it('fromObject: should create instance with displayName', () => {
@@ -106,6 +117,47 @@ describe('Account Model', () => {
     expect(account.displayName).toBe(null);
   });
 
+  it('fromObject: should hydrate language field from object', () => {
+    const obj = {
+      id: 'test-id',
+      username: 'testuser',
+      email: 'test@example.com',
+      roles: ['user'],
+      language: 'es',
+    };
+
+    const account = Account.fromObject(obj);
+
+    expect(account.language).toBe('es');
+  });
+
+  it('fromObject: should default language to "en" when not set', () => {
+    const obj = {
+      id: 'test-id',
+      username: 'testuser',
+      email: 'test@example.com',
+      roles: ['user'],
+    };
+
+    const account = Account.fromObject(obj);
+
+    expect(account.language).toBe('en');
+  });
+
+  it('fromObject: should default language to "en" when invalid language code provided', () => {
+    const obj = {
+      id: 'test-id',
+      username: 'testuser',
+      email: 'test@example.com',
+      roles: ['user'],
+      language: 'invalid-lang',
+    };
+
+    const account = Account.fromObject(obj);
+
+    expect(account.language).toBe('en');
+  });
+
   it('should maintain data integrity through toObject-fromObject conversion with displayName', () => {
     const original = new Account('round-trip-id', 'testuser', 'test@example.com');
     original.displayName = 'Test Display Name';
@@ -135,6 +187,26 @@ describe('Account Model', () => {
     expect(roundTrip.roles).toEqual(original.roles);
   });
 
+  it('should maintain language through serialization round-trip', () => {
+    const original = new Account('round-trip-id', 'testuser', 'test@example.com');
+    original.language = 'es';
+
+    const obj = original.toObject();
+    const roundTrip = Account.fromObject(obj);
+
+    expect(roundTrip.language).toBe('es');
+  });
+
+  it('should default language to "en" through round-trip when language is default', () => {
+    const original = new Account('round-trip-id', 'testuser', 'test@example.com');
+    // language defaults to 'en'
+
+    const obj = original.toObject();
+    const roundTrip = Account.fromObject(obj);
+
+    expect(roundTrip.language).toBe('en');
+  });
+
   it('clone: should create deep copy with displayName', () => {
     const original = new Account('test-id', 'testuser', 'test@example.com');
     original.displayName = 'Original Display Name';
@@ -148,6 +220,15 @@ describe('Account Model', () => {
     expect(clone.email).toBe(original.email);
     expect(clone.displayName).toBe(original.displayName);
     expect(clone.roles).toEqual(original.roles);
+  });
+
+  it('clone: should preserve language field', () => {
+    const original = new Account('test-id', 'testuser', 'test@example.com');
+    original.language = 'es';
+
+    const clone = original.clone();
+
+    expect(clone.language).toBe('es');
   });
 
   it('hasRole: should work correctly with roles', () => {

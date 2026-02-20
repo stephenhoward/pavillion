@@ -14,7 +14,7 @@
           class="btn--ghost"
           type="button"
           @click="close"
-          aria-label="Close dialog"
+          :aria-label="t('modal.close')"
           data-variant="ghost"
         >&times;</button>
       </header>
@@ -27,6 +27,9 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
+import { useTranslation } from 'i18next-vue';
+
+const { t } = useTranslation('system');
 
 const props = defineProps({
   title: String,

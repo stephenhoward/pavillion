@@ -34,7 +34,22 @@
         "no_events": "No events",
         "follow_button": "Follow a Calendar",
         "repost_error": "Failed to repost event",
-        "unrepost_error": "Failed to remove repost"
+        "unrepost_error": "Failed to remove repost",
+        "repost_button": "Repost",
+        "reposted_button": "Reposted",
+        "unrepost_aria_label": "Remove repost",
+        "auto_posted_label": "Auto-posted",
+        "loading_more": "Loading more events...",
+        "untitled_event": "Untitled Event",
+        "unknown_calendar": "Unknown"
+    },
+    "categoryMapping": {
+        "repostDialogTitle": "Repost with categories",
+        "repostDialogDescription": "Some categories from \"{{eventTitle}}\" are not mapped to local categories. Select the local categories to apply when reposting:",
+        "repostConfirm": "Repost",
+        "cancel": "Cancel",
+        "categoriesLabel": "Local categories",
+        "noLocalCategories": "No local categories available."
     },
     "add_calendar_modal": {
         "title": "Add a Calendar",
@@ -57,7 +72,12 @@
         "auto_repost_reposts_help": "Also share events this calendar has reposted from others",
         "cancel_button": "Cancel",
         "follow_button": "Follow",
-        "following_button": "Following..."
+        "following_button": "Following...",
+        "mapping_step_title": "Set up category mappings (optional)",
+        "mapping_step_description": "Map categories from this calendar to your own for automatic categorization of reposted events.",
+        "mapping_save_button": "Save mappings",
+        "mapping_saving_button": "Saving...",
+        "mapping_skip_button": "Skip for now"
     },
     "errors": {
         "InvalidRemoteCalendarIdentifierError": "Invalid calendar identifier format. Please use the format: calendar@domain.com",
@@ -65,6 +85,7 @@
         "InvalidRepostPolicySettingsError": "Invalid auto-repost settings: cannot enable reposting of shared events without enabling reposting of original events.",
         "InvalidSharedEventUrlError": "Invalid event URL. Please check the event URL and try again.",
         "SelfFollowError": "A calendar cannot follow itself.",
+        "AlreadyFollowingError": "You are already following this calendar.",
         "InsufficientCalendarPermissionsError": "You don't have permission to perform this action on this calendar.",
         "FollowRelationshipNotFoundError": "Follow relationship not found. The calendar may have already been unfollowed.",
         "RemoteCalendarNotFoundError": "Calendar not found. Please check the identifier and try again.",

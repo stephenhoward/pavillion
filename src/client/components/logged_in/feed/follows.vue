@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useFeedStore } from '@/client/stores/feedStore';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
@@ -10,11 +10,33 @@ const { t } = useTranslation('feed', {
   keyPrefix: 'follows',
 });
 
+const props = withDefaults(defineProps<{
+  openAddCalendarModal?: boolean;
+}>(), {
+  openAddCalendarModal: false,
+});
+
+const emit = defineEmits<{
+  (e: 'addCalendarModalOpened'): void;
+}>();
+
 const feedStore = useFeedStore();
 const showAddModal = ref(false);
 
 const follows = computed(() => feedStore.follows);
 const isLoading = computed(() => feedStore.isLoadingFollows);
+
+/**
+ * When the parent signals that the modal should be opened (e.g. from the
+ * Events tab "Follow a Calendar" button), open it and notify the parent
+ * so it can reset the flag.
+ */
+watch(() => props.openAddCalendarModal, (shouldOpen) => {
+  if (shouldOpen) {
+    showAddModal.value = true;
+    emit('addCalendarModalOpened');
+  }
+});
 
 const handlePolicyChange = async (followId: string, autoRepostOriginals: boolean, autoRepostReposts: boolean) => {
   try {

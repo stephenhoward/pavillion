@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, nextTick } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import Modal from '@/client/components/common/modal.vue';
 import ToggleSwitch from '@/client/components/common/toggle_switch.vue';
+import CategoryMappingEditor from '@/client/components/logged_in/category-mapping-editor.vue';
 import { useFeedStore } from '@/client/stores/feedStore';
-import FeedService, { type RemoteCalendarPreview } from '@/client/service/feed';
+import FeedService, { type RemoteCalendarPreview, type CategoryEntry, type CategoryMappingEntry } from '@/client/service/feed';
 import {
   InvalidRemoteCalendarIdentifierError,
   RemoteCalendarNotFoundError,
@@ -12,6 +13,7 @@ import {
   ActivityPubNotSupportedError,
   RemoteProfileFetchError,
   SelfFollowError,
+  AlreadyFollowingError,
 } from '@/common/exceptions/activitypub';
 import { InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
 
@@ -30,6 +32,15 @@ const preview = ref<RemoteCalendarPreview | null>(null);
 const isLookingUp = ref(false);
 const lookupError = ref('');
 const isFollowing = ref(false);
+
+// Mapping step state
+const showMappingStep = ref(false);
+const pendingActorId = ref('');
+const pendingSourceCategories = ref<CategoryEntry[]>([]);
+const localCategories = ref<CategoryEntry[]>([]);
+const pendingMappings = ref<CategoryMappingEntry[]>([]);
+const isSavingMappings = ref(false);
+const mappingStepRef = ref<HTMLElement | null>(null);
 
 const isValidIdentifier = computed(() => {
   return identifier.value.includes('@') && identifier.value.split('@').length === 2;
@@ -131,9 +142,15 @@ const handleFollow = async () => {
   isFollowing.value = true;
 
   try {
-    await feedStore.followCalendar(identifier.value, autoRepostOriginals.value, autoRepostReposts.value);
+    const calendarActorId = await feedStore.followCalendar(identifier.value, autoRepostOriginals.value, autoRepostReposts.value);
     emit('follow-success');
-    handleClose();
+
+    if (calendarActorId && feedStore.selectedCalendarId) {
+      await loadMappingStep(feedStore.selectedCalendarId, calendarActorId);
+    }
+    else {
+      handleClose();
+    }
   }
   catch (error: any) {
     console.error('Error following calendar:', error);
@@ -148,12 +165,68 @@ const handleFollow = async () => {
       case SelfFollowError:
         lookupError.value = t('errors.SelfFollowError');
         break;
+      case AlreadyFollowingError:
+        lookupError.value = t('errors.AlreadyFollowingError');
+        break;
       default:
         lookupError.value = t('add_calendar_modal.follow_error');
     }
   }
   finally {
     isFollowing.value = false;
+  }
+};
+
+/**
+ * Load source categories and local categories for the mapping step.
+ * Automatically skips the step if there are no source categories.
+ */
+const loadMappingStep = async (calendarId: string, actorId: string) => {
+  try {
+    const feedService = new FeedService();
+    const [sourceCategories, calendarCategories] = await Promise.all([
+      feedService.getSourceCategories(calendarId, actorId),
+      feedService.getCalendarCategories(calendarId),
+    ]);
+
+    if (sourceCategories.length === 0) {
+      // No source categories — skip mapping step and close
+      handleClose();
+      return;
+    }
+
+    pendingActorId.value = actorId;
+    pendingSourceCategories.value = sourceCategories;
+    localCategories.value = calendarCategories;
+    pendingMappings.value = [];
+    showMappingStep.value = true;
+    await nextTick();
+    mappingStepRef.value?.focus();
+  }
+  catch {
+    // If we can't load categories, just close — mapping can be configured later
+    handleClose();
+  }
+};
+
+const saveMappingsAndClose = async () => {
+  if (!feedStore.selectedCalendarId || !pendingActorId.value) {
+    handleClose();
+    return;
+  }
+
+  isSavingMappings.value = true;
+  try {
+    const feedService = new FeedService();
+    await feedService.setCategoryMappings(feedStore.selectedCalendarId, pendingActorId.value, pendingMappings.value);
+  }
+  catch (error) {
+    console.error('Error saving category mappings:', error);
+    // Non-fatal: close anyway so user isn't blocked
+  }
+  finally {
+    isSavingMappings.value = false;
+    handleClose();
   }
 };
 
@@ -167,6 +240,13 @@ const handleClose = () => {
   isLookingUp.value = false;
   isFollowing.value = false;
 
+  // Reset mapping step
+  showMappingStep.value = false;
+  pendingActorId.value = '';
+  pendingSourceCategories.value = [];
+  localCategories.value = [];
+  pendingMappings.value = [];
+
   if (lookupTimeout) {
     clearTimeout(lookupTimeout);
     lookupTimeout = null;
@@ -178,10 +258,14 @@ const handleClose = () => {
 
 <template>
   <Modal
-    :title="t('add_calendar_modal.title')"
+    :title="showMappingStep ? t('add_calendar_modal.mapping_step_title') : t('add_calendar_modal.title')"
     @close="handleClose"
   >
-    <div class="add-calendar-modal">
+    <!-- Follow step -->
+    <div
+      v-if="!showMappingStep"
+      class="add-calendar-modal"
+    >
       <div class="form-group">
         <label for="calendar-identifier">
           {{ t('add_calendar_modal.identifier_label') }}
@@ -203,7 +287,11 @@ const handleClose = () => {
         {{ t('add_calendar_modal.looking_up') }}
       </div>
 
-      <div v-if="lookupError" class="error-state">
+      <div
+        v-if="lookupError"
+        class="error-state"
+        role="alert"
+      >
         {{ lookupError }}
       </div>
 
@@ -264,6 +352,42 @@ const handleClose = () => {
         </button>
       </div>
     </div>
+
+    <!-- Category mapping step -->
+    <div
+      v-else
+      ref="mappingStepRef"
+      tabindex="-1"
+      class="add-calendar-modal mapping-step"
+    >
+      <p class="mapping-step-description">
+        {{ t('add_calendar_modal.mapping_step_description') }}
+      </p>
+
+      <CategoryMappingEditor
+        v-model="pendingMappings"
+        :source-categories="pendingSourceCategories"
+        :local-categories="localCategories"
+      />
+
+      <div class="modal-actions">
+        <button
+          type="button"
+          class="secondary"
+          @click="handleClose"
+        >
+          {{ t('add_calendar_modal.mapping_skip_button') }}
+        </button>
+        <button
+          type="button"
+          class="primary"
+          :disabled="isSavingMappings"
+          @click="saveMappingsAndClose"
+        >
+          {{ isSavingMappings ? t('add_calendar_modal.mapping_saving_button') : t('add_calendar_modal.mapping_save_button') }}
+        </button>
+      </div>
+    </div>
   </Modal>
 </template>
 
@@ -276,6 +400,18 @@ div.add-calendar-modal {
 
   @media (min-width: 768px) {
     min-width: 500px;
+  }
+
+  &.mapping-step {
+    p.mapping-step-description {
+      font-size: 0.875rem;
+      color: rgba(0, 0, 0, 0.6);
+      margin: 0;
+
+      @media (prefers-color-scheme: dark) {
+        color: rgba(255, 255, 255, 0.6);
+      }
+    }
   }
 
   div.form-group {

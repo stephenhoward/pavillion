@@ -2,12 +2,13 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { DateTime } from 'luxon';
 import BackupService from '@/server/housekeeping/service/backup';
 import config from 'config';
-import * as child_process from 'child_process';
 import * as fs from 'fs';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
 
-// Mock modules
-vi.mock('child_process');
+// Mock fs (a non-built-in wrapper that can be mocked) and the database entity.
+// Note: child_process is a Node.js built-in and cannot be mocked via vi.mock() in
+// ESM environments. Instead, we spy on BackupService.executeCommand() directly,
+// which is a protected method exposed for exactly this purpose.
 vi.mock('fs');
 vi.mock('@/server/housekeeping/entity/backup', () => ({
   BackupEntity: {
@@ -22,11 +23,10 @@ describe('BackupService', () => {
     service = new BackupService();
     vi.clearAllMocks();
 
-    // Default mock implementations
-    vi.mocked(child_process.exec).mockImplementation((cmd, callback: any) => {
-      callback(null, '', '');
-      return {} as any;
-    });
+    // Spy on the protected executeCommand method to prevent real shell execution.
+    // This avoids the need to mock the Node.js child_process built-in module, which
+    // is non-configurable in ESM environments and cannot be replaced via vi.mock().
+    vi.spyOn(service as any, 'executeCommand').mockResolvedValue(undefined);
 
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.statSync).mockReturnValue({ size: 5000 } as any);

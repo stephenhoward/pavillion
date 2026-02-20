@@ -13,6 +13,7 @@ import {
   ActivityPubNotSupportedError,
   RemoteProfileFetchError,
   SelfFollowError,
+  AlreadyFollowingError,
 } from '@/common/exceptions/activitypub';
 import { InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
 import { UnknownError } from '@/common/exceptions';
@@ -28,6 +29,7 @@ const errorMap = {
   ActivityPubNotSupportedError,
   RemoteProfileFetchError,
   SelfFollowError,
+  AlreadyFollowingError,
   InsufficientCalendarPermissionsError,
 };
 
@@ -37,6 +39,7 @@ const errorMap = {
 export interface FollowRelationship {
   id: string;
   calendarActorId: string;
+  calendarActorUuid: string;
   calendarId: string;
   autoRepostOriginals: boolean;
   autoRepostReposts: boolean;
@@ -52,10 +55,12 @@ export interface FollowerRelationship {
 }
 
 /**
- * Feed event extends CalendarEvent with repost status
+ * Feed event extends CalendarEvent with repost status and source calendar identifier
  */
 export type FeedEvent = CalendarEvent & {
   repostStatus: 'none' | 'manual' | 'auto';
+  sourceCalendarActorId: string | null;
+  categoryIds?: string[];
 };
 
 /**
@@ -75,6 +80,23 @@ export interface RemoteCalendarPreview {
   domain: string;
   actorUrl: string;
   calendarId?: string;
+}
+
+/**
+ * A single category entry from the source or local calendar
+ */
+export interface CategoryEntry {
+  id: string;
+  name: string;
+}
+
+/**
+ * A single category mapping entry
+ */
+export interface CategoryMappingEntry {
+  sourceCategoryId: string;
+  sourceCategoryName: string;
+  localCategoryId: string;
 }
 
 /**
@@ -112,6 +134,7 @@ export default class FeedService {
       return data.items.map(item => ({
         id: item.id,
         calendarActorId: item.calendarActorId,
+        calendarActorUuid: item.calendarActorUuid ?? '',
         calendarId: item.calendarId,
         autoRepostOriginals: item.autoRepostOriginals ?? false,
         autoRepostReposts: item.autoRepostReposts ?? false,
@@ -156,10 +179,14 @@ export default class FeedService {
         return { events: [], hasMore: false };
       }
 
-      // Convert API response to CalendarEvent objects with repostStatus
+      // Convert API response to CalendarEvent objects with repostStatus and sourceCalendarActorId
       const events: FeedEvent[] = data.events.map((eventData: any) => {
         const event = CalendarEvent.fromObject(eventData);
-        return Object.assign(event, { repostStatus: eventData.repostStatus });
+        return Object.assign(event, {
+          repostStatus: eventData.repostStatus,
+          sourceCalendarActorId: eventData.sourceCalendarActorId ?? null,
+          categoryIds: Array.isArray(eventData.categoryIds) ? eventData.categoryIds : undefined,
+        });
       });
 
       return {
@@ -220,16 +247,22 @@ export default class FeedService {
   }
 
   /**
-   * Manually repost an event to the calendar
+   * Manually repost an event to the calendar, optionally tagging it with local category IDs.
    * @param calendarId The calendar ID to repost to
-   * @param eventId The event ID to repost
+   * @param eventSourceUrl The ActivityPub URL of the event to repost
+   * @param categoryIds Optional list of local category IDs to assign when reposting
    * @returns Promise<void>
    */
-  async shareEvent(calendarId: string, eventId: string): Promise<void> {
+  async shareEvent(calendarId: string, eventSourceUrl: string, categoryIds: string[] = []): Promise<void> {
     try {
       // Using a simple object since SharedEvent isn't a PrimaryModel on the client
       await ModelService.createModel(
-        { id: '', calendarId, eventId, toObject: () => ({ calendarId, eventId }) } as any,
+        {
+          id: '',
+          calendarId,
+          eventId: eventSourceUrl,
+          toObject: () => ({ calendarId, eventId: eventSourceUrl, categoryIds }),
+        } as any,
         '/api/v1/social/shares',
       );
     }
@@ -304,5 +337,72 @@ export default class FeedService {
       handleActivityPubError(error);
       throw new UnknownError();
     }
+  }
+
+  /**
+   * Get source categories for a followed calendar actor.
+   * Returns { id, name } entries for each source category.
+   * @param calendarId The local calendar ID
+   * @param actorId The followed actor identifier
+   * @returns Promise<CategoryEntry[]> Array of source categories
+   */
+  async getSourceCategories(calendarId: string, actorId: string): Promise<CategoryEntry[]> {
+    const response = await axios.get(
+      `/api/v1/calendars/${encodeURIComponent(calendarId)}/following/${encodeURIComponent(actorId)}/source-categories`,
+    );
+    return response.data;
+  }
+
+  /**
+   * Get the local categories for a calendar.
+   * Returns { id, name } entries extracted from the translated content.
+   * @param calendarId The local calendar ID
+   * @returns Promise<CategoryEntry[]> Array of local categories
+   */
+  async getCalendarCategories(calendarId: string): Promise<CategoryEntry[]> {
+    const response = await axios.get(
+      `/api/v1/calendars/${encodeURIComponent(calendarId)}/categories`,
+    );
+    return response.data.map((c: any) => {
+      // content is an object keyed by language, e.g. { en: { language: 'en', name: '...' } }
+      const contentValues = c.content ? Object.values(c.content) : [];
+      const firstName = (contentValues[0] as any)?.name ?? '';
+      return {
+        id: c.id,
+        name: firstName,
+      };
+    });
+  }
+
+  /**
+   * Get existing category mappings for a followed calendar actor.
+   * @param calendarId The local calendar ID
+   * @param actorId The followed actor identifier
+   * @returns Promise<CategoryMappingEntry[]> Array of mapping entries
+   */
+  async getCategoryMappings(calendarId: string, actorId: string): Promise<CategoryMappingEntry[]> {
+    const response = await axios.get(
+      `/api/v1/calendars/${encodeURIComponent(calendarId)}/following/${encodeURIComponent(actorId)}/category-mappings`,
+    );
+    return response.data;
+  }
+
+  /**
+   * Replace all category mappings for a followed calendar actor.
+   * @param calendarId The local calendar ID
+   * @param actorId The followed actor identifier
+   * @param mappings The new full set of category mappings
+   * @returns Promise<CategoryMappingEntry[]> Updated mapping entries
+   */
+  async setCategoryMappings(
+    calendarId: string,
+    actorId: string,
+    mappings: CategoryMappingEntry[],
+  ): Promise<CategoryMappingEntry[]> {
+    const response = await axios.put(
+      `/api/v1/calendars/${encodeURIComponent(calendarId)}/following/${encodeURIComponent(actorId)}/category-mappings`,
+      { mappings },
+    );
+    return response.data;
   }
 }

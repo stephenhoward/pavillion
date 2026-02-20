@@ -20,6 +20,9 @@
   "navigation": {
     "skip_to_content": "Skip to main content"
   },
+  "modal": {
+    "close": "Close dialog"
+  },
   "report": {
     "form_title": "Report Event",
     "close_dialog": "Close report dialog",

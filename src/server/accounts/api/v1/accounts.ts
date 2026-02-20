@@ -4,6 +4,7 @@ import AccountsInterface from '@/server/accounts/interface';
 import { AccountAlreadyExistsError, AccountRegistrationClosedError } from '@/server/accounts/exceptions';
 import { Account } from '@/common/model/account';
 import { logError } from '@/server/common/helper/error-logger';
+import { ValidationError } from '@/common/exceptions/base';
 
 export default class AccountRouteHandlers {
   private service: AccountsInterface;
@@ -70,7 +71,7 @@ export default class AccountRouteHandlers {
       return;
     }
 
-    const { displayName } = req.body;
+    const { displayName, language } = req.body;
 
     if (displayName === undefined) {
       res.status(400).json({
@@ -81,10 +82,14 @@ export default class AccountRouteHandlers {
     }
 
     try {
-      const updatedAccount = await this.service.updateProfile(account, displayName);
+      const updatedAccount = await this.service.updateProfile(account, displayName, language);
       res.json(updatedAccount.toObject());
     }
     catch (error) {
+      if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
+        return;
+      }
       logError(error, 'Error updating profile');
       res.status(500).json({
         error: 'An error occurred while updating the profile',

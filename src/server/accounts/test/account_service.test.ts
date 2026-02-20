@@ -8,6 +8,7 @@ import EmailInterface from '@/server/email/interface';
 import ServiceSettings from '@/server/configuration/service/settings';
 import AccountService from '@/server/accounts/service/account';
 import { AccountAlreadyExistsError, AccountInviteAlreadyExistsError, AccountRegistrationClosedError, AccountApplicationAlreadyExistsError, AccountApplicationsClosedError, noAccountInviteExistsError, noAccountApplicationExistsError, AccountInvitationPermissionError } from '@/server/accounts/exceptions';
+import { ValidationError } from '@/common/exceptions/base';
 import { initI18Next } from '@/server/common/test/lib/i18next';
 import EventEmitter from 'events';
 import ConfigurationInterface from '@/server/configuration/interface';
@@ -1132,5 +1133,64 @@ describe('updateProfile', () => {
 
     expect(saveStub.calledOnce).toBe(true);
     expect(mockEntity.display_name).toBe('Persisted Name');
+  });
+
+  it('should throw ValidationError for an invalid language code', async () => {
+    const testAccount = new Account('user-id', 'testuser', 'test@example.com');
+
+    await expect(accountService.updateProfile(testAccount, 'Name', 'xx'))
+      .rejects.toThrow(ValidationError);
+  });
+
+  it('should update language when a valid language code is provided', async () => {
+    const testAccount = new Account('user-id', 'testuser', 'test@example.com');
+    const mockEntity = {
+      id: 'user-id',
+      username: 'testuser',
+      email: 'test@example.com',
+      display_name: null,
+      language: 'en',
+      save: sandbox.stub().resolves(),
+      toModel: () => {
+        const account = new Account('user-id', 'testuser', 'test@example.com');
+        account.language = 'es';
+        return account;
+      },
+    } as any;
+
+    const findByPkStub = sandbox.stub(AccountEntity, 'findByPk');
+    findByPkStub.resolves(mockEntity);
+
+    const result = await accountService.updateProfile(testAccount, 'Name', 'es');
+
+    expect(mockEntity.language).toBe('es');
+    expect(mockEntity.save.called).toBe(true);
+    expect(result.language).toBe('es');
+  });
+
+  it('should not update language when language is not provided', async () => {
+    const testAccount = new Account('user-id', 'testuser', 'test@example.com');
+    const mockEntity = {
+      id: 'user-id',
+      username: 'testuser',
+      email: 'test@example.com',
+      display_name: null,
+      language: 'en',
+      save: sandbox.stub().resolves(),
+      toModel: () => {
+        const account = new Account('user-id', 'testuser', 'test@example.com');
+        account.language = 'en';
+        return account;
+      },
+    } as any;
+
+    const findByPkStub = sandbox.stub(AccountEntity, 'findByPk');
+    findByPkStub.resolves(mockEntity);
+
+    await accountService.updateProfile(testAccount, 'Name');
+
+    // language should remain unchanged
+    expect(mockEntity.language).toBe('en');
+    expect(mockEntity.save.called).toBe(true);
   });
 });
