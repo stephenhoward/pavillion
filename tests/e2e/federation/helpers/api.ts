@@ -309,16 +309,11 @@ export async function unfollowCalendar(
   localCalendarId: string,
   remoteCalendarId: string,
 ): Promise<void> {
-  const response = await fetch(`${instance.baseUrl}/api/v1/social/follows/${encodeURIComponent(followId)}`, {
+  const response = await fetch(`${instance.baseUrl}/api/v1/social/follows/${encodeURIComponent(followId)}?calendarId=${encodeURIComponent(localCalendarId)}`, {
     method: 'DELETE',
     headers: {
-      'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
-    body: JSON.stringify({
-      calendarId: localCalendarId,
-      remoteCalendar: remoteCalendarId,
-    }),
   });
 
   if (!response.ok) {
