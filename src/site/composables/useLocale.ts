@@ -1,4 +1,4 @@
-import { ref, Ref } from 'vue';
+import { ref, Ref, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import i18next from 'i18next';
 
@@ -34,6 +34,11 @@ export function useLocale() {
 
   const currentLocale: Ref<string> = ref(detectCurrentLocale());
 
+  // Keep currentLocale in sync when route.path changes (e.g. direct URL navigation)
+  watch(() => route.path, () => {
+    currentLocale.value = detectCurrentLocale();
+  });
+
   /**
    * Generates a locale-prefixed path for a given route path.
    *
@@ -53,9 +58,11 @@ export function useLocale() {
    * Switches the application to the given locale.
    *
    * Steps performed (no full-page reload):
-   * 1. Generates the new locale-prefixed URL for the current path using addLocalePrefix()
-   * 2. Navigates to the new URL via Vue Router (the router guard will strip
-   *    the prefix and call i18next.changeLanguage() automatically)
+   * 1. Calls i18next.changeLanguage() directly so translations update immediately,
+   *    regardless of whether the URL prefix changes (the router guard only fires
+   *    for non-default locales that have a URL prefix, so switching back to the
+   *    default locale requires this direct call)
+   * 2. Generates the new locale-prefixed URL and navigates via Vue Router
    * 3. Writes the pavilion_locale cookie so the server and future visits
    *    can honour the preference
    * 4. Updates the reactive currentLocale ref
@@ -63,16 +70,20 @@ export function useLocale() {
    * @param locale - The ISO 639-1 locale code to switch to (e.g. 'es')
    */
   function switchLocale(locale: string): void {
+    // Change i18next language immediately — do not rely solely on the router guard,
+    // which only fires when the destination URL has a locale prefix. Switching to
+    // the default locale produces an unprefixed URL, so the guard would never call
+    // changeLanguage and translations would stay stuck in the previous language.
+    i18next.changeLanguage(locale);
+
     // Derive the canonical path (without any existing locale prefix)
     const { path: canonicalPath } = stripLocalePrefix(route.path);
 
-    // Build the new URL with the locale prefix
+    // Build the new URL with the locale prefix (default locale gets no prefix)
     const newPath = addLocalePrefix(canonicalPath, locale, DEFAULT_LANGUAGE_CODE);
 
-    // Navigate via Vue Router — the beforeEach guard in app.ts will:
-    //   a) detect the locale prefix
-    //   b) call i18next.changeLanguage(locale)
-    //   c) redirect to the canonical path for route matching
+    // Navigate via Vue Router (the beforeEach guard will also call changeLanguage
+    // for non-default locales, which is harmless since it is idempotent)
     router.push({ path: newPath, query: route.query, hash: route.hash });
 
     // Persist the preference in a cookie
