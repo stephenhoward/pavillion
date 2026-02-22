@@ -310,7 +310,7 @@ const handleRepostCategoryUpdate = async (categoryIds) => {
         categoryIds,
       );
       updatedEvents.forEach(event => {
-        store.updateEvent(event.calendarId, event);
+        store.updateEvent(state.calendar?.id, event);
       });
     }
     catch (error) {
@@ -568,6 +568,13 @@ const hasActiveFilters = computed(() => {
                   </span>
                 </div>
                 <p v-if="event.content('en').description" class="event-description">{{ event.content("en").description }}</p>
+                <div v-if="event.categories && event.categories.length > 0" class="event-categories">
+                  <span v-for="category in event.categories"
+                        :key="category.id"
+                        class="category-badge">
+                    {{ category.content('en').name }}
+                  </span>
+                </div>
               </div>
             </article>
             <div class="event-actions">
@@ -996,6 +1003,30 @@ section[aria-label="Calendar Events"] {
 
         @media (prefers-color-scheme: dark) {
           color: var(--pav-color-stone-400);
+        }
+      }
+
+      .event-categories {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.375rem;
+        margin-top: 0.5rem;
+
+        .category-badge {
+          display: inline-flex;
+          align-items: center;
+          padding: 0.125rem 0.5rem;
+          background: var(--pav-color-stone-100);
+          border-radius: 9999px; // pill
+          color: var(--pav-color-stone-700);
+          font-size: 0.75rem; // text-xs
+          font-weight: 500;
+          white-space: nowrap;
+
+          @media (prefers-color-scheme: dark) {
+            background: var(--pav-color-stone-700);
+            color: var(--pav-color-stone-200);
+          }
         }
       }
     }
