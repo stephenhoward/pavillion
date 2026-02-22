@@ -74,6 +74,53 @@ describe('app_routes', () => {
       expect(res.status).toBe(200);
       expect(res.body.data.locale).toBe('es');
     });
+
+    it('should pass non-empty hreflangLinks array to the template', async () => {
+      const mockSettings = {
+        get: (_key: string) => 'en',
+      } as unknown as ServiceSettings;
+      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
+
+      const app = buildTestApp('en');
+      const res = await request(app).get('/@mycalendar');
+
+      expect(res.status).toBe(200);
+      const links = res.body.data?.hreflangLinks;
+      expect(Array.isArray(links)).toBe(true);
+      expect(links.length).toBeGreaterThan(0);
+      // should include x-default
+      expect(links.some((l: { hreflang: string }) => l.hreflang === 'x-default')).toBe(true);
+    });
+
+    it('should include hreflang entries for all enabled languages', async () => {
+      const mockSettings = {
+        get: (_key: string) => 'en',
+      } as unknown as ServiceSettings;
+      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
+
+      const app = buildTestApp('en');
+      const res = await request(app).get('/@mycalendar');
+
+      const links = res.body.data?.hreflangLinks;
+      expect(links.some((l: { hreflang: string }) => l.hreflang === 'en')).toBe(true);
+      expect(links.some((l: { hreflang: string }) => l.hreflang === 'es')).toBe(true);
+    });
+
+    it('should include canonical path in hreflang hrefs', async () => {
+      const mockSettings = {
+        get: (_key: string) => 'en',
+      } as unknown as ServiceSettings;
+      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
+
+      const app = buildTestApp('en');
+      const res = await request(app).get('/@mycalendar');
+
+      const links = res.body.data?.hreflangLinks;
+      const enLink = links.find((l: { hreflang: string }) => l.hreflang === 'en');
+      expect(enLink?.href).toContain('/@mycalendar');
+      const esLink = links.find((l: { hreflang: string }) => l.hreflang === 'es');
+      expect(esLink?.href).toContain('/es/@mycalendar');
+    });
   });
 
   // -----------------------------------------------------------------------
@@ -118,6 +165,41 @@ describe('app_routes', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.template).toBe('site.index.html.ejs');
+    });
+
+    it('should pass non-empty hreflangLinks array for locale-prefixed routes', async () => {
+      const mockSettings = {
+        get: (_key: string) => 'en',
+      } as unknown as ServiceSettings;
+      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
+
+      const app = buildTestApp('es');
+      const res = await request(app).get('/es/@mycalendar');
+
+      expect(res.status).toBe(200);
+      const links = res.body.data?.hreflangLinks;
+      expect(Array.isArray(links)).toBe(true);
+      expect(links.length).toBeGreaterThan(0);
+      expect(links.some((l: { hreflang: string }) => l.hreflang === 'x-default')).toBe(true);
+    });
+
+    it('should use stripped path (without locale prefix) in hreflang hrefs', async () => {
+      const mockSettings = {
+        get: (_key: string) => 'en',
+      } as unknown as ServiceSettings;
+      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
+
+      const app = buildTestApp('es');
+      const res = await request(app).get('/es/@mycalendar');
+
+      const links = res.body.data?.hreflangLinks;
+      // x-default points to the unprefixed canonical URL
+      const xDefault = links.find((l: { hreflang: string }) => l.hreflang === 'x-default');
+      expect(xDefault?.href).toContain('/@mycalendar');
+      expect(xDefault?.href).not.toContain('/es/@mycalendar');
+      // es link should have /es/ prefix
+      const esLink = links.find((l: { hreflang: string }) => l.hreflang === 'es');
+      expect(esLink?.href).toContain('/es/@mycalendar');
     });
   });
 
