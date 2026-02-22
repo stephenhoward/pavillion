@@ -1195,18 +1195,36 @@ class EventService {
         throw new MixedCalendarEventsError('All events must belong to the same calendar');
       }
 
-      const calendarId = calendarIds[0] as string;
+      let calendarId = calendarIds[0] as string;
+
+      // 3. Resolve the effective calendar for permission and category validation.
+      // For reposted events the event's calendar_id is the original owner's calendar;
+      // we need the reposter's calendar (which the user controls) instead.
+      const userCalendars = await this.calendarService.editableCalendarsForUser(account);
+      if (!userCalendars.some(cal => cal.id === calendarId)) {
+        const reposts = await EventRepostEntity.findAll({
+          where: { event_id: eventIds },
+          transaction,
+        });
+        if (reposts.length === eventIds.length) {
+          const repostCalendarIds = [...new Set(reposts.map(r => r.calendar_id))];
+          if (repostCalendarIds.length === 1 && userCalendars.some(cal => cal.id === repostCalendarIds[0])) {
+            calendarId = repostCalendarIds[0];
+          }
+        }
+      }
+
       const calendar = await this.calendarService.getCalendar(calendarId);
 
       if (!calendar) {
         throw new CalendarNotFoundError('Calendar not found for events');
       }
 
-      // 3. Validate categories exist and belong to the same calendar
+      // 4. Validate categories exist and belong to the effective calendar
       const categories = await EventCategoryEntity.findAll({
         where: {
           id: categoryIds,
-          calendar_id: calendarId,  // Use UUID, not AP URL
+          calendar_id: calendarId,
         },
         transaction,
       });
@@ -1215,9 +1233,8 @@ class EventService {
         throw new CategoriesNotFoundError('Some categories were not found in the calendar');
       }
 
-      // 4. Check user has permission to modify events (do this AFTER data validation)
-      // All events are in the same calendar (validated above), so just check permission for that calendar
-      const userCalendars = await this.calendarService.editableCalendarsForUser(account);
+      // 5. Check user has permission to modify events
+      // All events are in the same effective calendar, so check permission once
       const hasPermission = userCalendars.some(cal => cal.id === calendarId);
       if (!hasPermission) {
         throw new InsufficientCalendarPermissionsError('Insufficient permissions to modify events in this calendar');

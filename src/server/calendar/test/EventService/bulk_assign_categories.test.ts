@@ -7,6 +7,7 @@ import { Calendar } from '@/common/model/calendar';
 import { EventEntity } from '@/server/calendar/entity/event';
 import { EventCategoryEntity } from '@/server/calendar/entity/event_category';
 import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_category_assignment';
+import { EventRepostEntity } from '@/server/calendar/entity/event_repost';
 import EventService from '@/server/calendar/service/events';
 import CalendarService from '@/server/calendar/service/calendar';
 import { BulkEventsNotFoundError, MixedCalendarEventsError, CategoriesNotFoundError } from '@/common/exceptions/calendar';
@@ -240,6 +241,67 @@ describe('EventService.bulkAssignCategories', () => {
     expect(result[0].id).toBe('11111111-1111-4111-8111-111111111111');
     expect(mockTransaction.commit.calledOnce).toBe(true);
     // Only cat2 should be newly assigned (cat1 was already assigned)
+  });
+
+  it('should assign categories to a reposted event using the reposter calendar', async () => {
+    // When the event belongs to a different calendar (original owner), but the user
+    // has reposter calendar access, categories from the reposter calendar should be usable.
+    const eventId = '11111111-1111-4111-8111-111111111111';
+    const categoryId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const originalCalendarId = 'original-calendar-uuid';
+    const reposterCalendarId = 'reposter-calendar-uuid';
+
+    const mockEvent = EventEntity.build({
+      id: eventId,
+      calendar_id: originalCalendarId,
+      account_id: 'other-account-id',
+    });
+
+    const mockCategory = EventCategoryEntity.build({
+      id: categoryId,
+      calendar_id: reposterCalendarId,
+    });
+
+    const mockRepost = EventRepostEntity.build({
+      id: 'repost-uuid',
+      event_id: eventId,
+      calendar_id: reposterCalendarId,
+    });
+
+    sandbox.stub(EventEntity, 'findAll').resolves([mockEvent]);
+
+    // editableCalendarsForUser returns the reposter's calendar, not original
+    sandbox.stub(CalendarService.prototype, 'editableCalendarsForUser')
+      .resolves([new Calendar(reposterCalendarId, 'reposter-calendar')]);
+
+    sandbox.stub(EventRepostEntity, 'findAll').resolves([mockRepost]);
+
+    sandbox.stub(CalendarService.prototype, 'getCalendar')
+      .resolves(new Calendar(reposterCalendarId, 'reposter-calendar'));
+
+    sandbox.stub(EventCategoryEntity, 'findAll').resolves([mockCategory]);
+
+    sandbox.stub(EventCategoryAssignmentEntity, 'findAll').resolves([]);
+
+    const mockTransaction = {
+      commit: sandbox.stub().resolves(),
+      rollback: sandbox.stub().resolves(),
+      afterCommit: sandbox.stub(),
+      LOCK: {},
+    } as unknown as Transaction;
+    sandbox.stub(db, 'transaction').resolves(mockTransaction);
+
+    const bulkCreateStub = sandbox.stub(EventCategoryAssignmentEntity, 'bulkCreate').resolves([]);
+
+    const getEventByIdStub = sandbox.stub(service, 'getEventById');
+    getEventByIdStub.withArgs(eventId).resolves({ id: eventId, calendarId: reposterCalendarId, categories: [] } as any);
+
+    const result = await service.bulkAssignCategories(mockAccount, [eventId], [categoryId]);
+
+    expect(Array.isArray(result)).toBe(true);
+    expect(result).toHaveLength(1);
+    expect(bulkCreateStub.calledOnce).toBe(true);
+    expect(mockTransaction.commit.calledOnce).toBe(true);
   });
 
   it('should rollback transaction on error', async () => {
