@@ -12,6 +12,7 @@ import EventView from '@/site/components/event.vue';
 import EventInstanceView from '@/site/components/eventInstance.vue';
 import Authentication from '@/client/service/authn';
 import Config from '@/client/service/config';
+import { stripLocalePrefix } from '@/common/i18n/locale-url';
 
 Config.init().then( (config) => {
 
@@ -27,6 +28,14 @@ Config.init().then( (config) => {
   const router = createRouter({
     history: createWebHistory(),
     routes,
+  });
+
+  router.beforeEach((to) => {
+    const { locale, path } = stripLocalePrefix(to.fullPath);
+    if (locale) {
+      i18next.changeLanguage(locale);
+      return { path, query: to.query, hash: to.hash, replace: true };
+    }
   });
 
   const pinia = createPinia();
