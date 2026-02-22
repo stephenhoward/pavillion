@@ -1,8 +1,8 @@
 import { Request, Response, Router } from 'express';
 import fs from "fs/promises";
 import path from "path";
-import { DEFAULT_LANGUAGE_CODE, isValidLanguageCode } from '@/common/i18n/languages';
-import { stripLocalePrefix } from '@/common/i18n/locale-url';
+import { stripLocalePrefix, addLocalePrefix } from '@/common/i18n/locale-url';
+import { isValidLanguageCode, DEFAULT_LANGUAGE_CODE, AVAILABLE_LANGUAGES, BETA_THRESHOLD } from '@/common/i18n/languages';
 import ServiceSettings from '@/server/configuration/service/settings';
 
 const router = Router();
@@ -45,13 +45,14 @@ const parseManifest = async () => {
 };
 
 /**
- * Resolves the instance default language from configuration.
+ * Resolves the instance default language from the configuration service.
  *
- * Falls back gracefully if the settings service is unavailable.
+ * Falls back to DEFAULT_LANGUAGE_CODE if the settings service is unavailable
+ * or returns an invalid/unsupported language code.
  *
  * @returns {Promise<string>} The instance default language code
  */
-const resolveInstanceDefaultLanguage = async (): Promise<string> => {
+export async function resolveInstanceDefaultLanguage(): Promise<string> {
   try {
     const settings = await ServiceSettings.getInstance();
     const value = settings.get('defaultLanguage');
@@ -65,7 +66,68 @@ const resolveInstanceDefaultLanguage = async (): Promise<string> => {
   }
 
   return DEFAULT_LANGUAGE_CODE;
-};
+}
+
+/**
+ * Returns the site base URL from the incoming request.
+ *
+ * Uses req.protocol and req.get('host') so it works across development,
+ * e2e, and production environments without additional configuration.
+ *
+ * @param req - Express request object
+ * @returns Base URL string, e.g. "https://example.com"
+ */
+export function getSiteBaseUrl(req: Request): string {
+  return `${req.protocol}://${req.get('host')}`;
+}
+
+/**
+ * Returns the list of enabled language codes for hreflang annotations.
+ *
+ * Only languages with completeness >= BETA_THRESHOLD are included; incomplete
+ * languages are excluded because they are hidden from the UI.
+ *
+ * @returns Array of language code strings
+ */
+export function getEnabledLanguageCodes(): string[] {
+  return AVAILABLE_LANGUAGES
+    .filter(lang => lang.completeness >= BETA_THRESHOLD)
+    .map(lang => lang.code);
+}
+
+/**
+ * Builds the hreflang link data for all enabled languages plus x-default.
+ *
+ * Each entry has:
+ * - hreflang: the BCP 47 language tag (or "x-default" for the default language)
+ * - href: the full URL for this language version of the current canonical path
+ *
+ * The x-default entry points to the unprefixed (default-language) URL.
+ *
+ * @param req - Express request object
+ * @param canonicalPath - The path without any locale prefix (e.g. "/@calendar")
+ * @param defaultLocale - The instance default locale code
+ * @returns Array of { hreflang, href } objects
+ */
+export function buildHreflangLinks(
+  req: Request,
+  canonicalPath: string,
+  defaultLocale: string,
+): { hreflang: string; href: string }[] {
+  const baseUrl = getSiteBaseUrl(req);
+  const enabledCodes = getEnabledLanguageCodes();
+
+  const links: { hreflang: string; href: string }[] = enabledCodes.map(code => ({
+    hreflang: code,
+    href: `${baseUrl}${addLocalePrefix(canonicalPath, code, defaultLocale)}`,
+  }));
+
+  // x-default points to the unprefixed (default locale) URL
+  const defaultHref = `${baseUrl}${addLocalePrefix(canonicalPath, defaultLocale, defaultLocale)}`;
+  links.push({ hreflang: 'x-default', href: defaultHref });
+
+  return links;
+}
 
 const handlers = {
   /**
@@ -87,60 +149,73 @@ const handlers = {
 
   /**
    * Handles requests for the site index/home page.
-   * Renders the single-page-application template with locale information.
+   * Renders the single-page-application template with locale data.
    *
    * @param {Request} req - Express request object
    * @param {Response} res - Express response object
    * @returns {Promise<void>}
    */
   site_index: async (req: Request, res: Response) => {
+    const instanceDefault = await resolveInstanceDefaultLanguage();
+    const { path: canonicalPath } = stripLocalePrefix(req.path);
+
     const data = {
       environment,
       manifest: await parseManifest(),
-      locale: req.locale ?? DEFAULT_LANGUAGE_CODE,
+      locale: req.locale,
+      siteBaseUrl: getSiteBaseUrl(req),
+      hreflangLinks: buildHreflangLinks(req, canonicalPath, instanceDefault),
     };
     res.render("site.index.html.ejs", data);
   },
 
   /**
-   * Handles locale-prefixed public site routes (e.g., /es/@calendar).
+   * Handles locale-prefixed site routes (e.g. /es/@calendar).
    *
-   * Uses the as-needed strategy: if the locale prefix matches the instance
-   * default language, redirect (301) to the unprefixed URL. Otherwise, serve
-   * the site SPA template — req.locale is already set by the locale middleware.
+   * If the locale in the URL matches the instance default language, redirects
+   * to the unprefixed canonical URL (301). Otherwise, serves the site SPA with
+   * the appropriate locale data.
    *
    * @param {Request} req - Express request object
    * @param {Response} res - Express response object
    * @returns {Promise<void>}
    */
   locale_prefixed_site: async (req: Request, res: Response) => {
-    const { locale: urlLocale, path: strippedPath } = stripLocalePrefix(req.path);
+    const { locale, path: strippedPath } = stripLocalePrefix(req.path);
 
-    // If no valid locale prefix found, fall through to serve SPA normally
-    if (!urlLocale) {
+    // If the path segment is not a valid locale, serve the site SPA normally
+    if (!locale) {
+      const instanceDefault = await resolveInstanceDefaultLanguage();
+      const { path: canonicalPath } = stripLocalePrefix(req.path);
       const data = {
         environment,
         manifest: await parseManifest(),
-        locale: req.locale ?? DEFAULT_LANGUAGE_CODE,
+        locale: req.locale,
+        siteBaseUrl: getSiteBaseUrl(req),
+        hreflangLinks: buildHreflangLinks(req, canonicalPath, instanceDefault),
       };
       res.render("site.index.html.ejs", data);
       return;
     }
 
-    const defaultLanguage = await resolveInstanceDefaultLanguage();
+    const instanceDefault = await resolveInstanceDefaultLanguage();
 
-    // Redirect to unprefixed URL when the prefix is the instance default language
-    if (urlLocale === defaultLanguage) {
-      const queryString = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
-      res.redirect(301, strippedPath + queryString);
+    // Redirect to canonical (unprefixed) URL when locale matches instance default
+    if (locale === instanceDefault) {
+      const redirectUrl = req.query && Object.keys(req.query).length > 0
+        ? `${strippedPath}?${new URLSearchParams(req.query as Record<string, string>).toString()}`
+        : strippedPath;
+      res.redirect(301, redirectUrl);
       return;
     }
 
-    // Serve the site SPA — req.locale is already set by the locale middleware
+    // Serve site SPA with the locale from the URL prefix
     const data = {
       environment,
       manifest: await parseManifest(),
-      locale: req.locale ?? DEFAULT_LANGUAGE_CODE,
+      locale: req.locale,
+      siteBaseUrl: getSiteBaseUrl(req),
+      hreflangLinks: buildHreflangLinks(req, strippedPath, instanceDefault),
     };
     res.render("site.index.html.ejs", data);
   },
@@ -237,15 +312,14 @@ router.use(/^\/widget\/.+/i, (req, res, next) => {
 
 router.get(/^\/widget\/.*/i, handlers.widget_index);
 
-// Locale-prefixed public site routes: /[locale]/@...
-// Handles both non-default locale serving and default-locale redirects.
-// Must come before the unprefixed site route so prefixed URLs are handled first.
-router.get(/^\/[a-z]{2,8}\/@/i, handlers.locale_prefixed_site);
+// Locale-prefixed site routes: /xx/@... where xx is a potential locale code
+// These match before the plain @-routes so we can handle locale prefix logic
+router.get(/^\/[a-z]{2,8}\/@.*/i, handlers.locale_prefixed_site);
 
-// Public site routes (unprefixed — default language, as-needed strategy)
+// Public site routes (unprefixed)
 router.get(/^\/@.*/i, handlers.site_index);
 
 // Client app catch-all (goes last)
 router.get(/^\/(?!(api|assets|\.well-known|calendars|users|widget)\/).*/i, handlers.client_index);
 
-export { handlers, router, resolveInstanceDefaultLanguage };
+export { handlers, router };

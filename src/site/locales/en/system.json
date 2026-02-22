@@ -1,4 +1,10 @@
 {
+    "language_switcher": {
+        "change_language": "Change language, current: {{current}}",
+        "available_languages": "Available languages",
+        "beta_languages": "Beta",
+        "beta_label": "Beta"
+    },
     "not_found_error_message": "Not Found",
     "error_load_event": "Failed to load event data",
     "filter_by_category": "Event Categories",

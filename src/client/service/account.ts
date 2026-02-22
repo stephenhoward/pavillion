@@ -45,6 +45,29 @@ export default class AccountService {
   }
 
   /**
+   * Update the current user's preferred language.
+   *
+   * Persists the language preference to the server so it is remembered across
+   * sessions and devices.
+   *
+   * @param language - The language code to persist (e.g. 'es', 'en')
+   * @param _options - Reserved for future use (e.g. additional metadata)
+   * @returns Promise<void>
+   */
+  async updateLanguage(language: string, _options?: unknown): Promise<void> {
+    try {
+      await axios.patch('/api/v1/accounts/me/profile', {
+        language,
+      });
+    }
+    catch (error) {
+      console.error('Error updating language preference:', error);
+      this.handleError(error);
+      throw new UnknownError();
+    }
+  }
+
+  /**
    * Handle errors by mapping backend error names to frontend exception classes
    * @param error The error from the API call
    */

@@ -3,6 +3,7 @@ import { useTranslation } from 'i18next-vue';
 import { inject, ref } from 'vue';
 import Config from '../../service/config';
 import HousekeepingStatus from './housekeeping-status.vue';
+import LanguageSettings from './language-settings.vue';
 
 const site_config = inject('site_config');
 const { t } = useTranslation('admin', {
@@ -189,6 +190,9 @@ async function updateSettings() {
         </form>
       </div>
     </section>
+
+    <!-- Language Settings Card -->
+    <LanguageSettings />
   </div>
 </template>
 

@@ -930,6 +930,23 @@ export default class AccountService {
 
     return accountEntity.toModel();
   }
+
+  /**
+   * Loads and populates roles for an existing Account model.
+   *
+   * Fetches all roles assigned to the account from the database and sets them
+   * on the account model. Useful when an Account was retrieved without roles
+   * (e.g. from passport JWT deserialization).
+   *
+   * @param account - The account to load roles for
+   * @returns The account with roles populated
+   */
+  async loadAccountRoles(account: Account): Promise<Account> {
+    const roles = await AccountRoleEntity.findAll({ where: { account_id: account.id } });
+    account.roles = roles.map(role => role.role);
+    return account;
+  }
+
   /**
    * Delete an account by its ID.
    * This will also delete all associated data (secrets, roles, invitations sent, etc.)
