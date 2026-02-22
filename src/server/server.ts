@@ -28,7 +28,6 @@ import { createLocaleMiddleware } from '@/server/common/middleware/locale';
 import { backfillUserActors } from '@/server/activitypub/scripts/backfill-user-actors';
 import { backfillCalendarActors } from '@/server/activitypub/scripts/backfill-calendar-actors';
 import { globalErrorHandler } from '@/server/common/middleware/error-handler';
-import { localeMiddleware } from '@/server/common/middleware/locale';
 import { createI18nConfig } from '@/common/i18n/config';
 
 /**
@@ -225,7 +224,7 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
 
   // Resolve req.locale for every request using the detection chain:
   // URL prefix → account language → cookie → Accept-Language → instance default → 'en'
-  app.use(localeMiddleware);
+  app.use(createLocaleMiddleware());
 
   app.set("views", path.join(path.resolve(), "src/server/templates"));
   // Initialize i18next with shared base config plus server-specific backend plugin
