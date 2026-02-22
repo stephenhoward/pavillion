@@ -49,7 +49,14 @@
         "repostConfirm": "Repost",
         "cancel": "Cancel",
         "categoriesLabel": "Local categories",
-        "noLocalCategories": "No local categories available."
+        "noLocalCategories": "No local categories available.",
+        "editDialogTitle": "Event Categories",
+        "editDialogDescription": "Manage local categories for: {{eventTitle}}",
+        "save": "Save",
+        "eventDate": "Date",
+        "eventDescription": "Description",
+        "eventLocation": "Location",
+        "eventSource": "Source"
     },
     "add_calendar_modal": {
         "title": "Add a Calendar",
