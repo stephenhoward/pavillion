@@ -647,7 +647,7 @@ const hasActiveFilters = computed(() => {
       :event-title="repostEventForModal.content('en').name"
       :event="repostEventForModal"
       :pre-selected-categories="repostEventForModal.categories.map(c => ({ id: c.id, name: c.content('en').name }))"
-      :all-local-categories="(categoryStore.categories[state.calendar?.id] || []).map(c => ({ id: c.id, name: c.content('en').name }))"
+      :all-local-categories="(categoryStore.categories[calendarId] || []).map(c => ({ id: c.id, name: c.content('en').name }))"
       :dialog-title="tFeed('categoryMapping.editDialogTitle')"
       :confirm-label="tFeed('categoryMapping.save')"
       @confirm="handleRepostCategoryUpdate"
