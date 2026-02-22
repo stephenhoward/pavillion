@@ -2,8 +2,9 @@ import i18next from 'i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 import { createI18nConfig } from '@/common/i18n/config';
 
-// Import English translation resources
+// Import translation resources
 import enSystem from '@/site/locales/en/system.json';
+import esSystem from '@/site/locales/es/system.json';
 
 /**
  * Initializes the i18next internationalization framework with all translation resources.
@@ -18,6 +19,9 @@ export const initI18Next = () => {
       resources: {
         en: {
           system: enSystem,
+        },
+        es: {
+          system: esSystem,
         },
       },
       detection: {
