@@ -39,10 +39,13 @@ const allVisibleLanguages = computed(() => [
 
 /**
  * The native name of the currently selected language for display in the trigger button.
+ * Falls back to matching the base language code (e.g. 'en' from 'en-US').
  */
 const currentLanguageNativeName = computed(() => {
-  const lang = AVAILABLE_LANGUAGES.find(l => l.code === currentLocale.value);
-  return lang?.nativeName ?? currentLocale.value;
+  const locale = currentLocale.value;
+  const lang = AVAILABLE_LANGUAGES.find(l => l.code === locale)
+    ?? AVAILABLE_LANGUAGES.find(l => l.code === locale.split('-')[0]);
+  return lang?.nativeName ?? locale;
 });
 
 function openDropdown() {
@@ -436,7 +439,7 @@ onUnmounted(() => {
 .language-switcher__dropdown {
   position: absolute;
   bottom: calc(100% + 8px);
-  right: 0;
+  left: 0;
   z-index: 50;
   min-width: 180px;
   padding: 6px;
