@@ -512,6 +512,7 @@ const hasActiveFilters = computed(() => {
               <div class="event-content">
                 <div class="event-title-row">
                   <h3 :id="`event-title-${event.id}`">{{ event.content("en").name }}</h3>
+                  <span v-if="event.isRepost" class="repost-badge">Repost</span>
                   <span v-if="event.languages && event.languages.length > 1" class="language-count">
                     <Languages :size="16" />
                     {{ event.languages.length }} languages
@@ -850,6 +851,23 @@ section[aria-label="Calendar Events"] {
 
           @media (prefers-color-scheme: dark) {
             color: var(--pav-color-stone-100);
+          }
+        }
+
+        .repost-badge {
+          display: inline-flex;
+          align-items: center;
+          padding: 0.125rem 0.5rem;
+          background: var(--pav-color-purple-100, #f3e8ff);
+          border-radius: 9999px; // pill
+          color: var(--pav-color-purple-700, #7e22ce);
+          font-size: 0.75rem; // text-xs
+          font-weight: 500;
+          white-space: nowrap;
+
+          @media (prefers-color-scheme: dark) {
+            background: rgba(168, 85, 247, 0.2);
+            color: var(--pav-color-purple-300, #d8b4fe);
           }
         }
 

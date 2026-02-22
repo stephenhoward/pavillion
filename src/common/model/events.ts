@@ -52,6 +52,7 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
   _content: Record<string, CalendarEventContent> = {};
   schedules: CalendarEventSchedule[] = [];
   categories: EventCategory[] = [];
+  isRepost: boolean = false;
 
   /**
    * Constructor for CalendarEvent.
@@ -133,6 +134,7 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
     event.location = obj.location ? EventLocation.fromObject(obj.location) : null;
     event.media = obj.media ? Media.fromObject(obj.media) : null;
     event.mediaId = obj.mediaId || null;
+    event.isRepost = obj.isRepost ?? false;
 
     if ( obj.content ) {
       for( let [language,strings] of Object.entries(obj.content) ) {
@@ -168,6 +170,7 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
       id: this.id,
       date: this.date,
       calendarId: this.calendarId,
+      isRepost: this.isRepost,
       locationId: this.locationId,
       location: this.location?.toObject(),
       media: this.media?.toObject(),

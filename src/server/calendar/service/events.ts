@@ -120,6 +120,8 @@ class EventService {
       ...shareEventIds,
     ];
 
+    const repostedIdSet = new Set(repostedEventIds);
+
     // Query events owned by calendar OR reposted by calendar
     const queryOptions: any = {
       where: {
@@ -212,6 +214,8 @@ class EventService {
       if (categoryAssignments) {
         e.categories = categoryAssignments.map(assignment => assignment.category.toModel());
       }
+
+      e.isRepost = repostedIdSet.has(e.id);
 
       return e;
     });
