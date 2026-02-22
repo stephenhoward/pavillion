@@ -26,7 +26,11 @@ const emit = defineEmits<{
 
 const { t } = useTranslation('feed');
 
-const selectedIds = ref<string[]>(props.preSelectedCategories.map(c => c.id));
+const selectedIds = ref<string[]>(
+  props.preSelectedCategories
+    .map(c => c.id)
+    .filter(id => props.allLocalCategories.some(cat => cat.id === id)),
+);
 
 function toggle(id: string) {
   if (selectedIds.value.includes(id)) {
