@@ -228,7 +228,8 @@ describe('unshareEvent', () => {
   });
 
   it('should fail without current user', async () => {
-    let req = { body: {} };
+    // No user attached — should return 403
+    let req = { body: {}, params: {} };
     let res = { status: sinon.stub(), json: sinon.stub() };
     res.status.returns(res);
 
@@ -240,8 +241,16 @@ describe('unshareEvent', () => {
     expect(response.errorName).toBe('UnauthenticatedError');
   });
 
-  it('should fail without event id', async () => {
-    let req = { body: {}, user: {} };
+  it('should fail without event id in params', async () => {
+    // The event ID must come from req.params.id (path param), not req.body.
+    // If params.id is missing, the handler returns 400.
+    let testCalendar = Calendar.fromObject({ id: 'testcalendarid' });
+    let req = {
+      body: {},
+      params: {},   // missing :id — eventId will be undefined
+      user: Account.fromObject({ id: 'testAccountId' }),
+      calendar: testCalendar,
+    };
     let res = { status: sinon.stub(), json: sinon.stub() };
     res.status.returns(res);
 
@@ -253,10 +262,17 @@ describe('unshareEvent', () => {
     expect(response.errorName).toBe('InvalidRequestError');
   });
 
-  it('should succeed with event id', async () => {
+  it('should succeed with event id in params and calendarId in query', async () => {
+    // The DELETE /social/shares/:id route sends:
+    //   - calendarId as a query parameter (handled by requireCalendarIdQuery middleware)
+    //   - eventId as the :id path parameter
+    // The middleware attaches the resolved calendar to (req as any).calendar.
+    let testCalendar = Calendar.fromObject({ id: 'testcalendarid' });
     let req = {
-      body: { eventId: 'testEventId' },
-      user: Account.fromObject({id: 'testAccountId' }),
+      body: {},
+      params: { id: 'test-event-uuid' },
+      user: Account.fromObject({ id: 'testAccountId' }),
+      calendar: testCalendar,   // attached by requireCalendarIdQuery middleware
     };
     let res = { status: sinon.stub(), send: sinon.stub() };
     res.status.returns(res);
@@ -268,5 +284,8 @@ describe('unshareEvent', () => {
 
     expect(res.status.calledWith(200)).toBe(true);
     expect(res.send.calledWith('Unshared')).toBe(true);
+    // Verify the correct event ID was passed to the service
+    expect(unshareMock.calledOnce).toBe(true);
+    expect(unshareMock.firstCall.args[2]).toBe('test-event-uuid');
   });
 });

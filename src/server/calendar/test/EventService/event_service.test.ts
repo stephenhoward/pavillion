@@ -51,6 +51,54 @@ describe('listEvents', () => {
     expect(events[0].content("en").name).toBe('testName');
   });
 
+  describe('isRepost flag', () => {
+    it('should mark events as isRepost=false when they are owned by the calendar', async () => {
+      const entity = EventEntity.build({ id: 'owned-event-id', calendar_id: 'cal-id' });
+      sandbox.stub(EventEntity, 'findAll').resolves([entity]);
+
+      const events = await service.listEvents(new Calendar('cal-id', 'testcal'));
+      expect(events[0].isRepost).toBe(false);
+    });
+
+    it('should mark events as isRepost=true when they are in EventRepostEntity', async () => {
+      (EventRepostEntity.findAll as sinon.SinonStub).resolves([
+        { event_id: 'reposted-event-id' },
+      ]);
+      const entity = EventEntity.build({ id: 'reposted-event-id' });
+      sandbox.stub(EventEntity, 'findAll').resolves([entity]);
+
+      const events = await service.listEvents(new Calendar('cal-id', 'testcal'));
+      expect(events[0].isRepost).toBe(true);
+    });
+
+    it('should mark events as isRepost=true when they are in SharedEventEntity (auto-repost)', async () => {
+      const autoRepostId = '550e8400-e29b-41d4-a716-446655440000';
+      (SharedEventEntity.findAll as sinon.SinonStub).resolves([
+        { event_id: autoRepostId },
+      ]);
+      const entity = EventEntity.build({ id: autoRepostId });
+      sandbox.stub(EventEntity, 'findAll').resolves([entity]);
+
+      const events = await service.listEvents(new Calendar('cal-id', 'testcal'));
+      expect(events[0].isRepost).toBe(true);
+    });
+
+    it('should correctly distinguish owned and reposted events in the same result', async () => {
+      (EventRepostEntity.findAll as sinon.SinonStub).resolves([
+        { event_id: 'reposted-id' },
+      ]);
+      const ownedEntity = EventEntity.build({ id: 'owned-id', calendar_id: 'cal-id' });
+      const repostedEntity = EventEntity.build({ id: 'reposted-id' });
+      sandbox.stub(EventEntity, 'findAll').resolves([ownedEntity, repostedEntity]);
+
+      const events = await service.listEvents(new Calendar('cal-id', 'testcal'));
+      const owned = events.find(e => e.id === 'owned-id');
+      const reposted = events.find(e => e.id === 'reposted-id');
+      expect(owned?.isRepost).toBe(false);
+      expect(reposted?.isRepost).toBe(true);
+    });
+  });
+
   describe('listEvents with search and filter options', () => {
     it('should pass search parameter to database query', async () => {
       let findEventsStub = sandbox.stub(EventEntity, 'findAll');

@@ -219,6 +219,34 @@ export const seedFollowData = async () => {
       });
     }
   }
+
+  // Seed EventObjectEntity records for testuser_calendar events.
+  // These are required by shareEvent() which needs an EventObjectEntity
+  // to resolve the canonical AP URL before creating a SharedEventEntity.
+  // Without these, the repost button in the feed would fail with
+  // InvalidSharedEventUrlError because eventSourceUrl would be empty.
+  const testUserCalendarEventIds = [
+    '34ca7066-322c-4b66-ad78-00360f71e698',
+    'd09334bd-e24d-4bfc-a46c-8c6dcf8f0b17',
+    '72a94cd2-eb3f-4f08-a008-574d54f809c9',
+    '2fa20dc5-d403-479b-a773-358ac4fe9fd3',
+    '792895df-c319-4920-a09e-9a8749cd3d76',
+  ];
+  const followedActorUri = `https://${domain}/calendars/testuser_calendar`;
+  for (const eventId of testUserCalendarEventIds) {
+    const apId = `https://${domain}/calendars/testuser_calendar/events/${eventId}`;
+    const exists = await db.models['EventObjectEntity'].findOne({
+      where: { event_id: eventId },
+    });
+    if (!exists) {
+      await db.models['EventObjectEntity'].create({
+        id: uuidv4(),
+        event_id: eventId,
+        ap_id: apId,
+        attributed_to: followedActorUri,
+      });
+    }
+  }
 };
 
 export default db;
