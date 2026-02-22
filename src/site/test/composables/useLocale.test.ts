@@ -217,9 +217,8 @@ describe('useLocale', () => {
     });
 
     it('should strip an existing locale prefix when switching locale', () => {
-      // Simulate being on the Spanish version of the page; the router guard
-      // would normally have redirected to the canonical path, but in tests
-      // the path may still carry the prefix.
+      // Simulate being on the Spanish version of the page; the router now keeps
+      // the locale prefix in the URL natively, so route.path carries the prefix.
       mockRoute.path = '/es/@mycalendar';
       const { switchLocale } = useLocale();
 
