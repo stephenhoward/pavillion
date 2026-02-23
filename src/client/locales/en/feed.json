@@ -42,7 +42,9 @@
         "auto_posted_label": "Auto-posted",
         "loading_more": "Loading more events...",
         "untitled_event": "Untitled Event",
-        "unknown_calendar": "Unknown"
+        "unknown_calendar": "Unknown",
+        "report_button": "Report",
+        "report_aria_label": "Report event: {{eventTitle}}"
     },
     "categoryMapping": {
         "repostDialogTitle": "Repost with categories",
