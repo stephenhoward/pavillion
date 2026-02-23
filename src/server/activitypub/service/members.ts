@@ -61,8 +61,9 @@ class ActivityPubService {
 
   constructor(
     private eventBus: EventEmitter,
+    calendarInterface?: CalendarInterface,
   ) {
-    this.calendarService = new CalendarInterface(eventBus);
+    this.calendarService = calendarInterface ?? new CalendarInterface(eventBus);
     this.remoteCalendarService = new RemoteCalendarService();
   }
 
@@ -364,7 +365,7 @@ class ActivityPubService {
 
     // Assign categories to the shared event if provided
     if (categoryIds && categoryIds.length > 0) {
-      await this.calendarService.categoryMappingService.assignManualRepostCategories(localEventId, categoryIds);
+      await this.calendarService.assignManualRepostCategories(localEventId, categoryIds);
     }
   }
 

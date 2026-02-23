@@ -582,7 +582,7 @@ const hasActiveFilters = computed(() => {
                 type="button"
                 class="edit-btn icon-btn"
                 @click.stop="handleEditEvent(event)"
-                :aria-label="`Edit event: ${event.content('en').name}`"
+                :aria-label="t('event.edit_label', { name: event.content('en').name })"
                 title="Edit this event"
               >
                 <Pencil :size="18" />
@@ -591,7 +591,7 @@ const hasActiveFilters = computed(() => {
                 type="button"
                 class="duplicate-btn icon-btn"
                 @click.stop="handleDuplicateEvent(event)"
-                :aria-label="`Duplicate event: ${event.content('en').name}`"
+                :aria-label="t('event.duplicate_label', { name: event.content('en').name })"
                 title="Duplicate this event"
               >
                 <Copy :size="18" />
