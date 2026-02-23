@@ -3,16 +3,12 @@ import ExpressHelper from '@/server/common/helper/express';
 import SubscriptionInterface from '@/server/subscription/interface';
 import { ProviderConnectionService } from '@/server/subscription/service/provider_connection';
 import { SubscriptionSettings } from '@/common/model/subscription';
+import { ValidationError } from '@/common/exceptions/base';
 import {
-  InvalidProviderTypeError,
-  InvalidAmountError,
-  InvalidCurrencyError,
-  MissingRequiredFieldError,
   AccountNotFoundError,
   DuplicateGrantError,
   GrantNotFoundError,
 } from '@/server/subscription/exceptions';
-import { ValidationError } from '@/common/exceptions/base';
 
 /**
  * Admin route handlers for subscription management
@@ -236,8 +232,8 @@ export default class AdminRouteHandlers {
     }
     catch (error) {
       console.error('Error initiating provider connection:', error);
-      if (error instanceof InvalidProviderTypeError) {
-        res.status(400).json({ error: error.message, errorName: 'ValidationError' });
+      if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
       }
       else {
         res.status(500).json({ error: 'Internal server error' });
@@ -272,8 +268,8 @@ export default class AdminRouteHandlers {
     }
     catch (error) {
       console.error('Error handling OAuth callback:', error);
-      if (error instanceof InvalidProviderTypeError) {
-        res.status(400).json({ error: error.message, errorName: 'ValidationError' });
+      if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
       }
       else {
         res.status(500).json({ error: 'Internal server error' });
@@ -296,11 +292,8 @@ export default class AdminRouteHandlers {
     }
     catch (error) {
       console.error('Error updating provider:', error);
-      if (error instanceof InvalidProviderTypeError) {
-        res.status(400).json({ error: error.message, errorName: 'ValidationError' });
-      }
-      else if (error instanceof MissingRequiredFieldError) {
-        res.status(400).json({ error: error.message, errorName: 'ValidationError' });
+      if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
       }
       else if (error instanceof Error && error.message.includes('not found')) {
         res.status(404).json({ error: error.message, errorName: 'NotFoundError' });
@@ -325,8 +318,8 @@ export default class AdminRouteHandlers {
     }
     catch (error) {
       console.error('Error disconnecting provider:', error);
-      if (error instanceof InvalidProviderTypeError) {
-        res.status(400).json({ error: error.message, errorName: 'ValidationError' });
+      if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
       }
       else if (error instanceof Error && error.message.includes('active subscription')) {
         res.status(400).json({ error: error.message, errorName: 'ValidationError' });

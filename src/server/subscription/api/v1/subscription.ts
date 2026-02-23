@@ -2,11 +2,7 @@ import express, { Request, Response } from 'express';
 import ExpressHelper from '@/server/common/helper/express';
 import SubscriptionInterface from '@/server/subscription/interface';
 import { Account } from '@/common/model/account';
-import {
-  InvalidBillingCycleError,
-  InvalidAmountError,
-  MissingRequiredFieldError,
-} from '@/server/subscription/exceptions';
+import { ValidationError } from '@/common/exceptions/base';
 
 /**
  * User subscription route handlers
@@ -96,14 +92,8 @@ export default class SubscriptionRouteHandlers {
     }
     catch (error) {
       console.error('Error creating subscription:', error);
-      if (error instanceof MissingRequiredFieldError) {
-        res.status(400).json({ error: error.message, errorName: 'ValidationError' });
-      }
-      else if (error instanceof InvalidBillingCycleError) {
-        res.status(400).json({ error: error.message, errorName: 'ValidationError' });
-      }
-      else if (error instanceof InvalidAmountError) {
-        res.status(400).json({ error: error.message, errorName: 'ValidationError' });
+      if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
       }
       else if (error instanceof Error) {
         if (error.message.includes('not found') || error.message.includes('not enabled')) {
@@ -205,8 +195,8 @@ export default class SubscriptionRouteHandlers {
     }
     catch (error) {
       console.error('Error getting billing portal URL:', error);
-      if (error instanceof MissingRequiredFieldError) {
-        res.status(400).json({ error: error.message, errorName: 'ValidationError' });
+      if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
       }
       else if (error instanceof Error && error.message.includes('not found')) {
         res.status(404).json({ error: error.message, errorName: 'NotFoundError' });
