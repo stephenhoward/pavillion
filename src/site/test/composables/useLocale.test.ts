@@ -32,6 +32,13 @@ vi.mock('@/common/i18n/cookie', () => ({
   LOCALE_COOKIE_NAME: 'pavilion_locale',
 }));
 
+vi.mock('i18next', () => ({
+  default: {
+    changeLanguage: vi.fn(),
+    language: 'en',
+  },
+}));
+
 // ---------------------------------------------------------------------------
 // Subject under test — imported after mocks are in place
 // ---------------------------------------------------------------------------

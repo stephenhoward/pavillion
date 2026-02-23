@@ -470,24 +470,24 @@ describe('Subscription Gating Integration Tests', () => {
 
     it('should handle consistent behavior when subscription expires during widget config request', async () => {
       await enableSubscriptions();
-      await createActiveSubscription(subscribedAccount.id);
+      await createActiveSubscription(unsubscribedAccount.id);
 
       // First call: active subscription
       const response1 = await env.authPut(
-        subscribedToken,
-        `/api/v1/calendars/${subscribedCalendar.id}/widget/domain`,
+        unsubscribedToken,
+        `/api/v1/calendars/${unsubscribedCalendar.id}/widget/domain`,
         { domain: 'test1.com' },
       );
 
       expect(response1.status).toBe(200);
 
       // Subscription expires (simulate by clearing and creating expired)
-      await clearSubscriptions(subscribedAccount.id);
-      await createExpiredSubscription(subscribedAccount.id);
+      await clearSubscriptions(unsubscribedAccount.id);
+      await createExpiredSubscription(unsubscribedAccount.id);
 
       const response2 = await env.authPut(
-        subscribedToken,
-        `/api/v1/calendars/${subscribedCalendar.id}/widget/domain`,
+        unsubscribedToken,
+        `/api/v1/calendars/${unsubscribedCalendar.id}/widget/domain`,
         { domain: 'test2.com' },
       );
 
@@ -500,29 +500,29 @@ describe('Subscription Gating Integration Tests', () => {
   describe('Edge Cases', () => {
     it('should stop serving widget data when calendar owner subscription expires', async () => {
       await enableSubscriptions();
-      await createActiveSubscription(subscribedAccount.id);
+      await createActiveSubscription(unsubscribedAccount.id);
 
       // Set widget domain while subscribed
       await env.authPut(
-        subscribedToken,
-        `/api/v1/calendars/${subscribedCalendar.id}/widget/domain`,
+        unsubscribedToken,
+        `/api/v1/calendars/${unsubscribedCalendar.id}/widget/domain`,
         { domain: 'example.com' },
       );
 
       // Widget data should work
       const response1 = await request(env.app)
-        .get(`/api/widget/v1/calendars/${subscribedCalendar.urlName}`)
+        .get(`/api/widget/v1/calendars/${unsubscribedCalendar.urlName}`)
         .set('Origin', 'https://example.com');
 
       expect(response1.status).toBe(200);
 
       // Subscription expires
-      await clearSubscriptions(subscribedAccount.id);
-      await createExpiredSubscription(subscribedAccount.id);
+      await clearSubscriptions(unsubscribedAccount.id);
+      await createExpiredSubscription(unsubscribedAccount.id);
 
       // Widget data should now return 402
       const response2 = await request(env.app)
-        .get(`/api/widget/v1/calendars/${subscribedCalendar.urlName}`)
+        .get(`/api/widget/v1/calendars/${unsubscribedCalendar.urlName}`)
         .set('Origin', 'https://example.com');
 
       expect(response2.status).toBe(402);
