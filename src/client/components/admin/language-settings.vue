@@ -14,11 +14,6 @@ const state = reactive({
   errorMessage: '',
   enabledLanguages: [] as string[],
   forceLanguage: null as string | null,
-  localeDetectionMethods: {
-    urlPrefix: true,
-    cookie: true,
-    acceptLanguage: true,
-  },
 });
 
 onMounted(async () => {
@@ -27,9 +22,6 @@ onMounted(async () => {
     const settings = configService.settings();
     state.enabledLanguages = settings.enabledLanguages ?? AVAILABLE_LANGUAGES.map(l => l.code);
     state.forceLanguage = settings.forceLanguage ?? null;
-    if (settings.localeDetectionMethods) {
-      state.localeDetectionMethods = { ...settings.localeDetectionMethods };
-    }
   }
   catch (error) {
     console.error('Error loading language settings:', error);
@@ -63,7 +55,6 @@ async function saveLanguageSettings(): Promise<void> {
     const success = await configService.updateSettings({
       enabledLanguages: state.enabledLanguages,
       forceLanguage: state.forceLanguage,
-      localeDetectionMethods: state.localeDetectionMethods,
     });
 
     if (success) {
@@ -91,10 +82,14 @@ async function saveLanguageSettings(): Promise<void> {
     </div>
 
     <div class="settings-card-body">
-      <!-- Status Messages -->
-      <div role="status" aria-live="polite">
-        <div v-if="state.successMessage" class="message message-success">
+      <!-- Success Messages -->
+      <div>
+        <div v-if="state.successMessage"
+             role="status"
+             aria-live="polite"
+             class="message message-success">
           <svg class="message-icon"
+               aria-hidden="true"
                width="16"
                height="16"
                viewBox="0 0 24 24"
@@ -107,8 +102,16 @@ async function saveLanguageSettings(): Promise<void> {
           </svg>
           {{ state.successMessage }}
         </div>
-        <div v-if="state.errorMessage" class="message message-error">
+      </div>
+
+      <!-- Error Messages -->
+      <div>
+        <div v-if="state.errorMessage"
+             role="alert"
+             aria-live="assertive"
+             class="message message-error">
           <svg class="message-icon"
+               aria-hidden="true"
                width="16"
                height="16"
                viewBox="0 0 24 24"
@@ -178,43 +181,6 @@ async function saveLanguageSettings(): Promise<void> {
           <p id="force-language-description" class="form-description">{{ t("force_language_description") }}</p>
         </div>
 
-        <!-- Detection Methods -->
-        <div class="form-group">
-          <fieldset class="checkbox-fieldset">
-            <legend class="form-label">{{ t("detection_methods") }}</legend>
-            <p class="form-description">{{ t("detection_methods_description") }}</p>
-            <div class="checkbox-group">
-              <label class="checkbox-label">
-                <input
-                  type="checkbox"
-                  class="form-checkbox"
-                  v-model="state.localeDetectionMethods.urlPrefix"
-                  :disabled="state.saving"
-                />
-                <span class="checkbox-text">{{ t("detection_url_prefix") }}</span>
-              </label>
-              <label class="checkbox-label">
-                <input
-                  type="checkbox"
-                  class="form-checkbox"
-                  v-model="state.localeDetectionMethods.cookie"
-                  :disabled="state.saving"
-                />
-                <span class="checkbox-text">{{ t("detection_cookie") }}</span>
-              </label>
-              <label class="checkbox-label">
-                <input
-                  type="checkbox"
-                  class="form-checkbox"
-                  v-model="state.localeDetectionMethods.acceptLanguage"
-                  :disabled="state.saving"
-                />
-                <span class="checkbox-text">{{ t("detection_accept_language") }}</span>
-              </label>
-            </div>
-          </fieldset>
-        </div>
-
         <!-- Save Button -->
         <div class="form-actions">
           <button
@@ -222,7 +188,7 @@ async function saveLanguageSettings(): Promise<void> {
             class="save-button"
             :disabled="state.saving"
           >
-            {{ state.saving ? t("saving", "Saving...") : t("save_settings_button") }}
+            {{ state.saving ? t("saving") : t("save_settings_button") }}
           </button>
         </div>
       </form>

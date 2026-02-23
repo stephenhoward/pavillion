@@ -1,12 +1,7 @@
 import SettingsService from '@/server/configuration/service/settings';
 import ServiceSettingEntity from '@/server/configuration/entity/settings';
-import { DEFAULT_LANGUAGE_CODE, AVAILABLE_LANGUAGES, BETA_THRESHOLD } from '@/common/i18n/languages';
-
-type LocaleDetectionMethods = {
-  urlPrefix: boolean;
-  cookie: boolean;
-  acceptLanguage: boolean;
-};
+import { DEFAULT_LANGUAGE_CODE, getDefaultEnabledLanguageCodes } from '@/common/i18n/languages';
+import type { LocaleDetectionMethods } from '@/common/i18n/config';
 
 /**
  * Implementation of the Configuration Internal API.
@@ -81,9 +76,7 @@ export default class ConfigurationInterface {
       return settings.getEnabledLanguages();
     }
     catch {
-      return AVAILABLE_LANGUAGES
-        .filter(lang => lang.completeness >= BETA_THRESHOLD)
-        .map(lang => lang.code);
+      return getDefaultEnabledLanguageCodes();
     }
   }
 

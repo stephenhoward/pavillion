@@ -4,7 +4,7 @@ import ExpressHelper from '../../../common/helper/express';
 import ConfigurationInterface from '@/server/configuration/interface';
 
 // Settings keys whose values are serialized as JSON strings for storage
-const JSON_SETTINGS = new Set(['enabledLanguages', 'localeDetectionMethods']);
+const JSON_SETTINGS = new Set(['enabledLanguages']);
 
 export default class SiteRouteHandlers {
   private service: ConfigurationInterface;
@@ -27,7 +27,6 @@ export default class SiteRouteHandlers {
       domain: config.get('domain'),
       enabledLanguages: await this.service.getEnabledLanguages(),
       forceLanguage: await this.service.getForceLanguage(),
-      localeDetectionMethods: await this.service.getLocaleDetectionMethods(),
     });
   }
 

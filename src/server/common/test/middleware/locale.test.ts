@@ -4,30 +4,27 @@ import request from 'supertest';
 import sinon from 'sinon';
 import { createLocaleMiddleware } from '@/server/common/middleware/locale';
 import { Account } from '@/common/model/account';
-import { AVAILABLE_LANGUAGES, BETA_THRESHOLD } from '@/common/i18n/languages';
+import { AVAILABLE_LANGUAGES } from '@/common/i18n/languages';
 
 type PartialConfigInterface = {
   getDefaultLanguage: () => Promise<string>;
   getEnabledLanguages: () => Promise<string[]>;
   getForceLanguage: () => Promise<string | null>;
-  getLocaleDetectionMethods: () => Promise<{ urlPrefix: boolean; cookie: boolean; acceptLanguage: boolean }>;
 };
 
 function allEnabledLanguages(): string[] {
-  return AVAILABLE_LANGUAGES.filter(l => l.completeness >= BETA_THRESHOLD).map(l => l.code);
+  return AVAILABLE_LANGUAGES.map(l => l.code);
 }
 
 function makeConfigInterface(overrides: Partial<{
   defaultLanguage: string;
   enabledLanguages: string[];
   forceLanguage: string | null;
-  detectionMethods: { urlPrefix: boolean; cookie: boolean; acceptLanguage: boolean };
 }> = {}): PartialConfigInterface {
   return {
     getDefaultLanguage: async () => overrides.defaultLanguage ?? 'en',
     getEnabledLanguages: async () => overrides.enabledLanguages ?? allEnabledLanguages(),
     getForceLanguage: async () => overrides.forceLanguage ?? null,
-    getLocaleDetectionMethods: async () => overrides.detectionMethods ?? { urlPrefix: true, cookie: true, acceptLanguage: true },
   };
 }
 
@@ -290,7 +287,6 @@ describe('localeMiddleware', () => {
         getDefaultLanguage: async () => { throw new Error('DB error'); },
         getEnabledLanguages: async () => { throw new Error('DB error'); },
         getForceLanguage: async () => { throw new Error('DB error'); },
-        getLocaleDetectionMethods: async () => { throw new Error('DB error'); },
       };
 
       const testApp = express();
@@ -398,51 +394,6 @@ describe('localeMiddleware admin overrides', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.locale).toBe('es');
-    });
-  });
-
-  describe('localeDetectionMethods', () => {
-    it('should skip URL prefix detection when urlPrefix is disabled', async () => {
-      const app = makeApp({
-        defaultLanguage: 'en',
-        detectionMethods: { urlPrefix: false, cookie: true, acceptLanguage: true },
-      });
-
-      const response = await request(app).get('/es/some-path');
-
-      // URL prefix disabled, should fall through to instance default
-      expect(response.status).toBe(200);
-      expect(response.body.locale).toBe('en');
-    });
-
-    it('should skip cookie detection when cookie is disabled', async () => {
-      const app = makeApp({
-        defaultLanguage: 'en',
-        detectionMethods: { urlPrefix: true, cookie: false, acceptLanguage: true },
-      });
-
-      const response = await request(app)
-        .get('/some-path')
-        .set('Cookie', 'pavilion_locale=es');
-
-      // Cookie disabled, falls through to Accept-Language then instance default
-      expect(response.status).toBe(200);
-      expect(response.body.locale).toBe('en');
-    });
-
-    it('should skip Accept-Language detection when acceptLanguage is disabled', async () => {
-      const app = makeApp({
-        defaultLanguage: 'en',
-        detectionMethods: { urlPrefix: true, cookie: true, acceptLanguage: false },
-      });
-
-      const response = await request(app)
-        .get('/some-path')
-        .set('Accept-Language', 'es');
-
-      // Accept-Language disabled, falls through to instance default
-      expect(response.status).toBe(200);
-      expect(response.body.locale).toBe('en');
     });
   });
 

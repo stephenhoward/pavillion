@@ -26,7 +26,6 @@ describe('Site API', () => {
     sandbox.stub(configurationInterface, 'getSetting').withArgs('registrationMode').resolves('testValue');
     sandbox.stub(configurationInterface, 'getEnabledLanguages').resolves(['en', 'es']);
     sandbox.stub(configurationInterface, 'getForceLanguage').resolves(null);
-    sandbox.stub(configurationInterface, 'getLocaleDetectionMethods').resolves({ urlPrefix: true, cookie: true, acceptLanguage: true });
 
     router.get('/handler', siteHandlers.getSettings.bind(siteHandlers));
 
@@ -40,7 +39,6 @@ describe('Site API', () => {
     sandbox.stub(configurationInterface, 'getSetting').resolves(undefined);
     sandbox.stub(configurationInterface, 'getEnabledLanguages').resolves(['en']);
     sandbox.stub(configurationInterface, 'getForceLanguage').resolves('es');
-    sandbox.stub(configurationInterface, 'getLocaleDetectionMethods').resolves({ urlPrefix: false, cookie: true, acceptLanguage: true });
 
     router.get('/handler', siteHandlers.getSettings.bind(siteHandlers));
 
@@ -49,7 +47,7 @@ describe('Site API', () => {
     expect(response.status).toBe(200);
     expect(response.body.enabledLanguages).toEqual(['en']);
     expect(response.body.forceLanguage).toBe('es');
-    expect(response.body.localeDetectionMethods).toEqual({ urlPrefix: false, cookie: true, acceptLanguage: true });
+    expect(response.body.localeDetectionMethods).toBeUndefined();
   });
 
   describe('updateSettings', () => {
@@ -64,20 +62,6 @@ describe('Site API', () => {
 
       expect(response.status).toBe(200);
       expect(mockSaveStub.calledWith('enabledLanguages', JSON.stringify(['en', 'es']))).toBe(true);
-    });
-
-    it('should serialize localeDetectionMethods as JSON for storage', async () => {
-      const mockSaveStub = sandbox.stub(configurationInterface, 'setSetting').resolves(true);
-
-      router.post('/handler', siteHandlers.updateSettings.bind(siteHandlers));
-
-      const methods = { urlPrefix: false, cookie: true, acceptLanguage: true };
-      const response = await request(testApp(router))
-        .post('/handler')
-        .send({ localeDetectionMethods: methods });
-
-      expect(response.status).toBe(200);
-      expect(mockSaveStub.calledWith('localeDetectionMethods', JSON.stringify(methods))).toBe(true);
     });
 
     it('should pass forceLanguage as a plain string', async () => {

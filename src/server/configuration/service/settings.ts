@@ -1,13 +1,8 @@
 import config from 'config';
 import ServiceSettingEntity from "@/server/configuration/entity/settings";
 import type { DefaultDateRange } from '@/common/model/calendar';
-import { isValidLanguageCode, DEFAULT_LANGUAGE_CODE, AVAILABLE_LANGUAGES, BETA_THRESHOLD } from '@/common/i18n/languages';
-
-type LocaleDetectionMethods = {
-  urlPrefix: boolean;
-  cookie: boolean;
-  acceptLanguage: boolean;
-};
+import { isValidLanguageCode, DEFAULT_LANGUAGE_CODE, getDefaultEnabledLanguageCodes } from '@/common/i18n/languages';
+import type { LocaleDetectionMethods } from '@/common/i18n/config';
 
 type Config = {
   registrationMode: 'open' | 'apply' | 'invitation' | 'closed';
@@ -20,16 +15,6 @@ type Config = {
   localeDetectionMethods: LocaleDetectionMethods;
 };
 
-/**
- * Returns the default list of enabled language codes.
- * Includes all languages meeting the BETA_THRESHOLD completeness requirement.
- */
-function defaultEnabledLanguages(): string[] {
-  return AVAILABLE_LANGUAGES
-    .filter(lang => lang.completeness >= BETA_THRESHOLD)
-    .map(lang => lang.code);
-}
-
 class ServiceSettings {
   private static instance: ServiceSettings;
   private config: Config;
@@ -41,7 +26,7 @@ class ServiceSettings {
       eventInstanceMonths: 6,
       defaultDateRange: '2weeks',
       defaultLanguage: DEFAULT_LANGUAGE_CODE,
-      enabledLanguages: defaultEnabledLanguages(),
+      enabledLanguages: getDefaultEnabledLanguageCodes(),
       forceLanguage: null,
       localeDetectionMethods: {
         urlPrefix: true,

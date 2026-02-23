@@ -3,7 +3,7 @@ import { Account } from '@/common/model/account';
 import { LOCALE_COOKIE_NAME } from '@/common/i18n/cookie';
 import { parseAcceptLanguage } from '@/common/i18n/accept-language';
 import { detectLocaleFromPath } from '@/common/i18n/locale-url';
-import { isValidLanguageCode, DEFAULT_LANGUAGE_CODE, AVAILABLE_LANGUAGES, BETA_THRESHOLD } from '@/common/i18n/languages';
+import { isValidLanguageCode, DEFAULT_LANGUAGE_CODE, getDefaultEnabledLanguageCodes } from '@/common/i18n/languages';
 import type ConfigurationInterface from '@/server/configuration/interface';
 
 declare module 'express-serve-static-core' {
@@ -72,16 +72,6 @@ function resolveFromAcceptLanguage(req: Request): string | null {
 }
 
 /**
- * Returns the default set of enabled language codes.
- * Includes all languages meeting the BETA_THRESHOLD completeness threshold.
- */
-function defaultEnabledLanguages(): string[] {
-  return AVAILABLE_LANGUAGES
-    .filter(lang => lang.completeness >= BETA_THRESHOLD)
-    .map(lang => lang.code);
-}
-
-/**
  * Creates an Express middleware that resolves req.locale for every request.
  *
  * Detection chain (first match wins):
@@ -96,9 +86,6 @@ function defaultEnabledLanguages(): string[] {
  * If the detected locale is not in the instance's enabledLanguages list,
  * the middleware falls back to the instance default.
  *
- * Individual detection steps (URL prefix, cookie, Accept-Language) can be
- * disabled via the localeDetectionMethods admin setting.
- *
  * @param configInterface - ConfigurationInterface for reading language settings.
  *   When provided, settings are fetched via the interface (respects DDD boundaries).
  *   When omitted, falls back to hardcoded defaults for all language settings.
@@ -108,15 +95,13 @@ export function createLocaleMiddleware(configInterface?: ConfigurationInterface)
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     // Load admin language settings via ConfigurationInterface
     let forceLanguage: string | null = null;
-    let detectionMethods = { urlPrefix: true, cookie: true, acceptLanguage: true };
-    let enabledLanguages: string[] = defaultEnabledLanguages();
+    let enabledLanguages: string[] = getDefaultEnabledLanguageCodes();
     let instanceDefault: string = DEFAULT_LANGUAGE_CODE;
 
     if (configInterface) {
       try {
-        [forceLanguage, detectionMethods, enabledLanguages, instanceDefault] = await Promise.all([
+        [forceLanguage, enabledLanguages, instanceDefault] = await Promise.all([
           configInterface.getForceLanguage(),
-          configInterface.getLocaleDetectionMethods(),
           configInterface.getEnabledLanguages(),
           configInterface.getDefaultLanguage(),
         ]);
@@ -132,14 +117,12 @@ export function createLocaleMiddleware(configInterface?: ConfigurationInterface)
       return next();
     }
 
-    // 1. URL prefix (if enabled)
-    if (detectionMethods.urlPrefix) {
-      const urlLocale = detectLocaleFromPath(req.path);
+    // 1. URL prefix
+    const urlLocale = detectLocaleFromPath(req.path);
 
-      if (urlLocale && isValidLanguageCode(urlLocale) && enabledLanguages.includes(urlLocale)) {
-        req.locale = urlLocale;
-        return next();
-      }
+    if (urlLocale && isValidLanguageCode(urlLocale) && enabledLanguages.includes(urlLocale)) {
+      req.locale = urlLocale;
+      return next();
     }
 
     // 2. Account language (populated by passport after JWT auth)
@@ -150,24 +133,20 @@ export function createLocaleMiddleware(configInterface?: ConfigurationInterface)
       return next();
     }
 
-    // 3. Locale cookie (if enabled)
-    if (detectionMethods.cookie) {
-      const cookieLocale = readCookieFromRequest(req);
+    // 3. Locale cookie
+    const cookieLocale = readCookieFromRequest(req);
 
-      if (cookieLocale && isValidLanguageCode(cookieLocale) && enabledLanguages.includes(cookieLocale)) {
-        req.locale = cookieLocale;
-        return next();
-      }
+    if (cookieLocale && isValidLanguageCode(cookieLocale) && enabledLanguages.includes(cookieLocale)) {
+      req.locale = cookieLocale;
+      return next();
     }
 
-    // 4. Accept-Language header (if enabled)
-    if (detectionMethods.acceptLanguage) {
-      const acceptLocale = resolveFromAcceptLanguage(req);
+    // 4. Accept-Language header
+    const acceptLocale = resolveFromAcceptLanguage(req);
 
-      if (acceptLocale && enabledLanguages.includes(acceptLocale)) {
-        req.locale = acceptLocale;
-        return next();
-      }
+    if (acceptLocale && enabledLanguages.includes(acceptLocale)) {
+      req.locale = acceptLocale;
+      return next();
     }
 
     // 5. Instance default language

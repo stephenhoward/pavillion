@@ -2,6 +2,16 @@ import type { InitOptions, FallbackLngObjList } from 'i18next';
 import { AVAILABLE_LANGUAGES, DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 
 /**
+ * The three server-side locale detection methods supported by Pavillion.
+ * Each flag enables or disables the corresponding detection strategy.
+ */
+export type LocaleDetectionMethods = {
+  urlPrefix: boolean;
+  cookie: boolean;
+  acceptLanguage: boolean;
+};
+
+/**
  * App-specific options that can be merged into the base i18next configuration.
  *
  * The `backend` and `detection` fields correspond to i18next plugin configuration.

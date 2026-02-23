@@ -1,11 +1,6 @@
 import axios from 'axios';
 import type { DefaultDateRange } from '@/common/model/calendar';
-
-type LocaleDetectionMethods = {
-  urlPrefix: boolean;
-  cookie: boolean;
-  acceptLanguage: boolean;
-};
+import type { LocaleDetectionMethods } from '@/common/i18n/config';
 
 type Settings = {
   registrationMode: string;
