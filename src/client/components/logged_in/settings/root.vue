@@ -165,20 +165,22 @@ onMounted(async () => {
                   class="text-input"
                   @blur="handleDisplayNameChange"
                 />
-                <transition name="fade">
-                  <span v-if="saveMessage" class="save-feedback" :class="{ 'is-error': saveMessage.includes('Error') || saveMessage.includes('error') }">
-                    {{ saveMessage }}
-                  </span>
-                </transition>
+                <span
+                  class="save-feedback"
+                  :class="{ 'is-error': saveMessage && (saveMessage.includes('Error') || saveMessage.includes('error')), 'is-visible': saveMessage }"
+                  role="status"
+                  aria-live="polite"
+                  aria-atomic="true"
+                >{{ saveMessage ?? '' }}</span>
               </div>
             </div>
 
             <!-- Username (read-only) -->
             <div class="form-field">
-              <label class="field-label">
+              <p id="username-label" class="field-label">
                 {{ t("username_label", { defaultValue: "Username" }) }}
-              </label>
-              <div class="readonly-field">
+              </p>
+              <div class="readonly-field" role="group" aria-labelledby="username-label">
                 <span class="at-symbol">@</span>
                 <span class="username-text">{{ state.userInfo.username }}</span>
                 <span class="readonly-badge">{{ t("readonly_badge", { defaultValue: "Read-only" }) }}</span>
@@ -262,6 +264,7 @@ onMounted(async () => {
           >
             <div class="logout-icon">
               <svg class="icon"
+                   aria-hidden="true"
                    fill="none"
                    viewBox="0 0 24 24"
                    stroke="currentColor">
@@ -291,6 +294,7 @@ onMounted(async () => {
           <router-link to="/admin/settings" class="btn-admin">
             {{ t("admin_link", { defaultValue: "Open Admin Settings" }) }}
             <svg class="icon-arrow"
+                 aria-hidden="true"
                  fill="none"
                  viewBox="0 0 24 24"
                  stroke="currentColor">
@@ -467,6 +471,10 @@ onMounted(async () => {
   color: var(--pav-color-green-600);
   font-weight: 500;
 
+  &:not(.is-visible) {
+    visibility: hidden;
+  }
+
   &.is-error {
     color: var(--pav-color-red-600);
   }
@@ -478,16 +486,6 @@ onMounted(async () => {
       color: var(--pav-color-red-400);
     }
   }
-}
-
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.3s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
 }
 
 .readonly-field {
@@ -635,6 +633,11 @@ onMounted(async () => {
     }
   }
 
+  &:focus-visible {
+    outline: 2px solid var(--pav-color-orange-600);
+    outline-offset: 2px;
+  }
+
   @media (prefers-color-scheme: dark) {
     color: var(--pav-color-orange-400);
   }
@@ -712,6 +715,11 @@ onMounted(async () => {
         color: var(--pav-color-stone-400);
       }
     }
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--pav-color-red-600);
+    outline-offset: 2px;
   }
 }
 
