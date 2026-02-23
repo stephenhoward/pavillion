@@ -52,6 +52,18 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
   _content: Record<string, CalendarEventContent> = {};
   schedules: CalendarEventSchedule[] = [];
   categories: EventCategory[] = [];
+  /**
+   * Whether this event was obtained via a repost (SharedEventEntity) rather than direct ownership.
+   *
+   * Populated by: EventService.listEvents() — sets true when the event has a corresponding
+   * SharedEventEntity for the querying calendar.
+   *
+   * NOT populated by: EventService.getEventById(), EventService.updateEvent(), or
+   * EventService.bulkAssignCategories() (which calls getEventById() internally). Events
+   * returned by those methods will always have isRepost=false regardless of actual repost state.
+   *
+   * Default: false. Must be explicitly set after retrieval if needed.
+   */
   isRepost: boolean = false;
 
   /**

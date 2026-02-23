@@ -295,8 +295,8 @@ export default class ActivityPubMemberRoutes {
     }
 
     const calendar = (req as any).calendar;
-    const page = req.query.page ? parseInt(req.query.page as string) : 0;
-    const pageSize = req.query.pageSize ? parseInt(req.query.pageSize as string) : 20;
+    const page = parseInt(req.query.page as string) || 0;
+    const pageSize = parseInt(req.query.pageSize as string) || 20;
 
     // Verify user has access to this calendar
     const hasAccess = await this.calendarService.userCanModifyCalendar(account, calendar);

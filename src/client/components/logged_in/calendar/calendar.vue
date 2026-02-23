@@ -574,7 +574,9 @@ const hasActiveFilters = computed(() => {
               <div class="event-content">
                 <div class="event-title-row">
                   <h3 :id="`event-title-${event.id}`">{{ event.content("en").name }}</h3>
-                  <span v-if="event.isRepost" class="repost-badge">{{ tFeed('events.repost_button') }}</span>
+                  <span v-if="event.isRepost" class="repost-badge">
+                    <span class="sr-only">{{ tFeed('events.repost_badge_prefix') }}</span>{{ tFeed('events.repost_button') }}
+                  </span>
                   <span v-if="event.languages && event.languages.length > 1" class="language-count">
                     <Languages :size="16" />
                     {{ event.languages.length }} languages
@@ -589,13 +591,13 @@ const hasActiveFilters = computed(() => {
                   </span>
                 </div>
                 <p v-if="event.content('en').description" class="event-description">{{ event.content("en").description }}</p>
-                <div v-if="event.categories && event.categories.length > 0" class="event-categories">
-                  <span v-for="category in event.categories"
-                        :key="category.id"
-                        class="category-badge">
+                <ul v-if="event.categories && event.categories.length > 0" class="event-categories" role="list">
+                  <li v-for="category in event.categories"
+                      :key="category.id"
+                      class="category-badge">
                     {{ category.content('en').name }}
-                  </span>
-                </div>
+                  </li>
+                </ul>
               </div>
             </article>
             <div class="event-actions">
@@ -672,7 +674,6 @@ const hasActiveFilters = computed(() => {
     <!-- Repost Category Edit Modal -->
     <RepostCategoriesModal
       v-if="repostEventForModal"
-      :event-title="repostEventForModal.content('en').name"
       :event="repostEventForModal"
       :pre-selected-categories="repostEventForModal.categories.map(c => ({ id: c.id, name: c.content('en').name }))"
       :all-local-categories="(categoryStore.categories[calendarId] || []).map(c => ({ id: c.id, name: c.content('en').name }))"
@@ -1032,6 +1033,8 @@ section[aria-label="Calendar Events"] {
         flex-wrap: wrap;
         gap: 0.375rem;
         margin-top: 0.5rem;
+        padding: 0;
+        list-style: none;
 
         .category-badge {
           display: inline-flex;

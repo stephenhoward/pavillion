@@ -329,6 +329,58 @@ describe('ActivityPub Social API Routes', () => {
       expect(pageSize).toBe(20);
     });
 
+    it('should fall back to default pageSize when pageSize is not a valid number', async () => {
+      const getFeedStub = sandbox.stub(activityPubInterface, 'getFeed').resolves([]);
+
+      const req = {
+        user: testAccount,
+        query: {
+          calendarId: testCalendar.id,
+          page: '0',
+          pageSize: 'abc',
+        },
+        calendar: testCalendar,
+      };
+      const res = {
+        status: sinon.stub(),
+        send: sinon.stub(),
+        json: sinon.stub(),
+      };
+      res.status.returns(res);
+
+      await routes.getFeed(req as any, res as any);
+
+      expect(getFeedStub.calledOnce).toBe(true);
+      const [, , pageSize] = getFeedStub.firstCall.args;
+      expect(pageSize).toBe(20);
+    });
+
+    it('should fall back to page 0 when page param is not a valid number', async () => {
+      const getFeedStub = sandbox.stub(activityPubInterface, 'getFeed').resolves([]);
+
+      const req = {
+        user: testAccount,
+        query: {
+          calendarId: testCalendar.id,
+          page: 'NaN',
+          pageSize: '10',
+        },
+        calendar: testCalendar,
+      };
+      const res = {
+        status: sinon.stub(),
+        send: sinon.stub(),
+        json: sinon.stub(),
+      };
+      res.status.returns(res);
+
+      await routes.getFeed(req as any, res as any);
+
+      expect(getFeedStub.calledOnce).toBe(true);
+      const [, page] = getFeedStub.firstCall.args;
+      expect(page).toBe(0);
+    });
+
     it('should require authenticated user', async () => {
       const req = {
         query: {

@@ -472,3 +472,86 @@ describe('EventService.bulkAssignCategories', () => {
     expect((mockTransaction.rollback as sinon.SinonStub).calledOnce).toBe(true);
   });
 });
+
+describe('EventService.resolveEffectiveCalendarId', () => {
+  let service: EventService;
+  let sandbox = sinon.createSandbox();
+  let mockAccount: Account;
+
+  beforeEach(() => {
+    service = new EventService(new EventEmitter());
+    mockAccount = new Account('test-account-id', 'test@example.com');
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('should return the original calendarId when account owns the calendar', async () => {
+    const calendarId = 'ownedcal-0000-4000-8000-000000000001';
+    const eventIds = ['event-id-0000-4000-8000-000000000001'];
+    const mockTransaction = {
+      commit: sandbox.stub().resolves(),
+      rollback: sandbox.stub().resolves(),
+    } as unknown as Transaction;
+
+    sandbox.stub(CalendarService.prototype, 'editableCalendarsForUser')
+      .resolves([new Calendar(calendarId, 'my-calendar')]);
+
+    const result = await (service as any).resolveEffectiveCalendarId(
+      mockAccount, calendarId, eventIds, mockTransaction,
+    );
+
+    expect(result.effectiveCalendarId).toBe(calendarId);
+    expect(result.wasRepost).toBe(false);
+    expect(result.userCalendars).toHaveLength(1);
+  });
+
+  it('should resolve to repost calendar when events are reposts', async () => {
+    const originalCalendarId = 'foreigncal-0000-4000-8000-000000000001';
+    const repostCalendarId  = 'repostcal-0000-4000-8000-000000000001';
+    const eventIds = ['event-id-0000-4000-8000-000000000001'];
+    const mockTransaction = {
+      commit: sandbox.stub().resolves(),
+      rollback: sandbox.stub().resolves(),
+    } as unknown as Transaction;
+
+    sandbox.stub(CalendarService.prototype, 'editableCalendarsForUser')
+      .resolves([new Calendar(repostCalendarId, 'my-calendar')]);
+
+    sandbox.stub(EventRepostEntity, 'findAll').resolves([
+      EventRepostEntity.build({ event_id: eventIds[0], calendar_id: repostCalendarId }),
+    ] as any);
+
+    const result = await (service as any).resolveEffectiveCalendarId(
+      mockAccount, originalCalendarId, eventIds, mockTransaction,
+    );
+
+    expect(result.effectiveCalendarId).toBe(repostCalendarId);
+    expect(result.wasRepost).toBe(true);
+  });
+
+  it('should leave effectiveCalendarId unresolved when account owns neither calendar', async () => {
+    const foreignCalendarId = 'foreigncal-0000-4000-8000-000000000001';
+    const ownedCalendarId   = 'ownedcal-0000-4000-8000-000000000001';
+    const eventIds = ['event-id-0000-4000-8000-000000000001'];
+    const mockTransaction = {
+      commit: sandbox.stub().resolves(),
+      rollback: sandbox.stub().resolves(),
+    } as unknown as Transaction;
+
+    sandbox.stub(CalendarService.prototype, 'editableCalendarsForUser')
+      .resolves([new Calendar(ownedCalendarId, 'my-calendar')]);
+
+    // No matching reposts either
+    sandbox.stub(EventRepostEntity, 'findAll').resolves([]);
+
+    const result = await (service as any).resolveEffectiveCalendarId(
+      mockAccount, foreignCalendarId, eventIds, mockTransaction,
+    );
+
+    // The method doesn't throw; the caller's permission check will throw
+    expect(result.effectiveCalendarId).toBe(foreignCalendarId);
+    expect(result.wasRepost).toBe(false);
+  });
+});

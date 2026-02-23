@@ -11,7 +11,6 @@ interface Category {
 }
 
 const props = defineProps<{
-  eventTitle?: string;
   preSelectedCategories: Category[];
   allLocalCategories: Category[];
   event?: CalendarEvent;
@@ -109,14 +108,6 @@ function getEventSource(url: string): string | null {
           </div>
         </dl>
       </div>
-
-      <!-- Description paragraph (shown in feed repost flow when event prop is absent) -->
-      <p
-        v-else
-        class="description"
-      >
-        {{ t('categoryMapping.repostDialogDescription', { eventTitle }) }}
-      </p>
 
       <fieldset
         v-if="allLocalCategories.length > 0"
@@ -218,13 +209,6 @@ div.repost-categories-modal {
         }
       }
     }
-  }
-
-  p.description {
-    margin: 0;
-    color: var(--pav-color-text-primary);
-    font-size: 0.9375rem;
-    line-height: 1.5;
   }
 
   fieldset.category-fieldset {

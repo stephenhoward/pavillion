@@ -96,14 +96,14 @@ const pendingRepostPreSelected = computed(() => {
 });
 
 /**
- * Derive the event title for the pending repost modal.
+ * Derive the full event object for the pending repost modal.
+ * Passes the complete event so the modal can display event details.
  */
-const pendingRepostEventTitle = computed(() => {
+const pendingRepostEvent = computed(() => {
   if (!pendingRepost.value) {
-    return '';
+    return null;
   }
-  const event = events.value.find((e) => e.id === pendingRepost.value.eventId);
-  return event ? getEventTitle(event) : '';
+  return events.value.find((e) => e.id === pendingRepost.value.eventId) ?? null;
 });
 
 /**
@@ -294,7 +294,7 @@ onUnmounted(() => {
     <!-- Repost categories modal — shown when pendingRepost is set -->
     <RepostCategoriesModal
       v-if="pendingRepost"
-      :event-title="pendingRepostEventTitle"
+      :event="pendingRepostEvent"
       :pre-selected-categories="pendingRepostPreSelected"
       :all-local-categories="pendingRepost.allLocalCategories"
       @confirm="handleRepostConfirm"

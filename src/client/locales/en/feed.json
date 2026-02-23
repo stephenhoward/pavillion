@@ -36,6 +36,7 @@
         "repost_error": "Failed to repost event",
         "unrepost_error": "Failed to remove repost",
         "repost_button": "Repost",
+        "repost_badge_prefix": "Event type: ",
         "reposted_button": "Reposted",
         "unrepost_aria_label": "Remove repost",
         "auto_posted_label": "Auto-posted",

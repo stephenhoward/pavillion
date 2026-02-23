@@ -23,6 +23,15 @@ const PRE_SELECTED = [
   { id: 'cat-1', name: 'Music' },
 ];
 
+const MOCK_EVENT = {
+  id: 'event-123',
+  content: (lang: string) => ({ name: 'Test Event', description: 'A test event description' }),
+  schedules: [],
+  categories: [],
+  location: null,
+  eventSourceUrl: 'https://example.com/event',
+} as any;
+
 const mountModal = (props: Record<string, any> = {}): VueWrapper => {
   return mount(RepostCategoriesModal, {
     global: {
@@ -38,7 +47,6 @@ const mountModal = (props: Record<string, any> = {}): VueWrapper => {
       },
     },
     props: {
-      eventTitle: 'Test Event',
       preSelectedCategories: PRE_SELECTED,
       allLocalCategories: ALL_CATEGORIES,
       ...props,
@@ -63,12 +71,21 @@ describe('RepostCategoriesModal', () => {
   });
 
   describe('Rendering', () => {
-    it('renders a description paragraph', async () => {
+    it('renders event-details section when event prop is provided', async () => {
+      const wrapper = mountModal({ event: MOCK_EVENT });
+      await flushPromises();
+
+      const details = wrapper.find('.event-details');
+      expect(details.exists()).toBe(true);
+      wrapper.unmount();
+    });
+
+    it('does not render event-details section when no event prop is provided', async () => {
       const wrapper = mountModal();
       await flushPromises();
 
-      const description = wrapper.find('p.description');
-      expect(description.exists()).toBe(true);
+      const details = wrapper.find('.event-details');
+      expect(details.exists()).toBe(false);
       wrapper.unmount();
     });
 
