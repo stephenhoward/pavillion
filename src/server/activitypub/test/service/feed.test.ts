@@ -13,6 +13,7 @@ import {
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import { EventEntity } from '@/server/calendar/entity/event';
+import CalendarInterface from '@/server/calendar/interface';
 
 describe("ActivityPub Feed Service Methods", () => {
   let service: ActivityPubService;
@@ -23,7 +24,7 @@ describe("ActivityPub Feed Service Methods", () => {
   beforeEach(() => {
     sandbox = sinon.createSandbox();
     const eventBus = new EventEmitter();
-    service = new ActivityPubService(eventBus);
+    service = new ActivityPubService(eventBus, new CalendarInterface(eventBus));
 
     account = Account.fromObject({ id: 'test-account-id' });
     calendar = Calendar.fromObject({ id: 'test-calendar-id', urlName: 'testcalendar' });
@@ -311,7 +312,7 @@ describe("getFeed repost status lookup", () => {
   beforeEach(() => {
     sandbox = sinon.createSandbox();
     const eventBus = new EventEmitter();
-    service = new ActivityPubService(eventBus);
+    service = new ActivityPubService(eventBus, new CalendarInterface(eventBus));
     calendar = Calendar.fromObject({ id: 'consumer-calendar-id', urlName: 'consumer' });
   });
 

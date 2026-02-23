@@ -19,6 +19,7 @@ import {
   SelfFollowError,
 } from '@/common/exceptions/activitypub';
 import { InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
+import CalendarInterface from '@/server/calendar/interface';
 
 describe('ActivityPubService Exception Handling', () => {
   let service: ActivityPubService;
@@ -29,7 +30,7 @@ describe('ActivityPubService Exception Handling', () => {
   beforeEach(() => {
     sandbox = sinon.createSandbox();
     const eventBus = new EventEmitter();
-    service = new ActivityPubService(eventBus);
+    service = new ActivityPubService(eventBus, new CalendarInterface(eventBus));
     account = Account.fromObject({ id: 'test-account-id' });
     calendar = Calendar.fromObject({ id: 'test-calendar-id', urlName: 'testcalendar' });
   });

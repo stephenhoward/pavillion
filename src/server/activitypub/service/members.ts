@@ -61,9 +61,9 @@ class ActivityPubService {
 
   constructor(
     private eventBus: EventEmitter,
-    calendarInterface?: CalendarInterface,
+    calendarInterface: CalendarInterface,
   ) {
-    this.calendarService = calendarInterface ?? new CalendarInterface(eventBus);
+    this.calendarService = calendarInterface;
     this.remoteCalendarService = new RemoteCalendarService();
   }
 

@@ -7,6 +7,8 @@ import { Calendar } from '@/common/model/calendar';
 import { EventEntity } from '@/server/calendar/entity/event';
 import { FollowingCalendarEntity, SharedEventEntity } from '@/server/activitypub/entity/activitypub';
 import { setupActivityPubSchema, teardownActivityPubSchema } from '@/server/test/helpers/database';
+import { EventEmitter } from 'events';
+import CalendarInterface from '@/server/calendar/interface';
 
 describe('ActivityPubService - getFeed with EventObjectEntity Join', () => {
   let sandbox: sinon.SinonSandbox;
@@ -18,7 +20,8 @@ describe('ActivityPubService - getFeed with EventObjectEntity Join', () => {
     await setupActivityPubSchema();
 
     sandbox = sinon.createSandbox();
-    service = new ActivityPubService();
+    const eventBus = new EventEmitter();
+    service = new ActivityPubService(eventBus, new CalendarInterface(eventBus));
     calendar = new Calendar('local-calendar-id', 'localcalendar');
   });
 

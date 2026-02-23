@@ -44,7 +44,7 @@ describe("followCalendar", () => {
 
   beforeEach(() => {
     const eventBus = new EventEmitter();
-    service = new ActivityPubService(eventBus);
+    service = new ActivityPubService(eventBus, new CalendarInterface(eventBus));
     getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
     getCalendarStub.resolves(Calendar.fromObject({ id: 'testid' }));
     userCanEditCalendarStub = sandbox.stub(service.calendarService, 'userCanModifyCalendar');
@@ -195,7 +195,7 @@ describe("unfollowCalendar", () => {
     await setupActivityPubSchema();
 
     const eventBus = new EventEmitter();
-    service = new ActivityPubService(eventBus);
+    service = new ActivityPubService(eventBus, new CalendarInterface(eventBus));
     getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
     getCalendarStub.resolves(Calendar.fromObject({ id: 'testid' }));
     userCanEditCalendarStub = sandbox.stub(service.calendarService, 'userCanModifyCalendar');
@@ -306,7 +306,7 @@ describe("getFeed - Local Calendar Follows", () => {
   beforeEach(() => {
     sandbox = sinon.createSandbox();
     const eventBus = new EventEmitter();
-    service = new ActivityPubService(eventBus);
+    service = new ActivityPubService(eventBus, new CalendarInterface(eventBus));
     account = Account.fromObject({ id: 'test-account-id' });
   });
 
@@ -775,7 +775,7 @@ describe("shareEvent - authorization", () => {
 
   beforeEach(() => {
     const eventBus = new EventEmitter();
-    service = new ActivityPubService(eventBus);
+    service = new ActivityPubService(eventBus, new CalendarInterface(eventBus));
   });
 
   afterEach(() => {
@@ -801,7 +801,7 @@ describe("unshareEvent - authorization", () => {
 
   beforeEach(() => {
     const eventBus = new EventEmitter();
-    service = new ActivityPubService(eventBus);
+    service = new ActivityPubService(eventBus, new CalendarInterface(eventBus));
   });
 
   afterEach(() => {
@@ -832,7 +832,7 @@ describe("ActivityPubService - constructor injection", () => {
     sandbox.restore();
   });
 
-  it('uses injected CalendarInterface instead of creating a new one', () => {
+  it('uses injected CalendarInterface', () => {
     const eventBus = new EventEmitter();
     const injectedCalendarInterface = new CalendarInterface(eventBus);
 
@@ -840,14 +840,6 @@ describe("ActivityPubService - constructor injection", () => {
 
     // The injected instance should be the one used by the service
     expect(service.calendarService).toBe(injectedCalendarInterface);
-  });
-
-  it('creates a default CalendarInterface when none is injected', () => {
-    const eventBus = new EventEmitter();
-    const service = new ActivityPubService(eventBus);
-
-    // Should have a CalendarInterface instance
-    expect(service.calendarService).toBeInstanceOf(CalendarInterface);
   });
 });
 
