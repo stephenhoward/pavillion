@@ -37,7 +37,7 @@ export default class ActivityPubInterface {
     moderationInterface?: ModerationInterface,
   ) {
     this.calendarInterface = calendarInterface;
-    this.memberService = new ActivityPubMemberService(eventBus);
+    this.memberService = new ActivityPubMemberService(eventBus, calendarInterface);
     this.serverService = new ActivityPubServerService(eventBus, calendarInterface, accountsInterface);
     this.inboxSerivce = new ProcessInboxService(eventBus, this.calendarInterface, moderationInterface);
     this.outboxService = new ProcessOutboxService(eventBus);
