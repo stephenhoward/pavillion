@@ -11,6 +11,7 @@ import {
   InvalidRemoteCalendarIdentifierError,
   AlreadyFollowingError,
 } from '@/common/exceptions/activitypub';
+import { InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
 import { setupActivityPubSchema, teardownActivityPubSchema } from '@/server/test/helpers/database';
 
 // Mock CalendarActor model for testing (remote type)
@@ -762,5 +763,57 @@ describe("getFeed - Local Calendar Follows", () => {
     expect(feed).toHaveLength(1);
     expect(feed[0].id).toBe('event-1');
     expect(feed[0].repostStatus).toBe('manual');
+  });
+});
+
+describe("shareEvent - authorization", () => {
+  let service: ActivityPubService;
+  let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+
+  beforeEach(() => {
+    const eventBus = new EventEmitter();
+    service = new ActivityPubService(eventBus);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('should throw InsufficientCalendarPermissionsError when account cannot modify the calendar', async () => {
+    const nonOwnerAccount = Account.fromObject({ id: 'non-owner-account-id' });
+    const calendar = Calendar.fromObject({ id: 'some-calendar-id', urlName: 'some-calendar' });
+
+    // Stub userCanModifyCalendar to return false (non-owner)
+    sandbox.stub(service.calendarService, 'userCanModifyCalendar').resolves(false);
+
+    await expect(
+      service.shareEvent(nonOwnerAccount, calendar, 'https://example.com/events/1'),
+    ).rejects.toThrow(InsufficientCalendarPermissionsError);
+  });
+});
+
+describe("unshareEvent - authorization", () => {
+  let service: ActivityPubService;
+  let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+
+  beforeEach(() => {
+    const eventBus = new EventEmitter();
+    service = new ActivityPubService(eventBus);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('should throw InsufficientCalendarPermissionsError when account cannot modify the calendar', async () => {
+    const nonOwnerAccount = Account.fromObject({ id: 'non-owner-account-id' });
+    const calendar = Calendar.fromObject({ id: 'some-calendar-id', urlName: 'some-calendar' });
+
+    // Stub userCanModifyCalendar to return false (non-owner)
+    sandbox.stub(service.calendarService, 'userCanModifyCalendar').resolves(false);
+
+    await expect(
+      service.unshareEvent(nonOwnerAccount, calendar, 'https://example.com/events/1'),
+    ).rejects.toThrow(InsufficientCalendarPermissionsError);
   });
 });

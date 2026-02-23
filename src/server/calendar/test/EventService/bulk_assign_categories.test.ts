@@ -4,6 +4,7 @@ import { EventEmitter } from 'events';
 
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
+import { CalendarEvent } from '@/common/model/events';
 import { EventEntity } from '@/server/calendar/entity/event';
 import { EventCategoryEntity } from '@/server/calendar/entity/event_category';
 import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_category_assignment';
@@ -302,6 +303,120 @@ describe('EventService.bulkAssignCategories', () => {
     expect(result).toHaveLength(1);
     expect(bulkCreateStub.calledOnce).toBe(true);
     expect(mockTransaction.commit.calledOnce).toBe(true);
+  });
+
+  it('should set isRepost=true on returned events when a repost resolution occurred', async () => {
+    // Verifies Bug 2 fix: getEventById never sets isRepost, so after bulkAssignCategories
+    // resolves through the repost path, returned events must have isRepost=true set
+    // explicitly so the store reflects the correct state without requiring a page refresh.
+    const eventId = '11111111-1111-4111-8111-111111111111';
+    const categoryId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const originalCalendarId = 'original-calendar-uuid';
+    const reposterCalendarId = 'reposter-calendar-uuid';
+
+    const mockEvent = EventEntity.build({
+      id: eventId,
+      calendar_id: originalCalendarId,
+      account_id: 'other-account-id',
+    });
+
+    const mockCategory = EventCategoryEntity.build({
+      id: categoryId,
+      calendar_id: reposterCalendarId,
+    });
+
+    const mockRepost = EventRepostEntity.build({
+      id: 'repost-uuid',
+      event_id: eventId,
+      calendar_id: reposterCalendarId,
+    });
+
+    sandbox.stub(EventEntity, 'findAll').resolves([mockEvent]);
+
+    sandbox.stub(CalendarService.prototype, 'editableCalendarsForUser')
+      .resolves([new Calendar(reposterCalendarId, 'reposter-calendar')]);
+
+    sandbox.stub(EventRepostEntity, 'findAll').resolves([mockRepost]);
+
+    sandbox.stub(CalendarService.prototype, 'getCalendar')
+      .resolves(new Calendar(reposterCalendarId, 'reposter-calendar'));
+
+    sandbox.stub(EventCategoryEntity, 'findAll').resolves([mockCategory]);
+    sandbox.stub(EventCategoryAssignmentEntity, 'findAll').resolves([]);
+
+    const mockTransaction = {
+      commit: sandbox.stub().resolves(),
+      rollback: sandbox.stub().resolves(),
+      afterCommit: sandbox.stub(),
+      LOCK: {},
+    } as unknown as Transaction;
+    sandbox.stub(db, 'transaction').resolves(mockTransaction);
+
+    sandbox.stub(EventCategoryAssignmentEntity, 'bulkCreate').resolves([]);
+
+    // getEventById returns an event with isRepost=false (as it always does, since it
+    // doesn't know about the repost relationship)
+    const returnedEvent = new CalendarEvent(eventId, reposterCalendarId);
+    returnedEvent.isRepost = false;
+    const getEventByIdStub = sandbox.stub(service, 'getEventById');
+    getEventByIdStub.withArgs(eventId).resolves(returnedEvent);
+
+    const result = await service.bulkAssignCategories(mockAccount, [eventId], [categoryId]);
+
+    // The service must correct isRepost to true since repost resolution occurred
+    expect(result).toHaveLength(1);
+    expect(result[0].isRepost).toBe(true);
+  });
+
+  it('should set isRepost=false on returned events when no repost resolution occurred', async () => {
+    // Verifies that the wasRepost flag stays false for normal (non-repost) events,
+    // so local events continue to have isRepost=false after category assignment.
+    const eventId = '11111111-1111-4111-8111-111111111111';
+    const categoryId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const calendarId = 'local-calendar-uuid';
+
+    const mockEvent = EventEntity.build({
+      id: eventId,
+      calendar_id: calendarId,
+      account_id: 'test-account-id',
+    });
+
+    const mockCategory = EventCategoryEntity.build({
+      id: categoryId,
+      calendar_id: calendarId,
+    });
+
+    sandbox.stub(EventEntity, 'findAll').resolves([mockEvent]);
+
+    // User owns the calendar directly — no repost resolution needed
+    sandbox.stub(CalendarService.prototype, 'editableCalendarsForUser')
+      .resolves([new Calendar(calendarId, 'local-calendar')]);
+
+    sandbox.stub(CalendarService.prototype, 'getCalendar')
+      .resolves(new Calendar(calendarId, 'local-calendar'));
+
+    sandbox.stub(EventCategoryEntity, 'findAll').resolves([mockCategory]);
+    sandbox.stub(EventCategoryAssignmentEntity, 'findAll').resolves([]);
+
+    const mockTransaction = {
+      commit: sandbox.stub().resolves(),
+      rollback: sandbox.stub().resolves(),
+      afterCommit: sandbox.stub(),
+      LOCK: {},
+    } as unknown as Transaction;
+    sandbox.stub(db, 'transaction').resolves(mockTransaction);
+
+    sandbox.stub(EventCategoryAssignmentEntity, 'bulkCreate').resolves([]);
+
+    const returnedEvent = new CalendarEvent(eventId, calendarId);
+    returnedEvent.isRepost = false;
+    const getEventByIdStub = sandbox.stub(service, 'getEventById');
+    getEventByIdStub.withArgs(eventId).resolves(returnedEvent);
+
+    const result = await service.bulkAssignCategories(mockAccount, [eventId], [categoryId]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].isRepost).toBe(false);
   });
 
   it('should rollback transaction on error', async () => {

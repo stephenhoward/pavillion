@@ -1170,6 +1170,8 @@ class EventService {
     }
 
 
+    let wasRepost = false;
+
     const transaction = await db.transaction();
 
     try {
@@ -1210,6 +1212,7 @@ class EventService {
           const repostCalendarIds = [...new Set(reposts.map(r => r.calendar_id))];
           if (repostCalendarIds.length === 1 && userCalendars.some(cal => cal.id === repostCalendarIds[0])) {
             calendarId = repostCalendarIds[0];
+            wasRepost = true;
           }
         }
       }
@@ -1285,6 +1288,7 @@ class EventService {
     const updatedEvents = [];
     for (const eventId of eventIds) {
       const updatedEvent = await this.getEventById(eventId);
+      updatedEvent.isRepost = wasRepost;
       updatedEvents.push(updatedEvent);
     }
 

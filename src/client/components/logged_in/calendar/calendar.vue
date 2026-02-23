@@ -553,7 +553,7 @@ const hasActiveFilters = computed(() => {
               <div class="event-content">
                 <div class="event-title-row">
                   <h3 :id="`event-title-${event.id}`">{{ event.content("en").name }}</h3>
-                  <span v-if="event.isRepost" class="repost-badge">Repost</span>
+                  <span v-if="event.isRepost" class="repost-badge">{{ tFeed('events.repost_button') }}</span>
                   <span v-if="event.languages && event.languages.length > 1" class="language-count">
                     <Languages :size="16" />
                     {{ event.languages.length }} languages

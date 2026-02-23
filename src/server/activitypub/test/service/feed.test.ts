@@ -107,7 +107,7 @@ describe("ActivityPub Feed Service Methods", () => {
 
       await expect(
         service.shareEvent(account, calendar, 'https://remote.com/event/no-uuid-in-url', false),
-      ).rejects.toThrow('Cannot share event: no EventObjectEntity found for URL');
+      ).rejects.toThrow('Invalid shared event URL');
     });
   });
 

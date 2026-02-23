@@ -291,12 +291,13 @@ class ActivityPubService {
     categoryIds?: string[],
   ) {
 
-    if ( ! this.calendarService.userCanModifyCalendar(account, calendar) ) {
+    if ( ! await this.calendarService.userCanModifyCalendar(account, calendar) ) {
       throw new InsufficientCalendarPermissionsError('User does not have permission to modify calendar: ' + calendar.id);
     }
 
     if (!eventUrl.match("^https:\/\/")) {
-      throw new InvalidSharedEventUrlError('Invalid shared event url: ' + eventUrl);
+      console.warn('[MemberService] shareEvent rejected invalid event URL (not https):', eventUrl);
+      throw new InvalidSharedEventUrlError('Invalid shared event URL');
     }
 
     // Resolve AP URL to local event UUID for consistent storage.
@@ -333,9 +334,8 @@ class ActivityPubService {
     // activity or store a consistent UUID key. This should not occur in normal operation —
     // any event reachable via AP must have an EventObjectEntity record.
     if (!eventObject) {
-      throw new InvalidSharedEventUrlError(
-        'Cannot share event: no EventObjectEntity found for URL ' + eventUrl,
-      );
+      console.warn('[MemberService] shareEvent: no EventObjectEntity found for URL:', eventUrl);
+      throw new InvalidSharedEventUrlError('Invalid shared event URL');
     }
 
     const localEventId = eventObject.event_id;
@@ -376,7 +376,7 @@ class ActivityPubService {
      */
   async unshareEvent(account: Account, calendar: Calendar, eventUrl: string) {
 
-    if (!this.calendarService.userCanModifyCalendar(account, calendar)) {
+    if (!await this.calendarService.userCanModifyCalendar(account, calendar)) {
       throw new InsufficientCalendarPermissionsError('User does not have permission to modify calendar: ' + calendar.id);
     }
 

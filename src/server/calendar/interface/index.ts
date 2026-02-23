@@ -39,7 +39,7 @@ export default class CalendarInterface {
   private eventInstanceService: EventInstanceService;
   private categoryService: CategoryService;
   private widgetDomainService: WidgetDomainService;
-  public categoryMappingService: CategoryMappingService;
+  private categoryMappingService: CategoryMappingService;
 
   constructor(
     eventBus: EventEmitter,
@@ -378,6 +378,20 @@ export default class CalendarInterface {
     }
 
     return this.widgetDomainService.clearAllowedDomain(calendar);
+  }
+
+  // Category mapping operations
+
+  /**
+   * Assigns explicitly selected local categories to a manually reposted event.
+   * Delegates to CategoryMappingService; no permission check needed here because
+   * the caller (shareEvent) has already verified the user can modify the calendar.
+   *
+   * @param eventId - The local event ID to assign categories to
+   * @param categoryIds - Local category IDs selected by the user in the repost modal
+   */
+  async assignManualRepostCategories(eventId: string, categoryIds: string[]): Promise<void> {
+    return this.categoryMappingService.assignManualRepostCategories(eventId, categoryIds);
   }
 
 }

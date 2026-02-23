@@ -539,6 +539,13 @@ export default class ActivityPubMemberRoutes {
     const eventId = req.params.id;
 
     if (typeof eventId === 'string') {
+      if (!ExpressHelper.isValidUUID(eventId)) {
+        res.status(400).json({
+          error: 'Invalid event ID format',
+          errorName: 'ValidationError',
+        });
+        return;
+      }
       try {
         await this.service.unshareEvent(account, calendar, eventId);
         res.status(200).send('Unshared');
