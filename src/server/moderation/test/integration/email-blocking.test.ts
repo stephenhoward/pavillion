@@ -8,7 +8,6 @@ import { EventReporterEntity } from '../../entity/event_reporter';
 import { Account } from '@/common/model/account';
 import { AccountEntity } from '@/server/common/entity/account';
 import { ReportCategory } from '@/common/model/report';
-import { ReporterBlockedError } from '../../exceptions';
 import { TestEnvironment } from '@/server/test/lib/test_environment';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -300,7 +299,7 @@ describe('ModerationService - Report Submission with Email Blocking', () => {
         description: 'This is spam',
         reporterEmail: blockedEmail,
         reporterType: 'anonymous',
-      })).rejects.toThrow(ReporterBlockedError);
+      })).rejects.toMatchObject({ name: 'ReporterBlockedError' });
 
       // Verify no report was created
       const reports = await ReportEntity.findAll({
@@ -325,7 +324,7 @@ describe('ModerationService - Report Submission with Email Blocking', () => {
         description: 'Test',
         reporterEmail: email,
         reporterType: 'anonymous',
-      })).rejects.toThrow(ReporterBlockedError);
+      })).rejects.toMatchObject({ name: 'ReporterBlockedError' });
 
       // Unblock the email
       await emailBlockingService.unblockReporter(blocked.emailHash);
@@ -371,7 +370,7 @@ describe('ModerationService - Report Submission with Email Blocking', () => {
           description: 'Test',
           reporterEmail: email,
           reporterType: 'anonymous',
-        })).rejects.toThrow(ReporterBlockedError);
+        })).rejects.toMatchObject({ name: 'ReporterBlockedError' });
       }
 
       // No reports should be created
