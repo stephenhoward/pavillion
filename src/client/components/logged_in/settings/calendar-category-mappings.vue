@@ -135,13 +135,15 @@ async function save() {
         </button>
 
         <span
+          v-if="saveSuccess"
           class="save-feedback success"
           role="status"
           aria-live="polite"
         >
-          {{ saveSuccess ? t('save_success') : '' }}
+          {{ t('save_success') }}
         </span>
         <span
+          v-if="saveError"
           class="save-feedback error"
           role="alert"
           aria-live="assertive"

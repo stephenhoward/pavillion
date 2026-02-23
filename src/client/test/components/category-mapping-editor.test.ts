@@ -22,6 +22,8 @@ function mountEditor(props: Record<string, unknown>) {
             no_mapping: 'No mapping',
             no_source_categories: 'Source calendar has no categories',
             dropdown_label: 'Map "{{name}}" to local category',
+            source_column_label: 'Their Categories',
+            local_column_label: 'Our Categories',
           },
         },
       },
@@ -56,10 +58,19 @@ describe('CategoryMappingEditor', () => {
   ];
 
   describe('rendering', () => {
+    it('renders column headers', () => {
+      wrapper = mountEditor({ sourceCategories, localCategories, modelValue: [] });
+
+      const headerRow = wrapper.find('.mapping-row.column-headers');
+      expect(headerRow.exists()).toBe(true);
+      expect(headerRow.text()).toContain('Their Categories');
+      expect(headerRow.text()).toContain('Our Categories');
+    });
+
     it('renders a row for each source category', () => {
       wrapper = mountEditor({ sourceCategories, localCategories, modelValue: [] });
 
-      const rows = wrapper.findAll('.mapping-row');
+      const rows = wrapper.findAll('.mapping-row:not(.column-headers)');
       expect(rows).toHaveLength(2);
       expect(rows[0].text()).toContain('Music');
       expect(rows[1].text()).toContain('Sports');

@@ -179,6 +179,19 @@ describe('CalendarCategoryMappings', () => {
       expect(saveBtn.text()).toBe('Save mappings');
       wrapper.unmount();
     });
+
+    it('does not render save feedback spans in idle state', async () => {
+      sandbox.stub(FeedService.prototype, 'getSourceCategories').resolves(SOURCE_CATEGORIES);
+      sandbox.stub(FeedService.prototype, 'getCalendarCategories').resolves(LOCAL_CATEGORIES);
+      sandbox.stub(FeedService.prototype, 'getCategoryMappings').resolves(EXISTING_MAPPINGS);
+
+      const wrapper = mountPage();
+      await flushPromises();
+
+      expect(wrapper.find('.save-feedback.success').exists()).toBe(false);
+      expect(wrapper.find('.save-feedback.error').exists()).toBe(false);
+      wrapper.unmount();
+    });
   });
 
   describe('save operation', () => {

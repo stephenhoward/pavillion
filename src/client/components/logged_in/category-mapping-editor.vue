@@ -62,6 +62,14 @@ function onSelect(sourceCat: SourceCategory, localCategoryId: string) {
       :aria-label="t('group_label')"
     >
       <div
+        class="mapping-row column-headers"
+        aria-hidden="true"
+      >
+        <span class="source-name">{{ t('source_column_label') }}</span>
+        <span class="mapping-arrow" />
+        <span class="column-header-local">{{ t('local_column_label') }}</span>
+      </div>
+      <div
         v-for="cat in sourceCategories"
         :key="cat.id"
         class="mapping-row"
@@ -108,6 +116,25 @@ function onSelect(sourceCat: SourceCategory, localCategoryId: string) {
   display: flex;
   align-items: center;
   gap: var(--pav-space-3);
+
+  &.column-headers {
+    .source-name,
+    .column-header-local {
+      font-size: 0.75rem;
+      font-weight: var(--pav-font-weight-bold);
+      color: var(--pav-color-stone-500);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+
+      @media (prefers-color-scheme: dark) {
+        color: var(--pav-color-stone-400);
+      }
+    }
+  }
+
+  .column-header-local {
+    flex: 1;
+  }
 
   .source-name {
     flex: 1;

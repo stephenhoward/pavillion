@@ -181,6 +181,8 @@
     "deselect_all_label": "Deselect all selected categories"
   },
   "category_mapping": {
+    "source_column_label": "Their Categories",
+    "local_column_label": "Our Categories",
     "no_mapping": "No mapping",
     "no_source_categories": "Source calendar has no categories",
     "dropdown_label": "Map \"{{name}}\" to local category",
