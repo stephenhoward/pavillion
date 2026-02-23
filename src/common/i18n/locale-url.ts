@@ -35,8 +35,11 @@ export function addLocalePrefix(path: string, locale: string, defaultLocale: str
  * Removes a locale prefix from a URL path.
  * Returns the locale found (or null if no valid locale prefix) and the remaining path.
  *
- * @param path - The URL path to strip (e.g., '/fr/@calendar')
- * @returns An object with the detected locale (or null) and the remaining path
+ * Locale-prefixed URLs have the form /{lang-code}/rest-of-path
+ * (e.g., /es/view/calendar, /fr/view/calendar).
+ *
+ * @param path - The URL path to inspect (should start with '/')
+ * @returns Object with the detected locale code (or null) and the remaining path
  */
 export function stripLocalePrefix(path: string): { locale: string | null; path: string } {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;

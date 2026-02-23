@@ -20,9 +20,9 @@ Config.init().then( (config) => {
   const authentication = new Authentication(localStorage);
 
   const routes: RouteRecordRaw[] = [
-    { path: '/@:calendar', component: CalendarView, name: 'calendar' },
-    { path: '/@:calendar/events/:event', component: EventView, name: 'event' },
-    { path: '/@:calendar/events/:event/:instance', component: EventInstanceView, name: 'instance' },
+    { path: '/view/:calendar', component: CalendarView, name: 'calendar' },
+    { path: '/view/:calendar/events/:event', component: EventView, name: 'event' },
+    { path: '/view/:calendar/events/:event/:instance', component: EventInstanceView, name: 'instance' },
   ];
 
   const nonDefaultLocales = AVAILABLE_LANGUAGES
@@ -34,9 +34,9 @@ Config.init().then( (config) => {
     // Locale-prefixed variants — unnamed intentionally.
     // Navigation uses the default-locale named routes; useLocale.localizedPath() adds the prefix.
     routes.push(
-      { path: `/:locale(${pattern})/@:calendar`, component: CalendarView },
-      { path: `/:locale(${pattern})/@:calendar/events/:event`, component: EventView },
-      { path: `/:locale(${pattern})/@:calendar/events/:event/:instance`, component: EventInstanceView },
+      { path: `/:locale(${pattern})/view/:calendar`, component: CalendarView },
+      { path: `/:locale(${pattern})/view/:calendar/events/:event`, component: EventView },
+      { path: `/:locale(${pattern})/view/:calendar/events/:event/:instance`, component: EventInstanceView },
     );
   }
 

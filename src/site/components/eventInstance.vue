@@ -1,7 +1,7 @@
 <script setup>
 import { reactive, onBeforeMount, ref } from 'vue';
 import { useTranslation } from 'i18next-vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { DateTime } from 'luxon';
 
 import CalendarService from '../service/calendar';
@@ -11,6 +11,7 @@ import ReportEvent from './report-event.vue';
 
 const { t } = useTranslation('system');
 const route = useRoute();
+const router = useRouter();
 const calendarId = route.params.calendar;
 const eventId = route.params.event;
 const instanceId = route.params.instance;
@@ -95,7 +96,7 @@ onBeforeMount(async () => {
       <div class="category-badges">
         <a v-for="category in state.instance.event.categories"
            class="event-category-badge"
-           :href="'/@'+ state.calendar.urlName + '?category='+category.content('en').name"
+           :href="router.resolve({ name: 'calendar', params: { calendar: state.calendar.urlName }, query: { category: category.content('en').name } }).href"
         >
           {{ category.content("en").name }}
         </a>
