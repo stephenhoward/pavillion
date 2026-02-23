@@ -103,7 +103,7 @@ export function getEnabledLanguageCodes(): string[] {
  * The x-default entry points to the unprefixed (default-language) URL.
  *
  * @param req - Express request object
- * @param canonicalPath - The path without any locale prefix (e.g. "/@calendar")
+ * @param canonicalPath - The path without any locale prefix (e.g. "/view/calendar")
  * @param defaultLocale - The instance default locale code
  * @returns Array of { hreflang, href } objects
  */
@@ -177,7 +177,7 @@ export function createRouter(configInterface: ConfigurationInterface) {
     },
 
     /**
-     * Handles locale-prefixed site routes (e.g. /es/@calendar).
+     * Handles locale-prefixed site routes (e.g. /es/view/calendar).
      *
      * If the locale in the URL matches the instance default language, redirects
      * to the unprefixed canonical URL (301). Otherwise, serves the site SPA with
@@ -319,15 +319,16 @@ export function createRouter(configInterface: ConfigurationInterface) {
 
   router.get(/^\/widget\/.*/i, handlers.widget_index);
 
-  // Locale-prefixed site routes: /xx/@... where xx is a potential locale code
-  // These match before the plain @-routes so we can handle locale prefix logic
-  router.get(/^\/[a-z]{2,8}\/@.*/i, handlers.locale_prefixed_site);
+  // Locale-prefixed public site routes: /[locale]/view/...
+  // Handles both non-default locale serving and default-locale redirects.
+  // Must come before the unprefixed site route so prefixed URLs are handled first.
+  router.get(/^\/[a-z]{2,8}\/view\//i, handlers.locale_prefixed_site);
 
-  // Public site routes (unprefixed)
-  router.get(/^\/@.*/i, handlers.site_index);
+  // Public site routes (unprefixed — default language, as-needed strategy)
+  router.get(/^\/view\/.*/i, handlers.site_index);
 
   // Client app catch-all (goes last)
-  router.get(/^\/(?!(api|assets|\.well-known|calendars|users|widget)\/).*/i, handlers.client_index);
+  router.get(/^\/(?!(api|assets|\.well-known|calendars|users|view|widget)\/).*/i, handlers.client_index);
 
   return { router, handlers };
 }

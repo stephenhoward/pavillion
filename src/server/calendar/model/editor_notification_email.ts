@@ -32,7 +32,7 @@ class EditorNotificationEmail extends EmailMessage {
 
   buildMessage(language: string): MailData {
     const domain = config.get('domain');
-    const calendarUrl = `${domain}/@${this.calendar.urlName}`;
+    const calendarUrl = `${domain}/view/${this.calendar.urlName}`;
     const calendarName = this.calendar.content(language).name;
 
     return {

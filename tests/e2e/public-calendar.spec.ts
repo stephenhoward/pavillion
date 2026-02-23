@@ -37,7 +37,7 @@ test.describe('Public Calendar', () => {
 
   test.beforeEach(async ({ page }) => {
     // Navigate to the public calendar for test_calendar
-    await page.goto(env.baseURL + '/@test_calendar');
+    await page.goto(env.baseURL + '/view/test_calendar');
 
     // Conditional skip if public site isn't rendering
     const appContent = await page.locator('#app').textContent({ timeout: 10000 }).catch(() => '');
@@ -165,7 +165,7 @@ test.describe('Public Calendar', () => {
     await eventLinks.first().click();
 
     // Wait for navigation to event detail page
-    await page.waitForURL(new RegExp(`${env.baseURL}/@test_calendar/events/`), { timeout: 10000 });
+    await page.waitForURL(new RegExp(`${env.baseURL}/view/test_calendar/events/`), { timeout: 10000 });
 
     // Verify event detail page renders
     const detailTitle = page.locator('h1');

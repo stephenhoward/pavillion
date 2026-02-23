@@ -69,17 +69,17 @@ describe('app_routes', () => {
   // -----------------------------------------------------------------------
 
   describe('unprefixed site routes', () => {
-    it('should serve site.index.html.ejs for /@calendar', async () => {
+    it('should serve site.index.html.ejs for /view/calendar', async () => {
       const app = buildTestApp('en');
-      const res = await request(app).get('/@mycalendar');
+      const res = await request(app).get('/view/mycalendar');
 
       expect(res.status).toBe(200);
       expect(res.body.template).toBe('site.index.html.ejs');
     });
 
-    it('should serve site.index.html.ejs for /@calendar/event/123', async () => {
+    it('should serve site.index.html.ejs for /view/calendar/event/123', async () => {
       const app = buildTestApp('en');
-      const res = await request(app).get('/@mycalendar/event/123');
+      const res = await request(app).get('/view/mycalendar/event/123');
 
       expect(res.status).toBe(200);
       expect(res.body.template).toBe('site.index.html.ejs');
@@ -87,7 +87,7 @@ describe('app_routes', () => {
 
     it('should pass locale from req.locale to the template', async () => {
       const app = buildTestApp('es');
-      const res = await request(app).get('/@mycalendar');
+      const res = await request(app).get('/view/mycalendar');
 
       expect(res.status).toBe(200);
       expect(res.body.data.locale).toBe('es');
@@ -96,7 +96,7 @@ describe('app_routes', () => {
     it('should pass non-empty hreflangLinks array to the template', async () => {
       const mockConfig = buildMockConfigInterface('en');
       const app = buildTestApp('en', mockConfig);
-      const res = await request(app).get('/@mycalendar');
+      const res = await request(app).get('/view/mycalendar');
 
       expect(res.status).toBe(200);
       const links = res.body.data?.hreflangLinks;
@@ -109,7 +109,7 @@ describe('app_routes', () => {
     it('should include hreflang entries for all enabled languages', async () => {
       const mockConfig = buildMockConfigInterface('en');
       const app = buildTestApp('en', mockConfig);
-      const res = await request(app).get('/@mycalendar');
+      const res = await request(app).get('/view/mycalendar');
 
       const links = res.body.data?.hreflangLinks;
       expect(links.some((l: { hreflang: string }) => l.hreflang === 'en')).toBe(true);
@@ -119,13 +119,13 @@ describe('app_routes', () => {
     it('should include canonical path in hreflang hrefs', async () => {
       const mockConfig = buildMockConfigInterface('en');
       const app = buildTestApp('en', mockConfig);
-      const res = await request(app).get('/@mycalendar');
+      const res = await request(app).get('/view/mycalendar');
 
       const links = res.body.data?.hreflangLinks;
       const enLink = links.find((l: { hreflang: string }) => l.hreflang === 'en');
-      expect(enLink?.href).toContain('/@mycalendar');
+      expect(enLink?.href).toContain('/view/mycalendar');
       const esLink = links.find((l: { hreflang: string }) => l.hreflang === 'es');
-      expect(esLink?.href).toContain('/es/@mycalendar');
+      expect(esLink?.href).toContain('/es/view/mycalendar');
     });
   });
 
@@ -134,10 +134,10 @@ describe('app_routes', () => {
   // -----------------------------------------------------------------------
 
   describe('locale-prefixed site routes — non-default language', () => {
-    it('should serve site.index.html.ejs for /es/@calendar when es is not the default', async () => {
+    it('should serve site.index.html.ejs for /es/view/calendar when es is not the default', async () => {
       const mockConfig = buildMockConfigInterface('en');
       const app = buildTestApp('es', mockConfig);
-      const res = await request(app).get('/es/@mycalendar');
+      const res = await request(app).get('/es/view/mycalendar');
 
       expect(res.status).toBe(200);
       expect(res.body.template).toBe('site.index.html.ejs');
@@ -146,16 +146,16 @@ describe('app_routes', () => {
     it('should pass locale from req.locale to the template for prefixed routes', async () => {
       const mockConfig = buildMockConfigInterface('en');
       const app = buildTestApp('es', mockConfig);
-      const res = await request(app).get('/es/@mycalendar');
+      const res = await request(app).get('/es/view/mycalendar');
 
       expect(res.status).toBe(200);
       expect(res.body.data.locale).toBe('es');
     });
 
-    it('should serve site.index.html.ejs for /es/@calendar/event/123', async () => {
+    it('should serve site.index.html.ejs for /es/view/calendar/event/123', async () => {
       const mockConfig = buildMockConfigInterface('en');
       const app = buildTestApp('es', mockConfig);
-      const res = await request(app).get('/es/@mycalendar/event/123');
+      const res = await request(app).get('/es/view/mycalendar/event/123');
 
       expect(res.status).toBe(200);
       expect(res.body.template).toBe('site.index.html.ejs');
@@ -164,7 +164,7 @@ describe('app_routes', () => {
     it('should pass non-empty hreflangLinks array for locale-prefixed routes', async () => {
       const mockConfig = buildMockConfigInterface('en');
       const app = buildTestApp('es', mockConfig);
-      const res = await request(app).get('/es/@mycalendar');
+      const res = await request(app).get('/es/view/mycalendar');
 
       expect(res.status).toBe(200);
       const links = res.body.data?.hreflangLinks;
@@ -176,16 +176,16 @@ describe('app_routes', () => {
     it('should use stripped path (without locale prefix) in hreflang hrefs', async () => {
       const mockConfig = buildMockConfigInterface('en');
       const app = buildTestApp('es', mockConfig);
-      const res = await request(app).get('/es/@mycalendar');
+      const res = await request(app).get('/es/view/mycalendar');
 
       const links = res.body.data?.hreflangLinks;
       // x-default points to the unprefixed canonical URL
       const xDefault = links.find((l: { hreflang: string }) => l.hreflang === 'x-default');
-      expect(xDefault?.href).toContain('/@mycalendar');
-      expect(xDefault?.href).not.toContain('/es/@mycalendar');
+      expect(xDefault?.href).toContain('/view/mycalendar');
+      expect(xDefault?.href).not.toContain('/es/view/mycalendar');
       // es link should have /es/ prefix
       const esLink = links.find((l: { hreflang: string }) => l.hreflang === 'es');
-      expect(esLink?.href).toContain('/es/@mycalendar');
+      expect(esLink?.href).toContain('/es/view/mycalendar');
     });
   });
 
@@ -194,40 +194,40 @@ describe('app_routes', () => {
   // -----------------------------------------------------------------------
 
   describe('locale-prefixed site routes — default language redirect', () => {
-    it('should redirect /en/@calendar to /@calendar when en is the default language', async () => {
+    it('should redirect /en/view/calendar to /view/calendar when en is the default language', async () => {
       const mockConfig = buildMockConfigInterface('en');
       const app = buildTestApp('en', mockConfig);
-      const res = await request(app).get('/en/@mycalendar');
+      const res = await request(app).get('/en/view/mycalendar');
 
       expect(res.status).toBe(301);
-      expect(res.headers.location).toBe('/@mycalendar');
+      expect(res.headers.location).toBe('/view/mycalendar');
     });
 
-    it('should redirect /es/@calendar to /@calendar when es is the default language', async () => {
+    it('should redirect /es/view/calendar to /view/calendar when es is the default language', async () => {
       const mockConfig = buildMockConfigInterface('es');
       const app = buildTestApp('es', mockConfig);
-      const res = await request(app).get('/es/@mycalendar');
+      const res = await request(app).get('/es/view/mycalendar');
 
       expect(res.status).toBe(301);
-      expect(res.headers.location).toBe('/@mycalendar');
+      expect(res.headers.location).toBe('/view/mycalendar');
     });
 
     it('should preserve query string when redirecting', async () => {
       const mockConfig = buildMockConfigInterface('en');
       const app = buildTestApp('en', mockConfig);
-      const res = await request(app).get('/en/@mycalendar?filter=music');
+      const res = await request(app).get('/en/view/mycalendar?filter=music');
 
       expect(res.status).toBe(301);
-      expect(res.headers.location).toBe('/@mycalendar?filter=music');
+      expect(res.headers.location).toBe('/view/mycalendar?filter=music');
     });
 
-    it('should redirect /en/@calendar/event/123 to /@calendar/event/123', async () => {
+    it('should redirect /en/view/calendar/event/123 to /view/calendar/event/123', async () => {
       const mockConfig = buildMockConfigInterface('en');
       const app = buildTestApp('en', mockConfig);
-      const res = await request(app).get('/en/@mycalendar/event/123');
+      const res = await request(app).get('/en/view/mycalendar/event/123');
 
       expect(res.status).toBe(301);
-      expect(res.headers.location).toBe('/@mycalendar/event/123');
+      expect(res.headers.location).toBe('/view/mycalendar/event/123');
     });
   });
 
@@ -236,19 +236,19 @@ describe('app_routes', () => {
   // -----------------------------------------------------------------------
 
   describe('non-locale path segments', () => {
-    it('should serve site SPA for /xx/@calendar when xx looks like locale but is not valid', async () => {
-      // /xx/@mycalendar matches the route regex (xx is 2 chars), but stripLocalePrefix
-      // returns null for 'xx' since it is not in AVAILABLE_LANGUAGES. The handler
-      // falls back to serving site.index.html.ejs, which is correct — the path
-      // contains an @-prefixed segment that Vue Router will interpret as a calendar view.
+    it('should serve site SPA for /xx/view/calendar when xx looks like locale but is not valid', async () => {
+      // /xx/view/mycalendar matches the locale-prefixed route regex (xx is 2 chars),
+      // but stripLocalePrefix returns null for 'xx' since it is not in AVAILABLE_LANGUAGES.
+      // The handler falls back to serving site.index.html.ejs, which is correct — the
+      // /view/ segment signals this is a public calendar path.
       const app = buildTestApp('en');
-      const res = await request(app).get('/xx/@mycalendar');
+      const res = await request(app).get('/xx/view/mycalendar');
 
       expect(res.status).toBe(200);
       expect(res.body.template).toBe('site.index.html.ejs');
     });
 
-    it('should serve client.index.html.ejs for unknown paths without @ segment', async () => {
+    it('should serve client.index.html.ejs for unknown paths without /view/ segment', async () => {
       const app = buildTestApp('en');
       const res = await request(app).get('/unknown/path');
 
@@ -351,7 +351,7 @@ describe('app_routes', () => {
         },
       } as unknown as Request;
 
-      const links = buildHreflangLinks(fakeReq, '/@mycalendar', 'en');
+      const links = buildHreflangLinks(fakeReq, '/view/mycalendar', 'en');
 
       for (const link of links) {
         expect(link.href).not.toContain('evil.com');

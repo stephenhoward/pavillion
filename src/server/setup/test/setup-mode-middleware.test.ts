@@ -69,7 +69,7 @@ describe('Setup Mode Middleware', () => {
       app.get('/api/v1/calendars', (_req: Request, res: Response) => {
         res.status(200).json({ calendars: [] });
       });
-      app.get('/@test/calendar', (_req: Request, res: Response) => {
+      app.get('/view/test/calendar', (_req: Request, res: Response) => {
         res.status(200).json({ page: 'public calendar' });
       });
     });
