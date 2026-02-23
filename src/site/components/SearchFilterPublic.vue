@@ -321,10 +321,10 @@ const clearSearch = () => {
 };
 
 // Handle category changes
-const handleCategoryChange = async (categoryNames: string[]) => {
+const handleCategoryChange = (categoryNames: string[]) => {
   publicStore.setSelectedCategories(categoryNames);
-  await publicStore.reloadWithFilters();
   updateURL();
+  publicStore.reloadWithFilters();
 };
 
 // Set "This Week" preset (toggle if already active)
