@@ -21,9 +21,7 @@ import { CalendarEvent } from "@/common/model/events";
 import { ReportCategory } from "@/common/model/report";
 import { Calendar } from "@/common/model/calendar";
 import { addToOutbox } from "@/server/activitypub/helper/outbox";
-import { UserActorEntity } from "@/server/activitypub/entity/user_actor";
 import { ReportEntity } from "@/server/moderation/entity/report";
-import { CalendarMemberEntity } from "@/server/calendar/entity/calendar_member";
 import { fetchRemoteObject } from "@/server/activitypub/helper/remote-fetch";
 
 /**
@@ -926,7 +924,7 @@ class ProcessInboxService {
 
   /**
    * Checks if a Person actor is an authorized remote editor of a calendar.
-   * Uses UserActorEntity + CalendarMemberEntity to look up membership.
+   * Delegates to CalendarInterface to look up membership.
    * Results are cached for 5 minutes to improve performance.
    *
    * @param calendarId - The calendar ID
@@ -943,30 +941,8 @@ class ProcessInboxService {
       return cached.authorized;
     }
 
-    // Cache miss or expired - perform database lookup
-    // First, find the UserActorEntity by actor_uri
-    const userActor = await UserActorEntity.findOne({
-      where: { actor_uri: actorUri },
-    });
-
-    if (!userActor) {
-      // Cache negative result
-      this.authorizationCache.set(cacheKey, {
-        authorized: false,
-        expiresAt: now + this.CACHE_TTL,
-      });
-      return false;
-    }
-
-    // Then, check if there's a CalendarMemberEntity for this actor and calendar
-    const membership = await CalendarMemberEntity.findOne({
-      where: {
-        calendar_id: calendarId,
-        user_actor_id: userActor.id,
-      },
-    });
-
-    const authorized = membership !== null;
+    // Cache miss or expired - check via calendar interface
+    const authorized = await this.calendarInterface.isEditorOfCalendar(actorUri, calendarId);
 
     // Cache the result
     this.authorizationCache.set(cacheKey, {

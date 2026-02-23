@@ -25,8 +25,6 @@ import ProcessInboxService from '@/server/activitypub/service/inbox';
 import { ActivityPubInboxMessageEntity, ActivityPubOutboxMessageEntity, FollowerCalendarEntity } from '@/server/activitypub/entity/activitypub';
 import CalendarInterface from '@/server/calendar/interface';
 import ModerationInterface from '@/server/moderation/interface';
-import { UserActorEntity } from '@/server/activitypub/entity/user_actor';
-import { CalendarMemberEntity } from '@/server/calendar/entity/calendar_member';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 
 // Import Fedify mock helpers for creating well-formed ActivityPub activities
@@ -764,15 +762,15 @@ describe('actorOwnsObject', () => {
 
 describe('isAuthorizedRemoteEditor caching', () => {
   let service: ProcessInboxService;
+  let calendarInterface: CalendarInterface;
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
 
   const TEST_CALENDAR_ID = 'test-calendar-id';
   const TEST_ACTOR_URI = 'https://remote.example/users/alice';
-  const TEST_USER_ACTOR_ID = 'test-user-actor-id';
 
   beforeEach(() => {
     const eventBus = new EventEmitter();
-    const calendarInterface = new CalendarInterface(eventBus);
+    calendarInterface = new CalendarInterface(eventBus);
     service = new ProcessInboxService(eventBus, calendarInterface);
   });
 
@@ -781,153 +779,96 @@ describe('isAuthorizedRemoteEditor caching', () => {
   });
 
   it('should cache positive authorization results', async () => {
-    // Set up database mocks
-    const userActorFindStub = sandbox.stub(UserActorEntity, 'findOne');
-    const membershipFindStub = sandbox.stub(CalendarMemberEntity, 'findOne');
+    const isEditorStub = sandbox.stub(service.calendarInterface, 'isEditorOfCalendar');
+    isEditorStub.resolves(true);
 
-    userActorFindStub.resolves({
-      id: TEST_USER_ACTOR_ID,
-      actor_uri: TEST_ACTOR_URI,
-    } as any);
-
-    membershipFindStub.resolves({
-      calendar_id: TEST_CALENDAR_ID,
-      user_actor_id: TEST_USER_ACTOR_ID,
-    } as any);
-
-    // First call - should hit database
+    // First call - should call interface
     const result1 = await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, TEST_ACTOR_URI);
     expect(result1).toBe(true);
-    expect(userActorFindStub.callCount).toBe(1);
-    expect(membershipFindStub.callCount).toBe(1);
+    expect(isEditorStub.callCount).toBe(1);
 
     // Second call - should use cache
     const result2 = await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, TEST_ACTOR_URI);
     expect(result2).toBe(true);
-    expect(userActorFindStub.callCount).toBe(1); // No additional database call
-    expect(membershipFindStub.callCount).toBe(1); // No additional database call
+    expect(isEditorStub.callCount).toBe(1); // No additional interface call
   });
 
   it('should cache negative authorization results', async () => {
-    // Set up database mocks - user actor not found
-    const userActorFindStub = sandbox.stub(UserActorEntity, 'findOne');
-    userActorFindStub.resolves(null);
+    const isEditorStub = sandbox.stub(service.calendarInterface, 'isEditorOfCalendar');
+    isEditorStub.resolves(false);
 
-    // First call - should hit database
+    // First call - should call interface
     const result1 = await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, TEST_ACTOR_URI);
     expect(result1).toBe(false);
-    expect(userActorFindStub.callCount).toBe(1);
+    expect(isEditorStub.callCount).toBe(1);
 
     // Second call - should use cache
     const result2 = await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, TEST_ACTOR_URI);
     expect(result2).toBe(false);
-    expect(userActorFindStub.callCount).toBe(1); // No additional database call
+    expect(isEditorStub.callCount).toBe(1); // No additional interface call
   });
 
-  it('should cache when user actor exists but membership does not', async () => {
-    // Set up database mocks
-    const userActorFindStub = sandbox.stub(UserActorEntity, 'findOne');
-    const membershipFindStub = sandbox.stub(CalendarMemberEntity, 'findOne');
+  it('should cache when actor has no membership', async () => {
+    const isEditorStub = sandbox.stub(service.calendarInterface, 'isEditorOfCalendar');
+    isEditorStub.resolves(false);
 
-    userActorFindStub.resolves({
-      id: TEST_USER_ACTOR_ID,
-      actor_uri: TEST_ACTOR_URI,
-    } as any);
-
-    membershipFindStub.resolves(null); // No membership found
-
-    // First call - should hit database
+    // First call - should call interface
     const result1 = await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, TEST_ACTOR_URI);
     expect(result1).toBe(false);
-    expect(userActorFindStub.callCount).toBe(1);
-    expect(membershipFindStub.callCount).toBe(1);
+    expect(isEditorStub.callCount).toBe(1);
 
     // Second call - should use cache
     const result2 = await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, TEST_ACTOR_URI);
     expect(result2).toBe(false);
-    expect(userActorFindStub.callCount).toBe(1); // No additional database call
-    expect(membershipFindStub.callCount).toBe(1); // No additional database call
+    expect(isEditorStub.callCount).toBe(1); // No additional interface call
   });
 
   it('should invalidate cache for specific calendar and actor', async () => {
-    // Set up database mocks
-    const userActorFindStub = sandbox.stub(UserActorEntity, 'findOne');
-    const membershipFindStub = sandbox.stub(CalendarMemberEntity, 'findOne');
-
-    userActorFindStub.resolves({
-      id: TEST_USER_ACTOR_ID,
-      actor_uri: TEST_ACTOR_URI,
-    } as any);
-
-    membershipFindStub.resolves({
-      calendar_id: TEST_CALENDAR_ID,
-      user_actor_id: TEST_USER_ACTOR_ID,
-    } as any);
+    const isEditorStub = sandbox.stub(service.calendarInterface, 'isEditorOfCalendar');
+    isEditorStub.resolves(true);
 
     // First call - populate cache
     const result1 = await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, TEST_ACTOR_URI);
     expect(result1).toBe(true);
-    expect(userActorFindStub.callCount).toBe(1);
+    expect(isEditorStub.callCount).toBe(1);
 
     // Invalidate cache
     service.invalidateAuthorizationCache(TEST_CALENDAR_ID, TEST_ACTOR_URI);
 
-    // Third call - should hit database again
+    // Second call - should call interface again
     const result3 = await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, TEST_ACTOR_URI);
     expect(result3).toBe(true);
-    expect(userActorFindStub.callCount).toBe(2); // Database called again
+    expect(isEditorStub.callCount).toBe(2); // Interface called again
   });
 
   it('should invalidate all cache entries for a calendar', async () => {
-    // Set up database mocks
-    const userActorFindStub = sandbox.stub(UserActorEntity, 'findOne');
-    const membershipFindStub = sandbox.stub(CalendarMemberEntity, 'findOne');
-
-    userActorFindStub.resolves({
-      id: TEST_USER_ACTOR_ID,
-      actor_uri: TEST_ACTOR_URI,
-    } as any);
-
-    membershipFindStub.resolves({
-      calendar_id: TEST_CALENDAR_ID,
-      user_actor_id: TEST_USER_ACTOR_ID,
-    } as any);
+    const isEditorStub = sandbox.stub(service.calendarInterface, 'isEditorOfCalendar');
+    isEditorStub.resolves(true);
 
     const ACTOR_URI_2 = 'https://remote.example/users/bob';
 
     // Populate cache for two actors
     await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, TEST_ACTOR_URI);
     await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, ACTOR_URI_2);
-    expect(userActorFindStub.callCount).toBe(2);
+    expect(isEditorStub.callCount).toBe(2);
 
     // Invalidate all for calendar
     service.invalidateCalendarAuthorizationCache(TEST_CALENDAR_ID);
 
-    // Both should hit database again
+    // Both should call interface again
     await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, TEST_ACTOR_URI);
     await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, ACTOR_URI_2);
-    expect(userActorFindStub.callCount).toBe(4); // Two more database calls
+    expect(isEditorStub.callCount).toBe(4); // Two more interface calls
   });
 
   it('should respect cache expiration', async () => {
-    // Set up database mocks
-    const userActorFindStub = sandbox.stub(UserActorEntity, 'findOne');
-    const membershipFindStub = sandbox.stub(CalendarMemberEntity, 'findOne');
-
-    userActorFindStub.resolves({
-      id: TEST_USER_ACTOR_ID,
-      actor_uri: TEST_ACTOR_URI,
-    } as any);
-
-    membershipFindStub.resolves({
-      calendar_id: TEST_CALENDAR_ID,
-      user_actor_id: TEST_USER_ACTOR_ID,
-    } as any);
+    const isEditorStub = sandbox.stub(service.calendarInterface, 'isEditorOfCalendar');
+    isEditorStub.resolves(true);
 
     // First call - populate cache
     const result1 = await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, TEST_ACTOR_URI);
     expect(result1).toBe(true);
-    expect(userActorFindStub.callCount).toBe(1);
+    expect(isEditorStub.callCount).toBe(1);
 
     // Manually expire the cache entry
     const cacheKey = `${TEST_CALENDAR_ID}:${TEST_ACTOR_URI}`;
@@ -935,26 +876,15 @@ describe('isAuthorizedRemoteEditor caching', () => {
     const entry = cache.get(cacheKey);
     entry.expiresAt = Date.now() - 1000; // Expired 1 second ago
 
-    // Second call - should hit database because cache is expired
+    // Second call - should call interface because cache is expired
     const result2 = await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, TEST_ACTOR_URI);
     expect(result2).toBe(true);
-    expect(userActorFindStub.callCount).toBe(2); // Database called again
+    expect(isEditorStub.callCount).toBe(2); // Interface called again
   });
 
   it('should clear expired entries without affecting valid ones', async () => {
-    // Set up database mocks
-    const userActorFindStub = sandbox.stub(UserActorEntity, 'findOne');
-    const membershipFindStub = sandbox.stub(CalendarMemberEntity, 'findOne');
-
-    userActorFindStub.resolves({
-      id: TEST_USER_ACTOR_ID,
-      actor_uri: TEST_ACTOR_URI,
-    } as any);
-
-    membershipFindStub.resolves({
-      calendar_id: TEST_CALENDAR_ID,
-      user_actor_id: TEST_USER_ACTOR_ID,
-    } as any);
+    const isEditorStub = sandbox.stub(service.calendarInterface, 'isEditorOfCalendar');
+    isEditorStub.resolves(true);
 
     const ACTOR_URI_2 = 'https://remote.example/users/bob';
 
@@ -971,58 +901,32 @@ describe('isAuthorizedRemoteEditor caching', () => {
     // Clear expired entries
     service.clearExpiredAuthorizationCache();
 
-    // First should hit database again, second should use cache
+    // First should call interface again, second should use cache
     await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, TEST_ACTOR_URI);
     await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, ACTOR_URI_2);
 
-    expect(userActorFindStub.callCount).toBe(3); // One additional call for expired entry
+    expect(isEditorStub.callCount).toBe(3); // One additional call for expired entry
   });
 
   it('should clear entire cache', async () => {
-    // Set up database mocks
-    const userActorFindStub = sandbox.stub(UserActorEntity, 'findOne');
-    const membershipFindStub = sandbox.stub(CalendarMemberEntity, 'findOne');
-
-    userActorFindStub.resolves({
-      id: TEST_USER_ACTOR_ID,
-      actor_uri: TEST_ACTOR_URI,
-    } as any);
-
-    membershipFindStub.resolves({
-      calendar_id: TEST_CALENDAR_ID,
-      user_actor_id: TEST_USER_ACTOR_ID,
-    } as any);
+    const isEditorStub = sandbox.stub(service.calendarInterface, 'isEditorOfCalendar');
+    isEditorStub.resolves(true);
 
     // Populate cache
     await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, TEST_ACTOR_URI);
-    expect(userActorFindStub.callCount).toBe(1);
+    expect(isEditorStub.callCount).toBe(1);
 
     // Clear entire cache
     service.clearAuthorizationCache();
 
-    // Should hit database again
+    // Should call interface again
     await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, TEST_ACTOR_URI);
-    expect(userActorFindStub.callCount).toBe(2);
+    expect(isEditorStub.callCount).toBe(2);
   });
 
   it('should maintain cache size under configured limit', async () => {
-    // Set up database mocks
-    const userActorFindStub = sandbox.stub(UserActorEntity, 'findOne');
-    const membershipFindStub = sandbox.stub(CalendarMemberEntity, 'findOne');
-
-    // Mock successful authorization for all actors
-    userActorFindStub.callsFake((options: any) => {
-      const actorUri = options.where.actor_uri;
-      return Promise.resolve({
-        id: `user-id-${actorUri}`,
-        actor_uri: actorUri,
-      } as any);
-    });
-
-    membershipFindStub.resolves({
-      calendar_id: TEST_CALENDAR_ID,
-      user_actor_id: TEST_USER_ACTOR_ID,
-    } as any);
+    const isEditorStub = sandbox.stub(service.calendarInterface, 'isEditorOfCalendar');
+    isEditorStub.resolves(true);
 
     // Add many entries to the cache
     for (let i = 0; i < 100; i++) {
@@ -1039,25 +943,10 @@ describe('isAuthorizedRemoteEditor caching', () => {
   });
 
   it('should evict oldest entries when cache exceeds max size', async () => {
-    // Set up database mocks
-    const userActorFindStub = sandbox.stub(UserActorEntity, 'findOne');
-    const membershipFindStub = sandbox.stub(CalendarMemberEntity, 'findOne');
+    const isEditorStub = sandbox.stub(service.calendarInterface, 'isEditorOfCalendar');
+    isEditorStub.resolves(true);
 
-    // Mock successful authorization
-    userActorFindStub.callsFake((options: any) => {
-      const actorUri = options.where.actor_uri;
-      return Promise.resolve({
-        id: `user-id-${actorUri}`,
-        actor_uri: actorUri,
-      } as any);
-    });
-
-    membershipFindStub.resolves({
-      calendar_id: TEST_CALENDAR_ID,
-      user_actor_id: TEST_USER_ACTOR_ID,
-    } as any);
-
-    // Add entries and check that old ones are accessible
+    // Add entries and check that cached ones are not re-fetched
     const actor1 = 'https://remote.example/users/actor1';
     const actor2 = 'https://remote.example/users/actor2';
     const actor3 = 'https://remote.example/users/actor3';
@@ -1066,15 +955,15 @@ describe('isAuthorizedRemoteEditor caching', () => {
     await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, actor2);
     await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, actor3);
 
-    expect(userActorFindStub.callCount).toBe(3);
+    expect(isEditorStub.callCount).toBe(3);
 
     // Access actor1 again - should be cached
     await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, actor1);
-    expect(userActorFindStub.callCount).toBe(3); // Still 3, used cache
+    expect(isEditorStub.callCount).toBe(3); // Still 3, used cache
 
     // Access actor2 again - should be cached
     await (service as any).isAuthorizedRemoteEditor(TEST_CALENDAR_ID, actor2);
-    expect(userActorFindStub.callCount).toBe(3); // Still 3, used cache
+    expect(isEditorStub.callCount).toBe(3); // Still 3, used cache
   });
 });
 

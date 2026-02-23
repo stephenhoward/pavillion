@@ -119,6 +119,17 @@ export default class CalendarInterface {
     return this.calendarService.getCalendarOwnerAccountId(calendarId);
   }
 
+  /**
+   * Checks if a remote actor (identified by actor URI) is an editor of the given calendar.
+   *
+   * @param actorUri - The ActivityPub actor URI of the remote user
+   * @param calendarId - The calendar UUID to check membership for
+   * @returns True if the actor has editor access to the calendar
+   */
+  async isEditorOfCalendar(actorUri: string, calendarId: string): Promise<boolean> {
+    return this.calendarService.isEditorOfCalendar(actorUri, calendarId);
+  }
+
   // Event operations
   async listEvents(calendar: Calendar, options?: {
     search?: string;

@@ -281,6 +281,32 @@ class CalendarService {
   }
 
   /**
+   * Checks if a remote actor (identified by actor URI) is an editor of the given calendar.
+   *
+   * @param actorUri - The ActivityPub actor URI of the remote user
+   * @param calendarId - The calendar UUID to check membership for
+   * @returns True if the actor has editor access to the calendar
+   */
+  async isEditorOfCalendar(actorUri: string, calendarId: string): Promise<boolean> {
+    const userActor = await UserActorEntity.findOne({
+      where: { actor_uri: actorUri },
+    });
+
+    if (!userActor) {
+      return false;
+    }
+
+    const membership = await CalendarMemberEntity.findOne({
+      where: {
+        calendar_id: calendarId,
+        user_actor_id: userActor.id,
+      },
+    });
+
+    return membership !== null;
+  }
+
+  /**
    * Check if the calendar owner account has admin role.
    * Returns false (fail-secure) if the account is not found or roles cannot be loaded.
    *
