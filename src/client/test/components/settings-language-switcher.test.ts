@@ -165,7 +165,7 @@ describe('Settings Language Switcher', () => {
       expect(capturedCallback).toBeDefined();
       await capturedCallback!('es');
 
-      expect(updateLanguageFn).toHaveBeenCalledWith('es', expect.anything());
+      expect(updateLanguageFn).toHaveBeenCalledWith('es');
     });
 
     it('does not use localStorage for language persistence', async () => {

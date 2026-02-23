@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   addLocalePrefix,
   stripLocalePrefix,
-  detectLocaleFromPath,
 } from '@/common/i18n/locale-url';
 
 describe('addLocalePrefix', () => {
@@ -141,52 +140,6 @@ describe('stripLocalePrefix', () => {
       const result = stripLocalePrefix('/123/events');
       expect(result.locale).toBeNull();
       expect(result.path).toBe('/123/events');
-    });
-  });
-});
-
-describe('detectLocaleFromPath', () => {
-
-  describe('valid locale prefixes', () => {
-    it('should detect a valid locale prefix', () => {
-      expect(detectLocaleFromPath('/es/@calendar')).toBe('es');
-    });
-
-    it('should detect locale from root locale path', () => {
-      expect(detectLocaleFromPath('/es')).toBe('es');
-    });
-
-    it('should detect locale from nested path', () => {
-      expect(detectLocaleFromPath('/es/events/123')).toBe('es');
-    });
-  });
-
-  describe('paths without locale prefix', () => {
-    it('should return null for paths without locale prefix', () => {
-      expect(detectLocaleFromPath('/@calendar')).toBeNull();
-    });
-
-    it('should return null for root path', () => {
-      expect(detectLocaleFromPath('/')).toBeNull();
-    });
-
-    it('should return null for unknown locale codes', () => {
-      expect(detectLocaleFromPath('/xx/events')).toBeNull();
-    });
-
-    it('should return null for non-available language codes', () => {
-      // 'fr' is not in AVAILABLE_LANGUAGES
-      expect(detectLocaleFromPath('/fr/events')).toBeNull();
-    });
-  });
-
-  describe('path normalization', () => {
-    it('should handle paths without leading slash', () => {
-      expect(detectLocaleFromPath('es/@calendar')).toBe('es');
-    });
-
-    it('should normalize locale code to lowercase', () => {
-      expect(detectLocaleFromPath('/ES/@calendar')).toBe('es');
     });
   });
 });

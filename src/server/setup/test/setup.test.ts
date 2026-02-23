@@ -1,20 +1,36 @@
-import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import sinon from 'sinon';
 import express from 'express';
 import request from 'supertest';
 
-import { AccountEntity, AccountRoleEntity, AccountSecretsEntity } from '@/server/common/entity/account';
-import ServiceSettings from '@/server/configuration/service/settings';
+import { AccountRoleEntity } from '@/server/common/entity/account';
 import SetupService from '@/server/setup/service/setup';
 import SetupRouteHandlers from '@/server/setup/api/v1/setup';
 import SetupInterface from '@/server/setup/interface';
+import ConfigurationInterface from '@/server/configuration/interface';
+
+/**
+ * Creates a minimal mock ConfigurationInterface for setup tests.
+ */
+function buildMockConfigInterface(): ConfigurationInterface {
+  return {
+    getSetting: sinon.stub().resolves(undefined),
+    setSetting: sinon.stub().resolves(true),
+    getAllSettings: sinon.stub().resolves({}),
+    getDefaultLanguage: sinon.stub().resolves('en'),
+    getEnabledLanguages: sinon.stub().resolves(['en', 'es']),
+    getForceLanguage: sinon.stub().resolves(null),
+  } as unknown as ConfigurationInterface;
+}
 
 describe('SetupService', () => {
   let sandbox = sinon.createSandbox();
   let setupService: SetupService;
+  let mockConfigInterface: ConfigurationInterface;
 
   beforeEach(() => {
-    setupService = new SetupService();
+    mockConfigInterface = buildMockConfigInterface();
+    setupService = new SetupService(mockConfigInterface);
   });
 
   afterEach(() => {
@@ -55,7 +71,7 @@ describe('Setup API', () => {
   beforeEach(() => {
     app = express();
     app.use(express.json());
-    setupInterface = new SetupInterface();
+    setupInterface = new SetupInterface(buildMockConfigInterface());
     const routeHandler = new SetupRouteHandlers(setupInterface);
     routeHandler.installHandlers(app, '/api/v1');
   });

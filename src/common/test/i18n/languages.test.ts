@@ -2,13 +2,10 @@ import { describe, it, expect } from 'vitest';
 import {
   AVAILABLE_LANGUAGES,
   DEFAULT_LANGUAGE_CODE,
-  PRIMARY_THRESHOLD,
-  BETA_THRESHOLD,
   isValidLanguageCode,
   getLanguage,
-  getLanguageCompleteness,
+  getDefaultEnabledLanguageCodes,
   type Language,
-  type LanguageCompleteness,
 } from '@/common/i18n/languages';
 
 describe('AVAILABLE_LANGUAGES', () => {
@@ -92,27 +89,6 @@ describe('DEFAULT_LANGUAGE_CODE', () => {
   });
 });
 
-describe('PRIMARY_THRESHOLD and BETA_THRESHOLD', () => {
-  it('PRIMARY_THRESHOLD should be 0.8', () => {
-    expect(PRIMARY_THRESHOLD).toBe(0.8);
-  });
-
-  it('BETA_THRESHOLD should be 0.5', () => {
-    expect(BETA_THRESHOLD).toBe(0.5);
-  });
-
-  it('PRIMARY_THRESHOLD should be greater than BETA_THRESHOLD', () => {
-    expect(PRIMARY_THRESHOLD).toBeGreaterThan(BETA_THRESHOLD);
-  });
-
-  it('both thresholds should be between 0 and 1', () => {
-    expect(PRIMARY_THRESHOLD).toBeGreaterThan(0);
-    expect(PRIMARY_THRESHOLD).toBeLessThanOrEqual(1);
-    expect(BETA_THRESHOLD).toBeGreaterThan(0);
-    expect(BETA_THRESHOLD).toBeLessThanOrEqual(1);
-  });
-});
-
 describe('isValidLanguageCode', () => {
   it('should return true for supported language codes', () => {
     for (const lang of AVAILABLE_LANGUAGES) {
@@ -156,29 +132,31 @@ describe('getLanguage', () => {
   });
 });
 
-describe('getLanguageCompleteness', () => {
-  it('should return "primary" for English', () => {
-    const result: LanguageCompleteness = getLanguageCompleteness('en');
-    expect(result).toBe('primary');
-  });
-
-  it('should return "incomplete" for unsupported codes', () => {
-    expect(getLanguageCompleteness('xx')).toBe('incomplete');
-    expect(getLanguageCompleteness('zz')).toBe('incomplete');
-    expect(getLanguageCompleteness('')).toBe('incomplete');
-  });
-
-  it('should return a valid LanguageCompleteness value for all supported languages', () => {
-    const validValues: LanguageCompleteness[] = ['primary', 'beta', 'incomplete'];
-    for (const lang of AVAILABLE_LANGUAGES) {
-      const result = getLanguageCompleteness(lang.code);
-      expect(validValues).toContain(result);
+describe('getDefaultEnabledLanguageCodes', () => {
+  it('should return an array of strings', () => {
+    const codes = getDefaultEnabledLanguageCodes();
+    expect(Array.isArray(codes)).toBe(true);
+    expect(codes.length).toBeGreaterThan(0);
+    for (const code of codes) {
+      expect(typeof code).toBe('string');
     }
   });
 
-  it('should never return "incomplete" for a supported language', () => {
-    for (const lang of AVAILABLE_LANGUAGES) {
-      expect(getLanguageCompleteness(lang.code)).not.toBe('incomplete');
+  it('should include all codes from AVAILABLE_LANGUAGES', () => {
+    const codes = getDefaultEnabledLanguageCodes();
+    const expectedCodes = AVAILABLE_LANGUAGES.map(lang => lang.code);
+    expect(codes).toEqual(expectedCodes);
+  });
+
+  it('should include "en"', () => {
+    const codes = getDefaultEnabledLanguageCodes();
+    expect(codes).toContain('en');
+  });
+
+  it('should return only valid language codes', () => {
+    const codes = getDefaultEnabledLanguageCodes();
+    for (const code of codes) {
+      expect(isValidLanguageCode(code)).toBe(true);
     }
   });
 });

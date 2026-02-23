@@ -6,6 +6,21 @@ import request from 'supertest';
 import SetupService from '@/server/setup/service/setup';
 import SetupRouteHandlers from '@/server/setup/api/v1/setup';
 import SetupInterface from '@/server/setup/interface';
+import ConfigurationInterface from '@/server/configuration/interface';
+
+/**
+ * Creates a minimal mock ConfigurationInterface for setup tests.
+ */
+function buildMockConfigInterface(): ConfigurationInterface {
+  return {
+    getSetting: sinon.stub().resolves(undefined),
+    setSetting: sinon.stub().resolves(true),
+    getAllSettings: sinon.stub().resolves({}),
+    getDefaultLanguage: sinon.stub().resolves('en'),
+    getEnabledLanguages: sinon.stub().resolves(['en', 'es']),
+    getForceLanguage: sinon.stub().resolves(null),
+  } as unknown as ConfigurationInterface;
+}
 
 /**
  * Additional strategic tests to fill coverage gaps for the docker first-run setup feature.
@@ -20,7 +35,7 @@ describe('Setup API - Additional Coverage', () => {
   beforeEach(() => {
     app = express();
     app.use(express.json());
-    setupInterface = new SetupInterface();
+    setupInterface = new SetupInterface(buildMockConfigInterface());
     const routeHandler = new SetupRouteHandlers(setupInterface);
     routeHandler.installHandlers(app, '/api/v1');
   });
@@ -150,7 +165,15 @@ describe('SetupService - Cache Behavior', () => {
     const { AccountRoleEntity } = await import('@/server/common/entity/account');
     sandbox.stub(AccountRoleEntity, 'findOne').callsFake(findOneStub);
 
-    const service = new SetupService();
+    const mockConfig = {
+      getSetting: sinon.stub().resolves(undefined),
+      setSetting: sinon.stub().resolves(true),
+      getAllSettings: sinon.stub().resolves({}),
+      getDefaultLanguage: sinon.stub().resolves('en'),
+      getEnabledLanguages: sinon.stub().resolves(['en']),
+      getForceLanguage: sinon.stub().resolves(null),
+    } as unknown as ConfigurationInterface;
+    const service = new SetupService(mockConfig);
 
     // First call should hit database
     const result1 = await service.isSetupModeActive();
@@ -170,7 +193,15 @@ describe('SetupService - Cache Behavior', () => {
     const { AccountRoleEntity } = await import('@/server/common/entity/account');
     sandbox.stub(AccountRoleEntity, 'findOne').callsFake(findOneStub);
 
-    const service = new SetupService();
+    const mockConfig = {
+      getSetting: sinon.stub().resolves(undefined),
+      setSetting: sinon.stub().resolves(true),
+      getAllSettings: sinon.stub().resolves({}),
+      getDefaultLanguage: sinon.stub().resolves('en'),
+      getEnabledLanguages: sinon.stub().resolves(['en']),
+      getForceLanguage: sinon.stub().resolves(null),
+    } as unknown as ConfigurationInterface;
+    const service = new SetupService(mockConfig);
 
     // First call
     await service.isSetupModeActive();

@@ -2,7 +2,6 @@ import config from 'config';
 import ServiceSettingEntity from "@/server/configuration/entity/settings";
 import type { DefaultDateRange } from '@/common/model/calendar';
 import { isValidLanguageCode, DEFAULT_LANGUAGE_CODE, getDefaultEnabledLanguageCodes } from '@/common/i18n/languages';
-import type { LocaleDetectionMethods } from '@/common/i18n/config';
 
 type Config = {
   registrationMode: 'open' | 'apply' | 'invitation' | 'closed';
@@ -12,7 +11,6 @@ type Config = {
   defaultLanguage: string;
   enabledLanguages: string[];
   forceLanguage: string | null;
-  localeDetectionMethods: LocaleDetectionMethods;
 };
 
 class ServiceSettings {
@@ -28,11 +26,6 @@ class ServiceSettings {
       defaultLanguage: DEFAULT_LANGUAGE_CODE,
       enabledLanguages: getDefaultEnabledLanguageCodes(),
       forceLanguage: null,
-      localeDetectionMethods: {
-        urlPrefix: true,
-        cookie: true,
-        acceptLanguage: true,
-      },
     };
   }
 
@@ -77,21 +70,6 @@ class ServiceSettings {
           this.config.forceLanguage = entity.value;
         }
       }
-      if ( entity.parameter == 'localeDetectionMethods' ) {
-        try {
-          const parsed = JSON.parse(entity.value);
-          if (parsed && typeof parsed === 'object') {
-            this.config.localeDetectionMethods = {
-              urlPrefix: typeof parsed.urlPrefix === 'boolean' ? parsed.urlPrefix : true,
-              cookie: typeof parsed.cookie === 'boolean' ? parsed.cookie : true,
-              acceptLanguage: typeof parsed.acceptLanguage === 'boolean' ? parsed.acceptLanguage : true,
-            };
-          }
-        }
-        catch {
-          // Invalid JSON — keep default
-        }
-      }
     });
   }
 
@@ -114,13 +92,6 @@ class ServiceSettings {
    */
   getForceLanguage(): string | null {
     return this.config.forceLanguage;
-  }
-
-  /**
-   * Returns the locale detection methods configuration.
-   */
-  getLocaleDetectionMethods(): LocaleDetectionMethods {
-    return this.config.localeDetectionMethods;
   }
 
   /**
@@ -203,21 +174,6 @@ class ServiceSettings {
       }
     }
 
-    // Validate localeDetectionMethods (stored as JSON string)
-    if ( parameter == 'localeDetectionMethods' ) {
-      try {
-        const parsed = typeof value === 'string' ? JSON.parse(value) : value;
-        if (!parsed || typeof parsed !== 'object') {
-          console.error('Invalid localeDetectionMethods:', value);
-          return false;
-        }
-      }
-      catch {
-        console.error('Invalid localeDetectionMethods JSON:', value);
-        return false;
-      }
-    }
-
     // Update or create the setting in the database
     const [entity, created] = await ServiceSettingEntity.findOrCreate({
       where: { parameter },
@@ -282,15 +238,6 @@ class ServiceSettings {
         else {
           this.config.forceLanguage = strValue;
         }
-        break;
-      }
-      case 'localeDetectionMethods': {
-        const parsed = typeof value === 'string' ? JSON.parse(value) : value;
-        this.config.localeDetectionMethods = {
-          urlPrefix: typeof parsed.urlPrefix === 'boolean' ? parsed.urlPrefix : true,
-          cookie: typeof parsed.cookie === 'boolean' ? parsed.cookie : true,
-          acceptLanguage: typeof parsed.acceptLanguage === 'boolean' ? parsed.acceptLanguage : true,
-        };
         break;
       }
       default:

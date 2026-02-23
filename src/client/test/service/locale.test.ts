@@ -1,5 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import sinon from 'sinon';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import i18next from 'i18next';
 
 // We need to isolate tests from the real i18next state
@@ -28,17 +27,10 @@ import { readLocaleCookie, writeLocaleCookie } from '@/common/i18n/cookie';
 import { detectLanguage, initI18Next, applyAccountLanguage, changeLanguage } from '@/client/service/locale';
 
 describe('locale service', () => {
-  let sandbox: sinon.SinonSandbox;
-
   beforeEach(() => {
-    sandbox = sinon.createSandbox();
     vi.clearAllMocks();
     // Reset i18next mock state
     (i18next as any).language = 'en';
-  });
-
-  afterEach(() => {
-    sandbox.restore();
   });
 
   describe('detectLanguage', () => {

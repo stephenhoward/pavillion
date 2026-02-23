@@ -2,8 +2,24 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import express, { Express, Request, Response } from 'express';
 import request from 'supertest';
 import sinon from 'sinon';
-import { router, handlers } from '@/server/app_routes';
-import ServiceSettings from '@/server/configuration/service/settings';
+import config from 'config';
+import { createRouter, getSiteBaseUrl, buildHreflangLinks, resolveInstanceDefaultLanguage } from '@/server/app_routes';
+import ConfigurationInterface from '@/server/configuration/interface';
+
+/**
+ * Creates a minimal mock ConfigurationInterface with controllable default language.
+ */
+function buildMockConfigInterface(defaultLanguage = 'en'): ConfigurationInterface {
+  const mock = {
+    getDefaultLanguage: sinon.stub().resolves(defaultLanguage),
+    getSetting: sinon.stub().resolves(undefined),
+    setSetting: sinon.stub().resolves(true),
+    getAllSettings: sinon.stub().resolves({}),
+    getEnabledLanguages: sinon.stub().resolves(['en', 'es']),
+    getForceLanguage: sinon.stub().resolves(null),
+  } as unknown as ConfigurationInterface;
+  return mock;
+}
 
 /**
  * Builds a minimal Express app that installs the locale middleware stub
@@ -12,7 +28,7 @@ import ServiceSettings from '@/server/configuration/service/settings';
  * The view engine is replaced with a spy so we can assert on render calls
  * without needing actual EJS templates on disk.
  */
-function buildTestApp(locale = 'en'): Express {
+function buildTestApp(locale = 'en', configInterface?: ConfigurationInterface): Express {
   const app = express();
 
   // Stub locale middleware: set req.locale to the supplied value
@@ -30,6 +46,8 @@ function buildTestApp(locale = 'en'): Express {
     next();
   });
 
+  const mockConfig = configInterface ?? buildMockConfigInterface(locale);
+  const { router } = createRouter(mockConfig);
   app.use('/', router);
 
   return app;
@@ -76,12 +94,8 @@ describe('app_routes', () => {
     });
 
     it('should pass non-empty hreflangLinks array to the template', async () => {
-      const mockSettings = {
-        get: (_key: string) => 'en',
-      } as unknown as ServiceSettings;
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
-
-      const app = buildTestApp('en');
+      const mockConfig = buildMockConfigInterface('en');
+      const app = buildTestApp('en', mockConfig);
       const res = await request(app).get('/@mycalendar');
 
       expect(res.status).toBe(200);
@@ -93,12 +107,8 @@ describe('app_routes', () => {
     });
 
     it('should include hreflang entries for all enabled languages', async () => {
-      const mockSettings = {
-        get: (_key: string) => 'en',
-      } as unknown as ServiceSettings;
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
-
-      const app = buildTestApp('en');
+      const mockConfig = buildMockConfigInterface('en');
+      const app = buildTestApp('en', mockConfig);
       const res = await request(app).get('/@mycalendar');
 
       const links = res.body.data?.hreflangLinks;
@@ -107,12 +117,8 @@ describe('app_routes', () => {
     });
 
     it('should include canonical path in hreflang hrefs', async () => {
-      const mockSettings = {
-        get: (_key: string) => 'en',
-      } as unknown as ServiceSettings;
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
-
-      const app = buildTestApp('en');
+      const mockConfig = buildMockConfigInterface('en');
+      const app = buildTestApp('en', mockConfig);
       const res = await request(app).get('/@mycalendar');
 
       const links = res.body.data?.hreflangLinks;
@@ -129,12 +135,8 @@ describe('app_routes', () => {
 
   describe('locale-prefixed site routes — non-default language', () => {
     it('should serve site.index.html.ejs for /es/@calendar when es is not the default', async () => {
-      const mockSettings = {
-        get: (_key: string) => 'en',
-      } as unknown as ServiceSettings;
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
-
-      const app = buildTestApp('es');
+      const mockConfig = buildMockConfigInterface('en');
+      const app = buildTestApp('es', mockConfig);
       const res = await request(app).get('/es/@mycalendar');
 
       expect(res.status).toBe(200);
@@ -142,12 +144,8 @@ describe('app_routes', () => {
     });
 
     it('should pass locale from req.locale to the template for prefixed routes', async () => {
-      const mockSettings = {
-        get: (_key: string) => 'en',
-      } as unknown as ServiceSettings;
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
-
-      const app = buildTestApp('es');
+      const mockConfig = buildMockConfigInterface('en');
+      const app = buildTestApp('es', mockConfig);
       const res = await request(app).get('/es/@mycalendar');
 
       expect(res.status).toBe(200);
@@ -155,12 +153,8 @@ describe('app_routes', () => {
     });
 
     it('should serve site.index.html.ejs for /es/@calendar/event/123', async () => {
-      const mockSettings = {
-        get: (_key: string) => 'en',
-      } as unknown as ServiceSettings;
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
-
-      const app = buildTestApp('es');
+      const mockConfig = buildMockConfigInterface('en');
+      const app = buildTestApp('es', mockConfig);
       const res = await request(app).get('/es/@mycalendar/event/123');
 
       expect(res.status).toBe(200);
@@ -168,12 +162,8 @@ describe('app_routes', () => {
     });
 
     it('should pass non-empty hreflangLinks array for locale-prefixed routes', async () => {
-      const mockSettings = {
-        get: (_key: string) => 'en',
-      } as unknown as ServiceSettings;
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
-
-      const app = buildTestApp('es');
+      const mockConfig = buildMockConfigInterface('en');
+      const app = buildTestApp('es', mockConfig);
       const res = await request(app).get('/es/@mycalendar');
 
       expect(res.status).toBe(200);
@@ -184,12 +174,8 @@ describe('app_routes', () => {
     });
 
     it('should use stripped path (without locale prefix) in hreflang hrefs', async () => {
-      const mockSettings = {
-        get: (_key: string) => 'en',
-      } as unknown as ServiceSettings;
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
-
-      const app = buildTestApp('es');
+      const mockConfig = buildMockConfigInterface('en');
+      const app = buildTestApp('es', mockConfig);
       const res = await request(app).get('/es/@mycalendar');
 
       const links = res.body.data?.hreflangLinks;
@@ -209,12 +195,8 @@ describe('app_routes', () => {
 
   describe('locale-prefixed site routes — default language redirect', () => {
     it('should redirect /en/@calendar to /@calendar when en is the default language', async () => {
-      const mockSettings = {
-        get: (_key: string) => 'en',
-      } as unknown as ServiceSettings;
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
-
-      const app = buildTestApp('en');
+      const mockConfig = buildMockConfigInterface('en');
+      const app = buildTestApp('en', mockConfig);
       const res = await request(app).get('/en/@mycalendar');
 
       expect(res.status).toBe(301);
@@ -222,12 +204,8 @@ describe('app_routes', () => {
     });
 
     it('should redirect /es/@calendar to /@calendar when es is the default language', async () => {
-      const mockSettings = {
-        get: (_key: string) => 'es',
-      } as unknown as ServiceSettings;
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
-
-      const app = buildTestApp('es');
+      const mockConfig = buildMockConfigInterface('es');
+      const app = buildTestApp('es', mockConfig);
       const res = await request(app).get('/es/@mycalendar');
 
       expect(res.status).toBe(301);
@@ -235,12 +213,8 @@ describe('app_routes', () => {
     });
 
     it('should preserve query string when redirecting', async () => {
-      const mockSettings = {
-        get: (_key: string) => 'en',
-      } as unknown as ServiceSettings;
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
-
-      const app = buildTestApp('en');
+      const mockConfig = buildMockConfigInterface('en');
+      const app = buildTestApp('en', mockConfig);
       const res = await request(app).get('/en/@mycalendar?filter=music');
 
       expect(res.status).toBe(301);
@@ -248,12 +222,8 @@ describe('app_routes', () => {
     });
 
     it('should redirect /en/@calendar/event/123 to /@calendar/event/123', async () => {
-      const mockSettings = {
-        get: (_key: string) => 'en',
-      } as unknown as ServiceSettings;
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
-
-      const app = buildTestApp('en');
+      const mockConfig = buildMockConfigInterface('en');
+      const app = buildTestApp('en', mockConfig);
       const res = await request(app).get('/en/@mycalendar/event/123');
 
       expect(res.status).toBe(301);
@@ -323,36 +293,69 @@ describe('app_routes', () => {
 
   describe('resolveInstanceDefaultLanguage', () => {
     it('should return the instance default language from settings', async () => {
-      const { resolveInstanceDefaultLanguage } = await import('@/server/app_routes');
+      const mockConfig = buildMockConfigInterface('es');
 
-      const mockSettings = {
-        get: (_key: string) => 'es',
-      } as unknown as ServiceSettings;
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
-
-      const result = await resolveInstanceDefaultLanguage();
+      const result = await resolveInstanceDefaultLanguage(mockConfig);
       expect(result).toBe('es');
     });
 
-    it('should fall back to DEFAULT_LANGUAGE_CODE when settings throws', async () => {
-      const { resolveInstanceDefaultLanguage } = await import('@/server/app_routes');
+    it('should fall back to DEFAULT_LANGUAGE_CODE when getDefaultLanguage throws', async () => {
+      const mockConfig = {
+        getDefaultLanguage: sinon.stub().rejects(new Error('DB error')),
+      } as unknown as ConfigurationInterface;
 
-      sandbox.stub(ServiceSettings, 'getInstance').rejects(new Error('DB error'));
-
-      const result = await resolveInstanceDefaultLanguage();
+      const result = await resolveInstanceDefaultLanguage(mockConfig);
       expect(result).toBe('en');
     });
 
     it('should fall back to DEFAULT_LANGUAGE_CODE when settings returns invalid code', async () => {
-      const { resolveInstanceDefaultLanguage } = await import('@/server/app_routes');
+      const mockConfig = {
+        getDefaultLanguage: sinon.stub().resolves('zz'),
+      } as unknown as ConfigurationInterface;
 
-      const mockSettings = {
-        get: (_key: string) => 'zz',
-      } as unknown as ServiceSettings;
-      sandbox.stub(ServiceSettings, 'getInstance').resolves(mockSettings);
-
-      const result = await resolveInstanceDefaultLanguage();
+      const result = await resolveInstanceDefaultLanguage(mockConfig);
       expect(result).toBe('en');
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // getSiteBaseUrl — host-header injection protection
+  // -----------------------------------------------------------------------
+
+  describe('getSiteBaseUrl', () => {
+    it('should use the configured domain, not the Host header', () => {
+      const configuredDomain = config.get<string>('domain');
+
+      // Build a fake request with a spoofed Host header
+      const fakeReq = {
+        protocol: 'https',
+        get: (header: string) => {
+          if (header === 'host') return 'evil.com';
+          return undefined;
+        },
+      } as unknown as Request;
+
+      const result = getSiteBaseUrl(fakeReq);
+
+      // The result must contain the configured domain, not the spoofed host
+      expect(result).toContain(configuredDomain);
+      expect(result).not.toContain('evil.com');
+    });
+
+    it('should not allow a spoofed Host header to appear in hreflang hrefs', () => {
+      const fakeReq = {
+        protocol: 'https',
+        get: (header: string) => {
+          if (header === 'host') return 'evil.com';
+          return undefined;
+        },
+      } as unknown as Request;
+
+      const links = buildHreflangLinks(fakeReq, '/@mycalendar', 'en');
+
+      for (const link of links) {
+        expect(link.href).not.toContain('evil.com');
+      }
     });
   });
 
@@ -362,6 +365,9 @@ describe('app_routes', () => {
 
   describe('handlers object', () => {
     it('should export expected handler functions', () => {
+      const mockConfig = buildMockConfigInterface('en');
+      const { handlers } = createRouter(mockConfig);
+
       expect(typeof handlers.client_index).toBe('function');
       expect(typeof handlers.site_index).toBe('function');
       expect(typeof handlers.locale_prefixed_site).toBe('function');

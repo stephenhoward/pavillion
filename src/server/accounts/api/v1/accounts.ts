@@ -72,6 +72,12 @@ export default class AccountRouteHandlers {
     }
 
     const { language } = req.body;
+
+    if (language !== undefined && typeof language !== 'string') {
+      res.status(400).json({ error: 'Invalid request' });
+      return;
+    }
+
     const displayName = req.body.displayName !== undefined ? req.body.displayName : account.displayName;
 
     try {

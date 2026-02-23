@@ -1,6 +1,5 @@
 import axios from 'axios';
 import type { DefaultDateRange } from '@/common/model/calendar';
-import type { LocaleDetectionMethods } from '@/common/i18n/config';
 
 type Settings = {
   registrationMode: string;
@@ -8,7 +7,6 @@ type Settings = {
   defaultLanguage: string;
   enabledLanguages?: string[];
   forceLanguage?: string | null;
-  localeDetectionMethods?: LocaleDetectionMethods;
 };
 
 /**

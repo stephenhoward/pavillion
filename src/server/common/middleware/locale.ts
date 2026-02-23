@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { Account } from '@/common/model/account';
 import { LOCALE_COOKIE_NAME } from '@/common/i18n/cookie';
 import { parseAcceptLanguage } from '@/common/i18n/accept-language';
-import { detectLocaleFromPath } from '@/common/i18n/locale-url';
+import { stripLocalePrefix } from '@/common/i18n/locale-url';
 import { isValidLanguageCode, DEFAULT_LANGUAGE_CODE, getDefaultEnabledLanguageCodes } from '@/common/i18n/languages';
 import type ConfigurationInterface from '@/server/configuration/interface';
 
@@ -118,7 +118,7 @@ export function createLocaleMiddleware(configInterface?: ConfigurationInterface)
     }
 
     // 1. URL prefix
-    const urlLocale = detectLocaleFromPath(req.path);
+    const urlLocale = stripLocalePrefix(req.path).locale;
 
     if (urlLocale && isValidLanguageCode(urlLocale) && enabledLanguages.includes(urlLocale)) {
       req.locale = urlLocale;

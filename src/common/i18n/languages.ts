@@ -24,33 +24,7 @@ export interface Language {
   fallbackChain: string[];
   /** Text direction: 'ltr' for left-to-right, 'rtl' for right-to-left */
   direction: 'ltr' | 'rtl';
-  /**
-   * Translation completeness as a fraction between 0 and 1.
-   * 1.0 = fully translated, 0.0 = no translations.
-   * Use PRIMARY_THRESHOLD and BETA_THRESHOLD to classify completeness.
-   */
-  completeness: number;
 }
-
-/**
- * Languages above this threshold are considered primary (fully supported).
- * Languages between BETA_THRESHOLD and PRIMARY_THRESHOLD are in beta.
- */
-export const PRIMARY_THRESHOLD = 0.8;
-
-/**
- * Languages at or above this threshold are shown in the language switcher.
- * Languages below this threshold are excluded from the UI.
- */
-export const BETA_THRESHOLD = 0.5;
-
-/**
- * Describes the completeness tier of a language.
- * - 'primary': above PRIMARY_THRESHOLD, fully supported
- * - 'beta': above BETA_THRESHOLD, partially supported
- * - 'incomplete': below BETA_THRESHOLD, not shown in UI
- */
-export type LanguageCompleteness = 'primary' | 'beta' | 'incomplete';
 
 /**
  * List of languages with complete UI translations.
@@ -62,22 +36,20 @@ export const AVAILABLE_LANGUAGES: Language[] = [
     nativeName: 'English',
     fallbackChain: [],
     direction: 'ltr',
-    completeness: 1.0,
   },
   {
     code: 'es',
     nativeName: 'Español',
     fallbackChain: ['en'],
     direction: 'ltr',
-    completeness: 1.0,
   },
   // Add new languages here as translations become available:
-  // { code: 'fr', nativeName: 'Français', fallbackChain: ['en'], direction: 'ltr', completeness: 0.9 },
-  // { code: 'de', nativeName: 'Deutsch', fallbackChain: ['en'], direction: 'ltr', completeness: 0.7 },
-  // { code: 'pt', nativeName: 'Português', fallbackChain: ['es', 'en'], direction: 'ltr', completeness: 0.6 },
-  // { code: 'ja', nativeName: '日本語', fallbackChain: ['en'], direction: 'ltr', completeness: 0.6 },
-  // { code: 'zh', nativeName: '中文', fallbackChain: ['en'], direction: 'ltr', completeness: 0.6 },
-  // { code: 'ar', nativeName: 'العربية', fallbackChain: ['en'], direction: 'rtl', completeness: 0.6 },
+  // { code: 'fr', nativeName: 'Français', fallbackChain: ['en'], direction: 'ltr' },
+  // { code: 'de', nativeName: 'Deutsch', fallbackChain: ['en'], direction: 'ltr' },
+  // { code: 'pt', nativeName: 'Português', fallbackChain: ['es', 'en'], direction: 'ltr' },
+  // { code: 'ja', nativeName: '日本語', fallbackChain: ['en'], direction: 'ltr' },
+  // { code: 'zh', nativeName: '中文', fallbackChain: ['en'], direction: 'ltr' },
+  // { code: 'ar', nativeName: 'العربية', fallbackChain: ['en'], direction: 'rtl' },
 ];
 
 /**
@@ -101,27 +73,11 @@ export function getLanguage(code: string): Language | undefined {
 }
 
 /**
- * Returns the completeness tier for a given language code.
- *
- * @param code - The ISO 639-1 language code
- * @returns 'primary', 'beta', or 'incomplete'
+ * Returns the default list of enabled language codes.
+ * Includes all languages in AVAILABLE_LANGUAGES.
  */
-export function getLanguageCompleteness(code: string): LanguageCompleteness {
-  const lang = getLanguage(code);
-
-  if (!lang) {
-    return 'incomplete';
-  }
-
-  if (lang.completeness >= PRIMARY_THRESHOLD) {
-    return 'primary';
-  }
-
-  if (lang.completeness >= BETA_THRESHOLD) {
-    return 'beta';
-  }
-
-  return 'incomplete';
+export function getDefaultEnabledLanguageCodes(): string[] {
+  return AVAILABLE_LANGUAGES.map(lang => lang.code);
 }
 
 /**

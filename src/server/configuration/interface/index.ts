@@ -1,7 +1,6 @@
 import SettingsService from '@/server/configuration/service/settings';
 import ServiceSettingEntity from '@/server/configuration/entity/settings';
 import { DEFAULT_LANGUAGE_CODE, getDefaultEnabledLanguageCodes } from '@/common/i18n/languages';
-import type { LocaleDetectionMethods } from '@/common/i18n/config';
 
 /**
  * Implementation of the Configuration Internal API.
@@ -95,18 +94,4 @@ export default class ConfigurationInterface {
     }
   }
 
-  /**
-   * Returns the locale detection methods configuration.
-   *
-   * @returns Promise resolving to detection method flags
-   */
-  async getLocaleDetectionMethods(): Promise<LocaleDetectionMethods> {
-    try {
-      const settings = await SettingsService.getInstance();
-      return settings.getLocaleDetectionMethods();
-    }
-    catch {
-      return { urlPrefix: true, cookie: true, acceptLanguage: true };
-    }
-  }
 }

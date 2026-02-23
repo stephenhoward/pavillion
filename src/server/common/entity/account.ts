@@ -23,9 +23,6 @@ class AccountEntity extends Model {
   @Column({ type: DataType.STRING, allowNull: true })
   declare display_name: string | null;
 
-  @Column({ type: DataType.STRING(50), allowNull: true })
-  declare formatting_locale: string | null;
-
   toModel(): Account {
     let account = new Account( this.id, this.username, this.email );
     account.language = this.language;

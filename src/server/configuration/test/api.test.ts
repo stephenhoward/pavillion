@@ -76,5 +76,35 @@ describe('Site API', () => {
       expect(response.status).toBe(200);
       expect(mockSaveStub.calledWith('forceLanguage', 'es')).toBe(true);
     });
+
+    it('should silently skip unknown keys and not call setSetting for them', async () => {
+      const mockSaveStub = sandbox.stub(configurationInterface, 'setSetting').resolves(true);
+
+      router.post('/handler', siteHandlers.updateSettings.bind(siteHandlers));
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .send({ registrationMode: 'open', unknownKey: 'malicious', anotherBadKey: 'data' });
+
+      expect(response.status).toBe(200);
+      // setSetting should only have been called for the allowed key
+      expect(mockSaveStub.callCount).toBe(1);
+      expect(mockSaveStub.calledWith('registrationMode', 'open')).toBe(true);
+      expect(mockSaveStub.calledWith('unknownKey', 'malicious')).toBe(false);
+      expect(mockSaveStub.calledWith('anotherBadKey', 'data')).toBe(false);
+    });
+
+    it('should succeed with no error when only unknown keys are sent', async () => {
+      const mockSaveStub = sandbox.stub(configurationInterface, 'setSetting').resolves(true);
+
+      router.post('/handler', siteHandlers.updateSettings.bind(siteHandlers));
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .send({ unknownKey: 'value' });
+
+      expect(response.status).toBe(200);
+      expect(mockSaveStub.callCount).toBe(0);
+    });
   });
 });

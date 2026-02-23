@@ -389,6 +389,66 @@ describe('Account API', () => {
     expect(updateStub.called).toBe(true);
   });
 
+  it('PATCH /me/profile: should return 400 with generic error when language is a number', async () => {
+    const testAccount = new Account('user-id', 'testuser', 'test@example.com');
+
+    const updateStub = sandbox.stub(accountsInterface, 'updateProfile');
+
+    router.patch('/me/profile', (req, res, next) => {
+      req.user = testAccount;
+      next();
+    }, accountHandlers.updateProfile.bind(accountHandlers));
+
+    const response = await request(testApp(router))
+      .patch('/me/profile')
+      .send({ displayName: 'Test User', language: 123 });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('Invalid request');
+    expect(updateStub.called).toBe(false);
+  });
+
+  it('PATCH /me/profile: should return 400 with generic error when language is an array', async () => {
+    const testAccount = new Account('user-id', 'testuser', 'test@example.com');
+
+    const updateStub = sandbox.stub(accountsInterface, 'updateProfile');
+
+    router.patch('/me/profile', (req, res, next) => {
+      req.user = testAccount;
+      next();
+    }, accountHandlers.updateProfile.bind(accountHandlers));
+
+    const response = await request(testApp(router))
+      .patch('/me/profile')
+      .send({ displayName: 'Test User', language: ['en'] });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('Invalid request');
+    expect(updateStub.called).toBe(false);
+  });
+
+  it('PATCH /me/profile: should process request normally when language is a valid string', async () => {
+    const testAccount = new Account('user-id', 'testuser', 'test@example.com');
+    const updatedAccount = new Account('user-id', 'testuser', 'test@example.com');
+    updatedAccount.language = 'en';
+
+    const updateStub = sandbox.stub(accountsInterface, 'updateProfile');
+    updateStub.resolves(updatedAccount);
+
+    router.patch('/me/profile', (req, res, next) => {
+      req.user = testAccount;
+      next();
+    }, accountHandlers.updateProfile.bind(accountHandlers));
+
+    const response = await request(testApp(router))
+      .patch('/me/profile')
+      .send({ displayName: 'Test User', language: 'en' });
+
+    expect(response.status).toBe(200);
+    expect(updateStub.called).toBe(true);
+    expect(updateStub.firstCall.args[2]).toBe('en');
+  });
+
 });
 
 describe ('Invitations API', () => {

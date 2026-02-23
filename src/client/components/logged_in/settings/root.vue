@@ -80,7 +80,7 @@ async function handleLanguageChange(event) {
   state.userInfo.preferredLanguage = language;
 
   await changeLanguage(language, async (lang) => {
-    await accountService.updateLanguage(lang, { source: 'settings' });
+    await accountService.updateLanguage(lang);
   });
 }
 

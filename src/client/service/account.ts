@@ -51,10 +51,9 @@ export default class AccountService {
    * sessions and devices.
    *
    * @param language - The language code to persist (e.g. 'es', 'en')
-   * @param _options - Reserved for future use (e.g. additional metadata)
    * @returns Promise<void>
    */
-  async updateLanguage(language: string, _options?: unknown): Promise<void> {
+  async updateLanguage(language: string): Promise<void> {
     try {
       await axios.patch('/api/v1/accounts/me/profile', {
         language,

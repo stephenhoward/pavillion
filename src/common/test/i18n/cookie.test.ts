@@ -114,7 +114,8 @@ describe('Locale cookie utilities', () => {
       documentCookieSpy.mockRestore();
     });
 
-    it('should include Secure attribute in the cookie string', () => {
+    it('should include Secure attribute when served over HTTPS', () => {
+      // Test environment URL is https://localhost — Secure should be present
       const documentCookieSpy = vi.spyOn(document, 'cookie', 'set');
 
       writeLocaleCookie('en');
@@ -124,6 +125,26 @@ describe('Locale cookie utilities', () => {
       );
 
       documentCookieSpy.mockRestore();
+    });
+
+    it('should omit Secure attribute when served over HTTP', () => {
+      // Switch to HTTP using happy-dom's setURL API so document.cookie remains valid
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as any).happyDOM.setURL('http://localhost');
+
+      const documentCookieSpy = vi.spyOn(document, 'cookie', 'set');
+
+      writeLocaleCookie('en');
+
+      expect(documentCookieSpy).toHaveBeenCalledWith(
+        expect.not.stringContaining('Secure'),
+      );
+
+      documentCookieSpy.mockRestore();
+
+      // Restore HTTPS URL for subsequent tests
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as any).happyDOM.setURL('https://localhost');
     });
 
     it('should include a 1-year max-age in the cookie string', () => {

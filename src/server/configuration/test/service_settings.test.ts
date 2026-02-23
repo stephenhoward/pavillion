@@ -486,7 +486,7 @@ describe('ServiceSettings', () => {
 
         const settings = await ServiceSettings.getInstance();
 
-        // Default should include all languages meeting BETA_THRESHOLD
+        // Default should include all available languages
         expect(settings.getEnabledLanguages().length).toBeGreaterThan(0);
         expect(settings.getEnabledLanguages()).toContain('en');
       });

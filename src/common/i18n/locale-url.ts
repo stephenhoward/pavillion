@@ -18,7 +18,7 @@ export function addLocalePrefix(path: string, locale: string, defaultLocale: str
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
 
   // Check if path already has this locale prefix to avoid double-prefixing
-  const existing = detectLocaleFromPath(normalizedPath);
+  const existing = stripLocalePrefix(normalizedPath).locale;
   if (existing === locale) {
     return normalizedPath;
   }
@@ -56,15 +56,4 @@ export function stripLocalePrefix(path: string): { locale: string | null; path: 
   }
 
   return { locale: potentialLocale, path: remainingPath };
-}
-
-/**
- * Detects the locale from a URL path prefix.
- * Returns the locale code if the path starts with a valid locale prefix, or null otherwise.
- *
- * @param path - The URL path to inspect (e.g., '/fr/@calendar')
- * @returns The locale code if detected, null otherwise
- */
-export function detectLocaleFromPath(path: string): string | null {
-  return stripLocalePrefix(path).locale;
 }

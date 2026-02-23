@@ -2,12 +2,12 @@
  * Tests for the LanguageSwitcher component.
  *
  * Validates:
- * - Rendering of primary and beta language sections
- * - Filtering: incomplete languages (<50%) are hidden
+ * - Rendering of all available languages
  * - Globe icon and native language names are shown
  * - Selecting a language calls switchLocale() and closes the dropdown
  * - Keyboard navigation: ArrowDown, ArrowUp, Enter, Escape
  * - ARIA attributes for screen-reader accessibility
+ * - Focus returns to trigger button on dropdown close (WCAG 2.1 SC 2.1.2)
  */
 import { describe, it, expect, afterEach, vi, beforeEach } from 'vitest';
 import { mount, VueWrapper } from '@vue/test-utils';
@@ -37,7 +37,7 @@ vi.mock('@/site/composables/useLocale', () => ({
 // Subject under test
 // ---------------------------------------------------------------------------
 import LanguageSwitcher from '@/site/components/LanguageSwitcher.vue';
-import { AVAILABLE_LANGUAGES, PRIMARY_THRESHOLD, BETA_THRESHOLD } from '@/common/i18n/languages';
+import { AVAILABLE_LANGUAGES } from '@/common/i18n/languages';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -138,49 +138,27 @@ describe('LanguageSwitcher Component', () => {
   });
 
   // -------------------------------------------------------------------------
-  // Language filtering by completeness
+  // Language rendering
   // -------------------------------------------------------------------------
 
-  describe('Language completeness filtering', () => {
-    it('only renders languages with completeness >= BETA_THRESHOLD', async () => {
+  describe('Language rendering', () => {
+    it('renders all available languages as options', async () => {
       wrapper = mountSwitcher();
       await wrapper.find('.language-switcher__trigger').trigger('click');
 
-      const visibleLanguages = AVAILABLE_LANGUAGES.filter(
-        l => l.completeness >= BETA_THRESHOLD,
-      );
       const options = wrapper.findAll('[role="option"]');
 
-      expect(options.length).toBe(visibleLanguages.length);
+      expect(options.length).toBe(AVAILABLE_LANGUAGES.length);
     });
 
-    it('renders primary languages (completeness >= PRIMARY_THRESHOLD)', async () => {
+    it('renders each available language', async () => {
       wrapper = mountSwitcher();
       await wrapper.find('.language-switcher__trigger').trigger('click');
 
-      const primaryLangs = AVAILABLE_LANGUAGES.filter(
-        l => l.completeness >= PRIMARY_THRESHOLD,
-      );
-
-      // Every primary language should appear as an option
-      for (const lang of primaryLangs) {
+      for (const lang of AVAILABLE_LANGUAGES) {
         const option = wrapper.find(`[id="lang-option-${lang.code}"]`);
         expect(option.exists()).toBe(true);
         expect(option.text()).toContain(lang.nativeName);
-      }
-    });
-
-    it('does not render incomplete languages (completeness < BETA_THRESHOLD)', async () => {
-      wrapper = mountSwitcher();
-      await wrapper.find('.language-switcher__trigger').trigger('click');
-
-      const incompleteLangs = AVAILABLE_LANGUAGES.filter(
-        l => l.completeness < BETA_THRESHOLD,
-      );
-
-      for (const lang of incompleteLangs) {
-        const option = wrapper.find(`[id="lang-option-${lang.code}"]`);
-        expect(option.exists()).toBe(false);
       }
     });
 
@@ -304,6 +282,55 @@ describe('LanguageSwitcher Component', () => {
       expect(wrapper.find('.language-switcher__dropdown').exists()).toBe(false);
     });
 
+    it('returns focus to trigger button when Escape closes the dropdown', async () => {
+      wrapper = mountSwitcher();
+      const triggerEl = wrapper.find('.language-switcher__trigger').element as HTMLElement;
+      const focusSpy = vi.spyOn(triggerEl, 'focus');
+
+      await wrapper.find('.language-switcher__trigger').trigger('click');
+      expect(wrapper.find('.language-switcher__dropdown').exists()).toBe(true);
+
+      await wrapper.find('.language-switcher').trigger('keydown', { key: 'Escape' });
+      await nextTick();
+
+      expect(focusSpy).toHaveBeenCalledOnce();
+    });
+
+    it('Tab closes the dropdown without stealing focus from browser Tab movement', async () => {
+      // Tab should close the dropdown but NOT call triggerRef.focus() —
+      // doing so would race with the browser's native Tab focus movement.
+      // Only Escape should return focus explicitly to the trigger.
+      wrapper = mountSwitcher();
+      const triggerEl = wrapper.find('.language-switcher__trigger').element as HTMLElement;
+      const focusSpy = vi.spyOn(triggerEl, 'focus');
+
+      await wrapper.find('.language-switcher__trigger').trigger('click');
+      expect(wrapper.find('.language-switcher__dropdown').exists()).toBe(true);
+
+      await wrapper.find('.language-switcher').trigger('keydown', { key: 'Tab' });
+      await nextTick();
+
+      // Dropdown must close
+      expect(wrapper.find('.language-switcher__dropdown').exists()).toBe(false);
+      // Focus must NOT be stolen back to the trigger (let Tab proceed naturally)
+      expect(focusSpy).not.toHaveBeenCalled();
+    });
+
+    it('returns focus to trigger button when clicking outside closes the dropdown', async () => {
+      wrapper = mountSwitcher();
+      const triggerEl = wrapper.find('.language-switcher__trigger').element as HTMLElement;
+      const focusSpy = vi.spyOn(triggerEl, 'focus');
+
+      await wrapper.find('.language-switcher__trigger').trigger('click');
+      expect(wrapper.find('.language-switcher__dropdown').exists()).toBe(true);
+
+      // Simulate outside click by dispatching a click on document body outside the component
+      document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await nextTick();
+
+      expect(focusSpy).toHaveBeenCalledOnce();
+    });
+
     it('selects language with Enter key on option', async () => {
       wrapper = mountSwitcher();
       await wrapper.find('.language-switcher__trigger').trigger('click');
@@ -409,6 +436,20 @@ describe('LanguageSwitcher Component', () => {
 
       const enOption = wrapper.find('[id="lang-option-en"]');
       expect(enOption.attributes('lang')).toBe('en');
+    });
+
+    it('listbox does not use aria-activedescendant (roving tabindex pattern)', async () => {
+      // The component uses real DOM focus (roving tabindex), not aria-activedescendant.
+      // These two patterns are mutually exclusive — mixing them causes screen reader conflicts.
+      mockCurrentLocale.value = 'en';
+      wrapper = mountSwitcher();
+
+      await wrapper.find('.language-switcher__trigger').trigger('click');
+      await nextTick();
+
+      const listbox = wrapper.find('[role="listbox"]');
+      // aria-activedescendant must be absent — focus moves to option elements directly
+      expect(listbox.attributes('aria-activedescendant')).toBeUndefined();
     });
   });
 

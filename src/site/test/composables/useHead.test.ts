@@ -2,7 +2,7 @@
  * Tests for the useHead composable and its helper functions.
  *
  * Validates that:
- * - getEnabledLanguageCodes() returns only languages above BETA_THRESHOLD
+ * - getEnabledLanguageCodes() returns codes for all available languages
  * - buildHreflangLinks() generates correct link objects including x-default
  * - useHead() inserts hreflang tags on mount and updates them on navigation
  * - useHead() replaces existing tags rather than duplicating them
@@ -20,16 +20,14 @@ import { createRouter, createWebHistory } from 'vue-router';
 
 vi.mock('@/common/i18n/languages', () => {
   const languages = [
-    { code: 'en', nativeName: 'English', fallbackChain: [], direction: 'ltr', completeness: 1.0 },
-    { code: 'es', nativeName: 'Español', fallbackChain: ['en'], direction: 'ltr', completeness: 0.9 },
-    { code: 'fr', nativeName: 'Français', fallbackChain: ['en'], direction: 'ltr', completeness: 0.6 },
-    // Below BETA_THRESHOLD — should be excluded from hreflang tags
-    { code: 'de', nativeName: 'Deutsch', fallbackChain: ['en'], direction: 'ltr', completeness: 0.3 },
+    { code: 'en', nativeName: 'English', fallbackChain: [], direction: 'ltr' },
+    { code: 'es', nativeName: 'Español', fallbackChain: ['en'], direction: 'ltr' },
+    { code: 'fr', nativeName: 'Français', fallbackChain: ['en'], direction: 'ltr' },
+    { code: 'de', nativeName: 'Deutsch', fallbackChain: ['en'], direction: 'ltr' },
   ];
 
   return {
     AVAILABLE_LANGUAGES: languages,
-    BETA_THRESHOLD: 0.5,
     DEFAULT_LANGUAGE_CODE: 'en',
     // isValidLanguageCode is called by stripLocalePrefix in locale-url.ts
     isValidLanguageCode: (code: string) => languages.some((l: { code: string }) => l.code === code),
@@ -69,12 +67,10 @@ function collectHreflangLinks(): { hreflang: string; href: string }[] {
 // ---------------------------------------------------------------------------
 
 describe('getEnabledLanguageCodes', () => {
-  it('returns only languages with completeness >= BETA_THRESHOLD', () => {
+  it('returns codes for all available languages', () => {
     const codes = getEnabledLanguageCodes();
 
-    // en (1.0), es (0.9), fr (0.6) are above 0.5; de (0.3) is excluded
-    expect(codes).toEqual(['en', 'es', 'fr']);
-    expect(codes).not.toContain('de');
+    expect(codes).toEqual(['en', 'es', 'fr', 'de']);
   });
 });
 
@@ -82,8 +78,8 @@ describe('buildHreflangLinks', () => {
   it('returns one link per enabled language plus x-default', () => {
     const links = buildHreflangLinks('/@calendar', 'en', 'https://example.com');
 
-    // 3 enabled languages + x-default
-    expect(links).toHaveLength(4);
+    // 4 enabled languages + x-default
+    expect(links).toHaveLength(5);
   });
 
   it('generates correct href for the default language (no prefix)', () => {
@@ -173,13 +169,14 @@ describe('useHead composable', () => {
     await nextTick();
 
     const links = collectHreflangLinks();
-    // 3 enabled languages (en, es, fr) + x-default
-    expect(links).toHaveLength(4);
+    // 4 enabled languages (en, es, fr, de) + x-default
+    expect(links).toHaveLength(5);
 
     const hreflangs = links.map(l => l.hreflang);
     expect(hreflangs).toContain('en');
     expect(hreflangs).toContain('es');
     expect(hreflangs).toContain('fr');
+    expect(hreflangs).toContain('de');
     expect(hreflangs).toContain('x-default');
   });
 
@@ -242,8 +239,8 @@ describe('useHead composable', () => {
     await nextTick();
 
     const links = collectHreflangLinks();
-    // Still only 4 links (3 languages + x-default), not 8
-    expect(links).toHaveLength(4);
+    // Still only 5 links (4 languages + x-default), not 10
+    expect(links).toHaveLength(5);
   });
 
   it('strips the locale prefix from the URL when computing canonical path', async () => {

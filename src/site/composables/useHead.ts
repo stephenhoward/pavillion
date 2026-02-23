@@ -1,21 +1,16 @@
 import { watch, onUnmounted } from 'vue';
 import { useRoute } from 'vue-router';
 
-import { AVAILABLE_LANGUAGES, BETA_THRESHOLD, DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
+import { AVAILABLE_LANGUAGES, DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 import { addLocalePrefix, stripLocalePrefix } from '@/common/i18n/locale-url';
 
 /**
  * Returns the list of enabled language codes for hreflang annotations.
  *
- * Only languages with completeness >= BETA_THRESHOLD are included; incomplete
- * languages are excluded because they are hidden from the UI.
- *
  * @returns Array of language code strings
  */
 export function getEnabledLanguageCodes(): string[] {
-  return AVAILABLE_LANGUAGES
-    .filter(lang => lang.completeness >= BETA_THRESHOLD)
-    .map(lang => lang.code);
+  return AVAILABLE_LANGUAGES.map(lang => lang.code);
 }
 
 /**

@@ -6,10 +6,13 @@ import ConfigurationInterface from '@/server/configuration/interface';
 // Settings keys whose values are serialized as JSON strings for storage
 const JSON_SETTINGS = new Set(['enabledLanguages']);
 
+// Allowlist of keys that may be updated via the API
+const ALLOWED_SETTINGS = new Set(['registrationMode', 'defaultLanguage', 'enabledLanguages', 'forceLanguage']);
+
 export default class SiteRouteHandlers {
   private service: ConfigurationInterface;
-  constructor(service: ConfigurationInterface) {
-    this.service = service;
+  constructor(internalAPI: ConfigurationInterface) {
+    this.service = internalAPI;
   }
   installHandlers(app: express.Application, routePrefix: string): void {
     const router = express.Router();
@@ -34,6 +37,10 @@ export default class SiteRouteHandlers {
     try {
       // TODO: wrap this in a transaction so we don't update some settings but not others:
       for ( const key in req.body ) {
+        // Defense-in-depth: only process known, allowed setting keys
+        if (!ALLOWED_SETTINGS.has(key)) {
+          continue;
+        }
         const rawValue = req.body[key];
         // Serialize complex values (arrays, objects) to JSON strings for storage
         const value = JSON_SETTINGS.has(key)

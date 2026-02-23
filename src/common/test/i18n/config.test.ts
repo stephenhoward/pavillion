@@ -157,7 +157,7 @@ describe('createI18nConfig', () => {
   });
 
   describe('detection option', () => {
-    it('should include detection config when provided without localStorage', () => {
+    it('should include detection config when provided', () => {
       const detection = { order: ['navigator', 'htmlTag'] };
       const config = createI18nConfig({ detection });
       expect(config.detection).toEqual(detection);
@@ -168,64 +168,10 @@ describe('createI18nConfig', () => {
       expect(config).not.toHaveProperty('detection');
     });
 
-    it('should strip localStorage from detection order', () => {
-      const detection = { order: ['localStorage', 'navigator'] };
+    it('should pass detection config through unchanged', () => {
+      const detection = { order: ['navigator'], caches: ['cookie'] };
       const config = createI18nConfig({ detection });
-      const resultOrder = (config.detection as any)?.order;
-      expect(resultOrder).not.toContain('localStorage');
-      expect(resultOrder).toContain('navigator');
-    });
-
-    it('should strip localStorage from detection caches', () => {
-      const detection = { order: ['navigator'], caches: ['localStorage'] };
-      const config = createI18nConfig({ detection });
-      const resultCaches = (config.detection as any)?.caches;
-      expect(resultCaches).not.toContain('localStorage');
-    });
-
-    it('should preserve other detection cache entries after stripping localStorage', () => {
-      const detection = { order: ['navigator'], caches: ['localStorage', 'cookie'] };
-      const config = createI18nConfig({ detection });
-      const resultCaches = (config.detection as any)?.caches;
-      expect(resultCaches).toContain('cookie');
-      expect(resultCaches).not.toContain('localStorage');
-    });
-
-    it('should warn when localStorage is stripped from order', () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-      const detection = { order: ['localStorage', 'navigator'] };
-
-      createI18nConfig({ detection });
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('localStorage'),
-      );
-
-      warnSpy.mockRestore();
-    });
-
-    it('should warn when localStorage is stripped from caches', () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-      const detection = { order: ['navigator'], caches: ['localStorage'] };
-
-      createI18nConfig({ detection });
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('localStorage'),
-      );
-
-      warnSpy.mockRestore();
-    });
-
-    it('should not warn when no localStorage is present in detection', () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-      const detection = { order: ['navigator'], caches: [] };
-
-      createI18nConfig({ detection });
-
-      expect(warnSpy).not.toHaveBeenCalled();
-
-      warnSpy.mockRestore();
+      expect(config.detection).toEqual(detection);
     });
   });
 

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { reactive, computed, ref, onMounted, onUnmounted } from 'vue';
+import { reactive, computed, ref, nextTick, onMounted, onUnmounted } from 'vue';
 import { useTranslation } from 'i18next-vue';
 
-import { AVAILABLE_LANGUAGES, PRIMARY_THRESHOLD, BETA_THRESHOLD } from '@/common/i18n/languages';
+import { AVAILABLE_LANGUAGES } from '@/common/i18n/languages';
 import { useLocale } from '@/site/composables/useLocale';
 
 const { t } = useTranslation('system', {
@@ -18,24 +18,12 @@ const state = reactive({
 
 const containerRef = ref<HTMLElement | null>(null);
 const listRef = ref<HTMLElement | null>(null);
+const triggerRef = ref<HTMLElement | null>(null);
 
 /**
- * Languages filtered into completeness tiers, excluding incomplete languages.
+ * All available languages shown in the switcher.
  */
-const primaryLanguages = computed(() =>
-  AVAILABLE_LANGUAGES.filter(lang => lang.completeness >= PRIMARY_THRESHOLD),
-);
-
-const betaLanguages = computed(() =>
-  AVAILABLE_LANGUAGES.filter(
-    lang => lang.completeness >= BETA_THRESHOLD && lang.completeness < PRIMARY_THRESHOLD,
-  ),
-);
-
-const allVisibleLanguages = computed(() => [
-  ...primaryLanguages.value,
-  ...betaLanguages.value,
-]);
+const allVisibleLanguages = computed(() => AVAILABLE_LANGUAGES);
 
 /**
  * The native name of the currently selected language for display in the trigger button.
@@ -53,11 +41,13 @@ function openDropdown() {
   state.focusedIndex = allVisibleLanguages.value.findIndex(
     l => l.code === currentLocale.value,
   );
+  nextTick(() => focusOption(state.focusedIndex));
 }
 
 function closeDropdown() {
   state.isOpen = false;
   state.focusedIndex = -1;
+  triggerRef.value?.focus();
 }
 
 function toggleDropdown() {
@@ -135,8 +125,13 @@ function handleKeydown(event: KeyboardEvent) {
       break;
 
     case 'Escape':
-    case 'Tab':
       closeDropdown();
+      break;
+
+    case 'Tab':
+      state.isOpen = false;
+      state.focusedIndex = -1;
+      // Let Tab proceed naturally — do not steal focus back to trigger
       break;
   }
 }
@@ -156,13 +151,6 @@ function focusOption(index: number) {
 const listboxId = 'language-switcher-listbox';
 const triggerId = 'language-switcher-trigger';
 
-/**
- * The index of the currently selected language inside allVisibleLanguages.
- */
-const selectedIndex = computed(() =>
-  allVisibleLanguages.value.findIndex(l => l.code === currentLocale.value),
-);
-
 onMounted(() => {
   document.addEventListener('click', handleClickOutside);
 });
@@ -181,6 +169,7 @@ onUnmounted(() => {
     <!-- Trigger button -->
     <button
       :id="triggerId"
+      ref="triggerRef"
       type="button"
       class="language-switcher__trigger"
       :aria-haspopup="'listbox'"
@@ -252,102 +241,41 @@ onUnmounted(() => {
         class="language-switcher__dropdown"
         role="listbox"
         :aria-label="t('available_languages')"
-        :aria-activedescendant="selectedIndex >= 0 ? `lang-option-${allVisibleLanguages[selectedIndex].code}` : undefined"
         tabindex="-1"
       >
-        <!-- Primary languages section -->
         <div
-          v-if="primaryLanguages.length > 0"
-          class="language-switcher__section"
+          v-for="lang in allVisibleLanguages"
+          :id="`lang-option-${lang.code}`"
+          :key="lang.code"
+          role="option"
+          :aria-selected="lang.code === currentLocale"
+          tabindex="0"
+          class="language-switcher__option"
+          :class="{ 'language-switcher__option--selected': lang.code === currentLocale }"
+          :lang="lang.code"
+          :dir="lang.direction"
+          @click="selectLanguage(lang.code)"
+          @keydown.enter.prevent="selectLanguage(lang.code)"
+          @keydown.space.prevent="selectLanguage(lang.code)"
         >
-          <div
-            v-for="lang in primaryLanguages"
-            :id="`lang-option-${lang.code}`"
-            :key="lang.code"
-            role="option"
-            :aria-selected="lang.code === currentLocale"
-            tabindex="0"
-            class="language-switcher__option"
-            :class="{ 'language-switcher__option--selected': lang.code === currentLocale }"
-            :lang="lang.code"
-            :dir="lang.direction"
-            @click="selectLanguage(lang.code)"
-            @keydown.enter.prevent="selectLanguage(lang.code)"
-            @keydown.space.prevent="selectLanguage(lang.code)"
-          >
-            <span class="language-switcher__native-name">{{ lang.nativeName }}</span>
-            <svg
-              v-if="lang.code === currentLocale"
-              class="language-switcher__checkmark"
-              width="14"
-              height="14"
-              viewBox="0 0 14 14"
-              fill="none"
-              aria-hidden="true"
-            >
-              <path
-                d="M2.5 7L5.5 10L11.5 4"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-          </div>
-        </div>
-
-        <!-- Beta languages section (shown with label if present) -->
-        <div
-          v-if="betaLanguages.length > 0"
-          class="language-switcher__section language-switcher__section--beta"
-        >
-          <div
-            v-if="primaryLanguages.length > 0"
-            class="language-switcher__section-label"
+          <span class="language-switcher__native-name">{{ lang.nativeName }}</span>
+          <svg
+            v-if="lang.code === currentLocale"
+            class="language-switcher__checkmark"
+            width="14"
+            height="14"
+            viewBox="0 0 14 14"
+            fill="none"
             aria-hidden="true"
           >
-            {{ t('beta_languages') }}
-          </div>
-          <div
-            v-for="lang in betaLanguages"
-            :id="`lang-option-${lang.code}`"
-            :key="lang.code"
-            role="option"
-            :aria-selected="lang.code === currentLocale"
-            tabindex="0"
-            class="language-switcher__option language-switcher__option--beta"
-            :class="{ 'language-switcher__option--selected': lang.code === currentLocale }"
-            :lang="lang.code"
-            :dir="lang.direction"
-            @click="selectLanguage(lang.code)"
-            @keydown.enter.prevent="selectLanguage(lang.code)"
-            @keydown.space.prevent="selectLanguage(lang.code)"
-          >
-            <span class="language-switcher__native-name">{{ lang.nativeName }}</span>
-            <span
-              class="language-switcher__beta-badge"
-              :aria-label="t('beta_label')"
-            >
-              {{ t('beta_label') }}
-            </span>
-            <svg
-              v-if="lang.code === currentLocale"
-              class="language-switcher__checkmark"
-              width="14"
-              height="14"
-              viewBox="0 0 14 14"
-              fill="none"
-              aria-hidden="true"
-            >
-              <path
-                d="M2.5 7L5.5 10L11.5 4"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-          </div>
+            <path
+              d="M2.5 7L5.5 10L11.5 4"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
         </div>
       </div>
     </transition>
@@ -455,35 +383,6 @@ onUnmounted(() => {
   }
 }
 
-// ===== Section =====
-
-.language-switcher__section {
-  // no separator on the first section
-}
-
-.language-switcher__section--beta {
-  border-top: 1px solid $public-border-subtle-light;
-  margin-top: 4px;
-  padding-top: 4px;
-
-  @include dark-mode {
-    border-top-color: $public-border-subtle-dark;
-  }
-}
-
-.language-switcher__section-label {
-  padding: 4px 10px 2px;
-  font-size: $public-font-size-xs;
-  font-weight: $public-font-weight-medium;
-  text-transform: uppercase;
-  letter-spacing: $public-letter-spacing-wide;
-  color: $public-text-tertiary-light;
-
-  @include dark-mode {
-    color: $public-text-tertiary-dark;
-  }
-}
-
 // ===== Option =====
 
 .language-switcher__option {
@@ -548,21 +447,6 @@ onUnmounted(() => {
 
   @include dark-mode {
     color: $public-accent-dark;
-  }
-}
-
-.language-switcher__beta-badge {
-  flex-shrink: 0;
-  padding: 1px 6px;
-  border-radius: $public-radius-full;
-  font-size: $public-font-size-xs;
-  font-weight: $public-font-weight-medium;
-  background: $public-bg-tertiary-light;
-  color: $public-text-tertiary-light;
-
-  @include dark-mode {
-    background: $public-bg-tertiary-dark;
-    color: $public-text-tertiary-dark;
   }
 }
 

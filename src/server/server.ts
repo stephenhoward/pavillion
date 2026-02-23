@@ -9,7 +9,7 @@ import { EventEmitter } from 'events';
 
 import db, { seedDB, seedFollowData } from '@/server/common/entity/db';
 import { runMigrations } from '@/server/common/migrations/runner';
-import { router as indexRoutes } from '@/server/app_routes';
+import { createRouter } from '@/server/app_routes';
 import { validateProductionSecrets } from '@/server/common/helper/production-validation';
 import AccountsDomain from '@/server/accounts';
 import ActivityPubDomain from './activitypub';
@@ -222,10 +222,6 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
     next();
   });
 
-  // Resolve req.locale for every request using the detection chain:
-  // URL prefix → account language → cookie → Accept-Language → instance default → 'en'
-  app.use(createLocaleMiddleware());
-
   app.set("views", path.join(path.resolve(), "src/server/templates"));
   // Initialize i18next with shared base config plus server-specific backend plugin
   i18next.use(Backend).init(createI18nConfig({
@@ -250,18 +246,22 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
 
   const eventBus = new EventEmitter();
 
-  // Initialize Setup domain first (needed for setup mode middleware)
-  const setupDomain = new SetupDomain();
+  // Initialize Configuration domain first so other domains can depend on it
+  const configurationDomain = new ConfigurationDomain(eventBus);
+  configurationDomain.initialize(app);
+
+  // Initialize Setup domain with ConfigurationInterface dependency
+  // (needed for setup mode middleware and settings persistence during setup)
+  const setupDomain = new SetupDomain(configurationDomain.interface);
   setupDomain.initialize(app);
 
   // Add setup mode middleware early in the pipeline (before authentication)
   // This middleware blocks all routes except /setup when no admin exists
   app.use(createSetupModeMiddleware(setupDomain.interface));
 
+  // Mount the page router with ConfigurationInterface injected for settings access
+  const { router: indexRoutes } = createRouter(configurationDomain.interface);
   app.use('/', indexRoutes);
-
-  const configurationDomain = new ConfigurationDomain(eventBus);
-  configurationDomain.initialize(app);
 
   // Add locale middleware after configuration domain is initialized so it can
   // use the ConfigurationInterface to read instance language settings.

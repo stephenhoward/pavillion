@@ -16,9 +16,6 @@ export type LocaleDetectionMethods = {
  *
  * The `backend` and `detection` fields correspond to i18next plugin configuration.
  * Any additional i18next InitOptions keys can be passed through the index signature.
- *
- * Note: Detection options will be stripped of any `localStorage` references
- * (see createI18nConfig for details).
  */
 export interface I18nConfigOptions {
   backend?: object;
@@ -54,50 +51,6 @@ export function buildFallbackLng(): FallbackLngObjList {
 }
 
 /**
- * Strips `localStorage` from detection caches and order arrays.
- *
- * Using localStorage for language caching causes issues in server-side
- * and widget contexts where localStorage is unavailable, and introduces
- * user-tracking concerns that conflict with Pavillion's privacy-first design.
- *
- * Emits a console.warn if localStorage references are found and removed.
- *
- * @param detection - Raw detection options passed by the caller
- * @returns Cleaned detection options without localStorage references
- */
-function stripLocalStorage(detection: Record<string, unknown>): Record<string, unknown> {
-  let warned = false;
-  const cleaned: Record<string, unknown> = { ...detection };
-
-  if (Array.isArray(cleaned['order'])) {
-    const original = cleaned['order'] as string[];
-    const filtered = original.filter((item) => item !== 'localStorage');
-    if (filtered.length !== original.length) {
-      warned = true;
-      cleaned['order'] = filtered;
-    }
-  }
-
-  if (Array.isArray(cleaned['caches'])) {
-    const original = cleaned['caches'] as string[];
-    const filtered = original.filter((item) => item !== 'localStorage');
-    if (filtered.length !== original.length) {
-      warned = true;
-      cleaned['caches'] = filtered;
-    }
-  }
-
-  if (warned) {
-    console.warn(
-      '[i18n] localStorage removed from detection config. ' +
-      'Pavillion does not use localStorage for language detection.',
-    );
-  }
-
-  return cleaned;
-}
-
-/**
  * Creates a base i18next InitOptions configuration with enforced settings.
  *
  * Enforced settings (always applied, not overridable by callers):
@@ -109,7 +62,7 @@ function stripLocalStorage(detection: Record<string, unknown>): Record<string, u
  *
  * App-specific settings (passed via `options` and merged in):
  * - `backend`   — backend plugin configuration (e.g. file path for server, HTTP for browser)
- * - `detection` — language detection plugin configuration (localStorage is stripped)
+ * - `detection` — language detection plugin configuration
  * - Any other valid InitOptions fields
  *
  * @param options - App-specific overrides and plugin configurations
@@ -117,8 +70,6 @@ function stripLocalStorage(detection: Record<string, unknown>): Record<string, u
  */
 export function createI18nConfig(options?: I18nConfigOptions): InitOptions {
   const { backend, detection, ...rest } = options ?? {};
-
-  const cleanedDetection = detection ? stripLocalStorage(detection) : undefined;
 
   const config: InitOptions = {
     // Spread app-specific overrides first so enforced settings below win
@@ -136,8 +87,8 @@ export function createI18nConfig(options?: I18nConfigOptions): InitOptions {
     config.backend = backend;
   }
 
-  if (cleanedDetection !== undefined) {
-    config.detection = cleanedDetection;
+  if (detection !== undefined) {
+    config.detection = detection;
   }
 
   return config;

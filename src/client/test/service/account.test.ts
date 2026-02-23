@@ -112,4 +112,31 @@ describe('AccountService', () => {
       await expect(service.updateProfile('New Name')).rejects.toThrow(UnauthenticatedError);
     });
   });
+
+  describe('updateLanguage', () => {
+    it('should patch the language preference to the API', async () => {
+      const axiosPatchStub = sandbox.stub(axios, 'patch').resolves({ data: {} });
+
+      await service.updateLanguage('es');
+
+      expect(axiosPatchStub.calledOnce).toBe(true);
+      expect(axiosPatchStub.calledWith('/api/v1/accounts/me/profile', { language: 'es' })).toBe(true);
+    });
+
+    it('should throw UnknownError when the request fails', async () => {
+      sandbox.stub(axios, 'patch').rejects(new Error('API Error'));
+
+      await expect(service.updateLanguage('es')).rejects.toThrow(UnknownError);
+    });
+
+    it('should handle UnauthenticatedError from API', async () => {
+      sandbox.stub(axios, 'patch').rejects({
+        response: {
+          data: { errorName: 'UnauthenticatedError' },
+        },
+      });
+
+      await expect(service.updateLanguage('es')).rejects.toThrow(UnauthenticatedError);
+    });
+  });
 });

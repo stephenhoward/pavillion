@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { scryptSync, randomBytes } from 'crypto';
 
 import { AccountEntity, AccountRoleEntity, AccountSecretsEntity } from '@/server/common/entity/account';
-import ServiceSettings from '@/server/configuration/service/settings';
+import ConfigurationInterface from '@/server/configuration/interface';
 import { validatePassword } from '@/common/validation/password';
 
 /**
@@ -16,6 +16,12 @@ export default class SetupService {
    * Set to null when cache needs to be invalidated.
    */
   private static setupModeCache: boolean | null = null;
+
+  private readonly configInterface: ConfigurationInterface;
+
+  constructor(configInterface: ConfigurationInterface) {
+    this.configInterface = configInterface;
+  }
 
   /**
    * Checks if setup mode is active (no admin account exists).
@@ -90,11 +96,10 @@ export default class SetupService {
     });
     await roleEntity.save();
 
-    // Save settings
-    const settings = await ServiceSettings.getInstance();
-    await settings.set('siteTitle', siteTitle);
-    await settings.set('registrationMode', registrationMode);
-    await settings.set('defaultLanguage', defaultLanguage);
+    // Save settings via ConfigurationInterface (respects DDD domain boundary)
+    await this.configInterface.setSetting('siteTitle', siteTitle);
+    await this.configInterface.setSetting('registrationMode', registrationMode);
+    await this.configInterface.setSetting('defaultLanguage', defaultLanguage);
 
     // Invalidate the setup mode cache
     SetupService.clearCache();

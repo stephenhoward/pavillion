@@ -1,4 +1,5 @@
 import SetupService from '@/server/setup/service/setup';
+import ConfigurationInterface from '@/server/configuration/interface';
 
 /**
  * Interface for the Setup domain.
@@ -8,8 +9,8 @@ import SetupService from '@/server/setup/service/setup';
 export default class SetupInterface {
   private setupService: SetupService;
 
-  constructor() {
-    this.setupService = new SetupService();
+  constructor(configInterface: ConfigurationInterface) {
+    this.setupService = new SetupService(configInterface);
   }
 
   /**
