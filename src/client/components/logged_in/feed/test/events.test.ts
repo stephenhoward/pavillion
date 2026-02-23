@@ -19,6 +19,10 @@ describe('FollowedEventsView', () => {
     setActivePinia(pinia);
     sandbox = sinon.createSandbox();
 
+    // Mock native dialog methods not implemented in happy-dom
+    vi.spyOn(HTMLDialogElement.prototype, 'showModal').mockImplementation(() => {});
+    vi.spyOn(HTMLDialogElement.prototype, 'close').mockImplementation(() => {});
+
     // Setup calendar store with a test calendar
     const calendarStore = useCalendarStore();
     const calendar = new Calendar('cal-123', 'test-calendar');
@@ -39,6 +43,8 @@ describe('FollowedEventsView', () => {
               no_events: 'No events',
               follow_button: 'Follow a Calendar',
               untitled_event: 'Untitled Event',
+              report_button: 'Report',
+              report_aria_label: 'Report event: {{eventTitle}}',
             },
           },
         },
@@ -48,6 +54,7 @@ describe('FollowedEventsView', () => {
 
   afterEach(() => {
     sandbox.restore();
+    vi.restoreAllMocks();
   });
 
   it('shows empty state with "Follow a Calendar" button when no events', () => {
@@ -133,6 +140,13 @@ describe('FollowedEventsView', () => {
     // Third event should show Auto-posted label
     expect(eventItems[2].text()).toContain('Test Event 3');
     expect(eventItems[2].find('[data-testid="auto-posted-label"]').exists()).toBe(true);
+
+    // Every event item should have a report button with a contextual aria-label
+    for (const [i, item] of eventItems.entries()) {
+      const reportButton = item.find('button[data-testid="report-button"]');
+      expect(reportButton.exists()).toBe(true);
+      expect(reportButton.attributes('aria-label')).toContain(`Test Event ${i + 1}`);
+    }
   });
 
   it('triggers store repostEvent action when repost button clicked', async () => {
@@ -199,6 +213,75 @@ describe('FollowedEventsView', () => {
 
     expect(unrepostStub.calledOnce).toBe(true);
     expect(unrepostStub.calledWith('event-1')).toBe(true);
+  });
+
+  it('opens report modal when report button is clicked', async () => {
+    const feedStore = useFeedStore();
+
+    const event = CalendarEvent.fromObject({
+      id: 'event-42',
+      calendarId: 'remote-cal',
+      date: '2025-12-27',
+      content: {
+        en: {
+          language: 'en',
+          name: 'Reportable Event',
+          description: 'Description',
+        },
+      },
+    });
+
+    feedStore.events = [Object.assign(event, { repostStatus: 'none' as const })];
+
+    const wrapper = mount(FollowedEventsView, {
+      global: {
+        plugins: [pinia, [I18NextVue, { i18next }]],
+      },
+    });
+
+    // Modal is not rendered initially
+    expect(wrapper.find('.report-dialog').exists()).toBe(false);
+
+    // Install local spy before triggering so we can assert on this specific call
+    const showModalSpy = vi.spyOn(HTMLDialogElement.prototype, 'showModal').mockImplementation(() => {});
+    await wrapper.find('button[data-testid="report-button"]').trigger('click');
+
+    expect(wrapper.find('.report-dialog').exists()).toBe(true);
+    expect(showModalSpy).toHaveBeenCalled();
+  });
+
+  it('closes report modal when modal emits close', async () => {
+    const feedStore = useFeedStore();
+
+    const event = CalendarEvent.fromObject({
+      id: 'event-1',
+      calendarId: 'remote-cal',
+      date: '2025-12-27',
+      content: {
+        en: {
+          language: 'en',
+          name: 'Test Event',
+          description: 'Description',
+        },
+      },
+    });
+
+    feedStore.events = [Object.assign(event, { repostStatus: 'none' as const })];
+
+    const wrapper = mount(FollowedEventsView, {
+      global: {
+        plugins: [pinia, [I18NextVue, { i18next }]],
+      },
+    });
+
+    // Open the modal
+    await wrapper.find('button[data-testid="report-button"]').trigger('click');
+    expect(wrapper.find('.report-dialog').exists()).toBe(true);
+
+    // Close via the modal's close button
+    await wrapper.find('.report-dialog__close').trigger('click');
+
+    expect(wrapper.find('.report-dialog').exists()).toBe(false);
   });
 
   it('loads more events on scroll when intersection observer triggers', async () => {

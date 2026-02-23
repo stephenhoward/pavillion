@@ -6,6 +6,7 @@ import { useFeedStore } from '@/client/stores/feedStore';
 import { useToast } from '@/client/composables/useToast';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
 import RepostCategoriesModal from '@/client/components/logged_in/repost-categories-modal.vue';
+import ReportEventModal from '@/client/components/report-event.vue';
 import { type FeedEvent } from '@/client/service/feed';
 
 const { t } = useTranslation('feed', { keyPrefix: 'events' });
@@ -18,6 +19,8 @@ const isLoading = computed(() => feedStore.isLoadingEvents);
 const pendingRepost = computed(() => feedStore.pendingRepost);
 const sentinelRef = ref(null);
 const repostTriggerElement = ref(null);
+const reportingEventId = ref<string | null>(null);
+const reportTriggerElement = ref<HTMLElement | null>(null);
 let observer = null;
 
 /**
@@ -156,6 +159,22 @@ const handleRepostCancel = () => {
 };
 
 /**
+ * Handle report button click — captures the trigger element for focus restoration
+ */
+const handleReport = (eventId: string, event: MouseEvent) => {
+  reportTriggerElement.value = (event?.currentTarget as HTMLElement) ?? null;
+  reportingEventId.value = eventId;
+};
+
+/**
+ * Handle report modal close — clears event ID and restores focus to the trigger button
+ */
+const handleReportClose = () => {
+  reportingEventId.value = null;
+  nextTick(() => { reportTriggerElement.value?.focus(); });
+};
+
+/**
  * Handle "Follow a Calendar" button click
  */
 const emit = defineEmits(['followCalendar']);
@@ -260,6 +279,16 @@ onUnmounted(() => {
           >
             {{ t('auto_posted_label') }}
           </span>
+
+          <button
+            type="button"
+            class="report-button"
+            data-testid="report-button"
+            :aria-label="t('report_aria_label', { eventTitle: getEventTitle(event) })"
+            @click="handleReport(event.id, $event)"
+          >
+            {{ t('report_button') }}
+          </button>
         </div>
       </div>
 
@@ -299,6 +328,13 @@ onUnmounted(() => {
       :all-local-categories="pendingRepost.allLocalCategories"
       @confirm="handleRepostConfirm"
       @cancel="handleRepostCancel"
+    />
+
+    <!-- Report event modal — shown when reportingEventId is set -->
+    <ReportEventModal
+      v-if="reportingEventId"
+      :event-id="reportingEventId"
+      @close="handleReportClose"
     />
   </div>
 </template>
@@ -371,6 +407,7 @@ div.events-container {
         flex-shrink: 0;
         display: flex;
         align-items: center;
+        gap: var(--pav-space-2);
 
         button.repost-button {
           padding: var(--pav-space-2) var(--pav-space-4);
@@ -419,6 +456,26 @@ div.events-container {
           border-radius: var(--pav-border-radius-sm);
           font-size: var(--pav-font-size-xs);
           font-weight: var(--pav-font-weight-medium);
+        }
+
+        button.report-button {
+          padding: var(--pav-space-2) var(--pav-space-3);
+          background: transparent;
+          color: var(--pav-color-text-secondary);
+          border: 1px solid var(--pav-color-border-primary);
+          border-radius: var(--pav-border-radius-sm);
+          font-size: var(--pav-font-size-xs);
+          cursor: pointer;
+          transition: color 0.2s ease, border-color 0.2s ease;
+
+          &:hover {
+            color: var(--pav-color-error);
+            border-color: var(--pav-color-error);
+          }
+
+          &:active {
+            opacity: 0.8;
+          }
         }
       }
 
