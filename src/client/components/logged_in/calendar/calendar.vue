@@ -1,5 +1,5 @@
 <script setup>
-import { onBeforeMount, reactive, inject, ref, watch, computed } from 'vue';
+import { onBeforeMount, reactive, inject, ref, watch, computed, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
@@ -89,6 +89,9 @@ const reportEventId = ref('');
 
 // Repost category edit modal state
 const repostEventForModal = ref(null);
+
+// Ref to the element that triggered the repost modal (for focus return on close)
+const repostModalTriggerEl = ref(null);
 
 /**
  * Initializes filter state from URL query parameters.
@@ -283,9 +286,14 @@ const newEvent = async () => {
 /**
  * Navigate to edit an existing event.
  * For reposted events, opens a read-only detail + category edit modal instead.
+ * Saves the triggering DOM element so focus can be returned when the modal closes.
+ *
+ * @param event - The CalendarEvent model to edit
+ * @param domEvent - The originating mouse event, used to capture the trigger element
  */
-const handleEditEvent = (event) => {
+const handleEditEvent = (event, domEvent) => {
   if (event.isRepost) {
+    repostModalTriggerEl.value = domEvent?.currentTarget ?? null;
     repostEventForModal.value = event;
     return;
   }
@@ -299,6 +307,7 @@ const handleEditEvent = (event) => {
  * Handle category save from the repost edit modal.
  * Calls bulkAssignCategories to add any newly selected categories,
  * then updates the event in the store with the API response.
+ * Returns focus to the element that triggered the modal.
  */
 const handleRepostCategoryUpdate = async (categoryIds) => {
   if (!repostEventForModal.value) return;
@@ -320,6 +329,18 @@ const handleRepostCategoryUpdate = async (categoryIds) => {
   }
 
   repostEventForModal.value = null;
+  await nextTick();
+  repostModalTriggerEl.value?.focus();
+};
+
+/**
+ * Handle cancel from the repost edit modal.
+ * Closes the modal and returns focus to the element that triggered it.
+ */
+const handleRepostModalCancel = async () => {
+  repostEventForModal.value = null;
+  await nextTick();
+  repostModalTriggerEl.value?.focus();
 };
 
 const navigateToManagement = () => {
@@ -546,7 +567,7 @@ const hasActiveFilters = computed(() => {
             </div>
             <article
               :aria-labelledby="`event-title-${event.id}`"
-              @click="handleEditEvent(event)"
+              @click="handleEditEvent(event, $event)"
               class="event-article"
             >
               <EventImage :media="event.media" size="small" />
@@ -581,7 +602,7 @@ const hasActiveFilters = computed(() => {
               <button
                 type="button"
                 class="edit-btn icon-btn"
-                @click.stop="handleEditEvent(event)"
+                @click.stop="handleEditEvent(event, $event)"
                 :aria-label="t('event.edit_label', { name: event.content('en').name })"
                 title="Edit this event"
               >
@@ -658,7 +679,7 @@ const hasActiveFilters = computed(() => {
       :dialog-title="tFeed('categoryMapping.editDialogTitle')"
       :confirm-label="tFeed('categoryMapping.save')"
       @confirm="handleRepostCategoryUpdate"
-      @cancel="repostEventForModal = null"
+      @cancel="handleRepostModalCancel"
     />
   </div>
 </template>

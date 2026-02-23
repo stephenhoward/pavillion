@@ -573,6 +573,10 @@ class ActivityPubService {
   async getFeed(calendar: Calendar, page?: number, pageSize?: number) {
     const defaultPageSize = pageSize || 20;
 
+    // Escape the calendar ID to prevent SQL injection in literal subqueries.
+    // sequelize.escape() wraps the value in quotes and escapes metacharacters.
+    const escapedCalendarId = EventEntity.sequelize!.escape(calendar.id);
+
     // Query events from calendars this calendar is following.
     // This includes BOTH:
     // - Remote events (calendar_id = null) tracked via EventObjectEntity.attributed_to
@@ -588,7 +592,7 @@ class ActivityPubService {
                 `(SELECT eo.event_id FROM ap_event_object eo
                   JOIN calendar_actor ca ON eo.attributed_to = ca.actor_uri AND ca.actor_type = 'remote'
                   JOIN ap_following f ON f.calendar_actor_id = ca.id
-                  WHERE f.calendar_id = '${calendar.id}')`,
+                  WHERE f.calendar_id = ${escapedCalendarId})`,
               ),
             },
           },
@@ -601,7 +605,7 @@ class ActivityPubService {
                   JOIN ap_event_activity ea ON eo.ap_id = ea.event_id AND ea.type = 'share'
                   JOIN calendar_actor ca ON ea.calendar_actor_id = ca.id AND ca.actor_type = 'remote'
                   JOIN ap_following f ON f.calendar_actor_id = ca.id
-                  WHERE f.calendar_id = '${calendar.id}')`,
+                  WHERE f.calendar_id = ${escapedCalendarId})`,
               ),
             },
           },
@@ -611,7 +615,7 @@ class ActivityPubService {
               [Op.in]: EventEntity.sequelize!.literal(
                 `(SELECT ca.calendar_id FROM ap_following f
                   JOIN calendar_actor ca ON f.calendar_actor_id = ca.id
-                  WHERE f.calendar_id = '${calendar.id}'
+                  WHERE f.calendar_id = ${escapedCalendarId}
                     AND ca.actor_type = 'local'
                     AND ca.calendar_id IS NOT NULL)`,
               ),
