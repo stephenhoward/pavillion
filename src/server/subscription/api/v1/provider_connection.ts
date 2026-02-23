@@ -2,12 +2,7 @@ import express, { Request, Response } from 'express';
 import ExpressHelper from '@/server/common/helper/express';
 import { ProviderConnectionService } from '@/server/subscription/service/provider_connection';
 import { ProviderType } from '@/common/model/subscription';
-import {
-  InvalidProviderTypeError,
-  InvalidEnvironmentError,
-  MissingRequiredFieldError,
-  InvalidCredentialsError,
-} from '@/server/subscription/exceptions';
+import { ValidationError } from '@/common/exceptions/base';
 
 /**
  * Provider Connection route handlers
@@ -115,7 +110,7 @@ export default class ProviderConnectionRoutes {
     }
     catch (error) {
       console.error('Error handling Stripe OAuth callback:', error);
-      if (error instanceof MissingRequiredFieldError) {
+      if (error instanceof ValidationError) {
         res.redirect('/admin/funding?error=invalid_request');
       }
       else {
@@ -155,14 +150,8 @@ export default class ProviderConnectionRoutes {
     catch (error) {
       console.error('Error configuring PayPal:', error);
 
-      if (error instanceof MissingRequiredFieldError) {
-        res.status(400).json({ error: error.message, errorName: 'ValidationError' });
-      }
-      else if (error instanceof InvalidEnvironmentError) {
-        res.status(400).json({ error: error.message, errorName: 'ValidationError' });
-      }
-      else if (error instanceof InvalidCredentialsError) {
-        res.status(400).json({ error: error.message, errorName: 'ValidationError' });
+      if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
       }
       else {
         res.status(500).json({ error: 'Internal server error' });
@@ -198,8 +187,8 @@ export default class ProviderConnectionRoutes {
     catch (error) {
       console.error('Error disconnecting provider:', error);
 
-      if (error instanceof InvalidProviderTypeError) {
-        res.status(400).json({ error: error.message, errorName: 'ValidationError' });
+      if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
       }
       else if (error instanceof Error && error.message.includes('not found')) {
         res.status(404).json({ error: error.message, errorName: 'NotFoundError' });
