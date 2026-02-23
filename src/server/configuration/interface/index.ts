@@ -1,5 +1,6 @@
 import SettingsService from '@/server/configuration/service/settings';
 import ServiceSettingEntity from '@/server/configuration/entity/settings';
+import { DEFAULT_LANGUAGE_CODE, getDefaultEnabledLanguageCodes } from '@/common/i18n/languages';
 
 /**
  * Implementation of the Configuration Internal API.
@@ -44,7 +45,53 @@ export default class ConfigurationInterface {
     };
   }
 
-  async getInstance(): Promise<SettingsService> {
-    return SettingsService.getInstance();
+  /**
+   * Returns the instance default language code.
+   *
+   * @returns Promise resolving to the default language code
+   */
+  async getDefaultLanguage(): Promise<string> {
+    try {
+      const settings = await SettingsService.getInstance();
+      const value = settings.get('defaultLanguage');
+      if (value && typeof value === 'string') {
+        return value;
+      }
+    }
+    catch {
+      // Settings unavailable — fall through
+    }
+    return DEFAULT_LANGUAGE_CODE;
   }
+
+  /**
+   * Returns the list of enabled language codes for this instance.
+   *
+   * @returns Promise resolving to array of enabled language codes
+   */
+  async getEnabledLanguages(): Promise<string[]> {
+    try {
+      const settings = await SettingsService.getInstance();
+      return settings.getEnabledLanguages();
+    }
+    catch {
+      return getDefaultEnabledLanguageCodes();
+    }
+  }
+
+  /**
+   * Returns the forced language override for all users, or null if not set.
+   *
+   * @returns Promise resolving to a language code or null
+   */
+  async getForceLanguage(): Promise<string | null> {
+    try {
+      const settings = await SettingsService.getInstance();
+      return settings.getForceLanguage();
+    }
+    catch {
+      return null;
+    }
+  }
+
 }

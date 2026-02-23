@@ -1,7 +1,7 @@
 import config from 'config';
 import ServiceSettingEntity from "@/server/configuration/entity/settings";
 import type { DefaultDateRange } from '@/common/model/calendar';
-import { isValidLanguageCode, DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
+import { isValidLanguageCode, DEFAULT_LANGUAGE_CODE, getDefaultEnabledLanguageCodes } from '@/common/i18n/languages';
 
 type Config = {
   registrationMode: 'open' | 'apply' | 'invitation' | 'closed';
@@ -9,7 +9,10 @@ type Config = {
   eventInstanceMonths: number;
   defaultDateRange: DefaultDateRange;
   defaultLanguage: string;
+  enabledLanguages: string[];
+  forceLanguage: string | null;
 };
+
 class ServiceSettings {
   private static instance: ServiceSettings;
   private config: Config;
@@ -21,6 +24,8 @@ class ServiceSettings {
       eventInstanceMonths: 6,
       defaultDateRange: '2weeks',
       defaultLanguage: DEFAULT_LANGUAGE_CODE,
+      enabledLanguages: getDefaultEnabledLanguageCodes(),
+      forceLanguage: null,
     };
   }
 
@@ -46,6 +51,25 @@ class ServiceSettings {
           this.config.defaultLanguage = entity.value;
         }
       }
+      if ( entity.parameter == 'enabledLanguages' ) {
+        try {
+          const parsed = JSON.parse(entity.value);
+          if (Array.isArray(parsed) && parsed.length > 0 && parsed.every(isValidLanguageCode)) {
+            this.config.enabledLanguages = parsed;
+          }
+        }
+        catch {
+          // Invalid JSON — keep default
+        }
+      }
+      if ( entity.parameter == 'forceLanguage' ) {
+        if (entity.value === '' || entity.value === 'null') {
+          this.config.forceLanguage = null;
+        }
+        else if (isValidLanguageCode(entity.value)) {
+          this.config.forceLanguage = entity.value;
+        }
+      }
     });
   }
 
@@ -59,8 +83,22 @@ class ServiceSettings {
 
   get(key: string): string | number | undefined {
     if ( key in this.config) {
-      return this.config[key as keyof Config];
+      return this.config[key as keyof Config] as string | number | undefined;
     }
+  }
+
+  /**
+   * Returns the forced language override for all users, or null if not set.
+   */
+  getForceLanguage(): string | null {
+    return this.config.forceLanguage;
+  }
+
+  /**
+   * Returns the list of enabled language codes for this instance.
+   */
+  getEnabledLanguages(): string[] {
+    return this.config.enabledLanguages;
   }
 
   /**
@@ -108,6 +146,30 @@ class ServiceSettings {
     if ( parameter == 'defaultLanguage' ) {
       if (!isValidLanguageCode(value as string)) {
         console.error('Invalid default language:', value);
+        return false;
+      }
+    }
+
+    // Validate enabledLanguages (stored as JSON string)
+    if ( parameter == 'enabledLanguages' ) {
+      try {
+        const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+        if (!Array.isArray(parsed) || parsed.length === 0 || !parsed.every(isValidLanguageCode)) {
+          console.error('Invalid enabledLanguages:', value);
+          return false;
+        }
+      }
+      catch {
+        console.error('Invalid enabledLanguages JSON:', value);
+        return false;
+      }
+    }
+
+    // Validate forceLanguage
+    if ( parameter == 'forceLanguage' ) {
+      const strValue = value as string;
+      if (strValue !== '' && strValue !== 'null' && !isValidLanguageCode(strValue)) {
+        console.error('Invalid forceLanguage:', value);
         return false;
       }
     }
@@ -163,6 +225,21 @@ class ServiceSettings {
           return false;
         }
         break;
+      case 'enabledLanguages': {
+        const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+        this.config.enabledLanguages = parsed;
+        break;
+      }
+      case 'forceLanguage': {
+        const strValue = value as string;
+        if (strValue === '' || strValue === 'null') {
+          this.config.forceLanguage = null;
+        }
+        else {
+          this.config.forceLanguage = strValue;
+        }
+        break;
+      }
       default:
         break;
     }

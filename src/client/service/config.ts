@@ -5,6 +5,8 @@ type Settings = {
   registrationMode: string;
   defaultDateRange: DefaultDateRange;
   defaultLanguage: string;
+  enabledLanguages?: string[];
+  forceLanguage?: string | null;
 };
 
 /**
@@ -61,12 +63,15 @@ export default class Config {
   }
 
   /**
-   * Updates the registration mode setting on the server
+   * Updates settings on the server.
    *
-   * @param {string} mode - The new registration mode ('open', 'apply', 'invite', or 'closed')
+   * Accepts any settings object including complex types like arrays and objects
+   * for language configuration settings.
+   *
+   * @param settings - Settings to update
    * @returns {Promise<boolean>} A promise that resolves to true if the update was successful
    */
-  async updateSettings(settings: Record<string,string>): Promise<boolean> {
+  async updateSettings(settings: Record<string, unknown>): Promise<boolean> {
     try {
       const response = await axios.post('/api/config/v1/site', settings);
       if (response.status === 200) {

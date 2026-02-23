@@ -71,15 +71,14 @@ export default class AccountRouteHandlers {
       return;
     }
 
-    const { displayName, language } = req.body;
+    const { language } = req.body;
 
-    if (displayName === undefined) {
-      res.status(400).json({
-        error: 'displayName is required',
-        errorName: 'ValidationError',
-      });
+    if (language !== undefined && typeof language !== 'string') {
+      res.status(400).json({ error: 'Invalid request' });
       return;
     }
+
+    const displayName = req.body.displayName !== undefined ? req.body.displayName : account.displayName;
 
     try {
       const updatedAccount = await this.service.updateProfile(account, displayName, language);

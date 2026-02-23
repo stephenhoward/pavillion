@@ -1,6 +1,7 @@
 import { Application } from 'express';
 import SetupInterface from './interface';
 import SetupApiV1 from './api/v1';
+import ConfigurationInterface from '@/server/configuration/interface';
 
 /**
  * Setup Domain entry point.
@@ -10,8 +11,8 @@ import SetupApiV1 from './api/v1';
 export default class SetupDomain {
   public readonly interface: SetupInterface;
 
-  constructor() {
-    this.interface = new SetupInterface();
+  constructor(configInterface: ConfigurationInterface) {
+    this.interface = new SetupInterface(configInterface);
   }
 
   /**

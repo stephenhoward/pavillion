@@ -423,5 +423,159 @@ describe('ServiceSettings', () => {
         expect(result).toBe(false);
       });
     });
+
+    describe('enabledLanguages', () => {
+      it('should accept a valid array of language codes as JSON string', async () => {
+        const mockSettingEntity = {
+          parameter: 'enabledLanguages',
+          value: '["en","es"]',
+          save: sandbox.stub().resolves(),
+        };
+        sandbox.stub(ServiceSettingEntity, 'findOrCreate').resolves([
+          mockSettingEntity as unknown as ServiceSettingEntity,
+          true,
+        ]);
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.set('enabledLanguages', '["en","es"]');
+
+        expect(result).toBe(true);
+        expect(settings.getEnabledLanguages()).toEqual(['en', 'es']);
+      });
+
+      it('should reject an empty array for enabledLanguages', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.set('enabledLanguages', '[]');
+
+        expect(result).toBe(false);
+      });
+
+      it('should reject invalid language codes in enabledLanguages', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.set('enabledLanguages', '["en","zz"]');
+
+        expect(result).toBe(false);
+      });
+
+      it('should reject invalid JSON for enabledLanguages', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.set('enabledLanguages', 'not-json');
+
+        expect(result).toBe(false);
+      });
+
+      it('should load enabledLanguages from database on init', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([
+          { parameter: 'enabledLanguages', value: '["en"]' } as unknown as ServiceSettingEntity,
+        ]);
+
+        const settings = await ServiceSettings.getInstance();
+
+        expect(settings.getEnabledLanguages()).toEqual(['en']);
+      });
+
+      it('should use default enabled languages when not in database', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+
+        // Default should include all available languages
+        expect(settings.getEnabledLanguages().length).toBeGreaterThan(0);
+        expect(settings.getEnabledLanguages()).toContain('en');
+      });
+    });
+
+    describe('forceLanguage', () => {
+      it('should accept a valid language code for forceLanguage', async () => {
+        const mockSettingEntity = {
+          parameter: 'forceLanguage',
+          value: 'es',
+          save: sandbox.stub().resolves(),
+        };
+        sandbox.stub(ServiceSettingEntity, 'findOrCreate').resolves([
+          mockSettingEntity as unknown as ServiceSettingEntity,
+          true,
+        ]);
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.set('forceLanguage', 'es');
+
+        expect(result).toBe(true);
+        expect(settings.getForceLanguage()).toBe('es');
+      });
+
+      it('should accept empty string to clear forceLanguage', async () => {
+        const mockSettingEntity = {
+          parameter: 'forceLanguage',
+          value: '',
+          save: sandbox.stub().resolves(),
+        };
+        sandbox.stub(ServiceSettingEntity, 'findOrCreate').resolves([
+          mockSettingEntity as unknown as ServiceSettingEntity,
+          true,
+        ]);
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.set('forceLanguage', '');
+
+        expect(result).toBe(true);
+        expect(settings.getForceLanguage()).toBeNull();
+      });
+
+      it('should accept "null" string to clear forceLanguage', async () => {
+        const mockSettingEntity = {
+          parameter: 'forceLanguage',
+          value: 'null',
+          save: sandbox.stub().resolves(),
+        };
+        sandbox.stub(ServiceSettingEntity, 'findOrCreate').resolves([
+          mockSettingEntity as unknown as ServiceSettingEntity,
+          true,
+        ]);
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.set('forceLanguage', 'null');
+
+        expect(result).toBe(true);
+        expect(settings.getForceLanguage()).toBeNull();
+      });
+
+      it('should reject invalid language codes for forceLanguage', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.set('forceLanguage', 'zz');
+
+        expect(result).toBe(false);
+      });
+
+      it('should default to null when not configured', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+
+        expect(settings.getForceLanguage()).toBeNull();
+      });
+
+      it('should load forceLanguage from database on init', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([
+          { parameter: 'forceLanguage', value: 'es' } as unknown as ServiceSettingEntity,
+        ]);
+
+        const settings = await ServiceSettings.getInstance();
+
+        expect(settings.getForceLanguage()).toBe('es');
+      });
+    });
   });
 });

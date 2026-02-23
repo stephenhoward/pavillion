@@ -201,8 +201,15 @@ describe('Account API', () => {
     expect(updateStub.firstCall.args[1]).toBe(null);
   });
 
-  it('PATCH /me/profile: should return 400 when displayName is missing', async () => {
+  it('PATCH /me/profile: should fall back to existing displayName when not provided', async () => {
     const testAccount = new Account('user-id', 'testuser', 'test@example.com');
+    testAccount.displayName = 'Existing Name';
+    const updatedAccount = new Account('user-id', 'testuser', 'test@example.com');
+    updatedAccount.displayName = 'Existing Name';
+    updatedAccount.language = 'es';
+
+    const updateStub = sandbox.stub(accountsInterface, 'updateProfile');
+    updateStub.resolves(updatedAccount);
 
     router.patch('/me/profile', (req, res, next) => {
       req.user = testAccount;
@@ -211,10 +218,12 @@ describe('Account API', () => {
 
     const response = await request(testApp(router))
       .patch('/me/profile')
-      .send({});
+      .send({ language: 'es' });
 
-    expect(response.status).toBe(400);
-    expect(response.body.error).toBe('displayName is required');
+    expect(response.status).toBe(200);
+    expect(updateStub.called).toBe(true);
+    expect(updateStub.firstCall.args[1]).toBe('Existing Name');
+    expect(updateStub.firstCall.args[2]).toBe('es');
   });
 
   it('PATCH /me/profile: should return 400 when user not authenticated', async () => {
@@ -378,6 +387,66 @@ describe('Account API', () => {
     expect(response.body.error).toBe('Invalid language code');
     expect(response.body.errorName).toBe('ValidationError');
     expect(updateStub.called).toBe(true);
+  });
+
+  it('PATCH /me/profile: should return 400 with generic error when language is a number', async () => {
+    const testAccount = new Account('user-id', 'testuser', 'test@example.com');
+
+    const updateStub = sandbox.stub(accountsInterface, 'updateProfile');
+
+    router.patch('/me/profile', (req, res, next) => {
+      req.user = testAccount;
+      next();
+    }, accountHandlers.updateProfile.bind(accountHandlers));
+
+    const response = await request(testApp(router))
+      .patch('/me/profile')
+      .send({ displayName: 'Test User', language: 123 });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('Invalid request');
+    expect(updateStub.called).toBe(false);
+  });
+
+  it('PATCH /me/profile: should return 400 with generic error when language is an array', async () => {
+    const testAccount = new Account('user-id', 'testuser', 'test@example.com');
+
+    const updateStub = sandbox.stub(accountsInterface, 'updateProfile');
+
+    router.patch('/me/profile', (req, res, next) => {
+      req.user = testAccount;
+      next();
+    }, accountHandlers.updateProfile.bind(accountHandlers));
+
+    const response = await request(testApp(router))
+      .patch('/me/profile')
+      .send({ displayName: 'Test User', language: ['en'] });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('Invalid request');
+    expect(updateStub.called).toBe(false);
+  });
+
+  it('PATCH /me/profile: should process request normally when language is a valid string', async () => {
+    const testAccount = new Account('user-id', 'testuser', 'test@example.com');
+    const updatedAccount = new Account('user-id', 'testuser', 'test@example.com');
+    updatedAccount.language = 'en';
+
+    const updateStub = sandbox.stub(accountsInterface, 'updateProfile');
+    updateStub.resolves(updatedAccount);
+
+    router.patch('/me/profile', (req, res, next) => {
+      req.user = testAccount;
+      next();
+    }, accountHandlers.updateProfile.bind(accountHandlers));
+
+    const response = await request(testApp(router))
+      .patch('/me/profile')
+      .send({ displayName: 'Test User', language: 'en' });
+
+    expect(response.status).toBe(200);
+    expect(updateStub.called).toBe(true);
+    expect(updateStub.firstCall.args[2]).toBe('en');
   });
 
 });

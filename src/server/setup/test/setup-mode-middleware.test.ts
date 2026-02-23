@@ -5,7 +5,22 @@ import request from 'supertest';
 
 import SetupService from '@/server/setup/service/setup';
 import SetupInterface from '@/server/setup/interface';
+import ConfigurationInterface from '@/server/configuration/interface';
 import { createSetupModeMiddleware } from '@/server/setup/middleware/setup-mode';
+
+/**
+ * Creates a minimal mock ConfigurationInterface for setup tests.
+ */
+function buildMockConfigInterface(): ConfigurationInterface {
+  return {
+    getSetting: sinon.stub().resolves(undefined),
+    setSetting: sinon.stub().resolves(true),
+    getAllSettings: sinon.stub().resolves({}),
+    getDefaultLanguage: sinon.stub().resolves('en'),
+    getEnabledLanguages: sinon.stub().resolves(['en', 'es']),
+    getForceLanguage: sinon.stub().resolves(null),
+  } as unknown as ConfigurationInterface;
+}
 
 describe('Setup Mode Middleware', () => {
   let sandbox = sinon.createSandbox();
@@ -15,7 +30,7 @@ describe('Setup Mode Middleware', () => {
   beforeEach(() => {
     app = express();
     app.use(express.json());
-    setupInterface = new SetupInterface();
+    setupInterface = new SetupInterface(buildMockConfigInterface());
   });
 
   afterEach(() => {
