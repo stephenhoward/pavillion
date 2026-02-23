@@ -38,7 +38,11 @@
     "noEvents": "No events",
     "noEventsDescription": "You don't have any events in this calendar yet.",
     "createEvent": "Create an Event",
-    "manage_calendar": "Manage Calendar"
+    "manage_calendar": "Manage Calendar",
+    "event": {
+      "edit_label": "Edit event: {{name}}",
+      "duplicate_label": "Duplicate event: {{name}}"
+    }
   },
   "editors": {
     "title": "Calendar Editors",

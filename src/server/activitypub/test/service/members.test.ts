@@ -11,7 +11,11 @@ import {
   InvalidRemoteCalendarIdentifierError,
   AlreadyFollowingError,
 } from '@/common/exceptions/activitypub';
+import { InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
 import { setupActivityPubSchema, teardownActivityPubSchema } from '@/server/test/helpers/database';
+import CalendarInterface from '@/server/calendar/interface';
+import { SharedEventEntity } from '@/server/activitypub/entity/activitypub';
+import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 
 // Mock CalendarActor model for testing (remote type)
 // Note: Uses snake_case property names to match database entity schema
@@ -762,5 +766,141 @@ describe("getFeed - Local Calendar Follows", () => {
     expect(feed).toHaveLength(1);
     expect(feed[0].id).toBe('event-1');
     expect(feed[0].repostStatus).toBe('manual');
+  });
+});
+
+describe("shareEvent - authorization", () => {
+  let service: ActivityPubService;
+  let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+
+  beforeEach(() => {
+    const eventBus = new EventEmitter();
+    service = new ActivityPubService(eventBus);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('should throw InsufficientCalendarPermissionsError when account cannot modify the calendar', async () => {
+    const nonOwnerAccount = Account.fromObject({ id: 'non-owner-account-id' });
+    const calendar = Calendar.fromObject({ id: 'some-calendar-id', urlName: 'some-calendar' });
+
+    // Stub userCanModifyCalendar to return false (non-owner)
+    sandbox.stub(service.calendarService, 'userCanModifyCalendar').resolves(false);
+
+    await expect(
+      service.shareEvent(nonOwnerAccount, calendar, 'https://example.com/events/1'),
+    ).rejects.toThrow(InsufficientCalendarPermissionsError);
+  });
+});
+
+describe("unshareEvent - authorization", () => {
+  let service: ActivityPubService;
+  let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+
+  beforeEach(() => {
+    const eventBus = new EventEmitter();
+    service = new ActivityPubService(eventBus);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('should throw InsufficientCalendarPermissionsError when account cannot modify the calendar', async () => {
+    const nonOwnerAccount = Account.fromObject({ id: 'non-owner-account-id' });
+    const calendar = Calendar.fromObject({ id: 'some-calendar-id', urlName: 'some-calendar' });
+
+    // Stub userCanModifyCalendar to return false (non-owner)
+    sandbox.stub(service.calendarService, 'userCanModifyCalendar').resolves(false);
+
+    await expect(
+      service.unshareEvent(nonOwnerAccount, calendar, 'https://example.com/events/1'),
+    ).rejects.toThrow(InsufficientCalendarPermissionsError);
+  });
+});
+
+describe("ActivityPubService - constructor injection", () => {
+  let sandbox: sinon.SinonSandbox;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('uses injected CalendarInterface instead of creating a new one', () => {
+    const eventBus = new EventEmitter();
+    const injectedCalendarInterface = new CalendarInterface(eventBus);
+
+    const service = new ActivityPubService(eventBus, injectedCalendarInterface);
+
+    // The injected instance should be the one used by the service
+    expect(service.calendarService).toBe(injectedCalendarInterface);
+  });
+
+  it('creates a default CalendarInterface when none is injected', () => {
+    const eventBus = new EventEmitter();
+    const service = new ActivityPubService(eventBus);
+
+    // Should have a CalendarInterface instance
+    expect(service.calendarService).toBeInstanceOf(CalendarInterface);
+  });
+});
+
+describe("ActivityPubService - shareEvent with injected CalendarInterface", () => {
+  let sandbox: sinon.SinonSandbox;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('calls assignManualRepostCategories on the injected CalendarInterface when shareEvent assigns categories', async () => {
+    const eventBus = new EventEmitter();
+    const injectedCalendarInterface = new CalendarInterface(eventBus);
+    const service = new ActivityPubService(eventBus, injectedCalendarInterface);
+
+    const account = Account.fromObject({ id: 'test-account-id' });
+    const calendar = Calendar.fromObject({ id: 'test-calendar-id', urlName: 'test-calendar' });
+    const eventUrl = 'https://example.com/events/test-event-uuid';
+    const categoryIds = ['cat-1', 'cat-2'];
+
+    // Stub permission check to allow the operation
+    sandbox.stub(injectedCalendarInterface, 'userCanModifyCalendar').resolves(true);
+
+    // Stub EventObjectEntity lookup to return a mock event object
+    sandbox.stub(EventObjectEntity, 'findOne').resolves({
+      event_id: 'local-event-uuid',
+      ap_id: eventUrl,
+    } as any);
+
+    // Stub SharedEventEntity.findOne (no existing share)
+    sandbox.stub(SharedEventEntity, 'findOne').resolves(null);
+
+    // Stub SharedEventEntity.create
+    sandbox.stub(SharedEventEntity, 'create').resolves({} as any);
+
+    // Stub actorUrl
+    sandbox.stub(service, 'actorUrl').resolves('https://local.example.com/calendars/test-calendar');
+
+    // Stub addToOutbox
+    sandbox.stub(service, 'addToOutbox').resolves();
+
+    // Spy on assignManualRepostCategories on the injected interface
+    const assignStub = sandbox.stub(injectedCalendarInterface, 'assignManualRepostCategories').resolves();
+
+    await service.shareEvent(account, calendar, eventUrl, false, categoryIds);
+
+    // Verify assignManualRepostCategories was called on the injected CalendarInterface
+    expect(assignStub.calledOnce).toBe(true);
+    expect(assignStub.firstCall.args[0]).toBe('local-event-uuid');
+    expect(assignStub.firstCall.args[1]).toEqual(categoryIds);
   });
 });

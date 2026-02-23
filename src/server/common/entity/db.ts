@@ -141,6 +141,10 @@ const seedTable = async (data: object) => {
  *   Two of testuser_calendar's four categories are pre-mapped to test_calendar
  *   local categories; the other two are left unmapped to exercise the
  *   repost-categories modal.
+ *
+ * Note: EventObjectEntity records for testuser_calendar events are seeded via
+ *   layouts/development/db/xa_event_object.json alongside the events they
+ *   reference, keeping all seed data co-located.
  */
 export const seedFollowData = async () => {
   if (process.env.NODE_ENV !== 'development') return;

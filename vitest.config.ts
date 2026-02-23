@@ -35,6 +35,9 @@ export default defineConfig({
       // Exclude server integration tests - run separately with test:integration
       '**/server/test/integration/**',
       '**/server/**/test/integration/**',
+      // Exclude git worktrees used by subagents — stale tests from old worktrees
+      // should never be collected in the main project's test run.
+      '**/.claude/worktrees/**',
     ],
     coverage: {
       reportOnFailure: true,

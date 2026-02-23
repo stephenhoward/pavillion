@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useTranslation } from 'i18next-vue';
+import { DateTime } from 'luxon';
 import Modal from '@/client/components/common/modal.vue';
+import type { CalendarEvent } from '@/common/model/events';
 
 interface Category {
   id: string;
@@ -9,9 +11,11 @@ interface Category {
 }
 
 const props = defineProps<{
-  eventTitle: string;
   preSelectedCategories: Category[];
   allLocalCategories: Category[];
+  event?: CalendarEvent;
+  confirmLabel?: string;
+  dialogTitle?: string;
 }>();
 
 const emit = defineEmits<{
@@ -21,7 +25,11 @@ const emit = defineEmits<{
 
 const { t } = useTranslation('feed');
 
-const selectedIds = ref<string[]>(props.preSelectedCategories.map(c => c.id));
+const selectedIds = ref<string[]>(
+  props.preSelectedCategories
+    .map(c => c.id)
+    .filter(id => props.allLocalCategories.some(cat => cat.id === id)),
+);
 
 function toggle(id: string) {
   if (selectedIds.value.includes(id)) {
@@ -39,17 +47,67 @@ function handleConfirm() {
 function handleCancel() {
   emit('cancel');
 }
+
+function formatEventDate(event: CalendarEvent): string | null {
+  if (!event.schedules || event.schedules.length === 0) return null;
+  const schedule = event.schedules[0];
+  if (!schedule.startDate) return null;
+  return schedule.startDate.toLocaleString(DateTime.DATETIME_MED);
+}
+
+function getEventSource(url: string): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).hostname;
+  }
+  catch {
+    return null;
+  }
+}
 </script>
 
 <template>
   <Modal
-    :title="t('categoryMapping.repostDialogTitle')"
+    :title="dialogTitle ?? t('categoryMapping.repostDialogTitle')"
     @close="handleCancel"
   >
     <div class="repost-categories-modal">
-      <p class="description">
-        {{ t('categoryMapping.repostDialogDescription', { eventTitle }) }}
-      </p>
+      <!-- Read-only event details section (shown when event prop is provided) -->
+      <div
+        v-if="event"
+        class="event-details"
+      >
+        <dl class="event-details-list">
+          <div
+            v-if="formatEventDate(event)"
+            class="detail-row"
+          >
+            <dt>{{ t('categoryMapping.eventDate') }}</dt>
+            <dd>{{ formatEventDate(event) }}</dd>
+          </div>
+          <div
+            v-if="event.content('en').description"
+            class="detail-row"
+          >
+            <dt>{{ t('categoryMapping.eventDescription') }}</dt>
+            <dd>{{ event.content('en').description }}</dd>
+          </div>
+          <div
+            v-if="event.location?.name"
+            class="detail-row"
+          >
+            <dt>{{ t('categoryMapping.eventLocation') }}</dt>
+            <dd>{{ event.location.name }}</dd>
+          </div>
+          <div
+            v-if="getEventSource(event.eventSourceUrl)"
+            class="detail-row"
+          >
+            <dt>{{ t('categoryMapping.eventSource') }}</dt>
+            <dd>{{ getEventSource(event.eventSourceUrl) }}</dd>
+          </div>
+        </dl>
+      </div>
 
       <fieldset
         v-if="allLocalCategories.length > 0"
@@ -95,7 +153,7 @@ function handleCancel() {
           class="primary"
           @click="handleConfirm"
         >
-          {{ t('categoryMapping.repostConfirm') }}
+          {{ confirmLabel ?? t('categoryMapping.repostConfirm') }}
         </button>
       </div>
     </div>
@@ -113,11 +171,44 @@ div.repost-categories-modal {
     min-width: 440px;
   }
 
-  p.description {
-    margin: 0;
-    color: var(--pav-color-text-primary);
-    font-size: 0.9375rem;
-    line-height: 1.5;
+  div.event-details {
+    padding: var(--pav-space-3);
+    background: var(--pav-color-surface-secondary);
+    border-radius: var(--pav-border-radius-md);
+    border: 1px solid var(--pav-color-border-primary);
+
+    dl.event-details-list {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: var(--pav-space-2);
+
+      div.detail-row {
+        display: grid;
+        grid-template-columns: 6rem 1fr;
+        gap: var(--pav-space-2);
+        align-items: baseline;
+
+        dt {
+          font-size: 0.8125rem;
+          font-weight: var(--pav-font-weight-medium);
+          color: var(--pav-color-text-secondary);
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+        }
+
+        dd {
+          margin: 0;
+          font-size: 0.9375rem;
+          color: var(--pav-color-text-primary);
+          line-height: 1.4;
+          overflow: hidden;
+          display: -webkit-box;
+          -webkit-line-clamp: 3;
+          -webkit-box-orient: vertical;
+        }
+      }
+    }
   }
 
   fieldset.category-fieldset {

@@ -6,6 +6,7 @@ import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import ActivityPubMemberRoutes from '@/server/activitypub/api/v1/members';
 import ActivityPubInterface from '@/server/activitypub/interface';
+import { InvalidSharedEventUrlError } from '@/common/exceptions/activitypub';
 
 /**
  * Creates a mock CalendarInterface with stubbed methods needed by member routes.
@@ -209,6 +210,33 @@ describe('shareEvent', () => {
     expect(res.status.calledWith(200)).toBe(true);
     expect(res.send.calledWith('Shared')).toBe(true);
   });
+
+  it('should return 400 without exposing raw event URL when service rejects with InvalidSharedEventUrlError', async () => {
+    const rawEventUrl = 'ftp://internal.host/events/secret-path?token=abc123';
+    const genericError = new InvalidSharedEventUrlError('Invalid shared event URL');
+    const req = {
+      body: { eventId: rawEventUrl },
+      user: Account.fromObject({ id: 'testAccountId' }),
+    };
+    const res = { status: sinon.stub(), json: sinon.stub() };
+    res.status.returns(res);
+
+    // Stub the interface to throw the generic (sanitized) error message the service now emits
+    const shareMock = sandbox.stub(activityPubInterface, 'shareEvent');
+    shareMock.rejects(genericError);
+
+    await routes.shareEvent(req as any, res as any);
+
+    expect(res.status.calledWith(400)).toBe(true);
+    expect(res.json.calledOnce).toBe(true);
+    const response = res.json.firstCall.args[0];
+    expect(response.errorName).toBe('InvalidSharedEventUrlError');
+    // The raw URL must not appear anywhere in the serialized response
+    const responseText = JSON.stringify(response);
+    expect(responseText).not.toContain(rawEventUrl);
+    expect(responseText).not.toContain('internal.host');
+    expect(responseText).not.toContain('secret-path');
+  });
 });
 
 describe('unshareEvent', () => {
@@ -228,7 +256,8 @@ describe('unshareEvent', () => {
   });
 
   it('should fail without current user', async () => {
-    let req = { body: {} };
+    // No user attached — should return 403
+    let req = { body: {}, params: {} };
     let res = { status: sinon.stub(), json: sinon.stub() };
     res.status.returns(res);
 
@@ -240,8 +269,16 @@ describe('unshareEvent', () => {
     expect(response.errorName).toBe('UnauthenticatedError');
   });
 
-  it('should fail without event id', async () => {
-    let req = { body: {}, user: {} };
+  it('should fail without event id in params', async () => {
+    // The event ID must come from req.params.id (path param), not req.body.
+    // If params.id is missing, the handler returns 400.
+    let testCalendar = Calendar.fromObject({ id: 'testcalendarid' });
+    let req = {
+      body: {},
+      params: {},   // missing :id — eventId will be undefined
+      user: Account.fromObject({ id: 'testAccountId' }),
+      calendar: testCalendar,
+    };
     let res = { status: sinon.stub(), json: sinon.stub() };
     res.status.returns(res);
 
@@ -253,10 +290,54 @@ describe('unshareEvent', () => {
     expect(response.errorName).toBe('InvalidRequestError');
   });
 
-  it('should succeed with event id', async () => {
+  it('should return 400 for malformed event ID (not-a-uuid)', async () => {
+    let testCalendar = Calendar.fromObject({ id: 'testcalendarid' });
     let req = {
-      body: { eventId: 'testEventId' },
-      user: Account.fromObject({id: 'testAccountId' }),
+      body: {},
+      params: { id: 'not-a-uuid' },
+      user: Account.fromObject({ id: 'testAccountId' }),
+      calendar: testCalendar,
+    };
+    let res = { status: sinon.stub(), json: sinon.stub() };
+    res.status.returns(res);
+
+    await routes.unshareEvent(req as any, res as any);
+
+    expect(res.status.calledWith(400)).toBe(true);
+    const response = res.json.firstCall.args[0];
+    expect(response.errorName).toBe('ValidationError');
+    expect(response.error).toBe('Invalid event ID format');
+  });
+
+  it('should return 400 for overlong event ID', async () => {
+    let testCalendar = Calendar.fromObject({ id: 'testcalendarid' });
+    let req = {
+      body: {},
+      params: { id: 'x'.repeat(1000) },
+      user: Account.fromObject({ id: 'testAccountId' }),
+      calendar: testCalendar,
+    };
+    let res = { status: sinon.stub(), json: sinon.stub() };
+    res.status.returns(res);
+
+    await routes.unshareEvent(req as any, res as any);
+
+    expect(res.status.calledWith(400)).toBe(true);
+    const response = res.json.firstCall.args[0];
+    expect(response.errorName).toBe('ValidationError');
+  });
+
+  it('should succeed with event id in params and calendarId in query', async () => {
+    // The DELETE /social/shares/:id route sends:
+    //   - calendarId as a query parameter (handled by requireCalendarIdQuery middleware)
+    //   - eventId as the :id path parameter
+    // The middleware attaches the resolved calendar to (req as any).calendar.
+    let testCalendar = Calendar.fromObject({ id: 'testcalendarid' });
+    let req = {
+      body: {},
+      params: { id: 'a1b2c3d4-e5f6-4890-abcd-ef1234567890' },
+      user: Account.fromObject({ id: 'testAccountId' }),
+      calendar: testCalendar,   // attached by requireCalendarIdQuery middleware
     };
     let res = { status: sinon.stub(), send: sinon.stub() };
     res.status.returns(res);
@@ -268,5 +349,8 @@ describe('unshareEvent', () => {
 
     expect(res.status.calledWith(200)).toBe(true);
     expect(res.send.calledWith('Unshared')).toBe(true);
+    // Verify the correct event ID was passed to the service
+    expect(unshareMock.calledOnce).toBe(true);
+    expect(unshareMock.firstCall.args[2]).toBe('a1b2c3d4-e5f6-4890-abcd-ef1234567890');
   });
 });

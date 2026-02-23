@@ -61,8 +61,9 @@ class ActivityPubService {
 
   constructor(
     private eventBus: EventEmitter,
+    calendarInterface?: CalendarInterface,
   ) {
-    this.calendarService = new CalendarInterface(eventBus);
+    this.calendarService = calendarInterface ?? new CalendarInterface(eventBus);
     this.remoteCalendarService = new RemoteCalendarService();
   }
 
@@ -291,24 +292,26 @@ class ActivityPubService {
     categoryIds?: string[],
   ) {
 
-    if ( ! this.calendarService.userCanModifyCalendar(account, calendar) ) {
+    if ( ! await this.calendarService.userCanModifyCalendar(account, calendar) ) {
       throw new InsufficientCalendarPermissionsError('User does not have permission to modify calendar: ' + calendar.id);
     }
 
     if (!eventUrl.match("^https:\/\/")) {
-      throw new InvalidSharedEventUrlError('Invalid shared event url: ' + eventUrl);
+      console.warn('[MemberService] shareEvent rejected invalid event URL (not https):', eventUrl);
+      throw new InvalidSharedEventUrlError('Invalid shared event URL');
     }
 
-    // Resolve AP URL to local event UUID for consistent storage
-    // First try to find by ap_id (handles remote events and properly-formed local URLs)
+    // Resolve AP URL to local event UUID for consistent storage.
+    // SharedEventEntity.event_id must always be a UUID — never a full URL.
+    //
+    // Step 1: Try to find by ap_id (handles remote events and properly-formed local URLs)
     let eventObject = await EventObjectEntity.findOne({
       where: { ap_id: eventUrl },
     });
 
-    // If not found, this may be a local same-instance event URL.
+    // Step 2: If not found, this may be a local same-instance event URL.
     // Extract a UUID from the URL and look up the local event to get its canonical AP URL.
     let canonicalEventUrl = eventUrl;
-    let extractedLocalEventId: string | null = null;  // UUID extracted from URL for local events
 
     if (!eventObject) {
       const uuidMatch = eventUrl.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
@@ -316,7 +319,6 @@ class ActivityPubService {
         const candidateId = uuidMatch[1];
         const localEvent = await this.calendarService.getEventById(candidateId);
         if (localEvent?.calendarId) {
-          extractedLocalEventId = candidateId;  // keep the UUID as fallback
           const localCalendar = await this.calendarService.getCalendar(localEvent.calendarId);
           if (localCalendar) {
             canonicalEventUrl = EventObject.eventUrl(localCalendar, localEvent);
@@ -329,7 +331,15 @@ class ActivityPubService {
       }
     }
 
-    const localEventId = eventObject?.event_id || extractedLocalEventId || canonicalEventUrl;
+    // Step 3: If we still have no EventObjectEntity, we cannot construct a valid AP Announce
+    // activity or store a consistent UUID key. This should not occur in normal operation —
+    // any event reachable via AP must have an EventObjectEntity record.
+    if (!eventObject) {
+      console.warn('[MemberService] shareEvent: no EventObjectEntity found for URL:', eventUrl);
+      throw new InvalidSharedEventUrlError('Invalid shared event URL');
+    }
+
+    const localEventId = eventObject.event_id;
 
     let existingShareEntity = await SharedEventEntity.findOne({
       where: {
@@ -353,10 +363,9 @@ class ActivityPubService {
     });
     this.addToOutbox(calendar, shareActivity);
 
-    // Assign categories to the shared event if provided and the event has a local UUID
-    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (categoryIds && categoryIds.length > 0 && UUID_REGEX.test(localEventId)) {
-      await this.calendarService.categoryMappingService.assignManualRepostCategories(localEventId, categoryIds);
+    // Assign categories to the shared event if provided
+    if (categoryIds && categoryIds.length > 0) {
+      await this.calendarService.assignManualRepostCategories(localEventId, categoryIds);
     }
   }
 
@@ -368,7 +377,7 @@ class ActivityPubService {
      */
   async unshareEvent(account: Account, calendar: Calendar, eventUrl: string) {
 
-    if (!this.calendarService.userCanModifyCalendar(account, calendar)) {
+    if (!await this.calendarService.userCanModifyCalendar(account, calendar)) {
       throw new InsufficientCalendarPermissionsError('User does not have permission to modify calendar: ' + calendar.id);
     }
 
@@ -564,6 +573,10 @@ class ActivityPubService {
   async getFeed(calendar: Calendar, page?: number, pageSize?: number) {
     const defaultPageSize = pageSize || 20;
 
+    // Escape the calendar ID to prevent SQL injection in literal subqueries.
+    // sequelize.escape() wraps the value in quotes and escapes metacharacters.
+    const escapedCalendarId = EventEntity.sequelize!.escape(calendar.id);
+
     // Query events from calendars this calendar is following.
     // This includes BOTH:
     // - Remote events (calendar_id = null) tracked via EventObjectEntity.attributed_to
@@ -579,7 +592,7 @@ class ActivityPubService {
                 `(SELECT eo.event_id FROM ap_event_object eo
                   JOIN calendar_actor ca ON eo.attributed_to = ca.actor_uri AND ca.actor_type = 'remote'
                   JOIN ap_following f ON f.calendar_actor_id = ca.id
-                  WHERE f.calendar_id = '${calendar.id}')`,
+                  WHERE f.calendar_id = ${escapedCalendarId})`,
               ),
             },
           },
@@ -592,7 +605,7 @@ class ActivityPubService {
                   JOIN ap_event_activity ea ON eo.ap_id = ea.event_id AND ea.type = 'share'
                   JOIN calendar_actor ca ON ea.calendar_actor_id = ca.id AND ca.actor_type = 'remote'
                   JOIN ap_following f ON f.calendar_actor_id = ca.id
-                  WHERE f.calendar_id = '${calendar.id}')`,
+                  WHERE f.calendar_id = ${escapedCalendarId})`,
               ),
             },
           },
@@ -602,7 +615,7 @@ class ActivityPubService {
               [Op.in]: EventEntity.sequelize!.literal(
                 `(SELECT ca.calendar_id FROM ap_following f
                   JOIN calendar_actor ca ON f.calendar_actor_id = ca.id
-                  WHERE f.calendar_id = '${calendar.id}'
+                  WHERE f.calendar_id = ${escapedCalendarId}
                     AND ca.actor_type = 'local'
                     AND ca.calendar_id IS NOT NULL)`,
               ),
@@ -629,15 +642,16 @@ class ActivityPubService {
       order: [['createdAt', 'DESC']],
     });
 
-    // Batch fetch all shared events for these events in a single query
-    const eventUrls = events.map(event => {
-      const rawSourceUrl = event.event_source_url as string | null;
-      return rawSourceUrl?.startsWith('https://') ? rawSourceUrl : `https://${config.get('domain')}/events/${event.id}`;
-    });
+    // Batch fetch all shared events for these events in a single query.
+    //
+    // SharedEventEntity.event_id always stores a UUID (EventEntity.id).
+    // This invariant is enforced by shareEvent(), which throws if no
+    // EventObjectEntity exists (and therefore no UUID can be resolved).
+    const eventIds = events.map(event => event.id);
 
     const sharedEvents = await SharedEventEntity.findAll({
       where: {
-        event_id: eventUrls,
+        event_id: eventIds,
         calendar_id: calendar.id,
       },
     });
@@ -647,21 +661,26 @@ class ActivityPubService {
       sharedEvents.map(shared => [shared.event_id, shared]),
     );
 
-    // Batch fetch EventObjectEntity records to resolve source calendar actor URIs
-    // for remote events (calendar_id = null).
-    const remoteEventIds = events
-      .filter(event => event.calendar_id === null)
-      .map(event => event.id);
-
-    const eventObjects = remoteEventIds.length > 0
+    // Batch fetch EventObjectEntity records for all events to resolve:
+    // - attributed_to (actor_uri) for source calendar identification
+    // - ap_id (full ActivityPub URL) for eventSourceUrl returned to the client
+    //
+    // Remote events (calendar_id = null) always have EventObjectEntity records.
+    // Local events may also have EventObjectEntity records if they have been published via AP.
+    const eventObjects = eventIds.length > 0
       ? await EventObjectEntity.findAll({
-        where: { event_id: remoteEventIds },
+        where: { event_id: eventIds },
       })
       : [];
 
     // Build a map from event_id -> attributed_to (actor_uri) for remote events
     const eventActorMap = new Map(
       eventObjects.map(eo => [eo.event_id, eo.attributed_to]),
+    );
+
+    // Build a map from event_id -> ap_id (full AP URL) for eventSourceUrl
+    const eventApUrlMap = new Map(
+      eventObjects.map(eo => [eo.event_id, eo.ap_id]),
     );
 
     // Build a map from local calendar_id -> actor_uri for local events in the feed
@@ -688,9 +707,8 @@ class ActivityPubService {
 
     // Map events with repost status and source calendar actor ID using the lookup maps
     const eventsWithRepostStatus = events.map((event) => {
-      const rawSourceUrl = event.event_source_url as string | null;
-      const eventUrl = rawSourceUrl?.startsWith('https://') ? rawSourceUrl : `https://${config.get('domain')}/events/${event.id}`;
-      const sharedEvent = sharedEventMap.get(eventUrl);
+      // SharedEventEntity.event_id is always a UUID — look up by event.id directly
+      const sharedEvent = sharedEventMap.get(event.id);
 
       let repostStatus: 'none' | 'manual' | 'auto' = 'none';
       if (sharedEvent) {
@@ -749,6 +767,11 @@ class ActivityPubService {
         ? plainEvent.categoryAssignments.map((ca: any) => ca.category_id)
         : [];
 
+      // eventSourceUrl must be the full ActivityPub URL for the event.
+      // The client uses this to call shareEvent(), which validates that it starts with https://.
+      // Look up the AP URL from EventObjectEntity; this is the canonical AP identifier.
+      const eventSourceUrl = eventApUrlMap.get(event.id) ?? '';
+
       const transformedEvent = {
         ...plainEvent,
         content: contentByLanguage,
@@ -756,7 +779,7 @@ class ActivityPubService {
         categoryIds,
         repostStatus,
         sourceCalendarActorId,
-        eventSourceUrl: eventUrl,
+        eventSourceUrl,
       };
 
       return transformedEvent;

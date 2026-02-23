@@ -38,7 +38,7 @@ export default class ActivityPubMemberRoutes {
     router.get('/social/followers', ExpressHelper.loggedInOnly, this.requireCalendarIdQuery.bind(this), this.getFollowers.bind(this));
     router.get('/social/feed', ExpressHelper.loggedInOnly, this.requireCalendarIdQuery.bind(this), this.getFeed.bind(this));
     router.post('/social/shares', ExpressHelper.loggedInOnly, this.requireCalendarId.bind(this), this.shareEvent.bind(this));
-    router.delete('/social/shares/:id', ExpressHelper.loggedInOnly, this.requireCalendarId.bind(this), this.unshareEvent.bind(this));
+    router.delete('/social/shares/:id', ExpressHelper.loggedInOnly, this.requireCalendarIdQuery.bind(this), this.unshareEvent.bind(this));
     app.use(routePrefix, router);
   }
 
@@ -295,8 +295,8 @@ export default class ActivityPubMemberRoutes {
     }
 
     const calendar = (req as any).calendar;
-    const page = req.query.page ? parseInt(req.query.page as string) : 0;
-    const pageSize = req.query.pageSize ? parseInt(req.query.pageSize as string) : 20;
+    const page = parseInt(req.query.page as string) || 0;
+    const pageSize = parseInt(req.query.pageSize as string) || 20;
 
     // Verify user has access to this calendar
     const hasAccess = await this.calendarService.userCanModifyCalendar(account, calendar);
@@ -533,9 +533,21 @@ export default class ActivityPubMemberRoutes {
       return;
     }
 
-    if (typeof req.body.eventId === 'string') {
+    // The calendar is attached by requireCalendarIdQuery middleware (reads from req.query.calendarId)
+    const calendar = (req as any).calendar;
+    // The event ID comes from the URL path parameter (:id), not the request body
+    const eventId = req.params.id;
+
+    if (typeof eventId === 'string') {
+      if (!ExpressHelper.isValidUUID(eventId)) {
+        res.status(400).json({
+          error: 'Invalid event ID format',
+          errorName: 'ValidationError',
+        });
+        return;
+      }
       try {
-        await this.service.unshareEvent(account, req.body.calendar, req.body.eventId);
+        await this.service.unshareEvent(account, calendar, eventId);
         res.status(200).send('Unshared');
       }
       catch (error: any) {
@@ -559,7 +571,7 @@ export default class ActivityPubMemberRoutes {
     }
     else {
       res.status(400).json({
-        error: 'Invalid request: eventId is required',
+        error: 'Invalid request: event ID is required',
         errorName: 'InvalidRequestError',
       });
     }

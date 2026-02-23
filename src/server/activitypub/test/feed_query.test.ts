@@ -141,4 +141,42 @@ describe('ActivityPubService - getFeed with EventObjectEntity Join', () => {
     expect(queryOptions.order[0][0]).toBe('createdAt');
     expect(queryOptions.order[0][1]).toBe('DESC');
   });
+
+  it('should use sequelize.escape() for calendar.id in all three literal subqueries (defense-in-depth)', async () => {
+    // Use a calendar ID that contains a SQL single-quote metacharacter.
+    // With direct interpolation: WHERE f.calendar_id = ''; DROP TABLE events; --'
+    // With escape():            WHERE f.calendar_id = '''; DROP TABLE events; --'
+    // The escaped form has an extra leading quote (SQLite doubles internal quotes).
+    const maliciousId = "'; DROP TABLE events; --";
+    const maliciousCalendar = new Calendar(maliciousId, 'malicious');
+
+    const findAllStub = sandbox.stub(EventEntity, 'findAll').resolves([]);
+    sandbox.stub(SharedEventEntity, 'findAll').resolves([]);
+
+    await service.getFeed(maliciousCalendar, 0, 20);
+
+    const queryOptions = findAllStub.firstCall.args[0] as any;
+    const orConditions = queryOptions.where[Op.or];
+
+    // Extract the raw SQL from all three literal objects
+    const remoteOriginalsLiteral: string = orConditions[0].id[Op.in].val;
+    const remoteAnnouncementsLiteral: string = orConditions[1].id[Op.in].val;
+    const localLiteral: string = orConditions[2].calendar_id[Op.in].val;
+
+    // With direct string interpolation the SQL would be:
+    //   WHERE f.calendar_id = ''; DROP TABLE events; --'
+    // The escape() function doubles the quote, producing:
+    //   WHERE f.calendar_id = '''; DROP TABLE events; --'
+    // Verify the unescaped injection pattern is NOT present in any literal.
+    const unescapedPattern = `= '${maliciousId}`;
+    expect(remoteOriginalsLiteral).not.toContain(unescapedPattern);
+    expect(remoteAnnouncementsLiteral).not.toContain(unescapedPattern);
+    expect(localLiteral).not.toContain(unescapedPattern);
+
+    // Verify the escaped form IS present (sequelize.escape wraps and escapes the value)
+    const escapedValue = EventEntity.sequelize!.escape(maliciousId);
+    expect(remoteOriginalsLiteral).toContain(`= ${escapedValue}`);
+    expect(remoteAnnouncementsLiteral).toContain(`= ${escapedValue}`);
+    expect(localLiteral).toContain(`= ${escapedValue}`);
+  });
 });

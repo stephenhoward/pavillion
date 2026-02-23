@@ -1,5 +1,5 @@
 <script setup>
-import { onBeforeMount, reactive, inject, ref, watch, computed } from 'vue';
+import { onBeforeMount, reactive, inject, ref, watch, computed, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
@@ -17,6 +17,8 @@ import SearchFilter from './SearchFilter.vue';
 import ReportEvent from '@/client/components/report-event.vue';
 import { useBulkSelection } from '@/client/composables/useBulkSelection';
 import { useCalendarStore } from '@/client/stores/calendarStore';
+import { useCategoryStore } from '@/client/stores/categoryStore';
+import RepostCategoriesModal from '@/client/components/logged_in/repost-categories-modal.vue';
 
 const { t } = useTranslation('calendars',{
   keyPrefix: 'calendar',
@@ -32,10 +34,14 @@ const { t: tReport } = useTranslation('system', {
   keyPrefix: 'report',
 });
 
+// For repost edit dialog translations
+const { t: tFeed } = useTranslation('feed');
+
 const site_config = inject('site_config');
 const site_domain = site_config.settings().domain;
 const eventService = new EventService();
 const calendarStore = useCalendarStore();
+const categoryStore = useCategoryStore();
 const toast = useToast();
 
 const route = useRoute();
@@ -80,6 +86,12 @@ const initialFilters = reactive({
 // Report dialog state
 const showReportDialog = ref(false);
 const reportEventId = ref('');
+
+// Repost category edit modal state
+const repostEventForModal = ref(null);
+
+// Ref to the element that triggered the repost modal (for focus return on close)
+const repostModalTriggerEl = ref(null);
 
 /**
  * Initializes filter state from URL query parameters.
@@ -273,12 +285,62 @@ const newEvent = async () => {
 
 /**
  * Navigate to edit an existing event.
+ * For reposted events, opens a read-only detail + category edit modal instead.
+ * Saves the triggering DOM element so focus can be returned when the modal closes.
+ *
+ * @param event - The CalendarEvent model to edit
+ * @param domEvent - The originating mouse event, used to capture the trigger element
  */
-const handleEditEvent = (event) => {
+const handleEditEvent = (event, domEvent) => {
+  if (event.isRepost) {
+    repostModalTriggerEl.value = domEvent?.currentTarget ?? null;
+    repostEventForModal.value = event;
+    return;
+  }
   router.push({
     name: 'event_edit',
     params: { eventId: event.id },
   });
+};
+
+/**
+ * Handle category save from the repost edit modal.
+ * Calls bulkAssignCategories to add any newly selected categories,
+ * then updates the event in the store with the API response.
+ * Returns focus to the element that triggered the modal.
+ */
+const handleRepostCategoryUpdate = async (categoryIds) => {
+  if (!repostEventForModal.value) return;
+
+  if (categoryIds.length > 0) {
+    try {
+      const updatedEvents = await calendarService.bulkAssignCategories(
+        [repostEventForModal.value.id],
+        categoryIds,
+      );
+      updatedEvents.forEach(event => {
+        store.updateEvent(state.calendar?.id, event);
+      });
+    }
+    catch (error) {
+      console.error('Error updating repost event categories:', error);
+      toast.error(tFeed('errors.UnknownError'));
+    }
+  }
+
+  repostEventForModal.value = null;
+  await nextTick();
+  repostModalTriggerEl.value?.focus();
+};
+
+/**
+ * Handle cancel from the repost edit modal.
+ * Closes the modal and returns focus to the element that triggered it.
+ */
+const handleRepostModalCancel = async () => {
+  repostEventForModal.value = null;
+  await nextTick();
+  repostModalTriggerEl.value?.focus();
 };
 
 const navigateToManagement = () => {
@@ -505,13 +567,16 @@ const hasActiveFilters = computed(() => {
             </div>
             <article
               :aria-labelledby="`event-title-${event.id}`"
-              @click="handleEditEvent(event)"
+              @click="handleEditEvent(event, $event)"
               class="event-article"
             >
               <EventImage :media="event.media" size="small" />
               <div class="event-content">
                 <div class="event-title-row">
                   <h3 :id="`event-title-${event.id}`">{{ event.content("en").name }}</h3>
+                  <span v-if="event.isRepost" class="repost-badge">
+                    <span class="sr-only">{{ tFeed('events.repost_badge_prefix') }}</span>{{ tFeed('events.repost_button') }}
+                  </span>
                   <span v-if="event.languages && event.languages.length > 1" class="language-count">
                     <Languages :size="16" />
                     {{ event.languages.length }} languages
@@ -526,14 +591,21 @@ const hasActiveFilters = computed(() => {
                   </span>
                 </div>
                 <p v-if="event.content('en').description" class="event-description">{{ event.content("en").description }}</p>
+                <ul v-if="event.categories && event.categories.length > 0" class="event-categories" role="list">
+                  <li v-for="category in event.categories"
+                      :key="category.id"
+                      class="category-badge">
+                    {{ category.content('en').name }}
+                  </li>
+                </ul>
               </div>
             </article>
             <div class="event-actions">
               <button
                 type="button"
                 class="edit-btn icon-btn"
-                @click.stop="handleEditEvent(event)"
-                :aria-label="`Edit event: ${event.content('en').name}`"
+                @click.stop="handleEditEvent(event, $event)"
+                :aria-label="t('event.edit_label', { name: event.content('en').name })"
                 title="Edit this event"
               >
                 <Pencil :size="18" />
@@ -542,7 +614,7 @@ const hasActiveFilters = computed(() => {
                 type="button"
                 class="duplicate-btn icon-btn"
                 @click.stop="handleDuplicateEvent(event)"
-                :aria-label="`Duplicate event: ${event.content('en').name}`"
+                :aria-label="t('event.duplicate_label', { name: event.content('en').name })"
                 title="Duplicate this event"
               >
                 <Copy :size="18" />
@@ -597,6 +669,18 @@ const hasActiveFilters = computed(() => {
       v-if="showReportDialog"
       :event-id="reportEventId"
       @close="handleReportDialogClose"
+    />
+
+    <!-- Repost Category Edit Modal -->
+    <RepostCategoriesModal
+      v-if="repostEventForModal"
+      :event="repostEventForModal"
+      :pre-selected-categories="repostEventForModal.categories.map(c => ({ id: c.id, name: c.content('en').name }))"
+      :all-local-categories="(categoryStore.categories[calendarId] || []).map(c => ({ id: c.id, name: c.content('en').name }))"
+      :dialog-title="tFeed('categoryMapping.editDialogTitle')"
+      :confirm-label="tFeed('categoryMapping.save')"
+      @confirm="handleRepostCategoryUpdate"
+      @cancel="handleRepostModalCancel"
     />
   </div>
 </template>
@@ -853,6 +937,23 @@ section[aria-label="Calendar Events"] {
           }
         }
 
+        .repost-badge {
+          display: inline-flex;
+          align-items: center;
+          padding: 0.125rem 0.5rem;
+          background: var(--pav-color-purple-100, #f3e8ff);
+          border-radius: 9999px; // pill
+          color: var(--pav-color-purple-700, #7e22ce);
+          font-size: 0.75rem; // text-xs
+          font-weight: 500;
+          white-space: nowrap;
+
+          @media (prefers-color-scheme: dark) {
+            background: rgba(168, 85, 247, 0.2);
+            color: var(--pav-color-purple-300, #d8b4fe);
+          }
+        }
+
         .language-count {
           display: inline-flex;
           align-items: center;
@@ -924,6 +1025,32 @@ section[aria-label="Calendar Events"] {
 
         @media (prefers-color-scheme: dark) {
           color: var(--pav-color-stone-400);
+        }
+      }
+
+      .event-categories {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.375rem;
+        margin-top: 0.5rem;
+        padding: 0;
+        list-style: none;
+
+        .category-badge {
+          display: inline-flex;
+          align-items: center;
+          padding: 0.125rem 0.5rem;
+          background: var(--pav-color-stone-100);
+          border-radius: 9999px; // pill
+          color: var(--pav-color-stone-700);
+          font-size: 0.75rem; // text-xs
+          font-weight: 500;
+          white-space: nowrap;
+
+          @media (prefers-color-scheme: dark) {
+            background: var(--pav-color-stone-700);
+            color: var(--pav-color-stone-200);
+          }
         }
       }
     }

@@ -25,7 +25,7 @@ import { EventInstanceEntity } from '@/server/calendar/entity/event_instance';
 import { EventRepostEntity } from '@/server/calendar/entity/event_repost';
 import { SharedEventEntity } from '@/server/activitypub/entity/activitypub';
 import db from '@/server/common/entity/db';
-import { Op, literal, where, fn, col } from 'sequelize';
+import { Op, literal, where, fn, col, type Transaction } from 'sequelize';
 
 /**
  * Service class for managing events
@@ -120,6 +120,8 @@ class EventService {
       ...shareEventIds,
     ];
 
+    const repostedIdSet = new Set(repostedEventIds);
+
     // Query events owned by calendar OR reposted by calendar
     const queryOptions: any = {
       where: {
@@ -212,6 +214,8 @@ class EventService {
       if (categoryAssignments) {
         e.categories = categoryAssignments.map(assignment => assignment.category.toModel());
       }
+
+      e.isRepost = repostedIdSet.has(e.id);
 
       return e;
     });
@@ -1125,6 +1129,49 @@ class EventService {
   }
 
   /**
+   * Resolves the effective calendar ID for a set of events, accounting for reposts.
+   *
+   * For owned events the calendar_id on the EventEntity is the correct calendar to use.
+   * For reposted events the calendar_id is the original owner's calendar; this method
+   * detects that case and returns the reposter's calendar (which the account controls)
+   * instead.
+   *
+   * @param account - The account requesting the operation
+   * @param calendarId - The calendar ID taken directly from the EventEntity rows
+   * @param eventIds - The event IDs being operated on
+   * @param transaction - Active Sequelize transaction
+   * @returns effectiveCalendarId (string), wasRepost flag, and pre-fetched userCalendars
+   * @throws InsufficientCalendarPermissionsError when no owned calendar can be resolved
+   */
+  private async resolveEffectiveCalendarId(
+    account: Account,
+    calendarId: string,
+    eventIds: string[],
+    transaction: Transaction,
+  ): Promise<{ effectiveCalendarId: string; wasRepost: boolean; userCalendars: Calendar[] }> {
+    const userCalendars = await this.calendarService.editableCalendarsForUser(account);
+    let effectiveCalendarId = calendarId;
+    let wasRepost = false;
+
+    if (!userCalendars.some(cal => cal.id === effectiveCalendarId)) {
+      const reposts = await EventRepostEntity.findAll({
+        where: { event_id: eventIds },
+        transaction,
+      });
+      if (reposts.length === eventIds.length) {
+        const repostCalendarIds = [...new Set(reposts.map(r => r.calendar_id))];
+        if (repostCalendarIds.length === 1 && userCalendars.some(cal => cal.id === repostCalendarIds[0])) {
+          effectiveCalendarId = repostCalendarIds[0];
+          wasRepost = true;
+        }
+      }
+      // If still not resolved, the permission check in the caller will throw
+    }
+
+    return { effectiveCalendarId, wasRepost, userCalendars };
+  }
+
+  /**
    * Assign categories to multiple events at once
    * @param account - the account performing the operation
    * @param eventIds - array of event IDs to assign categories to
@@ -1166,6 +1213,8 @@ class EventService {
     }
 
 
+    let wasRepost = false;
+
     const transaction = await db.transaction();
 
     try {
@@ -1191,18 +1240,28 @@ class EventService {
         throw new MixedCalendarEventsError('All events must belong to the same calendar');
       }
 
-      const calendarId = calendarIds[0] as string;
+      // 3. Resolve the effective calendar for permission and category validation.
+      // For reposted events the event's calendar_id is the original owner's calendar;
+      // we need the reposter's calendar (which the user controls) instead.
+      const {
+        effectiveCalendarId,
+        wasRepost: resolvedAsRepost,
+        userCalendars,
+      } = await this.resolveEffectiveCalendarId(account, calendarIds[0] as string, eventIds, transaction);
+      let calendarId = effectiveCalendarId;
+      wasRepost = resolvedAsRepost;
+
       const calendar = await this.calendarService.getCalendar(calendarId);
 
       if (!calendar) {
         throw new CalendarNotFoundError('Calendar not found for events');
       }
 
-      // 3. Validate categories exist and belong to the same calendar
+      // 4. Validate categories exist and belong to the effective calendar
       const categories = await EventCategoryEntity.findAll({
         where: {
           id: categoryIds,
-          calendar_id: calendarId,  // Use UUID, not AP URL
+          calendar_id: calendarId,
         },
         transaction,
       });
@@ -1211,9 +1270,8 @@ class EventService {
         throw new CategoriesNotFoundError('Some categories were not found in the calendar');
       }
 
-      // 4. Check user has permission to modify events (do this AFTER data validation)
-      // All events are in the same calendar (validated above), so just check permission for that calendar
-      const userCalendars = await this.calendarService.editableCalendarsForUser(account);
+      // 5. Check user has permission to modify events
+      // All events are in the same effective calendar, so check permission once
       const hasPermission = userCalendars.some(cal => cal.id === calendarId);
       if (!hasPermission) {
         throw new InsufficientCalendarPermissionsError('Insufficient permissions to modify events in this calendar');
@@ -1264,6 +1322,7 @@ class EventService {
     const updatedEvents = [];
     for (const eventId of eventIds) {
       const updatedEvent = await this.getEventById(eventId);
+      updatedEvent.isRepost = wasRepost;
       updatedEvents.push(updatedEvent);
     }
 
