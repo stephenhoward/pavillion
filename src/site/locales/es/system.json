@@ -41,6 +41,7 @@
         "hide_filters": "Ocultar filtros",
         "show_filters": "Mostrar filtros"
     },
+    "event_location": "Ubicación",
     "report": {
         "link_text": "Reportar evento",
         "form_title": "Reportar este evento",

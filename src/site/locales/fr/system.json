@@ -10,7 +10,8 @@
     "filter_by_category": "Catégories d'événements",
     "clear_filters": "Effacer les filtres",
     "no_events_with_filters": "Aucun événement trouvé",
-    "no_events_available": "Aucun événement disponible",
+    "no_events_available": "Aucun événement programmé prochainement.",
+    "no_events_available_hint": "Essayez de sélectionner une plage de dates différente pour trouver des événements.",
     "loading_events": "Chargement des événements...",
     "loading_categories": "Chargement des catégories d'événements...",
     "previous_week": "Semaine précédente",
@@ -40,6 +41,7 @@
         "hide_filters": "Masquer les filtres",
         "show_filters": "Afficher les filtres"
     },
+    "event_location": "Lieu",
     "report": {
         "link_text": "Signaler l'événement",
         "form_title": "Signaler cet événement",
