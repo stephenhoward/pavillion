@@ -5,6 +5,7 @@ import { createI18nConfig } from '@/common/i18n/config';
 // Import translation resources
 import enSystem from '@/site/locales/en/system.json';
 import esSystem from '@/site/locales/es/system.json';
+import frSystem from '@/site/locales/fr/system.json';
 
 /**
  * Initializes the i18next internationalization framework with all translation resources.
@@ -22,6 +23,9 @@ export const initI18Next = () => {
         },
         es: {
           system: esSystem,
+        },
+        fr: {
+          system: frSystem,
         },
       },
       detection: {

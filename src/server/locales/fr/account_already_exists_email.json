@@ -1,0 +1,14 @@
+{
+    "subject": "Tentative d'inscription",
+    "title": "Compte déjà enregistré",
+    "greeting": "Bonjour,",
+    "instructions": "Quelqu'un a tenté de créer un compte avec votre adresse e-mail. Si c'était vous, vous avez déjà un compte. Vous pouvez vous connecter ou réinitialiser votre mot de passe en utilisant les liens ci-dessous.",
+    "login_label": "Connectez-vous à votre compte :",
+    "login_button": "Se connecter",
+    "forgot_password_text": "Si vous avez oublié votre mot de passe, vous pouvez le réinitialiser :",
+    "forgot_password_label": "Réinitialisez votre mot de passe :",
+    "forgot_password_button": "Réinitialiser le mot de passe",
+    "signature": "Merci,",
+    "team_name": "L'équipe Pavillion",
+    "footer_text": "Ceci est un message automatique, veuillez ne pas répondre à cet e-mail."
+}

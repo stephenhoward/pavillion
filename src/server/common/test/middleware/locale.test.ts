@@ -111,6 +111,11 @@ describe('localeMiddleware', () => {
       expect(response.body.locale).toBe('en');
     });
 
+    it('should detect fr from /fr/... path', async () => {
+      const response = await request(app).get('/fr/calendar');
+      expect(response.body.locale).toBe('fr');
+    });
+
     it('should not detect locale from non-locale path segment', async () => {
       const testApp = express();
       testApp.use(createLocaleMiddleware(makeConfigInterface({ defaultLanguage: 'en' }) as any));
@@ -238,10 +243,18 @@ describe('localeMiddleware', () => {
     it('should skip unsupported languages in Accept-Language', async () => {
       const response = await request(app)
         .get('/some-path')
+        .set('Accept-Language', 'de;q=0.9,es;q=0.8');
+
+      // 'de' is not supported, should fall back to 'es'
+      expect(response.body.locale).toBe('es');
+    });
+
+    it('should detect French from Accept-Language header', async () => {
+      const response = await request(app)
+        .get('/some-path')
         .set('Accept-Language', 'fr;q=0.9,es;q=0.8');
 
-      // 'fr' is not supported, should fall back to 'es'
-      expect(response.body.locale).toBe('es');
+      expect(response.body.locale).toBe('fr');
     });
 
     it('should fall through when Accept-Language contains only unsupported languages', async () => {
@@ -253,7 +266,7 @@ describe('localeMiddleware', () => {
 
       const response = await request(testApp)
         .get('/some-path')
-        .set('Accept-Language', 'fr,de,it');
+        .set('Accept-Language', 'de,it,ja');
 
       expect(response.body.locale).toBe('en');
     });

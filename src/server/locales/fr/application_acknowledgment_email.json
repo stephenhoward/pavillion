@@ -1,0 +1,10 @@
+{
+    "subject": "Demande de compte reçue",
+    "title": "Confirmation de demande",
+    "greeting": "Bonjour,",
+    "acknowledgment_message": "Nous avons bien reçu votre demande de compte sur notre service. Merci de l'intérêt que vous portez à notre communauté.",
+    "review_message": "Nos administrateurs examineront votre demande. Vous serez informé par e-mail lorsqu'une décision aura été prise.",
+    "signature": "Merci,",
+    "team_name": "L'équipe",
+    "footer_text": "Ceci est un message automatique, veuillez ne pas répondre à cet e-mail."
+}

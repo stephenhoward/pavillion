@@ -1,0 +1,13 @@
+{
+    "subject": "Vérification de l'inscription",
+    "title": "Vérifiez votre compte",
+    "greeting": "Bonjour,",
+    "instructions": "Merci de votre inscription. Pour vérifier votre compte, veuillez cliquer sur le bouton ci-dessous ou copier et coller le lien dans votre navigateur :",
+    "button": "Vérifier le compte",
+    "copy_link_text": "Ou copiez ce lien :",
+    "verification_code": "Code de vérification",
+    "expiry_notice": "Ce lien de vérification expirera dans 24 heures.",
+    "signature": "Merci,",
+    "team_name": "L'équipe Pavillion",
+    "footer_text": "Ceci est un message automatique, veuillez ne pas répondre à cet e-mail."
+}

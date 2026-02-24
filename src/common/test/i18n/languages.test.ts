@@ -39,6 +39,9 @@ describe('AVAILABLE_LANGUAGES', () => {
 
     const es = AVAILABLE_LANGUAGES.find(lang => lang.code === 'es');
     expect(es?.nativeName).toBe('Español');
+
+    const fr = AVAILABLE_LANGUAGES.find(lang => lang.code === 'fr');
+    expect(fr?.nativeName).toBe('Français');
   });
 
   it('English should have an empty fallback chain', () => {
@@ -68,7 +71,7 @@ describe('AVAILABLE_LANGUAGES', () => {
   });
 
   it('should have ltr direction for Latin-script languages', () => {
-    const ltrCodes = ['en', 'es'];
+    const ltrCodes = ['en', 'es', 'fr'];
     for (const code of ltrCodes) {
       const lang = AVAILABLE_LANGUAGES.find(l => l.code === code);
       if (lang) {

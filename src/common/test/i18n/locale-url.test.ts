@@ -85,6 +85,12 @@ describe('stripLocalePrefix', () => {
       expect(result.locale).toBe('es');
       expect(result.path).toBe('/events/123');
     });
+
+    it('should strip French locale prefix and return locale and remaining path', () => {
+      const result = stripLocalePrefix('/fr/events');
+      expect(result.locale).toBe('fr');
+      expect(result.path).toBe('/events');
+    });
   });
 
   describe('paths without locale prefix', () => {
@@ -130,10 +136,10 @@ describe('stripLocalePrefix', () => {
 
   describe('invalid locale codes', () => {
     it('should not strip an unknown language code as a locale prefix', () => {
-      const result = stripLocalePrefix('/fr/events');
-      // 'fr' is not in AVAILABLE_LANGUAGES (only 'en' and 'es' are)
+      const result = stripLocalePrefix('/de/events');
+      // 'de' is not in AVAILABLE_LANGUAGES
       expect(result.locale).toBeNull();
-      expect(result.path).toBe('/fr/events');
+      expect(result.path).toBe('/de/events');
     });
 
     it('should not treat numeric path segments as locale prefixes', () => {

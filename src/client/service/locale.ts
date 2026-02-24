@@ -25,6 +25,11 @@ import esSystem from '@/client/locales/es/system.json';
 import esAuthentication from '@/client/locales/es/authentication.json';
 import esSetup from '@/client/locales/es/setup.json';
 
+// Import French translation resources
+import frSystem from '@/client/locales/fr/system.json';
+import frAuthentication from '@/client/locales/fr/authentication.json';
+import frSetup from '@/client/locales/fr/setup.json';
+
 /**
  * Detects the best language for the client from available signals.
  *
@@ -69,7 +74,7 @@ export function detectLanguage(serverLanguage?: string): string {
 
 /**
  * Initializes the i18next internationalization framework with all translation resources.
- * Uses the detection chain (cookie → browser → instance default → 'en') to pick the
+ * Uses the detection chain (cookie -> browser -> instance default -> 'en') to pick the
  * initial language.
  *
  * @param serverLanguage - Optional language code from server settings (e.g., 'es', 'en')
@@ -100,6 +105,11 @@ export const initI18Next = (serverLanguage?: string) => {
         system: esSystem,
         authentication: esAuthentication,
         setup: esSetup,
+      },
+      fr: {
+        system: frSystem,
+        authentication: frAuthentication,
+        setup: frSetup,
       },
     },
   });

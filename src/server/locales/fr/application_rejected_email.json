@@ -1,0 +1,9 @@
+{
+    "subject": "Concernant votre demande de compte",
+    "title": "Statut de la demande de compte",
+    "greeting": "Bonjour,",
+    "application_rejected_message": "Merci de l'intérêt que vous portez à notre service. Après examen attentif de votre demande, nous avons le regret de vous informer que nous ne sommes pas en mesure d'approuver votre demande de compte pour le moment.",
+    "signature": "Cordialement,",
+    "team_name": "L'équipe",
+    "footer_text": "Ceci est un message automatique, veuillez ne pas répondre à cet e-mail."
+}

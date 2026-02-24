@@ -1,0 +1,15 @@
+{
+  "subject": "Vérifiez votre signalement d'événement",
+  "title": "Vérifiez votre signalement",
+  "greeting": "Bonjour,",
+  "instructions": "Vous avez récemment soumis un signalement pour l'événement ci-dessous. Pour finaliser votre signalement, veuillez vérifier votre adresse e-mail en cliquant sur le bouton ci-dessous.",
+  "event_label": "Événement :",
+  "category_label": "Catégorie du signalement :",
+  "button": "Vérifier mon signalement",
+  "copy_link_text": "Ou copiez ce lien :",
+  "expiry_notice": "Ce lien de vérification expirera dans 24 heures.",
+  "ignore_message": "Si vous n'avez pas soumis ce signalement, vous pouvez ignorer cet e-mail en toute sécurité.",
+  "signature": "Merci,",
+  "team_name": "L'équipe Pavillion",
+  "footer_text": "Ceci est un message automatique, veuillez ne pas répondre à cet e-mail."
+}

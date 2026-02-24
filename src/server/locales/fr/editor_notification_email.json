@@ -1,0 +1,12 @@
+{
+    "subject": "Vous pouvez maintenant modifier {{calendarName}}",
+    "title": "Accès éditeur accordé",
+    "greeting": "Bonjour,",
+    "notification_message": "{{inviterName}} vous a accordé l'accès éditeur au calendrier « {{calendarName}} ».",
+    "custom_message_label": "Message personnel de {{inviterName}} :",
+    "access_granted": "Vous disposez maintenant de tous les privilèges d'édition pour ce calendrier.",
+    "view_calendar_instructions": "Vous pouvez commencer à modifier ce calendrier immédiatement. Cliquez sur le bouton ci-dessous pour le voir :",
+    "view_calendar_button": "Voir le calendrier",
+    "signature": "Cordialement,",
+    "footer_text": "Ceci est un message automatique, veuillez ne pas répondre à cet e-mail."
+}

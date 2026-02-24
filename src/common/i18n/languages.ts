@@ -43,8 +43,13 @@ export const AVAILABLE_LANGUAGES: Language[] = [
     fallbackChain: ['en'],
     direction: 'ltr',
   },
+  {
+    code: 'fr',
+    nativeName: 'Français',
+    fallbackChain: ['en'],
+    direction: 'ltr',
+  },
   // Add new languages here as translations become available:
-  // { code: 'fr', nativeName: 'Français', fallbackChain: ['en'], direction: 'ltr' },
   // { code: 'de', nativeName: 'Deutsch', fallbackChain: ['en'], direction: 'ltr' },
   // { code: 'pt', nativeName: 'Português', fallbackChain: ['es', 'en'], direction: 'ltr' },
   // { code: 'ja', nativeName: '日本語', fallbackChain: ['en'], direction: 'ltr' },

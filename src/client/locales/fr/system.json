@@ -1,0 +1,19 @@
+{
+  "main_navigation": {
+    "calendar_button": "Calendrier",
+    "inbox_button": "Boîte de réception",
+    "new_event": "Nouvel événement",
+    "profile_button": "Paramètres",
+    "feed_button": "Fil d'actualité"
+  },
+  "language_picker": {
+    "search_language": "Rechercher une langue",
+    "select_language": "Sélectionner une langue",
+    "close": "Fermer",
+    "no_languages_match": "Aucune langue ne correspond à votre recherche",
+    "all_languages_added": "Toutes les langues ont été ajoutées"
+  },
+  "navigation": {
+    "skip_to_content": "Aller au contenu principal"
+  }
+}

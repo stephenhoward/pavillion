@@ -1,0 +1,16 @@
+{
+  "subject": "Rappel : Signalement en attente d'examen sur votre calendrier",
+  "title": "Rappel d'examen de signalement",
+  "greeting": "Bonjour,",
+  "notification": "Un signalement sur votre calendrier nécessite votre attention. Si aucune action n'est prise, ce signalement sera automatiquement transmis à un administrateur de l'instance.",
+  "event_label": "Événement :",
+  "category_label": "Catégorie du signalement :",
+  "description_label": "Description :",
+  "time_remaining_label": "Temps restant avant la transmission automatique :",
+  "action_message": "Veuillez examiner ce signalement depuis le tableau de bord des signalements de votre calendrier et agir avant qu'il ne soit transmis.",
+  "review_button": "Examiner le signalement",
+  "copy_link_text": "Ou copiez ce lien :",
+  "signature": "Merci,",
+  "team_name": "L'équipe Pavillion",
+  "footer_text": "Ceci est un message automatique, veuillez ne pas répondre à cet e-mail."
+}
