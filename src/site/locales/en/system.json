@@ -13,6 +13,7 @@
     "clear_filters": "Clear Filters",
     "no_events_with_filters": "No Events Found",
     "no_events_with_filters_hint": "Try adjusting your filters or date range to find events.",
+    "no_events_in_date_range": "No Events in This Date Range",
     "no_events_available": "No upcoming events scheduled.",
     "no_events_available_hint": "Try selecting a different date range to find events.",
     "loading_events": "Loading Events...",

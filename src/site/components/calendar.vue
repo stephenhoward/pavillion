@@ -33,6 +33,8 @@ const publicCalendarStore = usePublicCalendarStore();
 const availableCategories = computed(() => publicCalendarStore.availableCategories);
 const filteredEventsByDay = computed(() => publicCalendarStore.getFilteredEventsByDay);
 const hasActiveFilters = computed(() => publicCalendarStore.hasActiveFilters);
+const hasNonDateFilters = computed(() => publicCalendarStore.hasNonDateFilters);
+const hasOnlyDateFilters = computed(() => publicCalendarStore.hasOnlyDateFilters);
 
 onBeforeMount(async () => {
   try {
@@ -111,10 +113,11 @@ onBeforeMount(async () => {
 
       <!-- Empty State: suppress when search is pending (1-2 chars typed) to avoid conflicting messages -->
       <div v-else-if="!state.isLoading && !publicCalendarStore.isLoadingEvents && publicCalendarStore.hasLoadedEvents && !publicCalendarStore.isSearchPending" role="status" class="empty-state">
-        <p v-if="hasActiveFilters">
+        <p v-if="hasNonDateFilters">
           {{ t('no_events_with_filters') }}
         </p>
-        <p v-if="hasActiveFilters" class="empty-state-hint">{{ t('no_events_with_filters_hint') }}</p>
+        <p v-if="hasNonDateFilters" class="empty-state-hint">{{ t('no_events_with_filters_hint') }}</p>
+        <p v-else-if="hasOnlyDateFilters">{{ t('no_events_in_date_range') }}</p>
         <template v-else>
           <p>{{ t('no_events_available') }}</p>
           <p class="empty-state-hint">{{ t('no_events_available_hint') }}</p>

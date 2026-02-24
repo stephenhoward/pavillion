@@ -82,13 +82,16 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
     },
 
     /**
-     * Get filtered events grouped by day
+     * Get filtered events grouped by day using the viewer's local timezone.
+     * Using toLocal() ensures day boundaries are determined by the viewer's
+     * clock rather than the server's timezone, preventing events from
+     * appearing on the wrong day when the server runs in a different timezone.
      */
     getFilteredEventsByDay(): Record<string, CalendarEventInstance[]> {
       const eventsByDay: Record<string, CalendarEventInstance[]> = {};
 
       this.getFilteredEvents.forEach(instance => {
-        const dateKey = instance.start.toISODate();
+        const dateKey = instance.start.toLocal().toISODate();
         if (dateKey) {
           if (!eventsByDay[dateKey]) {
             eventsByDay[dateKey] = [];
@@ -110,6 +113,28 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
         this.startDate !== null ||
         this.endDate !== null
       );
+    },
+
+    /**
+     * Check if non-date filters (search or category) are active.
+     * Used to distinguish "no results due to search/category" from
+     * "no results in this date window".
+     */
+    hasNonDateFilters(): boolean {
+      return (
+        this.selectedCategoryIds.length > 0 ||
+        this.searchQuery.trim().length > 0
+      );
+    },
+
+    /**
+     * Check if only date filters are active (no search or category filters).
+     * Used to show "no events in this date range" message.
+     */
+    hasOnlyDateFilters(): boolean {
+      const hasDateFilter = this.startDate !== null || this.endDate !== null;
+      const hasNonDate = this.selectedCategoryIds.length > 0 || this.searchQuery.trim().length > 0;
+      return hasDateFilter && !hasNonDate;
     },
 
     /**

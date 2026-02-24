@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { EventCategory } from '@/common/model/event_category';
 import { useLocalizedContent } from '../composables/useLocalizedContent';
@@ -106,11 +106,18 @@ const updateScrollButtons = (): void => {
 };
 
 /**
+ * Returns 'smooth' unless the user has opted out of motion (prefers-reduced-motion).
+ */
+const getScrollBehavior = (): ScrollBehavior => {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth';
+};
+
+/**
  * Scroll left by a reasonable amount
  */
 const scrollLeft = (): void => {
   if (!scrollContainer.value) return;
-  scrollContainer.value.scrollBy({ left: -200, behavior: 'smooth' });
+  scrollContainer.value.scrollBy({ left: -200, behavior: getScrollBehavior() });
 };
 
 /**
@@ -118,8 +125,22 @@ const scrollLeft = (): void => {
  */
 const scrollRight = (): void => {
   if (!scrollContainer.value) return;
-  scrollContainer.value.scrollBy({ left: 200, behavior: 'smooth' });
+  scrollContainer.value.scrollBy({ left: 200, behavior: getScrollBehavior() });
 };
+
+/**
+ * Scroll the container to bring the first selected category pill into view
+ */
+const scrollToSelectedCategory = (): void => {
+  if (!scrollContainer.value) return;
+  const selectedPill = scrollContainer.value.querySelector('.category-pill.selected');
+  if (selectedPill) {
+    selectedPill.scrollIntoView({ behavior: getScrollBehavior(), inline: 'nearest', block: 'nearest' });
+  }
+};
+
+// Run after DOM update so the .selected class is already applied when we query
+watch(() => props.selectedCategories, scrollToSelectedCategory, { flush: 'post' });
 
 onMounted(() => {
   if (scrollContainer.value) {
@@ -127,6 +148,7 @@ onMounted(() => {
     scrollContainer.value.addEventListener('scroll', updateScrollButtons);
     window.addEventListener('resize', updateScrollButtons);
   }
+  scrollToSelectedCategory();
 });
 
 onUnmounted(() => {
