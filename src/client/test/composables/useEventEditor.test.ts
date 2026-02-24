@@ -5,6 +5,7 @@ import { useEventEditor } from '@/client/composables/useEventEditor';
 import { CalendarEvent } from '@/common/model/events';
 import { Calendar } from '@/common/model/calendar';
 import { EventCategory } from '@/common/model/event_category';
+import { EventLocation } from '@/common/model/location';
 import CalendarService from '@/client/service/calendar';
 import EventService from '@/client/service/event';
 import CategoryService from '@/client/service/category';
@@ -631,6 +632,74 @@ describe('useEventEditor', () => {
 
       const savedModel = saveStub.firstCall.args[0];
       expect(savedModel.locationId).toBe('location-123');
+    });
+
+    it('should nullify empty location before saving to prevent server 500', async () => {
+      const calendar = new Calendar('cal-1', 'test-calendar');
+      const savedEvent = new CalendarEvent('event-123', 'cal-1');
+
+      sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
+      const saveStub = sandbox.stub(EventService.prototype, 'saveEvent').resolves(savedEvent);
+
+      const { state, initializeEvent, saveEvent } = useEventEditor();
+
+      await initializeEvent();
+
+      // Verify initial state: new event has an empty EventLocation from initializeNewEvent
+      expect(state.event!.location).not.toBeNull();
+      expect(state.event!.location!.id).toBe('');
+      expect(state.event!.location!.name).toBe('');
+
+      const mockT = vi.fn((key) => key);
+      await saveEvent(mockT);
+
+      // The empty location should be nullified before saving
+      const savedModel = saveStub.firstCall.args[0];
+      expect(savedModel.location).toBeNull();
+    });
+
+    it('should preserve location with valid data when saving', async () => {
+      const calendar = new Calendar('cal-1', 'test-calendar');
+      const savedEvent = new CalendarEvent('event-123', 'cal-1');
+
+      sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
+      const saveStub = sandbox.stub(EventService.prototype, 'saveEvent').resolves(savedEvent);
+
+      const { state, initializeEvent, saveEvent } = useEventEditor();
+
+      await initializeEvent();
+
+      // Set a valid location with a name
+      state.event!.location = new EventLocation('loc-1', 'Community Center', '123 Main St');
+      state.event!.locationId = 'loc-1';
+
+      const mockT = vi.fn((key) => key);
+      await saveEvent(mockT);
+
+      const savedModel = saveStub.firstCall.args[0];
+      expect(savedModel.location).not.toBeNull();
+      expect(savedModel.location!.name).toBe('Community Center');
+    });
+
+    it('should nullify location with only empty strings', async () => {
+      const calendar = new Calendar('cal-1', 'test-calendar');
+      const savedEvent = new CalendarEvent('event-123', 'cal-1');
+
+      sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
+      const saveStub = sandbox.stub(EventService.prototype, 'saveEvent').resolves(savedEvent);
+
+      const { state, initializeEvent, saveEvent } = useEventEditor();
+
+      await initializeEvent();
+
+      // Explicitly set an empty location (simulates form with no location input)
+      state.event!.location = new EventLocation('', '', '', '', '', '', '');
+
+      const mockT = vi.fn((key) => key);
+      await saveEvent(mockT);
+
+      const savedModel = saveStub.firstCall.args[0];
+      expect(savedModel.location).toBeNull();
     });
   });
 

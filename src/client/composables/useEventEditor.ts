@@ -29,6 +29,17 @@ export interface EventEditorState {
 }
 
 /**
+ * Checks whether an EventLocation has any meaningful data.
+ * A location is considered empty if it has no id and no name.
+ *
+ * @param location - The location to check
+ * @returns true if the location is empty
+ */
+function isEmptyLocation(location: EventLocation): boolean {
+  return !location.id && !location.name;
+}
+
+/**
  * Composable for event editor core functionality
  *
  * Handles mode determination, event initialization, loading, and saving.
@@ -305,6 +316,13 @@ export function useEventEditor(defaultLanguage: string = 'en') {
       // (The location object is only for display purposes in the UI)
       if (state.event.locationId) {
         model.locationId = state.event.locationId;
+      }
+
+      // Nullify empty location objects to prevent sending empty data to the server.
+      // The form initializes events with an empty EventLocation for UI binding,
+      // but the server rejects empty location objects with a 500 error.
+      if (model.location && isEmptyLocation(model.location)) {
+        model.location = null;
       }
 
       // Save the event
