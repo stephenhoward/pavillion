@@ -33,8 +33,8 @@ export class EventInstanceEntity extends Model {
     return new CalendarEventInstance(
       this.id,
       this.event.toModel(),
-      DateTime.fromJSDate(this.start_time),
-      this.end_time ? DateTime.fromJSDate(this.end_time) : null,
+      DateTime.fromJSDate(this.start_time, { zone: 'utc' }),
+      this.end_time ? DateTime.fromJSDate(this.end_time, { zone: 'utc' }) : null,
     );
   }
   static fromModel(eventInstance: CalendarEventInstance): EventInstanceEntity {

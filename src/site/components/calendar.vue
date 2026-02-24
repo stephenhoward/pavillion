@@ -9,11 +9,13 @@ import SearchFilterPublic from './SearchFilterPublic.vue';
 import { DateTime } from 'luxon';
 import EventImage from './EventImage.vue';
 import type Config from '@/client/service/config';
+import { useLocale } from '@/site/composables/useLocale';
 
 const { t } = useTranslation('system');
 const route = useRoute();
 const calendarUrlName = route.params.calendar as string;
 const siteConfig = inject<Config>('site_config');
+const { localizedPath } = useLocale();
 
 const state = reactive({
   err: '',
@@ -96,11 +98,11 @@ onBeforeMount(async () => {
             <li class="event" v-for="instance in filteredEventsByDay[day]" :key="instance.id">
               <EventImage :media="instance.event.media" context="card" :lazy="true" />
               <h3>
-                <router-link :to="{ name: 'instance', params: { event: instance.event.id, instance: instance.id } }">
+                <router-link :to="localizedPath(`/view/${calendarUrlName}/events/${instance.event.id}/${instance.id}`)">
                   {{ instance.event.content("en").name }}
                 </router-link>
               </h3>
-              <div class="event-time">{{ instance.start.toLocaleString(DateTime.TIME_SIMPLE) }}</div>
+              <div class="event-time">{{ instance.start.toLocal().toLocaleString(DateTime.TIME_SIMPLE) }}</div>
             </li>
           </ul>
         </section>

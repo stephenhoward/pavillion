@@ -1,17 +1,18 @@
 <script setup>
 import { reactive, onBeforeMount, ref } from 'vue';
 import { useTranslation } from 'i18next-vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 import { DateTime } from 'luxon';
 
 import CalendarService from '../service/calendar';
 import NotFound from './notFound.vue';
 import EventImage from './EventImage.vue';
 import ReportEvent from './report-event.vue';
+import { useLocale } from '@/site/composables/useLocale';
 
 const { t } = useTranslation('system');
 const route = useRoute();
-const router = useRouter();
+const { currentLocale, localizedPath } = useLocale();
 const calendarId = route.params.calendar;
 const eventId = route.params.event;
 const instanceId = route.params.instance;
@@ -76,15 +77,15 @@ onBeforeMount(async () => {
     <header v-if="state.calendar" class="instance-header">
       <!-- TODO: respect the user's language prefernces instead of using 'en' -->
       <p class="breadcrumb">
-        <router-link :to="{ name: 'calendar', params: { calendar: state.calendar.urlName } }">
+        <a :href="localizedPath('/view/' + state.calendar.urlName)">
           {{ state.calendar.content("en").name || state.calendar.urlName }}
-        </router-link>
+        </a>
       </p>
       <EventImage :media="state.instance.event.media" context="hero" />
       <div class="instance-meta">
         <h1>{{ state.instance.event.content("en").name }}</h1>
         <time :datetime="state.instance.start.toISO()" class="event-datetime">
-          {{ state.instance.start.toLocaleString(DateTime.DATETIME_MED) }}
+          {{ state.instance.start.toLocal().toLocaleString(DateTime.DATETIME_MED) }}
         </time>
       </div>
     </header>
@@ -95,10 +96,11 @@ onBeforeMount(async () => {
     <footer>
       <div class="category-badges">
         <a v-for="category in state.instance.event.categories"
+           :key="category.id"
            class="event-category-badge"
-           :href="router.resolve({ name: 'calendar', params: { calendar: state.calendar.urlName }, query: { category: category.content('en').name } }).href"
+           :href="localizedPath('/view/' + state.calendar.urlName) + '?category=' + category.id"
         >
-          {{ category.content("en").name }}
+          {{ category.content(currentLocale).name || category.content('en').name }}
         </a>
       </div>
       <button
