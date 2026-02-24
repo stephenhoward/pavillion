@@ -138,7 +138,7 @@ describe('ActivityPub Repost Policy API Routes', () => {
 
   describe('API validation - rejects invalid policy combinations', () => {
     // TODO: Re-enable when validation is restored in bead pv-5fk
-    it.skip('should reject autoRepostReposts=true when autoRepostOriginals=false', async () => {
+    it('should reject autoRepostReposts=true when autoRepostOriginals=false', async () => {
       const req = {
         user: testAccount,
         params: { id: 'follow-1' },
