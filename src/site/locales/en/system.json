@@ -40,6 +40,7 @@
         "hide_filters": "Hide Filters",
         "show_filters": "Show Filters"
     },
+    "event_location": "Location",
     "report": {
         "link_text": "Report Event",
         "form_title": "Report this Event",

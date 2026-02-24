@@ -92,6 +92,17 @@ onBeforeMount(async () => {
     <main>
       <div v-if="state.err" class="error">{{ state.err }}</div>
       <p>{{ state.instance.event.content("en").description }}</p>
+      <section v-if="state.instance.event.location" class="event-location">
+        <h2>{{ t('event_location') }}</h2>
+        <p class="location-name">{{ state.instance.event.location.name }}</p>
+        <p v-if="state.instance.event.location.address" class="location-address">
+          {{ state.instance.event.location.address }}
+          <template v-if="state.instance.event.location.city">
+            <br />{{ state.instance.event.location.city }}<template v-if="state.instance.event.location.state">, {{ state.instance.event.location.state }}</template>
+            <template v-if="state.instance.event.location.postalCode"> {{ state.instance.event.location.postalCode }}</template>
+          </template>
+        </p>
+      </section>
     </main>
     <footer>
       <div class="category-badges">
@@ -248,6 +259,41 @@ main {
 
     @include public-dark-mode {
       color: $public-text-primary-dark;
+    }
+  }
+
+  .event-location {
+    margin-top: $public-space-lg;
+    padding-top: $public-space-lg;
+    border-top: 1px solid $public-border-subtle-light;
+
+    @include public-dark-mode {
+      border-top-color: $public-border-subtle-dark;
+    }
+
+    h2 {
+      font-size: $public-font-size-md;
+      font-weight: $public-font-weight-semibold;
+      color: $public-text-secondary-light;
+      margin: 0 0 $public-space-sm 0;
+
+      @include public-dark-mode {
+        color: $public-text-secondary-dark;
+      }
+    }
+
+    .location-name {
+      font-weight: $public-font-weight-medium;
+      margin-bottom: $public-space-xs;
+    }
+
+    .location-address {
+      color: $public-text-secondary-light;
+      font-size: $public-font-size-sm;
+
+      @include public-dark-mode {
+        color: $public-text-secondary-dark;
+      }
     }
   }
 }

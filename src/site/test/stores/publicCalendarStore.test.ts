@@ -107,11 +107,11 @@ describe('publicCalendarStore - Search and Date Filter Extensions', () => {
 
     it('resets selected categories to empty array', () => {
       store.setSelectedCategories(['Arts', 'Sports']);
-      expect(store.selectedCategoryNames).toEqual(['Arts', 'Sports']);
+      expect(store.selectedCategoryIds).toEqual(['Arts', 'Sports']);
 
       store.clearAllFilters();
 
-      expect(store.selectedCategoryNames).toEqual([]);
+      expect(store.selectedCategoryIds).toEqual([]);
     });
 
     it('resets all filters simultaneously', () => {
@@ -124,7 +124,7 @@ describe('publicCalendarStore - Search and Date Filter Extensions', () => {
       expect(store.searchQuery).toBe('');
       expect(store.startDate).toBeNull();
       expect(store.endDate).toBeNull();
-      expect(store.selectedCategoryNames).toEqual([]);
+      expect(store.selectedCategoryIds).toEqual([]);
     });
   });
 

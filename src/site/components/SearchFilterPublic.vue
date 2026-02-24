@@ -166,7 +166,7 @@
 
       <CategoryPillSelector
         :categories="publicStore.availableCategories"
-        :selected-categories="publicStore.selectedCategoryNames"
+        :selected-categories="publicStore.selectedCategoryIds"
         :disabled="publicStore.isLoadingCategories"
         @update:selected-categories="handleCategoryChange"
       />
@@ -434,8 +434,8 @@ const updateURL = () => {
   }
 
   // Update category parameters
-  if (publicStore.selectedCategoryNames.length > 0) {
-    query.category = publicStore.selectedCategoryNames;
+  if (publicStore.selectedCategoryIds.length > 0) {
+    query.category = publicStore.selectedCategoryIds;
   }
   else {
     delete query.category;

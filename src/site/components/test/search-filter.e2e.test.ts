@@ -105,7 +105,7 @@ describe('Public Event Search & Filtering - End-to-End Tests', () => {
       // Component should not crash - the current implementation accepts all category names
       // The filtering will happen server-side and return no results for invalid categories
       expect(wrapper.vm).toBeDefined();
-      expect(store.selectedCategoryNames.length).toBeGreaterThan(0);
+      expect(store.selectedCategoryIds.length).toBeGreaterThan(0);
     });
   });
 
@@ -418,7 +418,7 @@ describe('Public Event Search & Filtering - End-to-End Tests', () => {
 
       // Verify complex state is set
       expect(store.searchQuery).toBe('yoga');
-      expect(store.selectedCategoryNames).toEqual(['Music', 'Arts']);
+      expect(store.selectedCategoryIds).toEqual(['Music', 'Arts']);
       expect(store.startDate).toBe('2025-11-15');
       expect(store.endDate).toBe('2025-11-21');
 
@@ -431,7 +431,7 @@ describe('Public Event Search & Filtering - End-to-End Tests', () => {
 
       // All filters should be cleared
       expect(store.searchQuery).toBe('');
-      expect(store.selectedCategoryNames).toEqual([]);
+      expect(store.selectedCategoryIds).toEqual([]);
       expect(store.startDate).toBeNull();
       expect(store.endDate).toBeNull();
 
@@ -476,7 +476,7 @@ describe('Public Event Search & Filtering - End-to-End Tests', () => {
 
       // Store should match shared URL parameters exactly
       expect(store.searchQuery).toBe('farmers market');
-      expect(store.selectedCategoryNames).toEqual(['Music']);
+      expect(store.selectedCategoryIds).toEqual(['Music']);
       expect(store.startDate).toBe('2025-11-15');
       expect(store.endDate).toBe('2025-11-22');
 

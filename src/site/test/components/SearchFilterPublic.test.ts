@@ -154,7 +154,7 @@ describe('SearchFilterPublic Component', () => {
       // Emit category selection
       await pillSelector.vm.$emit('update:selectedCategories', ['Sports']);
 
-      expect(store.selectedCategoryNames).toContain('Sports');
+      expect(store.selectedCategoryIds).toContain('Sports');
     });
   });
 
@@ -332,7 +332,7 @@ describe('SearchFilterPublic Component', () => {
 
       // Store should be initialized from URL params
       expect(store.searchQuery).toBe('yoga');
-      expect(store.selectedCategoryNames).toEqual(['Sports', 'Health']);
+      expect(store.selectedCategoryIds).toEqual(['Sports', 'Health']);
       expect(store.startDate).toBe('2025-01-01');
       expect(store.endDate).toBe('2025-01-07');
     });

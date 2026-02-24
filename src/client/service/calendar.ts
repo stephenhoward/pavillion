@@ -85,18 +85,21 @@ export default class CalendarService {
   /**
    * Create a new calendar with the given name
    * @param urlName The URL name for the calendar
+   * @param title Optional human-readable title for the calendar
    * @returns Promise<Calendar> The newly created calendar
    */
-  async createCalendar(urlName: string): Promise<Calendar> {
+  async createCalendar(urlName: string, title?: string): Promise<Calendar> {
     if (!urlName || urlName.trim() === '') {
       throw new EmptyValueError('urlName is empty');
     }
 
     try {
-      const createdCalendar = await ModelService.createModel(
-        new Calendar(undefined, urlName.trim()),
-        '/api/v1/calendars',
-      );
+      const body: Record<string, any> = { urlName: urlName.trim() };
+      if (title && title.trim()) {
+        body.content = { en: { name: title.trim() } };
+      }
+      const response = await axios.post('/api/v1/calendars', body);
+      const createdCalendar = response.data;
       const newCalendar = Calendar.fromObject(createdCalendar);
 
       // Add the new calendar to the store

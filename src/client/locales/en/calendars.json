@@ -17,7 +17,10 @@
     "aria_create_new_calendar": "Create New Calendar",
     "aria_new_calendar_form": "New Calendar Form",
     "legend_calendar_creation": "Calendar Creation",
-    "label_calendar_name": "Calendar Name"
+    "label_calendar_name": "Calendar Name",
+    "label_calendar_title": "Calendar Title",
+    "calendar_title_placeholder": "My Community Calendar",
+    "calendar_title_help": "A human-readable title for your calendar"
   },
   "selector": {
     "select_calendar_title": "Select Calendar",

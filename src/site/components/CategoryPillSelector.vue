@@ -4,13 +4,13 @@ import { EventCategory } from '@/common/model/event_category';
 
 export interface CategoryPillSelectorProps {
   categories: EventCategory[];
-  selectedCategories: string[]; // Now expects category names instead of IDs
+  selectedCategories: string[];
   disabled?: boolean;
   maxDisplayRows?: number;
 }
 
 export interface CategoryPillSelectorEmits {
-  (e: 'update:selectedCategories', value: string[]): void; // Now emits category names instead of IDs
+  (e: 'update:selectedCategories', value: string[]): void;
 }
 
 const props = withDefaults(defineProps<CategoryPillSelectorProps>(), {
@@ -25,30 +25,26 @@ const canScrollLeft = ref(false);
 const canScrollRight = ref(false);
 
 /**
- * Check if a category is currently selected by name
+ * Check if a category is currently selected by ID (per DEC-005)
  */
 const isCategorySelected = (category: EventCategory): boolean => {
-  const categoryName = getCategoryDisplayName(category);
-  return props.selectedCategories.includes(categoryName);
+  return props.selectedCategories.includes(category.id);
 };
 
 /**
- * Toggle category selection state using category name
+ * Toggle category selection state using category ID
  */
 const toggleCategory = (category: EventCategory): void => {
   if (props.disabled) return;
 
-  const categoryName = getCategoryDisplayName(category);
   const currentSelection = [...props.selectedCategories];
-  const index = currentSelection.indexOf(categoryName);
+  const index = currentSelection.indexOf(category.id);
 
   if (index > -1) {
-    // Remove category from selection
     currentSelection.splice(index, 1);
   }
   else {
-    // Add category to selection
-    currentSelection.push(categoryName);
+    currentSelection.push(category.id);
   }
 
   emit('update:selectedCategories', currentSelection);

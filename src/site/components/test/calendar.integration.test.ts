@@ -125,7 +125,7 @@ describe('calendar.vue - SearchFilterPublic Integration', () => {
 
     // Verify store state matches URL parameters
     expect(store.searchQuery).toBe('yoga');
-    expect(store.selectedCategoryNames).toEqual(['Fitness', 'Wellness']);
+    expect(store.selectedCategoryIds).toEqual(['Fitness', 'Wellness']);
     expect(store.startDate).toBe('2025-11-15');
     expect(store.endDate).toBe('2025-11-22');
   });
@@ -197,7 +197,7 @@ describe('calendar.vue - SearchFilterPublic Integration', () => {
     await new Promise(resolve => setTimeout(resolve, 50));
 
     expect(store.searchQuery).toBe('yoga');
-    expect(store.selectedCategoryNames).toEqual(['Fitness']);
+    expect(store.selectedCategoryIds).toEqual(['Fitness']);
 
     // Apply second set of filters
     await router.push({
@@ -209,7 +209,7 @@ describe('calendar.vue - SearchFilterPublic Integration', () => {
     await new Promise(resolve => setTimeout(resolve, 50));
 
     expect(store.searchQuery).toBe('concert');
-    expect(store.selectedCategoryNames).toEqual(['Music']);
+    expect(store.selectedCategoryIds).toEqual(['Music']);
 
     // Simulate browser back button
     await router.back();
@@ -218,7 +218,7 @@ describe('calendar.vue - SearchFilterPublic Integration', () => {
 
     // Verify filters restored to previous state
     expect(store.searchQuery).toBe('yoga');
-    expect(store.selectedCategoryNames).toEqual(['Fitness']);
+    expect(store.selectedCategoryIds).toEqual(['Fitness']);
   });
 
   it('displays loading state during calendar data load', async () => {

@@ -23,6 +23,7 @@ const state = reactive({
 });
 
 const newCalendarName = ref('');
+const newCalendarTitle = ref('');
 const inputRef = ref(null);
 const inputWidth = ref('100px'); // default width
 const calendar_name_placeholder = t('calendar_name_placeholder');
@@ -95,7 +96,7 @@ async function createCalendar() {
   state.errorMessage = '';
 
   try {
-    const calendar = await calendarService.createCalendar(calendarName);
+    const calendar = await calendarService.createCalendar(calendarName, newCalendarTitle.value);
 
     // Navigate to the new calendar
     router.push({ path: '/calendar/' + calendar.urlName });
@@ -145,6 +146,17 @@ async function createCalendar() {
       <form @submit.prevent="createCalendar" :aria-label="t('aria_new_calendar_form')">
         <fieldset>
           <legend class="sr-only">{{ t('legend_calendar_creation') }}</legend>
+          <div class="calendar-title-field">
+            <label for="calendar-title">{{ t('label_calendar_title') }}</label>
+            <input
+              id="calendar-title"
+              type="text"
+              v-model="newCalendarTitle"
+              :placeholder="t('calendar_title_placeholder')"
+              aria-describedby="calendar-title-help"
+            />
+            <div id="calendar-title-help" class="help-text">{{ t('calendar_title_help') }}</div>
+          </div>
           <div class="calendar-url">
             <label for="calendar-name" class="sr-only">{{ t('label_calendar_name') }}</label>
             <input
@@ -222,6 +234,33 @@ nav[aria-label="My Calendars Navigation"] {
           outline-offset: var(--pav-space-xs);
         }
       }
+    }
+  }
+}
+
+.calendar-title-field {
+  margin-bottom: var(--pav-space-md);
+
+  label {
+    display: block;
+    font-size: var(--pav-font-size-body);
+    font-weight: var(--pav-font-weight-medium);
+    color: var(--pav-color-text-primary);
+    margin-bottom: var(--pav-space-xs);
+  }
+
+  input {
+    width: 100%;
+    padding: var(--pav-space-sm);
+    font-size: var(--pav-font-size-body);
+    border: 1px solid var(--pav-color-border-primary);
+    border-radius: var(--pav-border-radius-md);
+    background: var(--pav-color-surface-primary);
+    color: var(--pav-color-text-primary);
+
+    &:focus {
+      outline: none;
+      border-color: var(--pav-border-color-focus);
     }
   }
 }

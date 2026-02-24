@@ -107,7 +107,7 @@ describe('createCalendar', () => {
   const sandbox = sinon.createSandbox();
   let mockStore: ReturnType<typeof useCalendarStore>;
   let service: CalendarService;
-  let mockCreate: sinon.SinonStub;
+  const mockPost = vi.mocked(axios.post);
 
   beforeEach(() => {
     // Create a mock store before each test
@@ -116,7 +116,7 @@ describe('createCalendar', () => {
     };
     // Stub the useCalendarStore function to always return our mock
     service = new CalendarService(mockStore);
-    mockCreate = sandbox.stub(ModelService,'createModel');
+    mockPost.mockReset();
   });
 
   afterEach(() => {
@@ -126,69 +126,75 @@ describe('createCalendar', () => {
   it('should create a calendar with valid url name', async () => {
     // Arrange
     const urlName = 'test-calendar';
-    const mockCreatedCalendar = { id: 'cal1', urlName };
-    mockCreate.resolves(mockCreatedCalendar);
+    mockPost.mockResolvedValue({ data: { id: 'cal1', urlName } });
 
     // Act
     const result = await service.createCalendar(urlName);
 
     // Assert
-    expect(mockCreate.called).toBe(true);
+    expect(mockPost).toHaveBeenCalledWith('/api/v1/calendars', { urlName });
     expect(result.urlName).toBe(urlName);
     expect(mockStore.addCalendar.called).toBe(true);
+  });
+
+  it('should send title as content when provided', async () => {
+    // Arrange
+    const urlName = 'test-calendar';
+    const title = 'My Test Calendar';
+    mockPost.mockResolvedValue({ data: { id: 'cal1', urlName } });
+
+    // Act
+    await service.createCalendar(urlName, title);
+
+    // Assert
+    expect(mockPost).toHaveBeenCalledWith('/api/v1/calendars', {
+      urlName,
+      content: { en: { name: title } },
+    });
   });
 
   it('should throw EmptyValueError when url name is empty', async () => {
     // Act & Assert
     await expect(service.createCalendar('')).rejects.toThrow(EmptyValueError);
-    expect(mockCreate.called).toBe(false);
+    expect(mockPost).not.toHaveBeenCalled();
   });
 
   it('should throw EmptyValueError when url name is only whitespace', async () => {
     // Act & Assert
     await expect(service.createCalendar('   ')).rejects.toThrow(EmptyValueError);
-    expect(mockCreate.called).toBe(false);
+    expect(mockPost).not.toHaveBeenCalled();
   });
 
   it('should handle UrlNameAlreadyExistsError from API', async () => {
     // Arrange
     const urlName = 'existing-calendar';
-    const mockError = {
-      response: {
-        data: {
-          errorName: 'UrlNameAlreadyExistsError',
-        },
-      },
-    };
-    mockCreate.rejects(mockError);
+    mockPost.mockRejectedValue({
+      response: { data: { errorName: 'UrlNameAlreadyExistsError' } },
+    });
 
     // Act & Assert
     await expect(service.createCalendar(urlName)).rejects.toThrow(UrlNameAlreadyExistsError);
-    expect(mockCreate.called).toBe(true);
+    expect(mockPost).toHaveBeenCalled();
   });
 
   it('should handle InvalidUrlNameError from API', async () => {
     // Arrange
-    mockCreate.rejects({
-      response: {
-        data: {
-          errorName: 'InvalidUrlNameError',
-        },
-      },
+    mockPost.mockRejectedValue({
+      response: { data: { errorName: 'InvalidUrlNameError' } },
     });
 
     // Act & Assert
     await expect(service.createCalendar('invalid-name')).rejects.toThrow(InvalidUrlNameError);
-    expect(mockCreate.called).toBe(true);
+    expect(mockPost).toHaveBeenCalled();
   });
 
   it('should throw UnknownError for unexpected errors', async () => {
     // Arrange
-    (ModelService.createModel as sinon.SinonStub).rejects(new Error('Unexpected error'));
+    mockPost.mockRejectedValue(new Error('Unexpected error'));
 
     // Act & Assert
     await expect(service.createCalendar('test-calendar')).rejects.toThrow(UnknownError);
-    expect(mockCreate.called).toBe(true);
+    expect(mockPost).toHaveBeenCalled();
   });
 });
 

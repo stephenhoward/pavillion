@@ -96,7 +96,7 @@ describe('CategoryPillSelector Component', () => {
 
       const { wrapper } = mountCategoryPillSelector({
         categories,
-        selectedCategories: ['Arts'],
+        selectedCategories: ['1'],
       });
       currentWrapper = wrapper;
 
@@ -110,7 +110,7 @@ describe('CategoryPillSelector Component', () => {
 
       const { wrapper } = mountCategoryPillSelector({
         categories,
-        selectedCategories: ['Arts'],
+        selectedCategories: ['1'],
       });
       currentWrapper = wrapper;
 
@@ -154,7 +154,7 @@ describe('CategoryPillSelector Component', () => {
 
       const emitted = wrapper.emitted('update:selectedCategories');
       expect(emitted).toBeTruthy();
-      expect(emitted?.[0]).toEqual([['Arts']]);
+      expect(emitted?.[0]).toEqual([['1']]);
     });
 
     it('toggles category selection on click', async () => {
@@ -171,10 +171,10 @@ describe('CategoryPillSelector Component', () => {
       // First click should select
       await pill.trigger('click');
       let emitted = wrapper.emitted('update:selectedCategories');
-      expect(emitted?.[0]).toEqual([['Arts']]);
+      expect(emitted?.[0]).toEqual([['1']]);
 
       // Second click should deselect
-      await wrapper.setProps({ selectedCategories: ['Arts'] });
+      await wrapper.setProps({ selectedCategories: ['1'] });
       await pill.trigger('click');
       emitted = wrapper.emitted('update:selectedCategories');
       expect(emitted?.[1]).toEqual([[]]);
@@ -194,13 +194,13 @@ describe('CategoryPillSelector Component', () => {
       // Select first category
       await pills[0].trigger('click');
       let emitted = wrapper.emitted('update:selectedCategories');
-      expect(emitted?.[0]).toEqual([['Arts']]);
+      expect(emitted?.[0]).toEqual([['1']]);
 
       // Select second category (should add to selection)
-      await wrapper.setProps({ selectedCategories: ['Arts'] });
+      await wrapper.setProps({ selectedCategories: ['1'] });
       await pills[1].trigger('click');
       emitted = wrapper.emitted('update:selectedCategories');
-      expect(emitted?.[1]).toEqual([['Arts', 'Sports']]);
+      expect(emitted?.[1]).toEqual([['1', '2']]);
     });
 
     it('does not emit events when disabled', async () => {
@@ -247,7 +247,7 @@ describe('CategoryPillSelector Component', () => {
 
       const emitted = wrapper.emitted('update:selectedCategories');
       expect(emitted).toBeTruthy();
-      expect(emitted?.[0]).toEqual([['Arts']]);
+      expect(emitted?.[0]).toEqual([['1']]);
     });
 
     it('toggles selection with Enter key', async () => {
@@ -261,7 +261,7 @@ describe('CategoryPillSelector Component', () => {
 
       const emitted = wrapper.emitted('update:selectedCategories');
       expect(emitted).toBeTruthy();
-      expect(emitted?.[0]).toEqual([['Arts']]);
+      expect(emitted?.[0]).toEqual([['1']]);
     });
 
     it('does not respond to keyboard when disabled', async () => {
@@ -289,7 +289,7 @@ describe('CategoryPillSelector Component', () => {
 
       const { wrapper } = mountCategoryPillSelector({
         categories,
-        selectedCategories: ['Sports'],
+        selectedCategories: ['2'],
       });
       currentWrapper = wrapper;
 
@@ -451,7 +451,7 @@ describe('CategoryPillSelector Component', () => {
 
       const emitted = wrapper.emitted('update:selectedCategories');
       expect(emitted).toBeTruthy();
-      expect(emitted?.[0]).toEqual([['Arts']]);
+      expect(emitted?.[0]).toEqual([['1']]);
     });
 
     it('provides visual feedback for touch interactions', async () => {
@@ -470,7 +470,7 @@ describe('CategoryPillSelector Component', () => {
 
       // Check that the component would emit the change
       const emitted = wrapper.emitted('update:selectedCategories');
-      expect(emitted?.[0]).toEqual([['Arts']]);
+      expect(emitted?.[0]).toEqual([['1']]);
     });
 
     it('prevents selection when disabled on touch devices', async () => {
@@ -529,7 +529,7 @@ describe('CategoryPillSelector Component', () => {
 
       const { wrapper } = mountCategoryPillSelector({
         categories,
-        selectedCategories: ['Arts'],
+        selectedCategories: ['1'],
       });
       currentWrapper = wrapper;
 
@@ -580,7 +580,7 @@ describe('CategoryPillSelector Component', () => {
 
       const { wrapper } = mountCategoryPillSelector({
         categories,
-        selectedCategories: ['Arts'],
+        selectedCategories: ['1'],
       });
       currentWrapper = wrapper;
 
@@ -648,7 +648,7 @@ describe('CategoryPillSelector Component', () => {
       // Test Space key
       await pill.trigger('keydown', { key: ' ' });
       let emitted = wrapper.emitted('update:selectedCategories');
-      expect(emitted?.[0]).toEqual([['Arts']]);
+      expect(emitted?.[0]).toEqual([['1']]);
 
       // Test Enter key
       await pill.trigger('keydown', { key: 'Enter' });

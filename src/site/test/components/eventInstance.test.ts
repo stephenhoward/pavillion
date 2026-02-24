@@ -38,6 +38,16 @@ let mockCategories: Array<{
   content: (lang: string) => { name: string };
 }> = [];
 
+// Mutable location state so individual tests can inject location data
+let mockLocation: {
+  name: string;
+  address: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+} | null = null;
+
 vi.mock('@/site/service/calendar', () => {
   return {
     default: vi.fn().mockImplementation(() => ({
@@ -55,6 +65,7 @@ vi.mock('@/site/service/calendar', () => {
             content: (_lang: string) => ({ name: 'Test Event', description: 'Description here' }),
             media: null,
             categories: mockCategories,
+            location: mockLocation,
           },
         }),
       ),
@@ -156,6 +167,7 @@ describe('eventInstance breadcrumb locale behaviour', () => {
     mockLocalizedPath.mockReset();
     mockCurrentLocale.value = 'en';
     mockCategories = [];
+    mockLocation = null;
   });
 
   afterEach(() => {
@@ -215,6 +227,7 @@ describe('eventInstance category badge locale behaviour', () => {
     mockLocalizedPath.mockReset();
     mockCurrentLocale.value = 'en';
     mockCategories = [];
+    mockLocation = null;
   });
 
   afterEach(() => {
@@ -373,6 +386,7 @@ describe('eventInstance category badge locale behaviour', () => {
   describe('no categories', () => {
     it('renders no category badges when event has no categories', async () => {
       mockCategories = [];
+      mockLocation = null;
 
       const wrapper = await mountInstance(
         '/view/test_calendar/events/evt-1/inst-1',
@@ -383,5 +397,76 @@ describe('eventInstance category badge locale behaviour', () => {
       expect(badges.length).toBe(0);
       wrapper.unmount();
     });
+  });
+});
+
+describe('eventInstance location display', () => {
+  beforeEach(() => {
+    mockLocalizedPath.mockReset();
+    mockCurrentLocale.value = 'en';
+    mockCategories = [];
+    mockLocation = null;
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('displays location section when event has location data', async () => {
+    mockLocation = {
+      name: 'Community Center',
+      address: '123 Main St',
+      city: 'Springfield',
+      state: 'IL',
+      postalCode: '62701',
+      country: 'US',
+    };
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    const locationSection = wrapper.find('.event-location');
+    expect(locationSection.exists()).toBe(true);
+    expect(locationSection.find('.location-name').text()).toBe('Community Center');
+    expect(locationSection.find('.location-address').text()).toContain('123 Main St');
+    expect(locationSection.find('.location-address').text()).toContain('Springfield');
+    expect(locationSection.find('.location-address').text()).toContain('IL');
+    wrapper.unmount();
+  });
+
+  it('does not display location section when event has no location', async () => {
+    mockLocation = null;
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    expect(wrapper.find('.event-location').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('shows venue name without address when only name is set', async () => {
+    mockLocation = {
+      name: 'Town Hall',
+      address: '',
+      city: '',
+      state: '',
+      postalCode: '',
+      country: '',
+    };
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    const locationSection = wrapper.find('.event-location');
+    expect(locationSection.exists()).toBe(true);
+    expect(locationSection.find('.location-name').text()).toBe('Town Hall');
+    expect(locationSection.find('.location-address').exists()).toBe(false);
+    wrapper.unmount();
   });
 });

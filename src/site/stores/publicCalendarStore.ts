@@ -14,7 +14,7 @@ export interface PublicCalendarState {
 
   // Category filtering
   availableCategories: EventCategory[];
-  selectedCategoryNames: string[]; // Changed from IDs to names
+  selectedCategoryIds: string[];
 
   // Search filtering
   searchQuery: string;
@@ -48,7 +48,7 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
     calendarDefaultDateRange: '2weeks',
     isCalendarSettingsLoaded: false,
     availableCategories: [],
-    selectedCategoryNames: [],
+    selectedCategoryIds: [],
     searchQuery: '',
     startDate: null,
     endDate: null,
@@ -65,27 +65,14 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
      * Get events filtered by selected categories
      */
     getFilteredEvents(): CalendarEventInstance[] {
-      console.log('filter by ',this.selectedCategoryNames);
-      if (this.selectedCategoryNames.length === 0) {
+      if (this.selectedCategoryIds.length === 0) {
         return this.allEvents;
       }
 
-      return this.allEvents.filter(event => {
-        // Check if event has any of the selected categories by name
-        console.log(event);
-        const eventCategoryNames = event.event.categories?.map(cat => {
-          try {
-            // Get category name in English, fallback to first available language
-            const content = cat.content('en') || cat.content(cat.getLanguages()[0]);
-            return content?.name || '';
-          }
-          catch {
-            return '';
-          }
-        }).filter(name => name.length > 0) || [];
-
-        return this.selectedCategoryNames.some(selectedName =>
-          eventCategoryNames.includes(selectedName),
+      return this.allEvents.filter(instance => {
+        const eventCategoryIds = instance.event.categories?.map(cat => cat.id) || [];
+        return this.selectedCategoryIds.some(selectedId =>
+          eventCategoryIds.includes(selectedId),
         );
       });
     },
@@ -114,7 +101,7 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
      */
     hasActiveFilters(): boolean {
       return (
-        this.selectedCategoryNames.length > 0 ||
+        this.selectedCategoryIds.length > 0 ||
         this.searchQuery.trim().length > 0 ||
         this.startDate !== null ||
         this.endDate !== null
@@ -230,11 +217,9 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
           params.append('search', filters.search.trim());
         }
 
-        // Add category filter parameters if provided
+        // Add category filter parameters if provided (UUIDs per DEC-005)
         if (filters?.categories && filters.categories.length > 0) {
-          filters.categories.forEach(name => params.append('category', name));
-          // Add language parameter so backend knows which language to use for category name matching
-          params.append('lang', 'en');
+          filters.categories.forEach(id => params.append('category', id));
         }
 
         // Add date range parameters - use calendar's default if none specified
@@ -269,20 +254,20 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
     /**
      * Set selected category names
      */
-    setSelectedCategories(categoryNames: string[]) {
-      this.selectedCategoryNames = [...categoryNames];
+    setSelectedCategories(categoryIds: string[]) {
+      this.selectedCategoryIds = [...categoryIds];
     },
 
     /**
      * Toggle a category filter
      */
-    toggleCategory(categoryName: string) {
-      const index = this.selectedCategoryNames.indexOf(categoryName);
+    toggleCategory(categoryId: string) {
+      const index = this.selectedCategoryIds.indexOf(categoryId);
       if (index > -1) {
-        this.selectedCategoryNames.splice(index, 1);
+        this.selectedCategoryIds.splice(index, 1);
       }
       else {
-        this.selectedCategoryNames.push(categoryName);
+        this.selectedCategoryIds.push(categoryId);
       }
     },
 
@@ -306,7 +291,7 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
      */
     clearAllFilters() {
       this.searchQuery = '';
-      this.selectedCategoryNames = [];
+      this.selectedCategoryIds = [];
       this.startDate = null;
       this.endDate = null;
     },
@@ -315,7 +300,7 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
      * Clear all category filters only
      */
     clearFilters() {
-      this.selectedCategoryNames = [];
+      this.selectedCategoryIds = [];
     },
 
     /**
@@ -325,7 +310,7 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
       this.calendarDefaultDateRange = this.serverDefaultDateRange;
       this.isCalendarSettingsLoaded = false;
       this.availableCategories = [];
-      this.selectedCategoryNames = [];
+      this.selectedCategoryIds = [];
       this.searchQuery = '';
       this.startDate = null;
       this.endDate = null;
@@ -348,8 +333,8 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
         if (this.searchQuery.trim().length >= 3) {
           filters.search = this.searchQuery;
         }
-        if (this.selectedCategoryNames.length > 0) {
-          filters.categories = this.selectedCategoryNames;
+        if (this.selectedCategoryIds.length > 0) {
+          filters.categories = this.selectedCategoryIds;
         }
         if (this.startDate) {
           filters.startDate = this.startDate;
