@@ -8,6 +8,10 @@
  * - Category badge links use localizedPath() for locale awareness.
  * - Category badge links use category.id (UUID) as the query param, not the English display name.
  * - Category names are displayed in the current UI language with English fallback.
+ * - End time is displayed when state.instance.end is not null.
+ * - Same-day events show only the time portion for the end time.
+ * - Multi-day events show the full datetime for the end time.
+ * - document.title is set to "Event Name | Pavillion" after loading.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises, VueWrapper } from '@vue/test-utils';
@@ -48,6 +52,16 @@ let mockLocation: {
   country: string;
 } | null = null;
 
+// Mutable end state so individual tests can inject end time data
+let mockEnd: {
+  toISO: () => string;
+  toLocal: () => { setLocale: (locale: string) => { toLocaleString: (fmt: unknown) => string } };
+  hasSame: (other: unknown, unit: string) => boolean;
+} | null = null;
+
+// Mutable event name so individual tests can control the event title
+let mockEventName = 'Test Event';
+
 vi.mock('@/site/service/calendar', () => {
   return {
     default: vi.fn().mockImplementation(() => ({
@@ -61,10 +75,16 @@ vi.mock('@/site/service/calendar', () => {
         Promise.resolve({
           start: {
             toISO: () => '2026-03-01T10:00:00.000Z',
-            toLocal: () => ({ toLocaleString: () => 'March 1, 2026, 10:00 AM' }),
+            toLocal: () => ({
+              setLocale: (_locale: string) => ({
+                toLocaleString: () => 'March 1, 2026, 10:00 AM',
+              }),
+            }),
+            hasSame: (_other: unknown, unit: string) => unit === 'day' ? true : false,
           },
+          end: mockEnd,
           event: {
-            content: (_lang: string) => ({ name: 'Test Event', description: 'Description here' }),
+            content: (_lang: string) => ({ name: mockEventName, description: 'Description here' }),
             hasContent: (_lang: string) => true,
             getLanguages: () => ['en'],
             media: null,
@@ -174,6 +194,8 @@ describe('eventInstance breadcrumb locale behaviour', () => {
     mockCurrentLocale.value = 'en';
     mockCategories = [];
     mockLocation = null;
+    mockEnd = null;
+    mockEventName = 'Test Event';
   });
 
   afterEach(() => {
@@ -234,6 +256,8 @@ describe('eventInstance category badge locale behaviour', () => {
     mockCurrentLocale.value = 'en';
     mockCategories = [];
     mockLocation = null;
+    mockEnd = null;
+    mockEventName = 'Test Event';
   });
 
   afterEach(() => {
@@ -412,6 +436,8 @@ describe('eventInstance location display', () => {
     mockCurrentLocale.value = 'en';
     mockCategories = [];
     mockLocation = null;
+    mockEnd = null;
+    mockEventName = 'Test Event';
   });
 
   afterEach(() => {
@@ -473,6 +499,126 @@ describe('eventInstance location display', () => {
     expect(locationSection.exists()).toBe(true);
     expect(locationSection.find('.location-name').text()).toBe('Town Hall');
     expect(locationSection.find('.location-address').exists()).toBe(false);
+    wrapper.unmount();
+  });
+});
+
+describe('eventInstance end time display', () => {
+  beforeEach(() => {
+    mockLocalizedPath.mockReset();
+    mockCurrentLocale.value = 'en';
+    mockCategories = [];
+    mockLocation = null;
+    mockEnd = null;
+    mockEventName = 'Test Event';
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('does not show an end time separator when end is null', async () => {
+    mockEnd = null;
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    const timeEl = wrapper.find('.event-datetime');
+    expect(timeEl.exists()).toBe(true);
+    expect(timeEl.text()).not.toContain('–');
+    wrapper.unmount();
+  });
+
+  it('shows end time with em-dash separator when end is on the same day', async () => {
+    // Same day: hasSame('day') returns true => TIME_SIMPLE format for end
+    mockEnd = {
+      toISO: () => '2026-03-01T12:00:00.000Z',
+      toLocal: () => ({
+        setLocale: (_locale: string) => ({
+          toLocaleString: () => '12:00 PM',
+        }),
+      }),
+      hasSame: (_other: unknown, unit: string) => unit === 'day',
+    };
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    const timeEl = wrapper.find('.event-datetime');
+    expect(timeEl.exists()).toBe(true);
+    const text = timeEl.text();
+    expect(text).toContain('–');
+    expect(text).toContain('12:00 PM');
+    wrapper.unmount();
+  });
+
+  it('shows full datetime for end time when end is on a different day', async () => {
+    // Different day: hasSame('day') returns false => DATETIME_MED format for end
+    mockEnd = {
+      toISO: () => '2026-03-02T02:00:00.000Z',
+      toLocal: () => ({
+        setLocale: (_locale: string) => ({
+          toLocaleString: () => 'Mar 2, 2026, 2:00 AM',
+        }),
+      }),
+      hasSame: (_other: unknown, unit: string) => unit !== 'day',
+    };
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    const timeEl = wrapper.find('.event-datetime');
+    expect(timeEl.exists()).toBe(true);
+    const text = timeEl.text();
+    expect(text).toContain('–');
+    expect(text).toContain('Mar 2, 2026, 2:00 AM');
+    wrapper.unmount();
+  });
+});
+
+describe('eventInstance document.title', () => {
+  beforeEach(() => {
+    mockLocalizedPath.mockReset();
+    mockCurrentLocale.value = 'en';
+    mockCategories = [];
+    mockLocation = null;
+    mockEnd = null;
+    mockEventName = 'Test Event';
+    document.title = 'Pavillion'; // Reset to default before each test
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    document.title = 'Pavillion';
+  });
+
+  it('sets document.title to "Event Name | Pavillion" after loading event data', async () => {
+    mockEventName = 'My Awesome Concert';
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    expect(document.title).toBe('My Awesome Concert | Pavillion');
+    wrapper.unmount();
+  });
+
+  it('sets document.title using the localized event name', async () => {
+    mockEventName = 'Test Event';
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    expect(document.title).toBe('Test Event | Pavillion');
     wrapper.unmount();
   });
 });

@@ -604,6 +604,121 @@ describe('SearchFilterPublic Component', () => {
     });
   });
 
+  describe('Clear All Filters Persistent Button', () => {
+    it('should not show clear-all-filters-btn when no filters are active', async () => {
+      const wrapper = mount(SearchFilterPublic, {
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+
+      expect(wrapper.find('.clear-all-filters-btn').exists()).toBe(false);
+    });
+
+    it('should show clear-all-filters-btn when search filter is active', async () => {
+      const store = usePublicCalendarStore();
+      store.setSearchQuery('yoga');
+
+      const wrapper = mount(SearchFilterPublic, {
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+
+      expect(wrapper.find('.clear-all-filters-btn').exists()).toBe(true);
+    });
+
+    it('should show clear-all-filters-btn when category filter is active', async () => {
+      const store = usePublicCalendarStore();
+      store.setSelectedCategories(['cat-1']);
+
+      const wrapper = mount(SearchFilterPublic, {
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+
+      expect(wrapper.find('.clear-all-filters-btn').exists()).toBe(true);
+    });
+
+    it('should show clear-all-filters-btn when date filter is active and results exist', async () => {
+      const wrapper = mount(SearchFilterPublic, {
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+
+      // Activate date filter
+      const dateFilterButton = wrapper.find('.date-filter-button');
+      await dateFilterButton.trigger('click');
+      await flushPromises();
+
+      const pills = wrapper.findAll('.date-pill');
+      await pills[0].trigger('click'); // Click "This Week"
+      await flushPromises();
+
+      // Clear all filters button should be visible
+      expect(wrapper.find('.clear-all-filters-btn').exists()).toBe(true);
+    });
+
+    it('should clear all filters and local state when clear-all-filters-btn clicked', async () => {
+      const store = usePublicCalendarStore();
+      store.setSearchQuery('yoga');
+
+      await router.push('/calendar/test');
+
+      const wrapper = mount(SearchFilterPublic, {
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+
+      // Confirm button is visible
+      const clearAllBtn = wrapper.find('.clear-all-filters-btn');
+      expect(clearAllBtn.exists()).toBe(true);
+
+      // Click it
+      await clearAllBtn.trigger('click');
+      await flushPromises();
+
+      // Store should be cleared
+      expect(store.searchQuery).toBe('');
+      expect(store.selectedCategoryIds).toEqual([]);
+    });
+
+    it('should hide clear-all-filters-btn after all filters are cleared', async () => {
+      const store = usePublicCalendarStore();
+      store.setSearchQuery('yoga');
+
+      const wrapper = mount(SearchFilterPublic, {
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+
+      expect(wrapper.find('.clear-all-filters-btn').exists()).toBe(true);
+
+      // Click clear all
+      await wrapper.find('.clear-all-filters-btn').trigger('click');
+      await flushPromises();
+
+      // Button should disappear
+      expect(wrapper.find('.clear-all-filters-btn').exists()).toBe(false);
+    });
+  });
+
   describe('External Clear All Filters', () => {
     it('should clear search input when store searchQuery is cleared externally', async () => {
       const store = usePublicCalendarStore();
@@ -663,6 +778,91 @@ describe('SearchFilterPublic Component', () => {
 
       // URL should no longer have search param
       expect(router.currentRoute.value.query.search).toBeUndefined();
+    });
+
+    it('should remove category URL params when store selectedCategoryIds is cleared externally', async () => {
+      const store = usePublicCalendarStore();
+
+      await router.push({
+        path: '/calendar/test',
+        query: { category: ['cat-1', 'cat-2'] },
+      });
+
+      mount(SearchFilterPublic, {
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+
+      // Confirm category params are in URL
+      expect(router.currentRoute.value.query.category).toEqual(['cat-1', 'cat-2']);
+
+      // Simulate external clearAllFilters call (as calendar.vue does)
+      store.clearAllFilters();
+      await flushPromises();
+
+      // URL should no longer have category params
+      expect(router.currentRoute.value.query.category).toBeUndefined();
+    });
+
+    it('should remove startDate and endDate URL params when store dates are cleared externally', async () => {
+      const store = usePublicCalendarStore();
+
+      await router.push({
+        path: '/calendar/test',
+        query: { startDate: '2025-01-01', endDate: '2025-01-07' },
+      });
+
+      mount(SearchFilterPublic, {
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+
+      // Confirm date params are in URL and store is initialized
+      expect(router.currentRoute.value.query.startDate).toBe('2025-01-01');
+      expect(router.currentRoute.value.query.endDate).toBe('2025-01-07');
+      expect(store.startDate).toBe('2025-01-01');
+      expect(store.endDate).toBe('2025-01-07');
+
+      // Simulate external clearAllFilters call (as calendar.vue does)
+      store.clearAllFilters();
+      await flushPromises();
+
+      // URL should no longer have date params
+      expect(router.currentRoute.value.query.startDate).toBeUndefined();
+      expect(router.currentRoute.value.query.endDate).toBeUndefined();
+    });
+
+    it('should reset date filter button to unfiltered state when store dates are cleared externally', async () => {
+      const store = usePublicCalendarStore();
+
+      await router.push({
+        path: '/calendar/test',
+        query: { startDate: '2025-01-01', endDate: '2025-01-07' },
+      });
+
+      const wrapper = mount(SearchFilterPublic, {
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+
+      // Verify that date filter appears active (clear button should be visible)
+      expect(wrapper.find('.clear-date-filter').exists()).toBe(true);
+
+      // Simulate external clearAllFilters call (as calendar.vue does)
+      store.clearAllFilters();
+      await flushPromises();
+
+      // Clear date filter button should no longer be visible
+      expect(wrapper.find('.clear-date-filter').exists()).toBe(false);
     });
   });
 

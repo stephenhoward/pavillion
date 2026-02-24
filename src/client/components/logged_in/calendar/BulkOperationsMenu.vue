@@ -84,8 +84,9 @@ const deleteEvents = () => {
 
       <PillButton
         type="button"
-        variant="ghost"
+        variant="secondary"
         size="sm"
+        class="deselect-btn"
         data-testid="deselect-all-btn"
         @click="deselectAll"
         :aria-label="t('deselect_all_label')"
@@ -136,6 +137,18 @@ const deleteEvents = () => {
       &:hover {
         background-color: var(--pav-color-red-600);
         border-color: var(--pav-color-red-600);
+      }
+    }
+
+    // White outlined style for deselect button on dark toolbar background
+    .deselect-btn {
+      background-color: transparent;
+      color: white;
+      border-color: rgba(255, 255, 255, 0.5);
+
+      &:hover {
+        background-color: rgba(255, 255, 255, 0.15);
+        border-color: white;
       }
     }
   }

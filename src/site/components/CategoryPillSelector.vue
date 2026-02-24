@@ -29,7 +29,7 @@ const canScrollRight = ref(false);
 // useTranslation subscribes to i18next language change events so this
 // component re-renders when the UI locale is switched, ensuring
 // localizedContent resolves the updated language.
-useTranslation();
+const { t } = useTranslation('system');
 
 const { localizedContent } = useLocalizedContent();
 
@@ -85,12 +85,15 @@ const getCategoryDisplayName = (category: EventCategory): string => {
 };
 
 /**
- * Generate ARIA label for accessibility
+ * Generate ARIA label for accessibility, translated to the current locale
  */
 const getCategoryAriaLabel = (category: EventCategory): string => {
   const name = getCategoryDisplayName(category);
   const isSelected = isCategorySelected(category);
-  return `${name} category filter, ${isSelected ? 'selected' : 'not selected'}`;
+  return t('category_filter_aria_label', {
+    name,
+    state: isSelected ? t('selected') : t('not_selected'),
+  });
 };
 
 /**
@@ -166,7 +169,7 @@ onUnmounted(() => {
       v-if="canScrollLeft"
       class="scroll-arrow scroll-arrow-left"
       @click="scrollLeft"
-      aria-label="Scroll categories left"
+      :aria-label="t('scroll_categories_left')"
       type="button"
     >
       ‹
@@ -211,7 +214,7 @@ onUnmounted(() => {
       v-if="canScrollRight"
       class="scroll-arrow scroll-arrow-right"
       @click="scrollRight"
-      aria-label="Scroll categories right"
+      :aria-label="t('scroll_categories_right')"
       type="button"
     >
       ›

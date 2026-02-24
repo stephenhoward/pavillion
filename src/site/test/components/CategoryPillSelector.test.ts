@@ -73,6 +73,26 @@ const createMultilingualCategory = (
   return category;
 };
 
+/**
+ * A no-op matchMedia stub that returns matches: false for all queries.
+ * Used to satisfy the getScrollBehavior helper in tests that don't exercise it directly.
+ */
+const stubMatchMedia = () => {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
+};
+
 describe('CategoryPillSelector Component', () => {
   let currentWrapper: any = null;
 
@@ -80,8 +100,24 @@ describe('CategoryPillSelector Component', () => {
     await i18next.init({
       lng: 'en',
       resources: {
-        en: { system: {} },
-        es: { system: {} },
+        en: {
+          system: {
+            scroll_categories_left: 'Scroll categories left',
+            scroll_categories_right: 'Scroll categories right',
+            category_filter_aria_label: '{{name}} category filter, {{state}}',
+            selected: 'selected',
+            not_selected: 'not selected',
+          },
+        },
+        es: {
+          system: {
+            scroll_categories_left: 'Desplazar categorías a la izquierda',
+            scroll_categories_right: 'Desplazar categorías a la derecha',
+            category_filter_aria_label: '{{name}} filtro de categoría, {{state}}',
+            selected: 'seleccionado',
+            not_selected: 'no seleccionado',
+          },
+        },
         fr: { system: {} },
       },
     });
@@ -965,6 +1001,192 @@ describe('CategoryPillSelector Component', () => {
       expect(scrollIntoViewMock).toHaveBeenCalledWith(
         expect.objectContaining({ behavior: 'smooth' }),
       );
+    });
+  });
+
+  describe('Scroll button aria-labels', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    /**
+     * Force the scroll container to report scrollable dimensions so that
+     * canScrollRight becomes true and the right scroll arrow is rendered.
+     */
+    const makeScrollable = (wrapper: any) => {
+      const container = wrapper.find('.category-pill-selector').element as HTMLElement;
+      Object.defineProperty(container, 'scrollWidth', { configurable: true, get: () => 500 });
+      Object.defineProperty(container, 'clientWidth', { configurable: true, get: () => 200 });
+      Object.defineProperty(container, 'scrollLeft', { configurable: true, get: () => 100 });
+      // Dispatch scroll to trigger updateScrollButtons
+      container.dispatchEvent(new Event('scroll'));
+    };
+
+    it('scroll-right button aria-label uses translated string', async () => {
+      const categories = [
+        createTestCategory('1', 'Arts'),
+        createTestCategory('2', 'Sports'),
+        createTestCategory('3', 'Business'),
+      ];
+
+      const { wrapper } = await mountCategoryPillSelector({ categories });
+      currentWrapper = wrapper;
+
+      makeScrollable(wrapper);
+      await nextTick();
+
+      const scrollRightBtn = wrapper.find('.scroll-arrow-right');
+      expect(scrollRightBtn.exists()).toBe(true);
+      expect(scrollRightBtn.attributes('aria-label')).toBe('Scroll categories right');
+    });
+
+    it('scroll-left button aria-label uses translated string', async () => {
+      const categories = [
+        createTestCategory('1', 'Arts'),
+        createTestCategory('2', 'Sports'),
+        createTestCategory('3', 'Business'),
+      ];
+
+      const { wrapper } = await mountCategoryPillSelector({ categories });
+      currentWrapper = wrapper;
+
+      makeScrollable(wrapper);
+      await nextTick();
+
+      const scrollLeftBtn = wrapper.find('.scroll-arrow-left');
+      expect(scrollLeftBtn.exists()).toBe(true);
+      expect(scrollLeftBtn.attributes('aria-label')).toBe('Scroll categories left');
+    });
+
+    it('scroll button aria-labels update when locale changes to Spanish', async () => {
+      const categories = [
+        createTestCategory('1', 'Arts'),
+        createTestCategory('2', 'Sports'),
+        createTestCategory('3', 'Business'),
+      ];
+
+      const { wrapper } = await mountCategoryPillSelector({ categories });
+      currentWrapper = wrapper;
+
+      makeScrollable(wrapper);
+      await nextTick();
+
+      // Switch to Spanish
+      await i18next.changeLanguage('es');
+      await nextTick();
+
+      const scrollRightBtn = wrapper.find('.scroll-arrow-right');
+      expect(scrollRightBtn.exists()).toBe(true);
+      expect(scrollRightBtn.attributes('aria-label')).toBe('Desplazar categorías a la derecha');
+    });
+  });
+
+  describe('Category filter button aria-labels', () => {
+    beforeEach(() => {
+      // Ensure window.matchMedia is available for tests that trigger
+      // scrollToSelectedCategory on mount (which calls getScrollBehavior).
+      stubMatchMedia();
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('aria-label uses translated "not selected" state in English', async () => {
+      const categories = [createTestCategory('1', 'Arts')];
+
+      const { wrapper } = await mountCategoryPillSelector({ categories });
+      currentWrapper = wrapper;
+
+      const pill = wrapper.find('.category-pill');
+      expect(pill.attributes('aria-label')).toBe('Arts category filter, not selected');
+    });
+
+    it('aria-label uses translated "selected" state in English', async () => {
+      const categories = [createTestCategory('1', 'Arts')];
+
+      const { wrapper } = await mountCategoryPillSelector({
+        categories,
+        selectedCategories: ['1'],
+      });
+      currentWrapper = wrapper;
+
+      const pill = wrapper.find('.category-pill');
+      expect(pill.attributes('aria-label')).toBe('Arts category filter, selected');
+    });
+
+    it('aria-label is translated to Spanish when locale is Spanish', async () => {
+      const categories = [
+        createMultilingualCategory('1', [
+          { lang: 'en', name: 'Arts' },
+          { lang: 'es', name: 'Artes' },
+        ]),
+      ];
+
+      await i18next.changeLanguage('es');
+
+      const { wrapper } = await mountCategoryPillSelector(
+        { categories },
+        '/es/view/test-calendar',
+      );
+      currentWrapper = wrapper;
+
+      await nextTick();
+
+      const pill = wrapper.find('.category-pill');
+      expect(pill.attributes('aria-label')).toBe('Artes filtro de categoría, no seleccionado');
+    });
+
+    it('aria-label selected state is translated to Spanish', async () => {
+      const categories = [
+        createMultilingualCategory('1', [
+          { lang: 'en', name: 'Arts' },
+          { lang: 'es', name: 'Artes' },
+        ]),
+      ];
+
+      await i18next.changeLanguage('es');
+
+      const { wrapper } = await mountCategoryPillSelector(
+        { categories, selectedCategories: ['1'] },
+        '/es/view/test-calendar',
+      );
+      currentWrapper = wrapper;
+
+      await nextTick();
+
+      const pill = wrapper.find('.category-pill');
+      expect(pill.attributes('aria-label')).toBe('Artes filtro de categoría, seleccionado');
+    });
+
+    it('aria-label updates when locale switches from English to Spanish', async () => {
+      const categories = [
+        createMultilingualCategory('1', [
+          { lang: 'en', name: 'Arts' },
+          { lang: 'es', name: 'Artes' },
+        ]),
+      ];
+
+      // Start in English
+      const { wrapper, router } = await mountCategoryPillSelector(
+        { categories },
+        '/view/test-calendar',
+      );
+      currentWrapper = wrapper;
+
+      await nextTick();
+
+      let pill = wrapper.find('.category-pill');
+      expect(pill.attributes('aria-label')).toBe('Arts category filter, not selected');
+
+      // Switch to Spanish via both i18next and router navigation
+      await i18next.changeLanguage('es');
+      await router.push('/es/view/test-calendar');
+      await nextTick();
+      await nextTick();
+
+      pill = wrapper.find('.category-pill');
+      expect(pill.attributes('aria-label')).toBe('Artes filtro de categoría, no seleccionado');
     });
   });
 });

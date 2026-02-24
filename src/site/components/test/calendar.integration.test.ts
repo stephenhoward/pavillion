@@ -289,8 +289,6 @@ describe('calendar.vue - SearchFilterPublic Integration', () => {
     expect(wrapper.find('.empty-state').exists()).toBe(true);
     expect(wrapper.find('.empty-state').text()).toContain('no_events_with_filters');
 
-    // Verify clear filters button exists
-    expect(wrapper.find('.clear-filters-btn').exists()).toBe(true);
   });
 
   it('displays helpful empty state when no upcoming events exist', async () => {
@@ -602,5 +600,121 @@ describe('calendar.vue - Locale-aware event card links', () => {
     const href = link.attributes('href');
     // Non-default locale — must include /es/ prefix
     expect(href).toBe('/es/view/test-calendar/events/event-abc/instance-xyz');
+  });
+});
+
+describe('calendar.vue - Locale-aware day group headings', () => {
+  let pinia;
+  let mockCalendar: Calendar;
+
+  // A fixed date: Sunday, March 15, 2026
+  const TEST_DATE_ISO = '2026-03-15T10:00:00';
+
+  function createMockEventInstance(eventId: string, instanceId: string): CalendarEventInstance {
+    const event = new CalendarEvent(eventId, 'calendar-123');
+    const eventContent = new CalendarEventContent('en');
+    eventContent.name = 'Test Event';
+    event.addContent(eventContent);
+    return new CalendarEventInstance(
+      instanceId,
+      event,
+      DateTime.fromISO(TEST_DATE_ISO),
+      null,
+    );
+  }
+
+  beforeEach(() => {
+    pinia = createPinia();
+    setActivePinia(pinia);
+
+    mockCalendar = new Calendar('calendar-123', 'test-calendar');
+    const content = new CalendarContent('en');
+    content.name = 'Test Calendar';
+    mockCalendar.addContent(content);
+
+    vi.mocked(ModelService.listModels).mockResolvedValue(ListResult.fromArray([]));
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('renders day headings in English when locale is en', async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/view/:calendar', name: 'calendar', component: calendar },
+      ],
+    });
+
+    vi.mocked(CalendarService.prototype.getCalendarByUrlName).mockResolvedValue(mockCalendar);
+    await router.push('/view/test-calendar');
+
+    const wrapper = mount(calendar, {
+      global: {
+        plugins: [pinia, router],
+        stubs: {
+          SearchFilterPublic: true,
+          NotFound: true,
+          EventImage: true,
+        },
+      },
+    });
+
+    await flushPromises();
+
+    const store = usePublicCalendarStore();
+    store.allEvents = [createMockEventInstance('event-en', 'instance-en')];
+    store.isLoadingEvents = false;
+
+    await wrapper.vm.$nextTick();
+
+    const h2 = wrapper.find('section.day h2');
+    expect(h2.exists()).toBe(true);
+
+    // English day heading for 2026-03-15: "Sunday, March 15"
+    const heading = h2.text();
+    expect(heading).toContain('Sunday');
+    expect(heading).toContain('March');
+  });
+
+  it('renders day headings in Spanish when locale is es', async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/view/:calendar', name: 'calendar', component: calendar },
+        { path: '/es/view/:calendar', component: calendar },
+      ],
+    });
+
+    vi.mocked(CalendarService.prototype.getCalendarByUrlName).mockResolvedValue(mockCalendar);
+    await router.push('/es/view/test-calendar');
+
+    const wrapper = mount(calendar, {
+      global: {
+        plugins: [pinia, router],
+        stubs: {
+          SearchFilterPublic: true,
+          NotFound: true,
+          EventImage: true,
+        },
+      },
+    });
+
+    await flushPromises();
+
+    const store = usePublicCalendarStore();
+    store.allEvents = [createMockEventInstance('event-es', 'instance-es')];
+    store.isLoadingEvents = false;
+
+    await wrapper.vm.$nextTick();
+
+    const h2 = wrapper.find('section.day h2');
+    expect(h2.exists()).toBe(true);
+
+    // Spanish day heading for 2026-03-15: "domingo, 15 de marzo"
+    const heading = h2.text();
+    expect(heading).toContain('domingo');
+    expect(heading).toContain('marzo');
   });
 });

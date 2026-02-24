@@ -22,6 +22,11 @@
     "next_week": "Semana siguiente",
     "previous_month": "Mes anterior",
     "next_month": "Mes siguiente",
+    "scroll_categories_left": "Desplazar categorías a la izquierda",
+    "scroll_categories_right": "Desplazar categorías a la derecha",
+    "category_filter_aria_label": "{{name}} filtro de categoría, {{state}}",
+    "selected": "seleccionado",
+    "not_selected": "no seleccionado",
     "public_search_filter": {
         "search_events": "Buscar eventos",
         "search_placeholder": "Buscar eventos...",

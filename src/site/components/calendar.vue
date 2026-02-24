@@ -16,7 +16,7 @@ const { t } = useTranslation('system');
 const route = useRoute();
 const calendarUrlName = route.params.calendar as string;
 const siteConfig = inject<Config>('site_config');
-const { localizedPath } = useLocale();
+const { currentLocale, localizedPath } = useLocale();
 const { localizedContent } = useLocalizedContent();
 
 const state = reactive({
@@ -30,9 +30,7 @@ const calendarService = new CalendarService();
 const publicCalendarStore = usePublicCalendarStore();
 
 // Computed properties for store data
-const availableCategories = computed(() => publicCalendarStore.availableCategories);
 const filteredEventsByDay = computed(() => publicCalendarStore.getFilteredEventsByDay);
-const hasActiveFilters = computed(() => publicCalendarStore.hasActiveFilters);
 const hasNonDateFilters = computed(() => publicCalendarStore.hasNonDateFilters);
 const hasOnlyDateFilters = computed(() => publicCalendarStore.hasOnlyDateFilters);
 
@@ -47,6 +45,10 @@ onBeforeMount(async () => {
       state.notFound = true;
       return;
     }
+
+    // Set page title to calendar name
+    const calendarName = localizedContent(state.calendar).name || state.calendar.urlName;
+    document.title = `${calendarName} | Pavillion`;
 
     // Set server-level default date range from site config before loading calendar
     if (siteConfig) {
@@ -84,7 +86,7 @@ onBeforeMount(async () => {
     <header v-if="state.calendar">
       <h1>{{ localizedContent(state.calendar).name || state.calendar.urlName }}</h1>
 
-      <!-- Search and Filter Component -->
+      <!-- Search and Filter Component (includes persistent Clear All Filters button) -->
       <SearchFilterPublic />
     </header>
 
@@ -96,7 +98,7 @@ onBeforeMount(async () => {
       <!-- Events Display -->
       <div v-if="Object.keys(filteredEventsByDay).length > 0">
         <section class="day" v-for="day in Object.keys(filteredEventsByDay).sort()" :key="day">
-          <h2>{{ DateTime.fromISO(day).toLocaleString({weekday: 'long', month: 'long', day: 'numeric'}) }}</h2>
+          <h2>{{ DateTime.fromISO(day).setLocale(currentLocale).toLocaleString({weekday: 'long', month: 'long', day: 'numeric'}) }}</h2>
           <ul class="events">
             <li class="event" v-for="instance in filteredEventsByDay[day]" :key="instance.id">
               <EventImage :media="instance.event.media" context="card" :lazy="true" />
@@ -122,14 +124,6 @@ onBeforeMount(async () => {
           <p>{{ t('no_events_available') }}</p>
           <p class="empty-state-hint">{{ t('no_events_available_hint') }}</p>
         </template>
-        <button
-          v-if="hasActiveFilters"
-          type="button"
-          class="clear-filters-btn"
-          @click="publicCalendarStore.clearAllFilters(); publicCalendarStore.reloadWithFilters();"
-        >
-          {{ t('public_search_filter.clear_all_filters') }}
-        </button>
       </div>
 
       <!-- Loading State -->
@@ -321,13 +315,6 @@ section.day {
     @media (prefers-color-scheme: dark) {
       color: $public-text-secondary-dark;
     }
-  }
-
-  .clear-filters-btn {
-    @include public-button-ghost;
-
-    padding: $public-space-sm $public-space-lg;
-    font-size: $public-font-size-base;
   }
 }
 

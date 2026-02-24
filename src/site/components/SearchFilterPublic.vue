@@ -193,6 +193,17 @@
         @update:selected-categories="handleCategoryChange"
       />
     </div>
+
+    <!-- Clear All Filters (visible whenever any filter is active) -->
+    <div v-if="publicStore.hasActiveFilters" class="clear-all-section">
+      <button
+        type="button"
+        class="clear-all-filters-btn"
+        @click="clearAllFilters"
+      >
+        {{ t('clear_all_filters') }}
+      </button>
+    </div>
   </div>
 </template>
 
@@ -560,14 +571,15 @@ watch(() => route.query, () => {
   publicStore.reloadWithFilters();
 }, { deep: true });
 
-// Watch for store date range changes to sync local state
+// Watch for store date range changes to sync local state and URL
 // This handles external clearAllFilters() calls from calendar.vue
 watch(() => [publicStore.startDate, publicStore.endDate], ([newStart, newEnd]) => {
-  // If store dates are cleared, reset local dateFilterMode
+  // If store dates are cleared, reset local dateFilterMode and remove date params from URL
   if (newStart === null && newEnd === null) {
     state.dateFilterMode = null;
     state.startDate = null;
     state.endDate = null;
+    updateURL();
   }
 });
 
@@ -584,6 +596,12 @@ watch(() => publicStore.searchQuery, (newQuery) => {
     updateURL();
   }
 });
+
+// Watch for store selectedCategoryIds changes to sync URL
+// This handles external clearAllFilters() calls from calendar.vue
+watch(() => publicStore.selectedCategoryIds, () => {
+  updateURL();
+}, { deep: true });
 
 onMounted(() => {
   initializeFromURL();
@@ -673,6 +691,20 @@ onUnmounted(() => {
     // Override font-size for better readability
     font-size: 12px;
     opacity: 0.6;
+  }
+}
+
+// Clear All Filters Section
+.clear-all-section {
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
+
+  .clear-all-filters-btn {
+    @include public-button-ghost;
+
+    padding: $public-space-xs $public-space-md;
+    font-size: $public-font-size-sm;
   }
 }
 

@@ -3,6 +3,7 @@ import { reactive, onBeforeMount, ref } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useRoute } from 'vue-router';
 import { DateTime } from 'luxon';
+import i18next from 'i18next';
 
 import CalendarService from '../service/calendar';
 import { useLocalizedContent } from '../composables/useLocalizedContent';
@@ -27,6 +28,17 @@ const state = reactive({
   isLoading: false,
 });
 const calendarService = new CalendarService();
+
+/**
+ * Returns true when start and end fall on the same calendar day.
+ *
+ * @param start - The event start DateTime
+ * @param end - The event end DateTime
+ * @returns true if both DateTimes share the same local day
+ */
+function isSameDay(start, end) {
+  return start.hasSame(end, 'day');
+}
 
 /**
  * Opens the report event modal dialog.
@@ -59,6 +71,10 @@ onBeforeMount(async () => {
       return;
     }
 
+    // Set page title to event name
+    const eventName = localizedContent(state.instance.event).name;
+    document.title = `${eventName} | Pavillion`;
+
   }
   catch (error) {
     console.error('Error loading event data:', error);
@@ -86,7 +102,10 @@ onBeforeMount(async () => {
       <div class="instance-meta">
         <h1>{{ localizedContent(state.instance.event).name }}</h1>
         <time :datetime="state.instance.start.toISO()" class="event-datetime">
-          {{ state.instance.start.toLocal().toLocaleString(DateTime.DATETIME_MED) }}
+          {{ state.instance.start.toLocal().setLocale(i18next.language).toLocaleString(DateTime.DATETIME_MED) }}<template v-if="state.instance.end">
+            – {{ state.instance.end.toLocal().setLocale(i18next.language).toLocaleString(
+              isSameDay(state.instance.start, state.instance.end) ? DateTime.TIME_SIMPLE : DateTime.DATETIME_MED
+            ) }}</template>
         </time>
       </div>
     </header>

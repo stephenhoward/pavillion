@@ -7,10 +7,10 @@
     "invite_button": "Send Invitation",
     "close_button": "Cancel"
   },
-  "navigation": {
-    "skip_to_content": "Skip to main content"
-  },
   "menu": {
+    "navigation": {
+      "skip_to_content": "Skip to main content"
+    },
     "back": "< back",
     "general_settings": "General",
     "instance_name_title": "Instance Name/Title",

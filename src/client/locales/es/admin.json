@@ -1,6 +1,8 @@
 {
-  "navigation": {
-    "skip_to_content": "Saltar al contenido principal"
+  "menu": {
+    "navigation": {
+      "skip_to_content": "Saltar al contenido principal"
+    }
   },
   "settings": {
     "general_settings": "Configuración General",
