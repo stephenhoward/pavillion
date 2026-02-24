@@ -5,6 +5,7 @@ import { useRoute } from 'vue-router';
 import { DateTime } from 'luxon';
 
 import CalendarService from '../service/calendar';
+import { useLocalizedContent } from '../composables/useLocalizedContent';
 import NotFound from './notFound.vue';
 import EventImage from './EventImage.vue';
 import ReportEvent from './report-event.vue';
@@ -12,11 +13,12 @@ import { useLocale } from '@/site/composables/useLocale';
 
 const { t } = useTranslation('system');
 const route = useRoute();
-const { currentLocale, localizedPath } = useLocale();
+const { localizedPath } = useLocale();
 const calendarId = route.params.calendar;
 const eventId = route.params.event;
 const instanceId = route.params.instance;
 const showReportModal = ref(false);
+const { localizedContent } = useLocalizedContent();
 const state = reactive({
   err: '',
   notFound: false,
@@ -75,15 +77,14 @@ onBeforeMount(async () => {
   </div>
   <div v-else-if="state.instance">
     <header v-if="state.calendar" class="instance-header">
-      <!-- TODO: respect the user's language prefernces instead of using 'en' -->
       <p class="breadcrumb">
         <a :href="localizedPath('/view/' + state.calendar.urlName)">
-          {{ state.calendar.content("en").name || state.calendar.urlName }}
+          {{ localizedContent(state.calendar).name || state.calendar.urlName }}
         </a>
       </p>
       <EventImage :media="state.instance.event.media" context="hero" />
       <div class="instance-meta">
-        <h1>{{ state.instance.event.content("en").name }}</h1>
+        <h1>{{ localizedContent(state.instance.event).name }}</h1>
         <time :datetime="state.instance.start.toISO()" class="event-datetime">
           {{ state.instance.start.toLocal().toLocaleString(DateTime.DATETIME_MED) }}
         </time>
@@ -91,7 +92,7 @@ onBeforeMount(async () => {
     </header>
     <main>
       <div v-if="state.err" class="error">{{ state.err }}</div>
-      <p>{{ state.instance.event.content("en").description }}</p>
+      <p>{{ localizedContent(state.instance.event).description }}</p>
       <section v-if="state.instance.event.location" class="event-location">
         <h2>{{ t('event_location') }}</h2>
         <p class="location-name">{{ state.instance.event.location.name }}</p>
@@ -111,7 +112,7 @@ onBeforeMount(async () => {
            class="event-category-badge"
            :href="localizedPath('/view/' + state.calendar.urlName) + '?category=' + category.id"
         >
-          {{ category.content(currentLocale).name || category.content('en').name }}
+          {{ localizedContent(category).name }}
         </a>
       </div>
       <button

@@ -4,6 +4,7 @@ import { useTranslation } from 'i18next-vue';
 import { useRoute } from 'vue-router';
 import CalendarService from '../service/calendar';
 import { usePublicCalendarStore } from '../stores/publicCalendarStore';
+import { useLocalizedContent } from '../composables/useLocalizedContent';
 import NotFound from './notFound.vue';
 import SearchFilterPublic from './SearchFilterPublic.vue';
 import { DateTime } from 'luxon';
@@ -16,6 +17,7 @@ const route = useRoute();
 const calendarUrlName = route.params.calendar as string;
 const siteConfig = inject<Config>('site_config');
 const { localizedPath } = useLocale();
+const { localizedContent } = useLocalizedContent();
 
 const state = reactive({
   err: '',
@@ -78,8 +80,7 @@ onBeforeMount(async () => {
   </div>
   <div v-else>
     <header v-if="state.calendar">
-      <!-- TODO: respect the user's language preferences instead of using 'en' -->
-      <h1>{{ state.calendar.content("en").name || state.calendar.urlName }}</h1>
+      <h1>{{ localizedContent(state.calendar).name || state.calendar.urlName }}</h1>
 
       <!-- Search and Filter Component -->
       <SearchFilterPublic />
@@ -99,7 +100,7 @@ onBeforeMount(async () => {
               <EventImage :media="instance.event.media" context="card" :lazy="true" />
               <h3>
                 <router-link :to="localizedPath(`/view/${calendarUrlName}/events/${instance.event.id}/${instance.id}`)">
-                  {{ instance.event.content("en").name }}
+                  {{ localizedContent(instance.event).name }}
                 </router-link>
               </h3>
               <div class="event-time">{{ instance.start.toLocal().toLocaleString(DateTime.TIME_SIMPLE) }}</div>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
 import { EventCategory } from '@/common/model/event_category';
+import { useLocalizedContent } from '../composables/useLocalizedContent';
 
 export interface CategoryPillSelectorProps {
   categories: EventCategory[];
@@ -23,6 +24,7 @@ const emit = defineEmits<CategoryPillSelectorEmits>();
 const scrollContainer = ref<HTMLElement | null>(null);
 const canScrollLeft = ref(false);
 const canScrollRight = ref(false);
+const { localizedContent } = useLocalizedContent();
 
 /**
  * Check if a category is currently selected by ID (per DEC-005)
@@ -66,9 +68,8 @@ const handleKeydown = (event: KeyboardEvent, category: EventCategory): void => {
  * Get the display name for a category in the current language
  */
 const getCategoryDisplayName = (category: EventCategory): string => {
-  // Default to English, or first available language
   try {
-    const content = category.content('en') || category.content(category.getLanguages()[0]);
+    const content = localizedContent(category);
     return content?.name || 'Unnamed Category';
   }
   catch {

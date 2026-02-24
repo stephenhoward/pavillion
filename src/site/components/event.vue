@@ -3,6 +3,7 @@ import { reactive, onBeforeMount, ref } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useRoute } from 'vue-router';
 import CalendarService from '../service/calendar';
+import { useLocalizedContent } from '../composables/useLocalizedContent';
 import { useEventStore } from '../../client/stores/eventStore';
 import NotFound from './notFound.vue';
 import EventImage from './EventImage.vue';
@@ -13,6 +14,7 @@ const route = useRoute();
 const calendarId = route.params.calendar;
 const eventId = route.params.event;
 const showReportModal = ref(false);
+const { localizedContent } = useLocalizedContent();
 const state = reactive({
   err: '',
   notFound: false,
@@ -73,19 +75,18 @@ function closeReportModal() {
   </div>
   <div v-else-if="state.event" class="event-detail">
     <header v-if="state.calendar" class="event-header">
-      <!-- TODO: respect the user's language prefernces instead of using 'en' -->
       <p class="breadcrumb">
         <router-link :to="{ name: 'calendar', params: { calendar: state.calendar.urlName } }">
-          {{ state.calendar.content("en").name || state.calendar.urlName }}
+          {{ localizedContent(state.calendar).name || state.calendar.urlName }}
         </router-link>
       </p>
       <EventImage :media="state.event.media" context="feature" />
-      <h1>{{ state.event.content("en").name }}</h1>
+      <h1>{{ localizedContent(state.event).name }}</h1>
     </header>
     <main class="event-content">
       <div v-if="state.err" class="error">{{ state.err }}</div>
       <div class="description">
-        <p>{{ state.event.content("en").description }}</p>
+        <p>{{ localizedContent(state.event).description }}</p>
       </div>
     </main>
     <footer class="event-footer">
