@@ -114,11 +114,13 @@ function toggleCategory(categoryId) {
 
 /**
  * Initialize selected categories from props.
- * The selectedCategories prop is an array of category ID strings.
+ * The prop may contain string IDs or objects with an .id property.
  */
 function initializeSelectedCategories() {
   if (props.selectedCategories && props.selectedCategories.length > 0) {
-    state.selectedCategoryIds = [...props.selectedCategories];
+    state.selectedCategoryIds = props.selectedCategories.map(cat =>
+      typeof cat === 'string' ? cat : cat.id,
+    );
   }
   else {
     state.selectedCategoryIds = [];
