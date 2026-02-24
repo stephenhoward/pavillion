@@ -31,9 +31,16 @@ export default class EventService {
   }
 
   /**
-   * Load events for the specified calendar
+   * Load events for the specified calendar and update the store.
+   *
+   * When calendarId is provided, the store is always updated - even when the
+   * API returns zero results (e.g. all events filtered out by category). Without
+   * calendarId the store can only be updated when at least one event comes back,
+   * because the calendar UUID is derived from the first result.
+   *
    * @param calendarUrlName The URL name of the calendar
    * @param filters Optional search and filter parameters
+   * @param calendarId Optional calendar UUID used to update the store when the result set is empty
    * @returns Promise<Array<CalendarEvent>> The events in the calendar
    */
   async loadCalendarEvents(
@@ -42,6 +49,7 @@ export default class EventService {
       search?: string;
       categories?: string[];
     },
+    calendarId?: string,
   ): Promise<Array<CalendarEvent>> {
     try {
       const encodedUrlName = validateAndEncodeId(calendarUrlName, 'Calendar URL name');
@@ -66,12 +74,13 @@ export default class EventService {
       const events = await ModelService.listModels(url);
       const calendarEvents = events.items.map(event => CalendarEvent.fromObject(event));
 
-      // Store events by calendar ID
-      if (calendarEvents.length > 0) {
-        const calendarId = calendarEvents[0].calendarId;
-        if (calendarId) {
-          this.store.setEventsForCalendar(calendarId, calendarEvents);
-        }
+      // Resolve the store key: prefer the ID from results, fall back to the explicit parameter
+      const storeCalendarId = (calendarEvents.length > 0 && calendarEvents[0].calendarId)
+        ? calendarEvents[0].calendarId
+        : calendarId;
+
+      if (storeCalendarId) {
+        this.store.setEventsForCalendar(storeCalendarId, calendarEvents);
       }
 
       return calendarEvents;

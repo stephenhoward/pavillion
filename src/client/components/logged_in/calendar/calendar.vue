@@ -213,7 +213,7 @@ const handleFiltersChanged = async (filters) => {
   // Reload events with new filters
   state.isLoading = true;
   try {
-    await eventService.loadCalendarEvents(calendarId.value, filters);
+    await eventService.loadCalendarEvents(calendarId.value, filters, state.calendar?.id);
     // Clear selections when filtering changes
     deselectAll();
   }
@@ -254,7 +254,7 @@ const loadCalendarData = async () => {
       filters.categories = currentFilters.categories;
     }
 
-    await eventService.loadCalendarEvents(calendarId.value, Object.keys(filters).length > 0 ? filters : undefined);
+    await eventService.loadCalendarEvents(calendarId.value, Object.keys(filters).length > 0 ? filters : undefined, state.calendar?.id);
   }
   catch (error) {
     console.error('Error loading calendar data:', error);
@@ -388,7 +388,7 @@ const handleDeleteEvents = async () => {
       }
 
       // Reload events after deletion with current filters
-      await eventService.loadCalendarEvents(calendarId.value, currentFilters);
+      await eventService.loadCalendarEvents(calendarId.value, currentFilters, state.calendar?.id);
       deselectAll();
       toast.success(tBulk('delete_success', { count: deleteCount }));
     }
