@@ -108,19 +108,17 @@ function toggleCategory(categoryId) {
     state.selectedCategoryIds.push(categoryId);
   }
 
-  // Emit the selected category objects
-  const selectedCategories = state.availableCategories.filter(
-    cat => state.selectedCategoryIds.includes(cat.id),
-  );
-  emit('categoriesChanged', selectedCategories);
+  // Emit the selected category IDs as strings
+  emit('categoriesChanged', [...state.selectedCategoryIds]);
 }
 
 /**
- * Initialize selected categories from props
+ * Initialize selected categories from props.
+ * The selectedCategories prop is an array of category ID strings.
  */
 function initializeSelectedCategories() {
   if (props.selectedCategories && props.selectedCategories.length > 0) {
-    state.selectedCategoryIds = props.selectedCategories.map(cat => cat.id);
+    state.selectedCategoryIds = [...props.selectedCategories];
   }
   else {
     state.selectedCategoryIds = [];
