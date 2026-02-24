@@ -54,6 +54,8 @@ vi.mock('@/site/service/calendar', () => {
       getCalendarByUrlName: vi.fn().mockResolvedValue({
         urlName: 'test_calendar',
         content: (_lang: string) => ({ name: 'Test Calendar', description: '' }),
+        hasContent: (_lang: string) => true,
+        getLanguages: () => ['en'],
       }),
       loadEventInstance: vi.fn().mockImplementation(() =>
         Promise.resolve({
@@ -63,6 +65,8 @@ vi.mock('@/site/service/calendar', () => {
           },
           event: {
             content: (_lang: string) => ({ name: 'Test Event', description: 'Description here' }),
+            hasContent: (_lang: string) => true,
+            getLanguages: () => ['en'],
             media: null,
             categories: mockCategories,
             location: mockLocation,
@@ -155,6 +159,8 @@ function makeCategoryObject(id: string, translations: Record<string, string>) {
       const name = translations[lang] ?? translations['en'] ?? '';
       return { name };
     },
+    hasContent: (lang: string) => lang in translations,
+    getLanguages: () => Object.keys(translations),
   };
 }
 
