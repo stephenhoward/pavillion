@@ -107,7 +107,7 @@ describe('createCalendar', () => {
   const sandbox = sinon.createSandbox();
   let mockStore: ReturnType<typeof useCalendarStore>;
   let service: CalendarService;
-  const mockPost = vi.mocked(axios.post);
+  let mockCreateModel: sinon.SinonStub;
 
   beforeEach(() => {
     // Create a mock store before each test
@@ -116,7 +116,7 @@ describe('createCalendar', () => {
     };
     // Stub the useCalendarStore function to always return our mock
     service = new CalendarService(mockStore);
-    mockPost.mockReset();
+    mockCreateModel = sandbox.stub(ModelService, 'createModel');
   });
 
   afterEach(() => {
@@ -126,13 +126,16 @@ describe('createCalendar', () => {
   it('should create a calendar with valid url name', async () => {
     // Arrange
     const urlName = 'test-calendar';
-    mockPost.mockResolvedValue({ data: { id: 'cal1', urlName } });
+    mockCreateModel.resolves({ id: 'cal1', urlName });
 
     // Act
     const result = await service.createCalendar(urlName);
 
     // Assert
-    expect(mockPost).toHaveBeenCalledWith('/api/v1/calendars', { urlName });
+    expect(mockCreateModel.calledOnce).toBe(true);
+    const calendarArg = mockCreateModel.firstCall.args[0];
+    expect(calendarArg.urlName).toBe(urlName);
+    expect(mockCreateModel.firstCall.args[1]).toBe('/api/v1/calendars');
     expect(result.urlName).toBe(urlName);
     expect(mockStore.addCalendar.called).toBe(true);
   });
@@ -141,60 +144,61 @@ describe('createCalendar', () => {
     // Arrange
     const urlName = 'test-calendar';
     const title = 'My Test Calendar';
-    mockPost.mockResolvedValue({ data: { id: 'cal1', urlName } });
+    mockCreateModel.resolves({ id: 'cal1', urlName });
 
     // Act
     await service.createCalendar(urlName, title);
 
     // Assert
-    expect(mockPost).toHaveBeenCalledWith('/api/v1/calendars', {
-      urlName,
-      content: { en: { name: title } },
-    });
+    expect(mockCreateModel.calledOnce).toBe(true);
+    const calendarArg = mockCreateModel.firstCall.args[0];
+    expect(calendarArg.urlName).toBe(urlName);
+    // Verify that content was set on the Calendar model
+    expect(calendarArg.content('en').name).toBe(title);
   });
 
   it('should throw EmptyValueError when url name is empty', async () => {
     // Act & Assert
     await expect(service.createCalendar('')).rejects.toThrow(EmptyValueError);
-    expect(mockPost).not.toHaveBeenCalled();
+    expect(mockCreateModel.called).toBe(false);
   });
 
   it('should throw EmptyValueError when url name is only whitespace', async () => {
     // Act & Assert
     await expect(service.createCalendar('   ')).rejects.toThrow(EmptyValueError);
-    expect(mockPost).not.toHaveBeenCalled();
+    expect(mockCreateModel.called).toBe(false);
   });
 
   it('should handle UrlNameAlreadyExistsError from API', async () => {
     // Arrange
     const urlName = 'existing-calendar';
-    mockPost.mockRejectedValue({
+    mockCreateModel.rejects({
       response: { data: { errorName: 'UrlNameAlreadyExistsError' } },
     });
 
     // Act & Assert
     await expect(service.createCalendar(urlName)).rejects.toThrow(UrlNameAlreadyExistsError);
-    expect(mockPost).toHaveBeenCalled();
+    expect(mockCreateModel.called).toBe(true);
   });
 
   it('should handle InvalidUrlNameError from API', async () => {
     // Arrange
-    mockPost.mockRejectedValue({
+    mockCreateModel.rejects({
       response: { data: { errorName: 'InvalidUrlNameError' } },
     });
 
     // Act & Assert
     await expect(service.createCalendar('invalid-name')).rejects.toThrow(InvalidUrlNameError);
-    expect(mockPost).toHaveBeenCalled();
+    expect(mockCreateModel.called).toBe(true);
   });
 
   it('should throw UnknownError for unexpected errors', async () => {
     // Arrange
-    mockPost.mockRejectedValue(new Error('Unexpected error'));
+    mockCreateModel.rejects(new Error('Unexpected error'));
 
     // Act & Assert
     await expect(service.createCalendar('test-calendar')).rejects.toThrow(UnknownError);
-    expect(mockPost).toHaveBeenCalled();
+    expect(mockCreateModel.called).toBe(true);
   });
 });
 

@@ -504,7 +504,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { reactive } from 'vue';
 import { CalendarEventSchedule } from '@/common/model/events';
 import { useTranslation } from 'i18next-vue';
