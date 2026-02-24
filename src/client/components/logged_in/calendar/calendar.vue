@@ -1,5 +1,5 @@
 <script setup>
-import { onBeforeMount, reactive, inject, ref, watch, computed, nextTick } from 'vue';
+import { onBeforeMount, reactive, ref, watch, computed, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
@@ -37,8 +37,6 @@ const { t: tReport } = useTranslation('system', {
 // For repost edit dialog translations
 const { t: tFeed } = useTranslation('feed');
 
-const site_config = inject('site_config');
-const site_domain = site_config.settings().domain;
 const eventService = new EventService();
 const calendarStore = useCalendarStore();
 const categoryStore = useCategoryStore();

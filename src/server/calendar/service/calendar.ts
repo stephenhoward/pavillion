@@ -117,7 +117,7 @@ class CalendarService {
     // Single query on CalendarMemberEntity for all memberships
     const memberships = await CalendarMemberEntity.findAll({
       where: { account_id: account.id },
-      include: [{ model: CalendarEntity, as: 'calendar' }],
+      include: [{ model: CalendarEntity, as: 'calendar', include: [CalendarContentEntity] }],
     });
 
     return memberships
@@ -140,7 +140,7 @@ class CalendarService {
     // Single query on CalendarMemberEntity for all memberships
     const memberships = await CalendarMemberEntity.findAll({
       where: { account_id: account.id },
-      include: [{ model: CalendarEntity, as: 'calendar' }],
+      include: [{ model: CalendarEntity, as: 'calendar', include: [CalendarContentEntity] }],
     });
 
     return memberships
@@ -1193,7 +1193,10 @@ class CalendarService {
   async updateCalendarSettings(
     account: Account,
     calendarId: string,
-    settings: { defaultDateRange?: DefaultDateRange },
+    settings: {
+      defaultDateRange?: DefaultDateRange;
+      content?: Record<string, { name?: string; description?: string }>;
+    },
   ): Promise<Calendar> {
     // Validate required fields
     if (!calendarId || calendarId.trim().length === 0) {
@@ -1230,7 +1233,26 @@ class CalendarService {
       await calendarEntity.update({ default_date_range: settings.defaultDateRange });
     }
 
-    return calendarEntity.toModel();
+    // Update content translations if provided
+    if (settings.content) {
+      const calendar = calendarEntity.toModel();
+      for (const [language, contentData] of Object.entries(settings.content)) {
+        const content = calendar.content(language);
+        if (contentData.name !== undefined) {
+          content.name = contentData.name;
+        }
+        if (contentData.description !== undefined) {
+          content.description = contentData.description;
+        }
+        await this.createCalendarContent(calendarId, content);
+      }
+    }
+
+    // Re-fetch with content included to return complete data
+    const updatedEntity = await CalendarEntity.findByPk(calendarId, {
+      include: [CalendarContentEntity],
+    });
+    return updatedEntity!.toModel();
   }
 
   /**
