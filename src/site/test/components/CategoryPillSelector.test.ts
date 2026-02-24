@@ -1,4 +1,4 @@
-import { expect, describe, it, afterEach, beforeAll, beforeEach } from 'vitest';
+import { expect, describe, it, afterEach, beforeAll, beforeEach, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { RouteRecordRaw } from 'vue-router';
@@ -794,6 +794,177 @@ describe('CategoryPillSelector Component', () => {
 
       const pill = wrapper.find('.category-pill');
       expect(pill.element.tagName).toBe('BUTTON');
+    });
+  });
+
+  describe('scrollToSelectedCategory behavior', () => {
+    let scrollIntoViewMock: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      scrollIntoViewMock = vi.fn();
+      // jsdom does not implement scrollIntoView, so we install it globally
+      window.HTMLElement.prototype.scrollIntoView = scrollIntoViewMock;
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('should call scrollIntoView on mount when a category is pre-selected', async () => {
+      const categories = [
+        createTestCategory('1', 'Arts'),
+        createTestCategory('2', 'Sports'),
+      ];
+
+      const { wrapper } = await mountCategoryPillSelector({
+        categories,
+        selectedCategories: ['1'],
+      });
+      currentWrapper = wrapper;
+
+      // Wait for the next DOM flush so onMounted has run
+      await nextTick();
+
+      expect(scrollIntoViewMock).toHaveBeenCalled();
+    });
+
+    it('should NOT call scrollIntoView on mount when no category is pre-selected', async () => {
+      const categories = [
+        createTestCategory('1', 'Arts'),
+        createTestCategory('2', 'Sports'),
+      ];
+
+      const { wrapper } = await mountCategoryPillSelector({
+        categories,
+        selectedCategories: [],
+      });
+      currentWrapper = wrapper;
+
+      await nextTick();
+
+      expect(scrollIntoViewMock).not.toHaveBeenCalled();
+    });
+
+    it('should call scrollIntoView when selectedCategories prop changes to include a selection', async () => {
+      const categories = [
+        createTestCategory('1', 'Arts'),
+        createTestCategory('2', 'Sports'),
+      ];
+
+      // Start with no selection
+      const { wrapper } = await mountCategoryPillSelector({
+        categories,
+        selectedCategories: [],
+      });
+      currentWrapper = wrapper;
+
+      await nextTick();
+      const callsBefore = scrollIntoViewMock.mock.calls.length;
+
+      // Now add a selection via prop change
+      await wrapper.setProps({ selectedCategories: ['2'] });
+      // flush: 'post' means the watcher runs after the DOM update — nextTick covers this
+      await nextTick();
+
+      expect(scrollIntoViewMock.mock.calls.length).toBeGreaterThan(callsBefore);
+    });
+
+    it('should call scrollIntoView when selectedCategories prop changes from one selection to another', async () => {
+      const categories = [
+        createTestCategory('1', 'Arts'),
+        createTestCategory('2', 'Sports'),
+      ];
+
+      const { wrapper } = await mountCategoryPillSelector({
+        categories,
+        selectedCategories: ['1'],
+      });
+      currentWrapper = wrapper;
+
+      await nextTick();
+      const callsBefore = scrollIntoViewMock.mock.calls.length;
+
+      await wrapper.setProps({ selectedCategories: ['2'] });
+      await nextTick();
+
+      expect(scrollIntoViewMock.mock.calls.length).toBeGreaterThan(callsBefore);
+    });
+  });
+
+  describe('getScrollBehavior helper', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('should return "instant" when prefers-reduced-motion: reduce matches', async () => {
+      // Mock window.matchMedia to return matches: true for prefers-reduced-motion
+      const matchMediaMock = vi.fn().mockImplementation((query: string) => ({
+        matches: query === '(prefers-reduced-motion: reduce)',
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }));
+      Object.defineProperty(window, 'matchMedia', {
+        writable: true,
+        value: matchMediaMock,
+      });
+
+      // Mount the component and trigger scroll to exercise getScrollBehavior
+      const scrollIntoViewMock = vi.fn();
+      window.HTMLElement.prototype.scrollIntoView = scrollIntoViewMock;
+
+      const categories = [createTestCategory('1', 'Arts')];
+      const { wrapper } = await mountCategoryPillSelector({
+        categories,
+        selectedCategories: ['1'],
+      });
+      currentWrapper = wrapper;
+
+      await nextTick();
+
+      // scrollIntoView should have been called with behavior: 'instant'
+      expect(scrollIntoViewMock).toHaveBeenCalledWith(
+        expect.objectContaining({ behavior: 'instant' }),
+      );
+    });
+
+    it('should return "smooth" when prefers-reduced-motion does not match', async () => {
+      // Mock window.matchMedia to return matches: false
+      const matchMediaMock = vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }));
+      Object.defineProperty(window, 'matchMedia', {
+        writable: true,
+        value: matchMediaMock,
+      });
+
+      const scrollIntoViewMock = vi.fn();
+      window.HTMLElement.prototype.scrollIntoView = scrollIntoViewMock;
+
+      const categories = [createTestCategory('1', 'Arts')];
+      const { wrapper } = await mountCategoryPillSelector({
+        categories,
+        selectedCategories: ['1'],
+      });
+      currentWrapper = wrapper;
+
+      await nextTick();
+
+      // scrollIntoView should have been called with behavior: 'smooth'
+      expect(scrollIntoViewMock).toHaveBeenCalledWith(
+        expect.objectContaining({ behavior: 'smooth' }),
+      );
     });
   });
 });
