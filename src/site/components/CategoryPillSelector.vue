@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
+import { useTranslation } from 'i18next-vue';
 import { EventCategory } from '@/common/model/event_category';
 import { useLocalizedContent } from '../composables/useLocalizedContent';
 
@@ -24,6 +25,12 @@ const emit = defineEmits<CategoryPillSelectorEmits>();
 const scrollContainer = ref<HTMLElement | null>(null);
 const canScrollLeft = ref(false);
 const canScrollRight = ref(false);
+
+// useTranslation subscribes to i18next language change events so this
+// component re-renders when the UI locale is switched, ensuring
+// localizedContent resolves the updated language.
+useTranslation();
+
 const { localizedContent } = useLocalizedContent();
 
 /**

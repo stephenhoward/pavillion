@@ -1,10 +1,11 @@
-import { expect, describe, it, afterEach } from 'vitest';
+import { expect, describe, it, afterEach, beforeAll, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { RouteRecordRaw } from 'vue-router';
 import { createPinia } from 'pinia';
 import I18NextVue from 'i18next-vue';
 import i18next from 'i18next';
+import { nextTick } from 'vue';
 
 import { EventCategory } from '@/common/model/event_category';
 import { EventCategoryContent } from '@/common/model/event_category_content';
@@ -12,13 +13,18 @@ import CategoryPillSelector from '@/site/components/CategoryPillSelector.vue';
 
 const routes: RouteRecordRaw[] = [
   { path: '/test', component: {}, name: 'test' },
+  { path: '/view/:calendar', component: {}, name: 'calendar' },
+  { path: '/:locale/view/:calendar', component: {}, name: 'calendar-locale' },
 ];
 
-const mountCategoryPillSelector = (props: Record<string, any> = {}) => {
+const mountCategoryPillSelector = async (props: Record<string, any> = {}, initialRoute = '/view/test-calendar') => {
   const router: Router = createRouter({
     history: createMemoryHistory(),
     routes: routes,
   });
+
+  router.push(initialRoute);
+  await router.isReady();
 
   const pinia = createPinia();
 
@@ -52,8 +58,38 @@ const createTestCategory = (id: string, name: string): EventCategory => {
   return category;
 };
 
+/**
+ * Create a category with content in multiple languages.
+ */
+const createMultilingualCategory = (
+  id: string,
+  translations: { lang: string; name: string }[],
+): EventCategory => {
+  const category = new EventCategory(id, 'test-calendar');
+  for (const { lang, name } of translations) {
+    const content = new EventCategoryContent(lang, name);
+    category.addContent(content);
+  }
+  return category;
+};
+
 describe('CategoryPillSelector Component', () => {
   let currentWrapper: any = null;
+
+  beforeAll(async () => {
+    await i18next.init({
+      lng: 'en',
+      resources: {
+        en: { system: {} },
+        es: { system: {} },
+        fr: { system: {} },
+      },
+    });
+  });
+
+  beforeEach(async () => {
+    await i18next.changeLanguage('en');
+  });
 
   afterEach(() => {
     if (currentWrapper) {
@@ -63,22 +99,22 @@ describe('CategoryPillSelector Component', () => {
   });
 
   describe('Component Rendering', () => {
-    it('renders empty state when no categories provided', () => {
-      const { wrapper } = mountCategoryPillSelector();
+    it('renders empty state when no categories provided', async () => {
+      const { wrapper } = await mountCategoryPillSelector();
       currentWrapper = wrapper;
 
       expect(wrapper.find('.category-pill-selector').exists()).toBe(true);
       expect(wrapper.findAll('.category-pill').length).toBe(0);
     });
 
-    it('renders category pills for provided categories', () => {
+    it('renders category pills for provided categories', async () => {
       const categories = [
         createTestCategory('1', 'Arts'),
         createTestCategory('2', 'Sports'),
         createTestCategory('3', 'Business'),
       ];
 
-      const { wrapper } = mountCategoryPillSelector({ categories });
+      const { wrapper } = await mountCategoryPillSelector({ categories });
       currentWrapper = wrapper;
 
       const pills = wrapper.findAll('.category-pill');
@@ -88,13 +124,13 @@ describe('CategoryPillSelector Component', () => {
       expect(pills[2].text()).toBe('Business');
     });
 
-    it('applies selected class to selected categories', () => {
+    it('applies selected class to selected categories', async () => {
       const categories = [
         createTestCategory('1', 'Arts'),
         createTestCategory('2', 'Sports'),
       ];
 
-      const { wrapper } = mountCategoryPillSelector({
+      const { wrapper } = await mountCategoryPillSelector({
         categories,
         selectedCategories: ['1'],
       });
@@ -105,10 +141,10 @@ describe('CategoryPillSelector Component', () => {
       expect(pills[1].classes()).not.toContain('selected');
     });
 
-    it('shows checkmark icon for selected categories', () => {
+    it('shows checkmark icon for selected categories', async () => {
       const categories = [createTestCategory('1', 'Arts')];
 
-      const { wrapper } = mountCategoryPillSelector({
+      const { wrapper } = await mountCategoryPillSelector({
         categories,
         selectedCategories: ['1'],
       });
@@ -118,20 +154,20 @@ describe('CategoryPillSelector Component', () => {
       expect(pill.find('.checkmark').exists()).toBe(true);
     });
 
-    it('does not show checkmark for unselected categories', () => {
+    it('does not show checkmark for unselected categories', async () => {
       const categories = [createTestCategory('1', 'Arts')];
 
-      const { wrapper } = mountCategoryPillSelector({ categories });
+      const { wrapper } = await mountCategoryPillSelector({ categories });
       currentWrapper = wrapper;
 
       const pill = wrapper.find('.category-pill');
       expect(pill.find('.checkmark').exists()).toBe(false);
     });
 
-    it('applies disabled class when disabled prop is true', () => {
+    it('applies disabled class when disabled prop is true', async () => {
       const categories = [createTestCategory('1', 'Arts')];
 
-      const { wrapper } = mountCategoryPillSelector({
+      const { wrapper } = await mountCategoryPillSelector({
         categories,
         disabled: true,
       });
@@ -142,11 +178,105 @@ describe('CategoryPillSelector Component', () => {
     });
   });
 
+  describe('Multilingual Display', () => {
+    it('displays category names in the current locale when available', async () => {
+      const categories = [
+        createMultilingualCategory('1', [
+          { lang: 'en', name: 'Arts' },
+          { lang: 'es', name: 'Artes' },
+        ]),
+        createMultilingualCategory('2', [
+          { lang: 'en', name: 'Sports' },
+          { lang: 'es', name: 'Deportes' },
+        ]),
+      ];
+
+      // Change i18next language to Spanish first
+      await i18next.changeLanguage('es');
+
+      // Mount with Spanish locale route
+      const { wrapper } = await mountCategoryPillSelector(
+        { categories },
+        '/es/view/test-calendar',
+      );
+      currentWrapper = wrapper;
+
+      await nextTick();
+
+      const pills = wrapper.findAll('.category-pill');
+      expect(pills[0].text()).toBe('Artes');
+      expect(pills[1].text()).toBe('Deportes');
+    });
+
+    it('falls back to English when current locale content is not available', async () => {
+      const categories = [
+        createMultilingualCategory('1', [
+          { lang: 'en', name: 'Arts' },
+        ]),
+      ];
+
+      // Change i18next language to French
+      await i18next.changeLanguage('fr');
+
+      // Mount with French locale route, but only English content exists
+      const { wrapper } = await mountCategoryPillSelector(
+        { categories },
+        '/fr/view/test-calendar',
+      );
+      currentWrapper = wrapper;
+
+      await nextTick();
+
+      const pill = wrapper.find('.category-pill');
+      expect(pill.text()).toBe('Arts');
+    });
+
+    it('updates pill names when locale changes via route navigation', async () => {
+      const categories = [
+        createMultilingualCategory('1', [
+          { lang: 'en', name: 'Community' },
+          { lang: 'es', name: 'Comunidad' },
+        ]),
+      ];
+
+      // Start in English
+      const { wrapper, router } = await mountCategoryPillSelector(
+        { categories },
+        '/view/test-calendar',
+      );
+      currentWrapper = wrapper;
+      await nextTick();
+
+      let pill = wrapper.find('.category-pill');
+      expect(pill.text()).toBe('Community');
+
+      // Switch to Spanish by changing the route and i18next language
+      await i18next.changeLanguage('es');
+      await router.push('/es/view/test-calendar');
+      await nextTick();
+      await nextTick();
+
+      pill = wrapper.find('.category-pill');
+      expect(pill.text()).toBe('Comunidad');
+    });
+
+    it('shows fallback name for category with no content', async () => {
+      const category = new EventCategory('1', 'test-calendar');
+      // No content added at all
+
+      const { wrapper } = await mountCategoryPillSelector({ categories: [category] });
+      currentWrapper = wrapper;
+
+      const pill = wrapper.find('.category-pill');
+      expect(pill.text()).toBe('Unnamed Category');
+    });
+  });
+
   describe('Interaction Behavior', () => {
     it('emits update:selectedCategories when pill is clicked', async () => {
       const categories = [createTestCategory('1', 'Arts')];
 
-      const { wrapper } = mountCategoryPillSelector({ categories });
+      const { wrapper } = await mountCategoryPillSelector({ categories });
       currentWrapper = wrapper;
 
       const pill = wrapper.find('.category-pill');
@@ -160,7 +290,7 @@ describe('CategoryPillSelector Component', () => {
     it('toggles category selection on click', async () => {
       const categories = [createTestCategory('1', 'Arts')];
 
-      const { wrapper } = mountCategoryPillSelector({
+      const { wrapper } = await mountCategoryPillSelector({
         categories,
         selectedCategories: [],
       });
@@ -186,7 +316,7 @@ describe('CategoryPillSelector Component', () => {
         createTestCategory('2', 'Sports'),
       ];
 
-      const { wrapper } = mountCategoryPillSelector({ categories });
+      const { wrapper } = await mountCategoryPillSelector({ categories });
       currentWrapper = wrapper;
 
       const pills = wrapper.findAll('.category-pill');
@@ -206,7 +336,7 @@ describe('CategoryPillSelector Component', () => {
     it('does not emit events when disabled', async () => {
       const categories = [createTestCategory('1', 'Arts')];
 
-      const { wrapper } = mountCategoryPillSelector({
+      const { wrapper } = await mountCategoryPillSelector({
         categories,
         disabled: true,
       });
@@ -226,7 +356,7 @@ describe('CategoryPillSelector Component', () => {
         createTestCategory('2', 'Sports'),
       ];
 
-      const { wrapper } = mountCategoryPillSelector({ categories });
+      const { wrapper } = await mountCategoryPillSelector({ categories });
       currentWrapper = wrapper;
 
       const pills = wrapper.findAll('.category-pill');
@@ -239,7 +369,7 @@ describe('CategoryPillSelector Component', () => {
     it('toggles selection with Space key', async () => {
       const categories = [createTestCategory('1', 'Arts')];
 
-      const { wrapper } = mountCategoryPillSelector({ categories });
+      const { wrapper } = await mountCategoryPillSelector({ categories });
       currentWrapper = wrapper;
 
       const pill = wrapper.find('.category-pill');
@@ -253,7 +383,7 @@ describe('CategoryPillSelector Component', () => {
     it('toggles selection with Enter key', async () => {
       const categories = [createTestCategory('1', 'Arts')];
 
-      const { wrapper } = mountCategoryPillSelector({ categories });
+      const { wrapper } = await mountCategoryPillSelector({ categories });
       currentWrapper = wrapper;
 
       const pill = wrapper.find('.category-pill');
@@ -267,7 +397,7 @@ describe('CategoryPillSelector Component', () => {
     it('does not respond to keyboard when disabled', async () => {
       const categories = [createTestCategory('1', 'Arts')];
 
-      const { wrapper } = mountCategoryPillSelector({
+      const { wrapper } = await mountCategoryPillSelector({
         categories,
         disabled: true,
       });
@@ -281,13 +411,13 @@ describe('CategoryPillSelector Component', () => {
   });
 
   describe('V-Model Integration', () => {
-    it('correctly reflects selectedCategories prop', () => {
+    it('correctly reflects selectedCategories prop', async () => {
       const categories = [
         createTestCategory('1', 'Arts'),
         createTestCategory('2', 'Sports'),
       ];
 
-      const { wrapper } = mountCategoryPillSelector({
+      const { wrapper } = await mountCategoryPillSelector({
         categories,
         selectedCategories: ['2'],
       });
@@ -298,10 +428,10 @@ describe('CategoryPillSelector Component', () => {
       expect(pills[1].classes()).toContain('selected');
     });
 
-    it('works with empty selectedCategories array', () => {
+    it('works with empty selectedCategories array', async () => {
       const categories = [createTestCategory('1', 'Arts')];
 
-      const { wrapper } = mountCategoryPillSelector({
+      const { wrapper } = await mountCategoryPillSelector({
         categories,
         selectedCategories: [],
       });
@@ -311,10 +441,10 @@ describe('CategoryPillSelector Component', () => {
       expect(pill.classes()).not.toContain('selected');
     });
 
-    it('handles invalid category IDs in selectedCategories', () => {
+    it('handles invalid category IDs in selectedCategories', async () => {
       const categories = [createTestCategory('1', 'Arts')];
 
-      const { wrapper } = mountCategoryPillSelector({
+      const { wrapper } = await mountCategoryPillSelector({
         categories,
         selectedCategories: ['invalid-id'],
       });
@@ -326,14 +456,14 @@ describe('CategoryPillSelector Component', () => {
   });
 
   describe('Responsive Layout', () => {
-    it('applies proper CSS classes for responsive wrapping', () => {
+    it('applies proper CSS classes for responsive wrapping', async () => {
       const categories = [
         createTestCategory('1', 'Arts'),
         createTestCategory('2', 'Sports'),
         createTestCategory('3', 'Business'),
       ];
 
-      const { wrapper } = mountCategoryPillSelector({ categories });
+      const { wrapper } = await mountCategoryPillSelector({ categories });
       currentWrapper = wrapper;
 
       const selector = wrapper.find('.category-pill-selector');
@@ -343,10 +473,10 @@ describe('CategoryPillSelector Component', () => {
       expect(wrapper.html()).toContain('category-pill-selector');
     });
 
-    it('maintains minimum touch target size', () => {
+    it('maintains minimum touch target size', async () => {
       const categories = [createTestCategory('1', 'Arts')];
 
-      const { wrapper } = mountCategoryPillSelector({ categories });
+      const { wrapper } = await mountCategoryPillSelector({ categories });
       currentWrapper = wrapper;
 
       const pill = wrapper.find('.category-pill');
@@ -356,14 +486,14 @@ describe('CategoryPillSelector Component', () => {
   });
 
   describe('Mobile Responsive Behavior', () => {
-    it('applies responsive CSS classes for mobile breakpoints', () => {
+    it('applies responsive CSS classes for mobile breakpoints', async () => {
       const categories = [
         createTestCategory('1', 'Arts'),
         createTestCategory('2', 'Sports'),
         createTestCategory('3', 'Business'),
       ];
 
-      const { wrapper } = mountCategoryPillSelector({ categories });
+      const { wrapper } = await mountCategoryPillSelector({ categories });
       currentWrapper = wrapper;
 
       const selector = wrapper.find('.category-pill-selector');
@@ -374,10 +504,10 @@ describe('CategoryPillSelector Component', () => {
       expect(pills.length).toBe(3);
     });
 
-    it('maintains touch target sizes on mobile screens', () => {
+    it('maintains touch target sizes on mobile screens', async () => {
       const categories = [createTestCategory('1', 'Arts & Culture')];
 
-      const { wrapper } = mountCategoryPillSelector({ categories });
+      const { wrapper } = await mountCategoryPillSelector({ categories });
       currentWrapper = wrapper;
 
       const pill = wrapper.find('.category-pill');
@@ -387,19 +517,19 @@ describe('CategoryPillSelector Component', () => {
       expect(pill.exists()).toBe(true);
     });
 
-    it('handles text wrapping for long category names', () => {
+    it('handles text wrapping for long category names', async () => {
       const categories = [
         createTestCategory('1', 'Very Long Category Name That Should Wrap Properly'),
       ];
 
-      const { wrapper } = mountCategoryPillSelector({ categories });
+      const { wrapper } = await mountCategoryPillSelector({ categories });
       currentWrapper = wrapper;
 
       const pill = wrapper.find('.category-pill');
       expect(pill.text()).toContain('Very Long Category Name');
     });
 
-    it('maintains proper spacing between pills on mobile', () => {
+    it('maintains proper spacing between pills on mobile', async () => {
       const categories = [
         createTestCategory('1', 'Arts'),
         createTestCategory('2', 'Sports'),
@@ -408,7 +538,7 @@ describe('CategoryPillSelector Component', () => {
         createTestCategory('5', 'Education'),
       ];
 
-      const { wrapper } = mountCategoryPillSelector({ categories });
+      const { wrapper } = await mountCategoryPillSelector({ categories });
       currentWrapper = wrapper;
 
       const selector = wrapper.find('.category-pill-selector');
@@ -418,12 +548,12 @@ describe('CategoryPillSelector Component', () => {
       expect(pills.length).toBe(5);
     });
 
-    it('supports maxDisplayRows prop for overflow handling', () => {
+    it('supports maxDisplayRows prop for overflow handling', async () => {
       const categories = Array.from({ length: 15 }, (_, i) =>
         createTestCategory(`${i + 1}`, `Category ${i + 1}`),
       );
 
-      const { wrapper } = mountCategoryPillSelector({
+      const { wrapper } = await mountCategoryPillSelector({
         categories,
         maxDisplayRows: 3,
       });
@@ -441,7 +571,7 @@ describe('CategoryPillSelector Component', () => {
     it('handles touch events for pill selection', async () => {
       const categories = [createTestCategory('1', 'Arts')];
 
-      const { wrapper } = mountCategoryPillSelector({ categories });
+      const { wrapper } = await mountCategoryPillSelector({ categories });
       currentWrapper = wrapper;
 
       const pill = wrapper.find('.category-pill');
@@ -457,7 +587,7 @@ describe('CategoryPillSelector Component', () => {
     it('provides visual feedback for touch interactions', async () => {
       const categories = [createTestCategory('1', 'Arts')];
 
-      const { wrapper } = mountCategoryPillSelector({ categories });
+      const { wrapper } = await mountCategoryPillSelector({ categories });
       currentWrapper = wrapper;
 
       const pill = wrapper.find('.category-pill');
@@ -476,7 +606,7 @@ describe('CategoryPillSelector Component', () => {
     it('prevents selection when disabled on touch devices', async () => {
       const categories = [createTestCategory('1', 'Arts')];
 
-      const { wrapper } = mountCategoryPillSelector({
+      const { wrapper } = await mountCategoryPillSelector({
         categories,
         disabled: true,
       });
@@ -495,7 +625,7 @@ describe('CategoryPillSelector Component', () => {
         createTestCategory('3', 'Business'),
       ];
 
-      const { wrapper } = mountCategoryPillSelector({ categories });
+      const { wrapper } = await mountCategoryPillSelector({ categories });
       currentWrapper = wrapper;
 
       const pills = wrapper.findAll('.category-pill');
@@ -512,10 +642,10 @@ describe('CategoryPillSelector Component', () => {
   });
 
   describe('Enhanced Accessibility Features', () => {
-    it('has proper ARIA attributes', () => {
+    it('has proper ARIA attributes', async () => {
       const categories = [createTestCategory('1', 'Arts')];
 
-      const { wrapper } = mountCategoryPillSelector({ categories });
+      const { wrapper } = await mountCategoryPillSelector({ categories });
       currentWrapper = wrapper;
 
       const pill = wrapper.find('.category-pill');
@@ -524,10 +654,10 @@ describe('CategoryPillSelector Component', () => {
       expect(pill.attributes('tabindex')).toBe('0');
     });
 
-    it('updates aria-pressed when selected', () => {
+    it('updates aria-pressed when selected', async () => {
       const categories = [createTestCategory('1', 'Arts')];
 
-      const { wrapper } = mountCategoryPillSelector({
+      const { wrapper } = await mountCategoryPillSelector({
         categories,
         selectedCategories: ['1'],
       });
@@ -537,10 +667,10 @@ describe('CategoryPillSelector Component', () => {
       expect(pill.attributes('aria-pressed')).toBe('true');
     });
 
-    it('has proper aria-label for screen readers', () => {
+    it('has proper aria-label for screen readers', async () => {
       const categories = [createTestCategory('1', 'Arts')];
 
-      const { wrapper } = mountCategoryPillSelector({ categories });
+      const { wrapper } = await mountCategoryPillSelector({ categories });
       currentWrapper = wrapper;
 
       const pill = wrapper.find('.category-pill');
@@ -548,10 +678,10 @@ describe('CategoryPillSelector Component', () => {
       expect(pill.attributes('aria-label')).toContain('not selected');
     });
 
-    it('updates aria-label when selection state changes', () => {
+    it('updates aria-label when selection state changes', async () => {
       const categories = [createTestCategory('1', 'Arts')];
 
-      const { wrapper } = mountCategoryPillSelector({
+      const { wrapper } = await mountCategoryPillSelector({
         categories,
         selectedCategories: ['1'],
       });
@@ -562,10 +692,10 @@ describe('CategoryPillSelector Component', () => {
       expect(pill.attributes('aria-label')).toContain('selected');
     });
 
-    it('maintains focus state visibility', () => {
+    it('maintains focus state visibility', async () => {
       const categories = [createTestCategory('1', 'Arts')];
 
-      const { wrapper } = mountCategoryPillSelector({ categories });
+      const { wrapper } = await mountCategoryPillSelector({ categories });
       currentWrapper = wrapper;
 
       const pill = wrapper.find('.category-pill');
@@ -575,10 +705,10 @@ describe('CategoryPillSelector Component', () => {
       expect(pill.exists()).toBe(true);
     });
 
-    it('provides proper screen reader context for checkmarks', () => {
+    it('provides proper screen reader context for checkmarks', async () => {
       const categories = [createTestCategory('1', 'Arts')];
 
-      const { wrapper } = mountCategoryPillSelector({
+      const { wrapper } = await mountCategoryPillSelector({
         categories,
         selectedCategories: ['1'],
       });
@@ -589,14 +719,14 @@ describe('CategoryPillSelector Component', () => {
       expect(checkmark.attributes('aria-hidden')).toBe('true');
     });
 
-    it('maintains keyboard navigation order', () => {
+    it('maintains keyboard navigation order', async () => {
       const categories = [
         createTestCategory('1', 'Arts'),
         createTestCategory('2', 'Sports'),
         createTestCategory('3', 'Business'),
       ];
 
-      const { wrapper } = mountCategoryPillSelector({ categories });
+      const { wrapper } = await mountCategoryPillSelector({ categories });
       currentWrapper = wrapper;
 
       const pills = wrapper.findAll('.category-pill');
@@ -607,10 +737,10 @@ describe('CategoryPillSelector Component', () => {
       });
     });
 
-    it('handles focus management when disabled', () => {
+    it('handles focus management when disabled', async () => {
       const categories = [createTestCategory('1', 'Arts')];
 
-      const { wrapper } = mountCategoryPillSelector({
+      const { wrapper } = await mountCategoryPillSelector({
         categories,
         disabled: true,
       });
@@ -625,7 +755,7 @@ describe('CategoryPillSelector Component', () => {
     it('uses standard event handlers compatible across browsers', async () => {
       const categories = [createTestCategory('1', 'Arts')];
 
-      const { wrapper } = mountCategoryPillSelector({ categories });
+      const { wrapper } = await mountCategoryPillSelector({ categories });
       currentWrapper = wrapper;
 
       const pill = wrapper.find('.category-pill');
@@ -640,7 +770,7 @@ describe('CategoryPillSelector Component', () => {
     it('handles keyboard events consistently', async () => {
       const categories = [createTestCategory('1', 'Arts')];
 
-      const { wrapper } = mountCategoryPillSelector({ categories });
+      const { wrapper } = await mountCategoryPillSelector({ categories });
       currentWrapper = wrapper;
 
       const pill = wrapper.find('.category-pill');
@@ -656,10 +786,10 @@ describe('CategoryPillSelector Component', () => {
       expect(emitted?.length).toBe(2);
     });
 
-    it('uses semantic HTML elements for better compatibility', () => {
+    it('uses semantic HTML elements for better compatibility', async () => {
       const categories = [createTestCategory('1', 'Arts')];
 
-      const { wrapper } = mountCategoryPillSelector({ categories });
+      const { wrapper } = await mountCategoryPillSelector({ categories });
       currentWrapper = wrapper;
 
       const pill = wrapper.find('.category-pill');

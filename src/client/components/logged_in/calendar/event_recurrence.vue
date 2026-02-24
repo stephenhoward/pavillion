@@ -130,6 +130,52 @@
       border-color: var(--pav-color-stone-700);
     }
 
+    .frequency-field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+
+      .frequency-label {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--pav-color-stone-700);
+
+        @media (prefers-color-scheme: dark) {
+          color: var(--pav-color-stone-300);
+        }
+      }
+
+      .frequency-select {
+        padding: 0.625rem 0.875rem;
+        border: 1px solid var(--pav-color-stone-200);
+        border-radius: 0.375rem;
+        font-size: 0.9375rem;
+        background: white;
+        color: var(--pav-color-stone-900);
+        font-family: inherit;
+        cursor: pointer;
+        transition: all 0.15s ease;
+
+        &:focus {
+          outline: none;
+          border-color: var(--pav-color-orange-500);
+          box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+        }
+
+        @media (prefers-color-scheme: dark) {
+          background: var(--pav-color-stone-900);
+          color: var(--pav-color-stone-100);
+          border-color: var(--pav-color-stone-700);
+
+          &:focus {
+            border-color: var(--pav-color-orange-500);
+            box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+          }
+        }
+      }
+    }
+
     label.repeat-interval {
       display: flex;
       align-items: center;
@@ -324,6 +370,19 @@
       margin-top: 1rem;
       padding: 1rem;
 
+      .frequency-field {
+        margin-bottom: 1rem;
+
+        .frequency-label {
+          font-size: 0.875rem;
+        }
+
+        .frequency-select {
+          font-size: 0.875rem;
+          padding: 0.5rem 0.625rem;
+        }
+      }
+
       label.repeat-interval {
         margin-bottom: 1rem;
         font-size: 0.875rem;
@@ -466,12 +525,29 @@
 
     <!-- Recurrence Form -->
     <form class="repeats" v-if="state.showRecurrence">
+      <!-- Frequency Selector -->
+      <div class="frequency-field">
+        <label class="frequency-label" :for="frequencySelectId">{{ t('frequency_label') }}</label>
+        <select
+          :id="frequencySelectId"
+          class="frequency-select"
+          v-model="state.frequency"
+          @change="onFrequencyChange()"
+        >
+          <option value="">{{ t('frequency_none') }}</option>
+          <option value="daily">{{ t('frequency_daily') }}</option>
+          <option value="weekly">{{ t('frequency_weekly') }}</option>
+          <option value="monthly">{{ t('frequency_monthly') }}</option>
+          <option value="yearly">{{ t('frequency_yearly') }}</option>
+        </select>
+      </div>
+
       <label class="repeat-interval" v-if="props.schedule.frequency">
         {{ t('every') }} <input type="number" v-model="props.schedule.interval" @change="compileRecurrence()" /> {{  props.schedule.frequency ? t( props.schedule.frequency + 'Term') : '' }}
       </label>
 
       <div class="week-parameters" v-if="props.schedule.frequency === 'weekly'">
-        {{ t('on-weekday-label') }}:
+        {{ t('on_weekday_label') }}:
         <label v-for="day in Object.keys(state.weekdays)">
           <input type="checkbox" v-model="state.weekdays[day]" @change="compileRecurrence()" /> {{ t(day) }}
         </label>
@@ -486,7 +562,7 @@
       </div>
 
       <div class="end-type" v-if="props.schedule.frequency">
-        {{ t('endType-label') }}:
+        {{ t('end_type_label') }}:
         <label><input type="radio"
                       value="none"
                       v-model="state.endType"
@@ -505,7 +581,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive } from 'vue';
+import { reactive, useId } from 'vue';
 import { CalendarEventSchedule } from '@/common/model/events';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
@@ -524,6 +600,8 @@ const emit = defineEmits(['remove-schedule']);
 const { t } = useTranslation('event_editor', {
   keyPrefix: 'recurrence',
 });
+
+const frequencySelectId = useId();
 
 /**
  * Returns the full list of IANA timezone identifiers supported by the browser.
@@ -646,6 +724,7 @@ const { date: initialDate, time: initialTime } = initDateTime();
 
 const state = reactive({
   showRecurrence: false,
+  frequency: (props.schedule.frequency as string) || '',
   date: initialDate,
   time: initialTime,
   duration: 60, // Default duration in minutes
@@ -705,6 +784,15 @@ const updateStartDate = () => {
     const dateTimeString = `${state.date}T${state.time}`;
     props.schedule.startDate = DateTime.fromISO(dateTimeString);
   }
+};
+
+/**
+ * Handles frequency selector changes. Syncs the local state.frequency
+ * value to props.schedule.frequency and triggers recurrence compilation.
+ */
+const onFrequencyChange = () => {
+  props.schedule.frequency = state.frequency || null;
+  compileRecurrence();
 };
 
 const compileRecurrence = () => {

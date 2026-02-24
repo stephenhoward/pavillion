@@ -6,6 +6,8 @@
         "beta_label": "Beta"
     },
     "not_found_error_message": "Not Found",
+    "not_found_suggestion": "The calendar or event you are looking for does not exist or may have been removed.",
+    "not_found_go_home": "Go to Homepage",
     "error_load_event": "Failed to load event data",
     "filter_by_category": "Event Categories",
     "clear_filters": "Clear Filters",
@@ -35,6 +37,7 @@
         "choose_custom_dates": "Choose start and end dates",
         "start_date": "Start Date",
         "end_date": "End Date",
+        "clear_date_filter": "Clear date filter",
         "clear_all_filters": "Clear All Filters",
         "toggle_filters": "Toggle filters",
         "more_filters": "More Filters",

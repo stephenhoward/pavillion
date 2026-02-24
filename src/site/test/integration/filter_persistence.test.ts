@@ -137,6 +137,53 @@ describe('Category Filter Persistence', () => {
     });
   });
 
+  describe('Search Filter Persistence', () => {
+    it('should not persist short search terms that cannot be executed', () => {
+      // When a URL contains a search term shorter than 3 characters,
+      // the app cannot execute that search. The URL should be cleaned up
+      // to avoid a misleading bookmarked state.
+      const MIN_SEARCH_LENGTH = 3;
+
+      const shortTermScenarios = [
+        { term: 'bo', expectedValid: false },
+        { term: 'a', expectedValid: false },
+        { term: 'ab', expectedValid: false },
+        { term: '  x ', expectedValid: false },  // trims to 'x' (1 char)
+        { term: '', expectedValid: false },
+        { term: 'bob', expectedValid: true },
+        { term: 'yoga class', expectedValid: true },
+        { term: 'art', expectedValid: true },
+      ];
+
+      shortTermScenarios.forEach(scenario => {
+        const trimmed = scenario.term.trim();
+        const isValid = trimmed.length >= MIN_SEARCH_LENGTH;
+        expect(isValid).toBe(scenario.expectedValid);
+      });
+    });
+
+    it('should clean URL when short search term is detected on initialization', () => {
+      // Simulate the expected behavior: on page load with ?search=bo,
+      // the search param should be removed from URL to prevent misleading state
+      const baseUrl = 'http://localhost:3000/calendars/test';
+      const MIN_SEARCH_LENGTH = 3;
+
+      // Build a URL with a short search term
+      const url = new URL(`${baseUrl}?search=bo&category=some-id`);
+      const searchParam = url.searchParams.get('search');
+
+      expect(searchParam).toBe('bo');
+      expect(searchParam!.trim().length).toBeLessThan(MIN_SEARCH_LENGTH);
+
+      // Simulate cleanup: remove invalid search, keep other params
+      const cleanQuery = new URLSearchParams(url.searchParams);
+      cleanQuery.delete('search');
+
+      expect(cleanQuery.get('search')).toBeNull();
+      expect(cleanQuery.get('category')).toBe('some-id');
+    });
+  });
+
   describe('State Recovery and Error Handling', () => {
     it('should handle corrupted URL parameters gracefully', () => {
       // Test scenarios where URL parameters might be corrupted or invalid

@@ -31,6 +31,7 @@ export interface PublicCalendarState {
   isLoadingCategories: boolean;
   isLoadingEvents: boolean;
   hasLoadedEvents: boolean;
+  isSearchPending: boolean;
   categoryError: string | null;
   eventError: string | null;
 }
@@ -58,6 +59,7 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
     isLoadingCategories: false,
     isLoadingEvents: false,
     hasLoadedEvents: false,
+    isSearchPending: false,
     categoryError: null,
     eventError: null,
   }),
@@ -282,6 +284,14 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
     },
 
     /**
+     * Set the search pending state. True when user has typed 1-2 characters
+     * in the search input (below the 3-character minimum for search).
+     */
+    setSearchPending(pending: boolean) {
+      this.isSearchPending = pending;
+    },
+
+    /**
      * Set date range for filtering
      */
     setDateRange(start: string | null, end: string | null) {
@@ -297,6 +307,7 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
       this.selectedCategoryIds = [];
       this.startDate = null;
       this.endDate = null;
+      this.isSearchPending = false;
     },
 
     /**
@@ -324,6 +335,7 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
       this.isLoadingCategories = false;
       this.isLoadingEvents = false;
       this.hasLoadedEvents = false;
+      this.isSearchPending = false;
     },
 
     /**

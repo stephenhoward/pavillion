@@ -85,7 +85,7 @@ function closeReportModal() {
     </header>
     <main class="event-content">
       <div v-if="state.err" class="error">{{ state.err }}</div>
-      <div class="description">
+      <div v-if="localizedContent(state.event).description" class="description">
         <p>{{ localizedContent(state.event).description }}</p>
       </div>
     </main>
@@ -124,7 +124,7 @@ function closeReportModal() {
   display: flex;
   flex-direction: column;
   gap: $public-space-lg;
-  margin-bottom: $public-space-2xl;
+  margin-bottom: $public-space-lg;
 
   .breadcrumb {
     margin: 0;
@@ -224,7 +224,7 @@ function closeReportModal() {
 }
 
 .event-footer {
-  margin-top: $public-space-2xl;
+  margin-top: $public-space-lg;
   padding-top: $public-space-lg;
   border-top: 1px solid $public-border-subtle-light;
 

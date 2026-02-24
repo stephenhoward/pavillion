@@ -365,6 +365,125 @@ describe('calendar.vue - SearchFilterPublic Integration', () => {
   });
 });
 
+describe('calendar.vue - Calendar title display', () => {
+  let pinia;
+  let router;
+
+  beforeEach(() => {
+    pinia = createPinia();
+    setActivePinia(pinia);
+
+    router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        {
+          path: '/view/:calendar',
+          name: 'calendar',
+          component: calendar,
+        },
+      ],
+    });
+
+    vi.mocked(ModelService.listModels).mockResolvedValue(ListResult.fromArray([]));
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('displays the calendar title from content, not the URL slug', async () => {
+    const mockCalendar = new Calendar('calendar-123', 'test_calendar');
+    const content = new CalendarContent('en');
+    content.name = 'My Community Calendar';
+    mockCalendar.addContent(content);
+
+    vi.mocked(CalendarService.prototype.getCalendarByUrlName).mockResolvedValue(mockCalendar);
+    await router.push('/view/test_calendar');
+
+    const wrapper = mount(calendar, {
+      global: {
+        plugins: [pinia, router],
+        stubs: {
+          SearchFilterPublic: true,
+          NotFound: true,
+          EventImage: true,
+        },
+      },
+    });
+
+    await flushPromises();
+
+    const h1 = wrapper.find('h1');
+    expect(h1.exists()).toBe(true);
+    expect(h1.text()).toBe('My Community Calendar');
+    expect(h1.text()).not.toBe('test_calendar');
+  });
+
+  it('falls back to URL slug when no content is configured', async () => {
+    // Calendar with no content added
+    const mockCalendar = new Calendar('calendar-456', 'bare_calendar');
+
+    vi.mocked(CalendarService.prototype.getCalendarByUrlName).mockResolvedValue(mockCalendar);
+    await router.push('/view/bare_calendar');
+
+    const wrapper = mount(calendar, {
+      global: {
+        plugins: [pinia, router],
+        stubs: {
+          SearchFilterPublic: true,
+          NotFound: true,
+          EventImage: true,
+        },
+      },
+    });
+
+    await flushPromises();
+
+    const h1 = wrapper.find('h1');
+    expect(h1.exists()).toBe(true);
+    expect(h1.text()).toBe('bare_calendar');
+  });
+
+  it('displays content in the current locale when multilingual content exists', async () => {
+    const mockCalendar = new Calendar('calendar-789', 'my_calendar');
+    const enContent = new CalendarContent('en');
+    enContent.name = 'English Title';
+    mockCalendar.addContent(enContent);
+    const esContent = new CalendarContent('es');
+    esContent.name = 'Titulo en Espanol';
+    mockCalendar.addContent(esContent);
+
+    vi.mocked(CalendarService.prototype.getCalendarByUrlName).mockResolvedValue(mockCalendar);
+
+    const esRouter = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/view/:calendar', name: 'calendar', component: calendar },
+        { path: '/es/view/:calendar', component: calendar },
+      ],
+    });
+
+    await esRouter.push('/es/view/my_calendar');
+
+    const wrapper = mount(calendar, {
+      global: {
+        plugins: [pinia, esRouter],
+        stubs: {
+          SearchFilterPublic: true,
+          NotFound: true,
+          EventImage: true,
+        },
+      },
+    });
+
+    await flushPromises();
+
+    const h1 = wrapper.find('h1');
+    expect(h1.exists()).toBe(true);
+    expect(h1.text()).toBe('Titulo en Espanol');
+  });
+});
+
 describe('calendar.vue - Locale-aware event card links', () => {
   let pinia;
   let mockCalendar: Calendar;

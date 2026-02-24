@@ -50,8 +50,8 @@ onBeforeMount(() => {
       </section>
     </div>
 
-    <!-- Empty State -->
-    <div v-else-if="!publicStore.isLoadingEvents" class="empty-state">
+    <!-- Empty State: suppress when search is pending (1-2 chars typed) to avoid conflicting messages -->
+    <div v-else-if="!publicStore.isLoadingEvents && !publicStore.isSearchPending" class="empty-state">
       <p v-if="publicStore.hasActiveFilters">
         {{ t('no_events_with_filters') }}
       </p>

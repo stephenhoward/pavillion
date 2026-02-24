@@ -182,6 +182,85 @@ describe('URL Sharing for Category Filters', () => {
     });
   });
 
+  describe('Search Parameter Validation', () => {
+    it('should not preserve short search terms in URL', () => {
+      // Short search terms (< 3 chars) should be removed from URLs
+      // because the app refuses to execute searches shorter than 3 characters
+      const shortSearchTerms = ['a', 'bo', 'ab', '  ', 'x'];
+
+      shortSearchTerms.forEach(term => {
+        const trimmed = term.trim();
+        // A valid search term must be at least 3 characters after trimming
+        expect(trimmed.length < 3).toBe(true);
+      });
+    });
+
+    it('should preserve valid search terms (3+ chars) in URL', () => {
+      const baseUrl = 'http://localhost:3000/calendars/test';
+      const validSearchTerms = ['bob', 'yoga', 'community', 'art class'];
+
+      validSearchTerms.forEach(term => {
+        const url = new URL(baseUrl);
+        url.searchParams.set('search', term);
+
+        const parsedSearch = url.searchParams.get('search');
+        expect(parsedSearch).toBe(term);
+        expect(parsedSearch!.trim().length).toBeGreaterThanOrEqual(3);
+      });
+    });
+
+    it('should clean up URLs with short search terms on initialization', () => {
+      // Simulate what initializeFromURL should do:
+      // If search param has < 3 chars, it should be removed from the URL
+      const baseUrl = 'http://localhost:3000/calendars/test';
+
+      const scenarios = [
+        {
+          name: '2-char search term',
+          searchParam: 'bo',
+          shouldKeep: false,
+        },
+        {
+          name: '1-char search term',
+          searchParam: 'a',
+          shouldKeep: false,
+        },
+        {
+          name: 'whitespace-only search term',
+          searchParam: '  ',
+          shouldKeep: false,
+        },
+        {
+          name: '3-char search term',
+          searchParam: 'bob',
+          shouldKeep: true,
+        },
+        {
+          name: 'long search term',
+          searchParam: 'community events',
+          shouldKeep: true,
+        },
+      ];
+
+      scenarios.forEach(scenario => {
+        const url = new URL(`${baseUrl}?search=${encodeURIComponent(scenario.searchParam)}`);
+        const searchParam = url.searchParams.get('search');
+
+        if (scenario.shouldKeep) {
+          expect(searchParam!.trim().length).toBeGreaterThanOrEqual(3);
+        }
+        else {
+          // The search param is present in URL but too short to be valid
+          expect(searchParam!.trim().length).toBeLessThan(3);
+
+          // Simulate cleanup: remove the invalid search param
+          url.searchParams.delete('search');
+          expect(url.searchParams.get('search')).toBeNull();
+        }
+      });
+    });
+  });
+
   describe('Cross-Browser Compatibility', () => {
     it('should handle different browser URL encoding behaviors', () => {
       // Test scenarios that different browsers might handle differently

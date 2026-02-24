@@ -6,6 +6,8 @@
         "beta_label": "Beta"
     },
     "not_found_error_message": "Page non trouvée",
+    "not_found_suggestion": "Le calendrier ou l'événement que vous recherchez n'existe pas ou a peut-être été supprimé.",
+    "not_found_go_home": "Retour à l'accueil",
     "error_load_event": "Impossible de charger les données de l'événement",
     "filter_by_category": "Catégories d'événements",
     "clear_filters": "Effacer les filtres",
@@ -23,6 +25,7 @@
         "search_placeholder": "Rechercher des événements...",
         "search_min_chars": "Saisissez au moins 3 caractères pour rechercher",
         "clear_search": "Effacer la recherche",
+        "clear_date_filter": "Effacer le filtre de dates",
         "filter_by_categories": "Filtrer par catégories",
         "filter_by_date_range": "Filtrer par plage de dates",
         "date_range_options": "Options de filtre par plage de dates",

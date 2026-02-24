@@ -346,6 +346,19 @@ describe('getCalendarByName', () => {
 
     expect(result).toBeNull();
   });
+
+  it('should include CalendarContentEntity in the query to populate content', async () => {
+    const cal = new Calendar('testCalendarId', 'testme');
+    const calendarFindOneStub = sandbox.stub(CalendarEntity, 'findOne');
+    calendarFindOneStub.resolves(CalendarEntity.fromModel(cal));
+
+    await service.getCalendarByName('testme');
+
+    // Verify the query includes CalendarContentEntity so content is eagerly loaded
+    const callArgs = calendarFindOneStub.firstCall.args[0];
+    expect(callArgs).toHaveProperty('include');
+    expect(callArgs.include).toContain(CalendarContentEntity);
+  });
 });
 
 describe('getPrimaryCalendarForUser', () => {

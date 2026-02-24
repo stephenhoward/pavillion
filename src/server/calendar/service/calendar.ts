@@ -205,7 +205,7 @@ class CalendarService {
     if (!name || ! this.isValidUrlName(name)) {
       return null;
     }
-    let calendar = await CalendarEntity.findOne({ where: { url_name: name } });
+    let calendar = await CalendarEntity.findOne({ where: { url_name: name }, include: [CalendarContentEntity] });
     return calendar ? calendar.toModel() : null;
   }
 
