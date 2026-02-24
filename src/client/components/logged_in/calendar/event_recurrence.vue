@@ -447,11 +447,9 @@
       <div class="grid-field">
         <label class="grid-label">Timezone</label>
         <select v-model="state.timezone" @change="compileRecurrence()" class="grid-input">
-          <option value="America/Los_Angeles">America/Los Angeles</option>
-          <option value="America/Denver">America/Denver</option>
-          <option value="America/Chicago">America/Chicago</option>
-          <option value="America/New_York">America/New York</option>
-          <option value="UTC">UTC</option>
+          <option v-for="tz in timezones" :key="tz" :value="tz">
+            {{ formatTimezone(tz) }}
+          </option>
         </select>
       </div>
     </div>
@@ -527,6 +525,108 @@ const { t } = useTranslation('event_editor', {
   keyPrefix: 'recurrence',
 });
 
+/**
+ * Returns the full list of IANA timezone identifiers supported by the browser.
+ * Falls back to a representative set if the API is unavailable.
+ */
+const getTimezones = (): string[] => {
+  if (typeof Intl !== 'undefined' && typeof Intl.supportedValuesOf === 'function') {
+    return Intl.supportedValuesOf('timeZone');
+  }
+  // Fallback for environments without Intl.supportedValuesOf
+  return [
+    'Africa/Cairo',
+    'Africa/Johannesburg',
+    'Africa/Lagos',
+    'Africa/Nairobi',
+    'America/Anchorage',
+    'America/Argentina/Buenos_Aires',
+    'America/Bogota',
+    'America/Chicago',
+    'America/Denver',
+    'America/Halifax',
+    'America/Lima',
+    'America/Los_Angeles',
+    'America/Mexico_City',
+    'America/New_York',
+    'America/Santiago',
+    'America/Sao_Paulo',
+    'America/St_Johns',
+    'America/Toronto',
+    'America/Vancouver',
+    'Asia/Bangkok',
+    'Asia/Colombo',
+    'Asia/Dhaka',
+    'Asia/Dubai',
+    'Asia/Hong_Kong',
+    'Asia/Jakarta',
+    'Asia/Karachi',
+    'Asia/Kolkata',
+    'Asia/Manila',
+    'Asia/Seoul',
+    'Asia/Shanghai',
+    'Asia/Singapore',
+    'Asia/Taipei',
+    'Asia/Tehran',
+    'Asia/Tokyo',
+    'Atlantic/Reykjavik',
+    'Australia/Adelaide',
+    'Australia/Brisbane',
+    'Australia/Melbourne',
+    'Australia/Perth',
+    'Australia/Sydney',
+    'Europe/Amsterdam',
+    'Europe/Athens',
+    'Europe/Berlin',
+    'Europe/Brussels',
+    'Europe/Dublin',
+    'Europe/Helsinki',
+    'Europe/Istanbul',
+    'Europe/Lisbon',
+    'Europe/London',
+    'Europe/Madrid',
+    'Europe/Moscow',
+    'Europe/Oslo',
+    'Europe/Paris',
+    'Europe/Prague',
+    'Europe/Rome',
+    'Europe/Stockholm',
+    'Europe/Vienna',
+    'Europe/Warsaw',
+    'Europe/Zurich',
+    'Pacific/Auckland',
+    'Pacific/Fiji',
+    'Pacific/Honolulu',
+    'UTC',
+  ];
+};
+
+const timezones = getTimezones();
+
+/**
+ * Formats an IANA timezone identifier for display by replacing
+ * underscores with spaces (e.g., "America/New_York" becomes "America/New York").
+ */
+const formatTimezone = (tz: string): string => {
+  return tz.replace(/_/g, ' ');
+};
+
+/**
+ * Returns the user's local timezone from the browser, or 'UTC' as a fallback.
+ */
+const getLocalTimezone = (): string => {
+  try {
+    const local = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (local && timezones.includes(local)) {
+      return local;
+    }
+  }
+  catch {
+    // Fall through to default
+  }
+  return 'UTC';
+};
+
 // Initialize date/time fields from startDate
 const initDateTime = () => {
   if (props.schedule.startDate) {
@@ -549,7 +649,7 @@ const state = reactive({
   date: initialDate,
   time: initialTime,
   duration: 60, // Default duration in minutes
-  timezone: 'America/Los_Angeles', // Default timezone
+  timezone: getLocalTimezone(),
   endDate: props.schedule.endDate ? props.schedule.endDate.toISO() : '',
   endType: 'none',
   weekdays: {
