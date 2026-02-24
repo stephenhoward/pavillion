@@ -110,13 +110,14 @@ onBeforeMount(async () => {
       </div>
 
       <!-- Empty State -->
-      <div v-else-if="!state.isLoading && !publicCalendarStore.isLoadingEvents" class="empty-state">
+      <div v-else-if="!state.isLoading && !publicCalendarStore.isLoadingEvents && publicCalendarStore.hasLoadedEvents" class="empty-state">
         <p v-if="hasActiveFilters">
           {{ t('no_events_with_filters') }}
         </p>
-        <p v-else>
-          {{ t('no_events_available') }}
-        </p>
+        <template v-else>
+          <p>{{ t('no_events_available') }}</p>
+          <p class="empty-state-hint">{{ t('no_events_available_hint') }}</p>
+        </template>
         <button
           v-if="hasActiveFilters"
           type="button"
@@ -307,6 +308,16 @@ section.day {
 
 .empty-state {
   @include public-empty-state;
+
+  .empty-state-hint {
+    font-size: $public-font-size-sm;
+    color: $public-text-secondary-light;
+    margin-top: $public-space-xs;
+
+    @media (prefers-color-scheme: dark) {
+      color: $public-text-secondary-dark;
+    }
+  }
 
   .clear-filters-btn {
     @include public-button-ghost;

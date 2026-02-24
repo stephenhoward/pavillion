@@ -8,6 +8,7 @@ import { EventCategory } from '@/common/model/event_category';
 vi.mock('@/client/service/models', () => ({
   default: {
     listModels: vi.fn(),
+    getModel: vi.fn(),
   },
 }));
 
@@ -171,6 +172,45 @@ describe('publicCalendarStore - Search and Date Filter Extensions', () => {
       store.clearAllFilters();
 
       expect(store.hasActiveFilters).toBe(false);
+    });
+  });
+
+  describe('hasLoadedEvents state', () => {
+    it('starts as false', () => {
+      expect(store.hasLoadedEvents).toBe(false);
+    });
+
+    it('becomes true after loadEvents completes successfully', async () => {
+      const ModelService = await import('@/client/service/models');
+      (ModelService.default.listModels as any).mockResolvedValue({ items: [] });
+
+      store.currentCalendarUrlName = 'test-calendar';
+      await store.loadEvents('test-calendar');
+
+      expect(store.hasLoadedEvents).toBe(true);
+    });
+
+    it('becomes true after loadEvents fails', async () => {
+      const ModelService = await import('@/client/service/models');
+      (ModelService.default.listModels as any).mockRejectedValue(new Error('Network error'));
+
+      store.currentCalendarUrlName = 'test-calendar';
+      await store.loadEvents('test-calendar');
+
+      expect(store.hasLoadedEvents).toBe(true);
+    });
+
+    it('resets to false when clearAll is called', async () => {
+      const ModelService = await import('@/client/service/models');
+      (ModelService.default.listModels as any).mockResolvedValue({ items: [] });
+
+      store.currentCalendarUrlName = 'test-calendar';
+      await store.loadEvents('test-calendar');
+      expect(store.hasLoadedEvents).toBe(true);
+
+      store.clearAll();
+
+      expect(store.hasLoadedEvents).toBe(false);
     });
   });
 

@@ -30,6 +30,7 @@ export interface PublicCalendarState {
   // UI state
   isLoadingCategories: boolean;
   isLoadingEvents: boolean;
+  hasLoadedEvents: boolean;
   categoryError: string | null;
   eventError: string | null;
 }
@@ -56,6 +57,7 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
     filteredEvents: [],
     isLoadingCategories: false,
     isLoadingEvents: false,
+    hasLoadedEvents: false,
     categoryError: null,
     eventError: null,
   }),
@@ -248,6 +250,7 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
       }
       finally {
         this.isLoadingEvents = false;
+        this.hasLoadedEvents = true;
       }
     },
 
@@ -320,6 +323,7 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
       this.eventError = null;
       this.isLoadingCategories = false;
       this.isLoadingEvents = false;
+      this.hasLoadedEvents = false;
     },
 
     /**

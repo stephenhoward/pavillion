@@ -281,6 +281,7 @@ describe('calendar.vue - SearchFilterPublic Integration', () => {
     store.searchQuery = 'nonexistent event';
     store.allEvents = []; // Simulate no events returned from API
     store.isLoadingEvents = false; // Not loading
+    store.hasLoadedEvents = true; // Events have been loaded (just empty)
 
     await wrapper.vm.$nextTick();
 
@@ -290,6 +291,77 @@ describe('calendar.vue - SearchFilterPublic Integration', () => {
 
     // Verify clear filters button exists
     expect(wrapper.find('.clear-filters-btn').exists()).toBe(true);
+  });
+
+  it('displays helpful empty state when no upcoming events exist', async () => {
+    // Mock calendar service
+    vi.mocked(CalendarService.prototype.getCalendarByUrlName).mockResolvedValue(mockCalendar);
+
+    await router.push('/calendar/test-calendar');
+
+    const wrapper = mount(calendar, {
+      global: {
+        plugins: [pinia, router],
+        stubs: {
+          SearchFilterPublic: true,
+          NotFound: true,
+          CategoryPillSelector: true,
+          EventImage: true,
+        },
+      },
+    });
+
+    await flushPromises();
+
+    const store = usePublicCalendarStore();
+
+    // Simulate no events with no active filters (default date range)
+    store.allEvents = [];
+    store.isLoadingEvents = false;
+    store.hasLoadedEvents = true;
+
+    await wrapper.vm.$nextTick();
+
+    // Verify empty state is shown with helpful message
+    expect(wrapper.find('.empty-state').exists()).toBe(true);
+    expect(wrapper.find('.empty-state').text()).toContain('no_events_available');
+    expect(wrapper.find('.empty-state').text()).toContain('no_events_available_hint');
+
+    // Verify no clear filters button (no active filters)
+    expect(wrapper.find('.clear-filters-btn').exists()).toBe(false);
+  });
+
+  it('does not show empty state before events have loaded', async () => {
+    // Mock calendar service
+    vi.mocked(CalendarService.prototype.getCalendarByUrlName).mockResolvedValue(mockCalendar);
+
+    await router.push('/calendar/test-calendar');
+
+    const wrapper = mount(calendar, {
+      global: {
+        plugins: [pinia, router],
+        stubs: {
+          SearchFilterPublic: true,
+          NotFound: true,
+          CategoryPillSelector: true,
+          EventImage: true,
+        },
+      },
+    });
+
+    await flushPromises();
+
+    const store = usePublicCalendarStore();
+
+    // Events have not loaded yet
+    store.allEvents = [];
+    store.isLoadingEvents = false;
+    store.hasLoadedEvents = false;
+
+    await wrapper.vm.$nextTick();
+
+    // Verify empty state is NOT shown before events have loaded
+    expect(wrapper.find('.empty-state').exists()).toBe(false);
   });
 });
 
