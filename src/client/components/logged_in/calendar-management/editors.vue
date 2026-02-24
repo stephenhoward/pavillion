@@ -18,7 +18,7 @@
     <div v-else-if="state.editors.length > 0 || state.pendingInvitations.length > 0" class="editors-content">
       <!-- Section Header -->
       <div class="editors-header">
-        <h2 class="editors-title">{{ t('calendar_editors') }}</h2>
+        <h2 class="editors-title">{{ t('title') }}</h2>
         <PillButton variant="primary" @click="openAddForm">
           <Plus :size="20" :stroke-width="2" />
           {{ t('add_editor_button') }}
@@ -27,7 +27,7 @@
 
       <!-- Active Editors Section -->
       <div v-if="state.editors.length > 0" class="editors-section">
-        <h3 class="section-label">{{ t('editors_label') }}</h3>
+        <h3 class="section-label">{{ t('active_editors_title') }}</h3>
         <div
           v-for="editor in state.editors"
           :key="editor.id"
@@ -68,7 +68,7 @@
 
       <!-- Pending Invitations Section -->
       <div v-if="state.pendingInvitations.length > 0" class="editors-section">
-        <h3 class="section-label">{{ t('pending_invitations') }}</h3>
+        <h3 class="section-label">{{ t('pending_invitations_title') }}</h3>
         <div
           v-for="invitation in state.pendingInvitations"
           :key="invitation.id"
@@ -494,7 +494,7 @@ const leaveCalendar = async () => {
     // Find the current user's editor record to get their account ID
     const currentEditor = state.editors.find(editor => editor.email === currentUserEmail);
     if (!currentEditor) {
-      state.error = t('editor_not_found');
+      state.error = t('error_editor_not_found');
       return;
     }
 

@@ -81,8 +81,15 @@
     "confirm_leave_message": "Are you sure you want to leave this calendar? You will no longer have edit access and will need to be re-invited to regain access.",
     "error_leaving_calendar": "Failed to leave calendar",
     "resend_button": "Resend",
+    "resending": "Resending...",
+    "canceling": "Canceling...",
     "active_editors_title": "Current Editors",
-    "pending_invitations_title": "Pending Invitations"
+    "pending_invitations_title": "Pending Invitations",
+    "invitation_pending": "Invitation pending",
+    "invitation_canceled_success": "Invitation canceled successfully",
+    "invitation_resent_success": "Invitation resent successfully",
+    "error_canceling_invitation": "Failed to cancel invitation",
+    "error_resending_invitation": "Failed to resend invitation"
   },
   "management": {
     "page_title": "calendar settings",
