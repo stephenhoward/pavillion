@@ -660,6 +660,7 @@ const hasActiveFilters = computed(() => {
     <CategorySelectionDialog
       :visible="showCategoryDialog"
       :selected-event-ids="selectedEvents"
+      :calendar-id="calendarId"
       @close="handleCategoryDialogClose"
       @assign-complete="handleAssignmentComplete"
     />
