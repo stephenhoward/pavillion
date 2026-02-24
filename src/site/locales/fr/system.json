@@ -12,6 +12,7 @@
     "filter_by_category": "Catégories d'événements",
     "clear_filters": "Effacer les filtres",
     "no_events_with_filters": "Aucun événement trouvé",
+    "no_events_with_filters_hint": "Essayez d'ajuster vos filtres ou votre plage de dates pour trouver des événements.",
     "no_events_available": "Aucun événement programmé prochainement.",
     "no_events_available_hint": "Essayez de sélectionner une plage de dates différente pour trouver des événements.",
     "loading_events": "Chargement des événements...",

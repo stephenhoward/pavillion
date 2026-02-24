@@ -110,10 +110,11 @@ onBeforeMount(async () => {
       </div>
 
       <!-- Empty State: suppress when search is pending (1-2 chars typed) to avoid conflicting messages -->
-      <div v-else-if="!state.isLoading && !publicCalendarStore.isLoadingEvents && publicCalendarStore.hasLoadedEvents && !publicCalendarStore.isSearchPending" class="empty-state">
+      <div v-else-if="!state.isLoading && !publicCalendarStore.isLoadingEvents && publicCalendarStore.hasLoadedEvents && !publicCalendarStore.isSearchPending" role="status" class="empty-state">
         <p v-if="hasActiveFilters">
           {{ t('no_events_with_filters') }}
         </p>
+        <p v-if="hasActiveFilters" class="empty-state-hint">{{ t('no_events_with_filters_hint') }}</p>
         <template v-else>
           <p>{{ t('no_events_available') }}</p>
           <p class="empty-state-hint">{{ t('no_events_available_hint') }}</p>
@@ -129,7 +130,7 @@ onBeforeMount(async () => {
       </div>
 
       <!-- Loading State -->
-      <div v-if="state.isLoading || publicCalendarStore.isLoadingEvents" class="loading">
+      <div v-if="state.isLoading || publicCalendarStore.isLoadingEvents" role="status" class="loading">
         {{ t('loading_events') }}
       </div>
     </main>
