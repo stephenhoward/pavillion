@@ -6,7 +6,7 @@ import axios from 'axios';
 
 import { Calendar, DefaultDateRange } from '@/common/model/calendar';
 import { Account } from '@/common/model/account';
-import { CalendarEntity } from '@/server/calendar/entity/calendar';
+import { CalendarEntity, CalendarContentEntity } from '@/server/calendar/entity/calendar';
 import { CalendarMemberEntity } from '@/server/calendar/entity/calendar_member';
 import { CalendarEditor } from '@/common/model/calendar_editor';
 import { CalendarMember } from '@/common/model/calendar_member';
@@ -58,7 +58,9 @@ class CalendarService {
     this.subscriptionInterface = subscriptionInterface;
   }
   async getCalendar(id: string): Promise<Calendar|null> {
-    const calendar = await CalendarEntity.findByPk(id);
+    const calendar = await CalendarEntity.findByPk(id, {
+      include: [CalendarContentEntity],
+    });
     return calendar ? calendar.toModel() : null;
   }
 
@@ -1041,7 +1043,11 @@ class CalendarService {
     }
     const membership = await CalendarMemberEntity.findOne({
       where: { account_id: account.id, role: 'owner' },
-      include: [{ model: CalendarEntity, as: 'calendar' }],
+      include: [{
+        model: CalendarEntity,
+        as: 'calendar',
+        include: [CalendarContentEntity],
+      }],
     });
     return membership?.calendar ? membership.calendar.toModel() : null;
   }

@@ -89,14 +89,14 @@ async function loadCalendars() {
 }
 
 // Create a new calendar with the name from the input field
-// TODO: run this function when the user hits enter
 async function createCalendar() {
   const calendarName = newCalendarName.value.trim();
+  const calendarTitle = newCalendarTitle.value.trim();
   state.isLoading = true;
   state.errorMessage = '';
 
   try {
-    const calendar = await calendarService.createCalendar(calendarName, newCalendarTitle.value);
+    const calendar = await calendarService.createCalendar(calendarName, calendarTitle || undefined);
 
     // Navigate to the new calendar
     router.push({ path: '/calendar/' + calendar.urlName });
@@ -153,6 +153,7 @@ async function createCalendar() {
               type="text"
               v-model="newCalendarTitle"
               :placeholder="t('calendar_title_placeholder')"
+              class="title-input"
               aria-describedby="calendar-title-help"
             />
             <div id="calendar-title-help" class="help-text">{{ t('calendar_title_help') }}</div>
@@ -249,8 +250,9 @@ nav[aria-label="My Calendars Navigation"] {
     margin-bottom: var(--pav-space-xs);
   }
 
-  input {
+  .title-input {
     width: 100%;
+    max-width: 24rem;
     padding: var(--pav-space-sm);
     font-size: var(--pav-font-size-body);
     border: 1px solid var(--pav-color-border-primary);

@@ -381,7 +381,11 @@ describe('getPrimaryCalendarForUser', () => {
     expect(result?.id).toBe('testCalendarId');
     expect(memberFindOneStub.calledWith({
       where: { account_id: 'testAccountId', role: 'owner' },
-      include: [{ model: CalendarEntity, as: 'calendar' }],
+      include: [{
+        model: CalendarEntity,
+        as: 'calendar',
+        include: [CalendarContentEntity],
+      }],
     })).toBe(true);
   });
 
@@ -394,7 +398,11 @@ describe('getPrimaryCalendarForUser', () => {
     expect(result).toBeNull();
     expect(memberFindOneStub.calledWith({
       where: { account_id: 'testAccountId', role: 'owner' },
-      include: [{ model: CalendarEntity, as: 'calendar' }],
+      include: [{
+        model: CalendarEntity,
+        as: 'calendar',
+        include: [CalendarContentEntity],
+      }],
     })).toBe(true);
   });
 });

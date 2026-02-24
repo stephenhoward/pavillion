@@ -83,9 +83,9 @@ export default class CalendarService {
   }
 
   /**
-   * Create a new calendar with the given name
+   * Create a new calendar with the given name and optional title
    * @param urlName The URL name for the calendar
-   * @param title Optional human-readable title for the calendar
+   * @param title Optional display title for the calendar
    * @returns Promise<Calendar> The newly created calendar
    */
   async createCalendar(urlName: string, title?: string): Promise<Calendar> {
@@ -94,12 +94,18 @@ export default class CalendarService {
     }
 
     try {
-      const body: Record<string, any> = { urlName: urlName.trim() };
+      const calendar = new Calendar(undefined, urlName.trim());
+
+      // Set calendar title in content if provided
       if (title && title.trim()) {
-        body.content = { en: { name: title.trim() } };
+        const content = calendar.content('en');
+        content.name = title.trim();
       }
-      const response = await axios.post('/api/v1/calendars', body);
-      const createdCalendar = response.data;
+
+      const createdCalendar = await ModelService.createModel(
+        calendar,
+        '/api/v1/calendars',
+      );
       const newCalendar = Calendar.fromObject(createdCalendar);
 
       // Add the new calendar to the store
@@ -333,14 +339,17 @@ export default class CalendarService {
   }
 
   /**
-   * Update calendar settings
+   * Update calendar settings including content translations
    * @param calendarId The ID of the calendar
    * @param settings The settings to update
    * @returns Promise<Calendar> The updated calendar
    */
   async updateCalendarSettings(
     calendarId: string,
-    settings: { defaultDateRange?: DefaultDateRange },
+    settings: {
+      defaultDateRange?: DefaultDateRange;
+      content?: Record<string, { name?: string; description?: string }>;
+    },
   ): Promise<Calendar> {
     try {
       const encodedId = validateAndEncodeId(calendarId, 'Calendar ID');

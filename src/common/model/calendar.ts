@@ -52,6 +52,10 @@ class Calendar extends TranslatedModel<CalendarContent> {
       languages: this.languages,
       defaultDateRange: this.defaultDateRange,
       widgetAllowedDomain: this.widgetAllowedDomain,
+      content: Object.fromEntries(
+        Object.entries(this._content)
+          .map(([language, strings]: [string, CalendarContent]) => [language, strings.toObject()]),
+      ),
     };
   };
 
@@ -67,6 +71,19 @@ class Calendar extends TranslatedModel<CalendarContent> {
     calendar.description = obj.description;
     calendar.defaultDateRange = obj.defaultDateRange || null;
     calendar.widgetAllowedDomain = obj.widgetAllowedDomain || null;
+
+    // Deserialize content if present
+    if (obj.content && typeof obj.content === 'object') {
+      for (const [language, contentObj] of Object.entries(obj.content)) {
+        if (contentObj && typeof contentObj === 'object') {
+          const content = CalendarContent.fromObject(
+            { ...(contentObj as Record<string, any>), language },
+          );
+          calendar.addContent(content);
+        }
+      }
+    }
+
     return calendar;
   }
 

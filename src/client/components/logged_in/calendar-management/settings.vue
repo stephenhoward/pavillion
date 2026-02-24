@@ -18,6 +18,37 @@
       <h2 class="settings-title">{{ t('title') }}</h2>
 
       <div class="settings-container">
+        <!-- Calendar Title -->
+        <div class="setting-card">
+          <h3 class="setting-label">{{ t('calendar_title_label') }}</h3>
+          <p class="setting-description">{{ t('calendar_title_help') }}</p>
+          <input
+            id="calendarTitle"
+            type="text"
+            class="setting-input"
+            v-model="state.calendarTitle"
+            :disabled="state.isSaving"
+            :placeholder="t('calendar_title_placeholder')"
+            @blur="saveSettings"
+          />
+        </div>
+
+        <!-- Calendar Description -->
+        <div class="setting-card">
+          <h3 class="setting-label">{{ t('calendar_description_label') }}</h3>
+          <p class="setting-description">{{ t('calendar_description_help') }}</p>
+          <textarea
+            id="calendarDescription"
+            class="setting-textarea"
+            v-model="state.calendarDescription"
+            :disabled="state.isSaving"
+            :placeholder="t('calendar_description_placeholder')"
+            rows="3"
+            @blur="saveSettings"
+          />
+        </div>
+
+        <!-- Default Date Range -->
         <div class="setting-card">
           <h3 class="setting-label">{{ t('default_date_range_label') }}</h3>
           <p class="setting-description">{{ t('default_date_range_help') }}</p>
@@ -67,6 +98,8 @@ const state = reactive({
   error: '',
   success: '',
   defaultDateRange: '2weeks',
+  calendarTitle: '',
+  calendarDescription: '',
 });
 
 /**
@@ -90,6 +123,9 @@ const loadSettings = async () => {
     const calendar = await calendarService.getCalendarById(props.calendarId);
     if (calendar) {
       state.defaultDateRange = calendar.defaultDateRange || '2weeks';
+      const content = calendar.content('en');
+      state.calendarTitle = content.name || '';
+      state.calendarDescription = content.description || '';
     }
   }
   catch (error) {
@@ -113,6 +149,12 @@ const saveSettings = async () => {
 
     await calendarService.updateCalendarSettings(props.calendarId, {
       defaultDateRange: state.defaultDateRange,
+      content: {
+        en: {
+          name: state.calendarTitle,
+          description: state.calendarDescription,
+        },
+      },
     });
 
     state.success = t('save_success');
@@ -162,6 +204,9 @@ onMounted(loadSettings);
 
 .settings-container {
   max-width: 36rem; // 576px (max-w-xl)
+  display: flex;
+  flex-direction: column;
+  gap: var(--pav-space-4);
 }
 
 .setting-card {
@@ -197,6 +242,63 @@ onMounted(loadSettings);
 
   @media (prefers-color-scheme: dark) {
     color: var(--pav-color-stone-400);
+  }
+}
+
+.setting-input {
+  width: 100%;
+  max-width: 24rem;
+  padding: 0.75rem 1rem;
+  border: 0;
+  border-radius: 0.75rem;
+  background: var(--pav-color-stone-100);
+  color: var(--pav-color-stone-900);
+  font-size: 1rem;
+  transition: box-shadow 0.2s;
+
+  &:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--pav-color-orange-500);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    background: var(--pav-color-stone-800);
+    color: var(--pav-color-stone-100);
+  }
+}
+
+.setting-textarea {
+  width: 100%;
+  max-width: 24rem;
+  padding: 0.75rem 1rem;
+  border: 0;
+  border-radius: 0.75rem;
+  background: var(--pav-color-stone-100);
+  color: var(--pav-color-stone-900);
+  font-size: 1rem;
+  transition: box-shadow 0.2s;
+  resize: vertical;
+  font-family: inherit;
+  line-height: 1.5;
+
+  &:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--pav-color-orange-500);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    background: var(--pav-color-stone-800);
+    color: var(--pav-color-stone-100);
   }
 }
 

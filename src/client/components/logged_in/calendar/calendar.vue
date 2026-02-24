@@ -490,8 +490,8 @@ const hasActiveFilters = computed(() => {
         <div class="header-content">
           <div class="header-title-section">
             <h1>
-              <span v-if="state.calendar">{{ state.calendar.urlName }}@{{ site_domain }}</span>
-              <span v-else>{{ calendarId }}@{{ site_domain }}</span>
+              <span v-if="state.calendar">{{ state.calendar.content('en').name || state.calendar.urlName }}</span>
+              <span v-else>{{ calendarId }}</span>
             </h1>
             <div class="header-actions">
               <RouterLink

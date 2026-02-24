@@ -1,4 +1,4 @@
-import { Model, Column, Table, BelongsTo, ForeignKey, DataType, PrimaryKey } from 'sequelize-typescript';
+import { Model, Column, Table, BelongsTo, ForeignKey, DataType, PrimaryKey, HasMany } from 'sequelize-typescript';
 
 import { Calendar, CalendarContent, DefaultDateRange } from '@/common/model/calendar';
 import db from '@/server/common/entity/db';
@@ -22,6 +22,9 @@ class CalendarEntity extends Model {
   @Column({ type: DataType.STRING, allowNull: true })
   declare widget_allowed_domain: string | null;
 
+  @HasMany(() => CalendarContentEntity)
+  declare contentEntities: CalendarContentEntity[];
+
   /**
    * Association with EventEntity defined programmatically in event.ts
    * to avoid circular dependency.
@@ -38,6 +41,13 @@ class CalendarEntity extends Model {
     }
     calendar.defaultDateRange = this.default_date_range as DefaultDateRange || null;
     calendar.widgetAllowedDomain = this.widget_allowed_domain || null;
+
+    // Load content from associated content entities if available
+    if (this.contentEntities && this.contentEntities.length > 0) {
+      for (const contentEntity of this.contentEntities) {
+        calendar.addContent(contentEntity.toModel());
+      }
+    }
 
     return calendar;
   };

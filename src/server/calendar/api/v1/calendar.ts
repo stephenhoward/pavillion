@@ -52,12 +52,28 @@ class CalendarRoutes {
     }
 
     try {
-      // Create calendar with the specified URL name
+      // Create calendar with the specified URL name and optional title
+      const calendarTitle = req.body.content?.en?.name || req.body.urlName;
       const calendar = await this.service.createCalendar(
         account,
         req.body.urlName,
-        req.body.content?.en?.name || req.body.urlName,
+        calendarTitle,
       );
+
+      // If additional content (description) was provided, save it
+      if (req.body.content) {
+        await this.service.updateCalendarSettings(
+          account,
+          calendar.id,
+          { content: req.body.content },
+        );
+        // Re-fetch calendar with content
+        const updatedCalendar = await this.service.getCalendar(calendar.id);
+        if (updatedCalendar) {
+          res.json(updatedCalendar.toObject());
+          return;
+        }
+      }
 
       res.json(calendar.toObject());
     }
@@ -98,13 +114,13 @@ class CalendarRoutes {
       return;
     }
 
-    const { defaultDateRange } = req.body;
+    const { defaultDateRange, content } = req.body;
 
     try {
       const calendar = await this.service.updateCalendarSettings(
         account,
         calendarId,
-        { defaultDateRange },
+        { defaultDateRange, content },
       );
 
       res.json(calendar.toObject());
