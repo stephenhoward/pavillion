@@ -28,6 +28,7 @@ import {
   RemoteProfileFetchError,
   SelfFollowError,
   AlreadyFollowingError,
+  InvalidRepostPolicySettingsError,
 } from '@/common/exceptions/activitypub';
 import { InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
 
@@ -89,13 +90,13 @@ class ActivityPubService {
   /**
    * Validate that repost policy settings are consistent.
    *
-   * Note: Previously enforced that autoRepostReposts required autoRepostOriginals,
-   * but this constraint was removed to allow more flexible policy configurations.
-   * Users may want to auto-repost only shared content (reposts) without auto-reposting
-   * original events, which is a valid use case.
+   * autoRepostReposts=true requires autoRepostOriginals=true because you cannot
+   * meaningfully repost reposts without also reposting the original events.
    */
-  static validateRepostPolicySettings(_autoRepostOriginals: boolean, _autoRepostReposts: boolean): void {
-    // No validation constraints - allow any combination of policy settings
+  static validateRepostPolicySettings(autoRepostOriginals: boolean, autoRepostReposts: boolean): void {
+    if (autoRepostReposts && !autoRepostOriginals) {
+      throw new InvalidRepostPolicySettingsError('Cannot enable reposting of shared events without enabling reposting of original events');
+    }
   }
 
   /**

@@ -175,7 +175,7 @@ test.describe('Auto-Repost Policy Enforcement', () => {
       bobToken,
       bobFollowsAlice!.id,
       bobCalendar.id,
-      false, // don't auto-repost originals
+      true,  // auto-repost originals (required when auto-repost reposts is enabled)
       true   // auto-repost reposts
     );
 

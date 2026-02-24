@@ -202,7 +202,7 @@ describe('ActivityPub Social API Routes', () => {
     });
 
     // TODO: Re-enable when validation is restored in bead pv-5fk
-    it.skip('should reject when autoRepostReposts is true but autoRepostOriginals is false', async () => {
+    it('should reject when autoRepostReposts is true but autoRepostOriginals is false', async () => {
       const req = {
         user: testAccount,
         params: { id: 'follow-1' },
