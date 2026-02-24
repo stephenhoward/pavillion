@@ -99,6 +99,15 @@ describe('LocationDisplayCard', () => {
       expect(wrapper.emitted('add-location')).toHaveLength(1);
     });
 
+    it('should have type="button" on Add Location button to prevent form submission', () => {
+      const wrapper = mount(LocationDisplayCard, {
+        props: { location: null },
+      });
+
+      const button = wrapper.find('.add-location-button');
+      expect(button.attributes('type')).toBe('button');
+    });
+
     it('should not display location info', () => {
       const wrapper = mount(LocationDisplayCard, {
         props: { location: null },
