@@ -49,7 +49,8 @@
         "toggle_filters": "Alternar filtros",
         "more_filters": "Más filtros",
         "hide_filters": "Ocultar filtros",
-        "show_filters": "Mostrar filtros"
+        "show_filters": "Mostrar filtros",
+        "date_range_invalid": "Rango de fechas no válido"
     },
     "event_location": "Ubicación",
     "report": {

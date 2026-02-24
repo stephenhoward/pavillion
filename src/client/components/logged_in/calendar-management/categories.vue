@@ -6,11 +6,6 @@
       {{ state.error }}
     </div>
 
-    <!-- Success Message -->
-    <div v-if="state.successMessage" class="alert alert--success">
-      {{ state.successMessage }}
-    </div>
-
     <LoadingMessage v-if="state.isLoading" :description="t('loading')" />
 
     <!-- Categories List -->
@@ -262,6 +257,7 @@ import EmptyLayout from '@/client/components/common/empty_state.vue';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
 import BulkCategoriesMenu from './BulkCategoriesMenu.vue';
 import PillButton from '@/client/components/common/PillButton.vue';
+import { useToast } from '@/client/composables/useToast';
 
 const props = defineProps({
   calendarId: {
@@ -276,6 +272,7 @@ const { t } = useTranslation('calendars', {
   keyPrefix: 'management',
 });
 
+const toast = useToast();
 const categoryService = new CategoryService();
 const currentLanguage = 'en'; // TODO: Get from language picker/preference
 
@@ -283,7 +280,6 @@ const state = reactive({
   categories: [],
   isLoading: false,
   error: '',
-  successMessage: '',
 
   // Editor state
   showEditor: false,
@@ -357,7 +353,6 @@ const selectedCount = computed(() => {
 async function loadCategories() {
   state.isLoading = true;
   state.error = '';
-  state.successMessage = '';
 
   try {
     state.categories = await categoryService.loadCategories(props.calendarId);
@@ -438,8 +433,15 @@ function closeEditor() {
  * Handle category saved from editor
  */
 async function onCategorySaved() {
+  const wasCreate = !state.categoryToEdit?.id;
   await loadCategories();
   emit('categoriesUpdated');
+  if (wasCreate) {
+    toast.success(t('category_created_success'));
+  }
+  else {
+    toast.success(t('category_updated_success'));
+  }
 }
 
 /**
@@ -482,20 +484,15 @@ async function deleteCategory() {
       state.deleteMigrationTarget || undefined,
     );
 
-    state.successMessage = t('category_deleted_success', { count: affectedEventCount });
-
     await loadCategories();
     cancelDeleteCategory();
     emit('categoriesUpdated');
 
-    // Clear success message after 3 seconds
-    setTimeout(() => {
-      state.successMessage = '';
-    }, 3000);
+    toast.success(t('category_deleted_success', { count: affectedEventCount }));
   }
   catch (error) {
     console.error('Error deleting category:', error);
-    state.error = t('error_deleting');
+    toast.error(t('error_deleting'));
   }
   finally {
     state.isDeleting = '';
@@ -550,10 +547,6 @@ async function mergeCategories() {
       sourceCategoryIds,
     );
 
-    state.successMessage = t('categories_merged_success', {
-      count: result.totalAffectedEvents,
-    });
-
     // Clear selection
     state.selectedCategories.clear();
 
@@ -561,14 +554,11 @@ async function mergeCategories() {
     cancelMergeDialog();
     emit('categoriesUpdated');
 
-    // Clear success message after 3 seconds
-    setTimeout(() => {
-      state.successMessage = '';
-    }, 3000);
+    toast.success(t('categories_merged_success', { count: result.totalAffectedEvents }));
   }
   catch (error) {
     console.error('Error merging categories:', error);
-    state.error = t('error_merging');
+    toast.error(t('error_merging'));
   }
   finally {
     state.isMerging = false;
@@ -1032,16 +1022,6 @@ onMounted(async () => {
 
     @media (prefers-color-scheme: dark) {
       color: var(--pav-color-red-400);
-    }
-  }
-
-  &.alert--success {
-    background-color: rgba(34, 197, 94, 0.1);
-    border: 1px solid rgba(34, 197, 94, 0.2);
-    color: rgb(21, 128, 61);
-
-    @media (prefers-color-scheme: dark) {
-      color: rgb(134, 239, 172);
     }
   }
 }

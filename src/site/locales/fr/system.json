@@ -44,7 +44,8 @@
         "toggle_filters": "Afficher/masquer les filtres",
         "more_filters": "Plus de filtres",
         "hide_filters": "Masquer les filtres",
-        "show_filters": "Afficher les filtres"
+        "show_filters": "Afficher les filtres",
+        "date_range_invalid": "Plage de dates invalide"
     },
     "event_location": "Lieu",
     "report": {

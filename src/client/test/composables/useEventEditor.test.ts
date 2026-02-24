@@ -38,6 +38,13 @@ const mockStripEventForDuplication = vi.fn((event) => {
   return stripped;
 });
 
+const mockToast = {
+  success: vi.fn(),
+  error: vi.fn(),
+  warning: vi.fn(),
+  info: vi.fn(),
+};
+
 // Mock modules
 vi.mock('vue-router', () => ({
   useRoute: () => mockRoute,
@@ -52,6 +59,10 @@ vi.mock('@/client/composables/useEventDuplication', () => ({
   useEventDuplication: () => ({
     stripEventForDuplication: mockStripEventForDuplication,
   }),
+}));
+
+vi.mock('@/client/composables/useToast', () => ({
+  useToast: () => mockToast,
 }));
 
 describe('useEventEditor', () => {
@@ -70,6 +81,10 @@ describe('useEventEditor', () => {
     mockCalendarStore.getLastInteractedCalendar = null;
     mockCalendarStore.setSelectedCalendar.mockClear();
     mockStripEventForDuplication.mockClear();
+    mockToast.success.mockClear();
+    mockToast.error.mockClear();
+    mockToast.warning.mockClear();
+    mockToast.info.mockClear();
   });
 
   afterEach(() => {
@@ -469,6 +484,83 @@ describe('useEventEditor', () => {
         name: 'calendar',
         params: { calendar: 'test-calendar' },
       });
+    });
+
+    it('should show a success toast after saving event in create mode', async () => {
+      const calendar = new Calendar('cal-1', 'test-calendar');
+      const savedEvent = new CalendarEvent('event-123', 'cal-1');
+
+      sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
+      sandbox.stub(EventService.prototype, 'saveEvent').resolves(savedEvent);
+
+      const { initializeEvent, saveEvent } = useEventEditor();
+
+      await initializeEvent();
+
+      const mockT = vi.fn((key) => key);
+      await saveEvent(mockT);
+
+      expect(mockT).toHaveBeenCalledWith('event_saved_success');
+      expect(mockToast.success).toHaveBeenCalledWith('event_saved_success');
+    });
+
+    it('should show a success toast after saving event in duplicate mode', async () => {
+      mockRoute.query.from = 'source-event-123';
+
+      const calendar = new Calendar('cal-1', 'test-calendar');
+      const sourceEvent = new CalendarEvent('source-event-123', 'cal-1');
+      const savedEvent = new CalendarEvent('new-event-456', 'cal-1');
+
+      sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
+      sandbox.stub(ModelService, 'getModel').resolves(sourceEvent.toObject());
+      sandbox.stub(EventService.prototype, 'saveEvent').resolves(savedEvent);
+
+      const { initializeEvent, saveEvent } = useEventEditor();
+
+      await initializeEvent();
+
+      const mockT = vi.fn((key) => key);
+      await saveEvent(mockT);
+
+      expect(mockToast.success).toHaveBeenCalledWith('event_saved_success');
+    });
+
+    it('should show a success toast after saving event in edit mode', async () => {
+      mockRoute.params.eventId = 'event-123';
+
+      const calendar = new Calendar('cal-1', 'test-calendar');
+      const event = new CalendarEvent('event-123', 'cal-1');
+      const savedEvent = new CalendarEvent('event-123', 'cal-1');
+
+      sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
+      sandbox.stub(ModelService, 'getModel').resolves(event.toObject());
+      sandbox.stub(CategoryService.prototype, 'getEventCategories').resolves([]);
+      sandbox.stub(EventService.prototype, 'saveEvent').resolves(savedEvent);
+
+      const { initializeEvent, saveEvent } = useEventEditor();
+
+      await initializeEvent('event-123');
+
+      const mockT = vi.fn((key) => key);
+      await saveEvent(mockT);
+
+      expect(mockToast.success).toHaveBeenCalledWith('event_saved_success');
+    });
+
+    it('should not show a success toast when save fails', async () => {
+      const calendar = new Calendar('cal-1', 'test-calendar');
+
+      sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
+      sandbox.stub(EventService.prototype, 'saveEvent').rejects(new Error('Save failed'));
+
+      const { initializeEvent, saveEvent } = useEventEditor();
+
+      await initializeEvent();
+
+      const mockT = vi.fn((key) => key);
+      await saveEvent(mockT);
+
+      expect(mockToast.success).not.toHaveBeenCalled();
     });
 
     it('should save event with categories', async () => {

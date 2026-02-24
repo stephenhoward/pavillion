@@ -133,6 +133,8 @@ checkSetupMode().then((setupRequired) => {
 
         children: [
           { path: 'calendar', component: CalendarsView, name: 'calendars', beforeEnter: mustBeLoggedIn },
+          // Static 'new' route must be declared before the dynamic :calendar route
+          { path: 'calendar/new', component: CalendarsView, name: 'calendar_new', beforeEnter: mustBeLoggedIn },
           { path: 'calendar/:calendar', component: CalendarView, name: 'calendar', beforeEnter: mustBeLoggedIn },
           { path: 'calendar/:calendar/manage', component: CalendarManagementView, name: 'calendar_management', beforeEnter: mustBeLoggedIn },
           { path: 'inbox', component: InboxView, name: 'inbox', beforeEnter: mustBeLoggedIn },

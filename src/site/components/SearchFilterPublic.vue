@@ -278,10 +278,15 @@ const formatDate = (dateStr: string): string => {
   return `${month} ${day}`;
 };
 
-// Format date range
+// Format date range — guards against inverted ranges (end before start)
 const formatDateRange = (start: string, end: string): string => {
   const startDate = new Date(start + 'T00:00:00');
   const endDate = new Date(end + 'T00:00:00');
+
+  // Guard: inverted range (end before start) — return clear label instead of garbled output
+  if (endDate < startDate) {
+    return t('date_range_invalid');
+  }
 
   const startMonth = startDate.toLocaleDateString('en-US', { month: 'short' });
   const endMonth = endDate.toLocaleDateString('en-US', { month: 'short' });
@@ -444,8 +449,12 @@ const setCustomMode = () => {
   }
 };
 
-// Handle manual date changes
+// Handle manual date changes — auto-swap if end is before start
 const onDateChange = () => {
+  // Validate date range: auto-correct inverted ranges by swapping start and end
+  if (state.startDate && state.endDate && state.startDate > state.endDate) {
+    [state.startDate, state.endDate] = [state.endDate, state.startDate];
+  }
   publicStore.setDateRange(state.startDate, state.endDate);
   publicStore.reloadWithFilters();
   updateURL();
@@ -553,12 +562,23 @@ const initializeFromURL = () => {
     publicStore.endDate = query.endDate;
   }
 
-  // Only set date filter mode to custom if:
-  // 1. Dates are present in URL AND
-  // 2. No mode is currently set (e.g., not just set by a preset button click)
-  // This prevents the mode from being overridden when preset buttons update the URL
-  if ((query.startDate || query.endDate) && !state.dateFilterMode) {
-    state.dateFilterMode = 'custom';
+  // Determine date filter mode: detect if stored dates match a preset before
+  // falling back to 'custom'. This ensures bookmarked preset URLs highlight the
+  // correct pill instead of always showing the custom date inputs.
+  if (query.startDate || query.endDate) {
+    const thisWeek = getThisWeek();
+    const nextWeek = getNextWeek();
+
+    if (query.startDate === thisWeek.startDate && query.endDate === thisWeek.endDate) {
+      state.dateFilterMode = 'thisWeek';
+    }
+    else if (query.startDate === nextWeek.startDate && query.endDate === nextWeek.endDate) {
+      state.dateFilterMode = 'nextWeek';
+    }
+    else if (!state.dateFilterMode) {
+      // Only set to custom if no mode is currently set (e.g., not just set by a preset button click)
+      state.dateFilterMode = 'custom';
+    }
   }
   else if (!query.startDate && !query.endDate) {
     state.dateFilterMode = null;

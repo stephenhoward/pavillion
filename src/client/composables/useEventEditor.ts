@@ -9,6 +9,7 @@ import CategoryService from '@/client/service/category';
 import ModelService from '@/client/service/models';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { useEventDuplication } from '@/client/composables/useEventDuplication';
+import { useToast } from '@/client/composables/useToast';
 
 /**
  * Editor mode type
@@ -53,6 +54,7 @@ export function useEventEditor(defaultLanguage: string = 'en') {
   const router = useRouter();
   const calendarStore = useCalendarStore();
   const { stripEventForDuplication } = useEventDuplication();
+  const toast = useToast();
 
   // Services
   const calendarService = new CalendarService();
@@ -346,6 +348,9 @@ export function useEventEditor(defaultLanguage: string = 'en') {
       if (onDirtyReset) {
         onDirtyReset();
       }
+
+      // Show success toast before navigating away
+      toast.success(t('event_saved_success'));
 
       // Navigate to the calendar view for this event's calendar
       const calendar = state.availableCalendars.find(c => c.id === model.calendarId);

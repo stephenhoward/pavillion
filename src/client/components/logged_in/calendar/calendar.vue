@@ -185,7 +185,9 @@ const syncFiltersToURL = () => {
  * 1. Updates local filter state
  * 2. Syncs filters to URL parameters (for bookmarking)
  * 3. Reloads events from API with new filters
- * 4. Clears any bulk selections (filtered view may exclude selected items)
+ *
+ * Selected events are preserved across filter changes. Events that no longer appear
+ * in the filtered list are simply hidden but remain selected for bulk operations.
  *
  * @param filters - Filter object from SearchFilter component
  * @param filters.search - Search query string (optional)
@@ -212,8 +214,6 @@ const handleFiltersChanged = async (filters) => {
   state.isLoading = true;
   try {
     await eventService.loadCalendarEvents(calendarId.value, filters, state.calendar?.id);
-    // Clear selections when filtering changes
-    deselectAll();
   }
   catch (error) {
     console.error('Error loading filtered events:', error);
@@ -473,6 +473,38 @@ const getRecurrenceText = (event) => {
 const hasActiveFilters = computed(() => {
   return !!(currentFilters.search?.trim() || currentFilters.categories?.length > 0);
 });
+
+/**
+ * Returns the visible label text for the Select All checkbox.
+ * Changes from "Select All" to "Deselect All" when all events are selected,
+ * ensuring state is communicated beyond color alone.
+ */
+const selectAllVisibleLabel = computed(() => {
+  if (!calendarEvents.value || calendarEvents.value.length === 0) {
+    return tBulk('select_all');
+  }
+  const checkboxState = selectAllState(calendarEvents.value);
+  return checkboxState.checked ? tBulk('deselect_all') : tBulk('select_all');
+});
+
+/**
+ * Returns the accessible aria-label for the Select All checkbox.
+ * Updates to reflect all three states: none selected, some selected (indeterminate),
+ * and all selected, so screen reader users always know the current state.
+ */
+const selectAllAriaLabel = computed(() => {
+  if (!calendarEvents.value || calendarEvents.value.length === 0) {
+    return tBulk('select_all_events');
+  }
+  const checkboxState = selectAllState(calendarEvents.value);
+  if (checkboxState.checked) {
+    return tBulk('deselect_all_label');
+  }
+  if (checkboxState.indeterminate) {
+    return tBulk('select_all_indeterminate_label');
+  }
+  return tBulk('select_all_events');
+});
 </script>
 
 <template>
@@ -543,9 +575,9 @@ const hasActiveFilters = computed(() => {
               :checked="selectAllState(calendarEvents).checked"
               :indeterminate="selectAllState(calendarEvents).indeterminate"
               @change="toggleSelectAll(calendarEvents)"
-              :aria-label="tBulk('select_all_events')"
+              :aria-label="selectAllAriaLabel"
             />
-            <span>{{ tBulk('select_all') }}</span>
+            <span>{{ selectAllVisibleLabel }}</span>
           </label>
         </div>
 

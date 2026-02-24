@@ -784,6 +784,7 @@ button {
                 >
                   <EventRecurrenceView
                     :schedule="schedule"
+                    :can-remove="editorState.event.schedules.length > 1"
                     @remove-schedule="editorState.event.dropSchedule(index)"
                   />
                 </div>
@@ -1094,18 +1095,7 @@ watch(() => showCreateLocationForm.value, async (newValue) => {
 watch(() => editorState.err, async (newError) => {
   if (newError) {
     await nextTick();
-    await nextTick();
-
-    if (errorContainer.value) {
-      // Scroll to top of the page container
-      const pageContainer = errorContainer.value.closest('.event-editor-page');
-      if (pageContainer) {
-        pageContainer.scrollTo({
-          top: 0,
-          behavior: 'smooth',
-        });
-      }
-    }
+    errorContainer.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 }, { deep: true });
 

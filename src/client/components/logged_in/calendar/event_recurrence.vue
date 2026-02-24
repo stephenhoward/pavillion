@@ -466,6 +466,7 @@
     <div class="schedule-header">
       <span>Schedule</span>
       <button
+        v-if="props.canRemove"
         type="button"
         class="remove-schedule-btn"
         @click="emit('remove-schedule')"
@@ -592,6 +593,10 @@ const props = defineProps({
   compact: {
     type: Boolean,
     default: false,
+  },
+  canRemove: {
+    type: Boolean,
+    default: true,
   },
 });
 

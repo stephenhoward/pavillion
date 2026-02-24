@@ -15,7 +15,6 @@
     <% if (environment === 'production' || environment === 'e2e') { %>
     <script type="module" src="/<%= manifest['src/widget/app.ts'].file %>"></script>
     <% } else { %>
-    <script type="module" src="http://localhost:5173/@vite/widget"></script>
     <script type="module" src="http://localhost:5173/src/widget/app.ts"></script>
     <% } %>
   </body>

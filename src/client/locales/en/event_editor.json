@@ -22,6 +22,7 @@
     "location_label": "Location",
     "dates_label": "Dates",
     "calendar_label": "Calendar",
+    "event_saved_success": "Event saved successfully",
     "error_no_calendar": "Please select a calendar",
     "error_loading_calendars": "Failed to load calendars",
     "error_saving_event": "Error saving event",
