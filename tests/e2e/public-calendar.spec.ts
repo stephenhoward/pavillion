@@ -104,7 +104,7 @@ test.describe('Public Calendar', () => {
 
     // Verify URL updates with category parameter
     const url = page.url();
-    expect(url).toContain('category=');
+    expect(url).toContain('categories=');
 
     // Click again to deselect
     await categoryPills.first().click();
