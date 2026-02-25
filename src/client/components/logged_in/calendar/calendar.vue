@@ -11,6 +11,7 @@ import EventService from '@/client/service/event';
 import EventImage from '@/client/components/common/media/EventImage.vue';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
 import PillButton from '@/client/components/common/PillButton.vue';
+import ModalLayout from '@/client/components/common/modal.vue';
 import BulkOperationsMenu from './BulkOperationsMenu.vue';
 import CategorySelectionDialog from './CategorySelectionDialog.vue';
 import SearchFilter from './SearchFilter.vue';
@@ -90,6 +91,12 @@ const repostEventForModal = ref(null);
 
 // Ref to the element that triggered the repost modal (for focus return on close)
 const repostModalTriggerEl = ref(null);
+
+// Delete confirmation modal state
+const showDeleteConfirmModal = ref(false);
+
+// Ref to the element that triggered the delete modal (for focus return on close)
+const deleteModalTriggerEl = ref(null);
 
 /**
  * Initializes filter state from URL query parameters.
@@ -288,14 +295,13 @@ const newEvent = async () => {
 };
 
 /**
- * Navigate to edit an existing event.
- * For reposted events, opens a read-only detail + category edit modal instead.
- * Saves the triggering DOM element so focus can be returned when the modal closes.
+ * Navigate to or open the editor for an event.
+ * Used internally when navigation should always occur regardless of bulk mode.
  *
  * @param event - The CalendarEvent model to edit
  * @param domEvent - The originating mouse event, used to capture the trigger element
  */
-const handleEditEvent = (event, domEvent) => {
+const navigateToEditEvent = (event, domEvent) => {
   if (event.isRepost) {
     repostModalTriggerEl.value = domEvent?.currentTarget ?? null;
     repostEventForModal.value = event;
@@ -305,6 +311,35 @@ const handleEditEvent = (event, domEvent) => {
     name: 'event_edit',
     params: { eventId: event.id },
   });
+};
+
+/**
+ * Handle a click on the event article body.
+ * When bulk mode is active (one or more events selected), toggles the event's
+ * selection instead of navigating to the editor. This prevents users from
+ * accidentally losing their selection by misclicking the card body.
+ *
+ * @param event - The CalendarEvent model
+ * @param domEvent - The originating mouse event
+ */
+const handleEditEvent = (event, domEvent) => {
+  if (hasSelection.value) {
+    toggleEventSelection(event);
+    return;
+  }
+  navigateToEditEvent(event, domEvent);
+};
+
+/**
+ * Handle click on the dedicated edit (pencil) button.
+ * Always navigates to the editor regardless of bulk mode, since the user
+ * explicitly intends to edit by clicking the edit button.
+ *
+ * @param event - The CalendarEvent model to edit
+ * @param domEvent - The originating mouse event
+ */
+const handleEditButtonClick = (event, domEvent) => {
+  navigateToEditEvent(event, domEvent);
 };
 
 /**
@@ -376,30 +411,56 @@ const handleAssignmentComplete = (result) => {
   deselectAll(); // Clear selection after successful assignment
 };
 
-const handleDeleteEvents = async () => {
+/**
+ * Opens the delete confirmation modal when the user clicks "Delete Events".
+ * Captures the trigger element so focus can be returned when the modal closes.
+ * The actual deletion is performed in handleDeleteConfirm() after the user confirms.
+ *
+ * @param event - The originating mouse event, used to capture the trigger element
+ */
+const handleDeleteEvents = (event) => {
   if (!selectedEvents.value.length) return;
+  deleteModalTriggerEl.value = (event?.currentTarget ?? null);
+  showDeleteConfirmModal.value = true;
+};
 
-  const confirmDelete = confirm(`Are you sure you want to delete ${selectedCount.value} event${selectedCount.value > 1 ? 's' : ''}?`);
+/**
+ * Cancels the delete operation and closes the confirmation modal.
+ * Returns focus to the element that triggered the modal.
+ */
+const handleDeleteCancel = async () => {
+  showDeleteConfirmModal.value = false;
+  await nextTick();
+  deleteModalTriggerEl.value?.focus();
+};
 
-  if (confirmDelete) {
-    const deleteCount = selectedEvents.value.length;
-    try {
-      // Get the actual event objects from the selected IDs
-      const eventsToDelete = getSelectedEventObjects(calendarEvents.value || []);
+/**
+ * Executes the bulk delete after the user confirms in the modal.
+ * Deletes all selected events, reloads the event list, and shows a toast notification.
+ * Returns focus to the element that triggered the modal after the modal closes.
+ */
+const handleDeleteConfirm = async () => {
+  showDeleteConfirmModal.value = false;
+  await nextTick();
+  deleteModalTriggerEl.value?.focus();
 
-      for (const event of eventsToDelete) {
-        await eventService.deleteEvent(event);
-      }
+  const deleteCount = selectedEvents.value.length;
+  try {
+    // Get the actual event objects from the selected IDs
+    const eventsToDelete = getSelectedEventObjects(calendarEvents.value || []);
 
-      // Reload events after deletion with current filters
-      await eventService.loadCalendarEvents(calendarId.value, currentFilters, state.calendar?.id);
-      deselectAll();
-      toast.success(tBulk('delete_success', { count: deleteCount }));
+    for (const event of eventsToDelete) {
+      await eventService.deleteEvent(event);
     }
-    catch (error) {
-      console.error('Error deleting events:', error);
-      toast.error(tBulk('delete_error'));
-    }
+
+    // Reload events after deletion with current filters
+    await eventService.loadCalendarEvents(calendarId.value, currentFilters, state.calendar?.id);
+    deselectAll();
+    toast.success(tBulk('delete_success', { count: deleteCount }));
+  }
+  catch (error) {
+    console.error('Error deleting events:', error);
+    toast.error(tBulk('delete_error'));
   }
 };
 
@@ -570,7 +631,9 @@ const selectAllAriaLabel = computed(() => {
       </div>
 
       <!-- Events Display Section -->
-      <section v-if="!state.isLoading && calendarEvents && calendarEvents.length > 0" aria-label="Calendar Events">
+      <section v-if="!state.isLoading && calendarEvents && calendarEvents.length > 0"
+               aria-label="Calendar Events"
+               :class="{ 'has-bulk-toolbar': hasSelection }">
         <h2 class="sr-only">Events in this Calendar</h2>
 
         <!-- Select All Controls -->
@@ -640,7 +703,7 @@ const selectAllAriaLabel = computed(() => {
               <button
                 type="button"
                 class="edit-btn icon-btn"
-                @click.stop="handleEditEvent(event, $event)"
+                @click.stop="handleEditButtonClick(event, $event)"
                 :aria-label="t('event.edit_label', { name: event.content('en').name })"
                 title="Edit this event"
               >
@@ -700,6 +763,34 @@ const selectAllAriaLabel = computed(() => {
       @close="handleCategoryDialogClose"
       @assign-complete="handleAssignmentComplete"
     />
+
+    <!-- Delete Confirmation Modal -->
+    <ModalLayout
+      v-if="showDeleteConfirmModal"
+      :title="tBulk('delete_confirm_title')"
+      modal-class="delete-events-modal"
+      @close="handleDeleteCancel"
+    >
+      <div class="delete-events-dialog">
+        <p class="delete-events-message">
+          {{ selectedCount === 1 ? tBulk('delete_confirm_message_one', { count: selectedCount }) : tBulk('delete_confirm_message_other', { count: selectedCount }) }}
+        </p>
+        <div class="delete-events-actions">
+          <PillButton
+            variant="ghost"
+            @click="handleDeleteCancel"
+          >
+            {{ tBulk('cancel') }}
+          </PillButton>
+          <PillButton
+            variant="danger"
+            @click="handleDeleteConfirm"
+          >
+            {{ tBulk('delete_confirm_button') }}
+          </PillButton>
+        </div>
+      </div>
+    </ModalLayout>
 
     <!-- Report Event Dialog -->
     <ReportEvent
@@ -809,6 +900,13 @@ section[aria-label="Calendar Events"] {
   max-width: 56rem; // max-w-4xl
   margin: 0 auto;
   padding: 1.5rem 1rem;
+
+  &.has-bulk-toolbar {
+    // Add clearance so the last event card is not obscured by the fixed bulk toolbar.
+    // The toolbar is approximately 4.5rem tall positioned 1rem from the bottom.
+    // Using 6rem provides comfortable clearance.
+    padding-bottom: 6rem;
+  }
 
   .event-controls {
     padding: 1rem 0;
@@ -1123,6 +1221,40 @@ section[aria-label="Calendar Events"] {
 
   @media (prefers-color-scheme: dark) {
     color: var(--pav-color-stone-400);
+  }
+}
+
+// Constrain delete events modal width
+:global(.delete-events-modal > div) {
+  max-width: 480px !important;
+}
+
+.delete-events-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pav-space-4, 1rem);
+
+  .delete-events-message {
+    margin: 0;
+    color: var(--pav-color-stone-600);
+    font-size: 0.875rem;
+    line-height: 1.5;
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-400);
+    }
+  }
+
+  .delete-events-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+    padding-top: var(--pav-space-4, 1rem);
+    border-top: 1px solid var(--pav-color-stone-200);
+
+    @media (prefers-color-scheme: dark) {
+      border-top-color: var(--pav-color-stone-700);
+    }
   }
 }
 </style>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, nextTick, onBeforeMount, ref } from 'vue';
+import { reactive, computed, nextTick, onBeforeMount, ref } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useRoute } from 'vue-router';
 import CategoriesTab from './categories.vue';
@@ -9,6 +9,7 @@ import WidgetTab from './widget-tab.vue';
 import ReportsDashboard from '@/client/components/moderation/reports-dashboard.vue';
 import ReportDetail from '@/client/components/moderation/report-detail.vue';
 import CalendarService from '../../../service/calendar';
+import { CalendarInfo } from '@/common/model/calendar_info';
 
 const route = useRoute();
 const calendarUrlName = Array.isArray(route.params.calendar)
@@ -23,7 +24,7 @@ const calendarService = new CalendarService();
 
 const state = reactive({
   activeTab: 'categories',
-  calendar: null as any,
+  calendarInfo: null as CalendarInfo | null,
   loading: false,
   error: null as string | null,
 });
@@ -31,10 +32,17 @@ const state = reactive({
 // Reports sub-navigation state
 const selectedReportId = ref<string | null>(null);
 
+const calendar = computed(() => state.calendarInfo?.calendar ?? null);
+const isOwner = computed(() => state.calendarInfo?.isOwner ?? false);
+
 onBeforeMount(async () => {
   state.loading = true;
   try {
-    state.calendar = await calendarService.getCalendarByUrlName(calendarUrlName);
+    const calendarsWithRelationship = await calendarService.loadCalendarsWithRelationship();
+    const found = calendarsWithRelationship.find(
+      (info) => info.calendar.urlName === calendarUrlName,
+    );
+    state.calendarInfo = found ?? null;
   }
   catch (error) {
     console.error('Failed to load calendar:', error);
@@ -46,6 +54,11 @@ onBeforeMount(async () => {
 });
 
 const activateTab = (tab: string) => {
+  // Prevent non-owners from activating owner-only tabs
+  if ((tab === 'settings' || tab === 'reports') && !isOwner.value) {
+    return;
+  }
+
   state.activeTab = tab;
 
   // Reset report detail view when switching to reports tab
@@ -89,13 +102,13 @@ const backToReports = () => {
       {{ state.error }}
     </div>
 
-    <template v-else-if="state.calendar">
+    <template v-else-if="calendar">
       <!-- Header with tabs -->
       <header class="calendar-management-root__header">
         <div class="calendar-management-root__header-content">
           <div class="calendar-management-root__header-top">
             <nav class="calendar-management-root__breadcrumb">
-              <span class="calendar-management-root__breadcrumb-item">{{ state.calendar.urlName }}</span>
+              <span class="calendar-management-root__breadcrumb-item">{{ calendar.urlName }}</span>
               <span class="calendar-management-root__breadcrumb-separator">/</span>
               <span class="calendar-management-root__breadcrumb-item">settings</span>
             </nav>
@@ -104,6 +117,7 @@ const backToReports = () => {
 
           <nav role="tablist" class="calendar-management-root__tabs">
             <button
+              id="categories-tab"
               type="button"
               role="tab"
               :aria-selected="state.activeTab === 'categories' ? 'true' : 'false'"
@@ -114,6 +128,7 @@ const backToReports = () => {
               {{ t('categories_tab') }}
             </button>
             <button
+              id="editors-tab"
               type="button"
               role="tab"
               :aria-selected="state.activeTab === 'editors' ? 'true' : 'false'"
@@ -124,6 +139,8 @@ const backToReports = () => {
               {{ t('editors_tab') }}
             </button>
             <button
+              v-if="isOwner"
+              id="reports-tab"
               type="button"
               role="tab"
               :aria-selected="state.activeTab === 'reports' ? 'true' : 'false'"
@@ -134,6 +151,8 @@ const backToReports = () => {
               {{ t('reports_tab') }}
             </button>
             <button
+              v-if="isOwner"
+              id="settings-tab"
               type="button"
               role="tab"
               :aria-selected="state.activeTab === 'settings' ? 'true' : 'false'"
@@ -144,6 +163,7 @@ const backToReports = () => {
               {{ t('settings_tab') }}
             </button>
             <button
+              id="widget-tab"
               type="button"
               role="tab"
               :aria-selected="state.activeTab === 'widget' ? 'true' : 'false'"
@@ -167,7 +187,7 @@ const backToReports = () => {
           :hidden="state.activeTab !== 'categories'"
           class="calendar-management-root__panel"
         >
-          <CategoriesTab v-if="state.calendar" :calendar-id="state.calendar.id" />
+          <CategoriesTab v-if="calendar" :calendar-id="calendar.id" />
         </div>
 
         <div
@@ -178,39 +198,44 @@ const backToReports = () => {
           :hidden="state.activeTab !== 'editors'"
           class="calendar-management-root__panel"
         >
-          <EditorsTab :calendar-id="state.calendar.id" />
+          <EditorsTab
+            :calendar-id="calendar.id"
+            :is-owner="isOwner"
+          />
         </div>
 
         <div
           id="reports-panel"
           role="tabpanel"
           aria-labelledby="reports-tab"
-          :aria-hidden="state.activeTab !== 'reports'"
-          :hidden="state.activeTab !== 'reports'"
+          :aria-hidden="state.activeTab !== 'reports' || !isOwner ? 'true' : 'false'"
+          :hidden="state.activeTab !== 'reports' || !isOwner"
           class="calendar-management-root__panel"
         >
-          <ReportDetail
-            v-if="selectedReportId"
-            :calendar-id="state.calendar.id"
-            :report-id="selectedReportId"
-            @back="backToReports"
-          />
-          <ReportsDashboard
-            v-else
-            :calendar-id="state.calendar.id"
-            @view-report="viewReport"
-          />
+          <template v-if="isOwner">
+            <ReportDetail
+              v-if="selectedReportId"
+              :calendar-id="calendar.id"
+              :report-id="selectedReportId"
+              @back="backToReports"
+            />
+            <ReportsDashboard
+              v-else
+              :calendar-id="calendar.id"
+              @view-report="viewReport"
+            />
+          </template>
         </div>
 
         <div
           id="settings-panel"
           role="tabpanel"
           aria-labelledby="settings-tab"
-          :aria-hidden="state.activeTab !== 'settings'"
-          :hidden="state.activeTab !== 'settings'"
+          :aria-hidden="state.activeTab !== 'settings' || !isOwner ? 'true' : 'false'"
+          :hidden="state.activeTab !== 'settings' || !isOwner"
           class="calendar-management-root__panel"
         >
-          <SettingsTab :calendar-id="state.calendar.id" />
+          <SettingsTab v-if="isOwner" :calendar-id="calendar.id" />
         </div>
 
         <div
@@ -222,8 +247,8 @@ const backToReports = () => {
           class="calendar-management-root__panel"
         >
           <WidgetTab
-            :calendar-id="state.calendar.id"
-            :calendar-url-name="state.calendar.urlName"
+            :calendar-id="calendar.id"
+            :calendar-url-name="calendar.urlName"
           />
         </div>
       </main>

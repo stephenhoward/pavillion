@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
+import { Op } from 'sequelize';
 
 import { Account } from '@/common/model/account';
 import { EventCategory } from '@/common/model/event_category';
@@ -14,6 +15,7 @@ import {
   CategoryAssignmentNotFoundError,
   CategoryAlreadyAssignedError,
   CategoryEventCalendarMismatchError,
+  DuplicateCategoryNameError,
 } from '@/common/exceptions/category';
 import CalendarService from './calendar';
 import db from '@/server/common/entity/db';
@@ -44,6 +46,20 @@ class CategoryService {
       throw new InsufficientCalendarPermissionsError();
     }
 
+    // Check for duplicate names per language before creating
+    if (categoryData.content) {
+      for (const [language, content] of Object.entries(categoryData.content)) {
+        if (!content) continue;
+        const c = content as Record<string, any>;
+        if (!c.name) continue;
+
+        const duplicate = await this.findDuplicateCategoryName(calendarId, language, c.name);
+        if (duplicate) {
+          throw new DuplicateCategoryNameError();
+        }
+      }
+    }
+
     // Create the category entity
     const categoryEntity = EventCategoryEntity.build({
       id: uuidv4(),
@@ -60,6 +76,33 @@ class CategoryService {
     }
 
     return category;
+  }
+
+  /**
+   * Check if a category with the given name already exists in this calendar for the given language.
+   * The comparison is case-insensitive.
+   *
+   * @param calendarId - The calendar to search within
+   * @param language - The language code to check
+   * @param name - The category name to look for
+   * @returns The matching content entity, or null if no duplicate
+   */
+  private async findDuplicateCategoryName(
+    calendarId: string,
+    language: string,
+    name: string,
+  ): Promise<EventCategoryContentEntity | null> {
+    return EventCategoryContentEntity.findOne({
+      where: {
+        language,
+        name: { [Op.like]: name },
+      },
+      include: [{
+        model: EventCategoryEntity,
+        where: { calendar_id: calendarId },
+        required: true,
+      }],
+    });
   }
 
   /**

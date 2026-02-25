@@ -470,7 +470,7 @@
         type="button"
         class="remove-schedule-btn"
         @click="emit('remove-schedule')"
-        aria-label="Remove this schedule"
+        :aria-label="t('remove_schedule')"
       >
         <Trash2 :size="16" aria-hidden="true" />
       </button>
@@ -727,69 +727,89 @@ const initDateTime = () => {
   };
 };
 
+/**
+ * Determines the end-type string from existing schedule data.
+ * Used to restore the correct radio button state when editing or duplicating
+ * a recurring event that already has count or endDate set.
+ */
+const initEndType = (): string => {
+  if (props.schedule.count && props.schedule.count > 0) {
+    return 'after';
+  }
+  if (props.schedule.endDate) {
+    return 'on';
+  }
+  return 'none';
+};
+
+/**
+ * Initializes weekday checkboxes from the schedule's byDay array.
+ * Called when the schedule already has weekly recurrence data (e.g. when
+ * editing or duplicating a recurring event).
+ */
+const initWeekdays = (): Record<string, boolean> => {
+  const byDay = props.schedule.byDay ?? [];
+  return {
+    SU: byDay.includes('SU'),
+    MO: byDay.includes('MO'),
+    TU: byDay.includes('TU'),
+    WE: byDay.includes('WE'),
+    TH: byDay.includes('TH'),
+    FR: byDay.includes('FR'),
+    SA: byDay.includes('SA'),
+  };
+};
+
+/**
+ * Initializes monthly weekday checkboxes from the schedule's byDay array.
+ * byDay entries for monthly recurrence use the format "NDD" (e.g. "1MO", "3FR").
+ */
+const initMonthlyWeekdayCheckboxes = (): Record<string, boolean> => {
+  const byDay = props.schedule.byDay ?? [];
+  const keys = [
+    '1SU','1MO','1TU','1WE','1TH','1FR','1SA',
+    '2SU','2MO','2TU','2WE','2TH','2FR','2SA',
+    '3SU','3MO','3TU','3WE','3TH','3FR','3SA',
+    '4SU','4MO','4TU','4WE','4TH','4FR','4SA',
+    '5SU','5MO','5TU','5WE','5TH','5FR','5SA',
+  ];
+  return Object.fromEntries(keys.map(key => [key, byDay.includes(key)]));
+};
+
 const { date: initialDate, time: initialTime } = initDateTime();
 
 const state = reactive({
-  showRecurrence: false,
+  // Show the recurrence form immediately when the schedule already has a frequency
+  // (e.g. when editing or duplicating a recurring event). Without this, the form
+  // stays hidden behind the "Add recurrence" button even though recurrence data exists.
+  showRecurrence: !!props.schedule.frequency,
   frequency: (props.schedule.frequency as string) || '',
   date: initialDate,
   time: initialTime,
   duration: 60, // Default duration in minutes
   timezone: getLocalTimezone(),
   endDate: props.schedule.endDate ? props.schedule.endDate.toISO() : '',
-  endType: 'none',
-  weekdays: {
-    SU: false,
-    MO: false,
-    TU: false,
-    WE: false,
-    TH: false,
-    FR: false,
-    SA: false,
-  },
-  monthlyWeekdayCheckboxes: {
-    '1SU': false,
-    '1MO': false,
-    '1TU': false,
-    '1WE': false,
-    '1TH': false,
-    '1FR': false,
-    '1SA': false,
-    '2SU': false,
-    '2MO': false,
-    '2TU': false,
-    '2WE': false,
-    '2TH': false,
-    '2FR': false,
-    '2SA': false,
-    '3SU': false,
-    '3MO': false,
-    '3TU': false,
-    '3WE': false,
-    '3TH': false,
-    '3FR': false,
-    '3SA': false,
-    '4SU': false,
-    '4MO': false,
-    '4TU': false,
-    '4WE': false,
-    '4TH': false,
-    '4FR': false,
-    '4SA': false,
-    '5SU': false,
-    '5MO': false,
-    '5TU': false,
-    '5WE': false,
-    '5TH': false,
-    '5FR': false,
-    '5SA': false,
-  },
+  // Restore end-type from existing schedule so the correct radio is selected
+  endType: initEndType(),
+  // Restore weekday and monthly checkboxes from existing byDay values
+  weekdays: initWeekdays(),
+  monthlyWeekdayCheckboxes: initMonthlyWeekdayCheckboxes(),
 });
 
+/**
+ * Builds a timezone-aware DateTime from the user-entered date and time fields,
+ * using the selected IANA timezone (state.timezone).
+ *
+ * Using { zone: state.timezone } ensures Luxon interprets the wall-clock time
+ * in the selected timezone rather than the system's local timezone. This
+ * preserves the user's intended time across DST boundaries when recurring
+ * event instances are generated — without this, RRule would see a UTC-naive
+ * date and produce instances that shift by 1 hour after a DST transition.
+ */
 const updateStartDate = () => {
   if (state.date && state.time) {
     const dateTimeString = `${state.date}T${state.time}`;
-    props.schedule.startDate = DateTime.fromISO(dateTimeString);
+    props.schedule.startDate = DateTime.fromISO(dateTimeString, { zone: state.timezone });
   }
 };
 

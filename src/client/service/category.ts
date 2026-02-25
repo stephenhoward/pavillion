@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { EventCategory } from '@/common/model/event_category';
-import { CategoryNotFoundError } from '@/common/exceptions/category';
+import { CategoryNotFoundError, DuplicateCategoryNameError } from '@/common/exceptions/category';
 import { CalendarNotFoundError, InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
 import { UnauthenticatedError, UnknownError, EmptyValueError } from '@/common/exceptions';
 import { useCategoryStore } from '@/client/stores/categoryStore';
@@ -9,6 +9,7 @@ import { validateAndEncodeId } from '@/client/service/utils';
 
 const errorMap = {
   CategoryNotFoundError,
+  DuplicateCategoryNameError,
   CalendarNotFoundError,
   InsufficientCalendarPermissionsError,
   UnauthenticatedError,

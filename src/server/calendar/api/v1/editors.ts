@@ -120,12 +120,13 @@ class EditorRoutes {
       else if (error instanceof EditorAlreadyExistsError) {
         res.status(409).json({
           "error": error.message,
+          errorName: 'EditorAlreadyExistsError',
         });
       }
       else if (error instanceof AccountInviteAlreadyExistsError) {
         res.status(409).json({
           "error": "An invitation has already been sent to this email address",
-          "errorName": "AccountInviteAlreadyExistsError",
+          errorName: 'AccountInviteAlreadyExistsError',
         });
       }
       else if (error instanceof CalendarNotFoundError || error instanceof noAccountExistsError) {

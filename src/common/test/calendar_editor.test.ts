@@ -13,6 +13,24 @@ describe('CalendarEditor Model', () => {
     expect(editor.id).toBe('test-id');
     expect(editor.calendarId).toBe('calendar-id');
     expect(editor.email).toBe('email@pavillion.dev');
+    expect(editor.displayName).toBeNull();
+    expect(editor.username).toBeNull();
+  });
+
+  it('should create instance with optional displayName and username', () => {
+    const editor = new CalendarEditor(
+      'test-id',
+      'calendar-id',
+      'email@pavillion.dev',
+      'Test User',
+      'testuser',
+    );
+
+    expect(editor.id).toBe('test-id');
+    expect(editor.calendarId).toBe('calendar-id');
+    expect(editor.email).toBe('email@pavillion.dev');
+    expect(editor.displayName).toBe('Test User');
+    expect(editor.username).toBe('testuser');
   });
 
   it('toObject: should return proper object with all fields', () => {
@@ -28,6 +46,28 @@ describe('CalendarEditor Model', () => {
       id: 'test-id',
       calendarId: 'calendar-id',
       email: 'email@pavillion.dev',
+      displayName: null,
+      username: null,
+    });
+  });
+
+  it('toObject: should include displayName and username when set', () => {
+    const editor = new CalendarEditor(
+      'test-id',
+      'calendar-id',
+      'email@pavillion.dev',
+      'Test User',
+      'testuser',
+    );
+
+    const obj = editor.toObject();
+
+    expect(obj).toEqual({
+      id: 'test-id',
+      calendarId: 'calendar-id',
+      email: 'email@pavillion.dev',
+      displayName: 'Test User',
+      username: 'testuser',
     });
   });
 
@@ -44,6 +84,27 @@ describe('CalendarEditor Model', () => {
     expect(editor.id).toBe('test-id');
     expect(editor.calendarId).toBe('calendar-id');
     expect(editor.email).toBe('email@pavillion.dev');
+    expect(editor.displayName).toBeNull();
+    expect(editor.username).toBeNull();
+  });
+
+  it('fromObject: should create instance with displayName and username', () => {
+
+    const obj = {
+      id: 'test-id',
+      calendarId: 'calendar-id',
+      email: 'email@pavillion.dev',
+      displayName: 'Test User',
+      username: 'testuser',
+    };
+
+    const editor = CalendarEditor.fromObject(obj);
+
+    expect(editor.id).toBe('test-id');
+    expect(editor.calendarId).toBe('calendar-id');
+    expect(editor.email).toBe('email@pavillion.dev');
+    expect(editor.displayName).toBe('Test User');
+    expect(editor.username).toBe('testuser');
   });
 
   it('should maintain data integrity through toObject-fromObject conversion', () => {
@@ -51,6 +112,8 @@ describe('CalendarEditor Model', () => {
       'round-trip-id',
       'calendar-id',
       'email@pavillion.dev',
+      'Round Trip User',
+      'roundtripuser',
     );
 
     const obj = original.toObject();
@@ -59,5 +122,7 @@ describe('CalendarEditor Model', () => {
     expect(roundTrip.id).toBe(original.id);
     expect(roundTrip.calendarId).toBe(original.calendarId);
     expect(roundTrip.email).toBe(original.email);
+    expect(roundTrip.displayName).toBe(original.displayName);
+    expect(roundTrip.username).toBe(original.username);
   });
 });

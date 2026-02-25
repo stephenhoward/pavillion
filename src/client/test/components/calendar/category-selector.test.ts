@@ -88,6 +88,42 @@ describe('CategorySelector', () => {
     });
   });
 
+  describe('Late prop arrival (duplicate mode race condition)', () => {
+    it('should show pre-selected chips when selectedCategories prop arrives after mount', async () => {
+      // Simulate duplicate mode: component mounts with empty selection, then parent
+      // finishes loading the source event and updates the prop
+      wrapper = createWrapper({
+        selectedCategories: [],
+      });
+
+      // Wait for initial mount and category loading to complete
+      await nextTick();
+      await nextTick();
+
+      // Verify initially no chips are selected
+      let chips = wrapper.findAll('.toggle-chip');
+      expect(chips.length).toBe(3);
+      for (const chip of chips) {
+        expect(chip.attributes('aria-checked')).toBe('false');
+      }
+
+      // Simulate parent updating the prop after async event loading (duplicate mode)
+      await wrapper.setProps({ selectedCategories: ['cat-1', 'cat-3'] });
+      await nextTick();
+
+      // cat-1 and cat-3 should now be selected
+      chips = wrapper.findAll('.toggle-chip');
+      const musicChip = chips.find((c: any) => c.text() === 'Music');
+      expect(musicChip?.attributes('aria-checked')).toBe('true');
+
+      const sportsChip = chips.find((c: any) => c.text() === 'Sports');
+      expect(sportsChip?.attributes('aria-checked')).toBe('false');
+
+      const artsChip = chips.find((c: any) => c.text() === 'Arts');
+      expect(artsChip?.attributes('aria-checked')).toBe('true');
+    });
+  });
+
   describe('Toggle emits string IDs', () => {
     it('should emit categoriesChanged with an array of string IDs when a category is toggled on', async () => {
       wrapper = createWrapper({

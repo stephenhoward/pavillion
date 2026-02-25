@@ -135,14 +135,16 @@ watch(() => props.calendarId, (newCalendarId) => {
   }
 });
 
-// Watch for selectedCategories prop changes
+// Watch for selectedCategories prop changes, including the initial value on mount.
+// Using { immediate: true } ensures pre-selected category IDs from the parent
+// (e.g. in duplicate mode) are applied as soon as the component is created,
+// even before the async loadCategories() call completes.
 watch(() => props.selectedCategories, () => {
   initializeSelectedCategories();
-}, { deep: true });
+}, { deep: true, immediate: true });
 
 // Load categories when component mounts
 onMounted(async () => {
-  initializeSelectedCategories();
   await loadCategories();
 });
 </script>

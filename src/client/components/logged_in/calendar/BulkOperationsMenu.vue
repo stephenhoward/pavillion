@@ -35,8 +35,8 @@ const deselectAll = () => {
   emit('deselect-all');
 };
 
-const deleteEvents = () => {
-  emit('delete-events');
+const deleteEvents = (event) => {
+  emit('delete-events', event);
 };
 
 </script>
@@ -76,7 +76,7 @@ const deleteEvents = () => {
         size="sm"
         class="delete-btn"
         data-testid="delete-events-btn"
-        @click="deleteEvents"
+        @click="deleteEvents($event)"
         :aria-label="t('delete_events_label')"
       >
         {{ t('delete_events') }}

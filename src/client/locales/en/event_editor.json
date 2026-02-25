@@ -75,6 +75,7 @@
     "never": "never",
     "after": "after",
     "occurrences": "occurrences",
-    "on_date": "on"
+    "on_date": "on",
+    "remove_schedule": "Remove this schedule"
   }
 }

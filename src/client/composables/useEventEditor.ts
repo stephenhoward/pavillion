@@ -225,9 +225,19 @@ export function useEventEditor(defaultLanguage: string = 'en') {
         // Ensure default language content exists
         state.event.content(defaultLanguage);
 
-        // Preserve categories from source event
-        if (sourceEvent.categories && sourceEvent.categories.length > 0) {
-          selectedCategories.value = sourceEvent.categories.map(cat => cat.id);
+        // Load categories from the source event via the API, mirroring the edit mode approach.
+        // This is more reliable than relying on sourceEvent.categories, which may be empty
+        // if the API response did not include category data in the serialised event object.
+        try {
+          const eventCategories = await categoryService.getEventCategories(sourceEventId);
+          selectedCategories.value = eventCategories.map(cat => cat.id);
+        }
+        catch (error) {
+          console.error('Error loading source event categories:', error);
+          // Fall back to categories already present on the loaded event model
+          if (sourceEvent.categories && sourceEvent.categories.length > 0) {
+            selectedCategories.value = sourceEvent.categories.map(cat => cat.id);
+          }
         }
 
         // Preserve media reference

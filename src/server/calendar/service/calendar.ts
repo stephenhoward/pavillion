@@ -382,7 +382,7 @@ class CalendarService {
       });
 
       await this.sendEditorNotificationEmail(calendar, grantingAccount, editorAccount, message);
-      return new CalendarEditor(editorAccount.id, calendar.id, editorAccount.email);
+      return new CalendarEditor(editorAccount.id, calendar.id, editorAccount.email, editorAccount.displayName ?? null, editorAccount.username ?? null);
     }
     catch (error) {
       if (error instanceof UniqueConstraintError) {
@@ -570,6 +570,8 @@ class CalendarService {
           id: existingAccount.id,
           calendarId: calendarId,
           email: existingAccount.email,
+          displayName: existingAccount.displayName ?? null,
+          username: existingAccount.username ?? null,
         },
       };
     }
@@ -870,7 +872,7 @@ class CalendarService {
         {
           model: AccountEntity,
           as: 'account',
-          attributes: ['id', 'email'],
+          attributes: ['id', 'email', 'username', 'display_name'],
         },
       ],
     });
@@ -881,6 +883,8 @@ class CalendarService {
         m.account.id,
         m.calendar_id,
         m.account.email,
+        m.account.display_name ?? null,
+        m.account.username ?? null,
       ));
   }
 
@@ -913,7 +917,7 @@ class CalendarService {
         {
           model: AccountEntity,
           as: 'account',
-          attributes: ['id', 'email'],
+          attributes: ['id', 'email', 'username', 'display_name'],
         },
         {
           model: UserActorEntity,
@@ -932,6 +936,8 @@ class CalendarService {
           member.account.id,
           member.calendar_id,
           member.account.email,
+          member.account.display_name ?? null,
+          member.account.username ?? null,
         ));
       }
       else if (member.user_actor_id && member.userActor) {

@@ -41,10 +41,10 @@
               {{ category.content(currentLanguage)?.name || 'Unnamed Category' }}
             </div>
             <div class="category-meta">
-              <span class="event-count">{{ category.eventCount || 0 }} events</span>
+              <span class="event-count">{{ t('event_count', { count: category.eventCount || 0 }) }}</span>
               <span class="language-indicator">
                 <Languages :size="16" :stroke-width="2" />
-                {{ category.getLanguages().length }} languages
+                {{ t('languages_count', { count: category.getLanguages().length }) }}
               </span>
             </div>
           </div>
@@ -104,7 +104,7 @@
         <p class="delete-description">
           Are you sure you want to delete "<strong>{{ state.categoryToDelete.content(currentLanguage)?.name || 'Unnamed Category' }}</strong>"?
           <span v-if="(state.categoryToDelete.eventCount || 0) > 0">
-            This category is assigned to <strong>{{ state.categoryToDelete.eventCount }} {{ state.categoryToDelete.eventCount === 1 ? 'event' : 'events' }}</strong>.
+            This category is assigned to <strong>{{ t('event_count', { count: state.categoryToDelete.eventCount }) }}</strong>.
           </span>
         </p>
 
@@ -205,7 +205,7 @@
                 {{ category.content(currentLanguage)?.name || 'Unnamed Category' }}
               </span>
               <span class="category-event-count">
-                {{ category.eventCount || 0 }} {{ category.eventCount === 1 ? 'event' : 'events' }}
+                {{ t('event_count', { count: category.eventCount || 0 }) }}
               </span>
             </div>
           </label>

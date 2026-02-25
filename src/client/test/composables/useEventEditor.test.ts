@@ -147,6 +147,7 @@ describe('useEventEditor', () => {
 
       sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
       sandbox.stub(ModelService, 'getModel').resolves(sourceEvent.toObject());
+      sandbox.stub(CategoryService.prototype, 'getEventCategories').resolves([]);
 
       const { state, initializeEvent } = useEventEditor();
 
@@ -339,6 +340,7 @@ describe('useEventEditor', () => {
 
       sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
       sandbox.stub(ModelService, 'getModel').resolves(sourceEvent.toObject());
+      sandbox.stub(CategoryService.prototype, 'getEventCategories').resolves([]);
 
       const { state, initializeEvent } = useEventEditor();
 
@@ -349,7 +351,26 @@ describe('useEventEditor', () => {
       expect(state.event?.content('en').name).toBe('Source Event');
     });
 
-    it('should preserve categories in duplicate mode', async () => {
+    it('should preserve categories in duplicate mode via getEventCategories', async () => {
+      mockRoute.query.from = 'source-event-123';
+
+      const calendar = new Calendar('cal-1', 'test-calendar');
+      const sourceEvent = new CalendarEvent('source-event-123', 'cal-1');
+      const category1 = new EventCategory('cat-1', 'cal-1');
+      const category2 = new EventCategory('cat-2', 'cal-1');
+
+      sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
+      sandbox.stub(ModelService, 'getModel').resolves(sourceEvent.toObject());
+      sandbox.stub(CategoryService.prototype, 'getEventCategories').resolves([category1, category2]);
+
+      const { selectedCategories, initializeEvent } = useEventEditor();
+
+      await initializeEvent();
+
+      expect(selectedCategories.value).toEqual(['cat-1', 'cat-2']);
+    });
+
+    it('should fall back to sourceEvent.categories when getEventCategories fails in duplicate mode', async () => {
       mockRoute.query.from = 'source-event-123';
 
       const calendar = new Calendar('cal-1', 'test-calendar');
@@ -361,6 +382,7 @@ describe('useEventEditor', () => {
 
       sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
       sandbox.stub(ModelService, 'getModel').resolves(sourceEvent.toObject());
+      sandbox.stub(CategoryService.prototype, 'getEventCategories').rejects(new Error('Category API error'));
 
       const { selectedCategories, initializeEvent } = useEventEditor();
 
@@ -378,6 +400,7 @@ describe('useEventEditor', () => {
 
       sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
       sandbox.stub(ModelService, 'getModel').resolves(sourceEvent.toObject());
+      sandbox.stub(CategoryService.prototype, 'getEventCategories').resolves([]);
 
       const { mediaId, initializeEvent } = useEventEditor();
 
@@ -518,6 +541,7 @@ describe('useEventEditor', () => {
 
       sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
       sandbox.stub(ModelService, 'getModel').resolves(sourceEvent.toObject());
+      sandbox.stub(CategoryService.prototype, 'getEventCategories').resolves([]);
       sandbox.stub(EventService.prototype, 'saveEvent').resolves(savedEvent);
 
       const { state, initializeEvent, saveEvent } = useEventEditor();
@@ -864,6 +888,7 @@ describe('useEventEditor', () => {
 
       sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
       sandbox.stub(ModelService, 'getModel').resolves(sourceEvent.toObject());
+      sandbox.stub(CategoryService.prototype, 'getEventCategories').resolves([]);
 
       const { pageTitle, initializeEvent } = useEventEditor();
 

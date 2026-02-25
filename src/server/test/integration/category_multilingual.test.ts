@@ -499,7 +499,7 @@ describe('Category Multilingual Integration', () => {
 
       const categoryData = {
         content: {
-          en: { name: 'English' },
+          en: { name: 'English - Non-Standard' },
           'en-US': { name: 'American English' },
           'es-MX': { name: 'Español Mexicano' },
           'zh-CN': { name: '简体中文' },
@@ -512,7 +512,7 @@ describe('Category Multilingual Integration', () => {
 
       // Should either handle gracefully or accept all codes
       expect(response.status).toBe(201);
-      expect(response.body.content.en.name).toBe('English');
+      expect(response.body.content.en.name).toBe('English - Non-Standard');
 
       // Non-standard codes may or may not be accepted depending on validation
       if (response.body.content['en-US']) {

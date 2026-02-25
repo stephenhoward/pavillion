@@ -6,7 +6,7 @@ import CalendarService from '@/client/service/calendar';
 import ModelService from '@/client/service/models';
 import ListResult from '@/client/service/list-result';
 import { Calendar } from '@/common/model/calendar';
-import { EmptyValueError, UnknownError } from '@/common/exceptions';
+import { EmptyValueError, UnknownError, AccountInviteAlreadyExistsError } from '@/common/exceptions';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/common/exceptions/editor';
 import { useCalendarStore } from '@/client/stores/calendarStore';
@@ -515,6 +515,25 @@ describe('grantEditAccess', () => {
     // Act & Assert
     await expect(service.grantEditAccess(calendarId, accountId))
       .rejects.toThrow(EditorAlreadyExistsError);
+  });
+
+  it('should handle duplicate invitation error', async () => {
+    // Arrange: backend now returns errorName: 'AccountInviteAlreadyExistsError'
+    const calendarId = 'cal1';
+    const email = 'pending@example.com';
+    const axiosPost = vi.mocked(axios.post);
+    axiosPost.mockRejectedValue({
+      response: {
+        data: {
+          error: 'An invitation has already been sent to this email address',
+          errorName: 'AccountInviteAlreadyExistsError',
+        },
+      },
+    });
+
+    // Act & Assert
+    await expect(service.grantEditAccess(calendarId, email))
+      .rejects.toThrow(AccountInviteAlreadyExistsError);
   });
 
   it('should handle permission error when granting access', async () => {

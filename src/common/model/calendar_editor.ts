@@ -8,6 +8,8 @@ export class CalendarEditor extends Model {
   declare id: string;
   declare calendarId: string;
   declare email: string;
+  declare displayName: string | null;
+  declare username: string | null;
 
   /**
    * Constructor for CalendarEditor.
@@ -15,16 +17,22 @@ export class CalendarEditor extends Model {
    * @param {string} id - Unique identifier for the editor relationship
    * @param {string} calendarId - ID of the calendar
    * @param {string} email - Email of the user with edit access
+   * @param {string | null} [displayName] - Display name of the user, if set
+   * @param {string | null} [username] - Username of the user
    */
   constructor(
     id: string,
     calendarId: string,
     email: string,
+    displayName: string | null = null,
+    username: string | null = null,
   ) {
     super();
     this.id = id;
     this.calendarId = calendarId;
     this.email = email;
+    this.displayName = displayName;
+    this.username = username;
   }
 
   /**
@@ -37,6 +45,8 @@ export class CalendarEditor extends Model {
       id: this.id,
       calendarId: this.calendarId,
       email: this.email,
+      displayName: this.displayName,
+      username: this.username,
     };
   }
 
@@ -51,6 +61,8 @@ export class CalendarEditor extends Model {
       obj.id || '',
       obj.calendarId || '',
       obj.email || '',
+      obj.displayName ?? null,
+      obj.username ?? null,
     );
 
     return editor;

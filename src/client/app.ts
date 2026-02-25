@@ -183,6 +183,8 @@ checkSetupMode().then((setupRequired) => {
           { path: 'password', component: PasswordResetView, name: 'reset_password', props: true, beforeEnter: authRouteGuard },
         ],
       },
+      // Convenience redirect: /login → /auth/login
+      { path: '/login', redirect: '/auth/login' },
     ];
 
     const router = createRouter({

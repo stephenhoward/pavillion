@@ -195,6 +195,7 @@ describe('EditorsTab Component', () => {
       const wrapper = mount(EditorsTab, {
         props: {
           calendarId: 'calendar-123',
+          isOwner: true,
         },
         global: {
           stubs: {
@@ -247,6 +248,7 @@ describe('EditorsTab Component', () => {
       const wrapper = mount(EditorsTab, {
         props: {
           calendarId: 'calendar-123',
+          isOwner: true,
         },
         attachTo: document.body,
         global: {
@@ -526,6 +528,7 @@ describe('EditorsTab Component', () => {
       const wrapper = mount(EditorsTab, {
         props: {
           calendarId: 'calendar-123',
+          isOwner: true,
         },
         global: {
           stubs: {
@@ -591,6 +594,7 @@ describe('EditorsTab Component', () => {
       const wrapper = mount(EditorsTab, {
         props: {
           calendarId: 'calendar-123',
+          isOwner: true,
         },
         global: {
           stubs: {
@@ -647,6 +651,7 @@ describe('EditorsTab Component', () => {
       const wrapper = mount(EditorsTab, {
         props: {
           calendarId: 'calendar-123',
+          isOwner: true,
         },
         global: {
           stubs: {

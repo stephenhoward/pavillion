@@ -13,7 +13,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/test', component: {}, name: 'test' },
 ];
 
-const mountEditorsComponent = (calendarId: string = 'test-calendar') => {
+const mountEditorsComponent = (calendarId: string = 'test-calendar', isOwner: boolean = true) => {
   const router: Router = createRouter({
     history: createMemoryHistory(),
     routes: routes,
@@ -22,6 +22,7 @@ const mountEditorsComponent = (calendarId: string = 'test-calendar') => {
   const wrapper = mountComponent(Editors, router, {
     props: {
       calendarId: calendarId,
+      isOwner: isOwner,
     },
   });
 
@@ -130,6 +131,22 @@ describe('Editors Component', () => {
       expect(wrapper.find('.alert--error').exists()).toBe(true);
     });
 
+    it('does not show empty state when a permission error occurs', async () => {
+      calendarServiceMock.listCalendarEditors.mockRejectedValue(
+        new CalendarEditorPermissionError(),
+      );
+
+      const { wrapper } = mountEditorsComponent();
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      // The permission-denied error message should be visible
+      expect(wrapper.find('.alert--error').exists()).toBe(true);
+      // The "No editors" empty state must NOT be shown alongside the error
+      expect(wrapper.find('.empty-state').exists()).toBe(false);
+    });
+
     it('handles generic error when loading editors', async () => {
       calendarServiceMock.listCalendarEditors.mockRejectedValue(new Error('Network error'));
 
@@ -201,6 +218,88 @@ describe('Editors Component', () => {
       const removeButton = wrapper.find('.editor-actions .btn-ghost');
       expect(removeButton.exists()).toBe(true);
       expect(removeButton.text()).toBe('Remove');
+    });
+  });
+
+  describe('isOwner prop — Add Editor visibility', () => {
+    beforeEach(() => {
+      calendarServiceMock.listCalendarEditors.mockResolvedValue({
+        activeEditors: [],
+        pendingInvitations: [],
+      });
+    });
+
+    it('shows Add Editor button in empty state when isOwner is true', async () => {
+      const { wrapper } = mountEditorsComponent('test-calendar', true);
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      // Empty state PillButton should be present for owners
+      const pillButtons = wrapper.findAll('.pill-button--primary');
+      expect(pillButtons.length).toBeGreaterThan(0);
+    });
+
+    it('hides Add Editor button in empty state when isOwner is false', async () => {
+      const { wrapper } = mountEditorsComponent('test-calendar', false);
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      // No primary pill button should appear for non-owners in empty state
+      const pillButtons = wrapper.findAll('.pill-button--primary');
+      expect(pillButtons.length).toBe(0);
+    });
+
+    it('shows Add Editor button in header when editors exist and isOwner is true', async () => {
+      calendarServiceMock.listCalendarEditors.mockResolvedValue({
+        activeEditors: [new CalendarEditor('1', 'test-calendar', 'user1@example.com')],
+        pendingInvitations: [],
+      });
+
+      const { wrapper } = mountEditorsComponent('test-calendar', true);
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      const headerAddButton = wrapper.find('.editors-header .pill-button--primary');
+      expect(headerAddButton.exists()).toBe(true);
+    });
+
+    it('hides Add Editor button in header when editors exist and isOwner is false', async () => {
+      calendarServiceMock.listCalendarEditors.mockResolvedValue({
+        activeEditors: [new CalendarEditor('1', 'test-calendar', 'user1@example.com')],
+        pendingInvitations: [],
+      });
+
+      const { wrapper } = mountEditorsComponent('test-calendar', false);
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      const headerAddButton = wrapper.find('.editors-header .pill-button--primary');
+      expect(headerAddButton.exists()).toBe(false);
+    });
+
+    it('defaults isOwner to false when prop is not provided', async () => {
+      const router: Router = createRouter({
+        history: createMemoryHistory(),
+        routes: routes,
+      });
+
+      const wrapper = mountComponent(Editors, router, {
+        props: {
+          calendarId: 'test-calendar',
+          // isOwner not provided — should default to false
+        },
+      });
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      // No primary pill button should appear by default
+      const pillButtons = wrapper.findAll('.pill-button--primary');
+      expect(pillButtons.length).toBe(0);
     });
   });
 
@@ -321,7 +420,7 @@ describe('Editors Component', () => {
 
       await wrapper.vm.addEditor();
 
-      expect(wrapper.vm.state.addError).toBe('This person already has edit access to this calendar');
+      expect(wrapper.vm.state.addError).toBe('This user is already an editor on this calendar.');
     });
 
     it('handles permission error when adding editor', async () => {
