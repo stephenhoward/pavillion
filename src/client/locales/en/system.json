@@ -15,6 +15,7 @@
   },
   "language_tab_selector": {
     "edit_content": "Edit {{language}} content",
+    "edit_content_error": "Edit {{language}} content (has errors)",
     "add_language": "Add language"
   },
   "navigation": {

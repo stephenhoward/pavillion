@@ -785,7 +785,7 @@ describe('SearchFilterPublic Component', () => {
 
       await router.push({
         path: '/calendar/test',
-        query: { category: ['cat-1', 'cat-2'] },
+        query: { categories: ['cat-1', 'cat-2'] },
       });
 
       mount(SearchFilterPublic, {
@@ -797,14 +797,14 @@ describe('SearchFilterPublic Component', () => {
       await flushPromises();
 
       // Confirm category params are in URL
-      expect(router.currentRoute.value.query.category).toEqual(['cat-1', 'cat-2']);
+      expect(router.currentRoute.value.query.categories).toEqual(['cat-1', 'cat-2']);
 
       // Simulate external clearAllFilters call (as calendar.vue does)
       store.clearAllFilters();
       await flushPromises();
 
       // URL should no longer have category params
-      expect(router.currentRoute.value.query.category).toBeUndefined();
+      expect(router.currentRoute.value.query.categories).toBeUndefined();
     });
 
     it('should remove startDate and endDate URL params when store dates are cleared externally', async () => {
@@ -875,7 +875,7 @@ describe('SearchFilterPublic Component', () => {
         path: '/calendar/test',
         query: {
           search: 'yoga',
-          category: ['Sports', 'Health'],
+          categories: ['Sports', 'Health'],
           startDate: '2025-01-01',
           endDate: '2025-01-07',
         },

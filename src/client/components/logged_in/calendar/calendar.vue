@@ -240,8 +240,14 @@ const loadCalendarData = async () => {
     state.isLoading = true;
     state.err = '';
 
-    // Load calendar by URL name
+    // Load calendar by URL name — only returns calendars the current user can edit
     state.calendar = await calendarService.getCalendarByUrlName(calendarId.value);
+
+    // If the calendar wasn't found in the user's accessible calendars, redirect away
+    if (!state.calendar) {
+      router.replace({ name: 'calendars' });
+      return;
+    }
 
     // Load events for this calendar with current filters (from URL if present)
     const filters = {};
@@ -867,7 +873,8 @@ section[aria-label="Calendar Events"] {
       align-items: flex-start;
       gap: 1rem;
 
-      &:hover {
+      &:hover,
+      &:focus-within {
         .event-actions {
           /* Inlined: hover-reveal */
           opacity: 1;

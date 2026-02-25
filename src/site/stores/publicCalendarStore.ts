@@ -248,7 +248,7 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
 
         // Add category filter parameters if provided (UUIDs per DEC-005)
         if (filters?.categories && filters.categories.length > 0) {
-          filters.categories.forEach(id => params.append('category', id));
+          filters.categories.forEach(id => params.append('categories', id));
         }
 
         // Add date range parameters - use calendar's default if none specified

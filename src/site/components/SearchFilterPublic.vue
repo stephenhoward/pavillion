@@ -501,10 +501,10 @@ const updateURL = () => {
 
   // Update category parameters
   if (publicStore.selectedCategoryIds.length > 0) {
-    query.category = publicStore.selectedCategoryIds;
+    query.categories = publicStore.selectedCategoryIds;
   }
   else {
-    delete query.category;
+    delete query.categories;
   }
 
   // Update date range parameters
@@ -546,8 +546,8 @@ const initializeFromURL = () => {
   }
 
   // Initialize categories
-  if (query.category) {
-    const categories = Array.isArray(query.category) ? query.category : [query.category];
+  if (query.categories) {
+    const categories = Array.isArray(query.categories) ? query.categories : [query.categories];
     publicStore.setSelectedCategories(categories as string[]);
   }
 

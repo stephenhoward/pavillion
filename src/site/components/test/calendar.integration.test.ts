@@ -101,7 +101,7 @@ describe('calendar.vue - SearchFilterPublic Integration', () => {
       path: '/calendar/test-calendar',
       query: {
         search: 'yoga',
-        category: ['Fitness', 'Wellness'],
+        categories: ['Fitness', 'Wellness'],
         startDate: '2025-11-15',
         endDate: '2025-11-22',
       },
@@ -190,7 +190,7 @@ describe('calendar.vue - SearchFilterPublic Integration', () => {
     // Apply first set of filters
     await router.push({
       path: '/calendar/test-calendar',
-      query: { search: 'yoga', category: ['Fitness'] },
+      query: { search: 'yoga', categories: ['Fitness'] },
     });
 
     await flushPromises();
@@ -202,7 +202,7 @@ describe('calendar.vue - SearchFilterPublic Integration', () => {
     // Apply second set of filters
     await router.push({
       path: '/calendar/test-calendar',
-      query: { search: 'concert', category: ['Music'] },
+      query: { search: 'concert', categories: ['Music'] },
     });
 
     await flushPromises();

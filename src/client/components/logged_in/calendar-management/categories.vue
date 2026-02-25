@@ -450,8 +450,18 @@ async function onCategorySaved() {
 function confirmDeleteCategory(category) {
   state.categoryToDelete = category;
   state.showDeleteDialog = true;
-  state.deleteAction = 'migrate';
-  state.deleteMigrationTarget = '';
+
+  // Pre-select migrate action and first available target if other categories exist,
+  // so the Delete button is enabled immediately on dialog open (fixes pv-yywh.91).
+  // otherCategories computed excludes the category being deleted (fixes pv-yywh.93).
+  if (otherCategories.value.length > 0) {
+    state.deleteAction = 'migrate';
+    state.deleteMigrationTarget = otherCategories.value[0].id;
+  }
+  else {
+    state.deleteAction = 'remove';
+    state.deleteMigrationTarget = '';
+  }
 }
 
 /**

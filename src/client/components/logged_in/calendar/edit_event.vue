@@ -683,6 +683,7 @@ button {
               <LanguageTabSelector
                 v-model="currentLanguage"
                 :languages="languages"
+                :errored-tabs="erroredTabs"
                 @add-language="openLanguagePicker"
                 @remove-language="handleRemoveLanguage"
               />
@@ -992,6 +993,18 @@ const translatedPageTitle = computed(() => {
 });
 
 /**
+ * Language tabs that have validation errors (missing required title field).
+ * Used to show a visual indicator on inactive tabs that need attention.
+ */
+const erroredTabs = computed(() => {
+  if (!editorState.event) return [];
+  return languages.value.filter((lang) => {
+    const name = editorState.event.content(lang).name;
+    return !name || name.trim() === '';
+  });
+});
+
+/**
  * Handle back button click
  */
 const handleBackClick = () => {
@@ -1067,12 +1080,18 @@ const handleAddLanguage = (language) => {
 };
 
 /**
- * Handle removing a language
+ * Handle removing a language — shows a confirmation dialog before removing.
  */
 const handleRemoveLanguage = (language) => {
-  if (editorState.event) {
-    removeLanguage(language, editorState.event);
-  }
+  if (!editorState.event) return;
+  const languageName = iso6391.getName(language);
+  const message = t(
+    'remove_translation_confirm',
+    `Remove the ${languageName} translation? This will permanently delete all ${languageName} content for this event.`,
+    { language: languageName },
+  );
+  if (!window.confirm(message)) return;
+  removeLanguage(language, editorState.event);
 };
 
 /**

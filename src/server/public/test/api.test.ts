@@ -130,7 +130,7 @@ describe('Public Calendar API', () => {
 
       router.get('/handler', (req, res) => {
         req.params.calendar = 'test-calendar';
-        req.query.category = 'category-1';
+        req.query.categories = 'category-1';
         routes.listInstances(req, res);
       });
 
@@ -164,7 +164,7 @@ describe('Public Calendar API', () => {
 
       router.get('/handler', (req, res) => {
         req.params.calendar = 'test-calendar';
-        req.query.category = ['category-1', 'category-3', 'category-5'];
+        req.query.categories = ['category-1', 'category-3', 'category-5'];
         routes.listInstances(req, res);
       });
 
@@ -190,7 +190,7 @@ describe('Public Calendar API', () => {
 
       router.get('/handler', (req, res) => {
         req.params.calendar = 'test-calendar';
-        req.query.category = ['invalid-category', 'non-existent'];
+        req.query.categories = ['invalid-category', 'non-existent'];
         routes.listInstances(req, res);
       });
 
