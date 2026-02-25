@@ -28,6 +28,7 @@
         :key="category.id"
         :model-value="state.selectedCategoryIds.includes(category.id)"
         :label="category.content(currentLanguage)?.name || 'Unnamed Category'"
+        variant="orange"
         @update:model-value="() => toggleCategory(category.id)"
       />
     </div>

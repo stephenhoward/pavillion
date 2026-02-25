@@ -22,6 +22,7 @@ export type EditorMode = 'create' | 'edit' | 'duplicate';
 export interface EventEditorState {
   isLoading: boolean;
   err: string;
+  errDetail: string;
   event: CalendarEvent | null;
   calendar: Calendar | null;
   availableCalendars: Calendar[];
@@ -65,6 +66,7 @@ export function useEventEditor(defaultLanguage: string = 'en') {
   const state = reactive<EventEditorState>({
     isLoading: true,
     err: '',
+    errDetail: '',
     event: null,
     calendar: null,
     availableCalendars: [],
@@ -293,11 +295,13 @@ export function useEventEditor(defaultLanguage: string = 'en') {
 
     if (!model) {
       state.err = t('error_no_event');
+      state.errDetail = '';
       return;
     }
 
     // Clear previous validation errors
     state.err = '';
+    state.errDetail = '';
 
     // Ensure we have a calendarId
     if (!model.calendarId && state.availableCalendars.length > 0) {
@@ -306,6 +310,17 @@ export function useEventEditor(defaultLanguage: string = 'en') {
 
     if (!model.calendarId) {
       state.err = t('error_no_calendar');
+      state.errDetail = '';
+      return;
+    }
+
+    // Validate that at least one schedule has a date and start time
+    const hasValidSchedule = model.schedules && model.schedules.some(
+      (schedule: any) => schedule.startDate,
+    );
+    if (!hasValidSchedule) {
+      state.err = t('error_date_required');
+      state.errDetail = '';
       return;
     }
 
@@ -364,9 +379,15 @@ export function useEventEditor(defaultLanguage: string = 'en') {
         router.push({ name: 'calendars' });
       }
     }
-    catch (error) {
+    catch (error: any) {
       console.error('Error saving event:', error);
       state.err = t('error_saving_event');
+      // Extract actionable detail from the server response if available
+      const serverMessage = error?.response?.data?.error
+        || error?.response?.data?.message
+        || error?.message
+        || '';
+      state.errDetail = typeof serverMessage === 'string' ? serverMessage : '';
     }
   };
 

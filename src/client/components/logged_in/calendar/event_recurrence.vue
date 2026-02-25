@@ -483,7 +483,8 @@
         <input type="date"
                v-model="state.date"
                @input="updateStartDate()"
-               class="grid-input"/>
+               class="grid-input"
+               required />
       </div>
 
       <div class="grid-field">
@@ -491,7 +492,8 @@
         <input type="time"
                v-model="state.time"
                @input="updateStartDate()"
-               class="grid-input"/>
+               class="grid-input"
+               required />
       </div>
 
       <div class="grid-field">

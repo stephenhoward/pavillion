@@ -26,6 +26,7 @@
     "error_no_calendar": "Please select a calendar",
     "error_loading_calendars": "Failed to load calendars",
     "error_saving_event": "Error saving event",
+    "error_date_required": "Please add a date and start time before saving",
     "error_location_city_requires_address": "City requires Address to be filled in",
     "error_location_state_requires_city": "State requires City to be filled in",
     "error_location_state_requires_address": "State requires Address to be filled in",

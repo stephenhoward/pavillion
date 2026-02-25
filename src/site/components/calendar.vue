@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { reactive, onBeforeMount, computed, inject } from 'vue';
 import { useTranslation } from 'i18next-vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import CalendarService from '../service/calendar';
 import { usePublicCalendarStore } from '../stores/publicCalendarStore';
 import { useLocalizedContent } from '../composables/useLocalizedContent';
@@ -14,6 +14,7 @@ import { useLocale } from '@/site/composables/useLocale';
 
 const { t } = useTranslation('system');
 const route = useRoute();
+const router = useRouter();
 const calendarUrlName = route.params.calendar as string;
 const siteConfig = inject<Config>('site_config');
 const { currentLocale, localizedPath } = useLocale();
@@ -31,8 +32,18 @@ const publicCalendarStore = usePublicCalendarStore();
 
 // Computed properties for store data
 const filteredEventsByDay = computed(() => publicCalendarStore.getFilteredEventsByDay);
+const hasActiveFilters = computed(() => publicCalendarStore.hasActiveFilters);
 const hasNonDateFilters = computed(() => publicCalendarStore.hasNonDateFilters);
 const hasOnlyDateFilters = computed(() => publicCalendarStore.hasOnlyDateFilters);
+
+/**
+ * Clears all active filters and resets the URL query params.
+ */
+function clearAllFilters() {
+  publicCalendarStore.clearAllFilters();
+  publicCalendarStore.reloadWithFilters();
+  router.replace({ query: {} });
+}
 
 onBeforeMount(async () => {
   try {
@@ -114,16 +125,21 @@ onBeforeMount(async () => {
       </div>
 
       <!-- Empty State: suppress when search is pending (1-2 chars typed) to avoid conflicting messages -->
-      <div v-else-if="!state.isLoading && !publicCalendarStore.isLoadingEvents && publicCalendarStore.hasLoadedEvents && !publicCalendarStore.isSearchPending" role="status" class="empty-state">
-        <p v-if="hasNonDateFilters">
-          {{ t('no_events_with_filters') }}
-        </p>
-        <p v-if="hasNonDateFilters" class="empty-state-hint">{{ t('no_events_with_filters_hint') }}</p>
-        <p v-else-if="hasOnlyDateFilters">{{ t('no_events_in_date_range') }}</p>
-        <template v-else>
+      <div v-else-if="!state.isLoading && !publicCalendarStore.isLoadingEvents && publicCalendarStore.hasLoadedEvents && !publicCalendarStore.isSearchPending" class="empty-state">
+        <div role="status">
           <p>{{ t('no_events_available') }}</p>
-          <p class="empty-state-hint">{{ t('no_events_available_hint') }}</p>
-        </template>
+          <p v-if="hasNonDateFilters" class="empty-state-hint">{{ t('no_events_with_filters_hint') }}</p>
+          <p v-else-if="hasOnlyDateFilters" class="empty-state-hint">{{ t('no_events_in_date_range_hint') }}</p>
+          <p v-else class="empty-state-hint">{{ t('no_events_available_hint') }}</p>
+        </div>
+        <button
+          v-if="hasActiveFilters"
+          type="button"
+          class="clear-filters-btn"
+          @click="clearAllFilters"
+        >
+          {{ t('clear_all_filters') }}
+        </button>
       </div>
 
       <!-- Loading State -->
@@ -314,6 +330,40 @@ section.day {
 
     @media (prefers-color-scheme: dark) {
       color: $public-text-secondary-dark;
+    }
+  }
+
+  .clear-filters-btn {
+    display: inline-block;
+    margin-top: $public-space-md;
+    padding: $public-space-xs $public-space-md;
+    background: none;
+    border: 1px solid $public-accent-light;
+    border-radius: 9999px;
+    color: $public-accent-light;
+    font-size: $public-font-size-sm;
+    font-weight: $public-font-weight-medium;
+    cursor: pointer;
+    transition: $public-transition-fast;
+
+    &:hover {
+      background: $public-accent-light;
+      color: white;
+    }
+
+    &:focus-visible {
+      outline: 2px solid $public-accent-light;
+      outline-offset: 2px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      border-color: $public-accent-dark;
+      color: $public-accent-dark;
+
+      &:hover {
+        background: $public-accent-dark;
+        color: white;
+      }
     }
   }
 }

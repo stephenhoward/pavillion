@@ -486,6 +486,12 @@ form {
   }
 }
 
+.error-detail {
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+  opacity: 0.85;
+}
+
 /* Form group styling (for general use) */
 .form-group {
   margin-bottom: 0;
@@ -659,6 +665,9 @@ button {
           </div>
           <div v-else>
             {{ editorState.err }}
+          </div>
+          <div v-if="editorState.errDetail" class="error-detail">
+            {{ editorState.errDetail }}
           </div>
         </div>
 

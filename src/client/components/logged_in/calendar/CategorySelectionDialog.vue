@@ -157,6 +157,7 @@ const toggleCategory = (categoryId) => {
             :key="category.id"
             :model-value="selectedCategoryIds.includes(category.id)"
             :label="category.content('en').name"
+            variant="orange"
             @update:model-value="() => toggleCategory(category.id)"
           />
         </div>

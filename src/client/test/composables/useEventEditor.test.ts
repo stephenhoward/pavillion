@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import sinon from 'sinon';
+import { DateTime } from 'luxon';
 import { createPinia, setActivePinia } from 'pinia';
 import { useEventEditor } from '@/client/composables/useEventEditor';
 import { CalendarEvent } from '@/common/model/events';
@@ -471,9 +472,11 @@ describe('useEventEditor', () => {
       sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
       const saveEventStub = sandbox.stub(EventService.prototype, 'saveEvent').resolves(savedEvent);
 
-      const { initializeEvent, saveEvent } = useEventEditor();
+      const { state, initializeEvent, saveEvent } = useEventEditor();
 
       await initializeEvent();
+
+      state.event!.schedules[0].startDate = DateTime.now();
 
       const mockT = vi.fn((key) => key);
       await saveEvent(mockT);
@@ -493,9 +496,11 @@ describe('useEventEditor', () => {
       sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
       sandbox.stub(EventService.prototype, 'saveEvent').resolves(savedEvent);
 
-      const { initializeEvent, saveEvent } = useEventEditor();
+      const { state, initializeEvent, saveEvent } = useEventEditor();
 
       await initializeEvent();
+
+      state.event!.schedules[0].startDate = DateTime.now();
 
       const mockT = vi.fn((key) => key);
       await saveEvent(mockT);
@@ -515,9 +520,13 @@ describe('useEventEditor', () => {
       sandbox.stub(ModelService, 'getModel').resolves(sourceEvent.toObject());
       sandbox.stub(EventService.prototype, 'saveEvent').resolves(savedEvent);
 
-      const { initializeEvent, saveEvent } = useEventEditor();
+      const { state, initializeEvent, saveEvent } = useEventEditor();
 
       await initializeEvent();
+
+      // Duplicate mode strips event, so add a schedule with startDate
+      state.event!.addSchedule();
+      state.event!.schedules[0].startDate = DateTime.now();
 
       const mockT = vi.fn((key) => key);
       await saveEvent(mockT);
@@ -537,9 +546,12 @@ describe('useEventEditor', () => {
       sandbox.stub(CategoryService.prototype, 'getEventCategories').resolves([]);
       sandbox.stub(EventService.prototype, 'saveEvent').resolves(savedEvent);
 
-      const { initializeEvent, saveEvent } = useEventEditor();
+      const { state, initializeEvent, saveEvent } = useEventEditor();
 
       await initializeEvent('event-123');
+
+      state.event!.addSchedule();
+      state.event!.schedules[0].startDate = DateTime.now();
 
       const mockT = vi.fn((key) => key);
       await saveEvent(mockT);
@@ -571,10 +583,11 @@ describe('useEventEditor', () => {
       sandbox.stub(EventService.prototype, 'saveEvent').resolves(savedEvent);
       const assignCategoriesStub = sandbox.stub(CategoryService.prototype, 'assignCategoriesToEvent').resolves();
 
-      const { selectedCategories, initializeEvent, saveEvent } = useEventEditor();
+      const { state, selectedCategories, initializeEvent, saveEvent } = useEventEditor();
 
       await initializeEvent();
 
+      state.event!.schedules[0].startDate = DateTime.now();
       selectedCategories.value = ['cat-1', 'cat-2'];
 
       const mockT = vi.fn((key) => key);
@@ -591,10 +604,11 @@ describe('useEventEditor', () => {
       sandbox.stub(EventService.prototype, 'saveEvent').resolves(savedEvent);
       sandbox.stub(CategoryService.prototype, 'assignCategoriesToEvent').rejects(new Error('Category error'));
 
-      const { selectedCategories, initializeEvent, saveEvent } = useEventEditor();
+      const { state, selectedCategories, initializeEvent, saveEvent } = useEventEditor();
 
       await initializeEvent();
 
+      state.event!.schedules[0].startDate = DateTime.now();
       selectedCategories.value = ['cat-1'];
 
       const mockT = vi.fn((key) => key);
@@ -611,10 +625,11 @@ describe('useEventEditor', () => {
       sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
       const saveStub = sandbox.stub(EventService.prototype, 'saveEvent').resolves(savedEvent);
 
-      const { mediaId, initializeEvent, saveEvent } = useEventEditor();
+      const { state, mediaId, initializeEvent, saveEvent } = useEventEditor();
 
       await initializeEvent();
 
+      state.event!.schedules[0].startDate = DateTime.now();
       mediaId.value = 'media-123';
 
       const mockT = vi.fn((key) => key);
@@ -651,6 +666,24 @@ describe('useEventEditor', () => {
       expect(state.err).toBe('error_no_calendar');
     });
 
+    it('should return error when no date set on schedule', async () => {
+      const calendar = new Calendar('cal-1', 'test-calendar');
+
+      sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
+
+      const { state, initializeEvent, saveEvent } = useEventEditor();
+
+      await initializeEvent();
+
+      // Do not set startDate - schedule has null startDate by default
+
+      const mockT = vi.fn((key) => key);
+      await saveEvent(mockT);
+
+      expect(mockT).toHaveBeenCalledWith('error_date_required');
+      expect(state.err).toBe('error_date_required');
+    });
+
     it('should handle save API error', async () => {
       const calendar = new Calendar('cal-1', 'test-calendar');
 
@@ -660,6 +693,8 @@ describe('useEventEditor', () => {
       const { state, initializeEvent, saveEvent } = useEventEditor();
 
       await initializeEvent();
+
+      state.event!.schedules[0].startDate = DateTime.now();
 
       const mockT = vi.fn((key) => key);
       await saveEvent(mockT);
@@ -675,9 +710,11 @@ describe('useEventEditor', () => {
       sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
       sandbox.stub(EventService.prototype, 'saveEvent').resolves(savedEvent);
 
-      const { initializeEvent, saveEvent } = useEventEditor();
+      const { state, initializeEvent, saveEvent } = useEventEditor();
 
       await initializeEvent();
+
+      state.event!.schedules[0].startDate = DateTime.now();
 
       const mockT = vi.fn((key) => key);
       const mockOnDirtyReset = vi.fn();
@@ -697,6 +734,7 @@ describe('useEventEditor', () => {
 
       await initializeEvent();
 
+      state.event!.schedules[0].startDate = DateTime.now();
       // Force the event to have a different calendar ID that doesn't exist
       state.event!.calendarId = 'cal-2';
 
@@ -717,6 +755,7 @@ describe('useEventEditor', () => {
 
       await initializeEvent();
 
+      state.event!.schedules[0].startDate = DateTime.now();
       state.event!.locationId = 'location-123';
 
       const mockT = vi.fn((key) => key);
@@ -742,6 +781,8 @@ describe('useEventEditor', () => {
       expect(state.event!.location!.id).toBe('');
       expect(state.event!.location!.name).toBe('');
 
+      state.event!.schedules[0].startDate = DateTime.now();
+
       const mockT = vi.fn((key) => key);
       await saveEvent(mockT);
 
@@ -761,6 +802,7 @@ describe('useEventEditor', () => {
 
       await initializeEvent();
 
+      state.event!.schedules[0].startDate = DateTime.now();
       // Set a valid location with a name
       state.event!.location = new EventLocation('loc-1', 'Community Center', '123 Main St');
       state.event!.locationId = 'loc-1';
@@ -784,6 +826,7 @@ describe('useEventEditor', () => {
 
       await initializeEvent();
 
+      state.event!.schedules[0].startDate = DateTime.now();
       // Explicitly set an empty location (simulates form with no location input)
       state.event!.location = new EventLocation('', '', '', '', '', '', '');
 
@@ -948,12 +991,13 @@ describe('useEventEditor', () => {
 
       await initializeEvent();
 
+      state.event!.schedules[0].startDate = DateTime.now();
       state.err = 'Previous error';
 
       const mockT = vi.fn((key) => key);
       await saveEvent(mockT);
 
-      // Error should be cleared before save attempt
+      // Error should be cleared before save attempt (and save succeeds, navigating away)
       expect(state.err).toBe('');
     });
   });
