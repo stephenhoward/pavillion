@@ -145,7 +145,7 @@ describe('Feed Root Component', () => {
     expect(followerPanel.attributes('hidden')).toBeUndefined();
   });
 
-  it('should switch to follows tab and set openAddCalendarModal flag when handleFollowCalendarRequest is called', async () => {
+  it('should open add calendar modal without switching tabs when handleFollowCalendarRequest is called', async () => {
     const pinia = createPinia();
     setActivePinia(pinia);
 
@@ -164,26 +164,27 @@ describe('Feed Root Component', () => {
         FollowsView: true,
         FollowersView: true,
         FollowedEventsView: true,
+        AddCalendarModal: true,
       },
     });
 
     await nextTick();
 
-    // Initially on events tab with modal flag false
+    // Initially on events tab with modal closed
     expect(wrapper.vm.state.activeTab).toBe('events');
-    expect(wrapper.vm.openAddCalendarModal).toBe(false);
+    expect(wrapper.vm.showAddCalendarModal).toBe(false);
 
     // Trigger the follow calendar request
     await wrapper.vm.handleFollowCalendarRequest();
     await nextTick();
 
-    // Should have switched to follows tab
-    expect(wrapper.vm.state.activeTab).toBe('follows');
-    // Should have set the modal flag
-    expect(wrapper.vm.openAddCalendarModal).toBe(true);
+    // Should stay on events tab (not switch to follows)
+    expect(wrapper.vm.state.activeTab).toBe('events');
+    // Should have opened the modal
+    expect(wrapper.vm.showAddCalendarModal).toBe(true);
   });
 
-  it('should reset openAddCalendarModal flag when handleAddCalendarModalOpened is called', async () => {
+  it('should close add calendar modal when handleCloseAddCalendarModal is called', async () => {
     const pinia = createPinia();
     setActivePinia(pinia);
 
@@ -202,21 +203,22 @@ describe('Feed Root Component', () => {
         FollowsView: true,
         FollowersView: true,
         FollowedEventsView: true,
+        AddCalendarModal: true,
       },
     });
 
     await nextTick();
 
-    // Set up: trigger follow calendar request first
+    // Open the modal first
     await wrapper.vm.handleFollowCalendarRequest();
     await nextTick();
-    expect(wrapper.vm.openAddCalendarModal).toBe(true);
+    expect(wrapper.vm.showAddCalendarModal).toBe(true);
 
-    // Now simulate follows.vue acknowledging it opened
-    await wrapper.vm.handleAddCalendarModalOpened();
+    // Now close it
+    await wrapper.vm.handleCloseAddCalendarModal();
     await nextTick();
 
-    // Flag should be reset
-    expect(wrapper.vm.openAddCalendarModal).toBe(false);
+    // Modal should be closed
+    expect(wrapper.vm.showAddCalendarModal).toBe(false);
   });
 });
