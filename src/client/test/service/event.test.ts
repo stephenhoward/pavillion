@@ -112,8 +112,10 @@ describe('loadCalendarEvents', () => {
     expect((mockStore.setEventsForCalendar as sinon.SinonStub).called).toBe(false);
   });
 
-  it('should prefer calendarId from results over explicit parameter', async () => {
-    // Arrange: API returns events with calendarId, and an explicit calendarId is also passed
+  it('should prefer explicit calendarId parameter over calendarId from results', async () => {
+    // Arrange: API returns events with calendarId (e.g. original owner for reposts),
+    // and an explicit calendarId is also passed (the requesting calendar's UUID).
+    // The explicit parameter must win so reposted events appear in the correct calendar.
     const mockEvents = [
       { calendarId: 'from-result', id: 'evt1', date: '2023-01-01' },
     ];
@@ -122,10 +124,10 @@ describe('loadCalendarEvents', () => {
     // Act
     await service.loadCalendarEvents('test-calendar', undefined, 'explicit-param');
 
-    // Assert: the calendarId from the result should take precedence
+    // Assert: the explicit calendarId should take precedence over the result's calendarId
     const stub = mockStore.setEventsForCalendar as sinon.SinonStub;
     expect(stub.calledOnce).toBe(true);
-    expect(stub.firstCall.args[0]).toBe('from-result');
+    expect(stub.firstCall.args[0]).toBe('explicit-param');
   });
 
   it('should throw an error when loading events fails', async () => {
