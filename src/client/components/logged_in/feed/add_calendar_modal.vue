@@ -4,6 +4,7 @@ import { useTranslation } from 'i18next-vue';
 import Modal from '@/client/components/common/modal.vue';
 import ToggleSwitch from '@/client/components/common/toggle_switch.vue';
 import CategoryMappingEditor from '@/client/components/logged_in/category-mapping-editor.vue';
+import { ADD_CATEGORY_VALUE } from '@/client/components/logged_in/category-mapping-constants';
 import { useFeedStore } from '@/client/stores/feedStore';
 import FeedService, { type RemoteCalendarPreview, type CategoryEntry, type CategoryMappingEntry } from '@/client/service/feed';
 import {
@@ -218,7 +219,26 @@ const saveMappingsAndClose = async () => {
   isSavingMappings.value = true;
   try {
     const feedService = new FeedService();
-    await feedService.setCategoryMappings(feedStore.selectedCalendarId, pendingActorId.value, pendingMappings.value);
+    const calendarId = feedStore.selectedCalendarId;
+
+    // Resolve any "__add__" entries by creating new local categories first
+    const resolvedMappings: CategoryMappingEntry[] = [];
+    for (const mapping of pendingMappings.value) {
+      if (mapping.localCategoryId === ADD_CATEGORY_VALUE) {
+        // Create a new local category named after the source category
+        const newCategory = await feedService.createLocalCategory(calendarId, mapping.sourceCategoryName);
+        resolvedMappings.push({
+          sourceCategoryId: mapping.sourceCategoryId,
+          sourceCategoryName: mapping.sourceCategoryName,
+          localCategoryId: newCategory.id,
+        });
+      }
+      else {
+        resolvedMappings.push(mapping);
+      }
+    }
+
+    await feedService.setCategoryMappings(calendarId, pendingActorId.value, resolvedMappings);
   }
   catch (error) {
     console.error('Error saving category mappings:', error);
@@ -283,7 +303,12 @@ const handleClose = () => {
         </p>
       </div>
 
-      <div v-if="isLookingUp" class="loading-state">
+      <div
+        v-if="isLookingUp"
+        class="loading-state"
+        role="status"
+        aria-live="polite"
+      >
         {{ t('add_calendar_modal.looking_up') }}
       </div>
 

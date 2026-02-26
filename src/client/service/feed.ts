@@ -378,6 +378,25 @@ export default class FeedService {
   }
 
   /**
+   * Create a new local category for a calendar.
+   * Uses the current UI language for the category name.
+   * @param calendarId The local calendar ID
+   * @param name The display name for the new category
+   * @returns Promise<CategoryEntry> The newly created category with id and name
+   */
+  async createLocalCategory(calendarId: string, name: string): Promise<CategoryEntry> {
+    const lang = i18next.resolvedLanguage ?? 'en';
+    const response = await axios.post(
+      `/api/v1/calendars/${encodeURIComponent(calendarId)}/categories`,
+      { content: { [lang]: { name } } },
+    );
+    return {
+      id: response.data.id,
+      name,
+    };
+  }
+
+  /**
    * Get existing category mappings for a followed calendar actor.
    * @param calendarId The local calendar ID
    * @param actorId The followed actor identifier
