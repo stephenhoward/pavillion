@@ -63,7 +63,7 @@ async function save() {
     saveSuccess.value = true;
     setTimeout(() => {
       saveSuccess.value = false;
-    }, 3000);
+    }, 5000);
   }
   catch {
     saveError.value = t('save_error');

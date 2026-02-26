@@ -6,6 +6,12 @@ import ModerationInterface from '@/server/moderation/interface';
 import { logError } from '@/server/common/helper/error-logger';
 
 /**
+ * Validates that a string is a well-formed domain name.
+ * Matches the same pattern as the client-side validation in blocked-instances.vue.
+ */
+const DOMAIN_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9-_.]*\.[a-zA-Z]{2,}$/;
+
+/**
  * Route handler for admin instance blocking endpoints.
  *
  * Provides POST, GET, and DELETE endpoints for blocking/unblocking
@@ -55,6 +61,11 @@ export default class AdminInstanceRoutes {
    */
   async blockInstance(req: Request, res: Response): Promise<void> {
     const account = req.user as Account;
+    if (!account) {
+      res.status(401).json({ error: 'not authenticated' });
+      return;
+    }
+
     const { domain, reason } = req.body ?? {};
 
     // Validate input
@@ -62,6 +73,14 @@ export default class AdminInstanceRoutes {
       res.status(400).json({
         error: 'Domain is required and must be a non-empty string',
         errorName: 'ValidationError',
+      });
+      return;
+    }
+
+    if (!DOMAIN_REGEX.test(domain.trim())) {
+      res.status(400).json({
+        error: 'Domain must be a valid domain name (e.g. example.com)',
+        errorName: 'InvalidDomainError',
       });
       return;
     }

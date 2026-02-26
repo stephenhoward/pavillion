@@ -125,6 +125,9 @@ const errorMap: Record<string, new (...args: any[]) => Error> = {
   InstanceAlreadyBlockedError: class InstanceAlreadyBlockedError extends Error {
     constructor() { super('Instance is already blocked'); this.name = 'InstanceAlreadyBlockedError'; }
   },
+  InvalidDomainError: class InvalidDomainError extends Error {
+    constructor() { super('Domain must be a valid domain name'); this.name = 'InvalidDomainError'; }
+  },
 };
 
 /**

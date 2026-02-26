@@ -26,7 +26,8 @@
         "auto_repost_originals_help": "Automatically share events posted by this calendar",
         "auto_repost_reposts": "Also auto-repost shared events",
         "auto_repost_reposts_help": "Also share events this calendar has reposted from others",
-        "unfollow_button": "Unfollow"
+        "unfollow_button": "Unfollow",
+        "local_calendar_label": "Posting to: {{name}}"
     },
     "events": {
         "title": "Events",

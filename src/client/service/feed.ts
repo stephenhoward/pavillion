@@ -1,4 +1,5 @@
 import axios from 'axios';
+import i18next from 'i18next';
 import { CalendarEvent } from '@/common/model/events';
 import { FollowerCalendar } from '@/common/model/follow';
 import ModelService from '@/client/service/models';
@@ -366,10 +367,12 @@ export default class FeedService {
     return response.data.map((c: any) => {
       // content is an object keyed by language, e.g. { en: { language: 'en', name: '...' } }
       const contentValues = c.content ? Object.values(c.content) : [];
-      const firstName = (contentValues[0] as any)?.name ?? '';
+      const lang = i18next.resolvedLanguage ?? 'en';
+      const content = c.content?.[lang] ?? c.content?.['en'] ?? contentValues[0];
+      const name = (content as any)?.name ?? '';
       return {
         id: c.id,
-        name: firstName,
+        name,
       };
     });
   }

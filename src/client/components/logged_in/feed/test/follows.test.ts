@@ -6,6 +6,8 @@ import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
 import Follows from '../follows.vue';
 import { useFeedStore } from '@/client/stores/feedStore';
+import { useCalendarStore } from '@/client/stores/calendarStore';
+import { Calendar, CalendarContent } from '@/common/model/calendar';
 
 describe('Following Tab', () => {
   let pinia: ReturnType<typeof createPinia>;
@@ -34,6 +36,7 @@ describe('Following Tab', () => {
               auto_repost_reposts: 'Also auto-repost shared events',
               auto_repost_reposts_help: 'Also share events this calendar has reposted from others',
               unfollow_button: 'Unfollow',
+              local_calendar_label: 'Posting to: {{name}}',
             },
           },
         },
@@ -71,6 +74,7 @@ describe('Following Tab', () => {
       {
         id: 'follow-1',
         calendarActorId: 'calendar@remote.com',
+        calendarActorUuid: 'uuid-1',
         calendarId: 'test-calendar',
         autoRepostOriginals: false,
         autoRepostReposts: false,
@@ -78,6 +82,7 @@ describe('Following Tab', () => {
       {
         id: 'follow-2',
         calendarActorId: 'events@other.com',
+        calendarActorUuid: 'uuid-2',
         calendarId: 'test-calendar',
         autoRepostOriginals: true,
         autoRepostReposts: true,
@@ -99,12 +104,72 @@ describe('Following Tab', () => {
     expect(wrapper.text()).toContain('events@other.com');
   });
 
+  it('shows local calendar name when calendar is in the store', async () => {
+    const feedStore = useFeedStore();
+    const calendarStore = useCalendarStore();
+
+    // Set up a calendar in the store that matches the follow's calendarId
+    const calendar = new Calendar('local-cal-id', 'my-calendar');
+    const content = new CalendarContent('en', 'My Local Calendar');
+    calendar.addContent(content);
+    calendarStore.setCalendars([calendar]);
+
+    feedStore.follows = [
+      {
+        id: 'follow-1',
+        calendarActorId: 'calendar@remote.com',
+        calendarActorUuid: 'uuid-1',
+        calendarId: 'local-cal-id',
+        autoRepostOriginals: false,
+        autoRepostReposts: false,
+      },
+    ];
+
+    const wrapper = mount(Follows, {
+      global: {
+        plugins: [pinia, [I18NextVue, { i18next }]],
+        stubs: {
+          AddCalendarModal: true,
+        },
+      },
+    });
+
+    expect(wrapper.text()).toContain('Posting to: My Local Calendar');
+  });
+
+  it('does not show local calendar label when calendar is not in the store', async () => {
+    const feedStore = useFeedStore();
+
+    feedStore.follows = [
+      {
+        id: 'follow-1',
+        calendarActorId: 'calendar@remote.com',
+        calendarActorUuid: 'uuid-1',
+        calendarId: 'unknown-calendar-id',
+        autoRepostOriginals: false,
+        autoRepostReposts: false,
+      },
+    ];
+
+    const wrapper = mount(Follows, {
+      global: {
+        plugins: [pinia, [I18NextVue, { i18next }]],
+        stubs: {
+          AddCalendarModal: true,
+        },
+      },
+    });
+
+    expect(wrapper.find('.local-calendar-label').exists()).toBe(false);
+  });
+
   it('triggers updateFollowPolicy action when toggle switches change', async () => {
     const feedStore = useFeedStore();
     feedStore.follows = [
       {
         id: 'follow-1',
         calendarActorId: 'calendar@remote.com',
+        calendarActorUuid: 'uuid-1',
         calendarId: 'test-calendar',
         autoRepostOriginals: false,
         autoRepostReposts: false,
@@ -137,6 +202,7 @@ describe('Following Tab', () => {
       {
         id: 'follow-1',
         calendarActorId: 'calendar@remote.com',
+        calendarActorUuid: 'uuid-1',
         calendarId: 'test-calendar',
         autoRepostOriginals: false,
         autoRepostReposts: false,
@@ -201,6 +267,7 @@ describe('Following Tab', () => {
       {
         id: 'follow-1',
         calendarActorId: 'calendar@remote.com',
+        calendarActorUuid: 'uuid-1',
         calendarId: 'test-calendar',
         autoRepostOriginals: false,
         autoRepostReposts: false,
@@ -235,6 +302,7 @@ describe('Following Tab', () => {
       {
         id: 'follow-1',
         calendarActorId: 'calendar@remote.com',
+        calendarActorUuid: 'uuid-1',
         calendarId: 'test-calendar',
         autoRepostOriginals: true,
         autoRepostReposts: true,
