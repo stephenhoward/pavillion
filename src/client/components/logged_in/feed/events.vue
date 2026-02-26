@@ -179,8 +179,8 @@ const handleReportClose = () => {
  * Handle "Follow a Calendar" button click
  */
 const emit = defineEmits(['followCalendar']);
-const handleFollowCalendar = () => {
-  emit('followCalendar');
+const handleFollowCalendar = (event: MouseEvent) => {
+  emit('followCalendar', event.currentTarget);
 };
 
 /**
@@ -326,7 +326,7 @@ onUnmounted(() => {
       <button
         type="button"
         class="primary"
-        @click="handleFollowCalendar"
+        @click="handleFollowCalendar($event)"
       >
         {{ t("follow_button") }}
       </button>
