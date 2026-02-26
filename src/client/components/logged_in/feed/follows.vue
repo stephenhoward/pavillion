@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, nextTick } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useFeedStore } from '@/client/stores/feedStore';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
@@ -12,6 +12,7 @@ const { t } = useTranslation('feed', {
 
 const feedStore = useFeedStore();
 const showAddModal = ref(false);
+const addModalTriggerRef = ref<HTMLElement | null>(null);
 
 const follows = computed(() => feedStore.follows);
 const isLoading = computed(() => feedStore.isLoadingFollows);
@@ -34,12 +35,14 @@ const handleUnfollow = async (followId: string) => {
   }
 };
 
-const handleOpenAddModal = () => {
+const handleOpenAddModal = (event: MouseEvent) => {
+  addModalTriggerRef.value = (event?.currentTarget as HTMLElement) ?? null;
   showAddModal.value = true;
 };
 
 const handleCloseAddModal = () => {
   showAddModal.value = false;
+  nextTick(() => { addModalTriggerRef.value?.focus(); });
 };
 
 const handleFollowSuccess = async () => {

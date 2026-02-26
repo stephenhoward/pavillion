@@ -23,6 +23,7 @@ const state = reactive({
 });
 
 const showAddCalendarModal = ref(false);
+const addCalendarTriggerRef = ref(null);
 
 const hasMultipleCalendars = computed(() => calendarStore.hasMultipleCalendars);
 const selectedCalendarId = computed(() => calendarStore.selectedCalendarId);
@@ -68,7 +69,8 @@ const loadFeedData = async () => {
  * Handle request to follow a calendar from the Events tab.
  * Opens the follow dialog without switching tabs.
  */
-const handleFollowCalendarRequest = () => {
+const handleFollowCalendarRequest = (triggerEl) => {
+  addCalendarTriggerRef.value = triggerEl ?? null;
   showAddCalendarModal.value = true;
 };
 
@@ -87,10 +89,11 @@ const handleFollowSuccess = async () => {
 };
 
 /**
- * Close the root-level add calendar modal.
+ * Close the root-level add calendar modal and restore focus to the trigger element.
  */
 const handleCloseAddCalendarModal = () => {
   showAddCalendarModal.value = false;
+  nextTick(() => { addCalendarTriggerRef.value?.focus(); });
 };
 
 onMounted(async () => {
@@ -150,6 +153,7 @@ onMounted(async () => {
         aria-label="Feed sections"
       >
         <button
+          id="events-tab"
           type="button"
           role="tab"
           :aria-selected="state.activeTab === 'events' ? 'true' : 'false'"
@@ -160,6 +164,7 @@ onMounted(async () => {
           {{ t('events_tab') }}
         </button>
         <button
+          id="follows-tab"
           type="button"
           role="tab"
           :aria-selected="state.activeTab === 'follows' ? 'true' : 'false'"
@@ -170,6 +175,7 @@ onMounted(async () => {
           {{ t('follows_tab') }}
         </button>
         <button
+          id="followers-tab"
           type="button"
           role="tab"
           :aria-selected="state.activeTab === 'followers' ? 'true' : 'false'"
@@ -184,6 +190,8 @@ onMounted(async () => {
       <div
         v-if="isLoadingAny && !state.isInitialized"
         class="loading-state"
+        aria-live="polite"
+        aria-atomic="true"
       >
         <p>{{ t('loading') }}</p>
       </div>

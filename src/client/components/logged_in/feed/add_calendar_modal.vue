@@ -346,6 +346,7 @@ const handleClose = () => {
           type="button"
           class="primary"
           :disabled="!canFollow"
+          :aria-disabled="!canFollow"
           @click="handleFollow"
         >
           {{ isFollowing ? t('add_calendar_modal.following_button') : t('add_calendar_modal.follow_button') }}
@@ -382,6 +383,7 @@ const handleClose = () => {
           type="button"
           class="primary"
           :disabled="isSavingMappings"
+          :aria-disabled="isSavingMappings"
           @click="saveMappingsAndClose"
         >
           {{ isSavingMappings ? t('add_calendar_modal.mapping_saving_button') : t('add_calendar_modal.mapping_save_button') }}
