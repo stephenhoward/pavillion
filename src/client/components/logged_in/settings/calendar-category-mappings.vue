@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { ArrowLeft } from 'lucide-vue-next';
 import CategoryMappingEditor from '@/client/components/logged_in/category-mapping-editor.vue';
+import { ADD_CATEGORY_VALUE } from '@/client/components/logged_in/category-mapping-constants';
 import FeedService, { type CategoryEntry, type CategoryMappingEntry } from '@/client/service/feed';
 
 const props = defineProps<{
@@ -59,7 +60,19 @@ async function save() {
   saveError.value = '';
   try {
     const feedService = new FeedService();
-    await feedService.setCategoryMappings(props.calendarId, props.actorId, mappings.value);
+
+    // Resolve any __add__ sentinel entries by creating new local categories
+    const resolvedMappings: CategoryMappingEntry[] = await Promise.all(
+      mappings.value.map(async (m) => {
+        if (m.localCategoryId !== ADD_CATEGORY_VALUE) return m;
+        const created = await feedService.createLocalCategory(props.calendarId, m.sourceCategoryName);
+        localCategories.value = [...localCategories.value, created];
+        return { ...m, localCategoryId: created.id };
+      }),
+    );
+
+    await feedService.setCategoryMappings(props.calendarId, props.actorId, resolvedMappings);
+    mappings.value = resolvedMappings;
     saveSuccess.value = true;
     setTimeout(() => {
       saveSuccess.value = false;
