@@ -89,6 +89,14 @@ const getCalendarIdentifier = (event: FeedEvent) => {
 };
 
 /**
+ * Get the event location name when available.
+ * Returns the venue name for events that have location data, empty string otherwise.
+ */
+const getEventLocation = (event: FeedEvent) => {
+  return event.location?.name || '';
+};
+
+/**
  * Derive the pre-selected category objects for the modal from pendingRepost state.
  * Matches preSelectedIds against allLocalCategories to get proper { id, name } pairs.
  */
@@ -248,6 +256,9 @@ onUnmounted(() => {
           </p>
           <p class="event-source">
             {{ getCalendarIdentifier(event) }}
+          </p>
+          <p v-if="getEventLocation(event)" class="event-location">
+            {{ getEventLocation(event) }}
           </p>
         </div>
 
@@ -412,10 +423,16 @@ div.events-container {
         }
 
         p.event-source {
-          margin: 0;
+          margin: 0 0 var(--pav-space-1) 0;
           font-size: var(--pav-font-size-caption);
           color: var(--pav-color-text-secondary);
           font-style: italic;
+        }
+
+        p.event-location {
+          margin: 0;
+          font-size: var(--pav-font-size-caption);
+          color: var(--pav-color-text-secondary);
         }
       }
 

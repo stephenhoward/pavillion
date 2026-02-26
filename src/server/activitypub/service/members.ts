@@ -680,6 +680,10 @@ class ActivityPubService {
           association: 'categoryAssignments',
           required: false,
         },
+        {
+          association: 'location',
+          required: false,
+        },
       ],
       limit: defaultPageSize,
       offset: page ? page * defaultPageSize : 0,
@@ -816,11 +820,24 @@ class ActivityPubService {
       // Look up the AP URL from EventObjectEntity; this is the canonical AP identifier.
       const eventSourceUrl = eventApUrlMap.get(event.id) ?? '';
 
+      // Transform location from Sequelize plain object (snake_case) to camelCase
+      // so CalendarEvent.fromObject() can reconstruct the EventLocation correctly.
+      const location = plainEvent.location ? {
+        id: plainEvent.location.id,
+        name: plainEvent.location.name,
+        address: plainEvent.location.address,
+        city: plainEvent.location.city,
+        state: plainEvent.location.state,
+        postalCode: plainEvent.location.postal_code,
+        country: plainEvent.location.country,
+      } : null;
+
       const transformedEvent = {
         ...plainEvent,
         content: contentByLanguage,
         schedules,
         categoryIds,
+        location,
         repostStatus,
         sourceCalendarActorId,
         eventSourceUrl,
