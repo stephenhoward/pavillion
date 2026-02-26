@@ -17,7 +17,7 @@
         "loading": "Loading followers..."
     },
     "follows": {
-        "title": "Follows",
+        "title": "Following",
         "description": "Calendars you follow",
         "no_follows": "You are not following any calendars",
         "follow_button": "Follow a Calendar",
