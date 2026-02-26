@@ -209,7 +209,7 @@ function goToSettings() {
         <button type="button"
                 class="action-button action-settings"
                 @click="goToSettings"
-                :aria-label="t('settings')">
+                :aria-label="t('settings_button_label')">
           <svg width="16"
                height="16"
                viewBox="0 0 24 24"

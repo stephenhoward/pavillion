@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
+import i18next from 'i18next';
 import { type FollowRelationship } from '@/client/service/feed';
+import { useCalendarStore } from '@/client/stores/calendarStore';
 import ToggleSwitch from '@/client/components/common/toggle_switch.vue';
 
 const { t } = useTranslation('feed', {
@@ -19,6 +22,22 @@ const emit = defineEmits<{
   (e: 'policy-change', followId: string, autoRepostOriginals: boolean, autoRepostReposts: boolean): void;
   (e: 'unfollow', followId: string): void;
 }>();
+
+const calendarStore = useCalendarStore();
+
+/**
+ * Resolved display name for the local calendar that receives this follow's events.
+ * Uses the translated content name if available, falling back to the URL name.
+ */
+const localCalendarName = computed(() => {
+  const calendar = calendarStore.getCalendarById(props.follow.calendarId);
+  if (!calendar) {
+    return null;
+  }
+  const lang = i18next.resolvedLanguage ?? 'en';
+  const name = calendar.content(lang).name || calendar.content('en').name || calendar.urlName;
+  return name || null;
+});
 
 const handleOriginalsToggle = (value: boolean) => {
   // If turning off originals, also turn off reposts
@@ -40,6 +59,12 @@ const handleUnfollow = () => {
     <div class="follow-info">
       <div class="remote-identifier">
         {{ follow.calendarActorId }}
+      </div>
+      <div
+        v-if="localCalendarName"
+        class="local-calendar-label"
+      >
+        {{ t('local_calendar_label', { name: localCalendarName }) }}
       </div>
     </div>
 
@@ -114,6 +139,12 @@ div.follow-list-item {
       font-size: 1rem;
       font-weight: var(--pav-font-weight-medium);
       color: var(--pav-color-text-primary);
+    }
+
+    div.local-calendar-label {
+      font-size: 0.8125rem;
+      color: var(--pav-color-text-secondary);
+      margin-top: var(--pav-space-1);
     }
   }
 

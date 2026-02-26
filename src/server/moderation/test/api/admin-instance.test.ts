@@ -193,6 +193,88 @@ describe('Admin Instance Blocking API', () => {
         expect(response.status).toBe(400);
         expect(response.body.error).toContain('Reason is required');
       });
+
+      it('should return 400 with InvalidDomainError when domain has spaces', async () => {
+        const app = createAppWithAuth();
+
+        const response = await request(app)
+          .post('/api/v1/admin/moderation/block-instance')
+          .send({
+            domain: 'not a valid domain!!!',
+            reason: 'Policy violation',
+          });
+
+        expect(response.status).toBe(400);
+        expect(response.body.errorName).toBe('InvalidDomainError');
+      });
+
+      it('should return 400 with InvalidDomainError when domain has no TLD', async () => {
+        const app = createAppWithAuth();
+
+        const response = await request(app)
+          .post('/api/v1/admin/moderation/block-instance')
+          .send({
+            domain: 'nodothere',
+            reason: 'Policy violation',
+          });
+
+        expect(response.status).toBe(400);
+        expect(response.body.errorName).toBe('InvalidDomainError');
+      });
+
+      it('should return 400 with InvalidDomainError when domain has special characters', async () => {
+        const app = createAppWithAuth();
+
+        const response = await request(app)
+          .post('/api/v1/admin/moderation/block-instance')
+          .send({
+            domain: 'bad!domain.com',
+            reason: 'Policy violation',
+          });
+
+        expect(response.status).toBe(400);
+        expect(response.body.errorName).toBe('InvalidDomainError');
+      });
+
+      it('should return 201 when domain is a valid simple domain', async () => {
+        const blockedInstance = new BlockedInstance('block-id');
+        blockedInstance.domain = 'example.com';
+        blockedInstance.reason = 'Policy violation';
+        blockedInstance.blockedAt = new Date();
+        blockedInstance.blockedBy = 'admin-id';
+        sandbox.stub(moderationInterface, 'blockInstance').resolves(blockedInstance);
+
+        const app = createAppWithAuth();
+
+        const response = await request(app)
+          .post('/api/v1/admin/moderation/block-instance')
+          .send({
+            domain: 'example.com',
+            reason: 'Policy violation',
+          });
+
+        expect(response.status).toBe(201);
+      });
+
+      it('should return 201 when domain is a valid subdomain', async () => {
+        const blockedInstance = new BlockedInstance('block-id');
+        blockedInstance.domain = 'bad-instance.example.com';
+        blockedInstance.reason = 'Policy violation';
+        blockedInstance.blockedAt = new Date();
+        blockedInstance.blockedBy = 'admin-id';
+        sandbox.stub(moderationInterface, 'blockInstance').resolves(blockedInstance);
+
+        const app = createAppWithAuth();
+
+        const response = await request(app)
+          .post('/api/v1/admin/moderation/block-instance')
+          .send({
+            domain: 'bad-instance.example.com',
+            reason: 'Policy violation',
+          });
+
+        expect(response.status).toBe(201);
+      });
     });
 
     describe('conflict - 409', () => {
