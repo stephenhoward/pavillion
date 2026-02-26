@@ -20,7 +20,7 @@
         "title": "Follows",
         "description": "Calendars you follow",
         "no_follows": "You are not following any calendars",
-        "follow_button": "Add a Calendar",
+        "follow_button": "Follow a Calendar",
         "loading": "Loading follows...",
         "auto_repost_originals": "Auto-repost original events",
         "auto_repost_originals_help": "Automatically share events posted by this calendar",
@@ -62,7 +62,7 @@
         "eventSource": "Source"
     },
     "add_calendar_modal": {
-        "title": "Add a Calendar",
+        "title": "Follow a Calendar",
         "identifier_label": "Calendar Identifier",
         "identifier_placeholder": "calendar@domain.com",
         "identifier_help": "Enter the ActivityPub identifier of the calendar you want to follow",
