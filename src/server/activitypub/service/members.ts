@@ -367,14 +367,25 @@ class ActivityPubService {
             eventObject = await EventObjectEntity.findOne({
               where: { ap_id: canonicalEventUrl },
             });
+            // If still no EventObjectEntity, this is a local event that has never been
+            // published via ActivityPub (e.g., a seed event inserted directly into the DB).
+            // Create the EventObjectEntity on-the-fly so it can be shared.
+            if (!eventObject) {
+              const localActorUrl = await this.actorUrl(localCalendar);
+              eventObject = await EventObjectEntity.create({
+                event_id: localEvent.id,
+                ap_id: canonicalEventUrl,
+                attributed_to: localActorUrl,
+              });
+              console.log('[MemberService] shareEvent: created EventObjectEntity on-the-fly for local event:', localEvent.id);
+            }
           }
         }
       }
     }
 
-    // Step 3: If we still have no EventObjectEntity, we cannot construct a valid AP Announce
-    // activity or store a consistent UUID key. This should not occur in normal operation —
-    // any event reachable via AP must have an EventObjectEntity record.
+    // Step 3: If we still have no EventObjectEntity, the provided URL does not correspond
+    // to a valid local event or a known remote event. Reject the request.
     if (!eventObject) {
       console.warn('[MemberService] shareEvent: no EventObjectEntity found for URL:', eventUrl);
       throw new InvalidSharedEventUrlError('Invalid shared event URL');
@@ -818,7 +829,15 @@ class ActivityPubService {
       // eventSourceUrl must be the full ActivityPub URL for the event.
       // The client uses this to call shareEvent(), which validates that it starts with https://.
       // Look up the AP URL from EventObjectEntity; this is the canonical AP identifier.
-      const eventSourceUrl = eventApUrlMap.get(event.id) ?? '';
+      // For local events that have never been published via ActivityPub (no EventObjectEntity
+      // record), derive the canonical AP URL from the calendar actor URI so reposting works.
+      let eventSourceUrl = eventApUrlMap.get(event.id) ?? '';
+      if (!eventSourceUrl && event.calendar_id !== null) {
+        const localActorUri = localCalendarActorMap.get(event.calendar_id);
+        if (localActorUri) {
+          eventSourceUrl = `${localActorUri}/events/${event.id}`;
+        }
+      }
 
       // Transform location from Sequelize plain object (snake_case) to camelCase
       // so CalendarEvent.fromObject() can reconstruct the EventLocation correctly.
