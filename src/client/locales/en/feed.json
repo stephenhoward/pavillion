@@ -38,15 +38,19 @@
         "repost_error": "Failed to repost event",
         "unrepost_error": "Failed to remove repost",
         "repost_button": "Repost",
+        "repost_aria_label": "Repost event: {{eventTitle}}",
         "repost_badge_prefix": "Event type: ",
         "reposted_button": "Reposted",
-        "unrepost_aria_label": "Remove repost",
+        "unrepost_aria_label": "Remove repost for: {{eventTitle}}",
         "auto_posted_label": "Auto-posted",
         "loading_more": "Loading more events...",
         "untitled_event": "Untitled Event",
         "unknown_calendar": "Unknown",
         "report_button": "Report",
-        "report_aria_label": "Report event: {{eventTitle}}"
+        "report_aria_label": "Report event: {{eventTitle}}",
+        "details_button": "Details",
+        "details_aria_label": "View details for: {{eventTitle}}",
+        "close_aria_label": "Close details"
     },
     "categoryMapping": {
         "repostDialogTitle": "Repost with categories",

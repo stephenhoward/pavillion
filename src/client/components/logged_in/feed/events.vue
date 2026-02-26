@@ -7,6 +7,7 @@ import { useToast } from '@/client/composables/useToast';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
 import RepostCategoriesModal from '@/client/components/logged_in/repost-categories-modal.vue';
 import ReportEventModal from '@/client/components/report-event.vue';
+import FeedEventDetailModal from '@/client/components/logged_in/feed/FeedEventDetailModal.vue';
 import { type FeedEvent } from '@/client/service/feed';
 
 const { t } = useTranslation('feed', { keyPrefix: 'events' });
@@ -23,6 +24,8 @@ const repostTriggerElement = ref(null);
 const reportingEventId = ref<string | null>(null);
 const reportingEventTitle = ref<string | null>(null);
 const reportTriggerElement = ref<HTMLElement | null>(null);
+const detailEvent = ref<FeedEvent | null>(null);
+const detailTriggerElement = ref<HTMLElement | null>(null);
 let observer = null;
 
 /**
@@ -187,6 +190,39 @@ const handleReportClose = () => {
 };
 
 /**
+ * Handle "Details" button click — opens the detail modal for the event
+ */
+const handleOpenDetail = (event: FeedEvent, domEvent: MouseEvent) => {
+  detailTriggerElement.value = domEvent.currentTarget as HTMLElement;
+  detailEvent.value = event;
+};
+
+/**
+ * Handle detail modal close — clears the detail event and restores focus to the trigger button
+ */
+const handleCloseDetail = () => {
+  detailEvent.value = null;
+  nextTick(() => { detailTriggerElement.value?.focus(); });
+};
+
+/**
+ * Handle report action emitted from the detail modal.
+ * Closes the detail modal first, then opens the report modal.
+ */
+const handleReportFromModal = (domEvent: MouseEvent) => {
+  if (detailEvent.value) {
+    const eventToReport = detailEvent.value;
+    // Set up report trigger as the detail modal's report button so focus
+    // returns sensibly after the report modal closes
+    reportTriggerElement.value = domEvent?.currentTarget as HTMLElement ?? null;
+    reportingEventId.value = eventToReport.id;
+    reportingEventTitle.value = getEventTitle(eventToReport);
+    // Close the detail modal
+    detailEvent.value = null;
+  }
+};
+
+/**
  * Handle "Follow a Calendar" button click
  */
 const emit = defineEmits(['followCalendar']);
@@ -269,6 +305,7 @@ onUnmounted(() => {
             type="button"
             class="repost-button"
             data-testid="repost-button"
+            :aria-label="t('repost_aria_label', { eventTitle: getEventTitle(event) })"
             @click="handleRepost(event.id, $event)"
           >
             {{ t('repost_button') }}
@@ -280,7 +317,7 @@ onUnmounted(() => {
             type="button"
             class="reposted-label"
             data-testid="reposted-label"
-            :aria-label="t('unrepost_aria_label')"
+            :aria-label="t('unrepost_aria_label', { eventTitle: getEventTitle(event) })"
             @click="handleUnrepost(event.id)"
           >
             {{ t('reposted_button') }}
@@ -303,6 +340,16 @@ onUnmounted(() => {
             @click="handleReport(event, $event)"
           >
             {{ t('report_button') }}
+          </button>
+
+          <button
+            type="button"
+            class="details-button"
+            data-testid="details-button"
+            :aria-label="t('details_aria_label', { eventTitle: getEventTitle(event) })"
+            @click="handleOpenDetail(event, $event)"
+          >
+            {{ t('details_button') }}
           </button>
         </div>
       </div>
@@ -362,6 +409,16 @@ onUnmounted(() => {
       :event-id="reportingEventId"
       :event-title="reportingEventTitle"
       @close="handleReportClose"
+    />
+
+    <!-- Event detail modal — shown when detailEvent is set -->
+    <FeedEventDetailModal
+      v-if="detailEvent"
+      :event="detailEvent"
+      @close="handleCloseDetail"
+      @repost="(domEvent) => handleRepost(detailEvent.id, domEvent)"
+      @unrepost="handleUnrepost(detailEvent.id)"
+      @report="handleReportFromModal"
     />
   </div>
 </template>
@@ -504,6 +561,26 @@ div.events-container {
           &:hover {
             color: var(--pav-color-error);
             border-color: var(--pav-color-error);
+          }
+
+          &:active {
+            opacity: 0.8;
+          }
+        }
+
+        button.details-button {
+          padding: var(--pav-space-2) var(--pav-space-3);
+          background: transparent;
+          color: var(--pav-color-text-secondary);
+          border: 1px solid var(--pav-color-border-primary);
+          border-radius: var(--pav-border-radius-sm);
+          font-size: var(--pav-font-size-xs);
+          cursor: pointer;
+          transition: color 0.2s ease, border-color 0.2s ease;
+
+          &:hover {
+            color: var(--pav-color-text-primary);
+            border-color: var(--pav-color-text-secondary);
           }
 
           &:active {

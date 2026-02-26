@@ -1,6 +1,11 @@
 {
     "events": {
-        "no_events_yet": "Aún no hay eventos. Los eventos de los calendarios que sigues aparecerán aquí una vez que se compartan."
+        "no_events_yet": "Aún no hay eventos. Los eventos de los calendarios que sigues aparecerán aquí una vez que se compartan.",
+        "repost_aria_label": "Reenviar evento: {{eventTitle}}",
+        "unrepost_aria_label": "Eliminar reenvío de: {{eventTitle}}",
+        "details_button": "Detalles",
+        "details_aria_label": "Ver detalles de: {{eventTitle}}",
+        "close_aria_label": "Cerrar detalles"
     },
     "categoryMapping": {
         "eventTitle": "Título"
