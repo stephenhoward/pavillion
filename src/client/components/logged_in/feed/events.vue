@@ -17,6 +17,7 @@ const events = computed(() => feedStore.events);
 const hasMore = computed(() => feedStore.eventsHasMore);
 const isLoading = computed(() => feedStore.isLoadingEvents);
 const pendingRepost = computed(() => feedStore.pendingRepost);
+const hasFollows = computed(() => feedStore.follows.length > 0);
 const sentinelRef = ref(null);
 const repostTriggerElement = ref(null);
 const reportingEventId = ref<string | null>(null);
@@ -309,8 +310,19 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Empty state -->
-    <EmptyLayout v-else :title="t('no_events')">
+    <!-- Empty state: user follows calendars but no events yet -->
+    <EmptyLayout
+      v-else-if="hasFollows"
+      :title="t('no_events')"
+    >
+      <p class="empty-waiting-message">{{ t('no_events_yet') }}</p>
+    </EmptyLayout>
+
+    <!-- Empty state: user follows no calendars -->
+    <EmptyLayout
+      v-else
+      :title="t('no_events')"
+    >
       <button
         type="button"
         class="primary"
@@ -530,6 +542,13 @@ div.events-container {
     &:active {
       background: var(--pav-color-orange-700);
     }
+  }
+
+  p.empty-waiting-message {
+    margin: 0;
+    font-size: var(--pav-font-size-sm);
+    color: var(--pav-color-text-secondary);
+    text-align: center;
   }
 }
 </style>

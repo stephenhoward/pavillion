@@ -33,6 +33,7 @@
         "title": "Events",
         "description": "Events from calendars you follow",
         "no_events": "No events",
+        "no_events_yet": "No events yet. Events from calendars you follow will appear here once they are shared.",
         "follow_button": "Follow a Calendar",
         "repost_error": "Failed to repost event",
         "unrepost_error": "Failed to remove repost",

@@ -1,4 +1,7 @@
 {
+    "events": {
+        "no_events_yet": "Aún no hay eventos. Los eventos de los calendarios que sigues aparecerán aquí una vez que se compartan."
+    },
     "categoryMapping": {
         "eventTitle": "Título"
     }
