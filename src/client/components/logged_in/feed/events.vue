@@ -8,7 +8,7 @@ import EmptyLayout from '@/client/components/common/empty_state.vue';
 import RepostCategoriesModal from '@/client/components/logged_in/repost-categories-modal.vue';
 import ReportEventModal from '@/client/components/report-event.vue';
 import FeedEventDetailModal from '@/client/components/logged_in/feed/FeedEventDetailModal.vue';
-import { type FeedEvent } from '@/client/service/feed';
+import { type FeedEvent, type CategoryEntry } from '@/client/service/feed';
 
 const { t } = useTranslation('feed', { keyPrefix: 'events' });
 const feedStore = useFeedStore();
@@ -150,11 +150,13 @@ const handleUnrepost = async (eventId: string) => {
 };
 
 /**
- * Handle modal confirm: repost with the selected category IDs
+ * Handle modal confirm: repost with the selected category IDs.
+ * When sourceCategoriesToAdopt is provided (no-local-categories mode), the store
+ * will create those categories, save mappings, and repost with the new IDs.
  */
-const handleRepostConfirm = async (categoryIds) => {
+const handleRepostConfirm = async (categoryIds: string[], sourceCategoriesToAdopt?: CategoryEntry[]) => {
   try {
-    await feedStore.confirmPendingRepost(categoryIds);
+    await feedStore.confirmPendingRepost(categoryIds, sourceCategoriesToAdopt);
     nextTick(() => { repostTriggerElement.value?.focus(); });
   }
   catch (error) {
@@ -399,6 +401,7 @@ onUnmounted(() => {
       :event="pendingRepostEvent"
       :pre-selected-categories="pendingRepostPreSelected"
       :all-local-categories="pendingRepost.allLocalCategories"
+      :source-categories="pendingRepost.sourceCategories"
       @confirm="handleRepostConfirm"
       @cancel="handleRepostCancel"
     />

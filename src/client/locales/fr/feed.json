@@ -8,6 +8,10 @@
         "close_aria_label": "Fermer les détails"
     },
     "categoryMapping": {
+        "repostDialogTitleSimple": "Repartager",
+        "adoptCategoryLabel": "Catégories de cet événement",
+        "adoptCategory": "Ajouter et utiliser cette catégorie",
+        "adoptCategoryActive": "Ajoutée",
         "eventTitle": "Titre"
     }
 }

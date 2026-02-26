@@ -16,6 +16,7 @@ interface PendingRepost {
   preSelectedIds: string[];
   sourceCategories: CategoryEntry[];
   allLocalCategories: CategoryEntry[];
+  calendarActorUuid: string;
 }
 
 /**
@@ -486,6 +487,7 @@ export const useFeedStore = defineStore('feed', {
         preSelectedIds,
         sourceCategories: relevantSourceCategories,
         allLocalCategories,
+        calendarActorUuid: follow.calendarActorUuid,
       };
     },
 
@@ -493,16 +495,66 @@ export const useFeedStore = defineStore('feed', {
      * Confirm a pending repost with the user-selected category IDs.
      * Called by the component when the user confirms the modal.
      *
-     * @param categoryIds - The category IDs selected by the user
+     * When sourceCategoriesToAdopt is provided (no-local-categories mode), this method:
+     * 1. Creates each adopted source category as a new local category
+     * 2. Saves the source-to-local mappings
+     * 3. Reposts with the new local category IDs
+     *
+     * @param categoryIds - The local category IDs selected by the user (has-categories mode)
+     * @param sourceCategoriesToAdopt - Source categories to create locally (no-categories mode)
      */
-    async confirmPendingRepost(categoryIds: string[]) {
+    async confirmPendingRepost(categoryIds: string[], sourceCategoriesToAdopt?: CategoryEntry[]) {
       if (!this.pendingRepost) {
         return;
       }
 
-      const { eventId } = this.pendingRepost;
+      const { eventId, calendarActorUuid } = this.pendingRepost;
       this.pendingRepost = null;
-      await this._doRepost(eventId, categoryIds);
+
+      if (!sourceCategoriesToAdopt || sourceCategoriesToAdopt.length === 0) {
+        return this._doRepost(eventId, categoryIds);
+      }
+
+      if (!this.selectedCalendarId) {
+        return;
+      }
+
+      const feedService = new FeedService();
+
+      // Create each adopted source category as a new local category and collect mappings
+      const newMappings: CategoryMappingEntry[] = [];
+      const newLocalCategoryIds: string[] = [];
+
+      for (const sourceCat of sourceCategoriesToAdopt) {
+        const newLocalCat = await feedService.createLocalCategory(this.selectedCalendarId, sourceCat.name);
+        newLocalCategoryIds.push(newLocalCat.id);
+        newMappings.push({
+          sourceCategoryId: sourceCat.id,
+          sourceCategoryName: sourceCat.name,
+          localCategoryId: newLocalCat.id,
+        });
+      }
+
+      // Fetch existing mappings and merge with new ones
+      let existingMappings: CategoryMappingEntry[] = [];
+      try {
+        existingMappings = await feedService.getCategoryMappings(this.selectedCalendarId, calendarActorUuid);
+      }
+      catch {
+        // If we can't fetch existing mappings, proceed with just the new ones
+      }
+
+      // Merge: new mappings override any existing mapping for the same source category
+      const existingFiltered = existingMappings.filter(
+        (m) => !newMappings.some((n) => n.sourceCategoryId === m.sourceCategoryId),
+      );
+      await feedService.setCategoryMappings(
+        this.selectedCalendarId,
+        calendarActorUuid,
+        [...existingFiltered, ...newMappings],
+      );
+
+      return this._doRepost(eventId, newLocalCategoryIds);
     },
 
     /**
