@@ -74,14 +74,15 @@ const handleFollowCalendarRequest = () => {
 
 /**
  * Handle successful follow from root-level modal.
- * Refreshes follows list after a new follow is established.
+ * Refreshes both the follows list and the feed events so that the Events tab
+ * immediately shows events from the newly followed calendar.
  */
 const handleFollowSuccess = async () => {
   try {
-    await feedStore.loadFollows();
+    await Promise.all([feedStore.loadFollows(), feedStore.loadFeed()]);
   }
   catch (error) {
-    console.error('Error refreshing follows:', error);
+    console.error('Error refreshing feed after follow:', error);
   }
 };
 

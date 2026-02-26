@@ -43,12 +43,13 @@ const handleCloseAddModal = () => {
 };
 
 const handleFollowSuccess = async () => {
-  // Refresh follows list after successful follow
+  // Refresh both follows list and feed events after successful follow
+  // so the Events tab immediately shows events from the newly followed calendar.
   try {
-    await feedStore.loadFollows();
+    await Promise.all([feedStore.loadFollows(), feedStore.loadFeed()]);
   }
   catch (error) {
-    console.error('Error refreshing follows:', error);
+    console.error('Error refreshing feed after follow:', error);
   }
 };
 </script>
