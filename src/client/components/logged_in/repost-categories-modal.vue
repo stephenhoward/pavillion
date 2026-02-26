@@ -79,6 +79,13 @@ function getEventSource(url: string): string | null {
       >
         <dl class="event-details-list">
           <div
+            v-if="event.content('en').name"
+            class="detail-row"
+          >
+            <dt>{{ t('categoryMapping.eventTitle') }}</dt>
+            <dd>{{ event.content('en').name }}</dd>
+          </div>
+          <div
             v-if="formatEventDate(event)"
             class="detail-row"
           >

@@ -11,6 +11,11 @@ const FEED_TRANSLATIONS: Record<string, string> = {
   'categoryMapping.cancel': 'Cancel',
   'categoryMapping.categoriesLabel': 'Local categories',
   'categoryMapping.noLocalCategories': 'No local categories available.',
+  'categoryMapping.eventTitle': 'Title',
+  'categoryMapping.eventDate': 'Date',
+  'categoryMapping.eventDescription': 'Description',
+  'categoryMapping.eventLocation': 'Location',
+  'categoryMapping.eventSource': 'Source',
 };
 
 const ALL_CATEGORIES = [
@@ -86,6 +91,19 @@ describe('RepostCategoriesModal', () => {
 
       const details = wrapper.find('.event-details');
       expect(details.exists()).toBe(false);
+      wrapper.unmount();
+    });
+
+    it('renders event title as the first detail row when event prop is provided', async () => {
+      const wrapper = mountModal({ event: MOCK_EVENT });
+      await flushPromises();
+
+      const detailRows = wrapper.findAll('.event-details .detail-row');
+      expect(detailRows.length).toBeGreaterThan(0);
+      // The first row should be the title row
+      const firstRow = detailRows[0];
+      expect(firstRow.find('dt').text()).toBe('Title');
+      expect(firstRow.find('dd').text()).toBe('Test Event');
       wrapper.unmount();
     });
 
