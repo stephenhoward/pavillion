@@ -5,6 +5,7 @@
  * - The 'Back to calendar' breadcrumb uses localizedPath() so that
  *   locale-prefixed URLs are preserved (e.g. /es/view/:calendar).
  * - The default locale (en) breadcrumb links to /view/:calendar (no prefix).
+ * - The breadcrumb displays a prominent "← Back to {calendar name}" link.
  * - Category badge links use localizedPath() for locale awareness.
  * - Category badge links use category.id (UUID) as the query param, not the English display name.
  * - Category names are displayed in the current UI language with English fallback.
@@ -13,7 +14,7 @@
  * - Multi-day events show the full datetime for the end time.
  * - document.title is set to "Event Name | Pavillion" after loading.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises, VueWrapper } from '@vue/test-utils';
 import { ref } from 'vue';
 import { createMemoryHistory, createRouter, Router, RouteRecordRaw } from 'vue-router';
@@ -185,6 +186,29 @@ function makeCategoryObject(id: string, translations: Record<string, string>) {
 }
 
 // ---------------------------------------------------------------------------
+// i18next initialisation
+// ---------------------------------------------------------------------------
+
+beforeAll(async () => {
+  if (!i18next.isInitialized) {
+    await i18next.init({
+      lng: 'en',
+      resources: {
+        en: {
+          system: {
+            back_to_calendar: 'Back to {{name}}',
+          },
+        },
+      },
+    });
+  }
+  else {
+    // Add the key to the existing instance if already initialised by another test file
+    i18next.addResourceBundle('en', 'system', { back_to_calendar: 'Back to {{name}}' }, true, true);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -237,14 +261,29 @@ describe('eventInstance breadcrumb locale behaviour', () => {
       wrapper.unmount();
     });
 
-    it('breadcrumb displays the calendar name', async () => {
+    it('breadcrumb displays the calendar name within "Back to {name}" text', async () => {
       const wrapper = await mountInstance(
         '/view/test_calendar/events/evt-1/inst-1',
         (path) => path,
       );
 
       const link = wrapper.find('.breadcrumb a');
-      expect(link.text()).toBe('Test Calendar');
+      expect(link.exists()).toBe(true);
+      expect(link.text()).toContain('Test Calendar');
+      wrapper.unmount();
+    });
+
+    it('breadcrumb includes a back arrow indicator', async () => {
+      const wrapper = await mountInstance(
+        '/view/test_calendar/events/evt-1/inst-1',
+        (path) => path,
+      );
+
+      const link = wrapper.find('.breadcrumb a');
+      expect(link.exists()).toBe(true);
+      // Arrow span is present (aria-hidden so screen readers skip it)
+      const arrow = link.find('.back-arrow');
+      expect(arrow.exists()).toBe(true);
       wrapper.unmount();
     });
   });

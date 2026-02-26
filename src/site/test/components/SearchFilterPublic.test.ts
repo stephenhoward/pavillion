@@ -81,6 +81,28 @@ describe('SearchFilterPublic Component', () => {
       expect(clearButton.exists()).toBe(true);
     });
 
+
+    it('should NOT show clear button when search contains only whitespace', async () => {
+      const wrapper = mount(SearchFilterPublic, {
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+
+      // Initially no clear button
+      expect(wrapper.find('.clear-search').exists()).toBe(false);
+
+      // Type only spaces into search input
+      const searchInput = wrapper.find('.search-input');
+      await searchInput.setValue('   ');
+      await flushPromises();
+
+      // Clear button should NOT appear for whitespace-only input
+      expect(wrapper.find('.clear-search').exists()).toBe(false);
+    });
+
     it('should clear search when clear button clicked', async () => {
       const store = usePublicCalendarStore();
 
@@ -433,6 +455,240 @@ describe('SearchFilterPublic Component', () => {
 
       expect(store.startDate).toBe('2025-01-15');
     });
+
+    it('should close dropdown when both date fields are manually cleared', async () => {
+      const wrapper = mount(SearchFilterPublic, {
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+
+      // Open date filter and activate custom mode
+      const dateFilterButton = wrapper.find('.date-filter-button');
+      await dateFilterButton.trigger('click');
+      await flushPromises();
+
+      const pills = wrapper.findAll('.date-pill');
+      await pills[2].trigger('click'); // Click custom pill
+      await flushPromises();
+
+      // Set both date inputs to values
+      const dateInputs = wrapper.findAll('input[type="date"]');
+      await dateInputs[0].setValue('2025-01-15');
+      await flushPromises();
+      await dateInputs[1].setValue('2025-01-22');
+      await flushPromises();
+
+      // Confirm dropdown is still open
+      expect(wrapper.find('.date-dropdown').exists()).toBe(true);
+
+      // Clear start date field
+      await dateInputs[0].setValue('');
+      await flushPromises();
+
+      // Dropdown still open (only one field cleared)
+      expect(wrapper.find('.date-dropdown').exists()).toBe(true);
+
+      // Clear end date field
+      await dateInputs[1].setValue('');
+      await flushPromises();
+
+      // Dropdown should now be closed because both fields are empty
+      expect(wrapper.find('.date-dropdown').exists()).toBe(false);
+    });
+
+    it('should reset dateFilterMode to null when both date fields are cleared', async () => {
+      const store = usePublicCalendarStore();
+
+      const wrapper = mount(SearchFilterPublic, {
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+
+      // Open date filter and activate custom mode with dates
+      const dateFilterButton = wrapper.find('.date-filter-button');
+      await dateFilterButton.trigger('click');
+      await flushPromises();
+
+      const pills = wrapper.findAll('.date-pill');
+      await pills[2].trigger('click'); // Click custom pill
+      await flushPromises();
+
+      const dateInputs = wrapper.findAll('input[type="date"]');
+      await dateInputs[0].setValue('2025-01-15');
+      await flushPromises();
+      await dateInputs[1].setValue('2025-01-22');
+      await flushPromises();
+
+      // Confirm store has dates
+      expect(store.startDate).toBe('2025-01-15');
+      expect(store.endDate).toBe('2025-01-22');
+
+      // Clear both date fields
+      await dateInputs[0].setValue('');
+      await flushPromises();
+      await dateInputs[1].setValue('');
+      await flushPromises();
+
+      // Store dates should be null
+      expect(store.startDate).toBeNull();
+      expect(store.endDate).toBeNull();
+
+      // Clear date filter button should not be visible (dateFilterMode reset to null)
+      expect(wrapper.find('.clear-date-filter').exists()).toBe(false);
+    });
+
+    it('should show year in button label when custom date range spans different years', async () => {
+      const wrapper = mount(SearchFilterPublic, {
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+
+      // Open date filter and activate custom mode
+      const dateFilterButton = wrapper.find('.date-filter-button');
+      await dateFilterButton.trigger('click');
+      await flushPromises();
+
+      const pills = wrapper.findAll('.date-pill');
+      await pills[2].trigger('click'); // Click custom pill
+      await flushPromises();
+
+      // Set a cross-year date range
+      const dateInputs = wrapper.findAll('input[type="date"]');
+      await dateInputs[0].setValue('2025-12-30');
+      await flushPromises();
+      await dateInputs[1].setValue('2026-01-05');
+      await flushPromises();
+
+      // Button label should include years for both dates
+      const buttonText = wrapper.find('.button-text').text();
+      expect(buttonText).toContain('2025');
+      expect(buttonText).toContain('2026');
+    });
+
+    it('should not show year in button label when custom date range is within same year', async () => {
+      const wrapper = mount(SearchFilterPublic, {
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+
+      // Open date filter and activate custom mode
+      const dateFilterButton = wrapper.find('.date-filter-button');
+      await dateFilterButton.trigger('click');
+      await flushPromises();
+
+      const pills = wrapper.findAll('.date-pill');
+      await pills[2].trigger('click'); // Click custom pill
+      await flushPromises();
+
+      // Set a same-year date range
+      const dateInputs = wrapper.findAll('input[type="date"]');
+      await dateInputs[0].setValue('2025-01-05');
+      await flushPromises();
+      await dateInputs[1].setValue('2025-01-12');
+      await flushPromises();
+
+      // Button label should NOT include year
+      const buttonText = wrapper.find('.button-text').text();
+      expect(buttonText).not.toContain('2025');
+    });
+    it('should show single date label when start and end dates are the same', async () => {
+      const wrapper = mount(SearchFilterPublic, {
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+
+      // Open date filter and activate custom mode
+      const dateFilterButton = wrapper.find('.date-filter-button');
+      await dateFilterButton.trigger('click');
+      await flushPromises();
+
+      const pills = wrapper.findAll('.date-pill');
+      await pills[2].trigger('click'); // Click custom pill
+      await flushPromises();
+
+      // Set both start and end to the same date
+      const dateInputs = wrapper.findAll('input[type="date"]');
+      await dateInputs[0].setValue('2026-02-24');
+      await flushPromises();
+      await dateInputs[1].setValue('2026-02-24');
+      await flushPromises();
+
+      // Button label should show single date (e.g. 'Feb 24'), not 'Feb 24-24'
+      const buttonText = wrapper.find('.button-text').text();
+      expect(buttonText).toBe('Feb 24');
+      expect(buttonText).not.toContain('24-24');
+    });
+  });
+
+  describe('Escape Key Behavior', () => {
+    it('should close the date filter dropdown when Escape is pressed', async () => {
+      const wrapper = mount(SearchFilterPublic, {
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+
+      // Open the dropdown
+      const dateFilterButton = wrapper.find('.date-filter-button');
+      await dateFilterButton.trigger('click');
+      await flushPromises();
+
+      // Confirm dropdown is open
+      expect(wrapper.find('.date-dropdown').exists()).toBe(true);
+
+      // Press Escape on the wrapper
+      const wrapper2 = wrapper.find('.date-filter-wrapper');
+      await wrapper2.trigger('keydown', { key: 'Escape' });
+      await flushPromises();
+
+      // Dropdown should now be closed
+      expect(wrapper.find('.date-dropdown').exists()).toBe(false);
+    });
+
+    it('should return focus to the date filter button after closing with Escape', async () => {
+      const wrapper = mount(SearchFilterPublic, {
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+
+      const dateFilterButton = wrapper.find('.date-filter-button');
+
+      // Open the dropdown
+      await dateFilterButton.trigger('click');
+      await flushPromises();
+
+      // Spy on focus method of the button element
+      const buttonEl = dateFilterButton.element as HTMLButtonElement;
+      const focusSpy = vi.spyOn(buttonEl, 'focus');
+
+      // Press Escape on the wrapper
+      const wrapperEl = wrapper.find('.date-filter-wrapper');
+      await wrapperEl.trigger('keydown', { key: 'Escape' });
+      await flushPromises();
+
+      // Focus should have been called on the trigger button
+      expect(focusSpy).toHaveBeenCalled();
+    });
   });
 
   describe('Clear Date Filter', () => {
@@ -716,6 +972,126 @@ describe('SearchFilterPublic Component', () => {
 
       // Button should disappear
       expect(wrapper.find('.clear-all-filters-btn').exists()).toBe(false);
+    });
+  });
+
+
+  describe('Clear Button Dynamic Label', () => {
+    beforeEach(async () => {
+      // Initialize i18next with translations for label verification
+      await i18next.init({
+        lng: 'en',
+        resources: {
+          en: {
+            system: {
+              'public_search_filter.clear_search': 'Clear Search',
+              'public_search_filter.clear_filters': 'Clear Filters',
+              'public_search_filter.clear_all_filters': 'Clear All Filters',
+            },
+          },
+        },
+      });
+    });
+
+    it('should show "Clear Search" label when only search is active', async () => {
+      const store = usePublicCalendarStore();
+      store.setSearchQuery('yoga');
+
+      const wrapper = mount(SearchFilterPublic, {
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+
+      const btn = wrapper.find('.clear-all-filters-btn');
+      expect(btn.exists()).toBe(true);
+      expect(btn.text()).toBe('Clear Search');
+    });
+
+    it('should show "Clear Filters" label when only category filter is active', async () => {
+      const store = usePublicCalendarStore();
+      store.setSelectedCategories(['cat-1']);
+
+      const wrapper = mount(SearchFilterPublic, {
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+
+      const btn = wrapper.find('.clear-all-filters-btn');
+      expect(btn.exists()).toBe(true);
+      expect(btn.text()).toBe('Clear Filters');
+    });
+
+    it('should show "Clear Filters" label when only date filter is active', async () => {
+      const wrapper = mount(SearchFilterPublic, {
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+
+      // Activate date filter
+      const dateFilterButton = wrapper.find('.date-filter-button');
+      await dateFilterButton.trigger('click');
+      await flushPromises();
+
+      const pills = wrapper.findAll('.date-pill');
+      await pills[0].trigger('click'); // Click "This Week"
+      await flushPromises();
+
+      const btn = wrapper.find('.clear-all-filters-btn');
+      expect(btn.exists()).toBe(true);
+      expect(btn.text()).toBe('Clear Filters');
+    });
+
+    it('should show "Clear All Filters" label when both search and category filters are active', async () => {
+      const store = usePublicCalendarStore();
+      store.setSearchQuery('yoga');
+      store.setSelectedCategories(['cat-1']);
+
+      const wrapper = mount(SearchFilterPublic, {
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+
+      const btn = wrapper.find('.clear-all-filters-btn');
+      expect(btn.exists()).toBe(true);
+      expect(btn.text()).toBe('Clear All Filters');
+    });
+
+    it('should show "Clear All Filters" label when both search and date filters are active', async () => {
+      const store = usePublicCalendarStore();
+      store.setSearchQuery('yoga');
+
+      const wrapper = mount(SearchFilterPublic, {
+        global: {
+          plugins: [pinia, router, [I18NextVue, { i18next }]],
+        },
+      });
+
+      await flushPromises();
+
+      // Also activate date filter
+      const dateFilterButton = wrapper.find('.date-filter-button');
+      await dateFilterButton.trigger('click');
+      await flushPromises();
+
+      const pills = wrapper.findAll('.date-pill');
+      await pills[0].trigger('click'); // Click "This Week"
+      await flushPromises();
+
+      const btn = wrapper.find('.clear-all-filters-btn');
+      expect(btn.exists()).toBe(true);
+      expect(btn.text()).toBe('Clear All Filters');
     });
   });
 

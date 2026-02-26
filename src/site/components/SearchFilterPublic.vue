@@ -5,10 +5,11 @@
          class="date-range-section"
          role="group"
          :aria-label="t('filter_by_date_range')">
-      <div class="date-filter-wrapper" ref="dateFilterRef">
+      <div class="date-filter-wrapper" ref="dateFilterRef" @keydown.escape.stop="closeDateFilterWithFocus">
         <!-- Date Filter Button -->
         <div class="date-filter-button-group">
           <button
+            ref="dateFilterButtonRef"
             type="button"
             class="date-filter-button"
             :class="{
@@ -166,7 +167,7 @@
           @input="onSearchInput"
         />
         <button
-          v-if="state.searchQuery"
+          v-if="state.searchQuery.trim()"
           type="button"
           class="clear-search"
           @click="clearSearch"
@@ -201,7 +202,7 @@
         class="clear-all-filters-btn"
         @click="clearAllFilters"
       >
-        {{ t('clear_all_filters') }}
+        {{ clearButtonLabel }}
       </button>
     </div>
   </div>
@@ -229,6 +230,7 @@ const route = useRoute();
 const router = useRouter();
 const publicStore = usePublicCalendarStore();
 const dateFilterRef = ref<HTMLElement | null>(null);
+const dateFilterButtonRef = ref<HTMLButtonElement | null>(null);
 
 // Check if we're in widget context and determine if date filter should show
 const isInWidget = computed(() => route.path.startsWith('/widget/'));
@@ -270,6 +272,22 @@ const dateFilterButtonText = computed(() => {
   return t('custom'); // "Select Dates"
 });
 
+// Computed label for the clear button — adapts based on active filter types
+const clearButtonLabel = computed(() => {
+  const hasSearch = publicStore.searchQuery.trim().length > 0;
+  const hasOtherFilters = publicStore.selectedCategoryIds.length > 0
+    || publicStore.startDate !== null
+    || publicStore.endDate !== null;
+
+  if (hasSearch && hasOtherFilters) {
+    return t('clear_all_filters');
+  }
+  if (hasSearch) {
+    return t('clear_search');
+  }
+  return t('clear_filters');
+});
+
 // Format a date nicely
 const formatDate = (dateStr: string): string => {
   const date = new Date(dateStr + 'T00:00:00'); // Prevent timezone issues
@@ -286,6 +304,21 @@ const formatDateRange = (start: string, end: string): string => {
   // Guard: inverted range (end before start) — return clear label instead of garbled output
   if (endDate < startDate) {
     return t('date_range_invalid');
+  }
+
+  // Same date: show just the date (e.g. 'Feb 24') not 'Feb 24-24'
+  if (start === end) {
+    const month = startDate.toLocaleDateString('en-US', { month: 'short' });
+    return `${month} ${startDate.getDate()}`;
+  }
+
+  const crossesYear = startDate.getFullYear() !== endDate.getFullYear();
+
+  // When dates span different years, include the year in both labels (e.g., "Dec 30, 2025 – Jan 5, 2026")
+  if (crossesYear) {
+    const formatWithYear = (d: Date) =>
+      d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return `${formatWithYear(startDate)} – ${formatWithYear(endDate)}`;
   }
 
   const startMonth = startDate.toLocaleDateString('en-US', { month: 'short' });
@@ -310,6 +343,12 @@ const toggleDateFilter = () => {
 // Close date filter dropdown
 const closeDateFilter = () => {
   state.isDateFilterOpen = false;
+};
+
+// Close date filter and return focus to the trigger button (for keyboard users)
+const closeDateFilterWithFocus = () => {
+  state.isDateFilterOpen = false;
+  dateFilterButtonRef.value?.focus();
 };
 
 // Handle click outside to close dropdown
@@ -451,13 +490,24 @@ const setCustomMode = () => {
 
 // Handle manual date changes — auto-swap if end is before start
 const onDateChange = () => {
+  // Normalize empty strings from date inputs to null
+  if (state.startDate === '') state.startDate = null;
+  if (state.endDate === '') state.endDate = null;
+
   // Validate date range: auto-correct inverted ranges by swapping start and end
   if (state.startDate && state.endDate && state.startDate > state.endDate) {
     [state.startDate, state.endDate] = [state.endDate, state.startDate];
   }
+
   publicStore.setDateRange(state.startDate, state.endDate);
   publicStore.reloadWithFilters();
   updateURL();
+
+  // Auto-close dropdown if both fields are cleared
+  if (!state.startDate && !state.endDate) {
+    state.dateFilterMode = null;
+    closeDateFilter();
+  }
 };
 
 // Clear date filter

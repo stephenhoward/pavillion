@@ -15,6 +15,7 @@
     "no_events_with_filters_hint": "Try adjusting your filters or date range to find events.",
     "no_events_in_date_range": "No Events Found",
     "no_events_in_date_range_hint": "No events are scheduled in this date range.",
+    "no_events_for_search": "No events found for \"{{term}}\"",
     "no_events_available": "No Events Found",
     "no_events_available_hint": "There are no upcoming events scheduled for this calendar.",
     "clear_all_filters": "Clear All Filters",
@@ -29,11 +30,13 @@
     "category_filter_aria_label": "{{name}} category filter, {{state}}",
     "selected": "selected",
     "not_selected": "not selected",
+    "back_to_calendar": "Back to {{name}}",
     "public_search_filter": {
         "search_events": "Search Events",
         "search_placeholder": "Search events...",
         "search_min_chars": "Enter at least 3 characters to search",
-        "clear_search": "Clear search",
+        "clear_search": "Clear Search",
+        "clear_filters": "Clear Filters",
         "filter_by_categories": "Filter by Categories",
         "filter_by_date_range": "Filter by Date Range",
         "date_range_options": "Date range filter options",
@@ -79,6 +82,9 @@
         "error_generic": "Something went wrong. Please try again.",
         "error_validation": "Please fill in all required fields.",
         "error_description_too_long": "Description must be 2000 characters or fewer.",
-        "close_dialog": "Close dialog"
+        "close_dialog": "Close dialog",
+        "field_error_category": "Please select a category.",
+        "field_error_description": "Please provide a description.",
+        "field_error_email": "Please enter a valid email address."
     }
 }

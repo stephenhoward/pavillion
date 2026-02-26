@@ -16,7 +16,44 @@ describe('useEventDuplication', () => {
     const duplicatedEvent = stripEventForDuplication(sourceEvent);
 
     expect(duplicatedEvent.id).toBe('');
-    expect(duplicatedEvent.content('en').name).toBe('Original Event');
+  });
+
+  it('prefixes duplicated event title with "Copy of "', () => {
+    const sourceEvent = new CalendarEvent('originalEventId', 'calendarId');
+    sourceEvent.content('en').name = 'Book Club Meeting';
+
+    const duplicatedEvent = stripEventForDuplication(sourceEvent);
+
+    expect(duplicatedEvent.content('en').name).toBe('Copy of Book Club Meeting');
+  });
+
+  it('prefixes all language variants of the title with "Copy of "', () => {
+    const sourceEvent = new CalendarEvent('originalEventId', 'calendarId');
+    sourceEvent.content('en').name = 'Book Club Meeting';
+    sourceEvent.content('es').name = 'Reunión del Club de Lectura';
+
+    const duplicatedEvent = stripEventForDuplication(sourceEvent);
+
+    expect(duplicatedEvent.content('en').name).toBe('Copy of Book Club Meeting');
+    expect(duplicatedEvent.content('es').name).toBe('Copy of Reunión del Club de Lectura');
+  });
+
+  it('does not prefix empty titles with "Copy of "', () => {
+    const sourceEvent = new CalendarEvent('originalEventId', 'calendarId');
+    sourceEvent.content('en').name = '';
+
+    const duplicatedEvent = stripEventForDuplication(sourceEvent);
+
+    expect(duplicatedEvent.content('en').name).toBe('');
+  });
+
+  it('does not modify original event title', () => {
+    const sourceEvent = new CalendarEvent('originalEventId', 'calendarId');
+    sourceEvent.content('en').name = 'Original Event';
+
+    stripEventForDuplication(sourceEvent);
+
+    expect(sourceEvent.content('en').name).toBe('Original Event');
   });
 
   it('strips schedule IDs', () => {
@@ -60,7 +97,7 @@ describe('useEventDuplication', () => {
     expect(duplicatedEvent.categories[0]).toEqual(sourceEvent.categories[0]);
   });
 
-  it('preserves event content and location', () => {
+  it('preserves event description and location', () => {
     const sourceEvent = new CalendarEvent('eventId', 'calendarId');
     sourceEvent.content('en').name = 'Test Event';
     sourceEvent.content('en').description = 'Test Description';
@@ -69,7 +106,6 @@ describe('useEventDuplication', () => {
 
     const duplicatedEvent = stripEventForDuplication(sourceEvent);
 
-    expect(duplicatedEvent.content('en').name).toBe('Test Event');
     expect(duplicatedEvent.content('en').description).toBe('Test Description');
     expect(duplicatedEvent.location?.name).toBe('Test Location');
     expect(duplicatedEvent.location?.address).toBe('123 Test St');

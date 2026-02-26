@@ -714,7 +714,7 @@ const selectAllAriaLabel = computed(() => {
                 class="duplicate-btn icon-btn"
                 @click.stop="handleDuplicateEvent(event)"
                 :aria-label="t('event.duplicate_label', { name: event.content('en').name })"
-                title="Duplicate this event"
+                :title="t('event.duplicate_label', { name: event.content('en').name })"
               >
                 <Copy :size="18" />
               </button>

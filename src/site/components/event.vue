@@ -76,8 +76,12 @@ function closeReportModal() {
   <div v-else-if="state.event" class="event-detail">
     <header v-if="state.calendar" class="event-header">
       <p class="breadcrumb">
-        <router-link :to="{ name: 'calendar', params: { calendar: state.calendar.urlName } }">
-          {{ localizedContent(state.calendar).name || state.calendar.urlName }}
+        <router-link
+          :to="{ name: 'calendar', params: { calendar: state.calendar.urlName } }"
+          class="back-link"
+        >
+          <span class="back-arrow" aria-hidden="true">&#8592;</span>
+          {{ t('back_to_calendar', { name: localizedContent(state.calendar).name || state.calendar.urlName }) }}
         </router-link>
       </p>
       <EventImage :media="state.event.media" context="feature" />
@@ -128,15 +132,27 @@ function closeReportModal() {
 
   .breadcrumb {
     margin: 0;
-    font-size: $public-font-size-sm;
+    font-size: $public-font-size-base;
 
-    a {
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: $public-space-sm;
       color: $public-text-secondary-light;
       text-decoration: none;
+      font-weight: $public-font-weight-medium;
       transition: $public-transition-fast;
 
       &:hover {
         color: $public-accent-light;
+
+        .back-arrow {
+          transform: translateX(-3px);
+        }
+      }
+
+      &:focus-visible {
+        @include public-focus-visible;
       }
 
       @include public-dark-mode {
@@ -146,6 +162,13 @@ function closeReportModal() {
           color: $public-accent-dark;
         }
       }
+    }
+
+    .back-arrow {
+      font-size: $public-font-size-md;
+      line-height: 1;
+      display: inline-block;
+      transition: $public-transition-fast;
     }
   }
 

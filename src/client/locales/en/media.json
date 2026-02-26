@@ -1,4 +1,6 @@
 {
+  "retry": "Retry",
+  "replace": "Replace",
   "upload": {
     "title": "Upload Images",
     "title_single": "Upload Image",

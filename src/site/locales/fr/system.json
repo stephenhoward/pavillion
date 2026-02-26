@@ -29,6 +29,7 @@
         "search_placeholder": "Rechercher des événements...",
         "search_min_chars": "Saisissez au moins 3 caractères pour rechercher",
         "clear_search": "Effacer la recherche",
+        "clear_filters": "Effacer les filtres",
         "clear_date_filter": "Effacer le filtre de dates",
         "filter_by_categories": "Filtrer par catégories",
         "filter_by_date_range": "Filtrer par plage de dates",

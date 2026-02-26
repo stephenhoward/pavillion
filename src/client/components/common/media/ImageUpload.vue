@@ -712,7 +712,8 @@ $transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
 .preview-image {
   width: 100%;
-  height: 100%;
+  max-width: 100%;
+  height: auto;
   max-height: 300px;
   object-fit: contain;
 }

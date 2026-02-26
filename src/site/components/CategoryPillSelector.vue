@@ -142,8 +142,17 @@ const scrollToSelectedCategory = (): void => {
   }
 };
 
-// Run after DOM update so the .selected class is already applied when we query
-watch(() => props.selectedCategories, scrollToSelectedCategory, { flush: 'post' });
+// Run after DOM update so the .selected class is already applied when we query.
+// When all filters are cleared, reset the scroll position to the start.
+watch(() => props.selectedCategories, (newVal) => {
+  if (newVal.length === 0 && scrollContainer.value) {
+    scrollContainer.value.scrollTo({ left: 0, behavior: getScrollBehavior() });
+    updateScrollButtons();
+  }
+  else {
+    scrollToSelectedCategory();
+  }
+}, { flush: 'post' });
 
 onMounted(() => {
   if (scrollContainer.value) {
@@ -286,7 +295,7 @@ onUnmounted(() => {
   display: flex;
   flex-wrap: nowrap;
   gap: $public-space-sm;
-  padding: $public-space-xs 0;
+  padding: $public-space-xs $public-space-sm;
 
   &.disabled {
     opacity: 0.5;

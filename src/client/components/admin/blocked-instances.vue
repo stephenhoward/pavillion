@@ -88,6 +88,9 @@ async function blockInstance() {
     if (error instanceof Error && error.name === 'InstanceAlreadyBlockedError') {
       state.errorMessage = t('error.already_blocked');
     }
+    else if (error instanceof Error && error.name === 'InvalidDomainError') {
+      state.validationErrors.domain = t('error.domain_invalid');
+    }
     else {
       state.errorMessage = moderationStore.blockingError || t('error.block_failed');
     }
@@ -237,6 +240,7 @@ function formatDate(dateString: string): string {
             <div class="form-group">
               <label for="reason-input" class="form-label">
                 {{ t('form.reason_label') }}
+                <span class="required-indicator" aria-label="required">*</span>
               </label>
               <textarea
                 id="reason-input"
@@ -246,6 +250,8 @@ function formatDate(dateString: string): string {
                 :placeholder="t('form.reason_placeholder')"
                 :disabled="state.isBlocking"
                 rows="3"
+                required
+                aria-required="true"
                 :aria-invalid="!!state.validationErrors.reason"
                 :aria-describedby="state.validationErrors.reason ? 'reason-error' : 'reason-help'"
               />
@@ -490,6 +496,11 @@ function formatDate(dateString: string): string {
         font-size: var(--pav-font-size-xs);
         font-weight: var(--pav-font-weight-medium);
         color: var(--pav-color-text-secondary);
+      }
+
+      .required-indicator {
+        color: var(--pav-color-error);
+        margin-left: var(--pav-space-0_5);
       }
 
       .form-input,

@@ -14,7 +14,11 @@ import Authentication from '@/client/service/authn';
 import Config from '@/client/service/config';
 import { AVAILABLE_LANGUAGES, DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
 
-Config.init().then( (config) => {
+Config.init().then( async (config) => {
+
+  // Initialize i18next BEFORE creating the app to prevent a flash of English
+  // content when a non-default locale URL is loaded for the first time.
+  await initI18Next();
 
   const app: App = createApp(AppVue);
   const authentication = new Authentication(localStorage);
@@ -47,18 +51,21 @@ Config.init().then( (config) => {
 
   router.beforeEach((to) => {
     const locale = to.params.locale as string | undefined;
-    if (locale) {
+    if (locale && i18next.language !== locale) {
       i18next.changeLanguage(locale);
     }
   });
 
   const pinia = createPinia();
-  initI18Next();
   app.use(pinia);
   app.use(router);
   app.use(I18NextVue, { i18next });
   app.provide('authn', authentication);
   app.provide('site_config', config);
+
+  // Wait for the router to resolve the initial navigation before mounting so
+  // the correct locale is applied before the first render.
+  await router.isReady();
   app.mount('#app');
 
 });

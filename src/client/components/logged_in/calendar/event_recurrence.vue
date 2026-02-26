@@ -464,7 +464,7 @@
 <template>
   <div :class="['recurrence-rule', { 'recurrence-rule--compact': compact }]">
     <div class="schedule-header">
-      <span>Schedule</span>
+      <span>Schedule {{ props.index + 1 }}</span>
       <button
         v-if="props.canRemove"
         type="button"
@@ -599,6 +599,10 @@ const props = defineProps({
   canRemove: {
     type: Boolean,
     default: true,
+  },
+  index: {
+    type: Number,
+    default: 0,
   },
 });
 

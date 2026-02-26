@@ -20,7 +20,13 @@ vi.mock('@/client/service/models');
 // Mock i18next-vue
 vi.mock('i18next-vue', () => ({
   useTranslation: () => ({
-    t: (key: string) => key, // Return key as translation
+    t: (key: string, params?: Record<string, unknown>) => {
+      // Simple interpolation for testing
+      if (params && key === 'no_events_for_search') {
+        return `no_events_for_search:${params.term}`;
+      }
+      return key;
+    },
   }),
 }));
 
@@ -255,6 +261,42 @@ describe('calendar.vue - SearchFilterPublic Integration', () => {
     expect(wrapper.vm.state.isLoading).toBe(false);
   });
 
+  it('displays search-specific empty state message when search returns no results', async () => {
+    // Mock calendar service
+    vi.mocked(CalendarService.prototype.getCalendarByUrlName).mockResolvedValue(mockCalendar);
+
+    await router.push('/calendar/test-calendar');
+
+    const wrapper = mount(calendar, {
+      global: {
+        plugins: [pinia, router],
+        stubs: {
+          SearchFilterPublic: true,
+          NotFound: true,
+          CategoryPillSelector: true,
+          EventImage: true,
+        },
+      },
+    });
+
+    await flushPromises();
+
+    const store = usePublicCalendarStore();
+
+    // Set a search query with no results
+    store.searchQuery = 'yoga';
+    store.allEvents = [];
+    store.isLoadingEvents = false;
+    store.hasLoadedEvents = true;
+
+    await wrapper.vm.$nextTick();
+
+    // Verify empty state is shown with search-specific hint
+    expect(wrapper.find('.empty-state').exists()).toBe(true);
+    expect(wrapper.find('.empty-state').text()).toContain('no_events_for_search:yoga');
+
+  });
+
   it('displays empty state when no events match filters', async () => {
     // Mock calendar service
     vi.mocked(CalendarService.prototype.getCalendarByUrlName).mockResolvedValue(mockCalendar);
@@ -277,17 +319,17 @@ describe('calendar.vue - SearchFilterPublic Integration', () => {
 
     const store = usePublicCalendarStore();
 
-    // Set filters that will result in no events
-    store.searchQuery = 'nonexistent event';
+    // Set category filter (not search) with no events
+    store.selectedCategoryIds = ['some-category-id'];
     store.allEvents = []; // Simulate no events returned from API
     store.isLoadingEvents = false; // Not loading
     store.hasLoadedEvents = true; // Events have been loaded (just empty)
 
     await wrapper.vm.$nextTick();
 
-    // Verify empty state is shown with active filters
+    // Verify empty state is shown with generic filter hint (not search-specific)
     expect(wrapper.find('.empty-state').exists()).toBe(true);
-    expect(wrapper.find('.empty-state').text()).toContain('no_events_with_filters');
+    expect(wrapper.find('.empty-state').text()).toContain('no_events_with_filters_hint');
 
   });
 
@@ -361,6 +403,50 @@ describe('calendar.vue - SearchFilterPublic Integration', () => {
     // Verify empty state is NOT shown before events have loaded
     expect(wrapper.find('.empty-state').exists()).toBe(false);
   });
+
+  it('skips loading state when navigating back to a calendar with cached data', async () => {
+    // Pre-populate store to simulate cached data from a previous visit
+    const store = usePublicCalendarStore();
+    store.currentCalendarUrlName = 'test-calendar';
+
+    // Create a minimal event instance to represent cached events
+    const event = new CalendarEvent('event-1', 'calendar-123');
+    const eventContent = new CalendarEventContent('en');
+    eventContent.name = 'Cached Event';
+    event.addContent(eventContent);
+    store.allEvents = [
+      new CalendarEventInstance('instance-1', event, DateTime.now(), null),
+    ];
+
+    // Mock calendar service for the metadata-only fetch
+    vi.mocked(CalendarService.prototype.getCalendarByUrlName).mockResolvedValue(mockCalendar);
+
+    await router.push('/calendar/test-calendar');
+
+    const wrapper = mount(calendar, {
+      global: {
+        plugins: [pinia, router],
+        stubs: {
+          SearchFilterPublic: true,
+          NotFound: true,
+          CategoryPillSelector: true,
+          EventImage: true,
+        },
+      },
+    });
+
+    // isLoading should not be set when data is cached — no loading flash on back-navigation
+    expect(wrapper.vm.state.isLoading).toBe(false);
+
+    await flushPromises();
+
+    // Still false after mount completes
+    expect(wrapper.vm.state.isLoading).toBe(false);
+
+    // Full reload should NOT have been triggered (no loadCalendar/loadCategories calls)
+    expect(ModelService.getModel).not.toHaveBeenCalled();
+  });
+
 });
 
 describe('calendar.vue - Calendar title display', () => {

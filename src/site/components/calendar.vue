@@ -46,6 +46,19 @@ function clearAllFilters() {
 }
 
 onBeforeMount(async () => {
+  // Skip full reload if the store already has data for this calendar (e.g. back-navigation).
+  // Only fetch the calendar metadata needed to render the header, then return early.
+  if (publicCalendarStore.currentCalendarUrlName === calendarUrlName
+      && publicCalendarStore.allEvents.length > 0) {
+    try {
+      state.calendar = await calendarService.getCalendarByUrlName(calendarUrlName);
+    }
+    catch (error) {
+      console.error('Error loading calendar metadata:', error);
+    }
+    return;
+  }
+
   try {
     state.isLoading = true;
 
@@ -128,7 +141,10 @@ onBeforeMount(async () => {
       <div v-else-if="!state.isLoading && !publicCalendarStore.isLoadingEvents && publicCalendarStore.hasLoadedEvents && !publicCalendarStore.isSearchPending" class="empty-state">
         <div role="status">
           <p>{{ t('no_events_available') }}</p>
-          <p v-if="hasNonDateFilters" class="empty-state-hint">{{ t('no_events_with_filters_hint') }}</p>
+          <p v-if="publicCalendarStore.searchQuery" class="empty-state-hint">
+            {{ t('no_events_for_search', { term: publicCalendarStore.searchQuery }) }}
+          </p>
+          <p v-else-if="hasNonDateFilters" class="empty-state-hint">{{ t('no_events_with_filters_hint') }}</p>
           <p v-else-if="hasOnlyDateFilters" class="empty-state-hint">{{ t('no_events_in_date_range_hint') }}</p>
           <p v-else class="empty-state-hint">{{ t('no_events_available_hint') }}</p>
         </div>

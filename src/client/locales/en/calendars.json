@@ -93,7 +93,7 @@
     "error_resending_invitation": "Failed to resend invitation"
   },
   "management": {
-    "page_title": "calendar settings",
+    "page_title": "Calendar Settings",
     "categories_tab": "Categories",
     "editors_tab": "Editors",
     "settings_tab": "Settings",

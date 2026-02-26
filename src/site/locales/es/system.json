@@ -15,6 +15,7 @@
     "no_events_with_filters_hint": "Intenta ajustar tus filtros o rango de fechas para encontrar eventos.",
     "no_events_in_date_range": "No hay eventos en este rango de fechas",
     "no_events_in_date_range_hint": "No hay eventos programados en este rango de fechas.",
+    "no_events_for_search": "No se encontraron eventos para \"{{term}}\"",
     "no_events_available": "No se encontraron eventos",
     "no_events_available_hint": "No hay eventos próximos programados para este calendario.",
     "clear_all_filters": "Borrar todos los filtros",
@@ -29,11 +30,13 @@
     "category_filter_aria_label": "{{name}} filtro de categoría, {{state}}",
     "selected": "seleccionado",
     "not_selected": "no seleccionado",
+    "back_to_calendar": "Volver a {{name}}",
     "public_search_filter": {
         "search_events": "Buscar eventos",
         "search_placeholder": "Buscar eventos...",
         "search_min_chars": "Ingresa al menos 3 caracteres para buscar",
         "clear_search": "Limpiar búsqueda",
+        "clear_filters": "Limpiar filtros",
         "clear_date_filter": "Limpiar filtro de fechas",
         "filter_by_categories": "Filtrar por categorías",
         "filter_by_date_range": "Filtrar por rango de fechas",
@@ -79,6 +82,9 @@
         "error_generic": "Algo salió mal. Por favor intenta de nuevo.",
         "error_validation": "Por favor completa todos los campos requeridos.",
         "error_description_too_long": "La descripción debe tener 2000 caracteres o menos.",
+        "field_error_category": "Por favor selecciona una categoría.",
+        "field_error_description": "Por favor proporciona una descripción.",
+        "field_error_email": "Por favor ingresa una dirección de correo electrónico válida.",
         "close_dialog": "Cerrar diálogo"
     }
 }

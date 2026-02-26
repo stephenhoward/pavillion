@@ -31,6 +31,14 @@ export function useEventDuplication() {
     // Keep categories - user likely wants same categories for duplicated event
     // Note: categories array is preserved
 
+    // Prefix all content titles with "Copy of " to disambiguate from the original
+    duplicatedEvent.getLanguages().forEach(lang => {
+      const content = duplicatedEvent.content(lang);
+      if (content && content.name) {
+        content.name = `Copy of ${content.name}`;
+      }
+    });
+
     return duplicatedEvent;
   };
 

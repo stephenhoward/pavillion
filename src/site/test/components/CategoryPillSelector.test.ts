@@ -925,6 +925,35 @@ describe('CategoryPillSelector Component', () => {
 
       expect(scrollIntoViewMock.mock.calls.length).toBeGreaterThan(callsBefore);
     });
+
+    it('should reset scroll to the start when all selected categories are cleared', async () => {
+      const scrollToMock = vi.fn();
+
+      const categories = [
+        createTestCategory('1', 'Arts'),
+        createTestCategory('2', 'Sports'),
+      ];
+
+      const { wrapper } = await mountCategoryPillSelector({
+        categories,
+        selectedCategories: ['1'],
+      });
+      currentWrapper = wrapper;
+
+      // Attach scrollTo mock to the container after mount
+      const container = wrapper.find('.category-pill-selector').element as HTMLElement;
+      container.scrollTo = scrollToMock;
+
+      await nextTick();
+
+      // Clear all selected categories
+      await wrapper.setProps({ selectedCategories: [] });
+      await nextTick();
+
+      expect(scrollToMock).toHaveBeenCalledWith(
+        expect.objectContaining({ left: 0 }),
+      );
+    });
   });
 
   describe('getScrollBehavior helper', () => {

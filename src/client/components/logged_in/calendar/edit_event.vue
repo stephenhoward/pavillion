@@ -458,9 +458,10 @@ form {
 
 /* Error styling */
 .error {
+  position: relative;
   color: var(--pav-color-red-700);
   font-size: 0.9rem;
-  padding: 1rem 1.5rem;
+  padding: 1rem 2.5rem 1rem 1.5rem;
   border-radius: 0.75rem; // rounded-xl
   background-color: var(--pav-color-red-50);
   border: 1px solid var(--pav-color-red-200);
@@ -482,6 +483,32 @@ form {
 
     &:last-child {
       margin-bottom: 0;
+    }
+  }
+}
+
+.error-dismiss {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.75rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: var(--pav-color-red-700);
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.25rem;
+
+  &:hover {
+    background-color: var(--pav-color-red-100);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-red-300);
+
+    &:hover {
+      background-color: rgba(239, 68, 68, 0.2);
     }
   }
 }
@@ -658,6 +685,12 @@ button {
              class="error"
              role="alert"
              aria-live="polite">
+          <button
+            class="error-dismiss"
+            type="button"
+            aria-label="Dismiss error"
+            @click="editorState.err = ''; editorState.errDetail = ''"
+          >&times;</button>
           <div v-if="Array.isArray(editorState.err)">
             <ul>
               <li v-for="(error, index) in editorState.err" :key="index">{{ error }}</li>
@@ -794,6 +827,7 @@ button {
                 >
                   <EventRecurrenceView
                     :schedule="schedule"
+                    :index="index"
                     :can-remove="editorState.event.schedules.length > 1"
                     @remove-schedule="editorState.event.dropSchedule(index)"
                   />
