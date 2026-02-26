@@ -21,6 +21,7 @@ const hasFollows = computed(() => feedStore.follows.length > 0);
 const sentinelRef = ref(null);
 const repostTriggerElement = ref(null);
 const reportingEventId = ref<string | null>(null);
+const reportingEventTitle = ref<string | null>(null);
 const reportTriggerElement = ref<HTMLElement | null>(null);
 let observer = null;
 
@@ -160,18 +161,20 @@ const handleRepostCancel = () => {
 };
 
 /**
- * Handle report button click — captures the trigger element for focus restoration
+ * Handle report button click — captures the trigger element and event title for focus restoration
  */
-const handleReport = (eventId: string, event: MouseEvent) => {
-  reportTriggerElement.value = (event?.currentTarget as HTMLElement) ?? null;
-  reportingEventId.value = eventId;
+const handleReport = (event: FeedEvent, domEvent: MouseEvent) => {
+  reportTriggerElement.value = (domEvent?.currentTarget as HTMLElement) ?? null;
+  reportingEventId.value = event.id;
+  reportingEventTitle.value = getEventTitle(event);
 };
 
 /**
- * Handle report modal close — clears event ID and restores focus to the trigger button
+ * Handle report modal close — clears event ID and title, restores focus to the trigger button
  */
 const handleReportClose = () => {
   reportingEventId.value = null;
+  reportingEventTitle.value = null;
   nextTick(() => { reportTriggerElement.value?.focus(); });
 };
 
@@ -286,7 +289,7 @@ onUnmounted(() => {
             class="report-button"
             data-testid="report-button"
             :aria-label="t('report_aria_label', { eventTitle: getEventTitle(event) })"
-            @click="handleReport(event.id, $event)"
+            @click="handleReport(event, $event)"
           >
             {{ t('report_button') }}
           </button>
@@ -346,6 +349,7 @@ onUnmounted(() => {
     <ReportEventModal
       v-if="reportingEventId"
       :event-id="reportingEventId"
+      :event-title="reportingEventTitle"
       @close="handleReportClose"
     />
   </div>

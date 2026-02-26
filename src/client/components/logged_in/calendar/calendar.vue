@@ -85,6 +85,7 @@ const initialFilters = reactive({
 // Report dialog state
 const showReportDialog = ref(false);
 const reportEventId = ref('');
+const reportEventTitle = ref('');
 
 // Repost category edit modal state
 const repostEventForModal = ref(null);
@@ -477,9 +478,11 @@ const handleDuplicateEvent = (event) => {
 
 /**
  * Opens the report dialog for the specified event.
+ * Captures the event title so the user can confirm they are reporting the correct event.
  */
 const handleReportEvent = (event) => {
   reportEventId.value = event.id;
+  reportEventTitle.value = event.content('en').name || '';
   showReportDialog.value = true;
 };
 
@@ -489,6 +492,7 @@ const handleReportEvent = (event) => {
 const handleReportDialogClose = () => {
   showReportDialog.value = false;
   reportEventId.value = '';
+  reportEventTitle.value = '';
 };
 
 // Format event date for display
@@ -796,6 +800,7 @@ const selectAllAriaLabel = computed(() => {
     <ReportEvent
       v-if="showReportDialog"
       :event-id="reportEventId"
+      :event-title="reportEventTitle"
       @close="handleReportDialogClose"
     />
 
