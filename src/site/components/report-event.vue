@@ -53,6 +53,13 @@ const state = reactive({
   error: '',
 });
 
+/** Per-field validation error messages. */
+const fieldErrors = reactive({
+  category: '',
+  description: '',
+  email: '',
+});
+
 /** Number of characters remaining for the description field. */
 const descriptionCharsRemaining = computed(() => {
   return MAX_DESCRIPTION_LENGTH - form.description.length;
@@ -110,27 +117,53 @@ function resetForm() {
   state.isSubmitting = false;
   state.isSuccess = false;
   state.error = '';
+  fieldErrors.category = '';
+  fieldErrors.description = '';
+  fieldErrors.email = '';
 }
 
 /**
  * Validates form fields before submission.
+ * Sets per-field error messages for any invalid fields.
  *
  * @returns true if the form is valid
  */
 function validate(): boolean {
-  if (!form.category || !form.description.trim() || !form.email.trim()) {
+  // Reset per-field errors before re-validating
+  fieldErrors.category = '';
+  fieldErrors.description = '';
+  fieldErrors.email = '';
+
+  let isValid = true;
+
+  if (!form.category) {
+    fieldErrors.category = t('field_error_category');
+    isValid = false;
+  }
+
+  if (!form.description.trim()) {
+    fieldErrors.description = t('field_error_description');
+    isValid = false;
+  }
+  else if (form.description.trim().length > MAX_DESCRIPTION_LENGTH) {
+    fieldErrors.description = t('error_description_too_long');
+    isValid = false;
+  }
+
+  if (!form.email.trim()) {
+    fieldErrors.email = t('field_error_email');
+    isValid = false;
+  }
+  else if (!EMAIL_REGEX.test(form.email.trim())) {
+    fieldErrors.email = t('field_error_email');
+    isValid = false;
+  }
+
+  if (!isValid) {
     state.error = t('error_validation');
-    return false;
   }
-  if (form.description.trim().length > MAX_DESCRIPTION_LENGTH) {
-    state.error = t('error_description_too_long');
-    return false;
-  }
-  if (!EMAIL_REGEX.test(form.email.trim())) {
-    state.error = t('error_validation');
-    return false;
-  }
-  return true;
+
+  return isValid;
 }
 
 /**
@@ -231,7 +264,6 @@ defineExpose({ open, close });
           v-if="state.error"
           class="report-dialog__error"
           role="alert"
-          aria-live="polite"
         >
           {{ state.error }}
         </div>
@@ -246,6 +278,9 @@ defineExpose({ open, close });
             v-model="form.category"
             required
             :disabled="state.isSubmitting"
+            :aria-invalid="!!fieldErrors.category || undefined"
+            :aria-describedby="fieldErrors.category ? `report-category-error-${dialogId}` : undefined"
+            @change="fieldErrors.category = ''"
           >
             <option
               value=""
@@ -257,6 +292,12 @@ defineExpose({ open, close });
               :value="option.value"
             >{{ t(option.labelKey) }}</option>
           </select>
+          <span
+            v-if="fieldErrors.category"
+            :id="`report-category-error-${dialogId}`"
+            class="report-dialog__field-error"
+            role="alert"
+          >{{ fieldErrors.category }}</span>
         </div>
 
         <div class="report-dialog__field">
@@ -271,8 +312,18 @@ defineExpose({ open, close });
             rows="4"
             required
             :disabled="state.isSubmitting"
-            :aria-describedby="`report-description-counter-${dialogId}`"
+            :aria-invalid="!!fieldErrors.description || undefined"
+            :aria-describedby="fieldErrors.description
+              ? `report-description-error-${dialogId} report-description-counter-${dialogId}`
+              : `report-description-counter-${dialogId}`"
+            @input="fieldErrors.description = ''"
           />
+          <span
+            v-if="fieldErrors.description"
+            :id="`report-description-error-${dialogId}`"
+            class="report-dialog__field-error"
+            role="alert"
+          >{{ fieldErrors.description }}</span>
           <p
             :id="`report-description-counter-${dialogId}`"
             class="report-dialog__char-counter"
@@ -293,7 +344,16 @@ defineExpose({ open, close });
             required
             autocomplete="email"
             :disabled="state.isSubmitting"
+            :aria-invalid="!!fieldErrors.email || undefined"
+            :aria-describedby="fieldErrors.email ? `report-email-error-${dialogId}` : undefined"
+            @input="fieldErrors.email = ''"
           />
+          <span
+            v-if="fieldErrors.email"
+            :id="`report-email-error-${dialogId}`"
+            class="report-dialog__field-error"
+            role="alert"
+          >{{ fieldErrors.email }}</span>
           <p class="report-dialog__help">{{ t('email_help') }}</p>
         </div>
 
@@ -302,12 +362,14 @@ defineExpose({ open, close });
             type="button"
             class="report-dialog__btn report-dialog__btn--ghost"
             :disabled="state.isSubmitting"
+            :aria-disabled="state.isSubmitting || undefined"
             @click="close"
           >{{ t('cancel_button') }}</button>
           <button
             type="submit"
             class="report-dialog__btn report-dialog__btn--primary"
             :disabled="state.isSubmitting"
+            :aria-disabled="state.isSubmitting || undefined"
           >{{ state.isSubmitting ? t('submitting_button') : t('submit_button') }}</button>
         </footer>
       </form>
@@ -470,6 +532,25 @@ defineExpose({ open, close });
     @include public-input-base;
 
     box-sizing: border-box;
+
+    &[aria-invalid="true"] {
+      border-color: $public-error-light;
+      outline-color: $public-error-light;
+
+      &:focus {
+        outline-color: $public-error-light;
+        border-color: transparent;
+      }
+
+      @include public-dark-mode {
+        border-color: $public-error-dark;
+        outline-color: $public-error-dark;
+
+        &:focus {
+          outline-color: $public-error-dark;
+        }
+      }
+    }
   }
 
   select {
@@ -480,6 +561,17 @@ defineExpose({ open, close });
   textarea {
     resize: vertical;
     min-height: 80px;
+  }
+}
+
+.report-dialog__field-error {
+  display: block;
+  margin-block-start: $public-space-xs;
+  font-size: $public-font-size-xs;
+  color: $public-error-light;
+
+  @include public-dark-mode {
+    color: $public-error-dark;
   }
 }
 

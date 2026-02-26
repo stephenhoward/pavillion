@@ -48,6 +48,9 @@ const reportTranslations: Record<string, string> = {
   'report.error_rate_limit': 'report.error_rate_limit',
   'report.error_generic': 'report.error_generic',
   'report.error_validation': 'report.error_validation',
+  'report.field_error_category': 'report.field_error_category',
+  'report.field_error_description': 'report.field_error_description',
+  'report.field_error_email': 'report.field_error_email',
 };
 
 /** Helper to get the mocked submitReport from the most recent ReportService instance. */
@@ -315,6 +318,193 @@ describe('ReportEvent Component', () => {
     });
   });
 
+  describe('Per-Field Validation', () => {
+    it('should show field error for category when category is not selected', async () => {
+      const wrapper = mountReportEvent();
+      await flushPromises();
+
+      await wrapper.find('textarea').setValue('Some description');
+      await wrapper.find('input[type="email"]').setValue('test@example.com');
+      await wrapper.find('form').trigger('submit');
+      await flushPromises();
+
+      const fieldErrors = wrapper.findAll('.report-dialog__field-error');
+      expect(fieldErrors.length).toBeGreaterThan(0);
+      expect(fieldErrors[0].text()).toBe('report.field_error_category');
+      wrapper.unmount();
+    });
+
+    it('should show field error for description when description is empty', async () => {
+      const wrapper = mountReportEvent();
+      await flushPromises();
+
+      await wrapper.find('select').setValue(ReportCategory.SPAM);
+      await wrapper.find('input[type="email"]').setValue('test@example.com');
+      await wrapper.find('form').trigger('submit');
+      await flushPromises();
+
+      const fieldErrors = wrapper.findAll('.report-dialog__field-error');
+      expect(fieldErrors.length).toBeGreaterThan(0);
+      const descriptionError = fieldErrors.find(el => el.text() === 'report.field_error_description');
+      expect(descriptionError).toBeTruthy();
+      wrapper.unmount();
+    });
+
+    it('should show field error for email when email is invalid', async () => {
+      const wrapper = mountReportEvent();
+      await flushPromises();
+
+      await wrapper.find('select').setValue(ReportCategory.SPAM);
+      await wrapper.find('textarea').setValue('Some description');
+      await wrapper.find('input[type="email"]').setValue('not-an-email');
+      await wrapper.find('form').trigger('submit');
+      await flushPromises();
+
+      const fieldErrors = wrapper.findAll('.report-dialog__field-error');
+      expect(fieldErrors.length).toBeGreaterThan(0);
+      const emailError = fieldErrors.find(el => el.text() === 'report.field_error_email');
+      expect(emailError).toBeTruthy();
+      wrapper.unmount();
+    });
+
+    it('should show all three field errors when all fields are empty', async () => {
+      const wrapper = mountReportEvent();
+      await flushPromises();
+
+      await wrapper.find('form').trigger('submit');
+      await flushPromises();
+
+      const fieldErrors = wrapper.findAll('.report-dialog__field-error');
+      expect(fieldErrors.length).toBe(3);
+      wrapper.unmount();
+    });
+
+    it('should set aria-invalid on invalid fields', async () => {
+      const wrapper = mountReportEvent();
+      await flushPromises();
+
+      await wrapper.find('form').trigger('submit');
+      await flushPromises();
+
+      expect(wrapper.find('select').attributes('aria-invalid')).toBe('true');
+      expect(wrapper.find('textarea').attributes('aria-invalid')).toBe('true');
+      expect(wrapper.find('input[type="email"]').attributes('aria-invalid')).toBe('true');
+      wrapper.unmount();
+    });
+
+    it('should not set aria-invalid on valid fields', async () => {
+      const wrapper = mountReportEvent();
+      await flushPromises();
+
+      // No submission yet — fields should not be invalid
+      expect(wrapper.find('select').attributes('aria-invalid')).toBeUndefined();
+      expect(wrapper.find('textarea').attributes('aria-invalid')).toBeUndefined();
+      expect(wrapper.find('input[type="email"]').attributes('aria-invalid')).toBeUndefined();
+      wrapper.unmount();
+    });
+
+    it('should have role="alert" on field error messages', async () => {
+      const wrapper = mountReportEvent();
+      await flushPromises();
+
+      await wrapper.find('form').trigger('submit');
+      await flushPromises();
+
+      const fieldErrors = wrapper.findAll('.report-dialog__field-error');
+      for (const error of fieldErrors) {
+        expect(error.attributes('role')).toBe('alert');
+      }
+      wrapper.unmount();
+    });
+
+    it('should clear field error when user changes the category', async () => {
+      const wrapper = mountReportEvent();
+      await flushPromises();
+
+      // Submit empty to trigger errors
+      await wrapper.find('form').trigger('submit');
+      await flushPromises();
+
+      // Verify category error is shown
+      const vm = wrapper.vm as any;
+      expect(vm.fieldErrors.category).toBeTruthy();
+
+      // Change the category selection
+      await wrapper.find('select').setValue(ReportCategory.SPAM);
+      await wrapper.find('select').trigger('change');
+      await flushPromises();
+
+      // Category error should be cleared
+      expect(vm.fieldErrors.category).toBe('');
+      wrapper.unmount();
+    });
+
+    it('should clear field error when user types in description', async () => {
+      const wrapper = mountReportEvent();
+      await flushPromises();
+
+      // Submit empty to trigger errors
+      await wrapper.find('form').trigger('submit');
+      await flushPromises();
+
+      // Verify description error is shown
+      const vm = wrapper.vm as any;
+      expect(vm.fieldErrors.description).toBeTruthy();
+
+      // Type in the description
+      await wrapper.find('textarea').setValue('Some text');
+      await wrapper.find('textarea').trigger('input');
+      await flushPromises();
+
+      // Description error should be cleared
+      expect(vm.fieldErrors.description).toBe('');
+      wrapper.unmount();
+    });
+
+    it('should clear field error when user types in email', async () => {
+      const wrapper = mountReportEvent();
+      await flushPromises();
+
+      // Submit empty to trigger errors
+      await wrapper.find('form').trigger('submit');
+      await flushPromises();
+
+      // Verify email error is shown
+      const vm = wrapper.vm as any;
+      expect(vm.fieldErrors.email).toBeTruthy();
+
+      // Type in the email field
+      await wrapper.find('input[type="email"]').setValue('user@example.com');
+      await wrapper.find('input[type="email"]').trigger('input');
+      await flushPromises();
+
+      // Email error should be cleared
+      expect(vm.fieldErrors.email).toBe('');
+      wrapper.unmount();
+    });
+
+    it('should clear all field errors on successful reset', async () => {
+      const wrapper = mountReportEvent();
+      await flushPromises();
+
+      // Submit empty to trigger errors
+      await wrapper.find('form').trigger('submit');
+      await flushPromises();
+
+      const vm = wrapper.vm as any;
+      expect(vm.fieldErrors.category).toBeTruthy();
+
+      // Close modal (triggers resetForm)
+      await wrapper.find('.report-dialog__close').trigger('click');
+      await flushPromises();
+
+      expect(vm.fieldErrors.category).toBe('');
+      expect(vm.fieldErrors.description).toBe('');
+      expect(vm.fieldErrors.email).toBe('');
+      wrapper.unmount();
+    });
+  });
+
   describe('Form Submission', () => {
     it('should call the service with correct data on valid submission', async () => {
       const wrapper = mountReportEventSuppressRenderErrors();
@@ -521,7 +711,6 @@ describe('ReportEvent Component', () => {
       const errorDiv = wrapper.find('.report-dialog__error');
       expect(errorDiv.exists()).toBe(true);
       expect(errorDiv.attributes('role')).toBe('alert');
-      expect(errorDiv.attributes('aria-live')).toBe('polite');
       wrapper.unmount();
     });
 

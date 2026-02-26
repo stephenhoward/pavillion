@@ -1,8 +1,15 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import axios from 'axios';
 import sinon from 'sinon';
+import i18next from 'i18next';
 import FeedService, { FollowRelationship } from '@/client/service/feed';
 import { FollowerCalendar } from '@/common/model/follow';
+
+vi.mock('i18next', () => ({
+  default: {
+    resolvedLanguage: 'en',
+  },
+}));
 
 describe('FeedService', () => {
   let sandbox: sinon.SinonSandbox;
@@ -196,6 +203,64 @@ describe('FeedService', () => {
       expect(result.domain).toBe('remote-instance.com');
       expect(result.actorUrl).toBe('https://remote-instance.com/u/calendar');
       expect(result.name).toBe('Test Calendar');
+    });
+  });
+
+  describe('getCalendarCategories', () => {
+    it('should return category name in the resolved language (English)', async () => {
+      (i18next as any).resolvedLanguage = 'en';
+      axiosGetStub.resolves({
+        data: [{ id: 'cat-1', content: { en: { language: 'en', name: 'Music' }, es: { language: 'es', name: 'Música' } } }],
+      });
+
+      const result = await service.getCalendarCategories(testCalendarId);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe('cat-1');
+      expect(result[0].name).toBe('Music');
+    });
+
+    it('should return category name in Spanish when UI language is Spanish', async () => {
+      (i18next as any).resolvedLanguage = 'es';
+      axiosGetStub.resolves({
+        data: [{ id: 'cat-2', content: { en: { language: 'en', name: 'Sports' }, es: { language: 'es', name: 'Deportes' } } }],
+      });
+
+      const result = await service.getCalendarCategories(testCalendarId);
+
+      expect(result[0].name).toBe('Deportes');
+    });
+
+    it('should fall back to English when resolved language has no content', async () => {
+      (i18next as any).resolvedLanguage = 'fr';
+      axiosGetStub.resolves({
+        data: [{ id: 'cat-3', content: { en: { language: 'en', name: 'Culture' }, es: { language: 'es', name: 'Cultura' } } }],
+      });
+
+      const result = await service.getCalendarCategories(testCalendarId);
+
+      expect(result[0].name).toBe('Culture');
+    });
+
+    it('should fall back to first available entry when English content is also missing', async () => {
+      (i18next as any).resolvedLanguage = 'fr';
+      axiosGetStub.resolves({
+        data: [{ id: 'cat-4', content: { de: { language: 'de', name: 'Unterhaltung' } } }],
+      });
+
+      const result = await service.getCalendarCategories(testCalendarId);
+
+      expect(result[0].name).toBe('Unterhaltung');
+    });
+
+    it('should return empty name when content is null', async () => {
+      axiosGetStub.resolves({
+        data: [{ id: 'cat-5', content: null }],
+      });
+
+      const result = await service.getCalendarCategories(testCalendarId);
+
+      expect(result[0].name).toBe('');
     });
   });
 });

@@ -204,6 +204,28 @@ describe('ActivityPubService Exception Handling', () => {
       ).rejects.toThrow(ActivityPubNotSupportedError);
     });
 
+    it('throws RemoteCalendarNotFoundError when actor profile endpoint returns 404', async () => {
+      const axiosStub = sandbox.stub(axios, 'get');
+
+      // First call succeeds (WebFinger)
+      axiosStub.onFirstCall().resolves({
+        data: {
+          links: [
+            { rel: 'self', type: 'application/activity+json', href: 'https://example.com/actor' },
+          ],
+        },
+      });
+
+      // Second call returns 404 (actor profile not found)
+      const notFoundError: any = new Error('Not Found');
+      notFoundError.response = { status: 404 };
+      axiosStub.onSecondCall().rejects(notFoundError);
+
+      await expect(
+        service.lookupRemoteCalendar('user@example.com'),
+      ).rejects.toThrow(RemoteCalendarNotFoundError);
+    });
+
     it('throws RemoteProfileFetchError when actor profile fetch fails', async () => {
       const axiosStub = sandbox.stub(axios, 'get');
 

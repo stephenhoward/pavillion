@@ -65,6 +65,19 @@ export class InstanceAlreadyBlockedError extends Error {
 }
 
 /**
+ * Custom error class for invalid domain format.
+ * Thrown when a provided domain string does not match the expected domain format.
+ */
+export class InvalidDomainError extends Error {
+  constructor(message: string = 'Domain must be a valid domain name') {
+    super(message);
+    this.name = 'InvalidDomainError';
+    // Maintaining proper prototype chain in ES5+
+    Object.setPrototypeOf(this, InvalidDomainError.prototype);
+  }
+}
+
+/**
  * Custom error class for blocked reporter attempting to submit a report.
  * Thrown when a reporter's email hash is in the blocked reporters list.
  */

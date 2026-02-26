@@ -554,6 +554,9 @@ class ActivityPubService {
       });
     }
     catch (error: any) {
+      if (error.response?.status === 404) {
+        throw new RemoteCalendarNotFoundError(`Calendar not found at ${actorUrl}`);
+      }
       throw new RemoteProfileFetchError(`Failed to fetch calendar profile: ${error.message}`);
     }
 
