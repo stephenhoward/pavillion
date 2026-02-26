@@ -1,0 +1,18 @@
+{
+  "subject": "[{{priority}}] Signalement administrateur sur votre événement",
+  "title": "Notification de signalement administrateur",
+  "greeting": "Bonjour,",
+  "notification": "Un administrateur a créé un signalement concernant un événement de votre calendrier. Veuillez examiner et agir rapidement.",
+  "event_label": "Événement :",
+  "calendar_label": "Calendrier :",
+  "category_label": "Catégorie du signalement :",
+  "description_label": "Description :",
+  "priority_label": "Priorité :",
+  "deadline_label": "Date limite :",
+  "action_message": "Veuillez examiner ce signalement depuis le tableau de bord des signalements de votre calendrier et prendre les mesures appropriées avant la date limite.",
+  "review_button": "Examiner le signalement",
+  "copy_link_text": "Ou copiez ce lien :",
+  "signature": "Merci,",
+  "team_name": "L'équipe Pavillion",
+  "footer_text": "Ceci est un message automatique, veuillez ne pas répondre à cet e-mail."
+}

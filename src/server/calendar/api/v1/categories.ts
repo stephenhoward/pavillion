@@ -9,6 +9,7 @@ import {
   CategoryAssignmentNotFoundError,
   CategoryAlreadyAssignedError,
   CategoryEventCalendarMismatchError,
+  DuplicateCategoryNameError,
 } from '@/common/exceptions/category';
 import { logError } from '@/server/common/helper/error-logger';
 
@@ -104,6 +105,11 @@ class CategoryRoutes {
     }
     catch (error) {
       logError(error, 'Error creating category');
+
+      if (error instanceof DuplicateCategoryNameError) {
+        res.status(409).json({ "error": "A category with this name already exists", errorName: 'DuplicateCategoryNameError' });
+        return;
+      }
 
       if (error instanceof CalendarNotFoundError) {
         res.status(404).json({ "error": "Calendar not found", "errorName": "CalendarNotFoundError" });
@@ -617,7 +623,7 @@ class CategoryRoutes {
     try {
       const { calendarId, categoryId } = req.params;
 
-      // Get the calendar by ID or URL name to verify it exists
+      // Get the calendar by ID or URL to verify it exists
       let calendar = await this.service.getCalendar(calendarId);
       if (!calendar) {
         // Try getting by URL name if ID lookup failed

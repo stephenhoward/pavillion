@@ -26,10 +26,20 @@ export function useLocale() {
    * Detect the current locale from the URL path, falling back to the
    * i18next language (which the router guard may have already set) and
    * ultimately to the default language code.
+   *
+   * Prefers i18next.resolvedLanguage over i18next.language because the browser
+   * may report a regional BCP 47 tag such as "en-US". With load: 'languageOnly'
+   * configured, i18next loads only the base "en" bundle and sets resolvedLanguage
+   * to "en", whereas i18next.language retains the raw "en-US" tag. Feeding an
+   * unsupported regional code into addLocalePrefix would generate broken URLs
+   * like /en-US/view/... that the server does not handle. resolvedLanguage is
+   * always a code from AVAILABLE_LANGUAGES (or undefined before init completes).
+   * When resolvedLanguage is not yet set, we fall back to i18next.language and
+   * then to DEFAULT_LANGUAGE_CODE.
    */
   const detectCurrentLocale = (): string => {
     const { locale } = stripLocalePrefix(route.path);
-    return locale ?? i18next.language ?? DEFAULT_LANGUAGE_CODE;
+    return locale ?? i18next.resolvedLanguage ?? i18next.language ?? DEFAULT_LANGUAGE_CODE;
   };
 
   const currentLocale: Ref<string> = ref(detectCurrentLocale());

@@ -1,16 +1,18 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { useTranslation } from 'i18next-vue';
 import { EventCategory } from '@/common/model/event_category';
+import { useLocalizedContent } from '../composables/useLocalizedContent';
 
 export interface CategoryPillSelectorProps {
   categories: EventCategory[];
-  selectedCategories: string[]; // Now expects category names instead of IDs
+  selectedCategories: string[];
   disabled?: boolean;
   maxDisplayRows?: number;
 }
 
 export interface CategoryPillSelectorEmits {
-  (e: 'update:selectedCategories', value: string[]): void; // Now emits category names instead of IDs
+  (e: 'update:selectedCategories', value: string[]): void;
 }
 
 const props = withDefaults(defineProps<CategoryPillSelectorProps>(), {
@@ -24,31 +26,34 @@ const scrollContainer = ref<HTMLElement | null>(null);
 const canScrollLeft = ref(false);
 const canScrollRight = ref(false);
 
+// useTranslation subscribes to i18next language change events so this
+// component re-renders when the UI locale is switched, ensuring
+// localizedContent resolves the updated language.
+const { t } = useTranslation('system');
+
+const { localizedContent } = useLocalizedContent();
+
 /**
- * Check if a category is currently selected by name
+ * Check if a category is currently selected by ID (per DEC-005)
  */
 const isCategorySelected = (category: EventCategory): boolean => {
-  const categoryName = getCategoryDisplayName(category);
-  return props.selectedCategories.includes(categoryName);
+  return props.selectedCategories.includes(category.id);
 };
 
 /**
- * Toggle category selection state using category name
+ * Toggle category selection state using category ID
  */
 const toggleCategory = (category: EventCategory): void => {
   if (props.disabled) return;
 
-  const categoryName = getCategoryDisplayName(category);
   const currentSelection = [...props.selectedCategories];
-  const index = currentSelection.indexOf(categoryName);
+  const index = currentSelection.indexOf(category.id);
 
   if (index > -1) {
-    // Remove category from selection
     currentSelection.splice(index, 1);
   }
   else {
-    // Add category to selection
-    currentSelection.push(categoryName);
+    currentSelection.push(category.id);
   }
 
   emit('update:selectedCategories', currentSelection);
@@ -70,9 +75,8 @@ const handleKeydown = (event: KeyboardEvent, category: EventCategory): void => {
  * Get the display name for a category in the current language
  */
 const getCategoryDisplayName = (category: EventCategory): string => {
-  // Default to English, or first available language
   try {
-    const content = category.content('en') || category.content(category.getLanguages()[0]);
+    const content = localizedContent(category);
     return content?.name || 'Unnamed Category';
   }
   catch {
@@ -81,12 +85,15 @@ const getCategoryDisplayName = (category: EventCategory): string => {
 };
 
 /**
- * Generate ARIA label for accessibility
+ * Generate ARIA label for accessibility, translated to the current locale
  */
 const getCategoryAriaLabel = (category: EventCategory): string => {
   const name = getCategoryDisplayName(category);
   const isSelected = isCategorySelected(category);
-  return `${name} category filter, ${isSelected ? 'selected' : 'not selected'}`;
+  return t('category_filter_aria_label', {
+    name,
+    state: isSelected ? t('selected') : t('not_selected'),
+  });
 };
 
 /**
@@ -102,11 +109,18 @@ const updateScrollButtons = (): void => {
 };
 
 /**
+ * Returns 'smooth' unless the user has opted out of motion (prefers-reduced-motion).
+ */
+const getScrollBehavior = (): ScrollBehavior => {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth';
+};
+
+/**
  * Scroll left by a reasonable amount
  */
 const scrollLeft = (): void => {
   if (!scrollContainer.value) return;
-  scrollContainer.value.scrollBy({ left: -200, behavior: 'smooth' });
+  scrollContainer.value.scrollBy({ left: -200, behavior: getScrollBehavior() });
 };
 
 /**
@@ -114,8 +128,31 @@ const scrollLeft = (): void => {
  */
 const scrollRight = (): void => {
   if (!scrollContainer.value) return;
-  scrollContainer.value.scrollBy({ left: 200, behavior: 'smooth' });
+  scrollContainer.value.scrollBy({ left: 200, behavior: getScrollBehavior() });
 };
+
+/**
+ * Scroll the container to bring the first selected category pill into view
+ */
+const scrollToSelectedCategory = (): void => {
+  if (!scrollContainer.value) return;
+  const selectedPill = scrollContainer.value.querySelector('.category-pill.selected');
+  if (selectedPill) {
+    selectedPill.scrollIntoView({ behavior: getScrollBehavior(), inline: 'nearest', block: 'nearest' });
+  }
+};
+
+// Run after DOM update so the .selected class is already applied when we query.
+// When all filters are cleared, reset the scroll position to the start.
+watch(() => props.selectedCategories, (newVal) => {
+  if (newVal.length === 0 && scrollContainer.value) {
+    scrollContainer.value.scrollTo({ left: 0, behavior: getScrollBehavior() });
+    updateScrollButtons();
+  }
+  else {
+    scrollToSelectedCategory();
+  }
+}, { flush: 'post' });
 
 onMounted(() => {
   if (scrollContainer.value) {
@@ -123,6 +160,7 @@ onMounted(() => {
     scrollContainer.value.addEventListener('scroll', updateScrollButtons);
     window.addEventListener('resize', updateScrollButtons);
   }
+  scrollToSelectedCategory();
 });
 
 onUnmounted(() => {
@@ -140,7 +178,7 @@ onUnmounted(() => {
       v-if="canScrollLeft"
       class="scroll-arrow scroll-arrow-left"
       @click="scrollLeft"
-      aria-label="Scroll categories left"
+      :aria-label="t('scroll_categories_left')"
       type="button"
     >
       ‹
@@ -185,7 +223,7 @@ onUnmounted(() => {
       v-if="canScrollRight"
       class="scroll-arrow scroll-arrow-right"
       @click="scrollRight"
-      aria-label="Scroll categories right"
+      :aria-label="t('scroll_categories_right')"
       type="button"
     >
       ›
@@ -257,7 +295,7 @@ onUnmounted(() => {
   display: flex;
   flex-wrap: nowrap;
   gap: $public-space-sm;
-  padding: $public-space-xs 0;
+  padding: $public-space-xs $public-space-sm;
 
   &.disabled {
     opacity: 0.5;

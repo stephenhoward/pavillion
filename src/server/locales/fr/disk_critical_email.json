@@ -1,0 +1,17 @@
+{
+  "subject": "CRITIQUE : Espace disque à {{usagePercent}}%",
+  "title": "Alerte CRITIQUE d'espace disque",
+  "greeting": "Bonjour Administrateur,",
+  "alert_message": "URGENT : Votre instance Pavillion a atteint le seuil critique d'espace disque. Une action immédiate est nécessaire pour éviter des défaillances du système.",
+  "current_usage": "Utilisation actuelle du disque : {{usagePercent}}% ({{usedSpace}} sur {{totalSpace}})",
+  "threshold": "Seuil critique : {{threshold}}%",
+  "path": "Chemin surveillé : {{path}}",
+  "urgent_actions": "Actions IMMÉDIATES requises :",
+  "action_1": "Supprimez immédiatement les anciens fichiers de sauvegarde",
+  "action_2": "Augmentez la capacité de stockage dès que possible",
+  "action_3": "Examinez tous les consommateurs d'espace disque",
+  "action_4": "Envisagez de désactiver temporairement les sauvegardes automatiques jusqu'à ce que de l'espace soit libéré",
+  "warning_message": "Le système peut devenir instable ou tomber en panne au-delà de 95% d'utilisation du disque. Les opérations de sauvegarde échoueront probablement sans espace libre suffisant.",
+  "signature": "Système de maintenance Pavillion",
+  "footer_text": "Ceci est une alerte automatique CRITIQUE. Une intervention immédiate de l'administrateur est requise."
+}

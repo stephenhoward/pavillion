@@ -1,0 +1,51 @@
+{
+  "language_select_title": "Choisissez votre langue",
+  "language_select_description": "Sélectionnez une langue par défaut pour votre serveur Pavillion.",
+  "continue_button": "Continuer",
+  "back_button": "Retour",
+
+  "title": "Bienvenue sur Pavillion",
+  "subtitle": "Configurons votre instance",
+  "description": "Créez votre compte administrateur et configurez votre serveur Pavillion.",
+
+  "email_label": "E-mail de l'administrateur",
+  "email_placeholder": "admin@exemple.com",
+
+  "password_label": "Mot de passe",
+  "password_placeholder": "Choisissez un mot de passe sécurisé",
+
+  "password_confirm_label": "Confirmer le mot de passe",
+  "password_confirm_placeholder": "Retapez votre mot de passe",
+
+  "site_title_label": "Titre du site",
+  "site_title_placeholder": "Mon calendrier communautaire",
+  "site_title_description": "Ce nom apparaîtra dans l'en-tête et dans le titre du navigateur",
+
+  "registration_mode_label": "Mode d'inscription",
+  "registration_mode_description": "Comment les nouveaux utilisateurs peuvent-ils rejoindre votre instance ?",
+  "registration_mode_open": "Ouvert - Tout le monde peut s'inscrire",
+  "registration_mode_apply": "Sur demande - Les utilisateurs soumettent des demandes",
+  "registration_mode_invitation": "Sur invitation - Tout utilisateur peut inviter d'autres personnes",
+  "registration_mode_closed": "Administrateurs uniquement - Seuls les administrateurs peuvent envoyer des invitations",
+
+  "default_language_label": "Langue par défaut",
+  "default_language_description": "La langue par défaut de l'interface utilisateur",
+
+  "submit_button": "Terminer la configuration",
+  "submitting_button": "Configuration en cours...",
+
+  "success_title": "Configuration terminée !",
+  "success_message": "Votre compte administrateur a été créé. Vous pouvez maintenant vous connecter.",
+  "continue_to_login": "Continuer vers la connexion",
+
+  "error_missing_email": "Une adresse e-mail est requise",
+  "error_missing_password": "Un mot de passe est requis",
+  "error_missing_password_confirm": "Veuillez confirmer votre mot de passe",
+  "error_missing_site_title": "Un titre de site est requis",
+  "error_passwords_mismatch": "Les mots de passe ne correspondent pas",
+  "error_setup_already_completed": "La configuration a déjà été effectuée",
+  "error_unknown": "Une erreur inattendue s'est produite. Veuillez réessayer.",
+
+  "password_too_short": "Le mot de passe doit contenir au moins 8 caractères",
+  "password_needs_variety": "Le mot de passe doit inclure au moins deux types parmi : lettres, chiffres, caractères spéciaux"
+}

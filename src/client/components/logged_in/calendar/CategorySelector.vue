@@ -28,6 +28,7 @@
         :key="category.id"
         :model-value="state.selectedCategoryIds.includes(category.id)"
         :label="category.content(currentLanguage)?.name || 'Unnamed Category'"
+        variant="orange"
         @update:model-value="() => toggleCategory(category.id)"
       />
     </div>
@@ -108,19 +109,19 @@ function toggleCategory(categoryId) {
     state.selectedCategoryIds.push(categoryId);
   }
 
-  // Emit the selected category objects
-  const selectedCategories = state.availableCategories.filter(
-    cat => state.selectedCategoryIds.includes(cat.id),
-  );
-  emit('categoriesChanged', selectedCategories);
+  // Emit the selected category IDs as strings
+  emit('categoriesChanged', [...state.selectedCategoryIds]);
 }
 
 /**
- * Initialize selected categories from props
+ * Initialize selected categories from props.
+ * The prop may contain string IDs or objects with an .id property.
  */
 function initializeSelectedCategories() {
   if (props.selectedCategories && props.selectedCategories.length > 0) {
-    state.selectedCategoryIds = props.selectedCategories.map(cat => cat.id);
+    state.selectedCategoryIds = props.selectedCategories.map(cat =>
+      typeof cat === 'string' ? cat : cat.id,
+    );
   }
   else {
     state.selectedCategoryIds = [];
@@ -134,14 +135,16 @@ watch(() => props.calendarId, (newCalendarId) => {
   }
 });
 
-// Watch for selectedCategories prop changes
+// Watch for selectedCategories prop changes, including the initial value on mount.
+// Using { immediate: true } ensures pre-selected category IDs from the parent
+// (e.g. in duplicate mode) are applied as soon as the component is created,
+// even before the async loadCategories() call completes.
 watch(() => props.selectedCategories, () => {
   initializeSelectedCategories();
-}, { deep: true });
+}, { deep: true, immediate: true });
 
 // Load categories when component mounts
 onMounted(async () => {
-  initializeSelectedCategories();
   await loadCategories();
 });
 </script>

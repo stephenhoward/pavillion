@@ -5,7 +5,11 @@
     @close="$emit('close')"
   >
     <div class="category-editor">
-      <div v-if="state.error" class="alert alert--error">
+      <div
+        v-if="state.error"
+        class="alert alert--error"
+        role="alert"
+      >
         {{ state.error }}
       </div>
 
@@ -33,7 +37,7 @@
               v-if="localCategory && localCategory.getLanguages().length > 1"
               type="button"
               class="remove-language-button"
-              aria-label="Remove Language"
+              :aria-label="t('remove_language')"
               @click="removeLanguage(lang)"
             >
               <X :size="16" :stroke-width="2" />
@@ -86,6 +90,7 @@ import { useTranslation } from 'i18next-vue';
 import { X } from 'lucide-vue-next';
 import iso6391 from 'iso-639-1-dir';
 import { EventCategoryContent } from '@/common/model/event_category_content';
+import { DuplicateCategoryNameError } from '@/common/exceptions/category';
 import CategoryService from '@/client/service/category';
 import ModalLayout from '@/client/components/common/modal.vue';
 import LanguagePicker from '@/client/components/common/languagePicker.vue';
@@ -161,8 +166,13 @@ async function saveCategory() {
     emit('close');
   }
   catch (error) {
-    console.error('Error saving category:', error);
-    state.error = localCategory.value?.id ? t('error_update_category') : t('error_create_category');
+    if (error instanceof DuplicateCategoryNameError) {
+      state.error = t('error_duplicate_name');
+    }
+    else {
+      console.error('Error saving category:', error);
+      state.error = localCategory.value?.id ? t('error_update_category') : t('error_create_category');
+    }
   }
   finally {
     state.isSaving = false;

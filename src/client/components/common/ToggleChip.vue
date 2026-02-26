@@ -3,15 +3,19 @@
  * ToggleChip Component
  *
  * A reusable toggle chip for filters and categories.
- * Uses Sky-500 background when selected, Stone-100 when unselected.
+ * Uses the variant color background when selected, Stone-100 when unselected.
+ *
+ * @prop variant - Color variant for selected state: 'sky' (default) or 'orange'
  */
 
 const props = withDefaults(defineProps<{
   modelValue: boolean;
   label: string;
   disabled?: boolean;
+  variant?: 'sky' | 'orange';
 }>(), {
   disabled: false,
+  variant: 'sky',
 });
 
 const emit = defineEmits<{
@@ -41,6 +45,7 @@ const handleKeydown = (event: KeyboardEvent) => {
     :disabled="disabled"
     :class="[
       'toggle-chip',
+      `toggle-chip--variant-${variant}`,
       {
         'toggle-chip--selected': modelValue,
         'toggle-chip--disabled': disabled
@@ -79,13 +84,23 @@ const handleKeydown = (event: KeyboardEvent) => {
     background: var(--pav-color-stone-200);
   }
 
-  // Selected state
-  &--selected {
+  // Selected state — sky variant (default)
+  &--variant-sky#{&}--selected {
     background: var(--pav-color-sky-500);
     color: white;
 
     &:hover:not(.toggle-chip--disabled) {
       background: var(--pav-color-sky-600);
+    }
+  }
+
+  // Selected state — orange variant
+  &--variant-orange#{&}--selected {
+    background: var(--pav-color-orange-500);
+    color: white;
+
+    &:hover:not(.toggle-chip--disabled) {
+      background: var(--pav-color-orange-600);
     }
   }
 
@@ -108,13 +123,22 @@ const handleKeydown = (event: KeyboardEvent) => {
       background: var(--pav-color-stone-700);
     }
 
-    // Selected stays the same in dark mode
-    &--selected {
+    // Selected stays the same in dark mode regardless of variant
+    &--variant-sky#{&}--selected {
       background: var(--pav-color-sky-500);
       color: white;
 
       &:hover:not(.toggle-chip--disabled) {
         background: var(--pav-color-sky-600);
+      }
+    }
+
+    &--variant-orange#{&}--selected {
+      background: var(--pav-color-orange-500);
+      color: white;
+
+      &:hover:not(.toggle-chip--disabled) {
+        background: var(--pav-color-orange-600);
       }
     }
   }

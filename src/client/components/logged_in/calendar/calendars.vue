@@ -1,6 +1,6 @@
-<script setup>
+<script setup lang="ts">
 import { onBeforeMount, reactive, inject, ref, watch, nextTick, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { EmptyValueError, InvalidUrlNameError, UnauthenticatedError, UrlNameAlreadyExistsError } from '@/common/exceptions';
 import CalendarService from '@/client/service/calendar';
@@ -15,17 +15,23 @@ const { t } = useTranslation('calendars', {
 });
 
 const router = useRouter();
+const route = useRoute();
 const state = reactive({
   err: '',
   calendars: [],
   isLoading: false,
   errorMessage: '',
+  showCreationForm: false,
 });
 
 const newCalendarName = ref('');
+const newCalendarTitle = ref('');
 const inputRef = ref(null);
 const inputWidth = ref('100px'); // default width
 const calendar_name_placeholder = t('calendar_name_placeholder');
+
+// Regex matching server-side isValidUrlName
+const VALID_URL_NAME_RE = /^[a-z0-9][a-z0-9_-]{1,22}[a-z0-9_]$/i;
 
 // Function to calculate and set the width of the input
 const updateInputWidth = () => {
@@ -70,6 +76,12 @@ async function loadCalendars() {
   try {
     const calendars = await calendarService.loadCalendars();
 
+    // If the route is /calendar/new, always show the creation form
+    if (route.path === '/calendar/new') {
+      state.showCreationForm = true;
+      return;
+    }
+
     // If there is only one calendar, redirect to it
     if (calendars.length === 1) {
       router.push({ path: '/calendar/' + calendars[0].urlName });
@@ -87,15 +99,34 @@ async function loadCalendars() {
   }
 }
 
+// Validate url name client-side before sending to server
+function validateCalendarName(calendarName: string): string | null {
+  if (!calendarName || calendarName.trim() === '') {
+    return t('error_empty_calendar_name');
+  }
+  if (!VALID_URL_NAME_RE.test(calendarName.trim())) {
+    return t('error_invalid_calendar_name');
+  }
+  return null;
+}
+
 // Create a new calendar with the name from the input field
-// TODO: run this function when the user hits enter
 async function createCalendar() {
   const calendarName = newCalendarName.value.trim();
-  state.isLoading = true;
+  const calendarTitle = newCalendarTitle.value.trim();
   state.errorMessage = '';
 
+  // Client-side validation — skip server round-trip for known-invalid input
+  const validationError = validateCalendarName(calendarName);
+  if (validationError) {
+    state.errorMessage = validationError;
+    return;
+  }
+
+  state.isLoading = true;
+
   try {
-    const calendar = await calendarService.createCalendar(calendarName);
+    const calendar = await calendarService.createCalendar(calendarName, calendarTitle || undefined);
 
     // Navigate to the new calendar
     router.push({ path: '/calendar/' + calendar.urlName });
@@ -127,7 +158,7 @@ async function createCalendar() {
 
 <template>
   <main role="main" :aria-label="t('aria_calendar_management')">
-    <nav v-if="state.calendars.length > 0" :aria-label="t('aria_my_calendars_navigation')">
+    <nav v-if="state.calendars.length > 0 && !state.showCreationForm" :aria-label="t('aria_my_calendars_navigation')">
       <section>
         <h2>{{ t('my_calendars_header') }}</h2>
         <ul role="list">
@@ -141,11 +172,23 @@ async function createCalendar() {
         </ul>
       </section>
     </nav>
-    <EmptyLayout  v-else :title="t('create_first_calendar_header')">
+    <EmptyLayout v-else :title="t('create_first_calendar_header')">
       <form @submit.prevent="createCalendar" :aria-label="t('aria_new_calendar_form')">
         <fieldset>
           <legend class="sr-only">{{ t('legend_calendar_creation') }}</legend>
-          <div class="calendar-url">
+          <div class="calendar-title-field">
+            <label for="calendar-title">{{ t('label_calendar_title') }}</label>
+            <input
+              id="calendar-title"
+              type="text"
+              v-model="newCalendarTitle"
+              :placeholder="t('calendar_title_placeholder')"
+              class="title-input"
+              aria-describedby="calendar-title-help"
+            />
+            <div id="calendar-title-help" class="help-text">{{ t('calendar_title_help') }}</div>
+          </div>
+          <div class="calendar-url" :class="{ 'calendar-url--error': state.errorMessage }">
             <label for="calendar-name" class="sr-only">{{ t('label_calendar_name') }}</label>
             <input
               id="calendar-name"
@@ -166,7 +209,7 @@ async function createCalendar() {
                aria-live="polite">
             {{ state.errorMessage }}
           </div>
-          <div id="calendar-help" class="help-text">{{ t('calendar_name_help') }}</div>
+          <div v-if="!state.errorMessage" id="calendar-help" class="help-text">{{ t('calendar_name_help') }}</div>
           <button type="submit"
                   class="primary"
                   :disabled="state.isLoading"
@@ -226,6 +269,34 @@ nav[aria-label="My Calendars Navigation"] {
   }
 }
 
+.calendar-title-field {
+  margin-bottom: var(--pav-space-md);
+
+  label {
+    display: block;
+    font-size: var(--pav-font-size-body);
+    font-weight: var(--pav-font-weight-medium);
+    color: var(--pav-color-text-primary);
+    margin-bottom: var(--pav-space-xs);
+  }
+
+  .title-input {
+    width: 100%;
+    max-width: 24rem;
+    padding: var(--pav-space-sm);
+    font-size: var(--pav-font-size-body);
+    border: 1px solid var(--pav-color-border-primary);
+    border-radius: var(--pav-border-radius-md);
+    background: var(--pav-color-surface-primary);
+    color: var(--pav-color-text-primary);
+
+    &:focus {
+      outline: none;
+      border-color: var(--pav-border-color-focus);
+    }
+  }
+}
+
 div.calendar-url {
   font-size: 12pt;
   color: var(--pav-color-text-secondary);
@@ -241,6 +312,9 @@ div.calendar-url {
       border-bottom: 1px solid var(--pav-border-color-focus);
       box-shadow: none;
     }
+  }
+  &.calendar-url--error #calendar-name {
+    border-bottom-color: var(--pav-color-border-error);
   }
   @media (min-width: 768px) {
     font-size: 14pt;

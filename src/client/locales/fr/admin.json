@@ -1,0 +1,34 @@
+{
+  "navigation": {
+    "skip_to_content": "Aller au contenu principal"
+  },
+  "settings": {
+    "general_settings": "Paramètres généraux",
+    "instance_name": "Nom/titre de l'instance",
+    "site_title_description": "Le nom de votre instance qui apparaît dans le titre du navigateur et ailleurs.",
+    "registration_mode": "Mode d'inscription",
+    "registration_mode_description": "Contrôle comment les nouveaux utilisateurs peuvent rejoindre cette instance.",
+    "registration_mode_open": "Ouvert - Tout le monde peut s'inscrire",
+    "registration_mode_apply": "Sur demande - Les utilisateurs doivent demander l'accès",
+    "registration_mode_invite": "Sur invitation uniquement - Les utilisateurs doivent être invités",
+    "registration_mode_closed": "Fermé - Aucun nouvel utilisateur accepté",
+    "default_date_range": "Plage de dates par défaut",
+    "default_date_range_description": "La plage de temps par défaut affichée lors de la consultation d'un calendrier.",
+    "date_range_1week": "1 semaine",
+    "date_range_2weeks": "2 semaines",
+    "date_range_1month": "1 mois",
+    "save_settings_button": "Enregistrer les paramètres",
+    "settings_update_success": "Paramètres mis à jour avec succès",
+    "settings_update_failed": "Échec de la mise à jour des paramètres",
+    "language_settings": "Paramètres de langue",
+    "language_settings_subtitle": "Configurez les langues disponibles et le fonctionnement de la détection de langue",
+    "enabled_languages": "Langues activées",
+    "enabled_languages_description": "Sélectionnez les langues disponibles pour les utilisateurs de cette instance.",
+    "force_language": "Forcer la langue",
+    "force_language_none": "Aucune préférence (utiliser la détection)",
+    "force_language_description": "Lorsque défini, tous les utilisateurs verront l'interface dans cette langue, indépendamment de leurs préférences.",
+    "saving": "Enregistrement...",
+    "settings_subtitle": "Surveillez l'état du système et configurez les paramètres de l'instance",
+    "instance_settings": "Paramètres de l'instance"
+  }
+}

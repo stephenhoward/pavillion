@@ -90,12 +90,22 @@ describe('locale service', () => {
 
       it('should skip unsupported browser languages and use instance default', () => {
         Object.defineProperty(navigator, 'languages', {
-          value: ['fr-FR', 'fr'],
+          value: ['de-DE', 'de'],
           configurable: true,
         });
 
         const result = detectLanguage('es');
         expect(result).toBe('es');
+      });
+
+      it('should detect French from browser language preferences', () => {
+        Object.defineProperty(navigator, 'languages', {
+          value: ['fr-FR', 'fr'],
+          configurable: true,
+        });
+
+        const result = detectLanguage('en');
+        expect(result).toBe('fr');
       });
     });
 

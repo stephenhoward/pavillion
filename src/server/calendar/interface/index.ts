@@ -338,7 +338,10 @@ export default class CalendarInterface {
   async updateCalendarSettings(
     account: Account,
     calendarId: string,
-    settings: { defaultDateRange?: DefaultDateRange },
+    settings: {
+      defaultDateRange?: DefaultDateRange;
+      content?: Record<string, { name?: string; description?: string }>;
+    },
   ): Promise<Calendar> {
     return this.calendarService.updateCalendarSettings(account, calendarId, settings);
   }

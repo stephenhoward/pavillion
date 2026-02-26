@@ -25,6 +25,7 @@
     "error_create_category": "Error creating category",
     "error_update_category": "Error updating category",
     "error_delete_category": "Error deleting category",
+    "error_duplicate_name": "A category with this name already exists",
     "success_created": "Category created successfully",
     "success_updated": "Category updated successfully",
     "success_deleted": "Category deleted successfully",

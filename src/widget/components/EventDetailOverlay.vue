@@ -83,7 +83,7 @@ onBeforeMount(async () => {
     <div v-else-if="state.err" class="error-container">
       <div class="error">{{ state.err }}</div>
       <button type="button" class="back-button" @click="goBack">
-        {{ t('back_to_calendar') }}
+        {{ t('back_to_calendar', { name: widgetStore.calendarUrlName || '' }) }}
       </button>
     </div>
 
@@ -94,7 +94,7 @@ onBeforeMount(async () => {
         <button type="button"
                 class="back-button"
                 @click="goBack"
-                :aria-label="t('back_to_calendar')">
+                :aria-label="t('back_to_calendar', { name: widgetStore.calendarUrlName || '' })">
           <svg width="24"
                height="24"
                viewBox="0 0 24 24"

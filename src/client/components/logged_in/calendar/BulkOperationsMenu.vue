@@ -35,8 +35,8 @@ const deselectAll = () => {
   emit('deselect-all');
 };
 
-const deleteEvents = () => {
-  emit('delete-events');
+const deleteEvents = (event) => {
+  emit('delete-events', event);
 };
 
 </script>
@@ -76,7 +76,7 @@ const deleteEvents = () => {
         size="sm"
         class="delete-btn"
         data-testid="delete-events-btn"
-        @click="deleteEvents"
+        @click="deleteEvents($event)"
         :aria-label="t('delete_events_label')"
       >
         {{ t('delete_events') }}
@@ -84,8 +84,9 @@ const deleteEvents = () => {
 
       <PillButton
         type="button"
-        variant="ghost"
+        variant="secondary"
         size="sm"
+        class="deselect-btn"
         data-testid="deselect-all-btn"
         @click="deselectAll"
         :aria-label="t('deselect_all_label')"
@@ -136,6 +137,18 @@ const deleteEvents = () => {
       &:hover {
         background-color: var(--pav-color-red-600);
         border-color: var(--pav-color-red-600);
+      }
+    }
+
+    // White outlined style for deselect button on dark toolbar background
+    .deselect-btn {
+      background-color: transparent;
+      color: white;
+      border-color: rgba(255, 255, 255, 0.5);
+
+      &:hover {
+        background-color: rgba(255, 255, 255, 0.15);
+        border-color: white;
       }
     }
   }

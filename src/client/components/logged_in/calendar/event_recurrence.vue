@@ -130,6 +130,52 @@
       border-color: var(--pav-color-stone-700);
     }
 
+    .frequency-field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+
+      .frequency-label {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--pav-color-stone-700);
+
+        @media (prefers-color-scheme: dark) {
+          color: var(--pav-color-stone-300);
+        }
+      }
+
+      .frequency-select {
+        padding: 0.625rem 0.875rem;
+        border: 1px solid var(--pav-color-stone-200);
+        border-radius: 0.375rem;
+        font-size: 0.9375rem;
+        background: white;
+        color: var(--pav-color-stone-900);
+        font-family: inherit;
+        cursor: pointer;
+        transition: all 0.15s ease;
+
+        &:focus {
+          outline: none;
+          border-color: var(--pav-color-orange-500);
+          box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+        }
+
+        @media (prefers-color-scheme: dark) {
+          background: var(--pav-color-stone-900);
+          color: var(--pav-color-stone-100);
+          border-color: var(--pav-color-stone-700);
+
+          &:focus {
+            border-color: var(--pav-color-orange-500);
+            box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+          }
+        }
+      }
+    }
+
     label.repeat-interval {
       display: flex;
       align-items: center;
@@ -324,6 +370,19 @@
       margin-top: 1rem;
       padding: 1rem;
 
+      .frequency-field {
+        margin-bottom: 1rem;
+
+        .frequency-label {
+          font-size: 0.875rem;
+        }
+
+        .frequency-select {
+          font-size: 0.875rem;
+          padding: 0.5rem 0.625rem;
+        }
+      }
+
       label.repeat-interval {
         margin-bottom: 1rem;
         font-size: 0.875rem;
@@ -405,12 +464,13 @@
 <template>
   <div :class="['recurrence-rule', { 'recurrence-rule--compact': compact }]">
     <div class="schedule-header">
-      <span>Schedule</span>
+      <span>Schedule {{ props.index + 1 }}</span>
       <button
+        v-if="props.canRemove"
         type="button"
         class="remove-schedule-btn"
         @click="emit('remove-schedule')"
-        aria-label="Remove this schedule"
+        :aria-label="t('remove_schedule')"
       >
         <Trash2 :size="16" aria-hidden="true" />
       </button>
@@ -423,7 +483,8 @@
         <input type="date"
                v-model="state.date"
                @input="updateStartDate()"
-               class="grid-input"/>
+               class="grid-input"
+               required />
       </div>
 
       <div class="grid-field">
@@ -431,7 +492,8 @@
         <input type="time"
                v-model="state.time"
                @input="updateStartDate()"
-               class="grid-input"/>
+               class="grid-input"
+               required />
       </div>
 
       <div class="grid-field">
@@ -447,11 +509,9 @@
       <div class="grid-field">
         <label class="grid-label">Timezone</label>
         <select v-model="state.timezone" @change="compileRecurrence()" class="grid-input">
-          <option value="America/Los_Angeles">America/Los Angeles</option>
-          <option value="America/Denver">America/Denver</option>
-          <option value="America/Chicago">America/Chicago</option>
-          <option value="America/New_York">America/New York</option>
-          <option value="UTC">UTC</option>
+          <option v-for="tz in timezones" :key="tz" :value="tz">
+            {{ formatTimezone(tz) }}
+          </option>
         </select>
       </div>
     </div>
@@ -468,12 +528,29 @@
 
     <!-- Recurrence Form -->
     <form class="repeats" v-if="state.showRecurrence">
+      <!-- Frequency Selector -->
+      <div class="frequency-field">
+        <label class="frequency-label" :for="frequencySelectId">{{ t('frequency_label') }}</label>
+        <select
+          :id="frequencySelectId"
+          class="frequency-select"
+          v-model="state.frequency"
+          @change="onFrequencyChange()"
+        >
+          <option value="">{{ t('frequency_none') }}</option>
+          <option value="daily">{{ t('frequency_daily') }}</option>
+          <option value="weekly">{{ t('frequency_weekly') }}</option>
+          <option value="monthly">{{ t('frequency_monthly') }}</option>
+          <option value="yearly">{{ t('frequency_yearly') }}</option>
+        </select>
+      </div>
+
       <label class="repeat-interval" v-if="props.schedule.frequency">
         {{ t('every') }} <input type="number" v-model="props.schedule.interval" @change="compileRecurrence()" /> {{  props.schedule.frequency ? t( props.schedule.frequency + 'Term') : '' }}
       </label>
 
       <div class="week-parameters" v-if="props.schedule.frequency === 'weekly'">
-        {{ t('on-weekday-label') }}:
+        {{ t('on_weekday_label') }}:
         <label v-for="day in Object.keys(state.weekdays)">
           <input type="checkbox" v-model="state.weekdays[day]" @change="compileRecurrence()" /> {{ t(day) }}
         </label>
@@ -488,7 +565,7 @@
       </div>
 
       <div class="end-type" v-if="props.schedule.frequency">
-        {{ t('endType-label') }}:
+        {{ t('end_type_label') }}:
         <label><input type="radio"
                       value="none"
                       v-model="state.endType"
@@ -506,8 +583,8 @@
   </div>
 </template>
 
-<script setup>
-import { reactive } from 'vue';
+<script setup lang="ts">
+import { reactive, useId } from 'vue';
 import { CalendarEventSchedule } from '@/common/model/events';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
@@ -519,6 +596,14 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  canRemove: {
+    type: Boolean,
+    default: true,
+  },
+  index: {
+    type: Number,
+    default: 0,
+  },
 });
 
 const emit = defineEmits(['remove-schedule']);
@@ -526,6 +611,110 @@ const emit = defineEmits(['remove-schedule']);
 const { t } = useTranslation('event_editor', {
   keyPrefix: 'recurrence',
 });
+
+const frequencySelectId = useId();
+
+/**
+ * Returns the full list of IANA timezone identifiers supported by the browser.
+ * Falls back to a representative set if the API is unavailable.
+ */
+const getTimezones = (): string[] => {
+  if (typeof Intl !== 'undefined' && typeof Intl.supportedValuesOf === 'function') {
+    return Intl.supportedValuesOf('timeZone');
+  }
+  // Fallback for environments without Intl.supportedValuesOf
+  return [
+    'Africa/Cairo',
+    'Africa/Johannesburg',
+    'Africa/Lagos',
+    'Africa/Nairobi',
+    'America/Anchorage',
+    'America/Argentina/Buenos_Aires',
+    'America/Bogota',
+    'America/Chicago',
+    'America/Denver',
+    'America/Halifax',
+    'America/Lima',
+    'America/Los_Angeles',
+    'America/Mexico_City',
+    'America/New_York',
+    'America/Santiago',
+    'America/Sao_Paulo',
+    'America/St_Johns',
+    'America/Toronto',
+    'America/Vancouver',
+    'Asia/Bangkok',
+    'Asia/Colombo',
+    'Asia/Dhaka',
+    'Asia/Dubai',
+    'Asia/Hong_Kong',
+    'Asia/Jakarta',
+    'Asia/Karachi',
+    'Asia/Kolkata',
+    'Asia/Manila',
+    'Asia/Seoul',
+    'Asia/Shanghai',
+    'Asia/Singapore',
+    'Asia/Taipei',
+    'Asia/Tehran',
+    'Asia/Tokyo',
+    'Atlantic/Reykjavik',
+    'Australia/Adelaide',
+    'Australia/Brisbane',
+    'Australia/Melbourne',
+    'Australia/Perth',
+    'Australia/Sydney',
+    'Europe/Amsterdam',
+    'Europe/Athens',
+    'Europe/Berlin',
+    'Europe/Brussels',
+    'Europe/Dublin',
+    'Europe/Helsinki',
+    'Europe/Istanbul',
+    'Europe/Lisbon',
+    'Europe/London',
+    'Europe/Madrid',
+    'Europe/Moscow',
+    'Europe/Oslo',
+    'Europe/Paris',
+    'Europe/Prague',
+    'Europe/Rome',
+    'Europe/Stockholm',
+    'Europe/Vienna',
+    'Europe/Warsaw',
+    'Europe/Zurich',
+    'Pacific/Auckland',
+    'Pacific/Fiji',
+    'Pacific/Honolulu',
+    'UTC',
+  ];
+};
+
+const timezones = getTimezones();
+
+/**
+ * Formats an IANA timezone identifier for display by replacing
+ * underscores with spaces (e.g., "America/New_York" becomes "America/New York").
+ */
+const formatTimezone = (tz: string): string => {
+  return tz.replace(/_/g, ' ');
+};
+
+/**
+ * Returns the user's local timezone from the browser, or 'UTC' as a fallback.
+ */
+const getLocalTimezone = (): string => {
+  try {
+    const local = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (local && timezones.includes(local)) {
+      return local;
+    }
+  }
+  catch {
+    // Fall through to default
+  }
+  return 'UTC';
+};
 
 // Initialize date/time fields from startDate
 const initDateTime = () => {
@@ -542,69 +731,99 @@ const initDateTime = () => {
   };
 };
 
+/**
+ * Determines the end-type string from existing schedule data.
+ * Used to restore the correct radio button state when editing or duplicating
+ * a recurring event that already has count or endDate set.
+ */
+const initEndType = (): string => {
+  if (props.schedule.count && props.schedule.count > 0) {
+    return 'after';
+  }
+  if (props.schedule.endDate) {
+    return 'on';
+  }
+  return 'none';
+};
+
+/**
+ * Initializes weekday checkboxes from the schedule's byDay array.
+ * Called when the schedule already has weekly recurrence data (e.g. when
+ * editing or duplicating a recurring event).
+ */
+const initWeekdays = (): Record<string, boolean> => {
+  const byDay = props.schedule.byDay ?? [];
+  return {
+    SU: byDay.includes('SU'),
+    MO: byDay.includes('MO'),
+    TU: byDay.includes('TU'),
+    WE: byDay.includes('WE'),
+    TH: byDay.includes('TH'),
+    FR: byDay.includes('FR'),
+    SA: byDay.includes('SA'),
+  };
+};
+
+/**
+ * Initializes monthly weekday checkboxes from the schedule's byDay array.
+ * byDay entries for monthly recurrence use the format "NDD" (e.g. "1MO", "3FR").
+ */
+const initMonthlyWeekdayCheckboxes = (): Record<string, boolean> => {
+  const byDay = props.schedule.byDay ?? [];
+  const keys = [
+    '1SU','1MO','1TU','1WE','1TH','1FR','1SA',
+    '2SU','2MO','2TU','2WE','2TH','2FR','2SA',
+    '3SU','3MO','3TU','3WE','3TH','3FR','3SA',
+    '4SU','4MO','4TU','4WE','4TH','4FR','4SA',
+    '5SU','5MO','5TU','5WE','5TH','5FR','5SA',
+  ];
+  return Object.fromEntries(keys.map(key => [key, byDay.includes(key)]));
+};
+
 const { date: initialDate, time: initialTime } = initDateTime();
 
 const state = reactive({
-  showRecurrence: false,
+  // Show the recurrence form immediately when the schedule already has a frequency
+  // (e.g. when editing or duplicating a recurring event). Without this, the form
+  // stays hidden behind the "Add recurrence" button even though recurrence data exists.
+  showRecurrence: !!props.schedule.frequency,
+  frequency: (props.schedule.frequency as string) || '',
   date: initialDate,
   time: initialTime,
   duration: 60, // Default duration in minutes
-  timezone: 'America/Los_Angeles', // Default timezone
+  timezone: getLocalTimezone(),
   endDate: props.schedule.endDate ? props.schedule.endDate.toISO() : '',
-  endType: 'none',
-  weekdays: {
-    SU: false,
-    MO: false,
-    TU: false,
-    WE: false,
-    TH: false,
-    FR: false,
-    SA: false,
-  },
-  monthlyWeekdayCheckboxes: {
-    '1SU': false,
-    '1MO': false,
-    '1TU': false,
-    '1WE': false,
-    '1TH': false,
-    '1FR': false,
-    '1SA': false,
-    '2SU': false,
-    '2MO': false,
-    '2TU': false,
-    '2WE': false,
-    '2TH': false,
-    '2FR': false,
-    '2SA': false,
-    '3SU': false,
-    '3MO': false,
-    '3TU': false,
-    '3WE': false,
-    '3TH': false,
-    '3FR': false,
-    '3SA': false,
-    '4SU': false,
-    '4MO': false,
-    '4TU': false,
-    '4WE': false,
-    '4TH': false,
-    '4FR': false,
-    '4SA': false,
-    '5SU': false,
-    '5MO': false,
-    '5TU': false,
-    '5WE': false,
-    '5TH': false,
-    '5FR': false,
-    '5SA': false,
-  },
+  // Restore end-type from existing schedule so the correct radio is selected
+  endType: initEndType(),
+  // Restore weekday and monthly checkboxes from existing byDay values
+  weekdays: initWeekdays(),
+  monthlyWeekdayCheckboxes: initMonthlyWeekdayCheckboxes(),
 });
 
+/**
+ * Builds a timezone-aware DateTime from the user-entered date and time fields,
+ * using the selected IANA timezone (state.timezone).
+ *
+ * Using { zone: state.timezone } ensures Luxon interprets the wall-clock time
+ * in the selected timezone rather than the system's local timezone. This
+ * preserves the user's intended time across DST boundaries when recurring
+ * event instances are generated — without this, RRule would see a UTC-naive
+ * date and produce instances that shift by 1 hour after a DST transition.
+ */
 const updateStartDate = () => {
   if (state.date && state.time) {
     const dateTimeString = `${state.date}T${state.time}`;
-    props.schedule.startDate = DateTime.fromISO(dateTimeString);
+    props.schedule.startDate = DateTime.fromISO(dateTimeString, { zone: state.timezone });
   }
+};
+
+/**
+ * Handles frequency selector changes. Syncs the local state.frequency
+ * value to props.schedule.frequency and triggers recurrence compilation.
+ */
+const onFrequencyChange = () => {
+  props.schedule.frequency = state.frequency || null;
+  compileRecurrence();
 };
 
 const compileRecurrence = () => {

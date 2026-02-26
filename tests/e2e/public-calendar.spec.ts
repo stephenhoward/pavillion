@@ -104,7 +104,7 @@ test.describe('Public Calendar', () => {
 
     // Verify URL updates with category parameter
     const url = page.url();
-    expect(url).toContain('category=');
+    expect(url).toContain('categories=');
 
     // Click again to deselect
     await categoryPills.first().click();
@@ -164,8 +164,20 @@ test.describe('Public Calendar', () => {
     // Click the first event link
     await eventLinks.first().click();
 
-    // Wait for navigation to event detail page
-    await page.waitForURL(new RegExp(`${env.baseURL}/view/test_calendar/events/`), { timeout: 10000 });
+    // Wait for navigation to event detail page.
+    // The URL may include an optional locale prefix (e.g. /es/) when the browser's
+    // navigator.language is a non-default locale, so we allow for that with [a-z]{2,8}\/.
+    // We escape the baseURL before embedding it in a RegExp to handle any special characters
+    // (e.g. dots in IP addresses).
+    //
+    // Use waitUntil: 'commit' because this is a Vue Router SPA navigation via history.pushState.
+    // Client-side routing does not fire a browser 'load' event (the default for waitForURL), so
+    // we only wait for the URL to commit (change) rather than for a full page reload lifecycle.
+    const escapedBase = env.baseURL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    await page.waitForURL(
+      new RegExp(`${escapedBase}(\\/[a-z]{2,8})?\\/view\\/test_calendar\\/events\\/`),
+      { timeout: 10000, waitUntil: 'commit' },
+    );
 
     // Verify event detail page renders
     const detailTitle = page.locator('h1');

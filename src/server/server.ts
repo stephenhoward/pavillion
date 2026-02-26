@@ -259,14 +259,14 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
   // This middleware blocks all routes except /setup when no admin exists
   app.use(createSetupModeMiddleware(setupDomain.interface));
 
+  // Add locale middleware before the page router so req.locale is populated
+  // when page handlers render templates. Detection chain: forceLanguage override
+  // → URL prefix → account language → cookie → Accept-Language → instance default.
+  app.use(createLocaleMiddleware(configurationDomain.interface));
+
   // Mount the page router with ConfigurationInterface injected for settings access
   const { router: indexRoutes } = createRouter(configurationDomain.interface);
   app.use('/', indexRoutes);
-
-  // Add locale middleware after configuration domain is initialized so it can
-  // use the ConfigurationInterface to read instance language settings.
-  // This respects domain-driven design boundaries by going through the interface.
-  app.use(createLocaleMiddleware(configurationDomain.interface));
 
   // Initialize Email domain (no API routes, provides interface for cross-domain email sending)
   const emailDomain = new EmailDomain();

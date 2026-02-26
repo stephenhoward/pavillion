@@ -14,7 +14,7 @@ export interface PublicCalendarState {
 
   // Category filtering
   availableCategories: EventCategory[];
-  selectedCategoryNames: string[]; // Changed from IDs to names
+  selectedCategoryIds: string[];
 
   // Search filtering
   searchQuery: string;
@@ -30,6 +30,8 @@ export interface PublicCalendarState {
   // UI state
   isLoadingCategories: boolean;
   isLoadingEvents: boolean;
+  hasLoadedEvents: boolean;
+  isSearchPending: boolean;
   categoryError: string | null;
   eventError: string | null;
 }
@@ -48,7 +50,7 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
     calendarDefaultDateRange: '2weeks',
     isCalendarSettingsLoaded: false,
     availableCategories: [],
-    selectedCategoryNames: [],
+    selectedCategoryIds: [],
     searchQuery: '',
     startDate: null,
     endDate: null,
@@ -56,6 +58,8 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
     filteredEvents: [],
     isLoadingCategories: false,
     isLoadingEvents: false,
+    hasLoadedEvents: false,
+    isSearchPending: false,
     categoryError: null,
     eventError: null,
   }),
@@ -65,39 +69,29 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
      * Get events filtered by selected categories
      */
     getFilteredEvents(): CalendarEventInstance[] {
-      console.log('filter by ',this.selectedCategoryNames);
-      if (this.selectedCategoryNames.length === 0) {
+      if (this.selectedCategoryIds.length === 0) {
         return this.allEvents;
       }
 
-      return this.allEvents.filter(event => {
-        // Check if event has any of the selected categories by name
-        console.log(event);
-        const eventCategoryNames = event.event.categories?.map(cat => {
-          try {
-            // Get category name in English, fallback to first available language
-            const content = cat.content('en') || cat.content(cat.getLanguages()[0]);
-            return content?.name || '';
-          }
-          catch {
-            return '';
-          }
-        }).filter(name => name.length > 0) || [];
-
-        return this.selectedCategoryNames.some(selectedName =>
-          eventCategoryNames.includes(selectedName),
+      return this.allEvents.filter(instance => {
+        const eventCategoryIds = instance.event.categories?.map(cat => cat.id) || [];
+        return this.selectedCategoryIds.some(selectedId =>
+          eventCategoryIds.includes(selectedId),
         );
       });
     },
 
     /**
-     * Get filtered events grouped by day
+     * Get filtered events grouped by day using the viewer's local timezone.
+     * Using toLocal() ensures day boundaries are determined by the viewer's
+     * clock rather than the server's timezone, preventing events from
+     * appearing on the wrong day when the server runs in a different timezone.
      */
     getFilteredEventsByDay(): Record<string, CalendarEventInstance[]> {
       const eventsByDay: Record<string, CalendarEventInstance[]> = {};
 
       this.getFilteredEvents.forEach(instance => {
-        const dateKey = instance.start.toISODate();
+        const dateKey = instance.start.toLocal().toISODate();
         if (dateKey) {
           if (!eventsByDay[dateKey]) {
             eventsByDay[dateKey] = [];
@@ -114,11 +108,33 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
      */
     hasActiveFilters(): boolean {
       return (
-        this.selectedCategoryNames.length > 0 ||
+        this.selectedCategoryIds.length > 0 ||
         this.searchQuery.trim().length > 0 ||
         this.startDate !== null ||
         this.endDate !== null
       );
+    },
+
+    /**
+     * Check if non-date filters (search or category) are active.
+     * Used to distinguish "no results due to search/category" from
+     * "no results in this date window".
+     */
+    hasNonDateFilters(): boolean {
+      return (
+        this.selectedCategoryIds.length > 0 ||
+        this.searchQuery.trim().length > 0
+      );
+    },
+
+    /**
+     * Check if only date filters are active (no search or category filters).
+     * Used to show "no events in this date range" message.
+     */
+    hasOnlyDateFilters(): boolean {
+      const hasDateFilter = this.startDate !== null || this.endDate !== null;
+      const hasNonDate = this.selectedCategoryIds.length > 0 || this.searchQuery.trim().length > 0;
+      return hasDateFilter && !hasNonDate;
     },
 
     /**
@@ -230,11 +246,9 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
           params.append('search', filters.search.trim());
         }
 
-        // Add category filter parameters if provided
+        // Add category filter parameters if provided (UUIDs per DEC-005)
         if (filters?.categories && filters.categories.length > 0) {
-          filters.categories.forEach(name => params.append('category', name));
-          // Add language parameter so backend knows which language to use for category name matching
-          params.append('lang', 'en');
+          filters.categories.forEach(id => params.append('categories', id));
         }
 
         // Add date range parameters - use calendar's default if none specified
@@ -263,26 +277,27 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
       }
       finally {
         this.isLoadingEvents = false;
+        this.hasLoadedEvents = true;
       }
     },
 
     /**
      * Set selected category names
      */
-    setSelectedCategories(categoryNames: string[]) {
-      this.selectedCategoryNames = [...categoryNames];
+    setSelectedCategories(categoryIds: string[]) {
+      this.selectedCategoryIds = [...categoryIds];
     },
 
     /**
      * Toggle a category filter
      */
-    toggleCategory(categoryName: string) {
-      const index = this.selectedCategoryNames.indexOf(categoryName);
+    toggleCategory(categoryId: string) {
+      const index = this.selectedCategoryIds.indexOf(categoryId);
       if (index > -1) {
-        this.selectedCategoryNames.splice(index, 1);
+        this.selectedCategoryIds.splice(index, 1);
       }
       else {
-        this.selectedCategoryNames.push(categoryName);
+        this.selectedCategoryIds.push(categoryId);
       }
     },
 
@@ -291,6 +306,14 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
      */
     setSearchQuery(query: string) {
       this.searchQuery = query.trim();
+    },
+
+    /**
+     * Set the search pending state. True when user has typed 1-2 characters
+     * in the search input (below the 3-character minimum for search).
+     */
+    setSearchPending(pending: boolean) {
+      this.isSearchPending = pending;
     },
 
     /**
@@ -306,16 +329,17 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
      */
     clearAllFilters() {
       this.searchQuery = '';
-      this.selectedCategoryNames = [];
+      this.selectedCategoryIds = [];
       this.startDate = null;
       this.endDate = null;
+      this.isSearchPending = false;
     },
 
     /**
      * Clear all category filters only
      */
     clearFilters() {
-      this.selectedCategoryNames = [];
+      this.selectedCategoryIds = [];
     },
 
     /**
@@ -325,7 +349,7 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
       this.calendarDefaultDateRange = this.serverDefaultDateRange;
       this.isCalendarSettingsLoaded = false;
       this.availableCategories = [];
-      this.selectedCategoryNames = [];
+      this.selectedCategoryIds = [];
       this.searchQuery = '';
       this.startDate = null;
       this.endDate = null;
@@ -335,6 +359,8 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
       this.eventError = null;
       this.isLoadingCategories = false;
       this.isLoadingEvents = false;
+      this.hasLoadedEvents = false;
+      this.isSearchPending = false;
     },
 
     /**
@@ -348,8 +374,8 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
         if (this.searchQuery.trim().length >= 3) {
           filters.search = this.searchQuery;
         }
-        if (this.selectedCategoryNames.length > 0) {
-          filters.categories = this.selectedCategoryNames;
+        if (this.selectedCategoryIds.length > 0) {
+          filters.categories = this.selectedCategoryIds;
         }
         if (this.startDate) {
           filters.startDate = this.startDate;

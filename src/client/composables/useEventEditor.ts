@@ -9,6 +9,7 @@ import CategoryService from '@/client/service/category';
 import ModelService from '@/client/service/models';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { useEventDuplication } from '@/client/composables/useEventDuplication';
+import { useToast } from '@/client/composables/useToast';
 
 /**
  * Editor mode type
@@ -21,11 +22,23 @@ export type EditorMode = 'create' | 'edit' | 'duplicate';
 export interface EventEditorState {
   isLoading: boolean;
   err: string;
+  errDetail: string;
   event: CalendarEvent | null;
   calendar: Calendar | null;
   availableCalendars: Calendar[];
   mode: EditorMode;
   isDuplicationMode: boolean;
+}
+
+/**
+ * Checks whether an EventLocation has any meaningful data.
+ * A location is considered empty if it has no id and no name.
+ *
+ * @param location - The location to check
+ * @returns true if the location is empty
+ */
+function isEmptyLocation(location: EventLocation): boolean {
+  return !location.id && !location.name;
 }
 
 /**
@@ -42,6 +55,7 @@ export function useEventEditor(defaultLanguage: string = 'en') {
   const router = useRouter();
   const calendarStore = useCalendarStore();
   const { stripEventForDuplication } = useEventDuplication();
+  const toast = useToast();
 
   // Services
   const calendarService = new CalendarService();
@@ -52,6 +66,7 @@ export function useEventEditor(defaultLanguage: string = 'en') {
   const state = reactive<EventEditorState>({
     isLoading: true,
     err: '',
+    errDetail: '',
     event: null,
     calendar: null,
     availableCalendars: [],
@@ -210,9 +225,19 @@ export function useEventEditor(defaultLanguage: string = 'en') {
         // Ensure default language content exists
         state.event.content(defaultLanguage);
 
-        // Preserve categories from source event
-        if (sourceEvent.categories && sourceEvent.categories.length > 0) {
-          selectedCategories.value = sourceEvent.categories.map(cat => cat.id);
+        // Load categories from the source event via the API, mirroring the edit mode approach.
+        // This is more reliable than relying on sourceEvent.categories, which may be empty
+        // if the API response did not include category data in the serialised event object.
+        try {
+          const eventCategories = await categoryService.getEventCategories(sourceEventId);
+          selectedCategories.value = eventCategories.map(cat => cat.id);
+        }
+        catch (error) {
+          console.error('Error loading source event categories:', error);
+          // Fall back to categories already present on the loaded event model
+          if (sourceEvent.categories && sourceEvent.categories.length > 0) {
+            selectedCategories.value = sourceEvent.categories.map(cat => cat.id);
+          }
         }
 
         // Preserve media reference
@@ -280,11 +305,13 @@ export function useEventEditor(defaultLanguage: string = 'en') {
 
     if (!model) {
       state.err = t('error_no_event');
+      state.errDetail = '';
       return;
     }
 
     // Clear previous validation errors
     state.err = '';
+    state.errDetail = '';
 
     // Ensure we have a calendarId
     if (!model.calendarId && state.availableCalendars.length > 0) {
@@ -293,6 +320,17 @@ export function useEventEditor(defaultLanguage: string = 'en') {
 
     if (!model.calendarId) {
       state.err = t('error_no_calendar');
+      state.errDetail = '';
+      return;
+    }
+
+    // Validate that at least one schedule has a date and start time
+    const hasValidSchedule = model.schedules && model.schedules.some(
+      (schedule: any) => schedule.startDate,
+    );
+    if (!hasValidSchedule) {
+      state.err = t('error_date_required');
+      state.errDetail = '';
       return;
     }
 
@@ -305,6 +343,13 @@ export function useEventEditor(defaultLanguage: string = 'en') {
       // (The location object is only for display purposes in the UI)
       if (state.event.locationId) {
         model.locationId = state.event.locationId;
+      }
+
+      // Nullify empty location objects to prevent sending empty data to the server.
+      // The form initializes events with an empty EventLocation for UI binding,
+      // but the server rejects empty location objects with a 500 error.
+      if (model.location && isEmptyLocation(model.location)) {
+        model.location = null;
       }
 
       // Save the event
@@ -329,6 +374,9 @@ export function useEventEditor(defaultLanguage: string = 'en') {
         onDirtyReset();
       }
 
+      // Show success toast before navigating away
+      toast.success(t('event_saved_success'));
+
       // Navigate to the calendar view for this event's calendar
       const calendar = state.availableCalendars.find(c => c.id === model.calendarId);
       if (calendar) {
@@ -341,9 +389,15 @@ export function useEventEditor(defaultLanguage: string = 'en') {
         router.push({ name: 'calendars' });
       }
     }
-    catch (error) {
+    catch (error: any) {
       console.error('Error saving event:', error);
       state.err = t('error_saving_event');
+      // Extract actionable detail from the server response if available
+      const serverMessage = error?.response?.data?.error
+        || error?.response?.data?.message
+        || error?.message
+        || '';
+      state.errDetail = typeof serverMessage === 'string' ? serverMessage : '';
     }
   };
 

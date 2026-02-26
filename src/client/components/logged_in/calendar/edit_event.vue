@@ -458,9 +458,10 @@ form {
 
 /* Error styling */
 .error {
+  position: relative;
   color: var(--pav-color-red-700);
   font-size: 0.9rem;
-  padding: 1rem 1.5rem;
+  padding: 1rem 2.5rem 1rem 1.5rem;
   border-radius: 0.75rem; // rounded-xl
   background-color: var(--pav-color-red-50);
   border: 1px solid var(--pav-color-red-200);
@@ -484,6 +485,38 @@ form {
       margin-bottom: 0;
     }
   }
+}
+
+.error-dismiss {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.75rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: var(--pav-color-red-700);
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.25rem;
+
+  &:hover {
+    background-color: var(--pav-color-red-100);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-red-300);
+
+    &:hover {
+      background-color: rgba(239, 68, 68, 0.2);
+    }
+  }
+}
+
+.error-detail {
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+  opacity: 0.85;
 }
 
 /* Form group styling (for general use) */
@@ -652,6 +685,12 @@ button {
              class="error"
              role="alert"
              aria-live="polite">
+          <button
+            class="error-dismiss"
+            type="button"
+            aria-label="Dismiss error"
+            @click="editorState.err = ''; editorState.errDetail = ''"
+          >&times;</button>
           <div v-if="Array.isArray(editorState.err)">
             <ul>
               <li v-for="(error, index) in editorState.err" :key="index">{{ error }}</li>
@@ -659,6 +698,9 @@ button {
           </div>
           <div v-else>
             {{ editorState.err }}
+          </div>
+          <div v-if="editorState.errDetail" class="error-detail">
+            {{ editorState.errDetail }}
           </div>
         </div>
 
@@ -674,6 +716,7 @@ button {
               <LanguageTabSelector
                 v-model="currentLanguage"
                 :languages="languages"
+                :errored-tabs="erroredTabs"
                 @add-language="openLanguagePicker"
                 @remove-language="handleRemoveLanguage"
               />
@@ -784,6 +827,8 @@ button {
                 >
                   <EventRecurrenceView
                     :schedule="schedule"
+                    :index="index"
+                    :can-remove="editorState.event.schedules.length > 1"
                     @remove-schedule="editorState.event.dropSchedule(index)"
                   />
                 </div>
@@ -982,6 +1027,18 @@ const translatedPageTitle = computed(() => {
 });
 
 /**
+ * Language tabs that have validation errors (missing required title field).
+ * Used to show a visual indicator on inactive tabs that need attention.
+ */
+const erroredTabs = computed(() => {
+  if (!editorState.event) return [];
+  return languages.value.filter((lang) => {
+    const name = editorState.event.content(lang).name;
+    return !name || name.trim() === '';
+  });
+});
+
+/**
  * Handle back button click
  */
 const handleBackClick = () => {
@@ -1057,12 +1114,18 @@ const handleAddLanguage = (language) => {
 };
 
 /**
- * Handle removing a language
+ * Handle removing a language — shows a confirmation dialog before removing.
  */
 const handleRemoveLanguage = (language) => {
-  if (editorState.event) {
-    removeLanguage(language, editorState.event);
-  }
+  if (!editorState.event) return;
+  const languageName = iso6391.getName(language);
+  const message = t(
+    'remove_translation_confirm',
+    `Remove the ${languageName} translation? This will permanently delete all ${languageName} content for this event.`,
+    { language: languageName },
+  );
+  if (!window.confirm(message)) return;
+  removeLanguage(language, editorState.event);
 };
 
 /**
@@ -1094,18 +1157,7 @@ watch(() => showCreateLocationForm.value, async (newValue) => {
 watch(() => editorState.err, async (newError) => {
   if (newError) {
     await nextTick();
-    await nextTick();
-
-    if (errorContainer.value) {
-      // Scroll to top of the page container
-      const pageContainer = errorContainer.value.closest('.event-editor-page');
-      if (pageContainer) {
-        pageContainer.scrollTo({
-          top: 0,
-          behavior: 'smooth',
-        });
-      }
-    }
+    errorContainer.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 }, { deep: true });
 

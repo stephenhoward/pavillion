@@ -1,5 +1,5 @@
 <script setup>
-import { onBeforeMount, reactive, inject, ref, watch, computed, nextTick } from 'vue';
+import { onBeforeMount, reactive, ref, watch, computed, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
@@ -11,6 +11,7 @@ import EventService from '@/client/service/event';
 import EventImage from '@/client/components/common/media/EventImage.vue';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
 import PillButton from '@/client/components/common/PillButton.vue';
+import ModalLayout from '@/client/components/common/modal.vue';
 import BulkOperationsMenu from './BulkOperationsMenu.vue';
 import CategorySelectionDialog from './CategorySelectionDialog.vue';
 import SearchFilter from './SearchFilter.vue';
@@ -37,8 +38,6 @@ const { t: tReport } = useTranslation('system', {
 // For repost edit dialog translations
 const { t: tFeed } = useTranslation('feed');
 
-const site_config = inject('site_config');
-const site_domain = site_config.settings().domain;
 const eventService = new EventService();
 const calendarStore = useCalendarStore();
 const categoryStore = useCategoryStore();
@@ -92,6 +91,12 @@ const repostEventForModal = ref(null);
 
 // Ref to the element that triggered the repost modal (for focus return on close)
 const repostModalTriggerEl = ref(null);
+
+// Delete confirmation modal state
+const showDeleteConfirmModal = ref(false);
+
+// Ref to the element that triggered the delete modal (for focus return on close)
+const deleteModalTriggerEl = ref(null);
 
 /**
  * Initializes filter state from URL query parameters.
@@ -187,7 +192,9 @@ const syncFiltersToURL = () => {
  * 1. Updates local filter state
  * 2. Syncs filters to URL parameters (for bookmarking)
  * 3. Reloads events from API with new filters
- * 4. Clears any bulk selections (filtered view may exclude selected items)
+ *
+ * Selected events are preserved across filter changes. Events that no longer appear
+ * in the filtered list are simply hidden but remain selected for bulk operations.
  *
  * @param filters - Filter object from SearchFilter component
  * @param filters.search - Search query string (optional)
@@ -213,9 +220,7 @@ const handleFiltersChanged = async (filters) => {
   // Reload events with new filters
   state.isLoading = true;
   try {
-    await eventService.loadCalendarEvents(calendarId.value, filters);
-    // Clear selections when filtering changes
-    deselectAll();
+    await eventService.loadCalendarEvents(calendarId.value, filters, state.calendar?.id);
   }
   catch (error) {
     console.error('Error loading filtered events:', error);
@@ -242,8 +247,14 @@ const loadCalendarData = async () => {
     state.isLoading = true;
     state.err = '';
 
-    // Load calendar by URL name
+    // Load calendar by URL name — only returns calendars the current user can edit
     state.calendar = await calendarService.getCalendarByUrlName(calendarId.value);
+
+    // If the calendar wasn't found in the user's accessible calendars, redirect away
+    if (!state.calendar) {
+      router.replace({ name: 'calendars' });
+      return;
+    }
 
     // Load events for this calendar with current filters (from URL if present)
     const filters = {};
@@ -254,7 +265,7 @@ const loadCalendarData = async () => {
       filters.categories = currentFilters.categories;
     }
 
-    await eventService.loadCalendarEvents(calendarId.value, Object.keys(filters).length > 0 ? filters : undefined);
+    await eventService.loadCalendarEvents(calendarId.value, Object.keys(filters).length > 0 ? filters : undefined, state.calendar?.id);
   }
   catch (error) {
     console.error('Error loading calendar data:', error);
@@ -284,14 +295,13 @@ const newEvent = async () => {
 };
 
 /**
- * Navigate to edit an existing event.
- * For reposted events, opens a read-only detail + category edit modal instead.
- * Saves the triggering DOM element so focus can be returned when the modal closes.
+ * Navigate to or open the editor for an event.
+ * Used internally when navigation should always occur regardless of bulk mode.
  *
  * @param event - The CalendarEvent model to edit
  * @param domEvent - The originating mouse event, used to capture the trigger element
  */
-const handleEditEvent = (event, domEvent) => {
+const navigateToEditEvent = (event, domEvent) => {
   if (event.isRepost) {
     repostModalTriggerEl.value = domEvent?.currentTarget ?? null;
     repostEventForModal.value = event;
@@ -301,6 +311,35 @@ const handleEditEvent = (event, domEvent) => {
     name: 'event_edit',
     params: { eventId: event.id },
   });
+};
+
+/**
+ * Handle a click on the event article body.
+ * When bulk mode is active (one or more events selected), toggles the event's
+ * selection instead of navigating to the editor. This prevents users from
+ * accidentally losing their selection by misclicking the card body.
+ *
+ * @param event - The CalendarEvent model
+ * @param domEvent - The originating mouse event
+ */
+const handleEditEvent = (event, domEvent) => {
+  if (hasSelection.value) {
+    toggleEventSelection(event);
+    return;
+  }
+  navigateToEditEvent(event, domEvent);
+};
+
+/**
+ * Handle click on the dedicated edit (pencil) button.
+ * Always navigates to the editor regardless of bulk mode, since the user
+ * explicitly intends to edit by clicking the edit button.
+ *
+ * @param event - The CalendarEvent model to edit
+ * @param domEvent - The originating mouse event
+ */
+const handleEditButtonClick = (event, domEvent) => {
+  navigateToEditEvent(event, domEvent);
 };
 
 /**
@@ -372,30 +411,56 @@ const handleAssignmentComplete = (result) => {
   deselectAll(); // Clear selection after successful assignment
 };
 
-const handleDeleteEvents = async () => {
+/**
+ * Opens the delete confirmation modal when the user clicks "Delete Events".
+ * Captures the trigger element so focus can be returned when the modal closes.
+ * The actual deletion is performed in handleDeleteConfirm() after the user confirms.
+ *
+ * @param event - The originating mouse event, used to capture the trigger element
+ */
+const handleDeleteEvents = (event) => {
   if (!selectedEvents.value.length) return;
+  deleteModalTriggerEl.value = (event?.currentTarget ?? null);
+  showDeleteConfirmModal.value = true;
+};
 
-  const confirmDelete = confirm(`Are you sure you want to delete ${selectedCount.value} event${selectedCount.value > 1 ? 's' : ''}?`);
+/**
+ * Cancels the delete operation and closes the confirmation modal.
+ * Returns focus to the element that triggered the modal.
+ */
+const handleDeleteCancel = async () => {
+  showDeleteConfirmModal.value = false;
+  await nextTick();
+  deleteModalTriggerEl.value?.focus();
+};
 
-  if (confirmDelete) {
-    const deleteCount = selectedEvents.value.length;
-    try {
-      // Get the actual event objects from the selected IDs
-      const eventsToDelete = getSelectedEventObjects(calendarEvents.value || []);
+/**
+ * Executes the bulk delete after the user confirms in the modal.
+ * Deletes all selected events, reloads the event list, and shows a toast notification.
+ * Returns focus to the element that triggered the modal after the modal closes.
+ */
+const handleDeleteConfirm = async () => {
+  showDeleteConfirmModal.value = false;
+  await nextTick();
+  deleteModalTriggerEl.value?.focus();
 
-      for (const event of eventsToDelete) {
-        await eventService.deleteEvent(event);
-      }
+  const deleteCount = selectedEvents.value.length;
+  try {
+    // Get the actual event objects from the selected IDs
+    const eventsToDelete = getSelectedEventObjects(calendarEvents.value || []);
 
-      // Reload events after deletion with current filters
-      await eventService.loadCalendarEvents(calendarId.value, currentFilters);
-      deselectAll();
-      toast.success(tBulk('delete_success', { count: deleteCount }));
+    for (const event of eventsToDelete) {
+      await eventService.deleteEvent(event);
     }
-    catch (error) {
-      console.error('Error deleting events:', error);
-      toast.error(tBulk('delete_error'));
-    }
+
+    // Reload events after deletion with current filters
+    await eventService.loadCalendarEvents(calendarId.value, currentFilters, state.calendar?.id);
+    deselectAll();
+    toast.success(tBulk('delete_success', { count: deleteCount }));
+  }
+  catch (error) {
+    console.error('Error deleting events:', error);
+    toast.error(tBulk('delete_error'));
   }
 };
 
@@ -475,6 +540,38 @@ const getRecurrenceText = (event) => {
 const hasActiveFilters = computed(() => {
   return !!(currentFilters.search?.trim() || currentFilters.categories?.length > 0);
 });
+
+/**
+ * Returns the visible label text for the Select All checkbox.
+ * Changes from "Select All" to "Deselect All" when all events are selected,
+ * ensuring state is communicated beyond color alone.
+ */
+const selectAllVisibleLabel = computed(() => {
+  if (!calendarEvents.value || calendarEvents.value.length === 0) {
+    return tBulk('select_all');
+  }
+  const checkboxState = selectAllState(calendarEvents.value);
+  return checkboxState.checked ? tBulk('deselect_all') : tBulk('select_all');
+});
+
+/**
+ * Returns the accessible aria-label for the Select All checkbox.
+ * Updates to reflect all three states: none selected, some selected (indeterminate),
+ * and all selected, so screen reader users always know the current state.
+ */
+const selectAllAriaLabel = computed(() => {
+  if (!calendarEvents.value || calendarEvents.value.length === 0) {
+    return tBulk('select_all_events');
+  }
+  const checkboxState = selectAllState(calendarEvents.value);
+  if (checkboxState.checked) {
+    return tBulk('deselect_all_label');
+  }
+  if (checkboxState.indeterminate) {
+    return tBulk('select_all_indeterminate_label');
+  }
+  return tBulk('select_all_events');
+});
 </script>
 
 <template>
@@ -490,8 +587,8 @@ const hasActiveFilters = computed(() => {
         <div class="header-content">
           <div class="header-title-section">
             <h1>
-              <span v-if="state.calendar">{{ state.calendar.urlName }}@{{ site_domain }}</span>
-              <span v-else>{{ calendarId }}@{{ site_domain }}</span>
+              <span v-if="state.calendar">{{ state.calendar.content('en').name || state.calendar.urlName }}</span>
+              <span v-else>{{ calendarId }}</span>
             </h1>
             <div class="header-actions">
               <RouterLink
@@ -534,7 +631,9 @@ const hasActiveFilters = computed(() => {
       </div>
 
       <!-- Events Display Section -->
-      <section v-if="!state.isLoading && calendarEvents && calendarEvents.length > 0" aria-label="Calendar Events">
+      <section v-if="!state.isLoading && calendarEvents && calendarEvents.length > 0"
+               aria-label="Calendar Events"
+               :class="{ 'has-bulk-toolbar': hasSelection }">
         <h2 class="sr-only">Events in this Calendar</h2>
 
         <!-- Select All Controls -->
@@ -545,9 +644,9 @@ const hasActiveFilters = computed(() => {
               :checked="selectAllState(calendarEvents).checked"
               :indeterminate="selectAllState(calendarEvents).indeterminate"
               @change="toggleSelectAll(calendarEvents)"
-              :aria-label="tBulk('select_all_events')"
+              :aria-label="selectAllAriaLabel"
             />
-            <span>{{ tBulk('select_all') }}</span>
+            <span>{{ selectAllVisibleLabel }}</span>
           </label>
         </div>
 
@@ -604,7 +703,7 @@ const hasActiveFilters = computed(() => {
               <button
                 type="button"
                 class="edit-btn icon-btn"
-                @click.stop="handleEditEvent(event, $event)"
+                @click.stop="handleEditButtonClick(event, $event)"
                 :aria-label="t('event.edit_label', { name: event.content('en').name })"
                 title="Edit this event"
               >
@@ -615,7 +714,7 @@ const hasActiveFilters = computed(() => {
                 class="duplicate-btn icon-btn"
                 @click.stop="handleDuplicateEvent(event)"
                 :aria-label="t('event.duplicate_label', { name: event.content('en').name })"
-                title="Duplicate this event"
+                :title="t('event.duplicate_label', { name: event.content('en').name })"
               >
                 <Copy :size="18" />
               </button>
@@ -660,9 +759,38 @@ const hasActiveFilters = computed(() => {
     <CategorySelectionDialog
       :visible="showCategoryDialog"
       :selected-event-ids="selectedEvents"
+      :calendar-id="calendarId"
       @close="handleCategoryDialogClose"
       @assign-complete="handleAssignmentComplete"
     />
+
+    <!-- Delete Confirmation Modal -->
+    <ModalLayout
+      v-if="showDeleteConfirmModal"
+      :title="tBulk('delete_confirm_title')"
+      modal-class="delete-events-modal"
+      @close="handleDeleteCancel"
+    >
+      <div class="delete-events-dialog">
+        <p class="delete-events-message">
+          {{ selectedCount === 1 ? tBulk('delete_confirm_message_one', { count: selectedCount }) : tBulk('delete_confirm_message_other', { count: selectedCount }) }}
+        </p>
+        <div class="delete-events-actions">
+          <PillButton
+            variant="ghost"
+            @click="handleDeleteCancel"
+          >
+            {{ tBulk('cancel') }}
+          </PillButton>
+          <PillButton
+            variant="danger"
+            @click="handleDeleteConfirm"
+          >
+            {{ tBulk('delete_confirm_button') }}
+          </PillButton>
+        </div>
+      </div>
+    </ModalLayout>
 
     <!-- Report Event Dialog -->
     <ReportEvent
@@ -773,6 +901,13 @@ section[aria-label="Calendar Events"] {
   margin: 0 auto;
   padding: 1.5rem 1rem;
 
+  &.has-bulk-toolbar {
+    // Add clearance so the last event card is not obscured by the fixed bulk toolbar.
+    // The toolbar is approximately 4.5rem tall positioned 1rem from the bottom.
+    // Using 6rem provides comfortable clearance.
+    padding-bottom: 6rem;
+  }
+
   .event-controls {
     padding: 1rem 0;
     margin-bottom: 1rem;
@@ -836,7 +971,8 @@ section[aria-label="Calendar Events"] {
       align-items: flex-start;
       gap: 1rem;
 
-      &:hover {
+      &:hover,
+      &:focus-within {
         .event-actions {
           /* Inlined: hover-reveal */
           opacity: 1;
@@ -1085,6 +1221,40 @@ section[aria-label="Calendar Events"] {
 
   @media (prefers-color-scheme: dark) {
     color: var(--pav-color-stone-400);
+  }
+}
+
+// Constrain delete events modal width
+:global(.delete-events-modal > div) {
+  max-width: 480px !important;
+}
+
+.delete-events-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pav-space-4, 1rem);
+
+  .delete-events-message {
+    margin: 0;
+    color: var(--pav-color-stone-600);
+    font-size: 0.875rem;
+    line-height: 1.5;
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-400);
+    }
+  }
+
+  .delete-events-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+    padding-top: var(--pav-space-4, 1rem);
+    border-top: 1px solid var(--pav-color-stone-200);
+
+    @media (prefers-color-scheme: dark) {
+      border-top-color: var(--pav-color-stone-700);
+    }
   }
 }
 </style>

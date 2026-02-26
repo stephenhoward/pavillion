@@ -52,6 +52,10 @@ function setI18nextLanguage(lang: string) {
   Object.defineProperty(i18next, 'language', { value: lang, configurable: true });
 }
 
+function setI18nextResolvedLanguage(lang: string | undefined) {
+  Object.defineProperty(i18next, 'resolvedLanguage', { value: lang, configurable: true });
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -68,6 +72,8 @@ describe('useLocale', () => {
 
     // Default i18next language
     setI18nextLanguage('en');
+    // Reset resolvedLanguage to undefined (simulates i18next before full init)
+    setI18nextResolvedLanguage(undefined);
   });
 
   afterEach(() => {
@@ -96,6 +102,20 @@ describe('useLocale', () => {
 
       // No locale in the path → falls back to i18next.language
       expect(currentLocale.value).toBe('es');
+    });
+
+    it('should use resolvedLanguage over language when both are set', () => {
+      mockRoute.path = '/@mycalendar';
+      // Simulate browser reporting "en-US" while i18next resolves to "en"
+      // (load: 'languageOnly' strips the region tag when resolving)
+      setI18nextLanguage('en-US');
+      setI18nextResolvedLanguage('en');
+
+      const { currentLocale } = useLocale();
+
+      // resolvedLanguage ('en') must win over language ('en-US') so that
+      // localizedPath() generates clean /view/... URLs instead of /en-US/view/...
+      expect(currentLocale.value).toBe('en');
     });
 
     it('should be reactive (writable ref)', () => {

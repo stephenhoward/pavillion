@@ -508,7 +508,7 @@ describe('Editor API', () => {
 
     it('should succeed and return editors list', async () => {
       let editorStub = editorSandbox.stub(calendarInterface, 'listCalendarEditorsWithInvitations');
-      const editor = new CalendarEditor('editor-id', 'cal-id', 'user-id');
+      const editor = new CalendarEditor('editor-id', 'cal-id', 'user@example.com');
       editorStub.resolves({
         activeEditors: [editor],
         pendingInvitations: [],
@@ -526,6 +526,50 @@ describe('Editor API', () => {
         activeEditors: [editor.toObject()],
         pendingInvitations: [],
       });
+    });
+
+    it('should return displayName and username in editors list when present', async () => {
+      let editorStub = editorSandbox.stub(calendarInterface, 'listCalendarEditorsWithInvitations');
+      const editor = new CalendarEditor('editor-id', 'cal-id', 'fresh@example.com', null, 'FreshUser');
+      editorStub.resolves({
+        activeEditors: [editor],
+        pendingInvitations: [],
+      });
+      router.get('/handler', addRequestUser, (req, res) => {
+        req.params.calendarId = 'cal-id';
+        routes.listEditors(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .get('/handler');
+
+      expect(response.status).toBe(200);
+      const returnedEditor = response.body.activeEditors[0];
+      expect(returnedEditor.email).toBe('fresh@example.com');
+      expect(returnedEditor.username).toBe('FreshUser');
+      expect(returnedEditor.displayName).toBeNull();
+    });
+
+    it('should return displayName when set on editor', async () => {
+      let editorStub = editorSandbox.stub(calendarInterface, 'listCalendarEditorsWithInvitations');
+      const editor = new CalendarEditor('editor-id', 'cal-id', 'fresh@example.com', 'Fresh User', 'FreshUser');
+      editorStub.resolves({
+        activeEditors: [editor],
+        pendingInvitations: [],
+      });
+      router.get('/handler', addRequestUser, (req, res) => {
+        req.params.calendarId = 'cal-id';
+        routes.listEditors(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .get('/handler');
+
+      expect(response.status).toBe(200);
+      const returnedEditor = response.body.activeEditors[0];
+      expect(returnedEditor.email).toBe('fresh@example.com');
+      expect(returnedEditor.username).toBe('FreshUser');
+      expect(returnedEditor.displayName).toBe('Fresh User');
     });
   });
 

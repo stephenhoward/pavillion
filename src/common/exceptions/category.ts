@@ -52,3 +52,14 @@ export class CategoryUpdateFailedError extends Error {
     Object.setPrototypeOf(this, CategoryUpdateFailedError.prototype);
   }
 }
+
+/**
+ * Custom error class for duplicate category name within the same calendar and language
+ */
+export class DuplicateCategoryNameError extends Error {
+  constructor(message: string = 'A category with this name already exists in this calendar') {
+    super(message);
+    this.name = 'DuplicateCategoryNameError';
+    Object.setPrototypeOf(this, DuplicateCategoryNameError.prototype);
+  }
+}

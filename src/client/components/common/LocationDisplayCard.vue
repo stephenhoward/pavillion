@@ -79,6 +79,7 @@ const handleButtonClick = () => {
   <!-- When location is empty: show Add Location button with nested borders -->
   <div v-else class="location-display-card location-display-card--empty">
     <button
+      type="button"
       class="add-location-button"
       @click="handleButtonClick"
     >

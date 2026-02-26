@@ -1,0 +1,13 @@
+{
+    "subject": "Votre demande de compte a été approuvée",
+    "title": "Demande approuvée",
+    "greeting": "Bonjour,",
+    "application_accepted_message": "Nous avons le plaisir de vous informer que votre demande de compte a été approuvée. Nous sommes ravis de vous accueillir dans notre communauté.",
+    "complete_registration_instruction": "Pour finaliser votre inscription et configurer votre compte, veuillez cliquer sur le bouton ci-dessous ou copier et coller le lien dans votre navigateur :",
+    "complete_registration_button": "Finaliser l'inscription",
+    "copy_link_text": "Ou copiez ce lien :",
+    "link_expiry_notice": "Ce lien expirera dans 24 heures. Si vous ne finalisez pas votre inscription dans ce délai, vous devrez peut-être contacter le support.",
+    "signature": "Merci,",
+    "team_name": "L'équipe",
+    "footer_text": "Ceci est un message automatique, veuillez ne pas répondre à cet e-mail."
+}

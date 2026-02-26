@@ -106,14 +106,15 @@ test.describe('Bulk Event Operations', () => {
     // Select first event
     await page.locator('.event-item input[type="checkbox"]').first().check();
 
-    // Set up dialog handler for window.confirm
-    page.on('dialog', async (dialog) => {
-      expect(dialog.type()).toBe('confirm');
-      await dialog.accept();
-    });
-
-    // Click delete
+    // Click delete button — opens the Vue confirmation modal
     await page.locator('[data-testid="delete-events-btn"]').click();
+
+    // Wait for the Vue confirmation modal to appear
+    const confirmModal = page.locator('dialog.delete-events-modal');
+    await expect(confirmModal).toBeVisible({ timeout: 5000 });
+
+    // Click the Delete confirm button inside the modal
+    await confirmModal.locator('button.pill-button--danger').click();
 
     // Wait for deletion to complete (event count should decrease)
     await page.waitForFunction(

@@ -5,36 +5,59 @@
          class="date-range-section"
          role="group"
          :aria-label="t('filter_by_date_range')">
-      <div class="date-filter-wrapper" ref="dateFilterRef">
+      <div class="date-filter-wrapper" ref="dateFilterRef" @keydown.escape.stop="closeDateFilterWithFocus">
         <!-- Date Filter Button -->
-        <button
-          type="button"
-          class="date-filter-button"
-          :class="{
-            active: state.isDateFilterOpen,
-            'has-filter': state.dateFilterMode !== null
-          }"
-          :aria-expanded="state.isDateFilterOpen"
-          :aria-label="t('filter_by_date_range')"
-          @click="toggleDateFilter"
-        >
-          <span class="button-text">{{ dateFilterButtonText }}</span>
-          <svg
-            class="dropdown-icon"
-            :class="{ rotated: state.isDateFilterOpen }"
-            width="12"
-            height="12"
-            viewBox="0 0 12 12"
-            fill="none"
-            aria-hidden="true"
+        <div class="date-filter-button-group">
+          <button
+            ref="dateFilterButtonRef"
+            type="button"
+            class="date-filter-button"
+            :class="{
+              active: state.isDateFilterOpen,
+              'has-filter': state.dateFilterMode !== null
+            }"
+            :aria-expanded="state.isDateFilterOpen"
+            :aria-label="t('filter_by_date_range')"
+            @click="toggleDateFilter"
           >
-            <path d="M2 4L6 8L10 4"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"/>
-          </svg>
-        </button>
+            <span class="button-text">{{ dateFilterButtonText }}</span>
+            <svg
+              class="dropdown-icon"
+              :class="{ rotated: state.isDateFilterOpen }"
+              width="12"
+              height="12"
+              viewBox="0 0 12 12"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path d="M2 4L6 8L10 4"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <button
+            v-if="state.dateFilterMode !== null"
+            type="button"
+            class="clear-date-filter"
+            :aria-label="t('clear_date_filter')"
+            @click="clearDateFilter"
+          >
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 10 10"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path d="M1 1L9 9M9 1L1 9"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
 
         <!-- Dropdown with Filter Options -->
         <transition name="dropdown-fade">
@@ -144,7 +167,7 @@
           @input="onSearchInput"
         />
         <button
-          v-if="state.searchQuery"
+          v-if="state.searchQuery.trim()"
           type="button"
           class="clear-search"
           @click="clearSearch"
@@ -166,10 +189,21 @@
 
       <CategoryPillSelector
         :categories="publicStore.availableCategories"
-        :selected-categories="publicStore.selectedCategoryNames"
+        :selected-categories="publicStore.selectedCategoryIds"
         :disabled="publicStore.isLoadingCategories"
         @update:selected-categories="handleCategoryChange"
       />
+    </div>
+
+    <!-- Clear All Filters (visible whenever any filter is active) -->
+    <div v-if="publicStore.hasActiveFilters" class="clear-all-section">
+      <button
+        type="button"
+        class="clear-all-filters-btn"
+        @click="clearAllFilters"
+      >
+        {{ clearButtonLabel }}
+      </button>
     </div>
   </div>
 </template>
@@ -196,6 +230,7 @@ const route = useRoute();
 const router = useRouter();
 const publicStore = usePublicCalendarStore();
 const dateFilterRef = ref<HTMLElement | null>(null);
+const dateFilterButtonRef = ref<HTMLButtonElement | null>(null);
 
 // Check if we're in widget context and determine if date filter should show
 const isInWidget = computed(() => route.path.startsWith('/widget/'));
@@ -237,6 +272,22 @@ const dateFilterButtonText = computed(() => {
   return t('custom'); // "Select Dates"
 });
 
+// Computed label for the clear button — adapts based on active filter types
+const clearButtonLabel = computed(() => {
+  const hasSearch = publicStore.searchQuery.trim().length > 0;
+  const hasOtherFilters = publicStore.selectedCategoryIds.length > 0
+    || publicStore.startDate !== null
+    || publicStore.endDate !== null;
+
+  if (hasSearch && hasOtherFilters) {
+    return t('clear_all_filters');
+  }
+  if (hasSearch) {
+    return t('clear_search');
+  }
+  return t('clear_filters');
+});
+
 // Format a date nicely
 const formatDate = (dateStr: string): string => {
   const date = new Date(dateStr + 'T00:00:00'); // Prevent timezone issues
@@ -245,10 +296,30 @@ const formatDate = (dateStr: string): string => {
   return `${month} ${day}`;
 };
 
-// Format date range
+// Format date range — guards against inverted ranges (end before start)
 const formatDateRange = (start: string, end: string): string => {
   const startDate = new Date(start + 'T00:00:00');
   const endDate = new Date(end + 'T00:00:00');
+
+  // Guard: inverted range (end before start) — return clear label instead of garbled output
+  if (endDate < startDate) {
+    return t('date_range_invalid');
+  }
+
+  // Same date: show just the date (e.g. 'Feb 24') not 'Feb 24-24'
+  if (start === end) {
+    const month = startDate.toLocaleDateString('en-US', { month: 'short' });
+    return `${month} ${startDate.getDate()}`;
+  }
+
+  const crossesYear = startDate.getFullYear() !== endDate.getFullYear();
+
+  // When dates span different years, include the year in both labels (e.g., "Dec 30, 2025 – Jan 5, 2026")
+  if (crossesYear) {
+    const formatWithYear = (d: Date) =>
+      d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return `${formatWithYear(startDate)} – ${formatWithYear(endDate)}`;
+  }
 
   const startMonth = startDate.toLocaleDateString('en-US', { month: 'short' });
   const endMonth = endDate.toLocaleDateString('en-US', { month: 'short' });
@@ -274,6 +345,12 @@ const closeDateFilter = () => {
   state.isDateFilterOpen = false;
 };
 
+// Close date filter and return focus to the trigger button (for keyboard users)
+const closeDateFilterWithFocus = () => {
+  state.isDateFilterOpen = false;
+  dateFilterButtonRef.value?.focus();
+};
+
 // Handle click outside to close dropdown
 const handleClickOutside = (event: MouseEvent) => {
   if (dateFilterRef.value && !dateFilterRef.value.contains(event.target as Node)) {
@@ -292,11 +369,23 @@ const toggleAccordion = () => {
   state.isAccordionOpen = !state.isAccordionOpen;
 };
 
+/**
+ * Update the store's isSearchPending flag based on local search query state.
+ * Pending means user has typed 1-2 characters (below the 3-character minimum).
+ */
+const updateSearchPendingState = () => {
+  const trimmedLength = state.searchQuery.trim().length;
+  publicStore.setSearchPending(trimmedLength > 0 && trimmedLength < 3);
+};
+
 // Search with debouncing
 const onSearchInput = () => {
   if (state.searchTimeout) {
     clearTimeout(state.searchTimeout);
   }
+
+  // Immediately update the pending state so the UI reacts without waiting for debounce
+  updateSearchPendingState();
 
   state.searchTimeout = setTimeout(() => {
     // Only search if query is empty (to clear) or has at least 3 characters
@@ -316,6 +405,7 @@ const clearSearch = () => {
     clearTimeout(state.searchTimeout);
   }
   publicStore.setSearchQuery('');
+  publicStore.setSearchPending(false);
   publicStore.reloadWithFilters();
   updateURL();
 };
@@ -398,11 +488,37 @@ const setCustomMode = () => {
   }
 };
 
-// Handle manual date changes
+// Handle manual date changes — auto-swap if end is before start
 const onDateChange = () => {
+  // Normalize empty strings from date inputs to null
+  if (state.startDate === '') state.startDate = null;
+  if (state.endDate === '') state.endDate = null;
+
+  // Validate date range: auto-correct inverted ranges by swapping start and end
+  if (state.startDate && state.endDate && state.startDate > state.endDate) {
+    [state.startDate, state.endDate] = [state.endDate, state.startDate];
+  }
+
   publicStore.setDateRange(state.startDate, state.endDate);
   publicStore.reloadWithFilters();
   updateURL();
+
+  // Auto-close dropdown if both fields are cleared
+  if (!state.startDate && !state.endDate) {
+    state.dateFilterMode = null;
+    closeDateFilter();
+  }
+};
+
+// Clear date filter
+const clearDateFilter = () => {
+  state.dateFilterMode = null;
+  state.startDate = null;
+  state.endDate = null;
+  publicStore.setDateRange(null, null);
+  publicStore.reloadWithFilters();
+  updateURL();
+  closeDateFilter();
 };
 
 // Clear all filters
@@ -434,11 +550,11 @@ const updateURL = () => {
   }
 
   // Update category parameters
-  if (publicStore.selectedCategoryNames.length > 0) {
-    query.category = publicStore.selectedCategoryNames;
+  if (publicStore.selectedCategoryIds.length > 0) {
+    query.categories = publicStore.selectedCategoryIds;
   }
   else {
-    delete query.category;
+    delete query.categories;
   }
 
   // Update date range parameters
@@ -464,15 +580,24 @@ const updateURL = () => {
 const initializeFromURL = () => {
   const query = route.query;
 
-  // Initialize search
+  // Initialize search - only accept terms with 3+ characters
   if (query.search && typeof query.search === 'string') {
-    state.searchQuery = query.search;
-    publicStore.setSearchQuery(query.search);
+    const searchTerm = query.search;
+    if (searchTerm.trim().length >= 3) {
+      state.searchQuery = searchTerm;
+      publicStore.setSearchQuery(searchTerm);
+    }
+    else {
+      // Invalid search term in URL (too short to execute) - clean it up
+      const cleanQuery = { ...route.query };
+      delete cleanQuery.search;
+      router.replace({ query: cleanQuery });
+    }
   }
 
   // Initialize categories
-  if (query.category) {
-    const categories = Array.isArray(query.category) ? query.category : [query.category];
+  if (query.categories) {
+    const categories = Array.isArray(query.categories) ? query.categories : [query.categories];
     publicStore.setSelectedCategories(categories as string[]);
   }
 
@@ -487,12 +612,23 @@ const initializeFromURL = () => {
     publicStore.endDate = query.endDate;
   }
 
-  // Only set date filter mode to custom if:
-  // 1. Dates are present in URL AND
-  // 2. No mode is currently set (e.g., not just set by a preset button click)
-  // This prevents the mode from being overridden when preset buttons update the URL
-  if ((query.startDate || query.endDate) && !state.dateFilterMode) {
-    state.dateFilterMode = 'custom';
+  // Determine date filter mode: detect if stored dates match a preset before
+  // falling back to 'custom'. This ensures bookmarked preset URLs highlight the
+  // correct pill instead of always showing the custom date inputs.
+  if (query.startDate || query.endDate) {
+    const thisWeek = getThisWeek();
+    const nextWeek = getNextWeek();
+
+    if (query.startDate === thisWeek.startDate && query.endDate === thisWeek.endDate) {
+      state.dateFilterMode = 'thisWeek';
+    }
+    else if (query.startDate === nextWeek.startDate && query.endDate === nextWeek.endDate) {
+      state.dateFilterMode = 'nextWeek';
+    }
+    else if (!state.dateFilterMode) {
+      // Only set to custom if no mode is currently set (e.g., not just set by a preset button click)
+      state.dateFilterMode = 'custom';
+    }
   }
   else if (!query.startDate && !query.endDate) {
     state.dateFilterMode = null;
@@ -505,16 +641,37 @@ watch(() => route.query, () => {
   publicStore.reloadWithFilters();
 }, { deep: true });
 
-// Watch for store date range changes to sync local state
+// Watch for store date range changes to sync local state and URL
 // This handles external clearAllFilters() calls from calendar.vue
 watch(() => [publicStore.startDate, publicStore.endDate], ([newStart, newEnd]) => {
-  // If store dates are cleared, reset local dateFilterMode
+  // If store dates are cleared, reset local dateFilterMode and remove date params from URL
   if (newStart === null && newEnd === null) {
     state.dateFilterMode = null;
     state.startDate = null;
     state.endDate = null;
+    updateURL();
   }
 });
+
+// Watch for store search query changes to sync local state and URL
+// This handles external clearAllFilters() calls from calendar.vue
+watch(() => publicStore.searchQuery, (newQuery) => {
+  if (newQuery !== state.searchQuery) {
+    state.searchQuery = newQuery;
+    if (state.searchTimeout) {
+      clearTimeout(state.searchTimeout);
+    }
+    // Sync the pending state when store query changes externally
+    updateSearchPendingState();
+    updateURL();
+  }
+});
+
+// Watch for store selectedCategoryIds changes to sync URL
+// This handles external clearAllFilters() calls from calendar.vue
+watch(() => publicStore.selectedCategoryIds, () => {
+  updateURL();
+}, { deep: true });
 
 onMounted(() => {
   initializeFromURL();
@@ -607,6 +764,20 @@ onUnmounted(() => {
   }
 }
 
+// Clear All Filters Section
+.clear-all-section {
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
+
+  .clear-all-filters-btn {
+    @include public-button-ghost;
+
+    padding: $public-space-xs $public-space-md;
+    font-size: $public-font-size-sm;
+  }
+}
+
 // Date Range Section - Collapsible Button
 .date-range-section {
   display: flex;
@@ -617,6 +788,63 @@ onUnmounted(() => {
     position: relative;
     display: inline-flex;
     flex-direction: column;
+  }
+
+  // Button group for date filter button + clear button
+  .date-filter-button-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+  }
+
+  // Clear date filter button
+  .clear-date-filter {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    margin-left: 4px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.08);
+    color: rgba(0, 0, 0, 0.5);
+    cursor: pointer;
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    flex-shrink: 0;
+
+    &:hover {
+      background: rgba(0, 0, 0, 0.15);
+      color: rgba(0, 0, 0, 0.8);
+    }
+
+    &:focus-visible {
+      outline: 2px solid $light-mode-button-background;
+      outline-offset: 1px;
+    }
+
+    &:active {
+      transform: scale(0.92);
+    }
+
+    svg {
+      display: block;
+    }
+
+    @include dark-mode {
+      background: rgba(255, 255, 255, 0.1);
+      color: rgba(255, 255, 255, 0.5);
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.2);
+        color: rgba(255, 255, 255, 0.8);
+      }
+
+      &:focus-visible {
+        outline-color: $dark-mode-button-background;
+      }
+    }
   }
 
   // Date Filter Button (Main Collapsible Button)

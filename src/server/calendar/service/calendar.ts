@@ -6,7 +6,7 @@ import axios from 'axios';
 
 import { Calendar, DefaultDateRange } from '@/common/model/calendar';
 import { Account } from '@/common/model/account';
-import { CalendarEntity } from '@/server/calendar/entity/calendar';
+import { CalendarEntity, CalendarContentEntity } from '@/server/calendar/entity/calendar';
 import { CalendarMemberEntity } from '@/server/calendar/entity/calendar_member';
 import { CalendarEditor } from '@/common/model/calendar_editor';
 import { CalendarMember } from '@/common/model/calendar_member';
@@ -58,7 +58,9 @@ class CalendarService {
     this.subscriptionInterface = subscriptionInterface;
   }
   async getCalendar(id: string): Promise<Calendar|null> {
-    const calendar = await CalendarEntity.findByPk(id);
+    const calendar = await CalendarEntity.findByPk(id, {
+      include: [CalendarContentEntity],
+    });
     return calendar ? calendar.toModel() : null;
   }
 
@@ -115,7 +117,7 @@ class CalendarService {
     // Single query on CalendarMemberEntity for all memberships
     const memberships = await CalendarMemberEntity.findAll({
       where: { account_id: account.id },
-      include: [{ model: CalendarEntity, as: 'calendar' }],
+      include: [{ model: CalendarEntity, as: 'calendar', include: [CalendarContentEntity] }],
     });
 
     return memberships
@@ -138,7 +140,7 @@ class CalendarService {
     // Single query on CalendarMemberEntity for all memberships
     const memberships = await CalendarMemberEntity.findAll({
       where: { account_id: account.id },
-      include: [{ model: CalendarEntity, as: 'calendar' }],
+      include: [{ model: CalendarEntity, as: 'calendar', include: [CalendarContentEntity] }],
     });
 
     return memberships
@@ -203,7 +205,7 @@ class CalendarService {
     if (!name || ! this.isValidUrlName(name)) {
       return null;
     }
-    let calendar = await CalendarEntity.findOne({ where: { url_name: name } });
+    let calendar = await CalendarEntity.findOne({ where: { url_name: name }, include: [CalendarContentEntity] });
     return calendar ? calendar.toModel() : null;
   }
 
@@ -380,7 +382,7 @@ class CalendarService {
       });
 
       await this.sendEditorNotificationEmail(calendar, grantingAccount, editorAccount, message);
-      return new CalendarEditor(editorAccount.id, calendar.id, editorAccount.email);
+      return new CalendarEditor(editorAccount.id, calendar.id, editorAccount.email, editorAccount.displayName ?? null, editorAccount.username ?? null);
     }
     catch (error) {
       if (error instanceof UniqueConstraintError) {
@@ -568,6 +570,8 @@ class CalendarService {
           id: existingAccount.id,
           calendarId: calendarId,
           email: existingAccount.email,
+          displayName: existingAccount.displayName ?? null,
+          username: existingAccount.username ?? null,
         },
       };
     }
@@ -868,7 +872,7 @@ class CalendarService {
         {
           model: AccountEntity,
           as: 'account',
-          attributes: ['id', 'email'],
+          attributes: ['id', 'email', 'username', 'display_name'],
         },
       ],
     });
@@ -879,6 +883,8 @@ class CalendarService {
         m.account.id,
         m.calendar_id,
         m.account.email,
+        m.account.display_name ?? null,
+        m.account.username ?? null,
       ));
   }
 
@@ -911,7 +917,7 @@ class CalendarService {
         {
           model: AccountEntity,
           as: 'account',
-          attributes: ['id', 'email'],
+          attributes: ['id', 'email', 'username', 'display_name'],
         },
         {
           model: UserActorEntity,
@@ -930,6 +936,8 @@ class CalendarService {
           member.account.id,
           member.calendar_id,
           member.account.email,
+          member.account.display_name ?? null,
+          member.account.username ?? null,
         ));
       }
       else if (member.user_actor_id && member.userActor) {
@@ -1041,7 +1049,11 @@ class CalendarService {
     }
     const membership = await CalendarMemberEntity.findOne({
       where: { account_id: account.id, role: 'owner' },
-      include: [{ model: CalendarEntity, as: 'calendar' }],
+      include: [{
+        model: CalendarEntity,
+        as: 'calendar',
+        include: [CalendarContentEntity],
+      }],
     });
     return membership?.calendar ? membership.calendar.toModel() : null;
   }
@@ -1187,7 +1199,10 @@ class CalendarService {
   async updateCalendarSettings(
     account: Account,
     calendarId: string,
-    settings: { defaultDateRange?: DefaultDateRange },
+    settings: {
+      defaultDateRange?: DefaultDateRange;
+      content?: Record<string, { name?: string; description?: string }>;
+    },
   ): Promise<Calendar> {
     // Validate required fields
     if (!calendarId || calendarId.trim().length === 0) {
@@ -1224,7 +1239,26 @@ class CalendarService {
       await calendarEntity.update({ default_date_range: settings.defaultDateRange });
     }
 
-    return calendarEntity.toModel();
+    // Update content translations if provided
+    if (settings.content) {
+      const calendar = calendarEntity.toModel();
+      for (const [language, contentData] of Object.entries(settings.content)) {
+        const content = calendar.content(language);
+        if (contentData.name !== undefined) {
+          content.name = contentData.name;
+        }
+        if (contentData.description !== undefined) {
+          content.description = contentData.description;
+        }
+        await this.createCalendarContent(calendarId, content);
+      }
+    }
+
+    // Re-fetch with content included to return complete data
+    const updatedEntity = await CalendarEntity.findByPk(calendarId, {
+      include: [CalendarContentEntity],
+    });
+    return updatedEntity!.toModel();
   }
 
   /**

@@ -2,12 +2,12 @@
   <div class="editors-tab">
 
     <!-- Error Display -->
-    <div v-if="state.error" class="alert alert--error">
+    <div v-if="state.error" class="alert alert--error" role="alert">
       {{ state.error }}
     </div>
 
     <!-- Success Display -->
-    <div v-if="state.success" class="alert alert--success">
+    <div v-if="state.success" class="alert alert--success" role="alert">
       {{ state.success }}
     </div>
 
@@ -18,8 +18,8 @@
     <div v-else-if="state.editors.length > 0 || state.pendingInvitations.length > 0" class="editors-content">
       <!-- Section Header -->
       <div class="editors-header">
-        <h2 class="editors-title">{{ t('calendar_editors') }}</h2>
-        <PillButton variant="primary" @click="openAddForm">
+        <h2 class="editors-title">{{ t('title') }}</h2>
+        <PillButton v-if="props.isOwner" variant="primary" @click="openAddForm">
           <Plus :size="20" :stroke-width="2" />
           {{ t('add_editor_button') }}
         </PillButton>
@@ -27,7 +27,7 @@
 
       <!-- Active Editors Section -->
       <div v-if="state.editors.length > 0" class="editors-section">
-        <h3 class="section-label">{{ t('editors_label') }}</h3>
+        <h3 class="section-label">{{ t('active_editors_title') }}</h3>
         <div
           v-for="editor in state.editors"
           :key="editor.id"
@@ -37,7 +37,7 @@
           <div class="editor-avatar"/>
           <div class="editor-info">
             <div class="editor-name-row">
-              <span class="editor-name">{{ editor.email }}</span>
+              <span class="editor-name">{{ editor.displayName || editor.username || editor.email }}</span>
             </div>
             <span class="editor-email">{{ editor.email }}</span>
           </div>
@@ -68,7 +68,7 @@
 
       <!-- Pending Invitations Section -->
       <div v-if="state.pendingInvitations.length > 0" class="editors-section">
-        <h3 class="section-label">{{ t('pending_invitations') }}</h3>
+        <h3 class="section-label">{{ t('pending_invitations_title') }}</h3>
         <div
           v-for="invitation in state.pendingInvitations"
           :key="invitation.id"
@@ -104,9 +104,9 @@
       </div>
     </div>
 
-    <!-- Empty State -->
-    <EmptyLayout v-else :title="t('no_editors')" :description="t('no_editors_description')">
-      <PillButton variant="primary" @click="openAddForm">
+    <!-- Empty State — only shown when there is no error -->
+    <EmptyLayout v-else-if="!state.error" :title="t('no_editors')" :description="t('no_editors_description')">
+      <PillButton v-if="props.isOwner" variant="primary" @click="openAddForm">
         <Plus :size="20" :stroke-width="2" />
         {{ t('add_editor_button') }}
       </PillButton>
@@ -235,6 +235,10 @@ const props = defineProps({
     type: String,
     required: true,
   },
+  isOwner: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 // Emit events
@@ -359,7 +363,9 @@ const closeAddForm = () => {
 };
 
 /**
- * Add an editor to the calendar
+ * Add an editor to the calendar.
+ * After success, check whether the address landed as an active editor or a
+ * pending invitation (unregistered email) and show the appropriate message.
  */
 const addEditor = async () => {
   if (!state.newAccountId.trim()) {
@@ -371,11 +377,22 @@ const addEditor = async () => {
     state.isAdding = true;
     state.addError = '';
 
-    await calendarService.grantEditAccess(props.calendarId, state.newAccountId.trim());
+    const submittedEmail = state.newAccountId.trim();
+    await calendarService.grantEditAccess(props.calendarId, submittedEmail);
     await loadEditors();
 
-    // Show success message
-    state.success = t('editor_added_success', { email: state.newAccountId.trim() });
+    // Determine whether the address ended up as an active editor or a pending
+    // invitation (which happens when the email is not yet registered).
+    const isPending = state.pendingInvitations.some(
+      inv => inv.email === submittedEmail,
+    );
+
+    if (isPending) {
+      state.success = t('editor_invited_pending');
+    }
+    else {
+      state.success = t('editor_added_success', { email: submittedEmail });
+    }
     clearMessages();
 
     // Reset isAdding before closing form on success
@@ -494,7 +511,7 @@ const leaveCalendar = async () => {
     // Find the current user's editor record to get their account ID
     const currentEditor = state.editors.find(editor => editor.email === currentUserEmail);
     if (!currentEditor) {
-      state.error = t('editor_not_found');
+      state.error = t('error_editor_not_found');
       return;
     }
 

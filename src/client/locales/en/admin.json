@@ -7,11 +7,11 @@
     "invite_button": "Send Invitation",
     "close_button": "Cancel"
   },
-  "navigation": {
-    "skip_to_content": "Skip to main content"
-  },
   "menu": {
-    "back": "< back",
+    "navigation": {
+      "skip_to_content": "Skip to main content"
+    },
+    "back": "Back",
     "general_settings": "General",
     "instance_name_title": "Instance Name/Title",
     "registration_mode": "Registration Mode",
@@ -33,6 +33,7 @@
     "view_details": "View Details",
     "deadline": "Deadline",
     "create_report": "Create Report",
+    "settings_button_label": "Moderation Settings",
     "settings": {
       "title": "Moderation Settings",
       "subtitle": "Configure instance-wide moderation policies",

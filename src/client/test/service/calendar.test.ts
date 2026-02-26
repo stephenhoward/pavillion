@@ -6,7 +6,7 @@ import CalendarService from '@/client/service/calendar';
 import ModelService from '@/client/service/models';
 import ListResult from '@/client/service/list-result';
 import { Calendar } from '@/common/model/calendar';
-import { EmptyValueError, UnknownError } from '@/common/exceptions';
+import { EmptyValueError, UnknownError, AccountInviteAlreadyExistsError } from '@/common/exceptions';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/common/exceptions/editor';
 import { useCalendarStore } from '@/client/stores/calendarStore';
@@ -107,7 +107,7 @@ describe('createCalendar', () => {
   const sandbox = sinon.createSandbox();
   let mockStore: ReturnType<typeof useCalendarStore>;
   let service: CalendarService;
-  let mockCreate: sinon.SinonStub;
+  let mockCreateModel: sinon.SinonStub;
 
   beforeEach(() => {
     // Create a mock store before each test
@@ -116,7 +116,7 @@ describe('createCalendar', () => {
     };
     // Stub the useCalendarStore function to always return our mock
     service = new CalendarService(mockStore);
-    mockCreate = sandbox.stub(ModelService,'createModel');
+    mockCreateModel = sandbox.stub(ModelService, 'createModel');
   });
 
   afterEach(() => {
@@ -126,69 +126,79 @@ describe('createCalendar', () => {
   it('should create a calendar with valid url name', async () => {
     // Arrange
     const urlName = 'test-calendar';
-    const mockCreatedCalendar = { id: 'cal1', urlName };
-    mockCreate.resolves(mockCreatedCalendar);
+    mockCreateModel.resolves({ id: 'cal1', urlName });
 
     // Act
     const result = await service.createCalendar(urlName);
 
     // Assert
-    expect(mockCreate.called).toBe(true);
+    expect(mockCreateModel.calledOnce).toBe(true);
+    const calendarArg = mockCreateModel.firstCall.args[0];
+    expect(calendarArg.urlName).toBe(urlName);
+    expect(mockCreateModel.firstCall.args[1]).toBe('/api/v1/calendars');
     expect(result.urlName).toBe(urlName);
     expect(mockStore.addCalendar.called).toBe(true);
+  });
+
+  it('should send title as content when provided', async () => {
+    // Arrange
+    const urlName = 'test-calendar';
+    const title = 'My Test Calendar';
+    mockCreateModel.resolves({ id: 'cal1', urlName });
+
+    // Act
+    await service.createCalendar(urlName, title);
+
+    // Assert
+    expect(mockCreateModel.calledOnce).toBe(true);
+    const calendarArg = mockCreateModel.firstCall.args[0];
+    expect(calendarArg.urlName).toBe(urlName);
+    // Verify that content was set on the Calendar model
+    expect(calendarArg.content('en').name).toBe(title);
   });
 
   it('should throw EmptyValueError when url name is empty', async () => {
     // Act & Assert
     await expect(service.createCalendar('')).rejects.toThrow(EmptyValueError);
-    expect(mockCreate.called).toBe(false);
+    expect(mockCreateModel.called).toBe(false);
   });
 
   it('should throw EmptyValueError when url name is only whitespace', async () => {
     // Act & Assert
     await expect(service.createCalendar('   ')).rejects.toThrow(EmptyValueError);
-    expect(mockCreate.called).toBe(false);
+    expect(mockCreateModel.called).toBe(false);
   });
 
   it('should handle UrlNameAlreadyExistsError from API', async () => {
     // Arrange
     const urlName = 'existing-calendar';
-    const mockError = {
-      response: {
-        data: {
-          errorName: 'UrlNameAlreadyExistsError',
-        },
-      },
-    };
-    mockCreate.rejects(mockError);
+    mockCreateModel.rejects({
+      response: { data: { errorName: 'UrlNameAlreadyExistsError' } },
+    });
 
     // Act & Assert
     await expect(service.createCalendar(urlName)).rejects.toThrow(UrlNameAlreadyExistsError);
-    expect(mockCreate.called).toBe(true);
+    expect(mockCreateModel.called).toBe(true);
   });
 
   it('should handle InvalidUrlNameError from API', async () => {
     // Arrange
-    mockCreate.rejects({
-      response: {
-        data: {
-          errorName: 'InvalidUrlNameError',
-        },
-      },
+    mockCreateModel.rejects({
+      response: { data: { errorName: 'InvalidUrlNameError' } },
     });
 
     // Act & Assert
     await expect(service.createCalendar('invalid-name')).rejects.toThrow(InvalidUrlNameError);
-    expect(mockCreate.called).toBe(true);
+    expect(mockCreateModel.called).toBe(true);
   });
 
   it('should throw UnknownError for unexpected errors', async () => {
     // Arrange
-    (ModelService.createModel as sinon.SinonStub).rejects(new Error('Unexpected error'));
+    mockCreateModel.rejects(new Error('Unexpected error'));
 
     // Act & Assert
     await expect(service.createCalendar('test-calendar')).rejects.toThrow(UnknownError);
-    expect(mockCreate.called).toBe(true);
+    expect(mockCreateModel.called).toBe(true);
   });
 });
 
@@ -505,6 +515,25 @@ describe('grantEditAccess', () => {
     // Act & Assert
     await expect(service.grantEditAccess(calendarId, accountId))
       .rejects.toThrow(EditorAlreadyExistsError);
+  });
+
+  it('should handle duplicate invitation error', async () => {
+    // Arrange: backend now returns errorName: 'AccountInviteAlreadyExistsError'
+    const calendarId = 'cal1';
+    const email = 'pending@example.com';
+    const axiosPost = vi.mocked(axios.post);
+    axiosPost.mockRejectedValue({
+      response: {
+        data: {
+          error: 'An invitation has already been sent to this email address',
+          errorName: 'AccountInviteAlreadyExistsError',
+        },
+      },
+    });
+
+    // Act & Assert
+    await expect(service.grantEditAccess(calendarId, email))
+      .rejects.toThrow(AccountInviteAlreadyExistsError);
   });
 
   it('should handle permission error when granting access', async () => {

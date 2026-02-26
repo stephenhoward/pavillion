@@ -1,21 +1,25 @@
 <script setup>
 import { reactive, onBeforeMount, ref } from 'vue';
 import { useTranslation } from 'i18next-vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 import { DateTime } from 'luxon';
+import i18next from 'i18next';
 
 import CalendarService from '../service/calendar';
+import { useLocalizedContent } from '../composables/useLocalizedContent';
 import NotFound from './notFound.vue';
 import EventImage from './EventImage.vue';
 import ReportEvent from './report-event.vue';
+import { useLocale } from '@/site/composables/useLocale';
 
 const { t } = useTranslation('system');
 const route = useRoute();
-const router = useRouter();
+const { localizedPath } = useLocale();
 const calendarId = route.params.calendar;
 const eventId = route.params.event;
 const instanceId = route.params.instance;
 const showReportModal = ref(false);
+const { localizedContent } = useLocalizedContent();
 const state = reactive({
   err: '',
   notFound: false,
@@ -24,6 +28,17 @@ const state = reactive({
   isLoading: false,
 });
 const calendarService = new CalendarService();
+
+/**
+ * Returns true when start and end fall on the same calendar day.
+ *
+ * @param start - The event start DateTime
+ * @param end - The event end DateTime
+ * @returns true if both DateTimes share the same local day
+ */
+function isSameDay(start, end) {
+  return start.hasSame(end, 'day');
+}
 
 /**
  * Opens the report event modal dialog.
@@ -56,6 +71,10 @@ onBeforeMount(async () => {
       return;
     }
 
+    // Set page title to event name
+    const eventName = localizedContent(state.instance.event).name;
+    document.title = `${eventName} | Pavillion`;
+
   }
   catch (error) {
     console.error('Error loading event data:', error);
@@ -74,31 +93,48 @@ onBeforeMount(async () => {
   </div>
   <div v-else-if="state.instance">
     <header v-if="state.calendar" class="instance-header">
-      <!-- TODO: respect the user's language prefernces instead of using 'en' -->
       <p class="breadcrumb">
-        <router-link :to="{ name: 'calendar', params: { calendar: state.calendar.urlName } }">
-          {{ state.calendar.content("en").name || state.calendar.urlName }}
-        </router-link>
+        <a :href="localizedPath('/view/' + state.calendar.urlName)"
+           class="back-link"
+        >
+          <span class="back-arrow" aria-hidden="true">&#8592;</span>
+          {{ t('back_to_calendar', { name: localizedContent(state.calendar).name || state.calendar.urlName }) }}
+        </a>
       </p>
       <EventImage :media="state.instance.event.media" context="hero" />
       <div class="instance-meta">
-        <h1>{{ state.instance.event.content("en").name }}</h1>
+        <h1>{{ localizedContent(state.instance.event).name }}</h1>
         <time :datetime="state.instance.start.toISO()" class="event-datetime">
-          {{ state.instance.start.toLocaleString(DateTime.DATETIME_MED) }}
+          {{ state.instance.start.toLocal().setLocale(i18next.language).toLocaleString(DateTime.DATETIME_MED) }}<template v-if="state.instance.end">
+            – {{ state.instance.end.toLocal().setLocale(i18next.language).toLocaleString(
+              isSameDay(state.instance.start, state.instance.end) ? DateTime.TIME_SIMPLE : DateTime.DATETIME_MED
+            ) }}</template>
         </time>
       </div>
     </header>
     <main>
       <div v-if="state.err" class="error">{{ state.err }}</div>
-      <p>{{ state.instance.event.content("en").description }}</p>
+      <p>{{ localizedContent(state.instance.event).description }}</p>
+      <section v-if="state.instance.event.location" class="event-location">
+        <h2>{{ t('event_location') }}</h2>
+        <p class="location-name">{{ state.instance.event.location.name }}</p>
+        <p v-if="state.instance.event.location.address" class="location-address">
+          {{ state.instance.event.location.address }}
+          <template v-if="state.instance.event.location.city">
+            <br />{{ state.instance.event.location.city }}<template v-if="state.instance.event.location.state">, {{ state.instance.event.location.state }}</template>
+            <template v-if="state.instance.event.location.postalCode"> {{ state.instance.event.location.postalCode }}</template>
+          </template>
+        </p>
+      </section>
     </main>
     <footer>
       <div class="category-badges">
         <a v-for="category in state.instance.event.categories"
+           :key="category.id"
            class="event-category-badge"
-           :href="router.resolve({ name: 'calendar', params: { calendar: state.calendar.urlName }, query: { category: category.content('en').name } }).href"
+           :href="localizedPath('/view/' + state.calendar.urlName) + '?category=' + category.id"
         >
-          {{ category.content("en").name }}
+          {{ localizedContent(category).name }}
         </a>
       </div>
       <button
@@ -134,15 +170,27 @@ onBeforeMount(async () => {
 
   .breadcrumb {
     margin: 0;
-    font-size: $public-font-size-sm;
+    font-size: $public-font-size-base;
 
-    a {
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: $public-space-sm;
       color: $public-text-secondary-light;
       text-decoration: none;
+      font-weight: $public-font-weight-medium;
       transition: $public-transition-fast;
 
       &:hover {
         color: $public-accent-light;
+
+        .back-arrow {
+          transform: translateX(-3px);
+        }
+      }
+
+      &:focus-visible {
+        @include public-focus-visible;
       }
 
       @include public-dark-mode {
@@ -152,6 +200,13 @@ onBeforeMount(async () => {
           color: $public-accent-dark;
         }
       }
+    }
+
+    .back-arrow {
+      font-size: $public-font-size-md;
+      line-height: 1;
+      display: inline-block;
+      transition: $public-transition-fast;
     }
   }
 
@@ -246,6 +301,41 @@ main {
 
     @include public-dark-mode {
       color: $public-text-primary-dark;
+    }
+  }
+
+  .event-location {
+    margin-top: $public-space-lg;
+    padding-top: $public-space-lg;
+    border-top: 1px solid $public-border-subtle-light;
+
+    @include public-dark-mode {
+      border-top-color: $public-border-subtle-dark;
+    }
+
+    h2 {
+      font-size: $public-font-size-md;
+      font-weight: $public-font-weight-semibold;
+      color: $public-text-secondary-light;
+      margin: 0 0 $public-space-sm 0;
+
+      @include public-dark-mode {
+        color: $public-text-secondary-dark;
+      }
+    }
+
+    .location-name {
+      font-weight: $public-font-weight-medium;
+      margin-bottom: $public-space-xs;
+    }
+
+    .location-address {
+      color: $public-text-secondary-light;
+      font-size: $public-font-size-sm;
+
+      @include public-dark-mode {
+        color: $public-text-secondary-dark;
+      }
     }
   }
 }

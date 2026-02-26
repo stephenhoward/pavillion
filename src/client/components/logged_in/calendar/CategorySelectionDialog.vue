@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { X } from 'lucide-vue-next';
 import CalendarService from '@/client/service/calendar';
@@ -21,6 +21,10 @@ const props = defineProps({
     type: Array,
     required: true,
   },
+  calendarId: {
+    type: String,
+    required: true,
+  },
 });
 
 const emit = defineEmits(['close', 'assign-complete']);
@@ -33,27 +37,11 @@ const isLoading = ref(false);
 const errorMessage = ref('');
 const dialogTitleId = 'category-dialog-title';
 
-// Get available categories from the current calendar
-// Note: Since selectedEventIds contains events, we need to extract their calendarId
-// All selected events should be from the same calendar (validated by the API)
+// Get available categories using the calendarId prop, which matches the key
+// used by CategoryService.loadCategories to store categories in the store
 const availableCategories = computed(() => {
-  // Get the first event's calendarId to find categories for that calendar
-  if (!props.selectedEventIds || props.selectedEventIds.length === 0) return [];
-
-  // Get a sample event from the store to determine calendar
-  let calendarId = null;
-  for (const [calId, events] of Object.entries(eventStore.events)) {
-    for (const event of events) {
-      if (props.selectedEventIds.includes(event.id)) {
-        calendarId = calId;
-        break;
-      }
-    }
-    if (calendarId) break;
-  }
-
-  if (!calendarId) return [];
-  return categoryStore.categories[calendarId] || [];
+  if (!props.calendarId) return [];
+  return categoryStore.categories[props.calendarId] || [];
 });
 
 const isFormValid = computed(() => {
@@ -169,6 +157,7 @@ const toggleCategory = (categoryId) => {
             :key="category.id"
             :model-value="selectedCategoryIds.includes(category.id)"
             :label="category.content('en').name"
+            variant="orange"
             @update:model-value="() => toggleCategory(category.id)"
           />
         </div>

@@ -1,0 +1,46 @@
+{
+  "register": {
+    "title": "Créer un compte",
+    "create_button": "Créer un compte",
+    "email": "adresse e-mail",
+    "go_login": "retour à la connexion",
+    "400": "erreur lors de l'inscription",
+    "unknown_error": "Une erreur inconnue s'est produite",
+    "registration_submitted": "Si cette adresse e-mail n'est pas encore enregistrée, vous recevrez un e-mail sous peu.",
+    "registration_closed": "L'inscription est actuellement fermée.",
+    "error_creating_account": "Une erreur s'est produite lors de la création de votre compte. Veuillez réessayer plus tard."
+  },
+  "apply": {
+    "title": "Demander un compte",
+    "create_button": "Soumettre la demande",
+    "email": "adresse e-mail",
+    "message_label": "Message",
+    "go_login": "retour à la connexion",
+    "400": "erreur lors de l'inscription",
+    "unknown_error": "Une erreur inconnue s'est produite",
+    "application_submitted": "Si cette adresse e-mail n'est pas encore enregistrée, votre demande sera examinée.",
+    "account_applications_closed": "Les demandes de compte sont actuellement fermées.",
+    "application_processing_error": "Une erreur s'est produite lors du traitement de votre demande. Veuillez réessayer plus tard.",
+    "invalid_request": "Demande invalide. Veuillez vérifier vos informations et réessayer."
+  },
+  "accept_invite": {
+    "bad_invite_title": "Invitation expirée",
+    "bad_invite_explanation": "Votre invitation a expiré ou est invalide. Veuillez contacter l'administrateur pour une nouvelle invitation.",
+    "go_login": "retour à la connexion",
+    "new_account_password_title": "Accepter l'invitation",
+    "registration_new_password": "Créez un mot de passe pour terminer la configuration de votre compte.",
+    "password_placeholder": "Mot de passe",
+    "password2_placeholder": "Confirmer le mot de passe",
+    "set_password_button": "Créer le compte",
+    "missing_password": "Un mot de passe est requis",
+    "missing_password2": "La confirmation du mot de passe est requise",
+    "bad_password_match": "Les mots de passe ne correspondent pas",
+    "invitation_accepted_title": "Compte créé avec succès !",
+    "invitation_accepted_description": "Votre compte a été créé et vous êtes prêt à commencer.",
+    "calendar_access_granted_title": "Accès au calendrier accordé :",
+    "invited_by": "Invité par {{email}}",
+    "continue_to_login": "Continuer vers la connexion",
+    "password_too_short": "Le mot de passe doit contenir au moins 8 caractères",
+    "password_needs_variety": "Le mot de passe doit inclure au moins deux types parmi : lettres, chiffres, caractères spéciaux"
+  }
+}

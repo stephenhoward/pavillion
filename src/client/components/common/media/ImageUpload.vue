@@ -54,6 +54,28 @@ const isFailed = computed(() => currentFile.value?.status === 'failed');
 const isUploading = computed(() => currentFile.value?.status === 'uploading');
 
 /**
+ * Decodes HTML entities (e.g. &quot; -> ", &#x2F; -> /) in a string.
+ * Used to sanitize server error messages before display.
+ */
+const decodeHtmlEntities = (str: string): string => {
+  const textarea = document.createElement('textarea');
+  textarea.innerHTML = str;
+  return textarea.value;
+};
+
+/**
+ * Returns error parameters with any string values decoded for HTML entities.
+ */
+const decodeErrorParameters = (parameters?: Record<string, any>): Record<string, any> => {
+  if (!parameters) return {};
+  const decoded: Record<string, any> = {};
+  for (const [key, value] of Object.entries(parameters)) {
+    decoded[key] = typeof value === 'string' ? decodeHtmlEntities(value) : value;
+  }
+  return decoded;
+};
+
+/**
  * Formats file size for display
  */
 const formatFileSize = (bytes: number): string => {
@@ -404,7 +426,7 @@ const handleKeyDown = (event: KeyboardEvent) => {
 
         <!-- Error message -->
         <div v-if="currentFile.error" class="error-banner" role="alert">
-          {{ t(`errors.${currentFile.error.code}`, currentFile.error.parameters || {}) }}
+          {{ t(`errors.${currentFile.error.code}`, decodeErrorParameters(currentFile.error.parameters)) }}
         </div>
       </div>
 
@@ -469,7 +491,7 @@ const handleKeyDown = (event: KeyboardEvent) => {
               x2="12.01"
               y2="16"/>
       </svg>
-      <span>{{ t(`errors.${state.uploadError.code}`, state.uploadError.parameters || {}) }}</span>
+      <span>{{ t(`errors.${state.uploadError.code}`, decodeErrorParameters(state.uploadError.parameters)) }}</span>
       <button type="button" class="dismiss" @click="state.uploadError = null">
         <svg width="14"
              height="14"
@@ -690,7 +712,8 @@ $transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
 .preview-image {
   width: 100%;
-  height: 100%;
+  max-width: 100%;
+  height: auto;
   max-height: 300px;
   object-fit: contain;
 }

@@ -254,7 +254,7 @@ describe('Widget Integration Tests', () => {
       publicStore.allEvents = [
         {
           id: '1',
-          start: { toISODate: () => '2026-01-06', toLocaleString: () => '10:00 AM' },
+          start: { toLocal: () => ({ toISODate: () => '2026-01-06' }), toLocaleString: () => '10:00 AM' },
           event: { id: 'e1', content: () => ({ name: 'Test Event' }), media: null, categories: [] },
         },
       ] as any;

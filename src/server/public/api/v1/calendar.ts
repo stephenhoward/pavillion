@@ -98,18 +98,18 @@ export default class CalendarRoutes {
         }
       }
 
-      // Handle category parameter (can be array or single value)
-      // Note: Store sends 'category' (singular) via params.append('category', name)
-      if (req.query.category) {
-        if (Array.isArray(req.query.category)) {
-          options.categories = req.query.category
+      // Handle categories parameter (can be array or single value)
+      // Note: Store sends 'categories' (plural) via params.append('categories', id)
+      if (req.query.categories) {
+        if (Array.isArray(req.query.categories)) {
+          options.categories = req.query.categories
             .filter(c => typeof c === 'string' && c.trim().length > 0)
             .map(c => (c as string).trim());
         }
-        else if (typeof req.query.category === 'string') {
-          const categoryName = req.query.category.trim();
-          if (categoryName.length > 0) {
-            options.categories = [categoryName];
+        else if (typeof req.query.categories === 'string') {
+          const categoryId = req.query.categories.trim();
+          if (categoryId.length > 0) {
+            options.categories = [categoryId];
           }
         }
       }

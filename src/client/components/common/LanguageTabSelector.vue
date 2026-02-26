@@ -6,7 +6,7 @@
  * Replaces the dropdown language selector with horizontal tab chips.
  */
 
-import { Plus, X } from 'lucide-vue-next';
+import { Plus } from 'lucide-vue-next';
 import iso6391 from 'iso-639-1-dir';
 import { useTranslation } from 'i18next-vue';
 
@@ -17,8 +17,10 @@ const { t } = useTranslation('system', {
 const props = withDefaults(defineProps<{
   modelValue: string;        // Currently selected language code
   languages: string[];       // Array of language codes
+  erroredTabs?: string[];    // Language codes that have validation errors
   maxVisibleTabs?: number;   // Maximum tabs to show before "..."
 }>(), {
+  erroredTabs: () => [],
   maxVisibleTabs: 5,
 });
 
@@ -30,11 +32,6 @@ const emit = defineEmits<{
 
 const selectLanguage = (lang: string) => {
   emit('update:modelValue', lang);
-};
-
-const removeLanguage = (lang: string, event: Event) => {
-  event.stopPropagation();
-  emit('remove-language', lang);
 };
 
 const addLanguage = () => {
@@ -57,10 +54,18 @@ const addLanguage = () => {
         :aria-selected="lang === modelValue ? 'true' : 'false'"
         :aria-controls="`content-${lang}`"
         class="language-tab"
+        :class="{ 'has-error': erroredTabs.includes(lang) }"
         @click="selectLanguage(lang)"
-        :aria-label="t('edit_content', { language: iso6391.getName(lang) })"
+        :aria-label="erroredTabs.includes(lang)
+          ? t('edit_content_error', { language: iso6391.getName(lang) })
+          : t('edit_content', { language: iso6391.getName(lang) })"
       >
         {{ iso6391.getName(lang) }}
+        <span
+          v-if="erroredTabs.includes(lang)"
+          class="error-dot"
+          aria-hidden="true"
+        />
       </button>
 
       <button
@@ -101,6 +106,9 @@ const addLanguage = () => {
 .language-tab {
   @include tab-button;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
 
   // Override default inactive color for consistency with the unique design
   &:not([aria-selected="true"]) {
@@ -109,6 +117,44 @@ const addLanguage = () => {
     @media (prefers-color-scheme: dark) {
       color: var(--pav-color-stone-400);
     }
+  }
+
+  // Error state: tint tab label red
+  &.has-error {
+    color: var(--pav-color-red-600);
+
+    &[aria-selected="true"] {
+      color: var(--pav-color-red-600);
+
+      &::after {
+        background: var(--pav-color-red-500);
+      }
+    }
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-red-400);
+
+      &[aria-selected="true"] {
+        color: var(--pav-color-red-400);
+
+        &::after {
+          background: var(--pav-color-red-400);
+        }
+      }
+    }
+  }
+}
+
+.error-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--pav-color-red-500);
+  flex-shrink: 0;
+
+  @media (prefers-color-scheme: dark) {
+    background-color: var(--pav-color-red-400);
   }
 }
 

@@ -172,7 +172,7 @@ describe('Widget View Components', () => {
 
       // FIXED: Component uses publicStore.allEvents and getFilteredEventsByDay getter
       publicStore.allEvents = [
-        { id: '1', start: { toISODate: () => '2026-01-06', toLocaleString: () => '10:00 AM' }, event: { id: 'e1', content: () => ({ name: 'Event 1' }), media: null, categories: [] } },
+        { id: '1', start: { toLocal: () => ({ toISODate: () => '2026-01-06' }), toLocaleString: () => '10:00 AM' }, event: { id: 'e1', content: () => ({ name: 'Event 1' }), media: null, categories: [] } },
       ] as any;
 
       const wrapper = mount(ListView, {
@@ -191,7 +191,7 @@ describe('Widget View Components', () => {
 
       // FIXED: Set allEvents so getFilteredEventsByDay has data
       publicStore.allEvents = [
-        { id: '1', start: { toISODate: () => '2026-01-06', toLocaleString: () => '10:00 AM' }, event: { id: 'e1', content: () => ({ name: 'Event 1' }), media: null, categories: [] } },
+        { id: '1', start: { toLocal: () => ({ toISODate: () => '2026-01-06' }), toLocaleString: () => '10:00 AM' }, event: { id: 'e1', content: () => ({ name: 'Event 1' }), media: null, categories: [] } },
       ] as any;
 
       const wrapper = mount(ListView, {

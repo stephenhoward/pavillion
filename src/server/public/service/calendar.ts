@@ -162,36 +162,9 @@ export default class PublicCalendarService {
       eventInclude.include.push(EventContentEntity);
     }
 
-    // Handle category filter - map category names to IDs
+    // Handle category filter — categories are UUIDs per DEC-005
     if (options.categories && options.categories.length > 0) {
-      // Map category names to IDs (similar to listEventInstancesWithCategoryFilter)
-      const categories = await this.calendarInterface.getCategories(calendar.id);
-      const categoryMap = new Map<string, string>();
-
-      // Default to English language for category name matching
-      const language = 'en';
-
-      for (const category of categories) {
-        try {
-          const content = category.content(language) || category.content(category.getLanguages()[0]);
-          if (content?.name) {
-            categoryMap.set(content.name, category.id);
-          }
-        }
-        catch (error) {
-          console.error(`Error getting category content for category ${category.id}:`, error);
-        }
-      }
-
-      // Map provided category names to IDs
-      const categoryIds = options.categories
-        .map(name => categoryMap.get(name))
-        .filter(id => id !== undefined) as string[];
-
-      // If none of the provided category names matched, throw an error
-      if (categoryIds.length === 0) {
-        throw new Error('Invalid category IDs provided');
-      }
+      const categoryIds = options.categories;
 
       // Find the category assignment include in the event include
       const eventInclude = queryOptions.include[0];
@@ -200,13 +173,12 @@ export default class PublicCalendarService {
       );
 
       if (categoryAssignmentInclude && typeof categoryAssignmentInclude === 'object') {
-        // Add the filter to the existing category assignment include
         categoryAssignmentInclude.where = {
           category_id: {
             [Op.in]: categoryIds,
           },
         };
-        categoryAssignmentInclude.required = true; // INNER JOIN to only include events with matching categories
+        categoryAssignmentInclude.required = true;
       }
     }
 

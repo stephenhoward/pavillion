@@ -3,6 +3,7 @@ import { reactive, onBeforeMount, ref } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useRoute } from 'vue-router';
 import CalendarService from '../service/calendar';
+import { useLocalizedContent } from '../composables/useLocalizedContent';
 import { useEventStore } from '../../client/stores/eventStore';
 import NotFound from './notFound.vue';
 import EventImage from './EventImage.vue';
@@ -13,6 +14,7 @@ const route = useRoute();
 const calendarId = route.params.calendar;
 const eventId = route.params.event;
 const showReportModal = ref(false);
+const { localizedContent } = useLocalizedContent();
 const state = reactive({
   err: '',
   notFound: false,
@@ -73,19 +75,22 @@ function closeReportModal() {
   </div>
   <div v-else-if="state.event" class="event-detail">
     <header v-if="state.calendar" class="event-header">
-      <!-- TODO: respect the user's language prefernces instead of using 'en' -->
       <p class="breadcrumb">
-        <router-link :to="{ name: 'calendar', params: { calendar: state.calendar.urlName } }">
-          {{ state.calendar.content("en").name || state.calendar.urlName }}
+        <router-link
+          :to="{ name: 'calendar', params: { calendar: state.calendar.urlName } }"
+          class="back-link"
+        >
+          <span class="back-arrow" aria-hidden="true">&#8592;</span>
+          {{ t('back_to_calendar', { name: localizedContent(state.calendar).name || state.calendar.urlName }) }}
         </router-link>
       </p>
       <EventImage :media="state.event.media" context="feature" />
-      <h1>{{ state.event.content("en").name }}</h1>
+      <h1>{{ localizedContent(state.event).name }}</h1>
     </header>
     <main class="event-content">
       <div v-if="state.err" class="error">{{ state.err }}</div>
-      <div class="description">
-        <p>{{ state.event.content("en").description }}</p>
+      <div v-if="localizedContent(state.event).description" class="description">
+        <p>{{ localizedContent(state.event).description }}</p>
       </div>
     </main>
     <footer class="event-footer">
@@ -123,19 +128,31 @@ function closeReportModal() {
   display: flex;
   flex-direction: column;
   gap: $public-space-lg;
-  margin-bottom: $public-space-2xl;
+  margin-bottom: $public-space-lg;
 
   .breadcrumb {
     margin: 0;
-    font-size: $public-font-size-sm;
+    font-size: $public-font-size-base;
 
-    a {
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: $public-space-sm;
       color: $public-text-secondary-light;
       text-decoration: none;
+      font-weight: $public-font-weight-medium;
       transition: $public-transition-fast;
 
       &:hover {
         color: $public-accent-light;
+
+        .back-arrow {
+          transform: translateX(-3px);
+        }
+      }
+
+      &:focus-visible {
+        @include public-focus-visible;
       }
 
       @include public-dark-mode {
@@ -145,6 +162,13 @@ function closeReportModal() {
           color: $public-accent-dark;
         }
       }
+    }
+
+    .back-arrow {
+      font-size: $public-font-size-md;
+      line-height: 1;
+      display: inline-block;
+      transition: $public-transition-fast;
     }
   }
 
@@ -223,7 +247,7 @@ function closeReportModal() {
 }
 
 .event-footer {
-  margin-top: $public-space-2xl;
+  margin-top: $public-space-lg;
   padding-top: $public-space-lg;
   border-top: 1px solid $public-border-subtle-light;
 

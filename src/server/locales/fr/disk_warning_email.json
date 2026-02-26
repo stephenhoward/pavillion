@@ -1,0 +1,17 @@
+{
+  "subject": "Avertissement espace disque : {{usagePercent}}% utilisé",
+  "title": "Avertissement d'espace disque",
+  "greeting": "Bonjour Administrateur,",
+  "alert_message": "Votre instance Pavillion a atteint le seuil d'avertissement d'espace disque.",
+  "current_usage": "Utilisation actuelle du disque : {{usagePercent}}% ({{usedSpace}} sur {{totalSpace}})",
+  "threshold": "Seuil d'avertissement : {{threshold}}%",
+  "path": "Chemin surveillé : {{path}}",
+  "recommendations": "Actions recommandées :",
+  "action_1": "Examinez et supprimez les anciens fichiers de sauvegarde s'ils ne sont plus nécessaires",
+  "action_2": "Vérifiez les paramètres de rétention des sauvegardes",
+  "action_3": "Envisagez d'augmenter la capacité de stockage",
+  "action_4": "Surveillez l'utilisation de l'espace disque de près",
+  "footer_note": "Cette alerte a été déclenchée car l'utilisation du disque a dépassé {{threshold}}%. Vous recevrez une alerte critique à 90% d'utilisation.",
+  "signature": "Système de maintenance Pavillion",
+  "footer_text": "Ceci est une alerte automatique. L'espace disque est surveillé toutes les heures."
+}

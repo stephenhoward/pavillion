@@ -1,0 +1,50 @@
+{
+  "login": {
+    "title": "Connectez-vous à votre compte",
+    "login_button": "Se connecter",
+    "email": "adresse e-mail",
+    "password": "mot de passe",
+    "forgot_password": "Mot de passe oublié ?",
+    "register_button": "Créer un compte",
+    "apply_button": "Demander un compte",
+    "UnknownLogin": "adresse e-mail ou mot de passe inconnu",
+    "MissingLogin": "adresse e-mail ou mot de passe manquant",
+    "400": "erreur de connexion",
+    "unknown_error": "Une erreur inconnue s'est produite"
+  },
+  "forgot_password": {
+    "title": "Mot de passe oublié ?",
+    "instructions": "Pas de problème. Entrez votre adresse e-mail et nous vous enverrons un lien pour réinitialiser votre mot de passe.",
+    "email": "votre adresse e-mail",
+    "go_button": "Envoyer la réinitialisation",
+    "login_link": "retour à la connexion",
+    "error_400": "Il y a un problème avec l'adresse e-mail que vous avez saisie",
+    "error_404": "Nous n'avons pas trouvé de compte avec cette adresse e-mail",
+    "error_500": "Oups. Le serveur a rencontré une erreur. Veuillez contacter le support",
+    "no_email_provided": "Veuillez entrer votre adresse e-mail"
+  },
+  "reset_password": {
+    "check_email_title": "Réinitialisation envoyée",
+    "new_account_password_title": "Bienvenue sur votre nouveau compte",
+    "check_email": "Nous avons envoyé un code de réinitialisation à",
+    "code_validated_title": "Code valide",
+    "set_password_prompt": "Veuillez définir un nouveau mot de passe",
+    "registration_new_password": "Veuillez définir un mot de passe",
+    "login_link": "retour à la connexion",
+    "reset_code": "code de réinitialisation",
+    "reset_button": "envoyer le code",
+    "password_placeholder": "mot de passe",
+    "password2_placeholder": "confirmer le mot de passe",
+    "next": "Suivant",
+
+    "bad_token": "jeton invalide ou expiré",
+    "missing_password": "veuillez entrer un mot de passe",
+    "missing_password2": "veuillez retaper votre mot de passe pour confirmer",
+    "bad_password_match": "Les mots de passe ne correspondent pas",
+    "no_token_provided": "Vous devez fournir un jeton de réinitialisation",
+    "no_password_provided": "Vous devez fournir un mot de passe",
+    "unknown_error": "Une erreur inconnue s'est produite",
+    "password_too_short": "Le mot de passe doit contenir au moins 8 caractères",
+    "password_needs_variety": "Le mot de passe doit inclure au moins deux types parmi : lettres, chiffres, caractères spéciaux"
+  }
+}

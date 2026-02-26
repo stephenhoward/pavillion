@@ -1,19 +1,24 @@
 <script setup lang="ts">
 import { reactive, onBeforeMount, computed, inject } from 'vue';
 import { useTranslation } from 'i18next-vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import CalendarService from '../service/calendar';
 import { usePublicCalendarStore } from '../stores/publicCalendarStore';
+import { useLocalizedContent } from '../composables/useLocalizedContent';
 import NotFound from './notFound.vue';
 import SearchFilterPublic from './SearchFilterPublic.vue';
 import { DateTime } from 'luxon';
 import EventImage from './EventImage.vue';
 import type Config from '@/client/service/config';
+import { useLocale } from '@/site/composables/useLocale';
 
 const { t } = useTranslation('system');
 const route = useRoute();
+const router = useRouter();
 const calendarUrlName = route.params.calendar as string;
 const siteConfig = inject<Config>('site_config');
+const { currentLocale, localizedPath } = useLocale();
+const { localizedContent } = useLocalizedContent();
 
 const state = reactive({
   err: '',
@@ -26,11 +31,34 @@ const calendarService = new CalendarService();
 const publicCalendarStore = usePublicCalendarStore();
 
 // Computed properties for store data
-const availableCategories = computed(() => publicCalendarStore.availableCategories);
 const filteredEventsByDay = computed(() => publicCalendarStore.getFilteredEventsByDay);
 const hasActiveFilters = computed(() => publicCalendarStore.hasActiveFilters);
+const hasNonDateFilters = computed(() => publicCalendarStore.hasNonDateFilters);
+const hasOnlyDateFilters = computed(() => publicCalendarStore.hasOnlyDateFilters);
+
+/**
+ * Clears all active filters and resets the URL query params.
+ */
+function clearAllFilters() {
+  publicCalendarStore.clearAllFilters();
+  publicCalendarStore.reloadWithFilters();
+  router.replace({ query: {} });
+}
 
 onBeforeMount(async () => {
+  // Skip full reload if the store already has data for this calendar (e.g. back-navigation).
+  // Only fetch the calendar metadata needed to render the header, then return early.
+  if (publicCalendarStore.currentCalendarUrlName === calendarUrlName
+      && publicCalendarStore.allEvents.length > 0) {
+    try {
+      state.calendar = await calendarService.getCalendarByUrlName(calendarUrlName);
+    }
+    catch (error) {
+      console.error('Error loading calendar metadata:', error);
+    }
+    return;
+  }
+
   try {
     state.isLoading = true;
 
@@ -41,6 +69,10 @@ onBeforeMount(async () => {
       state.notFound = true;
       return;
     }
+
+    // Set page title to calendar name
+    const calendarName = localizedContent(state.calendar).name || state.calendar.urlName;
+    document.title = `${calendarName} | Pavillion`;
 
     // Set server-level default date range from site config before loading calendar
     if (siteConfig) {
@@ -76,10 +108,9 @@ onBeforeMount(async () => {
   </div>
   <div v-else>
     <header v-if="state.calendar">
-      <!-- TODO: respect the user's language preferences instead of using 'en' -->
-      <h1>{{ state.calendar.content("en").name || state.calendar.urlName }}</h1>
+      <h1>{{ localizedContent(state.calendar).name || state.calendar.urlName }}</h1>
 
-      <!-- Search and Filter Component -->
+      <!-- Search and Filter Component (includes persistent Clear All Filters button) -->
       <SearchFilterPublic />
     </header>
 
@@ -91,41 +122,44 @@ onBeforeMount(async () => {
       <!-- Events Display -->
       <div v-if="Object.keys(filteredEventsByDay).length > 0">
         <section class="day" v-for="day in Object.keys(filteredEventsByDay).sort()" :key="day">
-          <h2>{{ DateTime.fromISO(day).toLocaleString({weekday: 'long', month: 'long', day: 'numeric'}) }}</h2>
+          <h2>{{ DateTime.fromISO(day).setLocale(currentLocale).toLocaleString({weekday: 'long', month: 'long', day: 'numeric'}) }}</h2>
           <ul class="events">
             <li class="event" v-for="instance in filteredEventsByDay[day]" :key="instance.id">
               <EventImage :media="instance.event.media" context="card" :lazy="true" />
               <h3>
-                <router-link :to="{ name: 'instance', params: { event: instance.event.id, instance: instance.id } }">
-                  {{ instance.event.content("en").name }}
+                <router-link :to="localizedPath(`/view/${calendarUrlName}/events/${instance.event.id}/${instance.id}`)">
+                  {{ localizedContent(instance.event).name }}
                 </router-link>
               </h3>
-              <div class="event-time">{{ instance.start.toLocaleString(DateTime.TIME_SIMPLE) }}</div>
+              <div class="event-time">{{ instance.start.toLocal().toLocaleString(DateTime.TIME_SIMPLE) }}</div>
             </li>
           </ul>
         </section>
       </div>
 
-      <!-- Empty State -->
-      <div v-else-if="!state.isLoading && !publicCalendarStore.isLoadingEvents" class="empty-state">
-        <p v-if="hasActiveFilters">
-          {{ t('no_events_with_filters') }}
-        </p>
-        <p v-else>
-          {{ t('no_events_available') }}
-        </p>
+      <!-- Empty State: suppress when search is pending (1-2 chars typed) to avoid conflicting messages -->
+      <div v-else-if="!state.isLoading && !publicCalendarStore.isLoadingEvents && publicCalendarStore.hasLoadedEvents && !publicCalendarStore.isSearchPending" class="empty-state">
+        <div role="status">
+          <p>{{ t('no_events_available') }}</p>
+          <p v-if="publicCalendarStore.searchQuery" class="empty-state-hint">
+            {{ t('no_events_for_search', { term: publicCalendarStore.searchQuery }) }}
+          </p>
+          <p v-else-if="hasNonDateFilters" class="empty-state-hint">{{ t('no_events_with_filters_hint') }}</p>
+          <p v-else-if="hasOnlyDateFilters" class="empty-state-hint">{{ t('no_events_in_date_range_hint') }}</p>
+          <p v-else class="empty-state-hint">{{ t('no_events_available_hint') }}</p>
+        </div>
         <button
           v-if="hasActiveFilters"
           type="button"
           class="clear-filters-btn"
-          @click="publicCalendarStore.clearAllFilters(); publicCalendarStore.reloadWithFilters();"
+          @click="clearAllFilters"
         >
-          {{ t('public_search_filter.clear_all_filters') }}
+          {{ t('clear_all_filters') }}
         </button>
       </div>
 
       <!-- Loading State -->
-      <div v-if="state.isLoading || publicCalendarStore.isLoadingEvents" class="loading">
+      <div v-if="state.isLoading || publicCalendarStore.isLoadingEvents" role="status" class="loading">
         {{ t('loading_events') }}
       </div>
     </main>
@@ -305,11 +339,48 @@ section.day {
 .empty-state {
   @include public-empty-state;
 
-  .clear-filters-btn {
-    @include public-button-ghost;
+  .empty-state-hint {
+    font-size: $public-font-size-sm;
+    color: $public-text-secondary-light;
+    margin-top: $public-space-xs;
 
-    padding: $public-space-sm $public-space-lg;
-    font-size: $public-font-size-base;
+    @media (prefers-color-scheme: dark) {
+      color: $public-text-secondary-dark;
+    }
+  }
+
+  .clear-filters-btn {
+    display: inline-block;
+    margin-top: $public-space-md;
+    padding: $public-space-xs $public-space-md;
+    background: none;
+    border: 1px solid $public-accent-light;
+    border-radius: 9999px;
+    color: $public-accent-light;
+    font-size: $public-font-size-sm;
+    font-weight: $public-font-weight-medium;
+    cursor: pointer;
+    transition: $public-transition-fast;
+
+    &:hover {
+      background: $public-accent-light;
+      color: white;
+    }
+
+    &:focus-visible {
+      outline: 2px solid $public-accent-light;
+      outline-offset: 2px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      border-color: $public-accent-dark;
+      color: $public-accent-dark;
+
+      &:hover {
+        background: $public-accent-dark;
+        color: white;
+      }
+    }
   }
 }
 

@@ -8,6 +8,17 @@ import CategoryService from '@/client/service/category';
 import { EventCategory } from '@/common/model/event_category';
 import { EventCategoryContent } from '@/common/model/event_category_content';
 
+const mockToast = {
+  success: vi.fn(),
+  error: vi.fn(),
+  warning: vi.fn(),
+  info: vi.fn(),
+};
+
+vi.mock('@/client/composables/useToast', () => ({
+  useToast: () => mockToast,
+}));
+
 const routes: RouteRecordRaw[] = [
   { path: '/calendar/:calendar/categories', component: {}, name: 'categories' },
 ];
@@ -46,6 +57,11 @@ describe('Category Management Enhancements - Frontend UI', () => {
     vi.spyOn(CategoryService.prototype, 'loadCategories').mockImplementation(mockCategoryService.loadCategories);
     vi.spyOn(CategoryService.prototype, 'deleteCategory').mockImplementation(mockCategoryService.deleteCategory);
     vi.spyOn(CategoryService.prototype, 'mergeCategories').mockImplementation(mockCategoryService.mergeCategories);
+
+    mockToast.success.mockClear();
+    mockToast.error.mockClear();
+    mockToast.warning.mockClear();
+    mockToast.info.mockClear();
   });
 
   afterEach(() => {
@@ -313,6 +329,80 @@ describe('Category Management Enhancements - Frontend UI', () => {
         'cat-2',
       );
     });
+
+    it('should show a success toast after deleting a category', async () => {
+      const mockCategories = [
+        createTestCategory('cat-1', 'Music', 15),
+        createTestCategory('cat-2', 'Sports', 3),
+      ];
+
+      mockCategoryService.loadCategories.mockResolvedValue(mockCategories);
+      mockCategoryService.deleteCategory.mockResolvedValue(15);
+
+      wrapper = createWrapper();
+
+      await nextTick();
+      await vi.waitFor(() => {
+        return wrapper.vm.state.categories.length > 0;
+      }, { timeout: 1000 });
+
+      // Click delete button
+      const deleteButtons = wrapper.findAll('.icon-button--danger');
+      await deleteButtons[0].trigger('click');
+      await nextTick();
+
+      // Select remove option
+      const removeRadio = wrapper.find('input[value="remove"]');
+      await removeRadio.setValue(true);
+      await nextTick();
+
+      // Confirm deletion
+      const confirmButton = wrapper.find('.delete-actions .pill-button--danger');
+      await confirmButton.trigger('click');
+
+      await vi.waitFor(() => {
+        return mockToast.success.mock.calls.length > 0;
+      }, { timeout: 1000 });
+
+      expect(mockToast.success).toHaveBeenCalledOnce();
+    });
+
+    it('should show an error toast when deleteCategory API fails', async () => {
+      const mockCategories = [
+        createTestCategory('cat-1', 'Music', 15),
+        createTestCategory('cat-2', 'Sports', 3),
+      ];
+
+      mockCategoryService.loadCategories.mockResolvedValue(mockCategories);
+      mockCategoryService.deleteCategory.mockRejectedValue(new Error('Network error'));
+
+      wrapper = createWrapper();
+
+      await nextTick();
+      await vi.waitFor(() => {
+        return wrapper.vm.state.categories.length > 0;
+      }, { timeout: 1000 });
+
+      // Click delete button
+      const deleteButtons = wrapper.findAll('.icon-button--danger');
+      await deleteButtons[0].trigger('click');
+      await nextTick();
+
+      // Select remove option
+      const removeRadio = wrapper.find('input[value="remove"]');
+      await removeRadio.setValue(true);
+      await nextTick();
+
+      // Confirm deletion
+      const confirmButton = wrapper.find('.delete-actions .pill-button--danger');
+      await confirmButton.trigger('click');
+
+      await vi.waitFor(() => {
+        return mockToast.error.mock.calls.length > 0;
+      }, { timeout: 1000 });
+
+      expect(mockToast.error).toHaveBeenCalledOnce();
+    });
   });
 
   describe('Merge dialog', () => {
@@ -427,6 +517,128 @@ describe('Category Management Enhancements - Frontend UI', () => {
         'cat-1',
         ['cat-2'],
       );
+    });
+
+    it('should show a success toast after merging categories', async () => {
+      const mockCategories = [
+        createTestCategory('cat-1', 'Music', 15),
+        createTestCategory('cat-2', 'Sports', 8),
+      ];
+
+      mockCategoryService.loadCategories.mockResolvedValue(mockCategories);
+      mockCategoryService.mergeCategories.mockResolvedValue({ totalAffectedEvents: 23 });
+
+      wrapper = createWrapper();
+
+      await nextTick();
+      await vi.waitFor(() => {
+        return wrapper.vm.state.categories.length > 0;
+      }, { timeout: 1000 });
+
+      // Select categories
+      const checkboxes = wrapper.findAll('input[type="checkbox"]');
+      await checkboxes[0].setValue(true);
+      await checkboxes[1].setValue(true);
+      await nextTick();
+
+      // Click merge button using data-testid
+      const mergeButton = wrapper.find('[data-testid="merge-categories-btn"]');
+      await mergeButton.trigger('click');
+      await nextTick();
+
+      // Select target
+      const targetRadio = wrapper.find('input[value="cat-1"]');
+      await targetRadio.setValue(true);
+      await nextTick();
+
+      // Confirm merge
+      const confirmButton = wrapper.find('.merge-actions .pill-button--primary');
+      await confirmButton.trigger('click');
+
+      await vi.waitFor(() => {
+        return mockToast.success.mock.calls.length > 0;
+      }, { timeout: 1000 });
+
+      expect(mockToast.success).toHaveBeenCalledOnce();
+    });
+
+    it('should show an error toast when mergeCategories API fails', async () => {
+      const mockCategories = [
+        createTestCategory('cat-1', 'Music', 15),
+        createTestCategory('cat-2', 'Sports', 8),
+      ];
+
+      mockCategoryService.loadCategories.mockResolvedValue(mockCategories);
+      mockCategoryService.mergeCategories.mockRejectedValue(new Error('Network error'));
+
+      wrapper = createWrapper();
+
+      await nextTick();
+      await vi.waitFor(() => {
+        return wrapper.vm.state.categories.length > 0;
+      }, { timeout: 1000 });
+
+      // Select categories
+      const checkboxes = wrapper.findAll('input[type="checkbox"]');
+      await checkboxes[0].setValue(true);
+      await checkboxes[1].setValue(true);
+      await nextTick();
+
+      // Click merge button using data-testid
+      const mergeButton = wrapper.find('[data-testid="merge-categories-btn"]');
+      await mergeButton.trigger('click');
+      await nextTick();
+
+      // Select target
+      const targetRadio = wrapper.find('input[value="cat-1"]');
+      await targetRadio.setValue(true);
+      await nextTick();
+
+      // Confirm merge
+      const confirmButton = wrapper.find('.merge-actions .pill-button--primary');
+      await confirmButton.trigger('click');
+
+      await vi.waitFor(() => {
+        return mockToast.error.mock.calls.length > 0;
+      }, { timeout: 1000 });
+
+      expect(mockToast.error).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('Toast notifications for category save', () => {
+    it('should show a success toast after creating a category', async () => {
+      mockCategoryService.loadCategories.mockResolvedValue([]);
+
+      wrapper = createWrapper();
+
+      await nextTick();
+      await vi.waitFor(() => {
+        return !wrapper.vm.state.isLoading;
+      }, { timeout: 1000 });
+
+      // Simulate onCategorySaved with a new category (no ID = create)
+      wrapper.vm.state.categoryToEdit = new EventCategory(null, 'calendar-123');
+      await wrapper.vm.onCategorySaved();
+
+      expect(mockToast.success).toHaveBeenCalledOnce();
+    });
+
+    it('should show a success toast after editing a category', async () => {
+      mockCategoryService.loadCategories.mockResolvedValue([]);
+
+      wrapper = createWrapper();
+
+      await nextTick();
+      await vi.waitFor(() => {
+        return !wrapper.vm.state.isLoading;
+      }, { timeout: 1000 });
+
+      // Simulate onCategorySaved with an existing category (has ID = edit)
+      wrapper.vm.state.categoryToEdit = new EventCategory('existing-id', 'calendar-123');
+      await wrapper.vm.onCategorySaved();
+
+      expect(mockToast.success).toHaveBeenCalledOnce();
     });
   });
 });

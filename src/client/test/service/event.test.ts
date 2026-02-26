@@ -84,6 +84,50 @@ describe('loadCalendarEvents', () => {
     expect((mockStore.setEventsForCalendar as sinon.SinonStub).calledWith('c1')).toBe(true);
   });
 
+  it('should clear the store when API returns empty results and calendarId is provided', async () => {
+    // Arrange: API returns zero events (e.g. all filtered out by category)
+    mockListModels.resolves(ListResult.fromArray([]));
+
+    // Act
+    const result = await service.loadCalendarEvents('test-calendar', undefined, 'cal-uuid-123');
+
+    // Assert
+    expect(result.length).toBe(0);
+    // Verify setEventsForCalendar was called with the explicit calendarId and an empty array
+    const stub = mockStore.setEventsForCalendar as sinon.SinonStub;
+    expect(stub.calledOnce).toBe(true);
+    expect(stub.calledWith('cal-uuid-123', sinon.match((arr: unknown[]) => arr.length === 0))).toBe(true);
+  });
+
+  it('should not update the store when API returns empty results and no calendarId is provided', async () => {
+    // Arrange: API returns zero events without an explicit calendarId
+    mockListModels.resolves(ListResult.fromArray([]));
+
+    // Act
+    const result = await service.loadCalendarEvents('test-calendar');
+
+    // Assert
+    expect(result.length).toBe(0);
+    // Verify setEventsForCalendar was NOT called (no way to know which calendar to clear)
+    expect((mockStore.setEventsForCalendar as sinon.SinonStub).called).toBe(false);
+  });
+
+  it('should prefer calendarId from results over explicit parameter', async () => {
+    // Arrange: API returns events with calendarId, and an explicit calendarId is also passed
+    const mockEvents = [
+      { calendarId: 'from-result', id: 'evt1', date: '2023-01-01' },
+    ];
+    mockListModels.resolves(ListResult.fromArray(mockEvents));
+
+    // Act
+    await service.loadCalendarEvents('test-calendar', undefined, 'explicit-param');
+
+    // Assert: the calendarId from the result should take precedence
+    const stub = mockStore.setEventsForCalendar as sinon.SinonStub;
+    expect(stub.calledOnce).toBe(true);
+    expect(stub.firstCall.args[0]).toBe('from-result');
+  });
+
   it('should throw an error when loading events fails', async () => {
     // Arrange
     mockListModels.rejects(new Error('API Error'));

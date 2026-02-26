@@ -16,6 +16,7 @@ import {
   CategoryAssignmentNotFoundError,
   CategoryAlreadyAssignedError,
   CategoryEventCalendarMismatchError,
+  DuplicateCategoryNameError,
 } from '@/common/exceptions/category';
 import db from '@/server/common/entity/db';
 
@@ -52,6 +53,9 @@ describe('CategoryService', () => {
       const categorySaveStub = sandbox.stub(EventCategoryEntity.prototype, 'save');
       const contentSaveStub = sandbox.stub(EventCategoryContentEntity.prototype, 'save');
 
+      // No existing categories with that name
+      sandbox.stub(EventCategoryContentEntity, 'findOne').resolves(null);
+
       const categoryData = {
         content: {
           en: {
@@ -72,6 +76,55 @@ describe('CategoryService', () => {
       // Verify permission checking was called
       expect(mockCalendarService.getCalendar.called).toBeTruthy();
       expect(mockCalendarService.userCanModifyCalendar.called).toBeTruthy();
+    });
+
+    it('should throw DuplicateCategoryNameError when a category with the same name exists for the same language', async () => {
+      mockCalendarService.getCalendar.resolves(testCalendar);
+      mockCalendarService.userCanModifyCalendar.resolves(true);
+
+      // Simulate an existing category content entity with the same name in the same language
+      const existingContent = EventCategoryContentEntity.build({
+        category_id: 'existing-cat-id',
+        language: 'en',
+        name: 'Technology',
+      });
+
+      // findOne will find the duplicate when querying for same calendar+language+name
+      sandbox.stub(EventCategoryContentEntity, 'findOne').resolves(existingContent);
+
+      const categoryData = {
+        content: {
+          en: {
+            name: 'Technology',
+          },
+        },
+      };
+
+      await expect(
+        categoryService.createCategory(testAccount, 'calendar-123', categoryData),
+      ).rejects.toThrow(DuplicateCategoryNameError);
+    });
+
+    it('should not throw DuplicateCategoryNameError when the same name exists in a different language', async () => {
+      mockCalendarService.getCalendar.resolves(testCalendar);
+      mockCalendarService.userCanModifyCalendar.resolves(true);
+
+      // No duplicate for the English name
+      sandbox.stub(EventCategoryContentEntity, 'findOne').resolves(null);
+      sandbox.stub(EventCategoryEntity.prototype, 'save');
+      sandbox.stub(EventCategoryContentEntity.prototype, 'save');
+
+      const categoryData = {
+        content: {
+          en: {
+            name: 'Technology',
+          },
+        },
+      };
+
+      // Should succeed — no duplicate for the queried language
+      const category = await categoryService.createCategory(testAccount, 'calendar-123', categoryData);
+      expect(category).toBeInstanceOf(EventCategory);
     });
 
     it('should throw error for non-existent calendar', async () => {
