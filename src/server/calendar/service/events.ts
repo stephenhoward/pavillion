@@ -19,6 +19,7 @@ import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFo
 import { ValidationError } from '@/common/exceptions/base';
 import CategoryService from './categories';
 import { EventCategoryEntity } from '@/server/calendar/entity/event_category';
+import { EventSeriesEntity, EventSeriesContentEntity } from '@/server/calendar/entity/event_series';
 import { EventCategoryContentEntity } from '@/server/calendar/entity/event_category_content';
 import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_category_assignment';
 import { EventInstanceEntity } from '@/server/calendar/entity/event_instance';
@@ -1098,7 +1099,13 @@ class EventService {
 
     const event = await EventEntity.findOne({
       where: { id: eventId },
-      include: [EventContentEntity, LocationEntity, EventScheduleEntity, MediaEntity],
+      include: [
+        EventContentEntity,
+        LocationEntity,
+        EventScheduleEntity,
+        MediaEntity,
+        { model: EventSeriesEntity, include: [EventSeriesContentEntity] },
+      ],
     });
 
     if ( ! event ) {
