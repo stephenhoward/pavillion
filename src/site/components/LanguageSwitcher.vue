@@ -66,8 +66,11 @@ function selectLanguage(code: string) {
 
 /**
  * Close when a click is detected outside the component.
+ * Guard against the dropdown being already closed to avoid stealing focus
+ * from whatever the user actually clicked.
  */
 function handleClickOutside(event: MouseEvent) {
+  if (!state.isOpen) return;
   if (containerRef.value && !containerRef.value.contains(event.target as Node)) {
     closeDropdown();
   }
