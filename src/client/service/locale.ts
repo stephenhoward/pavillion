@@ -32,6 +32,7 @@ import frSystem from '@/client/locales/fr/system.json';
 import frAuthentication from '@/client/locales/fr/authentication.json';
 import frSetup from '@/client/locales/fr/setup.json';
 import frFeed from '@/client/locales/fr/feed.json';
+import frInbox from '@/client/locales/fr/inbox.json';
 
 /**
  * Detects the best language for the client from available signals.
@@ -116,6 +117,7 @@ export const initI18Next = (serverLanguage?: string) => {
         authentication: frAuthentication,
         setup: frSetup,
         feed: frFeed,
+        inbox: frInbox,
       },
     },
   });
