@@ -26,6 +26,7 @@ import esSystem from '@/client/locales/es/system.json';
 import esAuthentication from '@/client/locales/es/authentication.json';
 import esSetup from '@/client/locales/es/setup.json';
 import esFeed from '@/client/locales/es/feed.json';
+import esInbox from '@/client/locales/es/inbox.json';
 
 // Import French translation resources
 import frSystem from '@/client/locales/fr/system.json';
@@ -111,6 +112,7 @@ export const initI18Next = (serverLanguage?: string) => {
         authentication: esAuthentication,
         setup: esSetup,
         feed: esFeed,
+        inbox: esInbox,
       },
       fr: {
         system: frSystem,
