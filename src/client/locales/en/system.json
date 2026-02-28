@@ -49,7 +49,8 @@
     "error_validation": "Please fill in all required fields.",
     "error_description_too_long": "Description exceeds maximum length.",
     "report_button": "Report",
-    "report_event_label": "Report this event"
+    "report_event_label": "Report this event",
+    "event_subtitle": "Reporting: {{title}}"
   },
   "moderation": {
     "dashboard": {

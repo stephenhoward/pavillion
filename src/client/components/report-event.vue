@@ -12,6 +12,7 @@ const { t } = useTranslation('system', {
 
 const props = defineProps<{
   eventId: string;
+  eventTitle?: string;
 }>();
 
 const emit = defineEmits<{
@@ -197,7 +198,13 @@ defineExpose({ open, close, state });
   >
     <div class="report-dialog__content">
       <header class="report-dialog__header">
-        <h2 :id="titleId">{{ t('form_title') }}</h2>
+        <div class="report-dialog__title-block">
+          <h2 :id="titleId">{{ t('form_title') }}</h2>
+          <p
+            v-if="props.eventTitle"
+            class="report-dialog__event-subtitle"
+          >{{ t('event_subtitle', { title: props.eventTitle }) }}</p>
+        </div>
         <button
           type="button"
           class="btn btn--ghost report-dialog__close"
@@ -369,7 +376,7 @@ defineExpose({ open, close, state });
 .report-dialog__header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   margin-block-end: var(--pav-space-xl);
   padding-block-end: var(--pav-space-md);
   border-block-end: var(--pav-border-width-1) solid var(--pav-border-subtle);
@@ -382,11 +389,29 @@ defineExpose({ open, close, state });
   }
 }
 
+.report-dialog__title-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pav-space-xs);
+}
+
+.report-dialog__event-subtitle {
+  margin: 0;
+  font-size: var(--pav-font-size-sm);
+  color: var(--pav-text-muted);
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 320px;
+}
+
 .report-dialog__close {
   font-size: var(--pav-font-size-xl);
   line-height: 1;
   min-width: 44px;
   min-height: 44px;
+  flex-shrink: 0;
 }
 
 .report-dialog__success {

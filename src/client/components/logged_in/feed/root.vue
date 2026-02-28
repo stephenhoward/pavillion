@@ -9,6 +9,7 @@ import CalendarSelector from './calendar_selector.vue';
 import FollowsView from './follows.vue';
 import FollowersView from './followers.vue';
 import FollowedEventsView from './events.vue';
+import AddCalendarModal from './add_calendar_modal.vue';
 
 const { t } = useTranslation('feed');
 const feedStore = useFeedStore();
@@ -21,7 +22,8 @@ const state = reactive({
   isInitialized: false,
 });
 
-const openAddCalendarModal = ref(false);
+const showAddCalendarModal = ref(false);
+const addCalendarTriggerRef = ref(null);
 
 const hasMultipleCalendars = computed(() => calendarStore.hasMultipleCalendars);
 const selectedCalendarId = computed(() => calendarStore.selectedCalendarId);
@@ -65,18 +67,33 @@ const loadFeedData = async () => {
 
 /**
  * Handle request to follow a calendar from the Events tab.
- * Switches to the Following tab and signals follows.vue to open its modal.
+ * Opens the follow dialog without switching tabs.
  */
-const handleFollowCalendarRequest = () => {
-  openAddCalendarModal.value = true;
-  activateTab('follows');
+const handleFollowCalendarRequest = (triggerEl) => {
+  addCalendarTriggerRef.value = triggerEl ?? null;
+  showAddCalendarModal.value = true;
 };
 
 /**
- * Reset the modal trigger flag after follows.vue has acknowledged it.
+ * Handle successful follow from root-level modal.
+ * Refreshes both the follows list and the feed events so that the Events tab
+ * immediately shows events from the newly followed calendar.
  */
-const handleAddCalendarModalOpened = () => {
-  openAddCalendarModal.value = false;
+const handleFollowSuccess = async () => {
+  try {
+    await Promise.all([feedStore.loadFollows(), feedStore.loadFeed()]);
+  }
+  catch (error) {
+    console.error('Error refreshing feed after follow:', error);
+  }
+};
+
+/**
+ * Close the root-level add calendar modal and restore focus to the trigger element.
+ */
+const handleCloseAddCalendarModal = () => {
+  showAddCalendarModal.value = false;
+  nextTick(() => { addCalendarTriggerRef.value?.focus(); });
 };
 
 onMounted(async () => {
@@ -136,6 +153,7 @@ onMounted(async () => {
         aria-label="Feed sections"
       >
         <button
+          id="events-tab"
           type="button"
           role="tab"
           :aria-selected="state.activeTab === 'events' ? 'true' : 'false'"
@@ -146,6 +164,7 @@ onMounted(async () => {
           {{ t('events_tab') }}
         </button>
         <button
+          id="follows-tab"
           type="button"
           role="tab"
           :aria-selected="state.activeTab === 'follows' ? 'true' : 'false'"
@@ -156,6 +175,7 @@ onMounted(async () => {
           {{ t('follows_tab') }}
         </button>
         <button
+          id="followers-tab"
           type="button"
           role="tab"
           :aria-selected="state.activeTab === 'followers' ? 'true' : 'false'"
@@ -170,6 +190,8 @@ onMounted(async () => {
       <div
         v-if="isLoadingAny && !state.isInitialized"
         class="loading-state"
+        aria-live="polite"
+        aria-atomic="true"
       >
         <p>{{ t('loading') }}</p>
       </div>
@@ -194,10 +216,7 @@ onMounted(async () => {
         class="tab-panel"
         tabindex="0"
       >
-        <FollowsView
-          :open-add-calendar-modal="openAddCalendarModal"
-          @add-calendar-modal-opened="handleAddCalendarModalOpened"
-        />
+        <FollowsView />
       </div>
       <div
         id="followers-panel"
@@ -211,6 +230,13 @@ onMounted(async () => {
         <FollowersView />
       </div>
     </template>
+
+    <!-- Root-level modal: opened from Events tab empty state "Follow a Calendar" button -->
+    <AddCalendarModal
+      v-if="showAddCalendarModal"
+      @close="handleCloseAddCalendarModal"
+      @follow-success="handleFollowSuccess"
+    />
   </div>
 </template>
 

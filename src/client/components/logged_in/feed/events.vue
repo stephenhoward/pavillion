@@ -7,7 +7,8 @@ import { useToast } from '@/client/composables/useToast';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
 import RepostCategoriesModal from '@/client/components/logged_in/repost-categories-modal.vue';
 import ReportEventModal from '@/client/components/report-event.vue';
-import { type FeedEvent } from '@/client/service/feed';
+import FeedEventDetailModal from '@/client/components/logged_in/feed/FeedEventDetailModal.vue';
+import { type FeedEvent, type CategoryEntry } from '@/client/service/feed';
 
 const { t } = useTranslation('feed', { keyPrefix: 'events' });
 const feedStore = useFeedStore();
@@ -17,10 +18,14 @@ const events = computed(() => feedStore.events);
 const hasMore = computed(() => feedStore.eventsHasMore);
 const isLoading = computed(() => feedStore.isLoadingEvents);
 const pendingRepost = computed(() => feedStore.pendingRepost);
+const hasFollows = computed(() => feedStore.follows.length > 0);
 const sentinelRef = ref(null);
 const repostTriggerElement = ref(null);
 const reportingEventId = ref<string | null>(null);
+const reportingEventTitle = ref<string | null>(null);
 const reportTriggerElement = ref<HTMLElement | null>(null);
+const detailEvent = ref<FeedEvent | null>(null);
+const detailTriggerElement = ref<HTMLElement | null>(null);
 let observer = null;
 
 /**
@@ -87,6 +92,14 @@ const getCalendarIdentifier = (event: FeedEvent) => {
 };
 
 /**
+ * Get the event location name when available.
+ * Returns the venue name for events that have location data, empty string otherwise.
+ */
+const getEventLocation = (event: FeedEvent) => {
+  return event.location?.name || '';
+};
+
+/**
  * Derive the pre-selected category objects for the modal from pendingRepost state.
  * Matches preSelectedIds against allLocalCategories to get proper { id, name } pairs.
  */
@@ -137,11 +150,13 @@ const handleUnrepost = async (eventId: string) => {
 };
 
 /**
- * Handle modal confirm: repost with the selected category IDs
+ * Handle modal confirm: repost with the selected category IDs.
+ * When sourceCategoriesToAdopt is provided (no-local-categories mode), the store
+ * will create those categories, save mappings, and repost with the new IDs.
  */
-const handleRepostConfirm = async (categoryIds) => {
+const handleRepostConfirm = async (categoryIds: string[], sourceCategoriesToAdopt?: CategoryEntry[]) => {
   try {
-    await feedStore.confirmPendingRepost(categoryIds);
+    await feedStore.confirmPendingRepost(categoryIds, sourceCategoriesToAdopt);
     nextTick(() => { repostTriggerElement.value?.focus(); });
   }
   catch (error) {
@@ -159,27 +174,62 @@ const handleRepostCancel = () => {
 };
 
 /**
- * Handle report button click — captures the trigger element for focus restoration
+ * Handle report button click — captures the trigger element and event title for focus restoration
  */
-const handleReport = (eventId: string, event: MouseEvent) => {
-  reportTriggerElement.value = (event?.currentTarget as HTMLElement) ?? null;
-  reportingEventId.value = eventId;
+const handleReport = (event: FeedEvent, domEvent: MouseEvent) => {
+  reportTriggerElement.value = (domEvent?.currentTarget as HTMLElement) ?? null;
+  reportingEventId.value = event.id;
+  reportingEventTitle.value = getEventTitle(event);
 };
 
 /**
- * Handle report modal close — clears event ID and restores focus to the trigger button
+ * Handle report modal close — clears event ID and title, restores focus to the trigger button
  */
 const handleReportClose = () => {
   reportingEventId.value = null;
+  reportingEventTitle.value = null;
   nextTick(() => { reportTriggerElement.value?.focus(); });
+};
+
+/**
+ * Handle "Details" button click — opens the detail modal for the event
+ */
+const handleOpenDetail = (event: FeedEvent, domEvent: MouseEvent) => {
+  detailTriggerElement.value = domEvent.currentTarget as HTMLElement;
+  detailEvent.value = event;
+};
+
+/**
+ * Handle detail modal close — clears the detail event and restores focus to the trigger button
+ */
+const handleCloseDetail = () => {
+  detailEvent.value = null;
+  nextTick(() => { detailTriggerElement.value?.focus(); });
+};
+
+/**
+ * Handle report action emitted from the detail modal.
+ * Closes the detail modal first, then opens the report modal.
+ */
+const handleReportFromModal = (domEvent: MouseEvent) => {
+  if (detailEvent.value) {
+    const eventToReport = detailEvent.value;
+    // Set up report trigger as the detail modal's report button so focus
+    // returns sensibly after the report modal closes
+    reportTriggerElement.value = domEvent?.currentTarget as HTMLElement ?? null;
+    reportingEventId.value = eventToReport.id;
+    reportingEventTitle.value = getEventTitle(eventToReport);
+    // Close the detail modal
+    detailEvent.value = null;
+  }
 };
 
 /**
  * Handle "Follow a Calendar" button click
  */
 const emit = defineEmits(['followCalendar']);
-const handleFollowCalendar = () => {
-  emit('followCalendar');
+const handleFollowCalendar = (event: MouseEvent) => {
+  emit('followCalendar', event.currentTarget);
 };
 
 /**
@@ -245,6 +295,9 @@ onUnmounted(() => {
           <p class="event-source">
             {{ getCalendarIdentifier(event) }}
           </p>
+          <p v-if="getEventLocation(event)" class="event-location">
+            {{ getEventLocation(event) }}
+          </p>
         </div>
 
         <div class="event-actions">
@@ -254,6 +307,7 @@ onUnmounted(() => {
             type="button"
             class="repost-button"
             data-testid="repost-button"
+            :aria-label="t('repost_aria_label', { eventTitle: getEventTitle(event) })"
             @click="handleRepost(event.id, $event)"
           >
             {{ t('repost_button') }}
@@ -265,7 +319,7 @@ onUnmounted(() => {
             type="button"
             class="reposted-label"
             data-testid="reposted-label"
-            :aria-label="t('unrepost_aria_label')"
+            :aria-label="t('unrepost_aria_label', { eventTitle: getEventTitle(event) })"
             @click="handleUnrepost(event.id)"
           >
             {{ t('reposted_button') }}
@@ -285,9 +339,19 @@ onUnmounted(() => {
             class="report-button"
             data-testid="report-button"
             :aria-label="t('report_aria_label', { eventTitle: getEventTitle(event) })"
-            @click="handleReport(event.id, $event)"
+            @click="handleReport(event, $event)"
           >
             {{ t('report_button') }}
+          </button>
+
+          <button
+            type="button"
+            class="details-button"
+            data-testid="details-button"
+            :aria-label="t('details_aria_label', { eventTitle: getEventTitle(event) })"
+            @click="handleOpenDetail(event, $event)"
+          >
+            {{ t('details_button') }}
           </button>
         </div>
       </div>
@@ -309,12 +373,23 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Empty state -->
-    <EmptyLayout v-else :title="t('no_events')">
+    <!-- Empty state: user follows calendars but no events yet -->
+    <EmptyLayout
+      v-else-if="hasFollows"
+      :title="t('no_events')"
+    >
+      <p class="empty-waiting-message">{{ t('no_events_yet') }}</p>
+    </EmptyLayout>
+
+    <!-- Empty state: user follows no calendars -->
+    <EmptyLayout
+      v-else
+      :title="t('no_events')"
+    >
       <button
         type="button"
         class="primary"
-        @click="handleFollowCalendar"
+        @click="handleFollowCalendar($event)"
       >
         {{ t("follow_button") }}
       </button>
@@ -326,6 +401,7 @@ onUnmounted(() => {
       :event="pendingRepostEvent"
       :pre-selected-categories="pendingRepostPreSelected"
       :all-local-categories="pendingRepost.allLocalCategories"
+      :source-categories="pendingRepost.sourceCategories"
       @confirm="handleRepostConfirm"
       @cancel="handleRepostCancel"
     />
@@ -334,7 +410,18 @@ onUnmounted(() => {
     <ReportEventModal
       v-if="reportingEventId"
       :event-id="reportingEventId"
+      :event-title="reportingEventTitle"
       @close="handleReportClose"
+    />
+
+    <!-- Event detail modal — shown when detailEvent is set -->
+    <FeedEventDetailModal
+      v-if="detailEvent"
+      :event="detailEvent"
+      @close="handleCloseDetail"
+      @repost="(domEvent) => handleRepost(detailEvent.id, domEvent)"
+      @unrepost="handleUnrepost(detailEvent.id)"
+      @report="handleReportFromModal"
     />
   </div>
 </template>
@@ -396,10 +483,16 @@ div.events-container {
         }
 
         p.event-source {
-          margin: 0;
+          margin: 0 0 var(--pav-space-1) 0;
           font-size: var(--pav-font-size-caption);
           color: var(--pav-color-text-secondary);
           font-style: italic;
+        }
+
+        p.event-location {
+          margin: 0;
+          font-size: var(--pav-font-size-caption);
+          color: var(--pav-color-text-secondary);
         }
       }
 
@@ -477,6 +570,26 @@ div.events-container {
             opacity: 0.8;
           }
         }
+
+        button.details-button {
+          padding: var(--pav-space-2) var(--pav-space-3);
+          background: transparent;
+          color: var(--pav-color-text-secondary);
+          border: 1px solid var(--pav-color-border-primary);
+          border-radius: var(--pav-border-radius-sm);
+          font-size: var(--pav-font-size-xs);
+          cursor: pointer;
+          transition: color 0.2s ease, border-color 0.2s ease;
+
+          &:hover {
+            color: var(--pav-color-text-primary);
+            border-color: var(--pav-color-text-secondary);
+          }
+
+          &:active {
+            opacity: 0.8;
+          }
+        }
       }
 
       @media (max-width: 768px) {
@@ -530,6 +643,13 @@ div.events-container {
     &:active {
       background: var(--pav-color-orange-700);
     }
+  }
+
+  p.empty-waiting-message {
+    margin: 0;
+    font-size: var(--pav-font-size-sm);
+    color: var(--pav-color-text-secondary);
+    text-align: center;
   }
 }
 </style>

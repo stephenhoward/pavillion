@@ -74,10 +74,11 @@ export default class EventService {
       const events = await ModelService.listModels(url);
       const calendarEvents = events.items.map(event => CalendarEvent.fromObject(event));
 
-      // Resolve the store key: prefer the ID from results, fall back to the explicit parameter
-      const storeCalendarId = (calendarEvents.length > 0 && calendarEvents[0].calendarId)
-        ? calendarEvents[0].calendarId
-        : calendarId;
+      // Resolve the store key: prefer the explicit calendarId parameter, fall back to the
+      // ID from the first result. The explicit parameter must take precedence because reposted
+      // events carry the original owner's calendarId, not the requesting calendar's ID.
+      const storeCalendarId = calendarId
+        ?? (calendarEvents.length > 0 ? calendarEvents[0].calendarId : undefined);
 
       if (storeCalendarId) {
         this.store.setEventsForCalendar(storeCalendarId, calendarEvents);

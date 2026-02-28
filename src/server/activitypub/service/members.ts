@@ -1,6 +1,7 @@
 import { EventEmitter } from "events";
 import config from 'config';
 import axios from 'axios';
+import { DateTime } from 'luxon';
 
 import { Op } from 'sequelize';
 import { Account } from "@/common/model/account";
@@ -54,6 +55,45 @@ function actorUriToIdentifier(actorUri: string): string {
   catch {
     return actorUri;
   }
+}
+
+/**
+ * Convert a schedule date returned by Sequelize (SQLite treats naive datetime strings as UTC)
+ * into an ISO string correctly placed in the event's original timezone.
+ *
+ * Background: SQLite stores naive datetime strings without timezone info. Sequelize's SQLite
+ * dialect appends "+00:00" when parsing DATE columns, so "18:30:00.000" becomes a JS Date
+ * whose UTC time is 18:30 — but the stored value was intended to mean "18:30 in the event's
+ * local timezone" (e.g., America/Los_Angeles). Without this correction, a 6:30 PM LA event
+ * would be displayed as 10:30 AM (or similar) because the UTC value is used directly.
+ *
+ * This function reconstructs the correct datetime by taking the UTC time components of the
+ * Sequelize-provided Date object and re-interpreting them in the schedule's timezone.
+ *
+ * @param dbDate The Date object (or raw value) returned by Sequelize for start_date/end_date
+ * @param timezone The IANA timezone name stored on the schedule (e.g. "America/Los_Angeles")
+ * @returns ISO 8601 string with the correct timezone offset, or null if dbDate is falsy
+ */
+function scheduleDbDateToISO(dbDate: Date | string | null | undefined, timezone: string | null | undefined): string | null {
+  if (!dbDate) return null;
+  const date = dbDate instanceof Date ? dbDate : new Date(String(dbDate));
+  const zone = timezone || 'UTC';
+  // Re-interpret the UTC time components as local time in the event's timezone.
+  // SQLite stored the local time digits as-is and Sequelize treated them as UTC,
+  // so the UTC hour/minute values actually represent the intended local time.
+  const dt = DateTime.fromObject(
+    {
+      year: date.getUTCFullYear(),
+      month: date.getUTCMonth() + 1,
+      day: date.getUTCDate(),
+      hour: date.getUTCHours(),
+      minute: date.getUTCMinutes(),
+      second: date.getUTCSeconds(),
+      millisecond: date.getUTCMilliseconds(),
+    },
+    { zone },
+  );
+  return dt.toISO();
 }
 
 class ActivityPubService {
@@ -327,14 +367,25 @@ class ActivityPubService {
             eventObject = await EventObjectEntity.findOne({
               where: { ap_id: canonicalEventUrl },
             });
+            // If still no EventObjectEntity, this is a local event that has never been
+            // published via ActivityPub (e.g., a seed event inserted directly into the DB).
+            // Create the EventObjectEntity on-the-fly so it can be shared.
+            if (!eventObject) {
+              const localActorUrl = await this.actorUrl(localCalendar);
+              eventObject = await EventObjectEntity.create({
+                event_id: localEvent.id,
+                ap_id: canonicalEventUrl,
+                attributed_to: localActorUrl,
+              });
+              console.log('[MemberService] shareEvent: created EventObjectEntity on-the-fly for local event:', localEvent.id);
+            }
           }
         }
       }
     }
 
-    // Step 3: If we still have no EventObjectEntity, we cannot construct a valid AP Announce
-    // activity or store a consistent UUID key. This should not occur in normal operation —
-    // any event reachable via AP must have an EventObjectEntity record.
+    // Step 3: If we still have no EventObjectEntity, the provided URL does not correspond
+    // to a valid local event or a known remote event. Reject the request.
     if (!eventObject) {
       console.warn('[MemberService] shareEvent: no EventObjectEntity found for URL:', eventUrl);
       throw new InvalidSharedEventUrlError('Invalid shared event URL');
@@ -640,6 +691,10 @@ class ActivityPubService {
           association: 'categoryAssignments',
           required: false,
         },
+        {
+          association: 'location',
+          required: false,
+        },
       ],
       limit: defaultPageSize,
       offset: page ? page * defaultPageSize : 0,
@@ -752,13 +807,13 @@ class ActivityPubService {
 
       // Transform schedules from Sequelize plain object format (snake_case Date fields)
       // to the format expected by CalendarEventSchedule.fromObject() (camelCase ISO strings).
-      // The Sequelize plain object has start_date/end_date as JS Date objects; the model
-      // expects start/end as ISO string values (matching EventScheduleEntity.toModel()).
+      // Uses scheduleDbDateToISO() to correctly apply the event's original timezone, since
+      // SQLite stores naive datetime strings that Sequelize reads as UTC.
       const schedules = Array.isArray(plainEvent.schedules)
         ? plainEvent.schedules.map((s: any) => ({
           id: s.id,
-          start: s.start_date ? new Date(s.start_date).toISOString() : null,
-          end: s.end_date ? new Date(s.end_date).toISOString() : null,
+          start: scheduleDbDateToISO(s.start_date, s.timezone),
+          end: scheduleDbDateToISO(s.end_date, s.timezone),
           frequency: s.frequency,
           interval: s.interval,
           count: s.count,
@@ -774,13 +829,34 @@ class ActivityPubService {
       // eventSourceUrl must be the full ActivityPub URL for the event.
       // The client uses this to call shareEvent(), which validates that it starts with https://.
       // Look up the AP URL from EventObjectEntity; this is the canonical AP identifier.
-      const eventSourceUrl = eventApUrlMap.get(event.id) ?? '';
+      // For local events that have never been published via ActivityPub (no EventObjectEntity
+      // record), derive the canonical AP URL from the calendar actor URI so reposting works.
+      let eventSourceUrl = eventApUrlMap.get(event.id) ?? '';
+      if (!eventSourceUrl && event.calendar_id !== null) {
+        const localActorUri = localCalendarActorMap.get(event.calendar_id);
+        if (localActorUri) {
+          eventSourceUrl = `${localActorUri}/events/${event.id}`;
+        }
+      }
+
+      // Transform location from Sequelize plain object (snake_case) to camelCase
+      // so CalendarEvent.fromObject() can reconstruct the EventLocation correctly.
+      const location = plainEvent.location ? {
+        id: plainEvent.location.id,
+        name: plainEvent.location.name,
+        address: plainEvent.location.address,
+        city: plainEvent.location.city,
+        state: plainEvent.location.state,
+        postalCode: plainEvent.location.postal_code,
+        country: plainEvent.location.country,
+      } : null;
 
       const transformedEvent = {
         ...plainEvent,
         content: contentByLanguage,
         schedules,
         categoryIds,
+        location,
         repostStatus,
         sourceCalendarActorId,
         eventSourceUrl,

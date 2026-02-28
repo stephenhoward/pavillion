@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, nextTick } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useFeedStore } from '@/client/stores/feedStore';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
@@ -10,33 +10,12 @@ const { t } = useTranslation('feed', {
   keyPrefix: 'follows',
 });
 
-const props = withDefaults(defineProps<{
-  openAddCalendarModal?: boolean;
-}>(), {
-  openAddCalendarModal: false,
-});
-
-const emit = defineEmits<{
-  (e: 'addCalendarModalOpened'): void;
-}>();
-
 const feedStore = useFeedStore();
 const showAddModal = ref(false);
+const addModalTriggerRef = ref<HTMLElement | null>(null);
 
 const follows = computed(() => feedStore.follows);
 const isLoading = computed(() => feedStore.isLoadingFollows);
-
-/**
- * When the parent signals that the modal should be opened (e.g. from the
- * Events tab "Follow a Calendar" button), open it and notify the parent
- * so it can reset the flag.
- */
-watch(() => props.openAddCalendarModal, (shouldOpen) => {
-  if (shouldOpen) {
-    showAddModal.value = true;
-    emit('addCalendarModalOpened');
-  }
-});
 
 const handlePolicyChange = async (followId: string, autoRepostOriginals: boolean, autoRepostReposts: boolean) => {
   try {
@@ -56,21 +35,24 @@ const handleUnfollow = async (followId: string) => {
   }
 };
 
-const handleOpenAddModal = () => {
+const handleOpenAddModal = (event: MouseEvent) => {
+  addModalTriggerRef.value = (event?.currentTarget as HTMLElement) ?? null;
   showAddModal.value = true;
 };
 
 const handleCloseAddModal = () => {
   showAddModal.value = false;
+  nextTick(() => { addModalTriggerRef.value?.focus(); });
 };
 
 const handleFollowSuccess = async () => {
-  // Refresh follows list after successful follow
+  // Refresh both follows list and feed events after successful follow
+  // so the Events tab immediately shows events from the newly followed calendar.
   try {
-    await feedStore.loadFollows();
+    await Promise.all([feedStore.loadFollows(), feedStore.loadFeed()]);
   }
   catch (error) {
-    console.error('Error refreshing follows:', error);
+    console.error('Error refreshing feed after follow:', error);
   }
 };
 </script>

@@ -29,9 +29,40 @@ const newCalendarTitle = ref('');
 const inputRef = ref(null);
 const inputWidth = ref('100px'); // default width
 const calendar_name_placeholder = t('calendar_name_placeholder');
+// Tracks whether the user has manually edited the calendar name field.
+// Once true, auto-fill from title is disabled.
+const calendarNameManuallyEdited = ref(false);
 
 // Regex matching server-side isValidUrlName
 const VALID_URL_NAME_RE = /^[a-z0-9][a-z0-9_-]{1,22}[a-z0-9_]$/i;
+
+/**
+ * Converts a human-readable title into a URL-safe calendar name slug.
+ * Lowercases, strips special characters, replaces spaces with hyphens,
+ * collapses consecutive hyphens, truncates to 24 chars, and strips
+ * leading/trailing hyphens or underscores.
+ */
+function slugify(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9\s_-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .substring(0, 24)
+    .replace(/^[-_]|[-_]$/g, '');
+}
+
+// Auto-populate calendar name from title while the user hasn't manually edited it
+watch(newCalendarTitle, (title) => {
+  if (!calendarNameManuallyEdited.value) {
+    newCalendarName.value = slugify(title);
+  }
+});
+
+// Mark the calendar name field as manually edited when the user types in it directly
+function onCalendarNameInput() {
+  calendarNameManuallyEdited.value = true;
+}
 
 // Function to calculate and set the width of the input
 const updateInputWidth = () => {
@@ -200,6 +231,7 @@ async function createCalendar() {
               :aria-describedby="state.errorMessage ? 'calendar-error' : 'calendar-help'"
               @focus="updateInputWidth"
               @keydown.enter="createCalendar"
+              @input="onCalendarNameInput"
             />@{{ site_domain }}
           </div>
           <div v-if="state.errorMessage"

@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
 import Modal from '@/client/components/common/modal.vue';
 import type { CalendarEvent } from '@/common/model/events';
+import type { CategoryEntry } from '@/client/service/feed';
 
 interface Category {
   id: string;
@@ -16,20 +17,37 @@ const props = defineProps<{
   event?: CalendarEvent;
   confirmLabel?: string;
   dialogTitle?: string;
+  sourceCategories?: CategoryEntry[];
 }>();
 
 const emit = defineEmits<{
-  confirm: [categoryIds: string[]];
+  confirm: [categoryIds: string[], sourceCategoriesToAdopt?: CategoryEntry[]];
   cancel: [];
 }>();
 
 const { t } = useTranslation('feed');
 
+// Has-categories mode: track which local categories are selected
 const selectedIds = ref<string[]>(
   props.preSelectedCategories
     .map(c => c.id)
     .filter(id => props.allLocalCategories.some(cat => cat.id === id)),
 );
+
+// No-categories mode: track which source categories the user wants to adopt
+const adoptedSourceIds = ref<string[]>([]);
+
+const hasLocalCategories = computed(() => props.allLocalCategories.length > 0);
+
+const computedDialogTitle = computed(() => {
+  if (props.dialogTitle) {
+    return props.dialogTitle;
+  }
+  if (!hasLocalCategories.value) {
+    return t('categoryMapping.repostDialogTitleSimple');
+  }
+  return t('categoryMapping.repostDialogTitle');
+});
 
 function toggle(id: string) {
   if (selectedIds.value.includes(id)) {
@@ -40,8 +58,25 @@ function toggle(id: string) {
   }
 }
 
+function toggleAdopt(id: string) {
+  if (adoptedSourceIds.value.includes(id)) {
+    adoptedSourceIds.value = adoptedSourceIds.value.filter(i => i !== id);
+  }
+  else {
+    adoptedSourceIds.value = [...adoptedSourceIds.value, id];
+  }
+}
+
 function handleConfirm() {
-  emit('confirm', [...selectedIds.value]);
+  if (!hasLocalCategories.value) {
+    const sourceCatsToAdopt = (props.sourceCategories ?? []).filter(
+      (cat) => adoptedSourceIds.value.includes(cat.id),
+    );
+    emit('confirm', [], sourceCatsToAdopt);
+  }
+  else {
+    emit('confirm', [...selectedIds.value]);
+  }
 }
 
 function handleCancel() {
@@ -68,7 +103,7 @@ function getEventSource(url: string): string | null {
 
 <template>
   <Modal
-    :title="dialogTitle ?? t('categoryMapping.repostDialogTitle')"
+    :title="computedDialogTitle"
     @close="handleCancel"
   >
     <div class="repost-categories-modal">
@@ -78,6 +113,13 @@ function getEventSource(url: string): string | null {
         class="event-details"
       >
         <dl class="event-details-list">
+          <div
+            v-if="event.content('en').name"
+            class="detail-row"
+          >
+            <dt>{{ t('categoryMapping.eventTitle') }}</dt>
+            <dd>{{ event.content('en').name }}</dd>
+          </div>
           <div
             v-if="formatEventDate(event)"
             class="detail-row"
@@ -109,8 +151,9 @@ function getEventSource(url: string): string | null {
         </dl>
       </div>
 
+      <!-- Has local categories: show local category checkboxes (existing behavior) -->
       <fieldset
-        v-if="allLocalCategories.length > 0"
+        v-if="hasLocalCategories"
         class="category-fieldset"
       >
         <legend>{{ t('categoryMapping.categoriesLabel') }}</legend>
@@ -133,12 +176,35 @@ function getEventSource(url: string): string | null {
         </ul>
       </fieldset>
 
-      <p
-        v-else
-        class="no-categories"
+      <!-- No local categories: show source category adopt toggles -->
+      <fieldset
+        v-else-if="sourceCategories && sourceCategories.length > 0"
+        class="category-fieldset"
       >
-        {{ t('categoryMapping.noLocalCategories') }}
-      </p>
+        <legend>{{ t('categoryMapping.adoptCategoryLabel') }}</legend>
+        <ul class="category-list">
+          <li
+            v-for="cat in sourceCategories"
+            :key="cat.id"
+            class="category-item"
+          >
+            <button
+              type="button"
+              role="switch"
+              class="adopt-toggle"
+              :class="{ active: adoptedSourceIds.includes(cat.id) }"
+              :aria-checked="String(adoptedSourceIds.includes(cat.id))"
+              :aria-label="cat.name"
+              @click="toggleAdopt(cat.id)"
+            >
+              <span class="adopt-toggle-name" aria-hidden="true">{{ cat.name }}</span>
+              <span class="adopt-toggle-label" aria-hidden="true">
+                {{ adoptedSourceIds.includes(cat.id) ? t('categoryMapping.adoptCategoryActive') : t('categoryMapping.adoptCategory') }}
+              </span>
+            </button>
+          </li>
+        </ul>
+      </fieldset>
 
       <div class="modal-actions">
         <button
@@ -255,14 +321,59 @@ div.repost-categories-modal {
           color: var(--pav-color-interactive-primary);
         }
       }
-    }
-  }
 
-  p.no-categories {
-    margin: 0;
-    font-size: 0.875rem;
-    color: var(--pav-color-text-secondary);
-    font-style: italic;
+      button.adopt-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        padding: var(--pav-space-2) var(--pav-space-3);
+        border: 1px solid var(--pav-color-border-primary);
+        border-radius: var(--pav-border-radius-md);
+        background: var(--pav-color-surface-secondary);
+        cursor: pointer;
+        font-size: 0.9375rem;
+        text-align: left;
+        transition: background 0.15s ease, border-color 0.15s ease;
+
+        .adopt-toggle-name {
+          color: var(--pav-color-text-primary);
+          font-weight: var(--pav-font-weight-medium);
+          flex: 1;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .adopt-toggle-label {
+          color: var(--pav-color-text-secondary);
+          font-size: 0.8125rem;
+          flex-shrink: 0;
+          margin-left: var(--pav-space-3);
+        }
+
+        &:hover {
+          background: var(--pav-color-surface-tertiary);
+          border-color: var(--pav-color-interactive-primary);
+        }
+
+        &.active {
+          border-color: var(--pav-color-interactive-primary);
+          background: var(--pav-color-surface-secondary);
+
+          .adopt-toggle-label {
+            color: var(--pav-color-interactive-primary);
+            font-weight: var(--pav-font-weight-medium);
+          }
+        }
+
+        &:focus-visible {
+          outline: 2px solid var(--pav-color-interactive-primary);
+          outline-offset: 2px;
+        }
+      }
+    }
   }
 
   div.modal-actions {

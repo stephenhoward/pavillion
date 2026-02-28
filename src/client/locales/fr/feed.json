@@ -1,0 +1,17 @@
+{
+    "events": {
+        "no_events_yet": "Pas encore d'événements. Les événements des calendriers que vous suivez apparaîtront ici une fois qu'ils seront partagés.",
+        "repost_aria_label": "Repartager l'événement : {{eventTitle}}",
+        "unrepost_aria_label": "Annuler le repartage de : {{eventTitle}}",
+        "details_button": "Détails",
+        "details_aria_label": "Voir les détails de : {{eventTitle}}",
+        "close_aria_label": "Fermer les détails"
+    },
+    "categoryMapping": {
+        "repostDialogTitleSimple": "Repartager",
+        "adoptCategoryLabel": "Catégories de cet événement",
+        "adoptCategory": "Ajouter et utiliser cette catégorie",
+        "adoptCategoryActive": "Ajoutée",
+        "eventTitle": "Titre"
+    }
+}

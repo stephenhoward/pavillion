@@ -22,6 +22,7 @@ import ReportService from '@/client/service/report';
 
 const TEST_EVENT_ID = 'event-abc-123';
 const TEST_USER_EMAIL = 'user@example.com';
+const TEST_EVENT_TITLE = 'Summer Festival';
 
 /**
  * i18next requires initialization to return key paths for missing keys.
@@ -49,6 +50,7 @@ const reportTranslations: Record<string, string> = {
   'report.error_not_found': 'report.error_not_found',
   'report.error_generic': 'report.error_generic',
   'report.error_validation': 'report.error_validation',
+  'report.event_subtitle': 'Reporting: {{title}}',
 };
 
 /** Helper to get the mocked submitReport from the most recent ReportService instance. */
@@ -166,6 +168,25 @@ describe('ReportEvent Component (Client)', () => {
       const heading = wrapper.find('h2');
       expect(heading.exists()).toBe(true);
       expect(heading.text()).toBe('report.form_title');
+      wrapper.unmount();
+    });
+
+    it('should not show event subtitle when eventTitle prop is not provided', async () => {
+      const wrapper = mountReportEvent();
+      await flushPromises();
+
+      const subtitle = wrapper.find('.report-dialog__event-subtitle');
+      expect(subtitle.exists()).toBe(false);
+      wrapper.unmount();
+    });
+
+    it('should show event subtitle when eventTitle prop is provided', async () => {
+      const wrapper = mountReportEvent({ eventTitle: TEST_EVENT_TITLE });
+      await flushPromises();
+
+      const subtitle = wrapper.find('.report-dialog__event-subtitle');
+      expect(subtitle.exists()).toBe(true);
+      expect(subtitle.text()).toContain(TEST_EVENT_TITLE);
       wrapper.unmount();
     });
 

@@ -6,11 +6,20 @@ import RepostCategoriesModal from '@/client/components/logged_in/repost-categori
 
 const FEED_TRANSLATIONS: Record<string, string> = {
   'categoryMapping.repostDialogTitle': 'Repost with categories',
+  'categoryMapping.repostDialogTitleSimple': 'Repost',
   'categoryMapping.repostDialogDescription': 'Some categories from "{{eventTitle}}" are not mapped to local categories. Select the local categories to apply when reposting:',
   'categoryMapping.repostConfirm': 'Repost',
   'categoryMapping.cancel': 'Cancel',
   'categoryMapping.categoriesLabel': 'Local categories',
   'categoryMapping.noLocalCategories': 'No local categories available.',
+  'categoryMapping.adoptCategoryLabel': 'Categories from this event',
+  'categoryMapping.adoptCategory': 'Add and use this category',
+  'categoryMapping.adoptCategoryActive': 'Added',
+  'categoryMapping.eventTitle': 'Title',
+  'categoryMapping.eventDate': 'Date',
+  'categoryMapping.eventDescription': 'Description',
+  'categoryMapping.eventLocation': 'Location',
+  'categoryMapping.eventSource': 'Source',
 };
 
 const ALL_CATEGORIES = [
@@ -21,6 +30,11 @@ const ALL_CATEGORIES = [
 
 const PRE_SELECTED = [
   { id: 'cat-1', name: 'Music' },
+];
+
+const SOURCE_CATEGORIES = [
+  { id: 'src-1', name: 'Remote Music' },
+  { id: 'src-2', name: 'Remote Sports' },
 ];
 
 const MOCK_EVENT = {
@@ -89,6 +103,19 @@ describe('RepostCategoriesModal', () => {
       wrapper.unmount();
     });
 
+    it('renders event title as the first detail row when event prop is provided', async () => {
+      const wrapper = mountModal({ event: MOCK_EVENT });
+      await flushPromises();
+
+      const detailRows = wrapper.findAll('.event-details .detail-row');
+      expect(detailRows.length).toBeGreaterThan(0);
+      // The first row should be the title row
+      const firstRow = detailRows[0];
+      expect(firstRow.find('dt').text()).toBe('Title');
+      expect(firstRow.find('dd').text()).toBe('Test Event');
+      wrapper.unmount();
+    });
+
     it('renders one checkbox per local category', async () => {
       const wrapper = mountModal();
       await flushPromises();
@@ -130,13 +157,12 @@ describe('RepostCategoriesModal', () => {
       wrapper.unmount();
     });
 
-    it('shows a no-categories message when allLocalCategories is empty', async () => {
-      const wrapper = mountModal({ allLocalCategories: [] });
+    it('shows no category list when allLocalCategories is empty and no sourceCategories provided', async () => {
+      const wrapper = mountModal({ allLocalCategories: [], preSelectedCategories: [] });
       await flushPromises();
 
       expect(wrapper.find('ul.category-list').exists()).toBe(false);
-      const msg = wrapper.find('p.no-categories');
-      expect(msg.exists()).toBe(true);
+      expect(wrapper.find('p.no-categories').exists()).toBe(false);
       wrapper.unmount();
     });
   });
@@ -320,6 +346,158 @@ describe('RepostCategoriesModal', () => {
 
       const vmAfter = wrapper.vm as any;
       expect(vmAfter.selectedIds).toEqual(idsBefore);
+      wrapper.unmount();
+    });
+  });
+
+  describe('No-local-categories mode (adopt source categories)', () => {
+    it('shows adopt toggles when allLocalCategories is empty and sourceCategories provided', async () => {
+      const wrapper = mountModal({
+        allLocalCategories: [],
+        preSelectedCategories: [],
+        sourceCategories: SOURCE_CATEGORIES,
+      });
+      await flushPromises();
+
+      expect(wrapper.find('ul.category-list').exists()).toBe(true);
+      const toggles = wrapper.findAll('button.adopt-toggle');
+      expect(toggles).toHaveLength(SOURCE_CATEGORIES.length);
+      wrapper.unmount();
+    });
+
+    it('does not show local category checkboxes in no-categories mode', async () => {
+      const wrapper = mountModal({
+        allLocalCategories: [],
+        preSelectedCategories: [],
+        sourceCategories: SOURCE_CATEGORIES,
+      });
+      await flushPromises();
+
+      expect(wrapper.findAll('input[type="checkbox"]')).toHaveLength(0);
+      wrapper.unmount();
+    });
+
+    it('shows source category names on the adopt toggles', async () => {
+      const wrapper = mountModal({
+        allLocalCategories: [],
+        preSelectedCategories: [],
+        sourceCategories: SOURCE_CATEGORIES,
+      });
+      await flushPromises();
+
+      const toggles = wrapper.findAll('button.adopt-toggle');
+      const names = toggles.map(t => t.find('.adopt-toggle-name').text());
+      expect(names).toContain('Remote Music');
+      expect(names).toContain('Remote Sports');
+      wrapper.unmount();
+    });
+
+    it('clicking an adopt toggle marks the source category as adopted', async () => {
+      const wrapper = mountModal({
+        allLocalCategories: [],
+        preSelectedCategories: [],
+        sourceCategories: SOURCE_CATEGORIES,
+      });
+      await flushPromises();
+
+      const toggles = wrapper.findAll('button.adopt-toggle');
+      await toggles[0].trigger('click');
+
+      const vm = wrapper.vm as any;
+      expect(vm.adoptedSourceIds).toContain('src-1');
+      wrapper.unmount();
+    });
+
+    it('clicking an adopted toggle un-adopts the source category', async () => {
+      const wrapper = mountModal({
+        allLocalCategories: [],
+        preSelectedCategories: [],
+        sourceCategories: SOURCE_CATEGORIES,
+      });
+      await flushPromises();
+
+      const toggles = wrapper.findAll('button.adopt-toggle');
+      await toggles[0].trigger('click'); // adopt
+      await toggles[0].trigger('click'); // un-adopt
+
+      const vm = wrapper.vm as any;
+      expect(vm.adoptedSourceIds).not.toContain('src-1');
+      wrapper.unmount();
+    });
+
+    it('emits confirm with empty categoryIds and sourceCategoriesToAdopt when in no-categories mode', async () => {
+      const wrapper = mountModal({
+        allLocalCategories: [],
+        preSelectedCategories: [],
+        sourceCategories: SOURCE_CATEGORIES,
+      });
+      await flushPromises();
+
+      // Adopt the first source category
+      const toggles = wrapper.findAll('button.adopt-toggle');
+      await toggles[0].trigger('click');
+
+      const buttons = wrapper.findAll('button');
+      const repostButton = buttons.find(b => b.text() === 'Repost');
+      await repostButton!.trigger('click');
+
+      const emitted = wrapper.emitted('confirm');
+      expect(emitted).toBeTruthy();
+      expect(emitted![0][0]).toEqual([]); // categoryIds is empty
+      expect(emitted![0][1]).toEqual([{ id: 'src-1', name: 'Remote Music' }]); // sourceCategoriesToAdopt
+      wrapper.unmount();
+    });
+
+    it('emits confirm with empty arrays when no source categories are toggled', async () => {
+      const wrapper = mountModal({
+        allLocalCategories: [],
+        preSelectedCategories: [],
+        sourceCategories: SOURCE_CATEGORIES,
+      });
+      await flushPromises();
+
+      // Confirm without adopting anything
+      const buttons = wrapper.findAll('button');
+      const repostButton = buttons.find(b => b.text() === 'Repost');
+      await repostButton!.trigger('click');
+
+      const emitted = wrapper.emitted('confirm');
+      expect(emitted).toBeTruthy();
+      expect(emitted![0][0]).toEqual([]);
+      expect(emitted![0][1]).toEqual([]);
+      wrapper.unmount();
+    });
+  });
+
+  describe('Dialog title adaptation', () => {
+    it('shows "Repost with categories" title when local categories exist', async () => {
+      const wrapper = mountModal();
+      await flushPromises();
+
+      const vm = wrapper.vm as any;
+      expect(vm.computedDialogTitle).toBe('Repost with categories');
+      wrapper.unmount();
+    });
+
+    it('shows "Repost" title when no local categories', async () => {
+      const wrapper = mountModal({
+        allLocalCategories: [],
+        preSelectedCategories: [],
+        sourceCategories: SOURCE_CATEGORIES,
+      });
+      await flushPromises();
+
+      const vm = wrapper.vm as any;
+      expect(vm.computedDialogTitle).toBe('Repost');
+      wrapper.unmount();
+    });
+
+    it('uses custom dialogTitle prop when provided regardless of categories', async () => {
+      const wrapper = mountModal({ dialogTitle: 'Custom Title' });
+      await flushPromises();
+
+      const vm = wrapper.vm as any;
+      expect(vm.computedDialogTitle).toBe('Custom Title');
       wrapper.unmount();
     });
   });

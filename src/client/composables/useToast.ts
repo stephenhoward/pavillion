@@ -26,7 +26,7 @@ const DEFAULT_DURATIONS: Record<ToastType, number> = {
   success: 5000,
   info: 5000,
   warning: 8000,
-  error: 0,
+  error: 5000,
 };
 
 /**

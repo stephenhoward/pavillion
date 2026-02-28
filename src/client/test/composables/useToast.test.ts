@@ -120,12 +120,12 @@ describe('useToast', () => {
       expect(toasts.value[0].duration).toBe(8000);
     });
 
-    it('should use 0ms (manual dismiss) duration for error toasts', () => {
+    it('should use 5000ms duration for error toasts', () => {
       const { toasts, error } = useToast();
 
       error('Failed');
 
-      expect(toasts.value[0].duration).toBe(0);
+      expect(toasts.value[0].duration).toBe(5000);
     });
   });
 

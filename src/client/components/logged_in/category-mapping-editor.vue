@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useTranslation } from 'i18next-vue';
+import { ADD_CATEGORY_VALUE } from './category-mapping-constants';
 
 interface SourceCategory {
   id: string;
@@ -31,9 +32,17 @@ const { t } = useTranslation('calendars', { keyPrefix: 'category_mapping' });
 
 /**
  * Returns the mapped local category ID for a given source category, or '' if none.
+ * Returns ADD_CATEGORY_VALUE if the user has toggled "add this category".
  */
 function getMappedLocalId(sourceCategoryId: string): string {
   return props.modelValue.find(m => m.sourceCategoryId === sourceCategoryId)?.localCategoryId ?? '';
+}
+
+/**
+ * Returns true when the given source category is toggled to "add this category".
+ */
+function isAddToggled(sourceCategoryId: string): boolean {
+  return getMappedLocalId(sourceCategoryId) === ADD_CATEGORY_VALUE;
 }
 
 /**
@@ -52,6 +61,23 @@ function onSelect(sourceCat: SourceCategory, localCategoryId: string) {
     emit('update:modelValue', filtered);
   }
 }
+
+/**
+ * Handles the "Add this category" toggle button click (no-local-categories mode).
+ * Toggles the mapping between ADD_CATEGORY_VALUE and unmapped.
+ */
+function onToggleAdd(sourceCat: SourceCategory) {
+  const filtered = props.modelValue.filter(m => m.sourceCategoryId !== sourceCat.id);
+  if (!isAddToggled(sourceCat.id)) {
+    emit('update:modelValue', [
+      ...filtered,
+      { sourceCategoryId: sourceCat.id, sourceCategoryName: sourceCat.name, localCategoryId: ADD_CATEGORY_VALUE },
+    ]);
+  }
+  else {
+    emit('update:modelValue', filtered);
+  }
+}
 </script>
 
 <template>
@@ -61,7 +87,9 @@ function onSelect(sourceCat: SourceCategory, localCategoryId: string) {
       role="group"
       :aria-label="t('group_label')"
     >
+      <!-- Column headers: only shown when there are local categories (dropdown mode) -->
       <div
+        v-if="localCategories.length > 0"
         class="mapping-row column-headers"
         aria-hidden="true"
       >
@@ -69,30 +97,53 @@ function onSelect(sourceCat: SourceCategory, localCategoryId: string) {
         <span class="mapping-arrow" />
         <span class="column-header-local">{{ t('local_column_label') }}</span>
       </div>
+
       <div
         v-for="cat in sourceCategories"
         :key="cat.id"
         class="mapping-row"
       >
         <span class="source-name">{{ cat.name }}</span>
-        <span
-          class="mapping-arrow"
-          aria-hidden="true"
-        >→</span>
-        <select
-          :value="getMappedLocalId(cat.id)"
-          :aria-label="t('dropdown_label', { name: cat.name })"
-          @change="onSelect(cat, ($event.target as HTMLSelectElement).value)"
-        >
-          <option value="">{{ t('no_mapping') }}</option>
-          <option
-            v-for="local in localCategories"
-            :key="local.id"
-            :value="local.id"
+
+        <!-- No local categories: show toggle button -->
+        <template v-if="localCategories.length === 0">
+          <button
+            type="button"
+            role="switch"
+            class="add-toggle"
+            :class="{ active: isAddToggled(cat.id) }"
+            :aria-checked="isAddToggled(cat.id)"
+            :aria-label="t('add_category_toggle_label', { name: cat.name })"
+            @click="onToggleAdd(cat)"
           >
-            {{ local.name }}
-          </option>
-        </select>
+            {{ isAddToggled(cat.id) ? t('add_category_toggled') : t('add_category_toggle') }}
+          </button>
+        </template>
+
+        <!-- Has local categories: show dropdown with "Add this category" option -->
+        <template v-else>
+          <span
+            class="mapping-arrow"
+            aria-hidden="true"
+          >→</span>
+          <select
+            :value="getMappedLocalId(cat.id)"
+            :aria-label="t('dropdown_label', { name: cat.name })"
+            @change="onSelect(cat, ($event.target as HTMLSelectElement).value)"
+          >
+            <option value="">{{ t('no_mapping') }}</option>
+            <option
+              v-for="local in localCategories"
+              :key="local.id"
+              :value="local.id"
+            >
+              {{ local.name }}
+            </option>
+            <option :value="ADD_CATEGORY_VALUE">
+              {{ t('add_category_option') }}
+            </option>
+          </select>
+        </template>
       </div>
     </div>
 
@@ -175,6 +226,49 @@ function onSelect(sourceCat: SourceCategory, localCategoryId: string) {
     @media (prefers-color-scheme: dark) {
       background: var(--pav-color-stone-800);
       color: var(--pav-color-stone-100);
+    }
+  }
+
+  .add-toggle {
+    flex: 1;
+    padding: var(--pav-space-2) var(--pav-space-3);
+    border: 1px solid var(--pav-border-primary);
+    border-radius: 0.5rem;
+    background: var(--pav-color-stone-50);
+    color: var(--pav-color-stone-700);
+    font-size: 0.875rem;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+
+    &:hover {
+      background: var(--pav-color-stone-100);
+
+      @media (prefers-color-scheme: dark) {
+        background: var(--pav-color-stone-700);
+      }
+    }
+
+    &.active {
+      background: var(--pav-color-orange-50, oklch(0.97 0.03 60));
+      border-color: var(--pav-color-orange-500);
+      color: var(--pav-color-orange-700, oklch(0.5 0.18 50));
+
+      @media (prefers-color-scheme: dark) {
+        background: oklch(0.25 0.05 50);
+        color: var(--pav-color-orange-300, oklch(0.78 0.14 55));
+      }
+    }
+
+    &:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 3px oklch(0.705 0.213 47.604 / 0.4);
+      border-color: var(--pav-color-orange-500);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      background: var(--pav-color-stone-800);
+      color: var(--pav-color-stone-300);
     }
   }
 }
