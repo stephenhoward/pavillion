@@ -8,6 +8,7 @@ import CategoryMappingRoutes from '@/server/calendar/api/v1/category_mappings';
 import LocationRoutes from '@/server/calendar/api/v1/location';
 import WidgetRoutes from '@/server/calendar/api/v1/widget';
 import WidgetConfigRoutes from '@/server/calendar/api/v1/widget-config';
+import SeriesRoutes from '@/server/calendar/api/v1/series';
 import CalendarInterface from '../interface';
 
 export default class CalendarAPI {
@@ -29,6 +30,8 @@ export default class CalendarAPI {
     categoryMappingRoutes.installHandlers(app, '/api/v1');
     let locationRoutes = new LocationRoutes(internalAPI);
     locationRoutes.installHandlers(app, '/api/v1');
+    let seriesRoutes = new SeriesRoutes(internalAPI);
+    seriesRoutes.installHandlers(app, '/api/v1');
     // Widget configuration routes for admin interface
     let widgetConfigRoutes = new WidgetConfigRoutes(internalAPI);
     widgetConfigRoutes.installHandlers(app, '/api/v1');

@@ -31,6 +31,19 @@
     "selected": "selected",
     "not_selected": "not selected",
     "back_to_calendar": "Back to {{name}}",
+    "series_events": "Events in this series",
+    "series_no_events": "No events in this series",
+    "series_load_error": "Failed to load series",
+    "series_previous_page": "Previous page",
+    "series_next_page": "Next page",
+    "series_page_info": "Page {{current}} of {{total}}",
+    "series_loading": "Loading series...",
+    "series_pagination": "Pagination",
+    "series": {
+        "label": "Series",
+        "part_of": "Part of {{name}}",
+        "view": "View series"
+    },
     "public_search_filter": {
         "search_events": "Search Events",
         "search_placeholder": "Search events...",

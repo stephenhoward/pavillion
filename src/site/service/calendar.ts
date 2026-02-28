@@ -4,6 +4,17 @@ import { useCalendarStore } from '@/client/stores/calendarStore';
 import { useEventInstanceStore } from '@/site/stores/eventInstanceStore';
 import CalendarEventInstance from '@/common/model/event_instance';
 import { CalendarEvent } from '@/common/model/events';
+import { EventSeries } from '@/common/model/event_series';
+
+export type SeriesDetail = {
+  series: EventSeries;
+  events: CalendarEvent[];
+  pagination: {
+    total: number;
+    limit: number;
+    offset: number;
+  };
+};
 
 export default class CalendarService {
   store: ReturnType<typeof useCalendarStore>;
@@ -100,6 +111,58 @@ export default class CalendarService {
     }
     catch (error) {
       console.error('Error loading event:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Load the list of series for a calendar.
+   *
+   * @param calendarUrlName - The URL name of the calendar
+   * @returns Array of plain series objects with eventCount, or empty array
+   */
+  async loadSeriesList(calendarUrlName: string): Promise<Array<Record<string, any>>> {
+    try {
+      const result = await ModelService.listModels(`/api/public/v1/calendar/${calendarUrlName}/series`);
+      return result.items;
+    }
+    catch (error) {
+      console.error('Error loading series list:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Load series detail including the paginated event list.
+   *
+   * @param calendarUrlName - The URL name of the calendar
+   * @param seriesUrlName - The URL name of the series
+   * @param limit - Number of events per page (default 20)
+   * @param offset - Pagination offset (default 0)
+   * @returns SeriesDetail object or null if not found
+   */
+  async loadSeriesDetail(
+    calendarUrlName: string,
+    seriesUrlName: string,
+    limit: number = 20,
+    offset: number = 0,
+  ): Promise<SeriesDetail | null> {
+    try {
+      const url = `/api/public/v1/calendar/${calendarUrlName}/series/${seriesUrlName}?limit=${limit}&offset=${offset}`;
+      const data = await ModelService.getModel(url);
+      if (!data) {
+        return null;
+      }
+
+      // The response merges series fields with events and pagination
+      const series = EventSeries.fromObject(data);
+      const events = (data.events || []).map((e: Record<string, any>) => CalendarEvent.fromObject(e));
+      const pagination = data.pagination || { total: 0, limit, offset };
+
+      return { series, events, pagination };
+    }
+    catch (error) {
+      console.error('Error loading series detail:', error);
       throw error;
     }
   }

@@ -6,6 +6,7 @@ import db from '@/server/common/entity/db';
 import { LocationEntity } from '@/server/calendar/entity/location';
 import { MediaEntity } from '@/server/media/entity/media';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
+import { EventSeriesEntity } from '@/server/calendar/entity/event_series';
 
 @Table({ tableName: 'event' })
 class EventEntity extends Model {
@@ -48,6 +49,10 @@ class EventEntity extends Model {
   @Column({ type: DataType.UUID })
   declare media_id: string;
 
+  @ForeignKey(() => EventSeriesEntity)
+  @Column({ type: DataType.UUID, allowNull: true })
+  declare series_id: string | null;
+
   @BelongsTo(() => EventEntity)
   declare parentEvent: EventEntity;
 
@@ -62,6 +67,9 @@ class EventEntity extends Model {
 
   @BelongsTo(() => MediaEntity)
   declare media: MediaEntity;
+
+  @BelongsTo(() => EventSeriesEntity)
+  declare series: EventSeriesEntity;
 
   /**
    * Association with EventCategoryAssignmentEntity defined programmatically
@@ -83,6 +91,9 @@ class EventEntity extends Model {
         model.addContent(content.toModel());
       }
     }
+    if (this.series) {
+      model.series = this.series.toModel();
+    }
     return model;
   };
 
@@ -95,6 +106,7 @@ class EventEntity extends Model {
       event_source_url: event.eventSourceUrl,
       calendar_id: event.calendarId,
       media_id: event.media?.id,
+      series_id: event.series?.id ?? null,
     });
   }
 };

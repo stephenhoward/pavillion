@@ -3,6 +3,7 @@ import { reactive, computed, nextTick, onBeforeMount, ref } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useRoute } from 'vue-router';
 import CategoriesTab from './categories.vue';
+import SeriesTab from './series.vue';
 import EditorsTab from './editors.vue';
 import SettingsTab from './settings.vue';
 import WidgetTab from './widget-tab.vue';
@@ -128,6 +129,17 @@ const backToReports = () => {
               {{ t('categories_tab') }}
             </button>
             <button
+              id="series-tab"
+              type="button"
+              role="tab"
+              :aria-selected="state.activeTab === 'series' ? 'true' : 'false'"
+              aria-controls="series-panel"
+              class="calendar-management-root__tab"
+              @click="activateTab('series')"
+            >
+              {{ t('series_tab') }}
+            </button>
+            <button
               id="editors-tab"
               type="button"
               role="tab"
@@ -188,6 +200,17 @@ const backToReports = () => {
           class="calendar-management-root__panel"
         >
           <CategoriesTab v-if="calendar" :calendar-id="calendar.id" />
+        </div>
+
+        <div
+          id="series-panel"
+          role="tabpanel"
+          aria-labelledby="series-tab"
+          :aria-hidden="state.activeTab !== 'series'"
+          :hidden="state.activeTab !== 'series'"
+          class="calendar-management-root__panel"
+        >
+          <SeriesTab v-if="calendar" :calendar-id="calendar.id" />
         </div>
 
         <div

@@ -1,5 +1,6 @@
 import express, { Request, Response, Application } from 'express';
 import PublicCalendarInterface from '../../interface';
+import { SeriesNotFoundError } from '@/common/exceptions/series';
 
 export default class CalendarRoutes {
   service: PublicCalendarInterface;
@@ -12,6 +13,8 @@ export default class CalendarRoutes {
     const router = express.Router();
     router.get('/calendar/:urlName', this.getCalendar.bind(this));
     router.get('/calendar/:urlName/categories', this.listCategories.bind(this));
+    router.get('/calendar/:urlName/series', this.listSeries.bind(this));
+    router.get('/calendar/:urlName/series/:seriesUrlName', this.getSeries.bind(this));
     router.get('/calendar/:calendar/events', this.listInstances.bind(this));
     router.get('/events/:id', this.getEvent.bind(this));
     router.get('/instances/:id', this.getEventInstance.bind(this));
@@ -59,6 +62,98 @@ export default class CalendarRoutes {
       res.status(500).json({
         "error": "Failed to retrieve categories",
       });
+    }
+  }
+
+  async listSeries(req: Request, res: Response) {
+    const calendarName = req.params.urlName;
+
+    const calendar = await this.service.getCalendarByName(calendarName);
+    if (!calendar) {
+      res.status(404).json({
+        "error": "calendar not found",
+        errorName: 'CalendarNotFoundError',
+      });
+      return;
+    }
+
+    try {
+      const seriesWithCounts = await this.service.listSeriesForCalendar(calendar);
+      res.json(
+        seriesWithCounts.map(({ series, eventCount }) => ({
+          ...series.toObject(),
+          eventCount,
+        })),
+      );
+    }
+    catch {
+      res.status(500).json({
+        "error": "Failed to retrieve series",
+      });
+    }
+  }
+
+  async getSeries(req: Request, res: Response) {
+    const calendarName = req.params.urlName;
+    const seriesUrlName = req.params.seriesUrlName;
+
+    const calendar = await this.service.getCalendarByName(calendarName);
+    if (!calendar) {
+      res.status(404).json({
+        "error": "calendar not found",
+        errorName: 'CalendarNotFoundError',
+      });
+      return;
+    }
+
+    try {
+      const series = await this.service.getSeriesByUrlName(calendar.id, seriesUrlName);
+
+      // Parse pagination parameters with server-enforced limits
+      const DEFAULT_LIMIT = 20;
+      const MAX_LIMIT = 100;
+
+      let limit = DEFAULT_LIMIT;
+      let offset = 0;
+
+      if (req.query.limit && typeof req.query.limit === 'string') {
+        const parsedLimit = parseInt(req.query.limit, 10);
+        if (!isNaN(parsedLimit) && parsedLimit > 0) {
+          limit = Math.min(parsedLimit, MAX_LIMIT);
+        }
+      }
+
+      if (req.query.offset && typeof req.query.offset === 'string') {
+        const parsedOffset = parseInt(req.query.offset, 10);
+        if (!isNaN(parsedOffset) && parsedOffset >= 0) {
+          offset = parsedOffset;
+        }
+      }
+
+      const { events, total } = await this.service.getSeriesEvents(series.id, calendar.id, limit, offset);
+
+      res.json({
+        ...series.toObject(),
+        events: events.map(event => event.toObject()),
+        pagination: {
+          total,
+          limit,
+          offset,
+        },
+      });
+    }
+    catch (error: any) {
+      if (error instanceof SeriesNotFoundError || error.name === 'SeriesNotFoundError') {
+        res.status(404).json({
+          "error": "series not found",
+          errorName: 'SeriesNotFoundError',
+        });
+      }
+      else {
+        res.status(500).json({
+          "error": "Failed to retrieve series",
+        });
+      }
     }
   }
 

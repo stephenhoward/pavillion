@@ -50,6 +50,20 @@
         "show_filters": "Afficher les filtres",
         "date_range_invalid": "Plage de dates invalide"
     },
+    "back_to_calendar": "Retour à {{name}}",
+    "series_events": "Événements de cette série",
+    "series_no_events": "Aucun événement dans cette série",
+    "series_load_error": "Impossible de charger la série",
+    "series_previous_page": "Page précédente",
+    "series_next_page": "Page suivante",
+    "series_page_info": "Page {{current}} sur {{total}}",
+    "series_loading": "Chargement de la série...",
+    "series_pagination": "Pagination",
+    "series": {
+        "label": "Série",
+        "part_of": "Fait partie de {{name}}",
+        "view": "Voir la série"
+    },
     "event_location": "Lieu",
     "report": {
         "link_text": "Signaler l'événement",

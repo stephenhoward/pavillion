@@ -49,6 +49,8 @@ export default class ActivityPubServerRoutes {
     // Calendar (Group) actor endpoints
     router.get('/calendars/:urlname', this.getCalendarActor.bind(this));
     router.get('/calendars/:urlname/events/:eventid', this.getEvent.bind(this));
+    router.get('/calendars/:urlname/series', this.getSeriesCollection.bind(this));
+    router.get('/calendars/:urlname/series/:seriesid', this.getSeries.bind(this));
     router.get('/calendars/:urlname/outbox', this.readOutbox.bind(this));
     router.post('/calendars/:urlname/inbox',
       createActorRateLimiter(),
@@ -175,6 +177,72 @@ export default class ActivityPubServerRoutes {
     }
     catch (error) {
       console.error(`[API] Error fetching event ${req.params.eventid}:`, error);
+      res.status(500).send('Internal server error');
+    }
+  }
+
+  /**
+   * Get an OrderedCollection of series AP Objects for a calendar
+   *
+   * @param urlname - calendar URL name
+   * @returns OrderedCollection of series AP Objects as ActivityPub JSON-LD
+   */
+  async getSeriesCollection(req: Request, res: Response): Promise<void> {
+    const { urlname } = req.params;
+
+    try {
+      const calendar = await this.calendarService.getCalendarByName(urlname);
+      if (!calendar) {
+        res.status(404).send('Calendar not found');
+        return;
+      }
+
+      const seriesList = await this.calendarService.getSeriesForCalendar(calendar.id);
+      const { SeriesObject } = await import('@/server/activitypub/model/object/series');
+
+      const items = seriesList.map(series => new SeriesObject(calendar, series));
+      const collection = {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'OrderedCollection',
+        totalItems: items.length,
+        orderedItems: items,
+      };
+
+      res.setHeader('Content-Type', 'application/activity+json');
+      res.json(collection);
+    }
+    catch (error) {
+      console.error(`[API] Error fetching series collection for ${req.params.urlname}:`, error);
+      res.status(500).send('Internal server error');
+    }
+  }
+
+  /**
+   * Get an individual series Object as ActivityPub JSON-LD
+   *
+   * @param urlname - calendar URL name
+   * @param seriesid - series UUID
+   * @returns Series AP Object as ActivityPub JSON-LD
+   */
+  async getSeries(req: Request, res: Response): Promise<void> {
+    const { urlname, seriesid } = req.params;
+
+    try {
+      const calendar = await this.calendarService.getCalendarByName(urlname);
+      if (!calendar) {
+        res.status(404).send('Calendar not found');
+        return;
+      }
+
+      const series = await this.calendarService.getSeries(seriesid, calendar.id);
+      const { SeriesObject } = await import('@/server/activitypub/model/object/series');
+      const seriesObject = new SeriesObject(calendar, series);
+
+      res.setHeader('Content-Type', 'application/activity+json');
+      res.json(seriesObject);
+    }
+    catch (error) {
+      console.error(`[API] Error fetching series ${req.params.seriesid}:`, error);
       res.status(500).send('Internal server error');
     }
   }

@@ -31,6 +31,19 @@
     "selected": "seleccionado",
     "not_selected": "no seleccionado",
     "back_to_calendar": "Volver a {{name}}",
+    "series_events": "Eventos en esta serie",
+    "series_no_events": "No hay eventos en esta serie",
+    "series_load_error": "Error al cargar la serie",
+    "series_previous_page": "Página anterior",
+    "series_next_page": "Página siguiente",
+    "series_page_info": "Página {{current}} de {{total}}",
+    "series_loading": "Cargando serie...",
+    "series_pagination": "Paginación",
+    "series": {
+        "label": "Serie",
+        "part_of": "Parte de {{name}}",
+        "view": "Ver serie"
+    },
     "public_search_filter": {
         "search_events": "Buscar eventos",
         "search_placeholder": "Buscar eventos...",

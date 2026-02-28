@@ -70,6 +70,15 @@ export class EventObjectEntity extends Model {
   @Column({ type: DataType.JSON, allowNull: true })
   declare source_categories: Array<{ id: string; name?: string }> | null;
 
+  /**
+   * Source series metadata extracted from the incoming ActivityPub event payload.
+   * Stores a validated { id: string; name?: string; description?: string } object
+   * parsed from the series field in the AP object, or null if not present.
+   * All string fields are stored as plain text only.
+   */
+  @Column({ type: DataType.JSON, allowNull: true })
+  declare source_series: { id: string; name?: string; description?: string } | null;
+
   @CreatedAt
   declare created_at: Date;
 

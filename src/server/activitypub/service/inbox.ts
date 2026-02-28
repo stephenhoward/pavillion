@@ -703,6 +703,15 @@ class ProcessInboxService {
       // ignore parse failures - proceed without categories
     }
 
+    // Extract source series from AP payload (strict allowlist validation)
+    let sourceSeries: { id: string; name?: string; description?: string } | null = null;
+    try {
+      sourceSeries = this.parseSourceSeries(message.object?.series, actorUri);
+    }
+    catch {
+      // ignore parse failures - proceed without series
+    }
+
     // Atomically find or create the EventObjectEntity to avoid race conditions
     const localEventId = uuidv4();
     const [, created] = await EventObjectEntity.findOrCreate({
@@ -712,6 +721,7 @@ class ProcessInboxService {
         ap_id: apObjectId,
         attributed_to: actorUri,
         source_categories: sourceCategories,
+        source_series: sourceSeries,
       },
     });
 
@@ -920,6 +930,73 @@ class ProcessInboxService {
    */
   private async isPersonActorUri(actorUri: string): Promise<boolean> {
     return actorUri.includes('/users/');
+  }
+
+  /**
+   * Parses and validates the series field from an incoming ActivityPub event payload.
+   * Applies a strict allowlist schema: only id, name, and description are accepted.
+   * The id must be a valid HTTPS URL whose domain matches the actor's domain.
+   * String fields are stored as plain text (HTML tags stripped) with max lengths enforced.
+   * Returns null if the series field is absent, malformed, or fails validation.
+   *
+   * @param seriesRaw - The raw series field value from the AP event payload
+   * @param actorUri - The actor URI used to validate the series id domain
+   * @returns Validated series object or null
+   */
+  private parseSourceSeries(
+    seriesRaw: unknown,
+    actorUri: string,
+  ): { id: string; name?: string; description?: string } | null {
+    if (!seriesRaw || typeof seriesRaw !== 'object' || Array.isArray(seriesRaw)) {
+      return null;
+    }
+    const raw = seriesRaw as Record<string, unknown>;
+
+    // id is required and must be a valid HTTPS URL
+    if (typeof raw.id !== 'string' || !raw.id) {
+      return null;
+    }
+    let seriesUrl: URL;
+    try {
+      seriesUrl = new URL(raw.id);
+    }
+    catch {
+      return null;
+    }
+    if (seriesUrl.protocol !== 'https:') {
+      return null;
+    }
+
+    // Validate series id domain matches actor domain
+    let actorDomain: string;
+    try {
+      actorDomain = new URL(actorUri).hostname;
+    }
+    catch {
+      return null;
+    }
+    if (seriesUrl.hostname !== actorDomain) {
+      return null;
+    }
+
+    // Helper: strip HTML tags and enforce max length
+    const toPlainText = (value: unknown, maxLen: number): string | undefined => {
+      if (typeof value !== 'string') return undefined;
+      const stripped = value.replace(/<[^>]*>/g, '').trim();
+      return stripped.length > 0 ? stripped.slice(0, maxLen) : undefined;
+    };
+
+    const result: { id: string; name?: string; description?: string } = {
+      id: raw.id,
+    };
+
+    const name = toPlainText(raw.name, 255);
+    if (name !== undefined) result.name = name;
+
+    const description = toPlainText(raw.description, 2000);
+    if (description !== undefined) result.description = description;
+
+    return result;
   }
 
   /**
@@ -1140,6 +1217,17 @@ class ProcessInboxService {
     }
 
     const updatedEvent = await this.calendarInterface.updateRemoteEvent(calendar, eventParams);
+
+    // Update source_series on the AP object record (strict allowlist validation)
+    if (apObject) {
+      try {
+        const updatedSourceSeries = this.parseSourceSeries(message.object?.series, actorUri);
+        await apObject.update({ source_series: updatedSourceSeries });
+      }
+      catch {
+        // ignore update failures - event was already updated successfully
+      }
+    }
 
     console.log(`[INBOX] Updated event ${apObject.event_id} from ${isPersonActor ? 'Person' : 'Calendar'} actor ${actorUri}`);
 

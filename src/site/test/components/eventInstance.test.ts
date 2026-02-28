@@ -13,6 +13,8 @@
  * - Same-day events show only the time portion for the end time.
  * - Multi-day events show the full datetime for the end time.
  * - document.title is set to "Event Name | Pavillion" after loading.
+ * - Events with a series show a clickable series link.
+ * - Events without a series show no series link.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises, VueWrapper } from '@vue/test-utils';
@@ -63,6 +65,14 @@ let mockEnd: {
 // Mutable event name so individual tests can control the event title
 let mockEventName = 'Test Event';
 
+// Mutable series state so individual tests can inject series data
+let mockSeries: {
+  urlName: string;
+  content: (lang: string) => { name: string };
+  hasContent: (lang: string) => boolean;
+  getLanguages: () => string[];
+} | null = null;
+
 vi.mock('@/site/service/calendar', () => {
   return {
     default: vi.fn().mockImplementation(() => ({
@@ -91,6 +101,7 @@ vi.mock('@/site/service/calendar', () => {
             media: null,
             categories: mockCategories,
             location: mockLocation,
+            series: mockSeries,
           },
         }),
       ),
@@ -185,6 +196,18 @@ function makeCategoryObject(id: string, translations: Record<string, string>) {
   };
 }
 
+function makeSeriesObject(urlName: string, translations: Record<string, string>) {
+  return {
+    urlName,
+    content: (lang: string) => {
+      const name = translations[lang] ?? translations['en'] ?? '';
+      return { name };
+    },
+    hasContent: (lang: string) => lang in translations,
+    getLanguages: () => Object.keys(translations),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // i18next initialisation
 // ---------------------------------------------------------------------------
@@ -197,6 +220,9 @@ beforeAll(async () => {
         en: {
           system: {
             back_to_calendar: 'Back to {{name}}',
+            'series.label': 'Series',
+            'series.part_of': 'Part of {{name}}',
+            'series.view': 'View series',
           },
         },
       },
@@ -204,7 +230,12 @@ beforeAll(async () => {
   }
   else {
     // Add the key to the existing instance if already initialised by another test file
-    i18next.addResourceBundle('en', 'system', { back_to_calendar: 'Back to {{name}}' }, true, true);
+    i18next.addResourceBundle('en', 'system', {
+      back_to_calendar: 'Back to {{name}}',
+      'series.label': 'Series',
+      'series.part_of': 'Part of {{name}}',
+      'series.view': 'View series',
+    }, true, true);
   }
 });
 
@@ -220,6 +251,7 @@ describe('eventInstance breadcrumb locale behaviour', () => {
     mockLocation = null;
     mockEnd = null;
     mockEventName = 'Test Event';
+    mockSeries = null;
   });
 
   afterEach(() => {
@@ -297,6 +329,7 @@ describe('eventInstance category badge locale behaviour', () => {
     mockLocation = null;
     mockEnd = null;
     mockEventName = 'Test Event';
+    mockSeries = null;
   });
 
   afterEach(() => {
@@ -477,6 +510,7 @@ describe('eventInstance location display', () => {
     mockLocation = null;
     mockEnd = null;
     mockEventName = 'Test Event';
+    mockSeries = null;
   });
 
   afterEach(() => {
@@ -550,6 +584,7 @@ describe('eventInstance end time display', () => {
     mockLocation = null;
     mockEnd = null;
     mockEventName = 'Test Event';
+    mockSeries = null;
   });
 
   afterEach(() => {
@@ -629,6 +664,7 @@ describe('eventInstance document.title', () => {
     mockLocation = null;
     mockEnd = null;
     mockEventName = 'Test Event';
+    mockSeries = null;
     document.title = 'Pavillion'; // Reset to default before each test
   });
 
@@ -658,6 +694,107 @@ describe('eventInstance document.title', () => {
     );
 
     expect(document.title).toBe('Test Event | Pavillion');
+    wrapper.unmount();
+  });
+});
+
+describe('eventInstance series link display', () => {
+  beforeEach(() => {
+    mockLocalizedPath.mockReset();
+    mockCurrentLocale.value = 'en';
+    mockCategories = [];
+    mockLocation = null;
+    mockEnd = null;
+    mockEventName = 'Test Event';
+    mockSeries = null;
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('renders a series link when the event belongs to a series', async () => {
+    mockSeries = makeSeriesObject('yoga-classes', { en: 'Yoga Classes' });
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    const seriesLink = wrapper.find('.event-series-link');
+    expect(seriesLink.exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('does not render a series link when the event has no series', async () => {
+    mockSeries = null;
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    const seriesLink = wrapper.find('.event-series-link');
+    expect(seriesLink.exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('series link href points to the series page', async () => {
+    mockSeries = makeSeriesObject('yoga-classes', { en: 'Yoga Classes' });
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    const seriesLink = wrapper.find('.event-series-link');
+    expect(seriesLink.exists()).toBe(true);
+    expect(seriesLink.attributes('href')).toBe('/view/test_calendar/series/yoga-classes');
+    wrapper.unmount();
+  });
+
+  it('series link displays the localized series name', async () => {
+    mockSeries = makeSeriesObject('yoga-classes', { en: 'Yoga Classes', es: 'Clases de Yoga' });
+    mockCurrentLocale.value = 'en';
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    const seriesLink = wrapper.find('.event-series-link');
+    expect(seriesLink.exists()).toBe(true);
+    expect(seriesLink.text()).toBe('Yoga Classes');
+    wrapper.unmount();
+  });
+
+  it('series link href includes locale prefix when locale is active', async () => {
+    mockSeries = makeSeriesObject('yoga-classes', { en: 'Yoga Classes' });
+    mockCurrentLocale.value = 'es';
+
+    const wrapper = await mountInstance(
+      '/es/view/test_calendar/events/evt-1/inst-1',
+      (path) => '/es' + path,
+    );
+
+    const seriesLink = wrapper.find('.event-series-link');
+    expect(seriesLink.exists()).toBe(true);
+    expect(seriesLink.attributes('href')).toBe('/es/view/test_calendar/series/yoga-classes');
+    wrapper.unmount();
+  });
+
+  it('series label text is shown alongside the series link', async () => {
+    mockSeries = makeSeriesObject('book-club', { en: 'Book Club' });
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    const seriesWrapper = wrapper.find('.series-link-wrapper');
+    expect(seriesWrapper.exists()).toBe(true);
+    const label = seriesWrapper.find('.series-label');
+    expect(label.exists()).toBe(true);
     wrapper.unmount();
   });
 });

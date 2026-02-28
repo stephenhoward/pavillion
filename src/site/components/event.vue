@@ -4,13 +4,14 @@ import { useTranslation } from 'i18next-vue';
 import { useRoute } from 'vue-router';
 import CalendarService from '../service/calendar';
 import { useLocalizedContent } from '../composables/useLocalizedContent';
-import { useEventStore } from '../../client/stores/eventStore';
 import NotFound from './notFound.vue';
 import EventImage from './EventImage.vue';
 import ReportEvent from './report-event.vue';
+import { useLocale } from '@/site/composables/useLocale';
 
 const { t } = useTranslation('system');
 const route = useRoute();
+const { localizedPath } = useLocale();
 const calendarId = route.params.calendar;
 const eventId = route.params.event;
 const showReportModal = ref(false);
@@ -23,7 +24,6 @@ const state = reactive({
   isLoading: false,
 });
 const calendarService = new CalendarService();
-const store = useEventStore();
 
 onBeforeMount(async () => {
   try {
@@ -46,7 +46,7 @@ onBeforeMount(async () => {
   }
   catch (error) {
     console.error('Error loading event data:', error);
-    state.err = 'Failed to load event data';
+    state.err = t('error_load_event');
   }
   finally {
     state.isLoading = false;
@@ -94,6 +94,17 @@ function closeReportModal() {
       </div>
     </main>
     <footer class="event-footer">
+      <div
+        v-if="state.event.series"
+        class="series-link-wrapper"
+      >
+        <span class="series-label">{{ t('series.label') }}</span>
+        <router-link
+          :to="localizedPath('/view/' + state.calendar.urlName + '/series/' + state.event.series.urlName)"
+          class="event-series-link"
+          :aria-label="t('series.part_of', { name: localizedContent(state.event.series).name })"
+        >{{ localizedContent(state.event.series).name }}</router-link>
+      </div>
       <button
         type="button"
         class="report-link"
@@ -253,6 +264,42 @@ function closeReportModal() {
 
   @include public-dark-mode {
     border-top-color: $public-border-subtle-dark;
+  }
+
+  .series-link-wrapper {
+    display: flex;
+    align-items: center;
+    gap: $public-space-sm;
+    margin-bottom: $public-space-md;
+    font-size: $public-font-size-sm;
+
+    .series-label {
+      color: $public-text-secondary-light;
+      font-weight: $public-font-weight-medium;
+
+      @include public-dark-mode {
+        color: $public-text-secondary-dark;
+      }
+    }
+  }
+}
+
+.event-series-link {
+  color: $public-accent-light;
+  text-decoration: none;
+  font-weight: $public-font-weight-medium;
+  transition: $public-transition-fast;
+
+  &:hover {
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    @include public-focus-visible;
+  }
+
+  @include public-dark-mode {
+    color: $public-accent-dark;
   }
 }
 

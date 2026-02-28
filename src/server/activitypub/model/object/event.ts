@@ -2,6 +2,7 @@ import config from 'config';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent } from '@/common/model/events';
 import { ActivityPubObject } from '@/server/activitypub/model/base';
+import { SeriesObject } from '@/server/activitypub/model/object/series';
 
 class EventObject extends ActivityPubObject {
   type: string = 'Event';
@@ -11,6 +12,7 @@ class EventObject extends ActivityPubObject {
   parentEvent: string = '';
   childEvents: string[] = [];
   categories: string[] = [];
+  series: string | null = null;
   content: Record<string, APEventContent>;
   schedules: CalendarEventSchedule[];
 
@@ -44,6 +46,11 @@ class EventObject extends ActivityPubObject {
       this.categories = event.categories.map(cat =>
         `https://${domain}/api/public/v1/calendar/${calendar.urlName}/categories/${cat.id}`,
       );
+    }
+
+    // Serialize series as AP series Object ID (UUID-based URL)
+    if (event.series) {
+      this.series = SeriesObject.seriesUrl(calendar, event.series);
     }
   }
 }

@@ -814,6 +814,20 @@ button {
             </div>
           </section>
 
+          <!-- SERIES Section -->
+          <section class="editor-section">
+            <h2 class="section-header">{{ t('series_section') }}</h2>
+
+            <div class="section-card">
+              <SeriesSelector
+                :calendar-id="editorState.event.calendarId"
+                :selected-series-id="selectedSeriesId"
+                :event-id="editorState.event.id"
+                @series-changed="handleSeriesChanged"
+              />
+            </div>
+          </section>
+
           <!-- DATE & TIME Section -->
           <section class="editor-section">
             <h2 class="section-header">DATE & TIME</h2>
@@ -928,6 +942,7 @@ import EventRecurrenceView from './event_recurrence.vue';
 import languagePicker from '@/client/components/common/languagePicker.vue';
 import ImageUpload from '@/client/components/common/media/ImageUpload.vue';
 import CategorySelector from './CategorySelector.vue';
+import SeriesSelector from './SeriesSelector.vue';
 import ModalLayout from '@/client/components/common/modal.vue';
 import PillButton from '@/client/components/common/PillButton.vue';
 import LanguageTabSelector from '@/client/components/common/LanguageTabSelector.vue';
@@ -965,6 +980,7 @@ const defaultLanguage = 'en';
 const {
   state: editorState,
   selectedCategories,
+  selectedSeriesId,
   mediaId,
   initializeEvent,
   saveEvent,
@@ -1059,6 +1075,13 @@ const handleImageUpload = (results) => {
  */
 const handleCategoriesChanged = (categories) => {
   selectedCategories.value = categories;
+};
+
+/**
+ * Handle series selection changes
+ */
+const handleSeriesChanged = (seriesId) => {
+  selectedSeriesId.value = seriesId;
 };
 
 /**
@@ -1247,6 +1270,7 @@ defineExpose({
   showUnsavedChangesDialog,
   state: editorState,
   selectedCategories,
+  selectedSeriesId,
   mediaId,
   confirmLeave,
   cancelLeave,
