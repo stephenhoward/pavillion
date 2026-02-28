@@ -46,6 +46,7 @@
     "image_section": "Series Image",
     "image": "Series Image",
     "image_help": "Upload an image to represent this series",
+    "current_image": "Current Image",
     "error_empty_name": "Series name cannot be empty",
     "error_empty_url_name": "Series URL name cannot be empty"
   },

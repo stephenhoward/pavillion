@@ -9,6 +9,7 @@ import SeriesService from '@/client/service/series';
 import LanguagePicker from '@/client/components/common/languagePicker.vue';
 import LanguageTabSelector from '@/client/components/common/LanguageTabSelector.vue';
 import ImageUpload from '@/client/components/common/media/ImageUpload.vue';
+import EventImage from '@/client/components/common/media/EventImage.vue';
 
 const emit = defineEmits(['close', 'saved']);
 
@@ -51,6 +52,12 @@ watch(() => props.series, (newSeries) => {
 }, { immediate: true });
 
 const nameInput = ref(null);
+const hasNewUpload = ref(false);
+
+const currentMedia = computed(() => {
+  const id = localSeries.value?.mediaId;
+  return id ? { id } : null;
+});
 
 const erroredTabs = computed(() => {
   if (!localSeries.value) return [];
@@ -126,6 +133,14 @@ function handleImageUpload(results) {
   if (results && results.length > 0 && results[0].success) {
     localSeries.value.mediaId = results[0].media.id;
   }
+}
+
+/**
+ * Track whether a new file has been selected in the upload zone.
+ * Used to hide the existing image preview when an upload is in progress.
+ */
+function handleFilesChanged(files) {
+  hasNewUpload.value = files.length > 0;
 }
 
 /**
@@ -311,11 +326,18 @@ onMounted(() => {
           <h2 class="section-header">{{ tEditor('image_section') }}</h2>
 
           <div class="section-card">
+            <!-- Existing image preview (hidden when a new upload is in progress) -->
+            <div v-if="currentMedia && !hasNewUpload" class="current-image-section">
+              <p class="field-label">{{ tEditor('current_image') }}</p>
+              <EventImage :media="currentMedia" size="medium" />
+            </div>
+
             <ImageUpload
               :calendar-id="localSeries?.calendarId || ''"
               :multiple="false"
               :aria-label="tEditor('image')"
               @upload-complete="handleImageUpload"
+              @files-changed="handleFilesChanged"
             />
             <p class="field-help">{{ tEditor('image_help') }}</p>
           </div>
