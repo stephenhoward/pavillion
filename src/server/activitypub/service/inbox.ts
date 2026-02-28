@@ -1405,6 +1405,13 @@ class ProcessInboxService {
       await addToOutbox(this.eventBus, calendar, acceptActivity);
 
       console.log(`[INBOX] Accept activity queued for delivery`);
+
+      // Emit domain event for notification system (fire-and-forget)
+      this.eventBus.emit('activitypub:calendar:followed', {
+        calendarId: calendar.id,
+        followerName: remoteCalendar.remoteDisplayName ?? message.actor,
+        followerUrl: message.actor,
+      });
     }
     else {
       console.log(`[INBOX] Follow relationship already exists for ${message.actor}, skipping`);
@@ -1622,6 +1629,25 @@ class ProcessInboxService {
         calendar_actor_id: sharerRemoteCalendar.id,
         type: 'share',
       });
+    }
+
+    // Emit domain event for notification system if the reposted event is local
+    if (apObject) {
+      try {
+        const localEvent = await this.calendarInterface.getEventById(apObject.event_id);
+        if (localEvent && localEvent.calendarId !== null) {
+          this.eventBus.emit('activitypub:event:reposted', {
+            eventId: localEvent.id,
+            calendarId: localEvent.calendarId,
+            reposterName: sharerRemoteCalendar.remoteDisplayName ?? message.actor,
+            reposterUrl: message.actor,
+          });
+        }
+      }
+      catch (error) {
+        // Non-critical: log and continue without blocking processing
+        logError(error, `[INBOX] Failed to emit repost event for ${apObjectId}`);
+      }
     }
 
     // Check for auto-repost

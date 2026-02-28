@@ -5,6 +5,7 @@ import CalendarInterface from '@/server/calendar/interface';
 import NotificationService from '@/server/notifications/service/notification';
 import NotificationsInterface from '@/server/notifications/interface';
 import NotificationEventHandlers from '@/server/notifications/events';
+import NotificationAPI from '@/server/notifications/api/v1';
 
 export default class NotificationsDomain {
   public readonly interface: NotificationsInterface;
@@ -24,8 +25,8 @@ export default class NotificationsDomain {
     this.installEventHandlers();
   }
 
-  public installAPI(_app: Application): void {
-    // API installation will be added in pv-pouu.3.1
+  public installAPI(app: Application): void {
+    NotificationAPI.install(app, this.interface);
   }
 
   public installEventHandlers(): void {
