@@ -9,6 +9,7 @@ import SeriesService from '@/client/service/series';
 import ModalLayout from '@/client/components/common/modal.vue';
 import LanguagePicker from '@/client/components/common/languagePicker.vue';
 import PillButton from '@/client/components/common/PillButton.vue';
+import ImageUpload from '@/client/components/common/media/ImageUpload.vue';
 
 const emit = defineEmits(['close', 'saved']);
 
@@ -112,6 +113,15 @@ async function saveSeries() {
 }
 
 /**
+ * Handle image upload completion
+ */
+function handleImageUpload(results) {
+  if (results && results.length > 0 && results[0].success) {
+    localSeries.value.mediaId = results[0].media.id;
+  }
+}
+
+/**
  * Add a new language to the series
  */
 function addLanguage(language) {
@@ -197,6 +207,20 @@ onMounted(() => {
           :disabled="state.isSaving"
         />
         <p class="field-help">{{ tEditor('url_name_help') }}</p>
+      </div>
+
+      <!-- Image upload field -->
+      <div class="form-field">
+        <label class="form-label">
+          {{ tEditor('image') }}
+        </label>
+        <ImageUpload
+          :calendar-id="localSeries?.calendarId || ''"
+          :multiple="false"
+          :aria-label="tEditor('image')"
+          @upload-complete="handleImageUpload"
+        />
+        <p class="field-help">{{ tEditor('image_help') }}</p>
       </div>
 
       <!-- Multilingual name and description fields -->
