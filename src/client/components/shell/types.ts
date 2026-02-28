@@ -19,6 +19,9 @@ export interface NavigationItem {
 
   /** Optional notification badge count */
   badge?: number;
+
+  /** Accessible label for the badge (pre-translated) */
+  badgeLabel?: string;
 }
 
 /**

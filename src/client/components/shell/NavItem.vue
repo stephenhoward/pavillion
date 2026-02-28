@@ -29,7 +29,7 @@ const props = withDefaults(defineProps<{
     <span
       v-if="props.item.badge && props.item.badge > 0"
       class="shell-nav-item__badge"
-      :aria-label="`${props.item.badge} notifications`"
+      :aria-label="props.item.badgeLabel"
     >
       {{ props.item.badge > 99 ? '99+' : props.item.badge }}
     </span>

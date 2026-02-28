@@ -43,6 +43,7 @@ const navigationItems = computed<NavigationItem[]>(() => [
     icon: Bell,
     to: '/inbox',
     badge: notificationStore.unreadCount,
+    badgeLabel: t('main_navigation.inbox_badge_label', { count: notificationStore.unreadCount }),
   },
   {
     id: 'settings',

@@ -120,7 +120,7 @@ onUnmounted(() => {
       aria-live="polite"
       aria-atomic="true"
     >
-      <p v-show="isLoading">
+      <p v-if="isLoading">
         {{ t('notifications.loading_more') }}
       </p>
     </div>
@@ -182,6 +182,12 @@ div.inbox-container {
   }
 
   div.loading-indicator {
+    // Override the global [aria-live="polite"] off-screen rule — this region is intentionally visible
+    position: static;
+    left: auto;
+    width: auto;
+    height: auto;
+    overflow: visible;
     padding: var(--pav-space-6);
     text-align: center;
 

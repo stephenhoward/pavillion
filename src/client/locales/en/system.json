@@ -4,7 +4,8 @@
     "inbox_button": "Inbox",
     "new_event": "New Event",
     "profile_button": "Settings",
-    "feed_button": "Feed"
+    "feed_button": "Feed",
+    "inbox_badge_label": "{{count}} unread notification"
   },
   "language_picker": {
     "search_language": "Search for a language",
