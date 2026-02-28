@@ -283,6 +283,33 @@ class CalendarService {
   }
 
   /**
+   * Returns all accounts with edit access to a calendar: the owner plus all local editors.
+   * Used for notification fan-out when a calendar-level event occurs.
+   *
+   * @param calendarId - The calendar UUID to get editors for
+   * @returns Array of Account models for all accounts with edit access; empty array if calendar not found
+   */
+  async getEditorsForCalendar(calendarId: string): Promise<Account[]> {
+    const memberships = await CalendarMemberEntity.findAll({
+      where: {
+        calendar_id: calendarId,
+        account_id: { [Op.ne]: null },
+      },
+      include: [
+        {
+          model: AccountEntity,
+          as: 'account',
+          attributes: ['id', 'username', 'email', 'language', 'display_name'],
+        },
+      ],
+    });
+
+    return memberships
+      .filter(m => m.account)
+      .map(m => m.account.toModel());
+  }
+
+  /**
    * Checks if a remote actor (identified by actor URI) is an editor of the given calendar.
    *
    * @param actorUri - The ActivityPub actor URI of the remote user

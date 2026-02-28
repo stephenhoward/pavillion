@@ -134,6 +134,17 @@ export default class CalendarInterface {
     return this.calendarService.isEditorOfCalendar(actorUri, calendarId);
   }
 
+  /**
+   * Returns all accounts with edit access to a calendar (owner + editors).
+   * Used for notification fan-out.
+   *
+   * @param calendarId - The calendar UUID to get editors for
+   * @returns Array of Account models; empty array if calendar not found
+   */
+  async getEditorsForCalendar(calendarId: string): Promise<Account[]> {
+    return this.calendarService.getEditorsForCalendar(calendarId);
+  }
+
   // Event operations
   async listEvents(calendar: Calendar, options?: {
     search?: string;
