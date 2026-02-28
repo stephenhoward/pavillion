@@ -42,6 +42,8 @@
     "url_name": "URL Name",
     "url_name_placeholder": "url-name",
     "url_name_help": "Used in URLs. Lowercase letters, numbers, and underscores only.",
+    "details_section": "Series Details",
+    "image_section": "Series Image",
     "image": "Series Image",
     "image_help": "Upload an image to represent this series",
     "error_empty_name": "Series name cannot be empty",
