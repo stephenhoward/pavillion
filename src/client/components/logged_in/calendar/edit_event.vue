@@ -769,7 +769,7 @@ button {
                   class="remove-translation-link"
                   @click="handleRemoveLanguage(currentLanguage)"
                 >
-                  Remove {{ iso6391.getName(currentLanguage) }} translation
+                  {{ t('remove_language', { language: iso6391.getName(currentLanguage) }) }}
                 </button>
               </div>
             </div>

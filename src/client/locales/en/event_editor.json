@@ -10,7 +10,7 @@
     "back_button": "Go back",
     "add_date_button": "Add another date",
     "add_language": "Add a Language",
-    "remove_language": "Remove This Language",
+    "remove_language": "Remove {{language}} translation",
     "remove_translation_confirm": "Remove the {{language}} translation? This will permanently delete all {{language}} content for this event.",
     "name_placeholder": "event name",
     "description_placeholder": "event description",

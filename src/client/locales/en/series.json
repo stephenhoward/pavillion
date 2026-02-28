@@ -29,7 +29,7 @@
     "success_deleted": "Series deleted successfully",
     "language_label": "Language",
     "add_language": "Add Language",
-    "remove_language": "Remove Language",
+    "remove_language": "Remove {{language}} translation",
     "event_count": "{{count}} event",
     "event_count_plural": "{{count}} events"
   },

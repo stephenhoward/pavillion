@@ -1,13 +1,13 @@
 <script setup>
-import { reactive, ref, nextTick, onMounted, watch } from 'vue';
+import { reactive, ref, computed, nextTick, onMounted, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
-import { X } from 'lucide-vue-next';
 import iso6391 from 'iso-639-1-dir';
 import { EventSeriesContent } from '@/common/model/event_series_content';
 import { DuplicateSeriesNameError, SeriesUrlNameAlreadyExistsError, InvalidSeriesUrlNameError } from '@/common/exceptions/series';
 import SeriesService from '@/client/service/series';
 import ModalLayout from '@/client/components/common/modal.vue';
 import LanguagePicker from '@/client/components/common/languagePicker.vue';
+import LanguageTabSelector from '@/client/components/common/LanguageTabSelector.vue';
 import PillButton from '@/client/components/common/PillButton.vue';
 import ImageUpload from '@/client/components/common/media/ImageUpload.vue';
 
@@ -52,6 +52,14 @@ watch(() => props.series, (newSeries) => {
 }, { immediate: true });
 
 const nameInput = ref(null);
+
+const erroredTabs = computed(() => {
+  if (!localSeries.value) return [];
+  return localSeries.value.getLanguages().filter(lang => {
+    const content = localSeries.value.content(lang);
+    return !content || !content.name || content.name.trim().length === 0;
+  });
+});
 
 /**
  * Check if the series can be saved
@@ -168,11 +176,8 @@ onMounted(() => {
   }
 
   nextTick(() => {
-    const firstInput = Array.isArray(nameInput.value)
-      ? nameInput.value[0]
-      : nameInput.value;
-    if (firstInput) {
-      firstInput.focus();
+    if (nameInput.value) {
+      nameInput.value.focus();
     }
   });
 });
@@ -226,66 +231,57 @@ onMounted(() => {
       <!-- Multilingual name and description fields -->
       <p class="form-helper">{{ tEditor('name_help') }}</p>
 
-      <div class="language-fields">
-        <div
-          v-for="lang in localSeries?.getLanguages()"
-          :key="lang"
-          class="language-section"
-        >
-          <div class="language-section-header">
-            <span class="language-label">{{ iso6391.getNativeName(lang) }}</span>
-            <button
-              v-if="localSeries && localSeries.getLanguages().length > 1"
-              type="button"
-              class="remove-language-button"
-              :aria-label="t('remove_language')"
-              @click="removeLanguage(lang)"
-            >
-              <X :size="16" :stroke-width="2" />
-            </button>
-          </div>
+      <LanguageTabSelector
+        v-model="state.currentLanguage"
+        :languages="localSeries?.getLanguages() || []"
+        :errored-tabs="erroredTabs"
+        @add-language="state.showLanguagePicker = true"
+        @remove-language="removeLanguage"
+      />
 
-          <div class="language-field">
-            <label class="field-label" :for="`name-${lang}`">
-              {{ tEditor('name') }}
-            </label>
-            <input
-              :id="`name-${lang}`"
-              type="text"
-              class="form-input"
-              v-model="localSeries.content(lang).name"
-              :dir="iso6391.getDir(lang) == 'rtl' ? 'rtl' : ''"
-              :placeholder="tEditor('name_placeholder')"
-              :disabled="state.isSaving"
-              @keyup.enter="saveSeries"
-              ref="nameInput"
-            />
-          </div>
-
-          <div class="language-field">
-            <label class="field-label" :for="`description-${lang}`">
-              {{ tEditor('description') }}
-            </label>
-            <textarea
-              :id="`description-${lang}`"
-              class="form-textarea"
-              v-model="localSeries.content(lang).description"
-              :dir="iso6391.getDir(lang) == 'rtl' ? 'rtl' : ''"
-              :placeholder="tEditor('description_placeholder')"
-              :disabled="state.isSaving"
-              rows="3"
-            />
-          </div>
-        </div>
-      </div>
-
-      <button
-        type="button"
-        class="add-language-button"
-        @click="state.showLanguagePicker = true"
+      <div
+        :dir="iso6391.getDir(state.currentLanguage) === 'rtl' ? 'rtl' : 'ltr'"
+        class="language-content"
       >
-        + {{ t('add_language') }}
-      </button>
+        <div class="language-field">
+          <label class="field-label" :for="`name-${state.currentLanguage}`">
+            {{ tEditor('name') }}
+          </label>
+          <input
+            :id="`name-${state.currentLanguage}`"
+            type="text"
+            class="form-input"
+            v-model="localSeries.content(state.currentLanguage).name"
+            :placeholder="tEditor('name_placeholder')"
+            :disabled="state.isSaving"
+            @keyup.enter="saveSeries"
+            ref="nameInput"
+          />
+        </div>
+
+        <div class="language-field">
+          <label class="field-label" :for="`description-${state.currentLanguage}`">
+            {{ tEditor('description') }}
+          </label>
+          <textarea
+            :id="`description-${state.currentLanguage}`"
+            class="form-textarea"
+            v-model="localSeries.content(state.currentLanguage).description"
+            :placeholder="tEditor('description_placeholder')"
+            :disabled="state.isSaving"
+            rows="3"
+          />
+        </div>
+
+        <button
+          v-if="localSeries && localSeries.getLanguages().length > 1"
+          type="button"
+          class="remove-translation-link"
+          @click="removeLanguage(state.currentLanguage)"
+        >
+          {{ t('remove_language', { language: iso6391.getName(state.currentLanguage) }) }}
+        </button>
+      </div>
 
       <div class="form-actions">
         <button
@@ -377,39 +373,10 @@ onMounted(() => {
   }
 }
 
-.language-fields {
-  display: flex;
-  flex-direction: column;
-  gap: var(--pav-space-6);
-}
-
-.language-section {
+.language-content {
   display: flex;
   flex-direction: column;
   gap: var(--pav-space-3);
-  padding: var(--pav-space-4);
-  border: 1px solid var(--pav-color-stone-200);
-  border-radius: 0.75rem;
-
-  @media (prefers-color-scheme: dark) {
-    border-color: var(--pav-color-stone-700);
-  }
-}
-
-.language-section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.language-label {
-  font-weight: 600;
-  font-size: 0.875rem;
-  color: var(--pav-color-stone-700);
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-300);
-  }
 }
 
 .language-field {
@@ -428,45 +395,22 @@ onMounted(() => {
   }
 }
 
-.remove-language-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--pav-space-2);
-  background: none;
-  border: none;
-  border-radius: 0.375rem;
-  color: var(--pav-color-stone-400);
-  cursor: pointer;
-  transition: color 0.2s, background-color 0.2s;
-
-  &:hover {
-    color: var(--pav-color-stone-600);
-    background: var(--pav-color-stone-100);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-300);
-      background: var(--pav-color-stone-700);
-    }
-  }
-}
-
-.add-language-button {
+.remove-translation-link {
   align-self: flex-start;
-  padding: var(--pav-space-2) var(--pav-space-3);
+  padding: 0;
   background: none;
   border: none;
-  color: var(--pav-color-stone-600);
-  font-size: 0.875rem;
-  font-weight: 500;
+  color: var(--pav-color-stone-500);
+  font-size: 0.8125rem;
   cursor: pointer;
-  transition: color 0.2s;
+  text-decoration: underline;
+  transition: color 0.15s;
 
   &:hover {
-    color: var(--pav-color-orange-600);
+    color: var(--pav-color-red-600);
 
     @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-orange-400);
+      color: var(--pav-color-red-400);
     }
   }
 }
