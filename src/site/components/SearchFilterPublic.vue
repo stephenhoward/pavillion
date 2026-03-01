@@ -52,22 +52,29 @@
               :aria-label="t('filter_by_date_range')"
               @click="toggleDateFilter"
             >
-              <span class="button-text">{{ dateFilterButtonText }}</span>
-              <svg
-                class="dropdown-icon"
-                :class="{ rotated: state.isDateFilterOpen }"
-                width="12"
-                height="12"
-                viewBox="0 0 12 12"
-                fill="none"
+              <CalendarDays
+                :size="18"
+                class="calendar-icon"
                 aria-hidden="true"
-              >
-                <path d="M2 4L6 8L10 4"
-                      stroke="currentColor"
-                      stroke-width="1.5"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"/>
-              </svg>
+              />
+              <span class="button-label">
+                <span class="button-text">{{ dateFilterButtonText }}</span>
+                <svg
+                  class="dropdown-icon"
+                  :class="{ rotated: state.isDateFilterOpen }"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 12 12"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <path d="M2 4L6 8L10 4"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"/>
+                </svg>
+              </span>
             </button>
             <button
               v-if="state.dateFilterMode !== null"
@@ -220,7 +227,7 @@ import { usePublicCalendarStore } from '../stores/publicCalendarStore';
 import CategoryPillSelector from './CategoryPillSelector.vue';
 import { getThisWeek, getNextWeek } from '@/common/utils/datePresets';
 import type { ViewMode } from '@/widget/stores/widgetStore';
-import { Search } from 'lucide-vue-next';
+import { Search, CalendarDays } from 'lucide-vue-next';
 
 // Accept optional widget view mode prop
 const props = defineProps<{
@@ -969,6 +976,16 @@ onUnmounted(() => {
       }
     }
 
+    .calendar-icon {
+      flex-shrink: 0;
+    }
+
+    .button-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
     .button-text {
       flex: 1;
       white-space: nowrap;
@@ -1298,6 +1315,19 @@ onUnmounted(() => {
   }
 
   .date-range-section {
+    .date-filter-button {
+      width: 38px;
+      min-width: 38px;
+      padding: 0;
+      justify-content: center;
+      gap: 0;
+      border-radius: 50%;
+
+      .button-label {
+        display: none;
+      }
+    }
+
     .date-mode-pills {
       width: 100%;
 
