@@ -78,7 +78,7 @@ onBeforeMount(async () => {
   }
   catch (error) {
     console.error('Error loading event data:', error);
-    state.err = 'Failed to load event data';
+    state.err = t('error_load_event');
   }
   finally {
     state.isLoading = false;
@@ -128,6 +128,17 @@ onBeforeMount(async () => {
       </section>
     </main>
     <footer>
+      <div
+        v-if="state.instance.event.series"
+        class="series-link-wrapper"
+      >
+        <span class="series-label">{{ t('series.label') }}</span>
+        <a
+          :href="localizedPath('/view/' + state.calendar.urlName + '/series/' + state.instance.event.series.urlName)"
+          class="event-series-link"
+          :aria-label="t('series.part_of', { name: localizedContent(state.instance.event.series).name })"
+        >{{ localizedContent(state.instance.event.series).name }}</a>
+      </div>
       <div class="category-badges">
         <a v-for="category in state.instance.event.categories"
            :key="category.id"
@@ -349,11 +360,47 @@ footer {
     border-top-color: $public-border-subtle-dark;
   }
 
+  .series-link-wrapper {
+    display: flex;
+    align-items: center;
+    gap: $public-space-sm;
+    margin-bottom: $public-space-md;
+    font-size: $public-font-size-sm;
+
+    .series-label {
+      color: $public-text-secondary-light;
+      font-weight: $public-font-weight-medium;
+
+      @include public-dark-mode {
+        color: $public-text-secondary-dark;
+      }
+    }
+  }
+
   .category-badges {
     display: flex;
     flex-wrap: wrap;
     gap: $public-space-sm;
     margin-bottom: $public-space-lg;
+  }
+}
+
+.event-series-link {
+  color: $public-accent-light;
+  text-decoration: none;
+  font-weight: $public-font-weight-medium;
+  transition: $public-transition-fast;
+
+  &:hover {
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    @include public-focus-visible;
+  }
+
+  @include public-dark-mode {
+    color: $public-accent-dark;
   }
 }
 

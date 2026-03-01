@@ -4,6 +4,7 @@
             "id": "37d1bb5a-452b-432e-ac46-268b9c565bde",
             "calendar_id": "c71f5c9e-7a3d-4e5f-8e1a-66c3612a05f3",
             "location_id": "dbe6a23a-e2a5-415b-a7bc-e4242d98ff9a",
+            "series_id": "e5000001-0000-4000-8000-000000000001",
             "event_source_url": "/test-calendar/evt-1-1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
             "createdAt": "2026-01-01T10:00:00.000",
             "updatedAt": "2026-01-01T10:00:00.000"
@@ -12,6 +13,7 @@
             "id": "35d10fac-fa3e-4d42-a8ac-d597338d8d64",
             "calendar_id": "c71f5c9e-7a3d-4e5f-8e1a-66c3612a05f3",
             "location_id": "a17cd52b-ae1e-4b22-aff7-5d488560f112",
+            "series_id": "e5000001-0000-4000-8000-000000000001",
             "event_source_url": "/test-calendar/evt-2-2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
             "createdAt": "2026-01-01T11:00:00.000",
             "updatedAt": "2026-01-01T11:00:00.000"
@@ -20,6 +22,7 @@
             "id": "6ec54e50-1abd-44b3-a670-71d5c0f7433b",
             "calendar_id": "c71f5c9e-7a3d-4e5f-8e1a-66c3612a05f3",
             "location_id": "8a64739e-5fc8-4e13-adcb-441597c76507",
+            "series_id": "e5000001-0000-4000-8000-000000000001",
             "event_source_url": "/test-calendar/evt-3-3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f",
             "createdAt": "2026-01-01T12:00:00.000",
             "updatedAt": "2026-01-01T12:00:00.000"
@@ -124,6 +127,7 @@
             "id": "6ec0637c-9dae-4489-ae74-f6b4301f318d",
             "calendar_id": "c8569a35-dccb-4f97-a214-a4dec6c84262",
             "location_id": "f8d85830-9274-481a-af57-52ffb82c9c69",
+            "series_id": "e5000002-0000-4000-8000-000000000002",
             "event_source_url": "/multicalendar_calendar/evt-mc-1-6e87d5ca-4d89-42c1-aa9d-5ef437fe8811",
             "createdAt": "2026-01-03T10:00:00.000",
             "updatedAt": "2026-01-03T10:00:00.000"
@@ -132,6 +136,7 @@
             "id": "5b41c6b3-1335-4bc5-aaee-ae44db2a114e",
             "calendar_id": "c8569a35-dccb-4f97-a214-a4dec6c84262",
             "location_id": null,
+            "series_id": "e5000002-0000-4000-8000-000000000002",
             "event_source_url": "/multicalendar_calendar/evt-mc-2-6e87d5ca-4d89-42c1-aa9d-5ef437fe8822",
             "createdAt": "2026-01-03T11:00:00.000",
             "updatedAt": "2026-01-03T11:00:00.000"

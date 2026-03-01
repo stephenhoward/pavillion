@@ -6,6 +6,7 @@ import { CalendarEditor } from '@/common/model/calendar_editor';
 import { CalendarMember } from '@/common/model/calendar_member';
 import { EventCategory } from '@/common/model/event_category';
 import { EventCategoryAssignmentModel } from '@/common/model/event_category_assignment';
+import { EventSeries } from '@/common/model/event_series';
 import AccountInvitation from '@/common/model/invitation';
 import CalendarService from '../service/calendar';
 import EventService from '../service/events';
@@ -15,6 +16,7 @@ import CategoryMappingService from '@/server/calendar/service/category_mapping';
 import WidgetDomainService from '../service/widget_domain';
 import { EventEmitter } from 'events';
 import EventInstanceService from '../service/event_instance';
+import SeriesService from '../service/series';
 import CalendarEventInstance from '@/common/model/event_instance';
 import AccountsInterface from '@/server/accounts/interface';
 import EmailInterface from '@/server/email/interface';
@@ -40,6 +42,7 @@ export default class CalendarInterface {
   private categoryService: CategoryService;
   private widgetDomainService: WidgetDomainService;
   private categoryMappingService: CategoryMappingService;
+  private seriesService: SeriesService;
 
   constructor(
     eventBus: EventEmitter,
@@ -54,6 +57,7 @@ export default class CalendarInterface {
     this.categoryService = new CategoryService(this.calendarService);
     this.widgetDomainService = new WidgetDomainService();
     this.categoryMappingService = new CategoryMappingService();
+    this.seriesService = new SeriesService(this.calendarService, eventBus);
   }
 
   // Calendar operations
@@ -406,6 +410,138 @@ export default class CalendarInterface {
    */
   async assignManualRepostCategories(eventId: string, categoryIds: string[]): Promise<void> {
     return this.categoryMappingService.assignManualRepostCategories(eventId, categoryIds);
+  }
+
+  // Series operations
+
+  /**
+   * Validate a series URL name against the allowed pattern.
+   *
+   * @param urlName - The URL name to validate
+   * @returns true if valid, false otherwise
+   */
+  isValidSeriesUrlName(urlName: string): boolean {
+    return this.seriesService.isValidUrlName(urlName);
+  }
+
+  /**
+   * Create a new event series for a calendar.
+   *
+   * @param account - The account performing the creation
+   * @param calendarId - The calendar to create the series in
+   * @param seriesData - Series data including urlName, mediaId, and content
+   * @returns The created EventSeries
+   */
+  async createSeries(account: Account, calendarId: string, seriesData: Record<string, any>): Promise<EventSeries> {
+    return this.seriesService.createSeries(account, calendarId, seriesData);
+  }
+
+  /**
+   * Get a specific series by ID with optional calendar scope enforcement.
+   *
+   * @param seriesId - The ID of the series to retrieve
+   * @param calendarId - Optional calendar ID to verify series belongs to calendar
+   * @returns The EventSeries
+   */
+  async getSeries(seriesId: string, calendarId?: string): Promise<EventSeries> {
+    return this.seriesService.getSeries(seriesId, calendarId);
+  }
+
+  /**
+   * Get a series by its URL name within a calendar.
+   *
+   * @param calendarId - The calendar to search within
+   * @param urlName - The URL name of the series
+   * @returns The EventSeries
+   */
+  async getSeriesByUrlName(calendarId: string, urlName: string): Promise<EventSeries> {
+    return this.seriesService.getSeriesByUrlName(calendarId, urlName);
+  }
+
+  /**
+   * Get all series for a calendar.
+   *
+   * @param calendarId - The calendar to retrieve series for
+   * @returns Array of EventSeries
+   */
+  async getSeriesForCalendar(calendarId: string): Promise<EventSeries[]> {
+    return this.seriesService.getSeriesForCalendar(calendarId);
+  }
+
+  /**
+   * Update a series with new data.
+   *
+   * @param account - The account performing the update
+   * @param seriesId - The ID of the series to update
+   * @param seriesData - The data to update
+   * @param calendarId - Optional calendar ID to verify series belongs to calendar
+   * @returns The updated EventSeries
+   */
+  async updateSeries(account: Account, seriesId: string, seriesData: Record<string, any>, calendarId?: string): Promise<EventSeries> {
+    return this.seriesService.updateSeries(account, seriesId, seriesData, calendarId);
+  }
+
+  /**
+   * Delete a series and clear series_id from associated events.
+   *
+   * @param account - The account performing the deletion
+   * @param seriesId - The ID of the series to delete
+   * @param calendarId - Optional calendar ID to verify series belongs to calendar
+   */
+  async deleteSeries(account: Account, seriesId: string, calendarId?: string): Promise<void> {
+    return this.seriesService.deleteSeries(account, seriesId, calendarId);
+  }
+
+  /**
+   * Assign an event to a series.
+   *
+   * @param account - The account performing the assignment
+   * @param eventId - The ID of the event to assign
+   * @param seriesId - The ID of the series to assign the event to
+   */
+  async setSeriesForEvent(account: Account, eventId: string, seriesId: string): Promise<void> {
+    return this.seriesService.setSeriesForEvent(account, eventId, seriesId);
+  }
+
+  /**
+   * Clear the series assignment from an event (set series_id to null).
+   *
+   * @param account - The account performing the operation
+   * @param eventId - The ID of the event to clear
+   */
+  async clearSeriesForEvent(account: Account, eventId: string): Promise<void> {
+    return this.seriesService.clearSeriesForEvent(account, eventId);
+  }
+
+  /**
+   * Get the series assigned to an event, if any.
+   *
+   * @param eventId - The ID of the event
+   * @returns The EventSeries if assigned, or null
+   */
+  async getEventSeries(eventId: string): Promise<EventSeries | null> {
+    return this.seriesService.getEventSeries(eventId);
+  }
+
+  /**
+   * Get event counts per series for a calendar.
+   *
+   * @param calendarId - The calendar ID to get stats for
+   * @returns Map of series ID to event count
+   */
+  async getSeriesStats(calendarId: string): Promise<Map<string, number>> {
+    return this.seriesService.getSeriesStats(calendarId);
+  }
+
+  /**
+   * Get all events belonging to a series.
+   *
+   * @param seriesId - The ID of the series
+   * @param calendarId - Optional calendar ID to verify the series belongs to it
+   * @returns Array of CalendarEvent with full eager loading
+   */
+  async getSeriesEvents(seriesId: string, calendarId?: string): Promise<CalendarEvent[]> {
+    return this.seriesService.getSeriesEvents(seriesId, calendarId);
   }
 
 }

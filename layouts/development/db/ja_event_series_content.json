@@ -1,0 +1,32 @@
+{
+    "EventSeriesContentEntity": [
+        {
+            "id": "e5000001-0000-0000-0000-000000000011",
+            "series_id": "e5000001-0000-4000-8000-000000000001",
+            "language": "en",
+            "name": "Summer Festival Series",
+            "description": "A series of summer festival events celebrating community and culture."
+        },
+        {
+            "id": "e5000001-0000-0000-0000-000000000012",
+            "series_id": "e5000001-0000-4000-8000-000000000001",
+            "language": "es",
+            "name": "Serie del Festival de Verano",
+            "description": "Una serie de eventos del festival de verano que celebran la comunidad y la cultura."
+        },
+        {
+            "id": "e5000002-0000-0000-0000-000000000021",
+            "series_id": "e5000002-0000-4000-8000-000000000002",
+            "language": "en",
+            "name": "Workshop Series",
+            "description": "Regular workshops on professional development and skill building."
+        },
+        {
+            "id": "e5000002-0000-0000-0000-000000000022",
+            "series_id": "e5000002-0000-4000-8000-000000000002",
+            "language": "es",
+            "name": "Serie de Talleres",
+            "description": "Talleres regulares sobre desarrollo profesional y formación de habilidades."
+        }
+    ]
+}

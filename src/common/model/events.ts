@@ -4,6 +4,7 @@ import { Model, TranslatedModel, TranslatedContentModel } from '@/common/model/m
 import { EventLocation } from '@/common/model/location';
 import { Media } from '@/common/model/media';
 import { EventCategory } from '@/common/model/event_category';
+import { EventSeries } from '@/common/model/event_series';
 
 /**
  * Frequency options for recurring events.
@@ -52,6 +53,7 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
   _content: Record<string, CalendarEventContent> = {};
   schedules: CalendarEventSchedule[] = [];
   categories: EventCategory[] = [];
+  series: EventSeries | null = null;
   /**
    * Whether this event was obtained via a repost (SharedEventEntity) rather than direct ownership.
    *
@@ -169,6 +171,11 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
     if( obj.categories ) {
       event.categories = obj.categories.map((c:Object) => EventCategory.fromObject(c));
     }
+
+    if( obj.series ) {
+      event.series = EventSeries.fromObject(obj.series);
+    }
+
     return event;
   }
 
@@ -193,6 +200,7 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
       ),
       schedules: this.schedules.map(schedule => schedule.toObject()),
       categories: this.categories.map(category => category.toObject() ),
+      series: this.series?.toObject() ?? null,
     };
 
     // Include mediaId if present (used for API communication)

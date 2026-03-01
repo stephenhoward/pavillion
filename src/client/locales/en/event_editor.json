@@ -10,7 +10,7 @@
     "back_button": "Go back",
     "add_date_button": "Add another date",
     "add_language": "Add a Language",
-    "remove_language": "Remove This Language",
+    "remove_language": "Remove {{language}} translation",
     "remove_translation_confirm": "Remove the {{language}} translation? This will permanently delete all {{language}} content for this event.",
     "name_placeholder": "event name",
     "description_placeholder": "event description",
@@ -37,7 +37,8 @@
     "unsaved_changes_title": "Unsaved Changes",
     "unsaved_changes_message": "You have unsaved changes. Are you sure you want to leave?",
     "unsaved_changes_confirm": "Leave",
-    "unsaved_changes_cancel": "Stay"
+    "unsaved_changes_cancel": "Stay",
+    "series_section": "Series"
   },
   "categories": {
     "categories_label": "Categories",
@@ -45,6 +46,14 @@
     "error_loading_categories": "Error loading categories",
     "no_categories_available": "No categories available",
     "no_categories_help": "Create categories in calendar management to organize your events"
+  },
+  "series": {
+    "series_label": "Series",
+    "none_option": "No series",
+    "loading_series": "Loading series...",
+    "error_loading_series": "Error loading series",
+    "no_series_available": "No series available",
+    "no_series_help": "Create series in calendar management to group related events"
   },
   "recurrence": {
     "dailyTerm": "days",

@@ -10,6 +10,7 @@ import { Calendar } from "@/common/model/calendar";
 import { DateTime } from 'luxon';
 import rrule from 'rrule';
 import { LocationEntity } from "@/server/calendar/entity/location";
+import { EventSeriesEntity, EventSeriesContentEntity } from '@/server/calendar/entity/event_series';
 import CategoryService from "./categories";
 import { ActivityPubActor } from "@/server/activitypub/model/base";
 import { Op } from 'sequelize';
@@ -54,7 +55,13 @@ export default class EventInstanceService {
       where: { id: instanceId },
       include: [{
         model: EventEntity,
-        include: [EventContentEntity, LocationEntity, EventScheduleEntity, MediaEntity],
+        include: [
+          EventContentEntity,
+          LocationEntity,
+          EventScheduleEntity,
+          MediaEntity,
+          { model: EventSeriesEntity, include: [EventSeriesContentEntity] },
+        ],
       }],
     });
 

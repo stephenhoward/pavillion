@@ -701,6 +701,12 @@ const selectAllAriaLabel = computed(() => {
                     {{ category.content('en').name }}
                   </li>
                 </ul>
+                <div v-if="event.series" class="series-badge-wrapper">
+                  <span class="series-badge">
+                    <span class="sr-only">{{ t('series_badge_label') }}</span>
+                    {{ event.series.content('en')?.name || event.series.urlName }}
+                  </span>
+                </div>
               </div>
             </article>
             <div class="event-actions">
@@ -1192,6 +1198,27 @@ section[aria-label="Calendar Events"] {
             background: var(--pav-color-stone-700);
             color: var(--pav-color-stone-200);
           }
+        }
+      }
+
+      .series-badge-wrapper {
+        margin-top: 0.5rem;
+      }
+
+      .series-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.125rem 0.5rem;
+        background: var(--pav-color-primary-100, #e0f2fe);
+        border-radius: 9999px; // pill
+        color: var(--pav-color-primary-700, #0369a1);
+        font-size: 0.75rem; // text-xs
+        font-weight: 500;
+        white-space: nowrap;
+
+        @media (prefers-color-scheme: dark) {
+          background: var(--pav-color-primary-900, #0c4a6e);
+          color: var(--pav-color-primary-200, #bae6fd);
         }
       }
     }

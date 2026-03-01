@@ -10,6 +10,7 @@ import AppVue from '@/site/components/app.vue';
 import CalendarView from '@/site/components/calendar.vue';
 import EventView from '@/site/components/event.vue';
 import EventInstanceView from '@/site/components/eventInstance.vue';
+import SeriesView from '@/site/components/SeriesView.vue';
 import Authentication from '@/client/service/authn';
 import Config from '@/client/service/config';
 import { AVAILABLE_LANGUAGES, DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
@@ -27,6 +28,7 @@ Config.init().then( async (config) => {
     { path: '/view/:calendar', component: CalendarView, name: 'calendar' },
     { path: '/view/:calendar/events/:event', component: EventView, name: 'event' },
     { path: '/view/:calendar/events/:event/:instance', component: EventInstanceView, name: 'instance' },
+    { path: '/view/:calendar/series/:series', component: SeriesView, name: 'series' },
   ];
 
   const nonDefaultLocales = AVAILABLE_LANGUAGES
@@ -41,6 +43,7 @@ Config.init().then( async (config) => {
       { path: `/:locale(${pattern})/view/:calendar`, component: CalendarView },
       { path: `/:locale(${pattern})/view/:calendar/events/:event`, component: EventView },
       { path: `/:locale(${pattern})/view/:calendar/events/:event/:instance`, component: EventInstanceView },
+      { path: `/:locale(${pattern})/view/:calendar/series/:series`, component: SeriesView },
     );
   }
 

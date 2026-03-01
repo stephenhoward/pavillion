@@ -11,6 +11,7 @@ import { useCalendarStore } from '@/client/stores/calendarStore';
 import { useFeedStore } from '@/client/stores/feedStore';
 import { useEventStore } from '@/client/stores/eventStore';
 import { useCategoryStore } from '@/client/stores/categoryStore';
+import { useSeriesStore } from '@/client/stores/seriesStore';
 import { useInvitationStore } from '@/client/stores/invitationStore';
 import { useApplicationStore } from '@/client/stores/applicationStore';
 
@@ -20,6 +21,7 @@ const calendarStore = useCalendarStore();
 const feedStore = useFeedStore();
 const eventStore = useEventStore();
 const categoryStore = useCategoryStore();
+const seriesStore = useSeriesStore();
 const invitationStore = useInvitationStore();
 const applicationStore = useApplicationStore();
 
@@ -30,6 +32,7 @@ onBeforeMount( () => {
   feedStore.$reset();
   eventStore.$reset();
   categoryStore.$reset();
+  seriesStore.$reset();
   invitationStore.$reset();
   applicationStore.$reset();
   router.replace('/');

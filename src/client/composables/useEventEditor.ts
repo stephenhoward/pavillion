@@ -6,6 +6,7 @@ import type { Calendar } from '@/common/model/calendar';
 import CalendarService from '@/client/service/calendar';
 import EventService from '@/client/service/event';
 import CategoryService from '@/client/service/category';
+import SeriesService from '@/client/service/series';
 import ModelService from '@/client/service/models';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { useEventDuplication } from '@/client/composables/useEventDuplication';
@@ -61,6 +62,7 @@ export function useEventEditor(defaultLanguage: string = 'en') {
   const calendarService = new CalendarService();
   const eventService = new EventService();
   const categoryService = new CategoryService();
+  const seriesService = new SeriesService();
 
   // State
   const state = reactive<EventEditorState>({
@@ -75,6 +77,7 @@ export function useEventEditor(defaultLanguage: string = 'en') {
   });
 
   const selectedCategories = ref<string[]>([]);
+  const selectedSeriesId = ref<string | null>(null);
   const mediaId = ref<string | null>(null);
 
   /**
@@ -210,6 +213,9 @@ export function useEventEditor(defaultLanguage: string = 'en') {
         catch (error) {
           console.error('Error loading event categories:', error);
         }
+
+        // Initialize series from the loaded event
+        selectedSeriesId.value = loadedEvent.series?.id || null;
       }
       else if (state.mode === 'duplicate') {
         // Duplicate mode: Load source event and strip IDs
@@ -244,6 +250,7 @@ export function useEventEditor(defaultLanguage: string = 'en') {
         if (sourceEvent.mediaId) {
           mediaId.value = sourceEvent.mediaId;
         }
+        // Series is not copied on duplication — new event starts without a series
       }
       else {
         // Create mode: Initialize new event
@@ -366,6 +373,23 @@ export function useEventEditor(defaultLanguage: string = 'en') {
         }
       }
 
+      // Save series assignment: assign or clear based on selection
+      try {
+        const previousSeriesId = model.series?.id || null;
+        if (selectedSeriesId.value) {
+          // Assign (or reassign) series to the event
+          await seriesService.assignSeries(savedEvent.id, selectedSeriesId.value);
+        }
+        else if (previousSeriesId) {
+          // Clear the existing series assignment
+          await seriesService.clearSeries(savedEvent.id, previousSeriesId);
+        }
+      }
+      catch (seriesError) {
+        console.error('Error saving event series:', seriesError);
+        // Don't fail the entire save for series errors
+      }
+
       // Update selected calendar
       calendarStore.setSelectedCalendar(model.calendarId);
 
@@ -419,6 +443,7 @@ export function useEventEditor(defaultLanguage: string = 'en') {
   return {
     state,
     selectedCategories,
+    selectedSeriesId,
     mediaId,
     initializeEvent,
     saveEvent,
