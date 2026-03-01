@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { EventEmitter } from 'events';
 import sinon from 'sinon';
 import SeriesService from '../service/series';
 import CalendarService from '../service/calendar';
@@ -24,13 +25,15 @@ describe('SeriesService', () => {
   let mockCalendarService: sinon.SinonStubbedInstance<CalendarService>;
   let testAccount: Account;
   let testCalendar: Calendar;
+  let eventBus: EventEmitter;
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
+    eventBus = new EventEmitter();
 
     // Create mock CalendarService
     mockCalendarService = sandbox.createStubInstance(CalendarService);
-    seriesService = new SeriesService(mockCalendarService as any);
+    seriesService = new SeriesService(mockCalendarService as any, eventBus);
 
     // Create test data
     testAccount = new Account('account-123', 'testuser', 'test@example.com');
@@ -39,6 +42,7 @@ describe('SeriesService', () => {
 
   afterEach(() => {
     sandbox.restore();
+    eventBus.removeAllListeners();
   });
 
   describe('isValidUrlName', () => {
@@ -180,6 +184,45 @@ describe('SeriesService', () => {
 
       expect(series).toBeInstanceOf(EventSeries);
       expect(series.mediaId).toBe('media-123');
+    });
+
+    it('should emit mediaAttachedToSeries event when series is created with a mediaId', async () => {
+      mockCalendarService.getCalendar.resolves(testCalendar);
+      mockCalendarService.userCanModifyCalendar.resolves(true);
+
+      sandbox.stub(EventSeriesEntity, 'findOne').resolves(null);
+      sandbox.stub(EventSeriesEntity.prototype, 'save');
+      sandbox.stub(MediaEntity, 'findOne').resolves({ id: 'media-123', calendar_id: 'calendar-123' } as any);
+
+      const emittedEvents: Array<{ mediaId: string; seriesId: string }> = [];
+      eventBus.on('mediaAttachedToSeries', (payload) => {
+        emittedEvents.push(payload);
+      });
+
+      const seriesData = { urlName: 'myseries', mediaId: 'media-123' };
+      const series = await seriesService.createSeries(testAccount, 'calendar-123', seriesData);
+
+      expect(emittedEvents).toHaveLength(1);
+      expect(emittedEvents[0].mediaId).toBe('media-123');
+      expect(emittedEvents[0].seriesId).toBe(series.id);
+    });
+
+    it('should NOT emit mediaAttachedToSeries when creating series without a mediaId', async () => {
+      mockCalendarService.getCalendar.resolves(testCalendar);
+      mockCalendarService.userCanModifyCalendar.resolves(true);
+
+      sandbox.stub(EventSeriesEntity, 'findOne').resolves(null);
+      sandbox.stub(EventSeriesEntity.prototype, 'save');
+
+      const emittedEvents: any[] = [];
+      eventBus.on('mediaAttachedToSeries', (payload) => {
+        emittedEvents.push(payload);
+      });
+
+      const seriesData = { urlName: 'myseries' };
+      await seriesService.createSeries(testAccount, 'calendar-123', seriesData);
+
+      expect(emittedEvents).toHaveLength(0);
     });
   });
 
@@ -413,6 +456,77 @@ describe('SeriesService', () => {
       await expect(
         seriesService.updateSeries(testAccount, 'series-123', updateData, 'calendar-123'),
       ).rejects.toThrow(SeriesNotFoundError);
+    });
+
+    it('should emit mediaAttachedToSeries when updating series with a new mediaId', async () => {
+      // Series currently has no media
+      const mockSeries = new EventSeries('series-123', 'calendar-123', 'myseries');
+      const getStub = sandbox.stub(seriesService, 'getSeries').resolves(mockSeries);
+
+      mockCalendarService.getCalendar.resolves(testCalendar);
+      mockCalendarService.userCanModifyCalendar.resolves(true);
+
+      sandbox.stub(MediaEntity, 'findOne').resolves({ id: 'media-456', calendar_id: 'calendar-123' } as any);
+      sandbox.stub(EventSeriesEntity, 'update').resolves([1]);
+
+      getStub.onSecondCall().resolves(new EventSeries('series-123', 'calendar-123', 'myseries'));
+
+      const emittedEvents: Array<{ mediaId: string; seriesId: string }> = [];
+      eventBus.on('mediaAttachedToSeries', (payload) => {
+        emittedEvents.push(payload);
+      });
+
+      await seriesService.updateSeries(testAccount, 'series-123', { mediaId: 'media-456' });
+
+      expect(emittedEvents).toHaveLength(1);
+      expect(emittedEvents[0].mediaId).toBe('media-456');
+      expect(emittedEvents[0].seriesId).toBe('series-123');
+    });
+
+    it('should NOT emit mediaAttachedToSeries when updating with the same mediaId (no change)', async () => {
+      // Series already has media-456 attached
+      const mockSeries = new EventSeries('series-123', 'calendar-123', 'myseries');
+      mockSeries.mediaId = 'media-456';
+      const getStub = sandbox.stub(seriesService, 'getSeries').resolves(mockSeries);
+
+      mockCalendarService.getCalendar.resolves(testCalendar);
+      mockCalendarService.userCanModifyCalendar.resolves(true);
+
+      sandbox.stub(MediaEntity, 'findOne').resolves({ id: 'media-456', calendar_id: 'calendar-123' } as any);
+      sandbox.stub(EventSeriesEntity, 'update').resolves([1]);
+
+      getStub.onSecondCall().resolves(mockSeries);
+
+      const emittedEvents: any[] = [];
+      eventBus.on('mediaAttachedToSeries', (payload) => {
+        emittedEvents.push(payload);
+      });
+
+      await seriesService.updateSeries(testAccount, 'series-123', { mediaId: 'media-456' });
+
+      expect(emittedEvents).toHaveLength(0);
+    });
+
+    it('should NOT emit mediaAttachedToSeries when clearing media (mediaId: null)', async () => {
+      const mockSeries = new EventSeries('series-123', 'calendar-123', 'myseries');
+      mockSeries.mediaId = 'media-456';
+      const getStub = sandbox.stub(seriesService, 'getSeries').resolves(mockSeries);
+
+      mockCalendarService.getCalendar.resolves(testCalendar);
+      mockCalendarService.userCanModifyCalendar.resolves(true);
+
+      sandbox.stub(EventSeriesEntity, 'update').resolves([1]);
+
+      getStub.onSecondCall().resolves(new EventSeries('series-123', 'calendar-123', 'myseries'));
+
+      const emittedEvents: any[] = [];
+      eventBus.on('mediaAttachedToSeries', (payload) => {
+        emittedEvents.push(payload);
+      });
+
+      await seriesService.updateSeries(testAccount, 'series-123', { mediaId: null });
+
+      expect(emittedEvents).toHaveLength(0);
     });
   });
 

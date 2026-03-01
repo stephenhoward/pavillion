@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { QueryTypes } from 'sequelize';
+import { EventEmitter } from 'events';
 
 import { Account } from '@/common/model/account';
 import { EventSeries } from '@/common/model/event_series';
@@ -23,8 +24,12 @@ import db from '@/server/common/entity/db';
  * Handles CRUD operations for series with multi-language content support.
  */
 class SeriesService {
-  constructor(private calendarService?: CalendarService) {
+  private eventBus: EventEmitter;
+
+  constructor(private calendarService?: CalendarService, eventBus?: EventEmitter) {
     // calendarService is optional for backward compatibility but recommended for proper dependency injection
+    // eventBus is optional; when provided, domain events are emitted for media approval pipeline
+    this.eventBus = eventBus ?? new EventEmitter();
   }
 
   /**
@@ -105,6 +110,14 @@ class SeriesService {
         if (!c.name) continue;
         series.addContent(await this.createSeriesContent(series.id, language, c));
       }
+    }
+
+    // Notify media domain after the full series (including content) is persisted
+    if (seriesEntity.media_id) {
+      this.eventBus.emit('mediaAttachedToSeries', {
+        mediaId: seriesEntity.media_id,
+        seriesId: series.id,
+      });
     }
 
     return series;
@@ -227,6 +240,14 @@ class SeriesService {
         { media_id: seriesData.mediaId },
         { where: { id: seriesId } },
       );
+
+      // Notify media domain if a new media was attached (non-null)
+      if (seriesData.mediaId !== null && seriesData.mediaId !== series.mediaId) {
+        this.eventBus.emit('mediaAttachedToSeries', {
+          mediaId: seriesData.mediaId,
+          seriesId,
+        });
+      }
     }
 
     // Handle content updates

@@ -57,7 +57,7 @@ export default class CalendarInterface {
     this.categoryService = new CategoryService(this.calendarService);
     this.widgetDomainService = new WidgetDomainService();
     this.categoryMappingService = new CategoryMappingService();
-    this.seriesService = new SeriesService(this.calendarService);
+    this.seriesService = new SeriesService(this.calendarService, eventBus);
   }
 
   // Calendar operations
