@@ -634,11 +634,12 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   border-radius: $public-radius-lg;
   font-size: $public-font-size-xs;
   font-weight: $public-font-weight-medium;
-  background-color: $public-accent-light;
-  color: white;
+  background-color: #e0f2fe;
+  color: #0369a1;
 
   @media (prefers-color-scheme: dark) {
-    background-color: $public-accent-dark;
+    background-color: rgba(12, 74, 110, 0.3);
+    color: #7dd3fc;
   }
 }
 

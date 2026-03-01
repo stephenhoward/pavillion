@@ -179,7 +179,7 @@ onBeforeMount(async () => {
       <div class="detail-grid">
         <!-- Left column: description + categories -->
         <div class="detail-main">
-          <h2 class="sr-only">{{ t('about_this_event') }}</h2>
+          <h2 class="about-heading">{{ t('about_this_event') }}</h2>
           <p class="event-description">{{ localizedContent(state.instance.event).description }}</p>
 
           <!-- Categories section -->
@@ -475,6 +475,17 @@ onBeforeMount(async () => {
 
 .sr-only {
   @include public-sr-only;
+}
+
+.about-heading {
+  font-size: $public-font-size-md;
+  font-weight: $public-font-weight-semibold;
+  color: $public-text-secondary-light;
+  margin: 0 0 $public-space-md 0;
+
+  @include public-dark-mode {
+    color: $public-text-secondary-dark;
+  }
 }
 
 .event-description {
