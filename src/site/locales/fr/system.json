@@ -9,6 +9,8 @@
     "not_found_suggestion": "Le calendrier ou l'événement que vous recherchez n'existe pas ou a peut-être été supprimé.",
     "not_found_go_home": "Retour à l'accueil",
     "error_load_event": "Impossible de charger les données de l'événement",
+    "error_load_calendar": "Impossible de charger les données du calendrier",
+    "no_events_for_search": "Aucun événement trouvé pour \"{{term}}\"",
     "filter_by_category": "Catégories d'événements",
     "clear_filters": "Effacer les filtres",
     "no_events_with_filters": "Aucun événement trouvé",
@@ -65,6 +67,12 @@
         "view": "Voir la série"
     },
     "event_location": "Lieu",
+    "about_this_event": "À propos de cet événement",
+    "event_categories": "Catégories",
+    "event_accessibility": "Accessibilité",
+    "event_accessibility_event": "Accessibilité de l'événement",
+    "event_accessibility_venue": "Accessibilité du lieu",
+    "event_recurring": "Événement récurrent",
     "report": {
         "link_text": "Signaler l'événement",
         "form_title": "Signaler cet événement",

@@ -76,8 +76,11 @@ vi.mock('@/site/components/SearchFilterPublic.vue', () => ({
   default: { template: '<div class="search-filter-stub"></div>' },
 }));
 
-vi.mock('@/site/components/EventImage.vue', () => ({
-  default: { template: '<div class="event-image-stub"></div>', props: ['media', 'context', 'lazy'] },
+vi.mock('@/site/components/EventCard.vue', () => ({
+  default: {
+    template: '<article class="event-card-stub"></article>',
+    props: ['instance', 'calendarUrlName'],
+  },
 }));
 
 // ---------------------------------------------------------------------------
@@ -137,7 +140,7 @@ describe('calendar.vue document.title', () => {
     document.title = 'Pavillion';
   });
 
-  it('sets document.title to "Calendar Name | Pavillion" after loading calendar data', async () => {
+  it('should set document.title to "Calendar Name | Pavillion" after loading calendar data', async () => {
     mockCalendarName = 'Downtown Events';
 
     const wrapper = await mountCalendar('/view/test_calendar');
@@ -146,7 +149,7 @@ describe('calendar.vue document.title', () => {
     wrapper.unmount();
   });
 
-  it('sets document.title using the localized calendar name', async () => {
+  it('should set document.title using the localized calendar name', async () => {
     mockCalendarName = 'Test Calendar';
 
     const wrapper = await mountCalendar('/view/test_calendar');

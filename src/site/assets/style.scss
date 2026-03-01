@@ -201,3 +201,9 @@ a {
     }
   }
 }
+
+// ===== CONTAINER UTILITIES =====
+
+.container-constrained {
+  @include public-container-constrained;
+}

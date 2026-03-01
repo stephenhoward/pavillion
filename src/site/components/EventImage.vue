@@ -20,7 +20,7 @@
     <img
       v-if="imageBlobUrl"
       :src="imageBlobUrl"
-      :alt="media?.originalFilename || ''"
+      :alt="alt || media?.originalFilename || ''"
       @load="handleImageLoad"
       @error="handleImageError"
       class="image-content"
@@ -43,6 +43,7 @@ const props = defineProps<{
   media: MediaObject | null;
   context?: 'card' | 'hero' | 'feature';
   lazy?: boolean;
+  alt?: string;
 }>();
 
 const isLoading = ref(true);
