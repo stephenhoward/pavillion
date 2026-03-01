@@ -14,6 +14,11 @@ import { EventSeriesEntity, EventSeriesContentEntity } from '@/server/calendar/e
 import CategoryService from "./categories";
 import { ActivityPubActor } from "@/server/activitypub/model/base";
 import { Op } from 'sequelize';
+import { EventRepostEntity } from "@/server/calendar/entity/event_repost";
+// Deliberate cross-domain import: SharedEventEntity lives in the activitypub domain
+// but is needed here to find all calendars that repost an event. This follows the
+// same cross-domain pattern used in events.ts for federation-related queries.
+import { SharedEventEntity } from "@/server/activitypub/entity/activitypub";
 
 const { RRule, RRuleSet } = rrule;
 
@@ -102,6 +107,77 @@ export default class EventInstanceService {
     }
   }
 
+  /**
+   * Removes all event instances for a specific (event, reposter calendar) pair.
+   * Uses Sequelize bulk-destroy for efficient targeted deletion by compound key.
+   *
+   * @param eventId - The event ID whose repost instances should be removed
+   * @param calendarId - The reposting calendar ID
+   */
+  async removeRepostInstances(eventId: string, calendarId: string): Promise<void> {
+    if (!eventId || !calendarId) {
+      return;
+    }
+
+    await EventInstanceEntity.destroy({
+      where: {
+        event_id: eventId,
+        calendar_id: calendarId,
+      },
+    });
+  }
+
+  /**
+   * Builds event instances for a reposting calendar. Idempotent: removes any
+   * existing repost instances for this (event, calendar) pair, then recreates
+   * them from the event's schedules.
+   *
+   * @param event - The event to create instances for
+   * @param repostCalendarId - The calendar ID that is reposting the event
+   */
+  async buildRepostInstances(event: CalendarEvent, repostCalendarId: string): Promise<void> {
+    await this.removeRepostInstances(event.id, repostCalendarId);
+    await this.buildInstancesForCalendar(event, repostCalendarId);
+  }
+
+  /**
+   * Rebuilds event instances for all local calendars that repost the given event.
+   * Queries both EventRepostEntity and SharedEventEntity to find all reposters,
+   * deduplicates them, filters out the original calendar, and verifies each
+   * calendar still exists before rebuilding.
+   *
+   * @param event - The event whose repost instances should be rebuilt
+   */
+  async rebuildAllRepostInstances(event: CalendarEvent): Promise<void> {
+    const [reposts, shares] = await Promise.all([
+      EventRepostEntity.findAll({ where: { event_id: event.id } }),
+      // Deliberate cross-domain query: SharedEventEntity is in the activitypub domain
+      SharedEventEntity.findAll({ where: { event_id: event.id } }),
+    ]);
+
+    // Collect and deduplicate calendar IDs, filtering out the original calendar
+    const repostCalendarIds = new Set<string>();
+    for (const repost of reposts) {
+      if (repost.calendar_id !== event.calendarId) {
+        repostCalendarIds.add(repost.calendar_id);
+      }
+    }
+    for (const share of shares) {
+      if (share.calendar_id !== event.calendarId) {
+        repostCalendarIds.add(share.calendar_id);
+      }
+    }
+
+    // Rebuild instances for each reposting calendar that still exists
+    for (const calendarId of repostCalendarIds) {
+      const calendar = await CalendarEntity.findByPk(calendarId);
+      if (!calendar) {
+        continue;
+      }
+      await this.buildRepostInstances(event, calendarId);
+    }
+  }
+
   // TODO: retrieving all events won't scale. Need a paging/incremental strategy
   async refreshAllEventInstances() {
     // Get all local calendars and build a map of calendar ID -> Calendar
@@ -141,6 +217,32 @@ export default class EventInstanceService {
           event: event.toModel(),
         });
       }
+    }
+  }
+
+  /**
+   * Creates event instances with the calendar_id overridden to the given calendar.
+   * Loads schedules from DB if not already populated on the event.
+   *
+   * @param event - The event to generate instances for
+   * @param calendarId - The calendar ID to assign to the generated instances
+   */
+  private async buildInstancesForCalendar(event: CalendarEvent, calendarId: string): Promise<void> {
+    if (!event.schedules || !event.schedules.length) {
+      const schedules = await EventScheduleEntity.findAll({
+        where: { event_id: event.id },
+        order: [['start_date', 'ASC']],
+      });
+      event.schedules = schedules.map(schedule => schedule.toModel());
+    }
+
+    const instances = this.generateInstances(event, 10);
+    for (const instance of instances) {
+      const instanceEntity = EventInstanceEntity.fromModel(instance);
+      instanceEntity.event_id = event.id;
+      // Override calendar_id to the reposting calendar instead of the event's original calendar
+      instanceEntity.calendar_id = calendarId;
+      await instanceEntity.save();
     }
   }
 

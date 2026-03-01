@@ -4,6 +4,7 @@ import { EventEmitter } from 'events';
 import EventService from '../../service/events';
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
+import { CalendarEvent } from '@/common/model/events';
 import { EventEntity, EventContentEntity, EventScheduleEntity } from '../../entity/event';
 import { EventInstanceEntity } from '../../entity/event_instance';
 import { LocationEntity } from '../../entity/location';
@@ -42,16 +43,26 @@ describe('EventService.deleteEvent', () => {
     sandbox.restore();
   });
 
+  /**
+   * Helper to create a mock event entity with a toModel stub.
+   */
+  function createMockEventEntity(calendarId: string, eventId?: string) {
+    const mockEvent = new CalendarEvent(eventId || '11111111-1111-4111-8111-111111111111');
+    mockEvent.calendarId = calendarId;
+    return {
+      calendar_id: calendarId,
+      destroy: sandbox.stub().resolves(),
+      toModel: sandbox.stub().returns(mockEvent),
+    };
+  }
+
   it('should successfully delete an event with all related data', async () => {
     const account = new Account('account-123', 'test@example.com', 'test@example.com');
     const calendar = new Calendar('calendar-123', 'test-calendar');
     const eventId = '11111111-1111-4111-8111-111111111111'; // Valid UUID
 
-    // Mock the event entity
-    const mockEventEntity = {
-      calendar_id: 'calendar-123',
-      destroy: sandbox.stub().resolves(),
-    };
+    // Mock the event entity with toModel for pre-deletion capture
+    const mockEventEntity = createMockEventEntity('calendar-123', eventId);
 
     sandbox.stub(EventEntity, 'findByPk').resolves(mockEventEntity as any);
     sandbox.stub(eventService['calendarService'], 'getCalendar').resolves(calendar);
@@ -84,12 +95,29 @@ describe('EventService.deleteEvent', () => {
     expect(mockEventEntity.destroy.calledWith({ transaction: mockTransaction })).toBe(true);
     expect(mockTransaction.commit.calledOnce).toBe(true);
 
-    // Verify event bus emission for ActivityPub federation
-    expect(eventBusEmitSpy.calledWith('event_deleted', {
-      eventId,
-      calendar,
-      account,
-    })).toBe(true);
+    // Verify event bus emission uses camelCase name and correct payload
+    expect(eventBusEmitSpy.calledOnce).toBe(true);
+    expect(eventBusEmitSpy.firstCall.args[0]).toBe('eventDeleted');
+    const payload = eventBusEmitSpy.firstCall.args[1];
+    expect(payload.calendar).toBe(calendar);
+    expect(payload.event).toEqual(mockEventEntity.toModel());
+  });
+
+  it('should capture CalendarEvent model before deletion transaction', async () => {
+    const account = new Account('account-123', 'test@example.com', 'test@example.com');
+    const calendar = new Calendar('calendar-123', 'test-calendar');
+    const eventId = '11111111-1111-4111-8111-111111111111';
+
+    const mockEventEntity = createMockEventEntity('calendar-123', eventId);
+
+    sandbox.stub(EventEntity, 'findByPk').resolves(mockEventEntity as any);
+    sandbox.stub(eventService['calendarService'], 'getCalendar').resolves(calendar);
+    sandbox.stub(eventService['calendarService'], 'userCanModifyCalendar').resolves(true);
+
+    await eventService.deleteEvent(account, eventId);
+
+    // toModel should be called to capture the event before deletion
+    expect(mockEventEntity.toModel.calledOnce).toBe(true);
   });
 
   it('should throw EventNotFoundError when event does not exist', async () => {
@@ -127,6 +155,7 @@ describe('EventService.deleteEvent', () => {
 
     const mockEventEntity = {
       calendar_id: 'nonexistent-calendar',
+      toModel: sandbox.stub().returns(new CalendarEvent(eventId)),
     };
 
     sandbox.stub(EventEntity, 'findByPk').resolves(mockEventEntity as any);
@@ -145,6 +174,7 @@ describe('EventService.deleteEvent', () => {
 
     const mockEventEntity = {
       calendar_id: 'calendar-123',
+      toModel: sandbox.stub().returns(new CalendarEvent(eventId)),
     };
 
     sandbox.stub(EventEntity, 'findByPk').resolves(mockEventEntity as any);
@@ -182,6 +212,7 @@ describe('EventService.deleteEvent', () => {
     const mockEventEntity = {
       calendar_id: 'calendar-123',
       destroy: sandbox.stub().rejects(new Error('Database error')),
+      toModel: sandbox.stub().returns(new CalendarEvent(eventId)),
     };
 
     sandbox.stub(EventEntity, 'findByPk').resolves(mockEventEntity as any);
@@ -214,10 +245,7 @@ describe('EventService.deleteEvent', () => {
     const calendar = new Calendar('calendar-123', 'test-calendar');
     const eventId = '11111111-1111-4111-8111-111111111111'; // Valid UUID
 
-    const mockEventEntity = {
-      calendar_id: 'calendar-123',
-      destroy: sandbox.stub().resolves(),
-    };
+    const mockEventEntity = createMockEventEntity('calendar-123', eventId);
 
     sandbox.stub(EventEntity, 'findByPk').resolves(mockEventEntity as any);
     sandbox.stub(eventService['calendarService'], 'getCalendar').resolves(calendar);
@@ -240,10 +268,7 @@ describe('EventService.deleteEvent', () => {
     const calendar = new Calendar('calendar-123', 'test-calendar');
     const eventId = '11111111-1111-4111-8111-111111111111'; // Valid UUID
 
-    const mockEventEntity = {
-      calendar_id: 'calendar-123',
-      destroy: sandbox.stub().resolves(),
-    };
+    const mockEventEntity = createMockEventEntity('calendar-123', eventId);
 
     sandbox.stub(EventEntity, 'findByPk').resolves(mockEventEntity as any);
     const getCalendarStub = sandbox.stub(eventService['calendarService'], 'getCalendar').resolves(calendar);

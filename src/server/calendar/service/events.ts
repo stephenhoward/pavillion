@@ -1399,6 +1399,9 @@ class EventService {
       throw new InsufficientCalendarPermissionsError(`User does not have permission to delete events in calendar ${calendar.urlName}`);
     }
 
+    // Capture the CalendarEvent model before the deletion transaction destroys the entity
+    const event = eventEntity.toModel();
+
     const transaction = await db.transaction();
     try {
       // Delete related records in correct order to satisfy foreign key constraints
@@ -1437,10 +1440,9 @@ class EventService {
     }
 
     // Emit event for ActivityPub federation (after successful commit)
-    this.eventBus.emit('event_deleted', {
-      eventId,
+    this.eventBus.emit('eventDeleted', {
       calendar,
-      account,
+      event,
     });
   }
 }

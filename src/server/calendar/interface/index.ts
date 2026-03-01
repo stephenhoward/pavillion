@@ -226,6 +226,40 @@ export default class CalendarInterface {
     return this.eventInstanceService.getEventInstanceById(instanceId);
   }
 
+  /**
+   * Builds event instances for a reposting calendar. Idempotent: removes any
+   * existing repost instances for this (event, calendar) pair, then recreates
+   * them from the event's schedules.
+   *
+   * @param event - The event to create instances for
+   * @param repostCalendarId - The calendar ID that is reposting the event
+   */
+  async buildRepostInstances(event: CalendarEvent, repostCalendarId: string): Promise<void> {
+    return this.eventInstanceService.buildRepostInstances(event, repostCalendarId);
+  }
+
+  /**
+   * Rebuilds event instances for all local calendars that repost the given event.
+   * Queries both manual reposts and federation shares, deduplicates, and rebuilds.
+   *
+   * @param event - The event whose repost instances should be rebuilt
+   */
+  async rebuildAllRepostInstances(event: CalendarEvent): Promise<void> {
+    return this.eventInstanceService.rebuildAllRepostInstances(event);
+  }
+
+  /**
+   * Removes all event instances for a specific (event, reposter calendar) pair.
+   * Note: This method is NOT exposed through CalendarInterface for cross-domain use.
+   * It is only used internally via event handlers. Exposed here for handler access.
+   *
+   * @param eventId - The event ID whose repost instances should be removed
+   * @param calendarId - The reposting calendar ID
+   */
+  async removeRepostInstances(eventId: string, calendarId: string): Promise<void> {
+    return this.eventInstanceService.removeRepostInstances(eventId, calendarId);
+  }
+
   async grantEditAccessByEmail(grantingAccount: Account, calendarId: string, email: string, message?: string): Promise<{ type: 'editor' | 'invitation', data: CalendarEditor | any }> {
     return this.calendarService.grantEditAccessByEmail(grantingAccount, calendarId, email, message);
   }

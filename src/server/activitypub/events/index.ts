@@ -53,7 +53,18 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
     );
   }
 
+  /**
+   * Re-broadcast a local event update to federation followers.
+   * Returns early when payload.calendar is null/undefined, which indicates
+   * the event update originated from a remote instance (incoming AP Update).
+   * Without this guard, processing a remote update would trigger an outbound
+   * Update back to federation, creating an infinite loop.
+   */
   private async handleEventUpdated(payload: ActivityPubEventUpdatedPayload): Promise<void> {
+    if (!payload.calendar) {
+      return;
+    }
+
     const actorUrl = await this.service.actorUrl(payload.calendar);
     await this.service.addToOutbox(
       payload.calendar,

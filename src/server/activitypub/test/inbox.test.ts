@@ -3,11 +3,12 @@ import sinon from 'sinon';
 import { v4 as uuidv4 } from 'uuid';
 
 import ProcessInboxService from '@/server/activitypub/service/inbox';
-import { FollowerCalendarEntity, FollowingCalendarEntity, ActivityPubOutboxMessageEntity, EventActivityEntity } from '@/server/activitypub/entity/activitypub';
+import { FollowerCalendarEntity, FollowingCalendarEntity, ActivityPubOutboxMessageEntity, EventActivityEntity, SharedEventEntity } from '@/server/activitypub/entity/activitypub';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import FollowActivity from '@/server/activitypub/model/action/follow';
 import AnnounceActivity from '@/server/activitypub/model/action/announce';
+import UpdateActivity from '@/server/activitypub/model/action/update';
 import { Calendar, CalendarContent } from '@/common/model/calendar';
 import { CalendarEvent } from '@/common/model/events';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
@@ -389,6 +390,454 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
       // Assert
       expect(emittedEvents).toHaveLength(1);
       expect(emittedEvents[0].reposterName).toBe(displayName);
+    });
+  });
+});
+
+describe('ProcessInboxService - checkAndPerformAutoRepost eventReposted emission', () => {
+  let sandbox: sinon.SinonSandbox;
+  let inboxService: ProcessInboxService;
+  let eventBus: EventEmitter;
+  let testCalendar: Calendar;
+  let calendarInterface: CalendarInterface;
+
+  beforeEach(async () => {
+    await setupActivityPubSchema();
+    sandbox = sinon.createSandbox();
+    eventBus = new EventEmitter();
+    calendarInterface = new CalendarInterface(eventBus);
+    inboxService = new ProcessInboxService(eventBus, calendarInterface);
+
+    testCalendar = new Calendar('test-calendar-id', 'test-calendar');
+    testCalendar.addContent('en', new CalendarContent('en'));
+    testCalendar.content('en').title = 'Test Calendar';
+
+    await CalendarEntity.create({
+      id: testCalendar.id,
+      url_name: testCalendar.urlName,
+      account_id: uuidv4(),
+      languages: 'en',
+    });
+
+    // Suppress console output during tests
+    sandbox.stub(console, 'log');
+    sandbox.stub(console, 'warn');
+  });
+
+  afterEach(async () => {
+    sandbox.restore();
+    await teardownActivityPubSchema();
+  });
+
+  it('should emit eventReposted after successful auto-repost', async () => {
+    // Arrange
+    const sourceActorUri = 'https://remote.instance/calendars/source-calendar';
+    const eventId = uuidv4();
+    const eventApId = `https://remote.instance/events/${eventId}`;
+
+    // Create the remote CalendarActorEntity
+    const remoteCalendarActorId = uuidv4();
+    await CalendarActorEntity.create({
+      id: remoteCalendarActorId,
+      actor_type: 'remote',
+      actor_uri: sourceActorUri,
+      remote_display_name: null,
+      remote_domain: 'remote.instance',
+      calendar_id: null,
+      private_key: null,
+    });
+
+    // Create FollowingCalendarEntity with auto_repost_originals enabled
+    await FollowingCalendarEntity.create({
+      id: uuidv4(),
+      calendar_actor_id: remoteCalendarActorId,
+      calendar_id: testCalendar.id,
+      auto_repost_originals: true,
+      auto_repost_reposts: false,
+    });
+
+    // Create EventObjectEntity for the event
+    await EventObjectEntity.create({
+      event_id: eventId,
+      ap_id: eventApId,
+      attributed_to: sourceActorUri,
+    });
+
+    // Stub calendarInterface.getEventById to return the event
+    const event = new CalendarEvent(eventId, null);
+    sandbox.stub(calendarInterface, 'getEventById').resolves(event);
+
+    // Stub category mapping service
+    sandbox.stub(calendarInterface.categoryMappingService, 'assignAutoRepostCategories').resolves();
+
+    const emittedEvents: any[] = [];
+    eventBus.on('eventReposted', (payload) => emittedEvents.push(payload));
+
+    // Act
+    await (inboxService as any).checkAndPerformAutoRepost(
+      testCalendar, sourceActorUri, eventApId, true,
+    );
+
+    // Assert
+    expect(emittedEvents).toHaveLength(1);
+    expect(emittedEvents[0].event).toBe(event);
+    expect(emittedEvents[0].calendar).toBe(testCalendar);
+  });
+
+  it('should not emit eventReposted when getEventById returns null', async () => {
+    // Arrange
+    const sourceActorUri = 'https://remote.instance/calendars/source-calendar';
+    const eventId = uuidv4();
+    const eventApId = `https://remote.instance/events/${eventId}`;
+
+    const remoteCalendarActorId = uuidv4();
+    await CalendarActorEntity.create({
+      id: remoteCalendarActorId,
+      actor_type: 'remote',
+      actor_uri: sourceActorUri,
+      remote_display_name: null,
+      remote_domain: 'remote.instance',
+      calendar_id: null,
+      private_key: null,
+    });
+
+    await FollowingCalendarEntity.create({
+      id: uuidv4(),
+      calendar_actor_id: remoteCalendarActorId,
+      calendar_id: testCalendar.id,
+      auto_repost_originals: true,
+      auto_repost_reposts: false,
+    });
+
+    await EventObjectEntity.create({
+      event_id: eventId,
+      ap_id: eventApId,
+      attributed_to: sourceActorUri,
+    });
+
+    // Stub calendarInterface.getEventById to return null
+    sandbox.stub(calendarInterface, 'getEventById').resolves(null as any);
+
+    // Stub category mapping service
+    sandbox.stub(calendarInterface.categoryMappingService, 'assignAutoRepostCategories').resolves();
+
+    const emittedEvents: any[] = [];
+    eventBus.on('eventReposted', (payload) => emittedEvents.push(payload));
+
+    // Act
+    await (inboxService as any).checkAndPerformAutoRepost(
+      testCalendar, sourceActorUri, eventApId, true,
+    );
+
+    // Assert - no emission when event not found
+    expect(emittedEvents).toHaveLength(0);
+  });
+
+  it('should not emit eventReposted when auto-repost policy is disabled', async () => {
+    // Arrange
+    const sourceActorUri = 'https://remote.instance/calendars/source-calendar';
+    const eventApId = `https://remote.instance/events/${uuidv4()}`;
+
+    const remoteCalendarActorId = uuidv4();
+    await CalendarActorEntity.create({
+      id: remoteCalendarActorId,
+      actor_type: 'remote',
+      actor_uri: sourceActorUri,
+      remote_display_name: null,
+      remote_domain: 'remote.instance',
+      calendar_id: null,
+      private_key: null,
+    });
+
+    // auto_repost_originals is false
+    await FollowingCalendarEntity.create({
+      id: uuidv4(),
+      calendar_actor_id: remoteCalendarActorId,
+      calendar_id: testCalendar.id,
+      auto_repost_originals: false,
+      auto_repost_reposts: false,
+    });
+
+    const emittedEvents: any[] = [];
+    eventBus.on('eventReposted', (payload) => emittedEvents.push(payload));
+
+    // Act
+    await (inboxService as any).checkAndPerformAutoRepost(
+      testCalendar, sourceActorUri, eventApId, true,
+    );
+
+    // Assert - no emission when policy disabled
+    expect(emittedEvents).toHaveLength(0);
+  });
+});
+
+describe('ProcessInboxService - processUpdateEvent', () => {
+  let sandbox: sinon.SinonSandbox;
+  let inboxService: ProcessInboxService;
+  let eventBus: EventEmitter;
+  let testCalendar: Calendar;
+  let calendarInterface: CalendarInterface;
+
+  beforeEach(async () => {
+    await setupActivityPubSchema();
+    sandbox = sinon.createSandbox();
+    eventBus = new EventEmitter();
+    calendarInterface = new CalendarInterface(eventBus);
+    inboxService = new ProcessInboxService(eventBus, calendarInterface);
+
+    testCalendar = new Calendar('test-calendar-id', 'test-calendar');
+    testCalendar.addContent('en', new CalendarContent('en'));
+    testCalendar.content('en').title = 'Test Calendar';
+
+    await CalendarEntity.create({
+      id: testCalendar.id,
+      url_name: testCalendar.urlName,
+      account_id: uuidv4(),
+      languages: 'en',
+    });
+
+    // Suppress console output during tests
+    sandbox.stub(console, 'log');
+    sandbox.stub(console, 'warn');
+  });
+
+  afterEach(async () => {
+    sandbox.restore();
+    await teardownActivityPubSchema();
+  });
+
+  describe('domain-of-origin verification', () => {
+    it('should reject Update when actor domain does not match event object domain', async () => {
+      // Arrange - actor from different domain than event
+      const actorUri = 'https://malicious.instance/calendars/attacker';
+      const eventApId = 'https://legitimate.instance/events/some-event';
+      const eventId = uuidv4();
+
+      // Create EventObjectEntity for the event
+      await EventObjectEntity.create({
+        event_id: eventId,
+        ap_id: eventApId,
+        attributed_to: 'https://legitimate.instance/calendars/source',
+      });
+
+      // Stub calendarInterface.getEventById
+      const existingEvent = new CalendarEvent(eventId, null);
+      sandbox.stub(calendarInterface, 'getEventById').resolves(existingEvent);
+
+      // Stub isPersonActorUri to return false (calendar actor)
+      sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+
+      const updateMessage = UpdateActivity.fromObject({
+        type: 'Update',
+        actor: actorUri,
+        object: {
+          id: eventApId,
+          type: 'Event',
+          name: 'Spoofed Event',
+        },
+      });
+
+      // Act
+      const result = await inboxService.processUpdateEvent(testCalendar, updateMessage!);
+
+      // Assert - should return null (rejected)
+      expect(result).toBeNull();
+    });
+
+    it('should allow Update when actor domain matches event object domain', async () => {
+      // Arrange - actor and event on same domain
+      const actorUri = 'https://remote.instance/calendars/source-calendar';
+      const eventApId = 'https://remote.instance/events/some-event';
+      const eventId = uuidv4();
+
+      await EventObjectEntity.create({
+        event_id: eventId,
+        ap_id: eventApId,
+        attributed_to: actorUri,
+      });
+
+      const existingEvent = new CalendarEvent(eventId, null);
+      sandbox.stub(calendarInterface, 'getEventById').resolves(existingEvent);
+      sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+
+      const updatedEvent = new CalendarEvent(eventId, null);
+      sandbox.stub(calendarInterface, 'updateRemoteEvent').resolves(updatedEvent);
+
+      const updateMessage = UpdateActivity.fromObject({
+        type: 'Update',
+        actor: actorUri,
+        object: {
+          id: eventApId,
+          type: 'Event',
+          name: 'Updated Event',
+        },
+      });
+
+      // Act
+      const result = await inboxService.processUpdateEvent(testCalendar, updateMessage!);
+
+      // Assert - should return the updated event
+      expect(result).not.toBeNull();
+      expect(result).toBe(updatedEvent);
+    });
+
+    it('should skip domain check for Person actor updates', async () => {
+      // Arrange - Person actor from different domain should still work
+      // (authorization check handles Person actors separately)
+      const personActorUri = 'https://user.instance/users/editor';
+      const eventApId = 'https://remote.instance/events/some-event';
+      const eventId = uuidv4();
+
+      await EventObjectEntity.create({
+        event_id: eventId,
+        ap_id: eventApId,
+        attributed_to: 'https://remote.instance/calendars/source',
+      });
+
+      const existingEvent = new CalendarEvent(eventId, null);
+      sandbox.stub(calendarInterface, 'getEventById').resolves(existingEvent);
+
+      // This is a Person actor
+      sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(true);
+      sandbox.stub(inboxService as any, 'isAuthorizedRemoteEditor').resolves(true);
+
+      const updatedEvent = new CalendarEvent(eventId, null);
+      sandbox.stub(calendarInterface, 'updateRemoteEvent').resolves(updatedEvent);
+
+      const updateMessage = UpdateActivity.fromObject({
+        type: 'Update',
+        actor: personActorUri,
+        object: {
+          id: eventApId,
+          type: 'Event',
+          name: 'Editor Updated Event',
+          eventParams: { id: eventId, name: 'Editor Updated Event' },
+        },
+      });
+
+      // Act
+      const result = await inboxService.processUpdateEvent(testCalendar, updateMessage!);
+
+      // Assert - Person actor bypasses domain check, uses editor authorization instead
+      expect(result).not.toBeNull();
+    });
+  });
+
+  describe('eventUpdated emission', () => {
+    it('should emit eventUpdated with calendar: null after successful remote event update', async () => {
+      // Arrange
+      const actorUri = 'https://remote.instance/calendars/source-calendar';
+      const eventApId = 'https://remote.instance/events/some-event';
+      const eventId = uuidv4();
+
+      await EventObjectEntity.create({
+        event_id: eventId,
+        ap_id: eventApId,
+        attributed_to: actorUri,
+      });
+
+      const existingEvent = new CalendarEvent(eventId, null);
+      sandbox.stub(calendarInterface, 'getEventById').resolves(existingEvent);
+      sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+
+      const updatedEvent = new CalendarEvent(eventId, null);
+      sandbox.stub(calendarInterface, 'updateRemoteEvent').resolves(updatedEvent);
+
+      const emittedEvents: any[] = [];
+      eventBus.on('eventUpdated', (payload) => emittedEvents.push(payload));
+
+      const updateMessage = UpdateActivity.fromObject({
+        type: 'Update',
+        actor: actorUri,
+        object: {
+          id: eventApId,
+          type: 'Event',
+          name: 'Updated Event',
+        },
+      });
+
+      // Act
+      await inboxService.processUpdateEvent(testCalendar, updateMessage!);
+
+      // Assert
+      expect(emittedEvents).toHaveLength(1);
+      expect(emittedEvents[0].calendar).toBeNull();
+      expect(emittedEvents[0].event).toBe(updatedEvent);
+    });
+
+    it('should not emit eventUpdated when updateRemoteEvent returns null', async () => {
+      // Arrange
+      const actorUri = 'https://remote.instance/calendars/source-calendar';
+      const eventApId = 'https://remote.instance/events/some-event';
+      const eventId = uuidv4();
+
+      await EventObjectEntity.create({
+        event_id: eventId,
+        ap_id: eventApId,
+        attributed_to: actorUri,
+      });
+
+      const existingEvent = new CalendarEvent(eventId, null);
+      sandbox.stub(calendarInterface, 'getEventById').resolves(existingEvent);
+      sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+
+      // updateRemoteEvent returns null
+      sandbox.stub(calendarInterface, 'updateRemoteEvent').resolves(null);
+
+      const emittedEvents: any[] = [];
+      eventBus.on('eventUpdated', (payload) => emittedEvents.push(payload));
+
+      const updateMessage = UpdateActivity.fromObject({
+        type: 'Update',
+        actor: actorUri,
+        object: {
+          id: eventApId,
+          type: 'Event',
+          name: 'Updated Event',
+        },
+      });
+
+      // Act
+      await inboxService.processUpdateEvent(testCalendar, updateMessage!);
+
+      // Assert - no emission when update fails
+      expect(emittedEvents).toHaveLength(0);
+    });
+
+    it('should not emit eventUpdated when domain-of-origin check rejects the activity', async () => {
+      // Arrange - actor domain mismatch
+      const actorUri = 'https://malicious.instance/calendars/attacker';
+      const eventApId = 'https://legitimate.instance/events/some-event';
+      const eventId = uuidv4();
+
+      await EventObjectEntity.create({
+        event_id: eventId,
+        ap_id: eventApId,
+        attributed_to: 'https://legitimate.instance/calendars/source',
+      });
+
+      const existingEvent = new CalendarEvent(eventId, null);
+      sandbox.stub(calendarInterface, 'getEventById').resolves(existingEvent);
+      sandbox.stub(inboxService as any, 'isPersonActorUri').resolves(false);
+
+      const emittedEvents: any[] = [];
+      eventBus.on('eventUpdated', (payload) => emittedEvents.push(payload));
+
+      const updateMessage = UpdateActivity.fromObject({
+        type: 'Update',
+        actor: actorUri,
+        object: {
+          id: eventApId,
+          type: 'Event',
+          name: 'Spoofed Event',
+        },
+      });
+
+      // Act
+      await inboxService.processUpdateEvent(testCalendar, updateMessage!);
+
+      // Assert - no emission when rejected
+      expect(emittedEvents).toHaveLength(0);
     });
   });
 });

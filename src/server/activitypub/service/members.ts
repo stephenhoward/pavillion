@@ -419,30 +419,55 @@ class ActivityPubService {
     if (categoryIds && categoryIds.length > 0) {
       await this.calendarService.assignManualRepostCategories(localEventId, categoryIds);
     }
+
+    // Emit eventReposted so downstream handlers (e.g. event instance building)
+    // can process the newly reposted event on the reposter's calendar.
+    const event = await this.calendarService.getEventById(localEventId);
+    if (event) {
+      this.eventBus.emit('eventReposted', { event, calendar });
+    }
   }
 
   /**
-     * user on this server stops sharing an event from someone else
-     * @param account The account performing the unsharing
-     * @param calendar The calendar to remove the share from
-     * @param eventUrl URL of remote event
-     */
+   * Remove a shared event from a calendar.
+   * Resolves the AP URL to a local event UUID via EventObjectEntity before
+   * querying SharedEventEntity, since event_id stores UUIDs not AP URLs.
+   *
+   * @param account The account performing the unsharing
+   * @param calendar The calendar to remove the share from
+   * @param eventUrl ActivityPub URL of the event to unshare
+   */
   async unshareEvent(account: Account, calendar: Calendar, eventUrl: string) {
 
     if (!await this.calendarService.userCanModifyCalendar(account, calendar)) {
       throw new InsufficientCalendarPermissionsError('User does not have permission to modify calendar: ' + calendar.id);
     }
 
+    // Resolve AP URL to local event UUID via EventObjectEntity.
+    // SharedEventEntity.event_id stores UUIDs, not AP URLs.
+    const eventObject = await EventObjectEntity.findOne({
+      where: { ap_id: eventUrl },
+    });
+
+    if (!eventObject) {
+      // Event doesn't exist locally, nothing to unshare
+      return;
+    }
+
+    const localEventId = eventObject.event_id;
+
     let shares = await SharedEventEntity.findAll({
       where: {
-        event_id: eventUrl,
+        event_id: localEventId,
         calendar_id: calendar.id,
       },
     });
     let actorUrl = await this.actorUrl(calendar);
     for (let share of shares) {
       this.addToOutbox(calendar, new UndoActivity(actorUrl, share.id));
-      share.destroy();
+      // Emit eventUnreposted before destroy so share.event_id is still accessible
+      this.eventBus.emit('eventUnreposted', { eventId: share.event_id, calendarId: calendar.id });
+      await share.destroy();
     }
   }
 

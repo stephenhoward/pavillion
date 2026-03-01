@@ -120,12 +120,14 @@ export default class PublicCalendarService {
     }
 
     // Build the query for event instances
+    // Scope on instance.calendar_id (not event.calendar_id) so reposted events
+    // are included — repost instances have the reposter's calendar_id.
     const queryOptions: any = {
+      where: { calendar_id: calendar.id },
       include: [
         {
           model: EventEntity,
           as: 'event',
-          where: { calendar_id: calendar.id },
           include: [
             LocationEntity,
             MediaEntity,
@@ -213,7 +215,7 @@ export default class PublicCalendarService {
     }
 
     if (Object.keys(instanceWhere).length > 0) {
-      queryOptions.where = instanceWhere;
+      Object.assign(queryOptions.where, instanceWhere);
     }
 
     // Execute the query
