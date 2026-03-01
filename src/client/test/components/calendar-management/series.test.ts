@@ -207,7 +207,7 @@ describe('Series Tab Component', () => {
         return wrapper.vm.state.series.length > 0;
       }, { timeout: 1000 });
 
-      const editButton = wrapper.find('.icon-button:not(.icon-button--danger)');
+      const editButton = wrapper.find('button.icon-button:not(.icon-button--danger)');
       await editButton.trigger('click');
       await nextTick();
 
