@@ -879,6 +879,13 @@ class ProcessInboxService {
       console.warn('[AUTO-REPOST] Category mapping or assignment failed, proceeding without categories:', error);
     }
 
+    // Emit eventReposted so downstream handlers (e.g. event instance building)
+    // can process the newly auto-reposted event on the reposter's calendar.
+    const event = await this.calendarInterface.getEventById(eventObject.event_id);
+    if (event) {
+      this.eventBus.emit('eventReposted', { event, calendar });
+    }
+
     console.log(`[AUTO-REPOST] ✅ SUCCESS: Auto-reposted event ${eventApId} from ${sourceActorUri} (isOriginal: ${isOriginal})`);
   }
 
@@ -1180,6 +1187,24 @@ class ProcessInboxService {
     }
     else {
       // Traditional calendar-to-calendar federation
+
+      // SECURITY: Domain-of-origin verification - ensure the actor's domain matches
+      // the event object's origin domain to prevent cross-domain spoofing of Update activities.
+      const actorDomain = new URL(actorUri).hostname;
+      const eventDomain = new URL(apObjectId).hostname;
+      if (actorDomain !== eventDomain) {
+        logActivityRejection({
+          rejection_type: 'domain_mismatch',
+          activity_type: 'Update',
+          actor_uri: actorUri,
+          actor_domain: actorDomain,
+          calendar_id: calendar.id,
+          calendar_url_name: calendar.urlName,
+          reason: `Actor domain ${actorDomain} does not match event domain ${eventDomain}`,
+        });
+        return null;
+      }
+
       if (this.isLocalEvent(existingEvent)) {
         // Can't update local events via federation from calendar actors
         return null;
@@ -1217,6 +1242,13 @@ class ProcessInboxService {
     }
 
     const updatedEvent = await this.calendarInterface.updateRemoteEvent(calendar, eventParams);
+
+    // Emit eventUpdated with calendar: null to signal this is a remote event.
+    // The null calendar tells both the Calendar handler (skip buildEventInstances for owning calendar)
+    // and the AP handler (skip re-broadcast to federation) that this originated remotely.
+    if (updatedEvent) {
+      this.eventBus.emit('eventUpdated', { calendar: null, event: updatedEvent });
+    }
 
     // Update source_series on the AP object record (strict allowlist validation)
     if (apObject) {

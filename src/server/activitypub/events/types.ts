@@ -7,7 +7,7 @@ export interface ActivityPubEventCreatedPayload {
 }
 
 export interface ActivityPubEventUpdatedPayload {
-  calendar: Calendar;
+  calendar: Calendar | null;
   event: CalendarEvent;
 }
 

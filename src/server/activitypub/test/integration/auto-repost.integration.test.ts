@@ -103,6 +103,11 @@ describe('Auto-Repost Integration Tests', () => {
       // Stub actorOwnsObject to avoid remote fetch
       sandbox.stub(inboxService as any, 'actorOwnsObject').resolves(true);
 
+      // Stub getEventById to avoid real DB lookup: addRemoteEvent is stubbed so no
+      // real EventEntity is created, but checkAndPerformAutoRepost now calls
+      // getEventById to emit eventReposted. Return null to skip the emission.
+      sandbox.stub(calendarInterface, 'getEventById').resolves(null as any);
+
       // Build CreateActivity from Calendar B - use proper ActivityPub Event object structure
       const eventObject = {
         id: eventApId,
@@ -525,6 +530,11 @@ describe('Auto-Repost Integration Tests', () => {
         id: eventId,
         calendarId: null,
       } as any);
+
+      // Stub getEventById to avoid real DB lookup: addRemoteEvent is stubbed so no
+      // real EventEntity is created, but checkAndPerformAutoRepost now calls
+      // getEventById to emit eventReposted. Return null to skip the emission.
+      sandbox.stub(calendarInterface, 'getEventById').resolves(null as any);
 
       // Build AnnounceActivity from Calendar B sharing an event from Calendar C
       const announceActivity = new AnnounceActivity(
