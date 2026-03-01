@@ -18,7 +18,7 @@
 
     <!-- The image itself -->
     <img
-      v-show="imageLoaded"
+      v-if="imageBlobUrl"
       :src="imageBlobUrl"
       :alt="media?.originalFilename || ''"
       @load="handleImageLoad"
@@ -46,9 +46,12 @@ const props = defineProps<{
 }>();
 
 const isLoading = ref(true);
-const imageLoaded = ref(false);
 const imageFailed = ref(false);
 const imageBlobUrl = ref<string | null>(null);
+const pollAttempt = ref(0);
+const pollingTimeout = ref<ReturnType<typeof setTimeout> | null>(null);
+
+const maxPollAttempts = 4;
 
 // Component only shows if media exists AND image hasn't failed
 const shouldShow = computed(() => {
@@ -60,24 +63,40 @@ const imageUrl = computed(() => {
   return `/api/v1/media/${props.media.id}`;
 });
 
-/**
- * Fetch image once. No retries.
- * If the image is still processing (202) or fails, we simply don't show it.
- */
+// Progressive backoff delays: 1s, 2s, 4s, 8s
+const getPollingDelay = (attempt: number): number => {
+  const delays = [1000, 2000, 4000, 8000];
+  return delays[Math.min(attempt, delays.length - 1)];
+};
+
 const fetchImage = async () => {
   if (!props.media) return;
 
   try {
     const response = await fetch(imageUrl.value);
 
-    // Only show image if it's immediately available
+    if (response.status === 202) {
+      // Media is still processing - retry with backoff
+      if (pollAttempt.value < maxPollAttempts) {
+        const delay = getPollingDelay(pollAttempt.value);
+        pollAttempt.value++;
+        pollingTimeout.value = setTimeout(fetchImage, delay);
+      }
+      else {
+        // Gave up polling - hide image
+        imageFailed.value = true;
+        isLoading.value = false;
+      }
+      return;
+    }
+
     if (response.ok) {
       const blob = await response.blob();
       imageBlobUrl.value = URL.createObjectURL(blob);
       // Keep loading true until img onload fires
     }
     else {
-      // 202 (processing) or any error - gracefully hide
+      // Other error - gracefully hide
       imageFailed.value = true;
       isLoading.value = false;
     }
@@ -91,7 +110,6 @@ const fetchImage = async () => {
 
 const handleImageLoad = () => {
   isLoading.value = false;
-  imageLoaded.value = true;
 };
 
 const handleImageError = () => {
@@ -100,6 +118,10 @@ const handleImageError = () => {
 };
 
 const cleanup = () => {
+  if (pollingTimeout.value) {
+    clearTimeout(pollingTimeout.value);
+    pollingTimeout.value = null;
+  }
   if (imageBlobUrl.value) {
     URL.revokeObjectURL(imageBlobUrl.value);
     imageBlobUrl.value = null;
@@ -111,8 +133,8 @@ watch(() => props.media?.id, (newId, oldId) => {
   if (newId !== oldId) {
     cleanup();
     imageFailed.value = false;
-    imageLoaded.value = false;
     isLoading.value = true;
+    pollAttempt.value = 0;
     if (newId) {
       fetchImage();
     }
