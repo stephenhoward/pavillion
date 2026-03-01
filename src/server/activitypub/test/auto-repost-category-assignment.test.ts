@@ -138,6 +138,11 @@ describe('ProcessInboxService - auto-repost category assignment', () => {
       calendar_id: testCalendar.id,
       auto_posted: true,
     } as any);
+
+    // Stub calendarInterface.getEventById to avoid real DB lookup after auto-repost.
+    // checkAndPerformAutoRepost fetches the event to emit eventReposted, but these
+    // unit tests do not create real EventEntity records.
+    sandbox.stub(calendarInterface, 'getEventById').resolves(null as any);
   }
 
   describe('category assignment when mappings exist', () => {
@@ -354,6 +359,11 @@ describe('ProcessInboxService - auto-repost category assignment', () => {
 
       // Category mapping throws
       sandbox.stub(CategoryMappingService.prototype, 'applyMappings').rejects(new Error('mapping failure'));
+
+      // Stub getEventById to avoid real DB lookup: no real EventEntity is created
+      // in this unit test, but checkAndPerformAutoRepost now calls getEventById to
+      // emit eventReposted after the auto-repost.
+      sandbox.stub(calendarInterface, 'getEventById').resolves(null as any);
 
       const eventObject = {
         id: eventApId,
