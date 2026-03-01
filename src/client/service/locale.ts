@@ -26,12 +26,14 @@ import esSystem from '@/client/locales/es/system.json';
 import esAuthentication from '@/client/locales/es/authentication.json';
 import esSetup from '@/client/locales/es/setup.json';
 import esFeed from '@/client/locales/es/feed.json';
+import esInbox from '@/client/locales/es/inbox.json';
 
 // Import French translation resources
 import frSystem from '@/client/locales/fr/system.json';
 import frAuthentication from '@/client/locales/fr/authentication.json';
 import frSetup from '@/client/locales/fr/setup.json';
 import frFeed from '@/client/locales/fr/feed.json';
+import frInbox from '@/client/locales/fr/inbox.json';
 
 /**
  * Detects the best language for the client from available signals.
@@ -110,12 +112,14 @@ export const initI18Next = (serverLanguage?: string) => {
         authentication: esAuthentication,
         setup: esSetup,
         feed: esFeed,
+        inbox: esInbox,
       },
       fr: {
         system: frSystem,
         authentication: frAuthentication,
         setup: frSetup,
         feed: frFeed,
+        inbox: frInbox,
       },
     },
   });

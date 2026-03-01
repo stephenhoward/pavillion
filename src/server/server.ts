@@ -19,6 +19,7 @@ import ConfigurationDomain from './configuration';
 import EmailDomain from './email';
 import HousekeepingDomain from './housekeeping';
 import ModerationDomain from './moderation';
+import NotificationsDomain from './notifications';
 import PublicCalendarDomain from './public';
 import MediaDomain from './media';
 import SetupDomain from './setup';
@@ -290,6 +291,9 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
 
   // Initialize ActivityPub domain with ModerationInterface for instance blocking
   new ActivityPubDomain(eventBus, calendarDomain.interface, accountsDomain.interface, moderationDomain.interface).initialize(app);
+
+  // Initialize Notifications domain after ActivityPub (depends on CalendarInterface)
+  new NotificationsDomain(eventBus, calendarDomain.interface).initialize(app);
 
   // Set up CalendarInterface on AccountsInterface to enable calendar editor invitation acceptance
   // TODO: move invites into a separate domain to avoid circular dependency

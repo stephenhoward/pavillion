@@ -1,0 +1,15 @@
+{
+    "title": "",
+    "description": "",
+    "noNotifications": "",
+    "notifications": {
+        "follow_suffix": "",
+        "repost_suffix": "",
+        "follow_description": "",
+        "repost_description": "",
+        "empty_state": "",
+        "mark_all_seen": "",
+        "loading_more": "",
+        "opens_in_new_tab": ""
+    }
+}

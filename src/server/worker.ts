@@ -9,6 +9,7 @@ import AlertsService from '@/server/housekeeping/service/alerts';
 import EmailInterface from '@/server/email/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import IpCleanupService from '@/server/moderation/service/ip-cleanup';
+import NotificationService from '@/server/notifications/service/notification';
 
 /**
  * Worker mode entrypoint for Pavillion.
@@ -135,6 +136,20 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
       throw error;
     }
   });
+
+  // Notification cleanup job handler (runs daily at 4 AM)
+  await queue.schedule('notifications:cleanup', '0 4 * * *', async () => {
+    console.log('[Worker] Executing notifications:cleanup job');
+    try {
+      const service = new NotificationService();
+      await service.deleteOldNotifications();
+      console.log('[Worker] Notification cleanup completed');
+    }
+    catch (error) {
+      console.error('[Worker] Notification cleanup failed:', error);
+      throw error;
+    }
+  });
 }
 
 /**
@@ -151,6 +166,10 @@ function getNextRunTime(cronExpression: string): string {
   }
   else if (cronExpression === '0 3 * * *') {
     const next = DateTime.now().plus({ days: 1 }).set({ hour: 3, minute: 0, second: 0 });
+    return next.toFormat('MMM dd, yyyy h:mm a');
+  }
+  else if (cronExpression === '0 4 * * *') {
+    const next = DateTime.now().plus({ days: 1 }).set({ hour: 4, minute: 0, second: 0 });
     return next.toFormat('MMM dd, yyyy h:mm a');
   }
   else if (cronExpression === '0 * * * *') {
@@ -170,6 +189,7 @@ function logStartupMessages(): void {
   console.log(`  - backup:daily at 2:00 AM (next: ${getNextRunTime('0 2 * * *')})`);
   console.log(`  - moderation:ip-cleanup at 3:00 AM (next: ${getNextRunTime('0 3 * * *')})`);
   console.log(`  - disk:check hourly (next: ${getNextRunTime('0 * * * *')})`);
+  console.log(`  - notifications:cleanup at 4:00 AM (next: ${getNextRunTime('0 4 * * *')})`);
   console.log('  - backup:create (manual backups via CLI/API)');
   console.log('[Pavillion] Worker ready, processing jobs...');
 }

@@ -4,7 +4,8 @@
     "inbox_button": "Bandeja de entrada",
     "new_event": "Nuevo Evento",
     "profile_button": "Configuración",
-    "feed_button": "Noticias"
+    "feed_button": "Noticias",
+    "inbox_badge_label": ""
   },
   "language_picker": {
     "search_language": "Buscar un idioma",

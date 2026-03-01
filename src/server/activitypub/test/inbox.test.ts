@@ -3,10 +3,13 @@ import sinon from 'sinon';
 import { v4 as uuidv4 } from 'uuid';
 
 import ProcessInboxService from '@/server/activitypub/service/inbox';
-import { FollowerCalendarEntity, FollowingCalendarEntity, ActivityPubOutboxMessageEntity } from '@/server/activitypub/entity/activitypub';
+import { FollowerCalendarEntity, FollowingCalendarEntity, ActivityPubOutboxMessageEntity, EventActivityEntity } from '@/server/activitypub/entity/activitypub';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
+import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import FollowActivity from '@/server/activitypub/model/action/follow';
+import AnnounceActivity from '@/server/activitypub/model/action/announce';
 import { Calendar, CalendarContent } from '@/common/model/calendar';
+import { CalendarEvent } from '@/common/model/events';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { EventEmitter } from 'events';
 import CalendarInterface from '@/server/calendar/interface';
@@ -143,6 +146,78 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
       expect(createStub.called).toBe(false);
       expect(createOutboxStub.called).toBe(false); // No Accept if already following
     });
+
+    it('should emit activitypub:calendar:followed after successful Follow processing', async () => {
+      // Arrange
+      const remoteActorUrl = 'https://remote.instance/calendars/remote-calendar';
+      const followActivity = new FollowActivity(remoteActorUrl, testCalendar.id);
+
+      const emittedEvents: any[] = [];
+      eventBus.on('activitypub:calendar:followed', (payload) => emittedEvents.push(payload));
+
+      // Act
+      await inboxService.processFollowAccount(testCalendar, followActivity);
+
+      // Assert
+      expect(emittedEvents).toHaveLength(1);
+      expect(emittedEvents[0].calendarId).toBe(testCalendar.id);
+      expect(emittedEvents[0].followerUrl).toBe(remoteActorUrl);
+      // followerName falls back to actor URL when no display name is cached
+      expect(emittedEvents[0].followerName).toBe(remoteActorUrl);
+    });
+
+    it('should not emit activitypub:calendar:followed when follow already exists', async () => {
+      // Arrange
+      const remoteActorUrl = 'https://remote.instance/calendars/remote-calendar';
+      const followActivity = new FollowActivity(remoteActorUrl, testCalendar.id);
+
+      const existingFollower = {
+        id: uuidv4(),
+        calendar_actor_id: remoteActorUrl,
+        calendar_id: testCalendar.id,
+      };
+
+      sandbox.stub(FollowerCalendarEntity, 'findOne').resolves(existingFollower as any);
+      sandbox.stub(FollowerCalendarEntity, 'create');
+      sandbox.stub(ActivityPubOutboxMessageEntity, 'create');
+
+      const emittedEvents: any[] = [];
+      eventBus.on('activitypub:calendar:followed', (payload) => emittedEvents.push(payload));
+
+      // Act
+      await inboxService.processFollowAccount(testCalendar, followActivity);
+
+      // Assert - no event emitted for duplicate follows
+      expect(emittedEvents).toHaveLength(0);
+    });
+
+    it('should use remoteDisplayName as followerName when available', async () => {
+      // Arrange
+      const remoteActorUrl = 'https://remote.instance/calendars/remote-calendar';
+      const followActivity = new FollowActivity(remoteActorUrl, testCalendar.id);
+      const displayName = 'Remote Calendar Display Name';
+
+      // Pre-create the CalendarActorEntity with a display name
+      await CalendarActorEntity.create({
+        id: uuidv4(),
+        actor_type: 'remote',
+        actor_uri: remoteActorUrl,
+        remote_display_name: displayName,
+        remote_domain: 'remote.instance',
+        calendar_id: null,
+        private_key: null,
+      });
+
+      const emittedEvents: any[] = [];
+      eventBus.on('activitypub:calendar:followed', (payload) => emittedEvents.push(payload));
+
+      // Act
+      await inboxService.processFollowAccount(testCalendar, followActivity);
+
+      // Assert - display name used when available
+      expect(emittedEvents).toHaveLength(1);
+      expect(emittedEvents[0].followerName).toBe(displayName);
+    });
   });
 
   describe('processAcceptActivity', () => {
@@ -195,6 +270,125 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
         calendar_id: testCalendar.id,
       });
       expect(consoleLogStub.called).toBe(true);
+    });
+  });
+
+  describe('processShareEvent', () => {
+    it('should emit activitypub:event:reposted when a local event is announced', async () => {
+      // Arrange
+      const remoteActorUrl = 'https://remote.instance/calendars/remote-calendar';
+      const localEventId = uuidv4();
+      const apObjectId = `https://this.instance/events/${localEventId}`;
+
+      // Create EventObjectEntity tracking the AP identity for this local event
+      // (EventObjectEntity has no FK to EventEntity, so no media table needed)
+      await EventObjectEntity.create({
+        event_id: localEventId,
+        ap_id: apObjectId,
+        attributed_to: 'https://this.instance/calendars/test-calendar',
+      });
+
+      // Stub calendarInterface.getEventById to return a local event (has calendarId)
+      const localEvent = new CalendarEvent(localEventId, testCalendar.id);
+      sandbox.stub(calendarInterface, 'getEventById').resolves(localEvent);
+
+      const announceActivity = new AnnounceActivity(remoteActorUrl, apObjectId);
+
+      const emittedEvents: any[] = [];
+      eventBus.on('activitypub:event:reposted', (payload) => emittedEvents.push(payload));
+
+      // Stub EventActivityEntity to skip DB write
+      sandbox.stub(EventActivityEntity, 'findOne').resolves(null);
+      sandbox.stub(EventActivityEntity, 'create').resolves({} as any);
+
+      // Act
+      await inboxService.processShareEvent(testCalendar, announceActivity);
+
+      // Assert
+      expect(emittedEvents).toHaveLength(1);
+      expect(emittedEvents[0].eventId).toBe(localEventId);
+      expect(emittedEvents[0].calendarId).toBe(testCalendar.id);
+      expect(emittedEvents[0].reposterUrl).toBe(remoteActorUrl);
+      // reposterName falls back to actor URL when no display name is cached
+      expect(emittedEvents[0].reposterName).toBe(remoteActorUrl);
+    });
+
+    it('should not emit activitypub:event:reposted when a remote (non-local) event is announced', async () => {
+      // Arrange
+      const remoteActorUrl = 'https://remote.instance/calendars/remote-calendar';
+      const remoteEventId = uuidv4();
+      const apObjectId = 'https://other.instance/events/remote-event-123';
+
+      // Create EventObjectEntity for the remote event
+      await EventObjectEntity.create({
+        event_id: remoteEventId,
+        ap_id: apObjectId,
+        attributed_to: 'https://other.instance/calendars/their-calendar',
+      });
+
+      // Stub calendarInterface.getEventById to return a remote event (calendarId is null)
+      const remoteEvent = new CalendarEvent(remoteEventId, null);
+      sandbox.stub(calendarInterface, 'getEventById').resolves(remoteEvent);
+
+      const announceActivity = new AnnounceActivity(remoteActorUrl, apObjectId);
+
+      const emittedEvents: any[] = [];
+      eventBus.on('activitypub:event:reposted', (payload) => emittedEvents.push(payload));
+
+      // Stub EventActivityEntity to skip DB write
+      sandbox.stub(EventActivityEntity, 'findOne').resolves(null);
+      sandbox.stub(EventActivityEntity, 'create').resolves({} as any);
+
+      // Act
+      await inboxService.processShareEvent(testCalendar, announceActivity);
+
+      // Assert - no event emitted for remote events
+      expect(emittedEvents).toHaveLength(0);
+    });
+
+    it('should use remoteDisplayName as reposterName when available', async () => {
+      // Arrange
+      const remoteActorUrl = 'https://remote.instance/calendars/remote-calendar';
+      const displayName = 'Remote Calendar Name';
+      const localEventId = uuidv4();
+      const apObjectId = `https://this.instance/events/${localEventId}`;
+
+      // Pre-create CalendarActorEntity with display name
+      await CalendarActorEntity.create({
+        id: uuidv4(),
+        actor_type: 'remote',
+        actor_uri: remoteActorUrl,
+        remote_display_name: displayName,
+        remote_domain: 'remote.instance',
+        calendar_id: null,
+        private_key: null,
+      });
+
+      // Create EventObjectEntity
+      await EventObjectEntity.create({
+        event_id: localEventId,
+        ap_id: apObjectId,
+        attributed_to: 'https://this.instance/calendars/test-calendar',
+      });
+
+      // Stub calendarInterface.getEventById to return a local event
+      const localEvent = new CalendarEvent(localEventId, testCalendar.id);
+      sandbox.stub(calendarInterface, 'getEventById').resolves(localEvent);
+
+      const announceActivity = new AnnounceActivity(remoteActorUrl, apObjectId);
+
+      const emittedEvents: any[] = [];
+      eventBus.on('activitypub:event:reposted', (payload) => emittedEvents.push(payload));
+
+      sandbox.stub(EventActivityEntity, 'findOne').resolves(null);
+      sandbox.stub(EventActivityEntity, 'create').resolves({} as any);
+
+      // Act
+      await inboxService.processShareEvent(testCalendar, announceActivity);
+
+      // Assert
+      expect(emittedEvents).toHaveLength(1);
+      expect(emittedEvents[0].reposterName).toBe(displayName);
     });
   });
 });

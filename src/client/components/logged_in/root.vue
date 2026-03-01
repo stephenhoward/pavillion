@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import CalendarService from '@/client/service/calendar';
 import { useCalendarStore } from '@/client/stores/calendarStore';
+import { useNotificationStore } from '@/client/stores/notificationStore';
 import CalendarSelector from '@/client/components/logged_in/calendar/calendar_selector.vue';
 import AppShell from '@/client/components/shell/AppShell.vue';
 import type { NavigationItem } from '@/client/components/shell/types';
@@ -16,6 +17,7 @@ const showCalendarSelector = ref(false);
 const { t } = useTranslation('system');
 const calendarService = new CalendarService();
 const calendarStore = useCalendarStore();
+const notificationStore = useNotificationStore();
 
 /**
  * Navigation items for the app shell.
@@ -40,8 +42,8 @@ const navigationItems = computed<NavigationItem[]>(() => [
     label: t('main_navigation.inbox_button'),
     icon: Bell,
     to: '/inbox',
-    // TODO: Add unread notification count when available
-    // badge: unreadCount.value,
+    badge: notificationStore.unreadCount,
+    badgeLabel: t('main_navigation.inbox_badge_label', { count: notificationStore.unreadCount }),
   },
   {
     id: 'settings',
@@ -92,6 +94,48 @@ const onCalendarSelectionCanceled = () => {
 
 // Expose newEvent for child components that need to trigger event creation
 defineExpose({ newEvent });
+
+// Polling for notification count updates
+let pollInterval: ReturnType<typeof setInterval> | null = null;
+
+const startPolling = () => {
+  pollInterval = setInterval(() => {
+    notificationStore.fetchNotifications().catch(() => {
+      // Silently ignore errors; retry at next normal interval
+    });
+  }, 30000);
+};
+
+const handleVisibilityChange = () => {
+  if (document.hidden) {
+    if (pollInterval) {
+      clearInterval(pollInterval);
+      pollInterval = null;
+    }
+  }
+  else {
+    notificationStore.fetchNotifications().catch(() => {
+      // Silently ignore errors on tab focus restore
+    });
+    startPolling();
+  }
+};
+
+onMounted(() => {
+  notificationStore.fetchNotifications().catch(() => {
+    // Silently ignore initial fetch error
+  });
+  startPolling();
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+});
+
+onUnmounted(() => {
+  if (pollInterval) {
+    clearInterval(pollInterval);
+    pollInterval = null;
+  }
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
+});
 </script>
 
 <template>

@@ -4,7 +4,8 @@
     "inbox_button": "Boîte de réception",
     "new_event": "Nouvel événement",
     "profile_button": "Paramètres",
-    "feed_button": "Fil d'actualité"
+    "feed_button": "Fil d'actualité",
+    "inbox_badge_label": ""
   },
   "language_picker": {
     "search_language": "Rechercher une langue",

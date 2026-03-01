@@ -7,6 +7,7 @@ import { CalendarEditor } from '@/common/model/calendar_editor';
 import AccountInvitation from '@/common/model/invitation';
 import { CalendarEntity, CalendarContentEntity } from '@/server/calendar/entity/calendar';
 import { CalendarMemberEntity } from '@/server/calendar/entity/calendar_member';
+import { AccountEntity } from '@/server/common/entity/account';
 import CalendarService from '@/server/calendar/service/calendar';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
 import db from '@/server/common/entity/db';
@@ -1032,5 +1033,101 @@ describe('Calendar Ownership and Editor Permissions', () => {
       await expect(service.resendCalendarInvitation(owner, 'cal-id', 'wrong-invite-id'))
         .rejects.toThrow('Invitation not found or not associated with this calendar');
     });
+  });
+});
+
+describe('getEditorsForCalendar', () => {
+  let sandbox: sinon.SinonSandbox;
+  let service: CalendarService;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    service = new CalendarService();
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('should return the owner account when there are no editors', async () => {
+    const ownerAccountEntity = AccountEntity.fromModel(new Account('owner-id', 'owneruser', 'owner@example.com'));
+    const memberFindAllStub = sandbox.stub(CalendarMemberEntity, 'findAll');
+    memberFindAllStub.resolves([
+      {
+        calendar_id: 'cal-id',
+        account_id: 'owner-id',
+        role: 'owner',
+        account: ownerAccountEntity,
+      } as any,
+    ]);
+
+    const result = await service.getEditorsForCalendar('cal-id');
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('owner-id');
+  });
+
+  it('should return owner and all local editor accounts', async () => {
+    const ownerAccountEntity = AccountEntity.fromModel(new Account('owner-id', 'owneruser', 'owner@example.com'));
+    const editor1AccountEntity = AccountEntity.fromModel(new Account('editor1-id', 'editor1', 'editor1@example.com'));
+    const editor2AccountEntity = AccountEntity.fromModel(new Account('editor2-id', 'editor2', 'editor2@example.com'));
+
+    const memberFindAllStub = sandbox.stub(CalendarMemberEntity, 'findAll');
+    memberFindAllStub.resolves([
+      {
+        calendar_id: 'cal-id',
+        account_id: 'owner-id',
+        role: 'owner',
+        account: ownerAccountEntity,
+      } as any,
+      {
+        calendar_id: 'cal-id',
+        account_id: 'editor1-id',
+        role: 'editor',
+        account: editor1AccountEntity,
+      } as any,
+      {
+        calendar_id: 'cal-id',
+        account_id: 'editor2-id',
+        role: 'editor',
+        account: editor2AccountEntity,
+      } as any,
+    ]);
+
+    const result = await service.getEditorsForCalendar('cal-id');
+
+    expect(result).toHaveLength(3);
+    const ids = result.map(a => a.id);
+    expect(ids).toContain('owner-id');
+    expect(ids).toContain('editor1-id');
+    expect(ids).toContain('editor2-id');
+  });
+
+  it('should return empty array for a non-existent calendar', async () => {
+    const memberFindAllStub = sandbox.stub(CalendarMemberEntity, 'findAll');
+    memberFindAllStub.resolves([]);
+
+    const result = await service.getEditorsForCalendar('nonexistent-cal-id');
+
+    expect(result).toHaveLength(0);
+  });
+
+  it('should exclude remote editors (members without a local account)', async () => {
+    const ownerAccountEntity = AccountEntity.fromModel(new Account('owner-id', 'owneruser', 'owner@example.com'));
+
+    const memberFindAllStub = sandbox.stub(CalendarMemberEntity, 'findAll');
+    memberFindAllStub.resolves([
+      {
+        calendar_id: 'cal-id',
+        account_id: 'owner-id',
+        role: 'owner',
+        account: ownerAccountEntity,
+      } as any,
+    ]);
+
+    const result = await service.getEditorsForCalendar('cal-id');
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('owner-id');
   });
 });
