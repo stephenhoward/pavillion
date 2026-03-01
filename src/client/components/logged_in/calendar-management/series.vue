@@ -1,7 +1,7 @@
 <script setup>
 import { reactive, onMounted, nextTick } from 'vue';
 import { useTranslation } from 'i18next-vue';
-import { Plus, Pencil, Trash2 } from 'lucide-vue-next';
+import { Plus, Pencil, Trash2, ExternalLink } from 'lucide-vue-next';
 import { EventSeries } from '@/common/model/event_series';
 import { EventSeriesContent } from '@/common/model/event_series_content';
 import SeriesService from '@/client/service/series';
@@ -14,6 +14,10 @@ import { useToast } from '@/client/composables/useToast';
 
 const props = defineProps({
   calendarId: {
+    type: String,
+    required: true,
+  },
+  calendarUrlName: {
     type: String,
     required: true,
   },
@@ -235,6 +239,15 @@ onMounted(async () => {
           </div>
 
           <div class="series-actions">
+            <a
+              :href="'/view/' + props.calendarUrlName + '/series/' + series.urlName"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="icon-button"
+              :aria-label="t('view_public_page')"
+            >
+              <ExternalLink :size="20" :stroke-width="2" />
+            </a>
             <button
               type="button"
               class="icon-button"

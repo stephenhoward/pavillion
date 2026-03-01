@@ -11,6 +11,7 @@
     "save_button": "Save Changes",
     "delete_button": "Delete",
     "edit_button": "Edit",
+    "view_public_page": "View public page",
     "creating": "Creating series...",
     "updating": "Updating series...",
     "deleting": "Deleting series...",

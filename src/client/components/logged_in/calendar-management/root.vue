@@ -210,7 +210,7 @@ const backToReports = () => {
           :hidden="state.activeTab !== 'series'"
           class="calendar-management-root__panel"
         >
-          <SeriesTab v-if="calendar" :calendar-id="calendar.id" />
+          <SeriesTab v-if="calendar" :calendar-id="calendar.id" :calendar-url-name="calendar.urlName" />
         </div>
 
         <div
