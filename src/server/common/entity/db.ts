@@ -130,6 +130,50 @@ const seedTable = async (data: object) => {
 };
 
 /**
+ * Copies seed media files to the local storage directory.
+ *
+ * Reads the media seed data (m_media.json) and copies corresponding
+ * image files from layouts/development/media/ into the storage/media/final/
+ * directory structure expected by the MediaService.
+ *
+ * Each media file is placed at: storage/media/final/{calendarId}/{sha256}.{ext}
+ */
+export const seedMediaFiles = async () => {
+  if (process.env.NODE_ENV !== 'development' && process.env.NODE_ENV !== 'e2e' && process.env.NODE_ENV !== 'federation') return;
+
+  const mediaSeedPath = path.join(path.resolve(), 'layouts/development/media');
+  const mediaDbPath = path.join(path.resolve(), 'layouts/development/db/m_media.json');
+
+  try {
+    await fs.access(mediaDbPath);
+  }
+  catch {
+    return;
+  }
+
+  const content = await fs.readFile(mediaDbPath, 'utf8');
+  const data = JSON.parse(content);
+  const mediaRecords = data.MediaEntity || [];
+
+  for (const record of mediaRecords) {
+    const ext = path.extname(record.original_filename);
+    const storageFilename = `${record.sha256}${ext}`;
+    const finalDir = path.join(path.resolve(), 'storage/media/final', record.calendar_id);
+    const finalPath = path.join(finalDir, storageFilename);
+    const sourcePath = path.join(mediaSeedPath, record.original_filename);
+
+    try {
+      await fs.access(sourcePath);
+      await fs.mkdir(finalDir, { recursive: true });
+      await fs.copyFile(sourcePath, finalPath);
+    }
+    catch {
+      console.warn(`[seedMediaFiles] Source file not found: ${record.original_filename}`);
+    }
+  }
+};
+
+/**
  * Seeds follow relationships and category mappings between local calendars.
  *
  * Called after backfillCalendarActors so that CalendarActorEntity IDs are
