@@ -45,6 +45,7 @@
         "choose_custom_dates": "Choisir les dates de début et de fin",
         "start_date": "Date de début",
         "end_date": "Date de fin",
+        "date_input_format_hint": "jj/mm/aaaa",
         "clear_all_filters": "Effacer tous les filtres",
         "toggle_filters": "Afficher/masquer les filtres",
         "more_filters": "Plus de filtres",

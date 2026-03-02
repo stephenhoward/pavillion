@@ -99,7 +99,7 @@ const alertLevel = computed(() => {
 const statusBadgeLabel = computed(() => {
   if (alertLevel.value === 'critical') return t('alert_critical');
   if (alertLevel.value === 'warning') return t('alert_warning');
-  return t('healthy', 'Healthy');
+  return t('healthy');
 });
 
 /**
@@ -166,8 +166,8 @@ onMounted(() => {
     >
       <div class="status-divider"/>
 
-      <!-- Disk Usage -->
-      <div class="disk-usage-section">
+      <!-- Disk Usage (only shown when disk monitoring data is available) -->
+      <div v-if="status.diskUsage" class="disk-usage-section">
         <div class="disk-usage-header">
           <span class="disk-label">{{ t("disk_usage") }}</span>
           <span class="disk-stats-text">
@@ -184,11 +184,20 @@ onMounted(() => {
             :aria-valuenow="status.diskUsage.percentageUsed"
             aria-valuemin="0"
             aria-valuemax="100"
+            :aria-label="t('disk_usage')"
           />
         </div>
         <div class="disk-percentage" :class="alertLevel">
-          {{ status.diskUsage.percentageUsed.toFixed(1) }}% {{ t("disk_usage", "used") }}
+          {{ status.diskUsage.percentageUsed.toFixed(1) }}% {{ t("disk_usage_used") }}
         </div>
+      </div>
+
+      <!-- Disk Usage unavailable notice -->
+      <div v-else class="disk-usage-section">
+        <div class="disk-usage-header">
+          <span class="disk-label">{{ t("disk_usage") }}</span>
+        </div>
+        <div class="info-card-empty">{{ t("disk_unavailable") }}</div>
       </div>
 
       <!-- Backup Info Grid -->
@@ -434,6 +443,12 @@ onMounted(() => {
         &.critical {
           color: var(--pav-color-red-600);
         }
+      }
+
+      .info-card-empty {
+        font-size: var(--pav-font-size-xs);
+        color: var(--pav-color-text-muted);
+        font-style: italic;
       }
     }
 

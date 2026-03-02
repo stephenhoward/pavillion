@@ -1,0 +1,15 @@
+{
+    "MediaEntity": [
+        {
+            "id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "calendar_id": "c71f5c9e-7a3d-4e5f-8e1a-66c3612a05f3",
+            "sha256": "58d907e3bd1801a9669f4d9f136e8b22a2e18f8b96efec5daa433a1f3dc97386",
+            "original_filename": "summer-festival.jpg",
+            "mime_type": "image/jpeg",
+            "file_size": 337,
+            "status": "approved",
+            "uploaded_at": "2026-01-01T09:00:00.000",
+            "processed_at": "2026-01-01T09:00:01.000"
+        }
+    ]
+}

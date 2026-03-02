@@ -7,7 +7,7 @@ import i18next from 'i18next';
 import Backend from 'i18next-fs-backend';
 import { EventEmitter } from 'events';
 
-import db, { seedDB, seedFollowData } from '@/server/common/entity/db';
+import db, { seedDB, seedFollowData, seedMediaFiles } from '@/server/common/entity/db';
 import { runMigrations } from '@/server/common/migrations/runner';
 import { createRouter } from '@/server/app_routes';
 import { validateProductionSecrets } from '@/server/common/helper/production-validation';
@@ -96,6 +96,7 @@ async function initializeDatabase(): Promise<void> {
       console.log(`${envLabel} mode: Syncing database schema...`);
       await db.sync({ force: true });
       await seedDB();
+      await seedMediaFiles();
       console.log('Database synced and seeded successfully.');
 
       // Backfill UserActors and CalendarActors for seeded accounts/calendars

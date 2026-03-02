@@ -309,7 +309,8 @@ const handleClose = () => {
         role="status"
         aria-live="polite"
       >
-        {{ t('add_calendar_modal.looking_up') }}
+        <span class="loading-spinner" aria-hidden="true" />
+        <span>{{ t('add_calendar_modal.looking_up') }}</span>
       </div>
 
       <div
@@ -482,10 +483,39 @@ div.add-calendar-modal {
   }
 
   div.loading-state {
-    padding: var(--pav-space-3);
-    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--pav-space-3);
+    padding: var(--pav-space-4);
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: var(--pav-border-radius-pill);
     color: var(--pav-color-text-primary);
-    font-style: italic;
+
+    @media (prefers-color-scheme: dark) {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    span.loading-spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid rgba(0, 0, 0, 0.15);
+      border-top-color: var(--pav-color-interactive-primary);
+      border-radius: 50%;
+      animation: spinner-rotate 0.8s linear infinite;
+      flex-shrink: 0;
+
+      @media (prefers-color-scheme: dark) {
+        border-color: rgba(255, 255, 255, 0.15);
+        border-top-color: var(--pav-color-interactive-primary);
+      }
+    }
+  }
+
+  @keyframes spinner-rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
 
   div.error-state {

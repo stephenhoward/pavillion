@@ -64,6 +64,7 @@
         "choose_custom_dates": "Elegir fechas de inicio y fin",
         "start_date": "Fecha de inicio",
         "end_date": "Fecha de fin",
+        "date_input_format_hint": "dd/mm/aaaa",
         "clear_all_filters": "Limpiar todos los filtros",
         "toggle_filters": "Alternar filtros",
         "more_filters": "Más filtros",
