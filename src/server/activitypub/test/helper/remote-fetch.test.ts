@@ -208,6 +208,7 @@ describe('fetchRemoteObject', () => {
       expect(result).toBeNull();
       expect(axiosGetStub.called).toBe(false);
       expect(consoleErrorStub.called).toBe(true);
+      expect(consoleErrorStub.args.some((args: unknown[]) => (args[1] as Record<string, unknown>)?.event === 'ssrf_blocked')).toBe(true);
     });
 
     it('should reject URI with private IPv4 address (192.168.0.0/16)', async () => {
@@ -216,6 +217,7 @@ describe('fetchRemoteObject', () => {
       expect(result).toBeNull();
       expect(axiosGetStub.called).toBe(false);
       expect(consoleErrorStub.called).toBe(true);
+      expect(consoleErrorStub.args.some((args: unknown[]) => (args[1] as Record<string, unknown>)?.event === 'ssrf_blocked')).toBe(true);
     });
 
     it('should reject URI with loopback address (127.0.0.1)', async () => {
@@ -224,6 +226,7 @@ describe('fetchRemoteObject', () => {
       expect(result).toBeNull();
       expect(axiosGetStub.called).toBe(false);
       expect(consoleErrorStub.called).toBe(true);
+      expect(consoleErrorStub.args.some((args: unknown[]) => (args[1] as Record<string, unknown>)?.event === 'ssrf_blocked')).toBe(true);
     });
 
     it('should reject URI with link-local address (169.254.169.254 - AWS metadata)', async () => {
@@ -232,6 +235,7 @@ describe('fetchRemoteObject', () => {
       expect(result).toBeNull();
       expect(axiosGetStub.called).toBe(false);
       expect(consoleErrorStub.called).toBe(true);
+      expect(consoleErrorStub.args.some((args: unknown[]) => (args[1] as Record<string, unknown>)?.event === 'ssrf_blocked')).toBe(true);
     });
 
     it('should reject URI with private IPv6 address (::1)', async () => {
@@ -240,6 +244,7 @@ describe('fetchRemoteObject', () => {
       expect(result).toBeNull();
       expect(axiosGetStub.called).toBe(false);
       expect(consoleErrorStub.called).toBe(true);
+      expect(consoleErrorStub.args.some((args: unknown[]) => (args[1] as Record<string, unknown>)?.event === 'ssrf_blocked')).toBe(true);
     });
 
     it('should reject URI with IPv6 link-local address (fe80::)', async () => {
@@ -248,6 +253,7 @@ describe('fetchRemoteObject', () => {
       expect(result).toBeNull();
       expect(axiosGetStub.called).toBe(false);
       expect(consoleErrorStub.called).toBe(true);
+      expect(consoleErrorStub.args.some((args: unknown[]) => (args[1] as Record<string, unknown>)?.event === 'ssrf_blocked')).toBe(true);
     });
 
     it('should allow URI with public IP address', async () => {

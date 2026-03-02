@@ -1688,7 +1688,7 @@ class ProcessInboxService {
       // SECURITY: fetchRemoteObject validates the URL against private IP ranges (SSRF protection)
       const remoteData = await fetchRemoteObject(apObjectId);
       if (!remoteData) {
-        console.warn('[INBOX] Failed to fetch remote event object — SSRF blocked or network error', {
+        console.warn('[INBOX] Failed to fetch remote event object — network error', {
           event: 'announce_fetch_failed',
           actorId: message.actor,
           objectId: apObjectId,
