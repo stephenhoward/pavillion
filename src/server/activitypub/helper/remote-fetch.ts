@@ -46,7 +46,11 @@ export async function fetchRemoteObject(uri: string): Promise<Record<string, unk
     }
     catch (error) {
       if (error instanceof Error) {
-        console.error(`Security: Blocked request to private IP for URI ${uri}: ${error.message}`);
+        console.error('[SECURITY] SSRF block: refused outbound fetch', {
+          event: 'ssrf_blocked',
+          uri,
+          reason: error.message,
+        });
       }
       return null;
     }
