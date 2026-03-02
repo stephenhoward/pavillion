@@ -22,10 +22,11 @@ import { EventEmitter } from 'events';
 
 import { Calendar } from '@/common/model/calendar';
 import ProcessInboxService from '@/server/activitypub/service/inbox';
-import { ActivityPubInboxMessageEntity, ActivityPubOutboxMessageEntity, FollowerCalendarEntity } from '@/server/activitypub/entity/activitypub';
+import { ActivityPubInboxMessageEntity, ActivityPubOutboxMessageEntity, FollowerCalendarEntity, FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
 import CalendarInterface from '@/server/calendar/interface';
 import ModerationInterface from '@/server/moderation/interface';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
+import { ActivityPubActor } from '@/server/activitypub/model/base';
 
 // Import Fedify mock helpers for creating well-formed ActivityPub activities
 import {
@@ -1351,6 +1352,387 @@ describe('Structured Logging for Activity Rejections', () => {
       const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME });
 
       await expect(service.processDeleteEvent(calendar, activityMessage)).rejects.toThrow();
+    });
+  });
+});
+
+describe('Relationship-Based Inbox Filtering', () => {
+  let service: ProcessInboxService;
+  let sandbox: sinon.SinonSandbox;
+
+  const TEST_CALENDAR_ID = 'test-calendar-id';
+  const TEST_CALENDAR_URL_NAME = 'testcalendar';
+  // Calendar actor URL (no /users/ in path — will NOT be treated as Person actor)
+  const REMOTE_CALENDAR_ACTOR_URL = 'https://remote.federation.test/calendars/events';
+  const REMOTE_EVENT_URL = 'https://remote.federation.test/events/123';
+  // Person actor URL (has /users/ in path — treated as Person actor, filter is skipped)
+  const REMOTE_PERSON_ACTOR_URL = 'https://remote.federation.test/users/alice';
+  const REMOTE_CALENDAR_ACTOR_ID = 'remote-actor-uuid';
+
+  // A mock CalendarActor returned by remoteCalendarService.getByActorUri
+  const mockRemoteCalendarActor = {
+    id: REMOTE_CALENDAR_ACTOR_ID,
+    actorUri: REMOTE_CALENDAR_ACTOR_URL,
+    actorType: 'remote' as const,
+    calendarId: null,
+    remoteCalendarId: null,
+    remoteDisplayName: null,
+    remoteDomain: 'remote.federation.test',
+    inboxUrl: null,
+    sharedInboxUrl: null,
+    lastFetched: null,
+    publicKey: null,
+    privateKey: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    const eventBus = new EventEmitter();
+    const calendarInterface = new CalendarInterface(eventBus);
+    service = new ProcessInboxService(eventBus, calendarInterface);
+
+    // Default: return calendar for lookup
+    sandbox.stub(service.calendarInterface, 'getCalendar')
+      .resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME }));
+
+    // Default: stub message update
+    sandbox.stub(ActivityPubInboxMessageEntity.prototype, 'update').resolves();
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  describe('hasRelationshipWithCalendar — addressing check', () => {
+    it('should return true when local actor URI appears in "to" field', async () => {
+      // Stub getByActorUri to return null (no DB record needed for addressing check)
+      sandbox.stub(service.remoteCalendarService, 'getByActorUri').resolves(null);
+
+      const localActorUri = ActivityPubActor.actorUrl(Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME }));
+      const rawMessage = {
+        type: 'Create',
+        actor: REMOTE_CALENDAR_ACTOR_URL,
+        to: [localActorUri],
+        object: { type: 'Event', id: REMOTE_EVENT_URL },
+      };
+
+      const result = await (service as any).hasRelationshipWithCalendar(
+        Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME }),
+        REMOTE_CALENDAR_ACTOR_URL,
+        ActivityPubInboxMessageEntity.build({ calendar_id: TEST_CALENDAR_ID, type: 'Create', message: rawMessage }),
+      );
+
+      expect(result).toBe(true);
+    });
+
+    it('should return true when local actor URI appears in "cc" field', async () => {
+      sandbox.stub(service.remoteCalendarService, 'getByActorUri').resolves(null);
+
+      const localActorUri = ActivityPubActor.actorUrl(Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME }));
+      const rawMessage = {
+        type: 'Create',
+        actor: REMOTE_CALENDAR_ACTOR_URL,
+        cc: localActorUri, // single string (not array)
+        object: { type: 'Event', id: REMOTE_EVENT_URL },
+      };
+
+      const result = await (service as any).hasRelationshipWithCalendar(
+        Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME }),
+        REMOTE_CALENDAR_ACTOR_URL,
+        ActivityPubInboxMessageEntity.build({ calendar_id: TEST_CALENDAR_ID, type: 'Create', message: rawMessage }),
+      );
+
+      expect(result).toBe(true);
+    });
+  });
+
+  describe('hasRelationshipWithCalendar — following/follower checks', () => {
+    it('should return false when actor is unknown (not in DB)', async () => {
+      sandbox.stub(service.remoteCalendarService, 'getByActorUri').resolves(null);
+
+      const rawMessage = {
+        type: 'Create',
+        actor: REMOTE_CALENDAR_ACTOR_URL,
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        object: { type: 'Event', id: REMOTE_EVENT_URL },
+      };
+
+      const result = await (service as any).hasRelationshipWithCalendar(
+        Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME }),
+        REMOTE_CALENDAR_ACTOR_URL,
+        ActivityPubInboxMessageEntity.build({ calendar_id: TEST_CALENDAR_ID, type: 'Create', message: rawMessage }),
+      );
+
+      expect(result).toBe(false);
+    });
+
+    it('should return true when local calendar follows the sender (FollowingCalendarEntity exists)', async () => {
+      sandbox.stub(service.remoteCalendarService, 'getByActorUri').resolves(mockRemoteCalendarActor);
+      // We follow them
+      sandbox.stub(FollowingCalendarEntity, 'findOne').resolves({ id: 'follow-id' } as any);
+      sandbox.stub(FollowerCalendarEntity, 'findOne').resolves(null);
+
+      const rawMessage = {
+        type: 'Create',
+        actor: REMOTE_CALENDAR_ACTOR_URL,
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        object: { type: 'Event', id: REMOTE_EVENT_URL },
+      };
+
+      const result = await (service as any).hasRelationshipWithCalendar(
+        Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME }),
+        REMOTE_CALENDAR_ACTOR_URL,
+        ActivityPubInboxMessageEntity.build({ calendar_id: TEST_CALENDAR_ID, type: 'Create', message: rawMessage }),
+      );
+
+      expect(result).toBe(true);
+    });
+
+    it('should return true when sender follows local calendar (FollowerCalendarEntity exists)', async () => {
+      sandbox.stub(service.remoteCalendarService, 'getByActorUri').resolves(mockRemoteCalendarActor);
+      // They follow us
+      sandbox.stub(FollowingCalendarEntity, 'findOne').resolves(null);
+      sandbox.stub(FollowerCalendarEntity, 'findOne').resolves({ id: 'follower-id' } as any);
+
+      const rawMessage = {
+        type: 'Create',
+        actor: REMOTE_CALENDAR_ACTOR_URL,
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        object: { type: 'Event', id: REMOTE_EVENT_URL },
+      };
+
+      const result = await (service as any).hasRelationshipWithCalendar(
+        Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME }),
+        REMOTE_CALENDAR_ACTOR_URL,
+        ActivityPubInboxMessageEntity.build({ calendar_id: TEST_CALENDAR_ID, type: 'Create', message: rawMessage }),
+      );
+
+      expect(result).toBe(true);
+    });
+
+    it('should return false when actor is known but no follow relationship exists', async () => {
+      sandbox.stub(service.remoteCalendarService, 'getByActorUri').resolves(mockRemoteCalendarActor);
+      sandbox.stub(FollowingCalendarEntity, 'findOne').resolves(null);
+      sandbox.stub(FollowerCalendarEntity, 'findOne').resolves(null);
+
+      const rawMessage = {
+        type: 'Create',
+        actor: REMOTE_CALENDAR_ACTOR_URL,
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+        object: { type: 'Event', id: REMOTE_EVENT_URL },
+      };
+
+      const result = await (service as any).hasRelationshipWithCalendar(
+        Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME }),
+        REMOTE_CALENDAR_ACTOR_URL,
+        ActivityPubInboxMessageEntity.build({ calendar_id: TEST_CALENDAR_ID, type: 'Create', message: rawMessage }),
+      );
+
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('Filter gate in processInboxMessage', () => {
+    it('should reject Create activity from Calendar actor with no relationship', async () => {
+      // No relationship
+      sandbox.stub(service.remoteCalendarService, 'getByActorUri').resolves(null);
+
+      const activityMessage = createMockCreateActivity(REMOTE_CALENDAR_ACTOR_URL, {
+        type: 'Event',
+        id: REMOTE_EVENT_URL,
+        name: 'Test Event',
+      });
+
+      const message = ActivityPubInboxMessageEntity.build({
+        calendar_id: TEST_CALENDAR_ID,
+        type: 'Create',
+        message: activityMessage,
+      });
+
+      const processStub = sandbox.stub(service, 'processCreateEvent');
+      const updateStub = (ActivityPubInboxMessageEntity.prototype.update as sinon.SinonStub);
+
+      await service.processInboxMessage(message);
+
+      expect(processStub.called).toBe(false);
+      expect(updateStub.calledOnce).toBe(true);
+      expect(updateStub.firstCall.args[0].processed_status).toBe('rejected');
+    });
+
+    it('should reject Update activity from Calendar actor with no relationship', async () => {
+      sandbox.stub(service.remoteCalendarService, 'getByActorUri').resolves(null);
+
+      const activityMessage = createMockUpdateActivity(REMOTE_CALENDAR_ACTOR_URL, {
+        type: 'Event',
+        id: REMOTE_EVENT_URL,
+        name: 'Updated Event',
+      });
+
+      const message = ActivityPubInboxMessageEntity.build({
+        calendar_id: TEST_CALENDAR_ID,
+        type: 'Update',
+        message: activityMessage,
+      });
+
+      const processStub = sandbox.stub(service, 'processUpdateEvent');
+      const updateStub = (ActivityPubInboxMessageEntity.prototype.update as sinon.SinonStub);
+
+      await service.processInboxMessage(message);
+
+      expect(processStub.called).toBe(false);
+      expect(updateStub.firstCall.args[0].processed_status).toBe('rejected');
+    });
+
+    it('should reject Delete activity from Calendar actor with no relationship', async () => {
+      sandbox.stub(service.remoteCalendarService, 'getByActorUri').resolves(null);
+
+      const activityMessage = createMockDeleteActivity(REMOTE_CALENDAR_ACTOR_URL, REMOTE_EVENT_URL);
+
+      const message = ActivityPubInboxMessageEntity.build({
+        calendar_id: TEST_CALENDAR_ID,
+        type: 'Delete',
+        message: activityMessage,
+      });
+
+      const processStub = sandbox.stub(service, 'processDeleteEvent');
+      const updateStub = (ActivityPubInboxMessageEntity.prototype.update as sinon.SinonStub);
+
+      await service.processInboxMessage(message);
+
+      expect(processStub.called).toBe(false);
+      expect(updateStub.firstCall.args[0].processed_status).toBe('rejected');
+    });
+
+    it('should reject Announce activity from Calendar actor with no relationship', async () => {
+      sandbox.stub(service.remoteCalendarService, 'getByActorUri').resolves(null);
+
+      const activityMessage = createMockAnnounceActivity(REMOTE_CALENDAR_ACTOR_URL, REMOTE_EVENT_URL);
+
+      const message = ActivityPubInboxMessageEntity.build({
+        calendar_id: TEST_CALENDAR_ID,
+        type: 'Announce',
+        message: activityMessage,
+      });
+
+      const processStub = sandbox.stub(service, 'processShareEvent');
+      const updateStub = (ActivityPubInboxMessageEntity.prototype.update as sinon.SinonStub);
+
+      await service.processInboxMessage(message);
+
+      expect(processStub.called).toBe(false);
+      expect(updateStub.firstCall.args[0].processed_status).toBe('rejected');
+    });
+
+    it('should NOT filter Follow activities from Calendar actors (Follow is not filtered)', async () => {
+      // Follow activities are not in the filtered types list
+      const activityMessage = createMockFollowActivity(REMOTE_CALENDAR_ACTOR_URL, `https://pavillion.test/calendars/${TEST_CALENDAR_URL_NAME}`);
+
+      const message = ActivityPubInboxMessageEntity.build({
+        calendar_id: TEST_CALENDAR_ID,
+        type: 'Follow',
+        message: activityMessage,
+      });
+
+      const processStub = sandbox.stub(service, 'processFollowAccount');
+      const updateStub = (ActivityPubInboxMessageEntity.prototype.update as sinon.SinonStub);
+
+      await service.processInboxMessage(message);
+
+      expect(processStub.called).toBe(true);
+      expect(updateStub.firstCall.args[0].processed_status).toBe('ok');
+    });
+
+    it('should NOT filter Create activities from Person actors (filter skipped for /users/ URIs)', async () => {
+      // Person actors use /users/ in their URI
+      const activityMessage = createMockCreateActivity(REMOTE_PERSON_ACTOR_URL, {
+        type: 'Event',
+        id: REMOTE_EVENT_URL,
+        name: 'Person Event',
+      });
+
+      const message = ActivityPubInboxMessageEntity.build({
+        calendar_id: TEST_CALENDAR_ID,
+        type: 'Create',
+        message: activityMessage,
+      });
+
+      const processStub = sandbox.stub(service, 'processCreateEvent');
+      const updateStub = (ActivityPubInboxMessageEntity.prototype.update as sinon.SinonStub);
+
+      await service.processInboxMessage(message);
+
+      // Should proceed to processCreateEvent (not filtered)
+      expect(processStub.called).toBe(true);
+    });
+
+    it('should allow Create from Calendar actor when following relationship exists', async () => {
+      // We follow this remote calendar
+      sandbox.stub(service.remoteCalendarService, 'getByActorUri').resolves(mockRemoteCalendarActor);
+      sandbox.stub(FollowingCalendarEntity, 'findOne').resolves({ id: 'follow-id' } as any);
+      sandbox.stub(FollowerCalendarEntity, 'findOne').resolves(null);
+
+      const activityMessage = createMockCreateActivity(REMOTE_CALENDAR_ACTOR_URL, {
+        type: 'Event',
+        id: REMOTE_EVENT_URL,
+        name: 'Test Event',
+      });
+
+      const message = ActivityPubInboxMessageEntity.build({
+        calendar_id: TEST_CALENDAR_ID,
+        type: 'Create',
+        message: activityMessage,
+      });
+
+      const processStub = sandbox.stub(service, 'processCreateEvent');
+      const updateStub = (ActivityPubInboxMessageEntity.prototype.update as sinon.SinonStub);
+
+      await service.processInboxMessage(message);
+
+      expect(processStub.called).toBe(true);
+      expect(updateStub.firstCall.args[0].processed_status).toBe('ok');
+    });
+
+    it('should log rejection with no_relationship type when filtering', async () => {
+      const consoleWarnStub = sandbox.stub(console, 'warn');
+
+      sandbox.stub(service.remoteCalendarService, 'getByActorUri').resolves(null);
+
+      const activityMessage = createMockCreateActivity(REMOTE_CALENDAR_ACTOR_URL, {
+        type: 'Event',
+        id: REMOTE_EVENT_URL,
+        name: 'Unrelated Event',
+      });
+
+      const message = ActivityPubInboxMessageEntity.build({
+        id: 'test-msg-id',
+        calendar_id: TEST_CALENDAR_ID,
+        type: 'Create',
+        message: activityMessage,
+      });
+
+      await service.processInboxMessage(message);
+
+      // Find JSON log entry in console.warn calls
+      let logEntry: any = null;
+      for (let i = 0; i < consoleWarnStub.callCount; i++) {
+        try {
+          const arg = consoleWarnStub.getCall(i).args[0];
+          if (typeof arg === 'string' && arg.includes('"rejection_type"')) {
+            logEntry = JSON.parse(arg);
+            break;
+          }
+        }
+        catch (e) {
+          // not JSON
+        }
+      }
+
+      expect(logEntry).toBeDefined();
+      expect(logEntry.rejection_type).toBe('no_relationship');
+      expect(logEntry.activity_type).toBe('Create');
+      expect(logEntry.actor_uri).toBe(REMOTE_CALENDAR_ACTOR_URL);
     });
   });
 });

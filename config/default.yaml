@@ -112,3 +112,7 @@ housekeeping:
       warning_threshold: 80
       critical_threshold: 90
       check_interval: '0 * * * *'  # Hourly
+  inbox:
+    retentionDays: 30
+    batchSize: 1000
+    schedule: '0 5 * * *'  # Daily at 5 AM

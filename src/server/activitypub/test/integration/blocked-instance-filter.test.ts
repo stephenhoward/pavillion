@@ -5,12 +5,13 @@ import { EventEmitter } from 'events';
 import ProcessInboxService from '@/server/activitypub/service/inbox';
 import ModerationService from '@/server/moderation/service/moderation';
 import ModerationInterface from '@/server/moderation/interface';
+import ActivityPubInterface from '@/server/activitypub/interface';
 import CalendarInterface from '@/server/calendar/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import EmailInterface from '@/server/email/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
 import RemoteCalendarService from '@/server/activitypub/service/remote_calendar';
-import { ActivityPubInboxMessageEntity } from '@/server/activitypub/entity/activitypub';
+import { ActivityPubInboxMessageEntity, FollowerCalendarEntity, FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
 import { Calendar } from '@/common/model/calendar';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import CreateActivity from '@/server/activitypub/model/action/create';
@@ -31,6 +32,7 @@ describe('ProcessInboxService - Blocked Instance Filtering', () => {
     const accountsInterface = sandbox.createStubInstance(AccountsInterface) as unknown as AccountsInterface;
     const emailInterface = sandbox.createStubInstance(EmailInterface) as unknown as EmailInterface;
     const configurationInterface = sandbox.createStubInstance(ConfigurationInterface) as unknown as ConfigurationInterface;
+    const activityPubInterface = sandbox.createStubInstance(ActivityPubInterface) as unknown as ActivityPubInterface;
 
     // Create real ModerationInterface with stubs
     moderationInterface = new ModerationInterface(
@@ -39,6 +41,7 @@ describe('ProcessInboxService - Blocked Instance Filtering', () => {
       accountsInterface,
       emailInterface,
       configurationInterface,
+      activityPubInterface,
     );
 
     // Create ProcessInboxService with ModerationInterface
@@ -110,6 +113,7 @@ describe('ProcessInboxService - Blocked Instance Filtering', () => {
     it('should process activities from non-blocked instances normally', async () => {
       const allowedDomain = 'allowed.example.com';
       const actorUri = `https://${allowedDomain}/calendars/testcal`;
+      const remoteCalendarId = 'remote-cal-actor-id';
 
       // Stub ModerationService to report instance as NOT blocked
       const moderationService = moderationInterface.getModerationService();
@@ -120,6 +124,19 @@ describe('ProcessInboxService - Blocked Instance Filtering', () => {
 
       // Stub calendar lookup
       (calendarInterface.getCalendar as sinon.SinonStub).resolves(calendar);
+
+      // Stub relationship check so the relationship filter passes.
+      // The actor URI contains /calendars/ (not /users/), so it is treated as a Calendar
+      // actor and the relationship gate applies. We stub getByActorUri to return a known
+      // remote calendar record, and FollowingCalendarEntity.findOne to return a follow
+      // record indicating this calendar follows the sender.
+      const remoteCalendarService = (inboxService as any).remoteCalendarService as RemoteCalendarService;
+      sandbox.stub(remoteCalendarService, 'getByActorUri').resolves({
+        id: remoteCalendarId,
+        actor_uri: actorUri,
+      } as any);
+      sandbox.stub(FollowingCalendarEntity, 'findOne').resolves({ id: 'follow-record' } as any);
+      sandbox.stub(FollowerCalendarEntity, 'findOne').resolves(null);
 
       // Stub processCreateEvent to avoid complex database operations
       // This test is focused on verifying blocking logic, not the full processing chain
@@ -177,6 +194,7 @@ describe('ProcessInboxService - Blocked Instance Filtering', () => {
         const accountsInterface = sandbox.createStubInstance(AccountsInterface) as unknown as AccountsInterface;
         const emailInterface = sandbox.createStubInstance(EmailInterface) as unknown as EmailInterface;
         const configurationInterface = sandbox.createStubInstance(ConfigurationInterface) as unknown as ConfigurationInterface;
+        const activityPubInterface = sandbox.createStubInstance(ActivityPubInterface) as unknown as ActivityPubInterface;
 
         // Recreate ModerationInterface
         moderationInterface = new ModerationInterface(
@@ -185,6 +203,7 @@ describe('ProcessInboxService - Blocked Instance Filtering', () => {
           accountsInterface,
           emailInterface,
           configurationInterface,
+          activityPubInterface,
         );
 
         // Stub isInstanceBlocked for this iteration
