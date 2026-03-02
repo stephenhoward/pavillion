@@ -25,6 +25,8 @@ import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_ca
 import { EventInstanceEntity } from '@/server/calendar/entity/event_instance';
 import { EventRepostEntity } from '@/server/calendar/entity/event_repost';
 import { SharedEventEntity } from '@/server/activitypub/entity/activitypub';
+import { validateUrlNotPrivate } from '@/server/activitypub/helper/ip-validation';
+import { FEDERATION_HTTP_TIMEOUT_MS } from '@/server/activitypub/constants';
 import db from '@/server/common/entity/db';
 import { Op, literal, where, fn, col, type Transaction } from 'sequelize';
 
@@ -286,9 +288,22 @@ class EventService {
 
     console.log(`[EVENTS] Sending Create activity to remote calendar: ${inboxUrl}`);
 
+    // SECURITY: Validate that the inbox URL does not point to a private IP address
+    // to prevent SSRF attacks where a malicious remote calendar advertises an internal
+    // network address as its inbox.
+    try {
+      await validateUrlNotPrivate(inboxUrl);
+    }
+    catch (error) {
+      const errorMsg = `Security: Blocked delivery to private inbox URL: ${error instanceof Error ? error.message : String(error)}`;
+      console.error(`[EVENTS] ${errorMsg}`);
+      throw new Error(errorMsg);
+    }
+
     try {
       const response = await axios.post(inboxUrl, createActivity, {
-        timeout: 15000,
+        timeout: FEDERATION_HTTP_TIMEOUT_MS,
+        maxRedirects: 0,
         headers: {
           'Content-Type': 'application/activity+json',
         },
@@ -398,9 +413,22 @@ class EventService {
 
     console.log(`[EVENTS] Sending Update activity to remote calendar: ${inboxUrl}`);
 
+    // SECURITY: Validate that the inbox URL does not point to a private IP address
+    // to prevent SSRF attacks where a malicious remote calendar advertises an internal
+    // network address as its inbox.
+    try {
+      await validateUrlNotPrivate(inboxUrl);
+    }
+    catch (error) {
+      const errorMsg = `Security: Blocked delivery to private inbox URL: ${error instanceof Error ? error.message : String(error)}`;
+      console.error(`[EVENTS] ${errorMsg}`);
+      throw new Error(errorMsg);
+    }
+
     try {
       const response = await axios.post(inboxUrl, updateActivity, {
-        timeout: 15000,
+        timeout: FEDERATION_HTTP_TIMEOUT_MS,
+        maxRedirects: 0,
         headers: {
           'Content-Type': 'application/activity+json',
         },
@@ -484,9 +512,22 @@ class EventService {
 
     console.log(`[EVENTS] Sending Delete activity to remote calendar: ${inboxUrl}`);
 
+    // SECURITY: Validate that the inbox URL does not point to a private IP address
+    // to prevent SSRF attacks where a malicious remote calendar advertises an internal
+    // network address as its inbox.
+    try {
+      await validateUrlNotPrivate(inboxUrl);
+    }
+    catch (error) {
+      const errorMsg = `Security: Blocked delivery to private inbox URL: ${error instanceof Error ? error.message : String(error)}`;
+      console.error(`[EVENTS] ${errorMsg}`);
+      throw new Error(errorMsg);
+    }
+
     try {
       const response = await axios.post(inboxUrl, deleteActivity, {
-        timeout: 15000,
+        timeout: FEDERATION_HTTP_TIMEOUT_MS,
+        maxRedirects: 0,
         headers: {
           'Content-Type': 'application/activity+json',
         },
