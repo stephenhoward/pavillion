@@ -245,7 +245,10 @@
     "alert_warning": "Warning - Disk usage is high",
     "daily": "Daily",
     "weekly": "Weekly",
-    "monthly": "Monthly"
+    "monthly": "Monthly",
+    "healthy": "Healthy",
+    "disk_unavailable": "Disk monitoring not configured",
+    "disk_usage_used": "used"
   },
   "accounts": {
     "page_title": "Account Management",

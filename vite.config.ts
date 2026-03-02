@@ -22,6 +22,13 @@ export default defineConfig({
       // Use polling in Docker environments where filesystem events aren't reliable
       usePolling: process.env.CHOKIDAR_USEPOLLING === 'true',
     },
+    // Proxy API requests to the Express backend in development
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+    },
   },
   build: {
     manifest: true,
