@@ -1,4 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+// Mock the ip-validation module so tests can control SSRF validation behaviour
+// without performing real DNS lookups. Defaults to resolving safely (no throw).
+vi.mock('@/server/activitypub/helper/ip-validation', () => ({
+  validateUrlNotPrivate: vi.fn().mockResolvedValue(true),
+}));
+import { validateUrlNotPrivate } from '@/server/activitypub/helper/ip-validation';
+
 import { v4 as uuidv4 } from 'uuid';
 import sinon from 'sinon';
 import axios from 'axios';
@@ -267,6 +274,90 @@ describe('CalendarService.grantEditAccessByEmail - Remote Editors', () => {
       await expect(
         service.grantEditAccessByEmail(testAccount, testCalendarId, 'Admin@nonexistent.federation.local'),
       ).rejects.toThrow('Could not connect');
+    });
+
+    it('should throw if WebFinger domain resolves to a private IP (SSRF block)', async () => {
+      // Simulate validateUrlNotPrivate blocking the WebFinger URL
+      vi.mocked(validateUrlNotPrivate).mockRejectedValueOnce(new Error('IP address is private'));
+
+      // axios.get should never be called when the WebFinger URL is blocked
+      const axiosGetStub = sandbox.stub(axios, 'get');
+
+      await expect(
+        service.grantEditAccessByEmail(testAccount, testCalendarId, 'Admin@beta.federation.local'),
+      ).rejects.toThrow(/Security.*Blocked WebFinger/i);
+
+      expect(axiosGetStub.called).toBe(false);
+    });
+
+    it('should throw if actor URI from WebFinger resolves to a private IP (SSRF block)', async () => {
+      // First call (WebFinger URL) passes; second call (actor URI) is blocked
+      vi.mocked(validateUrlNotPrivate)
+        .mockResolvedValueOnce(true)
+        .mockRejectedValueOnce(new Error('IP address is private'));
+
+      const axiosStub = sandbox.stub(axios, 'get');
+      axiosStub.onFirstCall().resolves({
+        data: {
+          subject: 'acct:@Admin@beta.federation.local',
+          links: [
+            {
+              rel: 'self',
+              type: 'application/activity+json',
+              href: 'https://beta.federation.local/users/Admin',
+            },
+          ],
+        },
+      });
+
+      await expect(
+        service.grantEditAccessByEmail(testAccount, testCalendarId, 'Admin@beta.federation.local'),
+      ).rejects.toThrow(/Security.*Blocked actor fetch/i);
+
+      // WebFinger GET should have been made, but actor GET should not
+      expect(axiosStub.callCount).toBe(1);
+    });
+
+    it('should return remote_editor without posting to inbox if inbox URL resolves to private IP', async () => {
+      // WebFinger and actor URL validations pass; inbox POST validation is blocked
+      vi.mocked(validateUrlNotPrivate)
+        .mockResolvedValueOnce(true)  // WebFinger
+        .mockResolvedValueOnce(true)  // actor URI
+        .mockRejectedValueOnce(new Error('IP address is private'));  // inbox
+
+      const axiosStub = sandbox.stub(axios, 'get');
+      axiosStub.onFirstCall().resolves({
+        data: {
+          subject: 'acct:@Admin@beta.federation.local',
+          links: [
+            {
+              rel: 'self',
+              type: 'application/activity+json',
+              href: 'https://beta.federation.local/users/Admin',
+            },
+          ],
+        },
+      });
+      axiosStub.onSecondCall().resolves({
+        data: {
+          type: 'Person',
+          preferredUsername: 'Admin',
+          inbox: 'https://beta.federation.local/users/Admin/inbox',
+          publicKey: { publicKeyPem: '-----BEGIN PUBLIC KEY-----...' },
+        },
+      });
+      const axiosPostStub = sandbox.stub(axios, 'post');
+
+      const result = await service.grantEditAccessByEmail(
+        testAccount,
+        testCalendarId,
+        'Admin@beta.federation.local',
+      );
+
+      // The grant itself succeeds (DB record created), but the inbox notification is skipped
+      expect(result.type).toBe('remote_editor');
+      expect((result.data as any).actorUri).toBe('https://beta.federation.local/users/Admin');
+      expect(axiosPostStub.called).toBe(false);
     });
 
     it('should throw error if Person actor type is wrong', async () => {
