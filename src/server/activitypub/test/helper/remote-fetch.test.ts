@@ -71,6 +71,18 @@ describe('fetchRemoteObject', () => {
     expect(callArgs.timeout).toBe(5000);
   });
 
+  it('should set maxRedirects to 0 to prevent redirect-based SSRF', async () => {
+    axiosGetStub.resolves({
+      status: 200,
+      data: { type: 'Note' },
+    });
+
+    await fetchRemoteObject('https://remote.example/notes/456');
+
+    const callArgs = axiosGetStub.firstCall.args[1];
+    expect(callArgs.maxRedirects).toBe(0);
+  });
+
   it('should return null when HTTP response is not 200', async () => {
     axiosGetStub.resolves({
       status: 404,
@@ -138,6 +150,19 @@ describe('fetchRemoteObject', () => {
     (axiosError as any).isAxiosError = true;
     sandbox.stub(axios, 'isAxiosError').returns(true);
     axiosGetStub.rejects(axiosError);
+
+    const result = await fetchRemoteObject('https://remote.example/events/123');
+
+    expect(result).toBeNull();
+    expect(consoleErrorStub.called).toBe(true);
+  });
+
+  it('should return null when axios throws a 302 redirect AxiosError', async () => {
+    const redirectError = new Error('Redirect');
+    (redirectError as any).response = { status: 302 };
+    (redirectError as any).isAxiosError = true;
+    sandbox.stub(axios, 'isAxiosError').returns(true);
+    axiosGetStub.rejects(redirectError);
 
     const result = await fetchRemoteObject('https://remote.example/events/123');
 
