@@ -3,6 +3,7 @@ import sinon from 'sinon';
 import { v4 as uuidv4 } from 'uuid';
 
 import ProcessInboxService from '@/server/activitypub/service/inbox';
+import * as remoteFetch from '@/server/activitypub/helper/remote-fetch';
 import { FollowerCalendarEntity, FollowingCalendarEntity, ActivityPubOutboxMessageEntity, EventActivityEntity, SharedEventEntity } from '@/server/activitypub/entity/activitypub';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
@@ -276,17 +277,17 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
 
   describe('processShareEvent', () => {
     it('should emit activitypub:event:reposted when a local event is announced', async () => {
-      // Arrange
+      // Arrange: actor and object must be on the same domain (domain-match security check)
       const remoteActorUrl = 'https://remote.instance/calendars/remote-calendar';
       const localEventId = uuidv4();
-      const apObjectId = `https://this.instance/events/${localEventId}`;
+      const apObjectId = `https://remote.instance/events/${localEventId}`;
 
       // Create EventObjectEntity tracking the AP identity for this local event
       // (EventObjectEntity has no FK to EventEntity, so no media table needed)
       await EventObjectEntity.create({
         event_id: localEventId,
         ap_id: apObjectId,
-        attributed_to: 'https://this.instance/calendars/test-calendar',
+        attributed_to: 'https://remote.instance/calendars/test-calendar',
       });
 
       // Stub calendarInterface.getEventById to return a local event (has calendarId)
@@ -315,16 +316,16 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
     });
 
     it('should not emit activitypub:event:reposted when a remote (non-local) event is announced', async () => {
-      // Arrange
+      // Arrange: actor and object must be on the same domain (domain-match security check)
       const remoteActorUrl = 'https://remote.instance/calendars/remote-calendar';
       const remoteEventId = uuidv4();
-      const apObjectId = 'https://other.instance/events/remote-event-123';
+      const apObjectId = 'https://remote.instance/events/remote-event-123';
 
       // Create EventObjectEntity for the remote event
       await EventObjectEntity.create({
         event_id: remoteEventId,
         ap_id: apObjectId,
-        attributed_to: 'https://other.instance/calendars/their-calendar',
+        attributed_to: 'https://remote.instance/calendars/their-calendar',
       });
 
       // Stub calendarInterface.getEventById to return a remote event (calendarId is null)
@@ -348,11 +349,11 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
     });
 
     it('should use remoteDisplayName as reposterName when available', async () => {
-      // Arrange
+      // Arrange: actor and object must be on the same domain (domain-match security check)
       const remoteActorUrl = 'https://remote.instance/calendars/remote-calendar';
       const displayName = 'Remote Calendar Name';
       const localEventId = uuidv4();
-      const apObjectId = `https://this.instance/events/${localEventId}`;
+      const apObjectId = `https://remote.instance/events/${localEventId}`;
 
       // Pre-create CalendarActorEntity with display name
       await CalendarActorEntity.create({
@@ -369,7 +370,7 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
       await EventObjectEntity.create({
         event_id: localEventId,
         ap_id: apObjectId,
-        attributed_to: 'https://this.instance/calendars/test-calendar',
+        attributed_to: 'https://remote.instance/calendars/test-calendar',
       });
 
       // Stub calendarInterface.getEventById to return a local event
@@ -839,5 +840,131 @@ describe('ProcessInboxService - processUpdateEvent', () => {
       // Assert - no emission when rejected
       expect(emittedEvents).toHaveLength(0);
     });
+  });
+});
+
+describe('ProcessInboxService - processShareEvent SSRF Protection', () => {
+  let sandbox: sinon.SinonSandbox;
+  let inboxService: ProcessInboxService;
+  let eventBus: EventEmitter;
+  let testCalendar: Calendar;
+  let calendarInterface: CalendarInterface;
+
+  // Actor on a legitimate remote domain — used as the announcer
+  const LEGITIMATE_ACTOR = 'https://legitimate.example/calendars/events';
+
+  beforeEach(async () => {
+    await setupActivityPubSchema();
+    sandbox = sinon.createSandbox();
+    eventBus = new EventEmitter();
+    calendarInterface = new CalendarInterface(eventBus);
+    inboxService = new ProcessInboxService(eventBus, calendarInterface);
+
+    testCalendar = new Calendar('announce-ssrf-calendar-id', 'announce-ssrf-calendar');
+    testCalendar.addContent('en', new CalendarContent('en'));
+    testCalendar.content('en').title = 'Announce SSRF Test Calendar';
+
+    await CalendarEntity.create({
+      id: testCalendar.id,
+      url_name: testCalendar.urlName,
+      account_id: uuidv4(),
+      languages: 'en',
+    });
+  });
+
+  afterEach(async () => {
+    sandbox.restore();
+    await teardownActivityPubSchema();
+  });
+
+  /**
+   * Helper: assert that an Announce is blocked by SSRF protection inside fetchRemoteObject.
+   * The real fetchRemoteObject is used here (not stubbed), so validateUrlNotPrivate() runs.
+   * For http:// URLs, it rejects immediately before any network contact.
+   */
+  async function assertBlockedViaFetch(actor: string, objectId: string): Promise<void> {
+    const warnSpy = sandbox.stub(console, 'warn');
+
+    const activity = new AnnounceActivity(actor, objectId);
+    await inboxService.processShareEvent(testCalendar, activity);
+
+    // SSRF protection runs inside fetchRemoteObject via validateUrlNotPrivate().
+    // fetchRemoteObject returns null (blocked), and processShareEvent emits announce_fetch_failed.
+    expect(warnSpy.calledWithMatch(
+      sinon.match.string,
+      sinon.match({ event: 'announce_fetch_failed' }),
+    )).toBe(true);
+  }
+
+  it('should block Announce whose object.id is a private IPv4 (10.x.x.x)', async () => {
+    await assertBlockedViaFetch(LEGITIMATE_ACTOR, 'http://10.0.0.1/events/123');
+  });
+
+  it('should block Announce whose object.id is a private LAN address (192.168.x.x)', async () => {
+    await assertBlockedViaFetch(LEGITIMATE_ACTOR, 'http://192.168.1.1/events/456');
+  });
+
+  it('should block Announce whose object.id is the loopback address (127.0.0.1)', async () => {
+    await assertBlockedViaFetch(LEGITIMATE_ACTOR, 'http://127.0.0.1/events/789');
+  });
+
+  it('should block Announce whose object.id is the AWS metadata endpoint', async () => {
+    await assertBlockedViaFetch(LEGITIMATE_ACTOR, 'http://169.254.169.254/latest/meta-data/');
+  });
+
+  it('should block Announce whose object.id is the IPv6 loopback (::1)', async () => {
+    await assertBlockedViaFetch(LEGITIMATE_ACTOR, 'http://[::1]/events/999');
+  });
+
+  it('should block Announce whose object.id is the wildcard address (0.0.0.0)', async () => {
+    await assertBlockedViaFetch(LEGITIMATE_ACTOR, 'http://0.0.0.0/events/000');
+  });
+
+  it('should allow cross-domain Announce (e.g. Bob on Beta reposts Alice on Alpha)', async () => {
+    // Cross-instance reposts are valid ActivityPub behavior — Bob's actor on beta.example
+    // legitimately announces Alice's event from alpha.example. The domain-match guard
+    // was incorrectly blocking this; SSRF protection comes from validateUrlNotPrivate() only.
+    const aliceEventUrl = 'https://alpha.example/events/alice-original';
+    const bobActor = 'https://beta.example/calendars/bob';
+
+    const findOneStub = sandbox.stub(EventObjectEntity, 'findOne').resolves({ event_id: uuidv4() } as any);
+    sandbox.stub(remoteFetch, 'fetchRemoteObject').resolves(null);
+
+    const activity = new AnnounceActivity(bobActor, aliceEventUrl);
+    await inboxService.processShareEvent(testCalendar, activity);
+
+    // DB lookup is reached — the announce was not dropped early
+    expect(findOneStub.calledOnce).toBe(true);
+  });
+
+  it('should allow a valid https:// public-domain Announce to proceed to DB lookup', async () => {
+    // Verify https:// public-domain URLs pass SSRF checks and reach the DB lookup step.
+    const publicEventUrl = 'https://legitimate.example/events/public-event-99';
+
+    const findOneStub = sandbox.stub(EventObjectEntity, 'findOne').resolves({ event_id: uuidv4() } as any);
+    sandbox.stub(remoteFetch, 'fetchRemoteObject').resolves(null);
+
+    const activity = new AnnounceActivity(LEGITIMATE_ACTOR, publicEventUrl);
+    await inboxService.processShareEvent(testCalendar, activity);
+
+    expect(findOneStub.calledOnce).toBe(true);
+  });
+
+  it('should emit announce_fetch_failed warning for an http:// Announce (non-HTTPS)', async () => {
+    // validateUrlNotPrivate() inside fetchRemoteObject rejects non-HTTPS URLs.
+    // processShareEvent logs announce_fetch_failed when fetchRemoteObject returns null.
+    const httpObjectUrl = 'http://legitimate.example/events/insecure';
+
+    sandbox.stub(EventObjectEntity, 'findOne').resolves(null);
+    sandbox.stub(remoteFetch, 'fetchRemoteObject').resolves(null);
+    const warnSpy = sandbox.stub(console, 'warn');
+
+    const activity = new AnnounceActivity(LEGITIMATE_ACTOR, httpObjectUrl);
+    await inboxService.processShareEvent(testCalendar, activity);
+
+    expect(warnSpy.calledWithMatch(
+      sinon.match.string,
+      sinon.match({ event: 'announce_fetch_failed' }),
+    )).toBe(true);
   });
 });

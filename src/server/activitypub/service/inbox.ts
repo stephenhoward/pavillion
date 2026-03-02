@@ -1,7 +1,6 @@
 import { DateTime } from "luxon";
 import { v4 as uuidv4 } from 'uuid';
 import { EventEmitter } from "events";
-import axios from "axios";
 import { logError } from '@/server/common/helper/error-logger';
 import { logActivityRejection } from '../helper/rejection-logger';
 
@@ -1593,7 +1592,7 @@ class ProcessInboxService {
       ? message.object
       : (message.object as any)?.id;
 
-    if (!apObjectId) {
+    if (!apObjectId || typeof apObjectId !== 'string') {
       console.warn(`[INBOX] Announce activity object missing id`);
       return;
     }
@@ -1605,43 +1604,39 @@ class ProcessInboxService {
 
     // If event doesn't exist locally, fetch and store it
     if (!apObject) {
-      try {
-        // Fetch the event object from the remote server
-        const response = await axios.get(apObjectId, {
-          timeout: 10000,
-          headers: {
-            'Accept': 'application/activity+json, application/ld+json',
-          },
+      // SECURITY: fetchRemoteObject validates the URL against private IP ranges (SSRF protection)
+      const remoteData = await fetchRemoteObject(apObjectId);
+      if (!remoteData) {
+        console.warn('[INBOX] Failed to fetch remote event object — SSRF blocked or network error', {
+          event: 'announce_fetch_failed',
+          actorId: message.actor,
+          objectId: apObjectId,
+          activityType: 'Announce',
         });
-
-        if (response && response.data) {
-          // Generate a new UUID for the local event record
-          const localEventId = uuidv4();
-
-          // Determine the attributed_to from the fetched object or the announcer
-          const attributedTo = response.data.attributedTo || message.actor;
-
-          // Store the event locally with null calendar_id (remote event)
-          const eventParams = {
-            ...response.data,
-            id: localEventId,
-            eventSourceUrl: apObjectId,
-          };
-
-          await this.calendarInterface.addRemoteEvent(calendar, eventParams);
-
-          // Create EventObjectEntity to track the AP identity
-          apObject = await EventObjectEntity.create({
-            event_id: localEventId,
-            ap_id: apObjectId,
-            attributed_to: attributedTo,
-          });
-        }
-      }
-      catch (error: any) {
-        logError(error, `[INBOX] Failed to fetch or store remote event ${apObjectId}`);
         return;
       }
+
+      // Generate a new UUID for the local event record
+      const localEventId = uuidv4();
+
+      // Determine the attributed_to from the fetched object or the announcer
+      const attributedTo = remoteData.attributedTo || message.actor;
+
+      // Store the event locally with null calendar_id (remote event)
+      const eventParams = {
+        ...remoteData,
+        id: localEventId,
+        eventSourceUrl: apObjectId,
+      };
+
+      await this.calendarInterface.addRemoteEvent(calendar, eventParams);
+
+      // Create EventObjectEntity to track the AP identity
+      apObject = await EventObjectEntity.create({
+        event_id: localEventId,
+        ap_id: apObjectId,
+        attributed_to: attributedTo,
+      });
     }
 
     // Track the Announce activity - use CalendarActorEntity reference

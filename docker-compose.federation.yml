@@ -88,6 +88,9 @@ services:
       - DB_RESET=true
       # Disable HTTP signature verification for local testing
       - SKIP_SIGNATURES=true
+      # Allow federation between Docker containers that resolve to private IPs
+      # WARNING: Never use in production — Docker bridge IPs are private RFC-1918 addresses
+      - ALLOW_PRIVATE_FEDERATION=true
       # Trust self-signed certificates for federation testing
       - NODE_TLS_REJECT_UNAUTHORIZED=0
       # Development settings
@@ -141,6 +144,9 @@ services:
       - DB_RESET=true
       # Disable HTTP signature verification for local testing
       - SKIP_SIGNATURES=true
+      # Allow federation between Docker containers that resolve to private IPs
+      # WARNING: Never use in production — Docker bridge IPs are private RFC-1918 addresses
+      - ALLOW_PRIVATE_FEDERATION=true
       # Trust self-signed certificates for federation testing
       - NODE_TLS_REJECT_UNAUTHORIZED=0
       # Development settings

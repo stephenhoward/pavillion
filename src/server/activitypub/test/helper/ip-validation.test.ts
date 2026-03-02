@@ -181,28 +181,35 @@ describe('IP Validation', () => {
 
   describe('validateUrlNotPrivate', () => {
     it('should reject URLs with private IPv4 addresses', async () => {
+      // http:// URLs are blocked by the HTTPS-only check before the IP check runs
       await expect(ipValidation.validateUrlNotPrivate('http://10.0.0.1/api')).rejects.toThrow(
-        'Access to private IP address 10.0.0.1 is not allowed',
+        'URL must use HTTPS',
       );
+      // https:// with private IP is blocked by the IP check
       await expect(ipValidation.validateUrlNotPrivate('https://192.168.1.1/api')).rejects.toThrow(
         'Access to private IP address 192.168.1.1 is not allowed',
       );
       await expect(ipValidation.validateUrlNotPrivate('http://127.0.0.1:3000')).rejects.toThrow(
-        'Access to private IP address 127.0.0.1 is not allowed',
+        'URL must use HTTPS',
       );
       await expect(ipValidation.validateUrlNotPrivate('http://169.254.169.254/latest/meta-data/')).rejects.toThrow(
-        'Access to private IP address 169.254.169.254 is not allowed',
+        'URL must use HTTPS',
       );
     });
 
     it('should reject URLs with private IPv6 addresses', async () => {
+      // http:// URLs are blocked by the HTTPS-only check before the IP check runs
       await expect(ipValidation.validateUrlNotPrivate('http://[::1]/api')).rejects.toThrow(
+        'URL must use HTTPS',
+      );
+      // https:// with private IPv6 is blocked by the IP check
+      await expect(ipValidation.validateUrlNotPrivate('https://[::1]/api')).rejects.toThrow(
         'Access to private IP address ::1 is not allowed',
       );
-      await expect(ipValidation.validateUrlNotPrivate('http://[fe80::1]/api')).rejects.toThrow(
+      await expect(ipValidation.validateUrlNotPrivate('https://[fe80::1]/api')).rejects.toThrow(
         'Access to private IP address fe80::1 is not allowed',
       );
-      await expect(ipValidation.validateUrlNotPrivate('http://[fc00::1]/api')).rejects.toThrow(
+      await expect(ipValidation.validateUrlNotPrivate('https://[fc00::1]/api')).rejects.toThrow(
         'Access to private IP address fc00::1 is not allowed',
       );
     });
@@ -217,9 +224,54 @@ describe('IP Validation', () => {
     });
 
     it('should reject localhost hostname', async () => {
+      // http:// is blocked by the HTTPS-only check
       await expect(ipValidation.validateUrlNotPrivate('http://localhost:3000/api')).rejects.toThrow(
+        'URL must use HTTPS',
+      );
+      // https:// with localhost is blocked by the private IP check
+      await expect(ipValidation.validateUrlNotPrivate('https://localhost:3000/api')).rejects.toThrow(
         'Hostname localhost resolves to a private IP address',
       );
+    });
+
+    describe('ALLOW_PRIVATE_FEDERATION bypass', () => {
+      const originalEnv = process.env.NODE_ENV;
+      const originalFlag = process.env.ALLOW_PRIVATE_FEDERATION;
+
+      afterEach(() => {
+        process.env.NODE_ENV = originalEnv;
+        if (originalFlag === undefined) {
+          delete process.env.ALLOW_PRIVATE_FEDERATION;
+        }
+        else {
+          process.env.ALLOW_PRIVATE_FEDERATION = originalFlag;
+        }
+      });
+
+      it('should skip DNS check when ALLOW_PRIVATE_FEDERATION=true in non-production', async () => {
+        process.env.ALLOW_PRIVATE_FEDERATION = 'true';
+        process.env.NODE_ENV = 'federation';
+        // localhost would normally fail DNS resolution to a private IP,
+        // but ALLOW_PRIVATE_FEDERATION skips that check
+        const result = await ipValidation.validateUrlNotPrivate('https://localhost/api');
+        expect(result).toBe(true);
+      });
+
+      it('should still block literal private IPs even with ALLOW_PRIVATE_FEDERATION=true', async () => {
+        process.env.ALLOW_PRIVATE_FEDERATION = 'true';
+        process.env.NODE_ENV = 'federation';
+        await expect(ipValidation.validateUrlNotPrivate('https://172.18.0.4/api')).rejects.toThrow(
+          'Access to private IP address 172.18.0.4 is not allowed',
+        );
+      });
+
+      it('should throw when ALLOW_PRIVATE_FEDERATION=true in production', async () => {
+        process.env.ALLOW_PRIVATE_FEDERATION = 'true';
+        process.env.NODE_ENV = 'production';
+        await expect(ipValidation.validateUrlNotPrivate('https://localhost/api')).rejects.toThrow(
+          'ALLOW_PRIVATE_FEDERATION cannot be used in production',
+        );
+      });
     });
 
     // Note: Testing DNS resolution requires mocking promisified dns.lookup which is complex.

@@ -235,6 +235,12 @@ export async function resolvesToPrivateIP(hostname: string): boolean {
 export async function validateUrlNotPrivate(url: string): Promise<boolean> {
   try {
     const parsedUrl = new URL(url);
+
+    // Reject non-HTTPS URLs — ActivityPub federation must use HTTPS
+    if (parsedUrl.protocol !== 'https:') {
+      throw new Error(`URL must use HTTPS, got: ${parsedUrl.protocol}`);
+    }
+
     let hostname = parsedUrl.hostname;
 
     // Remove brackets from IPv6 addresses (e.g., [::1] -> ::1)
@@ -255,6 +261,18 @@ export async function validateUrlNotPrivate(url: string): Promise<boolean> {
       if (isPrivateIP(hostname)) {
         throw new Error(`Access to private IP address ${hostname} is not allowed`);
       }
+      return true;
+    }
+
+    // Allow private-IP hostnames in non-production federation test environments.
+    // Docker-based federation tests use private bridge-network IPs for
+    // alpha.federation.local / beta.federation.local. Literal private IP
+    // addresses in the URL are still rejected above regardless of this flag.
+    if (process.env.ALLOW_PRIVATE_FEDERATION === 'true') {
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('ALLOW_PRIVATE_FEDERATION cannot be used in production');
+      }
+      console.warn('SECURITY WARNING: ALLOW_PRIVATE_FEDERATION is set — skipping DNS-based private IP check. Never use in production.');
       return true;
     }
 
