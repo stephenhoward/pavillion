@@ -1597,32 +1597,6 @@ class ProcessInboxService {
       return;
     }
 
-    // SECURITY: Verify that the object URL belongs to the same domain as the actor.
-    // This prevents cross-domain SSRF attacks where an attacker announces an object
-    // from a different (potentially internal) domain.
-    try {
-      const actorHostname = new URL(message.actor).hostname;
-      const objectHostname = new URL(apObjectId).hostname;
-      if (actorHostname !== objectHostname) {
-        console.warn('[INBOX] Announce activity domain mismatch — dropping', {
-          event: 'ssrf_domain_mismatch',
-          actorId: message.actor,
-          objectId: apObjectId,
-          activityType: 'Announce',
-        });
-        return;
-      }
-    }
-    catch {
-      console.warn('[INBOX] Announce activity has unparseable actor or object URL', {
-        event: 'ssrf_unparseable_url',
-        actorId: message.actor,
-        objectId: apObjectId,
-        activityType: 'Announce',
-      });
-      return;
-    }
-
     // Check if we already have this AP object
     let apObject = await EventObjectEntity.findOne({
       where: { ap_id: apObjectId },

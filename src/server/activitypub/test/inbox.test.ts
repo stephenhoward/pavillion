@@ -878,71 +878,67 @@ describe('ProcessInboxService - processShareEvent SSRF Protection', () => {
   });
 
   /**
-   * Helper: stub EventObjectEntity.findOne to return null (no cached object),
-   * then assert that fetchRemoteObject is never called for the given announce.
+   * Helper: assert that an Announce is blocked by SSRF protection inside fetchRemoteObject.
+   * The real fetchRemoteObject is used here (not stubbed), so validateUrlNotPrivate() runs.
+   * For http:// URLs, it rejects immediately before any network contact.
    */
-  async function assertFetchNotCalled(actor: string, objectId: string): Promise<void> {
-    sandbox.stub(EventObjectEntity, 'findOne').resolves(null);
-    const fetchStub = sandbox.stub(remoteFetch, 'fetchRemoteObject').resolves(null);
+  async function assertBlockedViaFetch(actor: string, objectId: string): Promise<void> {
     const warnSpy = sandbox.stub(console, 'warn');
 
     const activity = new AnnounceActivity(actor, objectId);
     await inboxService.processShareEvent(testCalendar, activity);
 
-    // fetchRemoteObject must NOT have been called — the security guard dropped the activity first.
-    // Note: private-IP object URLs (10.x, 127.x, etc.) are blocked by the domain-mismatch guard
-    // because those IPs don't match the actor's hostname. Same-domain URLs pointing to private IPs
-    // via DNS would be caught later by validateUrlNotPrivate() inside fetchRemoteObject().
-    expect(fetchStub.called).toBe(false);
-    expect(warnSpy.called).toBe(true);
+    // SSRF protection runs inside fetchRemoteObject via validateUrlNotPrivate().
+    // fetchRemoteObject returns null (blocked), and processShareEvent emits announce_fetch_failed.
+    expect(warnSpy.calledWithMatch(
+      sinon.match.string,
+      sinon.match({ event: 'announce_fetch_failed' }),
+    )).toBe(true);
   }
 
   it('should block Announce whose object.id is a private IPv4 (10.x.x.x)', async () => {
-    await assertFetchNotCalled(LEGITIMATE_ACTOR, 'http://10.0.0.1/events/123');
+    await assertBlockedViaFetch(LEGITIMATE_ACTOR, 'http://10.0.0.1/events/123');
   });
 
   it('should block Announce whose object.id is a private LAN address (192.168.x.x)', async () => {
-    await assertFetchNotCalled(LEGITIMATE_ACTOR, 'http://192.168.1.1/events/456');
+    await assertBlockedViaFetch(LEGITIMATE_ACTOR, 'http://192.168.1.1/events/456');
   });
 
   it('should block Announce whose object.id is the loopback address (127.0.0.1)', async () => {
-    await assertFetchNotCalled(LEGITIMATE_ACTOR, 'http://127.0.0.1/events/789');
+    await assertBlockedViaFetch(LEGITIMATE_ACTOR, 'http://127.0.0.1/events/789');
   });
 
   it('should block Announce whose object.id is the AWS metadata endpoint', async () => {
-    await assertFetchNotCalled(LEGITIMATE_ACTOR, 'http://169.254.169.254/latest/meta-data/');
+    await assertBlockedViaFetch(LEGITIMATE_ACTOR, 'http://169.254.169.254/latest/meta-data/');
   });
 
   it('should block Announce whose object.id is the IPv6 loopback (::1)', async () => {
-    await assertFetchNotCalled(LEGITIMATE_ACTOR, 'http://[::1]/events/999');
+    await assertBlockedViaFetch(LEGITIMATE_ACTOR, 'http://[::1]/events/999');
   });
 
   it('should block Announce whose object.id is the wildcard address (0.0.0.0)', async () => {
-    await assertFetchNotCalled(LEGITIMATE_ACTOR, 'http://0.0.0.0/events/000');
+    await assertBlockedViaFetch(LEGITIMATE_ACTOR, 'http://0.0.0.0/events/000');
   });
 
-  it('should block Announce with a domain-mismatch between actor and object (cross-domain SSRF)', async () => {
-    // console.warn is called as warn(message, structuredData) — match both positional args
-    sandbox.stub(EventObjectEntity, 'findOne').resolves(null);
-    sandbox.stub(remoteFetch, 'fetchRemoteObject').resolves(null);
-    const warnSpy = sandbox.stub(console, 'warn');
+  it('should allow cross-domain Announce (e.g. Bob on Beta reposts Alice on Alpha)', async () => {
+    // Cross-instance reposts are valid ActivityPub behavior — Bob's actor on beta.example
+    // legitimately announces Alice's event from alpha.example. The domain-match guard
+    // was incorrectly blocking this; SSRF protection comes from validateUrlNotPrivate() only.
+    const aliceEventUrl = 'https://alpha.example/events/alice-original';
+    const bobActor = 'https://beta.example/calendars/bob';
 
-    const activity = new AnnounceActivity(
-      'https://attacker.example/calendars/evil',
-      'https://victim.example/events/secret',
-    );
+    const findOneStub = sandbox.stub(EventObjectEntity, 'findOne').resolves({ event_id: uuidv4() } as any);
+    sandbox.stub(remoteFetch, 'fetchRemoteObject').resolves(null);
+
+    const activity = new AnnounceActivity(bobActor, aliceEventUrl);
     await inboxService.processShareEvent(testCalendar, activity);
 
-    expect(warnSpy.calledWithMatch(
-      sinon.match.string,
-      sinon.match({ event: 'ssrf_domain_mismatch' }),
-    )).toBe(true);
+    // DB lookup is reached — the announce was not dropped early
+    expect(findOneStub.calledOnce).toBe(true);
   });
 
-  it('should allow a valid https:// public-domain Announce to pass the domain guard', async () => {
-    // Verify same-domain https:// passes the domain guard and reaches the DB lookup step.
-    // We check EventObjectEntity.findOne is called, which only happens AFTER the domain
-    // guard passes (the guard returns early before the DB lookup on mismatch).
+  it('should allow a valid https:// public-domain Announce to proceed to DB lookup', async () => {
+    // Verify https:// public-domain URLs pass SSRF checks and reach the DB lookup step.
     const publicEventUrl = 'https://legitimate.example/events/public-event-99';
 
     const findOneStub = sandbox.stub(EventObjectEntity, 'findOne').resolves({ event_id: uuidv4() } as any);
@@ -951,13 +947,12 @@ describe('ProcessInboxService - processShareEvent SSRF Protection', () => {
     const activity = new AnnounceActivity(LEGITIMATE_ACTOR, publicEventUrl);
     await inboxService.processShareEvent(testCalendar, activity);
 
-    // findOne is called only if the domain-mismatch guard did NOT return early
     expect(findOneStub.calledOnce).toBe(true);
   });
 
-  it('should emit announce_fetch_failed warning for same-domain http:// Announce (non-HTTPS)', async () => {
-    // The domain-match check passes (same hostname), but validateUrlNotPrivate() inside
-    // fetchRemoteObject rejects non-HTTPS URLs. processShareEvent logs announce_fetch_failed.
+  it('should emit announce_fetch_failed warning for an http:// Announce (non-HTTPS)', async () => {
+    // validateUrlNotPrivate() inside fetchRemoteObject rejects non-HTTPS URLs.
+    // processShareEvent logs announce_fetch_failed when fetchRemoteObject returns null.
     const httpObjectUrl = 'http://legitimate.example/events/insecure';
 
     sandbox.stub(EventObjectEntity, 'findOne').resolves(null);
@@ -967,7 +962,6 @@ describe('ProcessInboxService - processShareEvent SSRF Protection', () => {
     const activity = new AnnounceActivity(LEGITIMATE_ACTOR, httpObjectUrl);
     await inboxService.processShareEvent(testCalendar, activity);
 
-    // The fetch path is reached (domain check passes), returns null, and warn is emitted
     expect(warnSpy.calledWithMatch(
       sinon.match.string,
       sinon.match({ event: 'announce_fetch_failed' }),
