@@ -222,6 +222,29 @@ describe('HTTP Signature Verification', () => {
     expect(next.called).toBe(false);
   });
 
+  it('should reject when actor URL fetch throws a 302 redirect AxiosError', async () => {
+    parseRequestStub.returns({
+      params: {
+        keyId: 'https://example.com/users/someactor#main-key',
+        signature: 'validSignature',
+        headers: ['(request-target)', 'host', 'date'],
+      },
+    } as any);
+
+    // Simulate axios throwing when it encounters a redirect (maxRedirects: 0)
+    const redirectError = new Error('Redirect');
+    (redirectError as any).response = { status: 302 };
+    (redirectError as any).isAxiosError = true;
+    axiosGetStub.rejects(redirectError);
+
+    await verifyHttpSignature(req as Request, res as Response, next as any);
+
+    expect(axiosGetStub.calledWith('https://example.com/users/someactor', sinon.match.any)).toBe(true);
+    expect(res.status.calledWith(401)).toBe(true);
+    expect(res.json.calledWith({ error: 'Could not retrieve public key' })).toBe(true);
+    expect(next.called).toBe(false);
+  });
+
   it('should reject when keyId is not a valid URL', async () => {
     parseRequestStub.returns({
       params: {

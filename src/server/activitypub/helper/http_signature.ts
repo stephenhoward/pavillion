@@ -208,6 +208,10 @@ async function getPublicKey(keyId: string): Promise<string | null> {
  * SECURITY: Validates that the keyId URL does not point to private IP addresses
  * to prevent SSRF (Server-Side Request Forgery) attacks.
  *
+ * SECURITY: maxRedirects is set to 0 to prevent redirect-based SSRF attacks
+ * where a redirect could lead to a private IP address after the initial URL
+ * validation has passed.
+ *
  * @param {string} keyId - The key identifier URL
  * @returns {Promise<string|null>} The public key as a string, or null if fetching fails
  */
@@ -244,6 +248,7 @@ async function fetchPublicKey(keyId: string): Promise<string | null> {
         'User-Agent': 'Pavillion ActivityPub Server',
       },
       timeout: PUBLIC_KEY_FETCH_TIMEOUT_MS,
+      maxRedirects: 0,
     });
 
     if (response.status !== 200) {
@@ -277,6 +282,7 @@ async function fetchPublicKey(keyId: string): Promise<string | null> {
           'User-Agent': 'Pavillion ActivityPub Server',
         },
         timeout: PUBLIC_KEY_FETCH_TIMEOUT_MS,
+        maxRedirects: 0,
       });
 
       if (keyResponse.status === 200 && keyResponse.data.publicKeyPem) {

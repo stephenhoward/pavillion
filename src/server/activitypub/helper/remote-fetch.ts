@@ -22,6 +22,10 @@ const ACTIVITYPUB_ACCEPT_HEADER = 'application/activity+json';
  * SECURITY: Validates that the URI does not point to private IP addresses
  * to prevent SSRF (Server-Side Request Forgery) attacks.
  *
+ * SECURITY: maxRedirects is set to 0 to prevent redirect-based SSRF attacks
+ * where a redirect could lead to a private IP address after the initial URL
+ * validation has passed.
+ *
  * @param uri - The URI of the remote ActivityPub object to fetch
  * @returns The parsed JSON object, or null if the fetch fails
  *
@@ -53,6 +57,7 @@ export async function fetchRemoteObject(uri: string): Promise<Record<string, unk
         'User-Agent': USER_AGENT,
       },
       timeout: REMOTE_OBJECT_FETCH_TIMEOUT_MS,
+      maxRedirects: 0,
     });
 
     if (response.status !== 200) {
