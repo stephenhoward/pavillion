@@ -16,6 +16,7 @@ import FlagActivity from "@/server/activitypub/model/action/flag";
 import { ActivityPubObject } from "@/server/activitypub/model/base";
 import CalendarInterface from "@/server/calendar/interface";
 import { FEDERATION_HTTP_TIMEOUT_MS } from "@/server/activitypub/constants";
+import { validateUrlNotPrivate } from "@/server/activitypub/helper/ip-validation";
 
 /**
  * Service responsible for processing and distributing outgoing ActivityPub messages.
@@ -154,6 +155,19 @@ class ProcessOutboxService {
         const inboxUrl = await this.resolveInboxUrl(recipient);
 
         if ( inboxUrl ) {
+          // SECURITY: Validate that the inbox URL does not point to a private IP address
+          // to prevent SSRF attacks where a malicious actor profile advertises an internal
+          // network address as its inbox.
+          try {
+            await validateUrlNotPrivate(inboxUrl);
+          }
+          catch (error) {
+            const errorMsg = `Security: Blocked delivery to private inbox URL for ${recipient}: ${error instanceof Error ? error.message : String(error)}`;
+            console.error(`[OUTBOX] ${errorMsg}`);
+            deliveryErrors.push(errorMsg);
+            continue;
+          }
+
           try {
             console.log(`[OUTBOX] Delivering ${message.type} to ${inboxUrl}`);
 
@@ -162,6 +176,7 @@ class ProcessOutboxService {
 
             await axios.post(inboxUrl, activityData, {
               timeout: FEDERATION_HTTP_TIMEOUT_MS,
+              maxRedirects: 0,
               headers: {
                 'Content-Type': 'application/activity+json',
               },
@@ -253,6 +268,9 @@ class ProcessOutboxService {
   /**
    * Resolves the inbox URL for a remote user by fetching their profile.
    *
+   * SECURITY: Validates that the actor profile URL does not point to a private
+   * IP address to prevent SSRF attacks via DNS rebinding or direct private IP hostnames.
+   *
    * @param {string} remote_user - The remote user identifier (username@domain or full actor URL)
    * @returns {Promise<string|null>} The inbox URL if found, otherwise null
    */
@@ -274,8 +292,23 @@ class ProcessOutboxService {
     }
 
     if ( profileUrl ) {
+      // SECURITY: Validate that the actor profile URL does not point to a private IP address
+      // to prevent SSRF attacks where a malicious actor advertises an internal network address.
+      try {
+        await validateUrlNotPrivate(profileUrl);
+      }
+      catch (error) {
+        if (error instanceof Error) {
+          console.error(`[OUTBOX] Security: Blocked actor profile fetch to private IP for ${remote_user}: ${error.message}`);
+        }
+        return null;
+      }
+
       console.log(`[OUTBOX] Fetching actor document from: ${profileUrl}`);
-      let response = await axios.get(profileUrl, { timeout: FEDERATION_HTTP_TIMEOUT_MS });
+      let response = await axios.get(profileUrl, {
+        timeout: FEDERATION_HTTP_TIMEOUT_MS,
+        maxRedirects: 0,
+      });
 
       if ( response && response.data ) {
         console.log(`[OUTBOX] Resolved inbox URL: ${response.data.inbox}`);
@@ -290,6 +323,9 @@ class ProcessOutboxService {
   /**
    * Fetches the profile URL for a remote user using WebFinger protocol.
    *
+   * SECURITY: Validates that the constructed WebFinger URL does not point to a private
+   * IP address to prevent SSRF attacks via DNS rebinding or direct private IP hostnames.
+   *
    * @param {string} remote_user - The remote user identifier (username@domain)
    * @returns {Promise<string|null>} The profile URL if found, otherwise null
    */
@@ -301,8 +337,24 @@ class ProcessOutboxService {
       const webfingerUrl = 'https://' + domain + '/.well-known/webfinger?resource=acct:' + username + '@' + domain;
       console.log(`[OUTBOX] Fetching WebFinger from: ${webfingerUrl}`);
 
+      // SECURITY: Validate that the WebFinger URL does not point to a private IP address
+      // to prevent SSRF attacks where a remote actor uses a domain that resolves to an
+      // internal network address (DNS rebinding or direct private IP).
       try {
-        let response = await axios.get(webfingerUrl, { timeout: FEDERATION_HTTP_TIMEOUT_MS });
+        await validateUrlNotPrivate(webfingerUrl);
+      }
+      catch (error) {
+        if (error instanceof Error) {
+          console.error(`[OUTBOX] Security: Blocked WebFinger request to private IP for ${remote_user}: ${error.message}`);
+        }
+        return null;
+      }
+
+      try {
+        let response = await axios.get(webfingerUrl, {
+          timeout: FEDERATION_HTTP_TIMEOUT_MS,
+          maxRedirects: 0,
+        });
 
         if ( response && response.data && response.data.links ) {
           const profileLink = (await response).data.links.filter((link: any) => link.rel === 'self');
