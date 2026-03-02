@@ -9,6 +9,7 @@
     "not_found_suggestion": "El calendario o evento que buscas no existe o puede haber sido eliminado.",
     "not_found_go_home": "Ir a la página principal",
     "error_load_event": "Error al cargar los datos del evento",
+    "error_load_calendar": "Error al cargar los datos del calendario",
     "filter_by_category": "Categorías de eventos",
     "clear_filters": "Limpiar filtros",
     "no_events_with_filters": "No se encontraron eventos",
@@ -71,6 +72,12 @@
         "date_range_invalid": "Rango de fechas no válido"
     },
     "event_location": "Ubicación",
+    "about_this_event": "Acerca de este evento",
+    "event_categories": "Categorías",
+    "event_accessibility": "Accesibilidad",
+    "event_accessibility_event": "Accesibilidad del evento",
+    "event_accessibility_venue": "Accesibilidad del lugar",
+    "event_recurring": "Evento recurrente",
     "report": {
         "link_text": "Reportar evento",
         "form_title": "Reportar este evento",

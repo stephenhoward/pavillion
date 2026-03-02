@@ -234,7 +234,16 @@ export default class CalendarRoutes {
         instances = await this.service.listEventInstances(calendar);
       }
 
-      res.json(instances.map((instance) => instance.toObject()));
+      res.json(instances.map((instance) => {
+        const obj = instance.toObject();
+        return {
+          ...obj,
+          event: {
+            ...obj.event,
+            isRecurring: (instance.event as any).isRecurring ?? false,
+          },
+        };
+      }));
     }
     catch (error: any) {
       // Log the full error for debugging
@@ -280,7 +289,14 @@ export default class CalendarRoutes {
     const instanceId = req.params.id;
     const instance = await this.service.getEventInstanceById(instanceId);
     if ( instance ) {
-      res.json(instance.toObject());
+      const obj = instance.toObject();
+      res.json({
+        ...obj,
+        event: {
+          ...obj.event,
+          recurrenceText: (instance.event as any).recurrenceText ?? null,
+        },
+      });
     }
     else {
       res.status(404).json({

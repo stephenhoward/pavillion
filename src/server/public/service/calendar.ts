@@ -3,13 +3,14 @@ import { EventCategory } from '@/common/model/event_category';
 import CalendarEventInstance from '@/common/model/event_instance';
 import CalendarInterface from '@/server/calendar/interface';
 import { EventInstanceEntity } from '@/server/calendar/entity/event_instance';
-import { EventEntity, EventContentEntity } from '@/server/calendar/entity/event';
+import { EventEntity, EventContentEntity, EventScheduleEntity } from '@/server/calendar/entity/event';
 import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_category_assignment';
 import { EventCategoryEntity, EventCategoryContentEntity } from '@/server/calendar/entity/event_category';
-import { LocationEntity } from '@/server/calendar/entity/location';
+import { LocationEntity, LocationContentEntity } from '@/server/calendar/entity/location';
 import { MediaEntity } from '@/server/media/entity/media';
 import { Op, literal } from 'sequelize';
 import { DateTime } from 'luxon';
+import { getRecurrenceText } from '@/common/utils/recurrence-text';
 
 /**
  * Service for public calendar operations
@@ -99,11 +100,13 @@ export default class PublicCalendarService {
   }
 
   /**
-   * List event instances with combined filters (search, categories, date range)
+   * List event instances with combined filters (search, categories, date range).
+   * Each result includes an `isRecurring` boolean derived from whether the event
+   * has any schedules (via a lightweight EXISTS subquery — no full schedule JOIN).
    *
    * @param calendar - The calendar to filter events for
    * @param options - Filter options
-   * @returns Filtered event instances
+   * @returns Filtered event instances, each augmented with isRecurring
    */
   async listEventInstancesWithFilters(calendar: Calendar, options: {
     search?: string;
@@ -128,6 +131,16 @@ export default class PublicCalendarService {
         {
           model: EventEntity,
           as: 'event',
+          // Lightweight isRecurring check via EXISTS subquery — avoids a full JOIN
+          // on event_schedule for every row in the list view.
+          attributes: {
+            include: [
+              [
+                literal(`(SELECT EXISTS(SELECT 1 FROM event_schedule WHERE event_schedule.event_id = \`event\`.\`id\`))`),
+                'isRecurring',
+              ],
+            ],
+          },
           include: [
             LocationEntity,
             MediaEntity,
@@ -221,7 +234,7 @@ export default class PublicCalendarService {
     // Execute the query
     const instances = await EventInstanceEntity.findAll(queryOptions);
 
-    // Convert entities to models
+    // Convert entities to models and augment with isRecurring
     const mappedInstances = instances.map(instanceEntity => {
       const instance = instanceEntity.toModel();
       const event = instanceEntity.event;
@@ -249,10 +262,68 @@ export default class PublicCalendarService {
         instance.event.categories = categoryAssignments.map(assignment => assignment.category.toModel());
       }
 
+      // Attach isRecurring — read from the virtual attribute added by the EXISTS subquery.
+      // Sequelize returns it as a number (0/1) in SQLite or boolean in PostgreSQL.
+      const isRecurringRaw = event.getDataValue('isRecurring');
+      (instance.event as any).isRecurring = Boolean(isRecurringRaw);
+
       return instance;
     });
 
     return mappedInstances;
+  }
+
+  /**
+   * Get a single event instance with full schedule and location content data.
+   * Used by the public detail page. Eager-loads EventScheduleEntity and
+   * LocationContentEntity (nested inside LocationEntity).
+   *
+   * @param instanceId - The UUID of the event instance
+   * @returns The event instance augmented with schedule detail and recurrence text,
+   *          or null if not found
+   */
+  async getEventInstanceById(instanceId: string): Promise<CalendarEventInstance | null> {
+    const eventInstance = await EventInstanceEntity.findOne({
+      where: { id: instanceId },
+      include: [{
+        model: EventEntity,
+        as: 'event',
+        include: [
+          EventContentEntity,
+          {
+            model: LocationEntity,
+            include: [LocationContentEntity],
+          },
+          EventScheduleEntity,
+          MediaEntity,
+        ],
+      }],
+    });
+
+    if (!eventInstance) {
+      return null;
+    }
+
+    const instance = eventInstance.toModel();
+    const event = eventInstance.event;
+
+    // Populate schedules on the model so recurrence text can be computed
+    const scheduleEntities = (event.getDataValue('schedules') ?? []) as EventScheduleEntity[];
+    const scheduleModels = scheduleEntities.map((s: EventScheduleEntity) => s.toModel());
+    instance.event.schedules = scheduleModels;
+
+    // Attach pre-computed human-readable recurrence text
+    (instance.event as any).recurrenceText = getRecurrenceText(scheduleModels);
+
+    // Populate location with content (accessibility info)
+    if (event.location) {
+      instance.event.location = event.location.toModel();
+    }
+
+    // Populate categories via the calendar interface
+    instance.event.categories = await this.calendarInterface.getEventCategories(instance.event.id);
+
+    return instance;
   }
 
   /**

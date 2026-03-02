@@ -1,5 +1,5 @@
 /**
- * Tests for the eventInstance component breadcrumb and category badge locale behaviour.
+ * Tests for the eventInstance component.
  *
  * Validates:
  * - The 'Back to calendar' breadcrumb uses localizedPath() so that
@@ -15,6 +15,10 @@
  * - document.title is set to "Event Name | Pavillion" after loading.
  * - Events with a series show a clickable series link.
  * - Events without a series show no series link.
+ * - Recurrence badge is shown when event has schedules with a frequency.
+ * - Location sidebar card displays location name and address.
+ * - Accessibility sidebar card displays location accessibility info.
+ * - Recurrence sidebar card displays human-readable recurrence text.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises, VueWrapper } from '@vue/test-utils';
@@ -53,6 +57,9 @@ let mockLocation: {
   state: string;
   postalCode: string;
   country: string;
+  hasContent?: (lang: string) => boolean;
+  content?: (lang: string) => { accessibilityInfo: string };
+  getLanguages?: () => string[];
 } | null = null;
 
 // Mutable end state so individual tests can inject end time data
@@ -72,6 +79,17 @@ let mockSeries: {
   hasContent: (lang: string) => boolean;
   getLanguages: () => string[];
 } | null = null;
+
+// Mutable schedules state so individual tests can inject schedule data
+let mockSchedules: Array<{
+  id: string;
+  frequency: string | null;
+  interval: number;
+  byDay: string[];
+  isExclusion: boolean;
+  startDate: unknown;
+  endDate: unknown;
+}> = [];
 
 vi.mock('@/site/service/calendar', () => {
   return {
@@ -102,6 +120,7 @@ vi.mock('@/site/service/calendar', () => {
             categories: mockCategories,
             location: mockLocation,
             series: mockSeries,
+            schedules: mockSchedules,
           },
         }),
       ),
@@ -118,7 +137,7 @@ vi.mock('@/site/components/notFound.vue', () => ({
 }));
 
 vi.mock('@/site/components/EventImage.vue', () => ({
-  default: { template: '<div class="event-image-stub"></div>', props: ['media', 'context'] },
+  default: { template: '<div class="event-image-stub"></div>', props: ['media', 'context', 'alt'] },
 }));
 
 // ---------------------------------------------------------------------------
@@ -208,6 +227,49 @@ function makeSeriesObject(urlName: string, translations: Record<string, string>)
   };
 }
 
+/**
+ * Creates a mock EventLocation with TranslatedModel interface.
+ */
+function makeLocationObject(
+  name: string,
+  address: string,
+  city: string,
+  state: string,
+  postalCode: string,
+  country: string,
+  accessibilityInfo: Record<string, string> = {},
+) {
+  return {
+    name,
+    address,
+    city,
+    state,
+    postalCode,
+    country,
+    hasContent: (lang: string) => lang in accessibilityInfo,
+    content: (lang: string) => ({
+      language: lang,
+      accessibilityInfo: accessibilityInfo[lang] ?? accessibilityInfo['en'] ?? '',
+    }),
+    getLanguages: () => Object.keys(accessibilityInfo),
+  };
+}
+
+/**
+ * Creates a mock schedule object mimicking CalendarEventSchedule.
+ */
+function makeScheduleObject(frequency: string | null, byDay: string[] = [], interval: number = 1) {
+  return {
+    id: 'sched-1',
+    frequency,
+    interval,
+    byDay,
+    isExclusion: false,
+    startDate: null,
+    endDate: null,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // i18next initialisation
 // ---------------------------------------------------------------------------
@@ -223,6 +285,11 @@ beforeAll(async () => {
             'series.label': 'Series',
             'series.part_of': 'Part of {{name}}',
             'series.view': 'View series',
+            about_this_event: 'About This Event',
+            event_categories: 'Categories',
+            event_accessibility: 'Accessibility',
+            event_recurring: 'Recurring Event',
+            event_location: 'Location',
           },
         },
       },
@@ -235,6 +302,11 @@ beforeAll(async () => {
       'series.label': 'Series',
       'series.part_of': 'Part of {{name}}',
       'series.view': 'View series',
+      about_this_event: 'About This Event',
+      event_categories: 'Categories',
+      event_accessibility: 'Accessibility',
+      event_recurring: 'Recurring Event',
+      event_location: 'Location',
     }, true, true);
   }
 });
@@ -252,6 +324,7 @@ describe('eventInstance breadcrumb locale behaviour', () => {
     mockEnd = null;
     mockEventName = 'Test Event';
     mockSeries = null;
+    mockSchedules = [];
   });
 
   afterEach(() => {
@@ -259,7 +332,7 @@ describe('eventInstance breadcrumb locale behaviour', () => {
   });
 
   describe('breadcrumb link generation', () => {
-    it('calls localizedPath with the calendar path to generate the breadcrumb href', async () => {
+    it('should call localizedPath with the calendar path to generate the breadcrumb href', async () => {
       const wrapper = await mountInstance(
         '/view/test_calendar/events/evt-1/inst-1',
         (path) => path,
@@ -269,7 +342,7 @@ describe('eventInstance breadcrumb locale behaviour', () => {
       wrapper.unmount();
     });
 
-    it('breadcrumb href is /view/test_calendar for default locale (no prefix)', async () => {
+    it('should set breadcrumb href to /view/test_calendar for default locale (no prefix)', async () => {
       const wrapper = await mountInstance(
         '/view/test_calendar/events/evt-1/inst-1',
         (path) => path, // default locale: no prefix added
@@ -281,7 +354,7 @@ describe('eventInstance breadcrumb locale behaviour', () => {
       wrapper.unmount();
     });
 
-    it('breadcrumb href is /es/view/test_calendar when localizedPath adds es prefix', async () => {
+    it('should set breadcrumb href to /es/view/test_calendar when localizedPath adds es prefix', async () => {
       const wrapper = await mountInstance(
         '/es/view/test_calendar/events/evt-1/inst-1',
         (path) => '/es' + path, // Spanish locale: adds /es prefix
@@ -293,7 +366,7 @@ describe('eventInstance breadcrumb locale behaviour', () => {
       wrapper.unmount();
     });
 
-    it('breadcrumb displays the calendar name within "Back to {name}" text', async () => {
+    it('should display the calendar name within "Back to {name}" text', async () => {
       const wrapper = await mountInstance(
         '/view/test_calendar/events/evt-1/inst-1',
         (path) => path,
@@ -305,7 +378,7 @@ describe('eventInstance breadcrumb locale behaviour', () => {
       wrapper.unmount();
     });
 
-    it('breadcrumb includes a back arrow indicator', async () => {
+    it('should include a back arrow indicator in the breadcrumb', async () => {
       const wrapper = await mountInstance(
         '/view/test_calendar/events/evt-1/inst-1',
         (path) => path,
@@ -313,7 +386,7 @@ describe('eventInstance breadcrumb locale behaviour', () => {
 
       const link = wrapper.find('.breadcrumb a');
       expect(link.exists()).toBe(true);
-      // Arrow span is present (aria-hidden so screen readers skip it)
+      // Arrow icon is present (aria-hidden so screen readers skip it)
       const arrow = link.find('.back-arrow');
       expect(arrow.exists()).toBe(true);
       wrapper.unmount();
@@ -330,6 +403,7 @@ describe('eventInstance category badge locale behaviour', () => {
     mockEnd = null;
     mockEventName = 'Test Event';
     mockSeries = null;
+    mockSchedules = [];
   });
 
   afterEach(() => {
@@ -337,7 +411,7 @@ describe('eventInstance category badge locale behaviour', () => {
   });
 
   describe('category badge link uses UUID', () => {
-    it('uses category.id (UUID) as the category query param', async () => {
+    it('should use category.id (UUID) as the category query param', async () => {
       mockCategories = [makeCategoryObject('uuid-arts-123', { en: 'Arts' })];
 
       const wrapper = await mountInstance(
@@ -351,7 +425,7 @@ describe('eventInstance category badge locale behaviour', () => {
       wrapper.unmount();
     });
 
-    it('does not use the English display name as the category query param', async () => {
+    it('should not use the English display name as the category query param', async () => {
       mockCategories = [makeCategoryObject('uuid-sports-456', { en: 'Sports & Recreation' })];
 
       const wrapper = await mountInstance(
@@ -369,7 +443,7 @@ describe('eventInstance category badge locale behaviour', () => {
   });
 
   describe('category badge link includes locale prefix', () => {
-    it('calls localizedPath for the calendar path used in category badge href', async () => {
+    it('should call localizedPath for the calendar path used in category badge href', async () => {
       mockCategories = [makeCategoryObject('cat-uuid-001', { en: 'Music' })];
       mockCurrentLocale.value = 'en';
 
@@ -383,7 +457,7 @@ describe('eventInstance category badge locale behaviour', () => {
       wrapper.unmount();
     });
 
-    it('category badge href includes locale prefix when locale is Spanish', async () => {
+    it('should include locale prefix in category badge href when locale is Spanish', async () => {
       mockCategories = [makeCategoryObject('cat-uuid-002', { en: 'Music', es: 'Música' })];
       mockCurrentLocale.value = 'es';
 
@@ -402,7 +476,7 @@ describe('eventInstance category badge locale behaviour', () => {
   });
 
   describe('category badge displays name in current locale', () => {
-    it('displays the English name when locale is English', async () => {
+    it('should display the English name when locale is English', async () => {
       mockCategories = [makeCategoryObject('cat-uuid-003', { en: 'Theater', es: 'Teatro' })];
       mockCurrentLocale.value = 'en';
 
@@ -417,7 +491,7 @@ describe('eventInstance category badge locale behaviour', () => {
       wrapper.unmount();
     });
 
-    it('displays the Spanish name when locale is Spanish', async () => {
+    it('should display the Spanish name when locale is Spanish', async () => {
       mockCategories = [makeCategoryObject('cat-uuid-004', { en: 'Theater', es: 'Teatro' })];
       mockCurrentLocale.value = 'es';
 
@@ -432,7 +506,7 @@ describe('eventInstance category badge locale behaviour', () => {
       wrapper.unmount();
     });
 
-    it('falls back to English name when the current-locale translation is missing', async () => {
+    it('should fall back to English name when the current-locale translation is missing', async () => {
       mockCategories = [makeCategoryObject('cat-uuid-005', { en: 'Theater' })]; // No Spanish translation
       mockCurrentLocale.value = 'es';
 
@@ -450,7 +524,7 @@ describe('eventInstance category badge locale behaviour', () => {
   });
 
   describe('multiple category badges', () => {
-    it('renders one badge per category', async () => {
+    it('should render one badge per category', async () => {
       mockCategories = [
         makeCategoryObject('cat-a', { en: 'Arts' }),
         makeCategoryObject('cat-b', { en: 'Business' }),
@@ -467,7 +541,7 @@ describe('eventInstance category badge locale behaviour', () => {
       wrapper.unmount();
     });
 
-    it('each badge href contains the correct UUID for that category', async () => {
+    it('should set each badge href to contain the correct UUID for that category', async () => {
       mockCategories = [
         makeCategoryObject('uuid-alpha', { en: 'Alpha' }),
         makeCategoryObject('uuid-beta', { en: 'Beta' }),
@@ -486,7 +560,7 @@ describe('eventInstance category badge locale behaviour', () => {
   });
 
   describe('no categories', () => {
-    it('renders no category badges when event has no categories', async () => {
+    it('should render no category badges when event has no categories', async () => {
       mockCategories = [];
       mockLocation = null;
 
@@ -511,13 +585,14 @@ describe('eventInstance location display', () => {
     mockEnd = null;
     mockEventName = 'Test Event';
     mockSeries = null;
+    mockSchedules = [];
   });
 
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  it('displays location section when event has location data', async () => {
+  it('should display location section when event has location data', async () => {
     mockLocation = {
       name: 'Community Center',
       address: '123 Main St',
@@ -541,7 +616,7 @@ describe('eventInstance location display', () => {
     wrapper.unmount();
   });
 
-  it('does not display location section when event has no location', async () => {
+  it('should not display location section when event has no location', async () => {
     mockLocation = null;
 
     const wrapper = await mountInstance(
@@ -553,7 +628,7 @@ describe('eventInstance location display', () => {
     wrapper.unmount();
   });
 
-  it('shows venue name without address when only name is set', async () => {
+  it('should show venue name without address when only name is set', async () => {
     mockLocation = {
       name: 'Town Hall',
       address: '',
@@ -574,6 +649,68 @@ describe('eventInstance location display', () => {
     expect(locationSection.find('.location-address').exists()).toBe(false);
     wrapper.unmount();
   });
+
+  it('should display accessibility info card when location has accessibility info', async () => {
+    mockLocation = makeLocationObject(
+      'Community Center',
+      '123 Main St',
+      'Springfield',
+      'IL',
+      '62701',
+      'US',
+      { en: 'Wheelchair accessible entrance on west side' },
+    );
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    const accessibilityCard = wrapper.find('.accessibility-card');
+    expect(accessibilityCard.exists()).toBe(true);
+    expect(accessibilityCard.find('.accessibility-info').text()).toContain('Wheelchair accessible');
+    wrapper.unmount();
+  });
+
+  it('should not display accessibility card when location has no accessibility info', async () => {
+    mockLocation = makeLocationObject(
+      'Town Hall',
+      '1 Main St',
+      'Anytown',
+      'CA',
+      '90210',
+      'US',
+      {}, // No accessibility info
+    );
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    expect(wrapper.find('.accessibility-card').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('should not display accessibility card when location is a plain object without accessibility', async () => {
+    // Plain object without hasContent method (backward-compatible mock)
+    mockLocation = {
+      name: 'Community Center',
+      address: '123 Main St',
+      city: 'Springfield',
+      state: 'IL',
+      postalCode: '62701',
+      country: 'US',
+    };
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    expect(wrapper.find('.accessibility-card').exists()).toBe(false);
+    wrapper.unmount();
+  });
 });
 
 describe('eventInstance end time display', () => {
@@ -585,13 +722,14 @@ describe('eventInstance end time display', () => {
     mockEnd = null;
     mockEventName = 'Test Event';
     mockSeries = null;
+    mockSchedules = [];
   });
 
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  it('does not show an end time separator when end is null', async () => {
+  it('should not show an end time separator when end is null', async () => {
     mockEnd = null;
 
     const wrapper = await mountInstance(
@@ -605,7 +743,7 @@ describe('eventInstance end time display', () => {
     wrapper.unmount();
   });
 
-  it('shows end time with em-dash separator when end is on the same day', async () => {
+  it('should show end time with em-dash separator when end is on the same day', async () => {
     // Same day: hasSame('day') returns true => TIME_SIMPLE format for end
     mockEnd = {
       toISO: () => '2026-03-01T12:00:00.000Z',
@@ -630,7 +768,7 @@ describe('eventInstance end time display', () => {
     wrapper.unmount();
   });
 
-  it('shows full datetime for end time when end is on a different day', async () => {
+  it('should show full datetime for end time when end is on a different day', async () => {
     // Different day: hasSame('day') returns false => DATETIME_MED format for end
     mockEnd = {
       toISO: () => '2026-03-02T02:00:00.000Z',
@@ -665,6 +803,7 @@ describe('eventInstance document.title', () => {
     mockEnd = null;
     mockEventName = 'Test Event';
     mockSeries = null;
+    mockSchedules = [];
     document.title = 'Pavillion'; // Reset to default before each test
   });
 
@@ -673,7 +812,7 @@ describe('eventInstance document.title', () => {
     document.title = 'Pavillion';
   });
 
-  it('sets document.title to "Event Name | Pavillion" after loading event data', async () => {
+  it('should set document.title to "Event Name | Pavillion" after loading event data', async () => {
     mockEventName = 'My Awesome Concert';
 
     const wrapper = await mountInstance(
@@ -685,7 +824,7 @@ describe('eventInstance document.title', () => {
     wrapper.unmount();
   });
 
-  it('sets document.title using the localized event name', async () => {
+  it('should set document.title using the localized event name', async () => {
     mockEventName = 'Test Event';
 
     const wrapper = await mountInstance(
@@ -707,13 +846,14 @@ describe('eventInstance series link display', () => {
     mockEnd = null;
     mockEventName = 'Test Event';
     mockSeries = null;
+    mockSchedules = [];
   });
 
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  it('renders a series link when the event belongs to a series', async () => {
+  it('should render a series link when the event belongs to a series', async () => {
     mockSeries = makeSeriesObject('yoga-classes', { en: 'Yoga Classes' });
 
     const wrapper = await mountInstance(
@@ -726,7 +866,7 @@ describe('eventInstance series link display', () => {
     wrapper.unmount();
   });
 
-  it('does not render a series link when the event has no series', async () => {
+  it('should not render a series link when the event has no series', async () => {
     mockSeries = null;
 
     const wrapper = await mountInstance(
@@ -739,7 +879,7 @@ describe('eventInstance series link display', () => {
     wrapper.unmount();
   });
 
-  it('series link href points to the series page', async () => {
+  it('should set series link href to point to the series page', async () => {
     mockSeries = makeSeriesObject('yoga-classes', { en: 'Yoga Classes' });
 
     const wrapper = await mountInstance(
@@ -753,7 +893,7 @@ describe('eventInstance series link display', () => {
     wrapper.unmount();
   });
 
-  it('series link displays the localized series name', async () => {
+  it('should display the localized series name in the series link', async () => {
     mockSeries = makeSeriesObject('yoga-classes', { en: 'Yoga Classes', es: 'Clases de Yoga' });
     mockCurrentLocale.value = 'en';
 
@@ -768,7 +908,7 @@ describe('eventInstance series link display', () => {
     wrapper.unmount();
   });
 
-  it('series link href includes locale prefix when locale is active', async () => {
+  it('should include locale prefix in series link href when locale is active', async () => {
     mockSeries = makeSeriesObject('yoga-classes', { en: 'Yoga Classes' });
     mockCurrentLocale.value = 'es';
 
@@ -783,7 +923,7 @@ describe('eventInstance series link display', () => {
     wrapper.unmount();
   });
 
-  it('series label text is shown alongside the series link', async () => {
+  it('should show series label text alongside the series link', async () => {
     mockSeries = makeSeriesObject('book-club', { en: 'Book Club' });
 
     const wrapper = await mountInstance(
@@ -795,6 +935,103 @@ describe('eventInstance series link display', () => {
     expect(seriesWrapper.exists()).toBe(true);
     const label = seriesWrapper.find('.series-label');
     expect(label.exists()).toBe(true);
+    wrapper.unmount();
+  });
+});
+
+describe('eventInstance recurrence display', () => {
+  beforeEach(() => {
+    mockLocalizedPath.mockReset();
+    mockCurrentLocale.value = 'en';
+    mockCategories = [];
+    mockLocation = null;
+    mockEnd = null;
+    mockEventName = 'Test Event';
+    mockSeries = null;
+    mockSchedules = [];
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should not show recurrence badge when event has no schedules', async () => {
+    mockSchedules = [];
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    expect(wrapper.find('.recurrence-badge').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('should show recurrence badge when event has a weekly schedule', async () => {
+    mockSchedules = [makeScheduleObject('weekly', ['SA'])];
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    const badge = wrapper.find('.recurrence-badge');
+    expect(badge.exists()).toBe(true);
+    expect(badge.text()).toContain('Saturday');
+    wrapper.unmount();
+  });
+
+  it('should show recurrence badge when event has a daily schedule', async () => {
+    mockSchedules = [makeScheduleObject('daily')];
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    const badge = wrapper.find('.recurrence-badge');
+    expect(badge.exists()).toBe(true);
+    expect(badge.text()).toContain('Every day');
+    wrapper.unmount();
+  });
+
+  it('should show recurrence sidebar card with human-readable text', async () => {
+    mockSchedules = [makeScheduleObject('weekly', ['MO', 'WE'])];
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    const card = wrapper.find('.recurrence-card');
+    expect(card.exists()).toBe(true);
+    expect(card.find('.recurrence-text').text()).toContain('Monday');
+    expect(card.find('.recurrence-text').text()).toContain('Wednesday');
+    wrapper.unmount();
+  });
+
+  it('should not show recurrence sidebar card when event has no schedules', async () => {
+    mockSchedules = [];
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    expect(wrapper.find('.recurrence-card').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('should not show recurrence badge or card for schedule with null frequency', async () => {
+    mockSchedules = [makeScheduleObject(null)];
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    expect(wrapper.find('.recurrence-badge').exists()).toBe(false);
+    expect(wrapper.find('.recurrence-card').exists()).toBe(false);
     wrapper.unmount();
   });
 });

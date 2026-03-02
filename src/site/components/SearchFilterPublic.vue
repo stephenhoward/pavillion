@@ -1,183 +1,194 @@
 <template>
   <div class="search-filter-public">
-    <!-- Date Range Filter Section (Collapsible Button) -->
-    <div v-if="shouldShowDateFilter"
-         class="date-range-section"
-         role="group"
-         :aria-label="t('filter_by_date_range')">
-      <div class="date-filter-wrapper" ref="dateFilterRef" @keydown.escape.stop="closeDateFilterWithFocus">
-        <!-- Date Filter Button -->
-        <div class="date-filter-button-group">
+    <!-- Search + Date Row (side-by-side at desktop) -->
+    <div class="search-row">
+      <!-- Search Input -->
+      <div class="search-section">
+        <label for="public-event-search" class="search-label sr-only">
+          {{ t('search_events') }}
+        </label>
+        <div class="search-input-container">
+          <Search :size="16" class="search-icon" aria-hidden="true" />
+          <input
+            id="public-event-search"
+            v-model="state.searchQuery"
+            type="text"
+            class="search-input"
+            :placeholder="t('search_placeholder')"
+            @input="onSearchInput"
+          />
           <button
-            ref="dateFilterButtonRef"
+            v-if="state.searchQuery.trim()"
             type="button"
-            class="date-filter-button"
-            :class="{
-              active: state.isDateFilterOpen,
-              'has-filter': state.dateFilterMode !== null
-            }"
-            :aria-expanded="state.isDateFilterOpen"
-            :aria-label="t('filter_by_date_range')"
-            @click="toggleDateFilter"
+            class="clear-search"
+            @click="clearSearch"
+            :aria-label="t('clear_search')"
           >
-            <span class="button-text">{{ dateFilterButtonText }}</span>
-            <svg
-              class="dropdown-icon"
-              :class="{ rotated: state.isDateFilterOpen }"
-              width="12"
-              height="12"
-              viewBox="0 0 12 12"
-              fill="none"
-              aria-hidden="true"
-            >
-              <path d="M2 4L6 8L10 4"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"/>
-            </svg>
-          </button>
-          <button
-            v-if="state.dateFilterMode !== null"
-            type="button"
-            class="clear-date-filter"
-            :aria-label="t('clear_date_filter')"
-            @click="clearDateFilter"
-          >
-            <svg
-              width="10"
-              height="10"
-              viewBox="0 0 10 10"
-              fill="none"
-              aria-hidden="true"
-            >
-              <path d="M1 1L9 9M9 1L1 9"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                    stroke-linecap="round"/>
-            </svg>
+            ✕
           </button>
         </div>
+        <div v-if="state.searchQuery.trim().length > 0 && state.searchQuery.trim().length < 3" class="search-helper-text">
+          {{ t('search_min_chars') }}
+        </div>
+      </div>
 
-        <!-- Dropdown with Filter Options -->
-        <transition name="dropdown-fade">
-          <div v-if="state.isDateFilterOpen" class="date-dropdown">
-            <!-- Date Filter Pills -->
-            <div class="date-mode-pills" role="radiogroup" :aria-label="t('date_range_options')">
-              <button
-                type="button"
-                role="radio"
-                :aria-checked="state.dateFilterMode === 'thisWeek'"
-                :aria-label="t('this_week_filter')"
-                :class="['date-pill', { active: state.dateFilterMode === 'thisWeek' }]"
-                @click="setThisWeek"
-              >
-                {{ t('this_week') }}
-              </button>
-              <button
-                type="button"
-                role="radio"
-                :aria-checked="state.dateFilterMode === 'nextWeek'"
-                :aria-label="t('next_week_filter')"
-                :class="['date-pill', { active: state.dateFilterMode === 'nextWeek' }]"
-                @click="setNextWeek"
-              >
-                {{ t('next_week') }}
-              </button>
-              <button
-                type="button"
-                role="radio"
-                :aria-checked="state.dateFilterMode === 'custom'"
-                :aria-label="t('choose_custom_dates')"
-                :class="['date-pill calendar-pill', { active: state.dateFilterMode === 'custom' }]"
-                @click="setCustomMode"
-              >
-                <svg width="16"
-                     height="16"
-                     viewBox="0 0 16 16"
-                     fill="none"
-                     aria-hidden="true">
-                  <rect x="2"
-                        y="3"
-                        width="12"
-                        height="11"
-                        rx="1.5"
+      <!-- Date Range Filter Section (Collapsible Button) -->
+      <div v-if="shouldShowDateFilter"
+           class="date-range-section"
+           role="group"
+           :aria-label="t('filter_by_date_range')">
+        <div class="date-filter-wrapper" ref="dateFilterRef" @keydown.escape.stop="closeDateFilterWithFocus">
+          <!-- Date Filter Button -->
+          <div class="date-filter-button-group">
+            <button
+              ref="dateFilterButtonRef"
+              type="button"
+              class="date-filter-button"
+              :class="{
+                active: state.isDateFilterOpen,
+                'has-filter': state.dateFilterMode !== null
+              }"
+              :aria-expanded="state.isDateFilterOpen"
+              :aria-label="t('filter_by_date_range')"
+              @click="toggleDateFilter"
+            >
+              <CalendarDays
+                :size="18"
+                class="calendar-icon"
+                aria-hidden="true"
+              />
+              <span class="button-label">
+                <span class="button-text">{{ dateFilterButtonText }}</span>
+                <svg
+                  class="dropdown-icon"
+                  :class="{ rotated: state.isDateFilterOpen }"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 12 12"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <path d="M2 4L6 8L10 4"
                         stroke="currentColor"
-                        stroke-width="1.2"/>
-                  <path d="M2 6H14" stroke="currentColor" stroke-width="1.2"/>
-                  <path d="M5 1.5V4.5"
-                        stroke="currentColor"
-                        stroke-width="1.2"
-                        stroke-linecap="round"/>
-                  <path d="M11 1.5V4.5"
-                        stroke="currentColor"
-                        stroke-width="1.2"
-                        stroke-linecap="round"/>
+                        stroke-width="1.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"/>
                 </svg>
-                <span class="sr-only">{{ t('choose_custom_dates') }}</span>
-              </button>
-            </div>
+              </span>
+            </button>
+            <button
+              v-if="state.dateFilterMode !== null"
+              type="button"
+              class="clear-date-filter"
+              :aria-label="t('clear_date_filter')"
+              @click="clearDateFilter"
+            >
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 10 10"
+                fill="none"
+                aria-hidden="true"
+              >
+                <path d="M1 1L9 9M9 1L1 9"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                      stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
 
-            <!-- Custom Date Inputs (shown when custom mode active) -->
-            <transition name="slide-fade">
-              <div v-if="state.dateFilterMode === 'custom'" class="custom-dates-section">
-                <div class="date-inputs-grid">
-                  <div class="date-input-group">
-                    <label for="start-date" class="date-input-label">{{ t('start_date') }}</label>
-                    <input
-                      id="start-date"
-                      v-model="state.startDate"
-                      type="date"
-                      class="date-input"
-                      :aria-label="t('start_date')"
-                      @change="onDateChange"
-                    />
-                  </div>
-                  <div class="date-input-group">
-                    <label for="end-date" class="date-input-label">{{ t('end_date') }}</label>
-                    <input
-                      id="end-date"
-                      v-model="state.endDate"
-                      type="date"
-                      class="date-input"
-                      :aria-label="t('end_date')"
-                      @change="onDateChange"
-                    />
+          <!-- Dropdown with Filter Options -->
+          <transition name="dropdown-fade">
+            <div v-if="state.isDateFilterOpen" class="date-dropdown">
+              <!-- Date Filter Pills -->
+              <div class="date-mode-pills" role="radiogroup" :aria-label="t('date_range_options')">
+                <button
+                  type="button"
+                  role="radio"
+                  :aria-checked="state.dateFilterMode === 'thisWeek'"
+                  :aria-label="t('this_week_filter')"
+                  :class="['date-pill', { active: state.dateFilterMode === 'thisWeek' }]"
+                  @click="setThisWeek"
+                >
+                  {{ t('this_week') }}
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  :aria-checked="state.dateFilterMode === 'nextWeek'"
+                  :aria-label="t('next_week_filter')"
+                  :class="['date-pill', { active: state.dateFilterMode === 'nextWeek' }]"
+                  @click="setNextWeek"
+                >
+                  {{ t('next_week') }}
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  :aria-checked="state.dateFilterMode === 'custom'"
+                  :aria-label="t('choose_custom_dates')"
+                  :class="['date-pill calendar-pill', { active: state.dateFilterMode === 'custom' }]"
+                  @click="setCustomMode"
+                >
+                  <svg width="16"
+                       height="16"
+                       viewBox="0 0 16 16"
+                       fill="none"
+                       aria-hidden="true">
+                    <rect x="2"
+                          y="3"
+                          width="12"
+                          height="11"
+                          rx="1.5"
+                          stroke="currentColor"
+                          stroke-width="1.2"/>
+                    <path d="M2 6H14" stroke="currentColor" stroke-width="1.2"/>
+                    <path d="M5 1.5V4.5"
+                          stroke="currentColor"
+                          stroke-width="1.2"
+                          stroke-linecap="round"/>
+                    <path d="M11 1.5V4.5"
+                          stroke="currentColor"
+                          stroke-width="1.2"
+                          stroke-linecap="round"/>
+                  </svg>
+                  <span class="sr-only">{{ t('choose_custom_dates') }}</span>
+                </button>
+              </div>
+
+              <!-- Custom Date Inputs (shown when custom mode active) -->
+              <transition name="slide-fade">
+                <div v-if="state.dateFilterMode === 'custom'" class="custom-dates-section">
+                  <div class="date-inputs-grid">
+                    <div class="date-input-group">
+                      <label for="start-date" class="date-input-label">{{ t('start_date') }}</label>
+                      <input
+                        id="start-date"
+                        v-model="state.startDate"
+                        type="date"
+                        class="date-input"
+                        :aria-label="t('start_date')"
+                        @change="onDateChange"
+                      />
+                    </div>
+                    <div class="date-input-group">
+                      <label for="end-date" class="date-input-label">{{ t('end_date') }}</label>
+                      <input
+                        id="end-date"
+                        v-model="state.endDate"
+                        type="date"
+                        class="date-input"
+                        :aria-label="t('end_date')"
+                        @change="onDateChange"
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
-            </transition>
-          </div>
-        </transition>
-      </div>
-    </div>
-
-    <!-- Search Input (always visible, outside accordion on mobile) -->
-    <div class="search-section">
-      <label for="public-event-search" class="search-label sr-only">
-        {{ t('search_events') }}
-      </label>
-      <div class="search-input-container">
-        <input
-          id="public-event-search"
-          v-model="state.searchQuery"
-          type="text"
-          class="search-input"
-          :placeholder="t('search_placeholder')"
-          @input="onSearchInput"
-        />
-        <button
-          v-if="state.searchQuery.trim()"
-          type="button"
-          class="clear-search"
-          @click="clearSearch"
-          :aria-label="t('clear_search')"
-        >
-          ✕
-        </button>
-      </div>
-      <div v-if="state.searchQuery.trim().length > 0 && state.searchQuery.trim().length < 3" class="search-helper-text">
-        {{ t('search_min_chars') }}
+              </transition>
+            </div>
+          </transition>
+        </div>
       </div>
     </div>
 
@@ -216,6 +227,7 @@ import { usePublicCalendarStore } from '../stores/publicCalendarStore';
 import CategoryPillSelector from './CategoryPillSelector.vue';
 import { getThisWeek, getNextWeek } from '@/common/utils/datePresets';
 import type { ViewMode } from '@/widget/stores/widgetStore';
+import { Search, CalendarDays } from 'lucide-vue-next';
 
 // Accept optional widget view mode prop
 const props = defineProps<{
@@ -706,9 +718,21 @@ onUnmounted(() => {
   // All layout styles provided by mixin
 }
 
+// Search + Date Row (side-by-side at all viewport widths)
+.search-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: $public-space-lg;
+  width: 100%;
+}
+
 // Search Section
 .search-section {
   @include filter-section;
+
+  flex: 1;
+  min-width: 0; // Prevent flex overflow
 
   .search-label {
     @include filter-label;
@@ -731,8 +755,23 @@ onUnmounted(() => {
     @include search-input-container;
   }
 
+  .search-icon {
+    position: absolute;
+    left: $public-space-md;
+    color: $public-text-tertiary-light;
+    pointer-events: none;
+    flex-shrink: 0;
+    z-index: 1;
+
+    @include dark-mode {
+      color: $public-text-tertiary-dark;
+    }
+  }
+
   .search-input {
     @include search-input;
+
+    padding-left: calc(#{$public-space-md} + 16px + #{$public-space-sm});
   }
 
   .clear-search {
@@ -782,7 +821,8 @@ onUnmounted(() => {
 .date-range-section {
   display: flex;
   justify-content: flex-end;
-  width: 100%;
+  flex-shrink: 0;
+  width: auto;
 
   .date-filter-wrapper {
     position: relative;
@@ -936,6 +976,16 @@ onUnmounted(() => {
       }
     }
 
+    .calendar-icon {
+      flex-shrink: 0;
+    }
+
+    .button-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
     .button-text {
       flex: 1;
       white-space: nowrap;
@@ -976,9 +1026,10 @@ onUnmounted(() => {
     }
 
     @include mobile-only {
-      left: 0;
       right: 0;
+      left: auto;
       min-width: auto;
+      width: min(280px, calc(100vw - 24px));
     }
   }
 
@@ -1265,6 +1316,19 @@ onUnmounted(() => {
   }
 
   .date-range-section {
+    .date-filter-button {
+      width: 38px;
+      min-width: 38px;
+      padding: 0;
+      justify-content: center;
+      gap: 0;
+      border-radius: 50%;
+
+      .button-label {
+        display: none;
+      }
+    }
+
     .date-mode-pills {
       width: 100%;
 

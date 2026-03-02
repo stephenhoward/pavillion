@@ -37,8 +37,13 @@ export default class PublicCalendarInterface {
     return this.calendarInterface.getEventById(eventId);
   }
 
+  /**
+   * Get a single event instance with full schedule and location content data.
+   * Returns schedule data with human-readable recurrence text and
+   * location content with accessibilityInfo for the public detail page.
+   */
   async getEventInstanceById(instanceId: string): Promise<CalendarEventInstance|null> {
-    return this.calendarInterface.getEventInstanceById(instanceId);
+    return this.publicCalendarService.getEventInstanceById(instanceId);
   }
 
   async listCategoriesForCalendar(calendar: Calendar): Promise<Array<{category: EventCategory, eventCount: number}>> {

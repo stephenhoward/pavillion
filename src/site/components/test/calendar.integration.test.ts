@@ -635,7 +635,7 @@ describe('calendar.vue - Locale-aware event card links', () => {
     await wrapper.vm.$nextTick();
 
     // Find event card link
-    const link = wrapper.find('li.event h3 a');
+    const link = wrapper.find('li.day-event-item h3 a');
     expect(link.exists()).toBe(true);
 
     const href = link.attributes('href');
@@ -680,7 +680,7 @@ describe('calendar.vue - Locale-aware event card links', () => {
     await wrapper.vm.$nextTick();
 
     // Find event card link
-    const link = wrapper.find('li.event h3 a');
+    const link = wrapper.find('li.day-event-item h3 a');
     expect(link.exists()).toBe(true);
 
     const href = link.attributes('href');
@@ -755,7 +755,7 @@ describe('calendar.vue - Locale-aware day group headings', () => {
 
     await wrapper.vm.$nextTick();
 
-    const h2 = wrapper.find('section.day h2');
+    const h2 = wrapper.find('section.day-section h2');
     expect(h2.exists()).toBe(true);
 
     // English day heading for 2026-03-15: "Sunday, March 15"
@@ -795,7 +795,7 @@ describe('calendar.vue - Locale-aware day group headings', () => {
 
     await wrapper.vm.$nextTick();
 
-    const h2 = wrapper.find('section.day h2');
+    const h2 = wrapper.find('section.day-section h2');
     expect(h2.exists()).toBe(true);
 
     // Spanish day heading for 2026-03-15: "domingo, 15 de marzo"

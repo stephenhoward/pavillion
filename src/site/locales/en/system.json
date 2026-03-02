@@ -9,6 +9,7 @@
     "not_found_suggestion": "The calendar or event you are looking for does not exist or may have been removed.",
     "not_found_go_home": "Go to Homepage",
     "error_load_event": "Failed to load event data",
+    "error_load_calendar": "Failed to load calendar data",
     "filter_by_category": "Event Categories",
     "clear_filters": "Clear Filters",
     "no_events_with_filters": "No Events Found",
@@ -71,6 +72,12 @@
         "date_range_invalid": "Invalid date range"
     },
     "event_location": "Location",
+    "about_this_event": "About This Event",
+    "event_categories": "Categories",
+    "event_accessibility": "Accessibility",
+    "event_accessibility_event": "Event Accessibility",
+    "event_accessibility_venue": "Venue Accessibility",
+    "event_recurring": "Recurring Event",
     "report": {
         "link_text": "Report Event",
         "form_title": "Report this Event",
