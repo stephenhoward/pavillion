@@ -1026,9 +1026,10 @@ onUnmounted(() => {
     }
 
     @include mobile-only {
-      left: 0;
       right: 0;
+      left: auto;
       min-width: auto;
+      width: min(280px, calc(100vw - 24px));
     }
   }
 
