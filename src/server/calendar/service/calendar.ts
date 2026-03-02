@@ -3,6 +3,8 @@ import { Op, UniqueConstraintError } from 'sequelize';
 import { EventEmitter } from 'events';
 import config from 'config';
 import axios from 'axios';
+import { validateUrlNotPrivate } from '@/server/activitypub/helper/ip-validation';
+import { PUBLIC_KEY_FETCH_TIMEOUT_MS, FEDERATION_HTTP_TIMEOUT_MS } from '@/server/activitypub/constants';
 
 import { Calendar, DefaultDateRange } from '@/common/model/calendar';
 import { Account } from '@/common/model/account';
@@ -495,8 +497,17 @@ class CalendarService {
     const webfingerUrl = `https://${domain}/.well-known/webfinger?resource=acct:@${username}@${domain}`;
 
     let webfingerResponse;
+    // SECURITY: Validate that the WebFinger URL does not point to a private IP address.
+    // NOTE: DNS TOCTOU gap — validateUrlNotPrivate resolves DNS at validation time;
+    // axios re-resolves at connect time. A DNS rebinding attack could bypass this check.
     try {
-      webfingerResponse = await axios.get(webfingerUrl, { timeout: 10000 });
+      await validateUrlNotPrivate(webfingerUrl);
+    }
+    catch (error) {
+      throw new Error(`[CALENDAR] Security: Blocked WebFinger request to private address for ${domain}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    try {
+      webfingerResponse = await axios.get(webfingerUrl, { timeout: PUBLIC_KEY_FETCH_TIMEOUT_MS, maxRedirects: 0 });
     }
     catch (error: any) {
       if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
@@ -521,12 +532,22 @@ class CalendarService {
 
     // Fetch the Person actor to verify it exists
     let actorResponse;
+    // SECURITY: Validate actor URI from untrusted WebFinger response.
+    // NOTE: DNS TOCTOU gap — validateUrlNotPrivate resolves DNS at validation time;
+    // axios re-resolves at connect time. A DNS rebinding attack could bypass this check.
+    try {
+      await validateUrlNotPrivate(actorUri);
+    }
+    catch (error) {
+      throw new Error(`[CALENDAR] Security: Blocked actor fetch to private address: ${error instanceof Error ? error.message : String(error)}`);
+    }
     try {
       actorResponse = await axios.get(actorUri, {
         headers: {
           'Accept': 'application/activity+json',
         },
-        timeout: 10000,
+        timeout: PUBLIC_KEY_FETCH_TIMEOUT_MS,
+        maxRedirects: 0,
       });
     }
     catch (error: any) {
@@ -716,9 +737,25 @@ class CalendarService {
     };
 
     // Send to remote user's inbox
+    // SECURITY: Validate inbox URL from untrusted actor document.
+    // NOTE: DNS TOCTOU gap — validateUrlNotPrivate resolves DNS at validation time;
+    // axios re-resolves at connect time. A DNS rebinding attack could bypass this check.
+    try {
+      await validateUrlNotPrivate(remoteUser.inbox);
+    }
+    catch (error) {
+      console.error(`[CALENDAR] Security: Blocked inbox POST to private address ${remoteUser.inbox}: ${error instanceof Error ? error.message : String(error)}`);
+      return {
+        type: 'remote_editor',
+        data: {
+          actorUri: remoteUser.actorUri,
+        },
+      };
+    }
     try {
       await axios.post(remoteUser.inbox, addActivity, {
-        timeout: 10000,
+        timeout: FEDERATION_HTTP_TIMEOUT_MS,
+        maxRedirects: 0,
         headers: {
           'Content-Type': 'application/activity+json',
         },
