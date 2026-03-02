@@ -3,8 +3,7 @@ import axios from 'axios';
 import { Report, ReportCategory, ReportStatus } from '@/common/model/report';
 import type { ReporterType, AdminPriority } from '@/common/model/report';
 import { BlockedInstance } from '@/common/model/blocked_instance';
-import { UnknownError } from '@/common/exceptions/base';
-import { validateAndEncodeId } from '@/client/service/utils';
+import { validateAndEncodeId, handleApiError } from '@/client/service/utils';
 
 /**
  * Filters for querying reports.
@@ -131,25 +130,6 @@ const errorMap: Record<string, new (...args: any[]) => Error> = {
 };
 
 /**
- * Maps backend error responses to domain-specific exceptions.
- *
- * @param error - The error from the API call
- */
-function handleModerationError(error: unknown): void {
-  if (error && typeof error === 'object' && 'response' in error &&
-      error.response && typeof error.response === 'object' && 'data' in error.response) {
-
-    const responseData = error.response.data as Record<string, unknown>;
-    const errorName = responseData.errorName as string;
-
-    if (errorName && errorName in errorMap) {
-      const ErrorClass = errorMap[errorName];
-      throw new ErrorClass();
-    }
-  }
-}
-
-/**
  * Builds a query string from report filters, omitting undefined values.
  *
  * @param filters - The report filter parameters
@@ -265,8 +245,7 @@ export default class ModerationService {
     }
     catch (error: unknown) {
       console.error('Error fetching reports:', error);
-      handleModerationError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -292,8 +271,7 @@ export default class ModerationService {
     }
     catch (error: unknown) {
       console.error('Error fetching report detail:', error);
-      handleModerationError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -318,8 +296,7 @@ export default class ModerationService {
     }
     catch (error: unknown) {
       console.error('Error updating report notes:', error);
-      handleModerationError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -344,8 +321,7 @@ export default class ModerationService {
     }
     catch (error: unknown) {
       console.error('Error resolving report:', error);
-      handleModerationError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -370,8 +346,7 @@ export default class ModerationService {
     }
     catch (error: unknown) {
       console.error('Error dismissing report:', error);
-      handleModerationError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -397,8 +372,7 @@ export default class ModerationService {
     }
     catch (error: unknown) {
       console.error('Error forwarding report:', error);
-      handleModerationError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -420,8 +394,7 @@ export default class ModerationService {
     }
     catch (error: unknown) {
       console.error('Error updating editor permissions:', error);
-      handleModerationError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -448,8 +421,7 @@ export default class ModerationService {
     }
     catch (error: unknown) {
       console.error('Error fetching admin reports:', error);
-      handleModerationError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -471,8 +443,7 @@ export default class ModerationService {
     }
     catch (error: unknown) {
       console.error('Error fetching admin report detail:', error);
-      handleModerationError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -495,8 +466,7 @@ export default class ModerationService {
     }
     catch (error: unknown) {
       console.error('Error resolving admin report:', error);
-      handleModerationError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -519,8 +489,7 @@ export default class ModerationService {
     }
     catch (error: unknown) {
       console.error('Error dismissing admin report:', error);
-      handleModerationError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -543,8 +512,7 @@ export default class ModerationService {
     }
     catch (error: unknown) {
       console.error('Error overriding admin report:', error);
-      handleModerationError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -563,8 +531,7 @@ export default class ModerationService {
     }
     catch (error: unknown) {
       console.error('Error creating admin report:', error);
-      handleModerationError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -581,8 +548,7 @@ export default class ModerationService {
     }
     catch (error: unknown) {
       console.error('Error forwarding report to remote admin:', error);
-      handleModerationError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -602,8 +568,7 @@ export default class ModerationService {
     }
     catch (error: unknown) {
       console.error('Error fetching moderation settings:', error);
-      handleModerationError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -620,8 +585,7 @@ export default class ModerationService {
     }
     catch (error: unknown) {
       console.error('Error updating moderation settings:', error);
-      handleModerationError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -641,8 +605,7 @@ export default class ModerationService {
     }
     catch (error: unknown) {
       console.error('Error fetching blocked instances:', error);
-      handleModerationError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -663,8 +626,7 @@ export default class ModerationService {
     }
     catch (error: unknown) {
       console.error('Error blocking instance:', error);
-      handleModerationError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -679,8 +641,7 @@ export default class ModerationService {
     }
     catch (error: unknown) {
       console.error('Error unblocking instance:', error);
-      handleModerationError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 }

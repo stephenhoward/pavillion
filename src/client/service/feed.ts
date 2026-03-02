@@ -17,7 +17,7 @@ import {
   AlreadyFollowingError,
 } from '@/common/exceptions/activitypub';
 import { InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
-import { UnknownError } from '@/common/exceptions';
+import { handleApiError } from '@/client/service/utils';
 
 const errorMap = {
   InvalidRemoteCalendarIdentifierError,
@@ -98,25 +98,6 @@ export interface CategoryMappingEntry {
   sourceCategoryId: string;
   sourceCategoryName: string;
   localCategoryId: string;
-}
-
-/**
- * Handle ActivityPub errors by mapping backend error names to frontend exception classes
- * @param error The error from the API call
- */
-function handleActivityPubError(error: unknown): void {
-  // Type guard to ensure error is the expected shape
-  if (error && typeof error === 'object' && 'response' in error &&
-      error.response && typeof error.response === 'object' && 'data' in error.response) {
-
-    const responseData = error.response.data as Record<string, unknown>;
-    const errorName = responseData.errorName as string;
-
-    if (errorName && errorName in errorMap) {
-      const ErrorClass = errorMap[errorName as keyof typeof errorMap];
-      throw new ErrorClass();
-    }
-  }
 }
 
 /**
@@ -225,8 +206,7 @@ export default class FeedService {
     }
     catch (error: unknown) {
       console.error('Error following calendar:', error);
-      handleActivityPubError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -242,8 +222,7 @@ export default class FeedService {
     }
     catch (error: unknown) {
       console.error('Error unfollowing calendar:', error);
-      handleActivityPubError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -269,8 +248,7 @@ export default class FeedService {
     }
     catch (error: unknown) {
       console.error('Error sharing event:', error);
-      handleActivityPubError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -286,8 +264,7 @@ export default class FeedService {
     }
     catch (error: unknown) {
       console.error('Error unsharing event:', error);
-      handleActivityPubError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -315,8 +292,7 @@ export default class FeedService {
     }
     catch (error: unknown) {
       console.error('Error updating follow policy:', error);
-      handleActivityPubError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -335,8 +311,7 @@ export default class FeedService {
     }
     catch (error: unknown) {
       console.error('Error looking up remote calendar:', error);
-      handleActivityPubError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 

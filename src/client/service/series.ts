@@ -5,7 +5,7 @@ import { CalendarNotFoundError, InsufficientCalendarPermissionsError, EventNotFo
 import { UnauthenticatedError, UnknownError } from '@/common/exceptions';
 import { useSeriesStore } from '@/client/stores/seriesStore';
 import ModelService from '@/client/service/models';
-import { validateAndEncodeId } from '@/client/service/utils';
+import { validateAndEncodeId, handleApiError } from '@/client/service/utils';
 
 const errorMap = {
   SeriesNotFoundError,
@@ -19,25 +19,6 @@ const errorMap = {
   UnauthenticatedError,
   UnknownError,
 };
-
-function handleError(error: unknown): never {
-  console.error('Series service error:', error);
-
-  // Type guard to ensure error is the expected shape
-  if (error && typeof error === 'object' && 'response' in error &&
-      error.response && typeof error.response === 'object' && 'data' in error.response) {
-
-    const responseData = error.response.data as Record<string, unknown>;
-    const errorName = responseData.errorName as string;
-
-    if (errorName && errorName in errorMap) {
-      const ErrorClass = errorMap[errorName as keyof typeof errorMap];
-      throw new ErrorClass();
-    }
-  }
-
-  throw new UnknownError();
-}
 
 export default class SeriesService {
   store: ReturnType<typeof useSeriesStore>;
@@ -109,7 +90,8 @@ export default class SeriesService {
       return savedSeries;
     }
     catch (error: unknown) {
-      handleError(error);
+      console.error('Error saving series:', error);
+      handleApiError(error, errorMap);
     }
   }
 
@@ -129,7 +111,8 @@ export default class SeriesService {
       return EventSeries.fromObject(response.data);
     }
     catch (error: unknown) {
-      handleError(error);
+      console.error('Error fetching series:', error);
+      handleApiError(error, errorMap);
     }
   }
 
@@ -149,7 +132,8 @@ export default class SeriesService {
       this.store.removeSeries(calendarId, seriesId);
     }
     catch (error: unknown) {
-      handleError(error);
+      console.error('Error deleting series:', error);
+      handleApiError(error, errorMap);
     }
   }
 
@@ -168,7 +152,8 @@ export default class SeriesService {
       await axios.post(`/api/v1/events/${encodedEventId}/series/${encodedSeriesId}`);
     }
     catch (error: unknown) {
-      handleError(error);
+      console.error('Error assigning series to event:', error);
+      handleApiError(error, errorMap);
     }
   }
 
@@ -187,7 +172,8 @@ export default class SeriesService {
       await axios.delete(`/api/v1/events/${encodedEventId}/series/${encodedSeriesId}`);
     }
     catch (error: unknown) {
-      handleError(error);
+      console.error('Error clearing series from event:', error);
+      handleApiError(error, errorMap);
     }
   }
 

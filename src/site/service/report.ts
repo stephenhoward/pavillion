@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { DuplicateReportError, RateLimitError, ReportValidationError } from '@/common/exceptions/report';
-import { UnknownError } from '@/common/exceptions/base';
+import { handleApiError } from '@/site/service/utils';
 
 const errorMap: Record<string, new (...args: any[]) => Error> = {
   DuplicateReportError,
@@ -41,18 +41,7 @@ export default class ReportService {
       });
     }
     catch (error: unknown) {
-      if (error && typeof error === 'object' && 'response' in error &&
-          error.response && typeof error.response === 'object' && 'data' in error.response) {
-
-        const responseData = error.response.data as Record<string, unknown>;
-        const errorName = responseData.errorName as string;
-
-        if (errorName && errorName in errorMap) {
-          const ErrorClass = errorMap[errorName];
-          throw new ErrorClass();
-        }
-      }
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 }
