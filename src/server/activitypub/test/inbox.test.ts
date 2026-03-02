@@ -967,4 +967,42 @@ describe('ProcessInboxService - processShareEvent SSRF Protection', () => {
       sinon.match({ event: 'announce_fetch_failed' }),
     )).toBe(true);
   });
+
+  it('should block Announce when same-domain actor DNS-resolves to a private IP', async () => {
+    // actor and object.id share the same hostname (attacker.legitimate-looking.com),
+    // so the domain-mismatch guard PASSES. But the SSRF protection inside
+    // fetchRemoteObject would block the fetch when the hostname resolves to a
+    // private IP (DNS-rebinding attack). We stub fetchRemoteObject directly —
+    // the correct seam, since inbox.ts imports it from a separate remote-fetch.ts
+    // module — to return null, simulating what happens when SSRF protection
+    // (e.g. validateUrlNotPrivate throwing due to a private DNS resolution) causes
+    // fetchRemoteObject to return null. processShareEvent must then log
+    // announce_fetch_failed and never call addRemoteEvent.
+    const actorUrl = 'https://attacker.legitimate-looking.com/calendars/evil';
+    const objectId = 'https://attacker.legitimate-looking.com/events/internal';
+
+    // Stub fetchRemoteObject to return null — simulates SSRF protection blocking
+    // the fetch because the hostname resolves to a private IP (10.0.0.5).
+    sandbox.stub(remoteFetch, 'fetchRemoteObject').resolves(null);
+
+    // Event has not been seen before — triggers the fetchRemoteObject path
+    sandbox.stub(EventObjectEntity, 'findOne').resolves(null);
+
+    // Spy on addRemoteEvent to assert it is never called
+    const addRemoteEventSpy = sandbox.stub(calendarInterface, 'addRemoteEvent');
+
+    const warnSpy = sandbox.stub(console, 'warn');
+
+    const activity = new AnnounceActivity(actorUrl, objectId);
+    await inboxService.processShareEvent(testCalendar, activity);
+
+    // SSRF protection blocked the fetch — announce_fetch_failed must be logged
+    expect(warnSpy.calledWithMatch(
+      sinon.match.string,
+      sinon.match({ event: 'announce_fetch_failed' }),
+    )).toBe(true);
+
+    // addRemoteEvent must NOT have been called
+    expect(addRemoteEventSpy.called).toBe(false);
+  });
 });
