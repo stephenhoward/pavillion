@@ -169,8 +169,10 @@
                         type="date"
                         class="date-input"
                         :aria-label="t('start_date')"
+                        :aria-describedby="'start-date-hint'"
                         @change="onDateChange"
                       />
+                      <small id="start-date-hint" class="date-format-hint">{{ t('date_input_format_hint') }}</small>
                     </div>
                     <div class="date-input-group">
                       <label for="end-date" class="date-input-label">{{ t('end_date') }}</label>
@@ -180,8 +182,10 @@
                         type="date"
                         class="date-input"
                         :aria-label="t('end_date')"
+                        :aria-describedby="'end-date-hint'"
                         @change="onDateChange"
                       />
+                      <small id="end-date-hint" class="date-format-hint">{{ t('date_input_format_hint') }}</small>
                     </div>
                   </div>
                 </div>
@@ -1240,6 +1244,16 @@ onUnmounted(() => {
             @include dark-mode {
               filter: invert(1);
             }
+          }
+        }
+
+        .date-format-hint {
+          font-size: 10px;
+          color: rgba(0, 0, 0, 0.4);
+          letter-spacing: 0.02em;
+
+          @include dark-mode {
+            color: rgba(255, 255, 255, 0.4);
           }
         }
       }

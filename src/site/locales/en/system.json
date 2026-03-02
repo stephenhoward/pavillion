@@ -63,6 +63,7 @@
         "choose_custom_dates": "Choose start and end dates",
         "start_date": "Start Date",
         "end_date": "End Date",
+        "date_input_format_hint": "mm/dd/yyyy",
         "clear_date_filter": "Clear date filter",
         "clear_all_filters": "Clear All Filters",
         "toggle_filters": "Toggle filters",
