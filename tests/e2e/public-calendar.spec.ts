@@ -58,13 +58,15 @@ test.describe('Public Calendar', () => {
 
   test('should display seeded events on the public calendar', async ({ page }) => {
     // Wait for events to load
-    const eventCards = page.locator('li.event');
-    const daySections = page.locator('section.day');
+    // New redesign uses: section.day-section for day groups, li.day-event-item for event list items,
+    // and article.event-card for the card rendered inside each list item.
+    const eventItems = page.locator('li.day-event-item');
+    const daySections = page.locator('section.day-section');
 
     // Wait for either events or an empty state to appear
-    await page.waitForSelector('section.day, .empty-state, li.event', { timeout: 15000 });
+    await page.waitForSelector('section.day-section, .empty-state, li.day-event-item', { timeout: 15000 });
 
-    const eventCount = await eventCards.count();
+    const eventCount = await eventItems.count();
     const dayCount = await daySections.count();
 
     // In the seeded database, test_calendar should have events
@@ -74,15 +76,17 @@ test.describe('Public Calendar', () => {
       await expect(emptyState).toBeVisible();
     }
     else {
-      // Verify at least one event card has a title
-      const firstEventTitle = eventCards.first().locator('h3');
+      // Verify at least one event card has a title (article.event-card contains an h3 with a link)
+      const firstEventTitle = eventItems.first().locator('h3');
       await expect(firstEventTitle).toBeVisible();
     }
   });
 
   test('should filter events by category', async ({ page }) => {
     // Wait for categories to load
-    await page.waitForSelector('button.category-pill, .category-pill-selector, .empty-state', { timeout: 15000 });
+    // category-pill-selector is now the scrollable container div, not itself a button.
+    // The interactive elements are button.category-pill inside it.
+    await page.waitForSelector('button.category-pill, .category-pill-selector-wrapper, .empty-state', { timeout: 15000 });
 
     const categoryPills = page.locator('button.category-pill');
     const pillCount = await categoryPills.count();
@@ -115,7 +119,8 @@ test.describe('Public Calendar', () => {
 
   test('should search events by text', async ({ page }) => {
     // Wait for page to load
-    await page.waitForSelector('#public-event-search, section.day, .empty-state', { timeout: 15000 });
+    // New redesign uses section.day-section instead of section.day
+    await page.waitForSelector('#public-event-search, section.day-section, .empty-state', { timeout: 15000 });
 
     const searchInput = page.locator('#public-event-search');
     const searchVisible = await searchInput.isVisible().catch(() => false);
@@ -148,9 +153,10 @@ test.describe('Public Calendar', () => {
 
   test('should navigate to event detail page', async ({ page }) => {
     // Wait for events to load
-    await page.waitForSelector('li.event, .empty-state', { timeout: 15000 });
+    // New redesign uses li.day-event-item (containing article.event-card) instead of li.event
+    await page.waitForSelector('li.day-event-item, .empty-state', { timeout: 15000 });
 
-    const eventLinks = page.locator('li.event h3 a');
+    const eventLinks = page.locator('li.day-event-item h3 a');
     const linkCount = await eventLinks.count();
 
     if (linkCount === 0) {
