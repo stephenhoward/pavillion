@@ -4,7 +4,7 @@ import config from 'config';
 import { Op } from 'sequelize';
 import ActivityPubService from '@/server/activitypub/service/members';
 import { Calendar } from '@/common/model/calendar';
-import { EventEntity } from '@/server/calendar/entity/event';
+import { EventEntity, EventScheduleEntity } from '@/server/calendar/entity/event';
 import { FollowingCalendarEntity, SharedEventEntity } from '@/server/activitypub/entity/activitypub';
 import { setupActivityPubSchema, teardownActivityPubSchema } from '@/server/test/helpers/database';
 import { EventEmitter } from 'events';
@@ -117,19 +117,17 @@ describe('ActivityPubService - getFeed with EventObjectEntity Join', () => {
     expect(localCondition.calendar_id[Op.in]).toBeDefined();
   });
 
-  it('should order results by createdAt DESC', async () => {
+  it('should order results by schedule start_date ASC', async () => {
     const mockEvents = [
       EventEntity.build({
-        id: 'event-uuid-newer',
+        id: 'event-uuid-earlier',
         calendar_id: null,
-        event_source_url: 'https://remote.example.com/events/newer',
-        createdAt: new Date('2026-01-15'),
+        event_source_url: 'https://remote.example.com/events/earlier',
       }),
       EventEntity.build({
-        id: 'event-uuid-older',
+        id: 'event-uuid-later',
         calendar_id: null,
-        event_source_url: 'https://remote.example.com/events/older',
-        createdAt: new Date('2026-01-10'),
+        event_source_url: 'https://remote.example.com/events/later',
       }),
     ];
 
@@ -138,11 +136,12 @@ describe('ActivityPubService - getFeed with EventObjectEntity Join', () => {
 
     const result = await service.getFeed(calendar, 0, 20);
 
-    // Verify ordering parameter
+    // Verify ordering parameter uses schedule start_date ascending (chronological order)
     const queryOptions = findAllStub.firstCall.args[0] as any;
     expect(queryOptions.order).toBeDefined();
-    expect(queryOptions.order[0][0]).toBe('createdAt');
-    expect(queryOptions.order[0][1]).toBe('DESC');
+    expect(queryOptions.order[0][0]).toMatchObject({ model: EventScheduleEntity, as: 'schedules' });
+    expect(queryOptions.order[0][1]).toBe('start_date');
+    expect(queryOptions.order[0][2]).toBe('ASC');
   });
 
   it('should use sequelize.escape() for calendar.id in all three literal subqueries (defense-in-depth)', async () => {

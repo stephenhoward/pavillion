@@ -15,7 +15,7 @@ import { CalendarActorEntity } from "@/server/activitypub/entity/calendar_actor"
 import { EventObjectEntity } from "@/server/activitypub/entity/event_object";
 import RemoteCalendarService from "@/server/activitypub/service/remote_calendar";
 import UndoActivity from "../model/action/undo";
-import { EventEntity } from "@/server/calendar/entity/event";
+import { EventEntity, EventScheduleEntity } from "@/server/calendar/entity/event";
 import CalendarInterface from "@/server/calendar/interface";
 import { EventObject } from "@/server/activitypub/model/object/event";
 import { addToOutbox as addToOutboxHelper } from "@/server/activitypub/helper/outbox";
@@ -728,7 +728,7 @@ class ActivityPubService {
       ],
       limit: defaultPageSize,
       offset: page ? page * defaultPageSize : 0,
-      order: [['createdAt', 'DESC']],
+      order: [[{ model: EventScheduleEntity, as: 'schedules' }, 'start_date', 'ASC']],
     });
 
     // Batch fetch all shared events for these events in a single query.
