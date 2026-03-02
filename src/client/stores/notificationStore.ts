@@ -13,6 +13,9 @@ interface NotificationState {
 
 const PAGE_SIZE = 50;
 
+/** Shared service instance for all store actions. */
+const notificationService = new NotificationService();
+
 /**
  * Pinia store for managing notification state and operations.
  */
@@ -37,8 +40,7 @@ export const useNotificationStore = defineStore('notifications', {
     async fetchNotifications(): Promise<void> {
       this.isLoading = true;
       try {
-        const service = new NotificationService();
-        const results = await service.getNotifications(PAGE_SIZE);
+        const results = await notificationService.getNotifications(PAGE_SIZE);
         this.notifications = results;
         this.hasMore = results.length === PAGE_SIZE;
       }
@@ -60,8 +62,7 @@ export const useNotificationStore = defineStore('notifications', {
       }
       this.isLoading = true;
       try {
-        const service = new NotificationService();
-        const results = await service.getNotifications(PAGE_SIZE);
+        const results = await notificationService.getNotifications(PAGE_SIZE);
         this.notifications = [...this.notifications, ...results];
         this.hasMore = results.length === PAGE_SIZE;
       }
@@ -78,8 +79,7 @@ export const useNotificationStore = defineStore('notifications', {
      * Mark all notifications as seen on the server and update local state.
      */
     async markAllSeen(): Promise<void> {
-      const service = new NotificationService();
-      await service.markAllSeen();
+      await notificationService.markAllSeen();
       this.notifications = this.notifications.map((n) => {
         n.seen = true;
         return n;

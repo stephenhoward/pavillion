@@ -74,6 +74,9 @@ function findFollowForEvent(follows: FollowRelationship[], event: FeedEvent): Fo
   return null;
 }
 
+/** Shared service instance for all store actions. */
+const feedService = new FeedService();
+
 /**
  * Pinia store for managing feed state and operations
  */
@@ -175,7 +178,6 @@ export const useFeedStore = defineStore('feed', {
 
       this.loading.follows = true;
       try {
-        const feedService = new FeedService();
         this.follows = await feedService.getFollows(this.selectedCalendarId);
       }
       catch (error) {
@@ -197,7 +199,6 @@ export const useFeedStore = defineStore('feed', {
 
       this.loading.followers = true;
       try {
-        const feedService = new FeedService();
         this.followers = await feedService.getFollowers(this.selectedCalendarId);
       }
       catch (error) {
@@ -221,7 +222,6 @@ export const useFeedStore = defineStore('feed', {
 
       this.loading.events = true;
       try {
-        const feedService = new FeedService();
         const page = append ? this.eventsPage + 1 : 0;
         const response = await feedService.getFeed(this.selectedCalendarId, page, 20);
 
@@ -264,7 +264,6 @@ export const useFeedStore = defineStore('feed', {
 
       const previousFollowIds = new Set(this.follows.map((f) => f.id));
 
-      const feedService = new FeedService();
       await feedService.followCalendar(this.selectedCalendarId, identifier, autoRepostOriginals, autoRepostReposts);
 
       // Refresh follows list
@@ -290,7 +289,6 @@ export const useFeedStore = defineStore('feed', {
       this.follows = this.follows.filter((f) => f.id !== followId);
 
       try {
-        const feedService = new FeedService();
         await feedService.unfollowCalendar(this.selectedCalendarId, followId);
       }
       catch (error) {
@@ -328,7 +326,6 @@ export const useFeedStore = defineStore('feed', {
       this.follows[followIndex].autoRepostReposts = autoRepostReposts;
 
       try {
-        const feedService = new FeedService();
         const updated = await feedService.updateFollowPolicy(
           followId,
           autoRepostOriginals,
@@ -370,7 +367,6 @@ export const useFeedStore = defineStore('feed', {
       this.events[eventIndex].repostStatus = 'manual';
 
       try {
-        const feedService = new FeedService();
         await feedService.shareEvent(this.selectedCalendarId, eventSourceUrl, categoryIds);
       }
       catch (error) {
@@ -410,8 +406,6 @@ export const useFeedStore = defineStore('feed', {
       if (!follow) {
         return this._doRepost(eventId, []);
       }
-
-      const feedService = new FeedService();
 
       // Fetch source categories for this followed calendar
       let sourceCategories: CategoryEntry[] = [];
@@ -519,8 +513,6 @@ export const useFeedStore = defineStore('feed', {
         return;
       }
 
-      const feedService = new FeedService();
-
       // Create each adopted source category as a new local category and collect mappings
       const newMappings: CategoryMappingEntry[] = [];
       const newLocalCategoryIds: string[] = [];
@@ -584,7 +576,6 @@ export const useFeedStore = defineStore('feed', {
       this.events[eventIndex].repostStatus = 'none';
 
       try {
-        const feedService = new FeedService();
         await feedService.unshareEvent(this.selectedCalendarId, eventId);
       }
       catch (error) {

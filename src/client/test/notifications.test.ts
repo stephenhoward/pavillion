@@ -3,11 +3,13 @@ import { createPinia, setActivePinia } from 'pinia';
 import { useNotificationStore } from '@/client/stores/notificationStore';
 import { Notification } from '@/common/model/notification';
 
-// Create a mock notification service instance
-const mockNotificationService = {
-  getNotifications: vi.fn(),
-  markAllSeen: vi.fn(),
-};
+// Use vi.hoisted() so the mock object is available when vi.mock() factory runs
+const { mockNotificationService } = vi.hoisted(() => ({
+  mockNotificationService: {
+    getNotifications: vi.fn(),
+    markAllSeen: vi.fn(),
+  },
+}));
 
 // Mock the NotificationService module so the store uses the mock
 vi.mock('@/client/service/notification', async () => {
