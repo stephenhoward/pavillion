@@ -20,7 +20,7 @@
  * if the service is refactored to use Fedify's built-in HTTP handling.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import axios from 'axios';
 import sinon from 'sinon';
 import { EventEmitter } from 'events';
@@ -42,6 +42,14 @@ import {
   type MockFederationContext,
 } from '@/server/activitypub/test/helpers/fedify-mock';
 
+// Mock the ip-validation module so tests can control SSRF validation behaviour
+// without performing real DNS lookups. Defaults to resolving safely (no throw).
+vi.mock('@/server/activitypub/helper/ip-validation', () => ({
+  validateUrlNotPrivate: vi.fn().mockResolvedValue(true),
+}));
+
+import { validateUrlNotPrivate } from '@/server/activitypub/helper/ip-validation';
+
 
 // Test constants for consistent URLs across tests
 const TEST_CALENDAR_ID = 'testid';
@@ -59,10 +67,12 @@ describe('resolveInbox', () => {
   beforeEach(() => {
     const eventBus = new EventEmitter();
     service = new ProcessOutboxService(eventBus);
+    vi.mocked(validateUrlNotPrivate).mockResolvedValue(true);
   });
 
   afterEach(() => {
     sandbox.restore();
+    vi.restoreAllMocks();
   });
 
   it('should return null without profile url', async () => {
@@ -103,6 +113,20 @@ describe('resolveInbox', () => {
     const result = await service.resolveInboxUrl(REMOTE_CALENDAR_HANDLE);
     expect(result).toBe(REMOTE_INBOX_URL);
   });
+
+  it('should return null when actor profile URL resolves to a private IP (SSRF)', async () => {
+    // fetchProfileUrl returns a profile URL that resolves to a private IP
+    const profileStub = sandbox.stub(service, 'fetchProfileUrl');
+    profileStub.resolves(REMOTE_PROFILE_URL);
+
+    // Simulate validateUrlNotPrivate blocking the profile URL (private IP SSRF)
+    vi.mocked(validateUrlNotPrivate).mockRejectedValueOnce(
+      new Error('Hostname remotedomain.test resolves to a private IP address'),
+    );
+
+    const result = await service.resolveInboxUrl(REMOTE_CALENDAR_HANDLE);
+    expect(result).toBeNull();
+  });
 });
 
 
@@ -113,10 +137,12 @@ describe('fetchProfileUrl', () => {
   beforeEach(() => {
     const eventBus = new EventEmitter();
     service = new ProcessOutboxService(eventBus);
+    vi.mocked(validateUrlNotPrivate).mockResolvedValue(true);
   });
 
   afterEach(() => {
     sandbox.restore();
+    vi.restoreAllMocks();
   });
 
   it('should return null without webfinger response', async () => {
@@ -154,6 +180,16 @@ describe('fetchProfileUrl', () => {
 
     const result = await service.fetchProfileUrl(REMOTE_CALENDAR_HANDLE);
     expect(result).toBe(REMOTE_PROFILE_URL);
+  });
+
+  it('should return null when webfingerUrl resolves to a private IP (SSRF)', async () => {
+    // Simulate validateUrlNotPrivate blocking the WebFinger URL (private IP SSRF)
+    vi.mocked(validateUrlNotPrivate).mockRejectedValueOnce(
+      new Error('Hostname private-domain.example resolves to a private IP address'),
+    );
+
+    const result = await service.fetchProfileUrl('user@private-domain.example');
+    expect(result).toBeNull();
   });
 });
 
@@ -220,10 +256,12 @@ describe('processOutboxMessage', () => {
   beforeEach(() => {
     const eventBus = new EventEmitter();
     service = new ProcessOutboxService(eventBus);
+    vi.mocked(validateUrlNotPrivate).mockResolvedValue(true);
   });
 
   afterEach(() => {
     sandbox.restore();
+    vi.restoreAllMocks();
   });
 
   it('should fail without calendar', async () => {
@@ -360,6 +398,46 @@ describe('processOutboxMessage', () => {
     expect(updateStub.calledOnce).toBe(true);
     expect(updateStub.getCalls()[0].args[0]['processed_time']).toBeDefined();
     expect(updateStub.getCalls()[0].args[0]['processed_status']).toBe('ok');
+  });
+
+  it('should skip delivery and record error when inbox URL resolves to a private IP (SSRF)', async () => {
+    // Use Fedify helper to create a proper Create activity
+    const activityMessage = createMockCreateActivity(LOCAL_ACTOR_URL, {
+      type: 'Event',
+      id: `${LOCAL_ACTOR_URL}/events/123`,
+      name: 'Test Event',
+    });
+
+    const message = ActivityPubOutboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Create',
+      message: activityMessage,
+    });
+
+    const getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
+    const postStub = sandbox.stub(axios, 'post');
+    const updateStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'update');
+    const getRecipientsStub = sandbox.stub(service, 'getRecipients');
+    const resolveStub = sandbox.stub(service, 'resolveInboxUrl');
+
+    getCalendarStub.resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID }));
+    getRecipientsStub.resolves([REMOTE_CALENDAR_HANDLE]);
+    // resolveInboxUrl returns a private inbox URL (SSRF scenario from malicious actor profile)
+    resolveStub.resolves('https://192.168.1.1/inbox');
+
+    // Simulate validateUrlNotPrivate blocking the private inbox URL
+    vi.mocked(validateUrlNotPrivate).mockRejectedValueOnce(
+      new Error('Access to private IP address 192.168.1.1 is not allowed'),
+    );
+
+    await service.processOutboxMessage(message);
+
+    // The POST should not be made to the private IP
+    expect(postStub.called).toBe(false);
+    expect(updateStub.calledOnce).toBe(true);
+    expect(updateStub.getCalls()[0].args[0]['processed_time']).toBeDefined();
+    // The delivery error should be recorded in processed_status
+    expect(updateStub.getCalls()[0].args[0]['processed_status']).toMatch(/^partial:/);
   });
 });
 

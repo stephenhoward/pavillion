@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import sinon from 'sinon';
 import { EventEmitter } from 'events';
 import axios from 'axios';
@@ -21,6 +21,14 @@ import {
 import { InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
 import CalendarInterface from '@/server/calendar/interface';
 
+// Mock the ip-validation module so tests can control SSRF validation behaviour
+// without performing real DNS lookups. Defaults to resolving safely (no throw).
+vi.mock('@/server/activitypub/helper/ip-validation', () => ({
+  validateUrlNotPrivate: vi.fn().mockResolvedValue(true),
+}));
+
+import { validateUrlNotPrivate } from '@/server/activitypub/helper/ip-validation';
+
 describe('ActivityPubService Exception Handling', () => {
   let service: ActivityPubService;
   let sandbox: sinon.SinonSandbox;
@@ -37,6 +45,7 @@ describe('ActivityPubService Exception Handling', () => {
 
   afterEach(() => {
     sandbox.restore();
+    vi.restoreAllMocks();
   });
 
   describe('followCalendar', () => {
@@ -240,6 +249,42 @@ describe('ActivityPubService Exception Handling', () => {
 
       // Second call fails (actor profile)
       axiosStub.onSecondCall().rejects(new Error('Profile fetch failed'));
+
+      await expect(
+        service.lookupRemoteCalendar('user@example.com'),
+      ).rejects.toThrow(RemoteProfileFetchError);
+    });
+
+    it('throws RemoteProfileFetchError when webfingerUrl resolves to a private IP (SSRF)', async () => {
+      // Simulate validateUrlNotPrivate blocking the WebFinger URL
+      vi.mocked(validateUrlNotPrivate).mockRejectedValueOnce(
+        new Error('Hostname private-domain.example resolves to a private IP address'),
+      );
+
+      await expect(
+        service.lookupRemoteCalendar('user@private-domain.example'),
+      ).rejects.toThrow(RemoteProfileFetchError);
+    });
+
+    it('throws RemoteProfileFetchError when actorUrl resolves to a private IP (SSRF)', async () => {
+      const axiosStub = sandbox.stub(axios, 'get');
+
+      // WebFinger validation passes (public domain)
+      // Actor URL validation throws (private IP in actor href)
+      vi.mocked(validateUrlNotPrivate)
+        .mockResolvedValueOnce(true)
+        .mockRejectedValueOnce(
+          new Error('Access to private IP address 192.168.1.1 is not allowed'),
+        );
+
+      // WebFinger responds with an actor URL pointing to a private IP
+      axiosStub.onFirstCall().resolves({
+        data: {
+          links: [
+            { rel: 'self', type: 'application/activity+json', href: 'https://192.168.1.1/actor' },
+          ],
+        },
+      });
 
       await expect(
         service.lookupRemoteCalendar('user@example.com'),

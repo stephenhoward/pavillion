@@ -19,6 +19,8 @@ import { EventEntity } from "@/server/calendar/entity/event";
 import CalendarInterface from "@/server/calendar/interface";
 import { EventObject } from "@/server/activitypub/model/object/event";
 import { addToOutbox as addToOutboxHelper } from "@/server/activitypub/helper/outbox";
+import { validateUrlNotPrivate } from "@/server/activitypub/helper/ip-validation";
+import { PUBLIC_KEY_FETCH_TIMEOUT_MS } from "@/server/activitypub/constants";
 import {
   InvalidRemoteCalendarIdentifierError,
   InvalidSharedEventUrlError,
@@ -596,7 +598,8 @@ class ActivityPubService {
     let webfingerResponse;
 
     try {
-      webfingerResponse = await axios.get(webfingerUrl, { timeout: 10000 });
+      await validateUrlNotPrivate(webfingerUrl);
+      webfingerResponse = await axios.get(webfingerUrl, { timeout: PUBLIC_KEY_FETCH_TIMEOUT_MS, maxRedirects: 0 });
     }
     catch (error: any) {
       if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
@@ -622,11 +625,13 @@ class ActivityPubService {
     // Fetch the actor profile
     let profileResponse;
     try {
+      await validateUrlNotPrivate(actorUrl);
       profileResponse = await axios.get(actorUrl, {
         headers: {
           'Accept': 'application/activity+json',
         },
-        timeout: 10000,
+        timeout: PUBLIC_KEY_FETCH_TIMEOUT_MS,
+        maxRedirects: 0,
       });
     }
     catch (error: any) {
