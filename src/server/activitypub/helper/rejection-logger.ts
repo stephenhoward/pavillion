@@ -11,7 +11,8 @@ export type RejectionType =
   | 'unauthorized_editor'
   | 'ownership_verification_failed'
   | 'parse_failure'
-  | 'invalid_object';
+  | 'invalid_object'
+  | 'no_relationship';
 
 export interface RejectionContext {
   rejection_type: RejectionType;

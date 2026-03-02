@@ -1,4 +1,5 @@
 import config from 'config';
+import { EventEmitter } from 'events';
 import { DateTime } from 'luxon';
 import db from '@/server/common/entity/db';
 import JobQueueService from '@/server/housekeeping/service/job-queue';
@@ -8,8 +9,10 @@ import DiskMonitorService from '@/server/housekeeping/service/disk-monitor';
 import AlertsService from '@/server/housekeeping/service/alerts';
 import EmailInterface from '@/server/email/interface';
 import AccountsInterface from '@/server/accounts/interface';
+import CalendarInterface from '@/server/calendar/interface';
 import IpCleanupService from '@/server/moderation/service/ip-cleanup';
 import NotificationService from '@/server/notifications/service/notification';
+import ActivityPubInterface from '@/server/activitypub/interface';
 
 /**
  * Worker mode entrypoint for Pavillion.
@@ -34,6 +37,9 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
   const accountsInterface = new AccountsInterface();
   const alertsService = new AlertsService(emailInterface, accountsInterface);
   const ipCleanupService = new IpCleanupService();
+  const eventBus = new EventEmitter();
+  const calendarInterface = new CalendarInterface(eventBus);
+  const activityPubInterface = new ActivityPubInterface(eventBus, calendarInterface, accountsInterface);
 
   // Manual backup job handler (triggered via API/CLI)
   await queue.subscribe('backup:create', async (data: any) => {
@@ -150,6 +156,25 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
       throw error;
     }
   });
+
+  // Inbox cleanup job handler (runs daily at 5 AM)
+  await queue.schedule(
+    'inbox:cleanup',
+    config.get<string>('housekeeping.inbox.schedule'),
+    async () => {
+      console.log('[Worker] Executing inbox:cleanup job');
+      try {
+        const retentionDays = config.get<number>('housekeeping.inbox.retentionDays');
+        const batchSize = config.get<number>('housekeeping.inbox.batchSize');
+        const count = await activityPubInterface.cleanupProcessedInboxMessages(retentionDays, batchSize);
+        console.log(`[Worker] Inbox cleanup completed: ${count} messages deleted`);
+      }
+      catch (error) {
+        console.error('[Worker] Inbox cleanup failed:', error);
+        throw error;
+      }
+    },
+  );
 }
 
 /**
@@ -172,6 +197,10 @@ function getNextRunTime(cronExpression: string): string {
     const next = DateTime.now().plus({ days: 1 }).set({ hour: 4, minute: 0, second: 0 });
     return next.toFormat('MMM dd, yyyy h:mm a');
   }
+  else if (cronExpression === '0 5 * * *') {
+    const next = DateTime.now().plus({ days: 1 }).set({ hour: 5, minute: 0, second: 0 });
+    return next.toFormat('MMM dd, yyyy h:mm a');
+  }
   else if (cronExpression === '0 * * * *') {
     const next = DateTime.now().plus({ hours: 1 }).set({ minute: 0, second: 0 });
     return next.toFormat('MMM dd, yyyy h:mm a');
@@ -190,6 +219,7 @@ function logStartupMessages(): void {
   console.log(`  - moderation:ip-cleanup at 3:00 AM (next: ${getNextRunTime('0 3 * * *')})`);
   console.log(`  - disk:check hourly (next: ${getNextRunTime('0 * * * *')})`);
   console.log(`  - notifications:cleanup at 4:00 AM (next: ${getNextRunTime('0 4 * * *')})`);
+  console.log(`  - inbox:cleanup at 5:00 AM (next: ${getNextRunTime('0 5 * * *')})`);
   console.log('  - backup:create (manual backups via CLI/API)');
   console.log('[Pavillion] Worker ready, processing jobs...');
 }

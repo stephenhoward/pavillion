@@ -22,6 +22,8 @@ import { Calendar } from "@/common/model/calendar";
 import { addToOutbox } from "@/server/activitypub/helper/outbox";
 import { ReportEntity } from "@/server/moderation/entity/report";
 import { fetchRemoteObject } from "@/server/activitypub/helper/remote-fetch";
+import { Op } from "sequelize";
+import config from "config";
 
 /**
  * Cache entry for authorization results
@@ -276,6 +278,33 @@ class ProcessInboxService {
         }
       }
 
+
+      // Relationship-based filtering for Calendar actors
+      const FILTERED_TYPES = ['Create', 'Update', 'Delete', 'Announce'];
+      if (actorUri && FILTERED_TYPES.includes(message.type)) {
+        const isPersonActor = await this.isPersonActorUri(actorUri);
+        if (!isPersonActor) {
+          const hasRelationship = await this.hasRelationshipWithCalendar(calendar, actorUri, message);
+          if (!hasRelationship) {
+            const domain = this.extractDomainFromActorUri(actorUri);
+            logActivityRejection({
+              rejection_type: 'no_relationship',
+              activity_type: message.type || 'unknown',
+              actor_uri: actorUri,
+              actor_domain: domain || 'unknown',
+              calendar_id: calendar.id,
+              calendar_url_name: calendar.urlName,
+              reason: `Activity rejected: no follow relationship with sender`,
+              message_id: message.id,
+            });
+            await message.update({
+              processed_time: DateTime.now().toJSDate(),
+              processed_status: 'rejected',
+            });
+            return;
+          }
+        }
+      }
       switch( message.type ) {
         case 'Create':
           {
@@ -937,6 +966,58 @@ class ProcessInboxService {
   private async isPersonActorUri(actorUri: string): Promise<boolean> {
     return actorUri.includes('/users/');
   }
+
+  /**
+   * Checks whether a Calendar actor has any relationship with the local calendar.
+   *
+   * Returns true if ANY of:
+   * - The message's to/cc/bto/bcc fields contain the local calendar's actor URI
+   * - A FollowingCalendarEntity exists linking local calendar → sender's CalendarActor (we follow them)
+   * - A FollowerCalendarEntity exists linking sender's CalendarActor → local calendar (they follow us)
+   *
+   * Uses getByActorUri (not findOrCreate) so unknown actors yield null without creating DB entries.
+   *
+   * @param calendar - The local calendar receiving the message
+   * @param actorUri - The sender's ActivityPub actor URI
+   * @param message - The raw inbox message entity
+   * @returns True if a relationship exists, false otherwise
+   */
+  private async hasRelationshipWithCalendar(
+    calendar: Calendar,
+    actorUri: string,
+    message: ActivityPubInboxMessageEntity,
+  ): Promise<boolean> {
+    // 1. Check explicit addressing in raw message
+    const rawMessage = message.message as any;
+    const localActorUri = ActivityPubActor.actorUrl(calendar);
+    const addressedFields = [rawMessage.to, rawMessage.cc, rawMessage.bto, rawMessage.bcc]
+      .flat()
+      .filter(Boolean);
+    if (addressedFields.includes(localActorUri)) {
+      return true;
+    }
+
+    // 2. Look up CalendarActorEntity — use getByActorUri (returns null if unknown)
+    const remoteCalendar = await this.remoteCalendarService.getByActorUri(actorUri);
+    if (!remoteCalendar) {
+      return false; // Unknown actor, no relationship
+    }
+
+    // 3. Check if we follow them (local calendar follows remote)
+    const following = await FollowingCalendarEntity.findOne({
+      where: { calendar_actor_id: remoteCalendar.id, calendar_id: calendar.id },
+    });
+    if (following) {
+      return true;
+    }
+
+    // 4. Check if they follow us (remote follows local calendar)
+    const follower = await FollowerCalendarEntity.findOne({
+      where: { calendar_actor_id: remoteCalendar.id, calendar_id: calendar.id },
+    });
+    return !!follower;
+  }
+
 
   /**
    * Parses and validates the series field from an incoming ActivityPub event payload.
@@ -1740,6 +1821,37 @@ class ProcessInboxService {
       await existingShare.destroy();
       // IF it's a event local to this server, send to all followers and sharers
     };
+  }
+
+  /**
+   * Deletes old processed inbox messages to keep the ap_inbox table manageable.
+   *
+   * Excludes Follow and Announce activity types from cleanup because the Undo
+   * handler looks up original Follow/Announce messages by ID in ap_inbox.
+   * Deleting these would break Undo/Follow and Undo/Announce processing.
+   *
+   * @param retentionDays - Days to keep processed messages (default from config)
+   * @param batchSize - Max rows to delete per call (default from config)
+   * @returns Number of messages deleted
+   */
+  public async cleanupProcessedInboxMessages(
+    retentionDays?: number,
+    batchSize?: number,
+  ): Promise<number> {
+    const days = retentionDays ?? config.get<number>("housekeeping.inbox.retentionDays");
+    const batch = batchSize ?? config.get<number>("housekeeping.inbox.batchSize");
+
+    const cutoff = DateTime.now().minus({ days }).toJSDate();
+
+    const count = await ActivityPubInboxMessageEntity.destroy({
+      where: {
+        processed_time: { [Op.lt]: cutoff, [Op.ne]: null },
+        type: { [Op.notIn]: ["Follow", "Announce"] },
+      },
+      limit: batch,
+    });
+
+    return count;
   }
 }
 

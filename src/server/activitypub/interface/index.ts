@@ -174,8 +174,21 @@ export default class ActivityPubInterface {
   async processOutboxMessage(message: ActivityPubOutboxMessageEntity): Promise<void> {
     await this.outboxService.processOutboxMessage(message);
   }
+
   async processInboxMessage(message: ActivityPubInboxMessageEntity): Promise<void> {
     await this.inboxSerivce.processInboxMessage(message);
+  }
+
+  /**
+   * Deletes processed inbox messages older than the configured retention period.
+   * Delegates to the inbox service cleanup method.
+   *
+   * @param retentionDays - Number of days to retain processed messages (defaults to config value)
+   * @param batchSize - Maximum number of messages to delete per run (defaults to config value)
+   * @returns Number of messages deleted
+   */
+  async cleanupProcessedInboxMessages(retentionDays?: number, batchSize?: number): Promise<number> {
+    return this.inboxSerivce.cleanupProcessedInboxMessages(retentionDays, batchSize);
   }
 
   /**
