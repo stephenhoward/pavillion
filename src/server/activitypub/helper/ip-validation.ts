@@ -264,6 +264,18 @@ export async function validateUrlNotPrivate(url: string): Promise<boolean> {
       return true;
     }
 
+    // Allow private-IP hostnames in non-production federation test environments.
+    // Docker-based federation tests use private bridge-network IPs for
+    // alpha.federation.local / beta.federation.local. Literal private IP
+    // addresses in the URL are still rejected above regardless of this flag.
+    if (process.env.ALLOW_PRIVATE_FEDERATION === 'true') {
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('ALLOW_PRIVATE_FEDERATION cannot be used in production');
+      }
+      console.warn('SECURITY WARNING: ALLOW_PRIVATE_FEDERATION is set — skipping DNS-based private IP check. Never use in production.');
+      return true;
+    }
+
     // Resolve hostname to IP and check
     const resolvesPrivate = await resolvesToPrivateIP(hostname);
     if (resolvesPrivate) {

@@ -234,6 +234,46 @@ describe('IP Validation', () => {
       );
     });
 
+    describe('ALLOW_PRIVATE_FEDERATION bypass', () => {
+      const originalEnv = process.env.NODE_ENV;
+      const originalFlag = process.env.ALLOW_PRIVATE_FEDERATION;
+
+      afterEach(() => {
+        process.env.NODE_ENV = originalEnv;
+        if (originalFlag === undefined) {
+          delete process.env.ALLOW_PRIVATE_FEDERATION;
+        }
+        else {
+          process.env.ALLOW_PRIVATE_FEDERATION = originalFlag;
+        }
+      });
+
+      it('should skip DNS check when ALLOW_PRIVATE_FEDERATION=true in non-production', async () => {
+        process.env.ALLOW_PRIVATE_FEDERATION = 'true';
+        process.env.NODE_ENV = 'federation';
+        // localhost would normally fail DNS resolution to a private IP,
+        // but ALLOW_PRIVATE_FEDERATION skips that check
+        const result = await ipValidation.validateUrlNotPrivate('https://localhost/api');
+        expect(result).toBe(true);
+      });
+
+      it('should still block literal private IPs even with ALLOW_PRIVATE_FEDERATION=true', async () => {
+        process.env.ALLOW_PRIVATE_FEDERATION = 'true';
+        process.env.NODE_ENV = 'federation';
+        await expect(ipValidation.validateUrlNotPrivate('https://172.18.0.4/api')).rejects.toThrow(
+          'Access to private IP address 172.18.0.4 is not allowed',
+        );
+      });
+
+      it('should throw when ALLOW_PRIVATE_FEDERATION=true in production', async () => {
+        process.env.ALLOW_PRIVATE_FEDERATION = 'true';
+        process.env.NODE_ENV = 'production';
+        await expect(ipValidation.validateUrlNotPrivate('https://localhost/api')).rejects.toThrow(
+          'ALLOW_PRIVATE_FEDERATION cannot be used in production',
+        );
+      });
+    });
+
     // Note: Testing DNS resolution requires mocking promisified dns.lookup which is complex.
     // The core IP validation logic is thoroughly tested above with isPrivateIP tests.
     // Integration tests with http_signature.test.ts cover the end-to-end behavior.
