@@ -12,19 +12,28 @@
  * not unit-level mocks, to ensure the complete middleware pipeline works.
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
 import request from 'supertest';
 import crypto from 'crypto';
+import sinon from 'sinon';
+import { v4 as uuidv4 } from 'uuid';
 
 import { Account } from '@/common/model/account';
-import { Calendar } from '@/common/model/calendar';
+import { Calendar, CalendarContent } from '@/common/model/calendar';
 import CalendarInterface from '@/server/calendar/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
 import AccountService from '@/server/accounts/service/account';
 import { TestEnvironment } from '@/server/test/lib/test_environment';
+import ProcessInboxService from '@/server/activitypub/service/inbox';
+import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
+import { EventActivityEntity } from '@/server/activitypub/entity/activitypub';
+import AnnounceActivity from '@/server/activitypub/model/action/announce';
+import * as remoteFetch from '@/server/activitypub/helper/remote-fetch';
+import { CalendarEntity } from '@/server/calendar/entity/calendar';
+import { setupActivityPubSchema, teardownActivityPubSchema } from '@/server/test/helpers/database';
 
 describe('ActivityPub Inbox Security Pipeline', () => {
   let env: TestEnvironment;
@@ -577,3 +586,12 @@ describe('ActivityPub Inbox Security Pipeline', () => {
     });
   });
 });
+
+/**
+ * Unit-level SSRF tests for processShareEvent.
+ *
+ * These tests exercise processShareEvent() directly with sinon stubs to assert
+ * that private-IP and domain-mismatch object URLs are dropped before any
+ * outbound HTTP request is made.
+ */
+

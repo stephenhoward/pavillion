@@ -235,6 +235,12 @@ export async function resolvesToPrivateIP(hostname: string): boolean {
 export async function validateUrlNotPrivate(url: string): Promise<boolean> {
   try {
     const parsedUrl = new URL(url);
+
+    // Reject non-HTTPS URLs — ActivityPub federation must use HTTPS
+    if (parsedUrl.protocol !== 'https:') {
+      throw new Error(`URL must use HTTPS, got: ${parsedUrl.protocol}`);
+    }
+
     let hostname = parsedUrl.hostname;
 
     // Remove brackets from IPv6 addresses (e.g., [::1] -> ::1)
