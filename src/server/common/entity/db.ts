@@ -26,13 +26,14 @@ const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}$/;
 
 /**
  * Find the earliest date in seed data to calculate shift offset.
+ * Appends 'Z' to parse naive strings as UTC, preserving the intended time digits.
  */
-const findEarliestDate = (data: unknown): Date | null => {
+export const findEarliestDate = (data: unknown): Date | null => {
   let earliest: Date | null = null;
 
   const scan = (value: unknown): void => {
     if (typeof value === 'string' && ISO_DATE_PATTERN.test(value)) {
-      const date = new Date(value);
+      const date = new Date(value + 'Z');
       if (!earliest || date < earliest) {
         earliest = date;
       }
@@ -51,11 +52,13 @@ const findEarliestDate = (data: unknown): Date | null => {
 
 /**
  * Shift all dates in seed data by offsetDays.
+ * Appends 'Z' to parse naive strings as UTC, preserving the intended time digits
+ * through the shift operation.
  */
-const shiftDates = (data: unknown, offsetDays: number): unknown => {
+export const shiftDates = (data: unknown, offsetDays: number): unknown => {
   if (typeof data === 'string' && ISO_DATE_PATTERN.test(data)) {
-    const date = new Date(data);
-    date.setDate(date.getDate() + offsetDays);
+    const date = new Date(data + 'Z');  // Parse as UTC to preserve time digits
+    date.setUTCDate(date.getUTCDate() + offsetDays);
     // Return in same format (without Z suffix)
     return date.toISOString().slice(0, -1);
   }

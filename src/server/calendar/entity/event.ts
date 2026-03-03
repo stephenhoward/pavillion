@@ -190,26 +190,55 @@ class EventScheduleEntity extends Model {
   @BelongsTo(() => EventEntity)
   declare event: EventEntity;
 
-  // TODO: use timezone field
   toModel(): CalendarEventSchedule {
-    return CalendarEventSchedule.fromObject({
-      id: this.id,
-      start: DateTime.fromJSDate(this.start_date),
-      end: DateTime.fromJSDate(this.end_date),
-      frequency: this.frequency,
-      interval: this.interval,
-      count: this.count,
-      byDay: this.by_day ? this.by_day.split(',') : [],
-      isExclusion: this.is_exclusion,
-    });
+    const zone = this.timezone || 'UTC';
+    // Sequelize SQLite stores naive datetime strings and reads them back as UTC
+    // (appending "+00:00"). The UTC digit values represent the intended local time,
+    // so we reinterpret them as the event's timezone using UTC field accessors.
+    const toLocalDT = (d: Date | null | undefined): DateTime | null => {
+      if (!d) return null;
+      return DateTime.fromObject(
+        {
+          year: d.getUTCFullYear(),
+          month: d.getUTCMonth() + 1,
+          day: d.getUTCDate(),
+          hour: d.getUTCHours(),
+          minute: d.getUTCMinutes(),
+          second: d.getUTCSeconds(),
+          millisecond: d.getUTCMilliseconds(),
+        },
+        { zone },
+      );
+    };
+    const schedule = new CalendarEventSchedule(
+      this.id,
+      toLocalDT(this.start_date) ?? undefined,
+      toLocalDT(this.end_date) ?? undefined,
+    );
+    schedule.frequency = this.frequency
+      ? CalendarEventSchedule.parseFrequency(this.frequency)
+      : null;
+    schedule.interval = this.interval;
+    schedule.count = this.count;
+    schedule.byDay = this.by_day ? this.by_day.split(',') : [];
+    schedule.isExclusion = this.is_exclusion;
+    return schedule;
   }
 
-  // TODO: set timezone field
   static fromModel(schedule: CalendarEventSchedule): EventScheduleEntity {
+    const tz = schedule.startDate?.zoneName ?? 'UTC';
+    // Store dates so that the local-time digit values are preserved as UTC digits.
+    // Sequelize SQLite appends "+00:00" to naive strings, treating stored values as UTC.
+    // By converting with keepLocalTime: true, toModel() can reverse this correctly.
+    const toStorageDate = (dt: DateTime | null | undefined): Date | undefined => {
+      if (!dt) return undefined;
+      return dt.setZone('UTC', { keepLocalTime: true }).toJSDate();
+    };
     return EventScheduleEntity.build({
       id: schedule.id,
-      start_date: schedule.startDate?.toJSDate(),
-      end_date: schedule.endDate?.toJSDate(),
+      timezone: tz,
+      start_date: toStorageDate(schedule.startDate),
+      end_date: toStorageDate(schedule.endDate),
       frequency: schedule.frequency as string,
       interval: schedule.interval,
       count: schedule.count,
