@@ -20,7 +20,9 @@
     "add_language": "Add language"
   },
   "navigation": {
-    "skip_to_content": "Skip to main content"
+    "skip_to_content": "Skip to main content",
+    "main_label": "Main navigation",
+    "mobile_label": "Mobile navigation"
   },
   "modal": {
     "close": "Close dialog"

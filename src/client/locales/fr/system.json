@@ -15,6 +15,8 @@
     "all_languages_added": "Toutes les langues ont été ajoutées"
   },
   "navigation": {
-    "skip_to_content": "Aller au contenu principal"
+    "skip_to_content": "Aller au contenu principal",
+    "main_label": "Navigation principale",
+    "mobile_label": "Navigation mobile"
   }
 }
