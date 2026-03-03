@@ -8,7 +8,7 @@ import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError }
 import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/common/exceptions/editor';
 import { UnauthenticatedError, UnknownError, EmptyValueError, AccountInviteAlreadyExistsError } from '@/common/exceptions';
 import { useCalendarStore } from '@/client/stores/calendarStore';
-import { validateAndEncodeId } from '@/client/service/utils';
+import { validateAndEncodeId, handleApiError } from '@/client/service/utils';
 
 import {
   BulkEventsNotFoundError,
@@ -115,21 +115,7 @@ export default class CalendarService {
     }
     catch (error: unknown) {
       console.error('Error creating calendar:', error);
-
-      // Type guard to ensure error is the expected shape
-      if (error && typeof error === 'object' && 'response' in error &&
-          error.response && typeof error.response === 'object' && 'data' in error.response) {
-
-        const responseData = error.response.data as Record<string, unknown>;
-        const errorName = responseData.errorName as string;
-
-        if (errorName && errorName in errorMap) {
-          const ErrorClass = errorMap[errorName as keyof typeof errorMap];
-          throw new ErrorClass();
-        }
-      }
-
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -215,8 +201,7 @@ export default class CalendarService {
     }
     catch (error: unknown) {
       console.error('Error listing calendar editors:', error);
-      this.handleEditorError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -240,8 +225,7 @@ export default class CalendarService {
     }
     catch (error: unknown) {
       console.error('Error granting edit access:', error);
-      this.handleEditorError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -264,8 +248,7 @@ export default class CalendarService {
     }
     catch (error: unknown) {
       console.error('Error revoking edit access:', error);
-      this.handleEditorError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -283,8 +266,7 @@ export default class CalendarService {
     }
     catch (error: unknown) {
       console.error('Error canceling invitation:', error);
-      this.handleEditorError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -302,8 +284,7 @@ export default class CalendarService {
     }
     catch (error: unknown) {
       console.error('Error resending invitation:', error);
-      this.handleEditorError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -333,8 +314,7 @@ export default class CalendarService {
     }
     catch (error: unknown) {
       console.error('Error in bulk category assignment:', error);
-      this.handleBulkOperationError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -363,46 +343,7 @@ export default class CalendarService {
     }
     catch (error: unknown) {
       console.error('Error updating calendar settings:', error);
-      this.handleEditorError(error);
-      throw new UnknownError();
-    }
-  }
-
-  /**
-   * Handle bulk operation errors by mapping backend error names to frontend exception classes
-   * @param error The error from the API call
-   */
-  private handleBulkOperationError(error: unknown): void {
-    // Type guard to ensure error is the expected shape
-    if (error && typeof error === 'object' && 'response' in error &&
-        error.response && typeof error.response === 'object' && 'data' in error.response) {
-
-      const responseData = error.response.data as Record<string, unknown>;
-      const errorName = responseData.errorName as string;
-
-      if (errorName && errorName in errorMap) {
-        const ErrorClass = errorMap[errorName as keyof typeof errorMap];
-        throw new ErrorClass();
-      }
-    }
-  }
-
-  /**
-   * Handle editor-related errors by mapping backend error names to frontend exception classes
-   * @param error The error from the API call
-   */
-  private handleEditorError(error: unknown): void {
-    // Type guard to ensure error is the expected shape
-    if (error && typeof error === 'object' && 'response' in error &&
-        error.response && typeof error.response === 'object' && 'data' in error.response) {
-
-      const responseData = error.response.data as Record<string, unknown>;
-      const errorName = responseData.errorName as string;
-
-      if (errorName && errorName in errorMap) {
-        const ErrorClass = errorMap[errorName as keyof typeof errorMap];
-        throw new ErrorClass();
-      }
+      handleApiError(error, errorMap);
     }
   }
 }

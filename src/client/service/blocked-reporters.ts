@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 import { BlockedReporter } from '@/common/model/blocked_reporter';
-import { UnknownError } from '@/common/exceptions/base';
+import { handleApiError } from '@/client/service/utils';
 
 /**
  * Error name mapping for blocked reporters API errors.
@@ -11,25 +11,6 @@ const errorMap: Record<string, new (...args: any[]) => Error> = {
     constructor() { super('Invalid input'); this.name = 'ValidationError'; }
   },
 };
-
-/**
- * Maps backend error responses to domain-specific exceptions.
- *
- * @param error - The error from the API call
- */
-function handleBlockedReportersError(error: unknown): void {
-  if (error && typeof error === 'object' && 'response' in error &&
-      error.response && typeof error.response === 'object' && 'data' in error.response) {
-
-    const responseData = error.response.data as Record<string, unknown>;
-    const errorName = responseData.errorName as string;
-
-    if (errorName && errorName in errorMap) {
-      const ErrorClass = errorMap[errorName];
-      throw new ErrorClass();
-    }
-  }
-}
 
 /**
  * Client service for admin blocked reporters endpoints.
@@ -51,8 +32,7 @@ export default class BlockedReportersService {
     }
     catch (error: unknown) {
       console.error('Error fetching blocked reporters:', error);
-      handleBlockedReportersError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -73,8 +53,7 @@ export default class BlockedReportersService {
     }
     catch (error: unknown) {
       console.error('Error blocking reporter:', error);
-      handleBlockedReportersError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -89,8 +68,7 @@ export default class BlockedReportersService {
     }
     catch (error: unknown) {
       console.error('Error unblocking reporter:', error);
-      handleBlockedReportersError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 }

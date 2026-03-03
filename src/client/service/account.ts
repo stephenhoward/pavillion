@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { Account } from '@/common/model/account';
 import { UnauthenticatedError, UnknownError } from '@/common/exceptions';
+import { handleApiError } from '@/client/service/utils';
 
 const errorMap = {
   UnauthenticatedError,
@@ -20,8 +21,7 @@ export default class AccountService {
     }
     catch (error) {
       console.error('Error fetching profile:', error);
-      this.handleError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -39,8 +39,7 @@ export default class AccountService {
     }
     catch (error) {
       console.error('Error updating profile:', error);
-      this.handleError(error);
-      throw new UnknownError();
+      handleApiError(error, errorMap);
     }
   }
 
@@ -61,27 +60,7 @@ export default class AccountService {
     }
     catch (error) {
       console.error('Error updating language preference:', error);
-      this.handleError(error);
-      throw new UnknownError();
-    }
-  }
-
-  /**
-   * Handle errors by mapping backend error names to frontend exception classes
-   * @param error The error from the API call
-   */
-  private handleError(error: unknown): void {
-    // Type guard to ensure error is the expected shape
-    if (error && typeof error === 'object' && 'response' in error &&
-        error.response && typeof error.response === 'object' && 'data' in error.response) {
-
-      const responseData = error.response.data as Record<string, unknown>;
-      const errorName = responseData.errorName as string;
-
-      if (errorName && errorName in errorMap) {
-        const ErrorClass = errorMap[errorName as keyof typeof errorMap];
-        throw new ErrorClass();
-      }
+      handleApiError(error, errorMap);
     }
   }
 }

@@ -5,7 +5,7 @@ import { CalendarNotFoundError, InsufficientCalendarPermissionsError } from '@/c
 import { UnauthenticatedError, UnknownError, EmptyValueError } from '@/common/exceptions';
 import { useCategoryStore } from '@/client/stores/categoryStore';
 import ModelService from '@/client/service/models';
-import { validateAndEncodeId } from '@/client/service/utils';
+import { validateAndEncodeId, handleApiError } from '@/client/service/utils';
 
 const errorMap = {
   CategoryNotFoundError,
@@ -16,25 +16,6 @@ const errorMap = {
   UnknownError,
   EmptyValueError,
 };
-
-function handleError(error: unknown): never {
-  console.error('Category service error:', error);
-
-  // Type guard to ensure error is the expected shape
-  if (error && typeof error === 'object' && 'response' in error &&
-      error.response && typeof error.response === 'object' && 'data' in error.response) {
-
-    const responseData = error.response.data as Record<string, unknown>;
-    const errorName = responseData.errorName as string;
-
-    if (errorName && errorName in errorMap) {
-      const ErrorClass = errorMap[errorName as keyof typeof errorMap];
-      throw new ErrorClass();
-    }
-  }
-
-  throw new UnknownError();
-}
 
 export default class CategoryService {
   store: ReturnType<typeof useCategoryStore>;
@@ -105,7 +86,8 @@ export default class CategoryService {
       return savedCategory;
     }
     catch (error: unknown) {
-      handleError(error);
+      console.error('Error saving category:', error);
+      handleApiError(error, errorMap);
     }
   }
 
@@ -124,7 +106,8 @@ export default class CategoryService {
       return EventCategory.fromObject(response.data);
     }
     catch (error: unknown) {
-      handleError(error);
+      console.error('Error fetching category:', error);
+      handleApiError(error, errorMap);
     }
   }
 
@@ -165,7 +148,8 @@ export default class CategoryService {
       return response.data.affectedEventCount || 0;
     }
     catch (error: unknown) {
-      handleError(error);
+      console.error('Error deleting category:', error);
+      handleApiError(error, errorMap);
     }
   }
 
@@ -200,7 +184,8 @@ export default class CategoryService {
       return response.data;
     }
     catch (error: unknown) {
-      handleError(error);
+      console.error('Error merging categories:', error);
+      handleApiError(error, errorMap);
     }
   }
 
@@ -237,7 +222,8 @@ export default class CategoryService {
       await axios.post(`/api/v1/events/${encodedEventId}/categories/${encodedCategoryId}`);
     }
     catch (error: unknown) {
-      handleError(error);
+      console.error('Error assigning category to event:', error);
+      handleApiError(error, errorMap);
     }
   }
 
@@ -268,7 +254,8 @@ export default class CategoryService {
       }
     }
     catch (error: unknown) {
-      handleError(error);
+      console.error('Error assigning categories to event:', error);
+      handleApiError(error, errorMap);
     }
   }
 
@@ -286,7 +273,8 @@ export default class CategoryService {
       await axios.delete(`/api/v1/events/${encodedEventId}/categories/${encodedCategoryId}`);
     }
     catch (error: unknown) {
-      handleError(error);
+      console.error('Error unassigning category from event:', error);
+      handleApiError(error, errorMap);
     }
   }
 }
