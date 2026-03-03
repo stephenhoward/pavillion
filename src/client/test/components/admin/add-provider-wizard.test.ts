@@ -3,7 +3,7 @@ import { mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
-import AddProviderWizard from '@/client/components/admin/AddProviderWizard.vue';
+import AddProviderWizard from '@/client/components/admin/add-provider-wizard.vue';
 import type { ProviderConfig } from '@/client/service/subscription';
 import enAdmin from '@/client/locales/en/admin.json';
 

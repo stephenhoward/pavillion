@@ -14,7 +14,7 @@ import { useModerationStore } from '@/client/stores/moderation-store';
 import { ReportStatus } from '@/common/model/report';
 import { useReportFormatting } from '@/client/composables/useReportFormatting';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
-import PillButton from '@/client/components/common/PillButton.vue';
+import PillButton from '@/client/components/common/pill-button.vue';
 
 const props = defineProps<{
   calendarId: string;

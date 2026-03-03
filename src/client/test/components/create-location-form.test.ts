@@ -2,9 +2,9 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
-import CreateLocationForm from '@/client/components/common/CreateLocationForm.vue';
-import PillButton from '@/client/components/common/PillButton.vue';
-import LanguageTabSelector from '@/client/components/common/LanguageTabSelector.vue';
+import CreateLocationForm from '@/client/components/common/create-location-form.vue';
+import PillButton from '@/client/components/common/pill-button.vue';
+import LanguageTabSelector from '@/client/components/common/language-tab-selector.vue';
 import enSystem from '@/client/locales/en/system.json';
 
 describe('CreateLocationForm', () => {

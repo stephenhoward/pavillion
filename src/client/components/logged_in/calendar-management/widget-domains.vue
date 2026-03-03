@@ -62,7 +62,7 @@
 import { reactive, onMounted, inject } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import axios from 'axios';
-import PillButton from '@/client/components/common/PillButton.vue';
+import PillButton from '@/client/components/common/pill-button.vue';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
 import { validateAndEncodeId } from '@/client/service/utils';
 

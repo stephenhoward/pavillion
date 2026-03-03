@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
-import LocationPickerModal from '@/client/components/common/LocationPickerModal.vue';
-import PillButton from '@/client/components/common/PillButton.vue';
+import LocationPickerModal from '@/client/components/common/location-picker-modal.vue';
+import PillButton from '@/client/components/common/pill-button.vue';
 import { EventLocation } from '@/common/model/location';
 
 describe('LocationPickerModal', () => {

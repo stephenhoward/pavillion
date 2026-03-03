@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
 import { MapPin, Repeat } from 'lucide-vue-next';
-import EventImage from './EventImage.vue';
+import EventImage from './event-image.vue';
 import { useLocalizedContent } from '@/site/composables/useLocalizedContent';
 import { useLocale } from '@/site/composables/useLocale';
 import type CalendarEventInstance from '@/common/model/event_instance';

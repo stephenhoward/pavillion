@@ -3,7 +3,7 @@ import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { RouteRecordRaw } from 'vue-router';
 import { nextTick } from 'vue';
 import { mountComponent } from '@/client/test/lib/vue';
-import CategorySelector from '@/client/components/logged_in/calendar/CategorySelector.vue';
+import CategorySelector from '@/client/components/logged_in/calendar/category-selector.vue';
 import CategoryService from '@/client/service/category';
 import { EventCategory } from '@/common/model/event_category';
 import { EventCategoryContent } from '@/common/model/event_category_content';

@@ -9,7 +9,7 @@ import { nextTick } from 'vue';
 
 import { EventCategory } from '@/common/model/event_category';
 import { EventCategoryContent } from '@/common/model/event_category_content';
-import CategoryPillSelector from '@/site/components/CategoryPillSelector.vue';
+import CategoryPillSelector from '@/site/components/category-pill-selector.vue';
 
 const routes: RouteRecordRaw[] = [
   { path: '/test', component: {}, name: 'test' },

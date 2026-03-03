@@ -62,7 +62,7 @@
 import { reactive, inject } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
-import ErrorAlert from './ErrorAlert.vue';
+import ErrorAlert from './error-alert.vue';
 
 const router = useRouter();
 const route = useRoute();

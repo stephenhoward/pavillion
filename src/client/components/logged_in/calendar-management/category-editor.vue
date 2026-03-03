@@ -93,8 +93,8 @@ import { EventCategoryContent } from '@/common/model/event_category_content';
 import { DuplicateCategoryNameError } from '@/common/exceptions/category';
 import CategoryService from '@/client/service/category';
 import ModalLayout from '@/client/components/common/modal.vue';
-import LanguagePicker from '@/client/components/common/languagePicker.vue';
-import PillButton from '@/client/components/common/PillButton.vue';
+import LanguagePicker from '@/client/components/common/language-picker.vue';
+import PillButton from '@/client/components/common/pill-button.vue';
 
 const emit = defineEmits(['close', 'saved']);
 

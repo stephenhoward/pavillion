@@ -5,8 +5,8 @@ import { useRoute, useRouter } from 'vue-router';
 import { DateTime } from 'luxon';
 import CalendarService from '@/site/service/calendar';
 import { useWidgetStore } from '../stores/widgetStore';
-import NotFound from '@/site/components/notFound.vue';
-import EventImage from '@/site/components/EventImage.vue';
+import NotFound from '@/site/components/not-found.vue';
+import EventImage from '@/site/components/event-image.vue';
 
 const { t } = useTranslation('system');
 const route = useRoute();
@@ -111,7 +111,7 @@ onBeforeMount(async () => {
         </button>
       </header>
 
-      <!-- Event Detail (based on site eventInstance.vue) -->
+      <!-- Event Detail (based on site event-instance.vue) -->
       <div class="instance-detail">
         <div class="instance-header">
           <EventImage :media="state.instance.event.media" context="hero" />
@@ -216,7 +216,7 @@ onBeforeMount(async () => {
 }
 
 // ================================================================
-// EVENT DETAIL (adapted from site eventInstance.vue)
+// EVENT DETAIL (adapted from site event-instance.vue)
 // ================================================================
 
 .instance-detail {

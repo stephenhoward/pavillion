@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { Search, MapPin, Check } from 'lucide-vue-next';
-import PillButton from '@/client/components/common/PillButton.vue';
+import PillButton from '@/client/components/common/pill-button.vue';
 import type { EventLocation } from '@/common/model/location';
 
 /**

@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
 import { useWidgetStore } from './stores/widgetStore';
-import WidgetContainer from './components/WidgetContainer.vue';
-import EventDetailOverlay from './components/EventDetailOverlay.vue';
+import WidgetContainer from './components/widget-container.vue';
+import EventDetailOverlay from './components/event-detail-overlay.vue';
 
 const routes: RouteRecordRaw[] = [
   {

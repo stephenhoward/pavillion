@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { RouteRecordRaw } from 'vue-router';
 import { mountComponent } from '@/client/test/lib/vue';
-import BulkOperationsMenu from '@/client/components/logged_in/calendar/BulkOperationsMenu.vue';
+import BulkOperationsMenu from '@/client/components/logged_in/calendar/bulk-operations-menu.vue';
 
 const routes: RouteRecordRaw[] = [
   { path: '/test', component: {}, name: 'test' },

@@ -6,8 +6,8 @@ import { ArrowLeft, MapPin, Accessibility } from 'lucide-vue-next';
 
 import CalendarService from '../service/calendar';
 import { useLocalizedContent } from '../composables/useLocalizedContent';
-import NotFound from './notFound.vue';
-import EventImage from './EventImage.vue';
+import NotFound from './not-found.vue';
+import EventImage from './event-image.vue';
 import ReportEvent from './report-event.vue';
 import { useLocale } from '@/site/composables/useLocale';
 

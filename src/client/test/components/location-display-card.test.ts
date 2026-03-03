@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
-import LocationDisplayCard from '@/client/components/common/LocationDisplayCard.vue';
-import PillButton from '@/client/components/common/PillButton.vue';
+import LocationDisplayCard from '@/client/components/common/location-display-card.vue';
+import PillButton from '@/client/components/common/pill-button.vue';
 import { EventLocation } from '@/common/model/location';
 
 describe('LocationDisplayCard', () => {

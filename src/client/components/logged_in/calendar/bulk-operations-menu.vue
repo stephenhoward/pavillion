@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
-import PillButton from '@/client/components/common/PillButton.vue';
+import PillButton from '@/client/components/common/pill-button.vue';
 
 const { t } = useTranslation('calendars', {
   keyPrefix: 'bulk_operations',

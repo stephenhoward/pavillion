@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mount, flushPromises, VueWrapper } from '@vue/test-utils';
 import { createRouter, createMemoryHistory, Router } from 'vue-router';
 import { createPinia, setActivePinia } from 'pinia';
-import SearchFilterPublic from '../SearchFilterPublic.vue';
+import SearchFilterPublic from '../search-filter-public.vue';
 import calendar from '../calendar.vue';
 import { usePublicCalendarStore } from '../../stores/publicCalendarStore';
 import CalendarService from '../../service/calendar';

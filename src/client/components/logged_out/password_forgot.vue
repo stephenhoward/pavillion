@@ -57,8 +57,8 @@
 import { reactive, inject } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
-import ErrorAlert from './ErrorAlert.vue';
-import SuccessState from './SuccessState.vue';
+import ErrorAlert from './error-alert.vue';
+import SuccessState from './success-state.vue';
 
 const { t } = useTranslation('authentication', {
   keyPrefix: 'forgot_password',

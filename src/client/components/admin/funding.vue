@@ -3,10 +3,10 @@ import { useTranslation } from 'i18next-vue';
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import SubscriptionService from '@/client/service/subscription';
-import PayPalConfigModal from './PayPalConfigModal.vue';
-import ConfirmDisconnectModal from './ConfirmDisconnectModal.vue';
-import AddProviderWizard from './AddProviderWizard.vue';
-import GrantForm from './GrantForm.vue';
+import PayPalConfigModal from './paypal-config-modal.vue';
+import ConfirmDisconnectModal from './confirm-disconnect-modal.vue';
+import AddProviderWizard from './add-provider-wizard.vue';
+import GrantForm from './grant-form.vue';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
 
 const { t } = useTranslation('admin', {

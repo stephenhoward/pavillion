@@ -5,8 +5,8 @@ import { useRoute } from 'vue-router';
 
 import CalendarService from '../service/calendar';
 import { useLocalizedContent } from '../composables/useLocalizedContent';
-import NotFound from './notFound.vue';
-import EventImage from './EventImage.vue';
+import NotFound from './not-found.vue';
+import EventImage from './event-image.vue';
 import { useLocale } from '@/site/composables/useLocale';
 
 const { t } = useTranslation('system');

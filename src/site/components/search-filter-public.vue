@@ -228,7 +228,7 @@ import { reactive, computed, ref, onMounted, onUnmounted, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useRoute, useRouter } from 'vue-router';
 import { usePublicCalendarStore } from '../stores/publicCalendarStore';
-import CategoryPillSelector from './CategoryPillSelector.vue';
+import CategoryPillSelector from './category-pill-selector.vue';
 import { getThisWeek, getNextWeek } from '@/common/utils/datePresets';
 import type { ViewMode } from '@/widget/stores/widgetStore';
 import { Search, CalendarDays } from 'lucide-vue-next';

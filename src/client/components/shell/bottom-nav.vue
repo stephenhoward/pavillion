@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import NavItem from './NavItem.vue';
+import NavItem from './nav-item.vue';
 import type { NavigationItemWithState } from './types';
 
 defineProps<{

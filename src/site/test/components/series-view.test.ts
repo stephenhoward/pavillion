@@ -32,11 +32,11 @@ vi.mock('@/site/composables/useLocale', () => ({
   }),
 }));
 
-vi.mock('@/site/components/notFound.vue', () => ({
+vi.mock('@/site/components/not-found.vue', () => ({
   default: { template: '<div class="not-found-stub"></div>' },
 }));
 
-vi.mock('@/site/components/EventImage.vue', () => ({
+vi.mock('@/site/components/event-image.vue', () => ({
   default: { template: '<div class="event-image-stub"></div>', props: ['media', 'context'] },
 }));
 
@@ -70,7 +70,7 @@ vi.mock('@/site/service/calendar', () => {
 // ---------------------------------------------------------------------------
 // Subject under test
 // ---------------------------------------------------------------------------
-import SeriesView from '@/site/components/SeriesView.vue';
+import SeriesView from '@/site/components/series-view.vue';
 
 // ---------------------------------------------------------------------------
 // Helpers

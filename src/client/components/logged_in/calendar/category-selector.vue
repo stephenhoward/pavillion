@@ -45,7 +45,7 @@
 import { reactive, onMounted, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import CategoryService from '@/client/service/category';
-import ToggleChip from '@/client/components/common/ToggleChip.vue';
+import ToggleChip from '@/client/components/common/toggle-chip.vue';
 
 const props = defineProps({
   calendarId: {

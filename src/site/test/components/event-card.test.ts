@@ -35,7 +35,7 @@ vi.mock('@/site/composables/useLocale', () => ({
   }),
 }));
 
-vi.mock('@/site/components/EventImage.vue', () => ({
+vi.mock('@/site/components/event-image.vue', () => ({
   default: {
     template: '<div class="event-image-stub"></div>',
     props: ['media', 'context', 'alt'],
@@ -45,7 +45,7 @@ vi.mock('@/site/components/EventImage.vue', () => ({
 // ---------------------------------------------------------------------------
 // Subject under test
 // ---------------------------------------------------------------------------
-import EventCard from '@/site/components/EventCard.vue';
+import EventCard from '@/site/components/event-card.vue';
 
 // ---------------------------------------------------------------------------
 // Helpers

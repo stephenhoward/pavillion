@@ -250,13 +250,13 @@ import { useTranslation } from 'i18next-vue';
 import { Plus, Pencil, Trash2, Languages } from 'lucide-vue-next';
 import { EventCategory } from '@/common/model/event_category';
 import CategoryService from '@/client/service/category';
-import CategoryEditor from './CategoryEditor.vue';
+import CategoryEditor from './category-editor.vue';
 import ModalLayout from '@/client/components/common/modal.vue';
 import { EventCategoryContent } from '@/common/model/event_category_content';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
-import BulkCategoriesMenu from './BulkCategoriesMenu.vue';
-import PillButton from '@/client/components/common/PillButton.vue';
+import BulkCategoriesMenu from './bulk-categories-menu.vue';
+import PillButton from '@/client/components/common/pill-button.vue';
 import { useToast } from '@/client/composables/useToast';
 
 const props = defineProps({

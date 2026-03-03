@@ -6,7 +6,7 @@ import { useRouter } from 'vue-router';
 import { usePublicCalendarStore } from '@/site/stores/publicCalendarStore';
 import { useWidgetStore } from '../stores/widgetStore';
 import { useSwipeGesture } from '../composables/useSwipeGesture';
-import EventImage from '@/site/components/EventImage.vue';
+import EventImage from '@/site/components/event-image.vue';
 
 const { t } = useTranslation('system');
 const router = useRouter();

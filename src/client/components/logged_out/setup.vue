@@ -130,8 +130,8 @@ import i18next from 'i18next';
 import { validatePassword } from '@/common/validation/password';
 import { AVAILABLE_LANGUAGES, getBrowserLanguage } from '@/common/i18n/languages';
 import SetupService from '@/client/service/setup';
-import ErrorAlert from './ErrorAlert.vue';
-import SuccessState from './SuccessState.vue';
+import ErrorAlert from './error-alert.vue';
+import SuccessState from './success-state.vue';
 
 // Allow injection of setup service for testing
 const injectedSetupService = inject('setupService', null);

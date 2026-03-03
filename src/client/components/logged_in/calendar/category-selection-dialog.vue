@@ -5,8 +5,8 @@ import { X } from 'lucide-vue-next';
 import CalendarService from '@/client/service/calendar';
 import { useEventStore } from '@/client/stores/eventStore';
 import { useCategoryStore } from '@/client/stores/categoryStore';
-import PillButton from '@/client/components/common/PillButton.vue';
-import ToggleChip from '@/client/components/common/ToggleChip.vue';
+import PillButton from '@/client/components/common/pill-button.vue';
+import ToggleChip from '@/client/components/common/toggle-chip.vue';
 
 const { t } = useTranslation('calendars', {
   keyPrefix: 'bulk_operations',

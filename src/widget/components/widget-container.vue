@@ -5,11 +5,11 @@ import { useTranslation } from 'i18next-vue';
 import { useWidgetStore } from '../stores/widgetStore';
 import { usePublicCalendarStore } from '@/site/stores/publicCalendarStore';
 import CalendarService from '@/site/service/calendar';
-import SearchFilterPublic from '@/site/components/SearchFilterPublic.vue';
-import WeekView from './WeekView.vue';
-import MonthView from './MonthView.vue';
-import ListView from './ListView.vue';
-import NotFound from '@/site/components/notFound.vue';
+import SearchFilterPublic from '@/site/components/search-filter-public.vue';
+import WeekView from './week-view.vue';
+import MonthView from './month-view.vue';
+import ListView from './list-view.vue';
+import NotFound from '@/site/components/not-found.vue';
 import type Config from '@/client/service/config';
 
 const { t } = useTranslation('system');

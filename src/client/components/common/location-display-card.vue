@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import PillButton from '@/client/components/common/PillButton.vue';
+import PillButton from '@/client/components/common/pill-button.vue';
 import type { EventLocation } from '@/common/model/location';
 
 /**

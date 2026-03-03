@@ -4,7 +4,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import I18NextVue from 'i18next-vue';
 import i18next from 'i18next';
-import SearchFilterPublic from '@/site/components/SearchFilterPublic.vue';
+import SearchFilterPublic from '@/site/components/search-filter-public.vue';
 import { usePublicCalendarStore } from '@/site/stores/publicCalendarStore';
 import { EventCategory } from '@/common/model/event_category';
 import { DateTime } from 'luxon';

@@ -36,7 +36,7 @@ vi.mock('@/site/composables/useLocale', () => ({
 // ---------------------------------------------------------------------------
 // Subject under test
 // ---------------------------------------------------------------------------
-import LanguageSwitcher from '@/site/components/LanguageSwitcher.vue';
+import LanguageSwitcher from '@/site/components/language-switcher.vue';
 import { AVAILABLE_LANGUAGES } from '@/common/i18n/languages';
 
 // ---------------------------------------------------------------------------

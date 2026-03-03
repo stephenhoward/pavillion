@@ -16,9 +16,9 @@ import WidgetDomainService from '@/server/calendar/service/widget_domain';
 import WidgetRoutes from '@/server/calendar/api/v1/widget';
 import WidgetEmbed from '@/client/components/logged_in/calendar-management/widget-embed.vue';
 import WidgetConfig from '@/client/components/logged_in/calendar-management/widget-config.vue';
-import WeekView from '@/widget/components/WeekView.vue';
-import MonthView from '@/widget/components/MonthView.vue';
-import ListView from '@/widget/components/ListView.vue';
+import WeekView from '@/widget/components/week-view.vue';
+import MonthView from '@/widget/components/month-view.vue';
+import ListView from '@/widget/components/list-view.vue';
 import { useWidgetStore } from '@/widget/stores/widgetStore';
 import { usePublicCalendarStore } from '@/site/stores/publicCalendarStore';
 

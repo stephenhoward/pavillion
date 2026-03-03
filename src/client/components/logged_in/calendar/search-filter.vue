@@ -116,8 +116,8 @@ import { reactive, onMounted, onUnmounted, watch, computed, ref, nextTick } from
 import { useTranslation } from 'i18next-vue';
 import { Search, X } from 'lucide-vue-next';
 import CategoryService from '@/client/service/category';
-import ToggleChip from '@/client/components/common/ToggleChip.vue';
-import PillButton from '@/client/components/common/PillButton.vue';
+import ToggleChip from '@/client/components/common/toggle-chip.vue';
+import PillButton from '@/client/components/common/pill-button.vue';
 
 const props = defineProps({
   calendarId: {

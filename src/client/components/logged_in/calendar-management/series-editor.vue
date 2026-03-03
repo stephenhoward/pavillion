@@ -6,10 +6,10 @@ import iso6391 from 'iso-639-1-dir';
 import { EventSeriesContent } from '@/common/model/event_series_content';
 import { DuplicateSeriesNameError, SeriesUrlNameAlreadyExistsError, InvalidSeriesUrlNameError } from '@/common/exceptions/series';
 import SeriesService from '@/client/service/series';
-import LanguagePicker from '@/client/components/common/languagePicker.vue';
-import LanguageTabSelector from '@/client/components/common/LanguageTabSelector.vue';
-import ImageUpload from '@/client/components/common/media/ImageUpload.vue';
-import EventImage from '@/client/components/common/media/EventImage.vue';
+import LanguagePicker from '@/client/components/common/language-picker.vue';
+import LanguageTabSelector from '@/client/components/common/language-tab-selector.vue';
+import ImageUpload from '@/client/components/common/media/image-upload.vue';
+import EventImage from '@/client/components/common/media/event-image.vue';
 
 const emit = defineEmits(['close', 'saved']);
 

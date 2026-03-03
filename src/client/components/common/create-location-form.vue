@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, reactive } from 'vue';
-import PillButton from '@/client/components/common/PillButton.vue';
-import LanguageTabSelector from '@/client/components/common/LanguageTabSelector.vue';
+import PillButton from '@/client/components/common/pill-button.vue';
+import LanguageTabSelector from '@/client/components/common/language-tab-selector.vue';
 
 /**
  * CreateLocationForm Component
