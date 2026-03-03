@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { useTranslation } from 'i18next-vue';
 import NavItem from './nav-item.vue';
 import type { NavigationItemWithState } from './types';
+
+const { t } = useTranslation('system');
 
 defineProps<{
   items: NavigationItemWithState[];
@@ -8,7 +11,7 @@ defineProps<{
 </script>
 
 <template>
-  <nav class="bottom-nav" role="navigation" aria-label="Main navigation">
+  <nav class="bottom-nav" :aria-label="t('navigation.mobile_label')">
     <ul class="bottom-nav__list">
       <li v-for="item in items" :key="item.id">
         <NavItem :item="item" variant="bottom" />

@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { useTranslation } from 'i18next-vue';
 import NavItem from './nav-item.vue';
 import type { NavigationItemWithState } from './types';
+
+const { t } = useTranslation('system');
 
 defineProps<{
   items: NavigationItemWithState[];
@@ -8,8 +11,8 @@ defineProps<{
 </script>
 
 <template>
-  <aside class="sidebar" role="navigation" aria-label="Main navigation">
-    <nav class="sidebar__nav">
+  <aside class="sidebar">
+    <nav class="sidebar__nav" :aria-label="t('navigation.main_label')">
       <ul class="sidebar__list">
         <li v-for="item in items" :key="item.id">
           <NavItem :item="item" variant="sidebar" />
