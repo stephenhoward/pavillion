@@ -113,7 +113,7 @@ describe('MediaEventHandlers', () => {
       await new Promise(resolve => setTimeout(resolve, 10));
 
       expect(consoleErrorStub.called).toBe(true);
-      expect(consoleErrorStub.args[0][0]).toContain('[MediaEvents]');
+      expect(consoleErrorStub.args[0][0]).toContain('[Media]');
     });
   });
 

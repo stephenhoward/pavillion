@@ -3,6 +3,7 @@ import { Account } from '@/common/model/account';
 import { validatePassword } from '@/common/validation/password';
 import AccountsInterface from '@/server/accounts/interface';
 import ExpressHelper from '@/server/common/helper/express';
+import { logError } from '@/server/common/helper/error-logger';
 
 export default class AccountInvitationRouteHandlers {
   private service: AccountsInterface;
@@ -100,7 +101,7 @@ export default class AccountInvitationRouteHandlers {
       }
     }
     catch (error) {
-      console.error('Error accepting invitation:', error);
+      logError(error, 'Error accepting invitation');
       res.status(400);
       res.json({ error: 'Failed to accept invitation', errorName: 'InvitationAcceptanceError' });
     }

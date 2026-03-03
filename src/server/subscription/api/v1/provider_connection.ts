@@ -3,6 +3,7 @@ import ExpressHelper from '@/server/common/helper/express';
 import { ProviderConnectionService } from '@/server/subscription/service/provider_connection';
 import { ProviderType } from '@/common/model/subscription';
 import { ValidationError } from '@/common/exceptions/base';
+import { logError } from '@/server/common/helper/error-logger';
 
 /**
  * Provider Connection route handlers
@@ -78,7 +79,7 @@ export default class ProviderConnectionRoutes {
       });
     }
     catch (error) {
-      console.error('Error initiating Stripe OAuth:', error);
+      logError(error, 'Error initiating Stripe OAuth');
       res.status(500).json({ error: 'Internal server error' });
     }
   }
@@ -109,7 +110,7 @@ export default class ProviderConnectionRoutes {
       res.redirect('/admin/funding?success=stripe_connected');
     }
     catch (error) {
-      console.error('Error handling Stripe OAuth callback:', error);
+      logError(error, 'Error handling Stripe OAuth callback');
       if (error instanceof ValidationError) {
         res.redirect('/admin/funding?error=invalid_request');
       }
@@ -148,7 +149,7 @@ export default class ProviderConnectionRoutes {
       res.json({ success: true });
     }
     catch (error) {
-      console.error('Error configuring PayPal:', error);
+      logError(error, 'Error configuring PayPal');
 
       if (error instanceof ValidationError) {
         ExpressHelper.sendValidationError(res, error);
@@ -185,7 +186,7 @@ export default class ProviderConnectionRoutes {
       res.json({ success: true });
     }
     catch (error) {
-      console.error('Error disconnecting provider:', error);
+      logError(error, 'Error disconnecting provider');
 
       if (error instanceof ValidationError) {
         ExpressHelper.sendValidationError(res, error);

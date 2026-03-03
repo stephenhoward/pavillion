@@ -180,7 +180,8 @@ describe('EmailService.sendEmail', () => {
 
     // Assert
     expect(result).toBeNull();
-    expect(consoleErrorStub.calledWith('Error sending email:', sinon.match.instanceOf(Error))).toBe(true);
+    expect(consoleErrorStub.calledOnce || consoleErrorStub.callCount > 0).toBe(true);
+    expect(consoleErrorStub.args[0][0]).toContain('Error sending email');
   });
 
   it('should use MAIL_FROM environment variable when set', async () => {

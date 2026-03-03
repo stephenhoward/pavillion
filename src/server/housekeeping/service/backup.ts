@@ -6,6 +6,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import config from 'config';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
+import { logError } from '@/server/common/helper/error-logger';
 
 /**
  * Backup metadata returned after backup creation
@@ -121,7 +122,7 @@ export default class BackupService {
       return metadata;
     }
     catch (error) {
-      console.error(`[Backup] Failed to create backup:`, error);
+      logError(error, '[Housekeeping] Failed to create backup');
       throw error;
     }
   }
@@ -218,7 +219,7 @@ export default class BackupService {
       return { verified: true, size };
     }
     catch (error) {
-      console.error(`[Backup] Verification error:`, error);
+      logError(error, '[Housekeeping] Backup verification error');
       return { verified: false, size: 0 };
     }
   }

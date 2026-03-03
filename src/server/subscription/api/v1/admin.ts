@@ -9,6 +9,7 @@ import {
   DuplicateGrantError,
   GrantNotFoundError,
 } from '@/server/subscription/exceptions';
+import { logError } from '@/server/common/helper/error-logger';
 
 /**
  * Admin route handlers for subscription management
@@ -113,7 +114,7 @@ export default class AdminRouteHandlers {
       });
     }
     catch (error) {
-      console.error('Error fetching subscription settings:', error);
+      logError(error, 'Error fetching subscription settings');
       res.status(500).json({ error: 'Internal server error' });
     }
   }
@@ -163,7 +164,7 @@ export default class AdminRouteHandlers {
       res.json({ success: true });
     }
     catch (error) {
-      console.error('Error updating subscription settings:', error);
+      logError(error, 'Error updating subscription settings');
       res.status(500).json({ error: 'Internal server error' });
     }
   }
@@ -197,7 +198,7 @@ export default class AdminRouteHandlers {
       res.json(sanitizedProviders);
     }
     catch (error) {
-      console.error('Error listing providers:', error);
+      logError(error, 'Error listing providers');
       res.status(500).json({ error: 'Internal server error' });
     }
   }
@@ -231,7 +232,7 @@ export default class AdminRouteHandlers {
       });
     }
     catch (error) {
-      console.error('Error initiating provider connection:', error);
+      logError(error, 'Error initiating provider connection');
       if (error instanceof ValidationError) {
         ExpressHelper.sendValidationError(res, error);
       }
@@ -267,7 +268,7 @@ export default class AdminRouteHandlers {
       res.json({ success: true });
     }
     catch (error) {
-      console.error('Error handling OAuth callback:', error);
+      logError(error, 'Error handling OAuth callback');
       if (error instanceof ValidationError) {
         ExpressHelper.sendValidationError(res, error);
       }
@@ -291,7 +292,7 @@ export default class AdminRouteHandlers {
       res.json({ success: true });
     }
     catch (error) {
-      console.error('Error updating provider:', error);
+      logError(error, 'Error updating provider');
       if (error instanceof ValidationError) {
         ExpressHelper.sendValidationError(res, error);
       }
@@ -317,7 +318,7 @@ export default class AdminRouteHandlers {
       res.json({ success: true });
     }
     catch (error) {
-      console.error('Error disconnecting provider:', error);
+      logError(error, 'Error disconnecting provider');
       if (error instanceof ValidationError) {
         ExpressHelper.sendValidationError(res, error);
       }
@@ -344,7 +345,7 @@ export default class AdminRouteHandlers {
       res.json(result);
     }
     catch (error) {
-      console.error('Error listing subscriptions:', error);
+      logError(error, 'Error listing subscriptions');
       res.status(500).json({ error: 'Internal server error' });
     }
   }
@@ -362,7 +363,7 @@ export default class AdminRouteHandlers {
       res.json({ success: true });
     }
     catch (error) {
-      console.error('Error force canceling subscription:', error);
+      logError(error, 'Error force canceling subscription');
       if (error instanceof Error && error.message.includes('not found')) {
         res.status(404).json({ error: error.message, errorName: 'NotFoundError' });
       }
@@ -383,7 +384,7 @@ export default class AdminRouteHandlers {
       res.json({ configured });
     }
     catch (error) {
-      console.error('Error getting platform OAuth status:', error);
+      logError(error, 'Error getting platform OAuth status');
       res.status(500).json({ error: 'Internal server error' });
     }
   }
@@ -413,7 +414,7 @@ export default class AdminRouteHandlers {
       res.json({ success: true });
     }
     catch (error) {
-      console.error('Error configuring platform OAuth:', error);
+      logError(error, 'Error configuring platform OAuth');
       res.status(500).json({ error: 'Internal server error' });
     }
   }
@@ -434,7 +435,7 @@ export default class AdminRouteHandlers {
       res.json(grants.map((grant) => grant.toObject()));
     }
     catch (error) {
-      console.error('Error listing grants:', error);
+      logError(error, 'Error listing grants');
       res.status(500).json({ error: 'Internal server error' });
     }
   }
@@ -491,7 +492,7 @@ export default class AdminRouteHandlers {
       res.status(201).json(grant.toObject());
     }
     catch (error) {
-      console.error('Error creating grant:', error);
+      logError(error, 'Error creating grant');
       if (error instanceof AccountNotFoundError) {
         res.status(404).json({ error: error.message, errorName: 'AccountNotFoundError' });
       }
@@ -533,7 +534,7 @@ export default class AdminRouteHandlers {
       res.status(204).send();
     }
     catch (error) {
-      console.error('Error revoking grant:', error);
+      logError(error, 'Error revoking grant');
       if (error instanceof GrantNotFoundError) {
         res.status(404).json({ error: error.message, errorName: 'GrantNotFoundError' });
       }

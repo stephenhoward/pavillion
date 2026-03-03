@@ -1,5 +1,6 @@
 import { generateKeyPairSync, createSign, createVerify } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
+import { logError } from '@/server/common/helper/error-logger';
 
 import { Account } from '@/common/model/account';
 import { UserActorEntity, UserActor } from '@/server/activitypub/entity/user_actor';
@@ -273,7 +274,7 @@ export default class UserActorService {
       return isValid;
     }
     catch (error) {
-      console.error('Error verifying signature:', error);
+      logError(error, '[ActivityPub] Error verifying user actor signature');
       return false;
     }
   }

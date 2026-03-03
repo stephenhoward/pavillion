@@ -8,6 +8,7 @@ import { SendmailTransport } from '@/server/email/transport/sendmail-transport';
 import { DevelopmentTransport } from '@/server/email/transport/development-transport';
 import { TestingTransport } from '@/server/email/transport/testing-transport';
 import { MailpitTransport } from '@/server/email/transport/mailpit-transport';
+import { logError } from '@/server/common/helper/error-logger';
 
 /**
  * Email Service for sending messages via various transports.
@@ -177,7 +178,7 @@ class EmailServiceClass {
       return info;
     }
     catch (error) {
-      console.error('Error sending email:', error);
+      logError(error, '[Email] Error sending email');
       return null;
     }
   }

@@ -2,6 +2,7 @@ import express, { Request, Response, Application } from 'express';
 import ExpressHelper from '@/server/common/helper/express';
 import AccountsInterface from '@/server/accounts/interface';
 import { Account } from '@/common/model/account';
+import { logError } from '@/server/common/helper/error-logger';
 
 export default class AdminAccountRouteHandlers {
   private service: AccountsInterface;
@@ -43,7 +44,7 @@ export default class AdminAccountRouteHandlers {
       res.json(result.accounts.map(account => account.toObject()));
     }
     catch (error) {
-      console.error('Error listing accounts:', error);
+      logError(error, 'Error listing accounts');
       res.status(500).json({ error: 'Failed to list accounts' });
     }
   }
@@ -66,7 +67,7 @@ export default class AdminAccountRouteHandlers {
       });
     }
     catch (error) {
-      console.error('Error listing applications:', error);
+      logError(error, 'Error listing applications');
       res.status(500).json({ error: 'Failed to list applications' });
     }
   }
@@ -92,7 +93,7 @@ export default class AdminAccountRouteHandlers {
       });
     }
     catch (error) {
-      console.error('Error approving application:', error);
+      logError(error, 'Error approving application');
       res.status(500).json({ error: 'Failed to approve application' });
     }
   }
@@ -119,7 +120,7 @@ export default class AdminAccountRouteHandlers {
       });
     }
     catch (error) {
-      console.error('Error denying application:', error);
+      logError(error, 'Error denying application');
       res.status(500).json({ error: 'Failed to deny application' });
     }
   }
@@ -155,7 +156,7 @@ export default class AdminAccountRouteHandlers {
       });
     }
     catch (error) {
-      console.error('Error sending invitation:', error);
+      logError(error, 'Error sending invitation');
       res.status(500).json({ error: 'Failed to send invitation' });
     }
   }
@@ -178,7 +179,7 @@ export default class AdminAccountRouteHandlers {
       });
     }
     catch (error) {
-      console.error('Error listing invitations:', error);
+      logError(error, 'Error listing invitations');
       res.status(500).json({ error: 'Failed to list invitations' });
     }
   }

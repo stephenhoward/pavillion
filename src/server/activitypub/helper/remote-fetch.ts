@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { logError } from '@/server/common/helper/error-logger';
 import { REMOTE_OBJECT_FETCH_TIMEOUT_MS } from '@/server/activitypub/constants';
 import { validateUrlNotPrivate } from '@/server/activitypub/helper/ip-validation';
 
@@ -75,20 +76,20 @@ export async function fetchRemoteObject(uri: string): Promise<Record<string, unk
     // Log the error but return null to allow graceful handling
     if (axios.isAxiosError(error)) {
       if (error.code === 'ECONNABORTED') {
-        console.error(`Timeout fetching remote object from ${uri}`);
+        logError(error, `Timeout fetching remote object from ${uri}`);
       }
       else if (error.response) {
-        console.error(`HTTP error fetching remote object from ${uri}: ${error.response.status}`);
+        logError(error, `HTTP error fetching remote object from ${uri}`);
       }
       else if (error.request) {
-        console.error(`Network error fetching remote object from ${uri}: ${error.message}`);
+        logError(error, `Network error fetching remote object from ${uri}`);
       }
       else {
-        console.error(`Error fetching remote object from ${uri}: ${error.message}`);
+        logError(error, `Error fetching remote object from ${uri}`);
       }
     }
     else {
-      console.error(`Unexpected error fetching remote object from ${uri}:`, error);
+      logError(error, `Unexpected error fetching remote object from ${uri}`);
     }
     return null;
   }

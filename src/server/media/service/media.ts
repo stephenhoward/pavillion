@@ -11,6 +11,7 @@ import CalendarInterface from '@/server/calendar/interface';
 import { Account } from '@/common/model/account';
 import { CalendarNotFoundError, InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
 import { MediaNotApprovedError, MediaNotFoundError } from '@/common/exceptions/media';
+import { logError } from '@/server/common/helper/error-logger';
 
 interface MediaConfig {
   maxFileSize: number;
@@ -312,7 +313,7 @@ export default class MediaService {
       return { media, buffer };
     }
     catch (error) {
-      console.error(`Error reading file for media ${mediaId}:`, error);
+      logError(error, `[Media] Error reading file for media ${mediaId}`);
       return null;
     }
   }

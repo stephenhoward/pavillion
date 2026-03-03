@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import { DomainEventHandlers } from '@/server/common/types/domain';
 import MediaInterface from '../interface';
+import { logError } from '@/server/common/helper/error-logger';
 
 export default class MediaEventHandlers implements DomainEventHandlers {
   private service: MediaInterface;
@@ -20,7 +21,7 @@ export default class MediaEventHandlers implements DomainEventHandlers {
         }
       }
       catch (error) {
-        console.error('[MediaEvents] Error processing media approval:', error);
+        logError(error, '[Media] Error processing media approval');
       }
     });
 
@@ -34,7 +35,7 @@ export default class MediaEventHandlers implements DomainEventHandlers {
         }
       }
       catch (error) {
-        console.error('[MediaEvents] Error processing series media approval:', error);
+        logError(error, '[Media] Error processing series media approval');
       }
     });
   }

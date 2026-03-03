@@ -24,6 +24,7 @@ import { EventEmitter } from 'events';
 import EditorInvitationEmail from '@/server/calendar/model/editor_invitation_email';
 import { isValidLanguageCode } from '@/common/i18n/languages';
 import { ValidationError } from '@/common/exceptions/base';
+import { logError } from '@/server/common/helper/error-logger';
 
 type AccountInfo = {
   account: Account,
@@ -305,7 +306,7 @@ export default class AccountService {
         }
       }
       catch (error) {
-        console.error('Failed to emit account.created event:', accountInfo.account.id, error);
+        logError(error, `[Accounts] Failed to emit account.created event: ${accountInfo.account.id}`);
         // Don't fail account creation if event emission fails
       }
     }
@@ -423,7 +424,7 @@ export default class AccountService {
         processedCalendars.add(inv.calendar_id);
       }
       catch (error) {
-        console.error(`Failed to grant calendar editor access for calendar ${inv.calendar_id}:`, error);
+        logError(error, `[Accounts] Failed to grant calendar editor access for calendar ${inv.calendar_id}`);
       }
     }
     return Array.from(processedCalendars);

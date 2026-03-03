@@ -1,6 +1,7 @@
 import PgBoss from 'pg-boss';
 import config from 'config';
 import { Client } from 'pg';
+import { logError } from '@/server/common/helper/error-logger';
 
 /**
  * Database configuration interface matching Sequelize config structure
@@ -76,7 +77,7 @@ export default class JobQueueService {
 
       // Register error handler
       this.boss.on('error', (error) => {
-        console.error('pg-boss error:', error);
+        logError(error, '[Housekeeping] pg-boss error');
       });
 
       await this.boss.start();
@@ -84,7 +85,7 @@ export default class JobQueueService {
       console.log('[JobQueue] pg-boss connected and started');
     }
     catch (error) {
-      console.error('Failed to start pg-boss:', error);
+      logError(error, '[Housekeeping] Failed to start pg-boss');
       throw error;
     }
   }
@@ -174,7 +175,7 @@ export default class JobQueueService {
       }
     }
     catch (error) {
-      console.error(`[JobQueue] Failed to create queue ${queueName}:`, error);
+      logError(error, `[Housekeeping] Failed to create queue ${queueName}`);
       throw error;
     }
     finally {
@@ -204,7 +205,7 @@ export default class JobQueueService {
         console.log(`[JobQueue] Completed job ${jobName} (ID: ${job.id})`);
       }
       catch (error) {
-        console.error(`[JobQueue] Error processing job ${jobName} (ID: ${job.id}):`, error);
+        logError(error, `[Housekeeping] Error processing job ${jobName} (ID: ${job.id})`);
         throw error;
       }
     });

@@ -1,6 +1,7 @@
 import { DateTime } from "luxon";
 import { EventEmitter } from "events";
 import axios from "axios";
+import { logError } from '@/server/common/helper/error-logger';
 
 import { Calendar } from "@/common/model/calendar";
 import { ActivityPubOutboxMessageEntity, EventActivityEntity, FollowerCalendarEntity, FollowingCalendarEntity } from "@/server/activitypub/entity/activitypub";
@@ -163,7 +164,7 @@ class ProcessOutboxService {
           }
           catch (error) {
             const errorMsg = `Security: Blocked delivery to private inbox URL for ${recipient}: ${error instanceof Error ? error.message : String(error)}`;
-            console.error(`[OUTBOX] ${errorMsg}`);
+            logError(error, `[SECURITY] Blocked delivery to private inbox URL for ${recipient}`);
             deliveryErrors.push(errorMsg);
             continue;
           }
@@ -185,7 +186,7 @@ class ProcessOutboxService {
           }
           catch (error: any) {
             const errorMsg = `Failed to deliver to ${recipient}: ${error.message}`;
-            console.error(`[OUTBOX] ${errorMsg}`);
+            logError(error, `[ActivityPub] Failed to deliver to ${recipient}`);
             deliveryErrors.push(errorMsg);
           }
         }
@@ -299,7 +300,7 @@ class ProcessOutboxService {
       }
       catch (error) {
         if (error instanceof Error) {
-          console.error(`[OUTBOX] Security: Blocked actor profile fetch to private IP for ${remote_user}: ${error.message}`);
+          logError(error, `[SECURITY] Blocked fetch of actor profile for ${remote_user}: private IP`);
         }
         return null;
       }
@@ -345,7 +346,7 @@ class ProcessOutboxService {
       }
       catch (error) {
         if (error instanceof Error) {
-          console.error(`[OUTBOX] Security: Blocked WebFinger request to private IP for ${remote_user}: ${error.message}`);
+          logError(error, `[ActivityPub] Failed to fetch WebFinger for ${remote_user}: private IP blocked`);
         }
         return null;
       }
@@ -365,7 +366,7 @@ class ProcessOutboxService {
         }
       }
       catch (error: any) {
-        console.error(`[OUTBOX] WebFinger lookup failed: ${error.message}`);
+        logError(error, `[ActivityPub] WebFinger lookup failed for ${remote_user}`);
       }
     }
     return null;

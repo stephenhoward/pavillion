@@ -1,5 +1,6 @@
 import { generateKeyPairSync, createSign, createVerify } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
+import { logError } from '@/server/common/helper/error-logger';
 
 import { Calendar } from '@/common/model/calendar';
 import { CalendarActorEntity, CalendarActor } from '@/server/activitypub/entity/calendar_actor';
@@ -233,7 +234,7 @@ export default class CalendarActorService {
       return isValid;
     }
     catch (error) {
-      console.error('Error verifying calendar actor signature:', error);
+      logError(error, '[ActivityPub] Error verifying calendar actor signature');
       return false;
     }
   }
