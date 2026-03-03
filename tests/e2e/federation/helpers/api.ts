@@ -397,7 +397,7 @@ export async function getFeed(
   instance: InstanceConfig,
   token: string,
   calendarId: string,
-): Promise<{ events: Array<{ id: string; event_source_url?: string; content: Record<string, { title: string }> }>; hasMore: boolean }> {
+): Promise<{ events: Array<{ id: string; eventSourceUrl?: string; content: Record<string, { title: string }> }>; hasMore: boolean }> {
   const response = await fetch(
     `${instance.baseUrl}/api/v1/social/feed?calendarId=${calendarId}`,
     {
