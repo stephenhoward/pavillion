@@ -1,6 +1,7 @@
 import express, { Request, Response, Application } from 'express';
 import PublicCalendarInterface from '../../interface';
 import { SeriesNotFoundError } from '@/common/exceptions/series';
+import { logError } from '@/server/common/helper/error-logger';
 
 export default class CalendarRoutes {
   service: PublicCalendarInterface;
@@ -247,7 +248,7 @@ export default class CalendarRoutes {
     }
     catch (error: any) {
       // Log the full error for debugging
-      console.error('Error in listInstances:', error);
+      logError(error, 'Error in listInstances');
 
       // Handle specific error types
       if (error.message === 'Invalid date format') {

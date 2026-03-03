@@ -11,6 +11,7 @@ import { MediaEntity } from '@/server/media/entity/media';
 import { Op, literal } from 'sequelize';
 import { DateTime } from 'luxon';
 import { getRecurrenceText } from '@/common/utils/recurrence-text';
+import { logError } from '@/server/common/helper/error-logger';
 
 /**
  * Service for public calendar operations
@@ -70,7 +71,7 @@ export default class PublicCalendarService {
         }
       }
       catch (error) {
-        console.error(`Error getting category content for category ${category.id}:`, error);
+        logError(error, `[Public] Error getting category content for category ${category.id}`);
       }
     }
 
@@ -368,7 +369,7 @@ export default class PublicCalendarService {
           }
         }
         catch (error) {
-          console.error(`Error fetching categories for event ${eventId}:`, error);
+          logError(error, `[Public] Error fetching categories for event ${eventId}`);
           // Set empty array if category fetch fails
           for (const instance of eventInstances) {
             (instance.event as any).categories = [];

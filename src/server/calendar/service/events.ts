@@ -28,6 +28,7 @@ import { SharedEventEntity } from '@/server/activitypub/entity/activitypub';
 import { validateUrlNotPrivate } from '@/server/activitypub/helper/ip-validation';
 import { FEDERATION_HTTP_TIMEOUT_MS } from '@/server/activitypub/constants';
 import db from '@/server/common/entity/db';
+import { logError } from '@/server/common/helper/error-logger';
 import { Op, literal, where, fn, col, type Transaction } from 'sequelize';
 
 /**
@@ -296,7 +297,7 @@ class EventService {
     }
     catch (error) {
       const errorMsg = `Security: Blocked delivery to private inbox URL: ${error instanceof Error ? error.message : String(error)}`;
-      console.error(`[EVENTS] ${errorMsg}`);
+      logError(error, `[Calendar] Security: Blocked delivery to private inbox URL for create activity`);
       throw new Error(errorMsg);
     }
 
@@ -337,7 +338,7 @@ class EventService {
       return event;
     }
     catch (error: any) {
-      console.error(`[EVENTS] Failed to create event on remote calendar: ${error.message}`);
+      logError(error, '[Calendar] Failed to create event on remote calendar');
       if (error.response?.status === 403) {
         throw new InsufficientCalendarPermissionsError('You are not authorized to create events on this calendar');
       }
@@ -421,7 +422,7 @@ class EventService {
     }
     catch (error) {
       const errorMsg = `Security: Blocked delivery to private inbox URL: ${error instanceof Error ? error.message : String(error)}`;
-      console.error(`[EVENTS] ${errorMsg}`);
+      logError(error, `[Calendar] Security: Blocked delivery to private inbox URL for update activity`);
       throw new Error(errorMsg);
     }
 
@@ -455,7 +456,7 @@ class EventService {
       return event;
     }
     catch (error: any) {
-      console.error(`[EVENTS] Failed to update event on remote calendar: ${error.message}`);
+      logError(error, '[Calendar] Failed to update event on remote calendar');
       if (error.response?.status === 403) {
         throw new InsufficientCalendarPermissionsError('You are not authorized to update events on this calendar');
       }
@@ -520,7 +521,7 @@ class EventService {
     }
     catch (error) {
       const errorMsg = `Security: Blocked delivery to private inbox URL: ${error instanceof Error ? error.message : String(error)}`;
-      console.error(`[EVENTS] ${errorMsg}`);
+      logError(error, `[Calendar] Security: Blocked delivery to private inbox URL for delete activity`);
       throw new Error(errorMsg);
     }
 
@@ -536,7 +537,7 @@ class EventService {
       console.log(`[EVENTS] Remote calendar accepted Delete activity (status: ${response.status})`);
     }
     catch (error: any) {
-      console.error(`[EVENTS] Failed to delete event on remote calendar: ${error.message}`);
+      logError(error, '[Calendar] Failed to delete event on remote calendar');
       if (error.response?.status === 403) {
         throw new InsufficientCalendarPermissionsError('You are not authorized to delete events on this calendar');
       }

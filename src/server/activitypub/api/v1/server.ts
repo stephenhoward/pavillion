@@ -8,6 +8,7 @@ import AcceptActivity from '@/server/activitypub/model/action/accept';
 import AnnounceActivity from '@/server/activitypub/model/action/announce';
 import UndoActivity from '@/server/activitypub/model/action/undo';
 import ActivityPubInterface from '@/server/activitypub/interface';
+import { logError } from '@/server/common/helper/error-logger';
 import CalendarInterface from '@/server/calendar/interface';
 import { verifyHttpSignature } from '@/server/activitypub/helper/http_signature';
 import {
@@ -176,7 +177,7 @@ export default class ActivityPubServerRoutes {
       res.json(eventObject);
     }
     catch (error) {
-      console.error(`[API] Error fetching event ${req.params.eventid}:`, error);
+      logError(error, `Error fetching event ${req.params.eventid}`);
       res.status(500).send('Internal server error');
     }
   }
@@ -212,7 +213,7 @@ export default class ActivityPubServerRoutes {
       res.json(collection);
     }
     catch (error) {
-      console.error(`[API] Error fetching series collection for ${req.params.urlname}:`, error);
+      logError(error, `Error fetching series collection for ${req.params.urlname}`);
       res.status(500).send('Internal server error');
     }
   }
@@ -242,7 +243,7 @@ export default class ActivityPubServerRoutes {
       res.json(seriesObject);
     }
     catch (error) {
-      console.error(`[API] Error fetching series ${req.params.seriesid}:`, error);
+      logError(error, `Error fetching series ${req.params.seriesid}`);
       res.status(500).send('Internal server error');
     }
   }
@@ -353,7 +354,7 @@ export default class ActivityPubServerRoutes {
         }
       }
       catch (error: any) {
-        console.error(`[INBOX] Error processing Person actor activity:`, error);
+        logError(error, 'Error processing Person actor activity');
         if (error.message === 'Actor is not an authorized editor of this calendar') {
           res.status(403).send('Forbidden: Not an authorized editor');
         }

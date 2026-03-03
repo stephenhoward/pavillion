@@ -2,6 +2,7 @@ import express, { Request, Response, Application, Router } from 'express';
 import Stripe from 'stripe';
 import SubscriptionInterface from '@/server/subscription/interface';
 import { ProviderConfigEntity } from '@/server/subscription/entity/provider_config';
+import { logError } from '@/server/common/helper/error-logger';
 
 /**
  * Webhook route handlers for payment provider events
@@ -94,7 +95,7 @@ export default class WebhookRouteHandlers {
       res.status(200).json({ received: true });
     }
     catch (error) {
-      console.error('Error processing Stripe webhook:', error);
+      logError(error, 'Error processing Stripe webhook');
       res.status(500).json({ error: 'Internal server error' });
     }
   }
@@ -150,7 +151,7 @@ export default class WebhookRouteHandlers {
       res.status(200).json({ received: true });
     }
     catch (error) {
-      console.error('Error processing PayPal webhook:', error);
+      logError(error, 'Error processing PayPal webhook');
       res.status(500).json({ error: 'Internal server error' });
     }
   }

@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import SubscriptionService from './subscription';
+import { logError } from '@/server/common/helper/error-logger';
 
 /**
  * Shared event bus for subscription jobs
@@ -23,7 +24,7 @@ export async function checkGracePeriodExpiry(): Promise<void> {
     console.log('[SubscriptionJobs] Grace period check completed');
   }
   catch (error) {
-    console.error('[SubscriptionJobs] Error checking grace period expiry:', error);
+    logError(error, '[Subscription] Error checking grace period expiry');
     throw error;
   }
 }
@@ -39,14 +40,14 @@ export function startScheduledJobs(): () => void {
   // Run grace period check every hour
   const gracePeriodInterval = setInterval(() => {
     checkGracePeriodExpiry().catch((error) => {
-      console.error('[SubscriptionJobs] Grace period check failed:', error);
+      logError(error, '[Subscription] Grace period check failed');
     });
   }, 60 * 60 * 1000); // 1 hour in milliseconds
 
   // Run initial check on startup (after 10 seconds to allow system to stabilize)
   setTimeout(() => {
     checkGracePeriodExpiry().catch((error) => {
-      console.error('[SubscriptionJobs] Initial grace period check failed:', error);
+      logError(error, '[Subscription] Initial grace period check failed');
     });
   }, 10000);
 

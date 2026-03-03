@@ -3,6 +3,7 @@ import ExpressHelper from '@/server/common/helper/express';
 import SubscriptionInterface from '@/server/subscription/interface';
 import { Account } from '@/common/model/account';
 import { ValidationError } from '@/common/exceptions/base';
+import { logError } from '@/server/common/helper/error-logger';
 
 /**
  * User subscription route handlers
@@ -60,7 +61,7 @@ export default class SubscriptionRouteHandlers {
       });
     }
     catch (error) {
-      console.error('Error fetching subscription options:', error);
+      logError(error, 'Error fetching subscription options');
       res.status(500).json({ error: 'Internal server error' });
     }
   }
@@ -91,7 +92,7 @@ export default class SubscriptionRouteHandlers {
       res.json(subscription.toObject());
     }
     catch (error) {
-      console.error('Error creating subscription:', error);
+      logError(error, 'Error creating subscription');
       if (error instanceof ValidationError) {
         ExpressHelper.sendValidationError(res, error);
       }
@@ -132,7 +133,7 @@ export default class SubscriptionRouteHandlers {
       res.json(subscription.toObject());
     }
     catch (error) {
-      console.error('Error fetching subscription status:', error);
+      logError(error, 'Error fetching subscription status');
       res.status(500).json({ error: 'Internal server error' });
     }
   }
@@ -164,7 +165,7 @@ export default class SubscriptionRouteHandlers {
       res.json({ success: true });
     }
     catch (error) {
-      console.error('Error canceling subscription:', error);
+      logError(error, 'Error canceling subscription');
       if (error instanceof Error && error.message.includes('not found')) {
         res.status(404).json({ error: error.message, errorName: 'NotFoundError' });
       }
@@ -194,7 +195,7 @@ export default class SubscriptionRouteHandlers {
       res.json({ portalUrl });
     }
     catch (error) {
-      console.error('Error getting billing portal URL:', error);
+      logError(error, 'Error getting billing portal URL');
       if (error instanceof ValidationError) {
         ExpressHelper.sendValidationError(res, error);
       }

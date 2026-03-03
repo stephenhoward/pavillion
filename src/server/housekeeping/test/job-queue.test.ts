@@ -151,7 +151,8 @@ describe('JobQueueService', () => {
       (PgBoss.prototype.start as any).mockRejectedValue(error);
 
       await expect(service.start()).rejects.toThrow('Connection failed');
-      expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to start pg-boss:', error);
+      expect(consoleErrorSpy).toHaveBeenCalled();
+      expect(consoleErrorSpy.mock.calls[0][0]).toContain('Failed to start pg-boss');
 
       consoleErrorSpy.mockRestore();
     });

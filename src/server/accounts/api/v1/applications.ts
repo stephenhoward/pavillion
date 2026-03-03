@@ -6,6 +6,7 @@ import {
   AccountApplicationAlreadyExistsError,
   AccountApplicationsClosedError,
 } from '@/server/accounts/exceptions';
+import { logError } from '@/server/common/helper/error-logger';
 
 export default class AccountApplicationRouteHandlers {
   private service: AccountsInterface;
@@ -42,7 +43,7 @@ export default class AccountApplicationRouteHandlers {
       }
       else {
         // Unexpected error - log and return generic error
-        console.error('Error processing application:', error);
+        logError(error, 'Error processing application');
         res.status(500).json({ error: 'application_processing_error', errorName: 'ApplicationProcessingError' });
         return;
       }
@@ -80,7 +81,7 @@ export default class AccountApplicationRouteHandlers {
     }
     catch (error) {
       // Don't expose internal error details - use generic translation key
-      console.error('Error processing application:', error);
+      logError(error, 'Error processing application');
       res.status(400).json({ error: 'application_processing_error', errorName: 'ApplicationProcessingError' });
     }
   }

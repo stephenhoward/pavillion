@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import config from 'config';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
+import { logError } from '@/server/common/helper/error-logger';
 
 /**
  * Storage statistics for backup storage volume
@@ -66,7 +67,7 @@ export default class StorageService {
       }
     }
     catch (error) {
-      console.error(`[Storage] Failed to delete backup file ${filename}:`, error);
+      logError(error, `[Housekeeping] Failed to delete backup file ${filename}`);
       throw error;
     }
   }
@@ -101,7 +102,7 @@ export default class StorageService {
       };
     }
     catch (error) {
-      console.error('[Storage] Failed to get storage stats:', error);
+      logError(error, '[Housekeeping] Failed to get storage stats');
       throw error;
     }
   }

@@ -9,6 +9,7 @@ import { Cache } from '@/server/activitypub/helper/cache';
 import { PUBLIC_KEY_FETCH_TIMEOUT_MS } from '@/server/activitypub/constants';
 import { objectUriSchema } from '@/server/activitypub/validation/schemas';
 import { validateUrlNotPrivate } from '@/server/activitypub/helper/ip-validation';
+import { logError } from '@/server/common/helper/error-logger';
 
 // A key cache to prevent frequent key fetching
 const keyCache = new Cache<string>(60 * 60 * 1000); // 1 hour expiration
@@ -170,7 +171,7 @@ export async function verifyHttpSignature(req: Request, res: Response, next: Nex
       return res.status(400).json({ error: 'Missing required signature header' });
     }
 
-    console.error('Error verifying HTTP signature', error);
+    logError(error, '[ActivityPub] Failed to verify HTTP signature');
     res.status(500).json({error: 'Error verifying HTTP signature'});
   }
 }
@@ -196,7 +197,7 @@ async function getPublicKey(keyId: string): Promise<string | null> {
     return publicKey;
   }
   catch (error) {
-    console.error('Error fetching public key:', error);
+    logError(error, `[ActivityPub] Failed to fetch public key for keyId ${keyId}`);
     return null;
   }
 }
@@ -235,7 +236,7 @@ async function fetchPublicKey(keyId: string): Promise<string | null> {
     }
     catch (error) {
       if (error instanceof Error) {
-        console.error(`Security: Blocked request to private IP for keyId ${keyId}: ${error.message}`);
+        logError(error, `[ActivityPub] Failed to fetch public key for keyId ${keyId}: private IP blocked`);
       }
       return null;
     }
@@ -270,7 +271,7 @@ async function fetchPublicKey(keyId: string): Promise<string | null> {
       }
       catch (error) {
         if (error instanceof Error) {
-          console.error(`Security: Blocked request to private IP for publicKey URL ${actor.publicKey}: ${error.message}`);
+          logError(error, `[SECURITY] Blocked fetch of public key URL (private IP) for actor ${String(actor.publicKey).substring(0, 200)}`);
         }
         return null;
       }
@@ -294,7 +295,7 @@ async function fetchPublicKey(keyId: string): Promise<string | null> {
     return null;
   }
   catch (error) {
-    console.error('Error fetching public key:', error);
+    logError(error, `[ActivityPub] Failed to fetch public key from ${actorUrl}`);
     return null;
   }
 }

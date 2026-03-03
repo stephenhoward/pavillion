@@ -20,6 +20,7 @@ import { ActivityPubOutboxMessageEntity, ActivityPubInboxMessageEntity } from '@
 import UserActorService from '../service/user_actor';
 import CalendarActorService from '../service/calendar_actor';
 import { Account } from '@/common/model/account';
+import { logError } from '@/server/common/helper/error-logger';
 import { Calendar } from '@/common/model/calendar';
 
 export default class ActivityPubEventHandlers implements DomainEventHandlers {
@@ -93,7 +94,7 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
         await this.service.processOutboxMessage(message);
       }
       catch (error) {
-        console.error(`[OUTBOX] Error processing outbox message ${message.id}:`, error.message);
+        logError(error, `[ActivityPub] Error processing outbox message ${message.id}`);
         // Mark message as processed with error status to prevent retry loop
         await message.update({
           processed_time: new Date(),
@@ -140,7 +141,7 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
     }
     catch (error) {
       // Log error but don't throw - UserActor creation failure should not break account creation
-      console.error(`[ActivityPub] Failed to create UserActor for account ${payload.accountId}:`, error);
+      logError(error, `[ActivityPub] Failed to create UserActor for account ${payload.accountId}`);
     }
   }
 
@@ -171,7 +172,7 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
     }
     catch (error) {
       // Log error but don't throw - CalendarActor creation failure should not break calendar creation
-      console.error(`[ActivityPub] Failed to create CalendarActor for calendar ${payload.calendarId}:`, error);
+      logError(error, `[ActivityPub] Failed to create CalendarActor for calendar ${payload.calendarId}`);
     }
   }
 

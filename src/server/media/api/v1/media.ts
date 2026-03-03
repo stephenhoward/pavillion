@@ -5,6 +5,7 @@ import ExpressHelper from '@/server/common/helper/express';
 import MediaInterface from '../../interface';
 import { Account } from '@/common/model/account';
 import { MediaNotApprovedError, MediaNotFoundError } from '@/common/exceptions/media';
+import { logError } from '@/server/common/helper/error-logger';
 
 // Extend Express Request interface to include file property
 declare global {
@@ -79,7 +80,7 @@ export default class MediaRouteHandlers {
       });
     }
     catch (error) {
-      console.error('File upload error:', error);
+      logError(error, 'File upload error');
       res.status(400).json({
         error: error instanceof Error ? error.message : 'Upload failed',
         errorName: 'ValidationError',
@@ -138,7 +139,7 @@ export default class MediaRouteHandlers {
         return;
       }
 
-      console.error('File serve error:', error);
+      logError(error, 'File serve error');
       res.status(500).json({
         error: error instanceof Error ? error.message : 'Failed to serve file',
       });

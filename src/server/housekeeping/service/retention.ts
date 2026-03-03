@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import config from 'config';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
+import { logError } from '@/server/common/helper/error-logger';
 import { Op } from 'sequelize';
 
 /**
@@ -40,7 +41,7 @@ export default class RetentionService {
       console.log('[Retention] Retention enforcement completed');
     }
     catch (error) {
-      console.error('[Retention] Failed to enforce retention policy:', error);
+      logError(error, '[Housekeeping] Failed to enforce retention policy');
       throw error;
     }
   }
@@ -105,7 +106,7 @@ export default class RetentionService {
       console.log(`[Retention] Updated metadata for deleted backup: ${backup.id}`);
     }
     catch (error) {
-      console.error(`[Retention] Failed to delete backup ${backup.filename}:`, error);
+      logError(error, `[Housekeeping] Failed to delete backup ${backup.filename}`);
       throw error;
     }
   }

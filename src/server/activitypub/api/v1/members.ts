@@ -5,6 +5,7 @@ import { ValidationError } from '@/common/exceptions/base';
 import ExpressHelper from '@/server/common/helper/express';
 import CalendarInterface from '@/server/calendar/interface';
 import ActivityPubInterface from '@/server/activitypub/interface';
+import { logError } from '@/server/common/helper/error-logger';
 import {
   InvalidRemoteCalendarIdentifierError,
   InvalidRepostPolicySettingsError,
@@ -143,7 +144,7 @@ export default class ActivityPubMemberRoutes {
         });
       }
       else {
-        console.error('Unexpected error in lookupRemoteCalendar:', error);
+        logError(error, 'Error looking up remote calendar');
         res.status(500).json({
           error: 'An unexpected error occurred',
           errorName: 'UnknownError',
@@ -274,7 +275,7 @@ export default class ActivityPubMemberRoutes {
         });
       }
       else {
-        console.error('Unexpected error in updateFollowPolicy:', error);
+        logError(error, 'Error updating follow policy');
         res.status(500).json({
           error: 'An unexpected error occurred',
           errorName: 'UnknownError',
@@ -321,7 +322,7 @@ export default class ActivityPubMemberRoutes {
       });
     }
     catch (error: any) {
-      console.error('Error fetching feed:', error.message);
+      logError(error, 'Error fetching feed');
       res.status(500).json({
         error: 'Failed to load feed',
         errorName: 'UnknownError',
@@ -389,7 +390,7 @@ export default class ActivityPubMemberRoutes {
           });
         }
         else {
-          console.error('Unexpected error in followCalendar:', error);
+          logError(error, 'Error following calendar');
           res.status(500).json({
             error: 'An unexpected error occurred',
             errorName: 'UnknownError',
@@ -461,7 +462,7 @@ export default class ActivityPubMemberRoutes {
         });
       }
       else {
-        console.error('Unexpected error in unfollowCalendar:', error);
+        logError(error, 'Error unfollowing calendar');
         res.status(500).json({
           error: 'An unexpected error occurred',
           errorName: 'UnknownError',
@@ -506,7 +507,7 @@ export default class ActivityPubMemberRoutes {
           });
         }
         else {
-          console.error('Unexpected error in shareEvent:', error);
+          logError(error, 'Error sharing event');
           res.status(500).json({
             error: 'An unexpected error occurred',
             errorName: 'UnknownError',
@@ -561,7 +562,7 @@ export default class ActivityPubMemberRoutes {
           });
         }
         else {
-          console.error('Unexpected error in unshareEvent:', error);
+          logError(error, 'Error unsharing event');
           res.status(500).json({
             error: 'An unexpected error occurred',
             errorName: 'UnknownError',

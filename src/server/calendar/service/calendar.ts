@@ -22,6 +22,7 @@ import { SubscriptionRequiredError } from '@/common/exceptions/subscription';
 import { noAccountExistsError } from '@/server/accounts/exceptions';
 import AccountsInterface from '@/server/accounts/interface';
 import EmailInterface from '@/server/email/interface';
+import { logError } from '@/server/common/helper/error-logger';
 import SubscriptionInterface from '@/server/subscription/interface';
 import EditorNotificationEmail from '@/server/calendar/model/editor_notification_email';
 import db from '@/server/common/entity/db';
@@ -436,7 +437,7 @@ class CalendarService {
       }
     }
     catch (error) {
-      console.error('Failed to send editor notification email:', error);
+      logError(error, '[Calendar] Failed to send editor notification email');
       // Don't fail the whole operation if email fails
     }
   }
@@ -744,7 +745,7 @@ class CalendarService {
       await validateUrlNotPrivate(remoteUser.inbox);
     }
     catch (error) {
-      console.error(`[CALENDAR] Security: Blocked inbox POST to private address ${remoteUser.inbox}: ${error instanceof Error ? error.message : String(error)}`);
+      logError(error, `[Calendar] Security: Blocked inbox POST to private address ${remoteUser.inbox}`);
       return {
         type: 'remote_editor',
         data: {
@@ -764,7 +765,7 @@ class CalendarService {
     }
     catch (error: any) {
       // Log but don't fail - the local record is created, notification is best-effort
-      console.error(`[CALENDAR] Failed to send Add activity to ${remoteUser.inbox}: ${error.message}`);
+      logError(error, `[Calendar] Failed to send Add activity to ${remoteUser.inbox}`);
     }
 
     return {
@@ -1206,7 +1207,7 @@ class CalendarService {
       }
     }
     catch (error) {
-      console.error('Failed to emit calendar.created event:', calendar.id, error);
+      logError(error, `[Calendar] Failed to emit calendar.created event: ${calendar.id}`);
       // Don't fail calendar creation if event emission fails
     }
   }
