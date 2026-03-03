@@ -7,7 +7,7 @@ import { useToast } from '@/client/composables/useToast';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
 import RepostCategoriesModal from '@/client/components/logged_in/repost-categories-modal.vue';
 import ReportEventModal from '@/client/components/report-event.vue';
-import FeedEventDetailModal from '@/client/components/logged_in/feed/FeedEventDetailModal.vue';
+import FeedEventDetailModal from '@/client/components/logged_in/feed/feed-event-detail-modal.vue';
 import { type FeedEvent, type CategoryEntry } from '@/client/service/feed';
 
 const { t } = useTranslation('feed', { keyPrefix: 'events' });

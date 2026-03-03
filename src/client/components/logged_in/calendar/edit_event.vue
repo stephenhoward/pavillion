@@ -939,16 +939,16 @@ import { useRouter, onBeforeRouteLeave } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { ArrowLeft, Plus } from 'lucide-vue-next';
 import EventRecurrenceView from './event_recurrence.vue';
-import languagePicker from '@/client/components/common/languagePicker.vue';
-import ImageUpload from '@/client/components/common/media/ImageUpload.vue';
-import CategorySelector from './CategorySelector.vue';
-import SeriesSelector from './SeriesSelector.vue';
+import languagePicker from '@/client/components/common/language-picker.vue';
+import ImageUpload from '@/client/components/common/media/image-upload.vue';
+import CategorySelector from './category-selector.vue';
+import SeriesSelector from './series-selector.vue';
 import ModalLayout from '@/client/components/common/modal.vue';
-import PillButton from '@/client/components/common/PillButton.vue';
-import LanguageTabSelector from '@/client/components/common/LanguageTabSelector.vue';
-import LocationDisplayCard from '@/client/components/common/LocationDisplayCard.vue';
-import LocationPickerModal from '@/client/components/common/LocationPickerModal.vue';
-import CreateLocationForm from '@/client/components/common/CreateLocationForm.vue';
+import PillButton from '@/client/components/common/pill-button.vue';
+import LanguageTabSelector from '@/client/components/common/language-tab-selector.vue';
+import LocationDisplayCard from '@/client/components/common/location-display-card.vue';
+import LocationPickerModal from '@/client/components/common/location-picker-modal.vue';
+import CreateLocationForm from '@/client/components/common/create-location-form.vue';
 import iso6391 from 'iso-639-1-dir';
 
 // Composables

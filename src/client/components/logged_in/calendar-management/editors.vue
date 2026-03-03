@@ -223,7 +223,7 @@ import { Plus, Crown, Globe, Mail, ArrowUp, Trash2, X } from 'lucide-vue-next';
 import CalendarService from '@/client/service/calendar';
 import AuthenticationService from '@/client/service/authn';
 import ModalLayout from '@/client/components/common/modal.vue';
-import PillButton from '@/client/components/common/PillButton.vue';
+import PillButton from '@/client/components/common/pill-button.vue';
 import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/common/exceptions/editor';
 import { EmptyValueError, AccountInviteAlreadyExistsError } from '@/common/exceptions';
 import EmptyLayout from '@/client/components/common/empty_state.vue';

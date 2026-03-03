@@ -7,9 +7,9 @@ import type Config from '@/client/service/config';
 
 import CalendarService from '../service/calendar';
 import { usePublicCalendarStore } from '../stores/publicCalendarStore';
-import NotFound from './notFound.vue';
-import SearchFilterPublic from './SearchFilterPublic.vue';
-import EventCard from './EventCard.vue';
+import NotFound from './not-found.vue';
+import SearchFilterPublic from './search-filter-public.vue';
+import EventCard from './event-card.vue';
 import { useLocalizedContent } from '../composables/useLocalizedContent';
 import { useLocale } from '@/site/composables/useLocale';
 

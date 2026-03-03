@@ -100,11 +100,11 @@ vi.mock('@/site/components/report-event.vue', () => ({
   default: { template: '<div class="report-event-stub"></div>', props: ['eventId'] },
 }));
 
-vi.mock('@/site/components/notFound.vue', () => ({
+vi.mock('@/site/components/not-found.vue', () => ({
   default: { template: '<div class="not-found-stub"></div>' },
 }));
 
-vi.mock('@/site/components/EventImage.vue', () => ({
+vi.mock('@/site/components/event-image.vue', () => ({
   default: { template: '<div class="event-image-stub"></div>', props: ['media', 'context', 'alt'] },
 }));
 

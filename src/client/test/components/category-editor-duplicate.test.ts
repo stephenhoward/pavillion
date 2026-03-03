@@ -3,7 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils';
 import { createPinia } from 'pinia';
 import I18NextVue from 'i18next-vue';
 import i18next from 'i18next';
-import CategoryEditor from '@/client/components/logged_in/calendar-management/CategoryEditor.vue';
+import CategoryEditor from '@/client/components/logged_in/calendar-management/category-editor.vue';
 import CategoryService from '@/client/service/category';
 import { EventCategory } from '@/common/model/event_category';
 import { EventCategoryContent } from '@/common/model/event_category_content';

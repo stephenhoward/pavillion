@@ -91,8 +91,8 @@ import { inject, onBeforeMount, reactive } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { validatePassword } from '@/common/validation/password';
-import ErrorAlert from './ErrorAlert.vue';
-import SuccessState from './SuccessState.vue';
+import ErrorAlert from './error-alert.vue';
+import SuccessState from './success-state.vue';
 
 const router = useRouter();
 const route = useRoute();

@@ -5,11 +5,11 @@ import { Plus, Pencil, Trash2, ExternalLink } from 'lucide-vue-next';
 import { EventSeries } from '@/common/model/event_series';
 import { EventSeriesContent } from '@/common/model/event_series_content';
 import SeriesService from '@/client/service/series';
-import SeriesEditor from './SeriesEditor.vue';
+import SeriesEditor from './series-editor.vue';
 import ModalLayout from '@/client/components/common/modal.vue';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
-import PillButton from '@/client/components/common/PillButton.vue';
+import PillButton from '@/client/components/common/pill-button.vue';
 import { useToast } from '@/client/composables/useToast';
 
 const props = defineProps({

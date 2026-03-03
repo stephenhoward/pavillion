@@ -5,9 +5,9 @@ import { createRouter, createMemoryHistory } from 'vue-router';
 import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
 import { DateTime } from 'luxon';
-import WeekView from '../WeekView.vue';
-import MonthView from '../MonthView.vue';
-import ListView from '../ListView.vue';
+import WeekView from '../week-view.vue';
+import MonthView from '../month-view.vue';
+import ListView from '../list-view.vue';
 import { usePublicCalendarStore } from '@/site/stores/publicCalendarStore';
 
 // Initialize i18next for tests

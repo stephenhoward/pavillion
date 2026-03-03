@@ -3,7 +3,7 @@ import { mount, VueWrapper } from '@vue/test-utils';
 import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
 import funding from '@/client/components/admin/funding.vue';
-import AddProviderWizard from '@/client/components/admin/AddProviderWizard.vue';
+import AddProviderWizard from '@/client/components/admin/add-provider-wizard.vue';
 import SubscriptionService from '@/client/service/subscription';
 import enAdmin from '@/client/locales/en/admin.json';
 

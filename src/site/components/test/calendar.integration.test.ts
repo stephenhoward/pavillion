@@ -3,7 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import { createPinia, setActivePinia } from 'pinia';
 import calendar from '../calendar.vue';
-import SearchFilterPublic from '../SearchFilterPublic.vue';
+import SearchFilterPublic from '../search-filter-public.vue';
 import { usePublicCalendarStore } from '../../stores/publicCalendarStore';
 import CalendarService from '../../service/calendar';
 import ModelService from '@/client/service/models';

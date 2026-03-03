@@ -68,15 +68,15 @@ vi.mock('@/site/stores/publicCalendarStore', () => {
   };
 });
 
-vi.mock('@/site/components/notFound.vue', () => ({
+vi.mock('@/site/components/not-found.vue', () => ({
   default: { template: '<div class="not-found-stub"></div>' },
 }));
 
-vi.mock('@/site/components/SearchFilterPublic.vue', () => ({
+vi.mock('@/site/components/search-filter-public.vue', () => ({
   default: { template: '<div class="search-filter-stub"></div>' },
 }));
 
-vi.mock('@/site/components/EventCard.vue', () => ({
+vi.mock('@/site/components/event-card.vue', () => ({
   default: {
     template: '<article class="event-card-stub"></article>',
     props: ['instance', 'calendarUrlName'],

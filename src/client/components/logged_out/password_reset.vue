@@ -100,7 +100,7 @@ import { reactive, onBeforeMount, inject } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { validatePassword } from '@/common/validation/password';
-import ErrorAlert from './ErrorAlert.vue';
+import ErrorAlert from './error-alert.vue';
 
 const router = useRouter();
 const route = useRoute();

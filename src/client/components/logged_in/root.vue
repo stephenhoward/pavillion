@@ -6,7 +6,7 @@ import CalendarService from '@/client/service/calendar';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { useNotificationStore } from '@/client/stores/notificationStore';
 import CalendarSelector from '@/client/components/logged_in/calendar/calendar_selector.vue';
-import AppShell from '@/client/components/shell/AppShell.vue';
+import AppShell from '@/client/components/shell/app-shell.vue';
 import type { NavigationItem } from '@/client/components/shell/types';
 
 // Lucide icons - same as reference design (strokeWidth 1.5)
