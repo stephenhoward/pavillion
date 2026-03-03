@@ -2,7 +2,6 @@ import { EventEmitter } from 'events';
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent } from '@/common/model/events';
-import { EventEntity } from '@/server/calendar/entity/event';
 import { ActivityPubActivity } from '@/server/activitypub/model/base';
 import { WebFingerResponse } from '@/server/activitypub/model/webfinger';
 import { UserProfileResponse } from '@/server/activitypub/model/userprofile';
@@ -128,7 +127,7 @@ export default class ActivityPubInterface {
     return this.serverService.removeFollower(calendarActorId, localCalendar);
   }
 
-  async getFeed(calendar: Calendar, page?: number, pageSize?: number): Promise<EventEntity[]> {
+  async getFeed(calendar: Calendar, page?: number, pageSize?: number): Promise<Record<string, any>[]> {
     return this.memberService.getFeed(calendar, page, pageSize);
   }
 

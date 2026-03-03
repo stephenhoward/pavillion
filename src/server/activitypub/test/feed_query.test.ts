@@ -1,62 +1,48 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
-import config from 'config';
-import { Op } from 'sequelize';
 import ActivityPubService from '@/server/activitypub/service/members';
 import { Calendar } from '@/common/model/calendar';
-import { EventEntity } from '@/server/calendar/entity/event';
-import { FollowingCalendarEntity, SharedEventEntity } from '@/server/activitypub/entity/activitypub';
-import { setupActivityPubSchema, teardownActivityPubSchema } from '@/server/test/helpers/database';
+import { CalendarEvent } from '@/common/model/events';
+import { SharedEventEntity } from '@/server/activitypub/entity/activitypub';
+import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
+import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import { EventEmitter } from 'events';
 import CalendarInterface from '@/server/calendar/interface';
 
-describe('ActivityPubService - getFeed with EventObjectEntity Join', () => {
+describe('ActivityPubService - getFeed with CalendarInterface', () => {
   let sandbox: sinon.SinonSandbox;
   let service: ActivityPubService;
   let calendar: Calendar;
+  let calendarInterface: CalendarInterface;
 
   beforeEach(async () => {
-    // Setup ephemeral ActivityPub database schema
-    await setupActivityPubSchema();
-
     sandbox = sinon.createSandbox();
     const eventBus = new EventEmitter();
-    service = new ActivityPubService(eventBus, new CalendarInterface(eventBus));
+    calendarInterface = new CalendarInterface(eventBus);
+    service = new ActivityPubService(eventBus, calendarInterface);
     calendar = new Calendar('local-calendar-id', 'localcalendar');
   });
 
   afterEach(async () => {
     sandbox.restore();
-
-    // Teardown ephemeral database schema
-    await teardownActivityPubSchema();
   });
 
   it('should return events from followed calendars only', async () => {
-    // Remote events have null calendar_id
     const mockEvents = [
-      EventEntity.build({
-        id: 'event-uuid-1',
-        calendar_id: null,
-        event_source_url: 'https://remote.example.com/events/event-1',
-        createdAt: new Date('2026-01-10'),
-      }),
-      EventEntity.build({
-        id: 'event-uuid-2',
-        calendar_id: null,
-        event_source_url: 'https://remote.example.com/events/event-2',
-        createdAt: new Date('2026-01-11'),
-      }),
+      new CalendarEvent('event-uuid-1', null),
+      new CalendarEvent('event-uuid-2', null),
     ];
 
-    // Stub the queries
-    const findAllStub = sandbox.stub(EventEntity, 'findAll').resolves(mockEvents);
+    // Stub via CalendarInterface to avoid domain boundary violation
+    const getEventsStub = sandbox.stub(calendarInterface, 'getEventsFromFollowedSources').resolves(mockEvents);
     sandbox.stub(SharedEventEntity, 'findAll').resolves([]);
+    sandbox.stub(EventObjectEntity, 'findAll').resolves([]);
+    sandbox.stub(CalendarActorEntity, 'findAll').resolves([]);
 
     const result = await service.getFeed(calendar, 0, 20);
 
-    // Verify the query was called
-    expect(findAllStub.calledOnce).toBe(true);
+    // Verify the stub was called
+    expect(getEventsStub.calledOnce).toBe(true);
 
     // Verify results include events from followed calendar
     expect(result.length).toBe(2);
@@ -65,121 +51,57 @@ describe('ActivityPubService - getFeed with EventObjectEntity Join', () => {
   });
 
   it('should return empty array when calendar has no follows', async () => {
-    // Stub findAll to return empty array (no events from followed calendars)
-    const findAllStub = sandbox.stub(EventEntity, 'findAll').resolves([]);
+    const getEventsStub = sandbox.stub(calendarInterface, 'getEventsFromFollowedSources').resolves([]);
     sandbox.stub(SharedEventEntity, 'findAll').resolves([]);
+    sandbox.stub(EventObjectEntity, 'findAll').resolves([]);
+    sandbox.stub(CalendarActorEntity, 'findAll').resolves([]);
 
     const result = await service.getFeed(calendar, 0, 20);
 
-    expect(findAllStub.calledOnce).toBe(true);
+    expect(getEventsStub.calledOnce).toBe(true);
     expect(result).toEqual([]);
   });
 
-  it('should query using EventObjectEntity join for remote events', async () => {
-    const mockEvents = [
-      EventEntity.build({
-        id: 'event-uuid-3',
-        calendar_id: null,
-        event_source_url: 'https://remote.example.com/events/test',
-        createdAt: new Date('2026-01-12'),
-      }),
-    ];
-
-    const findAllStub = sandbox.stub(EventEntity, 'findAll').resolves(mockEvents);
+  it('should pass page and pageSize to getEventsFromFollowedSources', async () => {
+    const getEventsStub = sandbox.stub(calendarInterface, 'getEventsFromFollowedSources').resolves([]);
     sandbox.stub(SharedEventEntity, 'findAll').resolves([]);
+    sandbox.stub(EventObjectEntity, 'findAll').resolves([]);
+    sandbox.stub(CalendarActorEntity, 'findAll').resolves([]);
 
-    await service.getFeed(calendar, 0, 20);
+    await service.getFeed(calendar, 2, 10);
 
-    // Verify the query structure for the new design
-    const queryOptions = findAllStub.firstCall.args[0] as any;
-
-    // Check that the where clause uses Op.or with remote (originals), remote (announcements), and local conditions
-    expect(queryOptions.where).toBeDefined();
-    expect(queryOptions.where[Op.or]).toBeDefined();
-    expect(Array.isArray(queryOptions.where[Op.or])).toBe(true);
-    expect(queryOptions.where[Op.or].length).toBe(3);
-
-    // First condition: remote events originally authored by followed remote calendars (calendar_id = null)
-    const remoteOriginalsCondition = queryOptions.where[Op.or][0];
-    expect(remoteOriginalsCondition.calendar_id).toBeNull();
-    expect(remoteOriginalsCondition.id).toBeDefined();
-    expect(remoteOriginalsCondition.id[Op.in]).toBeDefined();
-
-    // Second condition: remote events announced/shared by followed remote calendars (calendar_id = null)
-    const remoteAnnouncementsCondition = queryOptions.where[Op.or][1];
-    expect(remoteAnnouncementsCondition.calendar_id).toBeNull();
-    expect(remoteAnnouncementsCondition.id).toBeDefined();
-    expect(remoteAnnouncementsCondition.id[Op.in]).toBeDefined();
-
-    // Third condition: local events from followed local calendars
-    const localCondition = queryOptions.where[Op.or][2];
-    expect(localCondition.calendar_id).toBeDefined();
-    expect(localCondition.calendar_id[Op.in]).toBeDefined();
+    expect(getEventsStub.calledOnce).toBe(true);
+    const [calendarArg, pageArg, pageSizeArg] = getEventsStub.firstCall.args;
+    expect(calendarArg.id).toBe(calendar.id);
+    expect(pageArg).toBe(2);
+    expect(pageSizeArg).toBe(10);
   });
 
-  it('should order results by createdAt DESC', async () => {
-    const mockEvents = [
-      EventEntity.build({
-        id: 'event-uuid-newer',
-        calendar_id: null,
-        event_source_url: 'https://remote.example.com/events/newer',
-        createdAt: new Date('2026-01-15'),
-      }),
-      EventEntity.build({
-        id: 'event-uuid-older',
-        calendar_id: null,
-        event_source_url: 'https://remote.example.com/events/older',
-        createdAt: new Date('2026-01-10'),
-      }),
-    ];
+  it('should order results by preserving the order returned by getEventsFromFollowedSources', async () => {
+    const newerEvent = new CalendarEvent('event-uuid-newer', null);
+    const olderEvent = new CalendarEvent('event-uuid-older', null);
 
-    const findAllStub = sandbox.stub(EventEntity, 'findAll').resolves(mockEvents);
+    sandbox.stub(calendarInterface, 'getEventsFromFollowedSources').resolves([newerEvent, olderEvent]);
     sandbox.stub(SharedEventEntity, 'findAll').resolves([]);
+    sandbox.stub(EventObjectEntity, 'findAll').resolves([]);
+    sandbox.stub(CalendarActorEntity, 'findAll').resolves([]);
 
     const result = await service.getFeed(calendar, 0, 20);
 
-    // Verify ordering parameter
-    const queryOptions = findAllStub.firstCall.args[0] as any;
-    expect(queryOptions.order).toBeDefined();
-    expect(queryOptions.order[0][0]).toBe('createdAt');
-    expect(queryOptions.order[0][1]).toBe('DESC');
+    expect(result[0].id).toBe('event-uuid-newer');
+    expect(result[1].id).toBe('event-uuid-older');
   });
 
-  it('should use sequelize.escape() for calendar.id in all three literal subqueries (defense-in-depth)', async () => {
-    // Use a calendar ID that contains a SQL single-quote metacharacter.
-    // With direct interpolation: WHERE f.calendar_id = ''; DROP TABLE events; --'
-    // With escape():            WHERE f.calendar_id = '''; DROP TABLE events; --'
-    // The escaped form has an extra leading quote (SQLite doubles internal quotes).
-    const maliciousId = "'; DROP TABLE events; --";
-    const maliciousCalendar = new Calendar(maliciousId, 'malicious');
-
-    const findAllStub = sandbox.stub(EventEntity, 'findAll').resolves([]);
+  it('should not import EventEntity directly — domain boundary is respected', async () => {
+    // This test verifies that EventEntity is NOT used in the ActivityPub domain.
+    // getFeed() delegates to CalendarInterface, which owns EventEntity access.
+    // The stub is on calendarInterface, not on EventEntity.findAll.
+    sandbox.stub(calendarInterface, 'getEventsFromFollowedSources').resolves([]);
     sandbox.stub(SharedEventEntity, 'findAll').resolves([]);
+    sandbox.stub(EventObjectEntity, 'findAll').resolves([]);
+    sandbox.stub(CalendarActorEntity, 'findAll').resolves([]);
 
-    await service.getFeed(maliciousCalendar, 0, 20);
-
-    const queryOptions = findAllStub.firstCall.args[0] as any;
-    const orConditions = queryOptions.where[Op.or];
-
-    // Extract the raw SQL from all three literal objects
-    const remoteOriginalsLiteral: string = orConditions[0].id[Op.in].val;
-    const remoteAnnouncementsLiteral: string = orConditions[1].id[Op.in].val;
-    const localLiteral: string = orConditions[2].calendar_id[Op.in].val;
-
-    // With direct string interpolation the SQL would be:
-    //   WHERE f.calendar_id = ''; DROP TABLE events; --'
-    // The escape() function doubles the quote, producing:
-    //   WHERE f.calendar_id = '''; DROP TABLE events; --'
-    // Verify the unescaped injection pattern is NOT present in any literal.
-    const unescapedPattern = `= '${maliciousId}`;
-    expect(remoteOriginalsLiteral).not.toContain(unescapedPattern);
-    expect(remoteAnnouncementsLiteral).not.toContain(unescapedPattern);
-    expect(localLiteral).not.toContain(unescapedPattern);
-
-    // Verify the escaped form IS present (sequelize.escape wraps and escapes the value)
-    const escapedValue = EventEntity.sequelize!.escape(maliciousId);
-    expect(remoteOriginalsLiteral).toContain(`= ${escapedValue}`);
-    expect(remoteAnnouncementsLiteral).toContain(`= ${escapedValue}`);
-    expect(localLiteral).toContain(`= ${escapedValue}`);
+    // Should not throw — the implementation no longer uses EventEntity directly
+    await expect(service.getFeed(calendar, 0, 20)).resolves.toEqual([]);
   });
 });

@@ -5,6 +5,8 @@ import { EventEmitter } from 'events';
 import { Account } from '@/common/model/account';
 import ActivityPubService from '@/server/activitypub/service/members';
 import { Calendar } from '@/common/model/calendar';
+import { CalendarEvent, CalendarEventSchedule } from '@/common/model/events';
+import { EventCategory } from '@/common/model/event_category';
 import {
   FollowingCalendarEntity,
   FollowerCalendarEntity,
@@ -12,19 +14,37 @@ import {
 } from '@/server/activitypub/entity/activitypub';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
-import { EventEntity } from '@/server/calendar/entity/event';
 import CalendarInterface from '@/server/calendar/interface';
+
+/**
+ * Helper to create a CalendarEvent for use in getFeed tests.
+ * Mirrors the shape returned by getEventsFromFollowedSources():
+ * a CalendarEvent with calendarId, schedules, and categories populated.
+ */
+function makeMockEvent(overrides: {
+  id: string;
+  calendarId: string | null;
+  schedules?: CalendarEventSchedule[];
+  categories?: EventCategory[];
+}): CalendarEvent {
+  const event = new CalendarEvent(overrides.id, overrides.calendarId);
+  event.schedules = overrides.schedules || [];
+  event.categories = overrides.categories || [];
+  return event;
+}
 
 describe("ActivityPub Feed Service Methods", () => {
   let service: ActivityPubService;
   let sandbox: sinon.SinonSandbox;
   let account: Account;
   let calendar: Calendar;
+  let calendarInterface: CalendarInterface;
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
     const eventBus = new EventEmitter();
-    service = new ActivityPubService(eventBus, new CalendarInterface(eventBus));
+    calendarInterface = new CalendarInterface(eventBus);
+    service = new ActivityPubService(eventBus, calendarInterface);
 
     account = Account.fromObject({ id: 'test-account-id' });
     calendar = Calendar.fromObject({ id: 'test-calendar-id', urlName: 'testcalendar' });
@@ -309,16 +329,21 @@ describe("ActivityPub Feed Service Methods", () => {
  * These tests exercise the real getFeed() implementation (not stubbed) to verify
  * that SharedEventEntity.event_id is always a UUID, and getFeed() always looks up
  * by event.id (UUID) — never by a constructed URL.
+ *
+ * After the domain boundary refactoring, getFeed() receives CalendarEvent[] from
+ * calendarInterface.getEventsFromFollowedSources() instead of querying EventEntity directly.
  */
 describe("getFeed repost status lookup", () => {
   let service: ActivityPubService;
   let sandbox: sinon.SinonSandbox;
   let calendar: Calendar;
+  let calendarInterface: CalendarInterface;
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
     const eventBus = new EventEmitter();
-    service = new ActivityPubService(eventBus, new CalendarInterface(eventBus));
+    calendarInterface = new CalendarInterface(eventBus);
+    service = new ActivityPubService(eventBus, calendarInterface);
     calendar = Calendar.fromObject({ id: 'consumer-calendar-id', urlName: 'consumer' });
   });
 
@@ -326,58 +351,27 @@ describe("getFeed repost status lookup", () => {
     sandbox.restore();
   });
 
-  /**
-   * Helper to create a minimal mock EventEntity-like object for use with
-   * EventEntity.findAll stubs. Includes the get() method required by getFeed().
-   */
-  function makeMockEvent(overrides: {
-    id: string;
-    calendar_id: string | null;
-    event_source_url: string | null;
-    content?: any[];
-    schedules?: any[];
-    categoryAssignments?: any[];
-  }) {
-    const base = {
-      content: [],
-      schedules: [],
-      categoryAssignments: [],
-      ...overrides,
-    };
-    return {
-      ...base,
-      get(options: any) {
-        return { ...base };
-      },
-    };
-  }
-
   it('returns repostStatus=manual for a local event stored with UUID key in SharedEventEntity', async () => {
     const localEventId = 'aaaaaaaa-0000-0000-0000-000000000001';
     const sourceCalendarId = 'source-calendar-id';
 
-    // getFeed() queries EventEntity.findAll to get the feed events
     const mockEvent = makeMockEvent({
       id: localEventId,
-      calendar_id: sourceCalendarId,   // local event: calendar_id is set
-      event_source_url: null,           // no source URL for local events
+      calendarId: sourceCalendarId,
     });
 
-    sandbox.stub(EventEntity, 'findAll').resolves([mockEvent] as any);
+    sandbox.stub(calendarInterface, 'getEventsFromFollowedSources').resolves([mockEvent]);
 
     // shareEvent() stores the UUID as the event_id for local events
     const mockSharedEvent = SharedEventEntity.build({
       id: 'share-id-1',
-      event_id: localEventId,           // stored as UUID (matches shareEvent() behavior)
+      event_id: localEventId,
       calendar_id: calendar.id,
       auto_posted: false,
     });
 
     sandbox.stub(SharedEventEntity, 'findAll').resolves([mockSharedEvent] as any);
-
-    // No local calendar actors needed for this test
     sandbox.stub(CalendarActorEntity, 'findAll').resolves([] as any);
-    // No remote event objects needed (local event)
     sandbox.stub(EventObjectEntity, 'findAll').resolves([] as any);
 
     const feed = await service.getFeed(calendar);
@@ -393,17 +387,16 @@ describe("getFeed repost status lookup", () => {
 
     const mockEvent = makeMockEvent({
       id: localEventId,
-      calendar_id: sourceCalendarId,
-      event_source_url: null,
+      calendarId: sourceCalendarId,
     });
 
-    sandbox.stub(EventEntity, 'findAll').resolves([mockEvent] as any);
+    sandbox.stub(calendarInterface, 'getEventsFromFollowedSources').resolves([mockEvent]);
 
     const mockSharedEvent = SharedEventEntity.build({
       id: 'share-id-2',
       event_id: localEventId,
       calendar_id: calendar.id,
-      auto_posted: true,               // auto-posted
+      auto_posted: true,
     });
 
     sandbox.stub(SharedEventEntity, 'findAll').resolves([mockSharedEvent] as any);
@@ -422,12 +415,10 @@ describe("getFeed repost status lookup", () => {
 
     const mockEvent = makeMockEvent({
       id: localEventId,
-      calendar_id: sourceCalendarId,
-      event_source_url: null,
+      calendarId: sourceCalendarId,
     });
 
-    sandbox.stub(EventEntity, 'findAll').resolves([mockEvent] as any);
-    // No shared events at all
+    sandbox.stub(calendarInterface, 'getEventsFromFollowedSources').resolves([mockEvent]);
     sandbox.stub(SharedEventEntity, 'findAll').resolves([] as any);
     sandbox.stub(CalendarActorEntity, 'findAll').resolves([] as any);
     sandbox.stub(EventObjectEntity, 'findAll').resolves([] as any);
@@ -439,31 +430,25 @@ describe("getFeed repost status lookup", () => {
   });
 
   it('returns repostStatus=manual for a remote event stored with UUID key in SharedEventEntity', async () => {
-    // After normalization, remote events are also stored with UUID (event.id),
-    // not with the full HTTPS URL. This test verifies the normalized behavior.
     const remoteEventId = 'bbbbbbbb-0000-0000-0000-000000000001';
-    const remoteEventUrl = 'https://remote.example.com/events/some-event';
 
-    // Remote event: calendar_id is null, event_source_url is the remote URL
     const mockEvent = makeMockEvent({
       id: remoteEventId,
-      calendar_id: null,
-      event_source_url: remoteEventUrl,
+      calendarId: null,  // remote event: calendarId is null
     });
 
-    sandbox.stub(EventEntity, 'findAll').resolves([mockEvent] as any);
+    sandbox.stub(calendarInterface, 'getEventsFromFollowedSources').resolves([mockEvent]);
 
-    // After normalization: event_id is stored as UUID (event.id), not the URL
+    // After normalization: event_id is stored as UUID (normalized behavior)
     const mockSharedEvent = SharedEventEntity.build({
       id: 'share-id-3',
-      event_id: remoteEventId,          // stored as UUID (normalized behavior)
+      event_id: remoteEventId,
       calendar_id: calendar.id,
       auto_posted: false,
     });
 
     sandbox.stub(SharedEventEntity, 'findAll').resolves([mockSharedEvent] as any);
     sandbox.stub(CalendarActorEntity, 'findAll').resolves([] as any);
-    // EventObjectEntity.findAll is called for all events to get ap_id and attributed_to
     sandbox.stub(EventObjectEntity, 'findAll').resolves([] as any);
 
     const feed = await service.getFeed(calendar);
@@ -473,18 +458,15 @@ describe("getFeed repost status lookup", () => {
   });
 
   it('getFeed passes the UUID (not a constructed URL) to SharedEventEntity query for local events', async () => {
-    // This test verifies the exact lookup key passed to SharedEventEntity.findAll,
-    // confirming the normalization: all events must use UUID, not URL.
     const localEventId = 'cccccccc-0000-0000-0000-000000000001';
     const sourceCalendarId = 'source-calendar-id';
 
     const mockEvent = makeMockEvent({
       id: localEventId,
-      calendar_id: sourceCalendarId,
-      event_source_url: null,
+      calendarId: sourceCalendarId,
     });
 
-    sandbox.stub(EventEntity, 'findAll').resolves([mockEvent] as any);
+    sandbox.stub(calendarInterface, 'getEventsFromFollowedSources').resolves([mockEvent]);
 
     const sharedEventFindAllStub = sandbox.stub(SharedEventEntity, 'findAll').resolves([] as any);
     sandbox.stub(CalendarActorEntity, 'findAll').resolves([] as any);
@@ -503,18 +485,14 @@ describe("getFeed repost status lookup", () => {
   });
 
   it('getFeed passes UUID (not URL) to SharedEventEntity query for remote events', async () => {
-    // This test verifies remote events are also looked up by UUID in SharedEventEntity,
-    // not by the event_source_url (full HTTPS URL).
     const remoteEventId = 'dddddddd-0000-0000-0000-000000000001';
-    const remoteEventUrl = 'https://remote.example.com/events/some-event';
 
     const mockEvent = makeMockEvent({
       id: remoteEventId,
-      calendar_id: null,
-      event_source_url: remoteEventUrl,
+      calendarId: null,
     });
 
-    sandbox.stub(EventEntity, 'findAll').resolves([mockEvent] as any);
+    sandbox.stub(calendarInterface, 'getEventsFromFollowedSources').resolves([mockEvent]);
 
     const sharedEventFindAllStub = sandbox.stub(SharedEventEntity, 'findAll').resolves([] as any);
     sandbox.stub(CalendarActorEntity, 'findAll').resolves([] as any);
@@ -528,23 +506,19 @@ describe("getFeed repost status lookup", () => {
     const queriedEventIds: string[] = findAllArgs.where.event_id;
 
     expect(queriedEventIds).toContain(remoteEventId);
-    expect(queriedEventIds).not.toContain(remoteEventUrl);
     expect(queriedEventIds.some((id: string) => id.startsWith('https://'))).toBe(false);
   });
 
   it('getFeed returns the full AP URL as eventSourceUrl for remote events', async () => {
-    // This test verifies that getFeed() returns the AP URL (not the UUID) as eventSourceUrl.
-    // The client uses eventSourceUrl to call shareEvent(), which requires an https:// URL.
     const remoteEventId = 'eeeeeeee-0000-0000-0000-000000000001';
     const remoteApUrl = 'https://remote.example.com/calendars/remotecal/events/some-event';
 
     const mockEvent = makeMockEvent({
       id: remoteEventId,
-      calendar_id: null,
-      event_source_url: null,
+      calendarId: null,
     });
 
-    sandbox.stub(EventEntity, 'findAll').resolves([mockEvent] as any);
+    sandbox.stub(calendarInterface, 'getEventsFromFollowedSources').resolves([mockEvent]);
     sandbox.stub(SharedEventEntity, 'findAll').resolves([] as any);
     sandbox.stub(CalendarActorEntity, 'findAll').resolves([] as any);
 
@@ -567,19 +541,16 @@ describe("getFeed repost status lookup", () => {
   });
 
   it('getFeed returns the full AP URL as eventSourceUrl for local events published via AP', async () => {
-    // Local events that have been published via ActivityPub also have EventObjectEntity records.
-    // getFeed() should return the ap_id from EventObjectEntity as eventSourceUrl.
     const localEventId = 'ffffffff-0000-0000-0000-000000000001';
     const sourceCalendarId = 'source-calendar-id';
     const localApUrl = 'https://local.example.com/calendars/sourcecal/events/' + localEventId;
 
     const mockEvent = makeMockEvent({
       id: localEventId,
-      calendar_id: sourceCalendarId,
-      event_source_url: null,
+      calendarId: sourceCalendarId,
     });
 
-    sandbox.stub(EventEntity, 'findAll').resolves([mockEvent] as any);
+    sandbox.stub(calendarInterface, 'getEventsFromFollowedSources').resolves([mockEvent]);
     sandbox.stub(SharedEventEntity, 'findAll').resolves([] as any);
     sandbox.stub(CalendarActorEntity, 'findAll').resolves([] as any);
 
@@ -602,24 +573,20 @@ describe("getFeed repost status lookup", () => {
   });
 
   it('getFeed fetches EventObjectEntity for all events (not only remote) to resolve ap_id', async () => {
-    // Verify that EventObjectEntity.findAll is called with all event IDs,
-    // not just remote event IDs. This ensures local events can also get their ap_id.
     const localEventId = 'aaaaaaaa-1111-0000-0000-000000000001';
     const remoteEventId = 'bbbbbbbb-1111-0000-0000-000000000001';
 
     const mockLocalEvent = makeMockEvent({
       id: localEventId,
-      calendar_id: 'source-calendar-id',
-      event_source_url: null,
+      calendarId: 'source-calendar-id',
     });
 
     const mockRemoteEvent = makeMockEvent({
       id: remoteEventId,
-      calendar_id: null,
-      event_source_url: null,
+      calendarId: null,
     });
 
-    sandbox.stub(EventEntity, 'findAll').resolves([mockLocalEvent, mockRemoteEvent] as any);
+    sandbox.stub(calendarInterface, 'getEventsFromFollowedSources').resolves([mockLocalEvent, mockRemoteEvent]);
     sandbox.stub(SharedEventEntity, 'findAll').resolves([] as any);
     sandbox.stub(CalendarActorEntity, 'findAll').resolves([] as any);
 
@@ -641,40 +608,19 @@ describe("getFeed - local events without EventObjectEntity (seed events)", () =>
   let service: ActivityPubService;
   let sandbox: sinon.SinonSandbox;
   let calendar: Calendar;
+  let calendarInterface: CalendarInterface;
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
     const eventBus = new EventEmitter();
-    service = new ActivityPubService(eventBus, new CalendarInterface(eventBus));
+    calendarInterface = new CalendarInterface(eventBus);
+    service = new ActivityPubService(eventBus, calendarInterface);
     calendar = Calendar.fromObject({ id: 'consumer-calendar-id', urlName: 'consumer' });
   });
 
   afterEach(() => {
     sandbox.restore();
   });
-
-  function makeMockEvent(overrides: {
-    id: string;
-    calendar_id: string | null;
-    event_source_url?: string | null;
-    content?: any[];
-    schedules?: any[];
-    categoryAssignments?: any[];
-  }) {
-    const base = {
-      content: [],
-      schedules: [],
-      categoryAssignments: [],
-      event_source_url: null,
-      ...overrides,
-    };
-    return {
-      ...base,
-      get(options: any) {
-        return { ...base };
-      },
-    };
-  }
 
   it('getFeed returns a derived AP URL for local events with no EventObjectEntity record', async () => {
     // Simulates a seed event inserted directly into the DB without ActivityPub publication —
@@ -686,10 +632,10 @@ describe("getFeed - local events without EventObjectEntity (seed events)", () =>
 
     const mockEvent = makeMockEvent({
       id: localEventId,
-      calendar_id: sourceCalendarId,
+      calendarId: sourceCalendarId,
     });
 
-    sandbox.stub(EventEntity, 'findAll').resolves([mockEvent] as any);
+    sandbox.stub(calendarInterface, 'getEventsFromFollowedSources').resolves([mockEvent]);
     sandbox.stub(SharedEventEntity, 'findAll').resolves([] as any);
 
     // Provide the CalendarActorEntity for the source calendar
@@ -721,10 +667,10 @@ describe("getFeed - local events without EventObjectEntity (seed events)", () =>
 
     const mockEvent = makeMockEvent({
       id: localEventId,
-      calendar_id: sourceCalendarId,
+      calendarId: sourceCalendarId,
     });
 
-    sandbox.stub(EventEntity, 'findAll').resolves([mockEvent] as any);
+    sandbox.stub(calendarInterface, 'getEventsFromFollowedSources').resolves([mockEvent]);
     sandbox.stub(SharedEventEntity, 'findAll').resolves([] as any);
     // No CalendarActorEntity for this calendar
     sandbox.stub(CalendarActorEntity, 'findAll').resolves([] as any);

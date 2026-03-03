@@ -8,6 +8,7 @@ import { CalendarMemberEntity } from "@/server/calendar/entity/calendar_member";
 import { CalendarActorEntity, CalendarActor } from "@/server/activitypub/entity/calendar_actor";
 import { UserActorEntity } from "@/server/activitypub/entity/user_actor";
 import { CalendarEvent, CalendarEventContent, CalendarEventSchedule } from "@/common/model/events";
+import { EventCategory } from "@/common/model/event_category";
 import { EventLocation, validateLocationHierarchy } from "@/common/model/location";
 import { EventContentEntity, EventEntity, EventScheduleEntity } from "@/server/calendar/entity/event";
 import CalendarService from "@/server/calendar/service/calendar";
@@ -1486,6 +1487,112 @@ class EventService {
       event,
     });
   }
+  /**
+   * Retrieves events from calendars that the given calendar is following.
+   * This is the calendar domain's implementation of the feed query, exposing
+   * the EventEntity records as CalendarEvent domain models.
+   *
+   * Used by ActivityPubService to populate the federation feed without
+   * crossing the domain boundary by importing EventEntity directly.
+   *
+   * @param calendar - The calendar whose followed sources should be queried
+   * @param page - Zero-based page number for pagination (default: 0)
+   * @param pageSize - Number of events per page (default: 20)
+   * @returns Array of CalendarEvent domain models from followed sources
+   */
+  async getEventsFromFollowedSources(calendar: Calendar, page?: number, pageSize?: number): Promise<CalendarEvent[]> {
+    const defaultPageSize = pageSize || 20;
+
+    // Escape the calendar ID to prevent SQL injection in literal subqueries.
+    const escapedCalendarId = EventEntity.sequelize!.escape(calendar.id);
+
+    // Query events from calendars this calendar is following.
+    // This includes BOTH:
+    // - Remote events (calendar_id = null) tracked via EventObjectEntity.attributed_to
+    // - Local events (calendar_id = UUID) from followed local calendars
+    const events = await EventEntity.findAll({
+      where: {
+        [Op.or]: [
+          // Remote events originally authored by followed remote calendars
+          {
+            calendar_id: null,
+            id: {
+              [Op.in]: EventEntity.sequelize!.literal(
+                `(SELECT eo.event_id FROM ap_event_object eo
+                  JOIN calendar_actor ca ON eo.attributed_to = ca.actor_uri AND ca.actor_type = 'remote'
+                  JOIN ap_following f ON f.calendar_actor_id = ca.id
+                  WHERE f.calendar_id = ${escapedCalendarId})`,
+              ),
+            },
+          },
+          // Remote events announced/shared by followed remote calendars
+          {
+            calendar_id: null,
+            id: {
+              [Op.in]: EventEntity.sequelize!.literal(
+                `(SELECT eo.event_id FROM ap_event_object eo
+                  JOIN ap_event_activity ea ON eo.ap_id = ea.event_id AND ea.type = 'share'
+                  JOIN calendar_actor ca ON ea.calendar_actor_id = ca.id AND ca.actor_type = 'remote'
+                  JOIN ap_following f ON f.calendar_actor_id = ca.id
+                  WHERE f.calendar_id = ${escapedCalendarId})`,
+              ),
+            },
+          },
+          // Local events from followed local calendars
+          {
+            calendar_id: {
+              [Op.in]: EventEntity.sequelize!.literal(
+                `(SELECT ca.calendar_id FROM ap_following f
+                  JOIN calendar_actor ca ON f.calendar_actor_id = ca.id
+                  WHERE f.calendar_id = ${escapedCalendarId}
+                    AND ca.actor_type = 'local'
+                    AND ca.calendar_id IS NOT NULL)`,
+              ),
+            },
+          },
+        ],
+      },
+      include: [
+        {
+          association: 'content',
+          required: false,
+        },
+        {
+          association: 'schedules',
+          required: false,
+        },
+        {
+          association: 'categoryAssignments',
+          required: false,
+        },
+        {
+          association: 'location',
+          required: false,
+        },
+      ],
+      limit: defaultPageSize,
+      offset: page ? page * defaultPageSize : 0,
+      order: [['createdAt', 'DESC']],
+    });
+
+    return events.map(entity => {
+      const event = entity.toModel();
+      // Populate schedules not handled by EventEntity.toModel()
+      if (entity.schedules && entity.schedules.length > 0) {
+        event.schedules = entity.schedules.map((s: any) => s.toModel());
+      }
+      // Populate category IDs from category assignments
+      const categoryAssignments = entity.getDataValue('categoryAssignments') as any[] | undefined;
+      if (categoryAssignments && categoryAssignments.length > 0) {
+        event.categories = categoryAssignments.map((ca: any) => {
+          const cat = new EventCategory(ca.category_id, '');
+          return cat;
+        });
+      }
+      return event;
+    });
+  }
+
 }
 
 export default EventService;
