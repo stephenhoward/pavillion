@@ -26,8 +26,8 @@ describe('Widget Page CSP Headers', () => {
     // Widget page should return successfully (200) now that /widget is exempt from setup mode
     expect(response.status).toBe(200);
 
-    // CSP header should allow framing from any origin
-    // This is critical for embedding the widget in external websites
+    // frame-ancestors * is intentional for the widget HTML shell.
+    // See security rationale in app_routes.ts (pv-tlal).
     const cspHeader = response.headers['content-security-policy'];
     expect(cspHeader).toBeDefined();
     expect(cspHeader).toBe('frame-ancestors *');
@@ -41,5 +41,10 @@ describe('Widget Page CSP Headers', () => {
     const cspHeader = response.headers['content-security-policy'];
     expect(cspHeader).toBeDefined();
     expect(cspHeader).toContain("frame-ancestors 'none'");
+  });
+
+  it('should not have X-Frame-Options: DENY on widget pages', async () => {
+    const response = await request(app).get('/widget/testcalendar');
+    expect(response.headers['x-frame-options']).toBeUndefined();
   });
 });

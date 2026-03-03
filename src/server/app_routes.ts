@@ -308,12 +308,30 @@ export function createRouter(configInterface: ConfigurationInterface) {
   // Serve the widget JavaScript file (must come before catch-all widget route)
   router.get('/widget/pavillion-widget.js', handlers.widget_javascript);
 
-  // Add middleware to allow widget pages to be framed
-  // This overrides the default CSP frame-ancestors 'none' set in server.ts
+  // Widget HTML shell: allow framing from any origin (frame-ancestors *)
+  //
+  // Security rationale (pv-tlal):
+  // The widget iframe contains only public, read-only event data. It has no
+  // authenticated user state, no forms, and no actions that mutate server state
+  // on behalf of a visitor. The clickjacking risk for read-only public content
+  // is negligible — there is nothing for an attacker to hijack a click toward.
+  //
+  // The widget data API (/api/widget/v1/) independently enforces a per-calendar
+  // domain allowlist via Origin header validation, which protects that data
+  // endpoint — it does not gate access to this HTML shell page itself.
+  //
+  // A narrowed frame-ancestors header would require a database lookup on every
+  // widget page load and would only marginally reduce an already-low residual
+  // risk. The complexity cost is not justified for public-only content.
+  //
+  // If the widget ever gains authenticated state or user-action buttons, this
+  // decision must be revisited and the per-calendar allowlist applied here too.
+  //
+  // Also remove X-Frame-Options: DENY (set globally by helmet) since it would
+  // override frame-ancestors in legacy browsers and prevent widget embedding.
   router.use(/^\/widget\/.+/i, (req, res, next) => {
-    // Allow framing from any origin for widget pages
-    // Widget pages need to be embeddable in iframes on external sites
     res.setHeader('Content-Security-Policy', "frame-ancestors *");
+    res.removeHeader('X-Frame-Options');
     next();
   });
 
