@@ -98,6 +98,10 @@ export const useWidgetStore = defineStore('widget', {
      */
     notifyResize(height: number) {
       if (window.parent !== window) {
+        // Target origin is '*' because these messages contain no sensitive data —
+        // only layout hints (height) and navigation paths. If this widget ever sends
+        // messages containing user-specific or authenticated data, replace '*' with
+        // the specific parent origin.
         window.parent.postMessage({
           type: 'pavillion:resize',
           height,
@@ -112,6 +116,10 @@ export const useWidgetStore = defineStore('widget', {
      */
     notifyNavigation(path: string) {
       if (window.parent !== window) {
+        // Target origin is '*' because these messages contain no sensitive data —
+        // only layout hints (height) and navigation paths. If this widget ever sends
+        // messages containing user-specific or authenticated data, replace '*' with
+        // the specific parent origin.
         window.parent.postMessage({
           type: 'pavillion:navigate',
           path,
