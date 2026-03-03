@@ -81,13 +81,11 @@ class WidgetRoutes {
       }
 
       // Origin is allowed - set security headers
-      // Override helmet's frame-ancestors CSP with validated origin
-      // Dynamic CSP frame-ancestors header with specific requesting domain
+      // Override helmet's frame-ancestors CSP with validated origin.
+      // X-Frame-Options: ALLOW-FROM is intentionally not set here — it was deprecated
+      // and is not supported in Chrome or Firefox. CSP frame-ancestors is the current
+      // standard and provides the actual framing control in all modern browsers.
       res.setHeader('Content-Security-Policy', `frame-ancestors ${origin}`);
-
-      // Add X-Frame-Options for legacy browser support (IE11+)
-      // Note: Modern browsers prefer CSP frame-ancestors, but this provides defense-in-depth
-      res.setHeader('X-Frame-Options', `ALLOW-FROM ${origin}`);
 
       // CORS headers for validated domain
       res.setHeader('Access-Control-Allow-Origin', origin);
