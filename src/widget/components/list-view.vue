@@ -44,7 +44,7 @@ onBeforeMount(() => {
               @click="openEvent(instance)">
             <EventImage :media="instance.event.media" context="card" :lazy="true" />
             <h3>{{ instance.event.content("en").name }}</h3>
-            <div class="event-time">{{ instance.start.toLocaleString(DateTime.TIME_SIMPLE) }}</div>
+            <div class="event-time">{{ instance.start.toLocal().toLocaleString(DateTime.TIME_SIMPLE) }}</div>
           </li>
         </ul>
       </section>

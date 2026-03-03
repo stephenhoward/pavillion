@@ -237,7 +237,7 @@ onMounted(() => {
             class="event-preview"
             @click="openEvent(instance)"
           >
-            <span class="event-time">{{ instance.start.toLocaleString(DateTime.TIME_SIMPLE) }}</span>
+            <span class="event-time">{{ instance.start.toLocal().toLocaleString(DateTime.TIME_SIMPLE) }}</span>
             <span class="event-name">{{ instance.event.content('en').name }}</span>
           </div>
 
@@ -271,7 +271,7 @@ onMounted(() => {
             @click="openEvent(instance)"
           >
             <div class="event-time">
-              {{ instance.start.toLocaleString(DateTime.TIME_SIMPLE) }}
+              {{ instance.start.toLocal().toLocaleString(DateTime.TIME_SIMPLE) }}
             </div>
             <div class="event-name">
               {{ instance.event.content('en').name }}

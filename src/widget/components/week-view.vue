@@ -181,7 +181,7 @@ onMounted(() => {
             />
             <div class="event-details">
               <div class="event-time">
-                {{ instance.start.toLocaleString(DateTime.TIME_SIMPLE) }}
+                {{ instance.start.toLocal().toLocaleString(DateTime.TIME_SIMPLE) }}
               </div>
               <div class="event-name">
                 {{ instance.event.content('en').name }}
