@@ -32,13 +32,13 @@ const timeRange = computed(() => {
   const start = props.instance.start;
   const end = props.instance.end;
 
-  const startStr = start.toLocaleString(DateTime.TIME_SIMPLE);
+  const startStr = start.toLocal().toLocaleString(DateTime.TIME_SIMPLE);
 
   if (!end) {
     return startStr;
   }
 
-  const endStr = end.toLocaleString(DateTime.TIME_SIMPLE);
+  const endStr = end.toLocal().toLocaleString(DateTime.TIME_SIMPLE);
   return `${startStr} – ${endStr}`;
 });
 

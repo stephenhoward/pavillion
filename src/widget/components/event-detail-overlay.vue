@@ -118,7 +118,7 @@ onBeforeMount(async () => {
           <div class="instance-meta">
             <h1>{{ state.instance.event.content("en").name }}</h1>
             <time :datetime="state.instance.start.toISO()" class="event-datetime">
-              {{ state.instance.start.toLocaleString(DateTime.DATETIME_MED) }}
+              {{ state.instance.start.toLocal().toLocaleString(DateTime.DATETIME_MED) }}
             </time>
           </div>
         </div>

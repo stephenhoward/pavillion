@@ -254,7 +254,7 @@ describe('Widget Integration Tests', () => {
       publicStore.allEvents = [
         {
           id: '1',
-          start: { toLocal: () => ({ toISODate: () => '2026-01-06' }), toLocaleString: () => '10:00 AM' },
+          start: { toLocal: () => ({ toISODate: () => '2026-01-06', toLocaleString: () => '10:00 AM' }) },
           event: { id: 'e1', content: () => ({ name: 'Test Event' }), media: null, categories: [] },
         },
       ] as any;
@@ -392,7 +392,7 @@ describe('Widget Integration Tests', () => {
           id: `event-${i}`,
           start: {
             toISODate: () => eventDate.toISODate(),
-            toLocaleString: () => `${i % 12}:00 ${i % 12 >= 12 ? 'PM' : 'AM'}`,
+            toLocal: () => ({ toLocaleString: () => `${i % 12}:00 ${i % 12 >= 12 ? 'PM' : 'AM'}` }),
           },
           event: {
             id: `e${i}`,
