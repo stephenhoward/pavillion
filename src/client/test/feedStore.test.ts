@@ -4,20 +4,22 @@ import { useFeedStore } from '@/client/stores/feedStore';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { Calendar } from '@/common/model/calendar';
 
-// Create mock service instance
-const mockFeedService = {
-  getFollows: vi.fn(),
-  getFollowers: vi.fn(),
-  getFeed: vi.fn(),
-  followCalendar: vi.fn(),
-  unfollowCalendar: vi.fn(),
-  shareEvent: vi.fn(),
-  unshareEvent: vi.fn(),
-  updateFollowPolicy: vi.fn(),
-  getSourceCategories: vi.fn(),
-  getCategoryMappings: vi.fn(),
-  getCalendarCategories: vi.fn(),
-};
+// Use vi.hoisted() so the mock object is available when vi.mock() factory runs
+const { mockFeedService } = vi.hoisted(() => ({
+  mockFeedService: {
+    getFollows: vi.fn(),
+    getFollowers: vi.fn(),
+    getFeed: vi.fn(),
+    followCalendar: vi.fn(),
+    unfollowCalendar: vi.fn(),
+    shareEvent: vi.fn(),
+    unshareEvent: vi.fn(),
+    updateFollowPolicy: vi.fn(),
+    getSourceCategories: vi.fn(),
+    getCategoryMappings: vi.fn(),
+    getCalendarCategories: vi.fn(),
+  },
+}));
 
 // Mock the FeedService module
 vi.mock('@/client/service/feed', async () => {
