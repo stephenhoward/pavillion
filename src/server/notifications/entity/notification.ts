@@ -26,7 +26,7 @@ import db from '@/server/common/entity/db';
  * but is excluded from toModel() output to avoid leaking internal IDs
  * through API responses.
  */
-@Table({ tableName: 'notification' })
+@Table({ tableName: 'notification', updatedAt: false })
 class NotificationEntity extends Model {
 
   @PrimaryKey
