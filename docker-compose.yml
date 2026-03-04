@@ -53,6 +53,7 @@ services:
       - SESSION_SECRET=${SESSION_SECRET:-}
       - S3_SECRET_KEY=${S3_SECRET_KEY:-}
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - EMAIL_HASH_SECRET=${EMAIL_HASH_SECRET:-}
       # Docker secrets via _FILE pattern (recommended for production)
       # When set, the entrypoint reads secret from file and unsets _FILE variable
       - DB_PASSWORD_FILE=${DB_PASSWORD_FILE:-}
@@ -60,6 +61,7 @@ services:
       - SESSION_SECRET_FILE=${SESSION_SECRET_FILE:-}
       - S3_SECRET_KEY_FILE=${S3_SECRET_KEY_FILE:-}
       - SMTP_PASSWORD_FILE=${SMTP_PASSWORD_FILE:-}
+      - EMAIL_HASH_SECRET_FILE=${EMAIL_HASH_SECRET_FILE:-}
       # Optional S3 storage configuration
       - S3_BUCKET=${S3_BUCKET:-}
       - S3_REGION=${S3_REGION:-}
@@ -110,11 +112,13 @@ services:
       - JWT_SECRET=${JWT_SECRET:-}
       - SESSION_SECRET=${SESSION_SECRET:-}
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - EMAIL_HASH_SECRET=${EMAIL_HASH_SECRET:-}
       # Docker secrets via _FILE pattern (recommended for production)
       - DB_PASSWORD_FILE=${DB_PASSWORD_FILE:-}
       - JWT_SECRET_FILE=${JWT_SECRET_FILE:-}
       - SESSION_SECRET_FILE=${SESSION_SECRET_FILE:-}
       - SMTP_PASSWORD_FILE=${SMTP_PASSWORD_FILE:-}
+      - EMAIL_HASH_SECRET_FILE=${EMAIL_HASH_SECRET_FILE:-}
       # Optional SMTP configuration for email alerts
       - SMTP_HOST=${SMTP_HOST:-}
       - SMTP_PORT=${SMTP_PORT:-}
