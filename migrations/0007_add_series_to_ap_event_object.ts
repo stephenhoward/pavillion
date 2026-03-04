@@ -1,4 +1,5 @@
 import { Sequelize, DataTypes } from 'sequelize';
+import { addColumnIfNotExists, removeColumnIfExists } from '../src/server/common/migrations/helpers.js';
 
 /**
  * Add source_series column to ap_event_object table.
@@ -15,7 +16,7 @@ export default {
   async up({ context: sequelize }: { context: Sequelize }) {
     const queryInterface = sequelize.getQueryInterface();
 
-    await queryInterface.addColumn('ap_event_object', 'source_series', {
+    await addColumnIfNotExists(queryInterface, 'ap_event_object', 'source_series', {
       type: DataTypes.JSON,
       allowNull: true,
       defaultValue: null,
@@ -25,6 +26,6 @@ export default {
   async down({ context: sequelize }: { context: Sequelize }) {
     const queryInterface = sequelize.getQueryInterface();
 
-    await queryInterface.removeColumn('ap_event_object', 'source_series');
+    await removeColumnIfExists(queryInterface, 'ap_event_object', 'source_series');
   },
 };
