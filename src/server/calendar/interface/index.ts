@@ -589,4 +589,18 @@ export default class CalendarInterface {
     return this.seriesService.getSeriesEvents(seriesId, calendarId);
   }
 
+  /**
+   * Retrieves events from calendars that the given calendar is following.
+   * Delegates to EventService; used by ActivityPubService to avoid
+   * crossing the domain boundary by importing EventEntity directly.
+   *
+   * @param calendar - The calendar whose followed sources should be queried
+   * @param page - Zero-based page number for pagination (default: 0)
+   * @param pageSize - Number of events per page (default: 20)
+   * @returns Array of CalendarEvent domain models from followed sources
+   */
+  async getEventsFromFollowedSources(calendar: Calendar, page?: number, pageSize?: number): Promise<CalendarEvent[]> {
+    return this.eventService.getEventsFromFollowedSources(calendar, page, pageSize);
+  }
+
 }

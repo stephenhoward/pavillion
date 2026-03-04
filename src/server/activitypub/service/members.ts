@@ -1,9 +1,7 @@
 import { EventEmitter } from "events";
 import config from 'config';
 import axios from 'axios';
-import { DateTime } from 'luxon';
 
-import { Op } from 'sequelize';
 import { Account } from "@/common/model/account";
 import { Calendar } from "@/common/model/calendar";
 import { FollowingCalendar, FollowerCalendar } from "@/common/model/follow";
@@ -15,7 +13,6 @@ import { CalendarActorEntity } from "@/server/activitypub/entity/calendar_actor"
 import { EventObjectEntity } from "@/server/activitypub/entity/event_object";
 import RemoteCalendarService from "@/server/activitypub/service/remote_calendar";
 import UndoActivity from "../model/action/undo";
-import { EventEntity } from "@/server/calendar/entity/event";
 import CalendarInterface from "@/server/calendar/interface";
 import { EventObject } from "@/server/activitypub/model/object/event";
 import { addToOutbox as addToOutboxHelper } from "@/server/activitypub/helper/outbox";
@@ -59,44 +56,6 @@ function actorUriToIdentifier(actorUri: string): string {
   }
 }
 
-/**
- * Convert a schedule date returned by Sequelize (SQLite treats naive datetime strings as UTC)
- * into an ISO string correctly placed in the event's original timezone.
- *
- * Background: SQLite stores naive datetime strings without timezone info. Sequelize's SQLite
- * dialect appends "+00:00" when parsing DATE columns, so "18:30:00.000" becomes a JS Date
- * whose UTC time is 18:30 — but the stored value was intended to mean "18:30 in the event's
- * local timezone" (e.g., America/Los_Angeles). Without this correction, a 6:30 PM LA event
- * would be displayed as 10:30 AM (or similar) because the UTC value is used directly.
- *
- * This function reconstructs the correct datetime by taking the UTC time components of the
- * Sequelize-provided Date object and re-interpreting them in the schedule's timezone.
- *
- * @param dbDate The Date object (or raw value) returned by Sequelize for start_date/end_date
- * @param timezone The IANA timezone name stored on the schedule (e.g. "America/Los_Angeles")
- * @returns ISO 8601 string with the correct timezone offset, or null if dbDate is falsy
- */
-function scheduleDbDateToISO(dbDate: Date | string | null | undefined, timezone: string | null | undefined): string | null {
-  if (!dbDate) return null;
-  const date = dbDate instanceof Date ? dbDate : new Date(String(dbDate));
-  const zone = timezone || 'UTC';
-  // Re-interpret the UTC time components as local time in the event's timezone.
-  // SQLite stored the local time digits as-is and Sequelize treated them as UTC,
-  // so the UTC hour/minute values actually represent the intended local time.
-  const dt = DateTime.fromObject(
-    {
-      year: date.getUTCFullYear(),
-      month: date.getUTCMonth() + 1,
-      day: date.getUTCDate(),
-      hour: date.getUTCHours(),
-      minute: date.getUTCMinutes(),
-      second: date.getUTCSeconds(),
-      millisecond: date.getUTCMilliseconds(),
-    },
-    { zone },
-  );
-  return dt.toISO();
-}
 
 class ActivityPubService {
   calendarService: CalendarInterface;
@@ -655,81 +614,11 @@ class ActivityPubService {
     await addToOutboxHelper(this.eventBus, calendar, message);
   }
 
-  async getFeed(calendar: Calendar, page?: number, pageSize?: number) {
-    const defaultPageSize = pageSize || 20;
-
-    // Escape the calendar ID to prevent SQL injection in literal subqueries.
-    // sequelize.escape() wraps the value in quotes and escapes metacharacters.
-    const escapedCalendarId = EventEntity.sequelize!.escape(calendar.id);
-
-    // Query events from calendars this calendar is following.
-    // This includes BOTH:
-    // - Remote events (calendar_id = null) tracked via EventObjectEntity.attributed_to
-    // - Local events (calendar_id = UUID) from followed local calendars
-    const events = await EventEntity.findAll({
-      where: {
-        [Op.or]: [
-          // Remote events originally authored by followed remote calendars
-          {
-            calendar_id: null,
-            id: {
-              [Op.in]: EventEntity.sequelize!.literal(
-                `(SELECT eo.event_id FROM ap_event_object eo
-                  JOIN calendar_actor ca ON eo.attributed_to = ca.actor_uri AND ca.actor_type = 'remote'
-                  JOIN ap_following f ON f.calendar_actor_id = ca.id
-                  WHERE f.calendar_id = ${escapedCalendarId})`,
-              ),
-            },
-          },
-          // Remote events announced/shared by followed remote calendars
-          {
-            calendar_id: null,
-            id: {
-              [Op.in]: EventEntity.sequelize!.literal(
-                `(SELECT eo.event_id FROM ap_event_object eo
-                  JOIN ap_event_activity ea ON eo.ap_id = ea.event_id AND ea.type = 'share'
-                  JOIN calendar_actor ca ON ea.calendar_actor_id = ca.id AND ca.actor_type = 'remote'
-                  JOIN ap_following f ON f.calendar_actor_id = ca.id
-                  WHERE f.calendar_id = ${escapedCalendarId})`,
-              ),
-            },
-          },
-          // Local events from followed local calendars
-          {
-            calendar_id: {
-              [Op.in]: EventEntity.sequelize!.literal(
-                `(SELECT ca.calendar_id FROM ap_following f
-                  JOIN calendar_actor ca ON f.calendar_actor_id = ca.id
-                  WHERE f.calendar_id = ${escapedCalendarId}
-                    AND ca.actor_type = 'local'
-                    AND ca.calendar_id IS NOT NULL)`,
-              ),
-            },
-          },
-        ],
-      },
-      include: [
-        {
-          association: 'content',
-          required: false,
-        },
-        {
-          association: 'schedules',
-          required: false,
-        },
-        {
-          association: 'categoryAssignments',
-          required: false,
-        },
-        {
-          association: 'location',
-          required: false,
-        },
-      ],
-      limit: defaultPageSize,
-      offset: page ? page * defaultPageSize : 0,
-      order: [['createdAt', 'DESC']],
-    });
+  async getFeed(calendar: Calendar, page?: number, pageSize?: number): Promise<Record<string, any>[]> {
+    // Use CalendarInterface to get events from followed sources.
+    // This keeps the calendar domain boundary intact: EventEntity is accessed
+    // only within the calendar domain, not here in the ActivityPub domain.
+    const events = await this.calendarService.getEventsFromFollowedSources(calendar, page, pageSize);
 
     // Batch fetch all shared events for these events in a single query.
     //
@@ -754,7 +643,7 @@ class ActivityPubService {
     // - attributed_to (actor_uri) for source calendar identification
     // - ap_id (full ActivityPub URL) for eventSourceUrl returned to the client
     //
-    // Remote events (calendar_id = null) always have EventObjectEntity records.
+    // Remote events (calendarId = null) always have EventObjectEntity records.
     // Local events may also have EventObjectEntity records if they have been published via AP.
     const eventObjects = eventIds.length > 0
       ? await EventObjectEntity.findAll({
@@ -772,12 +661,12 @@ class ActivityPubService {
       eventObjects.map(eo => [eo.event_id, eo.ap_id]),
     );
 
-    // Build a map from local calendar_id -> actor_uri for local events in the feed
-    // Only needed when there are local events (calendar_id != null)
+    // Build a map from local calendarId -> actor_uri for local events in the feed
+    // Only needed when there are local events (calendarId != null)
     const localCalendarIds = [...new Set(
       events
-        .filter(event => event.calendar_id !== null)
-        .map(event => event.calendar_id as string),
+        .filter(event => event.calendarId !== null)
+        .map(event => event.calendarId as string),
     )];
 
     const localCalendarActors = localCalendarIds.length > 0
@@ -789,7 +678,7 @@ class ActivityPubService {
       })
       : [];
 
-    // Build a map from calendar_id -> actor_uri for local calendars
+    // Build a map from calendarId -> actor_uri for local calendars
     const localCalendarActorMap = new Map(
       localCalendarActors.map(ca => [ca.calendar_id as string, ca.actor_uri]),
     );
@@ -806,7 +695,7 @@ class ActivityPubService {
 
       // Resolve the source calendar actor URI and convert to human-readable identifier
       let sourceCalendarActorId: string | null = null;
-      if (event.calendar_id === null) {
+      if (event.calendarId === null) {
         // Remote event: look up actor_uri from EventObjectEntity
         const actorUri = eventActorMap.get(event.id);
         if (actorUri) {
@@ -815,46 +704,40 @@ class ActivityPubService {
       }
       else {
         // Local event: look up actor_uri from CalendarActorEntity
-        const actorUri = localCalendarActorMap.get(event.calendar_id);
+        const actorUri = localCalendarActorMap.get(event.calendarId);
         if (actorUri) {
           sourceCalendarActorId = actorUriToIdentifier(actorUri);
         }
       }
 
-      // Transform content array to object keyed by language
-      const plainEvent = event.get({ plain: true }) as any;
+      // Build content object keyed by language from CalendarEvent._content
       const contentByLanguage: Record<string, any> = {};
-
-      if (plainEvent.content && Array.isArray(plainEvent.content)) {
-        plainEvent.content.forEach((c: any) => {
-          contentByLanguage[c.language] = {
-            title: c.name || c.title || '',  // Support both field names for API compatibility
-            name: c.name || c.title || '',   // Include both for compatibility
-            description: c.description,
-          };
-        });
+      for (const [language, c] of Object.entries(event._content)) {
+        contentByLanguage[language] = {
+          title: c.name || '',
+          name: c.name || '',
+          description: c.description,
+        };
       }
 
-      // Transform schedules from Sequelize plain object format (snake_case Date fields)
-      // to the format expected by CalendarEventSchedule.fromObject() (camelCase ISO strings).
-      // Uses scheduleDbDateToISO() to correctly apply the event's original timezone, since
-      // SQLite stores naive datetime strings that Sequelize reads as UTC.
-      const schedules = Array.isArray(plainEvent.schedules)
-        ? plainEvent.schedules.map((s: any) => ({
-          id: s.id,
-          start: scheduleDbDateToISO(s.start_date, s.timezone),
-          end: scheduleDbDateToISO(s.end_date, s.timezone),
-          frequency: s.frequency,
-          interval: s.interval,
-          count: s.count,
-          byDay: s.by_day ? s.by_day.split(',') : [],
-          isException: s.is_exclusion,
-        }))
-        : [];
+      // Transform schedules from CalendarEventSchedule domain models to the
+      // wire format expected by the client (ISO strings for start/end dates).
+      // CalendarEventSchedule.startDate is already timezone-corrected by
+      // EventScheduleEntity.toModel(), so we just call toISO() directly.
+      const schedules = event.schedules.map((s: any) => ({
+        id: s.id,
+        start: s.startDate ? s.startDate.toISO() : null,
+        end: s.endDate ? s.endDate.toISO() : null,
+        frequency: s.frequency,
+        interval: s.interval,
+        count: s.count,
+        byDay: s.byDay || [],
+        isException: s.isExclusion,
+      }));
 
-      const categoryIds = Array.isArray(plainEvent.categoryAssignments)
-        ? plainEvent.categoryAssignments.map((ca: any) => ca.category_id)
-        : [];
+      // Extract category IDs from the CalendarEvent.categories array
+      // (populated by getEventsFromFollowedSources from categoryAssignments)
+      const categoryIds = (event.categories || []).map((c: any) => c.id);
 
       // eventSourceUrl must be the full ActivityPub URL for the event.
       // The client uses this to call shareEvent(), which validates that it starts with https://.
@@ -862,27 +745,27 @@ class ActivityPubService {
       // For local events that have never been published via ActivityPub (no EventObjectEntity
       // record), derive the canonical AP URL from the calendar actor URI so reposting works.
       let eventSourceUrl = eventApUrlMap.get(event.id) ?? '';
-      if (!eventSourceUrl && event.calendar_id !== null) {
-        const localActorUri = localCalendarActorMap.get(event.calendar_id);
+      if (!eventSourceUrl && event.calendarId !== null) {
+        const localActorUri = localCalendarActorMap.get(event.calendarId);
         if (localActorUri) {
           eventSourceUrl = `${localActorUri}/events/${event.id}`;
         }
       }
 
-      // Transform location from Sequelize plain object (snake_case) to camelCase
-      // so CalendarEvent.fromObject() can reconstruct the EventLocation correctly.
-      const location = plainEvent.location ? {
-        id: plainEvent.location.id,
-        name: plainEvent.location.name,
-        address: plainEvent.location.address,
-        city: plainEvent.location.city,
-        state: plainEvent.location.state,
-        postalCode: plainEvent.location.postal_code,
-        country: plainEvent.location.country,
+      // Build location object in camelCase format for the client
+      const location = event.location ? {
+        id: event.location.id,
+        name: event.location.name,
+        address: event.location.address,
+        city: event.location.city,
+        state: event.location.state,
+        postalCode: event.location.postalCode,
+        country: event.location.country,
       } : null;
 
       const transformedEvent = {
-        ...plainEvent,
+        id: event.id,
+        calendar_id: event.calendarId,
         content: contentByLanguage,
         schedules,
         categoryIds,

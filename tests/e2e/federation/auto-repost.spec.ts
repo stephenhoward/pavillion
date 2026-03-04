@@ -212,10 +212,10 @@ test.describe('Auto-Repost Policy Enforcement', () => {
     expect(charlieEventInAliceFeed).toBeDefined();
 
     // Share the event to Alice's calendar
-    // Use event_source_url for federated events (ActivityPub URL, not just UUID)
+    // Use eventSourceUrl for federated events (ActivityPub URL, not just UUID)
     // For events on the same instance, construct the full URL
-    let eventUrl = charlieEventInAliceFeed!.event_source_url || charlieEventInAliceFeed!.id;
-    // If event_source_url is just a path (starts with /), prepend the instance base URL
+    let eventUrl = charlieEventInAliceFeed!.eventSourceUrl || charlieEventInAliceFeed!.id;
+    // If eventSourceUrl is just a path (starts with /), prepend the instance base URL
     if (eventUrl.startsWith('/')) {
       eventUrl = `${INSTANCE_ALPHA.baseUrl}${eventUrl}`;
     }
@@ -568,10 +568,10 @@ test.describe('Auto-Repost Policy Enforcement', () => {
     const event1InFeed = bobFeed.events.find(e => e.content?.en?.title === event1Title);
     expect(event1InFeed).toBeDefined();
 
-    // Use event_source_url for federated events (ActivityPub URL, not just UUID)
+    // Use eventSourceUrl for federated events (ActivityPub URL, not just UUID)
     // event1 is from Alice (INSTANCE_ALPHA), so use Alpha's domain
-    let eventUrl = event1InFeed!.event_source_url || event1InFeed!.id;
-    // If event_source_url is just a path (starts with /), prepend the source instance base URL
+    let eventUrl = event1InFeed!.eventSourceUrl || event1InFeed!.id;
+    // If eventSourceUrl is just a path (starts with /), prepend the source instance base URL
     if (eventUrl.startsWith('/')) {
       eventUrl = `${INSTANCE_ALPHA.baseUrl}${eventUrl}`;
     }
