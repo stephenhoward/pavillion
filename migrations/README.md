@@ -63,10 +63,29 @@ Migrations are automatically run on production server startup before the applica
 
 In development mode (`npm run dev`), the database is reset and re-seeded on each restart, so migrations are not used.
 
+## Idempotency
+
+All migrations **must be idempotent** — safe to run even if the schema change already exists.
+Use the helpers in `src/server/common/migrations/helpers.ts`:
+
+```typescript
+import { addColumnIfNotExists, renameColumnIfExists } from '../src/server/common/migrations/helpers.js';
+
+// Instead of: await queryInterface.addColumn(...)
+await addColumnIfNotExists(queryInterface, 'table', 'column', { type: DataTypes.STRING });
+
+// Instead of: await queryInterface.renameColumn(...)
+await renameColumnIfExists(queryInterface, 'table', 'oldName', 'newName');
+```
+
+Available helpers: `addColumnIfNotExists`, `removeColumnIfExists`, `renameColumnIfExists`,
+`createTableIfNotExists`, `columnExists`, `tableExists`.
+
 ## Important Notes
 
 1. **Never modify existing migrations** that have been run in production
 2. **Always provide a down() method** for rollback capability
-3. **Test migrations** against a copy of production data before deploying
-4. **Keep migrations small** and focused on a single change
-5. **Avoid data-dependent logic** that might fail on different database states
+3. **Always use idempotent helpers** instead of raw queryInterface calls for DDL operations
+4. **Test migrations** against a copy of production data before deploying
+5. **Keep migrations small** and focused on a single change
+6. **Avoid data-dependent logic** that might fail on different database states
