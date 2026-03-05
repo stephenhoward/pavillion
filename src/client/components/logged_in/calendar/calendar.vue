@@ -50,7 +50,7 @@ const state = reactive({
   calendar: null,
   isLoading: false,
 });
-const calendarId = computed(() => route.params.calendar);
+const calendarUrlName = computed(() => route.params.calendar);
 const store = useEventStore();
 const calendarService = new CalendarService();
 
@@ -221,7 +221,7 @@ const handleFiltersChanged = async (filters) => {
   // Reload events with new filters
   state.isLoading = true;
   try {
-    await eventService.loadCalendarEvents(calendarId.value, filters, state.calendar?.id);
+    await eventService.loadCalendarEvents(calendarUrlName.value, filters, state.calendar?.id);
   }
   catch (error) {
     console.error('Error loading filtered events:', error);
@@ -242,14 +242,14 @@ onBeforeMount(async () => {
 
 // Function to load calendar data
 const loadCalendarData = async () => {
-  if (!calendarId.value) return;
+  if (!calendarUrlName.value) return;
 
   try {
     state.isLoading = true;
     state.err = '';
 
     // Load calendar by URL name — only returns calendars the current user can edit
-    state.calendar = await calendarService.getCalendarByUrlName(calendarId.value);
+    state.calendar = await calendarService.getCalendarByUrlName(calendarUrlName.value);
 
     // If the calendar wasn't found in the user's accessible calendars, redirect away
     if (!state.calendar) {
@@ -266,7 +266,7 @@ const loadCalendarData = async () => {
       filters.categories = currentFilters.categories;
     }
 
-    await eventService.loadCalendarEvents(calendarId.value, Object.keys(filters).length > 0 ? filters : undefined, state.calendar?.id);
+    await eventService.loadCalendarEvents(calendarUrlName.value, Object.keys(filters).length > 0 ? filters : undefined, state.calendar?.id);
   }
   catch (error) {
     console.error('Error loading calendar data:', error);
@@ -278,8 +278,8 @@ const loadCalendarData = async () => {
 };
 
 // Watch for calendar ID changes and reload data
-watch(calendarId, (newCalendarId, oldCalendarId) => {
-  if (newCalendarId && newCalendarId !== oldCalendarId) {
+watch(calendarUrlName, (newUrlName, oldUrlName) => {
+  if (newUrlName && newUrlName !== oldUrlName) {
     loadCalendarData();
   }
 });
@@ -455,7 +455,7 @@ const handleDeleteConfirm = async () => {
     }
 
     // Reload events after deletion with current filters
-    await eventService.loadCalendarEvents(calendarId.value, currentFilters, state.calendar?.id);
+    await eventService.loadCalendarEvents(calendarUrlName.value, currentFilters, state.calendar?.id);
     deselectAll();
     toast.success(tBulk('delete_success', { count: deleteCount }));
   }
@@ -592,7 +592,7 @@ const selectAllAriaLabel = computed(() => {
           <div class="header-title-section">
             <h1>
               <span v-if="state.calendar">{{ state.calendar.content('en').name || state.calendar.urlName }}</span>
-              <span v-else>{{ calendarId }}</span>
+              <span v-else>{{ calendarUrlName }}</span>
             </h1>
             <div class="header-actions">
               <RouterLink
@@ -622,7 +622,7 @@ const selectAllAriaLabel = computed(() => {
           <!-- Search and Filter Controls -->
           <SearchFilter
             v-if="state.calendar && (calendarEvents.length > 0 || hasActiveFilters)"
-            :calendar-id="calendarId"
+            :calendar-id="state.calendar?.id"
             :initial-filters="initialFilters"
             @filters-changed="handleFiltersChanged"
           />
@@ -769,7 +769,7 @@ const selectAllAriaLabel = computed(() => {
     <CategorySelectionDialog
       :visible="showCategoryDialog"
       :selected-event-ids="selectedEvents"
-      :calendar-id="calendarId"
+      :calendar-id="state.calendar?.id"
       @close="handleCategoryDialogClose"
       @assign-complete="handleAssignmentComplete"
     />
@@ -815,7 +815,7 @@ const selectAllAriaLabel = computed(() => {
       v-if="repostEventForModal"
       :event="repostEventForModal"
       :pre-selected-categories="repostEventForModal.categories.map(c => ({ id: c.id, name: c.content('en').name }))"
-      :all-local-categories="(categoryStore.categories[calendarId] || []).map(c => ({ id: c.id, name: c.content('en').name }))"
+      :all-local-categories="(categoryStore.categories[state.calendar?.id] || []).map(c => ({ id: c.id, name: c.content('en').name }))"
       :dialog-title="tFeed('categoryMapping.editDialogTitle')"
       :confirm-label="tFeed('categoryMapping.save')"
       @confirm="handleRepostCategoryUpdate"

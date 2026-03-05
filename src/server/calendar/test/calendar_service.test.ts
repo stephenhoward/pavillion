@@ -152,26 +152,37 @@ describe('getCalendar', () => {
   });
 
   it('should return a Calendar model if found', async () => {
-    const cal = new Calendar('testCalendarId', 'testme');
+    const testId = '550e8400-e29b-41d4-a716-446655440000';
+    const cal = new Calendar(testId, 'testme');
     const calendarFindStub = sandbox.stub(CalendarEntity, 'findByPk');
     calendarFindStub.resolves(CalendarEntity.fromModel(cal));
 
-    const result = await service.getCalendar('testCalendarId');
+    const result = await service.getCalendar(testId);
 
     expect(result).not.toBeNull();
-    expect(result?.id).toBe('testCalendarId');
+    expect(result?.id).toBe(testId);
     expect(result?.urlName).toBe('testme');
-    expect(calendarFindStub.calledWith('testCalendarId')).toBe(true);
+    expect(calendarFindStub.calledWith(testId)).toBe(true);
   });
 
   it('should return null if calendar not found', async () => {
+    const nonExistentId = '550e8400-e29b-41d4-a716-446655440001';
     const calendarFindStub = sandbox.stub(CalendarEntity, 'findByPk');
     calendarFindStub.resolves(null);
 
-    const result = await service.getCalendar('nonExistentId');
+    const result = await service.getCalendar(nonExistentId);
 
     expect(result).toBeNull();
-    expect(calendarFindStub.calledWith('nonExistentId')).toBe(true);
+    expect(calendarFindStub.calledWith(nonExistentId)).toBe(true);
+  });
+
+  it('should return null for non-UUID input without querying database', async () => {
+    const calendarFindStub = sandbox.stub(CalendarEntity, 'findByPk');
+
+    const result = await service.getCalendar('not-a-uuid');
+
+    expect(result).toBeNull();
+    expect(calendarFindStub.called).toBe(false);
   });
 });
 
