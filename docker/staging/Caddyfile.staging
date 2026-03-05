@@ -5,18 +5,7 @@
     encode gzip zstd
 
     handle /hooks/* {
-        reverse_proxy localhost:9000
-
-        @ratelimit {
-            path /hooks/*
-        }
-        rate_limit @ratelimit {
-            zone hooks {
-                key {remote_host}
-                events 5
-                window 1m
-            }
-        }
+        reverse_proxy host.docker.internal:9000
     }
 
     handle {

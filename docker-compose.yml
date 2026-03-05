@@ -155,6 +155,8 @@ services:
       - caddy-config:/config
     environment:
       - DOMAIN=${DOMAIN:-localhost}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       app:
         condition: service_healthy
