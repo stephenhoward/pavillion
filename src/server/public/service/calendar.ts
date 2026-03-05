@@ -137,7 +137,7 @@ export default class PublicCalendarService {
           attributes: {
             include: [
               [
-                literal(`(SELECT EXISTS(SELECT 1 FROM event_schedule WHERE event_schedule.event_id = \`event\`.\`id\`))`),
+                literal(`(SELECT EXISTS(SELECT 1 FROM event_schedule WHERE event_schedule.event_id = "event"."id"))`),
                 'isRecurring',
               ],
             ],
@@ -168,7 +168,7 @@ export default class PublicCalendarService {
       eventInclude.include.push({
         model: EventContentEntity,
         as: 'content',
-        where: literal(`(LOWER(\`event->content\`.\`name\`) LIKE '%${searchTerm}%' OR LOWER(\`event->content\`.\`description\`) LIKE '%${searchTerm}%')`),
+        where: literal(`(LOWER("event->content"."name") LIKE '%${searchTerm}%' OR LOWER("event->content"."description") LIKE '%${searchTerm}%')`),
         required: true, // INNER JOIN to only include events with matching content
       });
     }
