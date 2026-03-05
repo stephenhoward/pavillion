@@ -1,0 +1,25 @@
+# Staging-only Caddyfile — derived from the root Caddyfile.
+# Keep the main `handle` block in sync with the production config.
+
+{$DOMAIN} {
+    encode gzip zstd
+
+    handle /hooks/* {
+        reverse_proxy localhost:9000
+
+        @ratelimit {
+            path /hooks/*
+        }
+        rate_limit @ratelimit {
+            zone hooks {
+                key {remote_host}
+                events 5
+                window 1m
+            }
+        }
+    }
+
+    handle {
+        reverse_proxy app:3000
+    }
+}

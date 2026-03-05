@@ -53,6 +53,7 @@ set -euo pipefail
 DEPLOY_USER="pavillion"
 APP_DIR="/opt/pavillion"
 SSH_PORT=22
+STAGING_MODE=false
 
 # --- Colors ------------------------------------------------------------------
 
@@ -128,10 +129,17 @@ create_deploy_user() {
   print_success "Copied SSH authorized_keys to '${DEPLOY_USER}'"
 
   # Grant sudo for docker commands without password
-  cat > "/etc/sudoers.d/${DEPLOY_USER}" << 'EOF'
+  if [ "$STAGING_MODE" = true ]; then
+    cat > "/etc/sudoers.d/${DEPLOY_USER}" << 'EOF'
+# Pavillion deploy user: docker and system management (staging)
+pavillion ALL=(ALL) NOPASSWD: /usr/bin/docker, /usr/bin/docker-compose, /usr/bin/systemctl restart docker, /usr/bin/systemctl status docker, /usr/bin/systemctl restart webhook, /usr/bin/systemctl status webhook, /usr/bin/systemctl start webhook, /usr/bin/journalctl
+EOF
+  else
+    cat > "/etc/sudoers.d/${DEPLOY_USER}" << 'EOF'
 # Pavillion deploy user: docker and system management
 pavillion ALL=(ALL) NOPASSWD: /usr/bin/docker, /usr/bin/docker-compose, /usr/bin/systemctl restart docker, /usr/bin/systemctl status docker, /usr/bin/journalctl
 EOF
+  fi
   chmod 440 "/etc/sudoers.d/${DEPLOY_USER}"
   print_success "Configured sudo access"
 }
@@ -257,6 +265,40 @@ create_app_directory() {
   print_success "Created ${APP_DIR} (owned by ${DEPLOY_USER})"
 }
 
+# --- Step 7 (staging only): Install webhook listener -------------------------
+
+install_webhook() {
+  print_step "Step 7: Installing webhook listener (staging mode)"
+
+  apt-get install -y -qq webhook > /dev/null
+  print_success "Installed webhook"
+
+  # Create systemd service
+  cat > /etc/systemd/system/webhook.service << 'EOF'
+[Unit]
+Description=Webhook deploy listener
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=pavillion
+Group=pavillion
+ExecStart=/usr/bin/webhook -hooks /opt/pavillion/hooks.json -ip 127.0.0.1 -port 9000 -verbose
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  systemctl daemon-reload
+  systemctl enable webhook > /dev/null 2>&1
+  print_success "Created and enabled webhook.service (not started — start after hooks.json is in place)"
+}
+
 # --- Summary ------------------------------------------------------------------
 
 print_summary() {
@@ -303,11 +345,45 @@ print_summary() {
   echo "     docker compose ps"
   echo "     docker compose logs -f app"
   echo ""
+
+  if [ "$STAGING_MODE" = true ]; then
+    echo -e "${BOLD}Staging-specific steps:${NC}"
+    echo ""
+    echo "  7. Copy deploy files:"
+    echo "     cp ${APP_DIR}/docker/staging/deploy.sh ${APP_DIR}/deploy.sh"
+    echo "     chmod 750 ${APP_DIR}/deploy.sh"
+    echo "     cp ${APP_DIR}/docker/staging/hooks.json ${APP_DIR}/hooks.json"
+    echo "     chmod 600 ${APP_DIR}/hooks.json"
+    echo ""
+    echo "  8. Set webhook secret:"
+    echo "     SECRET=\$(openssl rand -hex 32)"
+    echo "     sed -i \"s/REPLACE_WITH_WEBHOOK_SECRET/\${SECRET}/\" ${APP_DIR}/hooks.json"
+    echo "     echo \"Add this as DEPLOY_WEBHOOK_SECRET in GitHub secrets: \${SECRET}\""
+    echo ""
+    echo "  9. Start webhook service:"
+    echo "     sudo systemctl start webhook"
+    echo ""
+    echo "  10. Update Caddyfile with staging version:"
+    echo "      cp ${APP_DIR}/docker/staging/Caddyfile.staging ${APP_DIR}/Caddyfile"
+    echo ""
+    echo "  11. Add GitHub secrets (in the 'staging' environment):"
+    echo "      - STAGING_HOST: your staging domain"
+    echo "      - DEPLOY_WEBHOOK_SECRET: the secret from step 8"
+    echo ""
+    echo "  See docker/staging/README.md for full details."
+    echo ""
+  fi
 }
 
 # --- Main ---------------------------------------------------------------------
 
 main() {
+  for arg in "$@"; do
+    case "$arg" in
+      --staging) STAGING_MODE=true ;;
+    esac
+  done
+
   print_header
   preflight
   create_deploy_user
@@ -316,6 +392,11 @@ main() {
   install_docker
   configure_docker_access
   create_app_directory
+
+  if [ "$STAGING_MODE" = true ]; then
+    install_webhook
+  fi
+
   print_summary
 }
 
