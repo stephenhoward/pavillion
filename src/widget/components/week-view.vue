@@ -38,7 +38,7 @@ const eventsByDay = computed(() => {
   // Safety check: ensure events array exists before iterating
   if (publicStore.allEvents && Array.isArray(publicStore.allEvents)) {
     publicStore.allEvents.forEach((instance) => {
-      const dayKey = instance.start.toISODate();
+      const dayKey = instance.start.toLocal().toISODate();
       if (dayKey && grouped[dayKey]) {
         grouped[dayKey].push(instance);
       }

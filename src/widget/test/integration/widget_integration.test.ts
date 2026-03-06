@@ -391,8 +391,7 @@ describe('Widget Integration Tests', () => {
         events.push({
           id: `event-${i}`,
           start: {
-            toISODate: () => eventDate.toISODate(),
-            toLocal: () => ({ toLocaleString: () => `${i % 12}:00 ${i % 12 >= 12 ? 'PM' : 'AM'}` }),
+            toLocal: () => ({ toISODate: () => eventDate.toISODate(), toLocaleString: () => `${i % 12}:00 ${i % 12 >= 12 ? 'PM' : 'AM'}` }),
           },
           event: {
             id: `e${i}`,
