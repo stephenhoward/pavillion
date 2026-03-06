@@ -2,19 +2,21 @@
 #
 # Pavillion Setup Script
 #
-# This script generates secure secrets for a new Pavillion deployment.
-# It creates both a .env file and individual secret files for Docker secrets.
+# Generates secure secrets and configures a new Pavillion deployment.
+# Creates .env file, Docker secret files, and local.yaml configuration.
 #
 # Usage:
-#   ./bin/setup.sh
+#   ./bin/setup.sh                          # Interactive: prompts for domain
+#   ./bin/setup.sh --domain=example.org     # Non-interactive: uses provided domain
 #
 # What this script does:
 #   1. Checks for existing configuration (.env, secrets/)
 #   2. Generates cryptographically secure secrets using OpenSSL
 #   3. Creates .env file with secure permissions (chmod 600)
 #   4. Creates secrets/ directory with individual secret files
-#   5. Displays secrets for backup to a password manager
-#   6. Provides next steps for deployment
+#   5. Prompts for domain and creates config/local.yaml
+#   6. Displays secrets for backup to a password manager
+#   7. Provides next steps for deployment
 #
 # Security Notes:
 #   - Generated secrets are 32 bytes of random data, base64 encoded
@@ -114,6 +116,7 @@ create_env_file() {
   local session_secret="$2"
   local email_hash_secret="$3"
   local db_password="$4"
+  local domain="$5"
 
   cat > .env << EOF
 # Pavillion Environment Variables
@@ -125,6 +128,16 @@ create_env_file() {
 #
 # For full documentation, see docs/configuration.md
 #
+
+# =============================================================================
+# Deployment Configuration
+# =============================================================================
+
+# Domain name for this Pavillion instance
+DOMAIN=${domain}
+
+# Docker Compose profiles to activate
+COMPOSE_PROFILES=standalone
 
 # =============================================================================
 # Security Secrets (Required)
@@ -213,6 +226,30 @@ create_secrets_directory() {
   print_success "Created secrets/ directory with individual secret files"
 }
 
+# Configure config/local.yaml from template
+configure_local_yaml() {
+  local domain="$1"
+
+  if [ -f "config/local.yaml" ]; then
+    print_warning "config/local.yaml already exists, skipping creation."
+    return
+  fi
+
+  if [ ! -f "config/local.yaml.example" ]; then
+    print_error "config/local.yaml.example not found, skipping local.yaml creation."
+    return
+  fi
+
+  cp config/local.yaml.example config/local.yaml
+
+  # Use | as sed delimiter to avoid issues with domains containing special chars
+  # Use sed -i.bak + rm for macOS/GNU sed portability
+  sed -i.bak "s|pavillion.example.org|${domain}|g" config/local.yaml
+  rm -f config/local.yaml.bak
+
+  print_success "Created config/local.yaml with domain '${domain}'"
+}
+
 # Display generated secrets for backup
 display_secrets() {
   local jwt_secret="$1"
@@ -250,14 +287,10 @@ display_next_steps() {
   echo ""
   echo "1. Back up your secrets to a password manager (e.g., Bitwarden, 1Password)"
   echo ""
-  echo "2. Configure your instance by editing config/local.yaml:"
-  echo "   cp config/local.yaml.example config/local.yaml"
-  echo "   # Edit config/local.yaml with your domain and email settings"
-  echo ""
-  echo "3. Start Pavillion:"
+  echo "2. Start Pavillion:"
   echo "   docker compose up -d"
   echo ""
-  echo "4. Check the logs:"
+  echo "3. Check the logs:"
   echo "   docker compose logs -f app"
   echo ""
   echo -e "${BOLD}Documentation:${NC}"
@@ -274,6 +307,15 @@ display_next_steps() {
 
 # Main function
 main() {
+  local domain=""
+
+  # Parse arguments
+  for arg in "$@"; do
+    case "$arg" in
+      --domain=*) domain="${arg#--domain=}" ;;
+    esac
+  done
+
   print_header
 
   # Check for OpenSSL
@@ -300,10 +342,27 @@ main() {
 
   print_success "Generated 4 unique secrets"
 
+  # Prompt for domain if not provided via flag
+  if [ -z "$domain" ]; then
+    if [ -t 0 ]; then
+      echo ""
+      echo -n "Enter your domain name (e.g., events.example.org): "
+      read -r domain
+      if [ -z "$domain" ]; then
+        print_error "Domain name is required."
+        exit 1
+      fi
+    else
+      print_error "No terminal detected. Use --domain=<value> for non-interactive mode."
+      exit 1
+    fi
+  fi
+
   # Create configuration files
   print_info "Creating configuration files..."
-  create_env_file "$jwt_secret" "$session_secret" "$email_hash_secret" "$db_password"
+  create_env_file "$jwt_secret" "$session_secret" "$email_hash_secret" "$db_password" "$domain"
   create_secrets_directory "$jwt_secret" "$session_secret" "$email_hash_secret" "$db_password"
+  configure_local_yaml "$domain"
 
   # Display secrets for backup
   display_secrets "$jwt_secret" "$session_secret" "$email_hash_secret" "$db_password"

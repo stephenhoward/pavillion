@@ -22,63 +22,22 @@ The webhook approach exposes only an HTTPS endpoint (behind Caddy with TLS and r
 
 ### 1. Provision the Server
 
-Run the provisioning script with the `--staging` flag to install the webhook package and create its systemd service:
+Run the provisioning script with the `--staging` flag. This will provision the server, clone the repo, generate secrets, configure the webhook, and start the webhook service:
 
 ```bash
-ssh root@your-server 'bash -s -- --staging' < bin/provision.sh
+ssh root@your-server 'bash -s -- --staging --domain=staging.example.org' < bin/provision.sh
 ```
 
-### 2. Copy Deploy Files
+At the end, the script displays a **webhook secret** — save it immediately.
 
-SSH to the server as the deploy user and copy the deploy script and webhook config:
-
-```bash
-ssh pavillion@your-server
-
-# Copy deploy script
-cp /opt/pavillion/docker/staging/deploy.sh /opt/pavillion/deploy.sh
-chmod 750 /opt/pavillion/deploy.sh
-
-# Copy webhook config
-cp /opt/pavillion/docker/staging/hooks.json /opt/pavillion/hooks.json
-chmod 600 /opt/pavillion/hooks.json
-```
-
-### 3. Generate and Set Webhook Secret
-
-```bash
-# Generate a secret
-SECRET=$(openssl rand -hex 32)
-echo "Save this secret for GitHub: $SECRET"
-
-# Substitute the placeholder in hooks.json
-sed -i "s/REPLACE_WITH_WEBHOOK_SECRET/${SECRET}/" /opt/pavillion/hooks.json
-```
-
-### 4. Start the Webhook Service
-
-```bash
-sudo systemctl start webhook
-sudo systemctl status webhook
-```
-
-### 5. Update Caddy Config
-
-Replace the production Caddyfile with the staging version:
-
-```bash
-cp /opt/pavillion/docker/staging/Caddyfile.staging /opt/pavillion/Caddyfile
-# Restart Caddy (via docker compose or systemctl, depending on your setup)
-```
-
-### 6. Add GitHub Secrets
+### 2. Add GitHub Secrets
 
 In your GitHub repository settings, add these secrets under the `staging` environment:
 
 - **`STAGING_HOST`**: The domain name of your staging server (e.g., `staging.pavillion.dev`)
-- **`DEPLOY_WEBHOOK_SECRET`**: The secret generated in step 3
+- **`DEPLOY_WEBHOOK_SECRET`**: The webhook secret displayed at the end of provisioning
 
-### 7. Verify
+### 3. Verify
 
 Test the webhook endpoint manually:
 
