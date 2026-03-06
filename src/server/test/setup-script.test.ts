@@ -44,10 +44,11 @@ function cleanupTestEnvironment(tempDir: string): void {
 function runSetupWithInput(
   cwd: string,
   input: string,
+  args = '',
   timeout = 10000,
 ): { stdout: string; stderr: string; exitCode: number } {
   try {
-    const stdout = execSync(`echo "${input}" | ./setup.sh`, {
+    const stdout = execSync(`echo "${input}" | ./setup.sh ${args}`, {
       cwd,
       encoding: 'utf8',
       timeout,
@@ -66,9 +67,9 @@ function runSetupWithInput(
 }
 
 // Helper to run setup.sh without input (for fresh environment)
-function runSetup(cwd: string, timeout = 10000): { stdout: string; stderr: string; exitCode: number } {
+function runSetup(cwd: string, args = '', timeout = 10000): { stdout: string; stderr: string; exitCode: number } {
   try {
-    const stdout = execSync('./setup.sh', {
+    const stdout = execSync(`./setup.sh ${args}`, {
       cwd,
       encoding: 'utf8',
       timeout,
@@ -105,7 +106,7 @@ describe('Setup Script', () => {
   describe('Secret Generation', () => {
     it('should generate cryptographically secure secrets', () => {
       // Run setup.sh in a fresh environment
-      const result = runSetup(testDir);
+      const result = runSetup(testDir, '--domain=test.example.org');
 
       // Script should complete successfully
       expect(result.exitCode).toBe(0);
@@ -143,7 +144,7 @@ describe('Setup Script', () => {
       // Run again to verify new secrets are generated each time
       cleanupTestEnvironment(testDir);
       testDir = createTestEnvironment();
-      runSetup(testDir);
+      runSetup(testDir, '--domain=test.example.org');
 
       const envContent2 = fs.readFileSync(path.join(testDir, '.env'), 'utf8');
       const jwtMatch2 = envContent2.match(/JWT_SECRET=(.+)/);
@@ -155,7 +156,7 @@ describe('Setup Script', () => {
 
   describe('File Permissions', () => {
     it('should create .env file with 600 permissions', () => {
-      runSetup(testDir);
+      runSetup(testDir, '--domain=test.example.org');
 
       const envPath = path.join(testDir, '.env');
       expect(fs.existsSync(envPath)).toBe(true);
@@ -170,7 +171,7 @@ describe('Setup Script', () => {
 
   describe('Secrets Directory', () => {
     it('should create secrets/ directory with individual secret files', () => {
-      runSetup(testDir);
+      runSetup(testDir, '--domain=test.example.org');
 
       const secretsDir = path.join(testDir, 'secrets');
       expect(fs.existsSync(secretsDir)).toBe(true);
@@ -205,7 +206,7 @@ describe('Setup Script', () => {
       fs.writeFileSync(path.join(testDir, '.env'), 'DB_PASSWORD=old_password\n');
 
       // Run setup and provide empty input (just press Enter to cancel)
-      const result = runSetupWithInput(testDir, '');
+      const result = runSetupWithInput(testDir, '', '--domain=test.example.org');
 
       // Should show warning about existing configuration
       expect(result.stdout).toMatch(/WARNING|existing|Found/i);
@@ -220,7 +221,7 @@ describe('Setup Script', () => {
       fs.writeFileSync(path.join(testDir, 'secrets', 'db_password.txt'), 'original');
 
       // Run setup and cancel by pressing Enter (empty input)
-      const result = runSetupWithInput(testDir, '');
+      const result = runSetupWithInput(testDir, '', '--domain=test.example.org');
 
       // Should exit with code 0 (clean exit, not an error)
       expect(result.exitCode).toBe(0);
@@ -239,25 +240,25 @@ describe('Setup Script', () => {
       fs.writeFileSync(path.join(testDir, '.env'), existingEnv);
 
       // Try with "y" - should NOT proceed
-      const resultY = runSetupWithInput(testDir, 'y');
+      const resultY = runSetupWithInput(testDir, 'y', '--domain=test.example.org');
       expect(resultY.exitCode).toBe(0); // Clean exit
       let currentEnv = fs.readFileSync(path.join(testDir, '.env'), 'utf8');
       expect(currentEnv).toBe(existingEnv); // Original preserved
 
       // Try with "yes" - should NOT proceed
-      const resultYes = runSetupWithInput(testDir, 'yes');
+      const resultYes = runSetupWithInput(testDir, 'yes', '--domain=test.example.org');
       expect(resultYes.exitCode).toBe(0);
       currentEnv = fs.readFileSync(path.join(testDir, '.env'), 'utf8');
       expect(currentEnv).toBe(existingEnv);
 
       // Try with "OVERWRITE" (wrong case) - should NOT proceed
-      const resultUppercase = runSetupWithInput(testDir, 'OVERWRITE');
+      const resultUppercase = runSetupWithInput(testDir, 'OVERWRITE', '--domain=test.example.org');
       expect(resultUppercase.exitCode).toBe(0);
       currentEnv = fs.readFileSync(path.join(testDir, '.env'), 'utf8');
       expect(currentEnv).toBe(existingEnv);
 
       // Try with "overwrite" - SHOULD proceed
-      const resultOverwrite = runSetupWithInput(testDir, 'overwrite');
+      const resultOverwrite = runSetupWithInput(testDir, 'overwrite', '--domain=test.example.org');
       expect(resultOverwrite.exitCode).toBe(0);
       currentEnv = fs.readFileSync(path.join(testDir, '.env'), 'utf8');
       expect(currentEnv).not.toBe(existingEnv); // Should be new content
