@@ -1,23 +1,10 @@
 import { defineStore } from 'pinia';
 import { useCalendarStore } from './calendarStore';
-import FeedService, {
-  type FollowRelationship,
-  type FollowerRelationship,
-  type FeedEvent,
-  type CategoryEntry,
-  type CategoryMappingEntry,
+import type {
+  FollowRelationship,
+  FollowerRelationship,
+  FeedEvent,
 } from '@/client/service/feed';
-
-/**
- * State representing a pending repost that requires the user to select categories.
- */
-interface PendingRepost {
-  eventId: string;
-  preSelectedIds: string[];
-  sourceCategories: CategoryEntry[];
-  allLocalCategories: CategoryEntry[];
-  calendarActorUuid: string;
-}
 
 /**
  * State interface for the feed store
@@ -28,57 +15,12 @@ interface FeedState {
   events: FeedEvent[];
   eventsPage: number;
   eventsHasMore: boolean;
-  loading: {
-    follows: boolean;
-    followers: boolean;
-    events: boolean;
-  };
-  pendingRepost: PendingRepost | null;
 }
 
 /**
- * Attempt to find which follow relationship corresponds to a given feed event.
- * Uses a domain-based heuristic for remote events, or falls back to single-follow detection.
- *
- * @param follows - List of follow relationships
- * @param event - The feed event to match
- * @returns The matching follow relationship, or null if not determinable
- */
-function findFollowForEvent(follows: FollowRelationship[], event: FeedEvent): FollowRelationship | null {
-  if (follows.length === 0) {
-    return null;
-  }
-
-  // For remote events: try to match by domain extracted from eventSourceUrl
-  if (!event.calendarId && event.eventSourceUrl) {
-    try {
-      const eventDomain = new URL(event.eventSourceUrl).hostname;
-      const match = follows.find((f) => {
-        const parts = f.calendarActorId.split('@');
-        return parts.length === 2 && parts[1] === eventDomain;
-      });
-      if (match) {
-        return match;
-      }
-    }
-    catch {
-      // URL parse failed; fall through to single-follow fallback
-    }
-  }
-
-  // Fallback: if there is exactly one follow, assume it is the source
-  if (follows.length === 1) {
-    return follows[0];
-  }
-
-  return null;
-}
-
-/** Shared service instance for all store actions. */
-const feedService = new FeedService();
-
-/**
- * Pinia store for managing feed state and operations
+ * Pinia store for feed data cache.
+ * Contains only data state and simple mutation actions.
+ * API calls and loading state are managed by composables and FeedService.
  */
 export const useFeedStore = defineStore('feed', {
   state: (): FeedState => {
@@ -88,12 +30,6 @@ export const useFeedStore = defineStore('feed', {
       events: [],
       eventsPage: 0,
       eventsHasMore: false,
-      loading: {
-        follows: false,
-        followers: false,
-        events: false,
-      },
-      pendingRepost: null,
     };
   },
 
@@ -120,27 +56,6 @@ export const useFeedStore = defineStore('feed', {
     hasMultipleCalendars(): boolean {
       const calendarStore = useCalendarStore();
       return calendarStore.calendars.length > 1;
-    },
-
-    /**
-     * Check if events are currently loading
-     */
-    isLoadingEvents(): boolean {
-      return this.loading.events;
-    },
-
-    /**
-     * Check if follows are currently loading
-     */
-    isLoadingFollows(): boolean {
-      return this.loading.follows;
-    },
-
-    /**
-     * Check if followers are currently loading
-     */
-    isLoadingFollowers(): boolean {
-      return this.loading.followers;
     },
   },
 
@@ -169,421 +84,43 @@ export const useFeedStore = defineStore('feed', {
     },
 
     /**
-     * Load list of calendars the user follows
+     * Replace the follows list.
      */
-    async loadFollows() {
-      if (!this.selectedCalendarId) {
-        return;
-      }
-
-      this.loading.follows = true;
-      try {
-        this.follows = await feedService.getFollows(this.selectedCalendarId);
-      }
-      catch (error) {
-        console.error('Error loading follows:', error);
-        throw error;
-      }
-      finally {
-        this.loading.follows = false;
-      }
+    setFollows(follows: FollowRelationship[]) {
+      this.follows = follows;
     },
 
     /**
-     * Load list of calendars following the user
+     * Replace the followers list.
      */
-    async loadFollowers() {
-      if (!this.selectedCalendarId) {
-        return;
-      }
-
-      this.loading.followers = true;
-      try {
-        this.followers = await feedService.getFollowers(this.selectedCalendarId);
-      }
-      catch (error) {
-        console.error('Error loading followers:', error);
-        throw error;
-      }
-      finally {
-        this.loading.followers = false;
-      }
+    setFollowers(followers: FollowerRelationship[]) {
+      this.followers = followers;
     },
 
     /**
-     * Load feed events from followed calendars
-     *
-     * @param append - If true, append to existing events (for infinite scroll)
+     * Replace the events list and reset pagination to page 0.
      */
-    async loadFeed(append: boolean = false) {
-      if (!this.selectedCalendarId) {
-        return;
-      }
-
-      this.loading.events = true;
-      try {
-        const page = append ? this.eventsPage + 1 : 0;
-        const response = await feedService.getFeed(this.selectedCalendarId, page, 20);
-
-        if (append) {
-          this.events = [...this.events, ...response.events];
-          this.eventsPage = page;
-        }
-        else {
-          this.events = response.events;
-          this.eventsPage = 0;
-        }
-
-        this.eventsHasMore = response.hasMore;
-      }
-      catch (error) {
-        console.error('Error loading feed:', error);
-        throw error;
-      }
-      finally {
-        this.loading.events = false;
-      }
+    setEvents(events: FeedEvent[]) {
+      this.events = events;
+      this.eventsPage = 0;
     },
 
     /**
-     * Follow a remote calendar
+     * Append events to the list for infinite scroll pagination.
      *
-     * @param identifier - The remote calendar identifier (e.g., calendar@domain.com)
-     * @param autoRepostOriginals - Whether to auto-repost original events (default: false)
-     * @param autoRepostReposts - Whether to auto-repost shared events (default: false)
-     * @returns The calendarActorId of the newly added follow, or null if not found
+     * @param events - New events to append
+     * @param page - The page number these events correspond to
      */
-    async followCalendar(
-      identifier: string,
-      autoRepostOriginals: boolean = false,
-      autoRepostReposts: boolean = false,
-    ): Promise<string | null> {
-      if (!this.selectedCalendarId) {
-        return null;
-      }
-
-      const previousFollowIds = new Set(this.follows.map((f) => f.id));
-
-      await feedService.followCalendar(this.selectedCalendarId, identifier, autoRepostOriginals, autoRepostReposts);
-
-      // Refresh follows list
-      await this.loadFollows();
-
-      // Find the newly added follow by comparing with the previous set of IDs
-      const newFollow = this.follows.find((f) => !previousFollowIds.has(f.id));
-      return newFollow?.calendarActorUuid ?? null;
+    appendEvents(events: FeedEvent[], page: number) {
+      this.events = [...this.events, ...events];
+      this.eventsPage = page;
     },
 
     /**
-     * Unfollow a remote calendar with optimistic update
-     *
-     * @param followId - The follow relationship ID to remove
+     * Set whether more events are available for pagination.
      */
-    async unfollowCalendar(followId: string) {
-      if (!this.selectedCalendarId) {
-        return;
-      }
-
-      // Optimistic update
-      const previousFollows = [...this.follows];
-      this.follows = this.follows.filter((f) => f.id !== followId);
-
-      try {
-        await feedService.unfollowCalendar(this.selectedCalendarId, followId);
-      }
-      catch (error) {
-        // Rollback on error
-        this.follows = previousFollows;
-        throw error;
-      }
-    },
-
-    /**
-     * Update the auto-repost policy for a follow relationship
-     *
-     * @param followId - The follow relationship ID
-     * @param autoRepostOriginals - Whether to auto-repost original events
-     * @param autoRepostReposts - Whether to auto-repost shared events
-     */
-    async updateFollowPolicy(
-      followId: string,
-      autoRepostOriginals: boolean,
-      autoRepostReposts: boolean,
-    ) {
-      if (!this.selectedCalendarId) {
-        return;
-      }
-
-      const followIndex = this.follows.findIndex((f) => f.id === followId);
-      if (followIndex === -1) {
-        return;
-      }
-
-      // Optimistic update
-      const previousOriginals = this.follows[followIndex].autoRepostOriginals;
-      const previousReposts = this.follows[followIndex].autoRepostReposts;
-      this.follows[followIndex].autoRepostOriginals = autoRepostOriginals;
-      this.follows[followIndex].autoRepostReposts = autoRepostReposts;
-
-      try {
-        const updated = await feedService.updateFollowPolicy(
-          followId,
-          autoRepostOriginals,
-          autoRepostReposts,
-          this.selectedCalendarId,
-        );
-        this.follows[followIndex] = updated;
-      }
-      catch (error) {
-        // Rollback on error
-        this.follows[followIndex].autoRepostOriginals = previousOriginals;
-        this.follows[followIndex].autoRepostReposts = previousReposts;
-        throw error;
-      }
-    },
-
-    /**
-     * Execute the actual repost API call with optional category IDs.
-     * Applies an optimistic update before the call and rolls back on error.
-     *
-     * @param eventId - The ID of the event to repost
-     * @param categoryIds - Local category IDs to assign to the reposted event
-     */
-    async _doRepost(eventId: string, categoryIds: string[]) {
-      if (!this.selectedCalendarId) {
-        return;
-      }
-
-      const eventIndex = this.events.findIndex((e) => e.id === eventId);
-      if (eventIndex === -1) {
-        return;
-      }
-
-      // Use the event's ActivityPub source URL for the repost API call
-      const eventSourceUrl = this.events[eventIndex].eventSourceUrl;
-
-      // Optimistic update
-      const previousStatus = this.events[eventIndex].repostStatus;
-      this.events[eventIndex].repostStatus = 'manual';
-
-      try {
-        await feedService.shareEvent(this.selectedCalendarId, eventSourceUrl, categoryIds);
-      }
-      catch (error) {
-        // Rollback on error
-        this.events[eventIndex].repostStatus = previousStatus;
-        console.error('Error reposting event:', error);
-        throw error;
-      }
-    },
-
-    /**
-     * Repost an event from the feed to the current calendar.
-     *
-     * Checks source categories and existing mappings before reposting:
-     * - If source follow cannot be identified: reposts silently
-     * - If source has no categories: reposts silently
-     * - If all source categories are mapped: applies mappings silently
-     * - If any source category is unmapped: sets pendingRepost state so the
-     *   component can open the category selection modal
-     *
-     * @param eventId - The ID of the event to repost
-     */
-    async repostEvent(eventId: string) {
-      if (!this.selectedCalendarId) {
-        return;
-      }
-
-      const event = this.events.find((e) => e.id === eventId);
-      if (!event) {
-        return;
-      }
-
-      // Find the follow relationship for this event
-      const follow = findFollowForEvent(this.follows, event);
-
-      // If we cannot determine the source follow, repost silently
-      if (!follow) {
-        return this._doRepost(eventId, []);
-      }
-
-      // Fetch source categories for this followed calendar
-      let sourceCategories: CategoryEntry[] = [];
-      try {
-        sourceCategories = await feedService.getSourceCategories(this.selectedCalendarId, follow.calendarActorUuid);
-      }
-      catch {
-        // If we can't fetch source categories, repost silently
-        return this._doRepost(eventId, []);
-      }
-
-      // If the source calendar has no categories, repost silently
-      if (sourceCategories.length === 0) {
-        return this._doRepost(eventId, []);
-      }
-
-      // Narrow to only the source categories assigned to this specific event.
-      // The feed response includes categoryIds when available. Three cases:
-      //   undefined — categoryIds not in feed response; fall back to checking all source categories
-      //   []        — event has no categories; repost silently
-      //   [ids]     — filter source categories to only those on this event
-      const eventCategoryIds = event.categoryIds;
-      let relevantSourceCategories: CategoryEntry[];
-      if (eventCategoryIds === undefined) {
-        relevantSourceCategories = sourceCategories;
-      }
-      else if (eventCategoryIds.length === 0) {
-        relevantSourceCategories = [];
-      }
-      else {
-        relevantSourceCategories = sourceCategories.filter((src) => eventCategoryIds.includes(src.id));
-      }
-
-      if (relevantSourceCategories.length === 0) {
-        return this._doRepost(eventId, []);
-      }
-
-      // Fetch existing category mappings
-      let mappings: CategoryMappingEntry[] = [];
-      try {
-        mappings = await feedService.getCategoryMappings(this.selectedCalendarId, follow.calendarActorUuid);
-      }
-      catch {
-        // If we can't fetch mappings, fall through to show modal with empty pre-selection
-      }
-
-      // Build the list of pre-selected local category IDs from existing mappings
-      // considering only the categories that are actually on this event.
-      const preSelectedIds = relevantSourceCategories
-        .map((src) => mappings.find((m) => m.sourceCategoryId === src.id)?.localCategoryId)
-        .filter((id): id is string => id !== undefined);
-
-      const allMapped = preSelectedIds.length === relevantSourceCategories.length;
-
-      if (allMapped) {
-        // All source categories are mapped: apply silently
-        return this._doRepost(eventId, preSelectedIds);
-      }
-
-      // Some categories are unmapped: fetch local categories and open the modal
-      let allLocalCategories: CategoryEntry[] = [];
-      try {
-        allLocalCategories = await feedService.getCalendarCategories(this.selectedCalendarId);
-      }
-      catch {
-        // If we can't load local categories, repost silently with partial mappings
-        return this._doRepost(eventId, preSelectedIds);
-      }
-
-      // Signal to the component that a pending repost needs user input
-      this.pendingRepost = {
-        eventId,
-        preSelectedIds,
-        sourceCategories: relevantSourceCategories,
-        allLocalCategories,
-        calendarActorUuid: follow.calendarActorUuid,
-      };
-    },
-
-    /**
-     * Confirm a pending repost with the user-selected category IDs.
-     * Called by the component when the user confirms the modal.
-     *
-     * When sourceCategoriesToAdopt is provided (no-local-categories mode), this method:
-     * 1. Creates each adopted source category as a new local category
-     * 2. Saves the source-to-local mappings
-     * 3. Reposts with the new local category IDs
-     *
-     * @param categoryIds - The local category IDs selected by the user (has-categories mode)
-     * @param sourceCategoriesToAdopt - Source categories to create locally (no-categories mode)
-     */
-    async confirmPendingRepost(categoryIds: string[], sourceCategoriesToAdopt?: CategoryEntry[]) {
-      if (!this.pendingRepost) {
-        return;
-      }
-
-      const { eventId, calendarActorUuid } = this.pendingRepost;
-      this.pendingRepost = null;
-
-      if (!sourceCategoriesToAdopt || sourceCategoriesToAdopt.length === 0) {
-        return this._doRepost(eventId, categoryIds);
-      }
-
-      if (!this.selectedCalendarId) {
-        return;
-      }
-
-      // Create each adopted source category as a new local category and collect mappings
-      const newMappings: CategoryMappingEntry[] = [];
-      const newLocalCategoryIds: string[] = [];
-
-      for (const sourceCat of sourceCategoriesToAdopt) {
-        const newLocalCat = await feedService.createLocalCategory(this.selectedCalendarId, sourceCat.name);
-        newLocalCategoryIds.push(newLocalCat.id);
-        newMappings.push({
-          sourceCategoryId: sourceCat.id,
-          sourceCategoryName: sourceCat.name,
-          localCategoryId: newLocalCat.id,
-        });
-      }
-
-      // Fetch existing mappings and merge with new ones
-      let existingMappings: CategoryMappingEntry[] = [];
-      try {
-        existingMappings = await feedService.getCategoryMappings(this.selectedCalendarId, calendarActorUuid);
-      }
-      catch {
-        // If we can't fetch existing mappings, proceed with just the new ones
-      }
-
-      // Merge: new mappings override any existing mapping for the same source category
-      const existingFiltered = existingMappings.filter(
-        (m) => !newMappings.some((n) => n.sourceCategoryId === m.sourceCategoryId),
-      );
-      await feedService.setCategoryMappings(
-        this.selectedCalendarId,
-        calendarActorUuid,
-        [...existingFiltered, ...newMappings],
-      );
-
-      return this._doRepost(eventId, newLocalCategoryIds);
-    },
-
-    /**
-     * Cancel a pending repost, dismissing the modal without reposting.
-     */
-    cancelPendingRepost() {
-      this.pendingRepost = null;
-    },
-
-    /**
-     * Un-repost an event (remove repost from current calendar)
-     *
-     * @param eventId - The ID of the event to un-repost
-     */
-    async unrepostEvent(eventId: string) {
-      if (!this.selectedCalendarId) {
-        return;
-      }
-
-      const eventIndex = this.events.findIndex((e) => e.id === eventId);
-      if (eventIndex === -1) {
-        return;
-      }
-
-      // Optimistic update
-      const previousStatus = this.events[eventIndex].repostStatus;
-      this.events[eventIndex].repostStatus = 'none';
-
-      try {
-        await feedService.unshareEvent(this.selectedCalendarId, eventId);
-      }
-      catch (error) {
-        // Rollback on error
-        this.events[eventIndex].repostStatus = previousStatus;
-        console.error('Error unreposting event:', error);
-        throw error;
-      }
+    setEventsHasMore(hasMore: boolean) {
+      this.eventsHasMore = hasMore;
     },
   },
 });

@@ -1,12 +1,22 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
+import { ref } from 'vue';
 import sinon from 'sinon';
 import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
 import Followers from '../followers.vue';
 import { useFeedStore } from '@/client/stores/feedStore';
 import type { FollowerRelationship } from '@/client/service/feed';
+
+const mockIsLoading = ref(false);
+
+vi.mock('@/client/composables/useFeedFollowers', () => ({
+  useFeedFollowers: () => ({
+    isLoading: mockIsLoading,
+    loadFollowers: vi.fn(),
+  }),
+}));
 
 describe('Followers Tab', () => {
   let pinia: ReturnType<typeof createPinia>;
@@ -43,7 +53,7 @@ describe('Followers Tab', () => {
   it('should show empty state when there are no followers', () => {
     const feedStore = useFeedStore();
     feedStore.followers = [];
-    feedStore.loading.followers = false;
+    mockIsLoading.value = false;
 
     const wrapper = mount(Followers, {
       global: {
@@ -83,7 +93,7 @@ describe('Followers Tab', () => {
     ];
 
     feedStore.followers = mockFollowers;
-    feedStore.loading.followers = false;
+    mockIsLoading.value = false;
 
     const wrapper = mount(Followers, {
       global: {
@@ -100,7 +110,7 @@ describe('Followers Tab', () => {
 
   it('should show loading state while fetching followers', () => {
     const feedStore = useFeedStore();
-    feedStore.loading.followers = true;
+    mockIsLoading.value = true;
     feedStore.followers = [];
 
     const wrapper = mount(Followers, {

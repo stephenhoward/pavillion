@@ -18,6 +18,7 @@ import {
 } from '@/common/exceptions/activitypub';
 import { InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
 import { handleApiError } from '@/client/service/utils';
+import { useFeedStore } from '@/client/stores/feedStore';
 
 const errorMap = {
   InvalidRemoteCalendarIdentifierError,
@@ -104,6 +105,71 @@ export interface CategoryMappingEntry {
  * Client service for feed and social operations
  */
 export default class FeedService {
+  private _store?: ReturnType<typeof useFeedStore>;
+
+  constructor(store?: ReturnType<typeof useFeedStore>) {
+    this._store = store;
+  }
+
+  /**
+   * Lazily access the feed store. Only initializes when first accessed,
+   * allowing HTTP-only methods to work without an active Pinia instance.
+   */
+  private get store(): ReturnType<typeof useFeedStore> {
+    if (!this._store) {
+      this._store = useFeedStore();
+    }
+    return this._store;
+  }
+
+  /**
+   * Load follows from the API and update the store.
+   * @param calendarId The calendar ID to load follows for
+   * @returns Promise<FollowRelationship[]> The loaded follows
+   */
+  async loadFollows(calendarId: string): Promise<FollowRelationship[]> {
+    const follows = await this.getFollows(calendarId);
+    this.store.setFollows(follows);
+    return follows;
+  }
+
+  /**
+   * Load followers from the API and update the store.
+   * @param calendarId The calendar ID to load followers for
+   * @returns Promise<FollowerRelationship[]> The loaded followers
+   */
+  async loadFollowers(calendarId: string): Promise<FollowerRelationship[]> {
+    const followers = await this.getFollowers(calendarId);
+    this.store.setFollowers(followers);
+    return followers;
+  }
+
+  /**
+   * Load the initial page of feed events and update the store.
+   * @param calendarId The calendar ID to load feed for
+   * @param pageSize The number of events per page
+   * @returns Promise<FeedResponse> The loaded feed response
+   */
+  async loadFeed(calendarId: string, pageSize: number = 20): Promise<FeedResponse> {
+    const response = await this.getFeed(calendarId, 0, pageSize);
+    this.store.setEvents(response.events);
+    this.store.setEventsHasMore(response.hasMore);
+    return response;
+  }
+
+  /**
+   * Load the next page of feed events and append to the store.
+   * @param calendarId The calendar ID to load feed for
+   * @param page The page number to load
+   * @param pageSize The number of events per page
+   * @returns Promise<FeedResponse> The loaded feed response
+   */
+  async loadMoreFeed(calendarId: string, page: number, pageSize: number = 20): Promise<FeedResponse> {
+    const response = await this.getFeed(calendarId, page, pageSize);
+    this.store.appendEvents(response.events, page);
+    this.store.setEventsHasMore(response.hasMore);
+    return response;
+  }
 
   /**
    * Get list of calendars the user follows

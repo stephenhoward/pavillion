@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useFeedStore } from '@/client/stores/feedStore';
+import { useFeedFollowers } from '@/client/composables/useFeedFollowers';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
 import FollowerListItem from './follower_list_item.vue';
 
@@ -10,9 +11,9 @@ const { t } = useTranslation('feed', {
 });
 
 const feedStore = useFeedStore();
+const { isLoading } = useFeedFollowers();
 
 const followers = computed(() => feedStore.followers);
-const isLoading = computed(() => feedStore.isLoadingFollowers);
 </script>
 
 <template>
