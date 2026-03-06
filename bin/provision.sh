@@ -197,6 +197,12 @@ configure_firewall() {
   ufw allow 80/tcp > /dev/null
   ufw allow 443/tcp > /dev/null
 
+  # Staging: allow Docker containers to reach the webhook listener on port 9000
+  if [ "$STAGING_MODE" = true ]; then
+    ufw allow in on docker0 to any port 9000 > /dev/null
+    print_success "Allowed Docker bridge traffic to webhook port 9000"
+  fi
+
   # Enable firewall (--force skips the confirmation prompt)
   ufw --force enable > /dev/null
   print_success "UFW enabled: allowing SSH (${SSH_PORT}), HTTP (80), HTTPS (443)"
