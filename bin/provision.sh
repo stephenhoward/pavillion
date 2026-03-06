@@ -7,10 +7,16 @@
 #
 # Usage (from your local machine):
 #   ssh root@your-server 'bash -s' < bin/provision.sh
+#   ssh root@your-server 'bash -s -- --staging --domain=staging.example.org' < bin/provision.sh
 #
 # Or copy to the server and run:
 #   scp bin/provision.sh root@your-server:/tmp/
 #   ssh root@your-server 'bash /tmp/provision.sh'
+#
+# Flags:
+#   --staging              Enable staging mode (webhook listener, auto-deploy)
+#   --domain=<value>       Domain name for the instance (required when piped)
+#   --repo=<url>           Git repository URL (default: GitHub repo)
 #
 # What this script does:
 #   1. Creates a 'pavillion' deploy user with sudo access
@@ -19,20 +25,8 @@
 #   4. Installs Docker CE from official repository
 #   5. Adds deploy user to docker group
 #   6. Creates application directory at /opt/pavillion
-#
-# After running this script:
-#   1. SSH to the server as the deploy user:
-#      ssh pavillion@your-server
-#   2. Clone the repo or copy deployment files:
-#      cd /opt/pavillion
-#      git clone https://github.com/stephenhoward/pavillion.git .
-#   3. Run the setup script:
-#      ./bin/setup.sh
-#   4. Configure your instance:
-#      cp config/local.yaml.example config/local.yaml
-#      # Edit config/local.yaml with your domain and settings
-#   5. Start Pavillion:
-#      docker compose --profile standalone up -d
+#   7. Clones the repo and runs setup.sh
+#   8. (Staging) Configures webhook auto-deploy
 #
 # Requirements:
 #   - Fresh Debian 12 (Bookworm) or later
@@ -54,6 +48,8 @@ DEPLOY_USER="pavillion"
 APP_DIR="/opt/pavillion"
 SSH_PORT=22
 STAGING_MODE=false
+DOMAIN=""
+REPO_URL="https://github.com/stephenhoward/pavillion.git"
 
 # --- Colors ------------------------------------------------------------------
 
@@ -104,6 +100,14 @@ preflight() {
     print_error "No SSH authorized_keys found for root."
     print_error "Add your SSH public key before running this script:"
     print_error "  ssh-copy-id root@your-server"
+    exit 1
+  fi
+
+  # When piped (non-interactive), require --domain flag
+  if [ ! -t 0 ] && [ -z "$DOMAIN" ]; then
+    print_error "Non-interactive mode detected (piped stdin)."
+    print_error "Use --domain=<value> when piping this script:"
+    print_error "  ssh root@server 'bash -s -- --domain=example.org' < bin/provision.sh"
     exit 1
   fi
 }
@@ -160,8 +164,8 @@ harden_ssh() {
   # Apply hardening via drop-in config (cleaner than editing main file)
   cat > /etc/ssh/sshd_config.d/99-pavillion-hardening.conf << EOF
 # Pavillion SSH hardening - applied by bin/provision.sh
-PermitRootLogin no
-PasswordAuthentication no
+ PermitRootLogin no
+ PasswordAuthentication no
 ChallengeResponseAuthentication no
 UsePAM yes
 X11Forwarding no
@@ -305,6 +309,92 @@ EOF
   print_success "Created and enabled webhook.service (not started — start after hooks.json is in place)"
 }
 
+# --- Clone repo and run setup ------------------------------------------------
+
+clone_and_setup() {
+  print_step "Cloning repository and running setup"
+
+  # Prompt for domain interactively if not provided
+  if [ -z "$DOMAIN" ]; then
+    echo ""
+    echo -n "Enter your domain name (e.g., events.example.org): "
+    read -r DOMAIN
+    if [ -z "$DOMAIN" ]; then
+      print_error "Domain name is required."
+      exit 1
+    fi
+  fi
+
+  # Clone the repository as deploy user
+  if [ "$(ls -A "${APP_DIR}" 2>/dev/null)" ]; then
+    print_warning "${APP_DIR} is not empty, skipping clone."
+  else
+    if su - "${DEPLOY_USER}" -c "git clone ${REPO_URL} ${APP_DIR}" 2>&1; then
+      print_success "Cloned repository to ${APP_DIR}"
+    else
+      print_error "Failed to clone repository. You will need to clone manually."
+      return 1
+    fi
+  fi
+
+  # Run setup.sh as deploy user
+  if [ -f "${APP_DIR}/bin/setup.sh" ]; then
+    su - "${DEPLOY_USER}" -c "cd ${APP_DIR} && ./bin/setup.sh --domain=${DOMAIN}"
+    print_success "Setup script completed"
+  else
+    print_error "bin/setup.sh not found in ${APP_DIR}. Run setup manually after cloning."
+    return 1
+  fi
+}
+
+# --- Configure staging auto-deploy ------------------------------------------
+
+configure_staging() {
+  print_step "Configuring staging auto-deploy"
+
+  local webhook_secret
+  webhook_secret=$(openssl rand -hex 32)
+
+  # Copy deploy script
+  if [ -f "${APP_DIR}/docker/staging/deploy.sh" ]; then
+    cp "${APP_DIR}/docker/staging/deploy.sh" "${APP_DIR}/deploy.sh"
+    chmod 750 "${APP_DIR}/deploy.sh"
+    chown "${DEPLOY_USER}:${DEPLOY_USER}" "${APP_DIR}/deploy.sh"
+    print_success "Copied deploy.sh"
+  else
+    print_error "docker/staging/deploy.sh not found, skipping deploy script."
+  fi
+
+  # Copy and configure hooks.json with generated webhook secret
+  if [ -f "${APP_DIR}/docker/staging/hooks.json" ]; then
+    cp "${APP_DIR}/docker/staging/hooks.json" "${APP_DIR}/hooks.json"
+    # Use | as sed delimiter for portability
+    sed -i.bak "s|REPLACE_WITH_WEBHOOK_SECRET|${webhook_secret}|" "${APP_DIR}/hooks.json"
+    rm -f "${APP_DIR}/hooks.json.bak"
+    chmod 600 "${APP_DIR}/hooks.json"
+    chown "${DEPLOY_USER}:${DEPLOY_USER}" "${APP_DIR}/hooks.json"
+    print_success "Configured hooks.json with webhook secret"
+  else
+    print_error "docker/staging/hooks.json not found, skipping webhook config."
+  fi
+
+  # Copy staging Caddyfile
+  if [ -f "${APP_DIR}/docker/staging/Caddyfile.staging" ]; then
+    cp "${APP_DIR}/docker/staging/Caddyfile.staging" "${APP_DIR}/Caddyfile"
+    chown "${DEPLOY_USER}:${DEPLOY_USER}" "${APP_DIR}/Caddyfile"
+    print_success "Copied staging Caddyfile"
+  else
+    print_error "docker/staging/Caddyfile.staging not found, skipping Caddyfile."
+  fi
+
+  # Start webhook service
+  systemctl start webhook
+  print_success "Started webhook service"
+
+  # Store webhook secret for summary display
+  WEBHOOK_SECRET="$webhook_secret"
+}
+
 # --- Summary ------------------------------------------------------------------
 
 print_summary() {
@@ -322,61 +412,32 @@ print_summary() {
   echo "  - UFW firewall (SSH, HTTP, HTTPS only)"
   echo "  - Docker CE with Compose plugin"
   echo "  - Application directory at ${APP_DIR}"
+  echo "  - Repository cloned and secrets generated"
   echo ""
   echo -e "${YELLOW}${BOLD}IMPORTANT: Root SSH is now disabled.${NC}"
   echo -e "${YELLOW}From now on, connect as:${NC}"
   echo -e "${YELLOW}  ssh ${DEPLOY_USER}@${server_ip}${NC}"
   echo ""
-  echo -e "${BOLD}Next steps (on the server as '${DEPLOY_USER}'):${NC}"
+  echo -e "${BOLD}Next steps:${NC}"
   echo ""
-  echo "  1. SSH to the server:"
-  echo "     ssh ${DEPLOY_USER}@${server_ip}"
+  echo "  1. Back up your secrets to a password manager"
+  echo "     ssh ${DEPLOY_USER}@${server_ip} 'cat ${APP_DIR}/.env'"
   echo ""
-  echo "  2. Clone Pavillion:"
-  echo "     cd ${APP_DIR}"
-  echo "     git clone https://github.com/stephenhoward/pavillion.git ."
-  echo ""
-  echo "  3. Generate secrets:"
-  echo "     ./bin/setup.sh"
-  echo ""
-  echo "  4. Configure your instance:"
-  echo "     cp config/local.yaml.example config/local.yaml"
-  echo "     nano config/local.yaml  # set your domain and email"
-  echo "     nano .env               # set DOMAIN and COMPOSE_PROFILES=standalone"
-  echo ""
-  echo "  5. Start Pavillion:"
-  echo "     docker compose --profile standalone up -d"
-  echo ""
-  echo "  6. Check it's running:"
-  echo "     docker compose ps"
-  echo "     docker compose logs -f app"
+  echo "  2. Start Pavillion:"
+  echo "     ssh ${DEPLOY_USER}@${server_ip} 'cd ${APP_DIR} && docker compose up -d'"
   echo ""
 
-  if [ "$STAGING_MODE" = true ]; then
-    echo -e "${BOLD}Staging-specific steps:${NC}"
+  if [ "$STAGING_MODE" = true ] && [ -n "${WEBHOOK_SECRET:-}" ]; then
+    echo -e "${BOLD}${YELLOW}========================================${NC}"
+    echo -e "${BOLD}${YELLOW}  Staging: Webhook Secret${NC}"
+    echo -e "${BOLD}${YELLOW}========================================${NC}"
     echo ""
-    echo "  7. Copy deploy files:"
-    echo "     cp ${APP_DIR}/docker/staging/deploy.sh ${APP_DIR}/deploy.sh"
-    echo "     chmod 750 ${APP_DIR}/deploy.sh"
-    echo "     cp ${APP_DIR}/docker/staging/hooks.json ${APP_DIR}/hooks.json"
-    echo "     chmod 600 ${APP_DIR}/hooks.json"
+    echo -e "${BOLD}Webhook secret (save this now!):${NC}"
+    echo "  ${WEBHOOK_SECRET}"
     echo ""
-    echo "  8. Set webhook secret:"
-    echo "     SECRET=\$(openssl rand -hex 32)"
-    echo "     sed -i \"s/REPLACE_WITH_WEBHOOK_SECRET/\${SECRET}/\" ${APP_DIR}/hooks.json"
-    echo "     echo \"Add this as DEPLOY_WEBHOOK_SECRET in GitHub secrets: \${SECRET}\""
-    echo ""
-    echo "  9. Start webhook service:"
-    echo "     sudo systemctl start webhook"
-    echo ""
-    echo "  10. Update Caddyfile with staging version:"
-    echo "      cp ${APP_DIR}/docker/staging/Caddyfile.staging ${APP_DIR}/Caddyfile"
-    echo ""
-    echo "  11. Add GitHub secrets (in the 'staging' environment):"
-    echo "      - STAGING_HOST: your staging domain"
-    echo "      - DEPLOY_WEBHOOK_SECRET: the secret from step 8"
-    echo ""
-    echo "  See docker/staging/README.md for full details."
+    echo -e "${BOLD}Add these GitHub secrets (in the 'staging' environment):${NC}"
+    echo "  - STAGING_HOST: ${DOMAIN}"
+    echo "  - DEPLOY_WEBHOOK_SECRET: ${WEBHOOK_SECRET}"
     echo ""
   fi
 }
@@ -384,9 +445,13 @@ print_summary() {
 # --- Main ---------------------------------------------------------------------
 
 main() {
+  WEBHOOK_SECRET=""
+
   for arg in "$@"; do
     case "$arg" in
       --staging) STAGING_MODE=true ;;
+      --domain=*) DOMAIN="${arg#--domain=}" ;;
+      --repo=*) REPO_URL="${arg#--repo=}" ;;
     esac
   done
 
@@ -401,6 +466,12 @@ main() {
 
   if [ "$STAGING_MODE" = true ]; then
     install_webhook
+  fi
+
+  clone_and_setup || print_warning "Clone/setup had errors — see above. Complete manually if needed."
+
+  if [ "$STAGING_MODE" = true ]; then
+    configure_staging || print_warning "Staging configuration had errors — see above."
   fi
 
   print_summary
