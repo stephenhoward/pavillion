@@ -4,7 +4,7 @@ import { logError } from '@/server/common/helper/error-logger';
 
 import { Calendar } from '@/common/model/calendar';
 import { CalendarActorEntity, CalendarActor } from '@/server/activitypub/entity/calendar_actor';
-import { CalendarEntity } from '@/server/calendar/entity/calendar';
+import CalendarInterface from '@/server/calendar/interface';
 
 /**
  * HTTP Signature object for ActivityPub requests
@@ -25,6 +25,11 @@ export interface HttpSignature {
  * signing/verification for federated calendar identities.
  */
 export default class CalendarActorService {
+  private calendarInterface: CalendarInterface;
+
+  constructor(calendarInterface: CalendarInterface) {
+    this.calendarInterface = calendarInterface;
+  }
 
   /**
    * Creates a new CalendarActor with RSA-2048 keypair for a calendar
@@ -64,9 +69,7 @@ export default class CalendarActorService {
    */
   async getActorByUrlName(urlName: string): Promise<CalendarActor | null> {
     // First find the calendar by URL name
-    const calendar = await CalendarEntity.findOne({
-      where: { url_name: urlName },
-    });
+    const calendar = await this.calendarInterface.getCalendarByName(urlName);
 
     if (!calendar) {
       return null;

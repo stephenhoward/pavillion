@@ -41,7 +41,7 @@ export default class ActivityPubDomain {
   }
 
   public installEventHandlers() {
-    new ActivityPubEventHandlers(this.interface).install(this.eventBus);
+    new ActivityPubEventHandlers(this.interface, this.calendarInterface).install(this.eventBus);
   }
 
 }

@@ -5,9 +5,9 @@ import { logError } from '@/server/common/helper/error-logger';
 import { Account } from '@/common/model/account';
 import { UserActorEntity, UserActor } from '@/server/activitypub/entity/user_actor';
 import { AccountEntity } from '@/server/common/entity/account';
-import { CalendarMemberEntity } from '@/server/calendar/entity/calendar_member';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import RemoteCalendarService from '@/server/activitypub/service/remote_calendar';
+import CalendarInterface from '@/server/calendar/interface';
 
 /**
  * HTTP Signature object for ActivityPub requests
@@ -28,6 +28,11 @@ export interface HttpSignature {
  * signing/verification for federated user identities.
  */
 export default class UserActorService {
+  private calendarInterface: CalendarInterface;
+
+  constructor(calendarInterface: CalendarInterface) {
+    this.calendarInterface = calendarInterface;
+  }
 
   /**
    * Creates a new UserActor with RSA-2048 keypair for an account
@@ -351,29 +356,8 @@ export default class UserActorService {
       });
     }
 
-    // Check if membership already exists
-    const existingMember = await CalendarMemberEntity.findOne({
-      where: {
-        calendar_actor_id: remoteCalendarActor.id,
-        account_id: account.id,
-      },
-    });
-
-    if (existingMember) {
-      console.log(`[USER INBOX] Remote calendar membership already exists for calendar ${calendarActorUri}`);
-      return true;
-    }
-
-    // Create CalendarMemberEntity to record the editor access on the remote calendar
-    await CalendarMemberEntity.create({
-      id: uuidv4(),
-      calendar_id: null, // This is a remote calendar, not local
-      calendar_actor_id: remoteCalendarActor.id,
-      account_id: account.id,
-      user_actor_id: null,
-      role: 'editor',
-      granted_by: null, // Remote grant, no local grantor
-    });
+    // Record the editor access on the remote calendar via CalendarInterface
+    await this.calendarInterface.grantRemoteEditorAccess(account.id, remoteCalendarActor.id);
 
     console.log(`[USER INBOX] Created remote calendar membership for user ${username} to calendar ${calendarActorUri}`);
     return true;
@@ -427,13 +411,8 @@ export default class UserActorService {
       return false;
     }
 
-    // Delete the CalendarMemberEntity
-    const deleted = await CalendarMemberEntity.destroy({
-      where: {
-        calendar_actor_id: remoteCalendarActor.id,
-        account_id: account.id,
-      },
-    });
+    // Remove the editor access record via CalendarInterface
+    const deleted = await this.calendarInterface.removeRemoteEditorAccess(account.id, remoteCalendarActor.id);
 
     console.log(`[USER INBOX] Removed remote calendar membership for user ${username} to calendar ${calendarActorUri} (deleted: ${deleted})`);
     return true;

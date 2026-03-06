@@ -9,10 +9,12 @@
  * Usage: tsx src/server/activitypub/scripts/backfill-calendar-actors.ts
  */
 
+import { EventEmitter } from 'events';
 import config from 'config';
 import db from '@/server/common/entity/db';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import CalendarActorService from '@/server/activitypub/service/calendar_actor';
+import CalendarInterface from '@/server/calendar/interface';
 
 /**
  * Backfills CalendarActor entities for all calendars that don't have one
@@ -47,7 +49,8 @@ export async function backfillCalendarActors(domain?: string, verbose: boolean =
     let skippedCount = 0;
     let errorCount = 0;
 
-    const calendarActorService = new CalendarActorService();
+    const calendarInterface = new CalendarInterface(new EventEmitter());
+    const calendarActorService = new CalendarActorService(calendarInterface);
 
     // Process each calendar
     for (const calendarEntity of calendars) {

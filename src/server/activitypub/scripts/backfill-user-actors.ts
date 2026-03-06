@@ -13,6 +13,7 @@ import config from 'config';
 import db from '@/server/common/entity/db';
 import { AccountEntity } from '@/server/common/entity/account';
 import UserActorService from '@/server/activitypub/service/user_actor';
+import CalendarInterface from '@/server/calendar/interface';
 
 /**
  * Backfills UserActor entities for all accounts that don't have one
@@ -47,7 +48,7 @@ export async function backfillUserActors(domain?: string, verbose: boolean = tru
     let skippedCount = 0;
     let errorCount = 0;
 
-    const userActorService = new UserActorService();
+    const userActorService = new UserActorService({} as CalendarInterface);
 
     // Process each account
     for (const accountEntity of accounts) {

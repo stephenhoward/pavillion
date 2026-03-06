@@ -603,4 +603,28 @@ export default class CalendarInterface {
     return this.eventService.getEventsFromFollowedSources(calendar, page, pageSize);
   }
 
+  /**
+   * Record that a local account has been granted editor access to a remote calendar.
+   * Idempotent — if membership already exists, returns the existing one.
+   *
+   * @param accountId - The local account ID
+   * @param calendarActorId - The CalendarActorEntity ID for the remote calendar
+   * @returns The CalendarMember domain model
+   */
+  async grantRemoteEditorAccess(accountId: string, calendarActorId: string): Promise<CalendarMember> {
+    return this.calendarService.recordRemoteCalendarMembership(accountId, calendarActorId);
+  }
+
+  /**
+   * Remove a local account's editor access record for a remote calendar.
+   * Returns true if a membership was found and deleted, false if none existed.
+   *
+   * @param accountId - The local account ID
+   * @param calendarActorId - The CalendarActorEntity ID for the remote calendar
+   * @returns True if a membership was deleted, false otherwise
+   */
+  async removeRemoteEditorAccess(accountId: string, calendarActorId: string): Promise<boolean> {
+    return this.calendarService.removeRemoteCalendarMembership(accountId, calendarActorId);
+  }
+
 }

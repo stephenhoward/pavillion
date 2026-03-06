@@ -19,6 +19,7 @@ import { EventObject } from '../model/object/event';
 import { ActivityPubOutboxMessageEntity, ActivityPubInboxMessageEntity } from '@/server/activitypub/entity/activitypub';
 import UserActorService from '../service/user_actor';
 import CalendarActorService from '../service/calendar_actor';
+import CalendarInterface from '@/server/calendar/interface';
 import { Account } from '@/common/model/account';
 import { logError } from '@/server/common/helper/error-logger';
 import { Calendar } from '@/common/model/calendar';
@@ -28,10 +29,10 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
   private userActorService: UserActorService;
   private calendarActorService: CalendarActorService;
 
-  constructor(service: ActivityPubInterface) {
+  constructor(service: ActivityPubInterface, calendarInterface: CalendarInterface) {
     this.service = service;
-    this.userActorService = new UserActorService();
-    this.calendarActorService = new CalendarActorService();
+    this.userActorService = new UserActorService(calendarInterface);
+    this.calendarActorService = new CalendarActorService(calendarInterface);
   }
 
   install(eventBus: EventEmitter): void {

@@ -18,7 +18,7 @@ export default class ActivityPubAPI {
     activityPubMemberRoutes.installHandlers(app, '/api/v1');
 
     // Install User Actor routes for Person actor endpoints
-    const userActorService = new UserActorService();
+    const userActorService = new UserActorService(calendarAPI);
     const userActorRoutes = new UserActorRoutes(userActorService);
     userActorRoutes.installHandlers(app, '/');
   }

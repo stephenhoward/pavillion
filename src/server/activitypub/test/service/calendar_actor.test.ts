@@ -5,15 +5,17 @@ import { generateKeyPairSync } from 'crypto';
 import { Calendar } from '@/common/model/calendar';
 import CalendarActorService from '@/server/activitypub/service/calendar_actor';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
-import { CalendarEntity } from '@/server/calendar/entity/calendar';
+import CalendarInterface from '@/server/calendar/interface';
 
 describe('CalendarActorService', () => {
   let service: CalendarActorService;
   let sandbox: sinon.SinonSandbox;
+  let calendarInterface: sinon.SinonStubbedInstance<CalendarInterface>;
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
-    service = new CalendarActorService();
+    calendarInterface = sandbox.createStubInstance(CalendarInterface);
+    service = new CalendarActorService(calendarInterface as unknown as CalendarInterface);
   });
 
   afterEach(() => {
@@ -118,17 +120,14 @@ describe('CalendarActorService', () => {
         },
       };
 
-      // Mock the calendar lookup
-      const calendarStub = sandbox.stub(CalendarEntity, 'findOne').resolves({
-        id: 'calendar-id-123',
-        url_name: testUrlName,
-      } as any);
+      // Mock the calendar lookup via interface
+      calendarInterface.getCalendarByName.resolves(new Calendar('calendar-id-123', testUrlName));
 
       const findStub = sandbox.stub(CalendarActorEntity, 'findOne').resolves(mockEntity as any);
 
       const result = await service.getActorByUrlName(testUrlName);
 
-      expect(calendarStub.calledOnce).toBe(true);
+      expect(calendarInterface.getCalendarByName.calledOnce).toBe(true);
       expect(findStub.calledOnce).toBe(true);
       expect(result).toBeDefined();
       expect(result?.actorUri).toBe(mockData.actor_uri);
@@ -136,7 +135,7 @@ describe('CalendarActorService', () => {
     });
 
     it('should return null for non-existent calendar', async () => {
-      sandbox.stub(CalendarEntity, 'findOne').resolves(null);
+      calendarInterface.getCalendarByName.resolves(null);
 
       const result = await service.getActorByUrlName('nonexistent');
 
@@ -391,10 +390,7 @@ describe('CalendarActorService', () => {
         },
       };
 
-      sandbox.stub(CalendarEntity, 'findOne').resolves({
-        id: 'calendar-id-123',
-        url_name: 'community-events',
-      } as any);
+      calendarInterface.getCalendarByName.resolves(new Calendar('calendar-id-123', 'community-events'));
 
       sandbox.stub(CalendarActorEntity, 'findOne').resolves(mockEntity as any);
 
@@ -404,7 +400,7 @@ describe('CalendarActorService', () => {
     });
 
     it('should return null for non-existent calendar', async () => {
-      sandbox.stub(CalendarEntity, 'findOne').resolves(null);
+      calendarInterface.getCalendarByName.resolves(null);
 
       const result = await service.getPublicKeyByUrlName('nonexistent');
 

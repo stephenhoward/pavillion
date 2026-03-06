@@ -21,7 +21,7 @@ export default class ActivityPubService {
     this.eventBus = eventBus;
     this.calendarService = calendarInterface;
     this.accountsService = accountsInterface;
-    this.calendarActorService = new CalendarActorService();
+    this.calendarActorService = new CalendarActorService(calendarInterface);
   }
 
   /**
