@@ -6,7 +6,7 @@ import { ClientRequest } from 'http';
 import crypto from 'crypto';
 import config from 'config';
 import { Cache } from '@/server/activitypub/helper/cache';
-import { PUBLIC_KEY_FETCH_TIMEOUT_MS } from '@/server/activitypub/constants';
+import { PUBLIC_KEY_FETCH_TIMEOUT_MS, MAX_REQUEST_AGE_MS } from '@/server/activitypub/constants';
 import { objectUriSchema } from '@/server/activitypub/validation/schemas';
 import { validateUrlNotPrivate } from '@/server/activitypub/helper/ip-validation';
 import { logError } from '@/server/common/helper/error-logger';
@@ -16,6 +16,7 @@ const keyCache = new Cache<string>(60 * 60 * 1000); // 1 hour expiration
 
 // Flag to track if we've already logged the bypass warning
 let bypassWarningLogged = false;
+
 
 /**
  * Checks if HTTP signature verification should be skipped.
@@ -114,11 +115,11 @@ export async function verifyHttpSignature(req: Request, res: Response, next: Nex
       return res.status(401).json({ error: 'Invalid signature format - missing required headers in signature' });
     }
 
-    // Check if date header is recent (within 30 seconds) to prevent replay attacks
+    // Check if date header is recent to prevent replay attacks
     if (req.headers.date) {
       const requestDate = new Date(req.headers.date as string).getTime();
       const currentDate = new Date().getTime();
-      if (Math.abs(currentDate - requestDate) > 30000) { // 30 seconds
+      if (Math.abs(currentDate - requestDate) > MAX_REQUEST_AGE_MS) {
         return res.status(401).json({ error: 'Request date is too old or in the future' });
       }
     }
@@ -217,17 +218,18 @@ async function getPublicKey(keyId: string): Promise<string | null> {
  * @returns {Promise<string|null>} The public key as a string, or null if fetching fails
  */
 async function fetchPublicKey(keyId: string): Promise<string | null> {
+  let actorUrl: string | undefined;
   try {
     // Validate keyId URL before fetching
     const validationResult = objectUriSchema.safeParse(keyId);
     if (!validationResult.success) {
-      console.error('Invalid keyId URL:', keyId, 'Validation errors:', validationResult.error.errors);
+      logError(new Error(`Invalid keyId URL: ${keyId}`), '[ActivityPub] keyId validation failed');
       return null;
     }
 
     // Extract the actor URL from the keyId
     const url = new URL(keyId);
-    const actorUrl = `${url.protocol}//${url.host}${url.pathname.split('#')[0]}`;
+    actorUrl = `${url.protocol}//${url.host}${url.pathname.split('#')[0]}`;
 
     // SECURITY: Validate that the URL does not point to a private IP address
     // This prevents SSRF attacks where an attacker could probe internal networks
@@ -253,7 +255,7 @@ async function fetchPublicKey(keyId: string): Promise<string | null> {
     });
 
     if (response.status !== 200) {
-      console.error(`Failed to fetch actor from ${actorUrl}, status: ${response.status}`);
+      logError(new Error(`Failed to fetch actor from ${actorUrl}, status: ${response.status}`), '[ActivityPub] Actor fetch failed');
       return null;
     }
 
@@ -291,11 +293,11 @@ async function fetchPublicKey(keyId: string): Promise<string | null> {
       }
     }
 
-    console.error(`Could not find public key in actor object from ${actorUrl}`);
+    logError(new Error(`Could not find public key in actor object from ${actorUrl}`), '[ActivityPub] Public key not found');
     return null;
   }
   catch (error) {
-    logError(error, `[ActivityPub] Failed to fetch public key from ${actorUrl}`);
+    logError(error, `[ActivityPub] Failed to fetch public key from ${actorUrl ?? keyId}`);
     return null;
   }
 }

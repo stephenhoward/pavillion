@@ -1,6 +1,5 @@
-import { generateKeyPairSync, createSign, createVerify } from 'crypto';
+import { generateKeyPairSync, createSign } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
-import { logError } from '@/server/common/helper/error-logger';
 
 import { Account } from '@/common/model/account';
 import { UserActorEntity, UserActor } from '@/server/activitypub/entity/user_actor';
@@ -25,7 +24,8 @@ export interface HttpSignature {
  *
  * @remarks
  * This service handles keypair generation, actor creation, and HTTP signature
- * signing/verification for federated user identities.
+ * signing for federated user identities. Signature verification is handled
+ * by the verifyHttpSignature middleware in http_signature.ts.
  */
 export default class UserActorService {
   private calendarInterface: CalendarInterface;
@@ -206,82 +206,6 @@ export default class UserActorService {
       headers: '(request-target) host date',
       date: date,
     };
-  }
-
-  /**
-   * Verifies an HTTP signature on an incoming request
-   *
-   * @param request - The HTTP request object with signature headers
-   * @param actorUri - The actor URI that supposedly signed the request
-   * @returns Promise resolving to true if signature is valid, false otherwise
-   */
-  async verifySignature(request: any, actorUri: string): Promise<boolean> {
-    try {
-      // Retrieve actor with public key
-      const actor = await this.getActorByUri(actorUri);
-      if (!actor) {
-        console.error(`Actor not found for verification: ${actorUri}`);
-        return false;
-      }
-
-      if (!actor.publicKey) {
-        console.error(`Actor ${actorUri} does not have a public key`);
-        return false;
-      }
-
-      // Extract signature from headers
-      const signatureHeader = request.headers.signature;
-      const dateHeader = request.headers.date;
-
-      if (!signatureHeader || !dateHeader) {
-        console.error('Missing signature or date header');
-        return false;
-      }
-
-      // Parse signature header components
-      // Format: keyId="...",signature="...",algorithm="...",headers="..."
-      const signatureParts: any = {};
-      signatureHeader.split(',').forEach((part: string) => {
-        const [key, ...valueParts] = part.split('=');
-        const value = valueParts.join('=').replace(/"/g, '');
-        signatureParts[key.trim()] = value;
-      });
-
-      const signature = signatureParts.signature;
-      if (!signature) {
-        console.error('Signature not found in header');
-        return false;
-      }
-
-      // Reconstruct signing string based on headers that were signed
-      const headers = signatureParts.headers || '(request-target) host date';
-      const headerList = headers.split(' ');
-
-      const signingParts = headerList.map((header: string) => {
-        if (header === '(request-target)') {
-          const method = request.method.toLowerCase();
-          const path = request.url;
-          return `(request-target): ${method} ${path}`;
-        }
-        return `${header}: ${request.headers[header]}`;
-      });
-
-      const signingString = signingParts.join('\n');
-
-      // Verify signature with public key
-      const verifier = createVerify('RSA-SHA256');
-      verifier.update(signingString);
-      verifier.end();
-
-      const signatureBuffer = Buffer.from(signature, 'base64');
-      const isValid = verifier.verify(actor.publicKey, signatureBuffer);
-
-      return isValid;
-    }
-    catch (error) {
-      logError(error, '[ActivityPub] Error verifying user actor signature');
-      return false;
-    }
   }
 
   /**

@@ -33,3 +33,12 @@ export const PUBLIC_KEY_FETCH_TIMEOUT_MS = 10000;
  * Kept at 5 seconds for quick failure detection on object lookups.
  */
 export const REMOTE_OBJECT_FETCH_TIMEOUT_MS = 5000;
+
+/**
+ * Maximum age for request Date header to prevent replay attacks (in milliseconds).
+ *
+ * 5 minutes tolerates clock skew between federated instances while still
+ * preventing replay of captured signed requests. This is the standard
+ * window used by most ActivityPub implementations.
+ */
+export const MAX_REQUEST_AGE_MS = 5 * 60 * 1000;
