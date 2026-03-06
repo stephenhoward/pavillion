@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
+import { ref } from 'vue';
 import sinon from 'sinon';
 import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
@@ -10,6 +11,38 @@ import { useCalendarStore } from '@/client/stores/calendarStore';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent } from '@/common/model/events';
 
+const mockEventsIsLoading = ref(false);
+const mockLoadFeed = vi.fn();
+const mockLoadMore = vi.fn();
+
+vi.mock('@/client/composables/useFeedEvents', () => ({
+  useFeedEvents: () => ({
+    isLoading: mockEventsIsLoading,
+    loadFeed: mockLoadFeed,
+    loadMore: mockLoadMore,
+  }),
+}));
+
+const mockRepostEvent = vi.fn();
+const mockUnrepostEvent = vi.fn();
+const mockConfirmRepost = vi.fn();
+
+vi.mock('@/client/composables/useFeedRepost', () => ({
+  useFeedRepost: () => ({
+    repostEvent: mockRepostEvent,
+    unrepostEvent: mockUnrepostEvent,
+    confirmRepost: mockConfirmRepost,
+  }),
+  PendingRepost: {},
+}));
+
+vi.mock('@/client/composables/useToast', () => ({
+  useToast: () => ({
+    error: vi.fn(),
+    success: vi.fn(),
+  }),
+}));
+
 describe('FollowedEventsView', () => {
   let pinia: ReturnType<typeof createPinia>;
   let sandbox: sinon.SinonSandbox;
@@ -18,6 +51,14 @@ describe('FollowedEventsView', () => {
     pinia = createPinia();
     setActivePinia(pinia);
     sandbox = sinon.createSandbox();
+
+    // Reset mocks
+    mockEventsIsLoading.value = false;
+    mockLoadFeed.mockReset();
+    mockLoadMore.mockReset();
+    mockRepostEvent.mockReset();
+    mockUnrepostEvent.mockReset();
+    mockConfirmRepost.mockReset();
 
     // Mock native dialog methods not implemented in happy-dom
     vi.spyOn(HTMLDialogElement.prototype, 'showModal').mockImplementation(() => {});
@@ -149,7 +190,7 @@ describe('FollowedEventsView', () => {
     }
   });
 
-  it('triggers store repostEvent action when repost button clicked', async () => {
+  it('triggers repostEvent composable when repost button clicked', async () => {
     const feedStore = useFeedStore();
 
     const event = CalendarEvent.fromObject({
@@ -167,7 +208,7 @@ describe('FollowedEventsView', () => {
 
     feedStore.events = [Object.assign(event, { repostStatus: 'none' as const })];
 
-    const repostStub = sandbox.stub(feedStore, 'repostEvent').resolves();
+    mockRepostEvent.mockResolvedValue(null);
 
     const wrapper = mount(FollowedEventsView, {
       global: {
@@ -178,11 +219,11 @@ describe('FollowedEventsView', () => {
     const repostButton = wrapper.find('button[data-testid="repost-button"]');
     await repostButton.trigger('click');
 
-    expect(repostStub.calledOnce).toBe(true);
-    expect(repostStub.calledWith('event-1')).toBe(true);
+    expect(mockRepostEvent).toHaveBeenCalledOnce();
+    expect(mockRepostEvent).toHaveBeenCalledWith('event-1');
   });
 
-  it('triggers store unrepostEvent action when reposted label clicked', async () => {
+  it('triggers unrepostEvent composable when reposted label clicked', async () => {
     const feedStore = useFeedStore();
 
     const event = CalendarEvent.fromObject({
@@ -200,7 +241,7 @@ describe('FollowedEventsView', () => {
 
     feedStore.events = [Object.assign(event, { repostStatus: 'manual' as const })];
 
-    const unrepostStub = sandbox.stub(feedStore, 'unrepostEvent').resolves();
+    mockUnrepostEvent.mockResolvedValue(undefined);
 
     const wrapper = mount(FollowedEventsView, {
       global: {
@@ -211,8 +252,8 @@ describe('FollowedEventsView', () => {
     const repostedLabel = wrapper.find('[data-testid="reposted-label"]');
     await repostedLabel.trigger('click');
 
-    expect(unrepostStub.calledOnce).toBe(true);
-    expect(unrepostStub.calledWith('event-1')).toBe(true);
+    expect(mockUnrepostEvent).toHaveBeenCalledOnce();
+    expect(mockUnrepostEvent).toHaveBeenCalledWith('event-1');
   });
 
   it('opens report modal when report button is clicked', async () => {
@@ -303,8 +344,6 @@ describe('FollowedEventsView', () => {
 
     feedStore.events = [Object.assign(event, { repostStatus: 'none' as const })];
 
-    const loadFeedStub = sandbox.stub(feedStore, 'loadFeed').resolves();
-
     // Mock IntersectionObserver
     const observeStub = sandbox.stub();
     const unobserveStub = sandbox.stub();
@@ -332,7 +371,6 @@ describe('FollowedEventsView', () => {
     // Wait for intersection observer callback
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    expect(loadFeedStub.calledOnce).toBe(true);
-    expect(loadFeedStub.calledWith(true)).toBe(true);
+    expect(mockLoadMore).toHaveBeenCalledOnce();
   });
 });

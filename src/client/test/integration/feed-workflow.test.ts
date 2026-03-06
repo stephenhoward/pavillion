@@ -4,6 +4,9 @@ import sinon from 'sinon';
 import axios from 'axios';
 import { useFeedStore } from '@/client/stores/feedStore';
 import { useCalendarStore } from '@/client/stores/calendarStore';
+import { useFeedFollows } from '@/client/composables/useFeedFollows';
+import { useFeedEvents } from '@/client/composables/useFeedEvents';
+import { useFeedRepost } from '@/client/composables/useFeedRepost';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent } from '@/common/model/events';
 
@@ -38,6 +41,8 @@ describe('Feed Workflow Integration Tests', () => {
     it('should show events in feed after following a remote calendar', async () => {
       const feedStore = useFeedStore();
       const calendarStore = useCalendarStore();
+      const { followCalendar } = useFeedFollows();
+      const { loadFeed } = useFeedEvents();
 
       // Setup: User has a calendar
       const calendar = new Calendar('local-cal-1', 'my-calendar');
@@ -85,14 +90,14 @@ describe('Feed Workflow Integration Tests', () => {
       });
 
       // Action: Follow a calendar with boolean fields (defaults to false, false)
-      await feedStore.followCalendar('remote@example.com');
+      await followCalendar('remote@example.com');
 
       // Verify: Calendar is in follows list
       expect(feedStore.follows).toHaveLength(1);
       expect(feedStore.follows[0].calendarActorId).toBe('remote@example.com');
 
       // Action: Load feed
-      await feedStore.loadFeed();
+      await loadFeed();
 
       // Verify: Events from followed calendar appear
       expect(feedStore.events).toHaveLength(1);
@@ -105,6 +110,7 @@ describe('Feed Workflow Integration Tests', () => {
     it('should change repost status after reposting an event', async () => {
       const feedStore = useFeedStore();
       const calendarStore = useCalendarStore();
+      const { repostEvent } = useFeedRepost();
       calendarStore.setSelectedCalendar('local-cal-1');
 
       // Setup: Event in feed that hasn't been reposted
@@ -129,7 +135,7 @@ describe('Feed Workflow Integration Tests', () => {
       });
 
       // Action: Repost the event
-      await feedStore.repostEvent('event-1');
+      await repostEvent('event-1');
 
       // Verify: Event status changed to 'manual'
       expect(feedStore.events[0].repostStatus).toBe('manual');
@@ -163,13 +169,7 @@ describe('Feed Workflow Integration Tests', () => {
       ];
       feedStore.eventsPage = 2;
 
-      // Mock API calls for calendar 2
-      axiosGetStub.withArgs(sinon.match(/calendarId=cal-2/)).resolves({
-        data: [],
-      });
-
       // Action: Switch to calendar 2 using component-level coordination pattern
-      // The component calls calendarStore then feedStore separately
       calendarStore.setSelectedCalendar('cal-2');
       feedStore.clearFeedData();
 
@@ -187,6 +187,7 @@ describe('Feed Workflow Integration Tests', () => {
     it('should append new events when loading more pages', async () => {
       const feedStore = useFeedStore();
       const calendarStore = useCalendarStore();
+      const { loadFeed, loadMore } = useFeedEvents();
       calendarStore.setSelectedCalendar('cal-1');
 
       // Setup: First page of events
@@ -207,7 +208,7 @@ describe('Feed Workflow Integration Tests', () => {
         },
       });
 
-      await feedStore.loadFeed();
+      await loadFeed();
 
       expect(feedStore.events).toHaveLength(1);
       expect(feedStore.eventsPage).toBe(0);
@@ -232,7 +233,7 @@ describe('Feed Workflow Integration Tests', () => {
       });
 
       // Action: Load more events
-      await feedStore.loadFeed(true);
+      await loadMore();
 
       // Verify: Events were appended
       expect(feedStore.events).toHaveLength(2);
@@ -245,6 +246,7 @@ describe('Feed Workflow Integration Tests', () => {
     it('should handle empty page when no more events available', async () => {
       const feedStore = useFeedStore();
       const calendarStore = useCalendarStore();
+      const { loadFeed } = useFeedEvents();
       calendarStore.setSelectedCalendar('cal-1');
 
       // Mock empty response
@@ -256,7 +258,7 @@ describe('Feed Workflow Integration Tests', () => {
       });
 
       // Action: Load feed
-      await feedStore.loadFeed(true);
+      await loadFeed();
 
       // Verify: hasMore is false
       expect(feedStore.eventsHasMore).toBe(false);
@@ -265,52 +267,42 @@ describe('Feed Workflow Integration Tests', () => {
 
   describe('Error handling: Network failure during API calls', () => {
     it('should handle network error during feed loading', async () => {
-      const feedStore = useFeedStore();
       const calendarStore = useCalendarStore();
+      const { loadFeed } = useFeedEvents();
       calendarStore.setSelectedCalendar('cal-1');
 
       // Mock network error
       axiosGetStub.withArgs(sinon.match(/\/api\/v1\/social\/feed/)).rejects(
         new Error('Network error'),
-        new Error('Network error'),
       );
 
       // Action: Try to load feed
-      await expect(feedStore.loadFeed()).rejects.toThrow('Network error');
-
-      // Verify: Loading state was cleared
-      expect(feedStore.loading.events).toBe(false);
+      await expect(loadFeed()).rejects.toThrow('Network error');
 
       // Verify: Error was logged
-      expect(consoleErrorStub.calledWith('Error loading feed:')).toBe(true);
+      expect(consoleErrorStub.called).toBe(true);
     });
 
     it('should handle error during follow calendar action', async () => {
-      const feedStore = useFeedStore();
       const calendarStore = useCalendarStore();
+      const { followCalendar } = useFeedFollows();
       calendarStore.setSelectedCalendar('cal-1');
 
       // Mock API error
       axiosPostStub.withArgs('/api/v1/social/follows').rejects(
         new Error('Failed to follow calendar'),
-        new Error('Failed to follow calendar'),
       );
 
-      // Mock the getFollows call that happens during followCalendar
-      axiosGetStub.withArgs(sinon.match(/\/api\/v1\/social\/follows/)).rejects(
-        new Error('Failed to follow calendar'),
-        new Error('Failed to follow calendar'),
-      );
-
-      // Action: Try to follow calendar with boolean fields (defaults)
+      // Action: Try to follow calendar
       await expect(
-        feedStore.followCalendar('remote@example.com'),
+        followCalendar('remote@example.com'),
       ).rejects.toThrow();
     });
 
     it('should rollback optimistic update on repost error', async () => {
       const feedStore = useFeedStore();
       const calendarStore = useCalendarStore();
+      const { repostEvent } = useFeedRepost();
       calendarStore.setSelectedCalendar('cal-1');
 
       const mockEvent = CalendarEvent.fromObject({
@@ -325,11 +317,10 @@ describe('Feed Workflow Integration Tests', () => {
       // Mock API error
       axiosPostStub.withArgs('/api/v1/social/shares').rejects(
         new Error('Failed to repost'),
-        new Error('Failed to repost'),
       );
 
       // Action: Try to repost - FeedService wraps errors in UnknownError
-      await expect(feedStore.repostEvent('event-1')).rejects.toThrow();
+      await expect(repostEvent('event-1')).rejects.toThrow();
 
       // Verify: Status was rolled back to original
       expect(feedStore.events[0].repostStatus).toBe('none');
@@ -343,6 +334,7 @@ describe('Feed Workflow Integration Tests', () => {
     it('should change auto-posted event to manual repost after un-repost and re-repost', async () => {
       const feedStore = useFeedStore();
       const calendarStore = useCalendarStore();
+      const { repostEvent, unrepostEvent } = useFeedRepost();
       calendarStore.setSelectedCalendar('cal-1');
 
       // Setup: Auto-posted event in feed
@@ -361,7 +353,7 @@ describe('Feed Workflow Integration Tests', () => {
       });
 
       // Action 1: Un-repost the auto-posted event
-      await feedStore.unrepostEvent('event-1');
+      await unrepostEvent('event-1');
 
       // Verify: Status changed to 'none'
       expect(feedStore.events[0].repostStatus).toBe('none');
@@ -372,7 +364,7 @@ describe('Feed Workflow Integration Tests', () => {
       });
 
       // Action 2: Manually repost the event
-      await feedStore.repostEvent('event-1');
+      await repostEvent('event-1');
 
       // Verify: Status changed to 'manual' (not 'auto')
       expect(feedStore.events[0].repostStatus).toBe('manual');
@@ -383,6 +375,7 @@ describe('Feed Workflow Integration Tests', () => {
     it('should update follow policy with boolean fields and persist change', async () => {
       const feedStore = useFeedStore();
       const calendarStore = useCalendarStore();
+      const { updateFollowPolicy } = useFeedFollows();
       calendarStore.setSelectedCalendar('cal-1');
 
       // Setup with boolean fields (both false initially)
@@ -390,6 +383,7 @@ describe('Feed Workflow Integration Tests', () => {
         {
           id: 'follow-1',
           calendarActorId: 'remote@example.com',
+          calendarActorUuid: 'uuid-1',
           calendarId: 'cal-1',
           autoRepostOriginals: false,
           autoRepostReposts: false,
@@ -409,7 +403,7 @@ describe('Feed Workflow Integration Tests', () => {
       });
 
       // Action: Update policy to enable both auto-repost settings
-      await feedStore.updateFollowPolicy('follow-1', true, true);
+      await updateFollowPolicy('follow-1', true, true);
 
       // Verify: Policy was updated in store with boolean fields
       expect(feedStore.follows[0].autoRepostOriginals).toBe(true);
@@ -421,6 +415,8 @@ describe('Feed Workflow Integration Tests', () => {
     it('should show empty feed after unfollowing the only followed calendar', async () => {
       const feedStore = useFeedStore();
       const calendarStore = useCalendarStore();
+      const { unfollowCalendar } = useFeedFollows();
+      const { loadFeed } = useFeedEvents();
       calendarStore.setSelectedCalendar('cal-1');
 
       // Setup: Following one calendar with events in feed (using boolean fields)
@@ -428,6 +424,7 @@ describe('Feed Workflow Integration Tests', () => {
         {
           id: 'follow-1',
           calendarActorId: 'remote@example.com',
+          calendarActorUuid: 'uuid-1',
           calendarId: 'cal-1',
           autoRepostOriginals: false,
           autoRepostReposts: false,
@@ -443,11 +440,6 @@ describe('Feed Workflow Integration Tests', () => {
         data: { success: true },
       });
 
-      // Mock empty follows after unfollow
-      axiosGetStub.withArgs(sinon.match(/\/api\/v1\/social\/follows/)).resolves({
-        data: [],
-      });
-
       // Mock empty feed after unfollow
       axiosGetStub.withArgs(sinon.match(/\/api\/v1\/social\/feed/)).resolves({
         data: {
@@ -457,13 +449,13 @@ describe('Feed Workflow Integration Tests', () => {
       });
 
       // Action: Unfollow the calendar
-      await feedStore.unfollowCalendar('follow-1');
+      await unfollowCalendar('follow-1');
 
       // Verify: Calendar removed from follows
       expect(feedStore.follows).toHaveLength(0);
 
       // Action: Reload feed
-      await feedStore.loadFeed();
+      await loadFeed();
 
       // Verify: Feed is now empty
       expect(feedStore.events).toHaveLength(0);

@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
+import { ref } from 'vue';
 import sinon from 'sinon';
 import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
@@ -8,6 +9,34 @@ import Follows from '../follows.vue';
 import { useFeedStore } from '@/client/stores/feedStore';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { Calendar, CalendarContent } from '@/common/model/calendar';
+
+const mockIsLoading = ref(false);
+const mockUnfollowCalendar = vi.fn();
+const mockUpdateFollowPolicy = vi.fn();
+const mockLoadFollows = vi.fn();
+const mockFollowCalendar = vi.fn();
+
+vi.mock('@/client/composables/useFeedFollows', () => ({
+  useFeedFollows: () => ({
+    isLoading: mockIsLoading,
+    loadFollows: mockLoadFollows,
+    followCalendar: mockFollowCalendar,
+    unfollowCalendar: mockUnfollowCalendar,
+    updateFollowPolicy: mockUpdateFollowPolicy,
+  }),
+}));
+
+const mockLoadFeed = vi.fn();
+const mockLoadMore = vi.fn();
+const mockEventsIsLoading = ref(false);
+
+vi.mock('@/client/composables/useFeedEvents', () => ({
+  useFeedEvents: () => ({
+    isLoading: mockEventsIsLoading,
+    loadFeed: mockLoadFeed,
+    loadMore: mockLoadMore,
+  }),
+}));
 
 describe('Following Tab', () => {
   let pinia: ReturnType<typeof createPinia>;
@@ -17,6 +46,14 @@ describe('Following Tab', () => {
     pinia = createPinia();
     setActivePinia(pinia);
     sandbox = sinon.createSandbox();
+
+    // Reset mocks
+    mockIsLoading.value = false;
+    mockUnfollowCalendar.mockReset();
+    mockUpdateFollowPolicy.mockReset();
+    mockLoadFollows.mockReset();
+    mockFollowCalendar.mockReset();
+    mockLoadFeed.mockReset();
 
     // Initialize i18next for testing
     await i18next.init({
@@ -176,7 +213,7 @@ describe('Following Tab', () => {
       },
     ];
 
-    const updatePolicySpy = sandbox.stub(feedStore, 'updateFollowPolicy').resolves();
+    mockUpdateFollowPolicy.mockResolvedValue(undefined);
 
     const wrapper = mount(Follows, {
       global: {
@@ -191,9 +228,9 @@ describe('Following Tab', () => {
     const toggleButton = wrapper.find('button[role="switch"]');
     await toggleButton.trigger('click');
 
-    expect(updatePolicySpy.calledOnce).toBe(true);
+    expect(mockUpdateFollowPolicy).toHaveBeenCalledOnce();
     // Should be called with followId, autoRepostOriginals=true, autoRepostReposts=false
-    expect(updatePolicySpy.calledWith('follow-1', true, false)).toBe(true);
+    expect(mockUpdateFollowPolicy).toHaveBeenCalledWith('follow-1', true, false);
   });
 
   it('removes calendar from list when unfollow button is clicked', async () => {
@@ -209,7 +246,7 @@ describe('Following Tab', () => {
       },
     ];
 
-    const unfollowSpy = sandbox.stub(feedStore, 'unfollowCalendar').resolves();
+    mockUnfollowCalendar.mockResolvedValue(undefined);
 
     const wrapper = mount(Follows, {
       global: {
@@ -223,8 +260,8 @@ describe('Following Tab', () => {
     const button = wrapper.find('button.unfollow-button');
     await button.trigger('click');
 
-    expect(unfollowSpy.calledOnce).toBe(true);
-    expect(unfollowSpy.calledWith('follow-1')).toBe(true);
+    expect(mockUnfollowCalendar).toHaveBeenCalledOnce();
+    expect(mockUnfollowCalendar).toHaveBeenCalledWith('follow-1');
   });
 
   it('opens Add Calendar modal when "Add a Calendar" button is clicked', async () => {
@@ -309,7 +346,7 @@ describe('Following Tab', () => {
       },
     ];
 
-    const updatePolicySpy = sandbox.stub(feedStore, 'updateFollowPolicy').resolves();
+    mockUpdateFollowPolicy.mockResolvedValue(undefined);
 
     const wrapper = mount(Follows, {
       global: {
@@ -328,7 +365,7 @@ describe('Following Tab', () => {
     await toggleSwitches[0].trigger('click');
 
     // Should update with both values set to false (turning off originals also turns off reposts)
-    expect(updatePolicySpy.calledOnce).toBe(true);
-    expect(updatePolicySpy.calledWith('follow-1', false, false)).toBe(true);
+    expect(mockUpdateFollowPolicy).toHaveBeenCalledOnce();
+    expect(mockUpdateFollowPolicy).toHaveBeenCalledWith('follow-1', false, false);
   });
 });

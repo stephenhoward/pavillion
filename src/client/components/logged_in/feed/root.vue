@@ -4,6 +4,9 @@ import { useTranslation } from 'i18next-vue';
 import { useFeedStore } from '@/client/stores/feedStore';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { useToast } from '@/client/composables/useToast';
+import { useFeedEvents } from '@/client/composables/useFeedEvents';
+import { useFeedFollows } from '@/client/composables/useFeedFollows';
+import { useFeedFollowers } from '@/client/composables/useFeedFollowers';
 import CalendarService from '@/client/service/calendar';
 import CalendarSelector from './calendar_selector.vue';
 import FollowsView from './follows.vue';
@@ -17,6 +20,10 @@ const calendarStore = useCalendarStore();
 const calendarService = new CalendarService();
 const toast = useToast();
 
+const { isLoading: isLoadingEvents, loadFeed } = useFeedEvents();
+const { isLoading: isLoadingFollows, loadFollows } = useFeedFollows();
+const { isLoading: isLoadingFollowers, loadFollowers } = useFeedFollowers();
+
 const state = reactive({
   activeTab: 'events',
   isInitialized: false,
@@ -28,7 +35,7 @@ const addCalendarTriggerRef = ref(null);
 const hasMultipleCalendars = computed(() => calendarStore.hasMultipleCalendars);
 const selectedCalendarId = computed(() => calendarStore.selectedCalendarId);
 const isLoadingAny = computed(() =>
-  feedStore.isLoadingEvents || feedStore.isLoadingFollows || feedStore.isLoadingFollowers,
+  isLoadingEvents.value || isLoadingFollows.value || isLoadingFollowers.value,
 );
 
 const activateTab = (tab) => {
@@ -54,9 +61,9 @@ const loadFeedData = async () => {
 
   try {
     await Promise.all([
-      feedStore.loadFollows(),
-      feedStore.loadFollowers(),
-      feedStore.loadFeed(),
+      loadFollows(),
+      loadFollowers(),
+      loadFeed(),
     ]);
   }
   catch (error) {
@@ -81,7 +88,7 @@ const handleFollowCalendarRequest = (triggerEl) => {
  */
 const handleFollowSuccess = async () => {
   try {
-    await Promise.all([feedStore.loadFollows(), feedStore.loadFeed()]);
+    await Promise.all([loadFollows(), loadFeed()]);
   }
   catch (error) {
     console.error('Error refreshing feed after follow:', error);

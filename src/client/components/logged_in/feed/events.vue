@@ -4,6 +4,8 @@ import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
 import { useFeedStore } from '@/client/stores/feedStore';
 import { useToast } from '@/client/composables/useToast';
+import { useFeedEvents } from '@/client/composables/useFeedEvents';
+import { useFeedRepost, type PendingRepost } from '@/client/composables/useFeedRepost';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
 import RepostCategoriesModal from '@/client/components/logged_in/repost-categories-modal.vue';
 import ReportEventModal from '@/client/components/report-event.vue';
@@ -13,11 +15,12 @@ import { type FeedEvent, type CategoryEntry } from '@/client/service/feed';
 const { t } = useTranslation('feed', { keyPrefix: 'events' });
 const feedStore = useFeedStore();
 const toast = useToast();
+const { isLoading, loadMore: loadMoreFeed } = useFeedEvents();
+const { repostEvent, unrepostEvent, confirmRepost } = useFeedRepost();
 
 const events = computed(() => feedStore.events);
 const hasMore = computed(() => feedStore.eventsHasMore);
-const isLoading = computed(() => feedStore.isLoadingEvents);
-const pendingRepost = computed(() => feedStore.pendingRepost);
+const pendingRepost = ref<PendingRepost | null>(null);
 const hasFollows = computed(() => feedStore.follows.length > 0);
 const sentinelRef = ref(null);
 const repostTriggerElement = ref(null);
@@ -123,12 +126,15 @@ const pendingRepostEvent = computed(() => {
 });
 
 /**
- * Handle repost button click — delegates to the store which may set pendingRepost
+ * Handle repost button click — delegates to the composable which may return a PendingRepost
  */
 const handleRepost = async (eventId: string, event: MouseEvent) => {
   repostTriggerElement.value = (event?.currentTarget) ?? null;
   try {
-    await feedStore.repostEvent(eventId);
+    const result = await repostEvent(eventId);
+    if (result) {
+      pendingRepost.value = result;
+    }
   }
   catch (error) {
     console.error('Error reposting event:', error);
@@ -141,7 +147,7 @@ const handleRepost = async (eventId: string, event: MouseEvent) => {
  */
 const handleUnrepost = async (eventId: string) => {
   try {
-    await feedStore.unrepostEvent(eventId);
+    await unrepostEvent(eventId);
   }
   catch (error) {
     console.error('Error unreposting event:', error);
@@ -151,12 +157,19 @@ const handleUnrepost = async (eventId: string) => {
 
 /**
  * Handle modal confirm: repost with the selected category IDs.
- * When sourceCategoriesToAdopt is provided (no-local-categories mode), the store
+ * When sourceCategoriesToAdopt is provided (no-local-categories mode), the composable
  * will create those categories, save mappings, and repost with the new IDs.
  */
 const handleRepostConfirm = async (categoryIds: string[], sourceCategoriesToAdopt?: CategoryEntry[]) => {
+  if (!pendingRepost.value) {
+    return;
+  }
+
+  const { eventId, calendarActorUuid } = pendingRepost.value;
+  pendingRepost.value = null;
+
   try {
-    await feedStore.confirmPendingRepost(categoryIds, sourceCategoriesToAdopt);
+    await confirmRepost(eventId, categoryIds, calendarActorUuid, sourceCategoriesToAdopt);
     nextTick(() => { repostTriggerElement.value?.focus(); });
   }
   catch (error) {
@@ -169,7 +182,7 @@ const handleRepostConfirm = async (categoryIds: string[], sourceCategoriesToAdop
  * Handle modal cancel: dismiss without reposting
  */
 const handleRepostCancel = () => {
-  feedStore.cancelPendingRepost();
+  pendingRepost.value = null;
   nextTick(() => { repostTriggerElement.value?.focus(); });
 };
 
@@ -237,7 +250,7 @@ const handleFollowCalendar = (event: MouseEvent) => {
  */
 const loadMore = () => {
   if (!isLoading.value && hasMore.value) {
-    feedStore.loadFeed(true);
+    loadMoreFeed();
   }
 };
 

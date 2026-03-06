@@ -6,6 +6,7 @@ import ToggleSwitch from '@/client/components/common/toggle_switch.vue';
 import CategoryMappingEditor from '@/client/components/logged_in/category-mapping-editor.vue';
 import { ADD_CATEGORY_VALUE } from '@/client/components/logged_in/category-mapping-constants';
 import { useFeedStore } from '@/client/stores/feedStore';
+import { useFeedFollows } from '@/client/composables/useFeedFollows';
 import FeedService, { type RemoteCalendarPreview, type CategoryEntry, type CategoryMappingEntry } from '@/client/service/feed';
 import {
   InvalidRemoteCalendarIdentifierError,
@@ -26,6 +27,7 @@ const emit = defineEmits<{
 }>();
 
 const feedStore = useFeedStore();
+const { followCalendar } = useFeedFollows();
 const identifier = ref('');
 const autoRepostOriginals = ref(false);
 const autoRepostReposts = ref(false);
@@ -143,7 +145,7 @@ const handleFollow = async () => {
   isFollowing.value = true;
 
   try {
-    const calendarActorId = await feedStore.followCalendar(identifier.value, autoRepostOriginals.value, autoRepostReposts.value);
+    const calendarActorId = await followCalendar(identifier.value, autoRepostOriginals.value, autoRepostReposts.value);
     emit('follow-success');
 
     if (calendarActorId && feedStore.selectedCalendarId) {

@@ -2,6 +2,8 @@
 import { ref, computed, nextTick } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useFeedStore } from '@/client/stores/feedStore';
+import { useFeedFollows } from '@/client/composables/useFeedFollows';
+import { useFeedEvents } from '@/client/composables/useFeedEvents';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
 import FollowListItem from './follow_list_item.vue';
 import AddCalendarModal from './add_calendar_modal.vue';
@@ -11,15 +13,16 @@ const { t } = useTranslation('feed', {
 });
 
 const feedStore = useFeedStore();
+const { isLoading, loadFollows, unfollowCalendar, updateFollowPolicy } = useFeedFollows();
+const { loadFeed } = useFeedEvents();
 const showAddModal = ref(false);
 const addModalTriggerRef = ref<HTMLElement | null>(null);
 
 const follows = computed(() => feedStore.follows);
-const isLoading = computed(() => feedStore.isLoadingFollows);
 
 const handlePolicyChange = async (followId: string, autoRepostOriginals: boolean, autoRepostReposts: boolean) => {
   try {
-    await feedStore.updateFollowPolicy(followId, autoRepostOriginals, autoRepostReposts);
+    await updateFollowPolicy(followId, autoRepostOriginals, autoRepostReposts);
   }
   catch (error) {
     console.error('Error updating follow policy:', error);
@@ -28,7 +31,7 @@ const handlePolicyChange = async (followId: string, autoRepostOriginals: boolean
 
 const handleUnfollow = async (followId: string) => {
   try {
-    await feedStore.unfollowCalendar(followId);
+    await unfollowCalendar(followId);
   }
   catch (error) {
     console.error('Error unfollowing calendar:', error);
@@ -49,7 +52,7 @@ const handleFollowSuccess = async () => {
   // Refresh both follows list and feed events after successful follow
   // so the Events tab immediately shows events from the newly followed calendar.
   try {
-    await Promise.all([feedStore.loadFollows(), feedStore.loadFeed()]);
+    await Promise.all([loadFollows(), loadFeed()]);
   }
   catch (error) {
     console.error('Error refreshing feed after follow:', error);

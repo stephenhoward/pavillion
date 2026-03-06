@@ -1,14 +1,25 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import sinon from 'sinon';
 import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
 import AddCalendarModal from '../add_calendar_modal.vue';
-import { useFeedStore } from '@/client/stores/feedStore';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { Calendar } from '@/common/model/calendar';
 import FeedService from '@/client/service/feed';
+
+const mockFollowCalendar = vi.fn();
+
+vi.mock('@/client/composables/useFeedFollows', () => ({
+  useFeedFollows: () => ({
+    isLoading: { value: false },
+    loadFollows: vi.fn(),
+    followCalendar: mockFollowCalendar,
+    unfollowCalendar: vi.fn(),
+    updateFollowPolicy: vi.fn(),
+  }),
+}));
 
 const i18nResources = {
   en: {
@@ -67,6 +78,9 @@ describe('AddCalendarModal — mapping step', () => {
     setActivePinia(pinia);
     sandbox = sinon.createSandbox();
 
+    // Reset mocks
+    mockFollowCalendar.mockReset();
+
     const calendarStore = useCalendarStore();
     const calendar = new Calendar('cal-123', 'test-calendar');
     calendar.addContent({ language: 'en', title: 'Test Calendar' });
@@ -105,8 +119,7 @@ describe('AddCalendarModal — mapping step', () => {
   });
 
   it('skips mapping step and closes dialog when source calendar has no categories', async () => {
-    const feedStore = useFeedStore();
-    sandbox.stub(feedStore, 'followCalendar').resolves('actor@remote.com');
+    mockFollowCalendar.mockResolvedValue('actor@remote.com');
 
     sandbox.stub(FeedService.prototype, 'getSourceCategories').resolves([]);
     sandbox.stub(FeedService.prototype, 'getCalendarCategories').resolves([]);
@@ -123,8 +136,7 @@ describe('AddCalendarModal — mapping step', () => {
   });
 
   it('shows mapping step when source calendar has categories', async () => {
-    const feedStore = useFeedStore();
-    sandbox.stub(feedStore, 'followCalendar').resolves('actor@remote.com');
+    mockFollowCalendar.mockResolvedValue('actor@remote.com');
 
     sandbox.stub(FeedService.prototype, 'getSourceCategories').resolves([
       { id: 'src-1', name: 'Music' },
@@ -146,8 +158,7 @@ describe('AddCalendarModal — mapping step', () => {
   });
 
   it('shows skip and save buttons during mapping step', async () => {
-    const feedStore = useFeedStore();
-    sandbox.stub(feedStore, 'followCalendar').resolves('actor@remote.com');
+    mockFollowCalendar.mockResolvedValue('actor@remote.com');
 
     sandbox.stub(FeedService.prototype, 'getSourceCategories').resolves([
       { id: 'src-1', name: 'Music' },
@@ -167,8 +178,7 @@ describe('AddCalendarModal — mapping step', () => {
   });
 
   it('closes dialog when skip button is clicked without calling setCategoryMappings', async () => {
-    const feedStore = useFeedStore();
-    sandbox.stub(feedStore, 'followCalendar').resolves('actor@remote.com');
+    mockFollowCalendar.mockResolvedValue('actor@remote.com');
 
     sandbox.stub(FeedService.prototype, 'getSourceCategories').resolves([
       { id: 'src-1', name: 'Music' },
@@ -195,8 +205,7 @@ describe('AddCalendarModal — mapping step', () => {
   });
 
   it('saves mappings and closes dialog when save button is clicked', async () => {
-    const feedStore = useFeedStore();
-    sandbox.stub(feedStore, 'followCalendar').resolves('actor@remote.com');
+    mockFollowCalendar.mockResolvedValue('actor@remote.com');
 
     sandbox.stub(FeedService.prototype, 'getSourceCategories').resolves([
       { id: 'src-1', name: 'Music' },
@@ -227,8 +236,7 @@ describe('AddCalendarModal — mapping step', () => {
   });
 
   it('closes dialog when follow returns no calendarActorId', async () => {
-    const feedStore = useFeedStore();
-    sandbox.stub(feedStore, 'followCalendar').resolves(null);
+    mockFollowCalendar.mockResolvedValue(null);
 
     const wrapper = mountModal();
     wrapper.vm.preview = { name: 'Test', domain: 'remote.com', actorUrl: 'https://remote.com/u/test' };
@@ -241,8 +249,7 @@ describe('AddCalendarModal — mapping step', () => {
   });
 
   it('emits follow-success after successful follow regardless of mapping step', async () => {
-    const feedStore = useFeedStore();
-    sandbox.stub(feedStore, 'followCalendar').resolves('actor@remote.com');
+    mockFollowCalendar.mockResolvedValue('actor@remote.com');
     sandbox.stub(FeedService.prototype, 'getSourceCategories').resolves([]);
     sandbox.stub(FeedService.prototype, 'getCalendarCategories').resolves([]);
 
@@ -256,8 +263,7 @@ describe('AddCalendarModal — mapping step', () => {
   });
 
   it('falls back to close when getSourceCategories throws an error', async () => {
-    const feedStore = useFeedStore();
-    sandbox.stub(feedStore, 'followCalendar').resolves('actor@remote.com');
+    mockFollowCalendar.mockResolvedValue('actor@remote.com');
     sandbox.stub(FeedService.prototype, 'getSourceCategories').rejects(new Error('Network error'));
     sandbox.stub(FeedService.prototype, 'getCalendarCategories').resolves([]);
 
