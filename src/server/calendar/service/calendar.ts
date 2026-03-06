@@ -1581,6 +1581,58 @@ class CalendarService {
     // Existing permission and validation logic would be handled by CalendarInterface
     // This method is called after those checks pass
   }
+
+  /**
+   * Record that a local account has been granted editor access to a remote calendar.
+   * Idempotent — if membership already exists, returns the existing one.
+   *
+   * @param accountId - The local account ID
+   * @param calendarActorId - The CalendarActorEntity ID for the remote calendar
+   * @returns The CalendarMember domain model
+   */
+  async recordRemoteCalendarMembership(accountId: string, calendarActorId: string): Promise<CalendarMember> {
+    const existingMember = await CalendarMemberEntity.findOne({
+      where: {
+        calendar_actor_id: calendarActorId,
+        account_id: accountId,
+      },
+    });
+
+    if (existingMember) {
+      return existingMember.toModel();
+    }
+
+    const newMember = await CalendarMemberEntity.create({
+      id: uuidv4(),
+      calendar_id: null,
+      calendar_actor_id: calendarActorId,
+      account_id: accountId,
+      user_actor_id: null,
+      role: 'editor',
+      granted_by: null,
+    });
+
+    return newMember.toModel();
+  }
+
+  /**
+   * Remove a local account's editor access record for a remote calendar.
+   * Returns true if a membership was found and deleted, false if none existed.
+   *
+   * @param accountId - The local account ID
+   * @param calendarActorId - The CalendarActorEntity ID for the remote calendar
+   * @returns True if a membership was deleted, false otherwise
+   */
+  async removeRemoteCalendarMembership(accountId: string, calendarActorId: string): Promise<boolean> {
+    const deleted = await CalendarMemberEntity.destroy({
+      where: {
+        calendar_actor_id: calendarActorId,
+        account_id: accountId,
+      },
+    });
+
+    return deleted > 0;
+  }
 }
 
 export default CalendarService;

@@ -6,6 +6,7 @@ import { Account } from '@/common/model/account';
 import UserActorService from '@/server/activitypub/service/user_actor';
 import { UserActorEntity } from '@/server/activitypub/entity/user_actor';
 import { AccountEntity } from '@/server/common/entity/account';
+import CalendarInterface from '@/server/calendar/interface';
 
 describe('UserActorService', () => {
   let service: UserActorService;
@@ -13,7 +14,7 @@ describe('UserActorService', () => {
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
-    service = new UserActorService();
+    service = new UserActorService({} as CalendarInterface);
   });
 
   afterEach(() => {

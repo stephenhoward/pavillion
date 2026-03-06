@@ -31,7 +31,7 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
 
   constructor(service: ActivityPubInterface, calendarInterface: CalendarInterface) {
     this.service = service;
-    this.userActorService = new UserActorService();
+    this.userActorService = new UserActorService(calendarInterface);
     this.calendarActorService = new CalendarActorService(calendarInterface);
   }
 

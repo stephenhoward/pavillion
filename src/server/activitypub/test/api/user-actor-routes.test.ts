@@ -5,6 +5,7 @@ import { EventEmitter } from 'events';
 import UserActorRoutes from '@/server/activitypub/api/v1/user-actor';
 import UserActorService from '@/server/activitypub/service/user_actor';
 import { UserActor } from '@/server/activitypub/entity/user_actor';
+import CalendarInterface from '@/server/calendar/interface';
 
 describe('UserActorRoutes - GET /users/:username', () => {
   let routes: UserActorRoutes;
@@ -12,7 +13,7 @@ describe('UserActorRoutes - GET /users/:username', () => {
   let userActorService: UserActorService;
 
   beforeEach(() => {
-    userActorService = new UserActorService();
+    userActorService = new UserActorService({} as CalendarInterface);
     routes = new UserActorRoutes(userActorService);
   });
 
@@ -134,7 +135,7 @@ describe('UserActorRoutes - POST /users/:username/inbox', () => {
   let userActorService: UserActorService;
 
   beforeEach(() => {
-    userActorService = new UserActorService();
+    userActorService = new UserActorService({} as CalendarInterface);
     routes = new UserActorRoutes(userActorService);
   });
 
@@ -226,7 +227,7 @@ describe('UserActorRoutes - GET /users/:username/outbox', () => {
   let userActorService: UserActorService;
 
   beforeEach(() => {
-    userActorService = new UserActorService();
+    userActorService = new UserActorService({} as CalendarInterface);
     routes = new UserActorRoutes(userActorService);
   });
 
