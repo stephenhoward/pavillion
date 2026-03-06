@@ -4,6 +4,7 @@ import sinon from 'sinon';
 
 import ActivityPubEventHandlers from '@/server/activitypub/events';
 import ActivityPubInterface from '@/server/activitypub/interface';
+import CalendarInterface from '@/server/calendar/interface';
 import { ActivityPubInboxMessageEntity, ActivityPubOutboxMessageEntity } from '@/server/activitypub/entity/activitypub';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent } from '@/common/model/events';
@@ -17,7 +18,7 @@ describe('inbox event listener', () => {
   beforeEach (() => {
     eventBus = new EventEmitter();
     service = new ActivityPubInterface(eventBus);
-    eventHandler = new ActivityPubEventHandlers(service);
+    eventHandler = new ActivityPubEventHandlers(service, new CalendarInterface(eventBus));
     eventHandler.install(eventBus);
   });
 
@@ -67,7 +68,7 @@ describe('outbox event listener', () => {
   beforeEach (() => {
     eventBus = new EventEmitter();
     service = new ActivityPubInterface(eventBus);
-    eventHandler = new ActivityPubEventHandlers(service);
+    eventHandler = new ActivityPubEventHandlers(service, new CalendarInterface(eventBus));
     eventHandler.install(eventBus);
   });
 
@@ -125,7 +126,7 @@ describe('handleEventUpdated guard', () => {
   beforeEach (() => {
     eventBus = new EventEmitter();
     service = new ActivityPubInterface(eventBus);
-    eventHandler = new ActivityPubEventHandlers(service);
+    eventHandler = new ActivityPubEventHandlers(service, new CalendarInterface(eventBus));
     eventHandler.install(eventBus);
   });
 

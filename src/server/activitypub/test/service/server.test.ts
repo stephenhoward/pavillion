@@ -10,7 +10,6 @@ import AccountsInterface from '@/server/accounts/interface';
 import { Calendar } from '@/common/model/calendar';
 import { ActivityPubActivity } from '@/server/activitypub/model/base';
 import { ActivityPubInboxMessageEntity } from '@/server/activitypub/entity/activitypub';
-import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 
 describe('parseWebFingerResource', () => {
@@ -128,11 +127,9 @@ describe('lookupUserProfile', () => {
     calendarStub.resolves(Calendar.fromObject({ id: 'testid', urlName: 'testCalendar' }));
 
     // Stub CalendarActorService dependencies for public key lookup
-    // The service looks up the calendar first, then the actor
-    sandbox.stub(CalendarEntity, 'findOne').resolves({
-      id: 'testid',
-      url_name: 'testCalendar',
-    } as any);
+    // The service now uses CalendarInterface.getCalendarByName internally,
+    // which is already stubbed via service.calendarService above.
+    // We only need to stub the CalendarActorEntity lookup.
     sandbox.stub(CalendarActorEntity, 'findOne').resolves({
       id: 'actor-id',
       calendar_id: 'testid',

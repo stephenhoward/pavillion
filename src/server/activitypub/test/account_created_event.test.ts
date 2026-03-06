@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import ActivityPubEventHandlers from '@/server/activitypub/events';
 import ActivityPubInterface from '@/server/activitypub/interface';
+import CalendarInterface from '@/server/calendar/interface';
 import UserActorService from '@/server/activitypub/service/user_actor';
 import { UserActorEntity } from '@/server/activitypub/entity/user_actor';
 import { AccountEntity } from '@/server/common/entity/account';
@@ -20,7 +21,7 @@ describe('ActivityPub account.created event handler', () => {
     sandbox = sinon.createSandbox();
     eventBus = new EventEmitter();
     activityPubInterface = new ActivityPubInterface(eventBus);
-    eventHandlers = new ActivityPubEventHandlers(activityPubInterface);
+    eventHandlers = new ActivityPubEventHandlers(activityPubInterface, new CalendarInterface(eventBus));
     eventHandlers.install(eventBus);
 
     // Sync database for test
