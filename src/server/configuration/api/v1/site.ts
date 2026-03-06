@@ -11,8 +11,8 @@ const ALLOWED_SETTINGS = new Set(['registrationMode', 'defaultLanguage', 'enable
 
 export default class SiteRouteHandlers {
   private service: ConfigurationInterface;
-  constructor(internalAPI: ConfigurationInterface) {
-    this.service = internalAPI;
+  constructor(service: ConfigurationInterface) {
+    this.service = service;
   }
   installHandlers(app: express.Application, routePrefix: string): void {
     const router = express.Router();
