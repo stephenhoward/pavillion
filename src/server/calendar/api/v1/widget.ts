@@ -143,7 +143,6 @@ class WidgetRoutes {
       console.error('Error fetching calendar for widget:', error);
       res.status(500).json({
         "error": "Failed to fetch calendar",
-        "details": error.message,
       });
     }
   }
