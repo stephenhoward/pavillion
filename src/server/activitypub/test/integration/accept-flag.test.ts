@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
 import sinon from 'sinon';
@@ -8,7 +8,6 @@ import CalendarInterface from '@/server/calendar/interface';
 import ModerationInterface from '@/server/moderation/interface';
 import { Calendar } from '@/common/model/calendar';
 import { Report, ReportCategory, ReportStatus } from '@/common/model/report';
-import { ReportEntity } from '@/server/moderation/entity/report';
 import AcceptActivity from '@/server/activitypub/model/action/accept';
 
 describe('ProcessInboxService - Accept Flag Activity', () => {
@@ -41,8 +40,10 @@ describe('ProcessInboxService - Accept Flag Activity', () => {
     // Mock CalendarInterface
     calendarInterface = {} as any;
 
-    // Mock ModerationInterface with methods we'll need
-    moderationInterface = {} as any;
+    // Mock ModerationInterface with acknowledgeForwardedReport
+    moderationInterface = {
+      acknowledgeForwardedReport: sandbox.stub(),
+    } as any;
 
     inboxService = new ProcessInboxService(eventBus, calendarInterface, moderationInterface);
   });
@@ -71,23 +72,14 @@ describe('ProcessInboxService - Accept Flag Activity', () => {
         object: originalFlagActivity,
       });
 
-      // Mock ReportEntity.findOne to find report by forwarded_report_id
-      let updatedStatus: string | null = null;
-      const mockEntity = {
-        id: testReport.id,
-        forward_status: 'pending',
-        update: sandbox.stub().callsFake(async (updates: any) => {
-          updatedStatus = updates.forward_status;
-        }),
-      };
-
-      sandbox.stub(ReportEntity, 'findOne').resolves(mockEntity as any);
+      // Stub acknowledgeForwardedReport to return true (report found and updated)
+      (moderationInterface.acknowledgeForwardedReport as sinon.SinonStub).resolves(true);
 
       await inboxService.processAcceptActivity(testCalendar, acceptActivity);
 
-      // Verify forward_status was updated to 'acknowledged'
-      expect(updatedStatus).toBe('acknowledged');
-      expect(mockEntity.update.calledOnce).toBe(true);
+      // Verify acknowledgeForwardedReport was called with the Flag ID
+      expect((moderationInterface.acknowledgeForwardedReport as sinon.SinonStub).calledOnce).toBe(true);
+      expect((moderationInterface.acknowledgeForwardedReport as sinon.SinonStub).calledWith('https://local.instance/flags/original-flag-id')).toBe(true);
     });
 
     it('should handle Accept activity when Flag object is a string ID', async () => {
@@ -102,23 +94,14 @@ describe('ProcessInboxService - Accept Flag Activity', () => {
         },
       });
 
-      // Mock ReportEntity.findOne
-      let updatedStatus: string | null = null;
-      const mockEntity = {
-        id: testReport.id,
-        forward_status: 'pending',
-        update: sandbox.stub().callsFake(async (updates: any) => {
-          updatedStatus = updates.forward_status;
-        }),
-      };
-
-      sandbox.stub(ReportEntity, 'findOne').resolves(mockEntity as any);
+      // Stub acknowledgeForwardedReport to return true
+      (moderationInterface.acknowledgeForwardedReport as sinon.SinonStub).resolves(true);
 
       await inboxService.processAcceptActivity(testCalendar, acceptActivity);
 
-      // Verify status was updated
-      expect(updatedStatus).toBe('acknowledged');
-      expect(mockEntity.update.calledOnce).toBe(true);
+      // Verify acknowledgeForwardedReport was called
+      expect((moderationInterface.acknowledgeForwardedReport as sinon.SinonStub).calledOnce).toBe(true);
+      expect((moderationInterface.acknowledgeForwardedReport as sinon.SinonStub).calledWith('https://local.instance/flags/flag-id')).toBe(true);
     });
 
     it('should log warning when Accept received for unknown Flag', async () => {
@@ -132,12 +115,14 @@ describe('ProcessInboxService - Accept Flag Activity', () => {
         },
       });
 
-      // Mock ReportEntity.findOne to return null (not found)
-      sandbox.stub(ReportEntity, 'findOne').resolves(null);
+      // Stub acknowledgeForwardedReport to return false (not found)
+      (moderationInterface.acknowledgeForwardedReport as sinon.SinonStub).resolves(false);
 
       // Should not throw, just log warning
       await inboxService.processAcceptActivity(testCalendar, acceptActivity);
-      // Test passes if no error is thrown
+
+      // Verify acknowledgeForwardedReport was called
+      expect((moderationInterface.acknowledgeForwardedReport as sinon.SinonStub).calledOnce).toBe(true);
     });
 
     it('should handle Accept for Follow activities without affecting reports', async () => {
@@ -156,9 +141,6 @@ describe('ProcessInboxService - Accept Flag Activity', () => {
         object: followActivity,
       });
 
-      // Mock ReportEntity.findOne - should not be called for Follow accepts
-      const findOneStub = sandbox.stub(ReportEntity, 'findOne');
-
       // The Follow logic will call RemoteCalendarService.getByActorUri
       // which we need to mock to prevent database access
       const remoteCalendarService = (inboxService as any).remoteCalendarService;
@@ -166,8 +148,8 @@ describe('ProcessInboxService - Accept Flag Activity', () => {
 
       await inboxService.processAcceptActivity(testCalendar, acceptActivity);
 
-      // Verify ReportEntity.findOne was not called (Follow logic doesn't touch reports)
-      expect(findOneStub.called).toBe(false);
+      // Verify acknowledgeForwardedReport was not called for Follow accepts
+      expect((moderationInterface.acknowledgeForwardedReport as sinon.SinonStub).called).toBe(false);
     });
   });
 });

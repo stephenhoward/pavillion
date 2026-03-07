@@ -1695,6 +1695,23 @@ class ModerationService {
     return (entity.forward_status as ForwardStatus) ?? null;
   }
 
+  /**
+   * Acknowledges a forwarded report by updating its forward_status to 'acknowledged'.
+   * Used when a remote instance sends an Accept activity for a Flag we forwarded.
+   *
+   * @param forwardedReportId - The forwarded_report_id (Flag activity ID) to look up
+   * @returns True if a report was found and updated, false if no matching report exists
+   */
+  async acknowledgeForwardedReport(forwardedReportId: string): Promise<boolean> {
+    const entity = await ReportEntity.findOne({
+      where: { forwarded_report_id: forwardedReportId },
+    });
+    if (!entity) {
+      return false;
+    }
+    await entity.update({ forward_status: 'acknowledged' });
+    return true;
+  }
 
   /**
    * Hashes an email address using HMAC-SHA256 with a server-side secret

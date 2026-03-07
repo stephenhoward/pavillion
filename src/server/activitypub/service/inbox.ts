@@ -20,7 +20,6 @@ import { CalendarEvent } from "@/common/model/events";
 import { ReportCategory } from "@/common/model/report";
 import { Calendar } from "@/common/model/calendar";
 import { addToOutbox } from "@/server/activitypub/helper/outbox";
-import { ReportEntity } from "@/server/moderation/entity/report";
 import { fetchRemoteObject } from "@/server/activitypub/helper/remote-fetch";
 import { Op } from "sequelize";
 import config from "config";
@@ -1561,20 +1560,18 @@ class ProcessInboxService {
         return;
       }
 
-      // Find the report by forwarded_report_id
-      const report = await ReportEntity.findOne({
-        where: { forwarded_report_id: flagId },
-      });
-
-      if (!report) {
-        console.warn(`[INBOX] No report found for Flag ID: ${flagId}, Accept may be for unknown Flag`);
-        return;
+      if (this.moderationInterface) {
+        const acknowledged = await this.moderationInterface.acknowledgeForwardedReport(flagId);
+        if (acknowledged) {
+          console.log(`[INBOX] Updated forward_status to 'acknowledged' for Flag ID: ${flagId}`);
+        }
+        else {
+          console.warn(`[INBOX] No report found for Flag ID: ${flagId}`);
+        }
       }
-
-      // Update forward_status to 'acknowledged'
-      await report.update({ forward_status: 'acknowledged' });
-      console.log(`[INBOX] Updated report ${report.id} forward_status to 'acknowledged'`);
-
+      else {
+        console.warn('[INBOX] Accept for Flag received but moderationInterface not available');
+      }
       return;
     }
 
