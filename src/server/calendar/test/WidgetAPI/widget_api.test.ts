@@ -257,4 +257,31 @@ describe('Widget API Routes', () => {
       expect(response.body).toHaveProperty('urlName', calendar.urlName);
     });
   });
+
+  describe('Internal server error handling', () => {
+    it('should return 500 without leaking error details when an unexpected error occurs', async () => {
+      const getCalendarByNameStub = mockInterface.getCalendarByName as sinon.SinonStub;
+      getCalendarByNameStub.resolves(calendar);
+
+      // Mock getCalendarForWidget to throw a generic error with sensitive details
+      const getCalendarForWidgetStub = sandbox.stub();
+      getCalendarForWidgetStub.rejects(new Error('ECONNREFUSED 127.0.0.1:5432 - database connection failed'));
+      mockInterface.getCalendarForWidget = getCalendarForWidgetStub;
+
+      const response = await supertest(app)
+        .get('/api/widget/v1/calendars/test-calendar')
+        .set('Origin', 'http://localhost:3000')
+        .expect(500);
+
+      // Should contain generic error message
+      expect(response.body).toHaveProperty('error', 'Failed to fetch calendar');
+
+      // Should NOT contain a details field that leaks error.message
+      expect(response.body).not.toHaveProperty('details');
+
+      // Should NOT contain the actual error message content anywhere in the response body
+      expect(JSON.stringify(response.body)).not.toContain('ECONNREFUSED');
+      expect(JSON.stringify(response.body)).not.toContain('database');
+    });
+  });
 });
