@@ -1564,6 +1564,10 @@ describe('ModerationService', () => {
 
         const eventEmitSpy = sandbox.spy(mockEventBus, 'emit');
 
+        // Stub ReportEntity.findByPk for forwarding metadata update
+        const mockUpdateStub = sandbox.stub().resolves();
+        sandbox.stub(ReportEntity, 'findByPk').resolves({ update: mockUpdateStub } as any);
+
         await service.forwardReport('report-id', 'https://remote.instance/calendars/remote');
 
         // Verify Flag activity was built and sent
@@ -1572,6 +1576,13 @@ describe('ModerationService', () => {
         expect(flagActivity.type).toBe('Flag');
         expect(flagActivity.content).toBe('Test report description');
         expect(flagActivity.to).toEqual(['https://remote.instance/calendars/remote']);
+
+        // Verify forwarding metadata was persisted on the report entity
+        expect(mockUpdateStub.calledOnce).toBe(true);
+        const updateArgs = mockUpdateStub.getCall(0).args[0];
+        expect(updateArgs.forwarded_report_id).toBe(flagActivity.id);
+        expect(updateArgs.forward_status).toBe('pending');
+        expect(updateArgs.forwarded_to_actor_uri).toBe('https://remote.instance/calendars/remote');
 
         // Verify event was emitted
         expect(eventEmitSpy.calledWith('reportForwarded')).toBe(true);
@@ -1613,6 +1624,10 @@ describe('ModerationService', () => {
         const configStub = sandbox.stub(config, 'get');
         configStub.withArgs('server.domain').returns('local.instance');
 
+        // Stub ReportEntity.findByPk for forwarding metadata update
+        const mockUpdateStub = sandbox.stub().resolves();
+        sandbox.stub(ReportEntity, 'findByPk').resolves({ update: mockUpdateStub } as any);
+
         await service.forwardReport('report-id', 'https://remote.instance/admin');
 
         // Verify admin Flag activity was built
@@ -1622,6 +1637,13 @@ describe('ModerationService', () => {
         expect(flagActivity.tag).toBeDefined();
         expect(flagActivity.tag.some((t: any) => t.name === '#admin-flag')).toBe(true);
         expect(flagActivity.tag.some((t: any) => t.name === '#priority-high')).toBe(true);
+
+        // Verify forwarding metadata was persisted on the report entity
+        expect(mockUpdateStub.calledOnce).toBe(true);
+        const updateArgs = mockUpdateStub.getCall(0).args[0];
+        expect(updateArgs.forwarded_report_id).toBe(flagActivity.id);
+        expect(updateArgs.forward_status).toBe('pending');
+        expect(updateArgs.forwarded_to_actor_uri).toBe('https://remote.instance/admin');
       });
     });
   });

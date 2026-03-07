@@ -1634,6 +1634,15 @@ class ModerationService {
     flagActivity.to = [targetActorUri];
     // Send via ActivityPub outbox
     await this.activityPubInterface.addToOutbox(calendar, flagActivity);
+    // Update the report entity with forwarding metadata
+    const reportEntity = await ReportEntity.findByPk(reportId);
+    if (reportEntity) {
+      await reportEntity.update({
+        forwarded_report_id: flagActivity.id,
+        forward_status: 'pending',
+        forwarded_to_actor_uri: targetActorUri,
+      });
+    }
     // Emit domain event for tracking
     this.emit('reportForwarded', {
       report,
@@ -1698,17 +1707,55 @@ class ModerationService {
   /**
    * Acknowledges a forwarded report by updating its forward_status to 'acknowledged'.
    * Used when a remote instance sends an Accept activity for a Flag we forwarded.
+   * Validates that the sender's hostname matches the instance the report was forwarded to.
    *
    * @param forwardedReportId - The forwarded_report_id (Flag activity ID) to look up
-   * @returns True if a report was found and updated, false if no matching report exists
+   * @param senderActorUri - The actor URI of the Accept activity sender
+   * @returns True if a report was found and updated, false if validation fails or no matching report exists
    */
-  async acknowledgeForwardedReport(forwardedReportId: string): Promise<boolean> {
+  async acknowledgeForwardedReport(forwardedReportId: string, senderActorUri: string): Promise<boolean> {
+    // Format validation: forwardedReportId must be a valid URI
+    if (!forwardedReportId) {
+      return false;
+    }
+    try {
+      new URL(forwardedReportId);
+    }
+    catch {
+      return false;
+    }
+
     const entity = await ReportEntity.findOne({
       where: { forwarded_report_id: forwardedReportId },
     });
     if (!entity) {
       return false;
     }
+
+    // Sender validation: the sender must be from the same instance the report was forwarded to
+    if (!entity.forwarded_to_actor_uri) {
+      console.warn(`[MODERATION] Cannot validate Accept sender: forwarded_to_actor_uri is null for report ${entity.id}`);
+      return false;
+    }
+
+    try {
+      const targetHostname = new URL(entity.forwarded_to_actor_uri).hostname;
+      const senderHostname = new URL(senderActorUri).hostname;
+      if (targetHostname !== senderHostname) {
+        console.warn(`[MODERATION] Accept sender hostname mismatch: expected ${targetHostname}, got ${senderHostname} for report ${entity.id}`);
+        return false;
+      }
+    }
+    catch {
+      console.warn(`[MODERATION] Invalid URI in sender validation for report ${entity.id}`);
+      return false;
+    }
+
+    // Idempotency: if already acknowledged, return true without updating
+    if (entity.forward_status === 'acknowledged') {
+      return true;
+    }
+
     await entity.update({ forward_status: 'acknowledged' });
     return true;
   }

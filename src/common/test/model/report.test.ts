@@ -208,6 +208,7 @@ describe('Report Model', () => {
         escalationType: null,
         forwardedFromInstance: null,
         forwardedReportId: null,
+        forwardedToActorUri: null,
         forwardStatus: null,
         reporterIpHash: null,
         reporterIpSubnet: null,
@@ -236,6 +237,7 @@ describe('Report Model', () => {
       report.escalationType = 'manual';
       report.forwardedFromInstance = 'remote.example.com';
       report.forwardedReportId = 'remote-report-123';
+      report.forwardedToActorUri = 'https://remote.example.com/calendars/target';
 
       const obj = report.toObject();
 
@@ -253,6 +255,7 @@ describe('Report Model', () => {
       expect(obj.escalationType).toBe('manual');
       expect(obj.forwardedFromInstance).toBe('remote.example.com');
       expect(obj.forwardedReportId).toBe('remote-report-123');
+      expect(obj.forwardedToActorUri).toBe('https://remote.example.com/calendars/target');
     });
 
     it('should serialize pattern flags when set to true', () => {
@@ -354,6 +357,7 @@ describe('Report Model', () => {
         reviewerTimestamp: null,
         escalationType: null,
         forwardedFromInstance: null,
+        forwardedToActorUri: null,
         forwardStatus: null,
         createdAt: sampleDate.toISOString(),
         updatedAt: sampleDate.toISOString(),
@@ -381,7 +385,7 @@ describe('Report Model', () => {
       expect(keys).toEqual([
         'id', 'eventId', 'calendarId', 'category', 'description', 'status',
         'reporterType', 'ownerNotes', 'reviewerNotes', 'reviewerTimestamp',
-        'escalationType', 'forwardedFromInstance', 'forwardStatus', 'createdAt', 'updatedAt',
+        'escalationType', 'forwardedFromInstance', 'forwardedToActorUri', 'forwardStatus', 'createdAt', 'updatedAt',
       ]);
 
       // Explicitly verify no sensitive fields
@@ -448,6 +452,7 @@ describe('Report Model', () => {
         escalationType: 'manual',
         forwardedFromInstance: null,
         forwardedReportId: null,
+        forwardedToActorUri: null,
         forwardStatus: null,
         reporterIpHash: null,
         reporterIpSubnet: null,
@@ -535,6 +540,7 @@ describe('Report Model', () => {
         escalationType: null,
         forwardedFromInstance: null,
         forwardedReportId: null,
+        forwardedToActorUri: null,
         forwardStatus: null,
         reporterIpHash: null,
         reporterIpSubnet: null,

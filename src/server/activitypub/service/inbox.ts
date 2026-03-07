@@ -1561,7 +1561,7 @@ class ProcessInboxService {
       }
 
       if (this.moderationInterface) {
-        const acknowledged = await this.moderationInterface.acknowledgeForwardedReport(flagId);
+        const acknowledged = await this.moderationInterface.acknowledgeForwardedReport(flagId, message.actor);
         if (acknowledged) {
           console.log(`[INBOX] Updated forward_status to 'acknowledged' for Flag ID: ${flagId}`);
         }
