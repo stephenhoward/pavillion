@@ -1,4 +1,5 @@
 import { Calendar } from '@/common/model/calendar';
+import { CalendarNotFoundError, InvalidDomainFormatError } from '@/common/exceptions/calendar';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 
 /**
@@ -53,16 +54,17 @@ class WidgetDomainService {
    *
    * @param calendar - Calendar to set domain for
    * @param domain - Domain to allow (without protocol), or null to clear
-   * @throws Error if domain format is invalid
+   * @throws InvalidDomainFormatError if domain format is invalid
+   * @throws CalendarNotFoundError if calendar entity is not found
    */
   async setAllowedDomain(calendar: Calendar, domain: string | null): Promise<void> {
     if (domain !== null && !this.isValidDomain(domain)) {
-      throw new Error('Invalid domain format. Domain must not include protocol or path.');
+      throw new InvalidDomainFormatError();
     }
 
     const calendarEntity = await CalendarEntity.findByPk(calendar.id);
     if (!calendarEntity) {
-      throw new Error('Calendar not found');
+      throw new CalendarNotFoundError();
     }
 
     await calendarEntity.update({ widget_allowed_domain: domain });

@@ -2,7 +2,7 @@ import express, { Request, Response, Application } from 'express';
 
 import { Account } from '@/common/model/account';
 import ExpressHelper from '@/server/common/helper/express';
-import { CalendarNotFoundError } from '@/common/exceptions/calendar';
+import { CalendarNotFoundError, InvalidDomainFormatError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
 import { SubscriptionRequiredError } from '@/common/exceptions/subscription';
 import { widgetConfigByAccount } from '@/server/common/middleware/rate-limiters';
@@ -157,10 +157,10 @@ class WidgetConfigRoutes {
           "errorName": error.name,
         });
       }
-      else if (error instanceof Error && error.message.includes('Invalid domain format')) {
+      else if (error instanceof InvalidDomainFormatError) {
         res.status(400).json({
-          "error": error.message,
-          "errorName": "InvalidDomainFormatError",
+          "error": "Invalid domain format",
+          "errorName": error.name,
         });
       }
       else {
