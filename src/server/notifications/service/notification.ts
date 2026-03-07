@@ -27,6 +27,11 @@ const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
 
 /**
+ * Upper cap on the offset value to prevent unreasonable skip values.
+ */
+const MAX_OFFSET = 10000;
+
+/**
  * Number of days after which seen notifications are deleted.
  */
 const SEEN_RETENTION_DAYS = 7;
@@ -133,15 +138,18 @@ class NotificationService {
    *
    * @param {string} accountId - The account whose notifications to fetch
    * @param {number} [limit=50] - Number of records to return (capped at 100)
+   * @param {number} [offset=0] - Number of records to skip (capped at 10000)
    * @returns {Promise<Notification[]>} Array of Notification domain models
    */
-  async getNotificationsForAccount(accountId: string, limit: number = DEFAULT_LIMIT): Promise<Notification[]> {
+  async getNotificationsForAccount(accountId: string, limit: number = DEFAULT_LIMIT, offset: number = 0): Promise<Notification[]> {
     const effectiveLimit = Math.min(limit, MAX_LIMIT);
+    const effectiveOffset = Math.max(0, Math.min(offset, MAX_OFFSET));
 
     const entities = await NotificationEntity.findAll({
       where: { account_id: accountId },
       order: [['created_at', 'DESC']],
       limit: effectiveLimit,
+      offset: effectiveOffset,
     });
 
     return entities.map(entity => entity.toModel());

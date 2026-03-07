@@ -8,6 +8,7 @@ import { logError } from '@/server/common/helper/error-logger';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
+const MAX_OFFSET = 10000;
 
 /**
  * Rate limiter for the GET /notifications endpoint.
@@ -37,6 +38,7 @@ export default class NotificationRoutes {
    *
    * Query params:
    *   limit (optional): number of notifications to return (default 50, max 100)
+   *   offset (optional): number of notifications to skip (default 0, max 10000)
    *
    * Response headers:
    *   Cache-Control: private, max-age=25
@@ -57,8 +59,16 @@ export default class NotificationRoutes {
       }
     }
 
+    let offset = 0;
+    if (req.query.offset !== undefined) {
+      const parsed = parseInt(req.query.offset as string, 10);
+      if (!isNaN(parsed) && parsed >= 0) {
+        offset = Math.min(parsed, MAX_OFFSET);
+      }
+    }
+
     try {
-      const notifications = await this.service.getNotificationsForAccount(account.id, limit);
+      const notifications = await this.service.getNotificationsForAccount(account.id, limit, offset);
       res.set('Cache-Control', 'private, max-age=25');
       res.json(notifications.map(n => n.toObject()));
     }

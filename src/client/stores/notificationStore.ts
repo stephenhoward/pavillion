@@ -40,7 +40,7 @@ export const useNotificationStore = defineStore('notifications', {
     async fetchNotifications(): Promise<void> {
       this.isLoading = true;
       try {
-        const results = await notificationService.getNotifications(PAGE_SIZE);
+        const results = await notificationService.getNotifications(PAGE_SIZE, 0);
         this.notifications = results;
         this.hasMore = results.length === PAGE_SIZE;
       }
@@ -62,7 +62,7 @@ export const useNotificationStore = defineStore('notifications', {
       }
       this.isLoading = true;
       try {
-        const results = await notificationService.getNotifications(PAGE_SIZE);
+        const results = await notificationService.getNotifications(PAGE_SIZE, this.notifications.length);
         this.notifications = [...this.notifications, ...results];
         this.hasMore = results.length === PAGE_SIZE;
       }

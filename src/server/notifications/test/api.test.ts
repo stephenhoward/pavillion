@@ -194,6 +194,86 @@ describe('Notification API', () => {
       });
     });
 
+    describe('offset parameter', () => {
+      it('should default offset to 0 when not provided', async () => {
+        const stub = sandbox.stub(notificationsInterface, 'getNotificationsForAccount').resolves([]);
+
+        router.get('/notifications', addRequestUser, (req, res) => {
+          routes.getNotifications(req, res);
+        });
+
+        await request(testApp(router)).get('/notifications');
+
+        expect(stub.calledOnce).toBe(true);
+        expect(stub.firstCall.args[2]).toBe(0);
+      });
+
+      it('should pass provided offset when ?offset=N is given', async () => {
+        const stub = sandbox.stub(notificationsInterface, 'getNotificationsForAccount').resolves([]);
+
+        router.get('/notifications', addRequestUser, (req, res) => {
+          routes.getNotifications(req, res);
+        });
+
+        await request(testApp(router)).get('/notifications?offset=50');
+
+        expect(stub.calledOnce).toBe(true);
+        expect(stub.firstCall.args[2]).toBe(50);
+      });
+
+      it('should accept ?offset=0 as a valid offset', async () => {
+        const stub = sandbox.stub(notificationsInterface, 'getNotificationsForAccount').resolves([]);
+
+        router.get('/notifications', addRequestUser, (req, res) => {
+          routes.getNotifications(req, res);
+        });
+
+        await request(testApp(router)).get('/notifications?offset=0');
+
+        expect(stub.calledOnce).toBe(true);
+        expect(stub.firstCall.args[2]).toBe(0);
+      });
+
+      it('should use default offset when ?offset is negative', async () => {
+        const stub = sandbox.stub(notificationsInterface, 'getNotificationsForAccount').resolves([]);
+
+        router.get('/notifications', addRequestUser, (req, res) => {
+          routes.getNotifications(req, res);
+        });
+
+        await request(testApp(router)).get('/notifications?offset=-5');
+
+        expect(stub.calledOnce).toBe(true);
+        expect(stub.firstCall.args[2]).toBe(0);
+      });
+
+      it('should cap offset at MAX_OFFSET (10000)', async () => {
+        const stub = sandbox.stub(notificationsInterface, 'getNotificationsForAccount').resolves([]);
+
+        router.get('/notifications', addRequestUser, (req, res) => {
+          routes.getNotifications(req, res);
+        });
+
+        await request(testApp(router)).get('/notifications?offset=99999');
+
+        expect(stub.calledOnce).toBe(true);
+        expect(stub.firstCall.args[2]).toBe(10000);
+      });
+
+      it('should use default offset when ?offset is not a valid number', async () => {
+        const stub = sandbox.stub(notificationsInterface, 'getNotificationsForAccount').resolves([]);
+
+        router.get('/notifications', addRequestUser, (req, res) => {
+          routes.getNotifications(req, res);
+        });
+
+        await request(testApp(router)).get('/notifications?offset=abc');
+
+        expect(stub.calledOnce).toBe(true);
+        expect(stub.firstCall.args[2]).toBe(0);
+      });
+    });
+
     describe('error handling', () => {
       it('should return 500 when service throws', async () => {
         sandbox.stub(notificationsInterface, 'getNotificationsForAccount').rejects(new Error('DB failure'));
