@@ -109,3 +109,15 @@ export class LocationValidationError extends Error {
     Object.setPrototypeOf(this, LocationValidationError.prototype);
   }
 }
+
+/**
+ * Custom error class for invalid domain format in widget configuration
+ */
+export class InvalidDomainFormatError extends Error {
+  constructor(message: string = 'Domain must not include protocol or path.') {
+    super(message);
+    this.name = 'InvalidDomainFormatError';
+    // Maintaining proper prototype chain in ES5+
+    Object.setPrototypeOf(this, InvalidDomainFormatError.prototype);
+  }
+}
