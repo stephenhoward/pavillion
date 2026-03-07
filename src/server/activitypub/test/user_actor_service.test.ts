@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import { v4 as uuidv4 } from 'uuid';
-import { generateKeyPairSync } from 'crypto';
 
 import UserActorService from '@/server/activitypub/service/user_actor';
 import { UserActorEntity } from '@/server/activitypub/entity/user_actor';
@@ -148,77 +147,6 @@ describe('UserActorService', () => {
     });
   });
 
-  describe('verifySignature', () => {
-    it('should validate known signatures correctly', async () => {
-      const username = 'alice';
-      const accountId = uuidv4();
-      const actorUri = `https://${testDomain}/users/${username}`;
-
-      // Create account and user actor
-      const accountEntity = await AccountEntity.create({
-        id: accountId,
-        username: username,
-        email: 'alice@example.com',
-        domain: testDomain,
-        language: 'en',
-      });
-
-      const account = accountEntity.toModel();
-      const userActor = await service.createActor(account, testDomain);
-
-      // Create a signed request
-      const targetUrl = `https://${testDomain}/inbox`;
-      const activity = { type: 'Create', actor: actorUri };
-      const signatureData = await service.signActivity(actorUri, activity, targetUrl);
-
-      const mockRequest = {
-        headers: {
-          signature: `keyId="${signatureData.keyId}",signature="${signatureData.signature}",algorithm="${signatureData.algorithm}",headers="${signatureData.headers}"`,
-          date: signatureData.date,
-          host: testDomain,
-        },
-        method: 'POST',
-        url: '/inbox',
-      } as any;
-
-      const result = await service.verifySignature(mockRequest, actorUri);
-
-      expect(result).toBe(true);
-    });
-
-    it('should return false for invalid signature', async () => {
-      const username = 'alice';
-      const accountId = uuidv4();
-      const actorUri = `https://${testDomain}/users/${username}`;
-
-      // Create account and user actor
-      const accountEntity = await AccountEntity.create({
-        id: accountId,
-        username: username,
-        email: 'alice@example.com',
-        domain: testDomain,
-        language: 'en',
-      });
-
-      const account = accountEntity.toModel();
-      await service.createActor(account, testDomain);
-
-      const mockRequest = {
-        headers: {
-          signature: `keyId="${actorUri}#main-key",signature="invalid-signature",algorithm="rsa-sha256",headers="(request-target) host date"`,
-          date: new Date().toUTCString(),
-          host: testDomain,
-        },
-        method: 'POST',
-        url: '/inbox',
-      } as any;
-
-      const result = await service.verifySignature(mockRequest, actorUri);
-
-      expect(result).toBe(false);
-    });
-  });
-
   describe('getActorByAccountId', () => {
     it('should return actor for existing account', async () => {
       const accountId = uuidv4();
@@ -325,27 +253,6 @@ describe('UserActorService', () => {
       await expect(service.signActivity(actorUri, activity, targetUrl))
         .rejects
         .toThrow('does not have a private key');
-    });
-  });
-
-  describe('verifySignature (null key handling)', () => {
-    it('should return false when actor has no public key', async () => {
-      const actorUri = 'https://remote.example/users/no-key';
-
-      await service.findOrCreateRemoteActor(actorUri, 'no-key', 'remote.example');
-
-      const mockRequest = {
-        headers: {
-          signature: `keyId="${actorUri}#main-key",signature="test",algorithm="rsa-sha256",headers="(request-target) host date"`,
-          date: new Date().toUTCString(),
-          host: 'remote.example',
-        },
-        method: 'POST',
-        url: '/inbox',
-      } as any;
-
-      const result = await service.verifySignature(mockRequest, actorUri);
-      expect(result).toBe(false);
     });
   });
 });

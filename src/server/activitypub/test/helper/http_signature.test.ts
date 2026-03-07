@@ -5,6 +5,7 @@ import axios from 'axios';
 import sinon from 'sinon';
 import { Cache } from '@/server/activitypub/helper/cache';
 import { verifyHttpSignature } from '@/server/activitypub/helper/http_signature';
+import { MAX_REQUEST_AGE_MS } from '@/server/activitypub/constants';
 import crypto from 'crypto';
 
 describe('HTTP Signature Verification', () => {
@@ -117,8 +118,8 @@ describe('HTTP Signature Verification', () => {
   });
 
   it('should reject requests with stale date headers', async () => {
-    // Set date header to 1 minute in the past
-    req.headers.date = new Date(Date.now() - 60000).toUTCString();
+    // Set date header beyond the freshness window
+    req.headers.date = new Date(Date.now() - MAX_REQUEST_AGE_MS - 60000).toUTCString();
 
     parseRequestStub.returns({
       params: {
