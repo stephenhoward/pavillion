@@ -102,7 +102,7 @@ describe('NotificationStore', () => {
 
       await store.fetchNotifications();
 
-      expect(mockNotificationService.getNotifications).toHaveBeenCalled();
+      expect(mockNotificationService.getNotifications).toHaveBeenCalledWith(50, 0);
       expect(store.notifications).toEqual(fetched);
     });
 
@@ -158,6 +158,47 @@ describe('NotificationStore', () => {
       expect(store.notifications).toHaveLength(2);
       expect(store.notifications[0].id).toBe('notif-1');
       expect(store.notifications[1].id).toBe('notif-2');
+    });
+
+    it('passes offset equal to current notifications length', async () => {
+      const PAGE_SIZE = 50;
+      const existing = Array.from({ length: PAGE_SIZE }, (_, i) =>
+        makeNotification({ id: `notif-${i}`, seen: false }),
+      );
+      store.notifications = existing;
+      store.hasMore = true;
+
+      mockNotificationService.getNotifications.mockResolvedValue([]);
+
+      await store.loadMore();
+
+      expect(mockNotificationService.getNotifications).toHaveBeenCalledWith(PAGE_SIZE, PAGE_SIZE);
+    });
+
+    it('passes correct offset after two loadMore calls', async () => {
+      const PAGE_SIZE = 50;
+      const firstPage = Array.from({ length: PAGE_SIZE }, (_, i) =>
+        makeNotification({ id: `notif-${i}`, seen: false }),
+      );
+      store.notifications = firstPage;
+      store.hasMore = true;
+
+      const secondPage = Array.from({ length: PAGE_SIZE }, (_, i) =>
+        makeNotification({ id: `notif-${PAGE_SIZE + i}`, seen: false }),
+      );
+      mockNotificationService.getNotifications.mockResolvedValue(secondPage);
+
+      await store.loadMore();
+
+      expect(mockNotificationService.getNotifications).toHaveBeenNthCalledWith(1, PAGE_SIZE, PAGE_SIZE);
+
+      // After first loadMore, notifications.length is now 2 * PAGE_SIZE
+      const thirdPage: Notification[] = [];
+      mockNotificationService.getNotifications.mockResolvedValue(thirdPage);
+
+      await store.loadMore();
+
+      expect(mockNotificationService.getNotifications).toHaveBeenNthCalledWith(2, PAGE_SIZE, 2 * PAGE_SIZE);
     });
 
     it('does nothing when hasMore is false', async () => {

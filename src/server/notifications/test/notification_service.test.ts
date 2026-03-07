@@ -309,6 +309,46 @@ describe('NotificationService', () => {
 
       expect(results[0]).toBeInstanceOf(Notification);
     });
+
+    it('should default offset to 0 when not specified', async () => {
+      const accountId = uuidv4();
+      findAllStub.resolves([]);
+
+      await service.getNotificationsForAccount(accountId);
+
+      const callArgs = findAllStub.firstCall.args[0];
+      expect(callArgs.offset).toBe(0);
+    });
+
+    it('should pass offset to findAll when provided', async () => {
+      const accountId = uuidv4();
+      findAllStub.resolves([]);
+
+      await service.getNotificationsForAccount(accountId, 50, 100);
+
+      const callArgs = findAllStub.firstCall.args[0];
+      expect(callArgs.offset).toBe(100);
+    });
+
+    it('should clamp negative offset to 0', async () => {
+      const accountId = uuidv4();
+      findAllStub.resolves([]);
+
+      await service.getNotificationsForAccount(accountId, 50, -10);
+
+      const callArgs = findAllStub.firstCall.args[0];
+      expect(callArgs.offset).toBe(0);
+    });
+
+    it('should cap offset at 10000', async () => {
+      const accountId = uuidv4();
+      findAllStub.resolves([]);
+
+      await service.getNotificationsForAccount(accountId, 50, 99999);
+
+      const callArgs = findAllStub.firstCall.args[0];
+      expect(callArgs.offset).toBe(10000);
+    });
   });
 
   // ---------------------------------------------------------------------------

@@ -14,10 +14,11 @@ export default class NotificationsInterface {
    *
    * @param {string} accountId - The account whose notifications to fetch
    * @param {number} [limit] - Number of records to return (default 50, max 100)
+   * @param {number} [offset] - Number of records to skip (default 0, max 10000)
    * @returns {Promise<Notification[]>} Array of Notification domain models
    */
-  async getNotificationsForAccount(accountId: string, limit?: number): Promise<Notification[]> {
-    return this.service.getNotificationsForAccount(accountId, limit);
+  async getNotificationsForAccount(accountId: string, limit?: number, offset?: number): Promise<Notification[]> {
+    return this.service.getNotificationsForAccount(accountId, limit, offset);
   }
 
   /**
