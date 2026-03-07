@@ -444,6 +444,17 @@ export default class ModerationInterface {
   }
 
   /**
+   * Acknowledges a forwarded report by updating its forward_status to 'acknowledged'.
+   * Used when a remote instance sends an Accept activity for a Flag we forwarded.
+   *
+   * @param forwardedReportId - The forwarded_report_id (Flag activity ID) to look up
+   * @returns True if a report was found and updated, false if no matching report exists
+   */
+  async acknowledgeForwardedReport(forwardedReportId: string): Promise<boolean> {
+    return this.moderationService.acknowledgeForwardedReport(forwardedReportId);
+  }
+
+  /**
    * Retrieves an event by its ID via the calendar domain.
    * Used for verifying event properties (e.g., whether it's remote) during report forwarding.
    *
