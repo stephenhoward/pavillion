@@ -1061,6 +1061,31 @@ section[aria-label="Calendar Events"] {
           opacity: 1;
         }
       }
+
+      // On narrow mobile, stack action buttons below event content
+      // so the article area gets adequate width for titles and dates
+      @media (max-width: 599px) {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        grid-template-areas:
+          'checkbox article'
+          '. actions';
+        gap: 0.5rem 0.75rem;
+
+        .event-checkbox {
+          grid-area: checkbox;
+          padding-top: 0.125rem;
+        }
+
+        .event-article {
+          grid-area: article;
+        }
+
+        .event-actions {
+          grid-area: actions;
+          justify-self: end;
+        }
+      }
     }
 
     .event-content {
