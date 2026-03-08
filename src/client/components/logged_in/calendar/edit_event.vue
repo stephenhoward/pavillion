@@ -87,6 +87,22 @@
       color: var(--pav-color-stone-100);
     }
   }
+
+  @media (max-width: 480px) {
+    flex-wrap: wrap;
+    padding: 1rem;
+    gap: 0.5rem;
+
+    h1 {
+      flex: 1;
+    }
+
+    .header-actions {
+      width: 100%;
+      margin-left: 0;
+      justify-content: flex-end;
+    }
+  }
 }
 
 /* Loading state */

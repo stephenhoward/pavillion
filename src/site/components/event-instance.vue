@@ -695,7 +695,8 @@ footer {
 .report-link {
   background: none;
   border: none;
-  padding: 0;
+  padding: $public-space-sm $public-space-md;
+  min-height: 44px;
   font-family: $public-font-family;
   font-size: $public-font-size-sm;
   color: $public-text-tertiary-light;

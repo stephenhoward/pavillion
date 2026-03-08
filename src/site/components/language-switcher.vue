@@ -301,6 +301,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
+  min-height: 44px;
   background: transparent;
   border: 1px solid $public-border-medium-light;
   border-radius: $public-radius-full;
@@ -394,6 +395,7 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 8px;
   padding: 8px 10px;
+  min-height: 44px;
   border-radius: $public-radius-sm;
   cursor: pointer;
   transition: background $public-duration-fast $public-ease-out;

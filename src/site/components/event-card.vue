@@ -215,6 +215,11 @@ const detailPath = computed(() => {
   overflow: hidden;
   background: $public-bg-tertiary-light;
 
+  // Reduce image height on narrow mobile to free up vertical space for content
+  @include public-mobile-only {
+    height: 9rem;
+  }
+
   @include public-dark-mode {
     background: $public-bg-tertiary-dark;
   }
@@ -280,6 +285,11 @@ const detailPath = computed(() => {
   flex-direction: column;
   gap: $public-space-sm;
   min-width: 0;
+
+  // Use tighter padding on narrow mobile to maximise text space
+  @include public-mobile-only {
+    padding: $public-space-md;
+  }
 }
 
 .event-time {
@@ -298,6 +308,11 @@ h3 {
   font-size: $public-font-size-md;
   font-weight: $public-font-weight-semibold;
   line-height: $public-line-height-tight;
+
+  // Slightly smaller title on narrow mobile to improve readability
+  @include public-mobile-only {
+    font-size: $public-font-size-base;
+  }
 }
 
 .event-title-link {

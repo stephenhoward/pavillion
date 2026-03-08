@@ -897,7 +897,7 @@ onUnmounted(() => {
     align-items: center;
     gap: 8px;
     padding: 8px 16px;
-    min-height: 38px;
+    min-height: 44px;
     border: 1px solid rgba(0, 0, 0, 0.12);
     border-radius: 20px;
     background: white;
@@ -1055,7 +1055,7 @@ onUnmounted(() => {
       gap: 6px;
       flex-shrink: 0;
       padding: 6px 14px;
-      min-height: 32px;
+      min-height: 44px;
       border: none;
       border-radius: 16px;
       font-family: 'Creato Display', 'Helvetica Neue', sans-serif;
@@ -1331,8 +1331,8 @@ onUnmounted(() => {
 
   .date-range-section {
     .date-filter-button {
-      width: 38px;
-      min-width: 38px;
+      width: 44px;
+      min-width: 44px;
       padding: 0;
       justify-content: center;
       gap: 0;
@@ -1350,7 +1350,7 @@ onUnmounted(() => {
         flex: 1;
         font-size: 12px;
         padding: 5px 10px;
-        min-height: 34px;
+        min-height: 44px;
         justify-content: center;
       }
     }
@@ -1360,7 +1360,7 @@ onUnmounted(() => {
         .date-input {
           font-size: 12px;
           padding: 5px 10px;
-          min-height: 34px;
+          min-height: 44px;
         }
       }
     }
