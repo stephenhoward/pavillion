@@ -11,6 +11,7 @@
             type="button"
             class="view-mode-card"
             :class="{ 'view-mode-card--selected': state.viewMode === 'list' }"
+            :aria-pressed="state.viewMode === 'list'"
             @click="state.viewMode = 'list'"
           >
             <div class="view-mode-card__illustration">
@@ -43,6 +44,7 @@
             type="button"
             class="view-mode-card"
             :class="{ 'view-mode-card--selected': state.viewMode === 'week' }"
+            :aria-pressed="state.viewMode === 'week'"
             @click="state.viewMode = 'week'"
           >
             <div class="view-mode-card__illustration">
@@ -79,6 +81,7 @@
             type="button"
             class="view-mode-card"
             :class="{ 'view-mode-card--selected': state.viewMode === 'month' }"
+            :aria-pressed="state.viewMode === 'month'"
             @click="state.viewMode = 'month'"
           >
             <div class="view-mode-card__illustration">

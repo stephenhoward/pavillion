@@ -847,10 +847,10 @@ onUnmounted(() => {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    min-width: 44px;
+    min-height: 44px;
     margin-left: 4px;
-    padding: 0;
+    padding: 8px;
     border: none;
     border-radius: 50%;
     background: rgba(0, 0, 0, 0.08);

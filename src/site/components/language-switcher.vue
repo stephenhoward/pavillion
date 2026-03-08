@@ -325,7 +325,7 @@ onUnmounted(() => {
     outline-offset: 2px;
   }
 
-  @include dark-mode {
+  @include public-dark-mode {
     border-color: $public-border-medium-dark;
     color: $public-text-secondary-dark;
 
@@ -380,7 +380,7 @@ onUnmounted(() => {
   box-shadow: $public-shadow-lg-light;
   outline: none;
 
-  @include dark-mode {
+  @include public-dark-mode {
     background: rgba(30, 30, 35, 0.98);
     box-shadow: $public-shadow-lg-dark;
     backdrop-filter: blur(20px);
@@ -411,7 +411,7 @@ onUnmounted(() => {
     outline-offset: -2px;
   }
 
-  @include dark-mode {
+  @include public-dark-mode {
     &:hover {
       background: $public-bg-tertiary-dark;
     }
@@ -430,7 +430,7 @@ onUnmounted(() => {
     font-weight: $public-font-weight-medium;
   }
 
-  @include dark-mode {
+  @include public-dark-mode {
     background: $public-bg-secondary-dark;
   }
 }
@@ -441,7 +441,7 @@ onUnmounted(() => {
   font-size: $public-font-size-sm;
   color: $public-text-primary-light;
 
-  @include dark-mode {
+  @include public-dark-mode {
     color: $public-text-primary-dark;
   }
 }
@@ -450,7 +450,7 @@ onUnmounted(() => {
   flex-shrink: 0;
   color: $public-accent-light;
 
-  @include dark-mode {
+  @include public-dark-mode {
     color: $public-accent-dark;
   }
 }

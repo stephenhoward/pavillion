@@ -360,16 +360,8 @@ onUnmounted(() => {
 // Responsive adjustments - maintain single row on all screen sizes
 @include public-mobile-only {
   .category-pill {
-    padding: 6px 12px;
-    font-size: $public-font-size-xs;
-    min-height: 44px;
-  }
-}
-
-@media (max-width: 480px) {
-  .category-pill {
     padding: 5px 10px;
-    font-size: 11.5px;
+    font-size: $public-font-size-xs;
     min-height: 44px; // Minimum touch target size per WCAG 2.5.8
   }
 }
