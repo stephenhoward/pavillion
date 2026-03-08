@@ -177,4 +177,59 @@ describe('ModerationService.acknowledgeForwardedReport', () => {
     expect(result).toBe(false);
     expect(updateStub.called).toBe(false);
   });
+
+  it('should return false when forwardedReportId uses javascript: scheme', async () => {
+    const findOneStub = sandbox.stub(ReportEntity, 'findOne');
+
+    const result = await service.acknowledgeForwardedReport(
+      'javascript:alert(1)',
+      'https://remote.instance/calendars/remote',
+    );
+
+    expect(result).toBe(false);
+    expect(findOneStub.called).toBe(false);
+  });
+
+  it('should return false when forwardedReportId uses data: scheme', async () => {
+    const findOneStub = sandbox.stub(ReportEntity, 'findOne');
+
+    const result = await service.acknowledgeForwardedReport(
+      'data:text/html,<h1>test</h1>',
+      'https://remote.instance/calendars/remote',
+    );
+
+    expect(result).toBe(false);
+    expect(findOneStub.called).toBe(false);
+  });
+
+  it('should return false when forwardedReportId uses file: scheme', async () => {
+    const findOneStub = sandbox.stub(ReportEntity, 'findOne');
+
+    const result = await service.acknowledgeForwardedReport(
+      'file:///etc/passwd',
+      'https://remote.instance/calendars/remote',
+    );
+
+    expect(result).toBe(false);
+    expect(findOneStub.called).toBe(false);
+  });
+
+  it('should return false when senderActorUri uses non-https scheme', async () => {
+    const updateStub = sandbox.stub().resolves();
+    const mockEntity = {
+      id: 'report-uuid',
+      forward_status: 'pending',
+      forwarded_to_actor_uri: 'https://remote.instance/calendars/target',
+      update: updateStub,
+    };
+    sandbox.stub(ReportEntity, 'findOne').resolves(mockEntity as any);
+
+    const result = await service.acknowledgeForwardedReport(
+      'https://local.instance/flags/flag-id',
+      'javascript:void(0)',
+    );
+
+    expect(result).toBe(false);
+    expect(updateStub.called).toBe(false);
+  });
 });

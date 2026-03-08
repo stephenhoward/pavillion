@@ -25,6 +25,7 @@ import {
 import CalendarInterface from '@/server/calendar/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
 import ActivityPubInterface from '@/server/activitypub/interface';
+import { validateActorUriProtocol } from '@/server/activitypub/helper/actor-uri';
 import FlagActivityBuilder from '@/server/moderation/service/flag-activity-builder';
 import EmailBlockingService from '@/server/moderation/service/email-blocking';
 import { PatternDetectionService } from '@/server/moderation/service/pattern-detection';
@@ -1719,7 +1720,10 @@ class ModerationService {
       return false;
     }
     try {
-      new URL(forwardedReportId);
+      const parsedUrl = new URL(forwardedReportId);
+      if (parsedUrl.protocol !== 'https:') {
+        return false;
+      }
     }
     catch {
       return false;
@@ -1738,6 +1742,10 @@ class ModerationService {
       return false;
     }
 
+    if (!validateActorUriProtocol(senderActorUri)) {
+      return false;
+    }
+
     try {
       const targetHostname = new URL(entity.forwarded_to_actor_uri).hostname;
       const senderHostname = new URL(senderActorUri).hostname;
@@ -1750,7 +1758,6 @@ class ModerationService {
       console.warn(`[MODERATION] Invalid URI in sender validation for report ${entity.id}`);
       return false;
     }
-
     // Idempotency: if already acknowledged, return true without updating
     if (entity.forward_status === 'acknowledged') {
       return true;
