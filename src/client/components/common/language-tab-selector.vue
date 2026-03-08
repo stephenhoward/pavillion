@@ -67,16 +67,16 @@ const addLanguage = () => {
           aria-hidden="true"
         />
       </button>
-
-      <button
-        type="button"
-        class="add-tab-btn"
-        @click="addLanguage"
-        :aria-label="t('add_language')"
-      >
-        <Plus :size="16" aria-hidden="true" />
-      </button>
     </nav>
+    <!-- add button is a sibling of nav, outside the tablist -->
+    <button
+      type="button"
+      class="add-tab-btn"
+      @click="addLanguage"
+      :aria-label="t('add_language')"
+    >
+      <Plus :size="16" aria-hidden="true" />
+    </button>
   </div>
 </template>
 
@@ -108,6 +108,15 @@ const addLanguage = () => {
 
   &::-webkit-scrollbar {
     display: none;
+  }
+
+  // Scroll fade affordance on narrow screens: right-edge fade hints that more
+  // tabs may exist off-screen. Mirrors the public site's scroll-fade pattern.
+  @media (width <= 639px) { // pav-media-down(sm) — 639px = $pav-breakpoints.sm (640px) - 1px
+    // 2rem stop (vs. 20px on site): relative unit scales with font size,
+    // giving a proportionally wider fade for tab labels vs. category pills.
+    -webkit-mask-image: linear-gradient(to right, black 0%, black calc(100% - 2rem), transparent 100%);
+    mask-image: linear-gradient(to right, black 0%, black calc(100% - 2rem), transparent 100%);
   }
 }
 

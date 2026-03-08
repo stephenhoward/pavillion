@@ -17,6 +17,15 @@
     &::-webkit-scrollbar {
       display: none;
     }
+
+    // Scroll fade affordance on narrow screens: right-edge fade hints that more
+    // tabs may exist off-screen. Mirrors the public site's scroll-fade pattern.
+    @media (width <= 639px) { // pav-media-down(sm) — 639px = $pav-breakpoints.sm (640px) - 1px
+      // 2rem stop (vs. 20px on site): relative unit scales with font size,
+      // giving a proportionally wider fade for tab labels vs. category pills.
+      -webkit-mask-image: linear-gradient(to right, black 0%, black calc(100% - 2rem), transparent 100%);
+      mask-image: linear-gradient(to right, black 0%, black calc(100% - 2rem), transparent 100%);
+    }
   }
 
   &__tab {

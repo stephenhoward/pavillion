@@ -116,7 +116,7 @@ const backToReports = () => {
             <h1 class="calendar-management-root__title">{{ t('page_title') }}</h1>
           </div>
 
-          <nav role="tablist" class="calendar-management-root__tabs">
+          <nav role="tablist" :aria-label="t('tabs_label')" class="calendar-management-root__tabs">
             <button
               id="categories-tab"
               type="button"
