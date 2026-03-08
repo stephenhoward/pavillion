@@ -260,7 +260,7 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
     }
   }
 
-  @media (prefers-color-scheme: dark) {
+  @include public-dark-mode {
     background-color: $public-bg-tertiary-dark;
     color: $public-text-secondary-dark;
     box-shadow: $public-shadow-xs-dark;

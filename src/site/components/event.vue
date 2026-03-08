@@ -159,7 +159,7 @@ function closeReportModal() {
               {{ state.event.location.address }}
               <template v-if="state.event.location.city">
                 <br />{{ state.event.location.city }}<template v-if="state.event.location.state">, {{ state.event.location.state }}</template>
-                <template v-if="state.event.location.postalCode"> {{ state.event.location.postalCode }}</template>
+                <template v-if="state.event.location.postalCode">{{ ' ' + state.event.location.postalCode }}</template>
               </template>
             </p>
           </div>

@@ -275,7 +275,7 @@ onUnmounted(() => {
     transform: scale(0.95);
   }
 
-  @media (prefers-color-scheme: dark) {
+  @include public-dark-mode {
     background-color: $public-bg-tertiary-dark;
     color: $public-text-secondary-dark;
 
@@ -350,7 +350,7 @@ onUnmounted(() => {
     opacity: 0.9;
   }
 
-  @media (prefers-color-scheme: dark) {
+  @include public-dark-mode {
     &:focus:not(:disabled) {
       outline-color: rgba(255, 255, 255, 0.4);
     }
