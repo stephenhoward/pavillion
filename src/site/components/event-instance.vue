@@ -210,7 +210,7 @@ onBeforeMount(async () => {
               {{ state.instance.event.location.address }}
               <template v-if="state.instance.event.location.city">
                 <br />{{ state.instance.event.location.city }}<template v-if="state.instance.event.location.state">, {{ state.instance.event.location.state }}</template>
-                <template v-if="state.instance.event.location.postalCode"> {{ state.instance.event.location.postalCode }}</template>
+                <template v-if="state.instance.event.location.postalCode">{{ ' ' + state.instance.event.location.postalCode }}</template>
               </template>
             </p>
           </div>
@@ -695,7 +695,8 @@ footer {
 .report-link {
   background: none;
   border: none;
-  padding: 0;
+  padding: $public-space-sm $public-space-md;
+  min-height: 44px;
   font-family: $public-font-family;
   font-size: $public-font-size-sm;
   color: $public-text-tertiary-light;

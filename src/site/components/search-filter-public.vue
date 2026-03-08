@@ -35,6 +35,7 @@
       <!-- Date Range Filter Section (Collapsible Button) -->
       <div v-if="shouldShowDateFilter"
            class="date-range-section"
+           :class="{ 'is-open': state.isDateFilterOpen }"
            role="group"
            :aria-label="t('filter_by_date_range')">
         <div class="date-filter-wrapper" ref="dateFilterRef" @keydown.escape.stop="closeDateFilterWithFocus">
@@ -846,10 +847,10 @@ onUnmounted(() => {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    min-width: 44px;
+    min-height: 44px;
     margin-left: 4px;
-    padding: 0;
+    padding: 8px;
     border: none;
     border-radius: 50%;
     background: rgba(0, 0, 0, 0.08);
@@ -897,7 +898,7 @@ onUnmounted(() => {
     align-items: center;
     gap: 8px;
     padding: 8px 16px;
-    min-height: 38px;
+    min-height: 44px;
     border: 1px solid rgba(0, 0, 0, 0.12);
     border-radius: 20px;
     background: white;
@@ -1055,7 +1056,7 @@ onUnmounted(() => {
       gap: 6px;
       flex-shrink: 0;
       padding: 6px 14px;
-      min-height: 32px;
+      min-height: 44px;
       border: none;
       border-radius: 16px;
       font-family: 'Creato Display', 'Helvetica Neue', sans-serif;
@@ -1329,10 +1330,14 @@ onUnmounted(() => {
     gap: $spacing-md;
   }
 
+  .search-row {
+    flex-wrap: wrap;
+  }
+
   .date-range-section {
     .date-filter-button {
-      width: 38px;
-      min-width: 38px;
+      width: 44px;
+      min-width: 44px;
       padding: 0;
       justify-content: center;
       gap: 0;
@@ -1350,7 +1355,7 @@ onUnmounted(() => {
         flex: 1;
         font-size: 12px;
         padding: 5px 10px;
-        min-height: 34px;
+        min-height: 44px;
         justify-content: center;
       }
     }
@@ -1360,8 +1365,26 @@ onUnmounted(() => {
         .date-input {
           font-size: 12px;
           padding: 5px 10px;
-          min-height: 34px;
+          min-height: 44px;
         }
+      }
+    }
+
+    // When open on mobile: break out of the flex row and show dropdown inline
+    &.is-open {
+      width: 100%;
+
+      .date-filter-wrapper {
+        position: static;
+        flex-direction: column;
+        width: 100%;
+      }
+
+      .date-dropdown {
+        position: static;
+        width: 100%;
+        min-width: unset;
+        margin-top: 8px;
       }
     }
   }

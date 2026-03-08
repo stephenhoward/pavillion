@@ -63,7 +63,7 @@
     &:focus {
       outline: none;
       border-color: var(--pav-color-orange-500);
-      background: white;
+      background: var(--pav-color-surface-primary);
       box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
     }
 
@@ -126,7 +126,7 @@
 @mixin event-card {
   border-radius: 0.75rem; // rounded-xl
   border: 1px solid var(--pav-color-stone-200);
-  background: white;
+  background: var(--pav-color-surface-primary);
   padding: 1rem;
   transition: all 0.15s ease;
 
@@ -166,7 +166,7 @@
 
 // Section card wrapper
 @mixin section-card {
-  background: white;
+  background: var(--pav-color-surface-primary);
   border-radius: 0.75rem; // rounded-xl
   border: 1px solid var(--pav-color-stone-200);
   padding: 1.5rem;

@@ -250,8 +250,8 @@ onUnmounted(() => {
 // Scroll arrow buttons
 .scroll-arrow {
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   border: none;
   border-radius: $public-radius-full;
   background-color: $public-bg-tertiary-light;
@@ -275,7 +275,7 @@ onUnmounted(() => {
     transform: scale(0.95);
   }
 
-  @media (prefers-color-scheme: dark) {
+  @include public-dark-mode {
     background-color: $public-bg-tertiary-dark;
     color: $public-text-secondary-dark;
 
@@ -350,7 +350,7 @@ onUnmounted(() => {
     opacity: 0.9;
   }
 
-  @media (prefers-color-scheme: dark) {
+  @include public-dark-mode {
     &:focus:not(:disabled) {
       outline-color: rgba(255, 255, 255, 0.4);
     }
@@ -360,17 +360,9 @@ onUnmounted(() => {
 // Responsive adjustments - maintain single row on all screen sizes
 @include public-mobile-only {
   .category-pill {
-    padding: 6px 12px;
-    font-size: $public-font-size-xs;
-    min-height: 34px;
-  }
-}
-
-@media (max-width: 480px) {
-  .category-pill {
     padding: 5px 10px;
-    font-size: 11.5px;
-    min-height: 36px; // Slightly larger for better touch targets
+    font-size: $public-font-size-xs;
+    min-height: 44px; // Minimum touch target size per WCAG 2.5.8
   }
 }
 </style>

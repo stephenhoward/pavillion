@@ -195,6 +195,11 @@ export default class PublicCalendarService {
           },
         };
         categoryAssignmentInclude.required = true;
+        // Also require the event include so that Sequelize propagates the INNER JOIN
+        // correctly. Without this, Sequelize may return EventInstance rows where the
+        // event association is null when the nested categoryAssignments filter
+        // eliminates all matching rows for that event.
+        eventInclude.required = true;
       }
     }
 
@@ -236,40 +241,46 @@ export default class PublicCalendarService {
     const instances = await EventInstanceEntity.findAll(queryOptions);
 
     // Convert entities to models and augment with isRecurring
-    const mappedInstances = instances.map(instanceEntity => {
-      const instance = instanceEntity.toModel();
-      const event = instanceEntity.event;
+    const mappedInstances = instances
+      // Belt-and-suspenders: eventInclude.required=true should prevent null events,
+      // but guard defensively since Sequelize JOIN propagation can vary by dialect.
+      .filter(instanceEntity => instanceEntity.event != null)
+      .map(instanceEntity => {
+        const instance = instanceEntity.toModel();
+        const event = instanceEntity.event;
 
-      // Add event content
-      if (event.content) {
-        for (const c of event.content) {
-          instance.event.addContent(c.toModel());
+        // Add event content
+        if (event.content) {
+          for (const c of event.content) {
+            instance.event.addContent(c.toModel());
+          }
         }
-      }
 
-      // Add location
-      if (event.location) {
-        instance.event.location = event.location.toModel();
-      }
+        // Add location
+        if (event.location) {
+          instance.event.location = event.location.toModel();
+        }
 
-      // Add media
-      if (event.media) {
-        instance.event.media = event.media.toModel();
-      }
+        // Add media
+        if (event.media) {
+          instance.event.media = event.media.toModel();
+        }
 
-      // Add categories
-      const categoryAssignments = event.getDataValue('categoryAssignments') as EventCategoryAssignmentEntity[] | undefined;
-      if (categoryAssignments) {
-        instance.event.categories = categoryAssignments.map(assignment => assignment.category.toModel());
-      }
+        // Add categories
+        const categoryAssignments = event.getDataValue('categoryAssignments') as EventCategoryAssignmentEntity[] | undefined;
+        if (categoryAssignments) {
+          instance.event.categories = categoryAssignments
+            .filter(assignment => assignment.category != null)
+            .map(assignment => assignment.category.toModel());
+        }
 
-      // Attach isRecurring — read from the virtual attribute added by the EXISTS subquery.
-      // Sequelize returns it as a number (0/1) in SQLite or boolean in PostgreSQL.
-      const isRecurringRaw = event.getDataValue('isRecurring');
-      (instance.event as any).isRecurring = Boolean(isRecurringRaw);
+        // Attach isRecurring — read from the virtual attribute added by the EXISTS subquery.
+        // Sequelize returns it as a number (0/1) in SQLite or boolean in PostgreSQL.
+        const isRecurringRaw = event.getDataValue('isRecurring');
+        (instance.event as any).isRecurring = Boolean(isRecurringRaw);
 
-      return instance;
-    });
+        return instance;
+      });
 
     return mappedInstances;
   }

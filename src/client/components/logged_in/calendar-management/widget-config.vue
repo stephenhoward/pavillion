@@ -11,6 +11,7 @@
             type="button"
             class="view-mode-card"
             :class="{ 'view-mode-card--selected': state.viewMode === 'list' }"
+            :aria-pressed="state.viewMode === 'list'"
             @click="state.viewMode = 'list'"
           >
             <div class="view-mode-card__illustration">
@@ -33,7 +34,8 @@
                    stroke="currentColor"
                    stroke-width="2"
                    stroke-linecap="round"
-                   stroke-linejoin="round">
+                   stroke-linejoin="round"
+                   aria-hidden="true">
                 <polyline points="20 6 9 17 4 12"/>
               </svg>
             </div>
@@ -43,6 +45,7 @@
             type="button"
             class="view-mode-card"
             :class="{ 'view-mode-card--selected': state.viewMode === 'week' }"
+            :aria-pressed="state.viewMode === 'week'"
             @click="state.viewMode = 'week'"
           >
             <div class="view-mode-card__illustration">
@@ -69,7 +72,8 @@
                    stroke="currentColor"
                    stroke-width="2"
                    stroke-linecap="round"
-                   stroke-linejoin="round">
+                   stroke-linejoin="round"
+                   aria-hidden="true">
                 <polyline points="20 6 9 17 4 12"/>
               </svg>
             </div>
@@ -79,6 +83,7 @@
             type="button"
             class="view-mode-card"
             :class="{ 'view-mode-card--selected': state.viewMode === 'month' }"
+            :aria-pressed="state.viewMode === 'month'"
             @click="state.viewMode = 'month'"
           >
             <div class="view-mode-card__illustration">
@@ -116,7 +121,8 @@
                    stroke="currentColor"
                    stroke-width="2"
                    stroke-linecap="round"
-                   stroke-linejoin="round">
+                   stroke-linejoin="round"
+                   aria-hidden="true">
                 <polyline points="20 6 9 17 4 12"/>
               </svg>
             </div>
@@ -303,10 +309,10 @@ defineExpose({
   .view-mode-group {
     .view-mode-cards {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      grid-template-columns: 1fr;
       gap: var(--pav-space-4);
 
-      @media (min-width: 768px) {
+      @media (min-width: 640px) {
         grid-template-columns: repeat(3, 1fr);
       }
     }
@@ -317,7 +323,7 @@ defineExpose({
       flex-direction: column;
       align-items: center;
       padding: var(--pav-space-5);
-      background: var(--pav-bg-primary);
+      background: var(--pav-color-surface-primary);
       border: 2px solid var(--pav-border-primary);
       border-radius: 0.75rem;
       cursor: pointer;

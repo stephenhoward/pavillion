@@ -260,7 +260,7 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
     }
   }
 
-  @media (prefers-color-scheme: dark) {
+  @include public-dark-mode {
     background-color: $public-bg-tertiary-dark;
     color: $public-text-secondary-dark;
     box-shadow: $public-shadow-xs-dark;
@@ -612,9 +612,9 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
 }
 
 @mixin public-dark-mode {
-  // Apply dark mode when system preference is dark (but not when forced to light mode)
+  // Apply dark mode when system preference is dark
   @media (prefers-color-scheme: dark) {
-    :global(html:not(.widget-theme-light)) & {
+    & {
       @content;
     }
   }

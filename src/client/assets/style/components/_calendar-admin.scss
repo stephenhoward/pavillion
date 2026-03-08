@@ -32,7 +32,7 @@
 
 // Card pattern (categories, editors)
 @mixin admin-card {
-  background: var(--pav-bg-primary);
+  background: var(--pav-color-surface-primary);
   border: 1px solid var(--pav-border-primary);
   border-radius: 0.75rem; // rounded-xl
   padding: var(--pav-space-4);
@@ -168,7 +168,7 @@
   }
 
   &__header {
-    background: var(--pav-surface-primary);
+    background: var(--pav-color-surface-primary);
     border-bottom: 1px solid var(--pav-border-primary);
     overflow: hidden;
 

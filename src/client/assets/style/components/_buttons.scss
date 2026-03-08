@@ -321,7 +321,7 @@ a.button {
 
   /* Secondary pill variant (outlined) */
   &.btn--secondary {
-    background-color: white;
+    background-color: var(--pav-color-surface-primary);
     color: var(--pav-color-stone-700);
     border-color: var(--pav-color-stone-300);
 
