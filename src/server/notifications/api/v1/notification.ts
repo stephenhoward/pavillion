@@ -1,4 +1,5 @@
-import express, { Request, Response, Application } from 'express';
+import express, { Request, Response, Application, RequestHandler } from 'express';
+import config from 'config';
 
 import { Account } from '@/common/model/account';
 import ExpressHelper from '@/server/common/helper/express';
@@ -13,8 +14,11 @@ const MAX_OFFSET = 10000;
 /**
  * Rate limiter for the GET /notifications endpoint.
  * Allows 10 requests per minute per authenticated user.
+ * Respects the rateLimit.enabled config flag (disabled in test/e2e environments).
  */
-const notificationsRateLimiter = createAccountRateLimiter(10, 60000, 'notifications');
+const notificationsRateLimiter: RequestHandler = config.get<boolean>('rateLimit.enabled')
+  ? createAccountRateLimiter(10, 60000, 'notifications')
+  : (_req, _res, next) => next();
 
 export default class NotificationRoutes {
   private service: NotificationsInterface;
