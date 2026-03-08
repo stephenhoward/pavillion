@@ -14,6 +14,9 @@
     "no_languages_match": "Aucune langue ne correspond à votre recherche",
     "all_languages_added": "Toutes les langues ont été ajoutées"
   },
+  "language_tab_selector": {
+    "nav_label": "Sélection de la langue"
+  },
   "navigation": {
     "skip_to_content": "Aller au contenu principal",
     "main_label": "Navigation principale",

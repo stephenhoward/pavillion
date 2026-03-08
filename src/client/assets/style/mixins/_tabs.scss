@@ -3,6 +3,8 @@
  * Reusable mixins for consistent tab styling across the application
  */
 
+@use '../tokens/breakpoint-mixins' as *;
+
 /**
  * Tab navigation container styles
  * Creates the horizontal tab bar with bottom border
@@ -11,6 +13,10 @@
  *   .my-tabs {
  *     @include tab-navigation;
  *   }
+ *
+ * Bidirectional scroll-fade affordance on narrow screens:
+ * Apply .can-scroll-right / .can-scroll-left classes (via useTabScroll composable)
+ * to show edge-fade masks indicating scrollable content in that direction.
  */
 @mixin tab-navigation {
   display: flex;
@@ -27,13 +33,27 @@
     display: none;
   }
 
-  // Scroll fade affordance on narrow screens: right-edge fade hints that more
-  // tabs may exist off-screen. Mirrors the public site's scroll-fade pattern.
-  @media (width <= 639px) { // pav-media-down(sm) — 639px = $pav-breakpoints.sm (640px) - 1px
-    // 2rem stop (vs. 20px on site): relative unit scales with font size,
-    // giving a proportionally wider fade for tab labels vs. category pills.
-    -webkit-mask-image: linear-gradient(to right, black 0%, black calc(100% - 2rem), transparent 100%);
-    mask-image: linear-gradient(to right, black 0%, black calc(100% - 2rem), transparent 100%);
+  // Bidirectional scroll-fade affordance on narrow screens.
+  // 2rem stop: relative unit scales with font size, giving a proportionally
+  // wider fade for tab labels vs. category pills.
+  @include pav-media-down(sm) {
+    // Right fade: more tabs off-screen to the right
+    &.can-scroll-right {
+      -webkit-mask-image: linear-gradient(to right, black 0%, black calc(100% - 2rem), transparent 100%);
+      mask-image: linear-gradient(to right, black 0%, black calc(100% - 2rem), transparent 100%);
+    }
+
+    // Left fade: tabs off-screen to the left
+    &.can-scroll-left {
+      -webkit-mask-image: linear-gradient(to right, transparent 0%, black 2rem, black 100%);
+      mask-image: linear-gradient(to right, transparent 0%, black 2rem, black 100%);
+    }
+
+    // Both fades simultaneously: tabs hidden on both sides
+    &.can-scroll-left.can-scroll-right {
+      -webkit-mask-image: linear-gradient(to right, transparent 0%, black 2rem, black calc(100% - 2rem), transparent 100%);
+      mask-image: linear-gradient(to right, transparent 0%, black 2rem, black calc(100% - 2rem), transparent 100%);
+    }
   }
 }
 

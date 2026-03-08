@@ -1,0 +1,61 @@
+/**
+ * Breakpoint Variables
+ * SCSS variables and CSS custom properties for the responsive breakpoint system.
+ * No mixins. No @import or @use of anything. This file is self-contained.
+ */
+
+:root {
+  /* Breakpoint Tokens (CSS Custom Properties for runtime access) */
+  --pav-breakpoint-xs: 320px;   /* Extra small devices */
+  --pav-breakpoint-sm: 640px;   /* Small devices (tablets) */
+  --pav-breakpoint-md: 768px;   /* Medium devices (small laptops) */
+  --pav-breakpoint-lg: 1024px;  /* Large devices (laptops) */
+  --pav-breakpoint-xl: 1280px;  /* Extra large devices (desktops) */
+  --pav-breakpoint-2xl: 1536px; /* 2x extra large devices (large desktops) */
+
+  /* Container Max Widths */
+  --pav-container-xs: 100%;
+  --pav-container-sm: 640px;
+  --pav-container-md: 768px;
+  --pav-container-lg: 1024px;
+  --pav-container-xl: 1280px;
+  --pav-container-2xl: 1536px;
+
+  /* Responsive Spacing Multipliers */
+  --pav-responsive-scale-xs: 0.75;  /* 75% scaling on extra small */
+  --pav-responsive-scale-sm: 0.875; /* 87.5% scaling on small */
+  --pav-responsive-scale-md: 1;     /* 100% baseline on medium+ */
+  --pav-responsive-scale-lg: 1.125; /* 112.5% scaling on large+ */
+  --pav-responsive-scale-xl: 1.25;  /* 125% scaling on extra large+ */
+}
+
+/* SCSS Variable Mirrors for Build-Time Logic */
+
+// Breakpoint map for mixins and utilities
+$pav-breakpoints: (
+  xs: 320px,
+  sm: 640px,
+  md: 768px,
+  lg: 1024px,
+  xl: 1280px,
+  '2xl': 1536px
+) !default;
+
+// Container max-width map
+$pav-containers: (
+  xs: 100%,
+  sm: 640px,
+  md: 768px,
+  lg: 1024px,
+  xl: 1280px,
+  '2xl': 1536px
+) !default;
+
+// Responsive scale factors
+$pav-responsive-scales: (
+  xs: 0.75,
+  sm: 0.875,
+  md: 1,
+  lg: 1.125,
+  xl: 1.25
+) !default;

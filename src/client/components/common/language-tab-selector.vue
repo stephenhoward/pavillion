@@ -9,6 +9,7 @@
 import { Plus } from 'lucide-vue-next';
 import iso6391 from 'iso-639-1-dir';
 import { useTranslation } from 'i18next-vue';
+import { useTabScroll } from '@/client/composables/useTabScroll';
 
 const { t } = useTranslation('system', {
   keyPrefix: 'language_tab_selector',
@@ -30,6 +31,8 @@ const emit = defineEmits<{
   (e: 'remove-language', lang: string): void;
 }>();
 
+const { tabsRef, canScrollLeft, canScrollRight } = useTabScroll();
+
 const selectLanguage = (lang: string) => {
   emit('update:modelValue', lang);
 };
@@ -42,9 +45,11 @@ const addLanguage = () => {
 <template>
   <div class="language-tab-selector">
     <nav
+      ref="tabsRef"
       role="tablist"
-      aria-label="Language selection"
+      :aria-label="t('nav_label')"
       class="tabs-container"
+      :class="{ 'can-scroll-left': canScrollLeft, 'can-scroll-right': canScrollRight }"
     >
       <button
         v-for="lang in languages"
@@ -82,6 +87,7 @@ const addLanguage = () => {
 
 <style scoped lang="scss">
 @use '@/client/assets/style/mixins' as *;
+@use '@/client/assets/style/tokens/breakpoint-mixins' as *;
 
 .language-tab-selector {
   display: flex;
@@ -110,13 +116,28 @@ const addLanguage = () => {
     display: none;
   }
 
-  // Scroll fade affordance on narrow screens: right-edge fade hints that more
-  // tabs may exist off-screen. Mirrors the public site's scroll-fade pattern.
-  @media (width <= 639px) { // pav-media-down(sm) — 639px = $pav-breakpoints.sm (640px) - 1px
-    // 2rem stop (vs. 20px on site): relative unit scales with font size,
-    // giving a proportionally wider fade for tab labels vs. category pills.
-    -webkit-mask-image: linear-gradient(to right, black 0%, black calc(100% - 2rem), transparent 100%);
-    mask-image: linear-gradient(to right, black 0%, black calc(100% - 2rem), transparent 100%);
+  // Bidirectional scroll-fade affordance on narrow screens.
+  // 2rem stop: relative unit scales with font size, giving a proportionally
+  // wider fade for tab labels vs. category pills.
+  // Apply .can-scroll-right / .can-scroll-left via useTabScroll composable.
+  @include pav-media-down(sm) {
+    // Right fade: more tabs off-screen to the right
+    &.can-scroll-right {
+      -webkit-mask-image: linear-gradient(to right, black 0%, black calc(100% - 2rem), transparent 100%);
+      mask-image: linear-gradient(to right, black 0%, black calc(100% - 2rem), transparent 100%);
+    }
+
+    // Left fade: tabs off-screen to the left
+    &.can-scroll-left {
+      -webkit-mask-image: linear-gradient(to right, transparent 0%, black 2rem, black 100%);
+      mask-image: linear-gradient(to right, transparent 0%, black 2rem, black 100%);
+    }
+
+    // Both fades simultaneously: tabs hidden on both sides
+    &.can-scroll-left.can-scroll-right {
+      -webkit-mask-image: linear-gradient(to right, transparent 0%, black 2rem, black calc(100% - 2rem), transparent 100%);
+      mask-image: linear-gradient(to right, transparent 0%, black 2rem, black calc(100% - 2rem), transparent 100%);
+    }
   }
 }
 
