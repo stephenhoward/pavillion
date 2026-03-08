@@ -101,7 +101,7 @@ const handleClick = (event: MouseEvent) => {
   }
 
   &--secondary {
-    background: white;
+    background: var(--pav-color-surface-primary);
     border-color: var(--pav-color-stone-300);
     color: var(--pav-color-stone-700);
 

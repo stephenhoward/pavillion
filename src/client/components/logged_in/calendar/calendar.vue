@@ -965,7 +965,7 @@ section[aria-label="Calendar Events"] {
       /* Inlined: event-card */
       border-radius: 0.75rem; // rounded-xl
       border: 1px solid var(--pav-color-stone-200);
-      background: white;
+      background: var(--pav-color-surface-primary);
       padding: 1rem;
       transition: all 0.15s ease;
 
