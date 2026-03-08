@@ -35,6 +35,7 @@
       <!-- Date Range Filter Section (Collapsible Button) -->
       <div v-if="shouldShowDateFilter"
            class="date-range-section"
+           :class="{ 'is-open': state.isDateFilterOpen }"
            role="group"
            :aria-label="t('filter_by_date_range')">
         <div class="date-filter-wrapper" ref="dateFilterRef" @keydown.escape.stop="closeDateFilterWithFocus">
@@ -1329,6 +1330,10 @@ onUnmounted(() => {
     gap: $spacing-md;
   }
 
+  .search-row {
+    flex-wrap: wrap;
+  }
+
   .date-range-section {
     .date-filter-button {
       width: 44px;
@@ -1362,6 +1367,24 @@ onUnmounted(() => {
           padding: 5px 10px;
           min-height: 44px;
         }
+      }
+    }
+
+    // When open on mobile: break out of the flex row and show dropdown inline
+    &.is-open {
+      width: 100%;
+
+      .date-filter-wrapper {
+        position: static;
+        flex-direction: column;
+        width: 100%;
+      }
+
+      .date-dropdown {
+        position: static;
+        width: 100%;
+        min-width: unset;
+        margin-top: 8px;
       }
     }
   }

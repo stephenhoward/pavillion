@@ -75,7 +75,7 @@ onUnmounted(() => {
 
 <template>
   <div class="inbox-container">
-    <h1 class="sr-only">
+    <h1 class="inbox-heading">
       {{ t('title') }}
     </h1>
 
@@ -139,6 +139,18 @@ div.inbox-container {
   flex-direction: column;
   height: 100%;
   overflow-y: auto;
+
+  h1.inbox-heading {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--pav-color-stone-900);
+    margin: 0;
+    padding: var(--pav-space-6) var(--pav-space-4) var(--pav-space-4);
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-stone-100);
+    }
+  }
 
   ul.notifications-list {
     flex: 1;
