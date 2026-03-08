@@ -14,6 +14,7 @@
  */
 @mixin tab-navigation {
   display: flex;
+  flex-direction: row; // Override Chrome UA stylesheet which sets column on <nav> flex containers
   flex-wrap: nowrap;
   overflow-x: auto;
   scrollbar-width: none;
