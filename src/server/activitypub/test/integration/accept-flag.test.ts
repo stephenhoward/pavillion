@@ -162,5 +162,80 @@ describe('ProcessInboxService - Accept Flag Activity', () => {
       // Verify acknowledgeForwardedReport was not called for Follow accepts
       expect((moderationInterface.acknowledgeForwardedReport as sinon.SinonStub).called).toBe(false);
     });
+
+    it('should acknowledge forwarded report when Accept object is a string URI with domain mismatch', async () => {
+      // When object is a string URI from a different domain than the actor,
+      // it is treated as a Flag URI (our local Flag ID sent to the remote instance)
+      const flagUri = 'https://local.instance/flags/forwarded-flag-id';
+      const acceptActivity = AcceptActivity.fromObject({
+        type: 'Accept',
+        id: 'https://remote.instance/accepts/accept-string-flag',
+        actor: 'https://remote.instance/calendars/remote-calendar',
+        object: flagUri,
+      });
+
+      // Stub acknowledgeForwardedReport to return true (report found and updated)
+      (moderationInterface.acknowledgeForwardedReport as sinon.SinonStub).resolves(true);
+
+      await inboxService.processAcceptActivity(testCalendar, acceptActivity);
+
+      // Verify acknowledgeForwardedReport was called with the string URI and sender actor
+      expect((moderationInterface.acknowledgeForwardedReport as sinon.SinonStub).calledOnce).toBe(true);
+      expect((moderationInterface.acknowledgeForwardedReport as sinon.SinonStub).calledWith(
+        flagUri,
+        'https://remote.instance/calendars/remote-calendar',
+      )).toBe(true);
+    });
+
+    it('should reject Accept with string URI object when hostname mismatch and no matching report', async () => {
+      // When the object URI hostname differs from the actor hostname and
+      // no matching forwarded report exists, the Accept should be rejected
+      const unknownUri = 'https://third-party.instance/flags/unknown-flag';
+      const acceptActivity = AcceptActivity.fromObject({
+        type: 'Accept',
+        id: 'https://remote.instance/accepts/accept-suspicious',
+        actor: 'https://remote.instance/calendars/remote-calendar',
+        object: unknownUri,
+      });
+
+      // Stub acknowledgeForwardedReport to return false (no matching report)
+      (moderationInterface.acknowledgeForwardedReport as sinon.SinonStub).resolves(false);
+
+      const consoleWarnStub = sandbox.stub(console, 'warn');
+
+      await inboxService.processAcceptActivity(testCalendar, acceptActivity);
+
+      // Verify acknowledgeForwardedReport was attempted
+      expect((moderationInterface.acknowledgeForwardedReport as sinon.SinonStub).calledOnce).toBe(true);
+
+      // Verify a warning was logged about the mismatch
+      const warningLogged = consoleWarnStub.getCalls().some(
+        call => call.args[0]?.includes('hostname mismatch'),
+      );
+      expect(warningLogged).toBe(true);
+    });
+
+    it('should reject Accept with string URI object using non-https scheme', async () => {
+      const maliciousUri = 'ftp://remote.instance/flags/some-flag';
+      const acceptActivity = AcceptActivity.fromObject({
+        type: 'Accept',
+        id: 'https://remote.instance/accepts/accept-ftp',
+        actor: 'https://remote.instance/calendars/remote-calendar',
+        object: maliciousUri,
+      });
+
+      const consoleWarnStub = sandbox.stub(console, 'warn');
+
+      await inboxService.processAcceptActivity(testCalendar, acceptActivity);
+
+      // Verify acknowledgeForwardedReport was NOT called
+      expect((moderationInterface.acknowledgeForwardedReport as sinon.SinonStub).called).toBe(false);
+
+      // Verify a warning was logged about invalid scheme
+      const warningLogged = consoleWarnStub.getCalls().some(
+        call => call.args[0]?.includes('invalid scheme'),
+      );
+      expect(warningLogged).toBe(true);
+    });
   });
 });

@@ -273,6 +273,62 @@ describe('ProcessInboxService - Follow Activity Processing', () => {
       });
       expect(consoleLogStub.called).toBe(true);
     });
+
+    it('should confirm follow relationship when Accept object is a string URI', async () => {
+      // Arrange: Accept with string URI object where hostnames match (Follow Accept)
+      const remoteCalendarUrl = 'https://remote.instance/calendars/remote-calendar';
+      const followActivityUri = 'https://remote.instance/follows/follow-activity-id';
+
+      const acceptActivity = {
+        type: 'Accept',
+        actor: remoteCalendarUrl,
+        object: followActivityUri,
+      };
+
+      // Mock CalendarActorEntity that would be found for this AP URL
+      const mockCalendarActor = {
+        id: 'mock-calendar-actor-uuid',
+        actor_type: 'remote',
+        calendar_id: null,
+        actor_uri: remoteCalendarUrl,
+        remote_display_name: null,
+        remote_domain: 'remote.instance',
+        inbox_url: null,
+        shared_inbox_url: null,
+        public_key: null,
+        private_key: null,
+        last_fetched: null,
+      };
+
+      const existingFollowing = {
+        id: uuidv4(),
+        calendar_actor_id: mockCalendarActor.id,
+        calendar_id: testCalendar.id,
+      };
+
+      // Stub remoteCalendarService to return the mock calendar actor
+      sandbox.stub(inboxService.remoteCalendarService, 'getByActorUri').resolves(mockCalendarActor as any);
+      const findOneStub = sandbox.stub(FollowingCalendarEntity, 'findOne').resolves(existingFollowing as any);
+      const consoleLogStub = sandbox.stub(console, 'log');
+
+      // Act
+      await inboxService.processAcceptActivity(testCalendar, acceptActivity as any);
+
+      // Assert - should look up remote calendar by actor URI
+      expect((inboxService.remoteCalendarService.getByActorUri as sinon.SinonStub).calledOnce).toBe(true);
+      expect(findOneStub.calledOnce).toBe(true);
+      expect(findOneStub.firstCall.args[0].where).toMatchObject({
+        calendar_actor_id: mockCalendarActor.id,
+        calendar_id: testCalendar.id,
+      });
+
+      // Verify confirmation log was written
+      const confirmationLogged = consoleLogStub.getCalls().some(
+        call => call.args[0]?.includes('Follow relationship confirmed') && call.args[0]?.includes('string URI'),
+      );
+      expect(confirmationLogged).toBe(true);
+    });
+
   });
 
   describe('processShareEvent', () => {
