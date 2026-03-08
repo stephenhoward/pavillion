@@ -97,6 +97,7 @@ const addLanguage = () => {
 
 .tabs-container {
   display: flex;
+  flex-direction: row; // Override Chrome UA stylesheet which sets column on <nav> flex containers
   gap: 1.5rem;
   align-items: center;
   flex-wrap: nowrap;

@@ -476,10 +476,10 @@ const isActive = (path) => {
   left: 0;
   right: 0;
   display: flex;
+  flex-direction: row; // Override Chrome UA stylesheet which sets column on <nav> flex containers
   align-items: center;
   height: calc(var(--pav-shell-bottom-nav-height) + var(--pav-shell-safe-area-bottom));
   overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
   background: var(--pav-color-surface-primary);
   border-top: var(--pav-border-width-1) solid var(--pav-color-border-secondary);
   padding-bottom: var(--pav-shell-safe-area-bottom);
