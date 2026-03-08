@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { EventEmitter } from "events";
 import { logError } from '@/server/common/helper/error-logger';
 import { logActivityRejection } from '../helper/rejection-logger';
+import { validateActorUriProtocol } from '../helper/actor-uri';
 
 import CreateActivity from "@/server/activitypub/model/action/create";
 import UpdateActivity from "@/server/activitypub/model/action/update";
@@ -1533,6 +1534,10 @@ class ProcessInboxService {
    * For Follow: Confirms the follow relationship on the initiating side.
    * For Flag: Updates the forward_status to 'acknowledged' on the forwarded report.
    *
+   * Security note: This method assumes that HTTP signature verification has already
+   * been completed upstream by the ActivityPub middleware, ensuring the message
+   * authenticity before processing.
+   *
    * @param {Calendar} calendar - The calendar that initiated the Follow/Flag
    * @param {AcceptActivity} message - The Accept activity message
    * @returns {Promise<void>}
@@ -1548,12 +1553,11 @@ class ProcessInboxService {
       return;
     }
 
-    // Check if this is an Accept for a Flag activity
+    // Check if this is an Accept for a Flag activity (object is inline Flag object)
     if (typeof acceptedObject === 'object' && acceptedObject.type === 'Flag') {
       console.log(`[INBOX] Accept confirms Flag activity`);
 
-      // Extract Flag ID from the accepted object
-      const flagId = acceptedObject.id || (typeof acceptedObject === 'object' ? acceptedObject.id : null);
+      const flagId = acceptedObject.id;
 
       if (!flagId) {
         console.warn(`[INBOX] Accept for Flag missing Flag ID`);
@@ -1575,7 +1579,58 @@ class ProcessInboxService {
       return;
     }
 
-    // Verify this Accept corresponds to a Follow we sent
+    // Handle Accept where object is a string URI (per ActivityPub spec, object can be a URI)
+    if (typeof acceptedObject === 'string') {
+      try {
+        if (!validateActorUriProtocol(acceptedObject)) {
+          console.warn(`[INBOX] Accept activity has object URI with invalid scheme: ${acceptedObject}`);
+          return;
+        }
+
+        const objectHostname = new URL(acceptedObject).hostname;
+        const actorHostname = new URL(message.actor).hostname;
+
+        if (objectHostname !== actorHostname) {
+          // Domain mismatch: defense-in-depth guard against cross-domain spoofing.
+          // The object URI references a different host than the actor sending the Accept.
+          // Try as a Flag acknowledgment (our local Flag URI sent to the remote instance).
+          if (this.moderationInterface) {
+            const acknowledged = await this.moderationInterface.acknowledgeForwardedReport(acceptedObject, message.actor);
+            if (acknowledged) {
+              console.log(`[INBOX] Updated forward_status to 'acknowledged' for Flag URI: ${acceptedObject}`);
+              return;
+            }
+          }
+
+          console.warn(`[INBOX] Accept with string URI object has hostname mismatch and no matching forwarded report: ${acceptedObject}`);
+          return;
+        }
+
+        // Hostnames match: treat as a Follow Accept. Use message.actor to find the remote calendar.
+        const remoteCalendar = await this.remoteCalendarService.getByActorUri(message.actor);
+        if (remoteCalendar) {
+          const followingRecord = await FollowingCalendarEntity.findOne({
+            where: {
+              calendar_actor_id: remoteCalendar.id,
+              calendar_id: calendar.id,
+            },
+          });
+
+          if (followingRecord) {
+            console.log(`[INBOX] Follow relationship confirmed for calendar ${calendar.id} via string URI Accept from ${message.actor}`);
+            return;
+          }
+        }
+
+        console.warn(`[INBOX] Accept with string URI object could not be matched to a known Follow: ${acceptedObject}`);
+      }
+      catch {
+        console.warn(`[INBOX] Accept activity has invalid URI as object: ${acceptedObject}`);
+      }
+      return;
+    }
+
+    // Verify this Accept corresponds to a Follow we sent (object is inline Follow object)
     if (typeof acceptedObject === 'object' && acceptedObject.type === 'Follow') {
       const followActivity = acceptedObject as FollowActivity;
 
