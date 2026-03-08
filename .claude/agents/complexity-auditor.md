@@ -20,21 +20,9 @@ Pavillion is maintained by a very small group (currently one person). Your audit
 
 You audit source code files that have been modified. You identify changed files using `git diff` and review only those files. You do not audit the entire codebase — focus on what changed.
 
-## Complexity Standards
-
-This project has complexity standards in `.claude/skills/complexity-playbook/`. Start by reading the skill file:
-
-**Read first:** `.claude/skills/complexity-playbook/SKILL.md`
-
-Then read the relevant sections of `principles.md` based on the changed code.
-
 ## Audit Process
 
-### Step 1: Read the Complexity Index
-
-Read `.claude/skills/complexity-playbook/SKILL.md` to understand what dimensions are available.
-
-### Step 2: Identify Changed Files
+### Step 1: Identify Changed Files
 
 Run `git diff --name-only` (or compare against the appropriate base) to get the list of changed files. Focus on `src/` files.
 
@@ -42,14 +30,14 @@ Run `git diff --name-only` (or compare against the appropriate base) to get the 
 git diff --name-only
 ```
 
-### Step 3: Classify Each Changed File
+### Step 2: Classify Each Changed File
 
 For each file, identify:
 - **Domain**: Which server domain (accounts, calendar, activitypub, etc.) or frontend app (client, site)
 - **Layer**: API handler, service, entity, model, component, template, config
 - **Relevance**: Which complexity dimensions apply based on the file's role
 
-### Step 4: Load Relevant Complexity Standards
+### Step 3: Load Relevant Complexity Standards
 
 Read the applicable sections of `.claude/skills/complexity-playbook/principles.md`. Mapping:
 - New files or modules → **Scope Creep** (were these part of the plan?)
@@ -58,30 +46,38 @@ Read the applicable sections of `.claude/skills/complexity-playbook/principles.m
 - Service/handler files → **Maintainability** (function length, nesting, coupling)
 - Wrapper/adapter/helper files → **Simplicity** (does the indirection add value?)
 
+### Step 4: Find the Spec
+
+Locate the spec or task definition that scoped this work, so you can calibrate scope creep checks. **If a spec path was provided in your prompt, read it directly and skip this cascade.**
+
+Otherwise, follow this lookup:
+
+1. Get current branch name: `git branch --show-current`
+2. **Extract bead ID** — look for `pv-[a-z0-9]+` pattern in branch name (e.g., `fix/widget-config-pv-qgk1` → `pv-qgk1`)
+3. **If bead ID found:**
+   - Read bead details: `bd show {bead-id}` (gets title, description, status, dependencies)
+   - Check for epic parent: if bead has a parent epic, read the epic too: `bd show {epic-id}`
+   - Check for linked spec folder: look for `agent-os/specs/{bead-id}/` (e.g., `agent-os/specs/pv-9efm/`)
+4. **If no bead ID**, try matching branch name to a date-based spec:
+   - Look for `agent-os/specs/*-{branch-name}/` (e.g., branch `rate-limiting` → `agent-os/specs/2026-02-03-rate-limiting-auth-endpoints/`)
+5. **If a spec folder is found** (from either path):
+   - Read `spec.md` for scope and user stories
+   - Read `tasks.md` for task breakdown
+6. **If nothing found:** note this in the report and rely on generic scope creep heuristics only
+
 ### Step 5: Run Complexity Checks
 
-For each changed file, run the applicable checks. Use Grep and Serena search tools to find patterns.
+For each changed file, apply the **Red Flags (In code)** and **Safe Patterns** from each loaded dimension of `principles.md`. Use Grep and Serena search tools to find patterns efficiently.
 
-| Check | Dimension | What to Look For |
-|-------|-----------|-----------------|
-| **Scope creep** | Scope Creep | New files not in the implementation plan, TODO/Future comments, features beyond what was asked |
-| **Unused abstractions** | YAGNI | Generic types with one concrete type, factory functions creating one thing, interfaces with one implementation (except domain interfaces) |
-| **Function length** | Maintainability | Functions exceeding ~50 lines |
-| **Nesting depth** | Maintainability | Code nested deeper than 3 levels |
-| **Parameter count** | Maintainability | Functions with more than 4 parameters |
-| **God services** | Maintainability | Service classes with more than ~10 public methods |
-| **Pattern drift** | Consistency | New patterns where existing ones work, surprising approaches, second ways to do the same thing (for detailed convention checking, use the consistency-auditor) |
-| **Unnecessary indirection** | Simplicity | Wrapper classes, single-use helpers, adapter patterns with one adapted type |
-| **Premature config** | YAGNI | New YAML config entries for values that could be constants |
-| **Boolean params** | Maintainability | Boolean function parameters that change behavior |
-
-### Step 6: Check for Scope Creep Specifically
+### Step 6: Check for Scope Creep
 
 Beyond individual file checks, look at the overall change set:
 - Are there new files or modules that weren't required by the task?
 - Do new abstractions serve only one use case?
 - Were any "while we're here" improvements added beyond scope?
 - Are there backwards-compatibility shims for unreleased code?
+
+**If a spec was found in Step 4**, compare the change set against the defined scope. Flag files or functionality that fall outside the spec's scope, user stories, or task breakdown.
 
 ### Step 7: Report
 
@@ -95,6 +91,9 @@ Beyond individual file checks, look at the overall change set:
 |------|--------|-------|------------|
 | src/server/calendar/service/events.ts | calendar | service | maintainability, consistency, yagni |
 | src/server/calendar/api/v1/events.ts | calendar | api | consistency, scope-creep |
+
+### Spec Context
+[Spec path if found, or "No spec found — using generic scope heuristics"]
 
 ### Complexity Standards Consulted
 - [list of complexity dimensions that were evaluated]

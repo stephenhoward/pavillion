@@ -52,3 +52,6 @@ When reviewing:
 2. Identify which architecture dimensions are relevant to the spec or code under review
 3. Read the relevant sections of `./principles.md`
 4. Evaluate whether the spec/code maintains the product's conceptual integrity
+
+- For **spec review** (pre-implementation): Focus on the "In specs" red flags in each dimension
+- For **code audit** (post-implementation): Focus on the "In code" red flags in each dimension

@@ -5,13 +5,7 @@ description: Pavillion complexity and maintainability standards. Use this skill 
 
 # Complexity Playbook
 
-This Skill provides Claude Code with complexity and maintainability standards specific to the Pavillion codebase. Use it when reviewing specs for scope creep, auditing code for unnecessary complexity, or checking that implementations follow established patterns.
-
-## Context
-
-Pavillion is maintained by a very small group (currently one person). These standards are calibrated for that reality. What might be "reasonable" complexity for a 10-person team is over-engineering here. The core litmus test for all decisions:
-
-> **Can a solo maintainer understand, debug, and modify this 6 months from now without context?**
+This Skill provides complexity and maintainability standards for the Pavillion codebase.
 
 ## Routing Guide
 
@@ -28,7 +22,7 @@ Pavillion is maintained by a very small group (currently one person). These stan
 For all complexity dimensions, refer to:
 [principles](./principles.md)
 
-The principles file covers: scope creep, YAGNI, consistency, maintainability, and simplicity -- each with **Threats**, **Red Flags**, and **Safe Patterns**.
+The principles file covers: scope creep, YAGNI, consistency, maintainability, and simplicity — each with **Threats**, **Red Flags**, and **Safe Patterns**.
 
 When reviewing:
 

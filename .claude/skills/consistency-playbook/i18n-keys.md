@@ -203,6 +203,6 @@ Backend translations follow the same snake_case key naming and namespace-per-fea
 
 ## Known Drift
 
-- **Inconsistent prefix usage**: Some older translation files don't consistently use the `error_`, `success_`, `confirm_` prefixes. Newer files follow the prefix convention. New translations should always use the established prefixes.
-- **Flat vs nested keys**: Some older files use flat key structures (`"management_title"`) while newer files use nested objects (`"management": { "title": ... }`). The nested pattern is preferred for new files.
-- **Client vs site namespaces**: The client app uses `calendars.json` (plural) while the site app uses `calendar.json` (singular) for similar content. This reflects different feature scopes and is acceptable.
+- **Prefix usage:** New translations must use `error_`, `success_`, `confirm_` prefixes. Some older files omit them.
+- **Key structure:** New files must use nested objects (`"management": { "title": ... }`). Some older files use flat keys (`"management_title"`).
+- **Client vs site namespaces**: The client app uses `calendars.json` (plural) while the site app uses `calendar.json` (singular). This reflects different feature scopes and is acceptable.

@@ -20,68 +20,29 @@ Scope reduction is a feature, not a compromise. "Do less" is always a valid reco
 
 You review spec documents located in `agent-os/specs/`. You do **NOT** read any files under `src/`. Your analysis is based entirely on the spec's described functionality, proposed architecture, and scope boundaries.
 
-## Complexity Standards
-
-This project has complexity standards in `.claude/skills/complexity-playbook/`. Start by reading the skill file:
-
-**Read first:** `.claude/skills/complexity-playbook/SKILL.md`
-
-Then read the relevant sections of `principles.md` based on what the spec covers.
-
 ## Review Process
 
-### Step 1: Read the Complexity Index
-
-Read `.claude/skills/complexity-playbook/SKILL.md` to understand what dimensions are available.
-
-### Step 2: Read the Spec
+### Step 1: Read the Spec
 
 Read the target spec completely:
 - `spec.md` (main requirements)
 - All files in `sub-specs/` (technical spec, API spec, database schema, tests spec)
 
-### Step 3: Load Relevant Complexity Standards
+### Step 2: Load Relevant Complexity Standards
 
-Read the applicable sections of `.claude/skills/complexity-playbook/principles.md`. All five dimensions typically apply, but focus on the most relevant ones:
+Read the applicable sections of `.claude/skills/complexity-playbook/principles.md`. All five dimensions typically apply, but focus on the most relevant:
 - If the spec has many features → focus on **Scope Creep**
 - If the spec proposes abstractions or config → focus on **YAGNI**
 - If the spec introduces new patterns → focus on **Consistency** (quick check only — detailed convention review is handled by the consistency-advisor)
 - If the design has many layers or steps → focus on **Maintainability** and **Simplicity**
 
-### Step 4: Evaluate Each Applicable Dimension
+### Step 3: Evaluate Using Loaded Standards
 
-For each loaded complexity dimension, check whether the spec introduces unnecessary complexity:
+For each relevant dimension, apply the **Threats**, **Red Flags (In specs)**, and **Safe Patterns** from `principles.md` to the spec under review. Check whether the spec introduces unnecessary complexity along each dimension.
 
-**Scope Creep**
-- Does the spec deliver more than what was originally requested?
-- Are there sub-specs covering functionality not mentioned in the user stories?
-- Are "nice to have" items properly separated from requirements?
-- Could any features be deferred to a separate, future spec?
+Additionally, check against the original ask: if you can identify what was originally requested (from the spec overview or user stories), flag anything that goes beyond it.
 
-**YAGNI**
-- Does the spec propose abstractions with only one concrete use?
-- Are there configurable parameters that will only ever have one value?
-- Does the technical spec build for hypothetical future requirements?
-- Are extension points or plugin systems justified by current needs?
-
-**Consistency** (quick check — for detailed convention review, use the consistency-advisor)
-- Does the spec introduce a new pattern where an existing one would work?
-- Would someone familiar with the codebase be surprised by the approach?
-- Does this create a second way to do the same thing?
-
-**Maintainability**
-- How many files/modules does this spec touch?
-- Are there data flows crossing more than 3 domain boundaries?
-- Is any single service or component accumulating too many responsibilities?
-- Can the feature be understood without holding excessive context?
-
-**Simplicity**
-- Are there unnecessary layers of abstraction in the proposed design?
-- Could the architecture be flattened without losing functionality?
-- Are there wrapper/adapter patterns proposed for single implementations?
-- Is the simplest possible solution considered first?
-
-### Step 5: Report
+### Step 4: Report
 
 ## Reporting Format
 
@@ -122,4 +83,3 @@ For each loaded complexity dimension, check whether the spec introduces unnecess
 4. **Classify severity.** HIGH = significant maintenance burden or architectural risk. MEDIUM = adds complexity that could be avoided. LOW = minor pattern drift or style concern.
 5. **Suggest spec changes.** Your recommendations should be modifications to the spec document, not code. Deferring features to a future spec is always an option.
 6. **Acknowledge simplicity.** Note aspects where the spec keeps things appropriately lean.
-7. **Check against the original ask.** If you can identify what was originally requested (from the spec overview or user stories), flag anything that goes beyond it.

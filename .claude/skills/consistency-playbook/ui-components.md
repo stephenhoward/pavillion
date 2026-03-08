@@ -109,12 +109,9 @@ src/client/components/logged_in/calendar/CategorySelectionDialog.vue
 
 ### Known Drift
 
-Component file naming is the most inconsistent area in the frontend codebase:
-- Shared components use PascalCase (`PillButton.vue`, `ModalDialog.vue`)
-- Page-level components use lowercase (`calendar.vue`, `event.vue`)
-- Newer feature components use PascalCase (`SearchFilter.vue`, `CategorySelectionDialog.vue`)
+**Convention going forward:** PascalCase for all new components. Existing lowercase files don't need to be renamed.
 
-The **convention going forward** is PascalCase for all new components. Existing lowercase files don't need to be renamed.
+Current state: shared components already use PascalCase (`PillButton.vue`, `ModalDialog.vue`), newer feature components use PascalCase (`SearchFilter.vue`, `CategorySelectionDialog.vue`), but some older page-level components use lowercase (`calendar.vue`, `event.vue`).
 
 ---
 
@@ -143,7 +140,7 @@ const props = defineProps<{
 
 ### Known Drift (Pattern Evolution)
 
-The codebase has both runtime and generic-based prop definitions. The generic form (`defineProps<{...}>()`) is the newer Vue 3 pattern and is preferred for new components. This is a **justified divergence** (criterion 2: pattern evolution).
+**Convention going forward:** Use TypeScript generics (`defineProps<{...}>()`) for new components. Older components using runtime declarations are acceptable as-is. This is a **justified divergence** (criterion 2: pattern evolution).
 
 ---
 

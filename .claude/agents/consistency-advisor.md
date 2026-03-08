@@ -18,19 +18,11 @@ Unlike complexity review (which asks "is this too much?"), consistency review as
 
 You review spec documents located in `agent-os/specs/`. You do **NOT** read any files under `src/`. Your analysis is based entirely on the spec's described APIs, data models, service designs, component structures, and naming choices.
 
-## Consistency Standards
-
-This project has consistency standards in `.claude/skills/consistency-playbook/`. Start by reading the skill file:
-
-**Read first:** `.claude/skills/consistency-playbook/SKILL.md`
-
-Then read **only** the topic files relevant to the spec under review. The skill file maps spec areas to the appropriate standards files.
-
 ## Review Process
 
-### Step 1: Read the Consistency Index
+### Step 1: Read the Consistency Playbook
 
-Read `.claude/skills/consistency-playbook/SKILL.md` to understand what standards are available and to familiarize yourself with the Justified Divergence Framework.
+Read `.claude/skills/consistency-playbook/SKILL.md` to understand what standards are available and to load the Justified Divergence Framework.
 
 ### Step 2: Read the Spec
 
@@ -40,60 +32,15 @@ Read the target spec completely:
 
 ### Step 3: Load Relevant Consistency Standards
 
-Based on what the spec covers, read the applicable consistency standard files from `.claude/skills/consistency-playbook/`. For example:
-- If the spec adds API endpoints → read `api-interface.md`
-- If the spec proposes new entities or models → read `data-model.md`
-- If the spec describes service methods → read `service-layer.md`
-- If the spec includes UI components → read `ui-components.md`
-- If the spec includes test plans → read `test-patterns.md`
-- If the spec adds translations → read `i18n-keys.md`
+Based on what the spec covers, read the applicable topic files from `.claude/skills/consistency-playbook/`. Only read files relevant to areas the spec touches. The SKILL.md routing table maps spec areas to the correct files.
 
 ### Step 4: Evaluate Each Applicable Area
 
-For each loaded consistency standard, check whether the spec's proposed design follows the established conventions:
-
-**API & Interface** (from `api-interface.md`)
-- Do proposed route paths follow the `/{resource}/:id` convention?
-- Are route handler classes named `{Resource}Routes`?
-- Does the error response shape match `{ error, errorName }`?
-- Are auth checks placed correctly (middleware + handler defense)?
-- Does response serialization use `.toObject()`?
-
-**Data Model** (from `data-model.md`)
-- Do proposed entities follow the `{Resource}Entity` naming?
-- Is the property casing correct (snake_case in entities, camelCase in models)?
-- Do entities include `toModel()` / `static fromModel()`?
-- Do models include `toObject()` / `static fromObject()`?
-- Do exceptions follow the `{Description}Error` naming pattern?
-
-**Service Layer** (from `service-layer.md`)
-- Do service method signatures follow the `(account, resourceId, data)` order?
-- Is validation proposed in the service layer, not in handlers?
-- Does cross-domain communication go through interfaces?
-- Are domain exceptions used (not HTTP status codes in services)?
-
-**UI Components** (from `ui-components.md`)
-- Does the proposed component structure follow script-template-style order?
-- Are Pinia stores proposed with the standard `use{Resource}Store` naming?
-- Is the import order consistent with the convention?
-
-**Tests** (from `test-patterns.md`)
-- Is the test file location consistent with the domain structure?
-- Are sinon sandboxes and `beforeEach`/`afterEach` patterns specified?
-- Is the describe naming using class and method names?
-
-**i18n Keys** (from `i18n-keys.md`)
-- Do proposed translation keys use snake_case?
-- Are error/success/confirm prefixes used correctly?
-- Is the namespace-per-feature pattern followed?
+For each loaded consistency standard, check whether the spec's proposed design follows the **Established Convention** and accounts for **Known Drift** documented in that file. Be specific — cite the convention and the spec's divergence.
 
 ### Step 5: Apply the Justified Divergence Framework
 
-For any inconsistency found, check whether it meets one of the four criteria:
-1. **Genuine structural difference** — the convention doesn't apply to this context
-2. **Pattern evolution** — the divergence is an improvement to adopt going forward
-3. **Fundamentally different domain** — external requirements override internal conventions
-4. **No existing precedent** — this is genuinely new ground with no convention to follow
+For any inconsistency found, check whether it meets one of the four criteria documented in SKILL.md. Not all inconsistency is drift.
 
 ### Step 6: Report
 
