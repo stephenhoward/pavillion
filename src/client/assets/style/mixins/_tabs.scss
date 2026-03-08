@@ -14,9 +14,17 @@
  */
 @mixin tab-navigation {
   display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   gap: var(--pav-space-6);
   border-bottom: 1px solid var(--pav-border-primary);
   margin-bottom: var(--pav-space-6);
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 /**
@@ -40,6 +48,7 @@
   font-size: var(--pav-font-size-xs);
   cursor: pointer;
   transition: color 0.2s ease;
+  white-space: nowrap;
 
   // Hover state (not active)
   &:hover:not([aria-selected="true"]) {

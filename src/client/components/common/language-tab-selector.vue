@@ -99,8 +99,15 @@ const addLanguage = () => {
   display: flex;
   gap: 1.5rem;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   width: 100%;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 .language-tab {

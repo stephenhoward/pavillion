@@ -447,7 +447,7 @@ const isActive = (path) => {
 .admin-main {
   flex: 1;
   min-height: 100vh;
-  padding-bottom: var(--pav-space-20);
+  padding-bottom: calc(var(--pav-shell-bottom-nav-height) + var(--pav-shell-safe-area-bottom));
 
   @include pav-media(md) {
     margin-left: 14rem;
@@ -476,9 +476,10 @@ const isActive = (path) => {
   left: 0;
   right: 0;
   display: flex;
-  justify-content: space-around;
   align-items: center;
-  height: var(--pav-shell-bottom-nav-height);
+  height: calc(var(--pav-shell-bottom-nav-height) + var(--pav-shell-safe-area-bottom));
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   background: var(--pav-color-surface-primary);
   border-top: var(--pav-border-width-1) solid var(--pav-color-border-secondary);
   padding-bottom: var(--pav-shell-safe-area-bottom);
@@ -494,7 +495,8 @@ const isActive = (path) => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  flex: 1;
+  flex-shrink: 0;
+  min-width: 4rem;
   height: 100%;
   gap: var(--pav-space-1);
   text-decoration: none;
