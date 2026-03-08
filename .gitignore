@@ -9,12 +9,11 @@ storage
 
 # Agent OS and Claude Code configuration
 .agent-os
-.claude
 .cursor/rules
 .serena
 agent-os
-CLAUDE.md
 .beads/
+.claude/worktrees/
 
 # Test artifacts
 .playwright-mcp

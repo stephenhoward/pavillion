@@ -1,0 +1,155 @@
+# Standards Routing Index - Maps topics to skills
+
+backend:
+  api:
+    description: RESTful API design, versioning, and HTTP conventions
+    skill: backend-api
+  cross-domain-injection:
+    description: How domains receive dependencies via constructor injection
+    skill: backend-domain-structure
+  domain-events:
+    description: Event handlers for async cross-domain communication
+    skill: backend-domain-events
+  domain-interface:
+    description: Facade pattern for domain public APIs
+    skill: backend-domain-structure
+  email-i18n:
+    description: Handlebars email templates with i18next translations
+    skill: backend-email
+  entity-model-separation:
+    description: Bidirectional conversion between DB entities and domain models
+    skill: backend-entity-model
+  error-serialization:
+    description: Exception serialization across HTTP with errorName field
+    skill: backend-error-serialization
+  migrations:
+    description: Database migration best practices
+    skill: backend-migrations
+  models:
+    description: General database model conventions
+    skill: backend-models
+  queries:
+    description: General SQL/ORM query best practices
+    skill: backend-queries
+  sequelize-queries:
+    description: Eager loading patterns to avoid N+1 queries
+    skill: backend-sequelize
+  service-layer:
+    description: Services for business logic, API handlers for HTTP only
+    skill: backend-domain-structure
+
+frontend:
+  accessibility:
+    description: Accessibility standards for UI components
+    skill: frontend-accessibility
+  components:
+    description: PascalCase naming, two-tier sharing, TypeScript props, v-model, a11y checklist
+    skill: frontend-components
+  css:
+    description: SCSS styling conventions
+    skill: frontend-css
+  design-system:
+    description: Semantic classes in markup, design tokens abstracted in SCSS
+    skill: frontend-design
+  i18n:
+    description: i18next namespaces and useTranslation patterns for Vue
+    skill: frontend-i18n
+  modal-dialog:
+    description: Native dialog element with ARIA for accessible modals
+    skill: frontend-modals
+  responsive:
+    description: Responsive design patterns
+    skill: frontend-responsive
+  store-service-pattern:
+    description: Three-layer pattern Components -> Services -> Stores
+    skill: frontend-stores
+
+global:
+  coding-style:
+    description: Code formatting and style conventions
+    skill: global-coding-style
+  commenting:
+    description: Documentation and comment standards
+    skill: global-commenting
+  conventions:
+    description: General development conventions
+    skill: global-conventions
+  error-handling:
+    description: General error handling best practices
+    skill: global-error-handling
+  tech-stack:
+    description: Technology stack and dependencies
+    skill: global-tech-stack
+  translated-model:
+    description: Language-keyed content with TranslatedModel base class
+    skill: global-translated-model
+  validation:
+    description: Input validation patterns
+    skill: global-validation
+
+security:
+  activitypub-federation:
+    description: HTTP signatures, SSRF, actor/signer match, replay attacks, blocked instances
+    skill: security-playbook
+  authentication:
+    description: JWT algorithm/expiration, password hashing, reset codes, IDOR, account enumeration
+    skill: security-playbook
+  configuration:
+    description: Secrets management, dev-only features in production, CSP/CORS headers
+    skill: security-playbook
+  database-injection:
+    description: Sequelize.literal(), raw queries, mass assignment, Op injection
+    skill: security-playbook
+  express-request-handling:
+    description: Trust proxy, body size limits, UUID validation, query param types, error info leakage
+    skill: security-playbook
+  file-uploads:
+    description: MIME validation, Multer limits, filename sanitization, path traversal, nosniff headers
+    skill: security-playbook
+  public-api:
+    description: Rate limiting, info disclosure, pagination limits, search sanitization, CORS
+    skill: security-playbook
+  template-injection:
+    description: v-html with user data, Handlebars triple-brace, translation key injection
+    skill: security-playbook
+
+complexity:
+  principles:
+    description: Scope creep, YAGNI, consistency, maintainability, simplicity
+    skill: complexity-playbook
+
+architecture:
+  principles:
+    description: Conceptual integrity, decision adherence, narrative coherence, responsibility clarity, federation model alignment, product direction
+    skill: architecture-playbook
+
+testing:
+  playwright-verification:
+    description: Use Playwright MCP to verify actual behavior as ground truth
+    skill: testing-playwright
+  test-validity:
+    description: Question whether failing tests or code are wrong before fixing
+    skill: testing-test-validity
+  test-writing:
+    description: Test philosophy, Sinon patterns, and ephemeral test data
+    skill: testing-test-writing
+
+consistency:
+  api-interface:
+    description: Route registration, HTTP verbs, parameter naming, error response shapes, auth check patterns
+    skill: consistency-playbook
+  data-model:
+    description: Entity decorator patterns, toModel/fromModel, toObject/fromObject, property casing
+    skill: consistency-playbook
+  i18n-keys:
+    description: snake_case keys, namespace-per-feature, key hierarchy, interpolation patterns
+    skill: consistency-playbook
+  service-layer:
+    description: Method signature conventions, validation in services, domain exceptions, event bus usage
+    skill: consistency-playbook
+  test-patterns:
+    description: Describe naming, sinon sandbox lifecycle, stub patterns, assertion style
+    skill: consistency-playbook
+  ui-components:
+    description: Script setup import order, props with TypeScript, store-service pattern, Pinia store conventions
+    skill: consistency-playbook
