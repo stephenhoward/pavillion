@@ -446,12 +446,14 @@ export default class ModerationInterface {
   /**
    * Acknowledges a forwarded report by updating its forward_status to 'acknowledged'.
    * Used when a remote instance sends an Accept activity for a Flag we forwarded.
+   * Validates that the sender's hostname matches the instance the report was forwarded to.
    *
    * @param forwardedReportId - The forwarded_report_id (Flag activity ID) to look up
-   * @returns True if a report was found and updated, false if no matching report exists
+   * @param senderActorUri - The actor URI of the Accept activity sender
+   * @returns True if a report was found and updated, false if validation fails or no matching report exists
    */
-  async acknowledgeForwardedReport(forwardedReportId: string): Promise<boolean> {
-    return this.moderationService.acknowledgeForwardedReport(forwardedReportId);
+  async acknowledgeForwardedReport(forwardedReportId: string, senderActorUri: string): Promise<boolean> {
+    return this.moderationService.acknowledgeForwardedReport(forwardedReportId, senderActorUri);
   }
 
   /**

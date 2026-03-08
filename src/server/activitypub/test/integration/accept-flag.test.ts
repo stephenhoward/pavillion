@@ -35,6 +35,7 @@ describe('ProcessInboxService - Accept Flag Activity', () => {
     testReport.reporterType = 'authenticated';
     testReport.status = ReportStatus.SUBMITTED;
     testReport.forwardedReportId = 'https://local.instance/flags/original-flag-id';
+    testReport.forwardedToActorUri = 'https://remote.instance/calendars/remote-calendar';
     testReport.forwardStatus = 'pending';
 
     // Mock CalendarInterface
@@ -53,7 +54,7 @@ describe('ProcessInboxService - Accept Flag Activity', () => {
   });
 
   describe('processAcceptActivity for Flag', () => {
-    it('should update forward_status to acknowledged when Accept received for Flag', async () => {
+    it('should call acknowledgeForwardedReport with Flag ID and sender actor URI', async () => {
       // Create Flag activity that was sent
       const originalFlagActivity = {
         type: 'Flag',
@@ -77,9 +78,12 @@ describe('ProcessInboxService - Accept Flag Activity', () => {
 
       await inboxService.processAcceptActivity(testCalendar, acceptActivity);
 
-      // Verify acknowledgeForwardedReport was called with the Flag ID
+      // Verify acknowledgeForwardedReport was called with the Flag ID and sender actor
       expect((moderationInterface.acknowledgeForwardedReport as sinon.SinonStub).calledOnce).toBe(true);
-      expect((moderationInterface.acknowledgeForwardedReport as sinon.SinonStub).calledWith('https://local.instance/flags/original-flag-id')).toBe(true);
+      expect((moderationInterface.acknowledgeForwardedReport as sinon.SinonStub).calledWith(
+        'https://local.instance/flags/original-flag-id',
+        'https://remote.instance/calendars/remote-calendar',
+      )).toBe(true);
     });
 
     it('should handle Accept activity when Flag object is a string ID', async () => {
@@ -99,9 +103,12 @@ describe('ProcessInboxService - Accept Flag Activity', () => {
 
       await inboxService.processAcceptActivity(testCalendar, acceptActivity);
 
-      // Verify acknowledgeForwardedReport was called
+      // Verify acknowledgeForwardedReport was called with Flag ID and sender
       expect((moderationInterface.acknowledgeForwardedReport as sinon.SinonStub).calledOnce).toBe(true);
-      expect((moderationInterface.acknowledgeForwardedReport as sinon.SinonStub).calledWith('https://local.instance/flags/flag-id')).toBe(true);
+      expect((moderationInterface.acknowledgeForwardedReport as sinon.SinonStub).calledWith(
+        'https://local.instance/flags/flag-id',
+        'https://remote.instance/calendars/remote',
+      )).toBe(true);
     });
 
     it('should log warning when Accept received for unknown Flag', async () => {
@@ -121,8 +128,12 @@ describe('ProcessInboxService - Accept Flag Activity', () => {
       // Should not throw, just log warning
       await inboxService.processAcceptActivity(testCalendar, acceptActivity);
 
-      // Verify acknowledgeForwardedReport was called
+      // Verify acknowledgeForwardedReport was called with both args
       expect((moderationInterface.acknowledgeForwardedReport as sinon.SinonStub).calledOnce).toBe(true);
+      expect((moderationInterface.acknowledgeForwardedReport as sinon.SinonStub).calledWith(
+        'https://local.instance/flags/unknown-flag-id',
+        'https://remote.instance/calendars/remote',
+      )).toBe(true);
     });
 
     it('should handle Accept for Follow activities without affecting reports', async () => {

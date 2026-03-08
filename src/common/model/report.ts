@@ -70,6 +70,7 @@ class Report extends PrimaryModel {
   escalationType: EscalationType | null = null;
   forwardedFromInstance: string | null = null;
   forwardedReportId: string | null = null;
+  forwardedToActorUri: string | null = null;
   forwardStatus: ForwardStatus | null = null;
   reporterIpHash: string | null = null;
   reporterIpSubnet: string | null = null;
@@ -158,6 +159,7 @@ class Report extends PrimaryModel {
       reviewerTimestamp: this.reviewerTimestamp ? this.reviewerTimestamp.toISOString() : null,
       escalationType: this.escalationType,
       forwardedFromInstance: this.forwardedFromInstance,
+      forwardedToActorUri: this.forwardedToActorUri,
       forwardStatus: this.forwardStatus,
       createdAt: this.createdAt.toISOString(),
       updatedAt: this.updatedAt.toISOString(),
@@ -193,6 +195,7 @@ class Report extends PrimaryModel {
       escalationType: this.escalationType,
       forwardedFromInstance: this.forwardedFromInstance,
       forwardedReportId: this.forwardedReportId,
+      forwardedToActorUri: this.forwardedToActorUri,
       forwardStatus: this.forwardStatus,
       reporterIpHash: this.reporterIpHash,
       reporterIpSubnet: this.reporterIpSubnet,
@@ -236,6 +239,7 @@ class Report extends PrimaryModel {
       escalationType: this.escalationType,
       forwardedFromInstance: this.forwardedFromInstance,
       forwardedReportId: this.forwardedReportId,
+      forwardedToActorUri: this.forwardedToActorUri,
       forwardStatus: this.forwardStatus,
       reporterIpHash: this.reporterIpHash,
       reporterIpSubnet: this.reporterIpSubnet,
@@ -278,6 +282,7 @@ class Report extends PrimaryModel {
     report.escalationType = obj.escalationType ?? null;
     report.forwardedFromInstance = obj.forwardedFromInstance ?? null;
     report.forwardedReportId = obj.forwardedReportId ?? null;
+    report.forwardedToActorUri = obj.forwardedToActorUri ?? null;
     report.forwardStatus = obj.forwardStatus ?? null;
     report.reporterIpHash = obj.reporterIpHash ?? null;
     report.reporterIpSubnet = obj.reporterIpSubnet ?? null;

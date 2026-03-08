@@ -102,6 +102,9 @@ class ReportEntity extends Model {
   @Column({ type: DataType.STRING, allowNull: true })
   declare forwarded_report_id: string | null;
 
+  @Column({ type: DataType.STRING, allowNull: true })
+  declare forwarded_to_actor_uri: string | null;
+
   @Column({
     type: DataType.ENUM('pending', 'acknowledged', 'no_response'),
     allowNull: true,
@@ -151,6 +154,7 @@ class ReportEntity extends Model {
     report.escalationType = this.escalation_type as EscalationType | null;
     report.forwardedFromInstance = this.forwarded_from_instance;
     report.forwardedReportId = this.forwarded_report_id;
+    report.forwardedToActorUri = this.forwarded_to_actor_uri;
     report.forwardStatus = this.forward_status as ForwardStatus | null;
     report.hasSourceFloodingPattern = this.has_source_flooding_pattern;
     report.hasEventTargetingPattern = this.has_event_targeting_pattern;
@@ -190,6 +194,7 @@ class ReportEntity extends Model {
       escalation_type: report.escalationType,
       forwarded_from_instance: report.forwardedFromInstance,
       forwarded_report_id: report.forwardedReportId,
+      forwarded_to_actor_uri: report.forwardedToActorUri,
       forward_status: report.forwardStatus,
       has_source_flooding_pattern: report.hasSourceFloodingPattern,
       has_event_targeting_pattern: report.hasEventTargetingPattern,
