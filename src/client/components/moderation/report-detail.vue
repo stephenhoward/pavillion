@@ -637,7 +637,7 @@ onMounted(async () => {
 
   &__section {
     @include admin-section;
-    background: var(--pav-bg-primary);
+    background: var(--pav-color-surface-primary);
     border: 1px solid var(--pav-border-primary);
     border-radius: 0.75rem;
     padding: var(--pav-space-5);
@@ -798,7 +798,7 @@ onMounted(async () => {
     height: 16px;
     border-radius: 50%;
     background: var(--pav-color-stone-300);
-    border: 2px solid var(--pav-bg-primary);
+    border: 2px solid var(--pav-color-surface-primary);
     flex-shrink: 0;
     position: relative;
     z-index: 1;

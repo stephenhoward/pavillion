@@ -242,6 +242,8 @@ export default class PublicCalendarService {
 
     // Convert entities to models and augment with isRecurring
     const mappedInstances = instances
+      // Belt-and-suspenders: eventInclude.required=true should prevent null events,
+      // but guard defensively since Sequelize JOIN propagation can vary by dialect.
       .filter(instanceEntity => instanceEntity.event != null)
       .map(instanceEntity => {
         const instance = instanceEntity.toModel();

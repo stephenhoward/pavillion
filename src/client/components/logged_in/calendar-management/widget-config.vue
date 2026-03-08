@@ -317,7 +317,7 @@ defineExpose({
       flex-direction: column;
       align-items: center;
       padding: var(--pav-space-5);
-      background: var(--pav-bg-primary);
+      background: var(--pav-color-surface-primary);
       border: 2px solid var(--pav-border-primary);
       border-radius: 0.75rem;
       cursor: pointer;
