@@ -4,6 +4,7 @@
  */
 
 // Load SCSS mixins and functions (available to all layers)
+@use 'sass:meta';
 @use './mixins/index' as *;
 
 // Establish CSS layer ordering (most important: layers load in the order declared)
@@ -11,58 +12,58 @@
 
 // Base & Reset Styles (lowest specificity, foundational)
 @layer reset {
-  @import './base/reset';
+  @include meta.load-css('./base/reset');
 }
 
 // Design Tokens (CSS Custom Properties)
 @layer tokens {
-  @import './tokens/colors';
-  @import './tokens/typography';
-  @import './tokens/spacing';
-  @import './tokens/borders';
-  @import './tokens/shadows';
-  @import './tokens/elevation';
-  @import './tokens/breakpoints';
+  @include meta.load-css('./tokens/colors');
+  @include meta.load-css('./tokens/typography');
+  @include meta.load-css('./tokens/spacing');
+  @include meta.load-css('./tokens/borders');
+  @include meta.load-css('./tokens/shadows');
+  @include meta.load-css('./tokens/elevation');
+  @include meta.load-css('./tokens/breakpoints');
 }
 
 @layer base {
-  @import './themes/light';
-  @import './themes/dark';
-  @import './base/fonts';
-  @import './base/typography';
-  @import './base/accessibility';
-  /* @import './base/semantic-elements'; */
+  @include meta.load-css('./themes/light');
+  @include meta.load-css('./themes/dark');
+  @include meta.load-css('./base/fonts');
+  @include meta.load-css('./base/typography');
+  @include meta.load-css('./base/accessibility');
+  /* @include meta.load-css('./base/semantic-elements'); */
 }
 
 // 4. Layout System (structural utilities)
 @layer layout {
-  @import './layout/containers';
-  @import './layout/grid';
-  @import './layout/flexbox';
-  @import './layout/logical-properties';
-  @import './layout/app';
-  @import './layout/shell';
+  @include meta.load-css('./layout/containers');
+  @include meta.load-css('./layout/grid');
+  @include meta.load-css('./layout/flexbox');
+  @include meta.load-css('./layout/logical-properties');
+  @include meta.load-css('./layout/app');
+  @include meta.load-css('./layout/shell');
 }
 
 // 5. Component Library (semantic components)
 @layer components {
-  @import './components/buttons';
-  @import './components/forms';
-  @import './components/modals';
-  @import './components/navigation';
-  @import './components/cards';
-  @import './components/tabs';
-  @import './components/tablist';
-  @import './components/alerts';
-  @import './components/badges';
-  @import './components/stacks';
-  @import './components/layout';
-  @import './components/tables';
-  @import './components/dialogs';
-  @import './components/empty-state';
-  @import './components/settings';
-  @import './components/shell-nav';
-  @import './components/event-management';  // Event Management UI patterns
-  @import './components/calendar-admin';  // Calendar Administration UI patterns
-  @import './layout/logged-out';  // Auth screens with component-specific styling
+  @include meta.load-css('./components/buttons');
+  @include meta.load-css('./components/forms');
+  @include meta.load-css('./components/modals');
+  @include meta.load-css('./components/navigation');
+  @include meta.load-css('./components/cards');
+  @include meta.load-css('./components/tabs');
+  @include meta.load-css('./components/tablist');
+  @include meta.load-css('./components/alerts');
+  @include meta.load-css('./components/badges');
+  @include meta.load-css('./components/stacks');
+  @include meta.load-css('./components/layout');
+  @include meta.load-css('./components/tables');
+  @include meta.load-css('./components/dialogs');
+  @include meta.load-css('./components/empty-state');
+  @include meta.load-css('./components/settings');
+  @include meta.load-css('./components/shell-nav');
+  @include meta.load-css('./components/event-management');  // Event Management UI patterns
+  @include meta.load-css('./components/calendar-admin');  // Calendar Administration UI patterns
+  @include meta.load-css('./layout/logged-out');  // Auth screens with component-specific styling
 }
