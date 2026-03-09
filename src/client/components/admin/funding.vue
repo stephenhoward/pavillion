@@ -1682,10 +1682,16 @@ onMounted(async () => {
 
   .card-header {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    flex-direction: column;
+    align-items: flex-start;
     gap: var(--pav-space-4);
     padding: var(--pav-space-4) var(--pav-space-6);
+
+    @include pav-media(sm) {
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+    }
 
     &--border-only {
       border-bottom: 1px solid var(--pav-border-color-light);
@@ -1702,11 +1708,17 @@ onMounted(async () => {
   .providers-list {
     .provider-item {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
+      flex-direction: column;
+      align-items: flex-start;
       gap: var(--pav-space-4);
       padding: var(--pav-space-4) var(--pav-space-6);
       border-bottom: 1px solid var(--pav-border-color-light);
+
+      @include pav-media(sm) {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+      }
 
       &:last-child {
         border-bottom: none;
@@ -1746,7 +1758,11 @@ onMounted(async () => {
         display: flex;
         align-items: center;
         gap: var(--pav-space-4);
-        flex-shrink: 0;
+        flex-wrap: wrap;
+
+        @include pav-media(sm) {
+          flex-shrink: 0;
+        }
       }
     }
   }
@@ -1761,6 +1777,7 @@ onMounted(async () => {
 
   .pricing-form {
     padding: var(--pav-space-6);
+    overflow: hidden;
   }
 
   .pricing-grid {
@@ -1770,6 +1787,10 @@ onMounted(async () => {
 
     @include pav-media(sm) {
       grid-template-columns: repeat(3, 1fr);
+    }
+
+    .form-group {
+      min-width: 0;
     }
   }
 
@@ -1783,6 +1804,14 @@ onMounted(async () => {
     margin-top: var(--pav-space-6);
     display: flex;
     justify-content: flex-end;
+
+    .btn-primary {
+      width: 100%;
+
+      @include pav-media(sm) {
+        width: auto;
+      }
+    }
   }
 
   /* Form Elements */
