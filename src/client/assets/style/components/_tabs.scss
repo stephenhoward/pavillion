@@ -3,6 +3,8 @@
  * Accessible tab interface with focus indicators
  */
 
+@use '../mixins' as *;
+
 .tabs {
   /* Tab container */
   &__list {

@@ -1,9 +1,9 @@
 /**
  * Shell Layout Mixins
  * Responsive app shell with sidebar (desktop) and bottom nav (mobile)
- *
- * Note: Breakpoint mixins are available globally via main.scss imports
  */
+
+@use '../mixins' as *;
 
 /**
  * Main shell layout wrapper

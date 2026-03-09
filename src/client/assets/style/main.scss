@@ -3,8 +3,8 @@
  * Main entry point for all styles
  */
 
-// Import SCSS mixins and functions (available to all layers)
-@import './mixins/index';
+// Load SCSS mixins and functions (available to all layers)
+@use './mixins/index' as *;
 
 // Establish CSS layer ordering (most important: layers load in the order declared)
 @layer reset, tokens, base, layout, components;
