@@ -232,4 +232,35 @@ describe('ModerationService.acknowledgeForwardedReport', () => {
     expect(result).toBe(false);
     expect(updateStub.called).toBe(false);
   });
+
+  it('should return false when forwardedReportId uses http: scheme', async () => {
+    const findOneStub = sandbox.stub(ReportEntity, 'findOne');
+
+    const result = await service.acknowledgeForwardedReport(
+      'http://remote.instance/flags/flag-id',
+      'https://remote.instance/calendars/remote',
+    );
+
+    expect(result).toBe(false);
+    expect(findOneStub.called).toBe(false);
+  });
+
+  it('should return false when senderActorUri uses http: scheme to a non-localhost host', async () => {
+    const updateStub = sandbox.stub().resolves();
+    const mockEntity = {
+      id: 'report-uuid',
+      forward_status: 'pending',
+      forwarded_to_actor_uri: 'https://legitimate.instance/calendars/target',
+      update: updateStub,
+    };
+    sandbox.stub(ReportEntity, 'findOne').resolves(mockEntity as any);
+
+    const result = await service.acknowledgeForwardedReport(
+      'https://local.instance/flags/flag-id',
+      'http://legitimate.instance/calendars/target',
+    );
+
+    expect(result).toBe(false);
+    expect(updateStub.called).toBe(false);
+  });
 });
