@@ -9,7 +9,7 @@ import { EventSeries } from '@/common/model/event_series';
 import { CalendarEvent } from '@/common/model/events';
 import { EventSeriesEntity, EventSeriesContentEntity } from '../entity/event_series';
 import { EventEntity } from '../entity/event';
-import { MediaEntity } from '@/server/media/entity/media';
+import { Media } from '@/common/model/media';
 import { CalendarNotFoundError, EventNotFoundError, InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
 import {
   SeriesNotFoundError,
@@ -26,6 +26,7 @@ describe('SeriesService', () => {
   let testAccount: Account;
   let testCalendar: Calendar;
   let eventBus: EventEmitter;
+  let mockMediaInterface: { getMediaById: sinon.SinonStub };
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
@@ -34,6 +35,10 @@ describe('SeriesService', () => {
     // Create mock CalendarService
     mockCalendarService = sandbox.createStubInstance(CalendarService);
     seriesService = new SeriesService(mockCalendarService as any, eventBus);
+
+    // Create mock MediaInterface and inject it
+    mockMediaInterface = { getMediaById: sandbox.stub().resolves(null) };
+    seriesService.setMediaInterface(mockMediaInterface as any);
 
     // Create test data
     testAccount = new Account('account-123', 'testuser', 'test@example.com');
@@ -161,7 +166,7 @@ describe('SeriesService', () => {
       mockCalendarService.userCanModifyCalendar.resolves(true);
 
       sandbox.stub(EventSeriesEntity, 'findOne').resolves(null);
-      sandbox.stub(MediaEntity, 'findOne').resolves(null);
+      mockMediaInterface.getMediaById.resolves(null);
 
       const seriesData = { urlName: 'myseries', mediaId: 'media-from-other-calendar' };
 
@@ -176,7 +181,7 @@ describe('SeriesService', () => {
 
       sandbox.stub(EventSeriesEntity, 'findOne').resolves(null);
       sandbox.stub(EventSeriesEntity.prototype, 'save');
-      sandbox.stub(MediaEntity, 'findOne').resolves({ id: 'media-123', calendar_id: 'calendar-123' } as any);
+      mockMediaInterface.getMediaById.resolves(new Media('media-123', 'calendar-123', 'abc', 'file.jpg', 'image/jpeg', 1000));
 
       const seriesData = { urlName: 'myseries', mediaId: 'media-123' };
 
@@ -192,7 +197,7 @@ describe('SeriesService', () => {
 
       sandbox.stub(EventSeriesEntity, 'findOne').resolves(null);
       sandbox.stub(EventSeriesEntity.prototype, 'save');
-      sandbox.stub(MediaEntity, 'findOne').resolves({ id: 'media-123', calendar_id: 'calendar-123' } as any);
+      mockMediaInterface.getMediaById.resolves(new Media('media-123', 'calendar-123', 'abc', 'file.jpg', 'image/jpeg', 1000));
 
       const emittedEvents: Array<{ mediaId: string; seriesId: string }> = [];
       eventBus.on('mediaAttachedToSeries', (payload) => {
@@ -438,7 +443,7 @@ describe('SeriesService', () => {
       mockCalendarService.getCalendar.resolves(testCalendar);
       mockCalendarService.userCanModifyCalendar.resolves(true);
 
-      sandbox.stub(MediaEntity, 'findOne').resolves(null);
+      mockMediaInterface.getMediaById.resolves(null);
 
       const updateData = { mediaId: 'media-from-other-calendar' };
 
@@ -466,7 +471,7 @@ describe('SeriesService', () => {
       mockCalendarService.getCalendar.resolves(testCalendar);
       mockCalendarService.userCanModifyCalendar.resolves(true);
 
-      sandbox.stub(MediaEntity, 'findOne').resolves({ id: 'media-456', calendar_id: 'calendar-123' } as any);
+      mockMediaInterface.getMediaById.resolves(new Media('media-456', 'calendar-123', 'abc', 'file.jpg', 'image/jpeg', 1000));
       sandbox.stub(EventSeriesEntity, 'update').resolves([1]);
 
       getStub.onSecondCall().resolves(new EventSeries('series-123', 'calendar-123', 'myseries'));
@@ -492,7 +497,7 @@ describe('SeriesService', () => {
       mockCalendarService.getCalendar.resolves(testCalendar);
       mockCalendarService.userCanModifyCalendar.resolves(true);
 
-      sandbox.stub(MediaEntity, 'findOne').resolves({ id: 'media-456', calendar_id: 'calendar-123' } as any);
+      mockMediaInterface.getMediaById.resolves(new Media('media-456', 'calendar-123', 'abc', 'file.jpg', 'image/jpeg', 1000));
       sandbox.stub(EventSeriesEntity, 'update').resolves([1]);
 
       getStub.onSecondCall().resolves(mockSeries);
