@@ -202,15 +202,13 @@ volumes:
   pavillion-backups:
     name: pavillion-backups
     # Operators can configure this volume to use different backing storage:
-    # - Local directory: Add driver_opts with device and o: bind
     # - NFS share: Use driver: local with type: nfs
     # - Cloud-backed filesystem: Use appropriate volume driver
-    # Example for local bind mount:
-    # driver: local
-    # driver_opts:
-    #   type: none
-    #   device: /path/to/backup/storage
-    #   o: bind
+    driver: local
+    driver_opts:
+      type: none
+      device: /opt/pavillion/backups
+      o: bind
 
 # Docker secrets configuration
 # These secrets are mounted as tmpfs at /run/secrets/ inside containers
