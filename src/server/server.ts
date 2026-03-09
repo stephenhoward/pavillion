@@ -302,7 +302,13 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
 
   new PublicCalendarDomain(eventBus,calendarDomain).initialize(app);
 
-  new MediaDomain(eventBus,calendarDomain.interface).initialize(app);
+  const mediaDomain = new MediaDomain(eventBus, calendarDomain.interface);
+  mediaDomain.initialize(app);
+
+  // Inject MediaInterface into CalendarDomain after MediaDomain is constructed
+  // to resolve the circular dependency (MediaDomain needs CalendarInterface,
+  // CalendarInterface needs MediaInterface for media ownership checks).
+  calendarDomain.interface.setMediaInterface(mediaDomain.interface);
 
   // Initialize housekeeping domain (for automated server maintenance)
   const housekeepingDomain = new HousekeepingDomain(eventBus, emailDomain.interface, accountsDomain.interface);

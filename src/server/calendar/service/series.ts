@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { QueryTypes } from 'sequelize';
 import { EventEmitter } from 'events';
+import type MediaInterface from '@/server/media/interface';
 
 import { Account } from '@/common/model/account';
 import { EventSeries } from '@/common/model/event_series';
@@ -8,7 +9,6 @@ import { EventSeriesContent } from '@/common/model/event_series_content';
 import { CalendarEvent } from '@/common/model/events';
 import { EventSeriesEntity, EventSeriesContentEntity } from '@/server/calendar/entity/event_series';
 import { EventEntity, EventContentEntity, EventScheduleEntity } from '@/server/calendar/entity/event';
-import { MediaEntity } from '@/server/media/entity/media';
 import { CalendarNotFoundError, EventNotFoundError, InsufficientCalendarPermissionsError } from '@/common/exceptions/calendar';
 import {
   SeriesNotFoundError,
@@ -25,11 +25,16 @@ import db from '@/server/common/entity/db';
  */
 class SeriesService {
   private eventBus: EventEmitter;
+  private mediaInterface?: MediaInterface;
 
   constructor(private calendarService?: CalendarService, eventBus?: EventEmitter) {
     // calendarService is optional for backward compatibility but recommended for proper dependency injection
     // eventBus is optional; when provided, domain events are emitted for media approval pipeline
     this.eventBus = eventBus ?? new EventEmitter();
+  }
+
+  setMediaInterface(mediaInterface: MediaInterface): void {
+    this.mediaInterface = mediaInterface;
   }
 
   /**
@@ -81,12 +86,10 @@ class SeriesService {
       throw new SeriesUrlNameAlreadyExistsError();
     }
 
-    // Validate mediaId ownership if provided
+    // Validate mediaId ownership if provided via MediaInterface
     if (seriesData.mediaId) {
-      const media = await MediaEntity.findOne({
-        where: { id: seriesData.mediaId, calendar_id: calendarId },
-      });
-      if (!media) {
+      const media = await this.mediaInterface?.getMediaById(seriesData.mediaId);
+      if (!media || media.calendarId !== calendarId) {
         throw new Error('Media not found or does not belong to this calendar');
       }
     }
@@ -224,13 +227,11 @@ class SeriesService {
       throw new InsufficientCalendarPermissionsError();
     }
 
-    // Validate mediaId ownership if provided
+    // Validate mediaId ownership if provided via MediaInterface
     if (seriesData.mediaId !== undefined) {
       if (seriesData.mediaId !== null) {
-        const media = await MediaEntity.findOne({
-          where: { id: seriesData.mediaId, calendar_id: series.calendarId },
-        });
-        if (!media) {
+        const media = await this.mediaInterface?.getMediaById(seriesData.mediaId);
+        if (!media || media.calendarId !== series.calendarId) {
           throw new Error('Media not found or does not belong to this calendar');
         }
       }

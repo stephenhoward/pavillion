@@ -32,7 +32,7 @@ export function validateAndEncodeId(id: string | any, idName: string = 'ID'): st
  */
 export function handleApiError(
   error: unknown,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   errorMap: Record<string, new (...args: any[]) => Error>,
 ): never {
   if (error && typeof error === 'object' && 'response' in error &&

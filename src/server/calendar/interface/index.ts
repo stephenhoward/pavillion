@@ -21,6 +21,7 @@ import CalendarEventInstance from '@/common/model/event_instance';
 import AccountsInterface from '@/server/accounts/interface';
 import EmailInterface from '@/server/email/interface';
 import SubscriptionInterface from '@/server/subscription/interface';
+import type MediaInterface from '@/server/media/interface';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
 
@@ -58,6 +59,17 @@ export default class CalendarInterface {
     this.widgetDomainService = new WidgetDomainService();
     this.categoryMappingService = new CategoryMappingService();
     this.seriesService = new SeriesService(this.calendarService, eventBus);
+  }
+
+  /**
+   * Injects MediaInterface into the services that need it for cross-domain media lookups.
+   * Called after MediaDomain is initialized to avoid circular construction dependencies.
+   *
+   * @param mediaInterface - The MediaInterface instance from the media domain
+   */
+  setMediaInterface(mediaInterface: MediaInterface): void {
+    this.eventService.setMediaInterface(mediaInterface);
+    this.seriesService.setMediaInterface(mediaInterface);
   }
 
   // Calendar operations

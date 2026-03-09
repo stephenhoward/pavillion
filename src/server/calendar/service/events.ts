@@ -13,9 +13,13 @@ import { EventLocation, validateLocationHierarchy } from "@/common/model/locatio
 import { EventContentEntity, EventEntity, EventScheduleEntity } from "@/server/calendar/entity/event";
 import CalendarService from "@/server/calendar/service/calendar";
 import { LocationEntity } from "@/server/calendar/entity/location";
+// TODO: MediaEntity is still needed here for Sequelize eager-load association includes
+// (e.g., include: [MediaEntity] in queries). Removing this cross-domain import requires
+// either restructuring entity associations or moving eager-loading to the media domain.
 import { MediaEntity } from "@/server/media/entity/media";
 import LocationService from "@/server/calendar/service/locations";
 import { EventEmitter } from 'events';
+import type MediaInterface from '@/server/media/interface';
 import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError, BulkEventsNotFoundError, MixedCalendarEventsError, CategoriesNotFoundError, LocationValidationError } from '@/common/exceptions/calendar';
 import { ValidationError } from '@/common/exceptions/base';
 import CategoryService from './categories';
@@ -43,12 +47,17 @@ class EventService {
   private calendarService: CalendarService;
   private categoryService: CategoryService;
   private eventBus: EventEmitter;
+  private mediaInterface?: MediaInterface;
 
   constructor(eventBus: EventEmitter) {
     this.locationService = new LocationService();
     this.calendarService = new CalendarService();
     this.categoryService = new CategoryService();
     this.eventBus = eventBus;
+  }
+
+  setMediaInterface(mediaInterface: MediaInterface): void {
+    this.mediaInterface = mediaInterface;
   }
 
   /**
@@ -629,18 +638,14 @@ class EventService {
 
     // Handle media attachment
     if (eventParams.mediaId) {
-      // Verify the media belongs to the same calendar
-      const media = await MediaEntity.findOne({
-        where: {
-          id: eventParams.mediaId,
-          calendar_id: calendar.id,
-        },
-      });
+      // Verify the media belongs to the same calendar via MediaInterface
+      const media = await this.mediaInterface?.getMediaById(eventParams.mediaId);
 
-      if (media) {
-        eventEntity.media_id = media.id;
-        event.media = media.toModel();
+      if (!media || media.calendarId !== calendar.id) {
+        throw new Error('Media not found or does not belong to this calendar');
       }
+      eventEntity.media_id = media.id;
+      event.media = media;
     }
 
     await eventEntity.save();
@@ -880,19 +885,15 @@ class EventService {
     let newMediaAttached = false;
     if (eventParams.hasOwnProperty('mediaId')) {
       if (eventParams.mediaId) {
-        // Verify the media belongs to the same calendar
-        const media = await MediaEntity.findOne({
-          where: {
-            id: eventParams.mediaId,
-            calendar_id: calendar.id,
-          },
-        });
+        // Verify the media belongs to the same calendar via MediaInterface
+        const media = await this.mediaInterface?.getMediaById(eventParams.mediaId);
 
-        if (media) {
-          newMediaAttached = eventEntity.media_id !== media.id;
-          eventEntity.media_id = media.id;
-          event.media = media.toModel();
+        if (!media || media.calendarId !== calendar.id) {
+          throw new Error('Media not found or does not belong to this calendar');
         }
+        newMediaAttached = eventEntity.media_id !== media.id;
+        eventEntity.media_id = media.id;
+        event.media = media;
       }
       else {
         // Remove media if mediaId is null/empty

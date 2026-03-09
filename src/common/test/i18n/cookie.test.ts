@@ -129,7 +129,7 @@ describe('Locale cookie utilities', () => {
 
     it('should omit Secure attribute when served over HTTP', () => {
       // Switch to HTTP using happy-dom's setURL API so document.cookie remains valid
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       (window as any).happyDOM.setURL('http://localhost');
 
       const documentCookieSpy = vi.spyOn(document, 'cookie', 'set');
@@ -143,7 +143,7 @@ describe('Locale cookie utilities', () => {
       documentCookieSpy.mockRestore();
 
       // Restore HTTPS URL for subsequent tests
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       (window as any).happyDOM.setURL('https://localhost');
     });
 

@@ -379,3 +379,72 @@ describe('updateEvent with schedules', () => {
   });
 
 });
+
+describe('updateEvent with mediaId', () => {
+  let service: EventService;
+  let sandbox = sinon.createSandbox();
+  let getCalendarStub: sinon.SinonStub;
+  let editableCalendarsStub: sinon.SinonStub;
+  let mockMediaInterface: { getMediaById: sinon.SinonStub };
+  const cal = new Calendar('testCalendarId', 'testme');
+  const acct = new Account('testAccountId', 'testme', 'testme');
+
+  beforeEach(async () => {
+    const { Media } = await import('@/common/model/media');
+    const MediaInterface = (await import('@/server/media/interface')).default;
+
+    service = new EventService(new EventEmitter());
+    getCalendarStub = sandbox.stub(service['calendarService'], 'getCalendar');
+    editableCalendarsStub = sandbox.stub(service['calendarService'], 'editableCalendarsForUser');
+    getCalendarStub.resolves(cal);
+    editableCalendarsStub.resolves([cal]);
+
+    mockMediaInterface = { getMediaById: sandbox.stub() };
+    service.setMediaInterface(mockMediaInterface as unknown as InstanceType<typeof MediaInterface>);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('should attach media when mediaId belongs to the same calendar', async () => {
+    const { Media } = await import('@/common/model/media');
+    const media = new Media('mediaId1', 'testCalendarId', 'abc123', 'photo.jpg', 'image/jpeg', 1024);
+    mockMediaInterface.getMediaById.resolves(media);
+
+    sandbox.stub(EventEntity, 'findByPk').resolves(EventEntity.build({ calendar_id: 'testCalendarId' }));
+    sandbox.stub(EventEntity.prototype, 'save').resolves();
+
+    const updatedEvent = await service.updateEvent(acct, '11111111-1111-4111-8111-111111111111', {
+      mediaId: 'mediaId1',
+    });
+
+    expect(mockMediaInterface.getMediaById.calledWith('mediaId1')).toBe(true);
+    expect(updatedEvent.media).toBe(media);
+  });
+
+  it('should throw an error when updating with a mediaId from a different calendar', async () => {
+    const { Media } = await import('@/common/model/media');
+    const media = new Media('mediaId1', 'otherCalendarId', 'abc123', 'photo.jpg', 'image/jpeg', 1024);
+    mockMediaInterface.getMediaById.resolves(media);
+
+    sandbox.stub(EventEntity, 'findByPk').resolves(EventEntity.build({ calendar_id: 'testCalendarId' }));
+    sandbox.stub(EventEntity.prototype, 'save').resolves();
+
+    await expect(service.updateEvent(acct, '11111111-1111-4111-8111-111111111111', {
+      mediaId: 'mediaId1',
+    })).rejects.toThrow('Media not found or does not belong to this calendar');
+  });
+
+  it('should throw an error when updating with a mediaId that is not found', async () => {
+    mockMediaInterface.getMediaById.resolves(null);
+
+    sandbox.stub(EventEntity, 'findByPk').resolves(EventEntity.build({ calendar_id: 'testCalendarId' }));
+    sandbox.stub(EventEntity.prototype, 'save').resolves();
+
+    await expect(service.updateEvent(acct, '11111111-1111-4111-8111-111111111111', {
+      mediaId: 'nonexistentMediaId',
+    })).rejects.toThrow('Media not found or does not belong to this calendar');
+  });
+
+});
