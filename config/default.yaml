@@ -22,7 +22,7 @@ media:
     - '.heic'
   storage:
     driver: 'local'
-    basePath: '/storage/media'
+    basePath: './storage/media'
 
 # JWT configuration for authentication tokens
 # In production, JWT_SECRET must be set via environment variable

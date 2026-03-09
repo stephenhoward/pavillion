@@ -281,6 +281,15 @@ create_app_directory() {
   chown 1001:1001 "${APP_DIR}/backups"
   chmod 750 "${APP_DIR}/backups"
   print_success "Created ${APP_DIR}/backups (owned by container user uid 1001)"
+
+  # Create media storage directory owned by the container user (uid/gid 1001).
+  # The container's pavillion user is hardcoded to uid 1001 in the Dockerfile.
+  # This directory is bind-accessible from within the named Docker volume
+  # and also used directly in bare-metal deployments.
+  mkdir -p "${APP_DIR}/storage/media"
+  chown 1001:1001 "${APP_DIR}/storage/media"
+  chmod 750 "${APP_DIR}/storage/media"
+  print_success "Created ${APP_DIR}/storage/media (owned by container user uid 1001)"
 }
 
 # --- Step 7 (staging only): Install webhook listener -------------------------
