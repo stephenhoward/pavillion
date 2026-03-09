@@ -273,6 +273,14 @@ create_app_directory() {
   mkdir -p "${APP_DIR}"
   chown "${DEPLOY_USER}:${DEPLOY_USER}" "${APP_DIR}"
   print_success "Created ${APP_DIR} (owned by ${DEPLOY_USER})"
+
+  # Create backup directory owned by the container user (uid/gid 1001).
+  # The container's pavillion user is hardcoded to uid 1001 in the Dockerfile.
+  # This directory is bind-mounted into the container at /backups via docker-compose.yml.
+  mkdir -p "${APP_DIR}/backups"
+  chown 1001:1001 "${APP_DIR}/backups"
+  chmod 750 "${APP_DIR}/backups"
+  print_success "Created ${APP_DIR}/backups (owned by container user uid 1001)"
 }
 
 # --- Step 7 (staging only): Install webhook listener -------------------------

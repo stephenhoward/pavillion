@@ -5,6 +5,7 @@
 database:
   dialect: postgres
   logging: false
+  storage: null   # Explicitly clear SQLite storage from default.yaml
 
 mail:
   transport: smtp

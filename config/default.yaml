@@ -1,6 +1,6 @@
 database:
   dialect: sqlite
-  storage: ':memory:'
+  storage: ':memory:'   # SQLite only — production.yaml sets this to null when using PostgreSQL
   logging: false
 host:
   port: 3000
