@@ -15,6 +15,7 @@
     "all_languages_added": "All languages have been added"
   },
   "language_tab_selector": {
+    "nav_label": "Language selection",
     "edit_content": "Edit {{language}} content",
     "edit_content_error": "Edit {{language}} content (has errors)",
     "add_language": "Add language"

@@ -17,6 +17,33 @@
     &::-webkit-scrollbar {
       display: none;
     }
+
+    // Scroll-fade rules intentionally parallel mixins/_tabs.scss (tab-navigation mixin).
+    // .tabs__list does not use @include tab-navigation directly, so the rules are
+    // repeated here. If .tabs__list is ever migrated to use the mixin, remove this block.
+    // Bidirectional scroll-fade affordance on narrow screens.
+    // 2rem stop: relative unit scales with font size, giving a proportionally
+    // wider fade for tab labels vs. category pills.
+    // Apply .can-scroll-right / .can-scroll-left via useTabScroll composable.
+    @include pav-media-down(sm) {
+      // Right fade: more tabs off-screen to the right
+      &.can-scroll-right {
+        -webkit-mask-image: linear-gradient(to right, black 0%, black calc(100% - 2rem), transparent 100%);
+        mask-image: linear-gradient(to right, black 0%, black calc(100% - 2rem), transparent 100%);
+      }
+
+      // Left fade: tabs off-screen to the left
+      &.can-scroll-left {
+        -webkit-mask-image: linear-gradient(to right, transparent 0%, black 2rem, black 100%);
+        mask-image: linear-gradient(to right, transparent 0%, black 2rem, black 100%);
+      }
+
+      // Both fades simultaneously: tabs hidden on both sides
+      &.can-scroll-left.can-scroll-right {
+        -webkit-mask-image: linear-gradient(to right, transparent 0%, black 2rem, black calc(100% - 2rem), transparent 100%);
+        mask-image: linear-gradient(to right, transparent 0%, black 2rem, black calc(100% - 2rem), transparent 100%);
+      }
+    }
   }
 
   &__tab {

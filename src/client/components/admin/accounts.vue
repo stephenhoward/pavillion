@@ -9,6 +9,7 @@ import LoadingMessage from '@/client/components/common/loading_message.vue';
 import { useApplicationStore } from '@/client/stores/applicationStore';
 import { useInvitationStore } from '@/client/stores/invitationStore';
 import { DateTime } from 'luxon';
+import { useTabScroll } from '@/client/composables/useTabScroll';
 
 const { t } = useTranslation('admin', {
   keyPrefix: 'accounts',
@@ -25,6 +26,8 @@ const state = reactive({
 });
 
 const invitationsViewRef = ref(null);
+
+const { tabsRef, canScrollLeft, canScrollRight } = useTabScroll();
 
 onBeforeMount(async () => {
   await loadAccounts();
@@ -116,7 +119,13 @@ const subTabs = computed(() => [
 
     <!-- Sub-Tab Navigation -->
     <div class="subtab-border">
-      <nav role="tablist" aria-label="Account management sections" class="subtab-nav">
+      <nav
+        ref="tabsRef"
+        role="tablist"
+        aria-label="Account management sections"
+        class="subtab-nav"
+        :class="{ 'can-scroll-left': canScrollLeft, 'can-scroll-right': canScrollRight }"
+      >
         <button
           v-for="tab in subTabs"
           :key="tab.id"
