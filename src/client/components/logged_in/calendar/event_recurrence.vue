@@ -1,5 +1,6 @@
 <style scoped lang="scss">
 @use '@/client/assets/style/components/event-management' as *;
+@use '@/client/assets/style/mixins/breakpoints' as *;
 
 .recurrence-rule {
   .schedule-header {
@@ -51,6 +52,10 @@
     grid-template-columns: 1fr 1fr;
     gap: 1rem;
     margin-bottom: 1rem;
+
+    @include pav-media-down(sm) {
+      grid-template-columns: 1fr;
+    }
   }
 
   .grid-field {
