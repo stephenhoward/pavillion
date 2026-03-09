@@ -23,11 +23,15 @@ describe('BackupService', () => {
     service = new BackupService();
     vi.clearAllMocks();
 
-    // Spy on the protected executeCommand method to prevent real shell execution.
+    // Spy on the protected executeCommand method to prevent real execFile calls.
     // This avoids the need to mock the Node.js child_process built-in module, which
     // is non-configurable in ESM environments and cannot be replaced via vi.mock().
+    // In the SQLite test environment this spy is not invoked (writeFileSync is used
+    // instead), but it guards against accidental pg_dump invocations.
     vi.spyOn(service as any, 'executeCommand').mockResolvedValue(undefined);
 
+    // Stub writeFileSync so the SQLite stub-file write is a no-op in tests
+    vi.mocked(fs.writeFileSync).mockImplementation(() => undefined);
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.statSync).mockReturnValue({ size: 5000 } as any);
     vi.mocked(BackupEntity.create).mockResolvedValue({} as any);
@@ -38,11 +42,18 @@ describe('BackupService', () => {
   });
 
   describe('createBackup', () => {
-    it('should construct pg_dump command with correct arguments', async () => {
+    it('should write stub file for SQLite without calling executeCommand', async () => {
+      const execSpy = vi.spyOn(service as any, 'executeCommand').mockResolvedValue(undefined);
+
       const result = await service.createBackup('manual');
 
-      // Verify the backup was created successfully (which proves command executed)
-      expect(result).toHaveProperty('filename');
+      // SQLite path: executeCommand (pg_dump) must never be invoked
+      expect(execSpy).not.toHaveBeenCalled();
+      // A stub file must be written directly via fs.writeFileSync
+      expect(fs.writeFileSync).toHaveBeenCalledWith(
+        expect.stringMatching(/\.dump$/),
+        'test backup',
+      );
       expect(result.filename).toMatch(/^pavillion_\d{8}_\d{6}_manual\.dump$/);
       expect(result.type).toBe('manual');
     });

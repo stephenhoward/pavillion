@@ -1,6 +1,6 @@
 import { DateTime } from 'luxon';
 import { v4 as uuidv4 } from 'uuid';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -51,16 +51,22 @@ export default class BackupService {
   }
 
   /**
-   * Executes a shell command asynchronously.
+   * Executes a binary with an explicit arguments array (no shell).
+   *
+   * Using execFile instead of exec prevents shell injection: arguments are passed
+   * directly to the OS without shell interpretation, so metacharacters in DB
+   * credentials cannot break out of the argument context.
    *
    * Exposed as a protected method so tests can spy on it without needing to
    * mock Node.js built-in modules (which are non-configurable in ESM environments).
    *
-   * @param command - The shell command to execute
+   * @param file - The binary to execute
+   * @param args - Arguments passed directly to the binary (no shell expansion)
+   * @param env  - Environment for the child process (defaults to process.env)
    */
-  protected async executeCommand(command: string): Promise<void> {
-    const execAsync = promisify(exec);
-    await execAsync(command);
+  protected async executeCommand(file: string, args: string[], env?: NodeJS.ProcessEnv): Promise<void> {
+    const execFileAsync = promisify(execFile);
+    await execFileAsync(file, args, { env: env ?? process.env });
   }
 
   /**
@@ -77,11 +83,16 @@ export default class BackupService {
     console.log(`[Backup] Creating ${type} backup: ${filename}`);
 
     try {
-      // Construct pg_dump command
-      const command = this.buildPgDumpCommand(fullPath);
+      // Build pg_dump arguments or write a stub file for SQLite environments
+      const pgArgs = this.buildPgDumpArgs(fullPath);
 
-      // Execute backup
-      await this.executeCommand(command);
+      if (pgArgs === null) {
+        // SQLite test environment: write a stub file directly (no child process needed)
+        fs.writeFileSync(fullPath, 'test backup');
+      }
+      else {
+        await this.executeCommand(pgArgs.file, pgArgs.args, pgArgs.env);
+      }
       console.log(`[Backup] pg_dump completed successfully`);
 
       // Verify backup
@@ -165,19 +176,24 @@ export default class BackupService {
   }
 
   /**
-   * Builds pg_dump command with database credentials.
+   * Builds pg_dump arguments for the execFile call.
    *
-   * Uses custom format (-Fc) for compression and selective restore.
+   * Arguments are returned as a structured object so each value is passed as a
+   * discrete array element — never interpolated into a shell string. PGPASSWORD
+   * is delivered through the child process environment rather than the command
+   * line, keeping credentials out of process listings and shell history.
    *
-   * @param outputPath - Full path for backup file
-   * @returns pg_dump command string
+   * Returns null for SQLite environments (caller writes a stub file directly).
+   *
+   * @param outputPath - Full path for backup file (-f argument to pg_dump)
+   * @returns execFile arguments, or null for SQLite environments
    */
-  private buildPgDumpCommand(outputPath: string): string {
+  private buildPgDumpArgs(outputPath: string): { file: string; args: string[]; env: NodeJS.ProcessEnv } | null {
     const dbConfig = config.get<DatabaseConfig>('database');
 
-    // For SQLite (testing), skip actual pg_dump
+    // SQLite environments don't use pg_dump; caller handles the stub write
     if (dbConfig.dialect === 'sqlite' || dbConfig.storage) {
-      return `echo "test backup" > ${outputPath}`;
+      return null;
     }
 
     const host = dbConfig.host || 'localhost';
@@ -186,11 +202,15 @@ export default class BackupService {
     const username = dbConfig.username || dbConfig.user || 'postgres';
     const password = dbConfig.password || '';
 
-    // Build command with PGPASSWORD environment variable
-    // Using -Fc for custom format (compressed)
-    const command = `PGPASSWORD="${password}" pg_dump -Fc -h ${host} -p ${port} -U ${username} -d ${database} > ${outputPath}`;
-
-    return command;
+    return {
+      file: 'pg_dump',
+      // -f writes the output file directly; avoids shell redirection (>)
+      args: ['-Fc', '-h', host, '-p', String(port), '-U', username, '-d', database, '-f', outputPath],
+      // Spread process.env so the child inherits PATH, locale, etc.
+      // PGPASSWORD is set here rather than on the command line to avoid
+      // exposing credentials in process listings.
+      env: { ...process.env, PGPASSWORD: password },
+    };
   }
 
   /**
