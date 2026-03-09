@@ -514,6 +514,7 @@ const handleKeyDown = (event: KeyboardEvent) => {
 </template>
 
 <style scoped lang="scss">
+@use '@/client/assets/style/mixins' as *;
 // Component-local design tokens
 $accent-color: #e67e22;
 $accent-color-light: #f39c12;
@@ -532,6 +533,7 @@ $transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
 .upload-zone {
   position: relative;
+  width: 100%;
   border: 2px dashed rgba(0, 0, 0, 0.15);
   border-radius: $border-radius;
   background: linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%);
@@ -677,7 +679,8 @@ $transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 .format-hint {
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 4px 8px;
   font-size: 12px;
   color: #999;
   text-transform: uppercase;
@@ -878,7 +881,7 @@ $transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   span {
-    @media (max-width: 500px) {
+    @include pav-media-down(sm) {
       display: none;
     }
   }
@@ -960,7 +963,7 @@ $transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 // Mobile responsiveness
-@media (max-width: 500px) {
+@include pav-media-down(sm) {
   .empty-state {
     padding: 32px 16px;
   }
