@@ -1,9 +1,15 @@
-@import '@/client/assets/style/mixins/breakpoints';
+@use '../mixins' as *;
 
 div.logged-in {
-  @include pav-flex-responsive;
+  display: flex;
+  gap: var(--pav-space-3);
+  flex-direction: column;
   align-items: stretch;
   height: 100vh;
+
+  @include pav-media(md) {
+    flex-direction: row;
+  }
 
   & > nav {
     order: 1;
@@ -52,4 +58,3 @@ div.logged-in {
     flex: 1;
   }
 }
-

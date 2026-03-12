@@ -230,12 +230,50 @@ export default class CalendarInterface {
     return this.eventInstanceService.listEventInstances(event);
   }
 
+  /**
+   * List all event instances for a calendar without filters.
+   * Used by internal calendar-domain code and legacy public-domain paths
+   * (e.g. listEventInstances, listEventInstancesWithCategoryFilter in PublicCalendarService).
+   * Prefer listEventInstancesWithFilters for new public-facing queries.
+   */
   async listEventInstancesForCalendar(calendar: Calendar): Promise<CalendarEventInstance[]> {
     return this.eventInstanceService.listEventInstancesForCalendar(calendar);
   }
 
   async getEventInstanceById(instanceId: string): Promise<CalendarEventInstance | null> {
     return this.eventInstanceService.getEventInstanceById(instanceId);
+  }
+
+  /**
+   * List event instances for a calendar with combined filters.
+   * Augments each instance with isRecurring on the event object.
+   *
+   * @param calendar - The calendar to filter events for
+   * @param options - Filter options (search, categories, startDate, endDate)
+   * @returns Filtered event instances, each augmented with isRecurring
+   */
+  async listEventInstancesWithFilters(
+    calendar: Calendar,
+    options?: {
+      search?: string;
+      categories?: string[];
+      startDate?: string;
+      endDate?: string;
+    },
+  ): Promise<CalendarEventInstance[]> {
+    return this.eventInstanceService.listEventInstancesWithFilters(calendar, options);
+  }
+
+  /**
+   * Get a single event instance with full schedule, location content, and category data.
+   * Augments the event with pre-computed recurrenceText.
+   *
+   * @param instanceId - The UUID of the event instance
+   * @returns The event instance augmented with schedule detail and recurrence text,
+   *          or null if not found
+   */
+  async getEventInstanceWithDetails(instanceId: string): Promise<CalendarEventInstance | null> {
+    return this.eventInstanceService.getEventInstanceWithDetails(instanceId);
   }
 
   /**

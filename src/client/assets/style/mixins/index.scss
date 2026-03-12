@@ -3,10 +3,10 @@
  * Centralized import of all SCSS mixins
  */
 
-@import 'breakpoints';
-@import 'logical-properties';
-@import 'tabs';
-@import 'layout';
-@import 'spacing';
-@import 'typography';
-@import 'visibility';
+@forward 'breakpoints';
+@forward 'logical-properties';
+@forward 'tabs';
+@forward 'layout';
+@forward 'spacing';
+@forward 'typography';
+@forward 'visibility';
