@@ -2,13 +2,14 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 
 import { Calendar } from '@/common/model/calendar';
-import { EventLocation } from '@/common/model/location';
-import { LocationEntity } from '@/server/calendar/entity/location';
+import { EventLocation, EventLocationContent } from '@/common/model/location';
+import { LocationEntity, LocationContentEntity } from '@/server/calendar/entity/location';
+import { EventEntity } from '@/server/calendar/entity/event';
 import LocationService from '@/server/calendar/service/locations';
 
-describe('findLocation', () => {
+describe('LocationService', () => {
 
-  let sandbox = sinon.createSandbox();
+  let sandbox: sinon.SinonSandbox;
   let service: LocationService;
 
   beforeEach(() => {
@@ -20,93 +21,85 @@ describe('findLocation', () => {
     sandbox.restore();
   });
 
-  it('should return a location by id', async () => {
-    let findLocationStub = sandbox.stub(LocationEntity, 'findByPk');
-    let calendar = new Calendar('calid', 'testme');
+  describe('findLocation', () => {
 
-    findLocationStub.resolves(LocationEntity.build({
-      calendar_id: calendar.id,
-      name: 'testLocation',
-    }));
+    it('should return a location by id', async () => {
+      let findLocationStub = sandbox.stub(LocationEntity, 'findByPk');
+      let calendar = new Calendar('calid', 'testme');
 
-    let location = await service.findLocation(
-      calendar,
-      new EventLocation('id', 'testLocation'),
-    );
+      findLocationStub.resolves(LocationEntity.build({
+        calendar_id: calendar.id,
+        name: 'testLocation',
+      }));
 
-    expect(location).toBeDefined();
-    expect(findLocationStub.called).toBe(true);
-  });
+      let location = await service.findLocation(
+        calendar,
+        new EventLocation('id', 'testLocation'),
+      );
 
-  it('calendar id mismatch', async () => {
-    let findLocationStub = sandbox.stub(LocationEntity, 'findByPk');
-    let calendar = new Calendar('calid', 'testme');
+      expect(location).toBeDefined();
+      expect(findLocationStub.called).toBe(true);
+    });
 
-    findLocationStub.resolves(LocationEntity.build({
-      calendar_id: 'someOtherCalendarId',
-      name: 'testLocation',
-    }));
+    it('calendar id mismatch', async () => {
+      let findLocationStub = sandbox.stub(LocationEntity, 'findByPk');
+      let calendar = new Calendar('calid', 'testme');
 
-    let location = await service.findLocation(
-      calendar,
-      new EventLocation('id', 'testLocation'),
-    );
+      findLocationStub.resolves(LocationEntity.build({
+        calendar_id: 'someOtherCalendarId',
+        name: 'testLocation',
+      }));
 
-    expect(location).toBeNull();
-    expect(findLocationStub.called).toBe(true);
-  });
+      let location = await service.findLocation(
+        calendar,
+        new EventLocation('id', 'testLocation'),
+      );
 
-  it('no location with that id', async () => {
-    let findLocationStub = sandbox.stub(LocationEntity, 'findByPk');
-    findLocationStub.resolves(undefined);
+      expect(location).toBeNull();
+      expect(findLocationStub.called).toBe(true);
+    });
 
-    let location = await service.findLocation(
-      new Calendar('id', 'testme'),
-      new EventLocation('id', 'testLocation'),
-    );
+    it('no location with that id', async () => {
+      let findLocationStub = sandbox.stub(LocationEntity, 'findByPk');
+      findLocationStub.resolves(undefined);
 
-    expect(location).toBeNull();
-    expect(findLocationStub.called).toBe(true);
-  });
+      let location = await service.findLocation(
+        new Calendar('id', 'testme'),
+        new EventLocation('id', 'testLocation'),
+      );
 
-  it('match by attributes', async () => {
-    let findLocationStub = sandbox.stub(LocationEntity, 'findOne');
-    findLocationStub.resolves(LocationEntity.build({ name: 'testLocation' }));
+      expect(location).toBeNull();
+      expect(findLocationStub.called).toBe(true);
+    });
 
-    let location = await service.findLocation(
-      new Calendar('id', 'testme'),
-      new EventLocation('', 'testLocation'),
-    );
+    it('match by attributes', async () => {
+      let findLocationStub = sandbox.stub(LocationEntity, 'findOne');
+      findLocationStub.resolves(LocationEntity.build({ name: 'testLocation' }));
 
-    expect(location).toBeDefined();
-    expect(findLocationStub.called).toBe(true);
-  });
+      let location = await service.findLocation(
+        new Calendar('id', 'testme'),
+        new EventLocation('', 'testLocation'),
+      );
 
-  it('no matches by attribute', async () => {
-    let findLocationStub = sandbox.stub(LocationEntity, 'findOne');
-    findLocationStub.resolves(undefined);
+      expect(location).toBeDefined();
+      expect(findLocationStub.called).toBe(true);
+    });
 
-    let location = await service.findLocation(
-      new Calendar('id', 'testme'),
-      new EventLocation('', 'testLocation'),
-    );
+    it('no matches by attribute', async () => {
+      let findLocationStub = sandbox.stub(LocationEntity, 'findOne');
+      findLocationStub.resolves(undefined);
 
-    expect(location).toBeNull();
-    expect(findLocationStub.called).toBe(true);
+      let location = await service.findLocation(
+        new Calendar('id', 'testme'),
+        new EventLocation('', 'testLocation'),
+      );
+
+      expect(location).toBeNull();
+      expect(findLocationStub.called).toBe(true);
+    });
   });
 
   describe('createLocation', () => {
-
-    let sandbox = sinon.createSandbox();
-    let service: LocationService;
-
-    beforeEach(() => {
-      service = new LocationService();
-    });
-
-    afterEach(() => {
-      sandbox.restore();
-    });
 
     it('should create a location', async () => {
       let saveStub = sandbox.stub(LocationEntity.prototype, 'save');
@@ -130,7 +123,170 @@ describe('findLocation', () => {
       expect(eventSpy.returnValues[0].calendar_id).toBe('testCalendarId');
       expect(saveStub.called).toBe(true);
     });
-
   });
 
+  describe('updateLocation', () => {
+
+    it('should update location fields', async () => {
+      const calendar = new Calendar('cal-1', 'testcal');
+      const existingEntity = LocationEntity.build({
+        id: 'loc-1',
+        calendar_id: 'cal-1',
+        name: 'Old Name',
+        address: '123 Old St',
+        city: 'Old City',
+        state: 'OC',
+        postal_code: '00000',
+        country: 'US',
+      });
+
+      const findByPkStub = sandbox.stub(LocationEntity, 'findByPk');
+      findByPkStub.resolves(existingEntity);
+
+      const updateStub = sandbox.stub(existingEntity, 'update').resolves(existingEntity);
+
+      // Stub content operations
+      sandbox.stub(LocationContentEntity, 'destroy').resolves(0);
+
+      // Stub getLocationById to return updated location
+      const getLocationByIdStub = sandbox.stub(service, 'getLocationById');
+      const updatedLocation = new EventLocation('loc-1', 'New Name', '456 New St', 'New City', 'NC', '11111', 'US');
+      getLocationByIdStub.resolves(updatedLocation);
+
+      const locationData = new EventLocation('loc-1', 'New Name', '456 New St', 'New City', 'NC', '11111', 'US');
+      const result = await service.updateLocation(calendar, 'loc-1', locationData);
+
+      expect(result).toBeDefined();
+      expect(result!.name).toBe('New Name');
+      expect(updateStub.called).toBe(true);
+    });
+
+    it('should return null if location not found', async () => {
+      const calendar = new Calendar('cal-1', 'testcal');
+      const findByPkStub = sandbox.stub(LocationEntity, 'findByPk');
+      findByPkStub.resolves(null);
+
+      const locationData = new EventLocation('', 'New Name');
+      const result = await service.updateLocation(calendar, 'nonexistent', locationData);
+
+      expect(result).toBeNull();
+    });
+
+    it('should return null if location belongs to different calendar', async () => {
+      const calendar = new Calendar('cal-1', 'testcal');
+      const existingEntity = LocationEntity.build({
+        id: 'loc-1',
+        calendar_id: 'other-cal',
+        name: 'Some Name',
+      });
+
+      const findByPkStub = sandbox.stub(LocationEntity, 'findByPk');
+      findByPkStub.resolves(existingEntity);
+
+      const locationData = new EventLocation('', 'New Name');
+      const result = await service.updateLocation(calendar, 'loc-1', locationData);
+
+      expect(result).toBeNull();
+    });
+
+    it('should throw error if name is empty', async () => {
+      const calendar = new Calendar('cal-1', 'testcal');
+      const existingEntity = LocationEntity.build({
+        id: 'loc-1',
+        calendar_id: 'cal-1',
+        name: 'Old Name',
+      });
+
+      const findByPkStub = sandbox.stub(LocationEntity, 'findByPk');
+      findByPkStub.resolves(existingEntity);
+
+      const locationData = new EventLocation('', '');
+      await expect(service.updateLocation(calendar, 'loc-1', locationData))
+        .rejects.toThrow('Location name is required');
+    });
+
+    it('should update content for existing languages', async () => {
+      const calendar = new Calendar('cal-1', 'testcal');
+      const existingEntity = LocationEntity.build({
+        id: 'loc-1',
+        calendar_id: 'cal-1',
+        name: 'Venue',
+      });
+
+      const findByPkStub = sandbox.stub(LocationEntity, 'findByPk');
+      findByPkStub.resolves(existingEntity);
+      sandbox.stub(existingEntity, 'update').resolves(existingEntity);
+
+      const destroyStub = sandbox.stub(LocationContentEntity, 'destroy').resolves(1);
+      const saveStub = sandbox.stub(LocationContentEntity.prototype, 'save').resolves();
+
+      const getLocationByIdStub = sandbox.stub(service, 'getLocationById');
+      const updatedLocation = new EventLocation('loc-1', 'Venue');
+      const content = new EventLocationContent('en', 'Wheelchair accessible');
+      updatedLocation.addContent(content);
+      getLocationByIdStub.resolves(updatedLocation);
+
+      const locationData = new EventLocation('loc-1', 'Venue');
+      locationData.addContent(new EventLocationContent('en', 'Wheelchair accessible'));
+
+      const result = await service.updateLocation(calendar, 'loc-1', locationData);
+
+      expect(result).toBeDefined();
+      expect(destroyStub.called).toBe(true);
+    });
+  });
+
+  describe('deleteLocation', () => {
+
+    it('should delete a location and nullify event references', async () => {
+      const calendar = new Calendar('cal-1', 'testcal');
+      const existingEntity = LocationEntity.build({
+        id: 'loc-1',
+        calendar_id: 'cal-1',
+        name: 'Old Venue',
+      });
+
+      const findByPkStub = sandbox.stub(LocationEntity, 'findByPk');
+      findByPkStub.resolves(existingEntity);
+
+      const eventUpdateStub = sandbox.stub(EventEntity, 'update').resolves([2]);
+      const contentDestroyStub = sandbox.stub(LocationContentEntity, 'destroy').resolves(1);
+      const destroyStub = sandbox.stub(existingEntity, 'destroy').resolves();
+
+      const result = await service.deleteLocation(calendar, 'loc-1');
+
+      expect(result).toBe(true);
+      expect(eventUpdateStub.called).toBe(true);
+      expect(eventUpdateStub.firstCall.args[0]).toEqual({ location_id: null });
+      expect(eventUpdateStub.firstCall.args[1].where).toEqual({ location_id: 'loc-1' });
+      expect(contentDestroyStub.called).toBe(true);
+      expect(destroyStub.called).toBe(true);
+    });
+
+    it('should return false if location not found', async () => {
+      const calendar = new Calendar('cal-1', 'testcal');
+      const findByPkStub = sandbox.stub(LocationEntity, 'findByPk');
+      findByPkStub.resolves(null);
+
+      const result = await service.deleteLocation(calendar, 'nonexistent');
+
+      expect(result).toBe(false);
+    });
+
+    it('should return false if location belongs to different calendar', async () => {
+      const calendar = new Calendar('cal-1', 'testcal');
+      const existingEntity = LocationEntity.build({
+        id: 'loc-1',
+        calendar_id: 'other-cal',
+        name: 'Venue',
+      });
+
+      const findByPkStub = sandbox.stub(LocationEntity, 'findByPk');
+      findByPkStub.resolves(existingEntity);
+
+      const result = await service.deleteLocation(calendar, 'loc-1');
+
+      expect(result).toBe(false);
+    });
+  });
 });

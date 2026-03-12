@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { onBeforeMount, reactive, ref, watch, computed, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
@@ -20,6 +20,9 @@ import { useBulkSelection } from '@/client/composables/useBulkSelection';
 import { useCalendarStore } from '@/client/stores/calendarStore';
 import { useCategoryStore } from '@/client/stores/categoryStore';
 import RepostCategoriesModal from '@/client/components/logged_in/repost-categories-modal.vue';
+import CategoriesTab from '@/client/components/logged_in/calendar-management/categories.vue';
+import SeriesTab from '@/client/components/logged_in/calendar-management/series.vue';
+import PlacesTab from '@/client/components/logged_in/calendar/places-tab.vue';
 
 const { t } = useTranslation('calendars',{
   keyPrefix: 'calendar',
@@ -53,6 +56,80 @@ const state = reactive({
 const calendarUrlName = computed(() => route.params.calendar);
 const store = useEventStore();
 const calendarService = new CalendarService();
+
+// Tab state
+const ORDERED_TABS = ['events', 'places', 'categories', 'series'];
+
+/**
+ * Resolves the active tab from the URL query parameter.
+ * Falls back to 'events' if the tab parameter is missing or invalid.
+ */
+const resolveActiveTab = () => {
+  const tabParam = route.query.tab;
+  if (typeof tabParam === 'string' && ORDERED_TABS.includes(tabParam)) {
+    return tabParam;
+  }
+  return 'events';
+};
+
+const activeTab = ref(resolveActiveTab());
+
+/**
+ * Activates a tab and syncs the state to the URL query parameter.
+ * Preserves all existing query parameters (search, categories, etc.).
+ *
+ * @param tab - The tab identifier to activate
+ */
+const activateTab = (tab: string) => {
+  activeTab.value = tab;
+
+  const query = { ...route.query };
+
+  if (tab === 'events') {
+    delete query.tab;
+  }
+  else {
+    query.tab = tab;
+  }
+
+  router.replace({
+    name: route.name,
+    params: route.params,
+    query,
+  });
+};
+
+/**
+ * Handles arrow key navigation within the tab list per ARIA APG tabs pattern.
+ * Supports ArrowLeft, ArrowRight, Home, and End keys with roving tabindex.
+ *
+ * @param event - The keyboard event from the tablist
+ */
+const handleTabKeydown = (event: KeyboardEvent) => {
+  const currentIndex = ORDERED_TABS.indexOf(activeTab.value);
+  let newIndex = currentIndex;
+  if (event.key === 'ArrowRight') {
+    newIndex = (currentIndex + 1) % ORDERED_TABS.length;
+  }
+  else if (event.key === 'ArrowLeft') {
+    newIndex = (currentIndex - 1 + ORDERED_TABS.length) % ORDERED_TABS.length;
+  }
+  else if (event.key === 'Home') {
+    newIndex = 0;
+  }
+  else if (event.key === 'End') {
+    newIndex = ORDERED_TABS.length - 1;
+  }
+  else {
+    return;
+  }
+  event.preventDefault();
+  const targetTab = document.getElementById(`${ORDERED_TABS[newIndex]}-tab`);
+  if (targetTab) {
+    targetTab.focus();
+    activateTab(ORDERED_TABS[newIndex]);
+  }
+};
 
 // Computed property to get events for the current calendar
 const calendarEvents = computed(() => store.eventsForCalendar(state.calendar?.id));
@@ -151,7 +228,7 @@ const initializeFiltersFromURL = () => {
  * - Empty search: Removes search parameter from URL
  * - Selected categories: Adds/updates ?categories=id1,id2 parameter
  * - No categories: Removes categories parameter from URL
- * - Preserves: All other existing query parameters
+ * - Preserves: All other existing query parameters (including ?tab=)
  *
  * @example
  * // Current URL: /calendar/my-calendar
@@ -407,8 +484,7 @@ const handleCategoryDialogClose = () => {
 };
 
 const handleAssignmentComplete = (result) => {
-  // Show success message or handle completion
-  console.log(`Successfully assigned ${result.categoryCount} categories to ${result.eventCount} events`);
+  toast.success(tBulk('delete_success', { count: result.eventCount }));
   deselectAll(); // Clear selection after successful assignment
 };
 
@@ -529,15 +605,14 @@ const getRecurrenceText = (event) => {
   const schedule = event.schedules[0];
   const frequency = schedule.frequency;
 
-  // Simple recurrence labels
   const labels = {
-    daily: 'Repeats daily',
-    weekly: 'Repeats weekly',
-    monthly: 'Repeats monthly',
-    yearly: 'Repeats yearly',
+    daily: t('recurrence_daily'),
+    weekly: t('recurrence_weekly'),
+    monthly: t('recurrence_monthly'),
+    yearly: t('recurrence_yearly'),
   };
 
-  return labels[frequency] || 'Recurring event';
+  return labels[frequency] || t('recurrence_generic');
 };
 
 // Check if any filters are currently active
@@ -604,7 +679,7 @@ const selectAllAriaLabel = computed(() => {
                 <PillButton
                   variant="ghost"
                   @click="navigate"
-                  :aria-label="`Manage calendar: ${state.calendar.urlName}`"
+                  :aria-label="t('manage_calendar_label', { name: state.calendar.urlName })"
                 >
                   {{ t('manage_calendar') }}
                 </PillButton>
@@ -619,142 +694,267 @@ const selectAllAriaLabel = computed(() => {
             </div>
           </div>
 
-          <!-- Search and Filter Controls -->
-          <SearchFilter
-            v-if="state.calendar && (calendarEvents.length > 0 || hasActiveFilters)"
-            :calendar-id="state.calendar?.id"
-            :initial-filters="initialFilters"
-            @filters-changed="handleFiltersChanged"
-          />
+          <!-- Tab Navigation -->
+          <nav
+            role="tablist"
+            :aria-label="t('tabs_label')"
+            class="calendar-tabs"
+            @keydown="handleTabKeydown"
+          >
+            <button
+              id="events-tab"
+              type="button"
+              role="tab"
+              :aria-selected="activeTab === 'events' ? 'true' : 'false'"
+              aria-controls="events-panel"
+              :tabindex="activeTab === 'events' ? 0 : -1"
+              class="calendar-tab"
+              @click="activateTab('events')"
+            >
+              {{ t('tab_events') }}
+            </button>
+            <button
+              id="places-tab"
+              type="button"
+              role="tab"
+              :aria-selected="activeTab === 'places' ? 'true' : 'false'"
+              aria-controls="places-panel"
+              :tabindex="activeTab === 'places' ? 0 : -1"
+              class="calendar-tab"
+              @click="activateTab('places')"
+            >
+              {{ t('tab_places') }}
+            </button>
+            <button
+              id="categories-tab"
+              type="button"
+              role="tab"
+              :aria-selected="activeTab === 'categories' ? 'true' : 'false'"
+              aria-controls="categories-panel"
+              :tabindex="activeTab === 'categories' ? 0 : -1"
+              class="calendar-tab"
+              @click="activateTab('categories')"
+            >
+              {{ t('tab_categories') }}
+            </button>
+            <button
+              id="series-tab"
+              type="button"
+              role="tab"
+              :aria-selected="activeTab === 'series' ? 'true' : 'false'"
+              aria-controls="series-panel"
+              :tabindex="activeTab === 'series' ? 0 : -1"
+              class="calendar-tab"
+              @click="activateTab('series')"
+            >
+              {{ t('tab_series') }}
+            </button>
+          </nav>
         </div>
       </header>
 
-      <!-- Loading State -->
-      <div v-if="state.isLoading" class="loading-state">
-        Loading events...
-      </div>
+      <!-- Tab Panels -->
 
-      <!-- Events Display Section -->
-      <section v-if="!state.isLoading && calendarEvents && calendarEvents.length > 0"
-               aria-label="Calendar Events"
-               :class="{ 'has-bulk-toolbar': hasSelection }">
-        <h2 class="sr-only">Events in this Calendar</h2>
+      <!-- Events Tab Panel -->
+      <div
+        id="events-panel"
+        role="tabpanel"
+        aria-labelledby="events-tab"
+        :aria-hidden="activeTab !== 'events'"
+        v-show="activeTab === 'events'"
+        class="calendar-panel"
+        tabindex="-1"
+      >
+        <!-- Search and Filter Controls -->
+        <SearchFilter
+          v-if="state.calendar && (calendarEvents.length > 0 || hasActiveFilters)"
+          :calendar-id="state.calendar?.id"
+          :initial-filters="initialFilters"
+          @filters-changed="handleFiltersChanged"
+        />
 
-        <!-- Select All Controls -->
-        <div class="event-controls">
-          <label class="select-all-control">
-            <input
-              type="checkbox"
-              :checked="selectAllState(calendarEvents).checked"
-              :indeterminate="selectAllState(calendarEvents).indeterminate"
-              @change="toggleSelectAll(calendarEvents)"
-              :aria-label="selectAllAriaLabel"
-            />
-            <span>{{ selectAllVisibleLabel }}</span>
-          </label>
+        <!-- Loading State -->
+        <div
+          v-if="state.isLoading"
+          class="loading-state"
+          role="status"
+          aria-live="polite"
+        >
+          {{ t('loading_events') }}
         </div>
 
-        <ul class="event-list" role="list">
-          <li v-for="event in calendarEvents"
-              :key="event.id"
-              class="event-item"
-              :class="{ selected: isEventSelected(event) }"
-              role="listitem">
-            <div class="event-checkbox">
+        <!-- Events Display Section -->
+        <section v-if="!state.isLoading && calendarEvents && calendarEvents.length > 0"
+                 :aria-label="t('events_section_label')"
+                 :class="{ 'events-section': true, 'has-bulk-toolbar': hasSelection }">
+          <h2 class="sr-only">{{ t('events_heading') }}</h2>
+
+          <!-- Select All Controls -->
+          <div class="event-controls">
+            <label class="select-all-control">
               <input
                 type="checkbox"
-                :checked="isEventSelected(event)"
-                @change.stop="toggleEventSelection(event)"
-                :aria-label="`Select event: ${event.content('en').name}`"
+                :checked="selectAllState(calendarEvents).checked"
+                :indeterminate="selectAllState(calendarEvents).indeterminate"
+                @change="toggleSelectAll(calendarEvents)"
+                :aria-label="selectAllAriaLabel"
               />
-            </div>
-            <article
-              :aria-labelledby="`event-title-${event.id}`"
-              @click="handleEditEvent(event, $event)"
-              class="event-article"
-            >
-              <EventImage :media="event.media" size="small" />
-              <div class="event-content">
-                <div class="event-title-row">
-                  <h3 :id="`event-title-${event.id}`">{{ event.content("en").name }}</h3>
-                  <span v-if="event.isRepost" class="repost-badge">
-                    <span class="sr-only">{{ tFeed('events.repost_badge_prefix') }}</span>{{ tFeed('events.repost_button') }}
-                  </span>
-                  <span v-if="event.languages && event.languages.length > 1" class="language-count">
-                    <Languages :size="16" />
-                    {{ event.languages.length }} languages
-                  </span>
-                </div>
-                <div v-if="formatEventDate(event)" class="event-date">
-                  <Calendar :size="16" class="date-icon" />
-                  <span class="date-text">{{ formatEventDate(event) }}</span>
-                  <span v-if="isRecurring(event)" class="recurrence-badge">
-                    <Repeat :size="14" />
-                    {{ getRecurrenceText(event) }}
-                  </span>
-                </div>
-                <p v-if="event.content('en').description" class="event-description">{{ event.content("en").description }}</p>
-                <ul v-if="event.categories && event.categories.length > 0" class="event-categories" role="list">
-                  <li v-for="category in event.categories"
-                      :key="category.id"
-                      class="category-badge">
-                    {{ category.content('en').name }}
-                  </li>
-                </ul>
-                <div v-if="event.series" class="series-badge-wrapper">
-                  <span class="series-badge">
-                    <span class="sr-only">{{ t('series_badge_label') }}</span>
-                    {{ event.series.content('en')?.name || event.series.urlName }}
-                  </span>
-                </div>
+              <span>{{ selectAllVisibleLabel }}</span>
+            </label>
+          </div>
+
+          <ul class="event-list" role="list">
+            <li v-for="event in calendarEvents"
+                :key="event.id"
+                class="event-item"
+                :class="{ selected: isEventSelected(event) }"
+                role="listitem">
+              <div class="event-checkbox">
+                <input
+                  type="checkbox"
+                  :checked="isEventSelected(event)"
+                  @change.stop="toggleEventSelection(event)"
+                  :aria-label="`Select event: ${event.content('en').name}`"
+                />
               </div>
-            </article>
-            <div class="event-actions">
-              <button
-                type="button"
-                class="edit-btn icon-btn"
-                @click.stop="handleEditButtonClick(event, $event)"
-                :aria-label="t('event.edit_label', { name: event.content('en').name })"
-                title="Edit this event"
+              <article
+                :aria-labelledby="`event-title-${event.id}`"
+                @click="handleEditEvent(event, $event)"
+                class="event-article"
               >
-                <Pencil :size="18" />
-              </button>
-              <button
-                type="button"
-                class="duplicate-btn icon-btn"
-                @click.stop="handleDuplicateEvent(event)"
-                :aria-label="t('event.duplicate_label', { name: event.content('en').name })"
-                :title="t('event.duplicate_label', { name: event.content('en').name })"
-              >
-                <Copy :size="18" />
-              </button>
-              <button
-                type="button"
-                class="report-btn icon-btn"
-                @click.stop="handleReportEvent(event)"
-                :aria-label="tReport('report_event_label')"
-                :title="tReport('report_button')"
-              >
-                <Flag :size="18" />
-              </button>
-            </div>
-          </li>
-        </ul>
-      </section>
+                <EventImage :media="event.media" size="small" />
+                <div class="event-content">
+                  <div class="event-title-row">
+                    <h3 :id="`event-title-${event.id}`">{{ event.content("en").name }}</h3>
+                    <span v-if="event.isRepost" class="repost-badge">
+                      <span class="sr-only">{{ tFeed('events.repost_badge_prefix') }}</span>{{ tFeed('events.repost_button') }}
+                    </span>
+                    <span v-if="event.languages && event.languages.length > 1" class="language-count">
+                      <Languages :size="16" />
+                      {{ t('language_count', { count: event.languages.length }) }}
+                    </span>
+                  </div>
+                  <div v-if="formatEventDate(event)" class="event-date">
+                    <Calendar :size="16" class="date-icon" />
+                    <span class="date-text">{{ formatEventDate(event) }}</span>
+                    <span v-if="isRecurring(event)" class="recurrence-badge">
+                      <Repeat :size="14" />
+                      {{ getRecurrenceText(event) }}
+                    </span>
+                  </div>
+                  <p v-if="event.content('en').description" class="event-description">{{ event.content("en").description }}</p>
+                  <ul v-if="event.categories && event.categories.length > 0" class="event-categories" role="list">
+                    <li v-for="category in event.categories"
+                        :key="category.id"
+                        class="category-badge">
+                      {{ category.content('en').name }}
+                    </li>
+                  </ul>
+                  <div v-if="event.series" class="series-badge-wrapper">
+                    <span class="series-badge">
+                      <span class="sr-only">{{ t('series_badge_label') }}</span>
+                      {{ event.series.content('en')?.name || event.series.urlName }}
+                    </span>
+                  </div>
+                </div>
+              </article>
+              <div class="event-actions">
+                <button
+                  type="button"
+                  class="edit-btn icon-btn"
+                  @click.stop="handleEditButtonClick(event, $event)"
+                  :aria-label="t('event.edit_label', { name: event.content('en').name })"
+                  title="Edit this event"
+                >
+                  <Pencil :size="18" />
+                </button>
+                <button
+                  type="button"
+                  class="duplicate-btn icon-btn"
+                  @click.stop="handleDuplicateEvent(event)"
+                  :aria-label="t('event.duplicate_label', { name: event.content('en').name })"
+                  :title="t('event.duplicate_label', { name: event.content('en').name })"
+                >
+                  <Copy :size="18" />
+                </button>
+                <button
+                  type="button"
+                  class="report-btn icon-btn"
+                  @click.stop="handleReportEvent(event)"
+                  :aria-label="tReport('report_event_label')"
+                  :title="tReport('report_button')"
+                >
+                  <Flag :size="18" />
+                </button>
+              </div>
+            </li>
+          </ul>
+        </section>
 
-      <!-- Empty State: No results from filters -->
-      <EmptyLayout v-else-if="!state.isLoading && hasActiveFilters && (!calendarEvents || calendarEvents.length === 0)"
-                   title="No events found"
-                   description="No events match your current search criteria. Try adjusting your filters or clearing them to see all events." />
+        <!-- Empty State: No results from filters -->
+        <EmptyLayout v-else-if="!state.isLoading && hasActiveFilters && (!calendarEvents || calendarEvents.length === 0)"
+                     :title="t('no_events_filtered_title')"
+                     :description="t('no_events_filtered_description')" />
 
-      <!-- Empty State: No events at all -->
-      <EmptyLayout v-else-if="!state.isLoading && !hasActiveFilters && (!calendarEvents || calendarEvents.length === 0)"
-                   :title="t('noEvents')"
-                   :description="t('noEventsDescription')">
-        <PillButton variant="primary" @click="newEvent()">
-          {{ t('createEvent') }}
-        </PillButton>
-      </EmptyLayout>
+        <!-- Empty State: No events at all -->
+        <EmptyLayout v-else-if="!state.isLoading && !hasActiveFilters && (!calendarEvents || calendarEvents.length === 0)"
+                     :title="t('noEvents')"
+                     :description="t('noEventsDescription')">
+          <PillButton variant="primary" @click="newEvent()">
+            {{ t('createEvent') }}
+          </PillButton>
+        </EmptyLayout>
+      </div>
+
+      <!-- Places Tab Panel -->
+      <div
+        id="places-panel"
+        role="tabpanel"
+        aria-labelledby="places-tab"
+        :aria-hidden="activeTab !== 'places'"
+        v-show="activeTab === 'places'"
+        class="calendar-panel"
+        tabindex="-1"
+      >
+        <PlacesTab
+          v-if="state.calendar"
+          :calendar-id="state.calendar.id"
+          :calendar-url-name="state.calendar.urlName"
+        />
+      </div>
+
+      <!-- Categories Tab Panel -->
+      <div
+        id="categories-panel"
+        role="tabpanel"
+        aria-labelledby="categories-tab"
+        :aria-hidden="activeTab !== 'categories'"
+        v-show="activeTab === 'categories'"
+        class="calendar-panel"
+        tabindex="-1"
+      >
+        <CategoriesTab
+          v-if="state.calendar"
+          :calendar-id="state.calendar.id"
+        />
+      </div>
+
+      <!-- Series Tab Panel -->
+      <div
+        id="series-panel"
+        role="tabpanel"
+        aria-labelledby="series-tab"
+        :aria-hidden="activeTab !== 'series'"
+        v-show="activeTab === 'series'"
+        class="calendar-panel"
+        tabindex="-1"
+      >
+        <SeriesTab
+          v-if="state.calendar"
+          :calendar-id="state.calendar.id"
+          :calendar-url-name="state.calendar.urlName"
+        />
+      </div>
     </div>
 
     <!-- Bulk Operations Menu -->
@@ -825,6 +1025,8 @@ const selectAllAriaLabel = computed(() => {
 </template>
 
 <style scoped lang="scss">
+@use '@/client/assets/style/mixins/tabs' as *;
+
 /* Screen reader only class for accessibility */
 .sr-only {
   position: absolute;
@@ -851,7 +1053,7 @@ const selectAllAriaLabel = computed(() => {
     background: rgba(28, 25, 23, 0.8); // Stone-900 with opacity
   }
 
-  padding: 1.5rem 1rem;
+  padding: 1.5rem 1rem 0;
   border-bottom: 1px solid var(--pav-color-stone-200);
 
   @media (prefers-color-scheme: dark) {
@@ -863,7 +1065,7 @@ const selectAllAriaLabel = computed(() => {
     margin: 0 auto;
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
+    gap: 1rem;
   }
 
   .header-title-section {
@@ -890,6 +1092,15 @@ const selectAllAriaLabel = computed(() => {
     }
   }
 
+  .calendar-tabs {
+    @include tab-navigation;
+    margin-bottom: 0;
+  }
+
+  .calendar-tab {
+    @include tab-button;
+  }
+
   @media (max-width: 768px) {
     .header-title-section {
       flex-direction: column;
@@ -906,11 +1117,21 @@ const selectAllAriaLabel = computed(() => {
   }
 }
 
-/* Events section with new design system */
-section[aria-label="Calendar Events"] {
-  max-width: 56rem; // max-w-4xl
+/* Tab panel content area */
+.calendar-panel {
+  max-width: 56rem;
   margin: 0 auto;
-  padding: 1.5rem 1rem;
+  padding: 0 1rem;
+
+  &:focus {
+    outline: 2px solid var(--pav-color-orange-500);
+    outline-offset: -2px;
+  }
+}
+
+/* Events section with new design system */
+.events-section {
+  padding: 1.5rem 0;
 
   &.has-bulk-toolbar {
     // Add clearance so the last event card is not obscured by the fixed bulk toolbar.

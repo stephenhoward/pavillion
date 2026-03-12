@@ -3,7 +3,9 @@ import config from 'config';
 
 import { Calendar } from '@/common/model/calendar';
 import { EventLocation } from '@/common/model/location';
+import { LocationValidationError } from '@/common/exceptions/calendar';
 import { LocationEntity, LocationContentEntity } from '@/server/calendar/entity/location';
+import { EventEntity } from '@/server/calendar/entity/event';
 
 export default class LocationService {
   /**
@@ -100,12 +102,12 @@ export default class LocationService {
    * @param calendar - The calendar that will own the location
    * @param location - The location model to create (with optional content)
    * @returns Created EventLocation model
-   * @throws Error if location name is empty
+   * @throws LocationValidationError if location name is empty
    */
   async createLocation(calendar: Calendar, location: EventLocation): Promise<EventLocation> {
     // Validate required fields
     if (!location.name || location.name.trim().length === 0) {
-      throw new Error('Location name is required');
+      throw new LocationValidationError(['Location name is required']);
     }
 
     // Create location entity
@@ -131,6 +133,87 @@ export default class LocationService {
   }
 
   /**
+   * Update an existing location's fields and content.
+   *
+   * @param calendar - The calendar that should own the location
+   * @param locationId - The ID of the location to update
+   * @param location - The location model with updated data
+   * @returns Updated EventLocation model, or null if not found or not owned by calendar
+   * @throws LocationValidationError if location name is empty
+   */
+  async updateLocation(calendar: Calendar, locationId: string, location: EventLocation): Promise<EventLocation | null> {
+    const entity = await LocationEntity.findByPk(locationId);
+
+    if (!entity || entity.calendar_id !== calendar.id) {
+      return null;
+    }
+
+    // Validate required fields
+    if (!location.name || location.name.trim().length === 0) {
+      throw new LocationValidationError(['Location name is required']);
+    }
+
+    // Update location fields
+    await entity.update({
+      name: location.name,
+      address: location.address,
+      city: location.city,
+      state: location.state,
+      postal_code: location.postalCode,
+      country: location.country,
+    });
+
+    // Replace content: delete existing, then create new
+    await LocationContentEntity.destroy({
+      where: { location_id: locationId },
+    });
+
+    const languages = location.getLanguages();
+    if (languages.length > 0) {
+      for (const language of languages) {
+        const content = location.content(language);
+        if (!content.isEmpty()) {
+          const contentEntity = LocationContentEntity.fromModel(locationId, content);
+          await contentEntity.save();
+        }
+      }
+    }
+
+    return this.getLocationById(calendar, locationId);
+  }
+
+  /**
+   * Delete a location and nullify location_id on associated events.
+   *
+   * @param calendar - The calendar that should own the location
+   * @param locationId - The ID of the location to delete
+   * @returns True if the location was deleted, false if not found or not owned by calendar
+   */
+  async deleteLocation(calendar: Calendar, locationId: string): Promise<boolean> {
+    const entity = await LocationEntity.findByPk(locationId);
+
+    if (!entity || entity.calendar_id !== calendar.id) {
+      return false;
+    }
+
+    // Nullify location_id on associated events
+    await EventEntity.update(
+      { location_id: null },
+      { where: { location_id: locationId } },
+    );
+
+    // Delete content entities
+    await LocationContentEntity.destroy({
+      where: { location_id: locationId },
+    });
+
+    // Delete the location entity
+    await entity.destroy();
+
+    return true;
+  }
+
+  /**
    * Find an existing location or create a new one if not found.
    *
    * Attempts to find a matching location by ID or attributes. If no match is found,
@@ -140,7 +223,7 @@ export default class LocationService {
    * @param calendar - The calendar that should own the location
    * @param locationParams - Raw location data object (will be converted to EventLocation)
    * @returns Existing or newly created EventLocation model
-   * @throws Error if location name is empty when creating
+   * @throws LocationValidationError if location name is empty when creating
    */
   async findOrCreateLocation(calendar: Calendar, locationParams: Record<string,any>): Promise<EventLocation> {
     let location = await this.findLocation(calendar, EventLocation.fromObject(locationParams));
