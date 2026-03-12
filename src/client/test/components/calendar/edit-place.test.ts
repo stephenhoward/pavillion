@@ -120,6 +120,15 @@ describe('EditPlaceView', () => {
       expect(wrapper.find('#place-postal-code').exists()).toBe(true);
     });
 
+    it('should display a visible required indicator on the name field label', async () => {
+      const wrapper = await createWrapper();
+      const nameLabel = wrapper.find('label[for="place-name"]');
+      expect(nameLabel.exists()).toBe(true);
+      const indicator = nameLabel.find('.required-indicator');
+      expect(indicator.exists()).toBe(true);
+      expect(indicator.text()).toBe('*');
+      expect(indicator.attributes('aria-hidden')).toBe('true');
+    });
     it('should render accessibility info textarea', async () => {
       const wrapper = await createWrapper();
       const textarea = wrapper.find('[id^="place-accessibility-"]');
@@ -283,6 +292,53 @@ describe('EditPlaceView', () => {
 
       // Error should be gone
       expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+    });
+
+    it('should have tabindex="-1" on error container for programmatic focus', async () => {
+      const wrapper = await createWrapper();
+
+      await wrapper.find('form').trigger('submit');
+      await flushPromises();
+
+      const error = wrapper.find('[role="alert"]');
+      expect(error.exists()).toBe(true);
+      expect(error.attributes('tabindex')).toBe('-1');
+    });
+
+    it('should move focus to error container when save fails', async () => {
+      const focusSpy = vi.spyOn(HTMLElement.prototype, 'focus');
+      mockCreateLocation.mockRejectedValueOnce(new Error('Server error'));
+      const wrapper = await createWrapper();
+
+      await wrapper.find('#place-name').setValue('New Place');
+      await wrapper.find('form').trigger('submit');
+      await flushPromises();
+
+      const error = wrapper.find('[role="alert"]');
+      expect(error.exists()).toBe(true);
+      expect(focusSpy).toHaveBeenCalled();
+      const focusedElements = focusSpy.mock.instances.filter(
+        (el) => el === error.element,
+      );
+      expect(focusedElements.length).toBeGreaterThan(0);
+      focusSpy.mockRestore();
+    });
+
+    it('should move focus to error container on validation error', async () => {
+      const focusSpy = vi.spyOn(HTMLElement.prototype, 'focus');
+      const wrapper = await createWrapper();
+
+      await wrapper.find('form').trigger('submit');
+      await flushPromises();
+
+      const error = wrapper.find('[role="alert"]');
+      expect(error.exists()).toBe(true);
+      expect(focusSpy).toHaveBeenCalled();
+      const focusedElements = focusSpy.mock.instances.filter(
+        (el) => el === error.element,
+      );
+      expect(focusedElements.length).toBeGreaterThan(0);
+      focusSpy.mockRestore();
     });
   });
 

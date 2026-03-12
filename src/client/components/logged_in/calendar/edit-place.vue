@@ -266,6 +266,10 @@ form {
   }
 }
 
+.required-indicator {
+  color: var(--pav-color-red-500);
+  margin-inline-start: var(--pav-space-1);
+}
 .field-input,
 .field-textarea {
   padding: 0.625rem 0.875rem;
@@ -428,7 +432,8 @@ form {
              ref="errorContainer"
              class="error"
              role="alert"
-             aria-live="polite">
+             aria-live="polite"
+             tabindex="-1">
           <button
             class="error-dismiss"
             type="button"
@@ -455,7 +460,7 @@ form {
             <div class="section-card">
               <div class="place-fields">
                 <div class="form-field">
-                  <label for="place-name" class="field-label">{{ t('field_name') }}</label>
+                  <label for="place-name" class="field-label">{{ t('field_name') }} <span class="required-indicator" aria-hidden="true">*</span></label>
                   <input
                     id="place-name"
                     type="text"
@@ -615,6 +620,7 @@ watch(() => state.error, async (newError) => {
   if (newError) {
     await nextTick();
     errorContainer.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    errorContainer.value?.focus();
   }
 });
 
@@ -694,13 +700,13 @@ function populateFormFromLocation(location: EventLocation) {
   formData.postalCode = location.postalCode;
 
   // Populate accessibility info from content
-  const contentLanguages = Object.keys(location._content);
+  const contentLanguages = location.getLanguages();
   if (contentLanguages.length > 0) {
     for (const lang of contentLanguages) {
       if (!languages.value.includes(lang)) {
         languages.value.push(lang);
       }
-      accessibilityInfo[lang] = location._content[lang].accessibilityInfo || '';
+      accessibilityInfo[lang] = location.content(lang).accessibilityInfo || '';
     }
     currentLanguage.value = languages.value[0];
   }

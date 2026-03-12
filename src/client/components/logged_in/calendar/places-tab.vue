@@ -165,7 +165,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="vstack stack--lg" :aria-busy="state.isLoading ? 'true': 'false'">
+  <div class="vstack stack--lg" :aria-busy="state.isLoading">
 
     <!-- Error Display -->
     <div
@@ -200,7 +200,7 @@ onMounted(async () => {
           class="place-card"
         >
           <div class="place-icon">
-            <MapPin :size="20" :stroke-width="2" />
+            <MapPin :size="20" :stroke-width="2" aria-hidden="true" />
           </div>
 
           <div class="place-info">

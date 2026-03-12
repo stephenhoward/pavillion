@@ -6,6 +6,7 @@ import { DateTime } from 'luxon';
 import { Calendar, MapPin, Languages, Repeat, Pencil, Copy, Flag } from 'lucide-vue-next';
 import { useEventStore } from '@/client/stores/eventStore';
 import { useToast } from '@/client/composables/useToast';
+import { useTabNavigation } from '@/client/composables/useTabNavigation';
 import CalendarService from '@/client/service/calendar';
 import EventService from '@/client/service/event';
 import EventImage from '@/client/components/common/media/event-image.vue';
@@ -99,37 +100,7 @@ const activateTab = (tab: string) => {
   });
 };
 
-/**
- * Handles arrow key navigation within the tab list per ARIA APG tabs pattern.
- * Supports ArrowLeft, ArrowRight, Home, and End keys with roving tabindex.
- *
- * @param event - The keyboard event from the tablist
- */
-const handleTabKeydown = (event: KeyboardEvent) => {
-  const currentIndex = ORDERED_TABS.indexOf(activeTab.value);
-  let newIndex = currentIndex;
-  if (event.key === 'ArrowRight') {
-    newIndex = (currentIndex + 1) % ORDERED_TABS.length;
-  }
-  else if (event.key === 'ArrowLeft') {
-    newIndex = (currentIndex - 1 + ORDERED_TABS.length) % ORDERED_TABS.length;
-  }
-  else if (event.key === 'Home') {
-    newIndex = 0;
-  }
-  else if (event.key === 'End') {
-    newIndex = ORDERED_TABS.length - 1;
-  }
-  else {
-    return;
-  }
-  event.preventDefault();
-  const targetTab = document.getElementById(`${ORDERED_TABS[newIndex]}-tab`);
-  if (targetTab) {
-    targetTab.focus();
-    activateTab(ORDERED_TABS[newIndex]);
-  }
-};
+const { handleTabKeydown } = useTabNavigation(ORDERED_TABS, activeTab, activateTab);
 
 // Computed property to get events for the current calendar
 const calendarEvents = computed(() => store.eventsForCalendar(state.calendar?.id));
@@ -705,7 +676,7 @@ const selectAllAriaLabel = computed(() => {
               id="events-tab"
               type="button"
               role="tab"
-              :aria-selected="activeTab === 'events' ? 'true' : 'false'"
+              :aria-selected="activeTab === 'events'"
               aria-controls="events-panel"
               :tabindex="activeTab === 'events' ? 0 : -1"
               class="calendar-tab"
@@ -717,7 +688,7 @@ const selectAllAriaLabel = computed(() => {
               id="places-tab"
               type="button"
               role="tab"
-              :aria-selected="activeTab === 'places' ? 'true' : 'false'"
+              :aria-selected="activeTab === 'places'"
               aria-controls="places-panel"
               :tabindex="activeTab === 'places' ? 0 : -1"
               class="calendar-tab"
@@ -729,7 +700,7 @@ const selectAllAriaLabel = computed(() => {
               id="categories-tab"
               type="button"
               role="tab"
-              :aria-selected="activeTab === 'categories' ? 'true' : 'false'"
+              :aria-selected="activeTab === 'categories'"
               aria-controls="categories-panel"
               :tabindex="activeTab === 'categories' ? 0 : -1"
               class="calendar-tab"
@@ -741,7 +712,7 @@ const selectAllAriaLabel = computed(() => {
               id="series-tab"
               type="button"
               role="tab"
-              :aria-selected="activeTab === 'series' ? 'true' : 'false'"
+              :aria-selected="activeTab === 'series'"
               aria-controls="series-panel"
               :tabindex="activeTab === 'series' ? 0 : -1"
               class="calendar-tab"
@@ -830,15 +801,15 @@ const selectAllAriaLabel = computed(() => {
                       <span class="sr-only">{{ tFeed('events.repost_badge_prefix') }}</span>{{ tFeed('events.repost_button') }}
                     </span>
                     <span v-if="event.languages && event.languages.length > 1" class="language-count">
-                      <Languages :size="16" />
+                      <Languages :size="16" aria-hidden="true" />
                       {{ t('language_count', { count: event.languages.length }) }}
                     </span>
                   </div>
                   <div v-if="formatEventDate(event)" class="event-date">
-                    <Calendar :size="16" class="date-icon" />
+                    <Calendar :size="16" class="date-icon" aria-hidden="true" />
                     <span class="date-text">{{ formatEventDate(event) }}</span>
                     <span v-if="isRecurring(event)" class="recurrence-badge">
-                      <Repeat :size="14" />
+                      <Repeat :size="14" aria-hidden="true" />
                       {{ getRecurrenceText(event) }}
                     </span>
                   </div>

@@ -367,4 +367,40 @@ describe('CalendarManagementRoot', () => {
       expect(wrapper.find('.error-message').exists()).toBe(true);
     });
   });
+
+  describe('Breadcrumb accessibility', () => {
+    it('breadcrumb nav has an aria-label attribute', async () => {
+      const info = makeCalendarInfo('my-calendar', 'owner');
+      vi.spyOn(CalendarService.prototype, 'loadCalendarsWithRelationship').mockResolvedValue([info]);
+
+      const { wrapper } = await mountRootComponent('my-calendar');
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      const breadcrumbNav = wrapper.find('.calendar-management-root__breadcrumb');
+      expect(breadcrumbNav.exists()).toBe(true);
+      expect(breadcrumbNav.attributes('aria-label')).toBeTruthy();
+    });
+
+    it('breadcrumb nav and tablist nav have distinct aria-labels', async () => {
+      const info = makeCalendarInfo('my-calendar', 'owner');
+      vi.spyOn(CalendarService.prototype, 'loadCalendarsWithRelationship').mockResolvedValue([info]);
+
+      const { wrapper } = await mountRootComponent('my-calendar');
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      const breadcrumbNav = wrapper.find('.calendar-management-root__breadcrumb');
+      const tablistNav = wrapper.find('[role="tablist"]');
+
+      const breadcrumbLabel = breadcrumbNav.attributes('aria-label');
+      const tablistLabel = tablistNav.attributes('aria-label');
+
+      expect(breadcrumbLabel).toBeTruthy();
+      expect(tablistLabel).toBeTruthy();
+      expect(breadcrumbLabel).not.toBe(tablistLabel);
+    });
+  });
 });

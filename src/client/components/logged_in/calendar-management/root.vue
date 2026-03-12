@@ -2,6 +2,7 @@
 import { reactive, computed, onBeforeMount, ref } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useRoute } from 'vue-router';
+import { useTabNavigation } from '@/client/composables/useTabNavigation';
 import EditorsTab from './editors.vue';
 import SettingsTab from './settings.vue';
 import WidgetTab from './widget-tab.vue';
@@ -78,38 +79,8 @@ const activateTab = (tab: string) => {
   }
 };
 
-/**
- * Handles arrow key navigation within the tab list per ARIA APG tabs pattern.
- * Supports ArrowLeft, ArrowRight, Home, and End keys with roving tabindex.
- *
- * @param event - The keyboard event from the tablist
- */
-const handleTabKeydown = (event: KeyboardEvent) => {
-  const tabs = visibleTabs.value;
-  const currentIndex = tabs.indexOf(state.activeTab);
-  let newIndex = currentIndex;
-  if (event.key === 'ArrowRight') {
-    newIndex = (currentIndex + 1) % tabs.length;
-  }
-  else if (event.key === 'ArrowLeft') {
-    newIndex = (currentIndex - 1 + tabs.length) % tabs.length;
-  }
-  else if (event.key === 'Home') {
-    newIndex = 0;
-  }
-  else if (event.key === 'End') {
-    newIndex = tabs.length - 1;
-  }
-  else {
-    return;
-  }
-  event.preventDefault();
-  const targetTab = document.getElementById(`${tabs[newIndex]}-tab`);
-  if (targetTab) {
-    targetTab.focus();
-    activateTab(tabs[newIndex]);
-  }
-};
+const activeTabRef = computed(() => state.activeTab);
+const { handleTabKeydown } = useTabNavigation(visibleTabs, activeTabRef, activateTab);
 
 /**
  * Navigates to the report detail view within the reports tab.
@@ -144,7 +115,7 @@ const backToReports = () => {
       <header class="calendar-management-root__header">
         <div class="calendar-management-root__header-content">
           <div class="calendar-management-root__header-top">
-            <nav class="calendar-management-root__breadcrumb">
+            <nav class="calendar-management-root__breadcrumb" :aria-label="t('breadcrumb_label')">
               <span class="calendar-management-root__breadcrumb-item">{{ calendar.urlName }}</span>
               <span class="calendar-management-root__breadcrumb-separator">/</span>
               <span class="calendar-management-root__breadcrumb-item">{{ t('breadcrumb_settings') }}</span>
@@ -162,7 +133,7 @@ const backToReports = () => {
               id="editors-tab"
               type="button"
               role="tab"
-              :aria-selected="state.activeTab === 'editors' ? 'true' : 'false'"
+              :aria-selected="state.activeTab === 'editors'"
               aria-controls="editors-panel"
               :tabindex="state.activeTab === 'editors' ? 0 : -1"
               class="calendar-management-root__tab"
@@ -175,7 +146,7 @@ const backToReports = () => {
               id="reports-tab"
               type="button"
               role="tab"
-              :aria-selected="state.activeTab === 'reports' ? 'true' : 'false'"
+              :aria-selected="state.activeTab === 'reports'"
               aria-controls="reports-panel"
               :tabindex="state.activeTab === 'reports' ? 0 : -1"
               class="calendar-management-root__tab"
@@ -188,7 +159,7 @@ const backToReports = () => {
               id="settings-tab"
               type="button"
               role="tab"
-              :aria-selected="state.activeTab === 'settings' ? 'true' : 'false'"
+              :aria-selected="state.activeTab === 'settings'"
               aria-controls="settings-panel"
               :tabindex="state.activeTab === 'settings' ? 0 : -1"
               class="calendar-management-root__tab"
@@ -200,7 +171,7 @@ const backToReports = () => {
               id="widget-tab"
               type="button"
               role="tab"
-              :aria-selected="state.activeTab === 'widget' ? 'true' : 'false'"
+              :aria-selected="state.activeTab === 'widget'"
               aria-controls="widget-panel"
               :tabindex="state.activeTab === 'widget' ? 0 : -1"
               class="calendar-management-root__tab"

@@ -144,6 +144,19 @@ describe('Places Tab Component', () => {
       );
       expect(addButton).toBeTruthy();
     });
+
+    it('hides decorative MapPin icon from accessibility tree', async () => {
+      const locations = [createTestLocation('loc-1', 'Community Center')];
+      vi.spyOn(LocationService.prototype, 'getLocations').mockResolvedValue(locations);
+
+      wrapper = createWrapper();
+      await nextTick();
+      await nextTick();
+
+      const placeIcon = wrapper.find('.place-icon svg');
+      expect(placeIcon.exists()).toBe(true);
+      expect(placeIcon.attributes('aria-hidden')).toBe('true');
+    });
   });
 
   describe('Navigation', () => {

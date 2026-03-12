@@ -167,6 +167,7 @@
         "languages_count_one": "{{count}} language",
         "languages_count_other": "{{count}} languages",
         "places_tab": "Places",
+        "breadcrumb_label": "Breadcrumb",
         "breadcrumb_settings": "settings"
     },
     "places": {

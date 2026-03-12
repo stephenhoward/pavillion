@@ -48,25 +48,19 @@ test.describe('Category Translation Management', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page, env.baseURL);
 
-    // Navigate to category management
+    // Navigate to calendar view
     await page.goto(env.baseURL + '/calendar');
     await page.waitForTimeout(2000);
 
-    // Click "Manage Calendar" button
-    const manageButton = page.getByRole('button', { name: /manage calendar/i });
-    await manageButton.click();
-    await page.waitForTimeout(1000);
-
-    // Ensure Categories tab is active
+    // Click Categories tab on the calendar view page
     const categoriesTab = page.locator('button[role="tab"]:has-text("Categories")');
-    if (await categoriesTab.count() > 0) {
-      await categoriesTab.click();
-    }
+    await categoriesTab.click();
+    await page.waitForTimeout(1000);
   });
 
   test('should add a new language translation to existing category', async ({ page }) => {
     // Click edit on first category
-    const editButton = page.getByRole('button', { name: /edit/i }).first();
+    const editButton = page.locator('#categories-panel .icon-button:not(.icon-button--danger)').first();
     await editButton.click();
 
     // Wait for edit dialog
@@ -112,13 +106,13 @@ test.describe('Category Translation Management', () => {
     await page.waitForSelector('dialog[open]', { state: 'hidden', timeout: 5000 });
 
     // Verify we're back on the category management page
-    const editButtons = page.getByRole('button', { name: /edit/i });
+    const editButtons = page.locator('#categories-panel .icon-button:not(.icon-button--danger)');
     await expect(editButtons.first()).toBeVisible({ timeout: 5000 });
   });
 
   test('should edit existing language translation', async ({ page }) => {
     // Click edit on first category
-    const editButton = page.getByRole('button', { name: /edit/i }).first();
+    const editButton = page.locator('#categories-panel .icon-button:not(.icon-button--danger)').first();
     await editButton.click();
 
     await page.waitForSelector('dialog[open]', { timeout: 5000 });
@@ -139,7 +133,7 @@ test.describe('Category Translation Management', () => {
     await page.waitForSelector('dialog[open]', { state: 'hidden', timeout: 5000 });
 
     // Verify the change persisted by opening edit dialog again
-    const editButtonAgain = page.getByRole('button', { name: /edit/i }).first();
+    const editButtonAgain = page.locator('#categories-panel .icon-button:not(.icon-button--danger)').first();
     await editButtonAgain.click();
 
     await page.waitForSelector('dialog[open]', { timeout: 5000 });
@@ -154,7 +148,7 @@ test.describe('Category Translation Management', () => {
 
   test('should remove a language translation', async ({ page }) => {
     // Open edit dialog
-    const editButton = page.getByRole('button', { name: /edit/i }).first();
+    const editButton = page.locator('#categories-panel .icon-button:not(.icon-button--danger)').first();
     await editButton.click();
     await page.waitForSelector('dialog[open]', { timeout: 5000 });
 
@@ -230,7 +224,7 @@ test.describe('Category Translation Management', () => {
 
   test('should cancel edit without saving changes', async ({ page }) => {
     // Click edit on first category
-    const editButton = page.getByRole('button', { name: /edit/i }).first();
+    const editButton = page.locator('#categories-panel .icon-button:not(.icon-button--danger)').first();
     await editButton.click();
     await page.waitForSelector('dialog[open]', { timeout: 5000 });
 
@@ -251,7 +245,7 @@ test.describe('Category Translation Management', () => {
     await page.waitForSelector('dialog[open]', { state: 'hidden', timeout: 5000 });
 
     // Open edit dialog again to verify change was not saved
-    const editButtonAgain = page.getByRole('button', { name: /edit/i }).first();
+    const editButtonAgain = page.locator('#categories-panel .icon-button:not(.icon-button--danger)').first();
     await editButtonAgain.click();
     await page.waitForSelector('dialog[open]', { timeout: 5000 });
 
@@ -261,7 +255,7 @@ test.describe('Category Translation Management', () => {
 
   test('should close edit dialog with X button without saving', async ({ page }) => {
     // Click edit on first category
-    const editButton = page.getByRole('button', { name: /edit/i }).first();
+    const editButton = page.locator('#categories-panel .icon-button:not(.icon-button--danger)').first();
     await editButton.click();
     await page.waitForSelector('dialog[open]', { timeout: 5000 });
 
@@ -282,7 +276,7 @@ test.describe('Category Translation Management', () => {
     await page.waitForSelector('dialog[open]', { state: 'hidden', timeout: 5000 });
 
     // Open edit dialog again to verify change was not saved
-    const editButtonAgain = page.getByRole('button', { name: /edit/i }).first();
+    const editButtonAgain = page.locator('#categories-panel .icon-button:not(.icon-button--danger)').first();
     await editButtonAgain.click();
     await page.waitForSelector('dialog[open]', { timeout: 5000 });
 
@@ -292,7 +286,7 @@ test.describe('Category Translation Management', () => {
 
   test('should search and filter languages in language picker', async ({ page }) => {
     // Click edit on first category
-    const editButton = page.getByRole('button', { name: /edit/i }).first();
+    const editButton = page.locator('#categories-panel .icon-button:not(.icon-button--danger)').first();
     await editButton.click();
     await page.waitForSelector('dialog[open]', { timeout: 5000 });
 
@@ -335,7 +329,7 @@ test.describe('Category Translation Management', () => {
 
   test('should handle empty category name appropriately', async ({ page }) => {
     // Click edit on first category
-    const editButton = page.getByRole('button', { name: /edit/i }).first();
+    const editButton = page.locator('#categories-panel .icon-button:not(.icon-button--danger)').first();
     await editButton.click();
     await page.waitForSelector('dialog[open]', { timeout: 5000 });
 
@@ -391,7 +385,7 @@ test.describe('Category Translation Management', () => {
   test('should handle language picker workflow', async ({ page }) => {
     // This test verifies the language picker can be opened and closed multiple times
     // Actual language addition is tested in other passing tests
-    const editButton = page.getByRole('button', { name: /edit/i }).first();
+    const editButton = page.locator('#categories-panel .icon-button:not(.icon-button--danger)').first();
     await editButton.click();
     await page.waitForSelector('dialog[open]', { timeout: 5000 });
 
@@ -428,13 +422,13 @@ test.describe('Category Translation Management', () => {
 
     // Verify dialog closed and we're back on category management page
     await page.waitForSelector('dialog[open]', { state: 'hidden', timeout: 5000 });
-    const editButtons = page.getByRole('button', { name: /edit/i });
+    const editButtons = page.locator('#categories-panel .icon-button:not(.icon-button--danger)');
     await expect(editButtons.first()).toBeVisible({ timeout: 5000 });
   });
 
   test('should close language picker without adding language', async ({ page }) => {
     // Click edit on first category
-    const editButton = page.getByRole('button', { name: /edit/i }).first();
+    const editButton = page.locator('#categories-panel .icon-button:not(.icon-button--danger)').first();
     await editButton.click();
     await page.waitForSelector('dialog[open]', { timeout: 5000 });
 
