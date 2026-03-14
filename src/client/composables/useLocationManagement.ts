@@ -75,17 +75,20 @@ export function useLocationManagement() {
    * Create a new location and assign it to the event
    *
    * @param calendarId - The calendar ID to create the location for
-   * @param locationData - The location data to create
+   * @param locationData - The location data to create (plain object from form)
    * @param event - The event to assign the new location to
    * @throws Error if location creation fails
    */
   const createLocation = async (
     calendarId: string,
-    locationData: any,
+    locationData: Record<string, any>,
     event: CalendarEvent,
   ): Promise<void> => {
+    // Convert raw form data to an EventLocation instance
+    const location = EventLocation.fromObject(locationData);
+
     // Create the location via API
-    const newLocation = await locationService.createLocation(calendarId, locationData);
+    const newLocation = await locationService.createLocation(calendarId, location);
 
     // Add to available locations
     availableLocations.value.push(newLocation);

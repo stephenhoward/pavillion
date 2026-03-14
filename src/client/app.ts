@@ -28,6 +28,7 @@ import CalendarsView from '@/client/components/logged_in/calendar/calendars.vue'
 import CalendarView from '@/client/components/logged_in/calendar/calendar.vue';
 import CalendarManagementView from '@/client/components/logged_in/calendar-management/root.vue';
 import EditEventView from '@/client/components/logged_in/calendar/edit_event.vue';
+import EditPlaceView from '@/client/components/logged_in/calendar/edit-place.vue';
 import FeedView from '@/client/components/logged_in/feed/root.vue';
 import ProfileView from '@/client/components/logged_in/settings/root.vue';
 import CalendarCategoryMappingsView from '@/client/components/logged_in/settings/calendar-category-mappings.vue';
@@ -154,6 +155,9 @@ checkSetupMode().then((setupRequired) => {
       // Event routes are top-level to render fullscreen without navigation
       { path: '/event', component: EditEventView, name: 'event_new', beforeEnter: mustBeLoggedIn },
       { path: '/event/:eventId', component: EditEventView, name: 'event_edit', beforeEnter: mustBeLoggedIn, props: true },
+      // Place routes are top-level to render fullscreen without navigation
+      { path: '/calendar/:calendar/places/new', component: EditPlaceView, name: 'place_new', beforeEnter: mustBeLoggedIn },
+      { path: '/calendar/:calendar/places/:placeId', component: EditPlaceView, name: 'place_edit', beforeEnter: mustBeLoggedIn, props: true },
       { path: '/admin', component: AdminViews, name: 'admin', beforeEnter: mustBeAdmin,
         children: [
           { path: 'settings', component: AdminSettingsView, name: 'admin_settings', beforeEnter: mustBeAdmin },

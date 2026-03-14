@@ -6,11 +6,12 @@ import express, { Application } from 'express';
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import { EventLocation, EventLocationContent } from '@/common/model/location';
+import { LocationValidationError } from '@/common/exceptions/calendar';
 import CalendarInterface from '@/server/calendar/interface';
 import LocationRoutes from '@/server/calendar/api/v1/location';
 import ExpressHelper from '@/server/common/helper/express';
 
-describe('Location API Integration Tests', () => {
+describe('Location API Tests', () => {
   let app: Application;
   let sandbox: sinon.SinonSandbox;
   let calendarInterface: CalendarInterface;
@@ -40,6 +41,8 @@ describe('Location API Integration Tests', () => {
       getLocationsForCalendar: sandbox.stub(),
       getLocationById: sandbox.stub(),
       createLocation: sandbox.stub(),
+      updateLocation: sandbox.stub(),
+      deleteLocation: sandbox.stub(),
     } as unknown as CalendarInterface;
 
     locationRoutes = new LocationRoutes(calendarInterface);
@@ -224,7 +227,7 @@ describe('Location API Integration Tests', () => {
       (calendarInterface.getCalendar as sinon.SinonStub).resolves(testCalendar);
       (calendarInterface.userCanModifyCalendar as sinon.SinonStub).resolves(true);
       (calendarInterface.createLocation as sinon.SinonStub).rejects(
-        new Error('Location name is required'),
+        new LocationValidationError(['Location name is required']),
       );
 
       const response = await request(app)
@@ -233,7 +236,7 @@ describe('Location API Integration Tests', () => {
         .expect(400);
 
       expect(response.body.error).toBe('Location name is required');
-      expect(response.body.errorName).toBe('ValidationError');
+      expect(response.body.errorName).toBe('LocationValidationError');
     });
   });
 
@@ -312,6 +315,166 @@ describe('Location API Integration Tests', () => {
 
       const response = await request(app)
         .get('/api/v1/calendars/cal-123/locations/other-calendar-loc')
+        .expect(404);
+
+      expect(response.body.error).toBe('Location not found');
+      expect(response.body.errorName).toBe('LocationNotFoundError');
+    });
+  });
+
+  describe('PUT /api/v1/calendars/:calendarId/locations/:locationId', () => {
+    it('should update a location', async () => {
+      const locationId = 'https://pavillion.dev/places/loc-1';
+      const updatedLocation = new EventLocation(
+        locationId,
+        'Updated Venue',
+        '789 New St',
+        'Portland',
+        'OR',
+        '97203',
+      );
+
+      (calendarInterface.getCalendar as sinon.SinonStub).resolves(testCalendar);
+      (calendarInterface.userCanModifyCalendar as sinon.SinonStub).resolves(true);
+      (calendarInterface.updateLocation as sinon.SinonStub).resolves(updatedLocation);
+
+      const response = await request(app)
+        .put(`/api/v1/calendars/cal-123/locations/${encodeURIComponent(locationId)}`)
+        .send({ name: 'Updated Venue', address: '789 New St', city: 'Portland', state: 'OR', postalCode: '97203' })
+        .expect(200);
+
+      expect(response.body.name).toBe('Updated Venue');
+      expect(response.body.address).toBe('789 New St');
+    });
+
+    it('should update location with accessibility content', async () => {
+      const locationId = 'https://pavillion.dev/places/loc-1';
+      const updatedLocation = new EventLocation(
+        locationId,
+        'Accessible Venue',
+        '789 Pine St',
+      );
+      const content = new EventLocationContent('en', 'Updated accessibility info.');
+      updatedLocation.addContent(content);
+
+      (calendarInterface.getCalendar as sinon.SinonStub).resolves(testCalendar);
+      (calendarInterface.userCanModifyCalendar as sinon.SinonStub).resolves(true);
+      (calendarInterface.updateLocation as sinon.SinonStub).resolves(updatedLocation);
+
+      const response = await request(app)
+        .put(`/api/v1/calendars/cal-123/locations/${encodeURIComponent(locationId)}`)
+        .send({
+          name: 'Accessible Venue',
+          address: '789 Pine St',
+          content: {
+            en: { language: 'en', accessibilityInfo: 'Updated accessibility info.' },
+          },
+        })
+        .expect(200);
+
+      expect(response.body.name).toBe('Accessible Venue');
+      expect(response.body.content.en.accessibilityInfo).toBe('Updated accessibility info.');
+    });
+
+    it('should return 404 when calendar does not exist', async () => {
+      (calendarInterface.getCalendar as sinon.SinonStub).resolves(null);
+
+      const response = await request(app)
+        .put('/api/v1/calendars/nonexistent/locations/loc-1')
+        .send({ name: 'Updated' })
+        .expect(404);
+
+      expect(response.body.error).toContain('Calendar not found');
+      expect(response.body.errorName).toBe('CalendarNotFoundError');
+    });
+
+    it('should return 403 when user lacks permissions', async () => {
+      (calendarInterface.getCalendar as sinon.SinonStub).resolves(testCalendar);
+      (calendarInterface.userCanModifyCalendar as sinon.SinonStub).resolves(false);
+
+      const response = await request(app)
+        .put('/api/v1/calendars/cal-123/locations/loc-1')
+        .send({ name: 'Updated' })
+        .expect(403);
+
+      expect(response.body.error).toContain('Insufficient permissions');
+      expect(response.body.errorName).toBe('InsufficientCalendarPermissionsError');
+    });
+
+    it('should return 404 when location does not exist', async () => {
+      (calendarInterface.getCalendar as sinon.SinonStub).resolves(testCalendar);
+      (calendarInterface.userCanModifyCalendar as sinon.SinonStub).resolves(true);
+      (calendarInterface.updateLocation as sinon.SinonStub).resolves(null);
+
+      const response = await request(app)
+        .put('/api/v1/calendars/cal-123/locations/nonexistent')
+        .send({ name: 'Updated' })
+        .expect(404);
+
+      expect(response.body.error).toBe('Location not found');
+      expect(response.body.errorName).toBe('LocationNotFoundError');
+    });
+
+    it('should return 400 when location name is empty', async () => {
+      (calendarInterface.getCalendar as sinon.SinonStub).resolves(testCalendar);
+      (calendarInterface.userCanModifyCalendar as sinon.SinonStub).resolves(true);
+      (calendarInterface.updateLocation as sinon.SinonStub).rejects(
+        new LocationValidationError(['Location name is required']),
+      );
+
+      const response = await request(app)
+        .put('/api/v1/calendars/cal-123/locations/loc-1')
+        .send({ name: '' })
+        .expect(400);
+
+      expect(response.body.error).toBe('Location name is required');
+      expect(response.body.errorName).toBe('LocationValidationError');
+    });
+  });
+
+  describe('DELETE /api/v1/calendars/:calendarId/locations/:locationId', () => {
+    it('should delete a location', async () => {
+      const locationId = 'https://pavillion.dev/places/loc-1';
+
+      (calendarInterface.getCalendar as sinon.SinonStub).resolves(testCalendar);
+      (calendarInterface.userCanModifyCalendar as sinon.SinonStub).resolves(true);
+      (calendarInterface.deleteLocation as sinon.SinonStub).resolves(true);
+
+      await request(app)
+        .delete(`/api/v1/calendars/cal-123/locations/${encodeURIComponent(locationId)}`)
+        .expect(204);
+    });
+
+    it('should return 404 when calendar does not exist', async () => {
+      (calendarInterface.getCalendar as sinon.SinonStub).resolves(null);
+
+      const response = await request(app)
+        .delete('/api/v1/calendars/nonexistent/locations/loc-1')
+        .expect(404);
+
+      expect(response.body.error).toContain('Calendar not found');
+      expect(response.body.errorName).toBe('CalendarNotFoundError');
+    });
+
+    it('should return 403 when user lacks permissions', async () => {
+      (calendarInterface.getCalendar as sinon.SinonStub).resolves(testCalendar);
+      (calendarInterface.userCanModifyCalendar as sinon.SinonStub).resolves(false);
+
+      const response = await request(app)
+        .delete('/api/v1/calendars/cal-123/locations/loc-1')
+        .expect(403);
+
+      expect(response.body.error).toContain('Insufficient permissions');
+      expect(response.body.errorName).toBe('InsufficientCalendarPermissionsError');
+    });
+
+    it('should return 404 when location does not exist', async () => {
+      (calendarInterface.getCalendar as sinon.SinonStub).resolves(testCalendar);
+      (calendarInterface.userCanModifyCalendar as sinon.SinonStub).resolves(true);
+      (calendarInterface.deleteLocation as sinon.SinonStub).resolves(false);
+
+      const response = await request(app)
+        .delete('/api/v1/calendars/cal-123/locations/nonexistent')
         .expect(404);
 
       expect(response.body.error).toBe('Location not found');

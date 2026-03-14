@@ -214,6 +214,29 @@ export default class CalendarInterface {
     return this.locationService.findOrCreateLocation(calendar, locationParams);
   }
 
+  /**
+   * Update an existing location's fields and content.
+   *
+   * @param calendar - The calendar that should own the location
+   * @param locationId - The ID of the location to update
+   * @param location - The location model with updated data
+   * @returns Updated EventLocation model, or null if not found
+   */
+  async updateLocation(calendar: Calendar, locationId: string, location: EventLocation): Promise<EventLocation | null> {
+    return this.locationService.updateLocation(calendar, locationId, location);
+  }
+
+  /**
+   * Delete a location and nullify location_id on associated events.
+   *
+   * @param calendar - The calendar that should own the location
+   * @param locationId - The ID of the location to delete
+   * @returns True if deleted, false if not found
+   */
+  async deleteLocation(calendar: Calendar, locationId: string): Promise<boolean> {
+    return this.locationService.deleteLocation(calendar, locationId);
+  }
+
   async buildEventInstances(event: CalendarEvent): Promise<void> {
     return this.eventInstanceService.buildEventInstances(event);
   }

@@ -56,18 +56,12 @@ test.describe('Category CRUD Workflow', () => {
     // Wait for calendar view to load
     await page.waitForTimeout(2000);
 
-    // Click "Manage" button to access calendar management (PillButton rendered as <button>)
-    const manageLink = page.locator('button:has-text("Manage"), a:has-text("Manage"), a[href*="/manage"]').first();
-    await manageLink.click();
-
-    // Wait for management page to load
-    await page.waitForTimeout(1000);
-
-    // Categories tab should be active by default, but click it to be sure
+    // Click Categories tab on the calendar view page
     const categoriesTab = page.locator('button[role="tab"]:has-text("Categories")');
-    if (await categoriesTab.count() > 0) {
-      await categoriesTab.click();
-    }
+    await categoriesTab.click();
+
+    // Wait for categories panel to be visible
+    await page.waitForTimeout(1000);
 
     // Listen for network requests to detect 404 errors
     const failed404Requests: string[] = [];
@@ -89,19 +83,13 @@ test.describe('Category CRUD Workflow', () => {
     await page.goto(env.baseURL + '/calendar');
     await page.waitForTimeout(2000);
 
-    // Click "Manage" button to access calendar management (PillButton rendered as <button>)
-    const manageLink = page.locator('button:has-text("Manage"), a:has-text("Manage"), a[href*="/manage"]').first();
-    await manageLink.click();
+    // Click Categories tab on the calendar view page
+    const categoriesTab = page.locator('button[role="tab"]:has-text("Categories")');
+    await categoriesTab.click();
     await page.waitForTimeout(1000);
 
-    // Click Categories tab
-    const categoriesTab = page.locator('button[role="tab"]:has-text("Categories")');
-    if (await categoriesTab.count() > 0) {
-      await categoriesTab.click();
-    }
-
-    // Click "Add Category" button (PillButton with pill-button--primary class)
-    const addButton = page.locator('.pill-button--primary').filter({ hasText: /add.*category|category/i }).first();
+    // Click "Add Category" button within the categories panel
+    const addButton = page.locator('#categories-panel .pill-button--primary').filter({ hasText: /add.*category/i }).first();
     await addButton.click();
 
     // Wait for modal dialog to open (native HTML dialog element)
@@ -146,16 +134,10 @@ test.describe('Category CRUD Workflow', () => {
     await page.goto(env.baseURL + '/calendar');
     await page.waitForTimeout(2000);
 
-    // Click "Manage" button to access calendar management (PillButton rendered as <button>)
-    const manageLink = page.locator('button:has-text("Manage"), a:has-text("Manage"), a[href*="/manage"]').first();
-    await manageLink.click();
-    await page.waitForTimeout(1000);
-
-    // Click Categories tab
+    // Click Categories tab on the calendar view page
     const categoriesTab = page.locator('button[role="tab"]:has-text("Categories")');
-    if (await categoriesTab.count() > 0) {
-      await categoriesTab.click();
-    }
+    await categoriesTab.click();
+    await page.waitForTimeout(1000);
 
     // Look for first category edit button (icon-button within .category-card, identified by aria-label)
     const editButton = page.locator('.category-card .icon-button:not(.icon-button--danger)').first();
@@ -220,19 +202,13 @@ test.describe('Category CRUD Workflow', () => {
     await page.goto(env.baseURL + '/calendar');
     await page.waitForTimeout(2000);
 
-    // Click "Manage" button to access calendar management (PillButton rendered as <button>)
-    const manageLink = page.locator('button:has-text("Manage"), a:has-text("Manage"), a[href*="/manage"]').first();
-    await manageLink.click();
+    // Click Categories tab on the calendar view page
+    const categoriesTab = page.locator('button[role="tab"]:has-text("Categories")');
+    await categoriesTab.click();
     await page.waitForTimeout(1000);
 
-    // Click Categories tab
-    const categoriesTab = page.locator('button[role="tab"]:has-text("Categories")');
-    if (await categoriesTab.count() > 0) {
-      await categoriesTab.click();
-    }
-
     // Create a category to delete
-    const addButton = page.locator('.pill-button--primary').filter({ hasText: /add.*category/i }).first();
+    const addButton = page.locator('#categories-panel .pill-button--primary').filter({ hasText: /add.*category/i }).first();
     await addButton.click();
     await page.waitForSelector('dialog.modal-dialog[open]');
 

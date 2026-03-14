@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import sinon from 'sinon';
+import { createPinia, setActivePinia } from 'pinia';
 import { useLocationManagement } from '@/client/composables/useLocationManagement';
 import LocationService from '@/client/service/location';
 import { EventLocation } from '@/common/model/location';
@@ -9,6 +10,7 @@ describe('useLocationManagement', () => {
   let sandbox: sinon.SinonSandbox;
 
   beforeEach(() => {
+    setActivePinia(createPinia());
     sandbox = sinon.createSandbox();
   });
 

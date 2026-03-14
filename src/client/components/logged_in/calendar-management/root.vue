@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { reactive, computed, nextTick, onBeforeMount, ref } from 'vue';
+import { reactive, computed, onBeforeMount, ref } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useRoute } from 'vue-router';
-import CategoriesTab from './categories.vue';
-import SeriesTab from './series.vue';
+import { useTabNavigation } from '@/client/composables/useTabNavigation';
 import EditorsTab from './editors.vue';
 import SettingsTab from './settings.vue';
 import WidgetTab from './widget-tab.vue';
@@ -24,7 +23,7 @@ const { t } = useTranslation('calendars', {
 const calendarService = new CalendarService();
 
 const state = reactive({
-  activeTab: 'categories',
+  activeTab: 'editors',
   calendarInfo: null as CalendarInfo | null,
   loading: false,
   error: null as string | null,
@@ -54,6 +53,18 @@ onBeforeMount(async () => {
   }
 });
 
+/**
+ * Returns the ordered list of visible tabs based on ownership status.
+ */
+const visibleTabs = computed(() => {
+  const tabs = ['editors'];
+  if (isOwner.value) {
+    tabs.push('reports', 'settings');
+  }
+  tabs.push('widget');
+  return tabs;
+});
+
 const activateTab = (tab: string) => {
   // Prevent non-owners from activating owner-only tabs
   if ((tab === 'settings' || tab === 'reports') && !isOwner.value) {
@@ -66,14 +77,10 @@ const activateTab = (tab: string) => {
   if (tab === 'reports') {
     selectedReportId.value = null;
   }
-
-  nextTick(() => {
-    const panel = document.getElementById(`${tab}-panel`);
-    if (panel) {
-      panel.focus();
-    }
-  });
 };
+
+const activeTabRef = computed(() => state.activeTab);
+const { handleTabKeydown } = useTabNavigation(visibleTabs, activeTabRef, activateTab);
 
 /**
  * Navigates to the report detail view within the reports tab.
@@ -108,43 +115,27 @@ const backToReports = () => {
       <header class="calendar-management-root__header">
         <div class="calendar-management-root__header-content">
           <div class="calendar-management-root__header-top">
-            <nav class="calendar-management-root__breadcrumb">
+            <nav class="calendar-management-root__breadcrumb" :aria-label="t('breadcrumb_label')">
               <span class="calendar-management-root__breadcrumb-item">{{ calendar.urlName }}</span>
               <span class="calendar-management-root__breadcrumb-separator">/</span>
-              <span class="calendar-management-root__breadcrumb-item">settings</span>
+              <span class="calendar-management-root__breadcrumb-item">{{ t('breadcrumb_settings') }}</span>
             </nav>
             <h1 class="calendar-management-root__title">{{ t('page_title') }}</h1>
           </div>
 
-          <nav role="tablist" :aria-label="t('tabs_label')" class="calendar-management-root__tabs">
-            <button
-              id="categories-tab"
-              type="button"
-              role="tab"
-              :aria-selected="state.activeTab === 'categories' ? 'true' : 'false'"
-              aria-controls="categories-panel"
-              class="calendar-management-root__tab"
-              @click="activateTab('categories')"
-            >
-              {{ t('categories_tab') }}
-            </button>
-            <button
-              id="series-tab"
-              type="button"
-              role="tab"
-              :aria-selected="state.activeTab === 'series' ? 'true' : 'false'"
-              aria-controls="series-panel"
-              class="calendar-management-root__tab"
-              @click="activateTab('series')"
-            >
-              {{ t('series_tab') }}
-            </button>
+          <nav
+            role="tablist"
+            :aria-label="t('tabs_label')"
+            class="calendar-management-root__tabs"
+            @keydown="handleTabKeydown"
+          >
             <button
               id="editors-tab"
               type="button"
               role="tab"
-              :aria-selected="state.activeTab === 'editors' ? 'true' : 'false'"
+              :aria-selected="state.activeTab === 'editors'"
               aria-controls="editors-panel"
+              :tabindex="state.activeTab === 'editors' ? 0 : -1"
               class="calendar-management-root__tab"
               @click="activateTab('editors')"
             >
@@ -155,8 +146,9 @@ const backToReports = () => {
               id="reports-tab"
               type="button"
               role="tab"
-              :aria-selected="state.activeTab === 'reports' ? 'true' : 'false'"
+              :aria-selected="state.activeTab === 'reports'"
               aria-controls="reports-panel"
+              :tabindex="state.activeTab === 'reports' ? 0 : -1"
               class="calendar-management-root__tab"
               @click="activateTab('reports')"
             >
@@ -167,8 +159,9 @@ const backToReports = () => {
               id="settings-tab"
               type="button"
               role="tab"
-              :aria-selected="state.activeTab === 'settings' ? 'true' : 'false'"
+              :aria-selected="state.activeTab === 'settings'"
               aria-controls="settings-panel"
+              :tabindex="state.activeTab === 'settings' ? 0 : -1"
               class="calendar-management-root__tab"
               @click="activateTab('settings')"
             >
@@ -178,8 +171,9 @@ const backToReports = () => {
               id="widget-tab"
               type="button"
               role="tab"
-              :aria-selected="state.activeTab === 'widget' ? 'true' : 'false'"
+              :aria-selected="state.activeTab === 'widget'"
               aria-controls="widget-panel"
+              :tabindex="state.activeTab === 'widget' ? 0 : -1"
               class="calendar-management-root__tab"
               @click="activateTab('widget')"
             >
@@ -190,29 +184,7 @@ const backToReports = () => {
       </header>
 
       <!-- Main content area -->
-      <main class="calendar-management-root__main">
-        <div
-          id="categories-panel"
-          role="tabpanel"
-          aria-labelledby="categories-tab"
-          :aria-hidden="state.activeTab !== 'categories'"
-          :hidden="state.activeTab !== 'categories'"
-          class="calendar-management-root__panel"
-        >
-          <CategoriesTab v-if="calendar" :calendar-id="calendar.id" />
-        </div>
-
-        <div
-          id="series-panel"
-          role="tabpanel"
-          aria-labelledby="series-tab"
-          :aria-hidden="state.activeTab !== 'series'"
-          :hidden="state.activeTab !== 'series'"
-          class="calendar-management-root__panel"
-        >
-          <SeriesTab v-if="calendar" :calendar-id="calendar.id" :calendar-url-name="calendar.urlName" />
-        </div>
-
+      <div class="calendar-management-root__main">
         <div
           id="editors-panel"
           role="tabpanel"
@@ -274,7 +246,7 @@ const backToReports = () => {
             :calendar-url-name="calendar.urlName"
           />
         </div>
-      </main>
+      </div>
     </template>
   </div>
 </template>
