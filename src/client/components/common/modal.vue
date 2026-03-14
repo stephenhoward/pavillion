@@ -11,11 +11,9 @@
       <header>
         <h2 :id="titleId">{{ props.title }}</h2>
         <button
-          class="btn--ghost"
           type="button"
           @click="close"
           :aria-label="t('modal.close')"
-          data-variant="ghost"
         >&times;</button>
       </header>
       <div>
@@ -143,10 +141,18 @@ dialog.modal-dialog {
       color: var(--pav-text-primary);
     }
 
-    /* Close button uses semantic button with ghost variant */
+    /* Close button - transparent by default, round highlight on hover */
     button {
-      /* Semantic button styling applied automatically from base layer */
-      /* data-variant="ghost" styling applied from ARIA roles layer */
+      background-color: transparent;
+      border-color: transparent;
+      color: var(--pav-text-secondary);
+
+      &:hover:not(:disabled) {
+        background-color: var(--pav-interactive-hover);
+        border-color: transparent;
+        border-radius: 50%;
+        color: var(--pav-text-primary);
+      }
     }
   }
 
