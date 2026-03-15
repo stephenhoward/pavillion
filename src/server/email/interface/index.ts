@@ -50,6 +50,20 @@ export default class EmailInterface {
   }
 
   /**
+   * Gets all stored emails.
+   * Only available when using the testing transport.
+   *
+   * @returns Array of all stored emails or empty array if not using testing transport
+   */
+  getAllEmails(): StoredEmail[] {
+    const transport = EmailService.transportInstance;
+    if (transport instanceof TestingTransport) {
+      return transport.getEmails();
+    }
+    return [];
+  }
+
+  /**
    * Clears all stored emails.
    * Only available when using the testing transport.
    */

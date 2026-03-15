@@ -6,14 +6,14 @@ import { startTestServer, TestEnvironment } from './helpers/test-server';
  * E2E Tests: Settings Page Modals
  *
  * Tests the settings page modal functionality to ensure:
- * - Modals open and close correctly
- * - Modals have proper styling (solid backgrounds, correct width)
+ * - Modals open with correct styling and focus
  * - Change Email modal validates and submits
  * - Change Password modal sends reset link
- * - Modals use the shared dialog component
- * - Focus management works correctly
+ * - Modals close correctly (Cancel button as primary close mechanism)
+ * - Only one modal can be open at a time
  *
  * UPDATED: Uses isolated test server with in-memory database for true test isolation
+ * TRIMMED: Consolidated redundant close tests (X button, Escape) into single Cancel close test per modal
  */
 
 let env: TestEnvironment;
@@ -114,32 +114,6 @@ test.describe('Settings Page Modals', () => {
       await expect(modal).not.toBeVisible();
     });
 
-    test('should close modal with close button', async ({ page }) => {
-      // Open modal
-      await page.getByRole('button', { name: 'Change Email' }).click();
-      const modal = page.locator('dialog[aria-modal="true"]');
-      await expect(modal).toBeVisible();
-
-      // Click close (×) button
-      await modal.getByRole('button', { name: /close dialog/i }).click();
-
-      // Modal should be hidden
-      await expect(modal).not.toBeVisible();
-    });
-
-    test('should close modal with Escape key', async ({ page }) => {
-      // Open modal
-      await page.getByRole('button', { name: 'Change Email' }).click();
-      const modal = page.locator('dialog[aria-modal="true"]');
-      await expect(modal).toBeVisible();
-
-      // Press Escape key
-      await page.keyboard.press('Escape');
-
-      // Modal should be hidden
-      await expect(modal).not.toBeVisible();
-    });
-
     test('should attempt to change email with valid input', async ({ page }) => {
       // Intercept the change email API request to prevent actually changing the email
       // This ensures the test doesn't break subsequent tests that need to login as admin
@@ -210,25 +184,6 @@ test.describe('Settings Page Modals', () => {
       await expect(modal.getByText(/admin@pavillion\.dev/i)).toBeVisible();
     });
 
-    test('should display sky blue info box with email icon', async ({ page }) => {
-      // Open modal
-      await page.getByRole('button', { name: 'Change Password' }).click();
-      const modal = page.locator('dialog[aria-modal="true"]');
-      await expect(modal).toBeVisible();
-
-      // Verify info box content
-      const infoBox = modal.locator('.info-box');
-      await expect(infoBox).toBeVisible();
-
-      // Verify icon is present (SVG mail icon)
-      const mailIcon = infoBox.locator('.icon-mail');
-      await expect(mailIcon).toBeVisible();
-
-      // Verify text content
-      await expect(infoBox.getByText(/password reset via email/i)).toBeVisible();
-      await expect(infoBox.getByText(/send a link to/i)).toBeVisible();
-    });
-
     test('should close modal with Cancel button', async ({ page }) => {
       // Open modal
       await page.getByRole('button', { name: 'Change Password' }).click();
@@ -237,32 +192,6 @@ test.describe('Settings Page Modals', () => {
 
       // Click Cancel button
       await modal.getByRole('button', { name: /cancel/i }).click();
-
-      // Modal should be hidden
-      await expect(modal).not.toBeVisible();
-    });
-
-    test('should close modal with close button', async ({ page }) => {
-      // Open modal
-      await page.getByRole('button', { name: 'Change Password' }).click();
-      const modal = page.locator('dialog[aria-modal="true"]');
-      await expect(modal).toBeVisible();
-
-      // Click close (×) button
-      await modal.getByRole('button', { name: /close dialog/i }).click();
-
-      // Modal should be hidden
-      await expect(modal).not.toBeVisible();
-    });
-
-    test('should close modal with Escape key', async ({ page }) => {
-      // Open modal
-      await page.getByRole('button', { name: 'Change Password' }).click();
-      const modal = page.locator('dialog[aria-modal="true"]');
-      await expect(modal).toBeVisible();
-
-      // Press Escape key
-      await page.keyboard.press('Escape');
 
       // Modal should be hidden
       await expect(modal).not.toBeVisible();

@@ -24,6 +24,7 @@ import PublicCalendarDomain from './public';
 import MediaDomain from './media';
 import SetupDomain from './setup';
 import SubscriptionDomain from './subscription';
+import TestEmailRoutes from '@/server/common/test-support/test-emails';
 import { createSetupModeMiddleware } from './setup/middleware/setup-mode';
 import { createLocaleMiddleware } from '@/server/common/middleware/locale';
 import { backfillUserActors } from '@/server/activitypub/scripts/backfill-user-actors';
@@ -270,8 +271,15 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
   const { router: indexRoutes } = createRouter(configurationDomain.interface);
   app.use('/', indexRoutes);
 
-  // Initialize Email domain (no API routes, provides interface for cross-domain email sending)
+  // Initialize Email domain (provides interface for cross-domain email sending)
   const emailDomain = new EmailDomain();
+
+  // Register test-only email API routes (gated on NODE_ENV !== 'production')
+  // These allow Playwright e2e tests to query the in-memory email store
+  if (process.env.NODE_ENV !== 'production') {
+    const testEmailRoutes = new TestEmailRoutes(emailDomain.interface);
+    testEmailRoutes.installHandlers(app);
+  }
 
   const accountsDomain = new AccountsDomain(eventBus, configurationDomain.interface, setupDomain.interface, emailDomain.interface);
   accountsDomain.initialize(app);

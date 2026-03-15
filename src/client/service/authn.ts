@@ -333,7 +333,7 @@ export default class AuthenticationService {
    * Validates a password reset token.
    *
    * @param {string} token - Password reset token to validate
-   * @returns {Promise<boolean>} True if token is valid, false otherwise
+   * @returns {Promise<{valid: boolean, isNewAccount?: boolean}>} Token validation result
    * @throws Will throw an error if token is null or empty or request fails
    */
   async check_password_reset_token( token: string ): Promise<{valid: boolean, isNewAccount?: boolean}> {
@@ -344,7 +344,7 @@ export default class AuthenticationService {
 
     try {
       let response = await axios.get( this._authUrl('/reset-password/' + token) );
-      if (response.data.message == 'ok') {
+      if (response.data.valid === true) {
         return {
           valid: true,
           isNewAccount: response.data.isNewAccount,
@@ -425,7 +425,7 @@ export default class AuthenticationService {
    */
   _accountUrl(path: string) {
 
-    return '/api/accounts/v1' + path;
+    return '/api/v1' + path;
   }
 
   /**
