@@ -1045,7 +1045,7 @@ onMounted(async () => {
                   <table class="grants-table" role="table" :aria-label="t('grants.tab_title')">
                     <thead>
                       <tr>
-                        <th scope="col">{{ t("grants.table.account") }}</th>
+                        <th scope="col">{{ t("grants.table.calendar") }}</th>
                         <th scope="col">{{ t("grants.table.reason") }}</th>
                         <th scope="col">{{ t("grants.table.expires") }}</th>
                         <th scope="col">{{ t("grants.table.granted_by") }}</th>
@@ -1059,7 +1059,7 @@ onMounted(async () => {
                         :key="grant.id"
                         :class="{ 'grant-row--revoked': grant.revokedAt }"
                       >
-                        <td class="cell-account">{{ grant.accountEmail || grant.accountId }}</td>
+                        <td class="cell-calendar">{{ grant.calendarId ? grant.calendarId.slice(0, 8) + "..." : "--" }}</td>
                         <td class="cell-reason">{{ grant.reason || '—' }}</td>
                         <td class="cell-expires">
                           {{ grant.expiresAt ? formatDate(grant.expiresAt) : t('grants.never_expires') }}
@@ -1082,7 +1082,7 @@ onMounted(async () => {
                             type="button"
                             class="action-link action-link--danger"
                             @click="revokeGrant(grant.id)"
-                            :aria-label="`${t('grants.revoke_button')} ${grant.accountEmail || grant.accountId}`"
+                            :aria-label="`${t('grants.revoke_button')} ${grant.calendarId || grant.id}`"
                           >
                             {{ t("grants.revoke_button") }}
                           </button>
@@ -1102,7 +1102,7 @@ onMounted(async () => {
                   >
                     <div class="grant-card-header">
                       <div class="grant-card-info">
-                        <p class="grant-card-account">{{ grant.accountEmail || grant.accountId }}</p>
+                        <p class="grant-card-calendar">{{ grant.calendarId ? grant.calendarId.slice(0, 8) + "..." : "--" }}</p>
                         <p v-if="grant.reason" class="grant-card-reason">{{ grant.reason }}</p>
                       </div>
                       <span
@@ -1126,7 +1126,7 @@ onMounted(async () => {
                         type="button"
                         class="action-link-mobile action-link--danger"
                         @click="revokeGrant(grant.id)"
-                        :aria-label="`${t('grants.revoke_button')} ${grant.accountEmail || grant.accountId}`"
+                        :aria-label="`${t('grants.revoke_button')} ${grant.calendarId || grant.id}`"
                       >
                         {{ t("grants.revoke_button") }}
                       </button>
@@ -2080,7 +2080,7 @@ onMounted(async () => {
           font-size: var(--pav-font-size-sm);
         }
 
-        .cell-account {
+        .cell-calendar {
           font-weight: var(--pav-font-weight-medium);
           color: var(--pav-color-text-primary);
         }
@@ -2141,7 +2141,7 @@ onMounted(async () => {
           min-width: 0;
           flex: 1;
 
-          .grant-card-account {
+          .grant-card-calendar {
             margin: 0;
             font-weight: var(--pav-font-weight-medium);
             color: var(--pav-color-text-primary);
