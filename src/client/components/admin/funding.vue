@@ -1059,7 +1059,7 @@ onMounted(async () => {
                         :key="grant.id"
                         :class="{ 'grant-row--revoked': grant.revokedAt }"
                       >
-                        <td class="cell-calendar">{{ grant.calendarId ? grant.calendarId.slice(0, 8) + "..." : "--" }}</td>
+                        <td class="cell-calendar">{{ grant.calendarUrlName || "--" }}</td>
                         <td class="cell-reason">{{ grant.reason || '—' }}</td>
                         <td class="cell-expires">
                           {{ grant.expiresAt ? formatDate(grant.expiresAt) : t('grants.never_expires') }}
@@ -1082,7 +1082,7 @@ onMounted(async () => {
                             type="button"
                             class="action-link action-link--danger"
                             @click="revokeGrant(grant.id)"
-                            :aria-label="`${t('grants.revoke_button')} ${grant.calendarId || grant.id}`"
+                            :aria-label="`${t('grants.revoke_button')} ${grant.calendarUrlName || grant.id}`"
                           >
                             {{ t("grants.revoke_button") }}
                           </button>
@@ -1102,7 +1102,7 @@ onMounted(async () => {
                   >
                     <div class="grant-card-header">
                       <div class="grant-card-info">
-                        <p class="grant-card-calendar">{{ grant.calendarId ? grant.calendarId.slice(0, 8) + "..." : "--" }}</p>
+                        <p class="grant-card-calendar">{{ grant.calendarUrlName || "--" }}</p>
                         <p v-if="grant.reason" class="grant-card-reason">{{ grant.reason }}</p>
                       </div>
                       <span
@@ -1126,7 +1126,7 @@ onMounted(async () => {
                         type="button"
                         class="action-link-mobile action-link--danger"
                         @click="revokeGrant(grant.id)"
-                        :aria-label="`${t('grants.revoke_button')} ${grant.calendarId || grant.id}`"
+                        :aria-label="`${t('grants.revoke_button')} ${grant.calendarUrlName || grant.id}`"
                       >
                         {{ t("grants.revoke_button") }}
                       </button>

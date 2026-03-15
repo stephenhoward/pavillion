@@ -18,8 +18,6 @@ import { PlatformOAuthConfigEntity } from '@/server/subscription/entity/platform
 import { ComplimentaryGrantEntity } from '@/server/subscription/entity/complimentary_grant';
 import { CalendarSubscriptionEntity } from '@/server/subscription/entity/calendar_subscription';
 import { AccountEntity, AccountRoleEntity } from '@/server/common/entity/account';
-import { CalendarEntity } from '@/server/calendar/entity/calendar';
-import { CalendarMemberEntity } from '@/server/calendar/entity/calendar_member';
 import { ProviderFactory } from '@/server/subscription/service/provider/factory';
 import { WebhookEvent, CreateSubscriptionParams } from '@/server/subscription/service/provider/adapter';
 import {
@@ -36,6 +34,7 @@ import {
   CalendarNotFoundError,
 } from '@/server/subscription/exceptions';
 import { ValidationError } from '@/common/exceptions/base';
+import type CalendarInterface from '@/server/calendar/interface';
 
 // UUID v4 validation regex
 const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -57,9 +56,20 @@ function isValidUUID(id: string): boolean {
  */
 export default class SubscriptionService {
   private eventBus: EventEmitter;
+  private calendarInterface?: CalendarInterface;
 
   constructor(eventBus: EventEmitter) {
     this.eventBus = eventBus;
+  }
+
+  /**
+   * Injects CalendarInterface for cross-domain calendar ownership and existence checks.
+   * Called after CalendarDomain is initialized to avoid circular construction dependencies.
+   *
+   * @param calendarInterface - The CalendarInterface instance from the calendar domain
+   */
+  setCalendarInterface(calendarInterface: CalendarInterface): void {
+    this.calendarInterface = calendarInterface;
   }
 
   /**
@@ -311,22 +321,20 @@ export default class SubscriptionService {
   }
 
   /**
-   * Verify that an account owns a calendar
+   * Verify that an account owns a calendar via CalendarInterface
    *
    * @param accountId - Account ID to verify
    * @param calendarId - Calendar ID to check ownership of
    * @throws ValidationError if account does not own the calendar
    */
   private async verifyCalendarOwnership(accountId: string, calendarId: string): Promise<void> {
-    const membership = await CalendarMemberEntity.findOne({
-      where: {
-        calendar_id: calendarId,
-        account_id: accountId,
-        role: 'owner',
-      },
-    });
+    if (!this.calendarInterface) {
+      throw new Error('CalendarInterface not available for ownership verification');
+    }
 
-    if (!membership) {
+    const isOwner = await this.calendarInterface.isCalendarOwnerById(accountId, calendarId);
+
+    if (!isOwner) {
       throw new ValidationError(`Account ${accountId} does not own calendar ${calendarId}`);
     }
   }
@@ -351,6 +359,9 @@ export default class SubscriptionService {
   /**
    * Update the subscription amount at the payment provider
    *
+   * Skips the provider call if the adapter does not support in-place amount updates
+   * (e.g. PayPal subscriptions have fixed amounts set at creation time).
+   *
    * @param subscriptionEntity - Subscription entity
    * @param newAmount - New total amount in millicents
    */
@@ -365,6 +376,11 @@ export default class SubscriptionService {
 
     const providerConfig = providerEntity.toModel();
     const adapter = ProviderFactory.getAdapter(providerConfig);
+
+    // PayPal subscriptions have fixed amounts; skip the provider-side update
+    if (!adapter.supportsAmountUpdates()) {
+      return;
+    }
 
     await adapter.updateSubscriptionAmount(
       subscriptionEntity.provider_subscription_id,
@@ -673,19 +689,16 @@ export default class SubscriptionService {
       throw new ValidationError('Invalid calendarId: must be a valid UUID');
     }
 
-    // Find the calendar owner
-    const ownerMembership = await CalendarMemberEntity.findOne({
-      where: {
-        calendar_id: calendarId,
-        role: 'owner',
-      },
-    });
-
-    if (!ownerMembership || !ownerMembership.account_id) {
+    if (!this.calendarInterface) {
       return 'unfunded';
     }
 
-    const ownerId = ownerMembership.account_id;
+    // Find the calendar owner via CalendarInterface
+    const ownerId = await this.calendarInterface.getCalendarOwnerAccountId(calendarId);
+
+    if (!ownerId) {
+      return 'unfunded';
+    }
 
     // Check if owner is admin
     const adminRole = await AccountRoleEntity.findOne({
@@ -1094,10 +1107,12 @@ export default class SubscriptionService {
       throw new ValidationError('expiresAt must be a future date');
     }
 
-    // Validate that the calendar exists
-    const calendarExists = await CalendarEntity.findByPk(calendarId);
-    if (!calendarExists) {
-      throw new CalendarNotFoundError(calendarId);
+    // Validate that the calendar exists via CalendarInterface
+    if (this.calendarInterface) {
+      const exists = await this.calendarInterface.calendarExists(calendarId);
+      if (!exists) {
+        throw new CalendarNotFoundError(calendarId);
+      }
     }
 
     // Check for existing active grant for this calendar
@@ -1166,12 +1181,12 @@ export default class SubscriptionService {
   }
 
   /**
-   * List all complimentary grants, including account email for display.
+   * List all complimentary grants, including account email and calendar URL name for display.
    *
-   * Fetches account emails in a single batch query to avoid N+1 queries.
+   * Fetches account emails and calendar URL names in batch queries to avoid N+1 queries.
    *
    * @param includeRevoked - If true, include revoked grants; otherwise only active grants
-   * @returns List of complimentary grants with accountEmail populated
+   * @returns List of complimentary grants with accountEmail and calendarUrlName populated
    */
   async listGrants(includeRevoked: boolean = false): Promise<ComplimentaryGrant[]> {
     const queryOptions: Record<string, any> = {
@@ -1201,10 +1216,29 @@ export default class SubscriptionService {
     });
     const emailByAccountId = new Map(accounts.map((a) => [a.id, a.email]));
 
+    // Fetch calendar URL names via CalendarInterface
+    const urlNameByCalendarId = new Map<string, string>();
+    if (this.calendarInterface) {
+      const calendarIds = [...new Set(
+        entities.map((e) => e.calendar_id).filter((id): id is string => id !== null),
+      )];
+      const calendars = await Promise.all(
+        calendarIds.map((id) => this.calendarInterface!.getCalendar(id)),
+      );
+      calendars.forEach((calendar) => {
+        if (calendar) {
+          urlNameByCalendarId.set(calendar.id, calendar.urlName);
+        }
+      });
+    }
+
     return entities.map((entity) => {
       const grant = entity.toModel();
       grant.accountEmail = emailByAccountId.get(entity.account_id);
       grant.grantedByEmail = emailByAccountId.get(entity.granted_by);
+      if (entity.calendar_id) {
+        grant.calendarUrlName = urlNameByCalendarId.get(entity.calendar_id);
+      }
       return grant;
     });
   }
@@ -1280,21 +1314,17 @@ export default class SubscriptionService {
   }
 
   /**
-   * Check if an account owns a calendar
+   * Check if an account owns a calendar via CalendarInterface
    *
    * @param accountId - Account ID to check
    * @param calendarId - Calendar ID to check
    * @returns True if account owns the calendar
    */
   async isCalendarOwner(accountId: string, calendarId: string): Promise<boolean> {
-    const membership = await CalendarMemberEntity.findOne({
-      where: {
-        calendar_id: calendarId,
-        account_id: accountId,
-        role: 'owner',
-      },
-    });
+    if (!this.calendarInterface) {
+      return false;
+    }
 
-    return !!membership;
+    return this.calendarInterface.isCalendarOwnerById(accountId, calendarId);
   }
 }

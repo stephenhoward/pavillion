@@ -346,6 +346,14 @@ export class PayPalAdapter implements PaymentProviderAdapter {
       },
     });
   }
+  /**
+   * PayPal does not support in-place subscription amount updates
+   *
+   * @returns False
+   */
+  supportsAmountUpdates(): boolean {
+    return false;
+  }
 
   /**
    * Update the amount on an existing subscription

@@ -97,8 +97,15 @@ export type AccountSearchResult = {
  */
 export type FundingStatus = {
   status: 'funded' | 'unfunded' | 'grant' | 'admin-exempt';
-  grantInfo?: Record<string, any>;
-  subscriptionInfo?: Record<string, any>;
+  grantInfo?: { reason?: string; expiresAt?: string };
+};
+
+/**
+ * Resolved public calendar information
+ */
+export type ResolvedCalendar = {
+  id: string;
+  title: string;
 };
 
 /**
@@ -415,6 +422,26 @@ export default class SubscriptionService {
     catch (error) {
       console.error('Failed to search accounts:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Resolve a public calendar by its URL name
+   *
+   * @param {string} urlName - The URL name of the calendar to resolve
+   * @returns {Promise<ResolvedCalendar | null>} Resolved calendar info or null if not found
+   */
+  async resolvePublicCalendar(urlName: string): Promise<ResolvedCalendar | null> {
+    try {
+      const response = await axios.get(`/api/public/v1/calendar/${encodeURIComponent(urlName)}`);
+      if (response.data && response.data.id) {
+        const title = response.data.content?.title || response.data.urlName || urlName;
+        return { id: response.data.id, title };
+      }
+      return null;
+    }
+    catch {
+      return null;
     }
   }
 

@@ -3,6 +3,7 @@ import SubscriptionService from '@/server/subscription/service/subscription';
 import { Subscription, SubscriptionSettings, ProviderConfig, FundingStatus } from '@/common/model/subscription';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
 import { ProviderSubscription, WebhookEvent } from '@/server/subscription/service/provider/adapter';
+import type CalendarInterface from '@/server/calendar/interface';
 
 /**
  * Subscription domain interface for cross-domain communication
@@ -15,6 +16,17 @@ export default class SubscriptionInterface {
 
   constructor(eventBus: EventEmitter) {
     this.subscriptionService = new SubscriptionService(eventBus);
+  }
+
+  /**
+   * Injects CalendarInterface into the subscription service for cross-domain
+   * calendar ownership and existence checks. Called after CalendarDomain is
+   * initialized to avoid circular construction dependencies.
+   *
+   * @param calendarInterface - The CalendarInterface instance from the calendar domain
+   */
+  setCalendarInterface(calendarInterface: CalendarInterface): void {
+    this.subscriptionService.setCalendarInterface(calendarInterface);
   }
 
   // Cross-domain query methods

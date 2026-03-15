@@ -29,6 +29,7 @@ describe('Payment Provider Adapters', () => {
         'handleOAuthCallback',
         'createSubscription',
         'cancelSubscription',
+        'supportsAmountUpdates',
         'updateSubscriptionAmount',
         'getSubscription',
         'getBillingPortalUrl',
@@ -38,7 +39,7 @@ describe('Payment Provider Adapters', () => {
 
       // This test validates structure
       expect(requiredProps.length).toBe(1);
-      expect(requiredMethods.length).toBe(9);
+      expect(requiredMethods.length).toBe(10);
 
       // Verify StripeAdapter implements the interface
       const stripeConfig = new ProviderConfig('test-stripe', 'stripe');
@@ -229,6 +230,10 @@ describe('Payment Provider Adapters', () => {
       ).rejects.toThrow('Subscription has no items to update');
     });
 
+    it('should report support for amount updates', () => {
+      expect(stripeAdapter.supportsAmountUpdates()).toBe(true);
+    });
+
     it('should verify webhook signature with valid and invalid signatures', () => {
       const payload = JSON.stringify({ id: 'evt_test', type: 'invoice.paid' });
       const validSignature = 't=1234567890,v1=valid_signature_hash';
@@ -314,6 +319,10 @@ describe('Payment Provider Adapters', () => {
       ).rejects.toThrow('updateSubscriptionAmount is not implemented for PayPal');
     });
 
+    it('should report no support for amount updates', () => {
+      expect(paypalAdapter.supportsAmountUpdates()).toBe(false);
+    });
+
     it('should verify webhook signature with valid and invalid signatures', () => {
       const payload = JSON.stringify({
         id: 'WH-TEST123',
@@ -340,6 +349,11 @@ describe('Payment Provider Adapters', () => {
   });
 
   describe('MockStripeAdapter', () => {
+    it('should report support for amount updates', () => {
+      const mockAdapter = new MockStripeAdapter();
+      expect(mockAdapter.supportsAmountUpdates()).toBe(true);
+    });
+
     it('should record updateSubscriptionAmount calls', async () => {
       const mockAdapter = new MockStripeAdapter();
 
@@ -361,6 +375,11 @@ describe('Payment Provider Adapters', () => {
   });
 
   describe('MockPayPalAdapter', () => {
+    it('should report no support for amount updates', () => {
+      const mockAdapter = new MockPayPalAdapter();
+      expect(mockAdapter.supportsAmountUpdates()).toBe(false);
+    });
+
     it('should record updateSubscriptionAmount calls', async () => {
       const mockAdapter = new MockPayPalAdapter();
 

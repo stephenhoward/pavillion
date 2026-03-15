@@ -114,8 +114,7 @@ const state = reactive({
   error: '',
   success: '',
   fundingStatus: '' as FundingStatus['status'] | '',
-  grantInfo: null as Record<string, any> | null,
-  subscriptionInfo: null as Record<string, any> | null,
+  grantInfo: null as { reason?: string; expiresAt?: string } | null,
 });
 
 /**
@@ -151,7 +150,6 @@ const loadFundingStatus = async () => {
     const result: FundingStatus = await subscriptionService.getFundingStatus(props.calendarId);
     state.fundingStatus = result.status;
     state.grantInfo = result.grantInfo ?? null;
-    state.subscriptionInfo = result.subscriptionInfo ?? null;
   }
   catch (error) {
     console.error('Error loading funding status:', error);

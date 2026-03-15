@@ -202,7 +202,6 @@
 <script setup lang="ts">
 import { reactive, computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
-import axios from 'axios';
 import Modal from '@/client/components/common/modal.vue';
 import SubscriptionService from '@/client/service/subscription';
 
@@ -264,7 +263,7 @@ function onCalendarInputChange() {
 }
 
 /**
- * Resolve calendar URL name to calendar ID using public API
+ * Resolve calendar URL name to calendar ID using the subscription service
  */
 async function resolveCalendar() {
   const urlName = state.calendarUrlName.trim();
@@ -284,23 +283,16 @@ async function resolveCalendar() {
   state.calendarDisplay = '';
   delete state.errors.calendar;
 
-  try {
-    const response = await axios.get(`/api/public/v1/calendar/${encodeURIComponent(urlName)}`);
-    if (response.data && response.data.id) {
-      state.calendarId = response.data.id;
-      const title = response.data.content?.title || response.data.urlName || urlName;
-      state.calendarDisplay = title;
-    }
-    else {
-      state.errors.calendar = t('grants.form.calendar_not_found');
-    }
+  const resolved = await subscriptionService.resolvePublicCalendar(urlName);
+  if (resolved) {
+    state.calendarId = resolved.id;
+    state.calendarDisplay = resolved.title;
   }
-  catch {
+  else {
     state.errors.calendar = t('grants.form.calendar_not_found');
   }
-  finally {
-    state.calendarResolving = false;
-  }
+
+  state.calendarResolving = false;
 }
 
 /**

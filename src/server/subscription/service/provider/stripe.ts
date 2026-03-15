@@ -271,6 +271,14 @@ export class StripeAdapter implements PaymentProviderAdapter {
       });
     }
   }
+  /**
+   * Stripe supports in-place subscription amount updates
+   *
+   * @returns True
+   */
+  supportsAmountUpdates(): boolean {
+    return true;
+  }
 
   /**
    * Update the amount on an existing subscription

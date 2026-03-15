@@ -9,6 +9,7 @@ import { PrimaryModel } from '@/common/model/model';
 class ComplimentaryGrant extends PrimaryModel {
   accountId: string = '';
   calendarId: string | null = null;
+  calendarUrlName?: string;
   accountEmail?: string;
   expiresAt: Date | null = null;
   reason: string | null = null;
@@ -48,6 +49,7 @@ class ComplimentaryGrant extends PrimaryModel {
       id: this.id,
       accountId: this.accountId,
       calendarId: this.calendarId,
+      calendarUrlName: this.calendarUrlName,
       accountEmail: this.accountEmail,
       expiresAt: this.expiresAt,
       reason: this.reason,
@@ -69,6 +71,7 @@ class ComplimentaryGrant extends PrimaryModel {
     const grant = new ComplimentaryGrant(obj.id);
     grant.accountId = obj.accountId;
     grant.calendarId = obj.calendarId ?? null;
+    grant.calendarUrlName = obj.calendarUrlName ?? undefined;
     grant.accountEmail = obj.accountEmail ?? undefined;
     grant.expiresAt = obj.expiresAt ?? null;
     grant.reason = obj.reason ?? null;

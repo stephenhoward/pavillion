@@ -9,7 +9,6 @@ import { SubscriptionEntity } from '@/server/subscription/entity/subscription';
 import { SubscriptionEventEntity } from '@/server/subscription/entity/subscription_event';
 import { ComplimentaryGrantEntity } from '@/server/subscription/entity/complimentary_grant';
 import { CalendarSubscriptionEntity } from '@/server/subscription/entity/calendar_subscription';
-import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { ProviderFactory } from '@/server/subscription/service/provider/factory';
 import { SubscriptionSettings, ProviderConfig, Subscription } from '@/common/model/subscription';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
@@ -26,7 +25,12 @@ describe('SubscriptionService', () => {
   let sandbox: sinon.SinonSandbox;
   let eventBus: EventEmitter;
   let service: SubscriptionService;
-
+  let mockCalendarInterface: {
+    isCalendarOwnerById: sinon.SinonStub;
+    calendarExists: sinon.SinonStub;
+    getCalendarOwnerAccountId: sinon.SinonStub;
+    getCalendar: sinon.SinonStub;
+  };
   beforeAll(async () => {
     // Sync database schema before running tests
     await db.sync({ force: true });
@@ -36,6 +40,15 @@ describe('SubscriptionService', () => {
     sandbox = sinon.createSandbox();
     eventBus = new EventEmitter();
     service = new SubscriptionService(eventBus);
+
+    // Create mock CalendarInterface and inject it
+    mockCalendarInterface = {
+      isCalendarOwnerById: sandbox.stub(),
+      calendarExists: sandbox.stub(),
+      getCalendarOwnerAccountId: sandbox.stub(),
+      getCalendar: sandbox.stub().resolves(null),
+    };
+    service.setCalendarInterface(mockCalendarInterface as any);
   });
 
   afterEach(() => {
@@ -395,7 +408,7 @@ describe('SubscriptionService', () => {
         },
       };
 
-      sandbox.stub(CalendarEntity, 'findByPk').resolves({ id: calendarId } as any);
+      mockCalendarInterface.calendarExists.withArgs(calendarId).resolves(true);
       sandbox.stub(ComplimentaryGrantEntity, 'findOne').resolves(null);
       sandbox.stub(ComplimentaryGrantEntity, 'build').returns(mockGrantEntity as any);
 
@@ -436,7 +449,7 @@ describe('SubscriptionService', () => {
         },
       };
 
-      sandbox.stub(CalendarEntity, 'findByPk').resolves({ id: calendarId } as any);
+      mockCalendarInterface.calendarExists.withArgs(calendarId).resolves(true);
       sandbox.stub(ComplimentaryGrantEntity, 'findOne').resolves(null);
       sandbox.stub(ComplimentaryGrantEntity, 'build').returns(mockGrantEntity as any);
 
@@ -456,7 +469,7 @@ describe('SubscriptionService', () => {
         expires_at: null,
       };
 
-      sandbox.stub(CalendarEntity, 'findByPk').resolves({ id: calendarId } as any);
+      mockCalendarInterface.calendarExists.withArgs(calendarId).resolves(true);
       sandbox.stub(ComplimentaryGrantEntity, 'findOne').resolves(existingGrantEntity as any);
 
       await expect(service.createGrant(calendarId, grantedBy)).rejects.toThrow(DuplicateGrantError);

@@ -6,7 +6,6 @@ import db from '@/server/common/entity/db';
 import SubscriptionService from '@/server/subscription/service/subscription';
 import { SubscriptionEntity } from '@/server/subscription/entity/subscription';
 import { CalendarSubscriptionEntity } from '@/server/subscription/entity/calendar_subscription';
-import { CalendarMemberEntity } from '@/server/calendar/entity/calendar_member';
 import { ComplimentaryGrantEntity } from '@/server/subscription/entity/complimentary_grant';
 import { ProviderConfigEntity } from '@/server/subscription/entity/provider_config';
 import { SubscriptionSettingsEntity } from '@/server/subscription/entity/subscription_settings';
@@ -23,6 +22,11 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
   let sandbox: sinon.SinonSandbox;
   let eventBus: EventEmitter;
   let service: SubscriptionService;
+  let mockCalendarInterface: {
+    isCalendarOwnerById: sinon.SinonStub;
+    calendarExists: sinon.SinonStub;
+    getCalendarOwnerAccountId: sinon.SinonStub;
+  };
 
   beforeAll(async () => {
     await db.sync({ force: true });
@@ -32,6 +36,14 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
     sandbox = sinon.createSandbox();
     eventBus = new EventEmitter();
     service = new SubscriptionService(eventBus);
+
+    // Create mock CalendarInterface and inject it
+    mockCalendarInterface = {
+      isCalendarOwnerById: sandbox.stub(),
+      calendarExists: sandbox.stub(),
+      getCalendarOwnerAccountId: sandbox.stub(),
+    };
+    service.setCalendarInterface(mockCalendarInterface as any);
   });
 
   afterEach(() => {
@@ -78,14 +90,13 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
 
       const mockAdapter = {
         updateSubscriptionAmount: sandbox.stub().resolves(),
+        supportsAmountUpdates: sandbox.stub().returns(true),
       };
 
-      // Ownership verification: account owns the calendar
-      sandbox.stub(CalendarMemberEntity, 'findOne').resolves({
-        calendar_id: calendarId,
-        account_id: accountId,
-        role: 'owner',
-      } as any);
+      // Ownership verification via CalendarInterface
+      mockCalendarInterface.isCalendarOwnerById
+        .withArgs(accountId, calendarId)
+        .resolves(true);
 
       sandbox.stub(SubscriptionEntity, 'findByPk').resolves(mockSubscriptionEntity as any);
       // No existing active calendar subscription
@@ -143,7 +154,9 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
       } as any);
 
       // Account is not an owner of the calendar
-      sandbox.stub(CalendarMemberEntity, 'findOne').resolves(null);
+      mockCalendarInterface.isCalendarOwnerById
+        .withArgs(accountId, calendarId)
+        .resolves(false);
 
       await expect(
         service.addCalendarToSubscription(accountId, subscriptionId, calendarId, 500000),
@@ -161,11 +174,9 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
         status: 'active',
       } as any);
 
-      sandbox.stub(CalendarMemberEntity, 'findOne').resolves({
-        calendar_id: calendarId,
-        account_id: accountId,
-        role: 'owner',
-      } as any);
+      mockCalendarInterface.isCalendarOwnerById
+        .withArgs(accountId, calendarId)
+        .resolves(true);
 
       sandbox.stub(CalendarSubscriptionEntity, 'findOne').resolves({
         id: uuidv4(),
@@ -257,14 +268,13 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
       const mockAdapter = {
         updateSubscriptionAmount: sandbox.stub().resolves(),
         cancelSubscription: sandbox.stub().resolves(),
+        supportsAmountUpdates: sandbox.stub().returns(true),
       };
 
       sandbox.stub(SubscriptionEntity, 'findByPk').resolves(mockSubscriptionEntity as any);
-      sandbox.stub(CalendarMemberEntity, 'findOne').resolves({
-        calendar_id: calendarId,
-        account_id: accountId,
-        role: 'owner',
-      } as any);
+      mockCalendarInterface.isCalendarOwnerById
+        .withArgs(accountId, calendarId)
+        .resolves(true);
 
       // The specific calendar subscription to remove
       sandbox.stub(CalendarSubscriptionEntity, 'findOne').resolves(mockCalendarSub as any);
@@ -324,14 +334,13 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
       const mockAdapter = {
         updateSubscriptionAmount: sandbox.stub().resolves(),
         cancelSubscription: sandbox.stub().resolves(),
+        supportsAmountUpdates: sandbox.stub().returns(true),
       };
 
       sandbox.stub(SubscriptionEntity, 'findByPk').resolves(mockSubscriptionEntity as any);
-      sandbox.stub(CalendarMemberEntity, 'findOne').resolves({
-        calendar_id: calendarId,
-        account_id: accountId,
-        role: 'owner',
-      } as any);
+      mockCalendarInterface.isCalendarOwnerById
+        .withArgs(accountId, calendarId)
+        .resolves(true);
       sandbox.stub(CalendarSubscriptionEntity, 'findOne').resolves(mockCalendarSub as any);
       // No remaining active subscriptions
       sandbox.stub(CalendarSubscriptionEntity, 'findAll').resolves([]);
@@ -365,11 +374,9 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
         status: 'active',
       } as any);
 
-      sandbox.stub(CalendarMemberEntity, 'findOne').resolves({
-        calendar_id: calendarId,
-        account_id: accountId,
-        role: 'owner',
-      } as any);
+      mockCalendarInterface.isCalendarOwnerById
+        .withArgs(accountId, calendarId)
+        .resolves(true);
 
       sandbox.stub(CalendarSubscriptionEntity, 'findOne').resolves(null);
 
@@ -390,11 +397,10 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
       const calendarId = uuidv4();
       const accountId = uuidv4();
 
-      // Calendar has an owner
-      sandbox.stub(CalendarMemberEntity, 'findOne').resolves({
-        account_id: accountId,
-        role: 'owner',
-      } as any);
+      // Calendar has an owner via CalendarInterface
+      mockCalendarInterface.getCalendarOwnerAccountId
+        .withArgs(calendarId)
+        .resolves(accountId);
 
       // Owner has admin role
       const { AccountRoleEntity } = await import('@/server/common/entity/account');
@@ -411,10 +417,9 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
       const calendarId = uuidv4();
       const accountId = uuidv4();
 
-      sandbox.stub(CalendarMemberEntity, 'findOne').resolves({
-        account_id: accountId,
-        role: 'owner',
-      } as any);
+      mockCalendarInterface.getCalendarOwnerAccountId
+        .withArgs(calendarId)
+        .resolves(accountId);
 
       const { AccountRoleEntity } = await import('@/server/common/entity/account');
       sandbox.stub(AccountRoleEntity, 'findOne').resolves(null);
@@ -435,10 +440,9 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
       const calendarId = uuidv4();
       const accountId = uuidv4();
 
-      sandbox.stub(CalendarMemberEntity, 'findOne').resolves({
-        account_id: accountId,
-        role: 'owner',
-      } as any);
+      mockCalendarInterface.getCalendarOwnerAccountId
+        .withArgs(calendarId)
+        .resolves(accountId);
 
       const { AccountRoleEntity } = await import('@/server/common/entity/account');
       sandbox.stub(AccountRoleEntity, 'findOne').resolves(null);
@@ -461,10 +465,9 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
       const calendarId = uuidv4();
       const accountId = uuidv4();
 
-      sandbox.stub(CalendarMemberEntity, 'findOne').resolves({
-        account_id: accountId,
-        role: 'owner',
-      } as any);
+      mockCalendarInterface.getCalendarOwnerAccountId
+        .withArgs(calendarId)
+        .resolves(accountId);
 
       const { AccountRoleEntity } = await import('@/server/common/entity/account');
       sandbox.stub(AccountRoleEntity, 'findOne').resolves(null);
@@ -478,7 +481,9 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
     it('should return unfunded when calendar has no owner', async () => {
       const calendarId = uuidv4();
 
-      sandbox.stub(CalendarMemberEntity, 'findOne').resolves(null);
+      mockCalendarInterface.getCalendarOwnerAccountId
+        .withArgs(calendarId)
+        .resolves(null);
 
       const status = await service.getFundingStatusForCalendar(calendarId);
       expect(status).toBe('unfunded');
@@ -548,12 +553,8 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
       sandbox.stub(ProviderFactory, 'getAdapter').returns(mockAdapter as any);
       sandbox.stub(SubscriptionEntity, 'fromModel').returns(mockSubscriptionEntity as any);
 
-      // Ownership verification for both calendars
-      const memberStub = sandbox.stub(CalendarMemberEntity, 'findOne');
-      memberStub.withArgs(sinon.match({ where: sinon.match({ calendar_id: calendarId1 }) }))
-        .resolves({ calendar_id: calendarId1, account_id: accountId, role: 'owner' } as any);
-      memberStub.withArgs(sinon.match({ where: sinon.match({ calendar_id: calendarId2 }) }))
-        .resolves({ calendar_id: calendarId2, account_id: accountId, role: 'owner' } as any);
+      // Ownership verification for both calendars via CalendarInterface
+      mockCalendarInterface.isCalendarOwnerById.resolves(true);
 
       const createStub = sandbox.stub(CalendarSubscriptionEntity, 'create').resolves({} as any);
 

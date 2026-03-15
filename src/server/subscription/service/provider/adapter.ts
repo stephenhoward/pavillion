@@ -149,6 +149,16 @@ export interface PaymentProviderAdapter {
   cancelSubscription(subscriptionId: string, immediate: boolean): Promise<void>;
 
   /**
+   * Whether the provider supports in-place subscription amount updates
+   *
+   * Stripe supports updating amounts on existing subscriptions.
+   * PayPal does not; subscriptions have fixed amounts set at creation.
+   *
+   * @returns True if updateSubscriptionAmount can be called
+   */
+  supportsAmountUpdates(): boolean;
+
+  /**
    * Update the amount on an existing subscription
    *
    * @param providerSubscriptionId - Provider's subscription ID

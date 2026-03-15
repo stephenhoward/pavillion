@@ -159,13 +159,13 @@ export const widgetConfigByAccount: RequestHandler = isRateLimitEnabled()
 
 /**
  * Calendar subscription rate limiter for authenticated users.
- * Limits: 30 requests per account per 15 minutes.
+ * Limits: 30 requests per account per 15 minutes (default config).
  * Prevents abuse of calendar add/remove subscription endpoints.
  */
 export const calendarSubscriptionByAccount: RequestHandler = isRateLimitEnabled()
   ? createAccountRateLimiter(
-    30,
-    15 * 60 * 1000, // 15 minutes
+    config.get<number>('rateLimit.calendarSubscription.byAccount.max'),
+    config.get<number>('rateLimit.calendarSubscription.byAccount.windowMs'),
     'calendar-subscription',
   )
   : noOpMiddleware;

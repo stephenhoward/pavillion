@@ -160,6 +160,14 @@ export class MockStripeAdapter implements PaymentProviderAdapter {
     // Mock cancellation - no actual API call
     return Promise.resolve();
   }
+  /**
+   * Mock Stripe supports amount updates
+   *
+   * @returns True
+   */
+  supportsAmountUpdates(): boolean {
+    return true;
+  }
 
   /**
    * Update subscription amount (mock)
@@ -391,6 +399,14 @@ export class MockPayPalAdapter implements PaymentProviderAdapter {
   async cancelSubscription(subscriptionId: string, immediate: boolean): Promise<void> {
     // Mock cancellation - no actual API call
     return Promise.resolve();
+  }
+  /**
+   * Mock PayPal does not support amount updates
+   *
+   * @returns False
+   */
+  supportsAmountUpdates(): boolean {
+    return false;
   }
 
   /**
