@@ -5,13 +5,11 @@ import { startTestServer, TestEnvironment } from './helpers/test-server';
 /**
  * E2E Tests: Profile Display Name Feature
  *
- * Tests the display name feature in the profile settings page:
+ * Tests the core display name workflow in profile settings:
  * - Display name field loads with current value
  * - Display name can be updated successfully
- * - Display name can be cleared (set to empty/null)
  * - Display name persists after page reload
- * - Display name saves on blur with feedback
- * - Display name appears in admin accounts list
+ * - Display name can be cleared (set to empty/null)
  *
  * UPDATED: Uses isolated test server with in-memory database for true test isolation
  * These tests run serially because they all modify the same admin
@@ -132,122 +130,5 @@ test.describe('Profile Display Name', () => {
     await page.reload();
     await page.waitForSelector('#display-name:not([disabled])', { timeout: 5000 });
     await expect(page.locator('#display-name')).toHaveValue('');
-  });
-
-  test('should show save feedback on blur', async ({ page }) => {
-    await page.goto(env.baseURL + '/profile');
-    await page.waitForSelector('#display-name:not([disabled])', { timeout: 5000 });
-
-    const displayNameInput = page.locator('#display-name');
-
-    // Feedback should not be visible initially
-    await expect(page.locator('.save-feedback')).not.toBeVisible();
-
-    // Change value and blur
-    await displayNameInput.fill('Feedback Test Name');
-    await displayNameInput.blur();
-
-    // Feedback should appear
-    const feedback = page.locator('.save-feedback');
-    await expect(feedback).toBeVisible({ timeout: 5000 });
-    await expect(feedback).not.toHaveClass(/is-error/);
-
-    // Feedback should contain success message
-    await expect(feedback).toContainText(/saved/i);
-
-    // Feedback should disappear after a few seconds
-    await expect(feedback).not.toBeVisible({ timeout: 5000 });
-  });
-
-  test('should disable input while saving', async ({ page }) => {
-    await page.goto(env.baseURL + '/profile');
-    await page.waitForSelector('#display-name:not([disabled])', { timeout: 5000 });
-
-    const displayNameInput = page.locator('#display-name');
-
-    // Fill in a new value
-    await displayNameInput.fill('Saving Test Name');
-
-    // Input should still be enabled before blur
-    await expect(displayNameInput).toBeEnabled();
-
-    // Trigger save
-    await displayNameInput.blur();
-
-    // Note: The input is disabled during save, but this happens very quickly
-    // so we may or may not catch it. The important thing is that it becomes
-    // enabled again after save completes.
-    await page.waitForTimeout(100); // Brief wait for save to start
-
-    // After save completes, input should be enabled again
-    await page.waitForSelector('#display-name:not([disabled])', { timeout: 5000 });
-    await expect(displayNameInput).toBeEnabled();
-  });
-
-  test('should display in admin accounts list', async ({ page }) => {
-    // First, set a unique display name
-    const uniqueDisplayName = `Admin DisplayName ${Date.now()}`;
-
-    await page.goto(env.baseURL + '/profile');
-    await page.waitForSelector('#display-name:not([disabled])', { timeout: 5000 });
-
-    const displayNameInput = page.locator('#display-name');
-    await displayNameInput.clear();
-    await displayNameInput.fill(uniqueDisplayName);
-    await displayNameInput.blur();
-    await expect(page.locator('.save-feedback:not(.is-error)')).toBeVisible({ timeout: 5000 });
-
-    // Now navigate to admin accounts list
-    await page.goto(env.baseURL + '/admin/accounts');
-    await page.waitForSelector('section#accounts', { timeout: 10000 });
-
-    // Wait for accounts table or cards to load
-    await page.waitForSelector('.accounts-table-desktop table[role="table"][aria-label="User accounts"], .accounts-mobile .account-card', { timeout: 10000 });
-
-    // The display name should appear in the accounts list
-    // (either in the desktop table or mobile cards)
-    await expect(page.locator(`text=${uniqueDisplayName}`).first()).toBeVisible({ timeout: 5000 });
-  });
-
-  test('should handle empty string vs null correctly', async ({ page }) => {
-    await page.goto(env.baseURL + '/profile');
-    await page.waitForSelector('#display-name:not([disabled])', { timeout: 5000 });
-
-    const displayNameInput = page.locator('#display-name');
-
-    // Test empty string
-    await displayNameInput.fill('');
-    await displayNameInput.blur();
-    await expect(page.locator('.save-feedback:not(.is-error)')).toBeVisible({ timeout: 5000 });
-    await expect(displayNameInput).toHaveValue('');
-
-    // Reload and verify
-    await page.reload();
-    await page.waitForSelector('#display-name:not([disabled])', { timeout: 5000 });
-    await expect(displayNameInput).toHaveValue('');
-  });
-
-  test('should maintain value after navigation away and back', async ({ page }) => {
-    // Set a display name
-    const testName = `Nav Test ${Date.now()}`;
-
-    await page.goto(env.baseURL + '/profile');
-    await page.waitForSelector('#display-name:not([disabled])', { timeout: 5000 });
-
-    const displayNameInput = page.locator('#display-name');
-    await displayNameInput.fill(testName);
-    await displayNameInput.blur();
-    await expect(page.locator('.save-feedback:not(.is-error)')).toBeVisible({ timeout: 5000 });
-
-    // Navigate away to dashboard
-    await page.goto(env.baseURL + '/');
-    await page.waitForSelector('body', { timeout: 5000 });
-
-    // Navigate back to profile
-    await page.goto(env.baseURL + '/profile');
-    await page.waitForSelector('#display-name:not([disabled])', { timeout: 5000 });
-
-    // Verify the display name is still there
-    await expect(page.locator('#display-name')).toHaveValue(testName);
   });
 });

@@ -7,9 +7,10 @@ database:
   storage: ':memory:'
   logging: false
 
-# Test mail transport
+# Test mail transport — must use 'testing' (not 'test') to match the
+# transport factory in EmailService.createTransport()
 mail:
-  transport: test
+  transport: testing
   from: test@pavillion.test
 
 # Disable rate limiting for tests
