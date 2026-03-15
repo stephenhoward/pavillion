@@ -48,5 +48,7 @@
 
   "portal_error": "Failed to access billing portal. Please try again.",
 
-  "subscriptions_disabled": "Subscriptions are not currently enabled on this instance."
+  "subscriptions_disabled": "Subscriptions are not currently enabled on this instance.",
+
+  "subscribe_to_fund_title": "Subscribe to Fund Calendar"
 }

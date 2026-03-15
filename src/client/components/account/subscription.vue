@@ -2,6 +2,7 @@
 import { useTranslation } from 'i18next-vue';
 import { ref, computed, onMounted } from 'vue';
 import SubscriptionService from '@/client/service/subscription';
+import SubscribeForm from '@/client/components/account/SubscribeForm.vue';
 
 const { t } = useTranslation('subscription');
 
@@ -20,9 +21,6 @@ const status = ref(null);
 
 // Subscribe form state
 const showSubscribeForm = ref(false);
-const selectedProvider = ref('');
-const selectedCycle = ref('monthly');
-const customAmount = ref(10.00);
 
 // Computed properties
 const hasSubscription = computed(() => status.value !== null);
@@ -79,65 +77,15 @@ async function loadData() {
  */
 function startSubscribe() {
   showSubscribeForm.value = true;
-  if (options.value.providers.length > 0) {
-    selectedProvider.value = options.value.providers[0].provider_type;
-  }
 }
 
 /**
- * Cancel subscription form
+ * Handle successful subscription from SubscribeForm
  */
-function cancelSubscribeForm() {
+async function onSubscribed() {
+  successMessage.value = t('subscribe_success');
   showSubscribeForm.value = false;
-  selectedProvider.value = '';
-  selectedCycle.value = 'monthly';
-  customAmount.value = 10.00;
-}
-
-/**
- * Submit subscription
- */
-async function submitSubscribe() {
-  if (!selectedProvider.value) {
-    errorMessage.value = t('select_provider_error');
-    return;
-  }
-
-  processing.value = true;
-  errorMessage.value = '';
-  successMessage.value = '';
-
-  try {
-    const params = {
-      provider_type: selectedProvider.value,
-      billing_cycle: selectedCycle.value,
-    };
-
-    // Add custom amount if PWYC is enabled
-    if (options.value.pay_what_you_can) {
-      params.amount = SubscriptionService.displayToMillicents(customAmount.value);
-    }
-
-    const result = await subscriptionService.subscribe(params);
-
-    // If provider requires redirect (e.g., Stripe Checkout)
-    if (result.redirectUrl) {
-      window.location.href = result.redirectUrl;
-      return;
-    }
-
-    // Subscription created successfully
-    successMessage.value = t('subscribe_success');
-    showSubscribeForm.value = false;
-    await loadData();
-  }
-  catch (error) {
-    console.error('Failed to subscribe:', error);
-    errorMessage.value = t('subscribe_error');
-  }
-  finally {
-    processing.value = false;
-  }
+  await loadData();
 }
 
 /**
@@ -238,75 +186,11 @@ onMounted(async () => {
       <!-- Subscribe form -->
       <div v-if="showSubscribeForm" class="subscribe-form">
         <h2>{{ t("subscribe_title") }}</h2>
-
-        <div class="form-group">
-          <label class="form-label">{{ t("select_provider") }}</label>
-          <div class="provider-options">
-            <label
-              v-for="provider in options.providers"
-              :key="provider.provider_type"
-              class="provider-option"
-            >
-              <input
-                type="radio"
-                :value="provider.provider_type"
-                v-model="selectedProvider"
-                :disabled="processing"
-              />
-              <span>{{ provider.display_name }}</span>
-            </label>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">{{ t("select_cycle") }}</label>
-          <div class="cycle-options">
-            <label class="cycle-option">
-              <input
-                type="radio"
-                value="monthly"
-                v-model="selectedCycle"
-                :disabled="processing"
-              />
-              <span>{{ t("billing_cycle_monthly") }} - {{ monthlyPriceDisplay }}</span>
-            </label>
-            <label class="cycle-option">
-              <input
-                type="radio"
-                value="yearly"
-                v-model="selectedCycle"
-                :disabled="processing"
-              />
-              <span>{{ t("billing_cycle_yearly") }} - {{ yearlyPriceDisplay }}</span>
-            </label>
-          </div>
-        </div>
-
-        <div v-if="options.pay_what_you_can" class="form-group">
-          <label class="form-label">{{ t("custom_amount_label") }}</label>
-          <div class="form-field">
-            <input
-              type="number"
-              v-model.number="customAmount"
-              step="0.01"
-              min="1"
-              :disabled="processing"
-            />
-            <div class="description">{{ t("custom_amount_description") }}</div>
-          </div>
-        </div>
-
+        <SubscribeForm @subscribed="onSubscribed" />
         <div class="form-actions">
           <button type="button"
-                  class="primary"
-                  :disabled="processing"
-                  @click="submitSubscribe">
-            {{ t("confirm_subscribe_button") }}
-          </button>
-          <button type="button"
                   class="secondary"
-                  :disabled="processing"
-                  @click="cancelSubscribeForm">
+                  @click="showSubscribeForm = false">
             {{ t("cancel_button") }}
           </button>
         </div>

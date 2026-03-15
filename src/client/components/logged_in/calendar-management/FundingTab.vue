@@ -23,6 +23,9 @@
     <!-- Loading State -->
     <LoadingMessage v-if="state.isLoading" :description="t('loading')" />
 
+    <!-- Subscriptions disabled - hide funding UI entirely -->
+    <template v-else-if="state.subscriptionsDisabled" />
+
     <!-- Funding Content -->
     <div v-else class="funding-content">
       <h2 class="funding-title">{{ t('title') }}</h2>
@@ -69,7 +72,22 @@
         </button>
       </div>
 
-      <!-- Unfunded Status -->
+      <!-- Unfunded Status - No subscription -->
+      <div v-else-if="state.fundingStatus === 'unfunded' && !state.hasSubscription" class="funding-card">
+        <div class="funding-status-badge funding-status-badge--unfunded">
+          {{ t('status_unfunded') }}
+        </div>
+        <p class="funding-description">{{ t('no_subscription_prompt') }}</p>
+        <button
+          type="button"
+          class="funding-button funding-button--primary"
+          @click="state.showSubscribeSheet = true"
+        >
+          {{ t('subscribe_to_fund_button') }}
+        </button>
+      </div>
+
+      <!-- Unfunded Status - Has subscription -->
       <div v-else class="funding-card">
         <div class="funding-status-badge funding-status-badge--unfunded">
           {{ t('status_unfunded') }}
@@ -85,27 +103,35 @@
         </button>
       </div>
     </div>
+
+    <!-- Subscribe Sheet -->
+    <SubscribeSheet
+      v-if="state.showSubscribeSheet"
+      :calendarId="props.calendarId"
+      @close="state.showSubscribeSheet = false"
+      @subscribed="onSubscribed"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { reactive, onMounted } from 'vue';
 import { useTranslation } from 'i18next-vue';
+import { useRoute } from 'vue-router';
 import SubscriptionService from '@/client/service/subscription';
 import type { FundingStatus } from '@/client/service/subscription';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
+import SubscribeSheet from '@/client/components/logged_in/calendar-management/SubscribeSheet.vue';
 
-const props = defineProps({
-  calendarId: {
-    type: String,
-    required: true,
-  },
-});
+const props = defineProps<{
+  calendarId: string;
+}>();
 
 const { t } = useTranslation('calendars', {
   keyPrefix: 'funding',
 });
 
+const route = useRoute();
 const subscriptionService = new SubscriptionService();
 
 const state = reactive({
@@ -115,6 +141,9 @@ const state = reactive({
   success: '',
   fundingStatus: '' as FundingStatus['status'] | '',
   grantInfo: null as { reason?: string; expiresAt?: string } | null,
+  hasSubscription: false,
+  subscriptionsDisabled: false,
+  showSubscribeSheet: false,
 });
 
 /**
@@ -140,16 +169,23 @@ const formatDate = (dateString: string): string => {
 };
 
 /**
- * Load the funding status for this calendar
+ * Load the funding status and subscription state for this calendar
  */
 const loadFundingStatus = async () => {
   try {
     state.isLoading = true;
     state.error = '';
 
-    const result: FundingStatus = await subscriptionService.getFundingStatus(props.calendarId);
-    state.fundingStatus = result.status;
-    state.grantInfo = result.grantInfo ?? null;
+    const [fundingResult, subscriptionStatus, subscriptionOptions] = await Promise.all([
+      subscriptionService.getFundingStatus(props.calendarId),
+      subscriptionService.getStatus(),
+      subscriptionService.getOptions(),
+    ]);
+
+    state.fundingStatus = fundingResult.status;
+    state.grantInfo = fundingResult.grantInfo ?? null;
+    state.hasSubscription = subscriptionStatus !== null;
+    state.subscriptionsDisabled = !subscriptionOptions.enabled;
   }
   catch (error) {
     console.error('Error loading funding status:', error);
@@ -211,7 +247,38 @@ const removeFromSubscription = async () => {
   }
 };
 
-onMounted(loadFundingStatus);
+/**
+ * Handle successful subscription from the subscribe sheet
+ */
+const onSubscribed = async () => {
+  state.showSubscribeSheet = false;
+  try {
+    state.isActing = true;
+    await subscriptionService.addCalendarToSubscription(props.calendarId, 0);
+    state.success = t('subscribe_and_fund_success');
+    clearMessages();
+  }
+  catch (error) {
+    console.error('Error auto-funding calendar after subscribe:', error);
+    state.error = t('error_adding');
+    clearMessages();
+  }
+  finally {
+    state.isActing = false;
+    await loadFundingStatus();
+  }
+};
+
+onMounted(async () => {
+  await loadFundingStatus();
+
+  // Handle checkout return
+  if (route.query.checkout === 'success') {
+    state.success = t('checkout_return_success');
+    clearMessages();
+    await loadFundingStatus();
+  }
+});
 </script>
 
 <style scoped lang="scss">
