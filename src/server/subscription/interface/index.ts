@@ -52,16 +52,6 @@ export default class SubscriptionInterface {
     return this.subscriptionService.hasSubscriptionAccess(calendarId);
   }
 
-  /**
-   * Get subscription status for an account
-   *
-   * @param accountId - Account ID to query
-   * @returns Subscription model or null if no subscription exists
-   */
-  async getSubscriptionStatus(accountId: string): Promise<Subscription | null> {
-    return this.subscriptionService.getSubscriptionStatus(accountId);
-  }
-
   // Settings management
 
   async getSettings(): Promise<SubscriptionSettings> {
@@ -125,47 +115,38 @@ export default class SubscriptionInterface {
   // Calendar subscription operations
 
   /**
-   * Add a calendar to an existing subscription
+   * Add a calendar to the account's active subscription
    *
-   * @param accountId - Account ID (for ownership verification)
-   * @param subscriptionId - Subscription ID
+   * @param accountId - Account ID (subscription resolved internally)
    * @param calendarId - Calendar ID to add
    * @param amount - Amount to allocate in millicents
    */
-  async addCalendarToSubscription(accountId: string, subscriptionId: string, calendarId: string, amount: number): Promise<void> {
-    return this.subscriptionService.addCalendarToSubscription(accountId, subscriptionId, calendarId, amount);
+  async addCalendarToSubscription(accountId: string, calendarId: string, amount: number): Promise<void> {
+    return this.subscriptionService.addCalendarToSubscription(accountId, calendarId, amount);
   }
 
   /**
-   * Remove a calendar from an existing subscription
+   * Remove a calendar from the account's active subscription
    *
-   * @param accountId - Account ID (for ownership verification)
-   * @param subscriptionId - Subscription ID
+   * @param accountId - Account ID (subscription resolved internally)
    * @param calendarId - Calendar ID to remove
    */
-  async removeCalendarFromSubscription(accountId: string, subscriptionId: string, calendarId: string): Promise<void> {
-    return this.subscriptionService.removeCalendarFromSubscription(accountId, subscriptionId, calendarId);
+  async removeCalendarFromSubscription(accountId: string, calendarId: string): Promise<void> {
+    return this.subscriptionService.removeCalendarFromSubscription(accountId, calendarId);
   }
 
   /**
    * Get funding status for a calendar
    *
+   * Verifies ownership internally and returns the funding status.
+   *
+   * @param accountId - Account ID requesting the status (must own the calendar)
    * @param calendarId - Calendar ID to check
    * @returns Funding status: 'admin-exempt' | 'grant' | 'funded' | 'unfunded'
+   * @throws ValidationError if accountId does not own the calendar
    */
-  async getFundingStatusForCalendar(calendarId: string): Promise<FundingStatus> {
-    return this.subscriptionService.getFundingStatusForCalendar(calendarId);
-  }
-
-  /**
-   * Check if an account owns a calendar
-   *
-   * @param accountId - Account ID to check
-   * @param calendarId - Calendar ID to check
-   * @returns True if account owns the calendar
-   */
-  async isCalendarOwner(accountId: string, calendarId: string): Promise<boolean> {
-    return this.subscriptionService.isCalendarOwner(accountId, calendarId);
+  async getFundingStatusForCalendar(accountId: string, calendarId: string): Promise<FundingStatus> {
+    return this.subscriptionService.getFundingStatusForCalendar(accountId, calendarId);
   }
 
   // Admin operations

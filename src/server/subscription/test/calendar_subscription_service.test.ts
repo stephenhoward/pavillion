@@ -51,7 +51,7 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
   });
 
   describe('addCalendarToSubscription', () => {
-    it('should create a CalendarSubscription row and update Stripe total', async () => {
+    it('should create a CalendarSubscription row and update provider total', async () => {
       const subscriptionId = uuidv4();
       const calendarId = uuidv4();
       const accountId = uuidv4();
@@ -98,7 +98,7 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
         .withArgs(accountId, calendarId)
         .resolves(true);
 
-      sandbox.stub(SubscriptionEntity, 'findByPk').resolves(mockSubscriptionEntity as any);
+      sandbox.stub(SubscriptionEntity, 'findOne').resolves(mockSubscriptionEntity as any);
       // No existing active calendar subscription
       sandbox.stub(CalendarSubscriptionEntity, 'findOne').resolves(null);
       const createStub = sandbox.stub(CalendarSubscriptionEntity, 'create').resolves(mockCalendarSubscription as any);
@@ -107,47 +107,29 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
       sandbox.stub(ProviderConfigEntity, 'findByPk').resolves(mockProviderConfig as any);
       sandbox.stub(ProviderFactory, 'getAdapter').returns(mockAdapter as any);
 
-      await service.addCalendarToSubscription(accountId, subscriptionId, calendarId, amount);
+      await service.addCalendarToSubscription(accountId, calendarId, amount);
 
       expect(createStub.called).toBe(true);
       expect(mockAdapter.updateSubscriptionAmount.called).toBe(true);
     });
 
-    it('should throw SubscriptionNotFoundError if subscription does not exist', async () => {
+    it('should throw SubscriptionNotFoundError if no active subscription exists', async () => {
       const accountId = uuidv4();
-      const subscriptionId = uuidv4();
       const calendarId = uuidv4();
 
-      sandbox.stub(SubscriptionEntity, 'findByPk').resolves(null);
+      sandbox.stub(SubscriptionEntity, 'findOne').resolves(null);
 
       await expect(
-        service.addCalendarToSubscription(accountId, subscriptionId, calendarId, 500000),
+        service.addCalendarToSubscription(accountId, calendarId, 500000),
       ).rejects.toThrow(SubscriptionNotFoundError);
-    });
-
-    it('should throw ValidationError if account does not own the subscription', async () => {
-      const accountId = uuidv4();
-      const otherAccountId = uuidv4();
-      const subscriptionId = uuidv4();
-      const calendarId = uuidv4();
-
-      sandbox.stub(SubscriptionEntity, 'findByPk').resolves({
-        id: subscriptionId,
-        account_id: otherAccountId,
-        status: 'active',
-      } as any);
-
-      await expect(
-        service.addCalendarToSubscription(accountId, subscriptionId, calendarId, 500000),
-      ).rejects.toThrow(ValidationError);
     });
 
     it('should throw ValidationError if account does not own the calendar', async () => {
       const accountId = uuidv4();
-      const subscriptionId = uuidv4();
       const calendarId = uuidv4();
+      const subscriptionId = uuidv4();
 
-      sandbox.stub(SubscriptionEntity, 'findByPk').resolves({
+      sandbox.stub(SubscriptionEntity, 'findOne').resolves({
         id: subscriptionId,
         account_id: accountId,
         status: 'active',
@@ -159,7 +141,7 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
         .resolves(false);
 
       await expect(
-        service.addCalendarToSubscription(accountId, subscriptionId, calendarId, 500000),
+        service.addCalendarToSubscription(accountId, calendarId, 500000),
       ).rejects.toThrow(ValidationError);
     });
 
@@ -168,7 +150,7 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
       const subscriptionId = uuidv4();
       const calendarId = uuidv4();
 
-      sandbox.stub(SubscriptionEntity, 'findByPk').resolves({
+      sandbox.stub(SubscriptionEntity, 'findOne').resolves({
         id: subscriptionId,
         account_id: accountId,
         status: 'active',
@@ -184,17 +166,16 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
       } as any);
 
       await expect(
-        service.addCalendarToSubscription(accountId, subscriptionId, calendarId, 500000),
+        service.addCalendarToSubscription(accountId, calendarId, 500000),
       ).rejects.toThrow(DuplicateCalendarSubscriptionError);
     });
 
     it('should throw error with InvalidAmountError name if amount is negative', async () => {
       const accountId = uuidv4();
-      const subscriptionId = uuidv4();
       const calendarId = uuidv4();
 
       try {
-        await service.addCalendarToSubscription(accountId, subscriptionId, calendarId, -100);
+        await service.addCalendarToSubscription(accountId, calendarId, -100);
         expect.fail('Should have thrown');
       }
       catch (err: any) {
@@ -204,21 +185,17 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
 
     it('should throw ValidationError for invalid UUID parameters', async () => {
       await expect(
-        service.addCalendarToSubscription('not-uuid', uuidv4(), uuidv4(), 500000),
+        service.addCalendarToSubscription('not-uuid', uuidv4(), 500000),
       ).rejects.toThrow(ValidationError);
 
       await expect(
-        service.addCalendarToSubscription(uuidv4(), 'not-uuid', uuidv4(), 500000),
-      ).rejects.toThrow(ValidationError);
-
-      await expect(
-        service.addCalendarToSubscription(uuidv4(), uuidv4(), 'not-uuid', 500000),
+        service.addCalendarToSubscription(uuidv4(), 'not-uuid', 500000),
       ).rejects.toThrow(ValidationError);
     });
   });
 
   describe('removeCalendarFromSubscription', () => {
-    it('should set end_time and reduce Stripe amount', async () => {
+    it('should set end_time and reduce provider amount', async () => {
       const subscriptionId = uuidv4();
       const calendarId = uuidv4();
       const accountId = uuidv4();
@@ -271,7 +248,7 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
         supportsAmountUpdates: sandbox.stub().returns(true),
       };
 
-      sandbox.stub(SubscriptionEntity, 'findByPk').resolves(mockSubscriptionEntity as any);
+      sandbox.stub(SubscriptionEntity, 'findOne').resolves(mockSubscriptionEntity as any);
       mockCalendarInterface.isCalendarOwnerById
         .withArgs(accountId, calendarId)
         .resolves(true);
@@ -283,7 +260,7 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
       sandbox.stub(ProviderConfigEntity, 'findByPk').resolves(mockProviderConfig as any);
       sandbox.stub(ProviderFactory, 'getAdapter').returns(mockAdapter as any);
 
-      await service.removeCalendarFromSubscription(accountId, subscriptionId, calendarId);
+      await service.removeCalendarFromSubscription(accountId, calendarId);
 
       expect(mockCalendarSub.end_time).toEqual(periodEnd);
       expect(mockCalendarSub.save.called).toBe(true);
@@ -292,7 +269,7 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
       expect(mockAdapter.updateSubscriptionAmount.firstCall.args[1]).toBe(300000);
     });
 
-    it('should cancel subscription when removing last active calendar', async () => {
+    it('should cancel subscription via this.cancel() when removing last active calendar', async () => {
       const subscriptionId = uuidv4();
       const calendarId = uuidv4();
       const accountId = uuidv4();
@@ -337,6 +314,8 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
         supportsAmountUpdates: sandbox.stub().returns(true),
       };
 
+      // findOne is called for resolveActiveSubscription; findByPk is called in cancel()
+      sandbox.stub(SubscriptionEntity, 'findOne').resolves(mockSubscriptionEntity as any);
       sandbox.stub(SubscriptionEntity, 'findByPk').resolves(mockSubscriptionEntity as any);
       mockCalendarInterface.isCalendarOwnerById
         .withArgs(accountId, calendarId)
@@ -347,19 +326,19 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
       sandbox.stub(ProviderConfigEntity, 'findByPk').resolves(mockProviderConfig as any);
       sandbox.stub(ProviderFactory, 'getAdapter').returns(mockAdapter as any);
 
-      await service.removeCalendarFromSubscription(accountId, subscriptionId, calendarId);
+      await service.removeCalendarFromSubscription(accountId, calendarId);
 
       expect(mockCalendarSub.end_time).toEqual(periodEnd);
       expect(mockAdapter.cancelSubscription.called).toBe(true);
       expect(mockSubscriptionEntity.status).toBe('cancelled');
     });
 
-    it('should throw SubscriptionNotFoundError if subscription does not exist', async () => {
+    it('should throw SubscriptionNotFoundError if no active subscription exists', async () => {
       const accountId = uuidv4();
-      sandbox.stub(SubscriptionEntity, 'findByPk').resolves(null);
+      sandbox.stub(SubscriptionEntity, 'findOne').resolves(null);
 
       await expect(
-        service.removeCalendarFromSubscription(accountId, uuidv4(), uuidv4()),
+        service.removeCalendarFromSubscription(accountId, uuidv4()),
       ).rejects.toThrow(SubscriptionNotFoundError);
     });
 
@@ -368,7 +347,7 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
       const subscriptionId = uuidv4();
       const calendarId = uuidv4();
 
-      sandbox.stub(SubscriptionEntity, 'findByPk').resolves({
+      sandbox.stub(SubscriptionEntity, 'findOne').resolves({
         id: subscriptionId,
         account_id: accountId,
         status: 'active',
@@ -381,13 +360,13 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
       sandbox.stub(CalendarSubscriptionEntity, 'findOne').resolves(null);
 
       await expect(
-        service.removeCalendarFromSubscription(accountId, subscriptionId, calendarId),
+        service.removeCalendarFromSubscription(accountId, calendarId),
       ).rejects.toThrow(CalendarSubscriptionNotFoundError);
     });
 
     it('should throw ValidationError for invalid UUID parameters', async () => {
       await expect(
-        service.removeCalendarFromSubscription('not-uuid', uuidv4(), uuidv4()),
+        service.removeCalendarFromSubscription('not-uuid', uuidv4()),
       ).rejects.toThrow(ValidationError);
     });
   });
@@ -396,6 +375,11 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
     it('should return admin-exempt when calendar owner is admin', async () => {
       const calendarId = uuidv4();
       const accountId = uuidv4();
+
+      // Account owns the calendar
+      mockCalendarInterface.isCalendarOwnerById
+        .withArgs(accountId, calendarId)
+        .resolves(true);
 
       // Calendar has an owner via CalendarInterface
       mockCalendarInterface.getCalendarOwnerAccountId
@@ -409,7 +393,7 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
         role: 'admin',
       } as any);
 
-      const status = await service.getFundingStatusForCalendar(calendarId);
+      const status = await service.getFundingStatusForCalendar(accountId, calendarId);
       expect(status).toBe('admin-exempt');
     });
 
@@ -417,6 +401,11 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
       const calendarId = uuidv4();
       const accountId = uuidv4();
 
+      // Account owns the calendar
+      mockCalendarInterface.isCalendarOwnerById
+        .withArgs(accountId, calendarId)
+        .resolves(true);
+
       mockCalendarInterface.getCalendarOwnerAccountId
         .withArgs(calendarId)
         .resolves(accountId);
@@ -424,7 +413,7 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
       const { AccountRoleEntity } = await import('@/server/common/entity/account');
       sandbox.stub(AccountRoleEntity, 'findOne').resolves(null);
 
-      // Active grant for this calendar
+      // Active grant for this calendar (via hasActiveGrant)
       sandbox.stub(ComplimentaryGrantEntity, 'findOne').resolves({
         id: uuidv4(),
         calendar_id: calendarId,
@@ -432,13 +421,18 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
         expires_at: null,
       } as any);
 
-      const status = await service.getFundingStatusForCalendar(calendarId);
+      const status = await service.getFundingStatusForCalendar(accountId, calendarId);
       expect(status).toBe('grant');
     });
 
     it('should return funded when calendar has an active calendar subscription', async () => {
       const calendarId = uuidv4();
       const accountId = uuidv4();
+
+      // Account owns the calendar
+      mockCalendarInterface.isCalendarOwnerById
+        .withArgs(accountId, calendarId)
+        .resolves(true);
 
       mockCalendarInterface.getCalendarOwnerAccountId
         .withArgs(calendarId)
@@ -447,8 +441,8 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
       const { AccountRoleEntity } = await import('@/server/common/entity/account');
       sandbox.stub(AccountRoleEntity, 'findOne').resolves(null);
 
-      // No grant
-      sandbox.stub(ComplimentaryGrantEntity, 'findOne').resolves(null);
+      // No grant - hasActiveGrant returns null for first call, CalendarSubscriptionEntity for second
+      const findOneStub = sandbox.stub(ComplimentaryGrantEntity, 'findOne').resolves(null);
 
       // Active calendar subscription exists
       sandbox.stub(CalendarSubscriptionEntity, 'findOne').resolves({
@@ -457,13 +451,18 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
         end_time: null,
       } as any);
 
-      const status = await service.getFundingStatusForCalendar(calendarId);
+      const status = await service.getFundingStatusForCalendar(accountId, calendarId);
       expect(status).toBe('funded');
     });
 
     it('should return unfunded when no exemption, grant, or subscription exists', async () => {
       const calendarId = uuidv4();
       const accountId = uuidv4();
+
+      // Account owns the calendar
+      mockCalendarInterface.isCalendarOwnerById
+        .withArgs(accountId, calendarId)
+        .resolves(true);
 
       mockCalendarInterface.getCalendarOwnerAccountId
         .withArgs(calendarId)
@@ -474,24 +473,53 @@ describe('SubscriptionService - Calendar Subscription Methods', () => {
       sandbox.stub(ComplimentaryGrantEntity, 'findOne').resolves(null);
       sandbox.stub(CalendarSubscriptionEntity, 'findOne').resolves(null);
 
-      const status = await service.getFundingStatusForCalendar(calendarId);
+      const status = await service.getFundingStatusForCalendar(accountId, calendarId);
       expect(status).toBe('unfunded');
     });
 
     it('should return unfunded when calendar has no owner', async () => {
       const calendarId = uuidv4();
+      const accountId = uuidv4();
+
+      // Account owns the calendar (for ownership check)
+      mockCalendarInterface.isCalendarOwnerById
+        .withArgs(accountId, calendarId)
+        .resolves(true);
 
       mockCalendarInterface.getCalendarOwnerAccountId
         .withArgs(calendarId)
         .resolves(null);
 
-      const status = await service.getFundingStatusForCalendar(calendarId);
+      const status = await service.getFundingStatusForCalendar(accountId, calendarId);
       expect(status).toBe('unfunded');
     });
 
     it('should throw ValidationError for invalid calendarId UUID', async () => {
+      const accountId = uuidv4();
+
       await expect(
-        service.getFundingStatusForCalendar('not-a-uuid'),
+        service.getFundingStatusForCalendar(accountId, 'not-a-uuid'),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('should throw ValidationError for invalid accountId UUID', async () => {
+      const calendarId = uuidv4();
+
+      await expect(
+        service.getFundingStatusForCalendar('not-a-uuid', calendarId),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('should throw ValidationError when account does not own the calendar', async () => {
+      const calendarId = uuidv4();
+      const accountId = uuidv4();
+
+      mockCalendarInterface.isCalendarOwnerById
+        .withArgs(accountId, calendarId)
+        .resolves(false);
+
+      await expect(
+        service.getFundingStatusForCalendar(accountId, calendarId),
       ).rejects.toThrow(ValidationError);
     });
   });

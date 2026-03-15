@@ -390,6 +390,25 @@ export default class SubscriptionService {
   }
 
   /**
+   * Resolve the active subscription for an account
+   *
+   * @param accountId - Account ID
+   * @returns Active subscription entity
+   * @throws SubscriptionNotFoundError if no active subscription exists
+   */
+  private async resolveActiveSubscription(accountId: string): Promise<SubscriptionEntity> {
+    const subscriptionEntity = await SubscriptionEntity.findOne({
+      where: { account_id: accountId, status: 'active' },
+    });
+
+    if (!subscriptionEntity) {
+      throw new SubscriptionNotFoundError(accountId);
+    }
+
+    return subscriptionEntity;
+  }
+
+  /**
    * Create a new subscription for a user
    *
    * @param accountId - Account ID
@@ -515,25 +534,21 @@ export default class SubscriptionService {
   /**
    * Add a calendar to an existing subscription
    *
-   * Creates a CalendarSubscription row and updates the Stripe total amount.
+   * Resolves the active subscription for the account internally.
+   * Creates a CalendarSubscription row and updates the provider total amount.
    *
-   * @param accountId - Account ID (for ownership verification)
-   * @param subscriptionId - Subscription ID
+   * @param accountId - Account ID (used to resolve subscription and verify ownership)
    * @param calendarId - Calendar ID to add
    * @param amount - Amount to allocate in millicents
    */
   async addCalendarToSubscription(
     accountId: string,
-    subscriptionId: string,
     calendarId: string,
     amount: number,
   ): Promise<void> {
     // Validate UUIDs
     if (!isValidUUID(accountId)) {
       throw new ValidationError('Invalid accountId: must be a valid UUID');
-    }
-    if (!isValidUUID(subscriptionId)) {
-      throw new ValidationError('Invalid subscriptionId: must be a valid UUID');
     }
     if (!isValidUUID(calendarId)) {
       throw new ValidationError('Invalid calendarId: must be a valid UUID');
@@ -544,16 +559,8 @@ export default class SubscriptionService {
       throw new InvalidAmountError();
     }
 
-    // Find the subscription
-    const subscriptionEntity = await SubscriptionEntity.findByPk(subscriptionId);
-    if (!subscriptionEntity) {
-      throw new SubscriptionNotFoundError(subscriptionId);
-    }
-
-    // Verify account owns the subscription
-    if (subscriptionEntity.account_id !== accountId) {
-      throw new ValidationError('Account does not own this subscription');
-    }
+    // Resolve the active subscription for this account
+    const subscriptionEntity = await this.resolveActiveSubscription(accountId);
 
     // Verify account owns the calendar
     await this.verifyCalendarOwnership(accountId, calendarId);
@@ -561,67 +568,55 @@ export default class SubscriptionService {
     // Check for existing active calendar subscription
     const existing = await CalendarSubscriptionEntity.findOne({
       where: {
-        subscription_id: subscriptionId,
+        subscription_id: subscriptionEntity.id,
         calendar_id: calendarId,
         end_time: { [Op.is]: null as any },
       },
     });
 
     if (existing) {
-      throw new DuplicateCalendarSubscriptionError(subscriptionId, calendarId);
+      throw new DuplicateCalendarSubscriptionError(subscriptionEntity.id, calendarId);
     }
 
     // Create the calendar subscription row
     await CalendarSubscriptionEntity.create({
       id: uuidv4(),
-      subscription_id: subscriptionId,
+      subscription_id: subscriptionEntity.id,
       calendar_id: calendarId,
       amount,
       end_time: null,
     });
 
-    // Recalculate total and update Stripe
-    const newTotal = await this.calculateActiveCalendarTotal(subscriptionId);
+    // Recalculate total and update provider
+    const newTotal = await this.calculateActiveCalendarTotal(subscriptionEntity.id);
     await this.updateProviderAmount(subscriptionEntity, newTotal);
   }
 
   /**
    * Remove a calendar from a subscription
    *
+   * Resolves the active subscription for the account internally.
    * Sets end_time to the subscription's current_period_end (calendar retains access until then).
-   * Reduces the Stripe amount immediately. If this is the last active calendar,
+   * Reduces the provider amount immediately. If this is the last active calendar,
    * cancels the entire subscription.
    *
-   * @param accountId - Account ID (for ownership verification)
-   * @param subscriptionId - Subscription ID
+   * @param accountId - Account ID (used to resolve subscription and verify ownership)
    * @param calendarId - Calendar ID to remove
    */
   async removeCalendarFromSubscription(
     accountId: string,
-    subscriptionId: string,
     calendarId: string,
   ): Promise<void> {
     // Validate UUIDs
     if (!isValidUUID(accountId)) {
       throw new ValidationError('Invalid accountId: must be a valid UUID');
     }
-    if (!isValidUUID(subscriptionId)) {
-      throw new ValidationError('Invalid subscriptionId: must be a valid UUID');
-    }
     if (!isValidUUID(calendarId)) {
       throw new ValidationError('Invalid calendarId: must be a valid UUID');
     }
 
-    // Find the subscription
-    const subscriptionEntity = await SubscriptionEntity.findByPk(subscriptionId);
-    if (!subscriptionEntity) {
-      throw new SubscriptionNotFoundError(subscriptionId);
-    }
-
-    // Verify account owns the subscription
-    if (subscriptionEntity.account_id !== accountId) {
-      throw new ValidationError('Account does not own this subscription');
-    }
+    // Resolve the active subscription for this account
+    const subscriptionEntity = await this.resolveActiveSubscription(accountId);
 
     // Verify account owns the calendar
     await this.verifyCalendarOwnership(accountId, calendarId);
@@ -629,14 +624,14 @@ export default class SubscriptionService {
     // Find the active calendar subscription
     const calendarSub = await CalendarSubscriptionEntity.findOne({
       where: {
-        subscription_id: subscriptionId,
+        subscription_id: subscriptionEntity.id,
         calendar_id: calendarId,
         end_time: { [Op.is]: null as any },
       },
     });
 
     if (!calendarSub) {
-      throw new CalendarSubscriptionNotFoundError(subscriptionId, calendarId);
+      throw new CalendarSubscriptionNotFoundError(subscriptionEntity.id, calendarId);
     }
 
     // Set end_time to subscription's current_period_end
@@ -646,31 +641,17 @@ export default class SubscriptionService {
     // Check remaining active calendar subscriptions
     const remainingActive = await CalendarSubscriptionEntity.findAll({
       where: {
-        subscription_id: subscriptionId,
+        subscription_id: subscriptionEntity.id,
         end_time: { [Op.is]: null as any },
       },
     });
 
     if (remainingActive.length === 0) {
-      // Last calendar removed: cancel the Stripe subscription
-      const providerEntity = await ProviderConfigEntity.findByPk(subscriptionEntity.provider_config_id);
-      if (providerEntity) {
-        const providerConfig = providerEntity.toModel();
-        const adapter = ProviderFactory.getAdapter(providerConfig);
-        await adapter.cancelSubscription(subscriptionEntity.provider_subscription_id, false);
-      }
-
-      subscriptionEntity.status = 'cancelled';
-      subscriptionEntity.cancelled_at = new Date();
-      await subscriptionEntity.save();
-
-      this.eventBus.emit('subscription:cancelled', {
-        subscription: subscriptionEntity.toModel(),
-        immediate: false,
-      });
+      // Last calendar removed: cancel the entire subscription
+      await this.cancel(subscriptionEntity.id, false);
     }
     else {
-      // Recalculate total and update Stripe
+      // Recalculate total and update provider
       const newTotal = remainingActive.reduce((sum, cs) => sum + cs.amount, 0);
       await this.updateProviderAmount(subscriptionEntity, newTotal);
     }
@@ -679,15 +660,25 @@ export default class SubscriptionService {
   /**
    * Get the funding status for a calendar
    *
-   * Checks in priority order: admin exemption, active grant, active calendar subscription.
+   * Checks in priority order: ownership verification, admin exemption, active grant,
+   * active calendar subscription.
    *
+   * @param accountId - Account ID requesting the funding status (must own the calendar)
    * @param calendarId - Calendar ID to check
    * @returns Funding status: 'admin-exempt' | 'grant' | 'funded' | 'unfunded'
+   * @throws ValidationError if accountId does not own the calendar
    */
-  async getFundingStatusForCalendar(calendarId: string): Promise<FundingStatus> {
+  async getFundingStatusForCalendar(accountId: string, calendarId: string): Promise<FundingStatus> {
     if (!isValidUUID(calendarId)) {
       throw new ValidationError('Invalid calendarId: must be a valid UUID');
     }
+
+    if (!isValidUUID(accountId)) {
+      throw new ValidationError('Invalid accountId: must be a valid UUID');
+    }
+
+    // Verify ownership - throws ValidationError if not owner
+    await this.verifyCalendarOwnership(accountId, calendarId);
 
     if (!this.calendarInterface) {
       return 'unfunded';
@@ -713,18 +704,9 @@ export default class SubscriptionService {
     }
 
     // Check for active grant targeting this calendar
-    const grant = await ComplimentaryGrantEntity.findOne({
-      where: {
-        calendar_id: calendarId,
-        revoked_at: { [Op.is]: null as any },
-        [Op.or]: [
-          { expires_at: { [Op.is]: null as any } },
-          { expires_at: { [Op.gt]: new Date() } },
-        ],
-      },
-    });
+    const hasGrant = await this.hasActiveGrant(calendarId);
 
-    if (grant) {
+    if (hasGrant) {
       return 'grant';
     }
 
@@ -1007,17 +989,6 @@ export default class SubscriptionService {
     });
 
     return !!calendarSub;
-  }
-
-  /**
-   * Get subscription status for cross-domain queries
-   *
-   * @param accountId - Account ID
-   * @returns Subscription status or null
-   */
-  async getSubscriptionStatus(accountId: string): Promise<Subscription | null> {
-    const subscription = await this.getStatus(accountId);
-    return subscription || null;
   }
 
   /**
@@ -1311,20 +1282,5 @@ export default class SubscriptionService {
       // Fail-secure: deny access on subscription check error
       return false;
     }
-  }
-
-  /**
-   * Check if an account owns a calendar via CalendarInterface
-   *
-   * @param accountId - Account ID to check
-   * @param calendarId - Calendar ID to check
-   * @returns True if account owns the calendar
-   */
-  async isCalendarOwner(accountId: string, calendarId: string): Promise<boolean> {
-    if (!this.calendarInterface) {
-      return false;
-    }
-
-    return this.calendarInterface.isCalendarOwnerById(accountId, calendarId);
   }
 }

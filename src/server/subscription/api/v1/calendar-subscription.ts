@@ -90,17 +90,8 @@ export default class CalendarSubscriptionRoutes {
         return;
       }
 
-      // Get the user's subscription
-      const subscription = await this.interface.getStatus(account.id);
-
-      if (!subscription) {
-        res.status(404).json({ error: 'No subscription found', errorName: 'SubscriptionNotFoundError' });
-        return;
-      }
-
       await this.interface.addCalendarToSubscription(
         account.id,
-        subscription.id,
         calendarId,
         amount,
       );
@@ -147,17 +138,8 @@ export default class CalendarSubscriptionRoutes {
         return;
       }
 
-      // Get the user's subscription
-      const subscription = await this.interface.getStatus(account.id);
-
-      if (!subscription) {
-        res.status(404).json({ error: 'No subscription found', errorName: 'SubscriptionNotFoundError' });
-        return;
-      }
-
       await this.interface.removeCalendarFromSubscription(
         account.id,
-        subscription.id,
         calendarId,
       );
 
@@ -184,7 +166,8 @@ export default class CalendarSubscriptionRoutes {
    * GET /calendars/:calendarId/funding
    * Get funding status for a calendar (owner-only)
    *
-   * Returns 403 if the authenticated user does not own the calendar.
+   * Ownership is verified by the service layer. Returns 400 (ValidationError)
+   * if the authenticated user does not own the calendar.
    */
   async getFundingStatus(req: Request, res: Response): Promise<void> {
     try {
@@ -202,21 +185,16 @@ export default class CalendarSubscriptionRoutes {
         return;
       }
 
-      // Verify the requesting user owns the calendar
-      const isOwner = await this.interface.isCalendarOwner(account.id, calendarId);
-
-      if (!isOwner) {
-        res.status(403).json({ error: 'Only calendar owners can view funding status' });
-        return;
-      }
-
-      const fundingStatus = await this.interface.getFundingStatusForCalendar(calendarId);
+      const fundingStatus = await this.interface.getFundingStatusForCalendar(account.id, calendarId);
 
       res.json({ calendarId, fundingStatus });
     }
     catch (error) {
       logError(error, 'Error fetching funding status');
-      if (error instanceof CalendarNotFoundError) {
+      if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
+      }
+      else if (error instanceof CalendarNotFoundError) {
         res.status(404).json({ error: error.message, errorName: 'CalendarNotFoundError' });
       }
       else {

@@ -8,6 +8,7 @@ import { Account } from '@/common/model/account';
 import { Subscription } from '@/common/model/subscription';
 import { testApp } from '@/server/common/test/lib/express';
 import {
+  SubscriptionNotFoundError,
   CalendarSubscriptionNotFoundError,
   DuplicateCalendarSubscriptionError,
   CalendarNotFoundError,
@@ -53,11 +54,6 @@ describe('CalendarSubscriptionRoutes API', () => {
     };
 
     it('should return 200 on successful add', async () => {
-      const mockSubscription = new Subscription('sub-1');
-      mockSubscription.accountId = 'test-account-id';
-      mockSubscription.status = 'active';
-
-      mockInterface.getStatus.resolves(mockSubscription);
       mockInterface.addCalendarToSubscription.resolves();
 
       bindAddCalendar();
@@ -72,6 +68,11 @@ describe('CalendarSubscriptionRoutes API', () => {
 
       expect(response.body).toEqual({ success: true });
       expect(mockInterface.addCalendarToSubscription.calledOnce).toBe(true);
+      expect(mockInterface.addCalendarToSubscription.calledWith(
+        'test-account-id',
+        'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d',
+        500000,
+      )).toBe(true);
     });
 
     it('should return 401 when not authenticated', async () => {
@@ -116,8 +117,10 @@ describe('CalendarSubscriptionRoutes API', () => {
       expect(response.body.error).toContain('amount is required');
     });
 
-    it('should return 404 when user has no subscription', async () => {
-      mockInterface.getStatus.resolves(null);
+    it('should return 404 when service throws SubscriptionNotFoundError', async () => {
+      mockInterface.addCalendarToSubscription.rejects(
+        new SubscriptionNotFoundError('test-account-id'),
+      );
 
       bindAddCalendar();
 
@@ -130,10 +133,6 @@ describe('CalendarSubscriptionRoutes API', () => {
     });
 
     it('should return 409 when calendar already has an active subscription', async () => {
-      const mockSubscription = new Subscription('sub-1');
-      mockSubscription.accountId = 'test-account-id';
-
-      mockInterface.getStatus.resolves(mockSubscription);
       mockInterface.addCalendarToSubscription.rejects(
         new DuplicateCalendarSubscriptionError('sub-1', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d'),
       );
@@ -149,10 +148,6 @@ describe('CalendarSubscriptionRoutes API', () => {
     });
 
     it('should return 404 when calendar does not exist', async () => {
-      const mockSubscription = new Subscription('sub-1');
-      mockSubscription.accountId = 'test-account-id';
-
-      mockInterface.getStatus.resolves(mockSubscription);
       mockInterface.addCalendarToSubscription.rejects(
         new CalendarNotFoundError('a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d'),
       );
@@ -168,10 +163,6 @@ describe('CalendarSubscriptionRoutes API', () => {
     });
 
     it('should return 400 when service throws ValidationError (ownership)', async () => {
-      const mockSubscription = new Subscription('sub-1');
-      mockSubscription.accountId = 'test-account-id';
-
-      mockInterface.getStatus.resolves(mockSubscription);
       mockInterface.addCalendarToSubscription.rejects(
         new ValidationError('Account does not own this calendar'),
       );
@@ -196,10 +187,6 @@ describe('CalendarSubscriptionRoutes API', () => {
     };
 
     it('should return 200 on successful removal', async () => {
-      const mockSubscription = new Subscription('sub-1');
-      mockSubscription.accountId = 'test-account-id';
-
-      mockInterface.getStatus.resolves(mockSubscription);
       mockInterface.removeCalendarFromSubscription.resolves();
 
       bindRemoveCalendar();
@@ -210,6 +197,10 @@ describe('CalendarSubscriptionRoutes API', () => {
 
       expect(response.body).toEqual({ success: true });
       expect(mockInterface.removeCalendarFromSubscription.calledOnce).toBe(true);
+      expect(mockInterface.removeCalendarFromSubscription.calledWith(
+        'test-account-id',
+        'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d',
+      )).toBe(true);
     });
 
     it('should return 401 when not authenticated', async () => {
@@ -230,8 +221,10 @@ describe('CalendarSubscriptionRoutes API', () => {
       expect(response.body.error).toContain('Invalid calendarId');
     });
 
-    it('should return 404 when user has no subscription', async () => {
-      mockInterface.getStatus.resolves(null);
+    it('should return 404 when service throws SubscriptionNotFoundError', async () => {
+      mockInterface.removeCalendarFromSubscription.rejects(
+        new SubscriptionNotFoundError('test-account-id'),
+      );
 
       bindRemoveCalendar();
 
@@ -243,10 +236,6 @@ describe('CalendarSubscriptionRoutes API', () => {
     });
 
     it('should return 404 when calendar subscription not found', async () => {
-      const mockSubscription = new Subscription('sub-1');
-      mockSubscription.accountId = 'test-account-id';
-
-      mockInterface.getStatus.resolves(mockSubscription);
       mockInterface.removeCalendarFromSubscription.rejects(
         new CalendarSubscriptionNotFoundError('sub-1', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d'),
       );
@@ -261,10 +250,6 @@ describe('CalendarSubscriptionRoutes API', () => {
     });
 
     it('should return 400 when service throws ValidationError', async () => {
-      const mockSubscription = new Subscription('sub-1');
-      mockSubscription.accountId = 'test-account-id';
-
-      mockInterface.getStatus.resolves(mockSubscription);
       mockInterface.removeCalendarFromSubscription.rejects(
         new ValidationError('Account does not own this calendar'),
       );
@@ -288,7 +273,6 @@ describe('CalendarSubscriptionRoutes API', () => {
     };
 
     it('should return 200 with funding status for calendar owner', async () => {
-      mockInterface.isCalendarOwner.resolves(true);
       mockInterface.getFundingStatusForCalendar.resolves('funded' as any);
 
       bindGetFundingStatus();
@@ -299,6 +283,11 @@ describe('CalendarSubscriptionRoutes API', () => {
 
       expect(response.body.calendarId).toBe('a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d');
       expect(response.body.fundingStatus).toBe('funded');
+      // Verify accountId is passed to getFundingStatusForCalendar
+      expect(mockInterface.getFundingStatusForCalendar.calledWith(
+        'test-account-id',
+        'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d',
+      )).toBe(true);
     });
 
     it('should return 401 when not authenticated', async () => {
@@ -309,16 +298,18 @@ describe('CalendarSubscriptionRoutes API', () => {
         .expect(401);
     });
 
-    it('should return 403 when user does not own the calendar', async () => {
-      mockInterface.isCalendarOwner.resolves(false);
+    it('should return 400 when user does not own the calendar (ValidationError from service)', async () => {
+      mockInterface.getFundingStatusForCalendar.rejects(
+        new ValidationError('Account does not own calendar'),
+      );
 
       bindGetFundingStatus();
 
       const response = await request(testApp(router))
         .get('/handler/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/funding')
-        .expect(403);
+        .expect(400);
 
-      expect(response.body.error).toContain('Only calendar owners');
+      expect(response.body.errorName).toBe('ValidationError');
     });
 
     it('should return 400 when calendarId is not a valid UUID', async () => {
@@ -332,7 +323,6 @@ describe('CalendarSubscriptionRoutes API', () => {
     });
 
     it('should return 404 when calendar does not exist', async () => {
-      mockInterface.isCalendarOwner.resolves(true);
       mockInterface.getFundingStatusForCalendar.rejects(
         new CalendarNotFoundError('a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d'),
       );
@@ -347,7 +337,6 @@ describe('CalendarSubscriptionRoutes API', () => {
     });
 
     it('should return admin-exempt status', async () => {
-      mockInterface.isCalendarOwner.resolves(true);
       mockInterface.getFundingStatusForCalendar.resolves('admin-exempt' as any);
 
       bindGetFundingStatus();
@@ -360,7 +349,6 @@ describe('CalendarSubscriptionRoutes API', () => {
     });
 
     it('should return unfunded status', async () => {
-      mockInterface.isCalendarOwner.resolves(true);
       mockInterface.getFundingStatusForCalendar.resolves('unfunded' as any);
 
       bindGetFundingStatus();
