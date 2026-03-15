@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import SubscriptionService from '@/server/subscription/service/subscription';
-import { Subscription, SubscriptionSettings, ProviderConfig } from '@/common/model/subscription';
+import { Subscription, SubscriptionSettings, ProviderConfig, FundingStatus } from '@/common/model/subscription';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
 import { ProviderSubscription, WebhookEvent } from '@/server/subscription/service/provider/adapter';
 
@@ -20,24 +20,24 @@ export default class SubscriptionInterface {
   // Cross-domain query methods
 
   /**
-   * Check if an account has an active subscription
+   * Check if a calendar has an active subscription
    *
-   * @param accountId - Account ID to check
-   * @returns True if account has active subscription, false otherwise
+   * @param calendarId - Calendar ID to check
+   * @returns True if calendar has active subscription, false otherwise
    */
-  async hasActiveSubscription(accountId: string): Promise<boolean> {
-    return this.subscriptionService.hasActiveSubscription(accountId);
+  async hasActiveSubscription(calendarId: string): Promise<boolean> {
+    return this.subscriptionService.hasActiveSubscription(calendarId);
   }
 
   /**
-   * Check if an account has access to subscription features
+   * Check if a calendar has access to subscription features
    * (either via active subscription or complimentary grant)
    *
-   * @param accountId - Account ID to check
-   * @returns True if account has subscription access, false otherwise
+   * @param calendarId - Calendar ID to check
+   * @returns True if calendar has subscription access, false otherwise
    */
-  async hasSubscriptionAccess(accountId: string): Promise<boolean> {
-    return this.subscriptionService.hasSubscriptionAccess(accountId);
+  async hasSubscriptionAccess(calendarId: string): Promise<boolean> {
+    return this.subscriptionService.hasSubscriptionAccess(calendarId);
   }
 
   /**
@@ -77,19 +77,25 @@ export default class SubscriptionInterface {
   // User subscription operations
 
   async getOptions(): Promise<{
-    settings: SubscriptionSettings;
+    enabled: boolean;
     providers: ProviderConfig[];
+    monthlyPrice: number;
+    yearlyPrice: number;
+    currency: string;
+    payWhatYouCan: boolean;
   }> {
     return this.subscriptionService.getOptions();
   }
 
   async subscribe(
     accountId: string,
-    providerType: 'stripe' | 'paypal',
+    accountEmail: string,
+    providerConfigId: string,
     billingCycle: 'monthly' | 'yearly',
-    amount?: number,
-  ): Promise<ProviderSubscription> {
-    return this.subscriptionService.subscribe(accountId, providerType, billingCycle, amount);
+    amount: number,
+    calendarIds?: string[],
+  ): Promise<Subscription> {
+    return this.subscriptionService.subscribe(accountId, accountEmail, providerConfigId, billingCycle, amount, calendarIds);
   }
 
   async getStatus(accountId: string): Promise<Subscription | null> {
@@ -102,6 +108,41 @@ export default class SubscriptionInterface {
 
   async getBillingPortalUrl(accountId: string, returnUrl: string): Promise<string> {
     return this.subscriptionService.getBillingPortalUrl(accountId, returnUrl);
+  }
+
+  // Calendar subscription operations
+
+  /**
+   * Add a calendar to an existing subscription
+   *
+   * @param accountId - Account ID (for ownership verification)
+   * @param subscriptionId - Subscription ID
+   * @param calendarId - Calendar ID to add
+   * @param amount - Amount to allocate in millicents
+   */
+  async addCalendarToSubscription(accountId: string, subscriptionId: string, calendarId: string, amount: number): Promise<void> {
+    return this.subscriptionService.addCalendarToSubscription(accountId, subscriptionId, calendarId, amount);
+  }
+
+  /**
+   * Remove a calendar from an existing subscription
+   *
+   * @param accountId - Account ID (for ownership verification)
+   * @param subscriptionId - Subscription ID
+   * @param calendarId - Calendar ID to remove
+   */
+  async removeCalendarFromSubscription(accountId: string, subscriptionId: string, calendarId: string): Promise<void> {
+    return this.subscriptionService.removeCalendarFromSubscription(accountId, subscriptionId, calendarId);
+  }
+
+  /**
+   * Get funding status for a calendar
+   *
+   * @param calendarId - Calendar ID to check
+   * @returns Funding status: 'admin-exempt' | 'grant' | 'funded' | 'unfunded'
+   */
+  async getFundingStatusForCalendar(calendarId: string): Promise<FundingStatus> {
+    return this.subscriptionService.getFundingStatusForCalendar(calendarId);
   }
 
   // Admin operations
@@ -125,16 +166,16 @@ export default class SubscriptionInterface {
   // Complimentary grant operations
 
   /**
-   * Create a complimentary grant for an account
+   * Create a complimentary grant for a calendar
    *
-   * @param accountId - Account ID to grant access to
+   * @param calendarId - Calendar ID to grant access to
    * @param grantedBy - Account ID of the admin granting access
    * @param reason - Optional reason for the grant
    * @param expiresAt - Optional expiration date for the grant
    * @returns The created ComplimentaryGrant
    */
-  async createGrant(accountId: string, grantedBy: string, reason?: string, expiresAt?: Date): Promise<ComplimentaryGrant> {
-    return this.subscriptionService.createGrant(accountId, grantedBy, reason, expiresAt);
+  async createGrant(calendarId: string, grantedBy: string, reason?: string, expiresAt?: Date): Promise<ComplimentaryGrant> {
+    return this.subscriptionService.createGrant(calendarId, grantedBy, reason, expiresAt);
   }
 
   /**
@@ -158,23 +199,23 @@ export default class SubscriptionInterface {
   }
 
   /**
-   * Check if an account has an active complimentary grant
+   * Check if a calendar has an active complimentary grant
    *
-   * @param accountId - Account ID to check
-   * @returns True if account has an active grant, false otherwise
+   * @param calendarId - Calendar ID to check
+   * @returns True if calendar has an active grant, false otherwise
    */
-  async hasActiveGrant(accountId: string): Promise<boolean> {
-    return this.subscriptionService.hasActiveGrant(accountId);
+  async hasActiveGrant(calendarId: string): Promise<boolean> {
+    return this.subscriptionService.hasActiveGrant(calendarId);
   }
 
   /**
-   * Get the complimentary grant for a specific account
+   * Get the complimentary grant for a specific calendar
    *
-   * @param accountId - Account ID to look up
+   * @param calendarId - Calendar ID to look up
    * @returns The ComplimentaryGrant if found, null otherwise
    */
-  async getGrantForAccount(accountId: string): Promise<ComplimentaryGrant | null> {
-    return this.subscriptionService.getGrantForAccount(accountId);
+  async getGrantForCalendar(calendarId: string): Promise<ComplimentaryGrant | null> {
+    return this.subscriptionService.getGrantForCalendar(calendarId);
   }
 
   // Platform OAuth configuration

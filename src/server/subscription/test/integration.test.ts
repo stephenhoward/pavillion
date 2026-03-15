@@ -8,7 +8,9 @@ import { SubscriptionSettingsEntity } from '@/server/subscription/entity/subscri
 import { ProviderConfigEntity } from '@/server/subscription/entity/provider_config';
 import { SubscriptionEntity } from '@/server/subscription/entity/subscription';
 import { SubscriptionEventEntity } from '@/server/subscription/entity/subscription_event';
+import { CalendarSubscriptionEntity } from '@/server/subscription/entity/calendar_subscription';
 import { AccountEntity } from '@/server/common/entity/account';
+import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { ProviderFactory } from '@/server/subscription/service/provider/factory';
 import { ProviderConfig, SubscriptionSettings, Subscription } from '@/common/model/subscription';
 import { WebhookEvent } from '@/server/subscription/service/provider/adapter';
@@ -576,9 +578,18 @@ describe('Subscription System Integration Tests', () => {
     });
     await account.save();
 
+    // Create a calendar for the account so we can link the subscription to it
+    const calendar = CalendarEntity.build({
+      id: uuidv4(),
+      url_name: 'interface-test-cal',
+      languages: 'en',
+      default_date_range: 'month',
+    });
+    await calendar.save();
+
     const providerConfig = await createProviderConfig('stripe');
 
-    // Create active subscription
+    // Create active subscription for the account
     const subscription = SubscriptionEntity.build({
       id: uuidv4(),
       account_id: account.id,
@@ -596,21 +607,30 @@ describe('Subscription System Integration Tests', () => {
     });
     await subscription.save();
 
-    // Test interface method: hasActiveSubscription
-    const hasActive = await service.hasActiveSubscription(account.id);
+    // Link the subscription to the calendar via CalendarSubscriptionEntity
+    const calendarSub = CalendarSubscriptionEntity.build({
+      id: uuidv4(),
+      subscription_id: subscription.id,
+      calendar_id: calendar.id,
+      amount: 1000000,
+      end_time: null,
+    });
+    await calendarSub.save();
+
+    // Test interface method: hasActiveSubscription — now takes calendarId
+    const hasActive = await service.hasActiveSubscription(calendar.id);
     expect(hasActive).toBe(true);
 
-    // Test with account that has no subscription
-    const accountWithoutSub = AccountEntity.build({
+    // Test with a calendar that has no subscription
+    const calendarWithoutSub = CalendarEntity.build({
       id: uuidv4(),
-      email: 'no-sub@example.com',
-      password_hash: 'hash',
-      status: 'active',
+      url_name: 'no-sub-cal',
       languages: 'en',
+      default_date_range: 'month',
     });
-    await accountWithoutSub.save();
+    await calendarWithoutSub.save();
 
-    const hasActiveNoSub = await service.hasActiveSubscription(accountWithoutSub.id);
+    const hasActiveNoSub = await service.hasActiveSubscription(calendarWithoutSub.id);
     expect(hasActiveNoSub).toBe(false);
 
     // Test getStatus - should work even though column query uses createdAt

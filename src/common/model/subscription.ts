@@ -16,6 +16,11 @@ export type BillingCycle = 'monthly' | 'yearly';
 export type ProviderType = 'stripe' | 'paypal';
 
 /**
+ * Calendar funding status for UI display
+ */
+export type FundingStatus = 'admin-exempt' | 'grant' | 'funded' | 'unfunded';
+
+/**
  * Instance-wide subscription settings
  */
 export class SubscriptionSettings extends PrimaryModel {

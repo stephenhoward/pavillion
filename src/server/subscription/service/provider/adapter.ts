@@ -149,6 +149,15 @@ export interface PaymentProviderAdapter {
   cancelSubscription(subscriptionId: string, immediate: boolean): Promise<void>;
 
   /**
+   * Update the amount on an existing subscription
+   *
+   * @param providerSubscriptionId - Provider's subscription ID
+   * @param newAmount - New subscription amount in millicents
+   * @param currency - ISO 4217 currency code
+   */
+  updateSubscriptionAmount(providerSubscriptionId: string, newAmount: number, currency: string): Promise<void>;
+
+  /**
    * Retrieve current subscription status from provider
    *
    * @param subscriptionId - Provider's subscription ID

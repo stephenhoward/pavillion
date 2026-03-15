@@ -3,6 +3,7 @@ import sinon from 'sinon';
 import { ProviderConfig } from '@/common/model/subscription';
 import { StripeAdapter } from '../service/provider/stripe';
 import { PayPalAdapter } from '../service/provider/paypal';
+import { MockStripeAdapter, MockPayPalAdapter } from '../service/provider/mock_adapters';
 import { ProviderFactory } from '../service/provider/factory';
 import Stripe from 'stripe';
 
@@ -28,6 +29,7 @@ describe('Payment Provider Adapters', () => {
         'handleOAuthCallback',
         'createSubscription',
         'cancelSubscription',
+        'updateSubscriptionAmount',
         'getSubscription',
         'getBillingPortalUrl',
         'verifyWebhookSignature',
@@ -36,7 +38,7 @@ describe('Payment Provider Adapters', () => {
 
       // This test validates structure
       expect(requiredProps.length).toBe(1);
-      expect(requiredMethods.length).toBe(8);
+      expect(requiredMethods.length).toBe(9);
 
       // Verify StripeAdapter implements the interface
       const stripeConfig = new ProviderConfig('test-stripe', 'stripe');
@@ -165,6 +167,68 @@ describe('Payment Provider Adapters', () => {
       expect(mockStripe.subscriptions.create.calledOnce).toBe(true);
     });
 
+    it('should update subscription amount via Stripe API', async () => {
+      // Mock subscription retrieve
+      mockStripe.subscriptions.retrieve.resolves({
+        id: 'sub_mock123',
+        items: {
+          data: [
+            {
+              id: 'si_item123',
+              price: {
+                recurring: { interval: 'month' },
+              },
+            },
+          ],
+        },
+      });
+
+      // Mock price creation for the new amount
+      mockStripe.prices.create.resolves({
+        id: 'price_new123',
+      });
+
+      // Mock subscription update
+      mockStripe.subscriptions.update.resolves({
+        id: 'sub_mock123',
+      });
+
+      await stripeAdapter.updateSubscriptionAmount('sub_mock123', 2000000, 'USD');
+
+      // Verify subscription was retrieved to get the current item
+      expect(mockStripe.subscriptions.retrieve.calledOnce).toBe(true);
+      expect(mockStripe.subscriptions.retrieve.calledWith('sub_mock123')).toBe(true);
+
+      // Verify a new price was created with the correct amount
+      expect(mockStripe.prices.create.calledOnce).toBe(true);
+      const priceArgs = mockStripe.prices.create.firstCall.args[0];
+      expect(priceArgs.unit_amount).toBe(2000); // 2000000 millicents -> 2000 cents
+      expect(priceArgs.currency).toBe('usd');
+      expect(priceArgs.recurring.interval).toBe('month');
+
+      // Verify subscription was updated with no proration
+      expect(mockStripe.subscriptions.update.calledOnce).toBe(true);
+      const updateArgs = mockStripe.subscriptions.update.firstCall.args;
+      expect(updateArgs[0]).toBe('sub_mock123');
+      expect(updateArgs[1].items[0].id).toBe('si_item123');
+      expect(updateArgs[1].items[0].price).toBe('price_new123');
+      expect(updateArgs[1].proration_behavior).toBe('none');
+    });
+
+    it('should throw when updating subscription with no items', async () => {
+      // Mock subscription retrieve with no items
+      mockStripe.subscriptions.retrieve.resolves({
+        id: 'sub_mock123',
+        items: {
+          data: [],
+        },
+      });
+
+      await expect(
+        stripeAdapter.updateSubscriptionAmount('sub_mock123', 2000000, 'USD'),
+      ).rejects.toThrow('Subscription has no items to update');
+    });
+
     it('should verify webhook signature with valid and invalid signatures', () => {
       const payload = JSON.stringify({ id: 'evt_test', type: 'invoice.paid' });
       const validSignature = 't=1234567890,v1=valid_signature_hash';
@@ -244,6 +308,12 @@ describe('Payment Provider Adapters', () => {
       expect(mockPayPalClient.subscriptions.subscriptionsCreate.calledOnce).toBe(true);
     });
 
+    it('should throw when updateSubscriptionAmount is called', async () => {
+      await expect(
+        paypalAdapter.updateSubscriptionAmount('I-MOCK123', 2000000, 'USD'),
+      ).rejects.toThrow('updateSubscriptionAmount is not implemented for PayPal');
+    });
+
     it('should verify webhook signature with valid and invalid signatures', () => {
       const payload = JSON.stringify({
         id: 'WH-TEST123',
@@ -266,6 +336,42 @@ describe('Payment Provider Adapters', () => {
       // Test with empty payload
       const invalidResult2 = paypalAdapter.verifyWebhookSignature('', validSignature);
       expect(invalidResult2).toBe(false);
+    });
+  });
+
+  describe('MockStripeAdapter', () => {
+    it('should record updateSubscriptionAmount calls', async () => {
+      const mockAdapter = new MockStripeAdapter();
+
+      await mockAdapter.updateSubscriptionAmount('sub_123', 5000000, 'USD');
+      await mockAdapter.updateSubscriptionAmount('sub_456', 3000000, 'EUR');
+
+      expect(mockAdapter.updateSubscriptionAmountCalls).toHaveLength(2);
+      expect(mockAdapter.updateSubscriptionAmountCalls[0]).toEqual({
+        providerSubscriptionId: 'sub_123',
+        newAmount: 5000000,
+        currency: 'USD',
+      });
+      expect(mockAdapter.updateSubscriptionAmountCalls[1]).toEqual({
+        providerSubscriptionId: 'sub_456',
+        newAmount: 3000000,
+        currency: 'EUR',
+      });
+    });
+  });
+
+  describe('MockPayPalAdapter', () => {
+    it('should record updateSubscriptionAmount calls', async () => {
+      const mockAdapter = new MockPayPalAdapter();
+
+      await mockAdapter.updateSubscriptionAmount('I-123', 5000000, 'USD');
+
+      expect(mockAdapter.updateSubscriptionAmountCalls).toHaveLength(1);
+      expect(mockAdapter.updateSubscriptionAmountCalls[0]).toEqual({
+        providerSubscriptionId: 'I-123',
+        newAmount: 5000000,
+        currency: 'USD',
+      });
     });
   });
 

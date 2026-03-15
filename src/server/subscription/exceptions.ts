@@ -56,9 +56,16 @@ export class AccountNotFoundError extends Error {
   }
 }
 
+export class CalendarNotFoundError extends Error {
+  constructor(calendarId: string) {
+    super(`Calendar not found: ${calendarId}`);
+    this.name = 'CalendarNotFoundError';
+  }
+}
+
 export class DuplicateGrantError extends Error {
-  constructor(accountId: string) {
-    super(`An active grant already exists for account: ${accountId}`);
+  constructor(calendarId: string) {
+    super(`An active grant already exists for calendar: ${calendarId}`);
     this.name = 'DuplicateGrantError';
   }
 }
@@ -67,5 +74,29 @@ export class GrantNotFoundError extends Error {
   constructor(grantId: string) {
     super(`Grant not found: ${grantId}`);
     this.name = 'GrantNotFoundError';
+  }
+}
+
+export class SubscriptionNotFoundError extends Error {
+  constructor(subscriptionId: string) {
+    super(`Subscription not found: ${subscriptionId}`);
+    this.name = 'SubscriptionNotFoundError';
+    Object.setPrototypeOf(this, SubscriptionNotFoundError.prototype);
+  }
+}
+
+export class CalendarSubscriptionNotFoundError extends Error {
+  constructor(subscriptionId: string, calendarId: string) {
+    super(`No active calendar subscription found for subscription ${subscriptionId} and calendar ${calendarId}`);
+    this.name = 'CalendarSubscriptionNotFoundError';
+    Object.setPrototypeOf(this, CalendarSubscriptionNotFoundError.prototype);
+  }
+}
+
+export class DuplicateCalendarSubscriptionError extends Error {
+  constructor(subscriptionId: string, calendarId: string) {
+    super(`An active calendar subscription already exists for subscription ${subscriptionId} and calendar ${calendarId}`);
+    this.name = 'DuplicateCalendarSubscriptionError';
+    Object.setPrototypeOf(this, DuplicateCalendarSubscriptionError.prototype);
   }
 }

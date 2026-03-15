@@ -13,6 +13,7 @@ import AccountService from '@/server/accounts/service/account';
 import { TestEnvironment } from '@/server/test/lib/test_environment';
 import { SubscriptionSettingsEntity } from '@/server/subscription/entity/subscription_settings';
 import { SubscriptionEntity } from '@/server/subscription/entity/subscription';
+import { CalendarSubscriptionEntity } from '@/server/subscription/entity/calendar_subscription';
 
 /**
  * Integration tests for Subscription Gating in Widget Embedding
@@ -93,9 +94,11 @@ describe('Subscription Gating Integration Tests', () => {
   }
 
   /**
-   * Helper function to create an active subscription for an account
+   * Helper function to create an active subscription for an account and link it to a calendar.
+   * hasActiveSubscription now checks CalendarSubscriptionEntity by calendar_id, so both
+   * a SubscriptionEntity and a CalendarSubscriptionEntity are required.
    */
-  async function createActiveSubscription(accountId: string) {
+  async function createActiveSubscription(accountId: string, calendarId?: string) {
     const futureDate = new Date();
     futureDate.setFullYear(futureDate.getFullYear() + 1); // 1 year in the future
 
@@ -114,6 +117,20 @@ describe('Subscription Gating Integration Tests', () => {
       updated_at: new Date(),
     });
     await subscription.save();
+
+    // Link the subscription to the calendar so hasActiveSubscription(calendarId) returns true
+    if (calendarId) {
+      const calendarSub = CalendarSubscriptionEntity.build({
+        id: uuidv4(),
+        subscription_id: subscription.id,
+        calendar_id: calendarId,
+        amount: 5.00,
+        end_time: null,
+      });
+      await calendarSub.save();
+    }
+
+    return subscription;
   }
 
   /**
@@ -141,9 +158,18 @@ describe('Subscription Gating Integration Tests', () => {
   }
 
   /**
-   * Helper function to clear all subscriptions for an account
+   * Helper function to clear all subscriptions for an account (and their calendar links)
    */
   async function clearSubscriptions(accountId: string) {
+    // Find all subscriptions for this account first
+    const subs = await SubscriptionEntity.findAll({ where: { account_id: accountId } });
+    const subIds = subs.map((s) => s.id);
+
+    // Remove calendar subscription links before removing subscriptions
+    if (subIds.length > 0) {
+      await CalendarSubscriptionEntity.destroy({ where: { subscription_id: subIds } });
+    }
+
     await SubscriptionEntity.destroy({
       where: { account_id: accountId },
     });
@@ -175,8 +201,8 @@ describe('Subscription Gating Integration Tests', () => {
     subscribedCalendar = await calendarInterface.createCalendar(subscribedAccount, 'subscribed-cal');
     unsubscribedCalendar = await calendarInterface.createCalendar(unsubscribedAccount, 'unsubscribed-cal');
 
-    // Create active subscription for subscribed account
-    await createActiveSubscription(subscribedAccount.id);
+    // Create active subscription for subscribed account linked to their calendar
+    await createActiveSubscription(subscribedAccount.id, subscribedCalendar.id);
   });
 
   afterAll(async () => {
@@ -212,7 +238,7 @@ describe('Subscription Gating Integration Tests', () => {
 
     it('should return 200 when subscriptions enabled and user has active subscription', async () => {
       await enableSubscriptions();
-      await createActiveSubscription(subscribedAccount.id);
+      await createActiveSubscription(subscribedAccount.id, subscribedCalendar.id);
 
       const response = await env.authPut(
         subscribedToken,
@@ -336,7 +362,7 @@ describe('Subscription Gating Integration Tests', () => {
 
     it('should return 200 when subscriptions enabled and calendar owner has subscription', async () => {
       await enableSubscriptions();
-      await createActiveSubscription(subscribedAccount.id);
+      await createActiveSubscription(subscribedAccount.id, subscribedCalendar.id);
 
       const response = await request(env.app)
         .get(`/api/widget/v1/calendars/${subscribedCalendar.urlName}`)
@@ -453,7 +479,7 @@ describe('Subscription Gating Integration Tests', () => {
       // Create a calendar owned by subscribed user
       const privateCalendar = await calendarInterface.createCalendar(subscribedAccount, 'private-cal');
       await enableSubscriptions();
-      await createActiveSubscription(subscribedAccount.id);
+      await createActiveSubscription(subscribedAccount.id, subscribedCalendar.id);
 
       // Unsubscribed user tries to configure widget on private calendar
       const response = await env.authPut(
@@ -470,7 +496,7 @@ describe('Subscription Gating Integration Tests', () => {
 
     it('should handle consistent behavior when subscription expires during widget config request', async () => {
       await enableSubscriptions();
-      await createActiveSubscription(unsubscribedAccount.id);
+      await createActiveSubscription(unsubscribedAccount.id, unsubscribedCalendar.id);
 
       // First call: active subscription
       const response1 = await env.authPut(
@@ -500,7 +526,7 @@ describe('Subscription Gating Integration Tests', () => {
   describe('Edge Cases', () => {
     it('should stop serving widget data when calendar owner subscription expires', async () => {
       await enableSubscriptions();
-      await createActiveSubscription(unsubscribedAccount.id);
+      await createActiveSubscription(unsubscribedAccount.id, unsubscribedCalendar.id);
 
       // Set widget domain while subscribed
       await env.authPut(
@@ -568,9 +594,9 @@ describe('Subscription Gating Integration Tests', () => {
 
       // Enable subscriptions and set up different states
       await enableSubscriptions();
-      await createActiveSubscription(subscribedAccount.id);
+      await createActiveSubscription(subscribedAccount.id, subscribedCalendar.id);
       // unsubscribedAccount has no subscription
-      await createActiveSubscription(thirdAccount.id);
+      await createActiveSubscription(thirdAccount.id, thirdCalendar.id);
 
       // Test subscribed calendar (should work)
       const response1 = await env.authPut(

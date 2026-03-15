@@ -1,4 +1,4 @@
-import { Model, Table, Column, PrimaryKey, ForeignKey, DataType, CreatedAt } from 'sequelize-typescript';
+import { Model, Table, Column, PrimaryKey, ForeignKey, BelongsTo, DataType, CreatedAt } from 'sequelize-typescript';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { SubscriptionEntity } from './subscription';
 import db from '@/server/common/entity/db';
@@ -42,6 +42,9 @@ class CalendarSubscriptionEntity extends Model {
     field: 'subscription_id',
   })
   declare subscription_id: string;
+
+  @BelongsTo(() => SubscriptionEntity)
+  declare subscription: SubscriptionEntity;
 
   @ForeignKey(() => CalendarEntity)
   @Column({

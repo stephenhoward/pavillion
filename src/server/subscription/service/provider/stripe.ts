@@ -273,6 +273,56 @@ export class StripeAdapter implements PaymentProviderAdapter {
   }
 
   /**
+   * Update the amount on an existing subscription
+   *
+   * Creates a new price and updates the subscription item to reflect the new amount.
+   * Uses no proration to avoid mid-cycle charges; the new amount applies at the next billing cycle.
+   *
+   * @param providerSubscriptionId - Provider's subscription ID
+   * @param newAmount - New subscription amount in millicents
+   * @param currency - ISO 4217 currency code
+   */
+  async updateSubscriptionAmount(
+    providerSubscriptionId: string,
+    newAmount: number,
+    currency: string,
+  ): Promise<void> {
+    // Retrieve the current subscription to get the existing item
+    const subscription = await this.stripe.subscriptions.retrieve(providerSubscriptionId);
+    const currentItem = subscription.items.data[0];
+
+    if (!currentItem) {
+      throw new Error('Subscription has no items to update');
+    }
+
+    // Determine the billing interval from the current price
+    const currentInterval = currentItem.price?.recurring?.interval || 'month';
+
+    // Create a new price with the updated amount
+    const newPrice = await this.stripe.prices.create({
+      unit_amount: Math.round(newAmount / 1000), // Convert millicents to cents
+      currency: currency.toLowerCase(),
+      recurring: {
+        interval: currentInterval,
+      },
+      product_data: {
+        name: 'Pavillion Subscription',
+      },
+    });
+
+    // Update the subscription item with the new price, no proration
+    await this.stripe.subscriptions.update(providerSubscriptionId, {
+      items: [
+        {
+          id: currentItem.id,
+          price: newPrice.id,
+        },
+      ],
+      proration_behavior: 'none',
+    });
+  }
+
+  /**
    * Retrieve current subscription status from provider
    *
    * @param subscriptionId - Provider's subscription ID

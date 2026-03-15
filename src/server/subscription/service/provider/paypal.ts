@@ -348,6 +348,25 @@ export class PayPalAdapter implements PaymentProviderAdapter {
   }
 
   /**
+   * Update the amount on an existing subscription
+   *
+   * PayPal does not support in-place subscription amount updates.
+   * This operation requires cancelling and recreating the subscription.
+   *
+   * @param providerSubscriptionId - Provider's subscription ID
+   * @param newAmount - New subscription amount in millicents
+   * @param currency - ISO 4217 currency code
+   * @throws Error always, as PayPal does not support this operation
+   */
+  async updateSubscriptionAmount(
+    providerSubscriptionId: string,
+    newAmount: number,
+    currency: string,
+  ): Promise<void> {
+    throw new Error('updateSubscriptionAmount is not implemented for PayPal');
+  }
+
+  /**
    * Retrieve current subscription status from provider
    *
    * @param subscriptionId - Provider's subscription ID
