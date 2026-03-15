@@ -145,6 +145,17 @@ export default class SubscriptionInterface {
     return this.subscriptionService.getFundingStatusForCalendar(calendarId);
   }
 
+  /**
+   * Check if an account owns a calendar
+   *
+   * @param accountId - Account ID to check
+   * @param calendarId - Calendar ID to check
+   * @returns True if account owns the calendar
+   */
+  async isCalendarOwner(accountId: string, calendarId: string): Promise<boolean> {
+    return this.subscriptionService.isCalendarOwner(accountId, calendarId);
+  }
+
   // Admin operations
 
   async listSubscriptions(page: number, limit: number): Promise<{

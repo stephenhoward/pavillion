@@ -41,7 +41,7 @@ import { ValidationError } from '@/common/exceptions/base';
 const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 // Maximum number of calendar IDs allowed in a single subscribe call
-const MAX_CALENDAR_IDS = 50;
+export const MAX_CALENDAR_IDS = 50;
 
 /**
  * Validates if a string is a valid UUID v4
@@ -1277,5 +1277,24 @@ export default class SubscriptionService {
       // Fail-secure: deny access on subscription check error
       return false;
     }
+  }
+
+  /**
+   * Check if an account owns a calendar
+   *
+   * @param accountId - Account ID to check
+   * @param calendarId - Calendar ID to check
+   * @returns True if account owns the calendar
+   */
+  async isCalendarOwner(accountId: string, calendarId: string): Promise<boolean> {
+    const membership = await CalendarMemberEntity.findOne({
+      where: {
+        calendar_id: calendarId,
+        account_id: accountId,
+        role: 'owner',
+      },
+    });
+
+    return !!membership;
   }
 }

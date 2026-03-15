@@ -2,6 +2,7 @@ import express, { Application } from 'express';
 import { EventEmitter } from 'events';
 import AdminRouteHandlers from '@/server/subscription/api/v1/admin';
 import SubscriptionRouteHandlers from '@/server/subscription/api/v1/subscription';
+import CalendarSubscriptionRoutes from '@/server/subscription/api/v1/calendar-subscription';
 import WebhookRouteHandlers from '@/server/subscription/api/v1/webhooks';
 import ProviderConnectionRoutes from '@/server/subscription/api/v1/provider_connection';
 import SubscriptionInterface from '@/server/subscription/interface';
@@ -30,6 +31,10 @@ export default class SubscriptionApiV1 {
     // Install user subscription routes
     const subscriptionRoutes = new SubscriptionRouteHandlers(internalAPI);
     subscriptionRoutes.installHandlers(app, '/api/subscription/v1');
+
+    // Install calendar subscription routes
+    const calendarSubscriptionRoutes = new CalendarSubscriptionRoutes(internalAPI);
+    calendarSubscriptionRoutes.installHandlers(app, '/api/subscription/v1');
 
     // Install webhook routes (separate prefix, no /v1)
     // Webhooks use raw body parsing, handled within the webhook routes

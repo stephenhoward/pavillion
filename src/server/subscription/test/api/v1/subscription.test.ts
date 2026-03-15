@@ -122,6 +122,140 @@ describe('User Subscription API Routes', () => {
         amount: 1000000,
       });
     });
+
+    it('should pass calendarIds to the service when provided', async () => {
+      const mockSubscription = new Subscription('sub-1');
+      mockSubscription.accountId = 'test-account-id';
+      mockSubscription.status = 'active';
+      mockSubscription.billingCycle = 'monthly';
+      mockSubscription.amount = 1000000;
+      mockSubscription.currency = 'USD';
+
+      const subscribeStub = sandbox.stub(service, 'subscribe').resolves(mockSubscription);
+
+      router.post('/handler', (req: Request, res: Response, next) => {
+        req.user = mockAccount;
+        next();
+      }, subscriptionHandlers.subscribe.bind(subscriptionHandlers));
+
+      const calendarIds = [
+        'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d',
+        'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e',
+      ];
+
+      await request(testApp(router))
+        .post('/handler')
+        .send({
+          providerConfigId: 'provider-1',
+          billingCycle: 'monthly',
+          amount: 1000000,
+          calendarIds,
+        })
+        .expect(200);
+
+      expect(subscribeStub.calledOnce).toBe(true);
+      expect(subscribeStub.firstCall.args[5]).toEqual(calendarIds);
+    });
+
+    it('should pass undefined calendarIds when not provided', async () => {
+      const mockSubscription = new Subscription('sub-1');
+      mockSubscription.accountId = 'test-account-id';
+      mockSubscription.status = 'active';
+      mockSubscription.billingCycle = 'monthly';
+      mockSubscription.amount = 1000000;
+
+      const subscribeStub = sandbox.stub(service, 'subscribe').resolves(mockSubscription);
+
+      router.post('/handler', (req: Request, res: Response, next) => {
+        req.user = mockAccount;
+        next();
+      }, subscriptionHandlers.subscribe.bind(subscriptionHandlers));
+
+      await request(testApp(router))
+        .post('/handler')
+        .send({
+          providerConfigId: 'provider-1',
+          billingCycle: 'monthly',
+          amount: 1000000,
+        })
+        .expect(200);
+
+      expect(subscribeStub.calledOnce).toBe(true);
+      expect(subscribeStub.firstCall.args[5]).toBeUndefined();
+    });
+
+    it('should return 400 when calendarIds is not an array', async () => {
+      sandbox.stub(service, 'subscribe').resolves(new Subscription());
+
+      router.post('/handler', (req: Request, res: Response, next) => {
+        req.user = mockAccount;
+        next();
+      }, subscriptionHandlers.subscribe.bind(subscriptionHandlers));
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .send({
+          providerConfigId: 'provider-1',
+          billingCycle: 'monthly',
+          amount: 1000000,
+          calendarIds: 'not-an-array',
+        })
+        .expect(400);
+
+      expect(response.body.error).toBe('calendarIds must be an array');
+      expect(response.body.errorName).toBe('ValidationError');
+    });
+
+    it('should return 400 when calendarIds exceeds 50 entries', async () => {
+      sandbox.stub(service, 'subscribe').resolves(new Subscription());
+
+      router.post('/handler', (req: Request, res: Response, next) => {
+        req.user = mockAccount;
+        next();
+      }, subscriptionHandlers.subscribe.bind(subscriptionHandlers));
+
+      // Generate 51 valid UUIDs
+      const calendarIds = Array.from({ length: 51 }, (_, i) =>
+        `a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c${String(i).padStart(2, '0')}`,
+      );
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .send({
+          providerConfigId: 'provider-1',
+          billingCycle: 'monthly',
+          amount: 1000000,
+          calendarIds,
+        })
+        .expect(400);
+
+      expect(response.body.error).toBe('calendarIds cannot exceed 50 entries');
+      expect(response.body.errorName).toBe('ValidationError');
+    });
+
+    it('should return 400 when calendarIds contains invalid UUIDs', async () => {
+      sandbox.stub(service, 'subscribe').resolves(new Subscription());
+
+      router.post('/handler', (req: Request, res: Response, next) => {
+        req.user = mockAccount;
+        next();
+      }, subscriptionHandlers.subscribe.bind(subscriptionHandlers));
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .send({
+          providerConfigId: 'provider-1',
+          billingCycle: 'monthly',
+          amount: 1000000,
+          calendarIds: ['not-a-uuid', 'also-invalid'],
+        })
+        .expect(400);
+
+      expect(response.body.error).toContain('Invalid calendar IDs');
+      expect(response.body.error).toContain('not-a-uuid');
+      expect(response.body.error).toContain('also-invalid');
+      expect(response.body.errorName).toBe('ValidationError');
+    });
   });
 
   describe('GET /status', () => {

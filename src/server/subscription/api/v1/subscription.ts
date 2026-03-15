@@ -4,6 +4,7 @@ import SubscriptionInterface from '@/server/subscription/interface';
 import { Account } from '@/common/model/account';
 import { ValidationError } from '@/common/exceptions/base';
 import { logError } from '@/server/common/helper/error-logger';
+import { MAX_CALENDAR_IDS } from '@/server/subscription/service/subscription';
 
 /**
  * User subscription route handlers
@@ -79,7 +80,26 @@ export default class SubscriptionRouteHandlers {
         return;
       }
 
-      const { providerConfigId, billingCycle, amount } = req.body;
+      const { providerConfigId, billingCycle, amount, calendarIds } = req.body;
+
+      // Validate calendarIds if provided
+      if (calendarIds !== undefined) {
+        if (!Array.isArray(calendarIds)) {
+          res.status(400).json({ error: 'calendarIds must be an array', errorName: 'ValidationError' });
+          return;
+        }
+
+        if (calendarIds.length > MAX_CALENDAR_IDS) {
+          res.status(400).json({ error: `calendarIds cannot exceed ${MAX_CALENDAR_IDS} entries`, errorName: 'ValidationError' });
+          return;
+        }
+
+        const invalidUUIDs = ExpressHelper.findInvalidUUIDs(calendarIds);
+        if (invalidUUIDs.length > 0) {
+          res.status(400).json({ error: `Invalid calendar IDs: ${invalidUUIDs.join(', ')}`, errorName: 'ValidationError' });
+          return;
+        }
+      }
 
       const subscription = await this.interface.subscribe(
         account.id,
@@ -87,6 +107,7 @@ export default class SubscriptionRouteHandlers {
         providerConfigId,
         billingCycle,
         amount,
+        calendarIds,
       );
 
       res.json(subscription.toObject());
