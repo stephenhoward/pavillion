@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 import { EmailStore } from '@/server/email/transport/testing-transport';
 import EmailInterface from '@/server/email/interface';
-import TestEmailRoutes from '@/server/email/api/v1/test-emails';
+import TestEmailRoutes from '@/server/common/test-support/test-emails';
 import express from 'express';
 import request from 'supertest';
 

@@ -24,7 +24,7 @@ import PublicCalendarDomain from './public';
 import MediaDomain from './media';
 import SetupDomain from './setup';
 import SubscriptionDomain from './subscription';
-import TestEmailRoutes from '@/server/email/api/v1/test-emails';
+import TestEmailRoutes from '@/server/common/test-support/test-emails';
 import { createSetupModeMiddleware } from './setup/middleware/setup-mode';
 import { createLocaleMiddleware } from '@/server/common/middleware/locale';
 import { backfillUserActors } from '@/server/activitypub/scripts/backfill-user-actors';
