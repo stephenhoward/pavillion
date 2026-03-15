@@ -38,6 +38,7 @@ describe('Admin Grant CRUD Integration Tests', () => {
   let adminAccount: Account;
   let regularAccount: Account;
   let regularCalendar: Calendar;
+  let adminCalendar: Calendar;
   let adminToken: string;
   let regularToken: string;
 
@@ -98,8 +99,9 @@ describe('Admin Grant CRUD Integration Tests', () => {
     adminToken = await env.login(adminEmail, password);
     regularToken = await env.login(regularEmail, password);
 
-    // Create a calendar with a widget domain for the regular account
+    // Create calendars for each account
     regularCalendar = await calendarInterface.createCalendar(regularAccount, 'grants-test-cal');
+    adminCalendar = await calendarInterface.createCalendar(adminAccount, 'grants-admin-cal');
 
     // Set a widget domain while subscriptions are disabled
     await env.authPut(
@@ -123,15 +125,15 @@ describe('Admin Grant CRUD Integration Tests', () => {
   // ─── POST /admin/grants ────────────────────────────────────────────────────
 
   describe('POST /api/subscription/v1/admin/grants', () => {
-    it('should create a grant for a valid account and return 201 with grant object', async () => {
+    it('should create a grant for a valid calendar and return 201 with grant object', async () => {
       const response = await request(env.app)
         .post('/api/subscription/v1/admin/grants')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ accountId: regularAccount.id });
+        .send({ calendarId: regularCalendar.id });
 
       expect(response.status).toBe(201);
       expect(response.body).toHaveProperty('id');
-      expect(response.body.accountId).toBe(regularAccount.id);
+      expect(response.body.calendarId).toBe(regularCalendar.id);
       expect(response.body.revokedAt).toBeNull();
     });
 
@@ -141,7 +143,7 @@ describe('Admin Grant CRUD Integration Tests', () => {
       const response = await request(env.app)
         .post('/api/subscription/v1/admin/grants')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ accountId: regularAccount.id, grantedBy: fakeAdminId });
+        .send({ calendarId: regularCalendar.id, grantedBy: fakeAdminId });
 
       expect(response.status).toBe(201);
       // grantedBy must be the authenticated user's ID, not fakeAdminId
@@ -157,7 +159,7 @@ describe('Admin Grant CRUD Integration Tests', () => {
         .post('/api/subscription/v1/admin/grants')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({
-          accountId: regularAccount.id,
+          calendarId: regularCalendar.id,
           reason: 'Beta tester reward',
           expiresAt: futureDate.toISOString(),
         });
@@ -167,40 +169,40 @@ describe('Admin Grant CRUD Integration Tests', () => {
       expect(response.body.expiresAt).not.toBeNull();
     });
 
-    it('should return 404 when account does not exist', async () => {
+    it('should return 404 when calendar does not exist', async () => {
       const nonExistentId = uuidv4();
 
       const response = await request(env.app)
         .post('/api/subscription/v1/admin/grants')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ accountId: nonExistentId });
+        .send({ calendarId: nonExistentId });
 
       expect(response.status).toBe(404);
       expect(response.body).toHaveProperty('error');
     });
 
-    it('should return 400 when accountId is not a valid UUID', async () => {
+    it('should return 400 when calendarId is not a valid UUID', async () => {
       const response = await request(env.app)
         .post('/api/subscription/v1/admin/grants')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ accountId: 'not-a-valid-uuid' });
+        .send({ calendarId: 'not-a-valid-uuid' });
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
     });
 
-    it('should return 409 when an active grant already exists for the account', async () => {
+    it('should return 409 when an active grant already exists for the calendar', async () => {
       // Create first grant
       await request(env.app)
         .post('/api/subscription/v1/admin/grants')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ accountId: regularAccount.id });
+        .send({ calendarId: regularCalendar.id });
 
       // Try to create duplicate
       const response = await request(env.app)
         .post('/api/subscription/v1/admin/grants')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ accountId: regularAccount.id });
+        .send({ calendarId: regularCalendar.id });
 
       expect(response.status).toBe(409);
       expect(response.body).toHaveProperty('error');
@@ -212,7 +214,7 @@ describe('Admin Grant CRUD Integration Tests', () => {
       const response = await request(env.app)
         .post('/api/subscription/v1/admin/grants')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ accountId: regularAccount.id, reason: longReason });
+        .send({ calendarId: regularCalendar.id, reason: longReason });
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
@@ -225,7 +227,7 @@ describe('Admin Grant CRUD Integration Tests', () => {
       const response = await request(env.app)
         .post('/api/subscription/v1/admin/grants')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ accountId: regularAccount.id, expiresAt: pastDate.toISOString() });
+        .send({ calendarId: regularCalendar.id, expiresAt: pastDate.toISOString() });
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
@@ -235,7 +237,7 @@ describe('Admin Grant CRUD Integration Tests', () => {
       const response = await request(env.app)
         .post('/api/subscription/v1/admin/grants')
         .set('Authorization', `Bearer ${regularToken}`)
-        .send({ accountId: regularAccount.id });
+        .send({ calendarId: regularCalendar.id });
 
       expect(response.status).toBe(403);
     });
@@ -243,7 +245,7 @@ describe('Admin Grant CRUD Integration Tests', () => {
     it('should return 401 for unauthenticated requests', async () => {
       const response = await request(env.app)
         .post('/api/subscription/v1/admin/grants')
-        .send({ accountId: regularAccount.id });
+        .send({ calendarId: regularCalendar.id });
 
       expect(response.status).toBe(401);
     });
@@ -254,10 +256,10 @@ describe('Admin Grant CRUD Integration Tests', () => {
   describe('GET /api/subscription/v1/admin/grants', () => {
     it('should return only active grants when includeRevoked=false (default)', async () => {
       // Create an active grant
-      await subscriptionInterface.createGrant(regularAccount.id, adminAccount.id, 'active grant');
+      await subscriptionInterface.createGrant(regularCalendar.id, adminAccount.id, 'active grant');
 
       // Create a revoked grant
-      const grantToRevoke = await subscriptionInterface.createGrant(adminAccount.id, adminAccount.id, 'to revoke');
+      const grantToRevoke = await subscriptionInterface.createGrant(adminCalendar.id, adminAccount.id, 'to revoke');
       await subscriptionInterface.revokeGrant(grantToRevoke.id, adminAccount.id);
 
       const response = await request(env.app)
@@ -273,10 +275,10 @@ describe('Admin Grant CRUD Integration Tests', () => {
 
     it('should return all grants when includeRevoked=true', async () => {
       // Create an active grant
-      await subscriptionInterface.createGrant(regularAccount.id, adminAccount.id, 'active grant');
+      await subscriptionInterface.createGrant(regularCalendar.id, adminAccount.id, 'active grant');
 
       // Create a revoked grant
-      const grantToRevoke = await subscriptionInterface.createGrant(adminAccount.id, adminAccount.id, 'to revoke');
+      const grantToRevoke = await subscriptionInterface.createGrant(adminCalendar.id, adminAccount.id, 'to revoke');
       await subscriptionInterface.revokeGrant(grantToRevoke.id, adminAccount.id);
 
       const response = await request(env.app)
@@ -311,7 +313,7 @@ describe('Admin Grant CRUD Integration Tests', () => {
 
   describe('DELETE /api/subscription/v1/admin/grants/:id', () => {
     it('should revoke a grant and return 204 No Content', async () => {
-      const grant = await subscriptionInterface.createGrant(regularAccount.id, adminAccount.id);
+      const grant = await subscriptionInterface.createGrant(regularCalendar.id, adminAccount.id);
 
       const response = await request(env.app)
         .delete(`/api/subscription/v1/admin/grants/${grant.id}`)
@@ -346,7 +348,7 @@ describe('Admin Grant CRUD Integration Tests', () => {
     });
 
     it('should return 403 for non-admin users', async () => {
-      const grant = await subscriptionInterface.createGrant(regularAccount.id, adminAccount.id);
+      const grant = await subscriptionInterface.createGrant(regularCalendar.id, adminAccount.id);
 
       const response = await request(env.app)
         .delete(`/api/subscription/v1/admin/grants/${grant.id}`)
@@ -356,7 +358,7 @@ describe('Admin Grant CRUD Integration Tests', () => {
     });
 
     it('should set revokedBy from the authenticated user, not from request body', async () => {
-      const grant = await subscriptionInterface.createGrant(regularAccount.id, adminAccount.id);
+      const grant = await subscriptionInterface.createGrant(regularCalendar.id, adminAccount.id);
 
       await request(env.app)
         .delete(`/api/subscription/v1/admin/grants/${grant.id}`)
@@ -376,7 +378,7 @@ describe('Admin Grant CRUD Integration Tests', () => {
       await enableSubscriptions();
 
       // Create a grant to allow widget access
-      const grant = await subscriptionInterface.createGrant(regularAccount.id, adminAccount.id);
+      const grant = await subscriptionInterface.createGrant(regularCalendar.id, adminAccount.id);
 
       // Verify widget is accessible with the grant
       const accessResponse = await request(env.app)

@@ -1,6 +1,7 @@
 import { Model, Table, Column, PrimaryKey, ForeignKey, DataType, CreatedAt } from 'sequelize-typescript';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
 import { AccountEntity } from '@/server/common/entity/account';
+import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import db from '@/server/common/entity/db';
 
 /**
@@ -29,6 +30,14 @@ class ComplimentaryGrantEntity extends Model {
     field: 'account_id',
   })
   declare account_id: string;
+
+  @ForeignKey(() => CalendarEntity)
+  @Column({
+    type: DataType.UUID,
+    allowNull: true,
+    field: 'calendar_id',
+  })
+  declare calendar_id: string | null;
 
   @Column({
     type: DataType.DATE,
@@ -81,6 +90,7 @@ class ComplimentaryGrantEntity extends Model {
   toModel(): ComplimentaryGrant {
     const grant = new ComplimentaryGrant(this.id);
     grant.accountId = this.account_id;
+    grant.calendarId = this.calendar_id;
     grant.expiresAt = this.expires_at;
     grant.reason = this.reason;
     grant.grantedBy = this.granted_by;
@@ -100,6 +110,7 @@ class ComplimentaryGrantEntity extends Model {
     return ComplimentaryGrantEntity.build({
       id: grant.id,
       account_id: grant.accountId,
+      calendar_id: grant.calendarId,
       expires_at: grant.expiresAt,
       reason: grant.reason,
       granted_by: grant.grantedBy,

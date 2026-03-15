@@ -136,6 +136,27 @@ export default class CalendarInterface {
   }
 
   /**
+   * Checks if a specific account is the owner of a calendar using primitive IDs.
+   *
+   * @param accountId - The account UUID to check
+   * @param calendarId - The calendar UUID to check ownership of
+   * @returns True if the account owns the calendar
+   */
+  async isCalendarOwnerById(accountId: string, calendarId: string): Promise<boolean> {
+    return this.calendarService.isCalendarOwnerById(accountId, calendarId);
+  }
+
+  /**
+   * Checks if a calendar exists by its primary key.
+   *
+   * @param calendarId - The calendar UUID to check
+   * @returns True if the calendar exists
+   */
+  async calendarExists(calendarId: string): Promise<boolean> {
+    return this.calendarService.calendarExists(calendarId);
+  }
+
+  /**
    * Checks if a remote actor (identified by actor URI) is an editor of the given calendar.
    *
    * @param actorUri - The ActivityPub actor URI of the remote user

@@ -267,7 +267,7 @@
     "noAccounts": "No accounts yet",
     "noAccountsDescription": "There are no accounts on this server yet.",
     "inviteNewAccount": "Invite New Account",
-    "no_role": "—"
+    "no_role": "\u2014"
   },
   "applications": {
     "title": "Account Applications",
@@ -322,7 +322,7 @@
     "status_expired": "Expired",
     "status_revoked": "Revoked",
     "expired_date": "Expired {{date}}",
-    "invited_by_expires": "Invited by {{username}} · Expires {{date}}",
+    "invited_by_expires": "Invited by {{username}} \u00b7 Expires {{date}}",
     "no_invitations": "No active invitations",
     "no_invitations_description": "No invitations have been sent yet",
     "send_invitation_link": "Send an invitation",
@@ -574,10 +574,11 @@
         "expires": "Expires",
         "granted_by": "Granted By",
         "created": "Created",
-        "actions": "Actions"
+        "actions": "Actions",
+        "calendar": "Calendar"
       },
       "form": {
-        "account_label": "Account",
+        "account_label": "Account (optional)",
         "account_placeholder": "Search by username or email",
         "account_required": "An account is required",
         "reason_label": "Reason (optional)",
@@ -589,7 +590,13 @@
         "no_results": "No accounts found",
         "searching": "Searching...",
         "char_count": "{{current}}/{{max}}",
-        "cancel_button": "Cancel"
+        "cancel_button": "Cancel",
+        "calendar_label": "Calendar",
+        "calendar_placeholder": "Enter calendar URL name",
+        "calendar_hint": "Enter the URL name of the calendar to grant access to",
+        "calendar_required": "A calendar is required",
+        "calendar_not_found": "Calendar not found. Please check the URL name.",
+        "calendar_resolving": "Looking up calendar..."
       },
       "status": {
         "active": "Active",

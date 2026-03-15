@@ -5,6 +5,7 @@ import { useRoute } from 'vue-router';
 import { useTabNavigation } from '@/client/composables/useTabNavigation';
 import EditorsTab from './editors.vue';
 import SettingsTab from './settings.vue';
+import FundingTab from './FundingTab.vue';
 import WidgetTab from './widget-tab.vue';
 import ReportsDashboard from '@/client/components/moderation/reports-dashboard.vue';
 import ReportDetail from '@/client/components/moderation/report-detail.vue';
@@ -59,7 +60,7 @@ onBeforeMount(async () => {
 const visibleTabs = computed(() => {
   const tabs = ['editors'];
   if (isOwner.value) {
-    tabs.push('reports', 'settings');
+    tabs.push('reports', 'settings', 'funding');
   }
   tabs.push('widget');
   return tabs;
@@ -67,7 +68,7 @@ const visibleTabs = computed(() => {
 
 const activateTab = (tab: string) => {
   // Prevent non-owners from activating owner-only tabs
-  if ((tab === 'settings' || tab === 'reports') && !isOwner.value) {
+  if ((tab === 'settings' || tab === 'reports' || tab === 'funding') && !isOwner.value) {
     return;
   }
 
@@ -168,6 +169,19 @@ const backToReports = () => {
               {{ t('settings_tab') }}
             </button>
             <button
+              v-if="isOwner"
+              id="funding-tab"
+              type="button"
+              role="tab"
+              :aria-selected="state.activeTab === 'funding'"
+              aria-controls="funding-panel"
+              :tabindex="state.activeTab === 'funding' ? 0 : -1"
+              class="calendar-management-root__tab"
+              @click="activateTab('funding')"
+            >
+              {{ t('funding_tab') }}
+            </button>
+            <button
               id="widget-tab"
               type="button"
               role="tab"
@@ -231,6 +245,17 @@ const backToReports = () => {
           class="calendar-management-root__panel"
         >
           <SettingsTab v-if="isOwner" :calendar-id="calendar.id" />
+        </div>
+
+        <div
+          id="funding-panel"
+          role="tabpanel"
+          aria-labelledby="funding-tab"
+          :aria-hidden="state.activeTab !== 'funding' || !isOwner ? 'true' : 'false'"
+          :hidden="state.activeTab !== 'funding' || !isOwner"
+          class="calendar-management-root__panel"
+        >
+          <FundingTab v-if="isOwner" :calendar-id="calendar.id" />
         </div>
 
         <div

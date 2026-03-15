@@ -28,6 +28,7 @@ const mountRootComponent = async (calendarUrlName: string = 'my-calendar') => {
     stubs: {
       EditorsTab: true,
       SettingsTab: true,
+      FundingTab: true,
       WidgetTab: true,
       ReportsDashboard: true,
       ReportDetail: true,
@@ -88,7 +89,7 @@ describe('CalendarManagementRoot', () => {
       expect(wrapper.find('#series-panel').exists()).toBe(false);
     });
 
-    it('shows Editors, Reports, Settings, Widget tabs for owners', async () => {
+    it('shows Editors, Reports, Settings, Funding, Widget tabs for owners', async () => {
       const info = makeCalendarInfo('my-calendar', 'owner');
       vi.spyOn(CalendarService.prototype, 'loadCalendarsWithRelationship').mockResolvedValue([info]);
 
@@ -98,10 +99,11 @@ describe('CalendarManagementRoot', () => {
       await flushPromises();
 
       const tabs = wrapper.findAll('[role="tab"]');
-      expect(tabs.length).toBe(4);
+      expect(tabs.length).toBe(5);
       expect(wrapper.find('#editors-tab').exists()).toBe(true);
       expect(wrapper.find('#reports-tab').exists()).toBe(true);
       expect(wrapper.find('#settings-tab').exists()).toBe(true);
+      expect(wrapper.find('#funding-tab').exists()).toBe(true);
       expect(wrapper.find('#widget-tab').exists()).toBe(true);
     });
 
@@ -120,6 +122,7 @@ describe('CalendarManagementRoot', () => {
       expect(wrapper.find('#widget-tab').exists()).toBe(true);
       expect(wrapper.find('#reports-tab').exists()).toBe(false);
       expect(wrapper.find('#settings-tab').exists()).toBe(false);
+      expect(wrapper.find('#funding-tab').exists()).toBe(false);
     });
   });
 
@@ -238,6 +241,90 @@ describe('CalendarManagementRoot', () => {
     });
   });
 
+  describe('Funding tab visibility', () => {
+    it('shows the Funding tab button for calendar owners', async () => {
+      const info = makeCalendarInfo('my-calendar', 'owner');
+      vi.spyOn(CalendarService.prototype, 'loadCalendarsWithRelationship').mockResolvedValue([info]);
+
+      const { wrapper } = await mountRootComponent('my-calendar');
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      expect(wrapper.find('#funding-tab').exists()).toBe(true);
+      const tabs = wrapper.findAll('[role="tab"]');
+      const tabLabels = tabs.map((t: any) => t.text());
+      expect(tabLabels.some((label: string) => label.toLowerCase().includes('funding'))).toBe(true);
+    });
+
+    it('hides the Funding tab button for editors', async () => {
+      const info = makeCalendarInfo('my-calendar', 'editor');
+      vi.spyOn(CalendarService.prototype, 'loadCalendarsWithRelationship').mockResolvedValue([info]);
+
+      const { wrapper } = await mountRootComponent('my-calendar');
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      expect(wrapper.find('#funding-tab').exists()).toBe(false);
+    });
+
+    it('renders the funding panel for calendar owners', async () => {
+      const info = makeCalendarInfo('my-calendar', 'owner');
+      vi.spyOn(CalendarService.prototype, 'loadCalendarsWithRelationship').mockResolvedValue([info]);
+
+      const { wrapper } = await mountRootComponent('my-calendar');
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      expect(wrapper.find('#funding-panel').exists()).toBe(true);
+    });
+
+    it('renders the funding panel wrapper in DOM for editors (inner content hidden)', async () => {
+      const info = makeCalendarInfo('my-calendar', 'editor');
+      vi.spyOn(CalendarService.prototype, 'loadCalendarsWithRelationship').mockResolvedValue([info]);
+
+      const { wrapper } = await mountRootComponent('my-calendar');
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      // Panel wrapper stays in DOM for ARIA consistency
+      expect(wrapper.find('#funding-panel').exists()).toBe(true);
+      // Inner FundingTab component should not be rendered for non-owners
+      expect(wrapper.findComponent({ name: 'FundingTab' }).exists()).toBe(false);
+    });
+
+    it('has correct ARIA attributes on funding tab button', async () => {
+      const info = makeCalendarInfo('my-calendar', 'owner');
+      vi.spyOn(CalendarService.prototype, 'loadCalendarsWithRelationship').mockResolvedValue([info]);
+
+      const { wrapper } = await mountRootComponent('my-calendar');
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      const fundingTab = wrapper.find('#funding-tab');
+      expect(fundingTab.attributes('role')).toBe('tab');
+      expect(fundingTab.attributes('aria-controls')).toBe('funding-panel');
+    });
+
+    it('has correct ARIA attributes on funding panel', async () => {
+      const info = makeCalendarInfo('my-calendar', 'owner');
+      vi.spyOn(CalendarService.prototype, 'loadCalendarsWithRelationship').mockResolvedValue([info]);
+
+      const { wrapper } = await mountRootComponent('my-calendar');
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      const fundingPanel = wrapper.find('#funding-panel');
+      expect(fundingPanel.attributes('role')).toBe('tabpanel');
+      expect(fundingPanel.attributes('aria-labelledby')).toBe('funding-tab');
+    });
+  });
+
   describe('Tab id attributes', () => {
     it('all tab buttons have id attributes for owners', async () => {
       const info = makeCalendarInfo('my-calendar', 'owner');
@@ -251,6 +338,7 @@ describe('CalendarManagementRoot', () => {
       expect(wrapper.find('#editors-tab').exists()).toBe(true);
       expect(wrapper.find('#reports-tab').exists()).toBe(true);
       expect(wrapper.find('#settings-tab').exists()).toBe(true);
+      expect(wrapper.find('#funding-tab').exists()).toBe(true);
       expect(wrapper.find('#widget-tab').exists()).toBe(true);
     });
 
@@ -268,6 +356,7 @@ describe('CalendarManagementRoot', () => {
       // Owner-only tab buttons are not rendered for editors
       expect(wrapper.find('#reports-tab').exists()).toBe(false);
       expect(wrapper.find('#settings-tab').exists()).toBe(false);
+      expect(wrapper.find('#funding-tab').exists()).toBe(false);
     });
   });
 
@@ -300,6 +389,23 @@ describe('CalendarManagementRoot', () => {
 
       // Attempt to activate reports tab programmatically
       await (wrapper.vm as any).activateTab('reports');
+      await wrapper.vm.$nextTick();
+
+      // Active tab should remain on the default 'editors'
+      expect((wrapper.vm as any).state.activeTab).toBe('editors');
+    });
+
+    it('does not switch to funding tab when user is not an owner', async () => {
+      const info = makeCalendarInfo('my-calendar', 'editor');
+      vi.spyOn(CalendarService.prototype, 'loadCalendarsWithRelationship').mockResolvedValue([info]);
+
+      const { wrapper } = await mountRootComponent('my-calendar');
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      // Attempt to activate funding tab programmatically
+      await (wrapper.vm as any).activateTab('funding');
       await wrapper.vm.$nextTick();
 
       // Active tab should remain on the default 'editors'

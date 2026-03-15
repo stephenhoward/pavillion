@@ -105,7 +105,7 @@ describe('CalendarService.getCalendarForWidget', () => {
         service.getCalendarForWidget('test-calendar'),
       ).rejects.toThrow('widget_embedding requires an active subscription');
 
-      expect(hasSubscriptionAccessStub.calledWith(ownerId)).toBe(true);
+      expect(hasSubscriptionAccessStub.calledWith(calendar.id)).toBe(true);
     });
 
     it('should return calendar if owner has active subscription', async () => {
@@ -124,7 +124,7 @@ describe('CalendarService.getCalendarForWidget', () => {
       const result = await service.getCalendarForWidget('test-calendar');
 
       expect(result).toBe(calendar);
-      expect(hasSubscriptionAccessStub.calledWith(ownerId)).toBe(true);
+      expect(hasSubscriptionAccessStub.calledWith(calendar.id)).toBe(true);
     });
 
     it('should return calendar if owner has active complimentary grant', async () => {
@@ -144,7 +144,7 @@ describe('CalendarService.getCalendarForWidget', () => {
       const result = await service.getCalendarForWidget('test-calendar');
 
       expect(result).toBe(calendar);
-      expect(hasSubscriptionAccessStub.calledWith(ownerId)).toBe(true);
+      expect(hasSubscriptionAccessStub.calledWith(calendar.id)).toBe(true);
     });
 
     it('should include feature name in SubscriptionRequiredError', async () => {
@@ -224,7 +224,7 @@ describe('CalendarService.getCalendarForWidget', () => {
         ).rejects.toThrow(SubscriptionRequiredError);
 
         // Should check subscription for non-admin
-        expect(hasSubscriptionAccessStub.calledWith(ownerId)).toBe(true);
+        expect(hasSubscriptionAccessStub.calledWith(calendar.id)).toBe(true);
       });
 
       it('should require subscription if account not found (fail-secure)', async () => {
@@ -248,7 +248,7 @@ describe('CalendarService.getCalendarForWidget', () => {
         ).rejects.toThrow(SubscriptionRequiredError);
 
         // Should check subscription when account lookup fails
-        expect(hasSubscriptionAccessStub.calledWith(ownerId)).toBe(true);
+        expect(hasSubscriptionAccessStub.calledWith(calendar.id)).toBe(true);
       });
 
       it('should require subscription if roles cannot be loaded (fail-secure)', async () => {
@@ -278,7 +278,7 @@ describe('CalendarService.getCalendarForWidget', () => {
         ).rejects.toThrow(SubscriptionRequiredError);
 
         // Should check subscription when roles can't be determined
-        expect(hasSubscriptionAccessStub.calledWith(ownerId)).toBe(true);
+        expect(hasSubscriptionAccessStub.calledWith(calendar.id)).toBe(true);
       });
     });
   });

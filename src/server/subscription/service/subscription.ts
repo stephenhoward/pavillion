@@ -5,9 +5,9 @@ import {
   SubscriptionSettings,
   ProviderConfig,
   Subscription,
-  SubscriptionEvent,
   ProviderType,
   BillingCycle,
+  FundingStatus,
 } from '@/common/model/subscription';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
 import { SubscriptionSettingsEntity } from '@/server/subscription/entity/subscription_settings';
@@ -16,7 +16,8 @@ import { SubscriptionEntity } from '@/server/subscription/entity/subscription';
 import { SubscriptionEventEntity } from '@/server/subscription/entity/subscription_event';
 import { PlatformOAuthConfigEntity } from '@/server/subscription/entity/platform_oauth_config';
 import { ComplimentaryGrantEntity } from '@/server/subscription/entity/complimentary_grant';
-import { AccountEntity } from '@/server/common/entity/account';
+import { CalendarSubscriptionEntity } from '@/server/subscription/entity/calendar_subscription';
+import { AccountEntity, AccountRoleEntity } from '@/server/common/entity/account';
 import { ProviderFactory } from '@/server/subscription/service/provider/factory';
 import { WebhookEvent, CreateSubscriptionParams } from '@/server/subscription/service/provider/adapter';
 import {
@@ -25,14 +26,21 @@ import {
   InvalidCurrencyError,
   MissingRequiredFieldError,
   InvalidProviderTypeError,
-  AccountNotFoundError,
   DuplicateGrantError,
   GrantNotFoundError,
+  SubscriptionNotFoundError,
+  CalendarSubscriptionNotFoundError,
+  DuplicateCalendarSubscriptionError,
+  CalendarNotFoundError,
 } from '@/server/subscription/exceptions';
 import { ValidationError } from '@/common/exceptions/base';
+import type CalendarInterface from '@/server/calendar/interface';
 
 // UUID v4 validation regex
 const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+// Maximum number of calendar IDs allowed in a single subscribe call
+export const MAX_CALENDAR_IDS = 50;
 
 /**
  * Validates if a string is a valid UUID v4
@@ -48,9 +56,20 @@ function isValidUUID(id: string): boolean {
  */
 export default class SubscriptionService {
   private eventBus: EventEmitter;
+  private calendarInterface?: CalendarInterface;
 
   constructor(eventBus: EventEmitter) {
     this.eventBus = eventBus;
+  }
+
+  /**
+   * Injects CalendarInterface for cross-domain calendar ownership and existence checks.
+   * Called after CalendarDomain is initialized to avoid circular construction dependencies.
+   *
+   * @param calendarInterface - The CalendarInterface instance from the calendar domain
+   */
+  setCalendarInterface(calendarInterface: CalendarInterface): void {
+    this.calendarInterface = calendarInterface;
   }
 
   /**
@@ -302,6 +321,94 @@ export default class SubscriptionService {
   }
 
   /**
+   * Verify that an account owns a calendar via CalendarInterface
+   *
+   * @param accountId - Account ID to verify
+   * @param calendarId - Calendar ID to check ownership of
+   * @throws ValidationError if account does not own the calendar
+   */
+  private async verifyCalendarOwnership(accountId: string, calendarId: string): Promise<void> {
+    if (!this.calendarInterface) {
+      throw new Error('CalendarInterface not available for ownership verification');
+    }
+
+    const isOwner = await this.calendarInterface.isCalendarOwnerById(accountId, calendarId);
+
+    if (!isOwner) {
+      throw new ValidationError(`Account ${accountId} does not own calendar ${calendarId}`);
+    }
+  }
+
+  /**
+   * Calculate the total amount from all active calendar subscriptions for a subscription
+   *
+   * @param subscriptionId - Subscription ID
+   * @returns Total amount in millicents
+   */
+  private async calculateActiveCalendarTotal(subscriptionId: string): Promise<number> {
+    const activeCalendarSubs = await CalendarSubscriptionEntity.findAll({
+      where: {
+        subscription_id: subscriptionId,
+        end_time: { [Op.is]: null as any },
+      },
+    });
+
+    return activeCalendarSubs.reduce((sum, cs) => sum + cs.amount, 0);
+  }
+
+  /**
+   * Update the subscription amount at the payment provider
+   *
+   * Skips the provider call if the adapter does not support in-place amount updates
+   * (e.g. PayPal subscriptions have fixed amounts set at creation time).
+   *
+   * @param subscriptionEntity - Subscription entity
+   * @param newAmount - New total amount in millicents
+   */
+  private async updateProviderAmount(
+    subscriptionEntity: SubscriptionEntity,
+    newAmount: number,
+  ): Promise<void> {
+    const providerEntity = await ProviderConfigEntity.findByPk(subscriptionEntity.provider_config_id);
+    if (!providerEntity) {
+      throw new Error('Provider configuration not found');
+    }
+
+    const providerConfig = providerEntity.toModel();
+    const adapter = ProviderFactory.getAdapter(providerConfig);
+
+    // PayPal subscriptions have fixed amounts; skip the provider-side update
+    if (!adapter.supportsAmountUpdates()) {
+      return;
+    }
+
+    await adapter.updateSubscriptionAmount(
+      subscriptionEntity.provider_subscription_id,
+      newAmount,
+      subscriptionEntity.currency,
+    );
+  }
+
+  /**
+   * Resolve the active subscription for an account
+   *
+   * @param accountId - Account ID
+   * @returns Active subscription entity
+   * @throws SubscriptionNotFoundError if no active subscription exists
+   */
+  private async resolveActiveSubscription(accountId: string): Promise<SubscriptionEntity> {
+    const subscriptionEntity = await SubscriptionEntity.findOne({
+      where: { account_id: accountId, status: 'active' },
+    });
+
+    if (!subscriptionEntity) {
+      throw new SubscriptionNotFoundError(accountId);
+    }
+
+    return subscriptionEntity;
+  }
+
+  /**
    * Create a new subscription for a user
    *
    * @param accountId - Account ID
@@ -309,6 +416,7 @@ export default class SubscriptionService {
    * @param providerConfigId - Provider configuration ID
    * @param billingCycle - monthly or yearly
    * @param amount - Amount in millicents (for PWYC)
+   * @param calendarIds - Optional array of calendar IDs to fund (max 50, UUID validated)
    * @returns Created subscription
    */
   async subscribe(
@@ -317,6 +425,7 @@ export default class SubscriptionService {
     providerConfigId: string,
     billingCycle: BillingCycle,
     amount: number,
+    calendarIds?: string[],
   ): Promise<Subscription> {
     // Validate required fields
     if (!providerConfigId) {
@@ -335,6 +444,24 @@ export default class SubscriptionService {
     // Validate amount for PWYC
     if (amount !== undefined && amount < 0) {
       throw new InvalidAmountError();
+    }
+
+    // Validate calendarIds if provided
+    if (calendarIds !== undefined) {
+      if (calendarIds.length > MAX_CALENDAR_IDS) {
+        throw new ValidationError(`calendarIds must not exceed ${MAX_CALENDAR_IDS} entries`);
+      }
+
+      for (const cId of calendarIds) {
+        if (!isValidUUID(cId)) {
+          throw new ValidationError(`Invalid calendarId: ${cId} must be a valid UUID`);
+        }
+      }
+
+      // Verify ownership for all calendars
+      for (const cId of calendarIds) {
+        await this.verifyCalendarOwnership(accountId, cId);
+      }
     }
 
     // Get provider configuration
@@ -383,10 +510,222 @@ export default class SubscriptionService {
     const entity = SubscriptionEntity.fromModel(subscription);
     await entity.save();
 
+    // Create calendar subscription rows if calendarIds provided
+    if (calendarIds && calendarIds.length > 0) {
+      const perCalendarAmount = Math.floor(amount / calendarIds.length);
+
+      for (const calendarId of calendarIds) {
+        await CalendarSubscriptionEntity.create({
+          id: uuidv4(),
+          subscription_id: subscription.id,
+          calendar_id: calendarId,
+          amount: perCalendarAmount,
+          end_time: null,
+        });
+      }
+    }
+
     // Emit event
     this.eventBus.emit('subscription:created', { subscription });
 
     return subscription;
+  }
+
+  /**
+   * Add a calendar to an existing subscription
+   *
+   * Resolves the active subscription for the account internally.
+   * Creates a CalendarSubscription row and updates the provider total amount.
+   *
+   * @param accountId - Account ID (used to resolve subscription and verify ownership)
+   * @param calendarId - Calendar ID to add
+   * @param amount - Amount to allocate in millicents
+   */
+  async addCalendarToSubscription(
+    accountId: string,
+    calendarId: string,
+    amount: number,
+  ): Promise<void> {
+    // Validate UUIDs
+    if (!isValidUUID(accountId)) {
+      throw new ValidationError('Invalid accountId: must be a valid UUID');
+    }
+    if (!isValidUUID(calendarId)) {
+      throw new ValidationError('Invalid calendarId: must be a valid UUID');
+    }
+
+    // Validate amount
+    if (amount < 0) {
+      throw new InvalidAmountError();
+    }
+
+    // Resolve the active subscription for this account
+    const subscriptionEntity = await this.resolveActiveSubscription(accountId);
+
+    // Verify account owns the calendar
+    await this.verifyCalendarOwnership(accountId, calendarId);
+
+    // Check for existing active calendar subscription
+    const existing = await CalendarSubscriptionEntity.findOne({
+      where: {
+        subscription_id: subscriptionEntity.id,
+        calendar_id: calendarId,
+        end_time: { [Op.is]: null as any },
+      },
+    });
+
+    if (existing) {
+      throw new DuplicateCalendarSubscriptionError(subscriptionEntity.id, calendarId);
+    }
+
+    // Create the calendar subscription row
+    await CalendarSubscriptionEntity.create({
+      id: uuidv4(),
+      subscription_id: subscriptionEntity.id,
+      calendar_id: calendarId,
+      amount,
+      end_time: null,
+    });
+
+    // Recalculate total and update provider
+    const newTotal = await this.calculateActiveCalendarTotal(subscriptionEntity.id);
+    await this.updateProviderAmount(subscriptionEntity, newTotal);
+  }
+
+  /**
+   * Remove a calendar from a subscription
+   *
+   * Resolves the active subscription for the account internally.
+   * Sets end_time to the subscription's current_period_end (calendar retains access until then).
+   * Reduces the provider amount immediately. If this is the last active calendar,
+   * cancels the entire subscription.
+   *
+   * @param accountId - Account ID (used to resolve subscription and verify ownership)
+   * @param calendarId - Calendar ID to remove
+   */
+  async removeCalendarFromSubscription(
+    accountId: string,
+    calendarId: string,
+  ): Promise<void> {
+    // Validate UUIDs
+    if (!isValidUUID(accountId)) {
+      throw new ValidationError('Invalid accountId: must be a valid UUID');
+    }
+    if (!isValidUUID(calendarId)) {
+      throw new ValidationError('Invalid calendarId: must be a valid UUID');
+    }
+
+    // Resolve the active subscription for this account
+    const subscriptionEntity = await this.resolveActiveSubscription(accountId);
+
+    // Verify account owns the calendar
+    await this.verifyCalendarOwnership(accountId, calendarId);
+
+    // Find the active calendar subscription
+    const calendarSub = await CalendarSubscriptionEntity.findOne({
+      where: {
+        subscription_id: subscriptionEntity.id,
+        calendar_id: calendarId,
+        end_time: { [Op.is]: null as any },
+      },
+    });
+
+    if (!calendarSub) {
+      throw new CalendarSubscriptionNotFoundError(subscriptionEntity.id, calendarId);
+    }
+
+    // Set end_time to subscription's current_period_end
+    calendarSub.end_time = subscriptionEntity.current_period_end;
+    await calendarSub.save();
+
+    // Check remaining active calendar subscriptions
+    const remainingActive = await CalendarSubscriptionEntity.findAll({
+      where: {
+        subscription_id: subscriptionEntity.id,
+        end_time: { [Op.is]: null as any },
+      },
+    });
+
+    if (remainingActive.length === 0) {
+      // Last calendar removed: cancel the entire subscription
+      await this.cancel(subscriptionEntity.id, false);
+    }
+    else {
+      // Recalculate total and update provider
+      const newTotal = remainingActive.reduce((sum, cs) => sum + cs.amount, 0);
+      await this.updateProviderAmount(subscriptionEntity, newTotal);
+    }
+  }
+
+  /**
+   * Get the funding status for a calendar
+   *
+   * Checks in priority order: ownership verification, admin exemption, active grant,
+   * active calendar subscription.
+   *
+   * @param accountId - Account ID requesting the funding status (must own the calendar)
+   * @param calendarId - Calendar ID to check
+   * @returns Funding status: 'admin-exempt' | 'grant' | 'funded' | 'unfunded'
+   * @throws ValidationError if accountId does not own the calendar
+   */
+  async getFundingStatusForCalendar(accountId: string, calendarId: string): Promise<FundingStatus> {
+    if (!isValidUUID(calendarId)) {
+      throw new ValidationError('Invalid calendarId: must be a valid UUID');
+    }
+
+    if (!isValidUUID(accountId)) {
+      throw new ValidationError('Invalid accountId: must be a valid UUID');
+    }
+
+    // Verify ownership - throws ValidationError if not owner
+    await this.verifyCalendarOwnership(accountId, calendarId);
+
+    if (!this.calendarInterface) {
+      return 'unfunded';
+    }
+
+    // Find the calendar owner via CalendarInterface
+    const ownerId = await this.calendarInterface.getCalendarOwnerAccountId(calendarId);
+
+    if (!ownerId) {
+      return 'unfunded';
+    }
+
+    // Check if owner is admin
+    const adminRole = await AccountRoleEntity.findOne({
+      where: {
+        account_id: ownerId,
+        role: 'admin',
+      },
+    });
+
+    if (adminRole) {
+      return 'admin-exempt';
+    }
+
+    // Check for active grant targeting this calendar
+    const hasGrant = await this.hasActiveGrant(calendarId);
+
+    if (hasGrant) {
+      return 'grant';
+    }
+
+    // Check for active calendar subscription
+    const calendarSub = await CalendarSubscriptionEntity.findOne({
+      where: {
+        calendar_id: calendarId,
+        [Op.or]: [
+          { end_time: { [Op.is]: null as any } },
+          { end_time: { [Op.gt]: new Date() } },
+        ],
+      },
+    });
+
+    if (calendarSub) {
+      return 'funded';
+    }
+
+    return 'unfunded';
   }
 
   /**
@@ -625,31 +964,31 @@ export default class SubscriptionService {
   }
 
   /**
-   * Check if account has an active subscription
+   * Check if a calendar has an active subscription via the calendar_subscription join table.
    *
-   * @param accountId - Account ID
-   * @returns True if account has active subscription
+   * Queries CalendarSubscriptionEntity for the given calendarId where the linked
+   * subscription is active and the allocation has not ended (end_time IS NULL or end_time > NOW()).
+   *
+   * @param calendarId - Calendar ID to check
+   * @returns True if calendar has an active subscription allocation
    */
-  async hasActiveSubscription(accountId: string): Promise<boolean> {
-    const subscription = await SubscriptionEntity.findOne({
+  async hasActiveSubscription(calendarId: string): Promise<boolean> {
+    const calendarSub = await CalendarSubscriptionEntity.findOne({
       where: {
-        account_id: accountId,
-        status: 'active',
+        calendar_id: calendarId,
+        [Op.or]: [
+          { end_time: { [Op.is]: null as any } },
+          { end_time: { [Op.gt]: new Date() } },
+        ],
       },
+      include: [{
+        model: SubscriptionEntity,
+        where: { status: 'active' },
+        required: true,
+      }],
     });
 
-    return !!subscription;
-  }
-
-  /**
-   * Get subscription status for cross-domain queries
-   *
-   * @param accountId - Account ID
-   * @returns Subscription status or null
-   */
-  async getSubscriptionStatus(accountId: string): Promise<Subscription | null> {
-    const subscription = await this.getStatus(accountId);
-    return subscription || null;
+    return !!calendarSub;
   }
 
   /**
@@ -706,23 +1045,23 @@ export default class SubscriptionService {
   }
 
   /**
-   * Create a complimentary grant for an account
+   * Create a complimentary grant for a calendar
    *
-   * @param accountId - Account ID to grant access to
+   * @param calendarId - Calendar ID to grant access to
    * @param grantedBy - Admin account ID granting access
    * @param reason - Optional reason for the grant (max 500 chars)
    * @param expiresAt - Optional future expiry date
    * @returns Created complimentary grant
    */
   async createGrant(
-    accountId: string,
+    calendarId: string,
     grantedBy: string,
     reason?: string,
     expiresAt?: Date,
   ): Promise<ComplimentaryGrant> {
     // Validate UUIDs
-    if (!isValidUUID(accountId)) {
-      throw new ValidationError('Invalid accountId: must be a valid UUID');
+    if (!isValidUUID(calendarId)) {
+      throw new ValidationError('Invalid calendarId: must be a valid UUID');
     }
 
     if (!isValidUUID(grantedBy)) {
@@ -739,16 +1078,18 @@ export default class SubscriptionService {
       throw new ValidationError('expiresAt must be a future date');
     }
 
-    // Check account exists
-    const account = await AccountEntity.findByPk(accountId);
-    if (!account) {
-      throw new AccountNotFoundError(accountId);
+    // Validate that the calendar exists via CalendarInterface
+    if (this.calendarInterface) {
+      const exists = await this.calendarInterface.calendarExists(calendarId);
+      if (!exists) {
+        throw new CalendarNotFoundError(calendarId);
+      }
     }
 
-    // Check for existing active grant
+    // Check for existing active grant for this calendar
     const existingGrant = await ComplimentaryGrantEntity.findOne({
       where: {
-        account_id: accountId,
+        calendar_id: calendarId,
         revoked_at: { [Op.is]: null as any },
         [Op.or]: [
           { expires_at: { [Op.is]: null as any } },
@@ -758,19 +1099,20 @@ export default class SubscriptionService {
     });
 
     if (existingGrant) {
-      throw new DuplicateGrantError(accountId);
+      throw new DuplicateGrantError(calendarId);
     }
 
     // Create the grant
     const grant = new ComplimentaryGrant(uuidv4());
-    grant.accountId = accountId;
+    grant.calendarId = calendarId;
     grant.grantedBy = grantedBy;
     grant.reason = reason ?? null;
     grant.expiresAt = expiresAt ?? null;
 
     const entity = ComplimentaryGrantEntity.build({
       id: grant.id,
-      account_id: grant.accountId,
+      account_id: grantedBy, // Use grantedBy as the account_id for the entity
+      calendar_id: grant.calendarId,
       granted_by: grant.grantedBy,
       reason: grant.reason,
       expires_at: grant.expiresAt,
@@ -810,12 +1152,12 @@ export default class SubscriptionService {
   }
 
   /**
-   * List all complimentary grants, including account email for display.
+   * List all complimentary grants, including account email and calendar URL name for display.
    *
-   * Fetches account emails in a single batch query to avoid N+1 queries.
+   * Fetches account emails and calendar URL names in batch queries to avoid N+1 queries.
    *
    * @param includeRevoked - If true, include revoked grants; otherwise only active grants
-   * @returns List of complimentary grants with accountEmail populated
+   * @returns List of complimentary grants with accountEmail and calendarUrlName populated
    */
   async listGrants(includeRevoked: boolean = false): Promise<ComplimentaryGrant[]> {
     const queryOptions: Record<string, any> = {
@@ -845,24 +1187,43 @@ export default class SubscriptionService {
     });
     const emailByAccountId = new Map(accounts.map((a) => [a.id, a.email]));
 
+    // Fetch calendar URL names via CalendarInterface
+    const urlNameByCalendarId = new Map<string, string>();
+    if (this.calendarInterface) {
+      const calendarIds = [...new Set(
+        entities.map((e) => e.calendar_id).filter((id): id is string => id !== null),
+      )];
+      const calendars = await Promise.all(
+        calendarIds.map((id) => this.calendarInterface!.getCalendar(id)),
+      );
+      calendars.forEach((calendar) => {
+        if (calendar) {
+          urlNameByCalendarId.set(calendar.id, calendar.urlName);
+        }
+      });
+    }
+
     return entities.map((entity) => {
       const grant = entity.toModel();
       grant.accountEmail = emailByAccountId.get(entity.account_id);
       grant.grantedByEmail = emailByAccountId.get(entity.granted_by);
+      if (entity.calendar_id) {
+        grant.calendarUrlName = urlNameByCalendarId.get(entity.calendar_id);
+      }
       return grant;
     });
   }
 
   /**
-   * Check if an account has an active complimentary grant
+   * Check if a calendar has an active complimentary grant
    *
-   * @param accountId - Account ID to check
-   * @returns True if account has an active, non-expired grant
+   * @param calendarId - Calendar ID to check
+   * @returns True if calendar has an active, non-expired grant
    */
-  async hasActiveGrant(accountId: string): Promise<boolean> {
+  async hasActiveGrant(calendarId: string): Promise<boolean> {
     const grant = await ComplimentaryGrantEntity.findOne({
       where: {
-        account_id: accountId,
+        calendar_id: calendarId,
         revoked_at: { [Op.is]: null as any },
         [Op.or]: [
           { expires_at: { [Op.is]: null as any } },
@@ -875,15 +1236,15 @@ export default class SubscriptionService {
   }
 
   /**
-   * Get the active complimentary grant for an account, if any
+   * Get the active complimentary grant for a calendar, if any
    *
-   * @param accountId - Account ID to check
+   * @param calendarId - Calendar ID to check
    * @returns Active grant or null if none exists
    */
-  async getGrantForAccount(accountId: string): Promise<ComplimentaryGrant | null> {
+  async getGrantForCalendar(calendarId: string): Promise<ComplimentaryGrant | null> {
     const entity = await ComplimentaryGrantEntity.findOne({
       where: {
-        account_id: accountId,
+        calendar_id: calendarId,
         revoked_at: { [Op.is]: null as any },
         [Op.or]: [
           { expires_at: { [Op.is]: null as any } },
@@ -896,25 +1257,25 @@ export default class SubscriptionService {
   }
 
   /**
-   * Check if an account has access via subscription or complimentary grant.
+   * Check if a calendar has access via subscription or complimentary grant.
    *
    * Uses fail-secure error handling: if checks throw errors, access is denied.
    * Grant check runs first (smaller table); subscription check runs second.
    *
-   * @param accountId - Account ID to check
-   * @returns True if account has an active grant or active subscription
+   * @param calendarId - Calendar ID to check
+   * @returns True if calendar has an active grant or active subscription
    */
-  async hasSubscriptionAccess(accountId: string): Promise<boolean> {
+  async hasSubscriptionAccess(calendarId: string): Promise<boolean> {
     try {
-      const hasGrant = await this.hasActiveGrant(accountId);
+      const hasGrant = await this.hasActiveGrant(calendarId);
       if (hasGrant) return true;
     }
     catch {
-      // Log error but continue to subscription check (fail-open for grant errors)
+      // Grant check failed; fall through to subscription check which may still deny access
     }
 
     try {
-      const hasSub = await this.hasActiveSubscription(accountId);
+      const hasSub = await this.hasActiveSubscription(calendarId);
       return hasSub;
     }
     catch {

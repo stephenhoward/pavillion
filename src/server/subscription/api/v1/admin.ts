@@ -6,6 +6,7 @@ import { SubscriptionSettings } from '@/common/model/subscription';
 import { ValidationError } from '@/common/exceptions/base';
 import {
   AccountNotFoundError,
+  CalendarNotFoundError,
   DuplicateGrantError,
   GrantNotFoundError,
 } from '@/server/subscription/exceptions';
@@ -442,25 +443,25 @@ export default class AdminRouteHandlers {
 
   /**
    * POST /admin/grants
-   * Create a complimentary grant for an account
+   * Create a complimentary grant for a calendar
    *
-   * Body: { accountId: string, reason?: string, expiresAt?: Date }
+   * Body: { calendarId: string, reason?: string, expiresAt?: Date }
    * Sets grantedBy from req.user.id — never from request body.
    */
   async createGrant(req: Request, res: Response): Promise<void> {
     try {
-      const { accountId, reason, expiresAt } = req.body;
+      const { calendarId, reason, expiresAt } = req.body;
       const adminUser = req.user!;
 
-      // Validate accountId is present
-      if (!accountId) {
-        res.status(400).json({ error: 'accountId is required', errorName: 'ValidationError' });
+      // Validate calendarId is present
+      if (!calendarId) {
+        res.status(400).json({ error: 'calendarId is required', errorName: 'ValidationError' });
         return;
       }
 
-      // Validate accountId is a valid UUID
-      if (!ExpressHelper.isValidUUID(accountId)) {
-        res.status(400).json({ error: 'Invalid accountId: must be a valid UUID', errorName: 'ValidationError' });
+      // Validate calendarId is a valid UUID
+      if (!ExpressHelper.isValidUUID(calendarId)) {
+        res.status(400).json({ error: 'Invalid calendarId: must be a valid UUID', errorName: 'ValidationError' });
         return;
       }
 
@@ -487,13 +488,16 @@ export default class AdminRouteHandlers {
       // grantedBy is always set from the authenticated user — never from the request body
       const grantedBy = adminUser.id;
 
-      const grant = await this.interface.createGrant(accountId, grantedBy, reason, expiresAtDate);
+      const grant = await this.interface.createGrant(calendarId, grantedBy, reason, expiresAtDate);
 
       res.status(201).json(grant.toObject());
     }
     catch (error) {
       logError(error, 'Error creating grant');
-      if (error instanceof AccountNotFoundError) {
+      if (error instanceof CalendarNotFoundError) {
+        res.status(404).json({ error: error.message, errorName: 'CalendarNotFoundError' });
+      }
+      else if (error instanceof AccountNotFoundError) {
         res.status(404).json({ error: error.message, errorName: 'AccountNotFoundError' });
       }
       else if (error instanceof DuplicateGrantError) {

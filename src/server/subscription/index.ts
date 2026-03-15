@@ -4,6 +4,7 @@ import SubscriptionInterface from '@/server/subscription/interface';
 import SubscriptionEventHandlers from '@/server/subscription/events';
 import SubscriptionApiV1 from '@/server/subscription/api/v1';
 import { startScheduledJobs } from '@/server/subscription/service/jobs';
+import type CalendarInterface from '@/server/calendar/interface';
 
 /**
  * Subscription Domain entry point.
@@ -19,6 +20,17 @@ export default class SubscriptionDomain {
     this.eventBus = eventBus;
     this.interface = new SubscriptionInterface(eventBus);
     this.eventHandlers = new SubscriptionEventHandlers();
+  }
+
+  /**
+   * Injects CalendarInterface into the subscription service for cross-domain
+   * calendar ownership and existence checks. Called after CalendarDomain is
+   * initialized to avoid circular construction dependencies.
+   *
+   * @param calendarInterface - The CalendarInterface instance from the calendar domain
+   */
+  setCalendarInterface(calendarInterface: CalendarInterface): void {
+    this.interface.setCalendarInterface(calendarInterface);
   }
 
   public initialize(app: Application): void {

@@ -9,6 +9,15 @@ import {
 import { ProviderType } from '@/common/model/subscription';
 
 /**
+ * Recorded call for updateSubscriptionAmount
+ */
+export interface UpdateSubscriptionAmountCall {
+  providerSubscriptionId: string;
+  newAmount: number;
+  currency: string;
+}
+
+/**
  * Mock Stripe Adapter for Testing
  *
  * Returns mock credentials without making real API calls.
@@ -16,6 +25,9 @@ import { ProviderType } from '@/common/model/subscription';
  */
 export class MockStripeAdapter implements PaymentProviderAdapter {
   readonly providerType: ProviderType = 'stripe';
+
+  /** Recorded calls to updateSubscriptionAmount for test verification */
+  updateSubscriptionAmountCalls: UpdateSubscriptionAmountCall[] = [];
 
   /**
    * Get OAuth connection URL (mock)
@@ -148,6 +160,35 @@ export class MockStripeAdapter implements PaymentProviderAdapter {
     // Mock cancellation - no actual API call
     return Promise.resolve();
   }
+  /**
+   * Mock Stripe supports amount updates
+   *
+   * @returns True
+   */
+  supportsAmountUpdates(): boolean {
+    return true;
+  }
+
+  /**
+   * Update subscription amount (mock)
+   *
+   * Records the call parameters for test verification.
+   *
+   * @param providerSubscriptionId - Provider's subscription ID
+   * @param newAmount - New subscription amount in millicents
+   * @param currency - ISO 4217 currency code
+   */
+  async updateSubscriptionAmount(
+    providerSubscriptionId: string,
+    newAmount: number,
+    currency: string,
+  ): Promise<void> {
+    this.updateSubscriptionAmountCalls.push({
+      providerSubscriptionId,
+      newAmount,
+      currency,
+    });
+  }
 
   /**
    * Get subscription status (mock)
@@ -222,6 +263,9 @@ export class MockStripeAdapter implements PaymentProviderAdapter {
  */
 export class MockPayPalAdapter implements PaymentProviderAdapter {
   readonly providerType: ProviderType = 'paypal';
+
+  /** Recorded calls to updateSubscriptionAmount for test verification */
+  updateSubscriptionAmountCalls: UpdateSubscriptionAmountCall[] = [];
 
   /**
    * Get OAuth connection URL (mock)
@@ -355,6 +399,35 @@ export class MockPayPalAdapter implements PaymentProviderAdapter {
   async cancelSubscription(subscriptionId: string, immediate: boolean): Promise<void> {
     // Mock cancellation - no actual API call
     return Promise.resolve();
+  }
+  /**
+   * Mock PayPal does not support amount updates
+   *
+   * @returns False
+   */
+  supportsAmountUpdates(): boolean {
+    return false;
+  }
+
+  /**
+   * Update subscription amount (mock)
+   *
+   * Records the call parameters for test verification.
+   *
+   * @param providerSubscriptionId - Provider's subscription ID
+   * @param newAmount - New subscription amount in millicents
+   * @param currency - ISO 4217 currency code
+   */
+  async updateSubscriptionAmount(
+    providerSubscriptionId: string,
+    newAmount: number,
+    currency: string,
+  ): Promise<void> {
+    this.updateSubscriptionAmountCalls.push({
+      providerSubscriptionId,
+      newAmount,
+      currency,
+    });
   }
 
   /**

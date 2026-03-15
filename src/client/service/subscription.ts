@@ -93,6 +93,22 @@ export type AccountSearchResult = {
 };
 
 /**
+ * Funding status for a calendar
+ */
+export type FundingStatus = {
+  status: 'funded' | 'unfunded' | 'grant' | 'admin-exempt';
+  grantInfo?: { reason?: string; expiresAt?: string };
+};
+
+/**
+ * Resolved public calendar information
+ */
+export type ResolvedCalendar = {
+  id: string;
+  title: string;
+};
+
+/**
  * Subscription service for managing subscription payments.
  * Provides methods to configure subscription settings (admin) and
  * manage user subscriptions.
@@ -350,14 +366,16 @@ export default class SubscriptionService {
    * @param {string} accountId - The account ID to grant access to
    * @param {string} reason - Optional reason for the grant
    * @param {Date} expiresAt - Optional expiration date for the grant
+   * @param {string} calendarId - Optional calendar ID to scope the grant to
    * @returns {Promise<ComplimentaryGrant>} The created complimentary grant
    */
-  async createGrant(accountId: string, reason?: string, expiresAt?: Date): Promise<ComplimentaryGrant> {
+  async createGrant(accountId: string, reason?: string, expiresAt?: Date, calendarId?: string): Promise<ComplimentaryGrant> {
     try {
       const response = await axios.post('/api/subscription/v1/admin/grants', {
         accountId,
         reason,
         expiresAt,
+        calendarId,
       });
       return ComplimentaryGrant.fromObject(response.data);
     }
@@ -407,6 +425,83 @@ export default class SubscriptionService {
     }
   }
 
+  /**
+   * Resolve a public calendar by its URL name
+   *
+   * @param {string} urlName - The URL name of the calendar to resolve
+   * @returns {Promise<ResolvedCalendar | null>} Resolved calendar info or null if not found
+   */
+  async resolvePublicCalendar(urlName: string): Promise<ResolvedCalendar | null> {
+    try {
+      const response = await axios.get(`/api/public/v1/calendar/${encodeURIComponent(urlName)}`);
+      if (response.data && response.data.id) {
+        const title = response.data.content?.title || response.data.urlName || urlName;
+        return { id: response.data.id, title };
+      }
+      return null;
+    }
+    catch {
+      return null;
+    }
+  }
+
+  // ========================================
+  // Calendar Subscription Methods
+  // ========================================
+
+  /**
+   * Add a calendar to the user's subscription
+   *
+   * @param {string} calendarId - The calendar ID to add
+   * @param {number} amount - The funding amount for this calendar
+   * @returns {Promise<void>}
+   */
+  async addCalendarToSubscription(calendarId: string, amount: number): Promise<void> {
+    try {
+      await axios.post('/api/subscription/v1/calendars', {
+        calendarId,
+        amount,
+      });
+    }
+    catch (error) {
+      console.error('Failed to add calendar to subscription:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Remove a calendar from the user's subscription
+   *
+   * @param {string} calendarId - The calendar ID to remove
+   * @returns {Promise<void>}
+   */
+  async removeCalendarFromSubscription(calendarId: string): Promise<void> {
+    try {
+      await axios.delete(`/api/subscription/v1/calendars/${calendarId}`);
+    }
+    catch (error) {
+      console.error('Failed to remove calendar from subscription:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get funding status for a specific calendar
+   *
+   * @param {string} calendarId - The calendar ID to check funding for
+   * @returns {Promise<FundingStatus>} The funding status of the calendar
+   */
+  async getFundingStatus(calendarId: string): Promise<FundingStatus> {
+    try {
+      const response = await axios.get(`/api/subscription/v1/calendars/${calendarId}/funding`);
+      return response.data;
+    }
+    catch (error) {
+      console.error('Failed to get funding status:', error);
+      throw error;
+    }
+  }
+
   // ========================================
   // User Methods
   // ========================================
@@ -431,11 +526,13 @@ export default class SubscriptionService {
    * Create a new subscription for the current user
    *
    * @param {SubscribeParams} params - Subscription parameters
+   * @param {string[]} calendarIds - Optional array of calendar IDs to include
    * @returns {Promise<any>} Subscription result (may include redirect URL for payment)
    */
-  async subscribe(params: SubscribeParams): Promise<any> {
+  async subscribe(params: SubscribeParams, calendarIds?: string[]): Promise<any> {
     try {
-      const response = await axios.post('/api/subscription/v1/subscribe', params);
+      const body = calendarIds ? { ...params, calendarIds } : params;
+      const response = await axios.post('/api/subscription/v1/subscribe', body);
       return response.data;
     }
     catch (error) {

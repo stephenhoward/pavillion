@@ -249,7 +249,7 @@ class CalendarService {
       // Admin-owned calendars bypass subscription checks
       const isAdmin = await this.isCalendarOwnerAdmin(ownerId);
       if (!isAdmin) {
-        const hasSubscription = await this.subscriptionInterface?.hasSubscriptionAccess(ownerId);
+        const hasSubscription = await this.subscriptionInterface?.hasSubscriptionAccess(calendar.id);
         if (!hasSubscription) {
           throw new SubscriptionRequiredError('widget_embedding');
         }
@@ -276,6 +276,38 @@ class CalendarService {
       },
     });
     return membership !== null;
+  }
+
+  /**
+   * Checks if a specific account is the owner of a calendar using primitive IDs.
+   * Designed for cross-domain use via CalendarInterface.
+   *
+   * @param accountId - The account UUID to check
+   * @param calendarId - The calendar UUID to check ownership of
+   * @returns True if the account owns the calendar
+   */
+  async isCalendarOwnerById(accountId: string, calendarId: string): Promise<boolean> {
+    const membership = await CalendarMemberEntity.findOne({
+      where: {
+        calendar_id: calendarId,
+        account_id: accountId,
+        role: 'owner',
+      },
+    });
+    return membership !== null;
+  }
+
+  /**
+   * Checks if a calendar exists by its primary key.
+   *
+   * @param calendarId - The calendar UUID to check
+   * @returns True if the calendar exists
+   */
+  async calendarExists(calendarId: string): Promise<boolean> {
+    const calendar = await CalendarEntity.findByPk(calendarId, {
+      attributes: ['id'],
+    });
+    return calendar !== null;
   }
 
   /**
@@ -1571,7 +1603,7 @@ class CalendarService {
       const isAdmin = await this.isCalendarOwnerAdmin(ownerId);
       if (!isAdmin) {
         // Check subscription status
-        const hasSubscription = await this.subscriptionInterface?.hasSubscriptionAccess(ownerId);
+        const hasSubscription = await this.subscriptionInterface?.hasSubscriptionAccess(calendarId);
         if (!hasSubscription) {
           throw new SubscriptionRequiredError('widget_embedding');
         }

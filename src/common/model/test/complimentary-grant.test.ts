@@ -11,6 +11,7 @@ describe('ComplimentaryGrant Model', () => {
 
       expect(grant.id).toBe('grant-1');
       expect(grant.accountId).toBe('');
+      expect(grant.calendarId).toBeNull();
       expect(grant.expiresAt).toBeNull();
       expect(grant.reason).toBeNull();
       expect(grant.grantedBy).toBe('');
@@ -108,6 +109,7 @@ describe('ComplimentaryGrant Model', () => {
     it('should serialize all properties to a plain object', () => {
       const grant = new ComplimentaryGrant('grant-1');
       grant.accountId = 'account-abc';
+      grant.calendarId = 'calendar-xyz';
       grant.reason = 'Test reason';
       grant.grantedBy = 'admin-xyz';
 
@@ -118,6 +120,7 @@ describe('ComplimentaryGrant Model', () => {
 
       expect(obj.id).toBe('grant-1');
       expect(obj.accountId).toBe('account-abc');
+      expect(obj.calendarId).toBe('calendar-xyz');
       expect(obj.reason).toBe('Test reason');
       expect(obj.grantedBy).toBe('admin-xyz');
       expect(obj.expiresAt).toBe(futureDate);
@@ -151,6 +154,17 @@ describe('ComplimentaryGrant Model', () => {
       expect(obj.revokedAt).toBe(revokedDate);
       expect(obj.revokedBy).toBe('admin-2');
     });
+
+    it('should include calendarId in serialized output', () => {
+      const grant = new ComplimentaryGrant('grant-4');
+      grant.accountId = 'account-1';
+      grant.calendarId = 'cal-123';
+      grant.grantedBy = 'admin-1';
+
+      const obj = grant.toObject();
+
+      expect(obj.calendarId).toBe('cal-123');
+    });
   });
 
   describe('fromObject() deserialization', () => {
@@ -160,6 +174,7 @@ describe('ComplimentaryGrant Model', () => {
       const obj = {
         id: 'grant-1',
         accountId: 'account-abc',
+        calendarId: 'calendar-xyz',
         expiresAt,
         reason: 'Test reason',
         grantedBy: 'admin-xyz',
@@ -171,6 +186,7 @@ describe('ComplimentaryGrant Model', () => {
 
       expect(grant.id).toBe('grant-1');
       expect(grant.accountId).toBe('account-abc');
+      expect(grant.calendarId).toBe('calendar-xyz');
       expect(grant.expiresAt).toBe(expiresAt);
       expect(grant.reason).toBe('Test reason');
       expect(grant.grantedBy).toBe('admin-xyz');
@@ -187,6 +203,7 @@ describe('ComplimentaryGrant Model', () => {
 
       const grant = ComplimentaryGrant.fromObject(obj);
 
+      expect(grant.calendarId).toBeNull();
       expect(grant.expiresAt).toBeNull();
       expect(grant.reason).toBeNull();
       expect(grant.revokedAt).toBeNull();
@@ -213,6 +230,7 @@ describe('ComplimentaryGrant Model', () => {
     it('should round-trip correctly through toObject and fromObject', () => {
       const original = new ComplimentaryGrant('grant-rt');
       original.accountId = 'account-rt';
+      original.calendarId = 'calendar-rt';
       original.reason = 'Round-trip test';
       original.grantedBy = 'admin-rt';
       const futureDate = new Date('2028-06-01');
@@ -223,6 +241,7 @@ describe('ComplimentaryGrant Model', () => {
 
       expect(restored.id).toBe(original.id);
       expect(restored.accountId).toBe(original.accountId);
+      expect(restored.calendarId).toBe(original.calendarId);
       expect(restored.reason).toBe(original.reason);
       expect(restored.grantedBy).toBe(original.grantedBy);
       expect(restored.expiresAt).toBe(original.expiresAt);

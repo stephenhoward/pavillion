@@ -1,11 +1,61 @@
 <template>
   <Modal :title="t('grants.form.section_title')" modal-class="grant-form-modal" @close="$emit('close')">
     <form class="grant-form" @submit.prevent="submitCreateGrant" novalidate>
-      <!-- Account Selector -->
+      <!-- Calendar URL Name -->
+      <div class="form-group">
+        <label class="form-label" for="grant-calendar">
+          {{ t("grants.form.calendar_label") }}
+          <span class="form-required" aria-hidden="true">*</span>
+        </label>
+        <div class="calendar-input-wrapper">
+          <input
+            id="grant-calendar"
+            type="text"
+            v-model="state.calendarUrlName"
+            :placeholder="t('grants.form.calendar_placeholder')"
+            class="form-input"
+            :class="{
+              'form-input--error': state.errors.calendar,
+              'form-input--valid': state.calendarId && !state.errors.calendar,
+            }"
+            autocomplete="off"
+            :aria-invalid="state.errors.calendar ? 'true' : 'false'"
+            :aria-describedby="[
+              state.errors.calendar ? 'grant-calendar-error' : null,
+              state.calendarId ? 'grant-calendar-resolved' : null,
+              'grant-calendar-hint',
+            ].filter(Boolean).join(' ')"
+            @blur="resolveCalendar"
+            @input="onCalendarInputChange"
+          />
+          <p v-if="state.calendarResolving" class="form-hint form-hint--loading">
+            {{ t("grants.form.calendar_resolving") }}
+          </p>
+          <p
+            v-else-if="state.calendarId && state.calendarDisplay"
+            id="grant-calendar-resolved"
+            class="form-hint form-hint--success"
+          >
+            {{ state.calendarDisplay }}
+          </p>
+          <p v-else id="grant-calendar-hint" class="form-hint">
+            {{ t("grants.form.calendar_hint") }}
+          </p>
+        </div>
+        <p
+          v-if="state.errors.calendar"
+          id="grant-calendar-error"
+          class="form-error"
+          role="alert"
+        >
+          {{ state.errors.calendar }}
+        </p>
+      </div>
+
+      <!-- Account Selector (optional context) -->
       <div class="form-group">
         <label class="form-label" for="grant-account">
           {{ t("grants.form.account_label") }}
-          <span class="form-required" aria-hidden="true">*</span>
         </label>
         <div class="account-search-wrapper">
           <input
@@ -165,6 +215,10 @@ const subscriptionService = new SubscriptionService();
 const state = reactive({
   accountId: '',
   accountDisplay: '',
+  calendarId: '',
+  calendarUrlName: '',
+  calendarDisplay: '',
+  calendarResolving: false,
   reason: '',
   expiresAt: '',
   submitting: false,
@@ -196,6 +250,50 @@ const activeDescendantId = computed(() => {
   }
   return `account-option-${state.activeDropdownIndex}`;
 });
+
+/**
+ * Clear resolved calendar state when user modifies the input
+ */
+function onCalendarInputChange() {
+  if (state.calendarId) {
+    state.calendarId = '';
+    state.calendarDisplay = '';
+  }
+  delete state.errors.calendar;
+}
+
+/**
+ * Resolve calendar URL name to calendar ID using the subscription service
+ */
+async function resolveCalendar() {
+  const urlName = state.calendarUrlName.trim();
+  if (!urlName) {
+    state.calendarId = '';
+    state.calendarDisplay = '';
+    return;
+  }
+
+  // Skip if already resolved for this name
+  if (state.calendarId && state.calendarDisplay) {
+    return;
+  }
+
+  state.calendarResolving = true;
+  state.calendarId = '';
+  state.calendarDisplay = '';
+  delete state.errors.calendar;
+
+  const resolved = await subscriptionService.resolvePublicCalendar(urlName);
+  if (resolved) {
+    state.calendarId = resolved.id;
+    state.calendarDisplay = resolved.title;
+  }
+  else {
+    state.errors.calendar = t('grants.form.calendar_not_found');
+  }
+
+  state.calendarResolving = false;
+}
 
 /**
  * Search accounts for autocomplete
@@ -308,8 +406,8 @@ function handleAccountSearchKeydown(event: KeyboardEvent) {
 function validateGrantForm(): boolean {
   const errors: Record<string, string> = {};
 
-  if (!state.accountId) {
-    errors.account = t('grants.form.account_required');
+  if (!state.calendarId) {
+    errors.calendar = t('grants.form.calendar_required');
   }
 
   if (state.reason.length > 500) {
@@ -333,6 +431,11 @@ function validateGrantForm(): boolean {
  * Submit create grant form
  */
 async function submitCreateGrant() {
+  // Resolve calendar first if not yet resolved
+  if (!state.calendarId && state.calendarUrlName.trim()) {
+    await resolveCalendar();
+  }
+
   if (!validateGrantForm()) {
     return;
   }
@@ -343,8 +446,9 @@ async function submitCreateGrant() {
   try {
     const expiresAt = state.expiresAt ? new Date(state.expiresAt) : undefined;
     const reason = state.reason.trim() || undefined;
+    const accountId = state.accountId || '';
 
-    await subscriptionService.createGrant(state.accountId, reason, expiresAt);
+    await subscriptionService.createGrant(accountId, reason, expiresAt, state.calendarId);
     emit('created');
   }
   catch (error) {
@@ -403,6 +507,10 @@ async function submitCreateGrant() {
       }
     }
 
+    &--valid {
+      border-color: var(--pav-color-emerald-400);
+    }
+
     &--date {
       cursor: pointer;
     }
@@ -433,6 +541,21 @@ async function submitCreateGrant() {
     color: var(--pav-color-red-600);
   }
 
+  .form-hint {
+    margin: var(--pav-space-1) 0 0;
+    font-size: var(--pav-font-size-xs);
+    color: var(--pav-color-text-muted);
+
+    &--loading {
+      color: var(--pav-color-text-muted);
+      font-style: italic;
+    }
+
+    &--success {
+      color: var(--pav-color-emerald-600);
+    }
+  }
+
   .textarea-wrapper {
     position: relative;
   }
@@ -446,6 +569,10 @@ async function submitCreateGrant() {
     &--warning {
       color: var(--pav-color-amber-600);
     }
+  }
+
+  .calendar-input-wrapper {
+    position: relative;
   }
 
   .account-search-wrapper {
