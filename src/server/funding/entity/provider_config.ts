@@ -43,14 +43,12 @@ function decrypt(text: string): string {
  *
  * Credentials JSON Structure:
  *
- * Stripe (via OAuth):
+ * Stripe (direct API keys - Embedded Checkout):
  * {
- *   stripe_user_id: string,    // The connected account ID (REQUIRED)
- *   scope: string,              // OAuth scope granted (read_write or read_only)
- *   livemode: boolean,          // Whether account is in live mode
- *   webhook_id: string,         // Webhook endpoint ID for deletion
- *   webhook_secret: string      // Webhook signing secret (moved from webhook_secret field)
+ *   apiKey: string,             // Stripe secret key (sk_test_ or sk_live_)
+ *   publishableKey: string      // Stripe publishable key (pk_test_ or pk_live_)
  * }
+ * The webhook signing secret (whsec_) is stored in the webhook_secret column.
  *
  * PayPal (manual configuration):
  * {

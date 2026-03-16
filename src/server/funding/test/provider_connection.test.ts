@@ -272,7 +272,7 @@ describe('ProviderConnectionService', () => {
       const mockEntity = {
         id: uuidv4(),
         provider_type: 'stripe',
-        credentials: JSON.stringify({ stripe_user_id: 'acct_123' }),
+        credentials: JSON.stringify({ apiKey: 'sk_test_123' }),
         toModel: () => ({
           id: uuidv4(),
           providerType: 'stripe' as ProviderType,
@@ -323,7 +323,7 @@ describe('ProviderConnectionService', () => {
       const result = await service.disconnectProvider('stripe', false);
 
       expect(result.requiresConfirmation).toBe(true);
-      expect(result.activeSubscriptionCount).toBe(5);
+      expect(result.activeFundingPlanCount).toBe(5);
       expect(countStub.calledOnce).toBe(true);
     });
 
@@ -363,7 +363,7 @@ describe('ProviderConnectionService', () => {
 
       // Stub cancel subscription via service
       const cancelStub = sandbox.stub();
-      (service as any).subscriptionService = {
+      (service as any).fundingService = {
         forceCancel: cancelStub,
       };
 
@@ -376,7 +376,7 @@ describe('ProviderConnectionService', () => {
     });
   });
 
-  describe('getActiveSubscriptionCount', () => {
+  describe('getActiveFundingPlanCount', () => {
     it('should return count of active subscriptions for provider', async () => {
       const providerId = uuidv4();
       const mockEntity = {
@@ -390,7 +390,7 @@ describe('ProviderConnectionService', () => {
       const countStub = sandbox.stub(FundingPlanEntity, 'count');
       countStub.resolves(3);
 
-      const result = await service.getActiveSubscriptionCount('stripe');
+      const result = await service.getActiveFundingPlanCount('stripe');
 
       expect(result).toBe(3);
       expect(countStub.calledOnce).toBe(true);

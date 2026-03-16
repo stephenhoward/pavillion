@@ -10,10 +10,11 @@ import FundingInterface from '@/server/funding/interface/index';
 import WebhookRouteHandlers from '@/server/funding/api/v1/webhooks';
 import { FundingPlanEntity } from '@/server/funding/entity/funding_plan';
 import { FundingEventEntity } from '@/server/funding/entity/funding_event';
-import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_subscription';
+import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_funding_plan';
 import { ProviderConfigEntity } from '@/server/funding/entity/provider_config';
 import { ProviderConfig } from '@/common/model/funding-plan';
 import { ProviderFactory } from '@/server/funding/service/provider/factory';
+import { StripeAdapter } from '@/server/funding/service/provider/stripe';
 
 // Mock Stripe module
 vi.mock('stripe', () => {
@@ -32,6 +33,15 @@ vi.mock('stripe', () => {
 });
 
 import Stripe from 'stripe';
+
+/**
+ * Create a parseWebhookEvent function that matches StripeAdapter behavior.
+ * Used by test mocks so the webhook handler can delegate parsing to the adapter.
+ */
+function createParseWebhookEvent() {
+  const adapter = new StripeAdapter({ apiKey: 'sk_test_mock' }, 'whsec_mock');
+  return (payload: string) => adapter.parseWebhookEvent(payload);
+}
 
 describe('Webhook Handling', () => {
   let app: Application;
@@ -156,7 +166,7 @@ describe('Webhook Handling', () => {
   });
 
   describe('PayPal webhook signature verification', () => {
-    it('should accept webhook with valid PayPal signature', async () => {
+    it('should return 501 for PayPal webhook with valid signature (not yet implemented)', async () => {
       const webhookPayload = JSON.stringify({
         id: 'WH-test-event',
         event_type: 'PAYMENT.SALE.COMPLETED',
@@ -171,10 +181,12 @@ describe('Webhook Handling', () => {
         .set('Content-Type', 'application/json')
         .send(webhookPayload);
 
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(501);
+      expect(response.body.error).toBe('PayPal webhook verification not implemented');
+      expect(response.body.errorName).toBe('NotImplemented');
     });
 
-    it('should reject webhook with invalid PayPal signature', async () => {
+    it('should return 400 when PayPal signature header is missing', async () => {
       const webhookPayload = JSON.stringify({
         id: 'WH-test-event',
         event_type: 'PAYMENT.SALE.COMPLETED',
@@ -186,7 +198,7 @@ describe('Webhook Handling', () => {
         .send(webhookPayload);
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toContain('signature');
+      expect(response.body.error).toContain('Missing PayPal signature');
     });
   });
 
@@ -236,6 +248,91 @@ describe('Webhook Handling', () => {
       const updatedSubscription = await FundingPlanEntity.findByPk(subscriptionId);
       expect(updatedSubscription).toBeDefined();
       expect(updatedSubscription?.status).toBe('past_due');
+    });
+
+    it('should store local FundingPlan UUID in funding_plan_id, not the Stripe subscription ID', async () => {
+      // Create a test subscription with a known local UUID
+      const localPlanId = uuidv4();
+      const subscription = new FundingPlanEntity();
+      subscription.id = localPlanId;
+      subscription.account_id = uuidv4();
+      subscription.provider_config_id = stripeConfig.id;
+      subscription.provider_subscription_id = 'sub_fk_test_456';
+      subscription.provider_customer_id = 'cus_fk_test_456';
+      subscription.status = 'active';
+      subscription.billing_cycle = 'monthly';
+      subscription.amount = 1000000;
+      subscription.currency = 'USD';
+      subscription.current_period_start = new Date();
+      subscription.current_period_end = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      await subscription.save();
+
+      // Create webhook payload for a subscription lifecycle event
+      // For customer.subscription.updated, the data.object IS the subscription
+      // so its 'id' field is the Stripe subscription ID
+      const webhookPayload = JSON.stringify({
+        id: 'evt_fk_test',
+        type: 'customer.subscription.updated',
+        data: {
+          object: {
+            id: 'sub_fk_test_456',
+            customer: 'cus_fk_test_456',
+            status: 'active',
+            current_period_start: Math.floor(Date.now() / 1000),
+            current_period_end: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
+          },
+        },
+      });
+
+      vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
+
+      const response = await request(app)
+        .post('/api/funding/webhooks/stripe')
+        .set('stripe-signature', 'valid_signature')
+        .set('Content-Type', 'application/json')
+        .send(webhookPayload);
+
+      expect(response.status).toBe(200);
+
+      // Verify the logged event has the local UUID, NOT the Stripe sub_xxx ID
+      const loggedEvent = await FundingEventEntity.findOne({
+        where: { provider_event_id: 'evt_fk_test' },
+      });
+      expect(loggedEvent).toBeDefined();
+      expect(loggedEvent?.funding_plan_id).toBe(localPlanId);
+      expect(loggedEvent?.funding_plan_id).not.toBe('sub_fk_test_456');
+    });
+
+    it('should log event with empty funding_plan_id when no matching FundingPlan exists', async () => {
+      // Send a webhook for a subscription that does not exist locally
+      const webhookPayload = JSON.stringify({
+        id: 'evt_unknown_sub',
+        type: 'invoice.paid',
+        data: {
+          object: {
+            subscription: 'sub_nonexistent_999',
+            customer: 'cus_nonexistent_999',
+          },
+        },
+      });
+
+      vi.mocked(Stripe.Webhook.constructEvent).mockReturnValue(JSON.parse(webhookPayload) as any);
+
+      const response = await request(app)
+        .post('/api/funding/webhooks/stripe')
+        .set('stripe-signature', 'valid_signature')
+        .set('Content-Type', 'application/json')
+        .send(webhookPayload);
+
+      expect(response.status).toBe(200);
+
+      // Event should still be logged for audit trail, with empty funding_plan_id
+      const loggedEvent = await FundingEventEntity.findOne({
+        where: { provider_event_id: 'evt_unknown_sub' },
+      });
+      expect(loggedEvent).toBeDefined();
+      expect(loggedEvent?.funding_plan_id).toBe('');
+      expect(loggedEvent?.event_type).toBe('invoice.paid');
     });
   });
 
@@ -322,8 +419,10 @@ describe('Webhook Handling', () => {
       periodEnd.setMonth(periodEnd.getMonth() + 1);
 
       // Mock the adapter returned by ProviderFactory
+      // Include parseWebhookEvent so the webhook handler can delegate parsing
       mockAdapter = {
         providerType: 'stripe',
+        parseWebhookEvent: createParseWebhookEvent(),
         getSubscription: sandbox.stub().resolves({
           providerSubscriptionId: 'sub_checkout_123',
           providerCustomerId: 'cus_checkout_123',

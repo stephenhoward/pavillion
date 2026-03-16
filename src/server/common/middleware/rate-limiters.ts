@@ -146,13 +146,13 @@ export const publicWidgetByIp: RequestHandler = isRateLimitEnabled()
 
 /**
  * Widget configuration rate limiter for authenticated users.
- * Limits: 100 requests per account per 15 minutes.
+ * Limits: 100 requests per account per 15 minutes (default config).
  * Prevents abuse of widget configuration endpoints.
  */
 export const widgetConfigByAccount: RequestHandler = isRateLimitEnabled()
   ? createAccountRateLimiter(
-    100,
-    15 * 60 * 1000, // 15 minutes
+    config.get<number>('rateLimit.widgetConfig.byAccount.max'),
+    config.get<number>('rateLimit.widgetConfig.byAccount.windowMs'),
     'widget-config',
   )
   : noOpMiddleware;
@@ -172,13 +172,13 @@ export const calendarSubscriptionByAccount: RequestHandler = isRateLimitEnabled(
 
 /**
  * Checkout session creation rate limiter for authenticated users.
- * Limits: 10 requests per account per 15 minutes.
+ * Limits: 10 requests per account per 15 minutes (default config).
  * Prevents abuse of Stripe checkout session creation.
  */
 export const checkoutSessionByAccount: RequestHandler = isRateLimitEnabled()
   ? createAccountRateLimiter(
-    10,
-    15 * 60 * 1000, // 15 minutes
+    config.get<number>('rateLimit.checkoutSession.byAccount.max'),
+    config.get<number>('rateLimit.checkoutSession.byAccount.windowMs'),
     'checkout-session',
   )
   : noOpMiddleware;

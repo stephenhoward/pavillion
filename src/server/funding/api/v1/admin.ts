@@ -72,7 +72,7 @@ export default class AdminRouteHandlers {
 
   /**
    * GET /admin/settings
-   * Get instance subscription settings
+   * Get instance funding settings
    */
   async getSettings(req: Request, res: Response): Promise<void> {
     try {
@@ -95,7 +95,7 @@ export default class AdminRouteHandlers {
 
   /**
    * POST /admin/settings
-   * Update instance subscription settings
+   * Update instance funding settings
    */
   async updateSettings(req: Request, res: Response): Promise<void> {
     try {
@@ -138,7 +138,7 @@ export default class AdminRouteHandlers {
       res.json({ success: true });
     }
     catch (error) {
-      logError(error, 'Error updating subscription settings');
+      logError(error, 'Error updating funding settings');
       res.status(500).json({ error: 'Internal server error' });
     }
   }

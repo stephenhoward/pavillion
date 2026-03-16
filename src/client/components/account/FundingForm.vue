@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { useTranslation } from 'i18next-vue';
-import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import FundingService from '@/client/service/funding';
 import type { FundingOptions, FundingProvider } from '@/client/service/funding';
-import { useStripeCheckout } from '@/client/composables/useStripeCheckout';
+import { loadStripe } from '@/client/composables/useStripeCheckout';
 
 const ALLOWED_CHECKOUT_ORIGINS = [
   'https://www.paypal.com',
@@ -111,7 +111,43 @@ function destroyCheckout() {
 }
 
 /**
- * Handle the Stripe embedded checkout flow
+ * Handle checkout completion callback from Stripe embedded checkout.
+ * Verifies the session status via our API before transitioning state.
+ */
+async function handleCheckoutComplete(sessionId: string) {
+  // If user already navigated away from checkout, ignore the callback
+  if (formState.value !== 'checkout') {
+    return;
+  }
+
+  try {
+    const status = await fundingService.getCheckoutSessionStatus(sessionId);
+
+    if (status.status === 'complete') {
+      destroyCheckout();
+      resultStatus.value = 'success';
+      formState.value = 'result';
+      return;
+    }
+
+    if (status.status === 'expired') {
+      destroyCheckout();
+      resultStatus.value = 'error';
+      formState.value = 'result';
+      return;
+    }
+  }
+  catch {
+    // If verification fails, still treat as success since Stripe confirmed completion
+    destroyCheckout();
+    resultStatus.value = 'success';
+    formState.value = 'result';
+  }
+}
+
+/**
+ * Handle the Stripe embedded checkout flow.
+ * Uses Stripe's onComplete callback instead of polling.
  */
 async function startStripeCheckout() {
   const provider = selectedProviderInfo.value;
@@ -142,41 +178,13 @@ async function startStripeCheckout() {
     // Create checkout session via API
     const session = await fundingService.createCheckoutSession(params);
 
-    // Initialize Stripe and mount embedded checkout
-    const { stripe, loading: stripeLoading, error: stripeError } = useStripeCheckout(provider.publishableKey);
+    // Load Stripe.js and initialize with publishable key
+    const stripeInstance = await loadStripe(provider.publishableKey);
 
-    // Wait for Stripe to load
-    await new Promise<void>((resolve, reject) => {
-      if (!stripeLoading.value) {
-        if (stripeError.value) {
-          reject(new Error(stripeError.value));
-        }
-        else {
-          resolve();
-        }
-        return;
-      }
-
-      const stopWatch = watch([stripeLoading, stripeError], () => {
-        if (!stripeLoading.value) {
-          stopWatch();
-          if (stripeError.value) {
-            reject(new Error(stripeError.value));
-          }
-          else {
-            resolve();
-          }
-        }
-      });
-    });
-
-    if (!stripe.value) {
-      throw new Error('Stripe failed to initialize');
-    }
-
-    // Initialize embedded checkout
-    checkoutInstance = await stripe.value.initEmbeddedCheckout({
+    // Initialize embedded checkout with onComplete callback
+    checkoutInstance = await stripeInstance.initEmbeddedCheckout({
       clientSecret: session.client_secret,
+      onComplete: () => handleCheckoutComplete(session.session_id),
     });
 
     // Switch to checkout state so the container is rendered
@@ -191,53 +199,12 @@ async function startStripeCheckout() {
     if (container) {
       checkoutInstance.mount(container);
     }
-
-    // Poll for session completion
-    pollCheckoutStatus(session.session_id);
   }
   catch (error) {
     console.error('Failed to start Stripe checkout:', error);
     errorMessage.value = t('subscribe_error');
     formState.value = 'configure';
     processing.value = false;
-  }
-}
-
-/**
- * Poll the checkout session status until it completes or fails
- */
-async function pollCheckoutStatus(sessionId: string) {
-  const maxAttempts = 120;
-  const intervalMs = 2000;
-
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    await new Promise(resolve => setTimeout(resolve, intervalMs));
-
-    // If user navigated away from checkout state, stop polling
-    if (formState.value !== 'checkout') {
-      return;
-    }
-
-    try {
-      const status = await fundingService.getCheckoutSessionStatus(sessionId);
-
-      if (status.status === 'complete') {
-        destroyCheckout();
-        resultStatus.value = 'success';
-        formState.value = 'result';
-        return;
-      }
-
-      if (status.status === 'expired') {
-        destroyCheckout();
-        resultStatus.value = 'error';
-        formState.value = 'result';
-        return;
-      }
-    }
-    catch {
-      // Continue polling on transient errors
-    }
   }
 }
 
@@ -527,21 +494,8 @@ onBeforeUnmount(() => {
   color: var(--pav-color-text-secondary);
 }
 
-.error-message {
-  padding: 0.75rem;
-  background-color: #fff0f0;
-  border: 1px solid #d87373;
-  color: #7d2a2a;
-  border-radius: 4px;
-  margin-bottom: 1rem;
-}
-
+.error-message,
 .success-message {
-  padding: 0.75rem;
-  background-color: #f0fff0;
-  border: 1px solid #73d873;
-  color: #2a7d2a;
-  border-radius: 4px;
   margin-bottom: 1rem;
 }
 

@@ -77,27 +77,27 @@ export class GrantNotFoundError extends Error {
   }
 }
 
-export class SubscriptionNotFoundError extends Error {
-  constructor(subscriptionId: string) {
-    super(`Funding plan not found: ${subscriptionId}`);
-    this.name = 'SubscriptionNotFoundError';
-    Object.setPrototypeOf(this, SubscriptionNotFoundError.prototype);
+export class FundingPlanNotFoundError extends Error {
+  constructor(fundingPlanId: string) {
+    super(`Funding plan not found: ${fundingPlanId}`);
+    this.name = 'FundingPlanNotFoundError';
+    Object.setPrototypeOf(this, FundingPlanNotFoundError.prototype);
   }
 }
 
-export class CalendarSubscriptionNotFoundError extends Error {
-  constructor(subscriptionId: string, calendarId: string) {
-    super(`No active calendar subscription found for subscription ${subscriptionId} and calendar ${calendarId}`);
-    this.name = 'CalendarSubscriptionNotFoundError';
-    Object.setPrototypeOf(this, CalendarSubscriptionNotFoundError.prototype);
+export class CalendarFundingPlanNotFoundError extends Error {
+  constructor(fundingPlanId: string, calendarId: string) {
+    super(`No active calendar funding plan found for funding plan ${fundingPlanId} and calendar ${calendarId}`);
+    this.name = 'CalendarFundingPlanNotFoundError';
+    Object.setPrototypeOf(this, CalendarFundingPlanNotFoundError.prototype);
   }
 }
 
-export class DuplicateCalendarSubscriptionError extends Error {
-  constructor(subscriptionId: string, calendarId: string) {
-    super(`An active calendar subscription already exists for subscription ${subscriptionId} and calendar ${calendarId}`);
-    this.name = 'DuplicateCalendarSubscriptionError';
-    Object.setPrototypeOf(this, DuplicateCalendarSubscriptionError.prototype);
+export class DuplicateCalendarFundingPlanError extends Error {
+  constructor(fundingPlanId: string, calendarId: string) {
+    super(`An active calendar funding plan already exists for funding plan ${fundingPlanId} and calendar ${calendarId}`);
+    this.name = 'DuplicateCalendarFundingPlanError';
+    Object.setPrototypeOf(this, DuplicateCalendarFundingPlanError.prototype);
   }
 }
 

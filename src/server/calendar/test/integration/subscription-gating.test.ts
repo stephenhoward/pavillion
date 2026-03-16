@@ -13,7 +13,7 @@ import AccountService from '@/server/accounts/service/account';
 import { TestEnvironment } from '@/server/test/lib/test_environment';
 import { FundingSettingsEntity } from '@/server/funding/entity/funding_settings';
 import { FundingPlanEntity } from '@/server/funding/entity/funding_plan';
-import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_subscription';
+import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_funding_plan';
 
 /**
  * Integration tests for Subscription Gating in Widget Embedding

@@ -8,7 +8,7 @@ import { ProviderConfigEntity } from '@/server/funding/entity/provider_config';
 import { FundingPlanEntity } from '@/server/funding/entity/funding_plan';
 import { FundingEventEntity } from '@/server/funding/entity/funding_event';
 import { ComplimentaryGrantEntity } from '@/server/funding/entity/complimentary_grant';
-import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_subscription';
+import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_funding_plan';
 import { ProviderFactory } from '@/server/funding/service/provider/factory';
 import { FundingSettings, ProviderConfig, FundingPlan } from '@/common/model/funding-plan';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
@@ -19,7 +19,7 @@ import {
   ActiveFundingPlanExistsError,
   ProviderNotConfiguredError,
   InvalidSessionIdError,
-  SubscriptionNotFoundError,
+  FundingPlanNotFoundError,
 } from '@/server/funding/exceptions';
 import { ValidationError } from '@/common/exceptions/base';
 import { AccountEntity } from '@/server/common/entity/account';
@@ -350,7 +350,7 @@ describe('FundingService', () => {
       };
       sandbox.stub(FundingSettingsEntity, 'findOne').resolves(mockSettings as any);
 
-      await service.suspendExpiredSubscriptions();
+      await service.suspendExpiredFundingPlans();
 
       expect(mockEntity.status).toBe('suspended');
       expect(mockEntity.save.called).toBe(true);
@@ -790,7 +790,7 @@ describe('FundingService', () => {
     const accountId = uuidv4();
     const calendarId = uuidv4();
     const providerConfigId = uuidv4();
-    const returnUrl = 'https://example.com/return';
+    const returnUrl = 'https://pavillion.dev/return';
 
     function stubEnabledStripeProvider() {
       const mockEntity = {
@@ -1017,6 +1017,55 @@ describe('FundingService', () => {
       const params = mockAdapter.createCheckoutSession.firstCall.args[0];
       expect(params.amount).toBe(MAX_PWYC_AMOUNT);
     });
+
+    it('should reject return_url with foreign origin', async () => {
+      await expect(
+        service.createCheckoutSession(accountId, 'monthly', 'https://evil.com/phish'),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('should reject return_url with non-http schemes', async () => {
+      const maliciousUrls = [
+        'javascript:alert(1)',
+        'data:text/html,<h1>hi</h1>',
+        'ftp://pavillion.dev/file',
+      ];
+
+      for (const url of maliciousUrls) {
+        await expect(
+          service.createCheckoutSession(accountId, 'monthly', url),
+        ).rejects.toThrow(ValidationError);
+      }
+    });
+
+    it('should reject unparseable return_url', async () => {
+      await expect(
+        service.createCheckoutSession(accountId, 'monthly', 'not a url at all'),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('should accept return_url matching configured domain', async () => {
+      sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
+      stubEnabledStripeProvider();
+      stubSettings();
+      stubMockAdapter();
+
+      // Should not throw - pavillion.dev is the test config domain
+      await expect(
+        service.createCheckoutSession(accountId, 'monthly', 'https://pavillion.dev/return'),
+      ).resolves.toBeDefined();
+    });
+
+    it('should accept return_url with path and query params on valid domain', async () => {
+      sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
+      stubEnabledStripeProvider();
+      stubSettings();
+      stubMockAdapter();
+
+      await expect(
+        service.createCheckoutSession(accountId, 'monthly', 'https://pavillion.dev/funding/complete?session_id={CHECKOUT_SESSION_ID}&plan=monthly'),
+      ).resolves.toBeDefined();
+    });
   });
 
   describe('getCheckoutSessionStatus', () => {
@@ -1067,14 +1116,14 @@ describe('FundingService', () => {
       expect(result.status).toBe('complete');
     });
 
-    it('should throw SubscriptionNotFoundError on IDOR mismatch (not 403)', async () => {
+    it('should throw FundingPlanNotFoundError on IDOR mismatch (not 403)', async () => {
       stubEnabledStripeProvider();
       const differentAccountId = uuidv4();
       stubMockAdapter(differentAccountId);
 
       await expect(
         service.getCheckoutSessionStatus(accountId, 'cs_test_abc123def'),
-      ).rejects.toThrow(SubscriptionNotFoundError);
+      ).rejects.toThrow(FundingPlanNotFoundError);
     });
 
     it('should reject empty sessionId', async () => {

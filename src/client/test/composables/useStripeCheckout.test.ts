@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { useStripeCheckout } from '@/client/composables/useStripeCheckout';
+import { loadStripe } from '@/client/composables/useStripeCheckout';
 
-describe('useStripeCheckout', () => {
+describe('loadStripe', () => {
   let mockStripeInstance: any;
   let originalCreateElement: typeof document.createElement;
 
@@ -70,60 +70,39 @@ describe('useStripeCheckout', () => {
     });
   }
 
-  it('should return loading, error, and stripe refs', () => {
+  it('should return a Stripe instance', async () => {
     (window as any).Stripe = vi.fn().mockReturnValue(mockStripeInstance);
 
-    const { stripe, loading, error } = useStripeCheckout('pk_test_123');
+    const result = await loadStripe('pk_test_123');
 
-    expect(loading).toBeDefined();
-    expect(error).toBeDefined();
-    expect(stripe).toBeDefined();
+    expect(result).toStrictEqual(mockStripeInstance);
   });
 
-  it('should use existing window.Stripe if already loaded', () => {
+  it('should use existing window.Stripe if already loaded', async () => {
     (window as any).Stripe = vi.fn().mockReturnValue(mockStripeInstance);
 
-    const { stripe, loading, error } = useStripeCheckout('pk_test_123');
+    const result = await loadStripe('pk_test_123');
 
     expect((window as any).Stripe).toHaveBeenCalledWith('pk_test_123');
-    expect(stripe.value).toStrictEqual(mockStripeInstance);
-    expect(loading.value).toBe(false);
-    expect(error.value).toBeNull();
+    expect(result).toStrictEqual(mockStripeInstance);
   });
 
   it('should dynamically load Stripe.js when not present', async () => {
     simulateStripeLoad();
 
-    const { stripe, loading, error } = useStripeCheckout('pk_test_456');
-
-    // Initially loading
-    expect(loading.value).toBe(true);
-
-    // Wait for async script load
-    await new Promise(resolve => setTimeout(resolve, 10));
+    const result = await loadStripe('pk_test_456');
 
     expect((window as any).Stripe).toHaveBeenCalledWith('pk_test_456');
-    expect(stripe.value).toStrictEqual(mockStripeInstance);
-    expect(loading.value).toBe(false);
-    expect(error.value).toBeNull();
+    expect(result).toStrictEqual(mockStripeInstance);
   });
 
-  it('should set error when script fails to load', async () => {
+  it('should reject when script fails to load', async () => {
     simulateStripeLoadError();
 
-    const { stripe, loading, error } = useStripeCheckout('pk_test_789');
-
-    expect(loading.value).toBe(true);
-
-    // Wait for async error
-    await new Promise(resolve => setTimeout(resolve, 10));
-
-    expect(stripe.value).toBeNull();
-    expect(loading.value).toBe(false);
-    expect(error.value).toBe('Failed to load Stripe.js');
+    await expect(loadStripe('pk_test_789')).rejects.toThrow('Failed to load Stripe.js');
   });
 
-  it('should set error when window.Stripe is not available after script loads', async () => {
+  it('should reject when window.Stripe is not available after script loads', async () => {
     const realCreate = originalCreateElement;
     vi.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
       const el = realCreate(tagName);
@@ -139,16 +118,12 @@ describe('useStripeCheckout', () => {
       return el;
     });
 
-    const { stripe, loading, error } = useStripeCheckout('pk_test_no_stripe');
-
-    await new Promise(resolve => setTimeout(resolve, 10));
-
-    expect(stripe.value).toBeNull();
-    expect(loading.value).toBe(false);
-    expect(error.value).toBe('Stripe.js loaded but Stripe is not available');
+    await expect(loadStripe('pk_test_no_stripe')).rejects.toThrow(
+      'Stripe.js loaded but Stripe is not available',
+    );
   });
 
-  it('should not add duplicate script tags', () => {
+  it('should not add duplicate script tags', async () => {
     // Add a pre-existing stripe script tag
     const existingScript = originalCreateElement('script');
     existingScript.src = 'https://js.stripe.com/v3/';
@@ -157,7 +132,7 @@ describe('useStripeCheckout', () => {
     // Stripe is available
     (window as any).Stripe = vi.fn().mockReturnValue(mockStripeInstance);
 
-    useStripeCheckout('pk_test_dup');
+    await loadStripe('pk_test_dup');
 
     const stripeScripts = document.querySelectorAll('script[src="https://js.stripe.com/v3/"]');
     expect(stripeScripts.length).toBe(1);

@@ -11,6 +11,7 @@ export function buildDefaultCSP(): string {
   const isDev = process.env.NODE_ENV === 'development';
 
   const directives: string[] = [
+    "default-src 'self'",
     "frame-ancestors 'none'",
     `script-src 'self'${isDev ? ' http://localhost:5173' : ''} https://js.stripe.com`,
     "frame-src https://*.stripe.com",

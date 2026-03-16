@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { flushPromises } from '@vue/test-utils';
 import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { RouteRecordRaw } from 'vue-router';
-import { ref } from 'vue';
 
 import { mountComponent } from '@/client/test/lib/vue';
 
@@ -12,13 +11,13 @@ const {
   mockSubscribe,
   mockCreateCheckoutSession,
   mockGetCheckoutSessionStatus,
-  mockUseStripeCheckout,
+  mockLoadStripe,
 } = vi.hoisted(() => ({
   mockGetOptions: vi.fn(),
   mockSubscribe: vi.fn(),
   mockCreateCheckoutSession: vi.fn(),
   mockGetCheckoutSessionStatus: vi.fn(),
-  mockUseStripeCheckout: vi.fn(),
+  mockLoadStripe: vi.fn(),
 }));
 
 vi.mock('@/client/service/funding', () => {
@@ -38,7 +37,7 @@ vi.mock('@/client/service/funding', () => {
 });
 
 vi.mock('@/client/composables/useStripeCheckout', () => ({
-  useStripeCheckout: (...args: any[]) => mockUseStripeCheckout(...args),
+  loadStripe: (...args: any[]) => mockLoadStripe(...args),
 }));
 
 // Import component after mocks are set up
@@ -86,6 +85,31 @@ function makeMultiProviderOptions() {
     yearlyPrice: 10000000,
     currency: 'USD',
     payWhatYouCan: false,
+  };
+}
+
+/**
+ * Creates a mock Stripe instance that captures the onComplete callback
+ * passed to initEmbeddedCheckout, allowing tests to trigger it manually.
+ */
+function makeMockStripeWithCallbackCapture() {
+  let capturedOnComplete: (() => void) | null = null;
+  const mockCheckout = { mount: vi.fn(), destroy: vi.fn() };
+  const mockStripeInstance = {
+    initEmbeddedCheckout: vi.fn().mockImplementation((opts: any) => {
+      capturedOnComplete = opts.onComplete || null;
+      return Promise.resolve(mockCheckout);
+    }),
+  };
+
+  return {
+    mockCheckout,
+    mockStripeInstance,
+    triggerOnComplete: () => {
+      if (capturedOnComplete) {
+        capturedOnComplete();
+      }
+    },
   };
 }
 
@@ -207,23 +231,13 @@ describe('FundingForm', () => {
     it('creates checkout session when submit clicked with Stripe provider', async () => {
       mockGetOptions.mockResolvedValue(makeStripeOptions());
 
-      const mockCheckout = { mount: vi.fn(), destroy: vi.fn() };
-      const mockStripeInstance = {
-        initEmbeddedCheckout: vi.fn().mockResolvedValue(mockCheckout),
-      };
-
-      mockUseStripeCheckout.mockReturnValue({
-        stripe: ref(mockStripeInstance),
-        loading: ref(false),
-        error: ref(null),
-      });
+      const { mockStripeInstance } = makeMockStripeWithCallbackCapture();
+      mockLoadStripe.mockResolvedValue(mockStripeInstance);
 
       mockCreateCheckoutSession.mockResolvedValue({
         client_secret: 'cs_test_secret',
         session_id: 'cs_test_session',
       });
-
-      mockGetCheckoutSessionStatus.mockReturnValue(new Promise(() => {}));
 
       const wrapper = await mountFundingForm();
       currentWrapper = wrapper;
@@ -239,26 +253,41 @@ describe('FundingForm', () => {
       );
     });
 
-    it('passes calendar_ids when calendarId prop is provided', async () => {
+    it('passes onComplete callback to initEmbeddedCheckout', async () => {
       mockGetOptions.mockResolvedValue(makeStripeOptions());
 
-      const mockCheckout = { mount: vi.fn(), destroy: vi.fn() };
-      const mockStripeInstance = {
-        initEmbeddedCheckout: vi.fn().mockResolvedValue(mockCheckout),
-      };
-
-      mockUseStripeCheckout.mockReturnValue({
-        stripe: ref(mockStripeInstance),
-        loading: ref(false),
-        error: ref(null),
-      });
+      const { mockStripeInstance } = makeMockStripeWithCallbackCapture();
+      mockLoadStripe.mockResolvedValue(mockStripeInstance);
 
       mockCreateCheckoutSession.mockResolvedValue({
         client_secret: 'cs_test_secret',
         session_id: 'cs_test_session',
       });
 
-      mockGetCheckoutSessionStatus.mockReturnValue(new Promise(() => {}));
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      await wrapper.find('button.primary').trigger('click');
+      await flushPromises();
+
+      expect(mockStripeInstance.initEmbeddedCheckout).toHaveBeenCalledWith(
+        expect.objectContaining({
+          clientSecret: 'cs_test_secret',
+          onComplete: expect.any(Function),
+        }),
+      );
+    });
+
+    it('passes calendar_ids when calendarId prop is provided', async () => {
+      mockGetOptions.mockResolvedValue(makeStripeOptions());
+
+      const { mockStripeInstance } = makeMockStripeWithCallbackCapture();
+      mockLoadStripe.mockResolvedValue(mockStripeInstance);
+
+      mockCreateCheckoutSession.mockResolvedValue({
+        client_secret: 'cs_test_secret',
+        session_id: 'cs_test_session',
+      });
 
       const wrapper = await mountFundingForm({ calendarId: 'cal-123' });
       currentWrapper = wrapper;
@@ -276,30 +305,18 @@ describe('FundingForm', () => {
     it('switches to checkout state after session creation', async () => {
       mockGetOptions.mockResolvedValue(makeStripeOptions());
 
-      const mockCheckout = { mount: vi.fn(), destroy: vi.fn() };
-      const mockStripeInstance = {
-        initEmbeddedCheckout: vi.fn().mockResolvedValue(mockCheckout),
-      };
-
-      mockUseStripeCheckout.mockReturnValue({
-        stripe: ref(mockStripeInstance),
-        loading: ref(false),
-        error: ref(null),
-      });
+      const { mockStripeInstance } = makeMockStripeWithCallbackCapture();
+      mockLoadStripe.mockResolvedValue(mockStripeInstance);
 
       mockCreateCheckoutSession.mockResolvedValue({
         client_secret: 'cs_test_secret',
         session_id: 'cs_test_session',
       });
 
-      mockGetCheckoutSessionStatus.mockReturnValue(new Promise(() => {}));
-
       const wrapper = await mountFundingForm();
       currentWrapper = wrapper;
 
       await wrapper.find('button.primary').trigger('click');
-      await flushPromises();
-      await new Promise(resolve => setTimeout(resolve, 10));
       await flushPromises();
 
       expect(wrapper.find('.stripe-checkout-container').exists()).toBe(true);
@@ -308,11 +325,7 @@ describe('FundingForm', () => {
     it('shows error when Stripe fails to load', async () => {
       mockGetOptions.mockResolvedValue(makeStripeOptions());
 
-      mockUseStripeCheckout.mockReturnValue({
-        stripe: ref(null),
-        loading: ref(false),
-        error: ref('Failed to load Stripe.js'),
-      });
+      mockLoadStripe.mockRejectedValue(new Error('Failed to load Stripe.js'));
 
       mockCreateCheckoutSession.mockResolvedValue({
         client_secret: 'cs_test_secret',
@@ -382,20 +395,12 @@ describe('FundingForm', () => {
     });
   });
 
-  describe('Result state', () => {
-    it('shows success message after checkout completion', async () => {
+  describe('Result state via onComplete callback', () => {
+    it('shows success message when onComplete fires and API confirms completion', async () => {
       mockGetOptions.mockResolvedValue(makeStripeOptions());
 
-      const mockCheckout = { mount: vi.fn(), destroy: vi.fn() };
-      const mockStripeInstance = {
-        initEmbeddedCheckout: vi.fn().mockResolvedValue(mockCheckout),
-      };
-
-      mockUseStripeCheckout.mockReturnValue({
-        stripe: ref(mockStripeInstance),
-        loading: ref(false),
-        error: ref(null),
-      });
+      const { mockStripeInstance, triggerOnComplete } = makeMockStripeWithCallbackCapture();
+      mockLoadStripe.mockResolvedValue(mockStripeInstance);
 
       mockCreateCheckoutSession.mockResolvedValue({
         client_secret: 'cs_test_secret',
@@ -412,25 +417,20 @@ describe('FundingForm', () => {
 
       await wrapper.find('button.primary').trigger('click');
       await flushPromises();
-      await new Promise(resolve => setTimeout(resolve, 2200));
+
+      // Trigger the onComplete callback that Stripe would fire
+      triggerOnComplete();
       await flushPromises();
 
+      expect(mockGetCheckoutSessionStatus).toHaveBeenCalledWith('cs_test_session');
       expect(wrapper.find('.success-message').exists()).toBe(true);
     });
 
-    it('shows error message when session expires', async () => {
+    it('shows error message when onComplete fires and API reports expired', async () => {
       mockGetOptions.mockResolvedValue(makeStripeOptions());
 
-      const mockCheckout = { mount: vi.fn(), destroy: vi.fn() };
-      const mockStripeInstance = {
-        initEmbeddedCheckout: vi.fn().mockResolvedValue(mockCheckout),
-      };
-
-      mockUseStripeCheckout.mockReturnValue({
-        stripe: ref(mockStripeInstance),
-        loading: ref(false),
-        error: ref(null),
-      });
+      const { mockStripeInstance, triggerOnComplete } = makeMockStripeWithCallbackCapture();
+      mockLoadStripe.mockResolvedValue(mockStripeInstance);
 
       mockCreateCheckoutSession.mockResolvedValue({
         client_secret: 'cs_test_secret',
@@ -446,25 +446,44 @@ describe('FundingForm', () => {
 
       await wrapper.find('button.primary').trigger('click');
       await flushPromises();
-      await new Promise(resolve => setTimeout(resolve, 2200));
+
+      triggerOnComplete();
       await flushPromises();
 
       expect(wrapper.find('.error-message').exists()).toBe(true);
     });
 
+    it('falls back to success when API verification fails after onComplete', async () => {
+      mockGetOptions.mockResolvedValue(makeStripeOptions());
+
+      const { mockStripeInstance, triggerOnComplete } = makeMockStripeWithCallbackCapture();
+      mockLoadStripe.mockResolvedValue(mockStripeInstance);
+
+      mockCreateCheckoutSession.mockResolvedValue({
+        client_secret: 'cs_test_secret',
+        session_id: 'cs_test_session',
+      });
+
+      mockGetCheckoutSessionStatus.mockRejectedValue(new Error('Network error'));
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      await wrapper.find('button.primary').trigger('click');
+      await flushPromises();
+
+      triggerOnComplete();
+      await flushPromises();
+
+      // Should still show success since Stripe confirmed completion
+      expect(wrapper.find('.success-message').exists()).toBe(true);
+    });
+
     it('emits subscribed when done button clicked after success', async () => {
       mockGetOptions.mockResolvedValue(makeStripeOptions());
 
-      const mockCheckout = { mount: vi.fn(), destroy: vi.fn() };
-      const mockStripeInstance = {
-        initEmbeddedCheckout: vi.fn().mockResolvedValue(mockCheckout),
-      };
-
-      mockUseStripeCheckout.mockReturnValue({
-        stripe: ref(mockStripeInstance),
-        loading: ref(false),
-        error: ref(null),
-      });
+      const { mockStripeInstance, triggerOnComplete } = makeMockStripeWithCallbackCapture();
+      mockLoadStripe.mockResolvedValue(mockStripeInstance);
 
       mockCreateCheckoutSession.mockResolvedValue({
         client_secret: 'cs_test_secret',
@@ -480,7 +499,8 @@ describe('FundingForm', () => {
 
       await wrapper.find('button.primary').trigger('click');
       await flushPromises();
-      await new Promise(resolve => setTimeout(resolve, 2200));
+
+      triggerOnComplete();
       await flushPromises();
 
       const doneButton = wrapper.find('.result-state button.primary');
@@ -494,16 +514,8 @@ describe('FundingForm', () => {
     it('returns to configure state when try again clicked after error', async () => {
       mockGetOptions.mockResolvedValue(makeStripeOptions());
 
-      const mockCheckout = { mount: vi.fn(), destroy: vi.fn() };
-      const mockStripeInstance = {
-        initEmbeddedCheckout: vi.fn().mockResolvedValue(mockCheckout),
-      };
-
-      mockUseStripeCheckout.mockReturnValue({
-        stripe: ref(mockStripeInstance),
-        loading: ref(false),
-        error: ref(null),
-      });
+      const { mockStripeInstance, triggerOnComplete } = makeMockStripeWithCallbackCapture();
+      mockLoadStripe.mockResolvedValue(mockStripeInstance);
 
       mockCreateCheckoutSession.mockResolvedValue({
         client_secret: 'cs_test_secret',
@@ -519,7 +531,8 @@ describe('FundingForm', () => {
 
       await wrapper.find('button.primary').trigger('click');
       await flushPromises();
-      await new Promise(resolve => setTimeout(resolve, 2200));
+
+      triggerOnComplete();
       await flushPromises();
 
       const tryAgainButton = wrapper.find('.result-state button.secondary');

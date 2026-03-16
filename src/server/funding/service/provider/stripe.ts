@@ -18,6 +18,10 @@ import { ProviderType } from '@/common/model/funding-plan';
  * Implements the PaymentProviderAdapter interface using Stripe SDK.
  * Handles subscription management, checkout sessions, webhook verification,
  * and billing portal.
+ *
+ * Webhook registration is managed manually by the instance administrator
+ * via the Stripe dashboard. The admin enters the webhook signing secret
+ * (whsec_) directly through the credential configuration form.
  */
 export class StripeAdapter implements PaymentProviderAdapter {
   readonly providerType: ProviderType = 'stripe';
@@ -45,72 +49,47 @@ export class StripeAdapter implements PaymentProviderAdapter {
   }
 
   /**
-   * Register a webhook endpoint with Stripe
+   * Webhook registration is not supported for Stripe Embedded Checkout.
    *
-   * @param webhookUrl - The URL to receive webhook events
-   * @param credentials - Provider credentials for authentication
-   * @returns Webhook ID and secret for verification
+   * Instance administrators configure webhooks manually via the Stripe
+   * dashboard and enter the webhook signing secret (whsec_) through the
+   * admin credential form.
+   *
+   * @throws Error always - webhook registration is managed manually
    */
   async registerWebhook(
-    webhookUrl: string,
-    credentials: ProviderCredentials,
+    _webhookUrl: string,
+    _credentials: ProviderCredentials,
   ): Promise<WebhookRegistration> {
-    const stripeUserId = credentials.stripeUserId as string;
-
-    // Define subscription-related events to listen for
-    const enabledEvents = [
-      'customer.subscription.created',
-      'customer.subscription.updated',
-      'customer.subscription.deleted',
-      'invoice.payment_succeeded',
-      'invoice.payment_failed',
-    ];
-
-    // Create webhook endpoint with Stripe-Account header for connected accounts
-    const webhookEndpoint = await this.stripe.webhookEndpoints.create(
-      {
-        url: webhookUrl,
-        enabled_events: enabledEvents,
-      },
-      {
-        stripeAccount: stripeUserId,
-      },
-    );
-
-    return {
-      webhookId: webhookEndpoint.id,
-      webhookSecret: webhookEndpoint.secret,
-    };
+    throw new Error('Stripe webhook registration is managed manually via the admin dashboard');
   }
 
   /**
-   * Delete a webhook endpoint from Stripe
+   * Webhook deletion is not supported for Stripe Embedded Checkout.
    *
-   * @param webhookId - The webhook endpoint ID to delete
-   * @param credentials - Provider credentials for authentication
+   * Instance administrators manage webhooks manually via the Stripe
+   * dashboard.
+   *
+   * @throws Error always - webhook deletion is managed manually
    */
-  async deleteWebhook(webhookId: string, credentials: ProviderCredentials): Promise<void> {
-    const stripeUserId = credentials.stripeUserId as string;
-
-    await this.stripe.webhookEndpoints.del(webhookId, {
-      stripeAccount: stripeUserId,
-    });
+  async deleteWebhook(_webhookId: string, _credentials: ProviderCredentials): Promise<void> {
+    throw new Error('Stripe webhook deletion is managed manually via the admin dashboard');
   }
 
   /**
    * Validate provider credentials format
    *
+   * Checks that the apiKey field is present. No stripeUserId is required
+   * since Embedded Checkout uses direct API keys, not Connect accounts.
+   *
    * @param credentials - Provider credentials to validate
    * @returns True if credentials are valid format
    */
   async validateCredentials(credentials: ProviderCredentials): Promise<boolean> {
-    // Check that required fields exist
-    if (!credentials.apiKey || !credentials.stripeUserId) {
+    if (!credentials.apiKey) {
       return false;
     }
 
-    // Optionally, could make a test API call to verify credentials work
-    // For now, just check format
     return true;
   }
 
@@ -331,6 +310,9 @@ export class StripeAdapter implements PaymentProviderAdapter {
   /**
    * Parse webhook event from Stripe
    *
+   * Handles all Stripe event types relevant to funding plan lifecycle:
+   * checkout completion, invoice payments, and subscription updates.
+   *
    * @param payload - Raw webhook payload (already verified)
    * @returns Parsed webhook event data
    */
@@ -346,6 +328,16 @@ export class StripeAdapter implements PaymentProviderAdapter {
 
     // Parse event-specific data
     switch (event.type) {
+      case 'checkout.session.completed': {
+        const session = event.data.object as Stripe.Checkout.Session;
+        webhookEvent.subscriptionId = session.subscription as string;
+        webhookEvent.customerId = session.customer as string;
+        webhookEvent.status = 'active';
+        webhookEvent.accountId = session.metadata?.pavillion_account_id;
+        webhookEvent.calendarIds = session.metadata?.pavillion_calendar_ids;
+        break;
+      }
+
       case 'invoice.paid':
       case 'invoice.payment_succeeded': {
         const invoice = event.data.object as Stripe.Invoice;

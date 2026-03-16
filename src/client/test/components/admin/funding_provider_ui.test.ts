@@ -179,7 +179,7 @@ describe('Funding Provider UI Components', () => {
     mockService.disconnectProvider
       .mockResolvedValueOnce({
         requiresConfirmation: true,
-        activeSubscriptionCount: 5,
+        activeFundingPlanCount: 5,
       })
       .mockResolvedValueOnce({ success: true });
 

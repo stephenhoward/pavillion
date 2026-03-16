@@ -9,7 +9,7 @@ import {
   ActiveFundingPlanExistsError,
   ProviderNotConfiguredError,
   InvalidSessionIdError,
-  SubscriptionNotFoundError,
+  FundingPlanNotFoundError,
 } from '@/server/funding/exceptions';
 import { ValidationError } from '@/common/exceptions/base';
 
@@ -296,7 +296,7 @@ describe('Checkout Session API Routes', () => {
 
     it('should return 404 when session not found or IDOR mismatch', async () => {
       (fundingInterface.getCheckoutSessionStatus as sinon.SinonStub).rejects(
-        new SubscriptionNotFoundError('cs_test_abc123'),
+        new FundingPlanNotFoundError('cs_test_abc123'),
       );
 
       router.use(addRequestUser);
@@ -306,7 +306,7 @@ describe('Checkout Session API Routes', () => {
         .get('/checkout-sessions/cs_test_abc123/status')
         .expect(404);
 
-      expect(response.body.errorName).toBe('SubscriptionNotFoundError');
+      expect(response.body.errorName).toBe('FundingPlanNotFoundError');
     });
 
     it('should return 404 when no provider is configured', async () => {

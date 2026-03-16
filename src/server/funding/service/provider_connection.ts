@@ -48,7 +48,7 @@ interface ProviderStatus {
  */
 interface DisconnectionResult {
   requiresConfirmation?: boolean;
-  activeSubscriptionCount?: number;
+  activeFundingPlanCount?: number;
   message?: string;
 }
 
@@ -61,12 +61,12 @@ interface DisconnectionResult {
 export class ProviderConnectionService {
   private eventBus: EventEmitter;
   private webhookManager: WebhookManager;
-  private subscriptionService: FundingService;
+  private fundingService: FundingService;
 
   constructor(eventBus: EventEmitter) {
     this.eventBus = eventBus;
     this.webhookManager = new WebhookManager();
-    this.subscriptionService = new FundingService(eventBus);
+    this.fundingService = new FundingService(eventBus);
   }
 
   /**
@@ -302,8 +302,8 @@ export class ProviderConnectionService {
   /**
    * Disconnect a payment provider
    *
-   * Checks for active subscriptions and requires confirmation before proceeding.
-   * If confirmed, cancels all active subscriptions, deletes webhook, and removes credentials.
+   * Checks for active funding plans and requires confirmation before proceeding.
+   * If confirmed, cancels all active funding plans, deletes webhook, and removes credentials.
    *
    * @param providerType - Type of provider to disconnect
    * @param confirmed - Whether admin has confirmed the disconnection
@@ -327,7 +327,7 @@ export class ProviderConnectionService {
       throw new Error('Provider not found');
     }
 
-    // Count active subscriptions
+    // Count active funding plans
     const activeCount = await FundingPlanEntity.count({
       where: {
         provider_config_id: entity.id,
@@ -337,19 +337,19 @@ export class ProviderConnectionService {
       },
     });
 
-    // If active subscriptions exist and not confirmed, return warning
+    // If active funding plans exist and not confirmed, return warning
     if (activeCount > 0 && !confirmed) {
       return {
         requiresConfirmation: true,
-        activeSubscriptionCount: activeCount,
-        message: `This provider has ${activeCount} active subscription(s). Disconnecting will cancel all active subscriptions.`,
+        activeFundingPlanCount: activeCount,
+        message: `This provider has ${activeCount} active funding plan(s). Disconnecting will cancel all active funding plans.`,
       };
     }
 
     // If confirmed, proceed with disconnection
     if (activeCount > 0 && confirmed) {
-      // Force-cancel all active subscriptions
-      const activeSubscriptions = await FundingPlanEntity.findAll({
+      // Force-cancel all active funding plans
+      const activeFundingPlans = await FundingPlanEntity.findAll({
         where: {
           provider_config_id: entity.id,
           status: {
@@ -358,8 +358,8 @@ export class ProviderConnectionService {
         },
       });
 
-      for (const subscription of activeSubscriptions) {
-        await this.subscriptionService.forceCancel(subscription.id);
+      for (const plan of activeFundingPlans) {
+        await this.fundingService.forceCancel(plan.id);
       }
     }
 
@@ -392,12 +392,12 @@ export class ProviderConnectionService {
   }
 
   /**
-   * Get count of active subscriptions for a provider
+   * Get count of active funding plans for a provider
    *
    * @param providerType - Type of provider
-   * @returns Count of active subscriptions
+   * @returns Count of active funding plans
    */
-  async getActiveSubscriptionCount(providerType: ProviderType): Promise<number> {
+  async getActiveFundingPlanCount(providerType: ProviderType): Promise<number> {
     const entity = await ProviderConfigEntity.findOne({
       where: { provider_type: providerType },
     });

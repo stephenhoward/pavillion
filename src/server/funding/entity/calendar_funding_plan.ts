@@ -4,8 +4,8 @@ import { FundingPlanEntity } from './funding_plan';
 import db from '@/server/common/entity/db';
 
 /**
- * Database entity for calendar subscriptions.
- * Represents the allocation of subscription funds to a specific calendar.
+ * Database entity for calendar funding plan allocations.
+ * Represents the allocation of funding plan funds to a specific calendar.
  * Server-only junction table — intentionally omits toModel/fromModel as there
  * is no corresponding common model. Data is accessed directly via entity properties.
  *

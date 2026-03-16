@@ -40,7 +40,8 @@ export interface CreatePriceCall {
  * Mock Stripe Adapter for Testing
  *
  * Returns mock data without making real API calls.
- * Enabled when MOCK_OAUTH=true environment variable is set.
+ * Webhook registration throws because Stripe webhooks are managed
+ * manually by the instance administrator via the Stripe dashboard.
  */
 export class MockStripeAdapter implements PaymentProviderAdapter {
   readonly providerType: ProviderType = 'stripe';
@@ -58,43 +59,38 @@ export class MockStripeAdapter implements PaymentProviderAdapter {
   private idCounter = 0;
 
   /**
-   * Register a webhook endpoint (mock)
+   * Webhook registration is not supported for Stripe Embedded Checkout (mock)
    *
-   * @param webhookUrl - The URL to receive webhook events
-   * @param credentials - Provider credentials
-   * @returns Mock webhook registration
+   * @throws Error always - webhook registration is managed manually
    */
   async registerWebhook(
-    webhookUrl: string,
-    credentials: ProviderCredentials,
+    _webhookUrl: string,
+    _credentials: ProviderCredentials,
   ): Promise<WebhookRegistration> {
-    const timestamp = Date.now();
-
-    return {
-      webhookId: `we_mock_${timestamp}`,
-      webhookSecret: `whsec_mock_${timestamp}`,
-    };
+    throw new Error('Stripe webhook registration is managed manually via the admin dashboard');
   }
 
   /**
-   * Delete a webhook endpoint (mock)
+   * Webhook deletion is not supported for Stripe Embedded Checkout (mock)
    *
-   * @param webhookId - The webhook endpoint ID to delete
-   * @param credentials - Provider credentials
+   * @throws Error always - webhook deletion is managed manually
    */
-  async deleteWebhook(webhookId: string, credentials: ProviderCredentials): Promise<void> {
-    // Mock deletion - no actual API call
-    return Promise.resolve();
+  async deleteWebhook(_webhookId: string, _credentials: ProviderCredentials): Promise<void> {
+    throw new Error('Stripe webhook deletion is managed manually via the admin dashboard');
   }
 
   /**
    * Validate provider credentials (mock)
    *
+   * Checks that apiKey is present. No stripeUserId required.
+   *
    * @param credentials - Provider credentials to validate
-   * @returns Always returns true for mock
+   * @returns True if apiKey is present
    */
   async validateCredentials(credentials: ProviderCredentials): Promise<boolean> {
-    // Mock validation - always returns true
+    if (!credentials.apiKey) {
+      return false;
+    }
     return true;
   }
 

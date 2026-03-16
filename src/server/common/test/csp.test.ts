@@ -8,6 +8,24 @@ describe('buildDefaultCSP', () => {
     process.env.NODE_ENV = originalEnv;
   });
 
+  it('should include default-src self directive in production', () => {
+    process.env.NODE_ENV = 'production';
+    const csp = buildDefaultCSP();
+    expect(csp).toContain("default-src 'self'");
+  });
+
+  it('should include default-src self directive in development', () => {
+    process.env.NODE_ENV = 'development';
+    const csp = buildDefaultCSP();
+    expect(csp).toContain("default-src 'self'");
+  });
+
+  it('should have default-src as the first directive', () => {
+    process.env.NODE_ENV = 'production';
+    const csp = buildDefaultCSP();
+    expect(csp.startsWith("default-src 'self'")).toBe(true);
+  });
+
   it('should include frame-ancestors none for clickjacking protection', () => {
     process.env.NODE_ENV = 'production';
     const csp = buildDefaultCSP();

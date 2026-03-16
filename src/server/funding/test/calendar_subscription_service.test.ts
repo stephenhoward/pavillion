@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import db from '@/server/common/entity/db';
 import FundingService from '@/server/funding/service/funding';
 import { FundingPlanEntity } from '@/server/funding/entity/funding_plan';
-import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_subscription';
+import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_funding_plan';
 import { ComplimentaryGrantEntity } from '@/server/funding/entity/complimentary_grant';
 import { ProviderConfigEntity } from '@/server/funding/entity/provider_config';
 import { FundingSettingsEntity } from '@/server/funding/entity/funding_settings';
@@ -13,9 +13,9 @@ import { ProviderFactory } from '@/server/funding/service/provider/factory';
 import { FundingSettings, ProviderConfig, FundingPlan } from '@/common/model/funding-plan';
 import { ValidationError } from '@/common/exceptions/base';
 import {
-  SubscriptionNotFoundError,
-  CalendarSubscriptionNotFoundError,
-  DuplicateCalendarSubscriptionError,
+  FundingPlanNotFoundError,
+  CalendarFundingPlanNotFoundError,
+  DuplicateCalendarFundingPlanError,
 } from '@/server/funding/exceptions';
 
 describe('FundingService - Calendar Subscription Methods', () => {
@@ -113,7 +113,7 @@ describe('FundingService - Calendar Subscription Methods', () => {
       expect(mockAdapter.updateSubscriptionAmount.called).toBe(true);
     });
 
-    it('should throw SubscriptionNotFoundError if no active subscription exists', async () => {
+    it('should throw FundingPlanNotFoundError if no active subscription exists', async () => {
       const accountId = uuidv4();
       const calendarId = uuidv4();
 
@@ -121,7 +121,7 @@ describe('FundingService - Calendar Subscription Methods', () => {
 
       await expect(
         service.addCalendarToFundingPlan(accountId, calendarId, 500000),
-      ).rejects.toThrow(SubscriptionNotFoundError);
+      ).rejects.toThrow(FundingPlanNotFoundError);
     });
 
     it('should throw ValidationError if account does not own the calendar', async () => {
@@ -145,7 +145,7 @@ describe('FundingService - Calendar Subscription Methods', () => {
       ).rejects.toThrow(ValidationError);
     });
 
-    it('should throw DuplicateCalendarSubscriptionError if active subscription already exists', async () => {
+    it('should throw DuplicateCalendarFundingPlanError if active subscription already exists', async () => {
       const accountId = uuidv4();
       const subscriptionId = uuidv4();
       const calendarId = uuidv4();
@@ -167,7 +167,7 @@ describe('FundingService - Calendar Subscription Methods', () => {
 
       await expect(
         service.addCalendarToFundingPlan(accountId, calendarId, 500000),
-      ).rejects.toThrow(DuplicateCalendarSubscriptionError);
+      ).rejects.toThrow(DuplicateCalendarFundingPlanError);
     });
 
     it('should throw error with InvalidAmountError name if amount is negative', async () => {
@@ -314,7 +314,7 @@ describe('FundingService - Calendar Subscription Methods', () => {
         supportsAmountUpdates: sandbox.stub().returns(true),
       };
 
-      // findOne is called for resolveActiveSubscription; findByPk is called in cancel()
+      // findOne is called for resolveActiveFundingPlan; findByPk is called in cancel()
       sandbox.stub(FundingPlanEntity, 'findOne').resolves(mockFundingPlanEntity as any);
       sandbox.stub(FundingPlanEntity, 'findByPk').resolves(mockFundingPlanEntity as any);
       mockCalendarInterface.isCalendarOwnerById
@@ -333,16 +333,16 @@ describe('FundingService - Calendar Subscription Methods', () => {
       expect(mockFundingPlanEntity.status).toBe('cancelled');
     });
 
-    it('should throw SubscriptionNotFoundError if no active subscription exists', async () => {
+    it('should throw FundingPlanNotFoundError if no active subscription exists', async () => {
       const accountId = uuidv4();
       sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
 
       await expect(
         service.removeCalendarFromFundingPlan(accountId, uuidv4()),
-      ).rejects.toThrow(SubscriptionNotFoundError);
+      ).rejects.toThrow(FundingPlanNotFoundError);
     });
 
-    it('should throw CalendarSubscriptionNotFoundError if no active calendar subscription', async () => {
+    it('should throw CalendarFundingPlanNotFoundError if no active calendar subscription', async () => {
       const accountId = uuidv4();
       const subscriptionId = uuidv4();
       const calendarId = uuidv4();
@@ -361,7 +361,7 @@ describe('FundingService - Calendar Subscription Methods', () => {
 
       await expect(
         service.removeCalendarFromFundingPlan(accountId, calendarId),
-      ).rejects.toThrow(CalendarSubscriptionNotFoundError);
+      ).rejects.toThrow(CalendarFundingPlanNotFoundError);
     });
 
     it('should throw ValidationError for invalid UUID parameters', async () => {

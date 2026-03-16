@@ -38,7 +38,7 @@ function extractPublishableKey(provider: ProviderConfig): string | undefined {
 }
 
 /**
- * User subscription route handlers
+ * User funding plan route handlers
  *
  * All routes require authentication via ExpressHelper.loggedInOnly
  */
@@ -50,7 +50,7 @@ export default class FundingPlanRouteHandlers {
   }
 
   /**
-   * Install user subscription route handlers
+   * Install user funding plan route handlers
    *
    * @param app - Express application
    * @param routePrefix - Route prefix (e.g., '/api/funding/v1')
@@ -58,7 +58,7 @@ export default class FundingPlanRouteHandlers {
   installHandlers(app: express.Application, routePrefix: string): void {
     const router = express.Router();
 
-    // All user subscription endpoints require authentication
+    // All user funding plan endpoints require authentication
     router.get('/options', ExpressHelper.loggedInOnly, this.getOptions.bind(this));
     router.post('/subscribe', ExpressHelper.loggedInOnly, this.subscribe.bind(this));
     router.get('/status', ExpressHelper.loggedInOnly, this.getStatus.bind(this));
@@ -70,7 +70,7 @@ export default class FundingPlanRouteHandlers {
 
   /**
    * GET /options
-   * Get available subscription options (enabled providers, pricing)
+   * Get available funding plan options (enabled providers, pricing)
    */
   async getOptions(req: Request, res: Response): Promise<void> {
     try {
@@ -103,14 +103,14 @@ export default class FundingPlanRouteHandlers {
       });
     }
     catch (error) {
-      logError(error, 'Error fetching subscription options');
+      logError(error, 'Error fetching funding plan options');
       res.status(500).json({ error: 'Internal server error' });
     }
   }
 
   /**
    * POST /subscribe
-   * Create new subscription with chosen provider
+   * Create new funding plan with chosen provider
    */
   async subscribe(req: Request, res: Response): Promise<void> {
     try {
@@ -142,7 +142,7 @@ export default class FundingPlanRouteHandlers {
         }
       }
 
-      const subscription = await this.interface.subscribe(
+      const fundingPlan = await this.interface.subscribe(
         account.id,
         account.email,
         providerConfigId,
@@ -151,10 +151,10 @@ export default class FundingPlanRouteHandlers {
         calendarIds,
       );
 
-      res.json(subscription.toObject());
+      res.json(fundingPlan.toObject());
     }
     catch (error) {
-      logError(error, 'Error creating subscription');
+      logError(error, 'Error creating funding plan');
       if (error instanceof ValidationError) {
         ExpressHelper.sendValidationError(res, error);
       }
@@ -174,7 +174,7 @@ export default class FundingPlanRouteHandlers {
 
   /**
    * GET /status
-   * Get current user's subscription status
+   * Get current user's funding plan status
    */
   async getStatus(req: Request, res: Response): Promise<void> {
     try {
@@ -185,24 +185,24 @@ export default class FundingPlanRouteHandlers {
         return;
       }
 
-      const subscription = await this.interface.getStatus(account.id);
+      const fundingPlan = await this.interface.getStatus(account.id);
 
-      if (!subscription) {
-        res.status(404).json({ error: 'No subscription found', errorName: 'SubscriptionNotFoundError' });
+      if (!fundingPlan) {
+        res.status(404).json({ error: 'No funding plan found', errorName: 'FundingPlanNotFoundError' });
         return;
       }
 
-      res.json(subscription.toObject());
+      res.json(fundingPlan.toObject());
     }
     catch (error) {
-      logError(error, 'Error fetching subscription status');
+      logError(error, 'Error fetching funding plan status');
       res.status(500).json({ error: 'Internal server error' });
     }
   }
 
   /**
    * POST /cancel
-   * Cancel subscription (continues to end of billing period)
+   * Cancel funding plan (continues to end of billing period)
    */
   async cancel(req: Request, res: Response): Promise<void> {
     try {
@@ -213,21 +213,21 @@ export default class FundingPlanRouteHandlers {
         return;
       }
 
-      // Get user's subscription to get the subscription ID
-      const subscription = await this.interface.getStatus(account.id);
+      // Get user's funding plan to get the ID
+      const fundingPlan = await this.interface.getStatus(account.id);
 
-      if (!subscription) {
-        res.status(404).json({ error: 'No subscription found', errorName: 'SubscriptionNotFoundError' });
+      if (!fundingPlan) {
+        res.status(404).json({ error: 'No funding plan found', errorName: 'FundingPlanNotFoundError' });
         return;
       }
 
       // Cancel at end of period (immediate = false)
-      await this.interface.cancel(subscription.id, false);
+      await this.interface.cancel(fundingPlan.id, false);
 
       res.json({ success: true });
     }
     catch (error) {
-      logError(error, 'Error canceling subscription');
+      logError(error, 'Error canceling funding plan');
       if (error instanceof Error && error.message.includes('not found')) {
         res.status(404).json({ error: error.message, errorName: 'NotFoundError' });
       }
@@ -239,7 +239,7 @@ export default class FundingPlanRouteHandlers {
 
   /**
    * GET /portal
-   * Get provider's billing portal URL for subscription management
+   * Get provider's billing portal URL for funding plan management
    */
   async getPortal(req: Request, res: Response): Promise<void> {
     try {

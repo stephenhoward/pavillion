@@ -244,7 +244,7 @@ describe('Provider Connection API Routes', () => {
     it('should return confirmation requirement when active subscriptions exist', async () => {
       sandbox.stub(service, 'disconnectProvider').resolves({
         requiresConfirmation: true,
-        activeSubscriptionCount: 5,
+        activeFundingPlanCount: 5,
         message: 'This provider has 5 active subscription(s). Disconnecting will cancel all active subscriptions.',
       });
 
@@ -255,7 +255,7 @@ describe('Provider Connection API Routes', () => {
         .expect(200);
 
       expect(response.body.requiresConfirmation).toBe(true);
-      expect(response.body.activeSubscriptionCount).toBe(5);
+      expect(response.body.activeFundingPlanCount).toBe(5);
       expect(response.body.message).toContain('5 active subscription');
     });
 

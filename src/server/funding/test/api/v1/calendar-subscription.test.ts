@@ -8,9 +8,9 @@ import { Account } from '@/common/model/account';
 import { FundingPlan } from '@/common/model/funding-plan';
 import { testApp } from '@/server/common/test/lib/express';
 import {
-  SubscriptionNotFoundError,
-  CalendarSubscriptionNotFoundError,
-  DuplicateCalendarSubscriptionError,
+  FundingPlanNotFoundError,
+  CalendarFundingPlanNotFoundError,
+  DuplicateCalendarFundingPlanError,
   CalendarNotFoundError,
 } from '@/server/funding/exceptions';
 import { ValidationError } from '@/common/exceptions/base';
@@ -117,9 +117,9 @@ describe('CalendarSubscriptionRoutes API', () => {
       expect(response.body.error).toContain('amount is required');
     });
 
-    it('should return 404 when service throws SubscriptionNotFoundError', async () => {
+    it('should return 404 when service throws FundingPlanNotFoundError', async () => {
       mockInterface.addCalendarToFundingPlan.rejects(
-        new SubscriptionNotFoundError('test-account-id'),
+        new FundingPlanNotFoundError('test-account-id'),
       );
 
       bindAddCalendar();
@@ -129,12 +129,12 @@ describe('CalendarSubscriptionRoutes API', () => {
         .send({ calendarId: 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', amount: 500000 })
         .expect(404);
 
-      expect(response.body.errorName).toBe('SubscriptionNotFoundError');
+      expect(response.body.errorName).toBe('FundingPlanNotFoundError');
     });
 
     it('should return 409 when calendar already has an active subscription', async () => {
       mockInterface.addCalendarToFundingPlan.rejects(
-        new DuplicateCalendarSubscriptionError('sub-1', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d'),
+        new DuplicateCalendarFundingPlanError('sub-1', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d'),
       );
 
       bindAddCalendar();
@@ -144,7 +144,7 @@ describe('CalendarSubscriptionRoutes API', () => {
         .send({ calendarId: 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', amount: 500000 })
         .expect(409);
 
-      expect(response.body.errorName).toBe('DuplicateCalendarSubscriptionError');
+      expect(response.body.errorName).toBe('DuplicateCalendarFundingPlanError');
     });
 
     it('should return 404 when calendar does not exist', async () => {
@@ -221,9 +221,9 @@ describe('CalendarSubscriptionRoutes API', () => {
       expect(response.body.error).toContain('Invalid calendarId');
     });
 
-    it('should return 404 when service throws SubscriptionNotFoundError', async () => {
+    it('should return 404 when service throws FundingPlanNotFoundError', async () => {
       mockInterface.removeCalendarFromFundingPlan.rejects(
-        new SubscriptionNotFoundError('test-account-id'),
+        new FundingPlanNotFoundError('test-account-id'),
       );
 
       bindRemoveCalendar();
@@ -232,12 +232,12 @@ describe('CalendarSubscriptionRoutes API', () => {
         .delete('/handler/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d')
         .expect(404);
 
-      expect(response.body.errorName).toBe('SubscriptionNotFoundError');
+      expect(response.body.errorName).toBe('FundingPlanNotFoundError');
     });
 
     it('should return 404 when calendar subscription not found', async () => {
       mockInterface.removeCalendarFromFundingPlan.rejects(
-        new CalendarSubscriptionNotFoundError('sub-1', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d'),
+        new CalendarFundingPlanNotFoundError('sub-1', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d'),
       );
 
       bindRemoveCalendar();
@@ -246,7 +246,7 @@ describe('CalendarSubscriptionRoutes API', () => {
         .delete('/handler/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d')
         .expect(404);
 
-      expect(response.body.errorName).toBe('CalendarSubscriptionNotFoundError');
+      expect(response.body.errorName).toBe('CalendarFundingPlanNotFoundError');
     });
 
     it('should return 400 when service throws ValidationError', async () => {

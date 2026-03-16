@@ -29,13 +29,13 @@ export default class FundingApiV1 {
     const providerRoutes = new ProviderConnectionRoutes(providerConnectionService);
     providerRoutes.installHandlers(app, '/api/funding/v1');
 
-    // Install user subscription routes
-    const subscriptionRoutes = new FundingPlanRouteHandlers(internalAPI);
-    subscriptionRoutes.installHandlers(app, '/api/funding/v1');
+    // Install user funding plan routes
+    const fundingPlanRoutes = new FundingPlanRouteHandlers(internalAPI);
+    fundingPlanRoutes.installHandlers(app, '/api/funding/v1');
 
-    // Install calendar subscription routes
-    const calendarSubscriptionRoutes = new CalendarSubscriptionRoutes(internalAPI);
-    calendarSubscriptionRoutes.installHandlers(app, '/api/funding/v1');
+    // Install calendar funding plan routes
+    const calendarFundingPlanRoutes = new CalendarSubscriptionRoutes(internalAPI);
+    calendarFundingPlanRoutes.installHandlers(app, '/api/funding/v1');
 
     // Install checkout session routes
     const checkoutSessionRoutes = new CheckoutSessionRoutes(internalAPI);

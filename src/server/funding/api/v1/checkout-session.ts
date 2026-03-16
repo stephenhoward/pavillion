@@ -7,7 +7,7 @@ import {
   ActiveFundingPlanExistsError,
   ProviderNotConfiguredError,
   InvalidSessionIdError,
-  SubscriptionNotFoundError,
+  FundingPlanNotFoundError,
 } from '@/server/funding/exceptions';
 import { checkoutSessionByAccount } from '@/server/common/middleware/rate-limiters';
 import { logError } from '@/server/common/helper/error-logger';
@@ -155,8 +155,8 @@ export default class CheckoutSessionRoutes {
       if (error instanceof InvalidSessionIdError) {
         res.status(400).json({ error: error.message, errorName: 'InvalidSessionIdError' });
       }
-      else if (error instanceof SubscriptionNotFoundError) {
-        res.status(404).json({ error: error.message, errorName: 'SubscriptionNotFoundError' });
+      else if (error instanceof FundingPlanNotFoundError) {
+        res.status(404).json({ error: error.message, errorName: 'FundingPlanNotFoundError' });
       }
       else if (error instanceof ProviderNotConfiguredError) {
         res.status(404).json({ error: error.message, errorName: 'ProviderNotConfiguredError' });

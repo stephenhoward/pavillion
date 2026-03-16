@@ -130,7 +130,7 @@ describe('Admin Funding API', () => {
           providerType: 'stripe',
           enabled: true,
           displayName: 'Credit Card',
-          credentials: '{"stripe_user_id": "acct_123"}',
+          credentials: '{"apiKey": "sk_test_123"}',
           webhookSecret: 'secret1',
         },
         {

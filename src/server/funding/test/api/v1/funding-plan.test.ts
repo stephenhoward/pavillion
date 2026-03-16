@@ -94,8 +94,6 @@ describe('User Subscription API Routes', () => {
       stripeProvider.credentials = JSON.stringify({
         apiKey: 'sk_test_secret123',
         publishableKey: 'pk_test_abc123',
-        stripeUserId: 'acct_123',
-        webhook_secret: 'whsec_test_secret',
       });
       stripeProvider.webhookSecret = 'whsec_test_secret';
 
@@ -162,7 +160,6 @@ describe('User Subscription API Routes', () => {
       stripeProvider.credentials = JSON.stringify({
         apiKey: 'sk_test_secret123',
         publishableKey: 'pk_test_abc123',
-        stripeUserId: 'acct_123',
         webhook_secret: 'whsec_test_secret',
       });
       stripeProvider.webhookSecret = 'whsec_test_secret';
@@ -201,7 +198,6 @@ describe('User Subscription API Routes', () => {
       // Verify secret values do not appear anywhere in the response body
       expect(responseText).not.toContain('sk_test_secret123');
       expect(responseText).not.toContain('whsec_test_secret');
-      expect(responseText).not.toContain('acct_123');
     });
 
     it('should not include publishableKey for PayPal providers', async () => {

@@ -8,7 +8,7 @@ import { FundingSettingsEntity } from '@/server/funding/entity/funding_settings'
 import { ProviderConfigEntity } from '@/server/funding/entity/provider_config';
 import { FundingPlanEntity } from '@/server/funding/entity/funding_plan';
 import { FundingEventEntity } from '@/server/funding/entity/funding_event';
-import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_subscription';
+import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_funding_plan';
 import { AccountEntity } from '@/server/common/entity/account';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { ProviderFactory } from '@/server/funding/service/provider/factory';

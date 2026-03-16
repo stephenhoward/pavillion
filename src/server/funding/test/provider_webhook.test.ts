@@ -9,7 +9,8 @@ import { MockStripeAdapter, MockPayPalAdapter } from '../service/provider/mock_a
  * Tests for Provider Adapter Webhook Management
  *
  * This test suite covers:
- * - Stripe adapter webhook registration (mocked API)
+ * - Stripe adapter webhook registration (throws - managed manually)
+ * - Stripe adapter webhook deletion (throws - managed manually)
  * - PayPal adapter webhook registration (mocked API)
  * - Error handling in adapters (network failures, invalid responses)
  * - WebhookManager utility service
@@ -23,92 +24,40 @@ describe('Provider Adapter Webhook Management', () => {
   });
 
   describe('StripeAdapter Webhook Registration', () => {
-    let mockStripe: any;
     let adapter: StripeAdapter;
 
     beforeEach(() => {
-      mockStripe = {
-        webhookEndpoints: {
-          create: sandbox.stub(),
-          del: sandbox.stub(),
-        },
-      };
-
-      const credentials = { apiKey: 'sk_test_123', stripeUserId: 'acct_test123' };
+      const credentials = { apiKey: 'sk_test_123' };
       const webhookSecret = 'whsec_test';
       adapter = new StripeAdapter(credentials, webhookSecret);
-      (adapter as any).stripe = mockStripe;
     });
 
-    it('should register webhook with Stripe API (mocked)', async () => {
+    it('should throw because Stripe webhooks are managed manually', async () => {
       const webhookUrl = 'https://example.com/webhooks/stripe';
-      const mockResponse = {
-        id: 'we_test123',
-        secret: 'whsec_new_secret',
-        url: webhookUrl,
-        enabled_events: ['customer.subscription.*', 'invoice.payment_*'],
-      };
+      const credentials = { apiKey: 'sk_test_123' };
 
-      mockStripe.webhookEndpoints.create.resolves(mockResponse);
-
-      const credentials = { stripeUserId: 'acct_test123' };
-      const result = await adapter.registerWebhook(webhookUrl, credentials);
-
-      // Verify webhook was registered
-      expect(result).toEqual({
-        webhookId: 'we_test123',
-        webhookSecret: 'whsec_new_secret',
-      });
-
-      // Verify correct API call
-      expect(mockStripe.webhookEndpoints.create.calledOnce).toBe(true);
-      const createArgs = mockStripe.webhookEndpoints.create.firstCall.args[0];
-      expect(createArgs.url).toBe(webhookUrl);
-      expect(createArgs.enabled_events).toContain('customer.subscription.created');
-    });
-
-    it('should use Stripe-Account header for connected accounts', async () => {
-      const webhookUrl = 'https://example.com/webhooks/stripe';
-      mockStripe.webhookEndpoints.create.resolves({
-        id: 'we_test123',
-        secret: 'whsec_secret',
-      });
-
-      const credentials = { stripeUserId: 'acct_connected123' };
-      await adapter.registerWebhook(webhookUrl, credentials);
-
-      // Verify Stripe-Account header was set (implementation detail)
-      expect(mockStripe.webhookEndpoints.create.calledOnce).toBe(true);
+      await expect(adapter.registerWebhook(webhookUrl, credentials)).rejects.toThrow(
+        'Stripe webhook registration is managed manually via the admin dashboard',
+      );
     });
   });
 
   describe('StripeAdapter Webhook Deletion', () => {
-    let mockStripe: any;
     let adapter: StripeAdapter;
 
     beforeEach(() => {
-      mockStripe = {
-        webhookEndpoints: {
-          del: sandbox.stub(),
-        },
-      };
-
-      const credentials = { apiKey: 'sk_test_123', stripeUserId: 'acct_test123' };
+      const credentials = { apiKey: 'sk_test_123' };
       const webhookSecret = 'whsec_test';
       adapter = new StripeAdapter(credentials, webhookSecret);
-      (adapter as any).stripe = mockStripe;
     });
 
-    it('should delete webhook endpoint', async () => {
+    it('should throw because Stripe webhooks are managed manually', async () => {
       const webhookId = 'we_test123';
-      const credentials = { stripeUserId: 'acct_test123' };
+      const credentials = { apiKey: 'sk_test_123' };
 
-      mockStripe.webhookEndpoints.del.resolves({ id: webhookId, deleted: true });
-
-      await adapter.deleteWebhook(webhookId, credentials);
-
-      expect(mockStripe.webhookEndpoints.del.calledOnce).toBe(true);
-      expect(mockStripe.webhookEndpoints.del.firstCall.args[0]).toBe(webhookId);
+      await expect(adapter.deleteWebhook(webhookId, credentials)).rejects.toThrow(
+        'Stripe webhook deletion is managed manually via the admin dashboard',
+      );
     });
   });
 
@@ -190,21 +139,14 @@ describe('Provider Adapter Webhook Management', () => {
   });
 
   describe('Error Handling in Adapters', () => {
-    it('should handle network failures in Stripe adapter', async () => {
-      const mockStripe = {
-        webhookEndpoints: {
-          create: sandbox.stub().rejects(new Error('Network error')),
-        },
-      };
-
+    it('should throw for Stripe webhook registration (managed manually)', async () => {
       const adapter = new StripeAdapter({ apiKey: 'sk_test' }, 'whsec_test');
-      (adapter as any).stripe = mockStripe;
 
       const webhookUrl = 'https://example.com/webhooks/stripe';
-      const credentials = { stripeUserId: 'acct_test' };
+      const credentials = { apiKey: 'sk_test' };
 
       await expect(adapter.registerWebhook(webhookUrl, credentials)).rejects.toThrow(
-        'Network error',
+        'Stripe webhook registration is managed manually via the admin dashboard',
       );
     });
 
@@ -267,16 +209,18 @@ describe('Provider Adapter Webhook Management', () => {
   });
 
   describe('Mock Adapters for Testing', () => {
-    it('should create MockStripeAdapter without API calls', async () => {
+    it('should create MockStripeAdapter that validates apiKey', async () => {
       const mockAdapter = new MockStripeAdapter();
 
-      // Should validate credentials without real API calls
+      // Should validate credentials with apiKey
       const isValid = await mockAdapter.validateCredentials({
-        apiKey: 'any_key',
-        stripeUserId: 'any_account',
+        apiKey: 'sk_test_any_key',
       });
-
       expect(isValid).toBe(true);
+
+      // Should reject credentials without apiKey
+      const isInvalid = await mockAdapter.validateCredentials({});
+      expect(isInvalid).toBe(false);
     });
 
     it('should create MockPayPalAdapter without API calls', async () => {
@@ -291,21 +235,23 @@ describe('Provider Adapter Webhook Management', () => {
       expect(isValid).toBe(true);
     });
 
-    it('should generate predictable test credentials for development', async () => {
+    it('should throw for MockStripeAdapter webhook registration', async () => {
       const mockStripe = new MockStripeAdapter();
+
+      await expect(
+        mockStripe.registerWebhook('https://test.com/webhook', {}),
+      ).rejects.toThrow('Stripe webhook registration is managed manually via the admin dashboard');
+    });
+
+    it('should generate predictable test credentials for PayPal development', async () => {
       const mockPayPal = new MockPayPalAdapter();
 
-      const stripeWebhook = await mockStripe.registerWebhook(
-        'https://test.com/webhook',
-        {},
-      );
       const paypalWebhook = await mockPayPal.registerWebhook(
         'https://test.com/webhook',
         {},
       );
 
       // Mock webhooks should return predictable IDs
-      expect(stripeWebhook.webhookId).toContain('we_mock_');
       expect(paypalWebhook.webhookId).toContain('WH-MOCK-');
     });
 

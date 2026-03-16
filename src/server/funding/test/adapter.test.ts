@@ -256,6 +256,143 @@ describe('Payment Provider Adapters', () => {
       expect(invalidResult).toBe(false);
     });
 
+    describe('parseWebhookEvent', () => {
+      it('should parse checkout.session.completed with metadata', () => {
+        const payload = JSON.stringify({
+          id: 'evt_checkout_123',
+          type: 'checkout.session.completed',
+          data: {
+            object: {
+              subscription: 'sub_checkout_abc',
+              customer: 'cus_checkout_xyz',
+              metadata: {
+                pavillion_account_id: 'acc_parse_test',
+                pavillion_calendar_ids: JSON.stringify(['cal_1', 'cal_2']),
+              },
+            },
+          },
+        });
+
+        const event = stripeAdapter.parseWebhookEvent(payload);
+
+        expect(event.eventId).toBe('evt_checkout_123');
+        expect(event.eventType).toBe('checkout.session.completed');
+        expect(event.subscriptionId).toBe('sub_checkout_abc');
+        expect(event.customerId).toBe('cus_checkout_xyz');
+        expect(event.status).toBe('active');
+        expect(event.accountId).toBe('acc_parse_test');
+        expect(event.calendarIds).toBe(JSON.stringify(['cal_1', 'cal_2']));
+      });
+
+      it('should parse checkout.session.completed without calendarIds', () => {
+        const payload = JSON.stringify({
+          id: 'evt_checkout_no_cals',
+          type: 'checkout.session.completed',
+          data: {
+            object: {
+              subscription: 'sub_no_cals',
+              customer: 'cus_no_cals',
+              metadata: {
+                pavillion_account_id: 'acc_no_cals',
+              },
+            },
+          },
+        });
+
+        const event = stripeAdapter.parseWebhookEvent(payload);
+
+        expect(event.eventId).toBe('evt_checkout_no_cals');
+        expect(event.eventType).toBe('checkout.session.completed');
+        expect(event.subscriptionId).toBe('sub_no_cals');
+        expect(event.customerId).toBe('cus_no_cals');
+        expect(event.status).toBe('active');
+        expect(event.accountId).toBe('acc_no_cals');
+        expect(event.calendarIds).toBeUndefined();
+      });
+
+      it('should parse invoice.paid event', () => {
+        const payload = JSON.stringify({
+          id: 'evt_invoice_paid',
+          type: 'invoice.paid',
+          data: {
+            object: {
+              subscription: 'sub_inv_123',
+              customer: 'cus_inv_123',
+            },
+          },
+        });
+
+        const event = stripeAdapter.parseWebhookEvent(payload);
+
+        expect(event.eventId).toBe('evt_invoice_paid');
+        expect(event.eventType).toBe('invoice.paid');
+        expect(event.subscriptionId).toBe('sub_inv_123');
+        expect(event.customerId).toBe('cus_inv_123');
+        expect(event.status).toBe('active');
+        expect(event.accountId).toBeUndefined();
+        expect(event.calendarIds).toBeUndefined();
+      });
+
+      it('should parse invoice.payment_failed event', () => {
+        const payload = JSON.stringify({
+          id: 'evt_inv_failed',
+          type: 'invoice.payment_failed',
+          data: {
+            object: {
+              subscription: 'sub_fail_123',
+              customer: 'cus_fail_123',
+            },
+          },
+        });
+
+        const event = stripeAdapter.parseWebhookEvent(payload);
+
+        expect(event.status).toBe('past_due');
+      });
+
+      it('should parse customer.subscription.deleted event', () => {
+        const payload = JSON.stringify({
+          id: 'evt_sub_deleted',
+          type: 'customer.subscription.deleted',
+          data: {
+            object: {
+              id: 'sub_del_123',
+              customer: 'cus_del_123',
+            },
+          },
+        });
+
+        const event = stripeAdapter.parseWebhookEvent(payload);
+
+        expect(event.subscriptionId).toBe('sub_del_123');
+        expect(event.status).toBe('cancelled');
+      });
+
+      it('should parse customer.subscription.updated with status mapping', () => {
+        const now = Math.floor(Date.now() / 1000);
+        const payload = JSON.stringify({
+          id: 'evt_sub_updated',
+          type: 'customer.subscription.updated',
+          data: {
+            object: {
+              id: 'sub_upd_123',
+              customer: 'cus_upd_123',
+              status: 'past_due',
+              current_period_start: now,
+              current_period_end: now + 30 * 24 * 60 * 60,
+            },
+          },
+        });
+
+        const event = stripeAdapter.parseWebhookEvent(payload);
+
+        expect(event.subscriptionId).toBe('sub_upd_123');
+        expect(event.status).toBe('past_due');
+        expect(event.currentPeriodStart).toBeInstanceOf(Date);
+        expect(event.currentPeriodEnd).toBeInstanceOf(Date);
+      });
+    });
+
     describe('createCheckoutSession', () => {
       it('should create checkout session with fixed pricing (priceId)', async () => {
         mockStripe.checkout.sessions.create.resolves({

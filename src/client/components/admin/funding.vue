@@ -46,7 +46,7 @@ const showDisconnectModal = ref(false); // Control disconnect confirmation modal
 const disconnectModalData = ref({
   providerType: '',
   providerName: '',
-  activeSubscriptionCount: 0,
+  activeFundingPlanCount: 0,
 }); // Data for disconnect confirmation modal
 
 // Wizard state
@@ -361,12 +361,12 @@ async function disconnectProvider(providerType) {
     const result = await fundingService.disconnectProvider(providerType, false);
 
     if (result.requiresConfirmation) {
-      // Show confirmation modal with active subscription count
+      // Show confirmation modal with active funding plan count
       const provider = providers.value.find(p => p.providerType === providerType);
       disconnectModalData.value = {
         providerType: providerType,
         providerName: provider?.displayName || providerType,
-        activeSubscriptionCount: result.activeSubscriptionCount || 0,
+        activeFundingPlanCount: result.activeFundingPlanCount || 0,
       };
       showDisconnectModal.value = true;
     }
@@ -1130,7 +1130,7 @@ onMounted(async () => {
     <ConfirmDisconnectModal
       :show="showDisconnectModal"
       :provider-name="disconnectModalData.providerName"
-      :active-subscription-count="disconnectModalData.activeSubscriptionCount"
+      :active-funding-plan-count="disconnectModalData.activeFundingPlanCount"
       @close="showDisconnectModal = false"
       @confirm="confirmDisconnect"
     />
