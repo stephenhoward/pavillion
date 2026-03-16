@@ -7,6 +7,7 @@ import { FundingPlanEntity } from '@/server/funding/entity/funding_plan';
 import { WebhookManager } from '@/server/funding/service/provider/webhook_manager';
 import { ProviderFactory } from '@/server/funding/service/provider/factory';
 import { PaymentProviderAdapter, ProviderCredentials } from '@/server/funding/service/provider/adapter';
+import { StripeAdapter } from '@/server/funding/service/provider/stripe';
 import FundingService from '@/server/funding/service/funding';
 import {
   InvalidProviderTypeError,
@@ -21,6 +22,15 @@ import {
 interface AdminUser {
   id: string;
   email: string;
+}
+
+/**
+ * Stripe credential inputs for configuration
+ */
+interface StripeCredentialInputs {
+  publishable_key: string;
+  secret_key: string;
+  webhook_secret: string;
 }
 
 /**
@@ -57,6 +67,87 @@ export class ProviderConnectionService {
     this.eventBus = eventBus;
     this.webhookManager = new WebhookManager();
     this.subscriptionService = new FundingService(eventBus);
+  }
+
+  /**
+   * Configure Stripe credentials via direct API key entry
+   *
+   * Validates key formats, encrypts, and stores Stripe credentials.
+   * Hard-fails if encryption key is unavailable (no plaintext fallback).
+   *
+   * @param credentials - Stripe credentials (publishable_key, secret_key, webhook_secret)
+   * @param adminUser - Admin user performing the configuration
+   * @returns True if configuration successful
+   */
+  async configureStripe(credentials: StripeCredentialInputs, adminUser: AdminUser): Promise<boolean> {
+    // Validate required fields
+    if (!credentials.publishable_key || credentials.publishable_key.trim() === '') {
+      throw new MissingRequiredFieldError('publishable_key');
+    }
+
+    if (!credentials.secret_key || credentials.secret_key.trim() === '') {
+      throw new MissingRequiredFieldError('secret_key');
+    }
+
+    if (!credentials.webhook_secret || credentials.webhook_secret.trim() === '') {
+      throw new MissingRequiredFieldError('webhook_secret');
+    }
+
+    // Validate key formats (prefix check only, no test API call)
+    const formatCheck = StripeAdapter.validateKeyFormats(
+      credentials.publishable_key,
+      credentials.secret_key,
+      credentials.webhook_secret,
+    );
+
+    if (!formatCheck.valid) {
+      throw new InvalidCredentialsError(formatCheck.error);
+    }
+
+    // Build credentials object for storage
+    // Store apiKey as secret_key for adapter compatibility
+    const storedCredentials = {
+      apiKey: credentials.secret_key,
+      publishableKey: credentials.publishable_key,
+    };
+
+    // Check if provider config already exists
+    let entity = await ProviderConfigEntity.findOne({
+      where: { provider_type: 'stripe' },
+    });
+
+    if (entity) {
+      // Update existing configuration
+      entity._decryptedCredentials = JSON.stringify(storedCredentials);
+      entity._decryptedWebhookSecret = credentials.webhook_secret;
+      await entity.save();
+    }
+    else {
+      // Create new configuration
+      entity = await ProviderConfigEntity.create({
+        id: uuidv4(),
+        provider_type: 'stripe',
+        enabled: false, // Admin must explicitly enable
+        display_name: 'Stripe',
+        credentials: JSON.stringify(storedCredentials),
+        webhook_secret: credentials.webhook_secret,
+      } as any);
+
+      // Set decrypted values for encryption hook
+      entity._decryptedCredentials = JSON.stringify(storedCredentials);
+      entity._decryptedWebhookSecret = credentials.webhook_secret;
+    }
+
+    // Clear cached adapter so new credentials are picked up
+    ProviderFactory.clearCache(entity.id);
+
+    // Emit event
+    this.eventBus.emit('provider:configured', {
+      providerType: 'stripe',
+      providerId: entity.id,
+    });
+
+    return true;
   }
 
   /**

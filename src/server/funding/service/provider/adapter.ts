@@ -15,6 +15,40 @@ export interface CreateSubscriptionParams {
 }
 
 /**
+ * Parameters for creating a checkout session
+ */
+export interface CreateCheckoutSessionParams {
+  priceId?: string; // Pre-created price ID for fixed pricing
+  amount?: number; // Amount in millicents for PWYC pricing
+  currency: string; // ISO 4217 currency code
+  interval: 'month' | 'year';
+  accountId: string;
+  calendarIds?: string[];
+  returnUrl: string;
+}
+
+/**
+ * Result of creating a checkout session
+ */
+export interface CheckoutSessionResult {
+  clientSecret: string;
+  sessionId: string;
+}
+
+/**
+ * Status of a checkout session
+ */
+export interface CheckoutSessionStatus {
+  status: 'complete' | 'open' | 'expired';
+  subscriptionId?: string;
+  customerId?: string;
+  metadata: {
+    accountId: string;
+    calendarIds?: string;
+  };
+}
+
+/**
  * Subscription data returned by provider
  */
 export interface ProviderSubscription {
@@ -63,7 +97,7 @@ export interface WebhookRegistration {
  *
  * This interface defines the contract that all payment provider implementations
  * must follow. It supports credential configuration, subscription management,
- * and webhook handling.
+ * checkout sessions, and webhook handling.
  */
 export interface PaymentProviderAdapter {
   /**
@@ -167,4 +201,33 @@ export interface PaymentProviderAdapter {
    * @returns Parsed webhook event data
    */
   parseWebhookEvent(payload: string): WebhookEvent;
+
+  /**
+   * Create a checkout session for embedded payment UI
+   *
+   * For fixed pricing, pass priceId. For PWYC pricing, pass amount
+   * which will be used to create a price on the fly.
+   *
+   * @param params - Checkout session parameters
+   * @returns Client secret and session ID for the embedded checkout
+   */
+  createCheckoutSession(params: CreateCheckoutSessionParams): Promise<CheckoutSessionResult>;
+
+  /**
+   * Retrieve the status of a checkout session
+   *
+   * @param sessionId - The checkout session ID
+   * @returns Current status, subscription/customer IDs, and metadata
+   */
+  getCheckoutSessionStatus(sessionId: string): Promise<CheckoutSessionStatus>;
+
+  /**
+   * Create a recurring price with the provider
+   *
+   * @param amount - Amount in millicents
+   * @param currency - ISO 4217 currency code
+   * @param interval - Billing interval ('month' or 'year')
+   * @returns Provider price ID
+   */
+  createPrice(amount: number, currency: string, interval: 'month' | 'year'): Promise<string>;
 }

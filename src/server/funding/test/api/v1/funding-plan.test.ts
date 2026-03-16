@@ -86,6 +86,254 @@ describe('User Subscription API Routes', () => {
         payWhatYouCan: true,
       });
     });
+
+    it('should include publishableKey for Stripe providers with valid credentials', async () => {
+      const stripeProvider = new ProviderConfig('provider-1', 'stripe');
+      stripeProvider.enabled = true;
+      stripeProvider.displayName = 'Credit Card';
+      stripeProvider.credentials = JSON.stringify({
+        apiKey: 'sk_test_secret123',
+        publishableKey: 'pk_test_abc123',
+        stripeUserId: 'acct_123',
+        webhook_secret: 'whsec_test_secret',
+      });
+      stripeProvider.webhookSecret = 'whsec_test_secret';
+
+      const mockOptions = {
+        enabled: true,
+        providers: [stripeProvider],
+        monthlyPrice: 1000000,
+        yearlyPrice: 10000000,
+        currency: 'USD',
+        payWhatYouCan: false,
+      };
+
+      sandbox.stub(service, 'getOptions').resolves(mockOptions);
+
+      router.get('/handler', (req: Request, res: Response, next) => {
+        req.user = mockAccount;
+        next();
+      }, subscriptionHandlers.getOptions.bind(subscriptionHandlers));
+
+      const response = await request(testApp(router))
+        .get('/handler')
+        .expect(200);
+
+      const stripeResult = response.body.providers[0];
+      expect(stripeResult.publishableKey).toBe('pk_test_abc123');
+    });
+
+    it('should include publishableKey for live Stripe keys', async () => {
+      const stripeProvider = new ProviderConfig('provider-1', 'stripe');
+      stripeProvider.enabled = true;
+      stripeProvider.displayName = 'Credit Card';
+      stripeProvider.credentials = JSON.stringify({
+        apiKey: 'sk_live_secret123',
+        publishableKey: 'pk_live_abc123',
+      });
+
+      const mockOptions = {
+        enabled: true,
+        providers: [stripeProvider],
+        monthlyPrice: 1000000,
+        yearlyPrice: 10000000,
+        currency: 'USD',
+        payWhatYouCan: false,
+      };
+
+      sandbox.stub(service, 'getOptions').resolves(mockOptions);
+
+      router.get('/handler', (req: Request, res: Response, next) => {
+        req.user = mockAccount;
+        next();
+      }, subscriptionHandlers.getOptions.bind(subscriptionHandlers));
+
+      const response = await request(testApp(router))
+        .get('/handler')
+        .expect(200);
+
+      expect(response.body.providers[0].publishableKey).toBe('pk_live_abc123');
+    });
+
+    it('should never expose secret_key, apiKey, or webhook_secret in options response', async () => {
+      const stripeProvider = new ProviderConfig('provider-1', 'stripe');
+      stripeProvider.enabled = true;
+      stripeProvider.displayName = 'Credit Card';
+      stripeProvider.credentials = JSON.stringify({
+        apiKey: 'sk_test_secret123',
+        publishableKey: 'pk_test_abc123',
+        stripeUserId: 'acct_123',
+        webhook_secret: 'whsec_test_secret',
+      });
+      stripeProvider.webhookSecret = 'whsec_test_secret';
+
+      const mockOptions = {
+        enabled: true,
+        providers: [stripeProvider],
+        monthlyPrice: 1000000,
+        yearlyPrice: 10000000,
+        currency: 'USD',
+        payWhatYouCan: false,
+      };
+
+      sandbox.stub(service, 'getOptions').resolves(mockOptions);
+
+      router.get('/handler', (req: Request, res: Response, next) => {
+        req.user = mockAccount;
+        next();
+      }, subscriptionHandlers.getOptions.bind(subscriptionHandlers));
+
+      const response = await request(testApp(router))
+        .get('/handler')
+        .expect(200);
+
+      const stripeResult = response.body.providers[0];
+      const responseText = JSON.stringify(response.body);
+
+      // Verify secret fields are not present in the provider object
+      expect(stripeResult.credentials).toBeUndefined();
+      expect(stripeResult.webhookSecret).toBeUndefined();
+      expect(stripeResult.apiKey).toBeUndefined();
+      expect(stripeResult.secret_key).toBeUndefined();
+      expect(stripeResult.webhook_secret).toBeUndefined();
+      expect(stripeResult.stripeUserId).toBeUndefined();
+
+      // Verify secret values do not appear anywhere in the response body
+      expect(responseText).not.toContain('sk_test_secret123');
+      expect(responseText).not.toContain('whsec_test_secret');
+      expect(responseText).not.toContain('acct_123');
+    });
+
+    it('should not include publishableKey for PayPal providers', async () => {
+      const paypalProvider = new ProviderConfig('provider-2', 'paypal');
+      paypalProvider.enabled = true;
+      paypalProvider.displayName = 'PayPal';
+      paypalProvider.credentials = JSON.stringify({
+        client_id: 'paypal_client_id',
+        client_secret: 'paypal_secret',
+      });
+
+      const mockOptions = {
+        enabled: true,
+        providers: [paypalProvider],
+        monthlyPrice: 1000000,
+        yearlyPrice: 10000000,
+        currency: 'USD',
+        payWhatYouCan: false,
+      };
+
+      sandbox.stub(service, 'getOptions').resolves(mockOptions);
+
+      router.get('/handler', (req: Request, res: Response, next) => {
+        req.user = mockAccount;
+        next();
+      }, subscriptionHandlers.getOptions.bind(subscriptionHandlers));
+
+      const response = await request(testApp(router))
+        .get('/handler')
+        .expect(200);
+
+      const paypalResult = response.body.providers[0];
+      expect(paypalResult.publishableKey).toBeUndefined();
+      expect(paypalResult.credentials).toBeUndefined();
+
+      // Verify PayPal secrets do not appear in response
+      const responseText = JSON.stringify(response.body);
+      expect(responseText).not.toContain('paypal_client_id');
+      expect(responseText).not.toContain('paypal_secret');
+    });
+
+    it('should omit publishableKey when Stripe credentials have no publishableKey', async () => {
+      const stripeProvider = new ProviderConfig('provider-1', 'stripe');
+      stripeProvider.enabled = true;
+      stripeProvider.displayName = 'Credit Card';
+      stripeProvider.credentials = JSON.stringify({
+        apiKey: 'sk_test_secret123',
+      });
+
+      const mockOptions = {
+        enabled: true,
+        providers: [stripeProvider],
+        monthlyPrice: 1000000,
+        yearlyPrice: 10000000,
+        currency: 'USD',
+        payWhatYouCan: false,
+      };
+
+      sandbox.stub(service, 'getOptions').resolves(mockOptions);
+
+      router.get('/handler', (req: Request, res: Response, next) => {
+        req.user = mockAccount;
+        next();
+      }, subscriptionHandlers.getOptions.bind(subscriptionHandlers));
+
+      const response = await request(testApp(router))
+        .get('/handler')
+        .expect(200);
+
+      expect(response.body.providers[0].publishableKey).toBeUndefined();
+    });
+
+    it('should omit publishableKey when credentials JSON is malformed', async () => {
+      const stripeProvider = new ProviderConfig('provider-1', 'stripe');
+      stripeProvider.enabled = true;
+      stripeProvider.displayName = 'Credit Card';
+      stripeProvider.credentials = 'not-valid-json';
+
+      const mockOptions = {
+        enabled: true,
+        providers: [stripeProvider],
+        monthlyPrice: 1000000,
+        yearlyPrice: 10000000,
+        currency: 'USD',
+        payWhatYouCan: false,
+      };
+
+      sandbox.stub(service, 'getOptions').resolves(mockOptions);
+
+      router.get('/handler', (req: Request, res: Response, next) => {
+        req.user = mockAccount;
+        next();
+      }, subscriptionHandlers.getOptions.bind(subscriptionHandlers));
+
+      const response = await request(testApp(router))
+        .get('/handler')
+        .expect(200);
+
+      expect(response.body.providers[0].publishableKey).toBeUndefined();
+    });
+
+    it('should reject publishableKey that does not start with pk_test_ or pk_live_', async () => {
+      const stripeProvider = new ProviderConfig('provider-1', 'stripe');
+      stripeProvider.enabled = true;
+      stripeProvider.displayName = 'Credit Card';
+      stripeProvider.credentials = JSON.stringify({
+        apiKey: 'sk_test_secret123',
+        publishableKey: 'sk_test_this_is_actually_a_secret_key',
+      });
+
+      const mockOptions = {
+        enabled: true,
+        providers: [stripeProvider],
+        monthlyPrice: 1000000,
+        yearlyPrice: 10000000,
+        currency: 'USD',
+        payWhatYouCan: false,
+      };
+
+      sandbox.stub(service, 'getOptions').resolves(mockOptions);
+
+      router.get('/handler', (req: Request, res: Response, next) => {
+        req.user = mockAccount;
+        next();
+      }, subscriptionHandlers.getOptions.bind(subscriptionHandlers));
+
+      const response = await request(testApp(router))
+        .get('/handler')
+        .expect(200);
+
+      expect(response.body.providers[0].publishableKey).toBeUndefined();
+    });
   });
 
   describe('POST /subscribe', () => {

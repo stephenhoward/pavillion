@@ -1,6 +1,9 @@
 import {
   PaymentProviderAdapter,
   CreateSubscriptionParams,
+  CreateCheckoutSessionParams,
+  CheckoutSessionResult,
+  CheckoutSessionStatus,
   ProviderSubscription,
   ProviderCredentials,
   WebhookEvent,
@@ -244,6 +247,7 @@ export class PayPalAdapter implements PaymentProviderAdapter {
       },
     });
   }
+
   /**
    * PayPal does not support in-place subscription amount updates
    *
@@ -386,6 +390,47 @@ export class PayPalAdapter implements PaymentProviderAdapter {
     }
 
     return webhookEvent;
+  }
+
+  /**
+   * Create a checkout session for PayPal
+   *
+   * PayPal does not support embedded checkout sessions in the same way as Stripe.
+   * This is a stub that throws an error.
+   *
+   * @param params - Checkout session parameters
+   * @throws Error always, as PayPal does not support embedded checkout sessions
+   */
+  async createCheckoutSession(params: CreateCheckoutSessionParams): Promise<CheckoutSessionResult> {
+    throw new Error('createCheckoutSession is not implemented for PayPal');
+  }
+
+  /**
+   * Get checkout session status for PayPal
+   *
+   * PayPal does not support checkout sessions.
+   * This is a stub that throws an error.
+   *
+   * @param sessionId - The checkout session ID
+   * @throws Error always, as PayPal does not support checkout sessions
+   */
+  async getCheckoutSessionStatus(sessionId: string): Promise<CheckoutSessionStatus> {
+    throw new Error('getCheckoutSessionStatus is not implemented for PayPal');
+  }
+
+  /**
+   * Create a recurring price for PayPal
+   *
+   * PayPal does not support standalone price creation.
+   * This is a stub that throws an error.
+   *
+   * @param amount - Amount in millicents
+   * @param currency - ISO 4217 currency code
+   * @param interval - Billing interval
+   * @throws Error always, as PayPal uses billing plans instead
+   */
+  async createPrice(amount: number, currency: string, interval: 'month' | 'year'): Promise<string> {
+    throw new Error('createPrice is not implemented for PayPal');
   }
 
   /**
