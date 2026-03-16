@@ -4,7 +4,7 @@ import CalendarEventHandlers from './events';
 import CalendarAPI from './api/v1';
 import AccountsInterface from '@/server/accounts/interface';
 import EmailInterface from '@/server/email/interface';
-import SubscriptionInterface from '@/server/subscription/interface';
+import FundingInterface from '@/server/funding/interface';
 import { EventEmitter } from 'events';
 
 export default class CalendarDomain {
@@ -16,11 +16,11 @@ export default class CalendarDomain {
     eventBus: EventEmitter,
     accountsInterface?: AccountsInterface,
     emailInterface?: EmailInterface,
-    subscriptionInterface?: SubscriptionInterface,
+    fundingInterface?: FundingInterface,
   ) {
     this.eventBus = eventBus;
     this.accountsInterface = accountsInterface;
-    this.interface = new CalendarInterface(eventBus, accountsInterface, emailInterface, subscriptionInterface);
+    this.interface = new CalendarInterface(eventBus, accountsInterface, emailInterface, fundingInterface);
   }
 
   public initialize(app: Application): void {

@@ -192,7 +192,11 @@
         "remove_success": "Calendar removed from subscription successfully.",
         "error_loading": "Failed to load funding status.",
         "error_adding": "Failed to add calendar to subscription.",
-        "error_removing": "Failed to remove calendar from subscription."
+        "error_removing": "Failed to remove calendar from subscription.",
+        "no_subscription_prompt": "You don't have an active subscription yet. Subscribe to fund this calendar.",
+        "subscribe_to_fund_button": "Subscribe to Fund This Calendar",
+        "subscribe_and_fund_success": "Subscription created and calendar funded successfully.",
+        "checkout_return_success": "Checkout completed successfully. Your calendar has been funded."
     },
     "places": {
         "title": "Places",

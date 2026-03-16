@@ -7,7 +7,7 @@ import { createPinia } from 'pinia';
 import I18NextVue from 'i18next-vue';
 import i18next from 'i18next';
 import funding from '@/client/components/admin/funding.vue';
-import SubscriptionService from '@/client/service/subscription';
+import FundingService from '@/client/service/funding';
 import adminTranslations from '@/client/locales/en/admin.json';
 
 const routes: RouteRecordRaw[] = [
@@ -19,11 +19,9 @@ const routes: RouteRecordRaw[] = [
  *
  * Tests cover:
  * - Provider connection status display (connected vs not connected)
- * - Stripe connect button triggers OAuth flow
  * - PayPal configure button opens credential form modal
  * - Disconnection warning dialog with confirmation checkbox
  * - Error message display from query parameters
- * - Platform OAuth configuration form (super admin only)
  */
 describe('Funding Provider UI Components', () => {
   let wrapper: VueWrapper | null = null;
@@ -74,27 +72,25 @@ describe('Funding Provider UI Components', () => {
           configured: false,
         },
       ]),
-      listSubscriptions: vi.fn().mockResolvedValue({
+      listFundingPlans: vi.fn().mockResolvedValue({
         subscriptions: [],
         total: 0,
       }),
-      connectStripe: vi.fn().mockResolvedValue({ oauthUrl: 'https://oauth.stripe.com/authorize?code=xyz' }),
       updateProvider: vi.fn().mockResolvedValue(true),
       disconnectProvider: vi.fn().mockResolvedValue({ success: true }),
     };
 
     // Mock the subscription service prototype methods
-    vi.spyOn(SubscriptionService.prototype, 'getSettings').mockImplementation(mockService.getSettings);
-    vi.spyOn(SubscriptionService.prototype, 'getProviders').mockImplementation(mockService.getProviders);
-    vi.spyOn(SubscriptionService.prototype, 'listSubscriptions').mockImplementation(mockService.listSubscriptions);
-    vi.spyOn(SubscriptionService.prototype, 'connectStripe').mockImplementation(mockService.connectStripe);
-    vi.spyOn(SubscriptionService.prototype, 'updateProvider').mockImplementation(mockService.updateProvider);
-    vi.spyOn(SubscriptionService.prototype, 'disconnectProvider').mockImplementation(mockService.disconnectProvider);
+    vi.spyOn(FundingService.prototype, 'getSettings').mockImplementation(mockService.getSettings);
+    vi.spyOn(FundingService.prototype, 'getProviders').mockImplementation(mockService.getProviders);
+    vi.spyOn(FundingService.prototype, 'listFundingPlans').mockImplementation(mockService.listFundingPlans);
+    vi.spyOn(FundingService.prototype, 'updateProvider').mockImplementation(mockService.updateProvider);
+    vi.spyOn(FundingService.prototype, 'disconnectProvider').mockImplementation(mockService.disconnectProvider);
 
     // Mock static methods
-    vi.spyOn(SubscriptionService, 'millicentsToDisplay').mockImplementation((millicents: number) => millicents / 1000000);
-    vi.spyOn(SubscriptionService, 'displayToMillicents').mockImplementation((amount: number) => amount * 1000000);
-    vi.spyOn(SubscriptionService, 'formatCurrency').mockImplementation((millicents: number, currency: string) =>
+    vi.spyOn(FundingService, 'millicentsToDisplay').mockImplementation((millicents: number) => millicents / 1000000);
+    vi.spyOn(FundingService, 'displayToMillicents').mockImplementation((amount: number) => amount * 1000000);
+    vi.spyOn(FundingService, 'formatCurrency').mockImplementation((millicents: number, currency: string) =>
       `${currency} ${(millicents / 1000000).toFixed(2)}`,
     );
   });
@@ -165,18 +161,7 @@ describe('Funding Provider UI Components', () => {
   });
 
   /**
-   * Test 2: Stripe connect button triggers OAuth flow
-   * NOTE: Skipped - this functionality is now handled by AddProviderWizard
-   * The main provider list only shows configured providers with "Disconnect" button
-   */
-  it.skip('initiates Stripe OAuth flow when connect button clicked', async () => {
-    // This test was written for a different UI design where unconfigured providers
-    // appeared in the main list with "Connect" buttons. The current implementation
-    // uses the AddProviderWizard for connecting new providers.
-  });
-
-  /**
-   * Test 3: Disconnection warning dialog with confirmation checkbox
+   * Test 2: Disconnection warning dialog with confirmation checkbox
    */
   it('shows confirmation dialog before disconnecting provider', async () => {
     // Mock provider with active subscriptions
@@ -243,7 +228,7 @@ describe('Funding Provider UI Components', () => {
   });
 
   /**
-   * Test 4: Error message display from query parameters
+   * Test 3: Error message display from query parameters
    */
   it('displays component successfully when URL has error query parameter', async () => {
     wrapper = mountFunding();
@@ -256,29 +241,7 @@ describe('Funding Provider UI Components', () => {
   });
 
   /**
-   * Test 5: PayPal configure modal
-   * NOTE: Skipped - PayPal configuration is handled by AddProviderWizard
-   * The PayPalConfigModal exists but is not currently triggered from the main provider list
-   */
-  it.skip('opens PayPal modal when configure button clicked', async () => {
-    // This test was written for functionality where a "Configure" button would
-    // open the PayPalConfigModal. The current implementation handles provider
-    // configuration through the AddProviderWizard instead.
-  });
-
-  /**
-   * Test 6: Platform OAuth configuration section (placeholder for future implementation)
-   */
-  it('will support platform OAuth configuration section when implemented', async () => {
-    // This test is a placeholder for the platform OAuth configuration section
-    // which will be implemented in subsequent subtasks
-    wrapper = mountFunding();
-    await nextTick();
-    expect(wrapper.find('.funding-page').exists()).toBe(true);
-  });
-
-  /**
-   * Test 7: Provider connection status detection on page load
+   * Test 4: Provider connection status detection on page load
    */
   it('detects provider connection status on page load', async () => {
     // Set up mock with at least one configured provider
@@ -302,16 +265,5 @@ describe('Funding Provider UI Components', () => {
     // Verify providers are displayed with correct status
     const providerItems = wrapper.findAll('.provider-item');
     expect(providerItems.length).toBeGreaterThan(0);
-  });
-
-  /**
-   * Test 8: Loading state during OAuth flow
-   * NOTE: Skipped - OAuth flow is now handled by AddProviderWizard
-   * Loading states during connection are managed within the wizard component
-   */
-  it.skip('handles async connection flow correctly', async () => {
-    // This test was written for functionality where the main provider list
-    // would have "Connect" buttons that trigger OAuth flows. The current
-    // implementation handles this through the AddProviderWizard.
   });
 });

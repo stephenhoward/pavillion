@@ -33,7 +33,7 @@ import FeedView from '@/client/components/logged_in/feed/root.vue';
 import ProfileView from '@/client/components/logged_in/settings/root.vue';
 import CalendarCategoryMappingsView from '@/client/components/logged_in/settings/calendar-category-mappings.vue';
 import InboxView from '@/client/components/logged_in/inbox.vue';
-import SubscriptionView from '@/client/components/account/subscription.vue';
+import FundingPlanView from '@/client/components/account/funding-plan.vue';
 
 import AdminViews from '@/client/components/admin/root.vue';
 import InvitesListView from '@/client/components/admin/accounts.vue';
@@ -141,7 +141,7 @@ checkSetupMode().then((setupRequired) => {
           { path: 'inbox', component: InboxView, name: 'inbox', beforeEnter: mustBeLoggedIn },
           { path: 'feed', component: FeedView, name: 'feed', beforeEnter: mustBeLoggedIn },
           { path: 'profile', component: ProfileView, name: 'profile', beforeEnter: mustBeLoggedIn },
-          { path: 'subscription', component: SubscriptionView, name: 'subscription', beforeEnter: mustBeLoggedIn },
+          { path: 'funding', component: FundingPlanView, name: 'funding_plan', beforeEnter: mustBeLoggedIn },
           {
             path: 'calendar/:calendarId/following/:actorId/category-mappings',
             component: CalendarCategoryMappingsView,

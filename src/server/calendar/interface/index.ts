@@ -20,7 +20,7 @@ import SeriesService from '../service/series';
 import CalendarEventInstance from '@/common/model/event_instance';
 import AccountsInterface from '@/server/accounts/interface';
 import EmailInterface from '@/server/email/interface';
-import SubscriptionInterface from '@/server/subscription/interface';
+import FundingInterface from '@/server/funding/interface';
 import type MediaInterface from '@/server/media/interface';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
@@ -49,9 +49,9 @@ export default class CalendarInterface {
     eventBus: EventEmitter,
     accountsInterface?: AccountsInterface,
     emailInterface?: EmailInterface,
-    subscriptionInterface?: SubscriptionInterface,
+    fundingInterface?: FundingInterface,
   ) {
-    this.calendarService = new CalendarService(accountsInterface, emailInterface, eventBus, subscriptionInterface);
+    this.calendarService = new CalendarService(accountsInterface, emailInterface, eventBus, fundingInterface);
     this.eventService = new EventService(eventBus);
     this.locationService = new LocationService();
     this.eventInstanceService = new EventInstanceService(eventBus);

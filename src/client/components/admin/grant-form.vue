@@ -203,14 +203,14 @@
 import { reactive, computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import Modal from '@/client/components/common/modal.vue';
-import SubscriptionService from '@/client/service/subscription';
+import FundingService from '@/client/service/funding';
 
 const emit = defineEmits(['close', 'created']);
 const { t } = useTranslation('admin', {
   keyPrefix: 'funding',
 });
 
-const subscriptionService = new SubscriptionService();
+const fundingService = new FundingService();
 
 const state = reactive({
   accountId: '',
@@ -283,7 +283,7 @@ async function resolveCalendar() {
   state.calendarDisplay = '';
   delete state.errors.calendar;
 
-  const resolved = await subscriptionService.resolvePublicCalendar(urlName);
+  const resolved = await fundingService.resolvePublicCalendar(urlName);
   if (resolved) {
     state.calendarId = resolved.id;
     state.calendarDisplay = resolved.title;
@@ -316,7 +316,7 @@ async function searchAccounts() {
       state.accountSearchLoading = true;
       state.showAccountDropdown = true;
       state.activeDropdownIndex = -1;
-      state.accountSearchResults = await subscriptionService.searchAccounts(query);
+      state.accountSearchResults = await fundingService.searchAccounts(query);
     }
     catch (error) {
       console.error('Failed to search accounts:', error);
@@ -448,7 +448,7 @@ async function submitCreateGrant() {
     const reason = state.reason.trim() || undefined;
     const accountId = state.accountId || '';
 
-    await subscriptionService.createGrant(accountId, reason, expiresAt, state.calendarId);
+    await fundingService.createGrant(accountId, reason, expiresAt, state.calendarId);
     emit('created');
   }
   catch (error) {

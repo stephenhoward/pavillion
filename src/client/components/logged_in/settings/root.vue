@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import EmailModal from '@/client/components/logged_in/settings/email_modal.vue';
 import PasswordModal from '@/client/components/logged_in/settings/password_modal.vue';
-import SubscriptionService from '@/client/service/subscription';
+import FundingService from '@/client/service/funding';
 import AccountService from '@/client/service/account';
 import { AVAILABLE_LANGUAGES } from '@/common/i18n/languages';
 import { changeLanguage, applyAccountLanguage } from '@/client/service/locale';
@@ -30,8 +30,8 @@ const saveMessage = ref(null);
 
 const { t } = useTranslation('profile');
 
-const subscriptionsEnabled = ref(false);
-const subscriptionService = new SubscriptionService();
+const fundingEnabled = ref(false);
+const fundingService = new FundingService();
 const accountService = new AccountService();
 
 /**
@@ -60,14 +60,14 @@ async function loadProfile() {
 /**
  * Check if subscriptions are enabled on this instance
  */
-async function checkSubscriptionsEnabled() {
+async function checkFundingEnabled() {
   try {
-    const options = await subscriptionService.getOptions();
-    subscriptionsEnabled.value = options.enabled;
+    const options = await fundingService.getOptions();
+    fundingEnabled.value = options.enabled;
   }
   catch (error) {
-    // Silently fail - subscriptions are not enabled if we can't fetch options
-    subscriptionsEnabled.value = false;
+    // Silently fail - funding is not enabled if we can't fetch options
+    fundingEnabled.value = false;
   }
 }
 
@@ -129,7 +129,7 @@ function handleLogout() {
 onMounted(async () => {
   await Promise.all([
     loadProfile(),
-    checkSubscriptionsEnabled(),
+    checkFundingEnabled(),
   ]);
 });
 </script>
@@ -308,9 +308,9 @@ onMounted(async () => {
       </div>
 
       <!-- Subscription Link (if enabled) -->
-      <div v-if="subscriptionsEnabled" class="subscription-link-wrapper">
-        <router-link class="subscription-link" to="/subscription">
-          {{ t("subscription_link") }}
+      <div v-if="fundingEnabled" class="funding-link-wrapper">
+        <router-link class="funding-link" to="/funding">
+          {{ t("funding_link") }}
         </router-link>
       </div>
     </div>
@@ -800,12 +800,12 @@ onMounted(async () => {
   }
 }
 
-.subscription-link-wrapper {
+.funding-link-wrapper {
   margin-top: var(--pav-space-4);
   text-align: center;
 }
 
-.subscription-link {
+.funding-link {
   color: var(--pav-color-orange-600);
   text-decoration: underline;
   font-size: 0.875rem;

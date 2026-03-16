@@ -1,0 +1,54 @@
+{
+  "title": "Funding Plan",
+  "back_to_settings": "← Back to Settings",
+  "loading": "Loading funding information...",
+  "load_error": "Failed to load funding information. Please try again.",
+
+  "no_funding_plan": "No Active Funding Plan",
+  "no_funding_plan_description": "Subscribe to support this instance and access premium features.",
+  "monthly_option": "Monthly",
+  "yearly_option": "Yearly",
+  "subscribe_button": "Subscribe Now",
+
+  "subscribe_title": "Choose Your Funding Plan",
+  "select_provider": "Payment Method",
+  "select_cycle": "Billing Cycle",
+  "billing_cycle_monthly": "Monthly",
+  "billing_cycle_yearly": "Yearly",
+  "custom_amount_label": "Custom Amount (Optional)",
+  "custom_amount_description": "Enter a custom amount to support this instance (pay what you can).",
+  "select_provider_error": "Please select a payment method.",
+  "confirm_subscribe_button": "Confirm & Subscribe",
+  "cancel_button": "Cancel",
+
+  "subscribe_success": "Funding plan created successfully!",
+  "subscribe_error": "Failed to create funding plan. Please try again.",
+
+  "current_funding_plan": "Current Funding Plan",
+  "status_label": "Status",
+  "billing_cycle_label": "Billing Cycle",
+  "amount_label": "Amount",
+  "current_period_label": "Current Period",
+  "cancelled_at_label": "Cancelled At",
+
+  "status_active": "Active",
+  "status_past_due": "Past Due",
+  "status_suspended": "Suspended",
+  "status_cancelled": "Cancelled",
+
+  "cancellation_info": "Your funding plan will remain active until {{date}}",
+  "past_due_warning": "Your payment failed. Please update your payment method to keep your funding plan active.",
+  "suspended_message": "Your funding plan has been suspended due to payment failure. Please contact support.",
+
+  "manage_payment_button": "Manage Payment Method",
+  "cancel_funding_plan_button": "Cancel Funding Plan",
+  "cancel_confirm": "Are you sure you want to cancel your funding plan? You will retain access until the end of your billing period.",
+  "cancel_success": "Funding plan cancelled successfully. You will retain access until the end of your billing period.",
+  "cancel_error": "Failed to cancel funding plan. Please try again.",
+
+  "portal_error": "Failed to access billing portal. Please try again.",
+
+  "funding_disabled": "Funding is not currently enabled on this instance.",
+
+  "subscribe_to_fund_title": "Subscribe to Fund Calendar"
+}

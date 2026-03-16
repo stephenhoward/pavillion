@@ -23,7 +23,7 @@ import { noAccountExistsError } from '@/server/accounts/exceptions';
 import AccountsInterface from '@/server/accounts/interface';
 import EmailInterface from '@/server/email/interface';
 import { logError } from '@/server/common/helper/error-logger';
-import SubscriptionInterface from '@/server/subscription/interface';
+import FundingInterface from '@/server/funding/interface';
 import EditorNotificationEmail from '@/server/calendar/model/editor_notification_email';
 import db from '@/server/common/entity/db';
 
@@ -49,16 +49,16 @@ type GrantEditAccessResult = {
 
 class CalendarService {
   private eventBus?: EventEmitter;
-  private readonly subscriptionInterface?: SubscriptionInterface;
+  private readonly fundingInterface?: FundingInterface;
 
   constructor(
     private accountsInterface?: AccountsInterface,
     private emailInterface?: EmailInterface,
     eventBus?: EventEmitter,
-    subscriptionInterface?: SubscriptionInterface,
+    fundingInterface?: FundingInterface,
   ) {
     this.eventBus = eventBus;
-    this.subscriptionInterface = subscriptionInterface;
+    this.fundingInterface = fundingInterface;
   }
 
   private isValidUUID(uuid: string): boolean {
@@ -238,7 +238,7 @@ class CalendarService {
     }
 
     // Check subscription for widget access (defense-in-depth)
-    const settings = await this.subscriptionInterface?.getSettings();
+    const settings = await this.fundingInterface?.getSettings();
 
     if (settings?.enabled) {
       const ownerId = await this.getCalendarOwnerAccountId(calendar.id);
@@ -249,7 +249,7 @@ class CalendarService {
       // Admin-owned calendars bypass subscription checks
       const isAdmin = await this.isCalendarOwnerAdmin(ownerId);
       if (!isAdmin) {
-        const hasSubscription = await this.subscriptionInterface?.hasSubscriptionAccess(calendar.id);
+        const hasSubscription = await this.fundingInterface?.hasFundingAccess(calendar.id);
         if (!hasSubscription) {
           throw new SubscriptionRequiredError('widget_embedding');
         }
@@ -1590,7 +1590,7 @@ class CalendarService {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async setWidgetDomain(account: Account, calendarId: string, _domain: string): Promise<void> {
     // Check if subscriptions are enabled
-    const settings = await this.subscriptionInterface?.getSettings();
+    const settings = await this.fundingInterface?.getSettings();
 
     if (settings?.enabled) {
       // Resolve calendar ownership
@@ -1603,7 +1603,7 @@ class CalendarService {
       const isAdmin = await this.isCalendarOwnerAdmin(ownerId);
       if (!isAdmin) {
         // Check subscription status
-        const hasSubscription = await this.subscriptionInterface?.hasSubscriptionAccess(calendarId);
+        const hasSubscription = await this.fundingInterface?.hasFundingAccess(calendarId);
         if (!hasSubscription) {
           throw new SubscriptionRequiredError('widget_embedding');
         }
