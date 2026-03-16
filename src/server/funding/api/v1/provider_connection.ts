@@ -27,6 +27,13 @@ export default class ProviderConnectionRoutes {
   installHandlers(app: express.Application, routePrefix: string): void {
     const router = express.Router();
 
+    // Stripe configuration route
+    router.post(
+      '/admin/providers/stripe/configure',
+      ...ExpressHelper.adminOnly,
+      this.configureStripe.bind(this),
+    );
+
     // PayPal configuration route
     router.post(
       '/admin/providers/paypal/configure',
@@ -42,6 +49,50 @@ export default class ProviderConnectionRoutes {
     );
 
     app.use(routePrefix, router);
+  }
+
+  /**
+   * POST /admin/providers/stripe/configure
+   * Configure Stripe credentials via direct API key entry
+   *
+   * Accepts publishable_key, secret_key, and webhook_secret.
+   * Error responses never include submitted key values.
+   */
+  async configureStripe(req: Request, res: Response): Promise<void> {
+    try {
+      const adminUser = req.user as any;
+
+      if (!adminUser) {
+        res.status(401).json({ error: 'Authentication required' });
+        return;
+      }
+
+      const { publishable_key, secret_key, webhook_secret } = req.body;
+
+      const credentials = {
+        publishable_key,
+        secret_key,
+        webhook_secret,
+      };
+
+      await this.service.configureStripe(credentials, {
+        id: adminUser.id,
+        email: adminUser.email,
+      });
+
+      res.json({ success: true });
+    }
+    catch (error) {
+      // Log only key prefix, never full value
+      logError(error, 'Error configuring Stripe');
+
+      if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
+      }
+      else {
+        res.status(500).json({ error: 'Internal server error' });
+      }
+    }
   }
 
   /**
