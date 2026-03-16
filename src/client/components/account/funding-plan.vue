@@ -1,13 +1,13 @@
 <script setup>
 import { useTranslation } from 'i18next-vue';
 import { ref, computed, onMounted } from 'vue';
-import SubscriptionService from '@/client/service/subscription';
-import SubscribeForm from '@/client/components/account/SubscribeForm.vue';
+import FundingService from '@/client/service/funding';
+import FundingForm from '@/client/components/account/FundingForm.vue';
 
-const { t } = useTranslation('subscription');
+const { t } = useTranslation('funding');
 
 // Service instance
-const subscriptionService = new SubscriptionService();
+const fundingService = new FundingService();
 
 // State management
 const loading = ref(true);
@@ -19,11 +19,11 @@ const errorMessage = ref('');
 const options = ref(null);
 const status = ref(null);
 
-// Subscribe form state
-const showSubscribeForm = ref(false);
+// Funding form state
+const showFundingForm = ref(false);
 
 // Computed properties
-const hasSubscription = computed(() => status.value !== null);
+const hasFundingPlan = computed(() => status.value !== null);
 
 const isActive = computed(() => status.value?.status === 'active');
 
@@ -33,38 +33,38 @@ const isSuspended = computed(() => status.value?.status === 'suspended');
 
 const isCancelled = computed(() => status.value?.status === 'cancelled');
 
-const canSubscribe = computed(() => options.value?.enabled && !hasSubscription.value);
+const canSubscribe = computed(() => options.value?.enabled && !hasFundingPlan.value);
 
-const canCancel = computed(() => hasSubscription.value && (isActive.value || isPastDue.value));
+const canCancel = computed(() => hasFundingPlan.value && (isActive.value || isPastDue.value));
 
 const monthlyPriceDisplay = computed(() => {
   if (!options.value) return '';
-  return SubscriptionService.formatCurrency(options.value.monthly_price, options.value.currency);
+  return FundingService.formatCurrency(options.value.monthly_price, options.value.currency);
 });
 
 const yearlyPriceDisplay = computed(() => {
   if (!options.value) return '';
-  return SubscriptionService.formatCurrency(options.value.yearly_price, options.value.currency);
+  return FundingService.formatCurrency(options.value.yearly_price, options.value.currency);
 });
 
 const currentAmountDisplay = computed(() => {
   if (!status.value) return '';
-  return SubscriptionService.formatCurrency(status.value.amount, status.value.currency);
+  return FundingService.formatCurrency(status.value.amount, status.value.currency);
 });
 
 /**
- * Load subscription options and current status
+ * Load funding options and current status
  */
 async function loadData() {
   try {
     loading.value = true;
     [options.value, status.value] = await Promise.all([
-      subscriptionService.getOptions(),
-      subscriptionService.getStatus(),
+      fundingService.getOptions(),
+      fundingService.getStatus(),
     ]);
   }
   catch (error) {
-    console.error('Failed to load subscription data:', error);
+    console.error('Failed to load funding data:', error);
     errorMessage.value = t('load_error');
   }
   finally {
@@ -73,25 +73,25 @@ async function loadData() {
 }
 
 /**
- * Start subscription flow
+ * Start funding plan flow
  */
 function startSubscribe() {
-  showSubscribeForm.value = true;
+  showFundingForm.value = true;
 }
 
 /**
- * Handle successful subscription from SubscribeForm
+ * Handle successful funding plan from FundingForm
  */
 async function onSubscribed() {
   successMessage.value = t('subscribe_success');
-  showSubscribeForm.value = false;
+  showFundingForm.value = false;
   await loadData();
 }
 
 /**
- * Cancel subscription
+ * Cancel funding plan
  */
-async function cancelSubscription() {
+async function cancelFundingPlan() {
   if (!confirm(t('cancel_confirm'))) {
     return;
   }
@@ -101,7 +101,7 @@ async function cancelSubscription() {
   successMessage.value = '';
 
   try {
-    const success = await subscriptionService.cancel();
+    const success = await fundingService.cancel();
 
     if (success) {
       successMessage.value = t('cancel_success');
@@ -112,7 +112,7 @@ async function cancelSubscription() {
     }
   }
   catch (error) {
-    console.error('Failed to cancel subscription:', error);
+    console.error('Failed to cancel funding plan:', error);
     errorMessage.value = t('cancel_error');
   }
   finally {
@@ -125,7 +125,7 @@ async function cancelSubscription() {
  */
 async function openBillingPortal() {
   try {
-    const portalUrl = await subscriptionService.getPortalUrl();
+    const portalUrl = await fundingService.getPortalUrl();
     window.location.href = portalUrl;
   }
   catch (error) {
@@ -148,10 +148,10 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="settings subscription-management" aria-labelledby="subscription-heading">
+  <section class="settings funding-plan-management" aria-labelledby="funding-plan-heading">
     <div class="settings-header">
       <router-link to="/profile" class="back-button">{{ t("back_to_settings") }}</router-link>
-      <h1 id="subscription-heading">{{ t("title") }}</h1>
+      <h1 id="funding-plan-heading">{{ t("title") }}</h1>
     </div>
 
     <div role="status" aria-live="polite">
@@ -161,11 +161,11 @@ onMounted(async () => {
 
     <div v-if="loading" class="loading">{{ t("loading") }}</div>
 
-    <div v-else class="subscription-content">
-      <!-- No subscription - Show subscribe options -->
-      <div v-if="canSubscribe && !showSubscribeForm" class="no-subscription">
-        <h2>{{ t("no_subscription") }}</h2>
-        <p>{{ t("no_subscription_description") }}</p>
+    <div v-else class="funding-plan-content">
+      <!-- No funding plan - Show subscribe options -->
+      <div v-if="canSubscribe && !showFundingForm" class="no-funding-plan">
+        <h2>{{ t("no_funding_plan") }}</h2>
+        <p>{{ t("no_funding_plan_description") }}</p>
 
         <div class="pricing-info">
           <div class="price-option">
@@ -183,22 +183,22 @@ onMounted(async () => {
         </button>
       </div>
 
-      <!-- Subscribe form -->
-      <div v-if="showSubscribeForm" class="subscribe-form">
+      <!-- Funding form -->
+      <div v-if="showFundingForm" class="funding-form">
         <h2>{{ t("subscribe_title") }}</h2>
-        <SubscribeForm @subscribed="onSubscribed" />
+        <FundingForm @subscribed="onSubscribed" />
         <div class="form-actions">
           <button type="button"
                   class="secondary"
-                  @click="showSubscribeForm = false">
+                  @click="showFundingForm = false">
             {{ t("cancel_button") }}
           </button>
         </div>
       </div>
 
-      <!-- Active subscription - Show status and management -->
-      <div v-if="hasSubscription" class="subscription-status">
-        <h2>{{ t("current_subscription") }}</h2>
+      <!-- Active funding plan - Show status and management -->
+      <div v-if="hasFundingPlan" class="funding-plan-status">
+        <h2>{{ t("current_funding_plan") }}</h2>
 
         <div class="status-card">
           <div class="status-row">
@@ -241,7 +241,7 @@ onMounted(async () => {
           </div>
         </div>
 
-        <div class="subscription-actions">
+        <div class="funding-plan-actions">
           <button
             v-if="isActive || isPastDue"
             type="button"
@@ -256,23 +256,23 @@ onMounted(async () => {
             type="button"
             class="danger"
             :disabled="processing"
-            @click="cancelSubscription"
+            @click="cancelFundingPlan"
           >
-            {{ t("cancel_subscription_button") }}
+            {{ t("cancel_funding_plan_button") }}
           </button>
         </div>
       </div>
 
-      <!-- Subscriptions disabled message -->
-      <div v-if="!options?.enabled" class="subscriptions-disabled">
-        <p>{{ t("subscriptions_disabled") }}</p>
+      <!-- Funding disabled message -->
+      <div v-if="!options?.enabled" class="funding-disabled">
+        <p>{{ t("funding_disabled") }}</p>
       </div>
     </div>
   </section>
 </template>
 
 <style scoped lang="scss">
-.subscription-management {
+.funding-plan-management {
   padding: 20px;
   max-width: 800px;
   margin: 0 auto;
@@ -330,13 +330,13 @@ h2 {
   border-radius: 4px;
 }
 
-.subscription-content {
+.funding-plan-content {
   display: flex;
   flex-direction: column;
   gap: 2rem;
 }
 
-.no-subscription {
+.no-funding-plan {
   text-align: center;
   padding: 2rem;
 
@@ -364,7 +364,7 @@ h2 {
   }
 }
 
-.subscribe-form {
+.funding-form {
   padding: 2rem;
   border: 1px solid var(--pav-color-border-primary);
   border-radius: 8px;
@@ -434,7 +434,7 @@ h2 {
   }
 }
 
-.subscription-status {
+.funding-plan-status {
   .status-card {
     padding: 1.5rem;
     border: 1px solid var(--pav-color-border-primary);
@@ -502,7 +502,7 @@ h2 {
     }
   }
 
-  .subscription-actions {
+  .funding-plan-actions {
     display: flex;
     gap: 1rem;
     margin-top: 1.5rem;
@@ -527,7 +527,7 @@ h2 {
   }
 }
 
-.subscriptions-disabled {
+.funding-disabled {
   padding: 2rem;
   text-align: center;
   color: var(--pav-color-text-secondary);

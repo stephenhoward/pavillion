@@ -2,15 +2,15 @@
 import { ref, computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import Modal from '@/client/components/common/modal.vue';
-import SubscriptionService from '@/client/service/subscription';
-import type { ProviderConfig, PayPalCredentials } from '@/client/service/subscription';
+import FundingService from '@/client/service/funding';
+import type { ProviderConfig, PayPalCredentials } from '@/client/service/funding';
 
 const { t } = useTranslation('admin', {
   keyPrefix: 'funding.wizard',
 });
 
 // Service instance
-const subscriptionService = new SubscriptionService();
+const fundingService = new FundingService();
 
 // Props
 const props = defineProps<{
@@ -143,27 +143,6 @@ function validatePayPalField(field: 'clientId' | 'clientSecret' | 'environment')
 }
 
 /**
- * Handle Stripe OAuth connection
- */
-async function connectStripe() {
-  try {
-    connecting.value = true;
-    error.value = null;
-
-    // Pass current URL as return URL for OAuth callback
-    const returnUrl = window.location.origin + '/admin/funding';
-    const result = await subscriptionService.connectStripe(returnUrl);
-    // Redirect to Stripe OAuth - the user will come back via OAuth redirect
-    window.location.href = result;
-  }
-  catch (err) {
-    console.error('Failed to connect Stripe:', err);
-    error.value = t('errors.connection_failed', { provider: selectedProviderName.value });
-    connecting.value = false;
-  }
-}
-
-/**
  * Handle PayPal configuration submission
  */
 async function configurePayPal() {
@@ -185,7 +164,7 @@ async function configurePayPal() {
       environment: paypalEnvironment.value,
     };
 
-    const success = await subscriptionService.configurePayPal(credentials);
+    const success = await fundingService.configurePayPal(credentials);
 
     if (success) {
       // Move to success step
@@ -247,7 +226,7 @@ function handleSuccess() {
             @click="selectProvider(provider.provider_type)"
           >
             <div class="provider-icon">
-              {{ provider.provider_type === 'stripe' ? '💳' : '🅿️' }}
+              {{ provider.provider_type === 'stripe' ? '&#x1F4B3;' : '&#x1F17F;&#xFE0F;' }}
             </div>
             <h4 class="provider-name">
               {{ t(`providers.${provider.provider_type}_name`) }}
@@ -261,19 +240,12 @@ function handleSuccess() {
 
       <!-- Step 2: Provider Configuration -->
       <div v-if="currentStep === 2" class="step-content">
-        <!-- Stripe Configuration -->
+        <!-- Stripe Configuration Placeholder -->
         <div v-if="selectedProvider === 'stripe'" class="provider-config">
           <h3 class="step-title">{{ t('step2.stripe_title') }}</h3>
-          <p class="step-description">{{ t('step2.stripe_description') }}</p>
-
-          <button
-            type="button"
-            class="primary connect-button"
-            @click="connectStripe"
-            :disabled="connecting"
-          >
-            {{ connecting ? t('connecting_button', { defaultValue: 'Connecting...' }) : t('step2.stripe_connect_button') }}
-          </button>
+          <p class="step-description">
+            {{ t('step2.stripe_coming_soon') }}
+          </p>
         </div>
 
         <!-- PayPal Configuration -->
@@ -356,7 +328,7 @@ function handleSuccess() {
 
       <!-- Step 3: Success -->
       <div v-if="currentStep === 3" class="step-content success-content">
-        <div class="success-icon">✓</div>
+        <div class="success-icon">&#x2713;</div>
         <h3 class="step-title">{{ t('step3.title') }}</h3>
         <p class="success-message">
           {{ t('step3.success_message', { provider: selectedProviderName }) }}

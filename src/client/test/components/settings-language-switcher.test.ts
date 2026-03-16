@@ -6,7 +6,7 @@ import { flushPromises } from '@vue/test-utils';
 import { mountComponent } from '@/client/test/lib/vue';
 import SettingsRoot from '@/client/components/logged_in/settings/root.vue';
 import AccountService from '@/client/service/account';
-import SubscriptionService from '@/client/service/subscription';
+import FundingService from '@/client/service/funding';
 import * as localeService from '@/client/service/locale';
 import { AVAILABLE_LANGUAGES } from '@/common/i18n/languages';
 import { Account } from '@/common/model/account';
@@ -59,7 +59,7 @@ describe('Settings Language Switcher', () => {
     // Default: profile returns English, subscription disabled, language changes succeed
     vi.spyOn(AccountService.prototype, 'getProfile').mockResolvedValue(buildProfile('en'));
     vi.spyOn(AccountService.prototype, 'updateLanguage').mockResolvedValue(undefined);
-    vi.spyOn(SubscriptionService.prototype, 'getOptions').mockResolvedValue({ enabled: false });
+    vi.spyOn(FundingService.prototype, 'getOptions').mockResolvedValue({ enabled: false });
     vi.spyOn(localeService, 'changeLanguage').mockResolvedValue(undefined);
     vi.spyOn(localeService, 'applyAccountLanguage').mockResolvedValue(undefined);
   });

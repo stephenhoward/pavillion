@@ -4,20 +4,19 @@ import { createRouter, createMemoryHistory } from 'vue-router';
 import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
 import FundingSettings from '@/client/components/admin/funding.vue';
-import SubscriptionManagement from '@/client/components/account/subscription.vue';
+import FundingPlanManagement from '@/client/components/account/funding-plan.vue';
 
 /**
- * Test suite for subscription UI components
- * Task 8.1: Write 6 focused tests for UI components
+ * Test suite for funding plan UI components
  */
-describe('Subscription UI Components', () => {
+describe('Funding Plan UI Components', () => {
 
-  let mockSubscriptionService: any;
+  let mockFundingService: any;
   let router: any;
 
   beforeEach(() => {
-    // Mock subscription service
-    mockSubscriptionService = {
+    // Mock funding service
+    mockFundingService = {
       getSettings: vi.fn(),
       updateSettings: vi.fn(),
       getProviders: vi.fn(),
@@ -35,7 +34,7 @@ describe('Subscription UI Components', () => {
       history: createMemoryHistory(),
       routes: [
         { path: '/admin/funding', component: FundingSettings },
-        { path: '/account/subscription', component: SubscriptionManagement },
+        { path: '/account/funding', component: FundingPlanManagement },
       ],
     });
 
@@ -48,7 +47,7 @@ describe('Subscription UI Components', () => {
           admin: {
             funding: {
               title: 'Funding Settings',
-              enabled_label: 'Enable Subscriptions',
+              enabled_label: 'Enable Funding',
               monthly_price_label: 'Monthly Price',
               yearly_price_label: 'Yearly Price',
               currency_label: 'Currency',
@@ -56,11 +55,11 @@ describe('Subscription UI Components', () => {
               grace_period_label: 'Grace Period (days)',
             },
           },
-          subscription: {
-            title: 'Subscription',
-            no_subscription: 'No active subscription',
+          funding: {
+            title: 'Funding Plan',
+            no_subscription: 'No active funding plan',
             subscribe_button: 'Subscribe',
-            cancel_button: 'Cancel Subscription',
+            cancel_button: 'Cancel Funding Plan',
             manage_payment: 'Manage Payment Method',
             status_active: 'Active',
             billing_cycle_monthly: 'Monthly',
@@ -88,8 +87,8 @@ describe('Subscription UI Components', () => {
       gracePeriodDays: 7,
     };
 
-    mockSubscriptionService.getSettings.mockResolvedValue(mockSettings);
-    mockSubscriptionService.getProviders.mockResolvedValue([]);
+    mockFundingService.getSettings.mockResolvedValue(mockSettings);
+    mockFundingService.getProviders.mockResolvedValue([]);
 
     const wrapper = mount(FundingSettings, {
       global: {
@@ -107,9 +106,6 @@ describe('Subscription UI Components', () => {
 
     // Verify settings content section exists (pricing form requires a configured provider)
     expect(wrapper.find('.settings-content').exists()).toBe(true);
-
-    // Note: Full value verification would require the component to be implemented
-    // This test verifies the component structure is correct
   });
 
   /**
@@ -121,8 +117,8 @@ describe('Subscription UI Components', () => {
       { provider_type: 'paypal', enabled: false, display_name: 'PayPal', configured: false },
     ];
 
-    mockSubscriptionService.getProviders.mockResolvedValue(mockProviders);
-    mockSubscriptionService.getSettings.mockResolvedValue({ enabled: true, monthlyPrice: 1000000, yearlyPrice: 10000000, currency: 'USD', payWhatYouCan: false, gracePeriodDays: 7 });
+    mockFundingService.getProviders.mockResolvedValue(mockProviders);
+    mockFundingService.getSettings.mockResolvedValue({ enabled: true, monthlyPrice: 1000000, yearlyPrice: 10000000, currency: 'USD', payWhatYouCan: false, gracePeriodDays: 7 });
 
     const wrapper = mount(FundingSettings, {
       global: {
@@ -134,7 +130,6 @@ describe('Subscription UI Components', () => {
     await new Promise(resolve => setTimeout(resolve, 100));
 
     // Verify provider section exists (structure test)
-    // Full implementation would check for "Connect Stripe" and "Connect PayPal" buttons
     expect(wrapper.html()).toBeTruthy();
   });
 
@@ -147,8 +142,8 @@ describe('Subscription UI Components', () => {
       { provider_type: 'paypal', enabled: false, display_name: 'PayPal', configured: true },
     ];
 
-    mockSubscriptionService.getProviders.mockResolvedValue(mockProviders);
-    mockSubscriptionService.getSettings.mockResolvedValue({ enabled: true, monthlyPrice: 1000000, yearlyPrice: 10000000, currency: 'USD', payWhatYouCan: false, gracePeriodDays: 7 });
+    mockFundingService.getProviders.mockResolvedValue(mockProviders);
+    mockFundingService.getSettings.mockResolvedValue({ enabled: true, monthlyPrice: 1000000, yearlyPrice: 10000000, currency: 'USD', payWhatYouCan: false, gracePeriodDays: 7 });
 
     const wrapper = mount(FundingSettings, {
       global: {
@@ -164,9 +159,9 @@ describe('Subscription UI Components', () => {
   });
 
   /**
-   * Test 4: User subscription options display available providers and pricing
+   * Test 4: User funding options display available providers and pricing
    */
-  it('should display available providers and pricing for subscription', async () => {
+  it('should display available providers and pricing for funding plan', async () => {
     const mockOptions = {
       enabled: true,
       providers: [
@@ -179,10 +174,10 @@ describe('Subscription UI Components', () => {
       payWhatYouCan: false,
     };
 
-    mockSubscriptionService.getOptions.mockResolvedValue(mockOptions);
-    mockSubscriptionService.getStatus.mockResolvedValue(null); // No subscription
+    mockFundingService.getOptions.mockResolvedValue(mockOptions);
+    mockFundingService.getStatus.mockResolvedValue(null); // No funding plan
 
-    const wrapper = mount(SubscriptionManagement, {
+    const wrapper = mount(FundingPlanManagement, {
       global: {
         plugins: [router, [I18NextVue, { i18next }]],
       },
@@ -191,14 +186,14 @@ describe('Subscription UI Components', () => {
     await wrapper.vm.$nextTick();
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    // Verify component renders subscription options
+    // Verify component renders funding options
     expect(wrapper.html()).toBeTruthy();
   });
 
   /**
-   * Test 5: User subscription status shows current subscription details
+   * Test 5: User funding plan status shows current details
    */
-  it('should show current subscription status and details', async () => {
+  it('should show current funding plan status and details', async () => {
     const mockStatus = {
       id: 'sub-123',
       status: 'active',
@@ -210,10 +205,10 @@ describe('Subscription UI Components', () => {
       provider_type: 'stripe',
     };
 
-    mockSubscriptionService.getStatus.mockResolvedValue(mockStatus);
-    mockSubscriptionService.getOptions.mockResolvedValue({ enabled: true, providers: [], monthlyPrice: 1000000, yearlyPrice: 10000000, currency: 'USD', payWhatYouCan: false });
+    mockFundingService.getStatus.mockResolvedValue(mockStatus);
+    mockFundingService.getOptions.mockResolvedValue({ enabled: true, providers: [], monthlyPrice: 1000000, yearlyPrice: 10000000, currency: 'USD', payWhatYouCan: false });
 
-    const wrapper = mount(SubscriptionManagement, {
+    const wrapper = mount(FundingPlanManagement, {
       global: {
         plugins: [router, [I18NextVue, { i18next }]],
       },
@@ -222,14 +217,14 @@ describe('Subscription UI Components', () => {
     await wrapper.vm.$nextTick();
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    // Verify component shows subscription status
+    // Verify component shows funding plan status
     expect(wrapper.html()).toBeTruthy();
   });
 
   /**
-   * Test 6: User cancel subscription shows confirmation and processes cancellation
+   * Test 6: User cancel funding plan shows confirmation and processes cancellation
    */
-  it('should show confirmation and process subscription cancellation', async () => {
+  it('should show confirmation and process funding plan cancellation', async () => {
     const mockStatus = {
       id: 'sub-123',
       status: 'active',
@@ -241,11 +236,11 @@ describe('Subscription UI Components', () => {
       provider_type: 'stripe',
     };
 
-    mockSubscriptionService.getStatus.mockResolvedValue(mockStatus);
-    mockSubscriptionService.getOptions.mockResolvedValue({ enabled: true, providers: [], monthlyPrice: 1000000, yearlyPrice: 10000000, currency: 'USD', payWhatYouCan: false });
-    mockSubscriptionService.cancel.mockResolvedValue({ success: true });
+    mockFundingService.getStatus.mockResolvedValue(mockStatus);
+    mockFundingService.getOptions.mockResolvedValue({ enabled: true, providers: [], monthlyPrice: 1000000, yearlyPrice: 10000000, currency: 'USD', payWhatYouCan: false });
+    mockFundingService.cancel.mockResolvedValue({ success: true });
 
-    const wrapper = mount(SubscriptionManagement, {
+    const wrapper = mount(FundingPlanManagement, {
       global: {
         plugins: [router, [I18NextVue, { i18next }]],
       },

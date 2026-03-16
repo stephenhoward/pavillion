@@ -2,9 +2,9 @@ import axios from 'axios';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
 
 /**
- * Subscription settings returned from API
+ * Funding settings returned from API
  */
-export type SubscriptionSettings = {
+export type FundingSettings = {
   enabled: boolean;
   monthlyPrice: number;
   yearlyPrice: number;
@@ -39,14 +39,14 @@ export type PayPalCredentials = {
 export type DisconnectResponse = {
   success?: boolean;
   requiresConfirmation?: boolean;
-  activeSubscriptionCount?: number;
+  activeFundingPlanCount?: number;
   message?: string;
 };
 
 /**
- * Subscription status for a user
+ * Funding plan status for a user
  */
-export type SubscriptionStatus = {
+export type FundingPlanStatus = {
   id: string;
   status: 'active' | 'past_due' | 'suspended' | 'cancelled';
   billing_cycle: 'monthly' | 'yearly';
@@ -60,9 +60,9 @@ export type SubscriptionStatus = {
 };
 
 /**
- * Subscription options available to users
+ * Funding options available to users
  */
-export type SubscriptionOptions = {
+export type FundingOptions = {
   enabled: boolean;
   providers: Array<{
     provider_type: string;
@@ -75,9 +75,9 @@ export type SubscriptionOptions = {
 };
 
 /**
- * Subscribe request parameters
+ * Funding plan request parameters
  */
-export type SubscribeParams = {
+export type FundingParams = {
   provider_type: 'stripe' | 'paypal';
   billing_cycle: 'monthly' | 'yearly';
   amount?: number; // For PWYC
@@ -109,11 +109,11 @@ export type ResolvedCalendar = {
 };
 
 /**
- * Subscription service for managing subscription payments.
- * Provides methods to configure subscription settings (admin) and
- * manage user subscriptions.
+ * Funding service for managing funding plan payments.
+ * Provides methods to configure funding settings (admin) and
+ * manage user funding plans.
  */
-export default class SubscriptionService {
+export default class FundingService {
 
   /**
    * Convert millicents to display amount (dollars)
@@ -145,34 +145,34 @@ export default class SubscriptionService {
   // ========================================
 
   /**
-   * Get current subscription settings (admin only)
+   * Get current funding settings (admin only)
    *
-   * @returns {Promise<SubscriptionSettings>} Current subscription settings
+   * @returns {Promise<FundingSettings>} Current funding settings
    */
-  async getSettings(): Promise<SubscriptionSettings> {
+  async getSettings(): Promise<FundingSettings> {
     try {
-      const response = await axios.get('/api/subscription/v1/admin/settings');
+      const response = await axios.get('/api/funding/v1/admin/settings');
       return response.data;
     }
     catch (error) {
-      console.error('Failed to get subscription settings:', error);
+      console.error('Failed to get funding settings:', error);
       throw error;
     }
   }
 
   /**
-   * Update subscription settings (admin only)
+   * Update funding settings (admin only)
    *
-   * @param {Partial<SubscriptionSettings>} settings - Settings to update
+   * @param {Partial<FundingSettings>} settings - Settings to update
    * @returns {Promise<boolean>} True if update was successful
    */
-  async updateSettings(settings: Partial<SubscriptionSettings>): Promise<boolean> {
+  async updateSettings(settings: Partial<FundingSettings>): Promise<boolean> {
     try {
-      const response = await axios.post('/api/subscription/v1/admin/settings', settings);
+      const response = await axios.post('/api/funding/v1/admin/settings', settings);
       return response.status === 200;
     }
     catch (error) {
-      console.error('Failed to update subscription settings:', error);
+      console.error('Failed to update funding settings:', error);
       return false;
     }
   }
@@ -184,30 +184,11 @@ export default class SubscriptionService {
    */
   async getProviders(): Promise<ProviderConfig[]> {
     try {
-      const response = await axios.get('/api/subscription/v1/admin/providers');
+      const response = await axios.get('/api/funding/v1/admin/providers');
       return response.data;
     }
     catch (error) {
       console.error('Failed to get providers:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Initiate OAuth connection flow for Stripe (admin only)
-   *
-   * @param {string} returnUrl - URL to return to after OAuth completion
-   * @returns {Promise<string>} OAuth redirect URL
-   */
-  async connectStripe(returnUrl: string): Promise<string> {
-    try {
-      const response = await axios.post('/api/subscription/v1/admin/providers/stripe/connect', {
-        returnUrl,
-      });
-      return response.data.redirectUrl;
-    }
-    catch (error) {
-      console.error('Failed to connect Stripe:', error);
       throw error;
     }
   }
@@ -220,7 +201,7 @@ export default class SubscriptionService {
    */
   async configurePayPal(credentials: PayPalCredentials): Promise<boolean> {
     try {
-      const response = await axios.post('/api/subscription/v1/admin/providers/paypal/configure', credentials);
+      const response = await axios.post('/api/funding/v1/admin/providers/paypal/configure', credentials);
       return response.status === 200;
     }
     catch (error) {
@@ -238,7 +219,7 @@ export default class SubscriptionService {
    */
   async updateProvider(providerType: string, config: Partial<ProviderConfig>): Promise<boolean> {
     try {
-      const response = await axios.put(`/api/subscription/v1/admin/providers/${providerType}`, config);
+      const response = await axios.put(`/api/funding/v1/admin/providers/${providerType}`, config);
       return response.status === 200;
     }
     catch (error) {
@@ -256,7 +237,7 @@ export default class SubscriptionService {
    */
   async disconnectProvider(providerType: string, confirmed: boolean = false): Promise<DisconnectResponse> {
     try {
-      const url = `/api/subscription/v1/admin/providers/${providerType}${confirmed ? '?confirm=true' : ''}`;
+      const url = `/api/funding/v1/admin/providers/${providerType}${confirmed ? '?confirm=true' : ''}`;
       const response = await axios.delete(url);
       return response.data;
     }
@@ -267,76 +248,38 @@ export default class SubscriptionService {
   }
 
   /**
-   * Get all subscriptions (admin only)
+   * Get all funding plans (admin only)
    *
    * @param {number} page - Page number (1-indexed)
    * @param {number} limit - Results per page
-   * @returns {Promise<any>} Paginated subscription list
+   * @returns {Promise<any>} Paginated funding plan list
    */
-  async listSubscriptions(page: number = 1, limit: number = 50): Promise<any> {
+  async listFundingPlans(page: number = 1, limit: number = 50): Promise<any> {
     try {
-      const response = await axios.get('/api/subscription/v1/admin/subscriptions', {
+      const response = await axios.get('/api/funding/v1/admin/funding-plans', {
         params: { page, limit },
       });
       return response.data;
     }
     catch (error) {
-      console.error('Failed to list subscriptions:', error);
+      console.error('Failed to list funding plans:', error);
       throw error;
     }
   }
 
   /**
-   * Force cancel a subscription (admin only)
+   * Force cancel a funding plan (admin only)
    *
-   * @param {string} subscriptionId - Subscription ID to cancel
+   * @param {string} fundingPlanId - Funding plan ID to cancel
    * @returns {Promise<boolean>} True if cancellation was successful
    */
-  async forceCancelSubscription(subscriptionId: string): Promise<boolean> {
+  async forceCancelFundingPlan(fundingPlanId: string): Promise<boolean> {
     try {
-      const response = await axios.post(`/api/subscription/v1/admin/subscriptions/${subscriptionId}/cancel`);
+      const response = await axios.post(`/api/funding/v1/admin/funding-plans/${fundingPlanId}/cancel`);
       return response.status === 200;
     }
     catch (error) {
-      console.error(`Failed to force cancel subscription ${subscriptionId}:`, error);
-      return false;
-    }
-  }
-
-  /**
-   * Get platform OAuth configuration status (super admin only)
-   *
-   * @returns {Promise<{ configured: boolean }>} Platform OAuth configuration status
-   */
-  async getPlatformOAuthStatus(): Promise<{ configured: boolean }> {
-    try {
-      const response = await axios.get('/api/subscription/v1/admin/platform/oauth/status');
-      return response.data;
-    }
-    catch (error) {
-      console.error('Failed to get platform OAuth status:', error);
-      return { configured: false };
-    }
-  }
-
-  /**
-   * Configure platform OAuth credentials (super admin only)
-   *
-   * @param {Object} credentials - Platform OAuth credentials
-   * @param {string} credentials.stripeClientId - Stripe Connect client ID
-   * @param {string} credentials.stripeClientSecret - Stripe Connect client secret
-   * @returns {Promise<boolean>} True if configuration was successful
-   */
-  async configurePlatformOAuth(credentials: {
-    stripeClientId: string;
-    stripeClientSecret: string;
-  }): Promise<boolean> {
-    try {
-      const response = await axios.post('/api/subscription/v1/admin/platform/oauth', credentials);
-      return response.status === 200;
-    }
-    catch (error) {
-      console.error('Failed to configure platform OAuth:', error);
+      console.error(`Failed to force cancel funding plan ${fundingPlanId}:`, error);
       return false;
     }
   }
@@ -349,7 +292,7 @@ export default class SubscriptionService {
    */
   async listGrants(includeRevoked: boolean = false): Promise<ComplimentaryGrant[]> {
     try {
-      const response = await axios.get('/api/subscription/v1/admin/grants', {
+      const response = await axios.get('/api/funding/v1/admin/grants', {
         params: { includeRevoked },
       });
       return response.data.map((grant: Record<string, any>) => ComplimentaryGrant.fromObject(grant));
@@ -371,7 +314,7 @@ export default class SubscriptionService {
    */
   async createGrant(accountId: string, reason?: string, expiresAt?: Date, calendarId?: string): Promise<ComplimentaryGrant> {
     try {
-      const response = await axios.post('/api/subscription/v1/admin/grants', {
+      const response = await axios.post('/api/funding/v1/admin/grants', {
         accountId,
         reason,
         expiresAt,
@@ -393,7 +336,7 @@ export default class SubscriptionService {
    */
   async revokeGrant(grantId: string): Promise<void> {
     try {
-      await axios.delete(`/api/subscription/v1/admin/grants/${grantId}`);
+      await axios.delete(`/api/funding/v1/admin/grants/${grantId}`);
     }
     catch (error) {
       console.error(`Failed to revoke grant ${grantId}:`, error);
@@ -446,41 +389,41 @@ export default class SubscriptionService {
   }
 
   // ========================================
-  // Calendar Subscription Methods
+  // Calendar Funding Methods
   // ========================================
 
   /**
-   * Add a calendar to the user's subscription
+   * Add a calendar to the user's funding plan
    *
    * @param {string} calendarId - The calendar ID to add
    * @param {number} amount - The funding amount for this calendar
    * @returns {Promise<void>}
    */
-  async addCalendarToSubscription(calendarId: string, amount: number): Promise<void> {
+  async addCalendarToFundingPlan(calendarId: string, amount: number): Promise<void> {
     try {
-      await axios.post('/api/subscription/v1/calendars', {
+      await axios.post('/api/funding/v1/calendars', {
         calendarId,
         amount,
       });
     }
     catch (error) {
-      console.error('Failed to add calendar to subscription:', error);
+      console.error('Failed to add calendar to funding plan:', error);
       throw error;
     }
   }
 
   /**
-   * Remove a calendar from the user's subscription
+   * Remove a calendar from the user's funding plan
    *
    * @param {string} calendarId - The calendar ID to remove
    * @returns {Promise<void>}
    */
-  async removeCalendarFromSubscription(calendarId: string): Promise<void> {
+  async removeCalendarFromFundingPlan(calendarId: string): Promise<void> {
     try {
-      await axios.delete(`/api/subscription/v1/calendars/${calendarId}`);
+      await axios.delete(`/api/funding/v1/calendars/${calendarId}`);
     }
     catch (error) {
-      console.error('Failed to remove calendar from subscription:', error);
+      console.error('Failed to remove calendar from funding plan:', error);
       throw error;
     }
   }
@@ -493,7 +436,7 @@ export default class SubscriptionService {
    */
   async getFundingStatus(calendarId: string): Promise<FundingStatus> {
     try {
-      const response = await axios.get(`/api/subscription/v1/calendars/${calendarId}/funding`);
+      const response = await axios.get(`/api/funding/v1/calendars/${calendarId}/funding`);
       return response.data;
     }
     catch (error) {
@@ -507,71 +450,71 @@ export default class SubscriptionService {
   // ========================================
 
   /**
-   * Get available subscription options for the current user
+   * Get available funding options for the current user
    *
-   * @returns {Promise<SubscriptionOptions>} Available subscription options
+   * @returns {Promise<FundingOptions>} Available funding options
    */
-  async getOptions(): Promise<SubscriptionOptions> {
+  async getOptions(): Promise<FundingOptions> {
     try {
-      const response = await axios.get('/api/subscription/v1/options');
+      const response = await axios.get('/api/funding/v1/options');
       return response.data;
     }
     catch (error) {
-      console.error('Failed to get subscription options:', error);
+      console.error('Failed to get funding options:', error);
       throw error;
     }
   }
 
   /**
-   * Create a new subscription for the current user
+   * Create a new funding plan for the current user
    *
-   * @param {SubscribeParams} params - Subscription parameters
+   * @param {FundingParams} params - Funding plan parameters
    * @param {string[]} calendarIds - Optional array of calendar IDs to include
-   * @returns {Promise<any>} Subscription result (may include redirect URL for payment)
+   * @returns {Promise<any>} Funding plan result (may include redirect URL for payment)
    */
-  async subscribe(params: SubscribeParams, calendarIds?: string[]): Promise<any> {
+  async subscribe(params: FundingParams, calendarIds?: string[]): Promise<any> {
     try {
       const body = calendarIds ? { ...params, calendarIds } : params;
-      const response = await axios.post('/api/subscription/v1/subscribe', body);
+      const response = await axios.post('/api/funding/v1/subscribe', body);
       return response.data;
     }
     catch (error) {
-      console.error('Failed to subscribe:', error);
+      console.error('Failed to create funding plan:', error);
       throw error;
     }
   }
 
   /**
-   * Get current subscription status for the authenticated user
+   * Get current funding plan status for the authenticated user
    *
-   * @returns {Promise<SubscriptionStatus | null>} Current subscription status or null if no subscription
+   * @returns {Promise<FundingPlanStatus | null>} Current funding plan status or null if none
    */
-  async getStatus(): Promise<SubscriptionStatus | null> {
+  async getStatus(): Promise<FundingPlanStatus | null> {
     try {
-      const response = await axios.get('/api/subscription/v1/status');
+      const response = await axios.get('/api/funding/v1/status');
       return response.data;
     }
     catch (error: any) {
       if (error.response?.status === 404) {
-        return null; // No subscription
+        return null; // No funding plan
       }
-      console.error('Failed to get subscription status:', error);
+      console.error('Failed to get funding plan status:', error);
       throw error;
     }
   }
 
   /**
-   * Cancel the current subscription (end of billing period)
+   * Cancel the current funding plan (end of billing period)
    *
    * @returns {Promise<boolean>} True if cancellation was successful
    */
   async cancel(): Promise<boolean> {
     try {
-      const response = await axios.post('/api/subscription/v1/cancel');
+      const response = await axios.post('/api/funding/v1/cancel');
       return response.status === 200;
     }
     catch (error) {
-      console.error('Failed to cancel subscription:', error);
+      console.error('Failed to cancel funding plan:', error);
       return false;
     }
   }
@@ -583,7 +526,7 @@ export default class SubscriptionService {
    */
   async getPortalUrl(): Promise<string> {
     try {
-      const response = await axios.get('/api/subscription/v1/portal');
+      const response = await axios.get('/api/funding/v1/portal');
       return response.data.portalUrl;
     }
     catch (error) {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useTranslation } from 'i18next-vue';
 import Sheet from '@/client/components/common/Sheet.vue';
-import SubscribeForm from '@/client/components/account/SubscribeForm.vue';
+import FundingForm from '@/client/components/account/FundingForm.vue';
 
 defineProps<{
   calendarId: string;
@@ -12,7 +12,7 @@ const emit = defineEmits<{
   subscribed: [];
 }>();
 
-const { t } = useTranslation('subscription');
+const { t } = useTranslation('funding');
 
 function onSubscribed() {
   emit('subscribed');
@@ -22,6 +22,6 @@ function onSubscribed() {
 
 <template>
   <Sheet :title="t('subscribe_to_fund_title')" @close="emit('close')">
-    <SubscribeForm :calendarId="calendarId" @subscribed="onSubscribed" />
+    <FundingForm :calendarId="calendarId" @subscribed="onSubscribed" />
   </Sheet>
 </template>

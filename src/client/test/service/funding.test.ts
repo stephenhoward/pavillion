@@ -1,18 +1,18 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import axios from 'axios';
-import SubscriptionService from '@/client/service/subscription';
+import FundingService from '@/client/service/funding';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
 
 vi.mock('axios');
 
-describe('SubscriptionService.listGrants', () => {
-  const service = new SubscriptionService();
+describe('FundingService.listGrants', () => {
+  const service = new FundingService();
 
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  it('should call GET /api/subscription/v1/admin/grants without includeRevoked parameter by default', async () => {
+  it('should call GET /api/funding/v1/admin/grants without includeRevoked parameter by default', async () => {
     // Arrange
     const mockGrants = [
       { id: 'grant1', accountId: 'acc1', reason: 'VIP', grantedBy: 'admin1', expiresAt: null, revokedAt: null, revokedBy: null },
@@ -25,7 +25,7 @@ describe('SubscriptionService.listGrants', () => {
     const result = await service.listGrants();
 
     // Assert
-    expect(axiosGet).toHaveBeenCalledWith('/api/subscription/v1/admin/grants', { params: { includeRevoked: false } });
+    expect(axiosGet).toHaveBeenCalledWith('/api/funding/v1/admin/grants', { params: { includeRevoked: false } });
     expect(result).toHaveLength(2);
     expect(result[0]).toBeInstanceOf(ComplimentaryGrant);
     expect(result[0].id).toBe('grant1');
@@ -41,7 +41,7 @@ describe('SubscriptionService.listGrants', () => {
     await service.listGrants(true);
 
     // Assert
-    expect(axiosGet).toHaveBeenCalledWith('/api/subscription/v1/admin/grants', { params: { includeRevoked: true } });
+    expect(axiosGet).toHaveBeenCalledWith('/api/funding/v1/admin/grants', { params: { includeRevoked: true } });
   });
 
   it('should call GET with includeRevoked=false when explicitly passed false', async () => {
@@ -53,7 +53,7 @@ describe('SubscriptionService.listGrants', () => {
     await service.listGrants(false);
 
     // Assert
-    expect(axiosGet).toHaveBeenCalledWith('/api/subscription/v1/admin/grants', { params: { includeRevoked: false } });
+    expect(axiosGet).toHaveBeenCalledWith('/api/funding/v1/admin/grants', { params: { includeRevoked: false } });
   });
 
   it('should return an empty array when no grants exist', async () => {
@@ -78,14 +78,14 @@ describe('SubscriptionService.listGrants', () => {
   });
 });
 
-describe('SubscriptionService.createGrant', () => {
-  const service = new SubscriptionService();
+describe('FundingService.createGrant', () => {
+  const service = new FundingService();
 
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  it('should call POST /api/subscription/v1/admin/grants with accountId', async () => {
+  it('should call POST /api/funding/v1/admin/grants with accountId', async () => {
     // Arrange
     const accountId = 'acc123';
     const grantData = { id: 'grant1', accountId, reason: null, grantedBy: 'admin1', expiresAt: null, revokedAt: null, revokedBy: null };
@@ -96,7 +96,7 @@ describe('SubscriptionService.createGrant', () => {
     const result = await service.createGrant(accountId);
 
     // Assert
-    expect(axiosPost).toHaveBeenCalledWith('/api/subscription/v1/admin/grants', {
+    expect(axiosPost).toHaveBeenCalledWith('/api/funding/v1/admin/grants', {
       accountId,
       reason: undefined,
       expiresAt: undefined,
@@ -120,7 +120,7 @@ describe('SubscriptionService.createGrant', () => {
     const result = await service.createGrant(accountId, reason, expiresAt);
 
     // Assert
-    expect(axiosPost).toHaveBeenCalledWith('/api/subscription/v1/admin/grants', {
+    expect(axiosPost).toHaveBeenCalledWith('/api/funding/v1/admin/grants', {
       accountId,
       reason,
       expiresAt,
@@ -142,7 +142,7 @@ describe('SubscriptionService.createGrant', () => {
     const result = await service.createGrant(accountId, undefined, undefined, calendarId);
 
     // Assert
-    expect(axiosPost).toHaveBeenCalledWith('/api/subscription/v1/admin/grants', {
+    expect(axiosPost).toHaveBeenCalledWith('/api/funding/v1/admin/grants', {
       accountId,
       reason: undefined,
       expiresAt: undefined,
@@ -161,14 +161,14 @@ describe('SubscriptionService.createGrant', () => {
   });
 });
 
-describe('SubscriptionService.revokeGrant', () => {
-  const service = new SubscriptionService();
+describe('FundingService.revokeGrant', () => {
+  const service = new FundingService();
 
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  it('should call DELETE /api/subscription/v1/admin/grants/{grantId}', async () => {
+  it('should call DELETE /api/funding/v1/admin/grants/{grantId}', async () => {
     // Arrange
     const grantId = 'grant123';
     const axiosDelete = vi.mocked(axios.delete);
@@ -178,7 +178,7 @@ describe('SubscriptionService.revokeGrant', () => {
     await service.revokeGrant(grantId);
 
     // Assert
-    expect(axiosDelete).toHaveBeenCalledWith(`/api/subscription/v1/admin/grants/${grantId}`);
+    expect(axiosDelete).toHaveBeenCalledWith(`/api/funding/v1/admin/grants/${grantId}`);
   });
 
   it('should return void on success', async () => {
@@ -203,23 +203,23 @@ describe('SubscriptionService.revokeGrant', () => {
   });
 });
 
-describe('SubscriptionService.addCalendarToSubscription', () => {
-  const service = new SubscriptionService();
+describe('FundingService.addCalendarToFundingPlan', () => {
+  const service = new FundingService();
 
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  it('should call POST /api/subscription/v1/calendars with calendarId and amount', async () => {
+  it('should call POST /api/funding/v1/calendars with calendarId and amount', async () => {
     // Arrange
     const axiosPost = vi.mocked(axios.post);
     axiosPost.mockResolvedValue({ status: 200 });
 
     // Act
-    await service.addCalendarToSubscription('cal123', 500);
+    await service.addCalendarToFundingPlan('cal123', 500);
 
     // Assert
-    expect(axiosPost).toHaveBeenCalledWith('/api/subscription/v1/calendars', {
+    expect(axiosPost).toHaveBeenCalledWith('/api/funding/v1/calendars', {
       calendarId: 'cal123',
       amount: 500,
     });
@@ -231,7 +231,7 @@ describe('SubscriptionService.addCalendarToSubscription', () => {
     axiosPost.mockResolvedValue({ status: 200 });
 
     // Act
-    const result = await service.addCalendarToSubscription('cal123', 1000);
+    const result = await service.addCalendarToFundingPlan('cal123', 1000);
 
     // Assert
     expect(result).toBeUndefined();
@@ -243,27 +243,27 @@ describe('SubscriptionService.addCalendarToSubscription', () => {
     axiosPost.mockRejectedValue(new Error('Failed'));
 
     // Act & Assert
-    await expect(service.addCalendarToSubscription('cal123', 500)).rejects.toThrow('Failed');
+    await expect(service.addCalendarToFundingPlan('cal123', 500)).rejects.toThrow('Failed');
   });
 });
 
-describe('SubscriptionService.removeCalendarFromSubscription', () => {
-  const service = new SubscriptionService();
+describe('FundingService.removeCalendarFromFundingPlan', () => {
+  const service = new FundingService();
 
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  it('should call DELETE /api/subscription/v1/calendars/:calendarId', async () => {
+  it('should call DELETE /api/funding/v1/calendars/:calendarId', async () => {
     // Arrange
     const axiosDelete = vi.mocked(axios.delete);
     axiosDelete.mockResolvedValue({ status: 204 });
 
     // Act
-    await service.removeCalendarFromSubscription('cal123');
+    await service.removeCalendarFromFundingPlan('cal123');
 
     // Assert
-    expect(axiosDelete).toHaveBeenCalledWith('/api/subscription/v1/calendars/cal123');
+    expect(axiosDelete).toHaveBeenCalledWith('/api/funding/v1/calendars/cal123');
   });
 
   it('should return void on success', async () => {
@@ -272,7 +272,7 @@ describe('SubscriptionService.removeCalendarFromSubscription', () => {
     axiosDelete.mockResolvedValue({ status: 204 });
 
     // Act
-    const result = await service.removeCalendarFromSubscription('cal123');
+    const result = await service.removeCalendarFromFundingPlan('cal123');
 
     // Assert
     expect(result).toBeUndefined();
@@ -284,18 +284,18 @@ describe('SubscriptionService.removeCalendarFromSubscription', () => {
     axiosDelete.mockRejectedValue(new Error('Not found'));
 
     // Act & Assert
-    await expect(service.removeCalendarFromSubscription('cal123')).rejects.toThrow('Not found');
+    await expect(service.removeCalendarFromFundingPlan('cal123')).rejects.toThrow('Not found');
   });
 });
 
-describe('SubscriptionService.getFundingStatus', () => {
-  const service = new SubscriptionService();
+describe('FundingService.getFundingStatus', () => {
+  const service = new FundingService();
 
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  it('should call GET /api/subscription/v1/calendars/:calendarId/funding', async () => {
+  it('should call GET /api/funding/v1/calendars/:calendarId/funding', async () => {
     // Arrange
     const mockStatus = { status: 'funded', subscriptionInfo: { amount: 500 } };
     const axiosGet = vi.mocked(axios.get);
@@ -305,7 +305,7 @@ describe('SubscriptionService.getFundingStatus', () => {
     const result = await service.getFundingStatus('cal123');
 
     // Assert
-    expect(axiosGet).toHaveBeenCalledWith('/api/subscription/v1/calendars/cal123/funding');
+    expect(axiosGet).toHaveBeenCalledWith('/api/funding/v1/calendars/cal123/funding');
     expect(result).toEqual(mockStatus);
   });
 
@@ -346,14 +346,14 @@ describe('SubscriptionService.getFundingStatus', () => {
   });
 });
 
-describe('SubscriptionService.subscribe', () => {
-  const service = new SubscriptionService();
+describe('FundingService.subscribe', () => {
+  const service = new FundingService();
 
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  it('should call POST /api/subscription/v1/subscribe without calendarIds by default', async () => {
+  it('should call POST /api/funding/v1/subscribe without calendarIds by default', async () => {
     // Arrange
     const params = { provider_type: 'stripe' as const, billing_cycle: 'monthly' as const };
     const axiosPost = vi.mocked(axios.post);
@@ -363,7 +363,7 @@ describe('SubscriptionService.subscribe', () => {
     await service.subscribe(params);
 
     // Assert
-    expect(axiosPost).toHaveBeenCalledWith('/api/subscription/v1/subscribe', params);
+    expect(axiosPost).toHaveBeenCalledWith('/api/funding/v1/subscribe', params);
   });
 
   it('should include calendarIds when provided', async () => {
@@ -377,7 +377,7 @@ describe('SubscriptionService.subscribe', () => {
     await service.subscribe(params, calendarIds);
 
     // Assert
-    expect(axiosPost).toHaveBeenCalledWith('/api/subscription/v1/subscribe', {
+    expect(axiosPost).toHaveBeenCalledWith('/api/funding/v1/subscribe', {
       ...params,
       calendarIds,
     });

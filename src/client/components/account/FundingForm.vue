@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { useTranslation } from 'i18next-vue';
 import { ref, computed, onMounted } from 'vue';
-import SubscriptionService from '@/client/service/subscription';
-import type { SubscriptionOptions } from '@/client/service/subscription';
+import FundingService from '@/client/service/funding';
+import type { FundingOptions } from '@/client/service/funding';
 
 const ALLOWED_CHECKOUT_ORIGINS = [
   'https://checkout.stripe.com',
@@ -18,14 +18,14 @@ const emit = defineEmits<{
   subscribed: [];
 }>();
 
-const { t } = useTranslation('subscription');
+const { t } = useTranslation('funding');
 
-const subscriptionService = new SubscriptionService();
+const fundingService = new FundingService();
 
 const loading = ref(true);
 const processing = ref(false);
 const errorMessage = ref('');
-const options = ref<SubscriptionOptions | null>(null);
+const options = ref<FundingOptions | null>(null);
 
 const selectedProvider = ref('');
 const selectedCycle = ref<'monthly' | 'yearly'>('monthly');
@@ -37,25 +37,25 @@ const singleProvider = computed(() =>
 
 const monthlyPriceDisplay = computed(() => {
   if (!options.value) return '';
-  return SubscriptionService.formatCurrency(options.value.monthly_price, options.value.currency);
+  return FundingService.formatCurrency(options.value.monthly_price, options.value.currency);
 });
 
 const yearlyPriceDisplay = computed(() => {
   if (!options.value) return '';
-  return SubscriptionService.formatCurrency(options.value.yearly_price, options.value.currency);
+  return FundingService.formatCurrency(options.value.yearly_price, options.value.currency);
 });
 
 async function loadOptions() {
   try {
     loading.value = true;
-    options.value = await subscriptionService.getOptions();
+    options.value = await fundingService.getOptions();
 
     if (options.value.providers.length > 0) {
       selectedProvider.value = options.value.providers[0].provider_type;
     }
   }
   catch (error) {
-    console.error('Failed to load subscription options:', error);
+    console.error('Failed to load funding options:', error);
     errorMessage.value = t('load_error');
   }
   finally {
@@ -89,11 +89,11 @@ async function submitSubscribe() {
     };
 
     if (options.value?.pay_what_you_can) {
-      params.amount = SubscriptionService.displayToMillicents(customAmount.value);
+      params.amount = FundingService.displayToMillicents(customAmount.value);
     }
 
     const calendarIds = props.calendarId ? [props.calendarId] : undefined;
-    const result = await subscriptionService.subscribe(params, calendarIds);
+    const result = await fundingService.subscribe(params, calendarIds);
 
     if (result.redirectUrl) {
       if (!isAllowedCheckoutOrigin(result.redirectUrl)) {
@@ -107,7 +107,7 @@ async function submitSubscribe() {
     emit('subscribed');
   }
   catch (error) {
-    console.error('Failed to subscribe:', error);
+    console.error('Failed to create funding plan:', error);
     errorMessage.value = t('subscribe_error');
   }
   finally {
@@ -119,7 +119,7 @@ onMounted(loadOptions);
 </script>
 
 <template>
-  <div class="subscribe-form">
+  <div class="funding-form">
     <div v-if="loading" class="loading">{{ t("loading") }}</div>
 
     <div v-else-if="errorMessage" class="error-message" role="alert">
@@ -203,7 +203,7 @@ onMounted(loadOptions);
 </template>
 
 <style scoped lang="scss">
-.subscribe-form {
+.funding-form {
   .form-group {
     margin-bottom: 1.5rem;
 
