@@ -4,12 +4,46 @@ import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { RouteRecordRaw } from 'vue-router';
 
 import FundingTab from '@/client/components/logged_in/calendar-management/FundingTab.vue';
-import SubscriptionService from '@/client/service/subscription';
+import FundingService from '@/client/service/funding';
 import { mountComponent } from '@/client/test/lib/vue';
 
 const routes: RouteRecordRaw[] = [
   { path: '/manage/:calendar', component: {}, name: 'manage' },
 ];
+
+const defaultOptions = {
+  enabled: true,
+  providers: [{ provider_type: 'stripe', display_name: 'Stripe' }],
+  monthly_price: 500000,
+  yearly_price: 5000000,
+  currency: 'USD',
+  pay_what_you_can: false,
+};
+
+const activeSubscription = {
+  id: 'sub-1',
+  status: 'active' as const,
+  billing_cycle: 'monthly' as const,
+  amount: 500000,
+  currency: 'USD',
+  current_period_start: '2026-03-01',
+  current_period_end: '2026-04-01',
+  provider_type: 'stripe',
+};
+
+/**
+ * Set up default mocks for getStatus and getOptions.
+ * Individual tests can override these before mounting.
+ */
+function setupDefaultMocks(overrides?: {
+  status?: any;
+  options?: any;
+}) {
+  vi.spyOn(FundingService.prototype, 'getStatus')
+    .mockResolvedValue('status' in (overrides || {}) ? overrides!.status : activeSubscription);
+  vi.spyOn(FundingService.prototype, 'getOptions')
+    .mockResolvedValue(overrides?.options ?? defaultOptions);
+}
 
 const mountFundingTab = async (calendarId: string = 'cal-uuid-1') => {
   const router: Router = createRouter({
@@ -26,6 +60,10 @@ const mountFundingTab = async (calendarId: string = 'cal-uuid-1') => {
       LoadingMessage: {
         template: '<div class="loading-message"><slot /></div>',
         props: ['description'],
+      },
+      FundingSheet: {
+        template: '<div class="subscribe-sheet-stub"><slot /></div>',
+        props: ['calendarId'],
       },
     },
   });
@@ -46,8 +84,14 @@ describe('FundingTab', () => {
 
   describe('Loading state', () => {
     it('shows loading message while fetching funding status', async () => {
-      vi.spyOn(SubscriptionService.prototype, 'getFundingStatus').mockReturnValue(
+      vi.spyOn(FundingService.prototype, 'getFundingStatus').mockReturnValue(
         new Promise(() => {}), // never resolves
+      );
+      vi.spyOn(FundingService.prototype, 'getStatus').mockReturnValue(
+        new Promise(() => {}),
+      );
+      vi.spyOn(FundingService.prototype, 'getOptions').mockReturnValue(
+        new Promise(() => {}),
       );
 
       const wrapper = await mountFundingTab();
@@ -61,7 +105,8 @@ describe('FundingTab', () => {
 
   describe('Funded status', () => {
     it('renders funded badge and remove button', async () => {
-      vi.spyOn(SubscriptionService.prototype, 'getFundingStatus').mockResolvedValue({
+      setupDefaultMocks();
+      vi.spyOn(FundingService.prototype, 'getFundingStatus').mockResolvedValue({
         status: 'funded',
       });
 
@@ -75,12 +120,12 @@ describe('FundingTab', () => {
       expect(removeButton.exists()).toBe(true);
     });
 
-    it('calls removeCalendarFromSubscription when remove button is clicked', async () => {
-      const removeSpy = vi.spyOn(SubscriptionService.prototype, 'removeCalendarFromSubscription')
+    it('calls removeCalendarFromFundingPlan when remove button is clicked', async () => {
+      setupDefaultMocks();
+      const removeSpy = vi.spyOn(FundingService.prototype, 'removeCalendarFromFundingPlan')
         .mockResolvedValue();
 
-      // getFundingStatus: first call returns funded, second returns unfunded (after removal)
-      const getFundingSpy = vi.spyOn(SubscriptionService.prototype, 'getFundingStatus')
+      const getFundingSpy = vi.spyOn(FundingService.prototype, 'getFundingStatus')
         .mockResolvedValueOnce({ status: 'funded' })
         .mockResolvedValueOnce({ status: 'unfunded' });
 
@@ -94,14 +139,14 @@ describe('FundingTab', () => {
       await flushPromises();
 
       expect(removeSpy).toHaveBeenCalledWith('cal-123');
-      // Should have reloaded the status
       expect(getFundingSpy).toHaveBeenCalledTimes(2);
     });
   });
 
-  describe('Unfunded status', () => {
-    it('renders unfunded badge and add button', async () => {
-      vi.spyOn(SubscriptionService.prototype, 'getFundingStatus').mockResolvedValue({
+  describe('Unfunded status with active subscription', () => {
+    it('renders unfunded badge and add button when user has subscription', async () => {
+      setupDefaultMocks();
+      vi.spyOn(FundingService.prototype, 'getFundingStatus').mockResolvedValue({
         status: 'unfunded',
       });
 
@@ -115,11 +160,12 @@ describe('FundingTab', () => {
       expect(addButton.exists()).toBe(true);
     });
 
-    it('calls addCalendarToSubscription when add button is clicked', async () => {
-      const addSpy = vi.spyOn(SubscriptionService.prototype, 'addCalendarToSubscription')
+    it('calls addCalendarToFundingPlan when add button is clicked', async () => {
+      setupDefaultMocks();
+      const addSpy = vi.spyOn(FundingService.prototype, 'addCalendarToFundingPlan')
         .mockResolvedValue();
 
-      vi.spyOn(SubscriptionService.prototype, 'getFundingStatus')
+      vi.spyOn(FundingService.prototype, 'getFundingStatus')
         .mockResolvedValueOnce({ status: 'unfunded' })
         .mockResolvedValueOnce({ status: 'funded' });
 
@@ -136,9 +182,64 @@ describe('FundingTab', () => {
     });
   });
 
+  describe('Unfunded status without subscription', () => {
+    it('shows subscribe prompt when user has no subscription', async () => {
+      setupDefaultMocks({ status: null });
+      vi.spyOn(FundingService.prototype, 'getFundingStatus').mockResolvedValue({
+        status: 'unfunded',
+      });
+
+      const wrapper = await mountFundingTab();
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      expect(wrapper.find('.funding-status-badge--unfunded').exists()).toBe(true);
+      const subscribeButton = wrapper.find('.funding-button--primary');
+      expect(subscribeButton.exists()).toBe(true);
+      expect(wrapper.text()).toContain('Subscribe');
+    });
+
+    it('opens subscribe sheet when subscribe button is clicked', async () => {
+      setupDefaultMocks({ status: null });
+      vi.spyOn(FundingService.prototype, 'getFundingStatus').mockResolvedValue({
+        status: 'unfunded',
+      });
+
+      const wrapper = await mountFundingTab();
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      const subscribeButton = wrapper.find('.funding-button--primary');
+      await subscribeButton.trigger('click');
+      await flushPromises();
+
+      expect(wrapper.find('.subscribe-sheet-stub').exists()).toBe(true);
+    });
+  });
+
+  describe('Subscriptions disabled', () => {
+    it('hides funding UI when subscriptions are disabled', async () => {
+      setupDefaultMocks({ options: { ...defaultOptions, enabled: false } });
+      vi.spyOn(FundingService.prototype, 'getFundingStatus').mockResolvedValue({
+        status: 'unfunded',
+      });
+
+      const wrapper = await mountFundingTab();
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      expect(wrapper.find('.funding-content').exists()).toBe(false);
+      expect(wrapper.find('.funding-status-badge').exists()).toBe(false);
+    });
+  });
+
   describe('Admin-exempt status', () => {
     it('renders admin-exempt badge without action buttons', async () => {
-      vi.spyOn(SubscriptionService.prototype, 'getFundingStatus').mockResolvedValue({
+      setupDefaultMocks();
+      vi.spyOn(FundingService.prototype, 'getFundingStatus').mockResolvedValue({
         status: 'admin-exempt',
       });
 
@@ -155,7 +256,8 @@ describe('FundingTab', () => {
 
   describe('Grant status', () => {
     it('renders grant badge without action buttons', async () => {
-      vi.spyOn(SubscriptionService.prototype, 'getFundingStatus').mockResolvedValue({
+      setupDefaultMocks();
+      vi.spyOn(FundingService.prototype, 'getFundingStatus').mockResolvedValue({
         status: 'grant',
         grantInfo: { reason: 'Beta tester' },
       });
@@ -171,7 +273,8 @@ describe('FundingTab', () => {
     });
 
     it('displays grant reason when provided', async () => {
-      vi.spyOn(SubscriptionService.prototype, 'getFundingStatus').mockResolvedValue({
+      setupDefaultMocks();
+      vi.spyOn(FundingService.prototype, 'getFundingStatus').mockResolvedValue({
         status: 'grant',
         grantInfo: { reason: 'Beta tester reward' },
       });
@@ -188,8 +291,12 @@ describe('FundingTab', () => {
 
   describe('Error handling', () => {
     it('shows error alert when loading fails', async () => {
-      vi.spyOn(SubscriptionService.prototype, 'getFundingStatus')
+      vi.spyOn(FundingService.prototype, 'getFundingStatus')
         .mockRejectedValue(new Error('Network error'));
+      vi.spyOn(FundingService.prototype, 'getStatus')
+        .mockResolvedValue(activeSubscription);
+      vi.spyOn(FundingService.prototype, 'getOptions')
+        .mockResolvedValue(defaultOptions);
 
       const wrapper = await mountFundingTab();
       currentWrapper = wrapper;
@@ -200,9 +307,10 @@ describe('FundingTab', () => {
     });
 
     it('shows error alert when add action fails', async () => {
-      vi.spyOn(SubscriptionService.prototype, 'getFundingStatus')
+      setupDefaultMocks();
+      vi.spyOn(FundingService.prototype, 'getFundingStatus')
         .mockResolvedValue({ status: 'unfunded' });
-      vi.spyOn(SubscriptionService.prototype, 'addCalendarToSubscription')
+      vi.spyOn(FundingService.prototype, 'addCalendarToFundingPlan')
         .mockRejectedValue(new Error('Add failed'));
 
       const wrapper = await mountFundingTab();
@@ -218,9 +326,10 @@ describe('FundingTab', () => {
     });
 
     it('shows error alert when remove action fails', async () => {
-      vi.spyOn(SubscriptionService.prototype, 'getFundingStatus')
+      setupDefaultMocks();
+      vi.spyOn(FundingService.prototype, 'getFundingStatus')
         .mockResolvedValue({ status: 'funded' });
-      vi.spyOn(SubscriptionService.prototype, 'removeCalendarFromSubscription')
+      vi.spyOn(FundingService.prototype, 'removeCalendarFromFundingPlan')
         .mockRejectedValue(new Error('Remove failed'));
 
       const wrapper = await mountFundingTab();
@@ -238,9 +347,10 @@ describe('FundingTab', () => {
 
   describe('Success messages', () => {
     it('shows success alert after successful add', async () => {
-      vi.spyOn(SubscriptionService.prototype, 'addCalendarToSubscription')
+      setupDefaultMocks();
+      vi.spyOn(FundingService.prototype, 'addCalendarToFundingPlan')
         .mockResolvedValue();
-      vi.spyOn(SubscriptionService.prototype, 'getFundingStatus')
+      vi.spyOn(FundingService.prototype, 'getFundingStatus')
         .mockResolvedValueOnce({ status: 'unfunded' })
         .mockResolvedValueOnce({ status: 'funded' });
 
@@ -257,9 +367,10 @@ describe('FundingTab', () => {
     });
 
     it('shows success alert after successful remove', async () => {
-      vi.spyOn(SubscriptionService.prototype, 'removeCalendarFromSubscription')
+      setupDefaultMocks();
+      vi.spyOn(FundingService.prototype, 'removeCalendarFromFundingPlan')
         .mockResolvedValue();
-      vi.spyOn(SubscriptionService.prototype, 'getFundingStatus')
+      vi.spyOn(FundingService.prototype, 'getFundingStatus')
         .mockResolvedValueOnce({ status: 'funded' })
         .mockResolvedValueOnce({ status: 'unfunded' });
 
@@ -278,14 +389,15 @@ describe('FundingTab', () => {
 
   describe('Button disabled state during actions', () => {
     it('disables add button while action is in progress', async () => {
+      setupDefaultMocks();
       let resolveAdd: () => void;
       const addPromise = new Promise<void>((resolve) => {
         resolveAdd = resolve;
       });
 
-      vi.spyOn(SubscriptionService.prototype, 'addCalendarToSubscription')
+      vi.spyOn(FundingService.prototype, 'addCalendarToFundingPlan')
         .mockReturnValue(addPromise);
-      vi.spyOn(SubscriptionService.prototype, 'getFundingStatus')
+      vi.spyOn(FundingService.prototype, 'getFundingStatus')
         .mockResolvedValue({ status: 'unfunded' });
 
       const wrapper = await mountFundingTab();
@@ -297,10 +409,8 @@ describe('FundingTab', () => {
       await addButton.trigger('click');
       await wrapper.vm.$nextTick();
 
-      // Button should be disabled while action is in progress
       expect(addButton.attributes('disabled')).toBeDefined();
 
-      // Resolve the promise to clean up
       resolveAdd!();
       await flushPromises();
     });

@@ -4,12 +4,12 @@ import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
 import funding from '@/client/components/admin/funding.vue';
 import AddProviderWizard from '@/client/components/admin/add-provider-wizard.vue';
-import SubscriptionService from '@/client/service/subscription';
+import FundingService from '@/client/service/funding';
 import enAdmin from '@/client/locales/en/admin.json';
 
-// Mock SubscriptionService
-vi.mock('@/client/service/subscription', () => {
-  const MockSubscriptionService = vi.fn().mockImplementation(() => ({
+// Mock FundingService
+vi.mock('@/client/service/funding', () => {
+  const MockFundingService = vi.fn().mockImplementation(() => ({
     getSettings: vi.fn().mockResolvedValue({
       enabled: true,
       monthlyPrice: 1000000, // 10.00 in millicents
@@ -32,17 +32,16 @@ vi.mock('@/client/service/subscription', () => {
         enabled: false,
       },
     ]),
-    getPlatformOAuthStatus: vi.fn().mockResolvedValue({ configured: true }),
-    listSubscriptions: vi.fn().mockResolvedValue({ subscriptions: [], total: 0 }),
+    listFundingPlans: vi.fn().mockResolvedValue({ subscriptions: [], total: 0 }),
   }));
 
   // Add static methods to the mock class
-  MockSubscriptionService.formatCurrency = vi.fn((millicents, currency) => `${currency} ${(millicents / 1000000).toFixed(2)}`);
-  MockSubscriptionService.millicentsToDisplay = vi.fn((millicents) => millicents / 1000000);
-  MockSubscriptionService.displayToMillicents = vi.fn((amount) => amount * 1000000);
+  MockFundingService.formatCurrency = vi.fn((millicents, currency) => `${currency} ${(millicents / 1000000).toFixed(2)}`);
+  MockFundingService.millicentsToDisplay = vi.fn((millicents) => millicents / 1000000);
+  MockFundingService.displayToMillicents = vi.fn((amount) => amount * 1000000);
 
   return {
-    default: MockSubscriptionService,
+    default: MockFundingService,
   };
 });
 
@@ -133,11 +132,10 @@ describe('Funding Page Wizard Integration', () => {
           enabled: true,
         },
       ]),
-      getPlatformOAuthStatus: vi.fn().mockResolvedValue({ configured: true }),
-      listSubscriptions: vi.fn().mockResolvedValue({ subscriptions: [], total: 0 }),
+      listFundingPlans: vi.fn().mockResolvedValue({ subscriptions: [], total: 0 }),
     };
 
-    vi.mocked(SubscriptionService).mockImplementation(() => mockService as any);
+    vi.mocked(FundingService).mockImplementation(() => mockService as any);
 
     wrapper = mountWithI18n({
       global: {
@@ -160,7 +158,7 @@ describe('Funding Page Wizard Integration', () => {
 
   it('opens wizard with correct provider list when "Add Provider" button is clicked', async () => {
     // Reset mock to ensure we get unconfigured providers
-    vi.mocked(SubscriptionService).mockImplementation(() => ({
+    vi.mocked(FundingService).mockImplementation(() => ({
       getSettings: vi.fn().mockResolvedValue({
         enabled: true,
         monthlyPrice: 1000000,
@@ -183,8 +181,7 @@ describe('Funding Page Wizard Integration', () => {
           enabled: false,
         },
       ]),
-      getPlatformOAuthStatus: vi.fn().mockResolvedValue({ configured: true }),
-      listSubscriptions: vi.fn().mockResolvedValue({ subscriptions: [], total: 0 }),
+      listFundingPlans: vi.fn().mockResolvedValue({ subscriptions: [], total: 0 }),
     } as any));
 
     wrapper = mountWithI18n({
@@ -266,11 +263,10 @@ describe('Funding Page Wizard Integration', () => {
             enabled: false,
           },
         ]),
-      getPlatformOAuthStatus: vi.fn().mockResolvedValue({ configured: true }),
-      listSubscriptions: vi.fn().mockResolvedValue({ subscriptions: [], total: 0 }),
+      listFundingPlans: vi.fn().mockResolvedValue({ subscriptions: [], total: 0 }),
     };
 
-    vi.mocked(SubscriptionService).mockImplementation(() => mockService as any);
+    vi.mocked(FundingService).mockImplementation(() => mockService as any);
 
     wrapper = mountWithI18n({
       global: {

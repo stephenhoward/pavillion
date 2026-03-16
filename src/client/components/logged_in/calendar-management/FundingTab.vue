@@ -23,6 +23,9 @@
     <!-- Loading State -->
     <LoadingMessage v-if="state.isLoading" :description="t('loading')" />
 
+    <!-- Subscriptions disabled - hide funding UI entirely -->
+    <template v-else-if="state.fundingDisabled" />
+
     <!-- Funding Content -->
     <div v-else class="funding-content">
       <h2 class="funding-title">{{ t('title') }}</h2>
@@ -63,13 +66,28 @@
           type="button"
           class="funding-button funding-button--secondary"
           :disabled="state.isActing"
-          @click="removeFromSubscription"
+          @click="removeFromFundingPlan"
         >
           {{ state.isActing ? t('removing') : t('remove_button') }}
         </button>
       </div>
 
-      <!-- Unfunded Status -->
+      <!-- Unfunded Status - No subscription -->
+      <div v-else-if="state.fundingStatus === 'unfunded' && !state.hasFundingPlan" class="funding-card">
+        <div class="funding-status-badge funding-status-badge--unfunded">
+          {{ t('status_unfunded') }}
+        </div>
+        <p class="funding-description">{{ t('no_subscription_prompt') }}</p>
+        <button
+          type="button"
+          class="funding-button funding-button--primary"
+          @click="state.showFundingSheet = true"
+        >
+          {{ t('subscribe_to_fund_button') }}
+        </button>
+      </div>
+
+      <!-- Unfunded Status - Has subscription -->
       <div v-else class="funding-card">
         <div class="funding-status-badge funding-status-badge--unfunded">
           {{ t('status_unfunded') }}
@@ -79,34 +97,42 @@
           type="button"
           class="funding-button funding-button--primary"
           :disabled="state.isActing"
-          @click="addToSubscription"
+          @click="addToFundingPlan"
         >
           {{ state.isActing ? t('adding') : t('add_button') }}
         </button>
       </div>
     </div>
+
+    <!-- Subscribe Sheet -->
+    <FundingSheet
+      v-if="state.showFundingSheet"
+      :calendarId="props.calendarId"
+      @close="state.showFundingSheet = false"
+      @subscribed="onSubscribed"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { reactive, onMounted } from 'vue';
 import { useTranslation } from 'i18next-vue';
-import SubscriptionService from '@/client/service/subscription';
-import type { FundingStatus } from '@/client/service/subscription';
+import { useRoute } from 'vue-router';
+import FundingService from '@/client/service/funding';
+import type { FundingStatus } from '@/client/service/funding';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
+import FundingSheet from '@/client/components/logged_in/calendar-management/FundingSheet.vue';
 
-const props = defineProps({
-  calendarId: {
-    type: String,
-    required: true,
-  },
-});
+const props = defineProps<{
+  calendarId: string;
+}>();
 
 const { t } = useTranslation('calendars', {
   keyPrefix: 'funding',
 });
 
-const subscriptionService = new SubscriptionService();
+const route = useRoute();
+const fundingService = new FundingService();
 
 const state = reactive({
   isLoading: false,
@@ -115,6 +141,9 @@ const state = reactive({
   success: '',
   fundingStatus: '' as FundingStatus['status'] | '',
   grantInfo: null as { reason?: string; expiresAt?: string } | null,
+  hasSubscription: false,
+  subscriptionsDisabled: false,
+  showFundingSheet: false,
 });
 
 /**
@@ -140,16 +169,23 @@ const formatDate = (dateString: string): string => {
 };
 
 /**
- * Load the funding status for this calendar
+ * Load the funding status and funding plan state for this calendar
  */
 const loadFundingStatus = async () => {
   try {
     state.isLoading = true;
     state.error = '';
 
-    const result: FundingStatus = await subscriptionService.getFundingStatus(props.calendarId);
-    state.fundingStatus = result.status;
-    state.grantInfo = result.grantInfo ?? null;
+    const [fundingResult, fundingPlanStatus, fundingPlanOptions] = await Promise.all([
+      fundingService.getFundingStatus(props.calendarId),
+      fundingService.getStatus(),
+      fundingService.getOptions(),
+    ]);
+
+    state.fundingStatus = fundingResult.status;
+    state.grantInfo = fundingResult.grantInfo ?? null;
+    state.hasFundingPlan = fundingPlanStatus !== null;
+    state.fundingDisabled = !fundingPlanOptions.enabled;
   }
   catch (error) {
     console.error('Error loading funding status:', error);
@@ -162,22 +198,22 @@ const loadFundingStatus = async () => {
 };
 
 /**
- * Add this calendar to the user's subscription
+ * Add this calendar to the user's funding plan
  */
-const addToSubscription = async () => {
+const addToFundingPlan = async () => {
   try {
     state.isActing = true;
     state.error = '';
     state.success = '';
 
-    await subscriptionService.addCalendarToSubscription(props.calendarId, 0);
+    await fundingService.addCalendarToFundingPlan(props.calendarId, 0);
 
     state.success = t('add_success');
     clearMessages();
     await loadFundingStatus();
   }
   catch (error) {
-    console.error('Error adding calendar to subscription:', error);
+    console.error('Error adding calendar to funding plan:', error);
     state.error = t('error_adding');
     clearMessages();
   }
@@ -187,22 +223,22 @@ const addToSubscription = async () => {
 };
 
 /**
- * Remove this calendar from the user's subscription
+ * Remove this calendar from the user's funding plan
  */
-const removeFromSubscription = async () => {
+const removeFromFundingPlan = async () => {
   try {
     state.isActing = true;
     state.error = '';
     state.success = '';
 
-    await subscriptionService.removeCalendarFromSubscription(props.calendarId);
+    await fundingService.removeCalendarFromFundingPlan(props.calendarId);
 
     state.success = t('remove_success');
     clearMessages();
     await loadFundingStatus();
   }
   catch (error) {
-    console.error('Error removing calendar from subscription:', error);
+    console.error('Error removing calendar from funding plan:', error);
     state.error = t('error_removing');
     clearMessages();
   }
@@ -211,7 +247,38 @@ const removeFromSubscription = async () => {
   }
 };
 
-onMounted(loadFundingStatus);
+/**
+ * Handle successful funding plan creation from the subscribe sheet
+ */
+const onSubscribed = async () => {
+  state.showFundingSheet = false;
+  try {
+    state.isActing = true;
+    await fundingService.addCalendarToFundingPlan(props.calendarId, 0);
+    state.success = t('subscribe_and_fund_success');
+    clearMessages();
+  }
+  catch (error) {
+    console.error('Error auto-funding calendar after subscribe:', error);
+    state.error = t('error_adding');
+    clearMessages();
+  }
+  finally {
+    state.isActing = false;
+    await loadFundingStatus();
+  }
+};
+
+onMounted(async () => {
+  await loadFundingStatus();
+
+  // Handle checkout return
+  if (route.query.checkout === 'success') {
+    state.success = t('checkout_return_success');
+    clearMessages();
+    await loadFundingStatus();
+  }
+});
 </script>
 
 <style scoped lang="scss">

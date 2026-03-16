@@ -4,7 +4,7 @@ import { nextTick } from 'vue';
 import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
 import AddProviderWizard from '@/client/components/admin/add-provider-wizard.vue';
-import type { ProviderConfig } from '@/client/service/subscription';
+import type { ProviderConfig } from '@/client/service/funding';
 import enAdmin from '@/client/locales/en/admin.json';
 
 describe('AddProviderWizard', () => {
@@ -105,7 +105,7 @@ describe('AddProviderWizard', () => {
 
     // Should now be on step 2
     expect(wrapper.text()).toContain('Step 2 of 3');
-    expect(wrapper.text()).toContain('Connect Stripe');
+    expect(wrapper.text()).toContain('Configure Stripe');
   });
 
   it('should navigate back from step 2 to step 1 when Back is clicked', async () => {

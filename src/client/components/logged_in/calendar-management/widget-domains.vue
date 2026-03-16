@@ -10,7 +10,7 @@
       <span v-else>
         {{ state.error }}
         <router-link
-          to="/subscription"
+          to="/funding"
           class="subscription-link"
           :aria-label="t('subscribe_action_full_context')">
           {{ t('subscribe_action') }}

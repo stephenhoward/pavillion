@@ -2,7 +2,7 @@
 import { useTranslation } from 'i18next-vue';
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import SubscriptionService from '@/client/service/subscription';
+import FundingService from '@/client/service/funding';
 import PayPalConfigModal from './paypal-config-modal.vue';
 import ConfirmDisconnectModal from './confirm-disconnect-modal.vue';
 import AddProviderWizard from './add-provider-wizard.vue';
@@ -14,7 +14,7 @@ const { t } = useTranslation('admin', {
 });
 
 // Service instance
-const subscriptionService = new SubscriptionService();
+const fundingService = new FundingService();
 
 // Router
 const route = useRoute();
@@ -100,10 +100,10 @@ const allProvidersConfigured = computed(() => {
  */
 async function loadSettings() {
   try {
-    const settings = await subscriptionService.getSettings();
+    const settings = await fundingService.getSettings();
     enabled.value = settings.enabled;
-    monthlyPrice.value = SubscriptionService.millicentsToDisplay(settings.monthlyPrice);
-    yearlyPrice.value = SubscriptionService.millicentsToDisplay(settings.yearlyPrice);
+    monthlyPrice.value = FundingService.millicentsToDisplay(settings.monthlyPrice);
+    yearlyPrice.value = FundingService.millicentsToDisplay(settings.yearlyPrice);
     currency.value = settings.currency;
     payWhatYouCan.value = settings.payWhatYouCan;
     gracePeriodDays.value = settings.gracePeriodDays;
@@ -123,7 +123,7 @@ async function loadSettings() {
 async function loadProviders() {
   try {
     providersLoading.value = true;
-    providers.value = await subscriptionService.getProviders();
+    providers.value = await fundingService.getProviders();
   }
   catch (error) {
     console.error('Failed to load providers:', error);
@@ -138,7 +138,7 @@ async function loadProviders() {
  */
 async function loadSubscriptions() {
   try {
-    const result = await subscriptionService.listSubscriptions(subscriptionsPage.value, subscriptionsLimit.value);
+    const result = await fundingService.listFundingPlans(subscriptionsPage.value, subscriptionsLimit.value);
     subscriptions.value = result.subscriptions || [];
     subscriptionsTotal.value = result.total || 0;
   }
@@ -153,7 +153,7 @@ async function loadSubscriptions() {
 async function loadGrants() {
   try {
     grantsLoading.value = true;
-    grants.value = await subscriptionService.listGrants(includeRevoked.value);
+    grants.value = await fundingService.listGrants(includeRevoked.value);
   }
   catch (error) {
     console.error('Failed to load grants:', error);
@@ -205,7 +205,7 @@ async function revokeGrant(grantId: string) {
   successMessage.value = '';
 
   try {
-    await subscriptionService.revokeGrant(grantId);
+    await fundingService.revokeGrant(grantId);
     successMessage.value = t('grants.revoked');
     await loadGrants();
   }
@@ -237,10 +237,10 @@ async function toggleEnabled() {
   successMessage.value = '';
 
   try {
-    const success = await subscriptionService.updateSettings({
+    const success = await fundingService.updateSettings({
       enabled: enabled.value,
-      monthlyPrice: SubscriptionService.displayToMillicents(monthlyPrice.value),
-      yearlyPrice: SubscriptionService.displayToMillicents(yearlyPrice.value),
+      monthlyPrice: FundingService.displayToMillicents(monthlyPrice.value),
+      yearlyPrice: FundingService.displayToMillicents(yearlyPrice.value),
       currency: currency.value,
       payWhatYouCan: payWhatYouCan.value,
       gracePeriodDays: gracePeriodDays.value,
@@ -279,10 +279,10 @@ async function updateSettings() {
   successMessage.value = '';
 
   try {
-    const success = await subscriptionService.updateSettings({
+    const success = await fundingService.updateSettings({
       enabled: enabled.value,
-      monthlyPrice: SubscriptionService.displayToMillicents(monthlyPrice.value),
-      yearlyPrice: SubscriptionService.displayToMillicents(yearlyPrice.value),
+      monthlyPrice: FundingService.displayToMillicents(monthlyPrice.value),
+      yearlyPrice: FundingService.displayToMillicents(yearlyPrice.value),
       currency: currency.value,
       payWhatYouCan: payWhatYouCan.value,
       gracePeriodDays: gracePeriodDays.value,
@@ -332,7 +332,7 @@ async function handleProviderConnected() {
  */
 async function toggleProvider(provider) {
   try {
-    const success = await subscriptionService.updateProvider(provider.provider_type, {
+    const success = await fundingService.updateProvider(provider.provider_type, {
       enabled: !provider.enabled,
     });
 
@@ -358,7 +358,7 @@ async function disconnectProvider(providerType) {
     errorMessage.value = '';
 
     // First call to check if confirmation is needed
-    const result = await subscriptionService.disconnectProvider(providerType, false);
+    const result = await fundingService.disconnectProvider(providerType, false);
 
     if (result.requiresConfirmation) {
       // Show confirmation modal with active subscription count
@@ -393,7 +393,7 @@ async function confirmDisconnect() {
     errorMessage.value = '';
 
     // Second call with confirmation=true to actually disconnect
-    const result = await subscriptionService.disconnectProvider(
+    const result = await fundingService.disconnectProvider(
       disconnectModalData.value.providerType,
       true,
     );
@@ -416,13 +416,13 @@ async function confirmDisconnect() {
 /**
  * Force cancel a subscription
  */
-async function forceCancelSubscription(subscriptionId) {
+async function forceCancelFundingPlan(subscriptionId) {
   if (!confirm(t('force_cancel_confirm'))) {
     return;
   }
 
   try {
-    const success = await subscriptionService.forceCancelSubscription(subscriptionId);
+    const success = await fundingService.forceCancelFundingPlan(subscriptionId);
 
     if (success) {
       successMessage.value = t('force_cancel_success');
@@ -450,7 +450,7 @@ function getProviderName(providerType) {
  * Format currency amount
  */
 function formatAmount(millicents, curr) {
-  return SubscriptionService.formatCurrency(millicents, curr);
+  return FundingService.formatCurrency(millicents, curr);
 }
 
 /**
@@ -466,7 +466,6 @@ function formatDate(dateString) {
  */
 function checkQueryParameters() {
   const error = route.query.error as string;
-  const success = route.query.success as string;
 
   if (error) {
     // Map error codes to error messages
@@ -489,25 +488,6 @@ function checkQueryParameters() {
     router.replace({ query: {} });
   }
 
-  if (success === 'stripe_connected') {
-    successMessage.value = t('query_success.stripe_connected');
-
-    // Close wizard if it's open
-    showWizard.value = false;
-
-    // Reload providers list
-    loadProviders();
-
-    // Auto-dismiss after 10 seconds
-    setTimeout(() => {
-      if (successMessage.value === t('query_success.stripe_connected')) {
-        successMessage.value = '';
-      }
-    }, 10000);
-
-    // Remove query parameter from URL
-    router.replace({ query: {} });
-  }
 }
 
 // Load data on mount
@@ -698,7 +678,7 @@ onMounted(async () => {
                       v-if="sub.status === 'active'"
                       type="button"
                       class="action-link action-link--danger"
-                      @click="forceCancelSubscription(sub.id)"
+                      @click="forceCancelFundingPlan(sub.id)"
                     >
                       {{ t("force_cancel_button") }}
                     </button>
@@ -734,7 +714,7 @@ onMounted(async () => {
                   v-if="sub.status === 'active'"
                   type="button"
                   class="action-link-mobile action-link--danger"
-                  @click="forceCancelSubscription(sub.id)"
+                  @click="forceCancelFundingPlan(sub.id)"
                 >
                   {{ t("force_cancel_button") }}
                 </button>

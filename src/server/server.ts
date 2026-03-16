@@ -23,7 +23,7 @@ import NotificationsDomain from './notifications';
 import PublicCalendarDomain from './public';
 import MediaDomain from './media';
 import SetupDomain from './setup';
-import SubscriptionDomain from './subscription';
+import FundingDomain from './funding';
 import TestEmailRoutes from '@/server/common/test-support/test-emails';
 import { createSetupModeMiddleware } from './setup/middleware/setup-mode';
 import { createLocaleMiddleware } from '@/server/common/middleware/locale';
@@ -287,17 +287,17 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
   const authenticationDomain = new AuthenticationDomain(eventBus, accountsDomain.interface, emailDomain.interface);
   authenticationDomain.initialize(app);
 
-  // Initialize subscription domain before calendar domain (calendar needs subscription interface)
-  const subscriptionDomain = new SubscriptionDomain(eventBus);
-  subscriptionDomain.initialize(app);
+  // Initialize funding domain before calendar domain (calendar needs funding interface)
+  const fundingDomain = new FundingDomain(eventBus);
+  fundingDomain.initialize(app);
 
-  const calendarDomain = new CalendarDomain(eventBus, accountsDomain.interface, emailDomain.interface, subscriptionDomain.interface);
+  const calendarDomain = new CalendarDomain(eventBus, accountsDomain.interface, emailDomain.interface, fundingDomain.interface);
   calendarDomain.initialize(app);
 
-  // Inject CalendarInterface into SubscriptionDomain after CalendarDomain is constructed
-  // to resolve the circular dependency (CalendarDomain needs SubscriptionInterface,
-  // SubscriptionDomain needs CalendarInterface for ownership/existence checks).
-  subscriptionDomain.setCalendarInterface(calendarDomain.interface);
+  // Inject CalendarInterface into FundingDomain after CalendarDomain is constructed
+  // to resolve the circular dependency (CalendarDomain needs FundingInterface,
+  // FundingDomain needs CalendarInterface for ownership/existence checks).
+  fundingDomain.setCalendarInterface(calendarDomain.interface);
 
   // Initialize moderation domain before ActivityPub (ActivityPub inbox needs ModerationInterface)
   const moderationDomain = new ModerationDomain(eventBus, calendarDomain.interface, accountsDomain.interface, emailDomain.interface, configurationDomain.interface);

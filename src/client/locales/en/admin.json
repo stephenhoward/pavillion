@@ -448,9 +448,8 @@
         "paypal_description": "Credit cards or PayPal payments"
       },
       "step2": {
-        "stripe_title": "Connect Stripe",
-        "stripe_description": "Click the button below to connect your Stripe account using OAuth. You will be redirected to Stripe to authorize the connection.",
-        "stripe_connect_button": "Connect with Stripe",
+        "stripe_title": "Configure Stripe",
+        "stripe_coming_soon": "Stripe configuration will be available soon.",
         "paypal_title": "Configure PayPal",
         "paypal_description": "Enter your PayPal REST API credentials to enable PayPal payments.",
         "paypal_configure_button": "Configure PayPal",
@@ -531,30 +530,11 @@
       "disconnecting_button": "Disconnecting...",
       "close_button": "Close"
     },
-    "platform_config": {
-      "section_title": "Platform OAuth Configuration",
-      "section_description": "Configure OAuth credentials for connecting providers to your platform. Required for Stripe OAuth flow.",
-      "stripe_section_title": "Stripe Connect Credentials",
-      "client_id_label": "Client ID",
-      "client_id_placeholder": "Enter Stripe Connect Client ID",
-      "client_secret_label": "Client Secret",
-      "client_secret_placeholder": "Enter Stripe Connect Client Secret",
-      "save_button": "Save Platform Configuration",
-      "saving_button": "Saving...",
-      "status_configured": "Platform OAuth credentials configured",
-      "status_not_configured": "Platform OAuth credentials not configured",
-      "validation_error": "Both Client ID and Client Secret are required",
-      "save_success": "Platform OAuth configuration saved successfully",
-      "save_failed": "Failed to save platform OAuth configuration"
-    },
     "query_error": {
       "access_denied": "Connection cancelled. Please try again if you want to connect {{provider}}.",
       "invalid_state": "Invalid connection request. Please try again.",
       "connection_failed": "Failed to connect to {{provider}}. Please check your platform credentials and try again.",
       "unknown": "An error occurred during provider connection. Please try again."
-    },
-    "query_success": {
-      "stripe_connected": "Stripe connected successfully!"
     },
     "grants": {
       "tab_title": "Complimentary Grants",

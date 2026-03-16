@@ -1,0 +1,535 @@
+<script setup>
+import { useTranslation } from 'i18next-vue';
+import { ref, computed, onMounted } from 'vue';
+import FundingService from '@/client/service/funding';
+import FundingForm from '@/client/components/account/FundingForm.vue';
+
+const { t } = useTranslation('funding');
+
+// Service instance
+const fundingService = new FundingService();
+
+// State management
+const loading = ref(true);
+const processing = ref(false);
+const successMessage = ref('');
+const errorMessage = ref('');
+
+// Data state
+const options = ref(null);
+const status = ref(null);
+
+// Funding form state
+const showFundingForm = ref(false);
+
+// Computed properties
+const hasFundingPlan = computed(() => status.value !== null);
+
+const isActive = computed(() => status.value?.status === 'active');
+
+const isPastDue = computed(() => status.value?.status === 'past_due');
+
+const isSuspended = computed(() => status.value?.status === 'suspended');
+
+const isCancelled = computed(() => status.value?.status === 'cancelled');
+
+const canSubscribe = computed(() => options.value?.enabled && !hasFundingPlan.value);
+
+const canCancel = computed(() => hasFundingPlan.value && (isActive.value || isPastDue.value));
+
+const monthlyPriceDisplay = computed(() => {
+  if (!options.value) return '';
+  return FundingService.formatCurrency(options.value.monthly_price, options.value.currency);
+});
+
+const yearlyPriceDisplay = computed(() => {
+  if (!options.value) return '';
+  return FundingService.formatCurrency(options.value.yearly_price, options.value.currency);
+});
+
+const currentAmountDisplay = computed(() => {
+  if (!status.value) return '';
+  return FundingService.formatCurrency(status.value.amount, status.value.currency);
+});
+
+/**
+ * Load funding options and current status
+ */
+async function loadData() {
+  try {
+    loading.value = true;
+    [options.value, status.value] = await Promise.all([
+      fundingService.getOptions(),
+      fundingService.getStatus(),
+    ]);
+  }
+  catch (error) {
+    console.error('Failed to load funding data:', error);
+    errorMessage.value = t('load_error');
+  }
+  finally {
+    loading.value = false;
+  }
+}
+
+/**
+ * Start funding plan flow
+ */
+function startSubscribe() {
+  showFundingForm.value = true;
+}
+
+/**
+ * Handle successful funding plan from FundingForm
+ */
+async function onSubscribed() {
+  successMessage.value = t('subscribe_success');
+  showFundingForm.value = false;
+  await loadData();
+}
+
+/**
+ * Cancel funding plan
+ */
+async function cancelFundingPlan() {
+  if (!confirm(t('cancel_confirm'))) {
+    return;
+  }
+
+  processing.value = true;
+  errorMessage.value = '';
+  successMessage.value = '';
+
+  try {
+    const success = await fundingService.cancel();
+
+    if (success) {
+      successMessage.value = t('cancel_success');
+      await loadData();
+    }
+    else {
+      errorMessage.value = t('cancel_error');
+    }
+  }
+  catch (error) {
+    console.error('Failed to cancel funding plan:', error);
+    errorMessage.value = t('cancel_error');
+  }
+  finally {
+    processing.value = false;
+  }
+}
+
+/**
+ * Open billing portal
+ */
+async function openBillingPortal() {
+  try {
+    const portalUrl = await fundingService.getPortalUrl();
+    window.location.href = portalUrl;
+  }
+  catch (error) {
+    console.error('Failed to get portal URL:', error);
+    errorMessage.value = t('portal_error');
+  }
+}
+
+/**
+ * Format date for display
+ */
+function formatDate(dateString) {
+  return new Date(dateString).toLocaleDateString();
+}
+
+// Load data on mount
+onMounted(async () => {
+  await loadData();
+});
+</script>
+
+<template>
+  <section class="settings funding-plan-management" aria-labelledby="funding-plan-heading">
+    <div class="settings-header">
+      <router-link to="/profile" class="back-button">{{ t("back_to_settings") }}</router-link>
+      <h1 id="funding-plan-heading">{{ t("title") }}</h1>
+    </div>
+
+    <div role="status" aria-live="polite">
+      <div v-if="successMessage" class="success-message">{{ successMessage }}</div>
+      <div v-if="errorMessage" class="error-message">{{ errorMessage }}</div>
+    </div>
+
+    <div v-if="loading" class="loading">{{ t("loading") }}</div>
+
+    <div v-else class="funding-plan-content">
+      <!-- No funding plan - Show subscribe options -->
+      <div v-if="canSubscribe && !showFundingForm" class="no-funding-plan">
+        <h2>{{ t("no_funding_plan") }}</h2>
+        <p>{{ t("no_funding_plan_description") }}</p>
+
+        <div class="pricing-info">
+          <div class="price-option">
+            <strong>{{ t("monthly_option") }}</strong>
+            <span class="price">{{ monthlyPriceDisplay }}</span>
+          </div>
+          <div class="price-option">
+            <strong>{{ t("yearly_option") }}</strong>
+            <span class="price">{{ yearlyPriceDisplay }}</span>
+          </div>
+        </div>
+
+        <button type="button" class="primary" @click="startSubscribe">
+          {{ t("subscribe_button") }}
+        </button>
+      </div>
+
+      <!-- Funding form -->
+      <div v-if="showFundingForm" class="funding-form">
+        <h2>{{ t("subscribe_title") }}</h2>
+        <FundingForm @subscribed="onSubscribed" />
+        <div class="form-actions">
+          <button type="button"
+                  class="secondary"
+                  @click="showFundingForm = false">
+            {{ t("cancel_button") }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Active funding plan - Show status and management -->
+      <div v-if="hasFundingPlan" class="funding-plan-status">
+        <h2>{{ t("current_funding_plan") }}</h2>
+
+        <div class="status-card">
+          <div class="status-row">
+            <span class="label">{{ t("status_label") }}</span>
+            <span :class="`status-badge status-${status.status}`">
+              {{ t(`status_${status.status}`) }}
+            </span>
+          </div>
+
+          <div class="status-row">
+            <span class="label">{{ t("billing_cycle_label") }}</span>
+            <span>{{ t(`billing_cycle_${status.billing_cycle}`) }}</span>
+          </div>
+
+          <div class="status-row">
+            <span class="label">{{ t("amount_label") }}</span>
+            <span>{{ currentAmountDisplay }}</span>
+          </div>
+
+          <div class="status-row">
+            <span class="label">{{ t("current_period_label") }}</span>
+            <span>{{ formatDate(status.current_period_start) }} - {{ formatDate(status.current_period_end) }}</span>
+          </div>
+
+          <div v-if="status.cancelled_at" class="status-row">
+            <span class="label">{{ t("cancelled_at_label") }}</span>
+            <span>{{ formatDate(status.cancelled_at) }}</span>
+          </div>
+
+          <div v-if="isCancelled" class="status-message info">
+            {{ t("cancellation_info", { date: formatDate(status.current_period_end) }) }}
+          </div>
+
+          <div v-if="isPastDue" class="status-message warning">
+            {{ t("past_due_warning") }}
+          </div>
+
+          <div v-if="isSuspended" class="status-message error">
+            {{ t("suspended_message") }}
+          </div>
+        </div>
+
+        <div class="funding-plan-actions">
+          <button
+            v-if="isActive || isPastDue"
+            type="button"
+            class="secondary"
+            @click="openBillingPortal"
+          >
+            {{ t("manage_payment_button") }}
+          </button>
+
+          <button
+            v-if="canCancel"
+            type="button"
+            class="danger"
+            :disabled="processing"
+            @click="cancelFundingPlan"
+          >
+            {{ t("cancel_funding_plan_button") }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Funding disabled message -->
+      <div v-if="!options?.enabled" class="funding-disabled">
+        <p>{{ t("funding_disabled") }}</p>
+      </div>
+    </div>
+  </section>
+</template>
+
+<style scoped lang="scss">
+.funding-plan-management {
+  padding: 20px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.settings-header {
+  margin-bottom: 2rem;
+
+  .back-button {
+    display: inline-block;
+    margin-bottom: 1rem;
+    color: var(--pav-color-interactive-primary);
+    text-decoration: none;
+    font-size: 0.875rem;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  h1 {
+    font-weight: 200;
+    font-size: 2rem;
+    margin: 0;
+  }
+}
+
+h2 {
+  font-weight: 200;
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.loading {
+  padding: 2rem;
+  text-align: center;
+  color: var(--pav-color-text-secondary);
+}
+
+.success-message {
+  margin-bottom: 1.5rem;
+  padding: 0.75rem;
+  background-color: #f0fff0;
+  border: 1px solid #73d873;
+  color: #2a7d2a;
+  border-radius: 4px;
+}
+
+.error-message {
+  margin-bottom: 1.5rem;
+  padding: 0.75rem;
+  background-color: #fff0f0;
+  border: 1px solid #d87373;
+  color: #7d2a2a;
+  border-radius: 4px;
+}
+
+.funding-plan-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.no-funding-plan {
+  text-align: center;
+  padding: 2rem;
+
+  .pricing-info {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    margin: 2rem 0;
+
+    .price-option {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      padding: 1rem;
+      border: 1px solid var(--pav-color-border-primary);
+      border-radius: 8px;
+      min-width: 150px;
+
+      .price {
+        font-size: 1.5rem;
+        font-weight: var(--pav-font-weight-semibold);
+        color: var(--pav-color-interactive-primary);
+      }
+    }
+  }
+}
+
+.funding-form {
+  padding: 2rem;
+  border: 1px solid var(--pav-color-border-primary);
+  border-radius: 8px;
+  background: var(--pav-color-surface-secondary);
+
+  .form-group {
+    margin-bottom: 1.5rem;
+
+    .form-label {
+      display: block;
+      font-weight: var(--pav-font-weight-medium);
+      margin-bottom: 0.5rem;
+      color: var(--pav-color-text-primary);
+    }
+
+    .provider-options, .cycle-options {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+
+      label {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.75rem;
+        border: 1px solid var(--pav-color-border-primary);
+        border-radius: 8px;
+        cursor: pointer;
+
+        &:hover {
+          background: var(--pav-color-surface-hover);
+        }
+
+        input[type="radio"] {
+          margin: 0;
+        }
+      }
+    }
+
+    .form-field {
+      input {
+        width: 100%;
+        max-width: 200px;
+        padding: 0.5rem;
+        border: 1px solid var(--pav-color-border-primary);
+        border-radius: 8px;
+        background: var(--pav-color-surface-secondary);
+        color: var(--pav-color-text-primary);
+
+        @media (prefers-color-scheme: dark) {
+          background: var(--pav-color-surface-tertiary);
+        }
+      }
+
+      .description {
+        margin-top: 0.5rem;
+        font-size: 0.875rem;
+        color: var(--pav-color-text-secondary);
+      }
+    }
+  }
+
+  .form-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 2rem;
+  }
+}
+
+.funding-plan-status {
+  .status-card {
+    padding: 1.5rem;
+    border: 1px solid var(--pav-color-border-primary);
+    border-radius: 8px;
+    background: var(--pav-color-surface-secondary);
+
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem 0;
+      border-bottom: 1px solid var(--pav-color-border-primary);
+
+      &:last-child {
+        border-bottom: none;
+      }
+
+      .label {
+        font-weight: var(--pav-font-weight-medium);
+        color: var(--pav-color-text-secondary);
+      }
+
+      .status-badge {
+        padding: 0.25rem 0.75rem;
+        border-radius: 4px;
+        font-size: 0.875rem;
+        font-weight: var(--pav-font-weight-medium);
+
+        &.status-active {
+          background: #d4edda;
+          color: #155724;
+        }
+
+        &.status-past_due {
+          background: #fff3cd;
+          color: #856404;
+        }
+
+        &.status-suspended, &.status-cancelled {
+          background: #f8d7da;
+          color: #721c24;
+        }
+      }
+    }
+
+    .status-message {
+      margin-top: 1rem;
+      padding: 0.75rem;
+      border-radius: 4px;
+
+      &.info {
+        background: #d1ecf1;
+        color: #0c5460;
+      }
+
+      &.warning {
+        background: #fff3cd;
+        color: #856404;
+      }
+
+      &.error {
+        background: #f8d7da;
+        color: #721c24;
+      }
+    }
+  }
+
+  .funding-plan-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1.5rem;
+
+    button.danger {
+      background: #dc3545;
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      cursor: pointer;
+
+      &:hover {
+        background: #c82333;
+      }
+
+      &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+    }
+  }
+}
+
+.funding-disabled {
+  padding: 2rem;
+  text-align: center;
+  color: var(--pav-color-text-secondary);
+}
+</style>
