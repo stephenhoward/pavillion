@@ -7,8 +7,8 @@ import {
   FundingPlanNotFoundError,
   CalendarFundingPlanNotFoundError,
   DuplicateCalendarFundingPlanError,
-  CalendarNotFoundError,
-} from '@/server/funding/exceptions';
+} from '@/common/exceptions/funding';
+import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { calendarFundingPlanByAccount } from '@/server/common/middleware/rate-limiters';
 import { logError } from '@/server/common/helper/error-logger';
 

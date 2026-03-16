@@ -21,7 +21,6 @@ import { AccountEntity, AccountRoleEntity } from '@/server/common/entity/account
 import { ProviderFactory } from '@/server/funding/service/provider/factory';
 import {
   WebhookEvent,
-  CreateSubscriptionParams,
   CreateCheckoutSessionParams,
   CheckoutSessionResult,
   CheckoutSessionStatus,
@@ -37,13 +36,13 @@ import {
   FundingPlanNotFoundError,
   CalendarFundingPlanNotFoundError,
   DuplicateCalendarFundingPlanError,
-  CalendarNotFoundError,
   ActiveFundingPlanExistsError,
   ProviderNotConfiguredError,
   InvalidSessionIdError,
   WebhookSignatureError,
-} from '@/server/funding/exceptions';
+} from '@/common/exceptions/funding';
 import { ValidationError } from '@/common/exceptions/base';
+import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import type CalendarInterface from '@/server/calendar/interface';
 
 // UUID v4 validation regex
@@ -118,7 +117,7 @@ export default class FundingService {
    * @param settings - Updated settings
    * @returns True if update successful
    */
-  async updateSettings(settings: FundingSettings): Promise<boolean> {
+  async updateSettings(settings: FundingSettings): Promise<void> {
     // Validate settings
     if (settings.monthlyPrice < 0 || settings.yearlyPrice < 0) {
       throw new InvalidAmountError('Prices must be non-negative');
@@ -152,7 +151,6 @@ export default class FundingService {
       await entity.save();
     }
 
-    return true;
   }
 
   /**
@@ -371,12 +369,12 @@ export default class FundingService {
       parsed = new URL(returnUrl);
     }
     catch {
-      throw new ValidationError('return_url is not a valid URL');
+      throw new ValidationError('returnUrl is not a valid URL');
     }
 
     // Reject non-http(s) schemes (javascript:, data:, ftp:, etc.)
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      throw new ValidationError('return_url must use http or https scheme');
+      throw new ValidationError('returnUrl must use http or https scheme');
     }
 
     // Build expected origin from configured domain
@@ -386,7 +384,7 @@ export default class FundingService {
       : `https://${instanceDomain}`;
 
     if (parsed.origin !== expectedOrigin) {
-      throw new ValidationError('return_url origin does not match this instance');
+      throw new ValidationError('returnUrl origin does not match this instance');
     }
   }
 
@@ -475,129 +473,6 @@ export default class FundingService {
     }
 
     return stripeEntity;
-  }
-
-  /**
-   * Create a new funding plan for a user
-   *
-   * @param accountId - Account ID
-   * @param accountEmail - Account email
-   * @param providerConfigId - Provider configuration ID
-   * @param billingCycle - monthly or yearly
-   * @param amount - Amount in millicents (for PWYC)
-   * @param calendarIds - Optional array of calendar IDs to fund (max 50, UUID validated)
-   * @returns Created funding plan
-   */
-  async subscribe(
-    accountId: string,
-    accountEmail: string,
-    providerConfigId: string,
-    billingCycle: BillingCycle,
-    amount: number,
-    calendarIds?: string[],
-  ): Promise<FundingPlan> {
-    // Validate required fields
-    if (!providerConfigId) {
-      throw new MissingRequiredFieldError('providerConfigId');
-    }
-
-    if (!billingCycle) {
-      throw new MissingRequiredFieldError('billingCycle');
-    }
-
-    // Validate billing cycle
-    if (billingCycle !== 'monthly' && billingCycle !== 'yearly') {
-      throw new InvalidBillingCycleError();
-    }
-
-    // Validate amount for PWYC
-    if (amount !== undefined && amount < 0) {
-      throw new InvalidAmountError();
-    }
-
-    // Validate calendarIds if provided
-    if (calendarIds !== undefined) {
-      if (calendarIds.length > MAX_CALENDAR_IDS) {
-        throw new ValidationError(`calendarIds must not exceed ${MAX_CALENDAR_IDS} entries`);
-      }
-
-      for (const cId of calendarIds) {
-        if (!isValidUUID(cId)) {
-          throw new ValidationError(`Invalid calendarId: ${cId} must be a valid UUID`);
-        }
-      }
-
-      // Verify ownership for all calendars
-      for (const cId of calendarIds) {
-        await this.verifyCalendarOwnership(accountId, cId);
-      }
-    }
-
-    // Get provider configuration
-    const providerEntity = await ProviderConfigEntity.findByPk(providerConfigId);
-    if (!providerEntity) {
-      throw new Error('Provider not found');
-    }
-
-    const providerConfig = providerEntity.toModel();
-
-    if (!providerConfig.enabled) {
-      throw new Error('Provider is not enabled');
-    }
-
-    // Get adapter
-    const adapter = ProviderFactory.getAdapter(providerConfig);
-
-    // Get settings for currency
-    const settings = await this.getSettings();
-
-    // Create provider subscription parameters
-    const params: CreateSubscriptionParams = {
-      accountEmail,
-      accountId,
-      amount,
-      currency: settings.currency,
-      billingCycle,
-    };
-
-    // Create subscription via provider
-    const providerSubscription = await adapter.createSubscription(params);
-
-    // Create funding plan entity
-    const fundingPlan = new FundingPlan(uuidv4());
-    fundingPlan.accountId = accountId;
-    fundingPlan.providerConfigId = providerConfigId;
-    fundingPlan.providerSubscriptionId = providerSubscription.providerSubscriptionId;
-    fundingPlan.providerCustomerId = providerSubscription.providerCustomerId;
-    fundingPlan.status = providerSubscription.status;
-    fundingPlan.billingCycle = billingCycle;
-    fundingPlan.amount = amount;
-    fundingPlan.currency = providerSubscription.currency;
-    fundingPlan.currentPeriodStart = providerSubscription.currentPeriodStart;
-    fundingPlan.currentPeriodEnd = providerSubscription.currentPeriodEnd;
-
-    const entity = FundingPlanEntity.fromModel(fundingPlan);
-    await entity.save();
-
-    // Create calendar funding plan rows if calendarIds provided
-    if (calendarIds && calendarIds.length > 0) {
-      const perCalendarAmount = Math.floor(amount / calendarIds.length);
-
-      for (const calendarId of calendarIds) {
-        await CalendarFundingPlanEntity.create({
-          id: uuidv4(),
-          funding_plan_id: fundingPlan.id,
-          calendar_id: calendarId,
-          amount: perCalendarAmount,
-          end_time: null,
-        });
-      }
-    }
-
-    // Emit event
-    this.eventBus.emit('funding:plan:created', { fundingPlan });
-
-    return fundingPlan;
   }
 
   /**

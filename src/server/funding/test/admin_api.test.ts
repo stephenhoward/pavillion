@@ -63,7 +63,7 @@ describe('Admin Funding API', () => {
 
   describe('POST /admin/settings', () => {
     it('should update settings with validation', async () => {
-      const updateStub = sandbox.stub(service, 'updateSettings').resolves(true);
+      const updateStub = sandbox.stub(service, 'updateSettings').resolves();
 
       const settingsUpdate = {
         enabled: true,

@@ -6,10 +6,10 @@ import { FundingSettings } from '@/common/model/funding-plan';
 import { ValidationError } from '@/common/exceptions/base';
 import {
   AccountNotFoundError,
-  CalendarNotFoundError,
   DuplicateGrantError,
   GrantNotFoundError,
-} from '@/server/funding/exceptions';
+} from '@/common/exceptions/funding';
+import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { logError } from '@/server/common/helper/error-logger';
 
 /**

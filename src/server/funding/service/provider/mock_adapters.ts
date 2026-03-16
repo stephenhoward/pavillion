@@ -1,13 +1,11 @@
 import {
   PaymentProviderAdapter,
-  CreateSubscriptionParams,
   CreateCheckoutSessionParams,
   CheckoutSessionResult,
   CheckoutSessionStatus,
   ProviderSubscription,
   ProviderCredentials,
   WebhookEvent,
-  WebhookRegistration,
 } from './adapter';
 import { ProviderType } from '@/common/model/funding-plan';
 
@@ -40,8 +38,8 @@ export interface CreatePriceCall {
  * Mock Stripe Adapter for Testing
  *
  * Returns mock data without making real API calls.
- * Webhook registration throws because Stripe webhooks are managed
- * manually by the instance administrator via the Stripe dashboard.
+ * Webhook registration is managed manually by the instance administrator
+ * via the Stripe dashboard, so no registerWebhook/deleteWebhook methods exist.
  */
 export class MockStripeAdapter implements PaymentProviderAdapter {
   readonly providerType: ProviderType = 'stripe';
@@ -59,27 +57,6 @@ export class MockStripeAdapter implements PaymentProviderAdapter {
   private idCounter = 0;
 
   /**
-   * Webhook registration is not supported for Stripe Embedded Checkout (mock)
-   *
-   * @throws Error always - webhook registration is managed manually
-   */
-  async registerWebhook(
-    _webhookUrl: string,
-    _credentials: ProviderCredentials,
-  ): Promise<WebhookRegistration> {
-    throw new Error('Stripe webhook registration is managed manually via the admin dashboard');
-  }
-
-  /**
-   * Webhook deletion is not supported for Stripe Embedded Checkout (mock)
-   *
-   * @throws Error always - webhook deletion is managed manually
-   */
-  async deleteWebhook(_webhookId: string, _credentials: ProviderCredentials): Promise<void> {
-    throw new Error('Stripe webhook deletion is managed manually via the admin dashboard');
-  }
-
-  /**
    * Validate provider credentials (mock)
    *
    * Checks that apiKey is present. No stripeUserId required.
@@ -92,28 +69,6 @@ export class MockStripeAdapter implements PaymentProviderAdapter {
       return false;
     }
     return true;
-  }
-
-  /**
-   * Create a new subscription (mock)
-   *
-   * @param params - Subscription creation parameters
-   * @returns Mock subscription data
-   */
-  async createSubscription(params: CreateSubscriptionParams): Promise<ProviderSubscription> {
-    const now = new Date();
-    const periodEnd = new Date(now);
-    periodEnd.setMonth(periodEnd.getMonth() + (params.billingCycle === 'monthly' ? 1 : 12));
-
-    return {
-      providerSubscriptionId: `sub_mock_${Date.now()}`,
-      providerCustomerId: `cus_mock_${Date.now()}`,
-      status: 'active',
-      currentPeriodStart: now,
-      currentPeriodEnd: periodEnd,
-      amount: params.amount,
-      currency: params.currency,
-    };
   }
 
   /**
@@ -288,70 +243,13 @@ export class MockPayPalAdapter implements PaymentProviderAdapter {
   updateSubscriptionAmountCalls: UpdateSubscriptionAmountCall[] = [];
 
   /**
-   * Register a webhook endpoint (mock)
-   *
-   * @param webhookUrl - The URL to receive webhook events
-   * @param credentials - Provider credentials
-   * @returns Mock webhook registration
-   */
-  async registerWebhook(
-    webhookUrl: string,
-    credentials: ProviderCredentials,
-  ): Promise<WebhookRegistration> {
-    const timestamp = Date.now();
-
-    return {
-      webhookId: `WH-MOCK-${timestamp}`,
-      webhookSecret: `paypal_webhook_secret_mock_${timestamp}`,
-    };
-  }
-
-  /**
-   * Delete a webhook endpoint (mock)
-   *
-   * @param webhookId - The webhook endpoint ID to delete
-   * @param credentials - Provider credentials
-   */
-  async deleteWebhook(webhookId: string, credentials: ProviderCredentials): Promise<void> {
-    // Mock deletion - no actual API call
-    return Promise.resolve();
-  }
-
-  /**
    * Validate provider credentials (mock)
    *
    * @param credentials - Provider credentials to validate
    * @returns Always returns true for mock
    */
-  async validateCredentials(credentials: ProviderCredentials): Promise<boolean> {
-    // Mock validation - always returns true
-    // Check that required fields exist
-    if (credentials.clientId && credentials.secret) {
-      return true;
-    }
-    return true; // Accept any credentials in mock mode
-  }
-
-  /**
-   * Create a new subscription (mock)
-   *
-   * @param params - Subscription creation parameters
-   * @returns Mock subscription data
-   */
-  async createSubscription(params: CreateSubscriptionParams): Promise<ProviderSubscription> {
-    const now = new Date();
-    const periodEnd = new Date(now);
-    periodEnd.setMonth(periodEnd.getMonth() + (params.billingCycle === 'monthly' ? 1 : 12));
-
-    return {
-      providerSubscriptionId: `I-MOCK${Date.now()}`,
-      providerCustomerId: params.accountEmail,
-      status: 'active',
-      currentPeriodStart: now,
-      currentPeriodEnd: periodEnd,
-      amount: params.amount,
-      currency: params.currency,
-    };
+  async validateCredentials(_credentials: ProviderCredentials): Promise<boolean> {
+    return true;
   }
 
   /**

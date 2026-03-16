@@ -5,11 +5,6 @@ import FundingService from '@/client/service/funding';
 import type { FundingOptions, FundingProvider } from '@/client/service/funding';
 import { loadStripe } from '@/client/service/stripe-loader';
 
-const ALLOWED_CHECKOUT_ORIGINS = [
-  'https://www.paypal.com',
-  'https://www.sandbox.paypal.com',
-];
-
 type FormState = 'configure' | 'checkout' | 'result';
 
 const props = defineProps<{
@@ -82,20 +77,6 @@ async function loadOptions() {
 }
 
 /**
- * Validates whether a redirect URL is from an allowed checkout origin.
- * Used for PayPal redirect flow.
- */
-function isAllowedCheckoutOrigin(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    return ALLOWED_CHECKOUT_ORIGINS.includes(parsed.origin);
-  }
-  catch {
-    return false;
-  }
-}
-
-/**
  * Clean up any mounted Stripe checkout instance
  */
 function destroyCheckout() {
@@ -163,8 +144,8 @@ async function startStripeCheckout() {
   try {
     // Build checkout session params
     const params: Record<string, any> = {
-      billing_cycle: selectedCycle.value,
-      return_url: window.location.href,
+      billingCycle: selectedCycle.value,
+      returnUrl: window.location.href,
     };
 
     if (options.value?.payWhatYouCan) {
@@ -172,7 +153,7 @@ async function startStripeCheckout() {
     }
 
     if (props.calendarId) {
-      params.calendar_ids = [props.calendarId];
+      params.calendarIds = [props.calendarId];
     }
 
     // Create checkout session via API
@@ -183,8 +164,8 @@ async function startStripeCheckout() {
 
     // Initialize embedded checkout with onComplete callback
     checkoutInstance = await stripeInstance.initEmbeddedCheckout({
-      clientSecret: session.client_secret,
-      onComplete: () => handleCheckoutComplete(session.session_id),
+      clientSecret: session.clientSecret,
+      onComplete: () => handleCheckoutComplete(session.sessionId),
     });
 
     // Switch to checkout state so the container is rendered
@@ -209,43 +190,11 @@ async function startStripeCheckout() {
 }
 
 /**
- * Handle the PayPal redirect flow (unchanged from original)
+ * PayPal checkout — not yet implemented, placeholder for future implementation
  */
 async function startPayPalCheckout() {
-  processing.value = true;
-  errorMessage.value = '';
-
-  try {
-    const params: Record<string, any> = {
-      provider_type: selectedProvider.value,
-      billing_cycle: selectedCycle.value,
-    };
-
-    if (options.value?.payWhatYouCan) {
-      params.amount = FundingService.displayToMillicents(customAmount.value);
-    }
-
-    const calendarIds = props.calendarId ? [props.calendarId] : undefined;
-    const result = await fundingService.subscribe(params, calendarIds);
-
-    if (result.redirectUrl) {
-      if (!isAllowedCheckoutOrigin(result.redirectUrl)) {
-        errorMessage.value = t('subscribe_error');
-        return;
-      }
-      window.location.href = result.redirectUrl;
-      return;
-    }
-
-    emit('subscribed');
-  }
-  catch (error) {
-    console.error('Failed to create funding plan:', error);
-    errorMessage.value = t('subscribe_error');
-  }
-  finally {
-    processing.value = false;
-  }
+  // TODO: Implement PayPal checkout flow
+  errorMessage.value = t('subscribe_error');
 }
 
 /**

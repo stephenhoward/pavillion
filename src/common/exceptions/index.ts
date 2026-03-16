@@ -5,3 +5,4 @@ export * from './media';
 export * from './activitypub';
 export * from './report';
 export * from './series';
+export * from './funding';

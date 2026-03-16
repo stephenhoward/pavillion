@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import FundingService from '@/server/funding/service/funding';
+import { ProviderConnectionService } from '@/server/funding/service/provider_connection';
 import { FundingPlan, FundingSettings, ProviderConfig, FundingStatus, BillingCycle } from '@/common/model/funding-plan';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
 import { CheckoutSessionResult } from '@/server/funding/service/provider/adapter';
@@ -13,9 +14,11 @@ import type CalendarInterface from '@/server/calendar/interface';
  */
 export default class FundingInterface {
   private fundingService: FundingService;
+  readonly providerConnectionService: ProviderConnectionService;
 
   constructor(eventBus: EventEmitter) {
     this.fundingService = new FundingService(eventBus);
+    this.providerConnectionService = new ProviderConnectionService(eventBus);
   }
 
   /**
@@ -87,17 +90,6 @@ export default class FundingInterface {
     payWhatYouCan: boolean;
   }> {
     return this.fundingService.getOptions();
-  }
-
-  async subscribe(
-    accountId: string,
-    accountEmail: string,
-    providerConfigId: string,
-    billingCycle: 'monthly' | 'yearly',
-    amount: number,
-    calendarIds?: string[],
-  ): Promise<FundingPlan> {
-    return this.fundingService.subscribe(accountId, accountEmail, providerConfigId, billingCycle, amount, calendarIds);
   }
 
   async getStatus(accountId: string): Promise<FundingPlan | null> {

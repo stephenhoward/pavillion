@@ -3,7 +3,7 @@ import sinon from 'sinon';
 import { v4 as uuidv4 } from 'uuid';
 import { ProviderConnectionService } from '@/server/funding/service/provider_connection';
 import { WebhookManager } from '@/server/funding/service/provider/webhook_manager';
-import { PaymentProviderAdapter, ProviderCredentials, WebhookRegistration } from '@/server/funding/service/provider/adapter';
+import { PaymentProviderAdapter, ProviderCredentials } from '@/server/funding/service/provider/adapter';
 import { ProviderConfigEntity } from '@/server/funding/entity/provider_config';
 import { FundingPlanEntity } from '@/server/funding/entity/funding_plan';
 import { ProviderType } from '@/common/model/funding-plan';
@@ -26,10 +26,7 @@ describe('ProviderConnectionService', () => {
     // Create mock adapters
     mockStripeAdapter = {
       providerType: 'stripe',
-      registerWebhook: sandbox.stub(),
-      deleteWebhook: sandbox.stub(),
       validateCredentials: sandbox.stub(),
-      createSubscription: sandbox.stub(),
       cancelSubscription: sandbox.stub(),
       getSubscription: sandbox.stub(),
       getBillingPortalUrl: sandbox.stub(),
@@ -39,10 +36,7 @@ describe('ProviderConnectionService', () => {
 
     mockPayPalAdapter = {
       providerType: 'paypal',
-      registerWebhook: sandbox.stub(),
-      deleteWebhook: sandbox.stub(),
       validateCredentials: sandbox.stub(),
-      createSubscription: sandbox.stub(),
       cancelSubscription: sandbox.stub(),
       getSubscription: sandbox.stub(),
       getBillingPortalUrl: sandbox.stub(),
@@ -215,20 +209,10 @@ describe('ProviderConnectionService', () => {
         client_secret: 'paypal-client-secret',
         environment: 'sandbox',
       };
-      const webhookRegistration: WebhookRegistration = {
-        webhookId: 'webhook-id-123',
-        webhookSecret: 'webhook-secret-123',
-      };
 
       // Stub adapter
       sandbox.stub(service as any, 'getAdapter').returns(mockPayPalAdapter);
       mockPayPalAdapter.validateCredentials.withArgs(credentials).resolves(true);
-
-      // Stub webhook manager
-      const generateUrlStub = sandbox.stub(webhookManager, 'generateWebhookUrl');
-      generateUrlStub.withArgs('paypal').returns('https://example.com/api/funding/v1/webhooks/paypal');
-
-      mockPayPalAdapter.registerWebhook.resolves(webhookRegistration);
 
       // Stub entity
       const findOneStub = sandbox.stub(ProviderConfigEntity, 'findOne');
@@ -248,7 +232,6 @@ describe('ProviderConnectionService', () => {
 
       expect(result).toBe(true);
       expect(mockPayPalAdapter.validateCredentials.calledOnce).toBe(true);
-      expect(mockPayPalAdapter.registerWebhook.calledOnce).toBe(true);
       expect(createStub.calledOnce).toBe(true);
     });
 
@@ -359,7 +342,6 @@ describe('ProviderConnectionService', () => {
 
       // Stub adapter
       sandbox.stub(service as any, 'getAdapter').returns(mockStripeAdapter);
-      mockStripeAdapter.deleteWebhook.resolves();
 
       // Stub cancel subscription via service
       const cancelStub = sandbox.stub();
@@ -371,7 +353,6 @@ describe('ProviderConnectionService', () => {
 
       expect(result.requiresConfirmation).toBeUndefined();
       expect(cancelStub.callCount).toBe(2); // Called for each subscription
-      expect(mockStripeAdapter.deleteWebhook.calledOnce).toBe(true);
       expect(mockEntity.destroy.calledOnce).toBe(true);
     });
   });

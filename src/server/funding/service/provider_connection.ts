@@ -4,7 +4,6 @@ import { Op } from 'sequelize';
 import { ProviderType } from '@/common/model/funding-plan';
 import { ProviderConfigEntity } from '@/server/funding/entity/provider_config';
 import { FundingPlanEntity } from '@/server/funding/entity/funding_plan';
-import { WebhookManager } from '@/server/funding/service/provider/webhook_manager';
 import { ProviderFactory } from '@/server/funding/service/provider/factory';
 import { PaymentProviderAdapter, ProviderCredentials } from '@/server/funding/service/provider/adapter';
 import { StripeAdapter } from '@/server/funding/service/provider/stripe';
@@ -14,7 +13,7 @@ import {
   InvalidEnvironmentError,
   MissingRequiredFieldError,
   InvalidCredentialsError,
-} from '@/server/funding/exceptions';
+} from '@/common/exceptions/funding';
 
 /**
  * User object for admin operations
@@ -60,12 +59,10 @@ interface DisconnectionResult {
  */
 export class ProviderConnectionService {
   private eventBus: EventEmitter;
-  private webhookManager: WebhookManager;
   private fundingService: FundingService;
 
   constructor(eventBus: EventEmitter) {
     this.eventBus = eventBus;
-    this.webhookManager = new WebhookManager();
     this.fundingService = new FundingService(eventBus);
   }
 
@@ -187,28 +184,9 @@ export class ProviderConnectionService {
       throw new InvalidCredentialsError('Invalid PayPal credentials');
     }
 
-    // Generate webhook URL
-    const webhookUrl = this.webhookManager.generateWebhookUrl('paypal');
-
-    // Register webhook with provider
-    let webhookId: string | undefined;
-    let webhookSecret: string | undefined;
-
-    try {
-      const webhookRegistration = await adapter.registerWebhook(webhookUrl, credentials);
-      webhookId = webhookRegistration.webhookId;
-      webhookSecret = webhookRegistration.webhookSecret;
-    }
-    catch (error) {
-      // Log warning but don't block configuration
-      console.warn('Failed to register PayPal webhook:', error);
-    }
-
-    // Store credentials with webhook info
-    const credentialsWithWebhook = {
+    // Store credentials
+    const credentialsToStore = {
       ...credentials,
-      webhook_id: webhookId,
-      webhook_secret: webhookSecret,
     };
 
     // Check if provider config already exists
@@ -218,10 +196,7 @@ export class ProviderConnectionService {
 
     if (entity) {
       // Update existing configuration
-      entity._decryptedCredentials = JSON.stringify(credentialsWithWebhook);
-      if (webhookSecret) {
-        entity._decryptedWebhookSecret = webhookSecret;
-      }
+      entity._decryptedCredentials = JSON.stringify(credentialsToStore);
       await entity.save();
     }
     else {
@@ -231,15 +206,12 @@ export class ProviderConnectionService {
         provider_type: 'paypal',
         enabled: false, // Admin must explicitly enable
         display_name: 'PayPal',
-        credentials: JSON.stringify(credentialsWithWebhook),
-        webhook_secret: webhookSecret || '',
+        credentials: JSON.stringify(credentialsToStore),
+        webhook_secret: '',
       } as any);
 
       // Set decrypted values for encryption hook
-      entity._decryptedCredentials = JSON.stringify(credentialsWithWebhook);
-      if (webhookSecret) {
-        entity._decryptedWebhookSecret = webhookSecret;
-      }
+      entity._decryptedCredentials = JSON.stringify(credentialsToStore);
     }
 
     // Emit event
@@ -361,22 +333,6 @@ export class ProviderConnectionService {
       for (const plan of activeFundingPlans) {
         await this.fundingService.forceCancel(plan.id);
       }
-    }
-
-    // Delete webhook at provider
-    try {
-      const config = entity.toModel();
-      const credentials = JSON.parse(config.credentials);
-      const webhookId = credentials.webhook_id;
-
-      if (webhookId) {
-        const adapter = this.getAdapter(providerType, credentials);
-        await adapter.deleteWebhook(webhookId, credentials);
-      }
-    }
-    catch (error) {
-      // Log warning but proceed with disconnection
-      console.warn('Failed to delete webhook:', error);
     }
 
     // Delete provider configuration

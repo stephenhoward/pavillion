@@ -1,20 +1,6 @@
 import { ProviderType } from '@/common/model/funding-plan';
 
 /**
- * Parameters for creating a subscription
- */
-export interface CreateSubscriptionParams {
-  accountEmail: string;
-  accountId: string;
-  priceId?: string; // Provider-specific price ID (Stripe) or plan ID (PayPal)
-  amount: number; // in millicents
-  currency: string; // ISO 4217 currency code
-  billingCycle: 'monthly' | 'yearly';
-  successUrl?: string; // Redirect URL after successful subscription
-  cancelUrl?: string; // Redirect URL if user cancels
-}
-
-/**
  * Parameters for creating a checkout session
  */
 export interface CreateCheckoutSessionParams {
@@ -89,19 +75,15 @@ export interface WebhookEvent {
 }
 
 /**
- * Webhook registration result
- */
-export interface WebhookRegistration {
-  webhookId: string;
-  webhookSecret: string;
-}
-
-/**
  * Abstract interface for payment provider adapters
  *
  * This interface defines the contract that all payment provider implementations
  * must follow. It supports credential configuration, subscription management,
  * checkout sessions, and webhook handling.
+ *
+ * Webhook registration for Stripe is managed manually by the instance
+ * administrator via the Stripe dashboard. The admin enters the webhook signing
+ * secret (whsec_) through the admin credential form.
  */
 export interface PaymentProviderAdapter {
   /**
@@ -110,40 +92,12 @@ export interface PaymentProviderAdapter {
   readonly providerType: ProviderType;
 
   /**
-   * Register a webhook endpoint with the provider
-   *
-   * @param webhookUrl - The URL to receive webhook events
-   * @param credentials - Provider credentials for authentication
-   * @returns Webhook ID and secret for verification
-   */
-  registerWebhook(
-    webhookUrl: string,
-    credentials: ProviderCredentials
-  ): Promise<WebhookRegistration>;
-
-  /**
-   * Delete a webhook endpoint from the provider
-   *
-   * @param webhookId - The webhook endpoint ID to delete
-   * @param credentials - Provider credentials for authentication
-   */
-  deleteWebhook(webhookId: string, credentials: ProviderCredentials): Promise<void>;
-
-  /**
    * Validate provider credentials format
    *
    * @param credentials - Provider credentials to validate
    * @returns True if credentials are valid format, false otherwise
    */
   validateCredentials(credentials: ProviderCredentials): Promise<boolean>;
-
-  /**
-   * Create a new subscription for a customer
-   *
-   * @param params - Subscription creation parameters
-   * @returns Provider subscription data
-   */
-  createSubscription(params: CreateSubscriptionParams): Promise<ProviderSubscription>;
 
   /**
    * Cancel an existing subscription

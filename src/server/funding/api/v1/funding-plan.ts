@@ -5,7 +5,6 @@ import { Account } from '@/common/model/account';
 import { ProviderConfig } from '@/common/model/funding-plan';
 import { ValidationError } from '@/common/exceptions/base';
 import { logError } from '@/server/common/helper/error-logger';
-import { MAX_CALENDAR_IDS } from '@/server/funding/service/funding';
 
 /**
  * Extract the publishable key from a Stripe provider's credentials JSON.
@@ -60,7 +59,6 @@ export default class FundingPlanRoutes {
 
     // All user funding plan endpoints require authentication
     router.get('/options', ExpressHelper.loggedInOnly, this.getOptions.bind(this));
-    router.post('/subscribe', ExpressHelper.loggedInOnly, this.subscribe.bind(this));
     router.get('/status', ExpressHelper.loggedInOnly, this.getStatus.bind(this));
     router.post('/cancel', ExpressHelper.loggedInOnly, this.cancel.bind(this));
     router.get('/portal', ExpressHelper.loggedInOnly, this.getPortal.bind(this));
@@ -105,70 +103,6 @@ export default class FundingPlanRoutes {
     catch (error) {
       logError(error, 'Error fetching funding plan options');
       res.status(500).json({ error: 'Internal server error' });
-    }
-  }
-
-  /**
-   * POST /subscribe
-   * Create new funding plan with chosen provider
-   */
-  async subscribe(req: Request, res: Response): Promise<void> {
-    try {
-      const account = req.user as Account;
-
-      if (!account) {
-        res.status(401).json({ error: 'Authentication required' });
-        return;
-      }
-
-      const { providerConfigId, billingCycle, amount, calendarIds } = req.body;
-
-      // Validate calendarIds if provided
-      if (calendarIds !== undefined) {
-        if (!Array.isArray(calendarIds)) {
-          res.status(400).json({ error: 'calendarIds must be an array', errorName: 'ValidationError' });
-          return;
-        }
-
-        if (calendarIds.length > MAX_CALENDAR_IDS) {
-          res.status(400).json({ error: `calendarIds cannot exceed ${MAX_CALENDAR_IDS} entries`, errorName: 'ValidationError' });
-          return;
-        }
-
-        const invalidUUIDs = ExpressHelper.findInvalidUUIDs(calendarIds);
-        if (invalidUUIDs.length > 0) {
-          res.status(400).json({ error: `Invalid calendar IDs: ${invalidUUIDs.join(', ')}`, errorName: 'ValidationError' });
-          return;
-        }
-      }
-
-      const fundingPlan = await this.service.subscribe(
-        account.id,
-        account.email,
-        providerConfigId,
-        billingCycle,
-        amount,
-        calendarIds,
-      );
-
-      res.json(fundingPlan.toObject());
-    }
-    catch (error) {
-      logError(error, 'Error creating funding plan');
-      if (error instanceof ValidationError) {
-        ExpressHelper.sendValidationError(res, error);
-      }
-      else if (error instanceof Error) {
-        if (error.message.includes('not found') || error.message.includes('not enabled')) {
-          res.status(400).json({ error: error.message, errorName: 'ValidationError' });
-        }
-        else {
-          res.status(500).json({ error: 'Internal server error' });
-        }
-      }
-      else {
-        res.status(500).json({ error: 'Internal server error' });
-      }
     }
   }
 

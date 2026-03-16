@@ -21,7 +21,7 @@ import {
   InvalidSessionIdError,
   WebhookSignatureError,
   FundingPlanNotFoundError,
-} from '@/server/funding/exceptions';
+} from '@/common/exceptions/funding';
 import { ValidationError } from '@/common/exceptions/base';
 import { AccountEntity } from '@/server/common/entity/account';
 import { v4 as uuidv4 } from 'uuid';
@@ -117,83 +117,12 @@ describe('FundingService', () => {
       updatedSettings.yearlyPrice = 10000000;
       updatedSettings.currency = 'USD';
 
-      const result = await service.updateSettings(updatedSettings);
+      await service.updateSettings(updatedSettings);
 
-      expect(result).toBe(true);
       expect(existingEntity.enabled).toBe(true);
       expect(existingEntity.monthly_price).toBe(1000000);
       expect(existingEntity.yearly_price).toBe(10000000);
       expect(existingEntity.save.called).toBe(true);
-    });
-  });
-
-  describe('subscribe', () => {
-    it('should create subscription via provider', async () => {
-      const accountId = uuidv4();
-      const providerConfigId = uuidv4();
-      const subscriptionId = uuidv4();
-
-      const mockProviderConfig = {
-        id: providerConfigId,
-        provider_type: 'stripe',
-        enabled: true,
-        display_name: 'Credit Card',
-        credentials: '{"apiKey":"test"}',
-        webhook_secret: 'secret',
-        toModel: function() {
-          const config = new ProviderConfig(this.id, this.provider_type);
-          config.enabled = this.enabled;
-          config.displayName = this.display_name;
-          config.credentials = this.credentials;
-          config.webhookSecret = this.webhook_secret;
-          return config;
-        },
-      };
-
-      const mockSettings = {
-        currency: 'USD',
-        toModel: function() {
-          const settings = new FundingSettings();
-          settings.currency = this.currency;
-          return settings;
-        },
-      };
-
-      const mockAdapter = {
-        providerType: 'stripe' as const,
-        createSubscription: sandbox.stub().resolves({
-          providerSubscriptionId: 'sub_123',
-          providerCustomerId: 'cus_123',
-          status: 'active' as const,
-          currentPeriodStart: new Date(),
-          currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-          amount: 1000000,
-          currency: 'USD',
-        }),
-      };
-
-      const mockFundingPlanEntity = {
-        id: subscriptionId,
-        save: sandbox.stub().resolves(),
-        toModel: () => new FundingPlan(subscriptionId),
-      };
-
-      sandbox.stub(ProviderConfigEntity, 'findByPk').resolves(mockProviderConfig as any);
-      sandbox.stub(FundingSettingsEntity, 'findOne').resolves(mockSettings as any);
-      sandbox.stub(ProviderFactory, 'getAdapter').returns(mockAdapter as any);
-      sandbox.stub(FundingPlanEntity, 'fromModel').returns(mockFundingPlanEntity as any);
-
-      const subscription = await service.subscribe(
-        accountId,
-        'user@example.com',
-        providerConfigId,
-        'monthly',
-        1000000,
-      );
-
-      expect(subscription).toBeDefined();
-      expect(mockAdapter.createSubscription.called).toBe(true);
-      expect(mockFundingPlanEntity.save.called).toBe(true);
     });
   });
 

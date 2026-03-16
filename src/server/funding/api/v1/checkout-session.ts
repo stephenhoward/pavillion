@@ -8,7 +8,7 @@ import {
   ProviderNotConfiguredError,
   InvalidSessionIdError,
   FundingPlanNotFoundError,
-} from '@/server/funding/exceptions';
+} from '@/common/exceptions/funding';
 import { checkoutSessionByAccount } from '@/server/common/middleware/rate-limiters';
 import { logError } from '@/server/common/helper/error-logger';
 import { MAX_CALENDAR_IDS } from '@/server/funding/service/funding';
@@ -55,7 +55,7 @@ export default class CheckoutSessionRoutes {
    * POST /checkout-sessions
    * Create a Stripe checkout session for embedded checkout
    *
-   * Body: { billing_cycle: string, return_url: string, amount?: number, calendar_ids?: string[] }
+   * Body: { billingCycle: string, returnUrl: string, amount?: number, calendarIds?: string[] }
    */
   async createSession(req: Request, res: Response): Promise<void> {
     try {
@@ -66,32 +66,32 @@ export default class CheckoutSessionRoutes {
         return;
       }
 
-      const { billing_cycle, return_url, amount, calendar_ids } = req.body;
+      const { billingCycle, returnUrl, amount, calendarIds } = req.body;
 
       // Validate required fields
-      if (!billing_cycle) {
-        res.status(400).json({ error: 'billing_cycle is required', errorName: 'ValidationError' });
+      if (!billingCycle) {
+        res.status(400).json({ error: 'billingCycle is required', errorName: 'ValidationError' });
         return;
       }
 
-      if (!return_url || typeof return_url !== 'string') {
-        res.status(400).json({ error: 'return_url is required', errorName: 'ValidationError' });
+      if (!returnUrl || typeof returnUrl !== 'string') {
+        res.status(400).json({ error: 'returnUrl is required', errorName: 'ValidationError' });
         return;
       }
 
-      // Validate calendar_ids if provided
-      if (calendar_ids !== undefined) {
-        if (!Array.isArray(calendar_ids)) {
-          res.status(400).json({ error: 'calendar_ids must be an array', errorName: 'ValidationError' });
+      // Validate calendarIds if provided
+      if (calendarIds !== undefined) {
+        if (!Array.isArray(calendarIds)) {
+          res.status(400).json({ error: 'calendarIds must be an array', errorName: 'ValidationError' });
           return;
         }
 
-        if (calendar_ids.length > MAX_CALENDAR_IDS) {
-          res.status(400).json({ error: `calendar_ids cannot exceed ${MAX_CALENDAR_IDS} entries`, errorName: 'ValidationError' });
+        if (calendarIds.length > MAX_CALENDAR_IDS) {
+          res.status(400).json({ error: `calendarIds cannot exceed ${MAX_CALENDAR_IDS} entries`, errorName: 'ValidationError' });
           return;
         }
 
-        const invalidUUIDs = ExpressHelper.findInvalidUUIDs(calendar_ids);
+        const invalidUUIDs = ExpressHelper.findInvalidUUIDs(calendarIds);
         if (invalidUUIDs.length > 0) {
           res.status(400).json({ error: `Invalid calendar IDs: ${invalidUUIDs.join(', ')}`, errorName: 'ValidationError' });
           return;
@@ -100,15 +100,15 @@ export default class CheckoutSessionRoutes {
 
       const result = await this.service.createCheckoutSession(
         account.id,
-        billing_cycle,
-        return_url,
+        billingCycle,
+        returnUrl,
         amount,
-        calendar_ids,
+        calendarIds,
       );
 
       res.json({
-        client_secret: result.clientSecret,
-        session_id: result.sessionId,
+        clientSecret: result.clientSecret,
+        sessionId: result.sessionId,
       });
     }
     catch (error) {

@@ -8,13 +8,11 @@ import { mountComponent } from '@/client/test/lib/vue';
 // Shared mock fns -- vi.hoisted ensures they're available before vi.mock runs
 const {
   mockGetOptions,
-  mockSubscribe,
   mockCreateCheckoutSession,
   mockGetCheckoutSessionStatus,
   mockLoadStripe,
 } = vi.hoisted(() => ({
   mockGetOptions: vi.fn(),
-  mockSubscribe: vi.fn(),
   mockCreateCheckoutSession: vi.fn(),
   mockGetCheckoutSessionStatus: vi.fn(),
   mockLoadStripe: vi.fn(),
@@ -23,7 +21,6 @@ const {
 vi.mock('@/client/service/funding', () => {
   const MockClass = vi.fn().mockImplementation(() => ({
     getOptions: mockGetOptions,
-    subscribe: mockSubscribe,
     createCheckoutSession: mockCreateCheckoutSession,
     getCheckoutSessionStatus: mockGetCheckoutSessionStatus,
   }));
@@ -235,8 +232,8 @@ describe('FundingForm', () => {
       mockLoadStripe.mockResolvedValue(mockStripeInstance);
 
       mockCreateCheckoutSession.mockResolvedValue({
-        client_secret: 'cs_test_secret',
-        session_id: 'cs_test_session',
+        clientSecret: 'cs_test_secret',
+        sessionId: 'cs_test_session',
       });
 
       const wrapper = await mountFundingForm();
@@ -247,8 +244,8 @@ describe('FundingForm', () => {
 
       expect(mockCreateCheckoutSession).toHaveBeenCalledWith(
         expect.objectContaining({
-          billing_cycle: 'monthly',
-          return_url: expect.any(String),
+          billingCycle: 'monthly',
+          returnUrl: expect.any(String),
         }),
       );
     });
@@ -260,8 +257,8 @@ describe('FundingForm', () => {
       mockLoadStripe.mockResolvedValue(mockStripeInstance);
 
       mockCreateCheckoutSession.mockResolvedValue({
-        client_secret: 'cs_test_secret',
-        session_id: 'cs_test_session',
+        clientSecret: 'cs_test_secret',
+        sessionId: 'cs_test_session',
       });
 
       const wrapper = await mountFundingForm();
@@ -278,15 +275,15 @@ describe('FundingForm', () => {
       );
     });
 
-    it('passes calendar_ids when calendarId prop is provided', async () => {
+    it('passes calendarIds when calendarId prop is provided', async () => {
       mockGetOptions.mockResolvedValue(makeStripeOptions());
 
       const { mockStripeInstance } = makeMockStripeWithCallbackCapture();
       mockLoadStripe.mockResolvedValue(mockStripeInstance);
 
       mockCreateCheckoutSession.mockResolvedValue({
-        client_secret: 'cs_test_secret',
-        session_id: 'cs_test_session',
+        clientSecret: 'cs_test_secret',
+        sessionId: 'cs_test_session',
       });
 
       const wrapper = await mountFundingForm({ calendarId: 'cal-123' });
@@ -297,7 +294,7 @@ describe('FundingForm', () => {
 
       expect(mockCreateCheckoutSession).toHaveBeenCalledWith(
         expect.objectContaining({
-          calendar_ids: ['cal-123'],
+          calendarIds: ['cal-123'],
         }),
       );
     });
@@ -309,8 +306,8 @@ describe('FundingForm', () => {
       mockLoadStripe.mockResolvedValue(mockStripeInstance);
 
       mockCreateCheckoutSession.mockResolvedValue({
-        client_secret: 'cs_test_secret',
-        session_id: 'cs_test_session',
+        clientSecret: 'cs_test_secret',
+        sessionId: 'cs_test_session',
       });
 
       const wrapper = await mountFundingForm();
@@ -328,8 +325,8 @@ describe('FundingForm', () => {
       mockLoadStripe.mockRejectedValue(new Error('Failed to load Stripe.js'));
 
       mockCreateCheckoutSession.mockResolvedValue({
-        client_secret: 'cs_test_secret',
-        session_id: 'cs_test_session',
+        clientSecret: 'cs_test_secret',
+        sessionId: 'cs_test_session',
       });
 
       const wrapper = await mountFundingForm();
@@ -342,48 +339,9 @@ describe('FundingForm', () => {
     });
   });
 
-  describe('PayPal redirect flow', () => {
-    it('uses subscribe redirect flow for PayPal', async () => {
+  describe('PayPal checkout (stub)', () => {
+    it('shows error when PayPal provider is selected — not yet implemented', async () => {
       mockGetOptions.mockResolvedValue(makePayPalOptions());
-
-      const originalLocation = window.location;
-      Object.defineProperty(window, 'location', {
-        value: { ...originalLocation, href: 'http://localhost/' },
-        writable: true,
-        configurable: true,
-      });
-
-      mockSubscribe.mockResolvedValue({
-        redirectUrl: 'https://www.sandbox.paypal.com/checkout',
-      });
-
-      const wrapper = await mountFundingForm();
-      currentWrapper = wrapper;
-
-      await wrapper.find('button.primary').trigger('click');
-      await flushPromises();
-
-      expect(mockSubscribe).toHaveBeenCalledWith(
-        expect.objectContaining({
-          provider_type: 'paypal',
-          billing_cycle: 'monthly',
-        }),
-        undefined,
-      );
-
-      Object.defineProperty(window, 'location', {
-        value: originalLocation,
-        writable: true,
-        configurable: true,
-      });
-    });
-
-    it('rejects redirect to non-allowed origins', async () => {
-      mockGetOptions.mockResolvedValue(makePayPalOptions());
-
-      mockSubscribe.mockResolvedValue({
-        redirectUrl: 'https://evil.com/checkout',
-      });
 
       const wrapper = await mountFundingForm();
       currentWrapper = wrapper;
@@ -403,8 +361,8 @@ describe('FundingForm', () => {
       mockLoadStripe.mockResolvedValue(mockStripeInstance);
 
       mockCreateCheckoutSession.mockResolvedValue({
-        client_secret: 'cs_test_secret',
-        session_id: 'cs_test_session',
+        clientSecret: 'cs_test_secret',
+        sessionId: 'cs_test_session',
       });
 
       mockGetCheckoutSessionStatus.mockResolvedValue({
@@ -433,8 +391,8 @@ describe('FundingForm', () => {
       mockLoadStripe.mockResolvedValue(mockStripeInstance);
 
       mockCreateCheckoutSession.mockResolvedValue({
-        client_secret: 'cs_test_secret',
-        session_id: 'cs_test_session',
+        clientSecret: 'cs_test_secret',
+        sessionId: 'cs_test_session',
       });
 
       mockGetCheckoutSessionStatus.mockResolvedValue({
@@ -460,8 +418,8 @@ describe('FundingForm', () => {
       mockLoadStripe.mockResolvedValue(mockStripeInstance);
 
       mockCreateCheckoutSession.mockResolvedValue({
-        client_secret: 'cs_test_secret',
-        session_id: 'cs_test_session',
+        clientSecret: 'cs_test_secret',
+        sessionId: 'cs_test_session',
       });
 
       mockGetCheckoutSessionStatus.mockRejectedValue(new Error('Network error'));
@@ -486,8 +444,8 @@ describe('FundingForm', () => {
       mockLoadStripe.mockResolvedValue(mockStripeInstance);
 
       mockCreateCheckoutSession.mockResolvedValue({
-        client_secret: 'cs_test_secret',
-        session_id: 'cs_test_session',
+        clientSecret: 'cs_test_secret',
+        sessionId: 'cs_test_session',
       });
 
       mockGetCheckoutSessionStatus.mockResolvedValue({
@@ -518,8 +476,8 @@ describe('FundingForm', () => {
       mockLoadStripe.mockResolvedValue(mockStripeInstance);
 
       mockCreateCheckoutSession.mockResolvedValue({
-        client_secret: 'cs_test_secret',
-        session_id: 'cs_test_session',
+        clientSecret: 'cs_test_secret',
+        sessionId: 'cs_test_session',
       });
 
       mockGetCheckoutSessionStatus.mockResolvedValue({

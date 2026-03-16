@@ -1,14 +1,12 @@
 import Stripe from 'stripe';
 import {
   PaymentProviderAdapter,
-  CreateSubscriptionParams,
   CreateCheckoutSessionParams,
   CheckoutSessionResult,
   CheckoutSessionStatus,
   ProviderSubscription,
   ProviderCredentials,
   WebhookEvent,
-  WebhookRegistration,
 } from './adapter';
 import { ProviderType } from '@/common/model/funding-plan';
 
@@ -46,34 +44,6 @@ export class StripeAdapter implements PaymentProviderAdapter {
     });
     this.webhookSecret = webhookSecret;
     this.credentials = credentials;
-  }
-
-  /**
-   * Webhook registration is not supported for Stripe Embedded Checkout.
-   *
-   * Instance administrators configure webhooks manually via the Stripe
-   * dashboard and enter the webhook signing secret (whsec_) through the
-   * admin credential form.
-   *
-   * @throws Error always - webhook registration is managed manually
-   */
-  async registerWebhook(
-    _webhookUrl: string,
-    _credentials: ProviderCredentials,
-  ): Promise<WebhookRegistration> {
-    throw new Error('Stripe webhook registration is managed manually via the admin dashboard');
-  }
-
-  /**
-   * Webhook deletion is not supported for Stripe Embedded Checkout.
-   *
-   * Instance administrators manage webhooks manually via the Stripe
-   * dashboard.
-   *
-   * @throws Error always - webhook deletion is managed manually
-   */
-  async deleteWebhook(_webhookId: string, _credentials: ProviderCredentials): Promise<void> {
-    throw new Error('Stripe webhook deletion is managed manually via the admin dashboard');
   }
 
   /**
@@ -124,65 +94,6 @@ export class StripeAdapter implements PaymentProviderAdapter {
     }
 
     return { valid: true };
-  }
-
-  /**
-   * Create a new subscription for a customer
-   *
-   * @param params - Subscription creation parameters
-   * @returns Provider subscription data
-   */
-  async createSubscription(params: CreateSubscriptionParams): Promise<ProviderSubscription> {
-    // Create or retrieve customer
-    let customer: Stripe.Customer;
-
-    // Try to find existing customer by email
-    const existingCustomers = await this.stripe.customers.list({
-      email: params.accountEmail,
-      limit: 1,
-    });
-
-    if (existingCustomers.data.length > 0) {
-      customer = existingCustomers.data[0];
-    }
-    else {
-      // Create new customer
-      customer = await this.stripe.customers.create({
-        email: params.accountEmail,
-        metadata: {
-          pavillion_account_id: params.accountId,
-        },
-      });
-    }
-
-    // Create or use existing price
-    let priceId = params.priceId;
-    if (!priceId) {
-      // Create a price for this subscription
-      const price = await this.stripe.prices.create({
-        unit_amount: Math.round(params.amount / 1000), // Convert millicents to cents
-        currency: params.currency.toLowerCase(),
-        recurring: {
-          interval: params.billingCycle === 'monthly' ? 'month' : 'year',
-        },
-        product_data: {
-          name: 'Pavillion Subscription',
-        },
-      });
-      priceId = price.id;
-    }
-
-    // Create subscription
-    const subscription = await this.stripe.subscriptions.create({
-      customer: customer.id,
-      items: [{ price: priceId }],
-      metadata: {
-        pavillion_account_id: params.accountId,
-      },
-    });
-
-    // Convert Stripe subscription to ProviderSubscription format
-    return this.convertStripeSubscription(subscription);
   }
 
   /**

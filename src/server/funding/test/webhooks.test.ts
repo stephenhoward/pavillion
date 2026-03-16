@@ -17,7 +17,7 @@ import { StripeAdapter } from '@/server/funding/service/provider/stripe';
 import {
   ProviderNotConfiguredError,
   WebhookSignatureError,
-} from '@/server/funding/exceptions';
+} from '@/common/exceptions/funding';
 
 // Mock Stripe module
 vi.mock('stripe', () => {
@@ -155,30 +155,6 @@ describe('Webhook Handling', () => {
         expect(response.body.error).toBe('Internal server error');
       });
     });
-
-    describe('PayPal webhook handler', () => {
-      it('should return 501 for PayPal webhook with valid signature (not yet implemented)', async () => {
-        const response = await request(app)
-          .post('/api/funding/webhooks/paypal')
-          .set('paypal-transmission-sig', 'valid_paypal_signature')
-          .set('Content-Type', 'application/json')
-          .send(JSON.stringify({ id: 'WH-test-event', event_type: 'PAYMENT.SALE.COMPLETED' }));
-
-        expect(response.status).toBe(501);
-        expect(response.body.error).toBe('PayPal webhook verification not implemented');
-        expect(response.body.errorName).toBe('NotImplemented');
-      });
-
-      it('should return 400 when PayPal signature header is missing', async () => {
-        const response = await request(app)
-          .post('/api/funding/webhooks/paypal')
-          .set('Content-Type', 'application/json')
-          .send(JSON.stringify({ id: 'WH-test-event', event_type: 'PAYMENT.SALE.COMPLETED' }));
-
-        expect(response.status).toBe(400);
-        expect(response.body.error).toContain('Missing PayPal signature');
-      });
-    });
   });
 
   // -------------------------------------------------------------------------
@@ -206,15 +182,6 @@ describe('Webhook Handling', () => {
       stripeModel.webhookSecret = 'whsec_test_stripe';
       stripeConfig = ProviderConfigEntity.fromModel(stripeModel);
       await stripeConfig.save();
-
-      // Create PayPal provider config (unused in integration tests but kept for parity)
-      const paypalModel = new ProviderConfig(uuidv4(), 'paypal');
-      paypalModel.enabled = true;
-      paypalModel.displayName = 'PayPal';
-      paypalModel.credentials = JSON.stringify({ clientId: 'test_client', secret: 'test_secret' });
-      paypalModel.webhookSecret = 'webhook_secret_paypal';
-      const paypalConfig = ProviderConfigEntity.fromModel(paypalModel);
-      await paypalConfig.save();
 
       app = express();
       const webhookRoutes = new WebhookRoutes(service as any);

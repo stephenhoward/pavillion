@@ -90,15 +90,6 @@ export type FundingOptions = {
 };
 
 /**
- * Funding plan request parameters
- */
-export type FundingParams = {
-  provider_type: 'stripe' | 'paypal';
-  billing_cycle: 'monthly' | 'yearly';
-  amount?: number; // For PWYC
-};
-
-/**
  * Account search result
  */
 export type AccountSearchResult = {
@@ -127,8 +118,8 @@ export type ResolvedCalendar = {
  * Checkout session creation response
  */
 export type CheckoutSessionResponse = {
-  client_secret: string;
-  session_id: string;
+  clientSecret: string;
+  sessionId: string;
 };
 
 /**
@@ -514,25 +505,6 @@ export default class FundingService {
   }
 
   /**
-   * Create a new funding plan for the current user
-   *
-   * @param {FundingParams} params - Funding plan parameters
-   * @param {string[]} calendarIds - Optional array of calendar IDs to include
-   * @returns {Promise<any>} Funding plan result (may include redirect URL for payment)
-   */
-  async subscribe(params: FundingParams, calendarIds?: string[]): Promise<any> {
-    try {
-      const body = calendarIds ? { ...params, calendarIds } : params;
-      const response = await axios.post('/api/funding/v1/subscribe', body);
-      return response.data;
-    }
-    catch (error) {
-      console.error('Failed to create funding plan:', error);
-      throw error;
-    }
-  }
-
-  /**
    * Get current funding plan status for the authenticated user
    *
    * @returns {Promise<FundingPlanStatus | null>} Current funding plan status or null if none
@@ -591,17 +563,17 @@ export default class FundingService {
    * Create a Stripe checkout session for embedded checkout
    *
    * @param {object} params - Checkout session parameters
-   * @param {string} params.billing_cycle - Billing cycle ('monthly' or 'yearly')
-   * @param {string} params.return_url - URL to redirect to after checkout
+   * @param {string} params.billingCycle - Billing cycle ('monthly' or 'yearly')
+   * @param {string} params.returnUrl - URL to redirect to after checkout
    * @param {number} params.amount - Optional custom amount in millicents (for PWYC)
-   * @param {string[]} params.calendar_ids - Optional array of calendar IDs
+   * @param {string[]} params.calendarIds - Optional array of calendar IDs
    * @returns {Promise<CheckoutSessionResponse>} Client secret and session ID
    */
   async createCheckoutSession(params: {
-    billing_cycle: string;
-    return_url: string;
+    billingCycle: string;
+    returnUrl: string;
     amount?: number;
-    calendar_ids?: string[];
+    calendarIds?: string[];
   }): Promise<CheckoutSessionResponse> {
     try {
       const response = await axios.post('/api/funding/v1/checkout-sessions', params);

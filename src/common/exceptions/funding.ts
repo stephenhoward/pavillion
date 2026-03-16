@@ -53,13 +53,7 @@ export class AccountNotFoundError extends Error {
   constructor(accountId: string) {
     super(`Account not found: ${accountId}`);
     this.name = 'AccountNotFoundError';
-  }
-}
-
-export class CalendarNotFoundError extends Error {
-  constructor(calendarId: string) {
-    super(`Calendar not found: ${calendarId}`);
-    this.name = 'CalendarNotFoundError';
+    Object.setPrototypeOf(this, AccountNotFoundError.prototype);
   }
 }
 
@@ -67,6 +61,7 @@ export class DuplicateGrantError extends Error {
   constructor(calendarId: string) {
     super(`An active grant already exists for calendar: ${calendarId}`);
     this.name = 'DuplicateGrantError';
+    Object.setPrototypeOf(this, DuplicateGrantError.prototype);
   }
 }
 
@@ -74,6 +69,7 @@ export class GrantNotFoundError extends Error {
   constructor(grantId: string) {
     super(`Grant not found: ${grantId}`);
     this.name = 'GrantNotFoundError';
+    Object.setPrototypeOf(this, GrantNotFoundError.prototype);
   }
 }
 

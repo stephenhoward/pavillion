@@ -10,7 +10,7 @@ import {
   ProviderNotConfiguredError,
   InvalidSessionIdError,
   FundingPlanNotFoundError,
-} from '@/server/funding/exceptions';
+} from '@/common/exceptions/funding';
 import { ValidationError } from '@/common/exceptions/base';
 
 /**
@@ -55,14 +55,14 @@ describe('Checkout Session API Routes', () => {
       const response = await request(testApp(router))
         .post('/checkout-sessions')
         .send({
-          billing_cycle: 'monthly',
-          return_url: 'https://example.com/return',
+          billingCycle: 'monthly',
+          returnUrl: 'https://example.com/return',
         })
         .expect(200);
 
       expect(response.body).toEqual({
-        client_secret: 'cs_secret_abc123',
-        session_id: 'cs_test_session123',
+        clientSecret: 'cs_secret_abc123',
+        sessionId: 'cs_test_session123',
       });
     });
 
@@ -79,10 +79,10 @@ describe('Checkout Session API Routes', () => {
       await request(testApp(router))
         .post('/checkout-sessions')
         .send({
-          billing_cycle: 'yearly',
-          return_url: 'https://example.com/return',
+          billingCycle: 'yearly',
+          returnUrl: 'https://example.com/return',
           amount: 500000,
-          calendar_ids: ['550e8400-e29b-41d4-a716-446655440000'],
+          calendarIds: ['550e8400-e29b-41d4-a716-446655440000'],
         })
         .expect(200);
 
@@ -95,60 +95,60 @@ describe('Checkout Session API Routes', () => {
       expect(calendarIds).toEqual(['550e8400-e29b-41d4-a716-446655440000']);
     });
 
-    it('should return 400 when billing_cycle is missing', async () => {
+    it('should return 400 when billingCycle is missing', async () => {
       router.use(addRequestUser);
       router.post('/checkout-sessions', routes.createSession.bind(routes));
 
       const response = await request(testApp(router))
         .post('/checkout-sessions')
         .send({
-          return_url: 'https://example.com/return',
+          returnUrl: 'https://example.com/return',
         })
         .expect(400);
 
-      expect(response.body.error).toContain('billing_cycle');
+      expect(response.body.error).toContain('billingCycle');
     });
 
-    it('should return 400 when return_url is missing', async () => {
+    it('should return 400 when returnUrl is missing', async () => {
       router.use(addRequestUser);
       router.post('/checkout-sessions', routes.createSession.bind(routes));
 
       const response = await request(testApp(router))
         .post('/checkout-sessions')
         .send({
-          billing_cycle: 'monthly',
+          billingCycle: 'monthly',
         })
         .expect(400);
 
-      expect(response.body.error).toContain('return_url');
+      expect(response.body.error).toContain('returnUrl');
     });
 
-    it('should return 400 when calendar_ids is not an array', async () => {
+    it('should return 400 when calendarIds is not an array', async () => {
       router.use(addRequestUser);
       router.post('/checkout-sessions', routes.createSession.bind(routes));
 
       const response = await request(testApp(router))
         .post('/checkout-sessions')
         .send({
-          billing_cycle: 'monthly',
-          return_url: 'https://example.com/return',
-          calendar_ids: 'not-an-array',
+          billingCycle: 'monthly',
+          returnUrl: 'https://example.com/return',
+          calendarIds: 'not-an-array',
         })
         .expect(400);
 
-      expect(response.body.error).toContain('calendar_ids must be an array');
+      expect(response.body.error).toContain('calendarIds must be an array');
     });
 
-    it('should return 400 when calendar_ids contains invalid UUIDs', async () => {
+    it('should return 400 when calendarIds contains invalid UUIDs', async () => {
       router.use(addRequestUser);
       router.post('/checkout-sessions', routes.createSession.bind(routes));
 
       const response = await request(testApp(router))
         .post('/checkout-sessions')
         .send({
-          billing_cycle: 'monthly',
-          return_url: 'https://example.com/return',
-          calendar_ids: ['not-a-uuid'],
+          billingCycle: 'monthly',
+          returnUrl: 'https://example.com/return',
+          calendarIds: ['not-a-uuid'],
         })
         .expect(400);
 
@@ -166,8 +166,8 @@ describe('Checkout Session API Routes', () => {
       const response = await request(testApp(router))
         .post('/checkout-sessions')
         .send({
-          billing_cycle: 'monthly',
-          return_url: 'https://example.com/return',
+          billingCycle: 'monthly',
+          returnUrl: 'https://example.com/return',
         })
         .expect(409);
 
@@ -185,8 +185,8 @@ describe('Checkout Session API Routes', () => {
       const response = await request(testApp(router))
         .post('/checkout-sessions')
         .send({
-          billing_cycle: 'monthly',
-          return_url: 'https://example.com/return',
+          billingCycle: 'monthly',
+          returnUrl: 'https://example.com/return',
         })
         .expect(404);
 
@@ -204,8 +204,8 @@ describe('Checkout Session API Routes', () => {
       const response = await request(testApp(router))
         .post('/checkout-sessions')
         .send({
-          billing_cycle: 'invalid',
-          return_url: 'https://example.com/return',
+          billingCycle: 'invalid',
+          returnUrl: 'https://example.com/return',
         })
         .expect(400);
 
@@ -223,8 +223,8 @@ describe('Checkout Session API Routes', () => {
       const response = await request(testApp(router))
         .post('/checkout-sessions')
         .send({
-          billing_cycle: 'monthly',
-          return_url: 'https://example.com/return',
+          billingCycle: 'monthly',
+          returnUrl: 'https://example.com/return',
         })
         .expect(500);
 
@@ -237,8 +237,8 @@ describe('Checkout Session API Routes', () => {
       const response = await request(testApp(router))
         .post('/checkout-sessions')
         .send({
-          billing_cycle: 'monthly',
-          return_url: 'https://example.com/return',
+          billingCycle: 'monthly',
+          returnUrl: 'https://example.com/return',
         })
         .expect(401);
 

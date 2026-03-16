@@ -21,7 +21,6 @@ describe('Payment Provider Adapters', () => {
 
       // Required methods (including the 3 new checkout/price methods)
       const requiredMethods = [
-        'createSubscription',
         'cancelSubscription',
         'supportsAmountUpdates',
         'updateSubscriptionAmount',
@@ -29,8 +28,6 @@ describe('Payment Provider Adapters', () => {
         'getBillingPortalUrl',
         'verifyWebhookSignature',
         'parseWebhookEvent',
-        'registerWebhook',
-        'deleteWebhook',
         'validateCredentials',
         'createCheckoutSession',
         'getCheckoutSessionStatus',
@@ -38,7 +35,7 @@ describe('Payment Provider Adapters', () => {
       ];
 
       expect(requiredProps.length).toBe(1);
-      expect(requiredMethods.length).toBe(14);
+      expect(requiredMethods.length).toBe(11);
 
       // Verify StripeAdapter implements the interface
       const stripeConfig = new ProviderConfig('test-stripe', 'stripe');
@@ -119,55 +116,6 @@ describe('Payment Provider Adapters', () => {
 
       // Replace the Stripe instance with our mock
       (stripeAdapter as any).stripe = mockStripe;
-    });
-
-    it('should create subscription with mock Stripe SDK', async () => {
-      // Mock customer list (no existing customer)
-      mockStripe.customers.list.resolves({ data: [] });
-
-      // Mock customer creation
-      mockStripe.customers.create.resolves({
-        id: 'cus_mock123',
-        email: 'test@example.com',
-      });
-
-      // Mock price creation
-      mockStripe.prices.create.resolves({
-        id: 'price_mock123',
-      });
-
-      // Mock subscription creation
-      mockStripe.subscriptions.create.resolves({
-        id: 'sub_mock123',
-        customer: 'cus_mock123',
-        status: 'active',
-        current_period_start: Math.floor(Date.now() / 1000),
-        current_period_end: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
-        items: {
-          data: [
-            {
-              price: {
-                unit_amount: 1000, // $10.00 in cents
-                currency: 'usd',
-              },
-            },
-          ],
-        },
-      });
-
-      // Create subscription
-      const result = await stripeAdapter.createSubscription({
-        accountEmail: 'test@example.com',
-        accountId: 'acc_123',
-        amount: 1000000, // $10.00 in millicents
-        currency: 'USD',
-        billingCycle: 'monthly',
-      });
-
-      expect(result.providerSubscriptionId).toBe('sub_mock123');
-      expect(result.providerCustomerId).toBe('cus_mock123');
-      expect(result.status).toBe('active');
-      expect(mockStripe.subscriptions.create.calledOnce).toBe(true);
     });
 
     it('should update subscription amount via Stripe API', async () => {
@@ -731,7 +679,6 @@ describe('Payment Provider Adapters', () => {
       // Create mock PayPal client
       mockPayPalClient = {
         subscriptions: {
-          subscriptionsCreate: sandbox.stub(),
           subscriptionsGet: sandbox.stub(),
           subscriptionsCancel: sandbox.stub(),
         },
@@ -748,37 +695,6 @@ describe('Payment Provider Adapters', () => {
 
       // Replace the client with our mock
       (paypalAdapter as any).client = mockPayPalClient;
-    });
-
-    it('should create subscription with mock PayPal SDK', async () => {
-      // Mock subscription creation
-      mockPayPalClient.subscriptions.subscriptionsCreate.resolves({
-        result: {
-          id: 'I-MOCK123',
-          status: 'ACTIVE',
-          start_time: new Date().toISOString(),
-          billing_info: {
-            next_billing_time: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          },
-          subscriber: {
-            email_address: 'test@example.com',
-          },
-        },
-      });
-
-      // Create subscription
-      const result = await paypalAdapter.createSubscription({
-        accountEmail: 'test@example.com',
-        accountId: 'acc_123',
-        priceId: 'P-TEST123', // Use existing plan
-        amount: 1000000, // $10.00 in millicents
-        currency: 'USD',
-        billingCycle: 'monthly',
-      });
-
-      expect(result.providerSubscriptionId).toBe('I-MOCK123');
-      expect(result.status).toBe('active');
-      expect(mockPayPalClient.subscriptions.subscriptionsCreate.calledOnce).toBe(true);
     });
 
     it('should throw when updateSubscriptionAmount is called', async () => {

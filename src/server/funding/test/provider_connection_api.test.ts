@@ -5,7 +5,7 @@ import sinon from 'sinon';
 import { testApp, addRequestUser } from '@/server/common/test/lib/express';
 import { ProviderConnectionService } from '@/server/funding/service/provider_connection';
 import ProviderConnectionRoutes from '@/server/funding/api/v1/provider_connection';
-import { InvalidCredentialsError, MissingRequiredFieldError } from '@/server/funding/exceptions';
+import { InvalidCredentialsError, MissingRequiredFieldError } from '@/common/exceptions/funding';
 
 /**
  * Tests for Provider Connection API routes

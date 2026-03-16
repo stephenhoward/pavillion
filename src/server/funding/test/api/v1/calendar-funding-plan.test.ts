@@ -11,8 +11,8 @@ import {
   FundingPlanNotFoundError,
   CalendarFundingPlanNotFoundError,
   DuplicateCalendarFundingPlanError,
-  CalendarNotFoundError,
-} from '@/server/funding/exceptions';
+} from '@/common/exceptions/funding';
+import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { ValidationError } from '@/common/exceptions/base';
 
 /**

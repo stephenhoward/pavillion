@@ -346,68 +346,6 @@ describe('FundingService.getFundingStatus', () => {
   });
 });
 
-describe('FundingService.subscribe', () => {
-  const service = new FundingService();
-
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('should call POST /api/funding/v1/subscribe without calendarIds by default', async () => {
-    // Arrange
-    const params = { provider_type: 'stripe' as const, billing_cycle: 'monthly' as const };
-    const axiosPost = vi.mocked(axios.post);
-    axiosPost.mockResolvedValue({ data: { redirectUrl: 'https://stripe.com/pay' } });
-
-    // Act
-    await service.subscribe(params);
-
-    // Assert
-    expect(axiosPost).toHaveBeenCalledWith('/api/funding/v1/subscribe', params);
-  });
-
-  it('should include calendarIds when provided', async () => {
-    // Arrange
-    const params = { provider_type: 'stripe' as const, billing_cycle: 'monthly' as const };
-    const calendarIds = ['cal1', 'cal2', 'cal3'];
-    const axiosPost = vi.mocked(axios.post);
-    axiosPost.mockResolvedValue({ data: { redirectUrl: 'https://stripe.com/pay' } });
-
-    // Act
-    await service.subscribe(params, calendarIds);
-
-    // Assert
-    expect(axiosPost).toHaveBeenCalledWith('/api/funding/v1/subscribe', {
-      ...params,
-      calendarIds,
-    });
-  });
-
-  it('should return response data', async () => {
-    // Arrange
-    const params = { provider_type: 'stripe' as const, billing_cycle: 'monthly' as const };
-    const responseData = { redirectUrl: 'https://stripe.com/pay' };
-    const axiosPost = vi.mocked(axios.post);
-    axiosPost.mockResolvedValue({ data: responseData });
-
-    // Act
-    const result = await service.subscribe(params);
-
-    // Assert
-    expect(result).toEqual(responseData);
-  });
-
-  it('should throw error when API call fails', async () => {
-    // Arrange
-    const params = { provider_type: 'stripe' as const, billing_cycle: 'monthly' as const };
-    const axiosPost = vi.mocked(axios.post);
-    axiosPost.mockRejectedValue(new Error('Payment error'));
-
-    // Act & Assert
-    await expect(service.subscribe(params)).rejects.toThrow('Payment error');
-  });
-});
-
 describe('FundingService.createCheckoutSession', () => {
   const service = new FundingService();
 
@@ -418,10 +356,10 @@ describe('FundingService.createCheckoutSession', () => {
   it('should call POST /api/funding/v1/checkout-sessions with params', async () => {
     // Arrange
     const params = {
-      billing_cycle: 'monthly',
-      return_url: 'http://localhost/funding',
+      billingCycle: 'monthly',
+      returnUrl: 'http://localhost/funding',
     };
-    const responseData = { client_secret: 'cs_secret_123', session_id: 'cs_session_123' };
+    const responseData = { clientSecret: 'cs_secret_123', sessionId: 'cs_session_123' };
     const axiosPost = vi.mocked(axios.post);
     axiosPost.mockResolvedValue({ data: responseData });
 
@@ -430,20 +368,20 @@ describe('FundingService.createCheckoutSession', () => {
 
     // Assert
     expect(axiosPost).toHaveBeenCalledWith('/api/funding/v1/checkout-sessions', params);
-    expect(result.client_secret).toBe('cs_secret_123');
-    expect(result.session_id).toBe('cs_session_123');
+    expect(result.clientSecret).toBe('cs_secret_123');
+    expect(result.sessionId).toBe('cs_session_123');
   });
 
-  it('should include amount and calendar_ids when provided', async () => {
+  it('should include amount and calendarIds when provided', async () => {
     // Arrange
     const params = {
-      billing_cycle: 'yearly',
-      return_url: 'http://localhost/funding',
+      billingCycle: 'yearly',
+      returnUrl: 'http://localhost/funding',
       amount: 2000000,
-      calendar_ids: ['cal1', 'cal2'],
+      calendarIds: ['cal1', 'cal2'],
     };
     const axiosPost = vi.mocked(axios.post);
-    axiosPost.mockResolvedValue({ data: { client_secret: 'cs_secret', session_id: 'cs_session' } });
+    axiosPost.mockResolvedValue({ data: { clientSecret: 'cs_secret', sessionId: 'cs_session' } });
 
     // Act
     await service.createCheckoutSession(params);
@@ -459,8 +397,8 @@ describe('FundingService.createCheckoutSession', () => {
 
     // Act & Assert
     await expect(service.createCheckoutSession({
-      billing_cycle: 'monthly',
-      return_url: 'http://localhost',
+      billingCycle: 'monthly',
+      returnUrl: 'http://localhost',
     })).rejects.toThrow('Session creation failed');
   });
 });
