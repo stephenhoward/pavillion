@@ -3,6 +3,7 @@ import { EventEmitter } from 'events';
 import AdminRouteHandlers from '@/server/funding/api/v1/admin';
 import FundingPlanRouteHandlers from '@/server/funding/api/v1/funding-plan';
 import CalendarSubscriptionRoutes from '@/server/funding/api/v1/calendar-subscription';
+import CheckoutSessionRoutes from '@/server/funding/api/v1/checkout-session';
 import WebhookRouteHandlers from '@/server/funding/api/v1/webhooks';
 import ProviderConnectionRoutes from '@/server/funding/api/v1/provider_connection';
 import FundingInterface from '@/server/funding/interface';
@@ -35,6 +36,10 @@ export default class FundingApiV1 {
     // Install calendar subscription routes
     const calendarSubscriptionRoutes = new CalendarSubscriptionRoutes(internalAPI);
     calendarSubscriptionRoutes.installHandlers(app, '/api/funding/v1');
+
+    // Install checkout session routes
+    const checkoutSessionRoutes = new CheckoutSessionRoutes(internalAPI);
+    checkoutSessionRoutes.installHandlers(app, '/api/funding/v1');
 
     // Install webhook routes (separate prefix, no /v1)
     // Webhooks use raw body parsing, handled within the webhook routes

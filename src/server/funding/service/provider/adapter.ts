@@ -82,6 +82,10 @@ export interface WebhookEvent {
   amount?: number; // in millicents
   currency?: string;
   rawPayload: any; // Provider-specific event data
+  /** Account ID from checkout session metadata (checkout.session.completed only) */
+  accountId?: string;
+  /** JSON string of calendar IDs from checkout session metadata (checkout.session.completed only) */
+  calendarIds?: string;
 }
 
 /**

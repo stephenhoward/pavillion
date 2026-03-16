@@ -172,6 +172,16 @@ export default class WebhookRouteHandlers {
 
     // Parse event-specific data
     switch (event.type) {
+      case 'checkout.session.completed': {
+        const session = event.data.object as Stripe.Checkout.Session;
+        webhookEvent.subscriptionId = session.subscription as string;
+        webhookEvent.customerId = session.customer as string;
+        webhookEvent.status = 'active';
+        webhookEvent.accountId = session.metadata?.pavillion_account_id;
+        webhookEvent.calendarIds = session.metadata?.pavillion_calendar_ids;
+        break;
+      }
+
       case 'invoice.paid':
       case 'invoice.payment_succeeded': {
         const invoice = event.data.object as Stripe.Invoice;

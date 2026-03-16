@@ -169,3 +169,16 @@ export const calendarSubscriptionByAccount: RequestHandler = isRateLimitEnabled(
     'calendar-subscription',
   )
   : noOpMiddleware;
+
+/**
+ * Checkout session creation rate limiter for authenticated users.
+ * Limits: 10 requests per account per 15 minutes.
+ * Prevents abuse of Stripe checkout session creation.
+ */
+export const checkoutSessionByAccount: RequestHandler = isRateLimitEnabled()
+  ? createAccountRateLimiter(
+    10,
+    15 * 60 * 1000, // 15 minutes
+    'checkout-session',
+  )
+  : noOpMiddleware;

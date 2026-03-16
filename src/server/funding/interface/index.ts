@@ -1,8 +1,8 @@
 import { EventEmitter } from 'events';
 import FundingService from '@/server/funding/service/funding';
-import { FundingPlan, FundingSettings, ProviderConfig, FundingStatus } from '@/common/model/funding-plan';
+import { FundingPlan, FundingSettings, ProviderConfig, FundingStatus, BillingCycle } from '@/common/model/funding-plan';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
-import { ProviderSubscription, WebhookEvent } from '@/server/funding/service/provider/adapter';
+import { ProviderSubscription, WebhookEvent, CheckoutSessionResult } from '@/server/funding/service/provider/adapter';
 import type CalendarInterface from '@/server/calendar/interface';
 
 /**
@@ -110,6 +110,44 @@ export default class FundingInterface {
 
   async getBillingPortalUrl(accountId: string, returnUrl: string): Promise<string> {
     return this.fundingService.getBillingPortalUrl(accountId, returnUrl);
+  }
+
+  // Checkout session operations
+
+  /**
+   * Create a Stripe checkout session for embedded checkout
+   *
+   * @param accountId - Authenticated account ID
+   * @param billingCycle - 'monthly' or 'yearly'
+   * @param returnUrl - URL to return to after checkout
+   * @param amount - Optional amount in millicents (for PWYC pricing)
+   * @param calendarIds - Optional array of calendar IDs to fund
+   * @returns Client secret and session ID for the embedded checkout
+   */
+  async createCheckoutSession(
+    accountId: string,
+    billingCycle: BillingCycle,
+    returnUrl: string,
+    amount?: number,
+    calendarIds?: string[],
+  ): Promise<CheckoutSessionResult> {
+    return this.fundingService.createCheckoutSession(accountId, billingCycle, returnUrl, amount, calendarIds);
+  }
+
+  /**
+   * Get the status of a checkout session
+   *
+   * Validates sessionId format and performs IDOR protection.
+   *
+   * @param accountId - Authenticated account ID
+   * @param sessionId - The checkout session ID to check
+   * @returns Status of the checkout session
+   */
+  async getCheckoutSessionStatus(
+    accountId: string,
+    sessionId: string,
+  ): Promise<{ status: string }> {
+    return this.fundingService.getCheckoutSessionStatus(accountId, sessionId);
   }
 
   // Calendar funding plan operations

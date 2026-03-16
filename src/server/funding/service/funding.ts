@@ -1054,7 +1054,15 @@ export default class FundingService {
       return;
     }
 
-    // Log event
+    // Handle checkout.session.completed: create a new FundingPlan
+    // Event logging is deferred until after the FundingPlan is created,
+    // because funding_plan_id is a FK that requires a valid local UUID
+    if (event.eventType === 'checkout.session.completed') {
+      await this.processCheckoutCompleted(event, providerConfigId);
+      return;
+    }
+
+    // Log event for subscription lifecycle events
     const eventEntity = new FundingEventEntity();
     eventEntity.id = uuidv4();
     eventEntity.funding_plan_id = event.subscriptionId || '';
@@ -1112,6 +1120,131 @@ export default class FundingService {
     }
 
     await subscription.save();
+  }
+
+  /**
+   * Process a checkout.session.completed webhook event
+   *
+   * Creates a local FundingPlan record from the completed checkout session,
+   * retrieves subscription details from the provider, re-validates calendar
+   * ownership, and allocates funding to validated calendars.
+   *
+   * @param event - Webhook event with checkout session data
+   * @param providerConfigId - Provider configuration ID
+   * @private
+   */
+  private async processCheckoutCompleted(event: WebhookEvent, providerConfigId: string): Promise<void> {
+    if (!event.subscriptionId || !event.customerId || !event.accountId) {
+      return;
+    }
+
+    // Idempotency: check if a FundingPlan already exists for this provider subscription
+    const existingPlan = await FundingPlanEntity.findOne({
+      where: {
+        provider_subscription_id: event.subscriptionId,
+        provider_config_id: providerConfigId,
+      },
+    });
+
+    if (existingPlan) {
+      return;
+    }
+
+    // Validate accountId from metadata
+    if (!isValidUUID(event.accountId)) {
+      return;
+    }
+
+    // Retrieve subscription details from the provider for amount/currency/period
+    const providerEntity = await ProviderConfigEntity.findByPk(providerConfigId);
+    if (!providerEntity) {
+      return;
+    }
+
+    const providerConfig = providerEntity.toModel();
+    const adapter = ProviderFactory.getAdapter(providerConfig);
+    const providerSubscription = await adapter.getSubscription(event.subscriptionId);
+
+    // Determine billing cycle from provider subscription period
+    const periodMs = providerSubscription.currentPeriodEnd.getTime()
+      - providerSubscription.currentPeriodStart.getTime();
+    const billingCycle: BillingCycle = periodMs > 60 * 24 * 60 * 60 * 1000 ? 'yearly' : 'monthly';
+
+    // Create local FundingPlan record
+    const fundingPlan = new FundingPlan(uuidv4());
+    fundingPlan.accountId = event.accountId;
+    fundingPlan.providerConfigId = providerConfigId;
+    fundingPlan.providerSubscriptionId = event.subscriptionId;
+    fundingPlan.providerCustomerId = event.customerId;
+    fundingPlan.status = providerSubscription.status;
+    fundingPlan.billingCycle = billingCycle;
+    fundingPlan.amount = providerSubscription.amount;
+    fundingPlan.currency = providerSubscription.currency;
+    fundingPlan.currentPeriodStart = providerSubscription.currentPeriodStart;
+    fundingPlan.currentPeriodEnd = providerSubscription.currentPeriodEnd;
+
+    const entity = FundingPlanEntity.fromModel(fundingPlan);
+    await entity.save();
+
+    // Log the checkout event now that we have a valid funding_plan_id
+    const eventEntity = new FundingEventEntity();
+    eventEntity.id = uuidv4();
+    eventEntity.funding_plan_id = fundingPlan.id;
+    eventEntity.event_type = event.eventType;
+    eventEntity.provider_event_id = event.eventId;
+    eventEntity.payload = JSON.stringify(event.rawPayload);
+    eventEntity.processed_at = new Date();
+    await eventEntity.save();
+
+    // Parse and re-validate calendarIds from metadata
+    if (event.calendarIds) {
+      let calendarIds: string[];
+      try {
+        calendarIds = JSON.parse(event.calendarIds);
+      }
+      catch {
+        // Invalid JSON in calendarIds metadata, skip calendar allocation
+        return;
+      }
+
+      if (!Array.isArray(calendarIds)) {
+        return;
+      }
+
+      // Filter to only valid UUIDs
+      const validCalendarIds = calendarIds.filter((cId) => isValidUUID(cId));
+
+      // Re-validate ownership for each calendar
+      const ownedCalendarIds: string[] = [];
+      for (const cId of validCalendarIds) {
+        try {
+          await this.verifyCalendarOwnership(event.accountId, cId);
+          ownedCalendarIds.push(cId);
+        }
+        catch {
+          // Calendar not owned by this account, skip it
+        }
+      }
+
+      // Allocate funding to validated calendars
+      if (ownedCalendarIds.length > 0) {
+        const perCalendarAmount = Math.floor(fundingPlan.amount / ownedCalendarIds.length);
+
+        for (const calendarId of ownedCalendarIds) {
+          await CalendarFundingPlanEntity.create({
+            id: uuidv4(),
+            funding_plan_id: fundingPlan.id,
+            calendar_id: calendarId,
+            amount: perCalendarAmount,
+            end_time: null,
+          });
+        }
+      }
+    }
+
+    this.eventBus.emit('funding_plan:created', {
+      subscription: fundingPlan,
+    });
   }
 
   /**
