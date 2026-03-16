@@ -158,15 +158,15 @@ export const widgetConfigByAccount: RequestHandler = isRateLimitEnabled()
   : noOpMiddleware;
 
 /**
- * Calendar subscription rate limiter for authenticated users.
+ * Calendar funding plan rate limiter for authenticated users.
  * Limits: 30 requests per account per 15 minutes (default config).
- * Prevents abuse of calendar add/remove subscription endpoints.
+ * Prevents abuse of calendar add/remove funding plan endpoints.
  */
-export const calendarSubscriptionByAccount: RequestHandler = isRateLimitEnabled()
+export const calendarFundingPlanByAccount: RequestHandler = isRateLimitEnabled()
   ? createAccountRateLimiter(
-    config.get<number>('rateLimit.calendarSubscription.byAccount.max'),
-    config.get<number>('rateLimit.calendarSubscription.byAccount.windowMs'),
-    'calendar-subscription',
+    config.get<number>('rateLimit.calendarFundingPlan.byAccount.max'),
+    config.get<number>('rateLimit.calendarFundingPlan.byAccount.windowMs'),
+    'calendar-funding-plan',
   )
   : noOpMiddleware;
 

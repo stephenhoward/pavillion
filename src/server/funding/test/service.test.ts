@@ -1107,6 +1107,22 @@ describe('FundingService', () => {
       return mockAdapter;
     }
 
+    function stubMockAdapterWithMissingAccountId(metadataAccountId: string | undefined | null) {
+      const mockAdapter = {
+        getCheckoutSessionStatus: sandbox.stub().resolves({
+          status: 'complete',
+          subscriptionId: 'sub_mock_123',
+          customerId: 'cus_mock_123',
+          metadata: {
+            accountId: metadataAccountId,
+            calendarIds: JSON.stringify([uuidv4()]),
+          },
+        }),
+      };
+      sandbox.stub(ProviderFactory, 'getAdapter').returns(mockAdapter as any);
+      return mockAdapter;
+    }
+
     it('should return status for valid session owned by requesting user', async () => {
       stubEnabledStripeProvider();
       stubMockAdapter(accountId);
@@ -1120,6 +1136,33 @@ describe('FundingService', () => {
       stubEnabledStripeProvider();
       const differentAccountId = uuidv4();
       stubMockAdapter(differentAccountId);
+
+      await expect(
+        service.getCheckoutSessionStatus(accountId, 'cs_test_abc123def'),
+      ).rejects.toThrow(FundingPlanNotFoundError);
+    });
+
+    it('should throw FundingPlanNotFoundError when metadata.accountId is empty string', async () => {
+      stubEnabledStripeProvider();
+      stubMockAdapterWithMissingAccountId('');
+
+      await expect(
+        service.getCheckoutSessionStatus(accountId, 'cs_test_abc123def'),
+      ).rejects.toThrow(FundingPlanNotFoundError);
+    });
+
+    it('should throw FundingPlanNotFoundError when metadata.accountId is undefined', async () => {
+      stubEnabledStripeProvider();
+      stubMockAdapterWithMissingAccountId(undefined);
+
+      await expect(
+        service.getCheckoutSessionStatus(accountId, 'cs_test_abc123def'),
+      ).rejects.toThrow(FundingPlanNotFoundError);
+    });
+
+    it('should throw FundingPlanNotFoundError when metadata.accountId is null', async () => {
+      stubEnabledStripeProvider();
+      stubMockAdapterWithMissingAccountId(null);
 
       await expect(
         service.getCheckoutSessionStatus(accountId, 'cs_test_abc123def'),

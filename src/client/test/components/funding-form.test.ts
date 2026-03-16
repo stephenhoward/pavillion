@@ -453,7 +453,7 @@ describe('FundingForm', () => {
       expect(wrapper.find('.error-message').exists()).toBe(true);
     });
 
-    it('falls back to success when API verification fails after onComplete', async () => {
+    it('shows error when API verification fails after onComplete', async () => {
       mockGetOptions.mockResolvedValue(makeStripeOptions());
 
       const { mockStripeInstance, triggerOnComplete } = makeMockStripeWithCallbackCapture();
@@ -475,8 +475,8 @@ describe('FundingForm', () => {
       triggerOnComplete();
       await flushPromises();
 
-      // Should still show success since Stripe confirmed completion
-      expect(wrapper.find('.success-message').exists()).toBe(true);
+      // Should show error since payment verification could not be confirmed
+      expect(wrapper.find('.error-message').exists()).toBe(true);
     });
 
     it('emits subscribed when done button clicked after success', async () => {

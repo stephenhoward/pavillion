@@ -197,7 +197,7 @@ describe('FundingTab', () => {
       expect(wrapper.find('.funding-status-badge--unfunded').exists()).toBe(true);
       const subscribeButton = wrapper.find('.funding-button--primary');
       expect(subscribeButton.exists()).toBe(true);
-      expect(wrapper.text()).toContain('Subscribe');
+      expect(wrapper.text()).toContain('Create a Funding Plan');
     });
 
     it('opens subscribe sheet when subscribe button is clicked', async () => {

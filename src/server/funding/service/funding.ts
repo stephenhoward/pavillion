@@ -938,7 +938,8 @@ export default class FundingService {
 
     // IDOR check: compare metadata.accountId to requesting user
     // Return generic "not found" error (not 403) to avoid leaking session existence
-    if (sessionStatus.metadata.accountId !== accountId) {
+    // Guard against missing metadata first to prevent empty/undefined bypass
+    if (!sessionStatus.metadata.accountId || sessionStatus.metadata.accountId !== accountId) {
       throw new FundingPlanNotFoundError(sessionId);
     }
 

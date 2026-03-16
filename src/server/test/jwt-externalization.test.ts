@@ -100,6 +100,7 @@ describe('JWT Externalization and Production Validation', () => {
     configGetStub.withArgs('jwt.secret').returns('development-only-jwt-secret-do-not-use-in-production');
     configGetStub.withArgs('session.secret').returns('custom-session-secret');
     configGetStub.withArgs('moderation.emailHashSecret').returns('custom-email-hash-secret');
+    configGetStub.withArgs('funding.encryptionKey').returns('custom-encryption-key');
 
     expect(() => {
       validateProductionSecrets();
@@ -112,6 +113,7 @@ describe('JWT Externalization and Production Validation', () => {
     configGetStub2.withArgs('jwt.secret').returns('custom-jwt-secret');
     configGetStub2.withArgs('session.secret').returns('development-only-session-secret-do-not-use-in-production');
     configGetStub2.withArgs('moderation.emailHashSecret').returns('custom-email-hash-secret');
+    configGetStub2.withArgs('funding.encryptionKey').returns('custom-encryption-key');
 
     expect(() => {
       validateProductionSecrets();
@@ -124,10 +126,24 @@ describe('JWT Externalization and Production Validation', () => {
     configGetStub3.withArgs('jwt.secret').returns('custom-jwt-secret');
     configGetStub3.withArgs('session.secret').returns('custom-session-secret');
     configGetStub3.withArgs('moderation.emailHashSecret').returns('development-only-email-hash-secret-do-not-use-in-production');
+    configGetStub3.withArgs('funding.encryptionKey').returns('custom-encryption-key');
 
     expect(() => {
       validateProductionSecrets();
     }).toThrow(/EMAIL_HASH_SECRET must be set in production/);
+
+    sandbox.restore();
+
+    // Test encryption key validation
+    const configGetStub4 = sandbox.stub(config, 'get');
+    configGetStub4.withArgs('jwt.secret').returns('custom-jwt-secret');
+    configGetStub4.withArgs('session.secret').returns('custom-session-secret');
+    configGetStub4.withArgs('moderation.emailHashSecret').returns('custom-email-hash-secret');
+    configGetStub4.withArgs('funding.encryptionKey').returns('development-only-do-not-use-prod');
+
+    expect(() => {
+      validateProductionSecrets();
+    }).toThrow(/ENCRYPTION_KEY must be set in production/);
   });
 
   // Test 5: Production validation passes with custom secrets
@@ -136,6 +152,7 @@ describe('JWT Externalization and Production Validation', () => {
     configGetStub.withArgs('jwt.secret').returns('custom-jwt-secret-xyzabc123');
     configGetStub.withArgs('session.secret').returns('custom-session-secret-xyzabc123');
     configGetStub.withArgs('moderation.emailHashSecret').returns('custom-email-hash-secret-xyzabc123');
+    configGetStub.withArgs('funding.encryptionKey').returns('custom-encryption-key-xyzabc123');
 
     // Should not throw
     expect(() => {

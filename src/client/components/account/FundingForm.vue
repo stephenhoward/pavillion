@@ -138,9 +138,9 @@ async function handleCheckoutComplete(sessionId: string) {
     }
   }
   catch {
-    // If verification fails, still treat as success since Stripe confirmed completion
+    // If verification fails, show error — the onComplete callback fires when the form finishes, not when payment is verified
     destroyCheckout();
-    resultStatus.value = 'success';
+    resultStatus.value = 'error';
     formState.value = 'result';
   }
 }

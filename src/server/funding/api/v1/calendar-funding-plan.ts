@@ -9,7 +9,7 @@ import {
   DuplicateCalendarFundingPlanError,
   CalendarNotFoundError,
 } from '@/server/funding/exceptions';
-import { calendarSubscriptionByAccount } from '@/server/common/middleware/rate-limiters';
+import { calendarFundingPlanByAccount } from '@/server/common/middleware/rate-limiters';
 import { logError } from '@/server/common/helper/error-logger';
 
 /**
@@ -19,7 +19,7 @@ import { logError } from '@/server/common/helper/error-logger';
  * from a funding plan and checking funding status. All routes require
  * authentication and ownership verification.
  */
-export default class CalendarSubscriptionRoutes {
+export default class CalendarFundingPlanRoutes {
   private interface: FundingInterface;
 
   constructor(fundingInterface: FundingInterface) {
@@ -38,14 +38,14 @@ export default class CalendarSubscriptionRoutes {
     router.post(
       '/calendars',
       ...ExpressHelper.loggedInOnly,
-      calendarSubscriptionByAccount,
+      calendarFundingPlanByAccount,
       this.addCalendar.bind(this),
     );
 
     router.delete(
       '/calendars/:calendarId',
       ...ExpressHelper.loggedInOnly,
-      calendarSubscriptionByAccount,
+      calendarFundingPlanByAccount,
       this.removeCalendar.bind(this),
     );
 

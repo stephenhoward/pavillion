@@ -128,15 +128,15 @@ describe('Webhook Handling', () => {
       expect(Stripe.Webhook.constructEvent).toHaveBeenCalledOnce();
     });
 
-    it('should reject webhook with invalid Stripe signature', async () => {
+    it('should reject webhook with invalid Stripe signature using a generic error message', async () => {
       const webhookPayload = JSON.stringify({
         id: 'evt_test_webhook',
         type: 'invoice.paid',
       });
 
-      // Mock Stripe.Webhook.constructEvent to throw error
+      // Mock Stripe.Webhook.constructEvent to throw error with SDK detail
       vi.mocked(Stripe.Webhook.constructEvent).mockImplementation(() => {
-        throw new Error('Invalid signature');
+        throw new Error('No signatures found matching the expected signature for payload. Are you passing the raw request body you received from Stripe?');
       });
 
       const response = await request(app)
@@ -146,7 +146,10 @@ describe('Webhook Handling', () => {
         .send(webhookPayload);
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toContain('Invalid signature');
+      // Must return a generic message — must NOT echo the Stripe SDK error detail
+      expect(response.body.error).toBe('Webhook signature verification failed');
+      expect(response.body.error).not.toContain('No signatures found');
+      expect(response.body.error).not.toContain('raw request body');
     });
 
     it('should return 400 when stripe-signature header is missing', async () => {

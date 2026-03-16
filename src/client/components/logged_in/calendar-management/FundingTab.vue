@@ -77,13 +77,13 @@
         <div class="funding-status-badge funding-status-badge--unfunded">
           {{ t('status_unfunded') }}
         </div>
-        <p class="funding-description">{{ t('no_subscription_prompt') }}</p>
+        <p class="funding-description">{{ t('no_funding_plan_prompt') }}</p>
         <button
           type="button"
           class="funding-button funding-button--primary"
           @click="state.showFundingSheet = true"
         >
-          {{ t('subscribe_to_fund_button') }}
+          {{ t('create_funding_plan_button') }}
         </button>
       </div>
 
@@ -255,7 +255,7 @@ const onSubscribed = async () => {
   try {
     state.isActing = true;
     await fundingService.addCalendarToFundingPlan(props.calendarId, 0);
-    state.success = t('subscribe_and_fund_success');
+    state.success = t('create_funding_plan_success');
     clearMessages();
   }
   catch (error) {

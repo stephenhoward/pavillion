@@ -183,4 +183,109 @@ describe('Admin Funding API', () => {
     });
   });
 
+  describe('GET /admin/funding-plans', () => {
+    const mockPaginationResult = (page: number, limit: number) => ({
+      fundingPlans: [],
+      pagination: {
+        currentPage: page,
+        totalPages: 0,
+        totalCount: 0,
+        limit,
+      },
+    });
+
+    it('should use default limit of 50 when no limit is provided', async () => {
+      const stub = sandbox.stub(service, 'listFundingPlans').resolves(mockPaginationResult(1, 50));
+
+      router.get('/handler', adminHandlers.listFundingPlans.bind(adminHandlers));
+
+      await request(testApp(router))
+        .get('/handler')
+        .expect(200);
+
+      expect(stub.calledOnce).toBe(true);
+      expect(stub.firstCall.args[0]).toBe(1); // page defaults to 1
+      expect(stub.firstCall.args[1]).toBe(50); // limit defaults to 50
+    });
+
+    it('should cap limit at 100 when a higher value is requested', async () => {
+      const stub = sandbox.stub(service, 'listFundingPlans').resolves(mockPaginationResult(1, 100));
+
+      router.get('/handler', adminHandlers.listFundingPlans.bind(adminHandlers));
+
+      await request(testApp(router))
+        .get('/handler?limit=999999')
+        .expect(200);
+
+      expect(stub.calledOnce).toBe(true);
+      expect(stub.firstCall.args[1]).toBe(100); // capped at MAX_LIMIT
+    });
+
+    it('should pass a valid limit through unchanged', async () => {
+      const stub = sandbox.stub(service, 'listFundingPlans').resolves(mockPaginationResult(1, 10));
+
+      router.get('/handler', adminHandlers.listFundingPlans.bind(adminHandlers));
+
+      await request(testApp(router))
+        .get('/handler?limit=10')
+        .expect(200);
+
+      expect(stub.firstCall.args[1]).toBe(10);
+    });
+
+    it('should fall back to default limit when limit is zero or negative', async () => {
+      const stub = sandbox.stub(service, 'listFundingPlans').resolves(mockPaginationResult(1, 50));
+
+      router.get('/handler', adminHandlers.listFundingPlans.bind(adminHandlers));
+
+      await request(testApp(router))
+        .get('/handler?limit=0')
+        .expect(200);
+
+      expect(stub.firstCall.args[1]).toBe(50); // zero falls back to default
+
+      stub.resetHistory();
+
+      await request(testApp(router))
+        .get('/handler?limit=-5')
+        .expect(200);
+
+      expect(stub.firstCall.args[1]).toBe(50); // negative falls back to default
+    });
+
+    it('should fall back to page 1 when page is zero or negative', async () => {
+      const stub = sandbox.stub(service, 'listFundingPlans').resolves(mockPaginationResult(1, 50));
+
+      router.get('/handler', adminHandlers.listFundingPlans.bind(adminHandlers));
+
+      await request(testApp(router))
+        .get('/handler?page=0')
+        .expect(200);
+
+      expect(stub.firstCall.args[0]).toBe(1); // zero falls back to page 1
+
+      stub.resetHistory();
+
+      await request(testApp(router))
+        .get('/handler?page=-3')
+        .expect(200);
+
+      expect(stub.firstCall.args[0]).toBe(1); // negative falls back to page 1
+    });
+
+    it('should pass page and limit correctly when both are valid', async () => {
+      const stub = sandbox.stub(service, 'listFundingPlans').resolves(mockPaginationResult(3, 25));
+
+      router.get('/handler', adminHandlers.listFundingPlans.bind(adminHandlers));
+
+      await request(testApp(router))
+        .get('/handler?page=3&limit=25')
+        .expect(200);
+
+      expect(stub.firstCall.args[0]).toBe(3);
+      expect(stub.firstCall.args[1]).toBe(25);
+    });
+  });
+
+
 });

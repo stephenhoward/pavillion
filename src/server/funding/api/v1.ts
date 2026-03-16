@@ -2,7 +2,7 @@ import express, { Application } from 'express';
 import { EventEmitter } from 'events';
 import AdminRouteHandlers from '@/server/funding/api/v1/admin';
 import FundingPlanRouteHandlers from '@/server/funding/api/v1/funding-plan';
-import CalendarSubscriptionRoutes from '@/server/funding/api/v1/calendar-subscription';
+import CalendarFundingPlanRoutes from '@/server/funding/api/v1/calendar-funding-plan';
 import CheckoutSessionRoutes from '@/server/funding/api/v1/checkout-session';
 import WebhookRouteHandlers from '@/server/funding/api/v1/webhooks';
 import ProviderConnectionRoutes from '@/server/funding/api/v1/provider_connection';
@@ -34,7 +34,7 @@ export default class FundingApiV1 {
     fundingPlanRoutes.installHandlers(app, '/api/funding/v1');
 
     // Install calendar funding plan routes
-    const calendarFundingPlanRoutes = new CalendarSubscriptionRoutes(internalAPI);
+    const calendarFundingPlanRoutes = new CalendarFundingPlanRoutes(internalAPI);
     calendarFundingPlanRoutes.installHandlers(app, '/api/funding/v1');
 
     // Install checkout session routes

@@ -35,6 +35,12 @@ jwt:
 session:
   secret: 'development-only-session-secret-do-not-use-in-production'
 
+# Funding domain configuration
+# In production, ENCRYPTION_KEY must be set via environment variable
+# Generate with: openssl rand -hex 32
+funding:
+  encryptionKey: 'development-only-do-not-use-prod'
+
 # Moderation configuration
 moderation:
   # HMAC secret for hashing reporter email addresses
@@ -91,7 +97,7 @@ rateLimit:
     byAccount:
       windowMs: 900000  # 15 minutes in milliseconds
       max: 100  # 100 requests per account per 15 minutes
-  calendarSubscription:
+  calendarFundingPlan:
     byAccount:
       windowMs: 900000  # 15 minutes in milliseconds
       max: 30  # 30 requests per account per 15 minutes

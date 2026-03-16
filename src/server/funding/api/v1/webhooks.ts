@@ -87,7 +87,8 @@ export default class WebhookRouteHandlers {
         Stripe.Webhook.constructEvent(rawBody, signature, webhookSecret);
       }
       catch (err) {
-        res.status(400).json({ error: `Invalid signature: ${err instanceof Error ? err.message : 'Unknown error'}`, errorName: 'ValidationError' });
+        logError(err, 'Stripe webhook signature verification failed');
+        res.status(400).json({ error: 'Webhook signature verification failed', errorName: 'ValidationError' });
         return;
       }
 

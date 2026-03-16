@@ -71,7 +71,7 @@ describe('WidgetDomains', () => {
       await nextTick();
 
       // Should show subscription error
-      expect(wrapper.vm.state.error).toBe('subscription_required');
+      expect(wrapper.vm.state.error).toBe('funding_plan_required');
       expect(wrapper.vm.state.isSubscriptionError).toBe(true);
     });
 

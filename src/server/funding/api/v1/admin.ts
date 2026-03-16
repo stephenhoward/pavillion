@@ -209,9 +209,15 @@ export default class AdminRouteHandlers {
    * List all funding plans with pagination
    */
   async listFundingPlans(req: Request, res: Response): Promise<void> {
+    const DEFAULT_LIMIT = 50;
+    const MAX_LIMIT = 100;
+
     try {
-      const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 50;
+      const parsedPage = parseInt(req.query.page as string, 10);
+      const page = parsedPage > 0 ? parsedPage : 1;
+
+      const parsedLimit = parseInt(req.query.limit as string, 10);
+      const limit = Math.min(parsedLimit > 0 ? parsedLimit : DEFAULT_LIMIT, MAX_LIMIT);
 
       const result = await this.interface.listFundingPlans(page, limit);
 

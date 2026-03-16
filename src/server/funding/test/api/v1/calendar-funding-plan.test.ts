@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import express, { Request, Response } from 'express';
 import request from 'supertest';
 import sinon from 'sinon';
-import CalendarSubscriptionRoutes from '@/server/funding/api/v1/calendar-subscription';
+import CalendarFundingPlanRoutes from '@/server/funding/api/v1/calendar-funding-plan';
 import FundingInterface from '@/server/funding/interface';
 import { Account } from '@/common/model/account';
 import { FundingPlan } from '@/common/model/funding-plan';
@@ -16,17 +16,17 @@ import {
 import { ValidationError } from '@/common/exceptions/base';
 
 /**
- * Tests for CalendarSubscriptionRoutes API handlers.
+ * Tests for CalendarFundingPlanRoutes API handlers.
  *
  * These tests verify the HTTP-level behavior of POST /calendars,
  * DELETE /calendars/:calendarId, and GET /calendars/:calendarId/funding
  * without rate limiting middleware (bypassed via direct handler binding).
  */
-describe('CalendarSubscriptionRoutes API', () => {
+describe('CalendarFundingPlanRoutes API', () => {
   let sandbox: sinon.SinonSandbox;
   let router: express.Router;
   let mockInterface: sinon.SinonStubbedInstance<FundingInterface>;
-  let routes: CalendarSubscriptionRoutes;
+  let routes: CalendarFundingPlanRoutes;
   let mockAccount: Account;
 
   beforeEach(() => {
@@ -35,7 +35,7 @@ describe('CalendarSubscriptionRoutes API', () => {
 
     // Create a stub of FundingInterface
     mockInterface = sandbox.createStubInstance(FundingInterface);
-    routes = new CalendarSubscriptionRoutes(mockInterface as any);
+    routes = new CalendarFundingPlanRoutes(mockInterface as any);
 
     mockAccount = new Account('test-account-id');
     mockAccount.email = 'test@example.com';
@@ -132,7 +132,7 @@ describe('CalendarSubscriptionRoutes API', () => {
       expect(response.body.errorName).toBe('FundingPlanNotFoundError');
     });
 
-    it('should return 409 when calendar already has an active subscription', async () => {
+    it('should return 409 when calendar already has an active funding plan', async () => {
       mockInterface.addCalendarToFundingPlan.rejects(
         new DuplicateCalendarFundingPlanError('sub-1', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d'),
       );
@@ -235,7 +235,7 @@ describe('CalendarSubscriptionRoutes API', () => {
       expect(response.body.errorName).toBe('FundingPlanNotFoundError');
     });
 
-    it('should return 404 when calendar subscription not found', async () => {
+    it('should return 404 when calendar funding plan not found', async () => {
       mockInterface.removeCalendarFromFundingPlan.rejects(
         new CalendarFundingPlanNotFoundError('sub-1', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d'),
       );

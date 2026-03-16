@@ -11,6 +11,8 @@ import yaml from 'yaml';
  * - Session secret loads from config in development
  * - JWT_SECRET env var overrides default config
  * - SESSION_SECRET env var overrides default config
+ * - funding.encryptionKey exists in default.yaml and is marked development-only
+ * - ENCRYPTION_KEY env var maps to funding.encryptionKey
  *
  * Note: These tests validate the configuration files and structure.
  * The config package caches values at first require, so we test the YAML
@@ -56,6 +58,32 @@ describe('Secrets Configuration', () => {
     });
   });
 
+  describe('default.yaml Encryption Key Configuration', () => {
+    let defaultConfig: Record<string, unknown>;
+
+    beforeEach(() => {
+      const defaultPath = path.join(CONFIG_DIR, 'default.yaml');
+      expect(fs.existsSync(defaultPath)).toBe(true);
+      const content = fs.readFileSync(defaultPath, 'utf8');
+      defaultConfig = yaml.parse(content);
+    });
+
+    it('should have funding.encryptionKey defined in default.yaml', () => {
+      expect(defaultConfig).toHaveProperty('funding');
+      const fundingConfig = defaultConfig.funding as Record<string, unknown>;
+
+      expect(fundingConfig.encryptionKey).toBeDefined();
+      expect(typeof fundingConfig.encryptionKey).toBe('string');
+    });
+
+    it('should mark funding.encryptionKey as development-only', () => {
+      const fundingConfig = defaultConfig.funding as Record<string, unknown>;
+
+      // Should be clearly marked as development-only so operators know to replace it
+      expect(fundingConfig.encryptionKey).toContain('development-only');
+    });
+  });
+
   describe('custom-environment-variables.yaml JWT and Session Mappings', () => {
     let envVarsConfig: Record<string, unknown>;
 
@@ -80,6 +108,25 @@ describe('Secrets Configuration', () => {
 
       // SESSION_SECRET environment variable should override session.secret config
       expect(sessionVars.secret).toBe('SESSION_SECRET');
+    });
+  });
+
+  describe('custom-environment-variables.yaml Encryption Key Mapping', () => {
+    let envVarsConfig: Record<string, unknown>;
+
+    beforeEach(() => {
+      const envVarsPath = path.join(CONFIG_DIR, 'custom-environment-variables.yaml');
+      expect(fs.existsSync(envVarsPath)).toBe(true);
+      const content = fs.readFileSync(envVarsPath, 'utf8');
+      envVarsConfig = yaml.parse(content);
+    });
+
+    it('should map ENCRYPTION_KEY env var to funding.encryptionKey config path', () => {
+      expect(envVarsConfig).toHaveProperty('funding');
+      const fundingVars = envVarsConfig.funding as Record<string, unknown>;
+
+      // ENCRYPTION_KEY environment variable should override funding.encryptionKey config
+      expect(fundingVars.encryptionKey).toBe('ENCRYPTION_KEY');
     });
   });
 

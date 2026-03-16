@@ -4,10 +4,15 @@ import db from '@/server/common/entity/db';
 import crypto from 'crypto';
 import config from 'config';
 
-// Get encryption key from config or generate a default (for development)
-const ENCRYPTION_KEY = config.has('subscription.encryptionKey')
-  ? config.get<string>('subscription.encryptionKey')
-  : '0123456789abcdef0123456789abcdef'; // 32 bytes for AES-256
+// Get encryption key from config - required; no fallback allowed
+if (!config.has('funding.encryptionKey')) {
+  throw new Error(
+    'Missing required configuration: funding.encryptionKey. ' +
+    'Set the ENCRYPTION_KEY environment variable or add funding.encryptionKey to your config.',
+  );
+}
+
+const ENCRYPTION_KEY = config.get<string>('funding.encryptionKey');
 
 const ALGORITHM = 'aes-256-cbc';
 const IV_LENGTH = 16;

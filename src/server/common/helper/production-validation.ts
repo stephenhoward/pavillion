@@ -12,6 +12,7 @@ export function validateProductionSecrets(): void {
   const jwtSecret = config.get<string>('jwt.secret');
   const sessionSecret = config.get<string>('session.secret');
   const emailHashSecret = config.get<string>('moderation.emailHashSecret');
+  const encryptionKey = config.get<string>('funding.encryptionKey');
 
   if (jwtSecret.includes('development-only')) {
     throw new Error(
@@ -31,6 +32,13 @@ export function validateProductionSecrets(): void {
     throw new Error(
       'EMAIL_HASH_SECRET must be set in production. Run bin/setup.sh to generate secure secrets, ' +
       'or set the EMAIL_HASH_SECRET environment variable to a cryptographically secure value.',
+    );
+  }
+
+  if (encryptionKey.includes('development-only')) {
+    throw new Error(
+      'ENCRYPTION_KEY must be set in production. Run bin/setup.sh to generate secure secrets, ' +
+      'or set the ENCRYPTION_KEY environment variable to a cryptographically secure value.',
     );
   }
 }
