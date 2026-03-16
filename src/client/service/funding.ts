@@ -34,6 +34,15 @@ export type PayPalCredentials = {
 };
 
 /**
+ * Stripe configuration credentials
+ */
+export type StripeCredentials = {
+  publishable_key: string;
+  secret_key: string;
+  webhook_secret: string;
+};
+
+/**
  * Provider disconnection response
  */
 export type DisconnectResponse = {
@@ -206,6 +215,23 @@ export default class FundingService {
     }
     catch (error) {
       console.error('Failed to configure PayPal:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Configure Stripe credentials manually (admin only)
+   *
+   * @param {StripeCredentials} credentials - Stripe credentials
+   * @returns {Promise<boolean>} True if configuration was successful
+   */
+  async configureStripe(credentials: StripeCredentials): Promise<boolean> {
+    try {
+      const response = await axios.post('/api/funding/v1/admin/providers/stripe/configure', credentials);
+      return response.status === 200;
+    }
+    catch (error) {
+      console.error('Failed to configure Stripe:', error);
       throw error;
     }
   }

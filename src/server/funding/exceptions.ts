@@ -100,3 +100,27 @@ export class DuplicateCalendarSubscriptionError extends Error {
     Object.setPrototypeOf(this, DuplicateCalendarSubscriptionError.prototype);
   }
 }
+
+export class ActiveFundingPlanExistsError extends Error {
+  constructor(accountId: string) {
+    super(`Account ${accountId} already has an active funding plan`);
+    this.name = 'ActiveFundingPlanExistsError';
+    Object.setPrototypeOf(this, ActiveFundingPlanExistsError.prototype);
+  }
+}
+
+export class ProviderNotConfiguredError extends Error {
+  constructor(message?: string) {
+    super(message || 'No Stripe provider configured or enabled');
+    this.name = 'ProviderNotConfiguredError';
+    Object.setPrototypeOf(this, ProviderNotConfiguredError.prototype);
+  }
+}
+
+export class InvalidSessionIdError extends ValidationError {
+  constructor(message?: string) {
+    super(message || 'Invalid session ID format');
+    this.name = 'InvalidSessionIdError';
+    Object.setPrototypeOf(this, InvalidSessionIdError.prototype);
+  }
+}

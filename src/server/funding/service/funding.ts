@@ -18,7 +18,13 @@ import { ComplimentaryGrantEntity } from '@/server/funding/entity/complimentary_
 import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_subscription';
 import { AccountEntity, AccountRoleEntity } from '@/server/common/entity/account';
 import { ProviderFactory } from '@/server/funding/service/provider/factory';
-import { WebhookEvent, CreateSubscriptionParams } from '@/server/funding/service/provider/adapter';
+import {
+  WebhookEvent,
+  CreateSubscriptionParams,
+  CreateCheckoutSessionParams,
+  CheckoutSessionResult,
+  CheckoutSessionStatus,
+} from '@/server/funding/service/provider/adapter';
 import {
   InvalidBillingCycleError,
   InvalidAmountError,
@@ -31,6 +37,9 @@ import {
   CalendarSubscriptionNotFoundError,
   DuplicateCalendarSubscriptionError,
   CalendarNotFoundError,
+  ActiveFundingPlanExistsError,
+  ProviderNotConfiguredError,
+  InvalidSessionIdError,
 } from '@/server/funding/exceptions';
 import { ValidationError } from '@/common/exceptions/base';
 import type CalendarInterface from '@/server/calendar/interface';
@@ -40,6 +49,13 @@ const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[
 
 // Maximum number of calendar IDs allowed in a single subscribe call
 export const MAX_CALENDAR_IDS = 50;
+
+// Checkout session ID format: cs_test_ or cs_live_ prefix, then 1-190 alphanumeric/underscore chars
+const CHECKOUT_SESSION_ID_REGEX = /^cs_(test|live)_[a-zA-Z0-9_]{1,190}$/;
+
+// PWYC amount bounds in millicents
+export const MIN_PWYC_AMOUNT = 100000; // $1.00
+export const MAX_PWYC_AMOUNT = 10000000000; // $100,000.00
 
 /**
  * Validates if a string is a valid UUID v4
@@ -408,6 +424,24 @@ export default class FundingService {
   }
 
   /**
+   * Resolve the enabled Stripe provider configuration
+   *
+   * @returns Enabled Stripe provider config entity
+   * @throws ProviderNotConfiguredError if no Stripe provider is configured or enabled
+   */
+  private async resolveEnabledStripeProvider(): Promise<ProviderConfigEntity> {
+    const stripeEntity = await ProviderConfigEntity.findOne({
+      where: { provider_type: 'stripe', enabled: true },
+    });
+
+    if (!stripeEntity) {
+      throw new ProviderNotConfiguredError();
+    }
+
+    return stripeEntity;
+  }
+
+  /**
    * Create a new subscription for a user
    *
    * @param accountId - Account ID
@@ -725,6 +759,154 @@ export default class FundingService {
     }
 
     return 'unfunded';
+  }
+
+  /**
+   * Create a Stripe checkout session for embedded payment UI
+   *
+   * Validates all inputs before delegating to the Stripe adapter:
+   * - Rejects if user already has an active funding plan
+   * - Rejects if no Stripe provider is configured/enabled
+   * - Validates calendarId ownership via calendar interface
+   * - Enforces PWYC amount bounds when amount is provided
+   * - accountId comes from the authenticated account, never from request body
+   *
+   * @param accountId - Authenticated account ID
+   * @param billingCycle - 'monthly' or 'yearly'
+   * @param returnUrl - URL to return to after checkout
+   * @param amount - Optional amount in millicents (for PWYC pricing)
+   * @param calendarIds - Optional array of calendar IDs to fund
+   * @returns Client secret and session ID for the embedded checkout
+   */
+  async createCheckoutSession(
+    accountId: string,
+    billingCycle: BillingCycle,
+    returnUrl: string,
+    amount?: number,
+    calendarIds?: string[],
+  ): Promise<CheckoutSessionResult> {
+    // Validate billing cycle
+    if (billingCycle !== 'monthly' && billingCycle !== 'yearly') {
+      throw new InvalidBillingCycleError();
+    }
+
+    // Check if user already has an active funding plan
+    const existingPlan = await FundingPlanEntity.findOne({
+      where: { account_id: accountId, status: 'active' },
+    });
+
+    if (existingPlan) {
+      throw new ActiveFundingPlanExistsError(accountId);
+    }
+
+    // Check for enabled Stripe provider
+    const stripeEntity = await this.resolveEnabledStripeProvider();
+    const providerConfig = stripeEntity.toModel();
+
+    // Get settings for pricing
+    const settings = await this.getSettings();
+
+    // Validate and resolve calendarIds if provided
+    if (calendarIds !== undefined) {
+      if (calendarIds.length > MAX_CALENDAR_IDS) {
+        throw new ValidationError(`calendarIds must not exceed ${MAX_CALENDAR_IDS} entries`);
+      }
+
+      for (const cId of calendarIds) {
+        if (!isValidUUID(cId)) {
+          throw new ValidationError(`Invalid calendarId: ${cId} must be a valid UUID`);
+        }
+      }
+
+      // Verify ownership for all calendars
+      for (const cId of calendarIds) {
+        await this.verifyCalendarOwnership(accountId, cId);
+      }
+    }
+
+    // Determine pricing: either use fixed price from settings or PWYC amount
+    let checkoutAmount: number | undefined;
+
+    if (amount !== undefined) {
+      // PWYC: validate amount bounds
+      if (!Number.isInteger(amount)) {
+        throw new InvalidAmountError('Amount must be a positive integer in millicents');
+      }
+      if (amount < MIN_PWYC_AMOUNT) {
+        throw new InvalidAmountError(`Amount must be at least ${MIN_PWYC_AMOUNT} millicents ($1.00)`);
+      }
+      if (amount > MAX_PWYC_AMOUNT) {
+        throw new InvalidAmountError(`Amount must not exceed ${MAX_PWYC_AMOUNT} millicents ($100,000.00)`);
+      }
+      checkoutAmount = amount;
+    }
+    else {
+      // Fixed pricing: use the settings price for the selected billing cycle
+      checkoutAmount = billingCycle === 'monthly' ? settings.monthlyPrice : settings.yearlyPrice;
+    }
+
+    // Map billing cycle to Stripe interval
+    const interval: 'month' | 'year' = billingCycle === 'monthly' ? 'month' : 'year';
+
+    // Build checkout session params
+    const adapter = ProviderFactory.getAdapter(providerConfig);
+    const params: CreateCheckoutSessionParams = {
+      amount: checkoutAmount,
+      currency: settings.currency,
+      interval,
+      accountId,
+      calendarIds,
+      returnUrl,
+    };
+
+    return adapter.createCheckoutSession(params);
+  }
+
+  /**
+   * Retrieve the status of a Stripe checkout session
+   *
+   * Validates sessionId format and performs IDOR protection by comparing the
+   * session metadata accountId to the requesting user's accountId.
+   * Returns 404-style error (not 403) on mismatch to avoid leaking session existence.
+   *
+   * @param accountId - Authenticated account ID
+   * @param sessionId - The checkout session ID to check
+   * @returns Status and customer email for the checkout session
+   */
+  async getCheckoutSessionStatus(
+    accountId: string,
+    sessionId: string,
+  ): Promise<{ status: string }> {
+    // Validate sessionId format
+    if (!sessionId || typeof sessionId !== 'string') {
+      throw new InvalidSessionIdError('Session ID is required');
+    }
+
+    if (sessionId.length > 200) {
+      throw new InvalidSessionIdError('Session ID must not exceed 200 characters');
+    }
+
+    if (!CHECKOUT_SESSION_ID_REGEX.test(sessionId)) {
+      throw new InvalidSessionIdError('Invalid session ID format');
+    }
+
+    // Resolve enabled Stripe provider
+    const stripeEntity = await this.resolveEnabledStripeProvider();
+    const providerConfig = stripeEntity.toModel();
+    const adapter = ProviderFactory.getAdapter(providerConfig);
+
+    // Retrieve session status from provider
+    const sessionStatus: CheckoutSessionStatus = await adapter.getCheckoutSessionStatus(sessionId);
+
+    // IDOR check: compare metadata.accountId to requesting user
+    // Return generic "not found" error (not 403) to avoid leaking session existence
+    if (sessionStatus.metadata.accountId !== accountId) {
+      throw new SubscriptionNotFoundError(sessionId);
+    }
+
+    return {
+      status: sessionStatus.status,
+    };
   }
 
   /**

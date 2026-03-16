@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import sinon from 'sinon';
 import { EventEmitter } from 'events';
 import db from '@/server/common/entity/db';
-import FundingService from '@/server/funding/service/funding';
+import FundingService, { MIN_PWYC_AMOUNT, MAX_PWYC_AMOUNT } from '@/server/funding/service/funding';
 import { FundingSettingsEntity } from '@/server/funding/entity/funding_settings';
 import { ProviderConfigEntity } from '@/server/funding/entity/provider_config';
 import { FundingPlanEntity } from '@/server/funding/entity/funding_plan';
@@ -16,6 +16,10 @@ import { WebhookEvent } from '@/server/funding/service/provider/adapter';
 import {
   DuplicateGrantError,
   GrantNotFoundError,
+  ActiveFundingPlanExistsError,
+  ProviderNotConfiguredError,
+  InvalidSessionIdError,
+  SubscriptionNotFoundError,
 } from '@/server/funding/exceptions';
 import { ValidationError } from '@/common/exceptions/base';
 import { AccountEntity } from '@/server/common/entity/account';
@@ -779,6 +783,354 @@ describe('FundingService', () => {
       await service.hasFundingAccess(calendarId);
 
       expect(subStub.called).toBe(false);
+    });
+  });
+
+  describe('createCheckoutSession', () => {
+    const accountId = uuidv4();
+    const calendarId = uuidv4();
+    const providerConfigId = uuidv4();
+    const returnUrl = 'https://example.com/return';
+
+    function stubEnabledStripeProvider() {
+      const mockEntity = {
+        id: providerConfigId,
+        provider_type: 'stripe',
+        enabled: true,
+        display_name: 'Stripe',
+        credentials: '{}',
+        webhook_secret: 'whsec_test',
+        toModel: function() {
+          const config = new ProviderConfig(this.id, 'stripe');
+          config.enabled = true;
+          config.displayName = this.display_name;
+          config.credentials = this.credentials;
+          config.webhookSecret = this.webhook_secret;
+          return config;
+        },
+      };
+      sandbox.stub(ProviderConfigEntity, 'findOne').resolves(mockEntity as any);
+      return mockEntity;
+    }
+
+    function stubSettings(overrides?: Partial<{ monthlyPrice: number; yearlyPrice: number; currency: string }>) {
+      const mockSettings = {
+        toModel: () => {
+          const settings = new FundingSettings();
+          settings.monthlyPrice = overrides?.monthlyPrice ?? 1000000;
+          settings.yearlyPrice = overrides?.yearlyPrice ?? 10000000;
+          settings.currency = overrides?.currency ?? 'USD';
+          return settings;
+        },
+      };
+      sandbox.stub(FundingSettingsEntity, 'findOne').resolves(mockSettings as any);
+    }
+
+    function stubMockAdapter() {
+      const mockAdapter = {
+        createCheckoutSession: sandbox.stub().resolves({
+          clientSecret: 'cs_secret_abc',
+          sessionId: 'cs_test_abc123',
+        }),
+      };
+      sandbox.stub(ProviderFactory, 'getAdapter').returns(mockAdapter as any);
+      return mockAdapter;
+    }
+
+    it('should create checkout session with valid inputs (fixed pricing)', async () => {
+      sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
+      stubEnabledStripeProvider();
+      stubSettings();
+      const mockAdapter = stubMockAdapter();
+
+      const result = await service.createCheckoutSession(accountId, 'monthly', returnUrl);
+
+      expect(result.clientSecret).toBe('cs_secret_abc');
+      expect(result.sessionId).toBe('cs_test_abc123');
+      expect(mockAdapter.createCheckoutSession.calledOnce).toBe(true);
+
+      const params = mockAdapter.createCheckoutSession.firstCall.args[0];
+      expect(params.accountId).toBe(accountId);
+      expect(params.interval).toBe('month');
+      expect(params.amount).toBe(1000000);
+      expect(params.currency).toBe('USD');
+    });
+
+    it('should use yearly price for yearly billing cycle', async () => {
+      sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
+      stubEnabledStripeProvider();
+      stubSettings({ yearlyPrice: 10000000 });
+      const mockAdapter = stubMockAdapter();
+
+      await service.createCheckoutSession(accountId, 'yearly', returnUrl);
+
+      const params = mockAdapter.createCheckoutSession.firstCall.args[0];
+      expect(params.interval).toBe('year');
+      expect(params.amount).toBe(10000000);
+    });
+
+    it('should create checkout session with PWYC amount', async () => {
+      sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
+      stubEnabledStripeProvider();
+      stubSettings();
+      const mockAdapter = stubMockAdapter();
+
+      const pwycAmount = 500000; // $5.00
+
+      await service.createCheckoutSession(accountId, 'monthly', returnUrl, pwycAmount);
+
+      const params = mockAdapter.createCheckoutSession.firstCall.args[0];
+      expect(params.amount).toBe(pwycAmount);
+    });
+
+    it('should pass calendarIds to adapter when provided', async () => {
+      sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
+      stubEnabledStripeProvider();
+      stubSettings();
+      const mockAdapter = stubMockAdapter();
+      mockCalendarInterface.isCalendarOwnerById.resolves(true);
+
+      const calIds = [calendarId];
+      await service.createCheckoutSession(accountId, 'monthly', returnUrl, undefined, calIds);
+
+      const params = mockAdapter.createCheckoutSession.firstCall.args[0];
+      expect(params.calendarIds).toEqual(calIds);
+    });
+
+    it('should reject if user already has active funding plan', async () => {
+      sandbox.stub(FundingPlanEntity, 'findOne').resolves({ id: uuidv4(), status: 'active' } as any);
+
+      await expect(
+        service.createCheckoutSession(accountId, 'monthly', returnUrl),
+      ).rejects.toThrow(ActiveFundingPlanExistsError);
+    });
+
+    it('should reject if no Stripe provider is configured', async () => {
+      sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
+      sandbox.stub(ProviderConfigEntity, 'findOne').resolves(null);
+
+      await expect(
+        service.createCheckoutSession(accountId, 'monthly', returnUrl),
+      ).rejects.toThrow(ProviderNotConfiguredError);
+    });
+
+    it('should reject if Stripe provider is disabled', async () => {
+      sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
+      // findOne returns null because query has enabled: true
+      sandbox.stub(ProviderConfigEntity, 'findOne').resolves(null);
+
+      await expect(
+        service.createCheckoutSession(accountId, 'monthly', returnUrl),
+      ).rejects.toThrow(ProviderNotConfiguredError);
+    });
+
+    it('should reject invalid billing cycle', async () => {
+      await expect(
+        service.createCheckoutSession(accountId, 'weekly' as any, returnUrl),
+      ).rejects.toThrow(/billing cycle/i);
+    });
+
+    it('should reject PWYC amount below minimum', async () => {
+      sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
+      stubEnabledStripeProvider();
+      stubSettings();
+
+      await expect(
+        service.createCheckoutSession(accountId, 'monthly', returnUrl, MIN_PWYC_AMOUNT - 1),
+      ).rejects.toThrow(/at least/i);
+    });
+
+    it('should reject PWYC amount above maximum', async () => {
+      sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
+      stubEnabledStripeProvider();
+      stubSettings();
+
+      await expect(
+        service.createCheckoutSession(accountId, 'monthly', returnUrl, MAX_PWYC_AMOUNT + 1),
+      ).rejects.toThrow(/must not exceed/i);
+    });
+
+    it('should reject non-integer PWYC amount', async () => {
+      sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
+      stubEnabledStripeProvider();
+      stubSettings();
+
+      await expect(
+        service.createCheckoutSession(accountId, 'monthly', returnUrl, 150000.5),
+      ).rejects.toThrow(/integer/i);
+    });
+
+    it('should reject calendarId that user does not own', async () => {
+      sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
+      stubEnabledStripeProvider();
+      stubSettings();
+      stubMockAdapter();
+      mockCalendarInterface.isCalendarOwnerById.resolves(false);
+
+      await expect(
+        service.createCheckoutSession(accountId, 'monthly', returnUrl, undefined, [calendarId]),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('should reject invalid UUID in calendarIds', async () => {
+      sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
+      stubEnabledStripeProvider();
+      stubSettings();
+
+      await expect(
+        service.createCheckoutSession(accountId, 'monthly', returnUrl, undefined, ['not-a-uuid']),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('should reject calendarIds exceeding maximum count', async () => {
+      sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
+      stubEnabledStripeProvider();
+      stubSettings();
+
+      const tooManyIds = Array.from({ length: 51 }, () => uuidv4());
+
+      await expect(
+        service.createCheckoutSession(accountId, 'monthly', returnUrl, undefined, tooManyIds),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('should accept PWYC amount at exact minimum boundary', async () => {
+      sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
+      stubEnabledStripeProvider();
+      stubSettings();
+      const mockAdapter = stubMockAdapter();
+
+      await service.createCheckoutSession(accountId, 'monthly', returnUrl, MIN_PWYC_AMOUNT);
+
+      const params = mockAdapter.createCheckoutSession.firstCall.args[0];
+      expect(params.amount).toBe(MIN_PWYC_AMOUNT);
+    });
+
+    it('should accept PWYC amount at exact maximum boundary', async () => {
+      sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
+      stubEnabledStripeProvider();
+      stubSettings();
+      const mockAdapter = stubMockAdapter();
+
+      await service.createCheckoutSession(accountId, 'monthly', returnUrl, MAX_PWYC_AMOUNT);
+
+      const params = mockAdapter.createCheckoutSession.firstCall.args[0];
+      expect(params.amount).toBe(MAX_PWYC_AMOUNT);
+    });
+  });
+
+  describe('getCheckoutSessionStatus', () => {
+    const accountId = uuidv4();
+    const providerConfigId = uuidv4();
+
+    function stubEnabledStripeProvider() {
+      const mockEntity = {
+        id: providerConfigId,
+        provider_type: 'stripe',
+        enabled: true,
+        display_name: 'Stripe',
+        credentials: '{}',
+        webhook_secret: 'whsec_test',
+        toModel: function() {
+          const config = new ProviderConfig(this.id, 'stripe');
+          config.enabled = true;
+          config.credentials = this.credentials;
+          config.webhookSecret = this.webhook_secret;
+          return config;
+        },
+      };
+      sandbox.stub(ProviderConfigEntity, 'findOne').resolves(mockEntity as any);
+    }
+
+    function stubMockAdapter(metadataAccountId: string) {
+      const mockAdapter = {
+        getCheckoutSessionStatus: sandbox.stub().resolves({
+          status: 'complete',
+          subscriptionId: 'sub_mock_123',
+          customerId: 'cus_mock_123',
+          metadata: {
+            accountId: metadataAccountId,
+            calendarIds: JSON.stringify([uuidv4()]),
+          },
+        }),
+      };
+      sandbox.stub(ProviderFactory, 'getAdapter').returns(mockAdapter as any);
+      return mockAdapter;
+    }
+
+    it('should return status for valid session owned by requesting user', async () => {
+      stubEnabledStripeProvider();
+      stubMockAdapter(accountId);
+
+      const result = await service.getCheckoutSessionStatus(accountId, 'cs_test_abc123def');
+
+      expect(result.status).toBe('complete');
+    });
+
+    it('should throw SubscriptionNotFoundError on IDOR mismatch (not 403)', async () => {
+      stubEnabledStripeProvider();
+      const differentAccountId = uuidv4();
+      stubMockAdapter(differentAccountId);
+
+      await expect(
+        service.getCheckoutSessionStatus(accountId, 'cs_test_abc123def'),
+      ).rejects.toThrow(SubscriptionNotFoundError);
+    });
+
+    it('should reject empty sessionId', async () => {
+      await expect(
+        service.getCheckoutSessionStatus(accountId, ''),
+      ).rejects.toThrow(InvalidSessionIdError);
+    });
+
+    it('should reject sessionId exceeding 200 characters', async () => {
+      const longId = 'cs_test_' + 'a'.repeat(200);
+
+      await expect(
+        service.getCheckoutSessionStatus(accountId, longId),
+      ).rejects.toThrow(InvalidSessionIdError);
+    });
+
+    it('should reject sessionId without cs_test_ or cs_live_ prefix', async () => {
+      await expect(
+        service.getCheckoutSessionStatus(accountId, 'invalid_prefix_abc'),
+      ).rejects.toThrow(InvalidSessionIdError);
+    });
+
+    it('should reject sessionId with special characters', async () => {
+      await expect(
+        service.getCheckoutSessionStatus(accountId, 'cs_test_abc$def!'),
+      ).rejects.toThrow(InvalidSessionIdError);
+    });
+
+    it('should accept cs_live_ prefix', async () => {
+      stubEnabledStripeProvider();
+      stubMockAdapter(accountId);
+
+      const result = await service.getCheckoutSessionStatus(accountId, 'cs_live_abc123def');
+
+      expect(result.status).toBe('complete');
+    });
+
+    it('should accept sessionId with underscores', async () => {
+      stubEnabledStripeProvider();
+      stubMockAdapter(accountId);
+
+      const result = await service.getCheckoutSessionStatus(accountId, 'cs_test_abc_123_def');
+
+      expect(result.status).toBe('complete');
+    });
+
+    it('should reject null sessionId', async () => {
+      await expect(
+        service.getCheckoutSessionStatus(accountId, null as any),
+      ).rejects.toThrow(InvalidSessionIdError);
+    });
+
+    it('should reject non-string sessionId', async () => {
+      await expect(
+        service.getCheckoutSessionStatus(accountId, 12345 as any),
+      ).rejects.toThrow(InvalidSessionIdError);
     });
   });
 });
