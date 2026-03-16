@@ -11,6 +11,7 @@ import db, { seedDB, seedFollowData, seedMediaFiles } from '@/server/common/enti
 import { runMigrations } from '@/server/common/migrations/runner';
 import { createRouter } from '@/server/app_routes';
 import { validateProductionSecrets } from '@/server/common/helper/production-validation';
+import { buildDefaultCSP } from '@/server/common/helper/csp';
 import AccountsDomain from '@/server/accounts';
 import ActivityPubDomain from './activitypub';
 import AuthenticationDomain from './authentication';
@@ -210,17 +211,19 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
     frameguard: {
       action: 'deny', // Default deny for all routes (widget routes will override)
     },
-    // Disable helmet's CSP - we'll set frame-ancestors manually below
+    // Disable helmet's CSP - we set CSP manually below for fine-grained control
     contentSecurityPolicy: false,
   }));
 
-  // Set frame-ancestors CSP header manually for clickjacking protection
-  // This works alongside X-Frame-Options for dual-header defense
+  // Set default CSP header with clickjacking protection and Stripe payment origins.
+  // Includes script-src for Stripe.js and frame-src for Stripe embedded checkout.
+  // In development, also allows the Vite dev server for script loading and HMR.
+  // This works alongside X-Frame-Options for dual-header clickjacking defense.
   app.use((req, res, next) => {
     // Only set if not already set by route-specific middleware (e.g., widget routes)
     const existingCSP = res.getHeader('Content-Security-Policy');
     if (!existingCSP) {
-      res.setHeader('Content-Security-Policy', "frame-ancestors 'none'");
+      res.setHeader('Content-Security-Policy', buildDefaultCSP());
     }
     next();
   });
