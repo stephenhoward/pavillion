@@ -8,12 +8,12 @@ import { Calendar } from '@/common/model/calendar';
 import CalendarInterface from '@/server/calendar/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
 import SetupInterface from '@/server/setup/interface';
-import SubscriptionInterface from '@/server/subscription/interface';
+import FundingInterface from '@/server/funding/interface';
 import AccountService from '@/server/accounts/service/account';
 import { TestEnvironment } from '@/server/test/lib/test_environment';
-import { SubscriptionSettingsEntity } from '@/server/subscription/entity/subscription_settings';
-import { SubscriptionEntity } from '@/server/subscription/entity/subscription';
-import { CalendarSubscriptionEntity } from '@/server/subscription/entity/calendar_subscription';
+import { FundingSettingsEntity } from '@/server/funding/entity/funding_settings';
+import { FundingPlanEntity } from '@/server/funding/entity/funding_plan';
+import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_subscription';
 
 /**
  * Integration tests for Subscription Gating in Widget Embedding
@@ -33,7 +33,7 @@ import { CalendarSubscriptionEntity } from '@/server/subscription/entity/calenda
 describe('Subscription Gating Integration Tests', () => {
   let env: TestEnvironment;
   let calendarInterface: CalendarInterface;
-  let subscriptionInterface: SubscriptionInterface;
+  let fundingInterface: FundingInterface;
   let eventBus: EventEmitter;
 
   let subscribedAccount: Account;
@@ -51,9 +51,9 @@ describe('Subscription Gating Integration Tests', () => {
    * Helper function to enable subscriptions instance-wide
    */
   async function enableSubscriptions() {
-    let settings = await SubscriptionSettingsEntity.findOne();
+    let settings = await FundingSettingsEntity.findOne();
     if (!settings) {
-      settings = SubscriptionSettingsEntity.build({
+      settings = FundingSettingsEntity.build({
         id: uuidv4(),
         enabled: true,
         monthly_price: 5.00,
@@ -74,9 +74,9 @@ describe('Subscription Gating Integration Tests', () => {
    * Helper function to disable subscriptions instance-wide
    */
   async function disableSubscriptions() {
-    let settings = await SubscriptionSettingsEntity.findOne();
+    let settings = await FundingSettingsEntity.findOne();
     if (!settings) {
-      settings = SubscriptionSettingsEntity.build({
+      settings = FundingSettingsEntity.build({
         id: uuidv4(),
         enabled: false,
         monthly_price: 0,
@@ -95,14 +95,14 @@ describe('Subscription Gating Integration Tests', () => {
 
   /**
    * Helper function to create an active subscription for an account and link it to a calendar.
-   * hasActiveSubscription now checks CalendarSubscriptionEntity by calendar_id, so both
-   * a SubscriptionEntity and a CalendarSubscriptionEntity are required.
+   * hasActiveFundingPlan now checks CalendarFundingPlanEntity by calendar_id, so both
+   * a FundingPlanEntity and a CalendarFundingPlanEntity are required.
    */
   async function createActiveSubscription(accountId: string, calendarId?: string) {
     const futureDate = new Date();
     futureDate.setFullYear(futureDate.getFullYear() + 1); // 1 year in the future
 
-    const subscription = SubscriptionEntity.build({
+    const subscription = FundingPlanEntity.build({
       id: uuidv4(),
       account_id: accountId,
       provider_type: 'stripe',
@@ -118,11 +118,11 @@ describe('Subscription Gating Integration Tests', () => {
     });
     await subscription.save();
 
-    // Link the subscription to the calendar so hasActiveSubscription(calendarId) returns true
+    // Link the subscription to the calendar so hasActiveFundingPlan(calendarId) returns true
     if (calendarId) {
-      const calendarSub = CalendarSubscriptionEntity.build({
+      const calendarSub = CalendarFundingPlanEntity.build({
         id: uuidv4(),
-        subscription_id: subscription.id,
+        funding_plan_id: subscription.id,
         calendar_id: calendarId,
         amount: 5.00,
         end_time: null,
@@ -140,7 +140,7 @@ describe('Subscription Gating Integration Tests', () => {
     const pastDate = new Date();
     pastDate.setDate(pastDate.getDate() - 30); // 30 days ago
 
-    const subscription = SubscriptionEntity.build({
+    const subscription = FundingPlanEntity.build({
       id: uuidv4(),
       account_id: accountId,
       provider_type: 'stripe',
@@ -162,15 +162,15 @@ describe('Subscription Gating Integration Tests', () => {
    */
   async function clearSubscriptions(accountId: string) {
     // Find all subscriptions for this account first
-    const subs = await SubscriptionEntity.findAll({ where: { account_id: accountId } });
+    const subs = await FundingPlanEntity.findAll({ where: { account_id: accountId } });
     const subIds = subs.map((s) => s.id);
 
     // Remove calendar subscription links before removing subscriptions
     if (subIds.length > 0) {
-      await CalendarSubscriptionEntity.destroy({ where: { subscription_id: subIds } });
+      await CalendarFundingPlanEntity.destroy({ where: { funding_plan_id: subIds } });
     }
 
-    await SubscriptionEntity.destroy({
+    await FundingPlanEntity.destroy({
       where: { account_id: accountId },
     });
   }
@@ -180,8 +180,8 @@ describe('Subscription Gating Integration Tests', () => {
     await env.init();
 
     eventBus = new EventEmitter();
-    subscriptionInterface = new SubscriptionInterface(eventBus);
-    calendarInterface = new CalendarInterface(eventBus, undefined, undefined, subscriptionInterface);
+    fundingInterface = new FundingInterface(eventBus);
+    calendarInterface = new CalendarInterface(eventBus, undefined, undefined, fundingInterface);
     const configurationInterface = new ConfigurationInterface();
     const setupInterface = new SetupInterface();
     const accountService = new AccountService(eventBus, configurationInterface, setupInterface);
