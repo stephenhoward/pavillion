@@ -141,8 +141,8 @@ const state = reactive({
   success: '',
   fundingStatus: '' as FundingStatus['status'] | '',
   grantInfo: null as { reason?: string; expiresAt?: string } | null,
-  hasSubscription: false,
-  subscriptionsDisabled: false,
+  hasFundingPlan: false,
+  fundingDisabled: false,
   showFundingSheet: false,
 });
 

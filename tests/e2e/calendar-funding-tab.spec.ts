@@ -33,8 +33,8 @@ async function mockSubscriptionAPIs(page: import('@playwright/test').Page, optio
   subscriptionsEnabled: boolean;
   fundingStatus: 'funded' | 'unfunded' | 'grant' | 'admin-exempt';
 }) {
-  // Mock subscription status
-  await page.route('**/api/subscription/v1/status', async (route) => {
+  // Mock funding plan status
+  await page.route('**/api/funding/v1/status', async (route) => {
     if (options.hasSubscription) {
       await route.fulfill({
         status: 200,
@@ -60,8 +60,8 @@ async function mockSubscriptionAPIs(page: import('@playwright/test').Page, optio
     }
   });
 
-  // Mock subscription options
-  await page.route('**/api/subscription/v1/options', async (route) => {
+  // Mock funding plan options
+  await page.route('**/api/funding/v1/options', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -79,7 +79,7 @@ async function mockSubscriptionAPIs(page: import('@playwright/test').Page, optio
   });
 
   // Mock funding status for any calendar
-  await page.route('**/api/subscription/v1/calendars/*/funding', async (route) => {
+  await page.route('**/api/funding/v1/calendars/*/funding', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
