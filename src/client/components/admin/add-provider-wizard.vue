@@ -3,7 +3,7 @@ import { ref, computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import Modal from '@/client/components/common/modal.vue';
 import FundingService from '@/client/service/funding';
-import type { ProviderConfig, PayPalCredentials } from '@/client/service/funding';
+import type { ProviderConfig, PayPalCredentials, StripeCredentials } from '@/client/service/funding';
 
 const { t } = useTranslation('admin', {
   keyPrefix: 'funding.wizard',
@@ -40,6 +40,16 @@ const paypalErrors = ref({
   environment: '',
 });
 
+// Stripe form state
+const stripePublishableKey = ref('');
+const stripeSecretKey = ref('');
+const stripeWebhookSecret = ref('');
+const stripeErrors = ref({
+  publishableKey: '',
+  secretKey: '',
+  webhookSecret: '',
+});
+
 // Computed
 const totalSteps = computed(() => 3);
 
@@ -64,6 +74,15 @@ const isPayPalFormValid = computed(() => {
          !paypalErrors.value.clientId &&
          !paypalErrors.value.clientSecret &&
          !paypalErrors.value.environment;
+});
+
+const isStripeFormValid = computed(() => {
+  return stripePublishableKey.value.trim() &&
+         stripeSecretKey.value.trim() &&
+         stripeWebhookSecret.value.trim() &&
+         !stripeErrors.value.publishableKey &&
+         !stripeErrors.value.secretKey &&
+         !stripeErrors.value.webhookSecret;
 });
 
 /**
@@ -111,6 +130,7 @@ function resetWizard() {
   error.value = null;
   connecting.value = false;
   resetPayPalForm();
+  resetStripeForm();
 }
 
 /**
@@ -128,6 +148,20 @@ function resetPayPalForm() {
 }
 
 /**
+ * Reset Stripe form fields
+ */
+function resetStripeForm() {
+  stripePublishableKey.value = '';
+  stripeSecretKey.value = '';
+  stripeWebhookSecret.value = '';
+  stripeErrors.value = {
+    publishableKey: '',
+    secretKey: '',
+    webhookSecret: '',
+  };
+}
+
+/**
  * Validate PayPal form field on blur
  */
 function validatePayPalField(field: 'clientId' | 'clientSecret' | 'environment') {
@@ -139,6 +173,52 @@ function validatePayPalField(field: 'clientId' | 'clientSecret' | 'environment')
   }
   else if (field === 'environment') {
     paypalErrors.value.environment = paypalEnvironment.value ? '' : 'Environment is required';
+  }
+}
+
+/**
+ * Validate Stripe form field on blur
+ */
+function validateStripeField(field: 'publishableKey' | 'secretKey' | 'webhookSecret') {
+  const value = field === 'publishableKey'
+    ? stripePublishableKey.value.trim()
+    : field === 'secretKey'
+      ? stripeSecretKey.value.trim()
+      : stripeWebhookSecret.value.trim();
+
+  if (!value) {
+    if (field === 'publishableKey') {
+      stripeErrors.value.publishableKey = t('step2.stripe_publishable_key_required');
+    }
+    else if (field === 'secretKey') {
+      stripeErrors.value.secretKey = t('step2.stripe_secret_key_required');
+    }
+    else if (field === 'webhookSecret') {
+      stripeErrors.value.webhookSecret = t('step2.stripe_webhook_secret_required');
+    }
+    return;
+  }
+
+  // Format validation
+  if (field === 'publishableKey' && !value.startsWith('pk_test_') && !value.startsWith('pk_live_')) {
+    stripeErrors.value.publishableKey = t('step2.stripe_publishable_key_format');
+  }
+  else if (field === 'publishableKey') {
+    stripeErrors.value.publishableKey = '';
+  }
+
+  if (field === 'secretKey' && !value.startsWith('sk_test_') && !value.startsWith('sk_live_')) {
+    stripeErrors.value.secretKey = t('step2.stripe_secret_key_format');
+  }
+  else if (field === 'secretKey') {
+    stripeErrors.value.secretKey = '';
+  }
+
+  if (field === 'webhookSecret' && !value.startsWith('whsec_')) {
+    stripeErrors.value.webhookSecret = t('step2.stripe_webhook_secret_format');
+  }
+  else if (field === 'webhookSecret') {
+    stripeErrors.value.webhookSecret = '';
   }
 }
 
@@ -178,6 +258,46 @@ async function configurePayPal() {
   }
   catch (err) {
     console.error('Failed to configure PayPal:', err);
+    error.value = t('errors.connection_failed', { provider: selectedProviderName.value });
+    connecting.value = false;
+  }
+}
+
+/**
+ * Handle Stripe configuration submission
+ */
+async function configureStripe() {
+  // Validate form
+  if (!isStripeFormValid.value) {
+    validateStripeField('publishableKey');
+    validateStripeField('secretKey');
+    validateStripeField('webhookSecret');
+    return;
+  }
+
+  try {
+    connecting.value = true;
+    error.value = null;
+
+    const credentials: StripeCredentials = {
+      publishable_key: stripePublishableKey.value.trim(),
+      secret_key: stripeSecretKey.value.trim(),
+      webhook_secret: stripeWebhookSecret.value.trim(),
+    };
+
+    const success = await fundingService.configureStripe(credentials);
+
+    if (success) {
+      currentStep.value = 3;
+      connecting.value = false;
+    }
+    else {
+      error.value = t('errors.connection_failed', { provider: selectedProviderName.value });
+      connecting.value = false;
+    }
+  }
+  catch (err) {
+    console.error('Failed to configure Stripe:', err);
     error.value = t('errors.connection_failed', { provider: selectedProviderName.value });
     connecting.value = false;
   }
@@ -240,12 +360,80 @@ function handleSuccess() {
 
       <!-- Step 2: Provider Configuration -->
       <div v-if="currentStep === 2" class="step-content">
-        <!-- Stripe Configuration Placeholder -->
+        <!-- Stripe Configuration -->
         <div v-if="selectedProvider === 'stripe'" class="provider-config">
           <h3 class="step-title">{{ t('step2.stripe_title') }}</h3>
-          <p class="step-description">
-            {{ t('step2.stripe_coming_soon') }}
-          </p>
+          <p class="step-description">{{ t('step2.stripe_description') }}</p>
+
+          <form @submit.prevent="configureStripe">
+            <div class="form-group">
+              <label for="stripe-publishable-key" class="form-label">
+                {{ t('step2.stripe_publishable_key_label') }}
+                <span class="required">*</span>
+              </label>
+              <input
+                id="stripe-publishable-key"
+                v-model="stripePublishableKey"
+                type="text"
+                class="form-input"
+                :class="{ 'has-error': stripeErrors.publishableKey }"
+                :placeholder="t('step2.stripe_publishable_key_placeholder')"
+                :disabled="connecting"
+                @blur="validateStripeField('publishableKey')"
+              />
+              <div v-if="stripeErrors.publishableKey" class="error-message-inline">
+                {{ stripeErrors.publishableKey }}
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="stripe-secret-key" class="form-label">
+                {{ t('step2.stripe_secret_key_label') }}
+                <span class="required">*</span>
+              </label>
+              <input
+                id="stripe-secret-key"
+                v-model="stripeSecretKey"
+                type="password"
+                class="form-input"
+                :class="{ 'has-error': stripeErrors.secretKey }"
+                :placeholder="t('step2.stripe_secret_key_placeholder')"
+                :disabled="connecting"
+                @blur="validateStripeField('secretKey')"
+              />
+              <div v-if="stripeErrors.secretKey" class="error-message-inline">
+                {{ stripeErrors.secretKey }}
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="stripe-webhook-secret" class="form-label">
+                {{ t('step2.stripe_webhook_secret_label') }}
+                <span class="required">*</span>
+              </label>
+              <input
+                id="stripe-webhook-secret"
+                v-model="stripeWebhookSecret"
+                type="password"
+                class="form-input"
+                :class="{ 'has-error': stripeErrors.webhookSecret }"
+                :placeholder="t('step2.stripe_webhook_secret_placeholder')"
+                :disabled="connecting"
+                @blur="validateStripeField('webhookSecret')"
+              />
+              <div v-if="stripeErrors.webhookSecret" class="error-message-inline">
+                {{ stripeErrors.webhookSecret }}
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              class="primary connect-button"
+              :disabled="!isStripeFormValid || connecting"
+            >
+              {{ connecting ? t('connecting_button', { defaultValue: 'Connecting...' }) : t('step2.stripe_configure_button') }}
+            </button>
+          </form>
         </div>
 
         <!-- PayPal Configuration -->

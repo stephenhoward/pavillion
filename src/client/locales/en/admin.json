@@ -267,7 +267,7 @@
     "noAccounts": "No accounts yet",
     "noAccountsDescription": "There are no accounts on this server yet.",
     "inviteNewAccount": "Invite New Account",
-    "no_role": "\u2014"
+    "no_role": "—"
   },
   "applications": {
     "title": "Account Applications",
@@ -322,7 +322,7 @@
     "status_expired": "Expired",
     "status_revoked": "Revoked",
     "expired_date": "Expired {{date}}",
-    "invited_by_expires": "Invited by {{username}} \u00b7 Expires {{date}}",
+    "invited_by_expires": "Invited by {{username}} · Expires {{date}}",
     "no_invitations": "No active invitations",
     "no_invitations_description": "No invitations have been sent yet",
     "send_invitation_link": "Send an invitation",
@@ -449,7 +449,6 @@
       },
       "step2": {
         "stripe_title": "Configure Stripe",
-        "stripe_coming_soon": "Stripe configuration will be available soon.",
         "paypal_title": "Configure PayPal",
         "paypal_description": "Enter your PayPal REST API credentials to enable PayPal payments.",
         "paypal_configure_button": "Configure PayPal",
@@ -459,7 +458,21 @@
         "paypal_client_secret_placeholder": "Enter PayPal Client Secret",
         "paypal_environment_label": "Environment",
         "paypal_environment_sandbox": "Sandbox (Testing)",
-        "paypal_environment_production": "Production (Live)"
+        "paypal_environment_production": "Production (Live)",
+        "stripe_description": "Enter your Stripe API credentials to enable credit card payments.",
+        "stripe_configure_button": "Configure Stripe",
+        "stripe_publishable_key_label": "Publishable Key",
+        "stripe_publishable_key_placeholder": "pk_test_...",
+        "stripe_publishable_key_required": "Publishable Key is required",
+        "stripe_publishable_key_format": "Publishable Key must start with pk_test_ or pk_live_",
+        "stripe_secret_key_label": "Secret Key",
+        "stripe_secret_key_placeholder": "sk_test_...",
+        "stripe_secret_key_required": "Secret Key is required",
+        "stripe_secret_key_format": "Secret Key must start with sk_test_ or sk_live_",
+        "stripe_webhook_secret_label": "Webhook Signing Secret",
+        "stripe_webhook_secret_placeholder": "whsec_...",
+        "stripe_webhook_secret_required": "Webhook Signing Secret is required",
+        "stripe_webhook_secret_format": "Webhook Signing Secret must start with whsec_"
       },
       "step3": {
         "title": "Provider Connected!",
