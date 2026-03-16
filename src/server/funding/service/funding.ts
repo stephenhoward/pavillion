@@ -41,6 +41,7 @@ import {
   ActiveFundingPlanExistsError,
   ProviderNotConfiguredError,
   InvalidSessionIdError,
+  WebhookSignatureError,
 } from '@/server/funding/exceptions';
 import { ValidationError } from '@/common/exceptions/base';
 import type CalendarInterface from '@/server/calendar/interface';
@@ -594,7 +595,7 @@ export default class FundingService {
     }
 
     // Emit event
-    this.eventBus.emit('funding_plan:created', { fundingPlan });
+    this.eventBus.emit('funding:plan:created', { fundingPlan });
 
     return fundingPlan;
   }
@@ -978,7 +979,7 @@ export default class FundingService {
     await entity.save();
 
     // Emit event
-    this.eventBus.emit('funding_plan:cancelled', {
+    this.eventBus.emit('funding:plan:cancelled', {
       fundingPlan: entity.toModel(),
       immediate,
     });
@@ -1076,6 +1077,39 @@ export default class FundingService {
     await this.cancel(fundingPlanId, true);
   }
 
+
+  /**
+   * Handle a raw Stripe webhook request by looking up provider config,
+   * verifying the signature, parsing the event, and delegating to processWebhookEvent.
+   *
+   * This method encapsulates all business logic that was previously in the API handler,
+   * following the service-layer pattern where handlers only extract HTTP params.
+   *
+   * @param rawBody - Raw request body string for signature verification
+   * @param signature - Value of the stripe-signature header
+   * @throws ProviderNotConfiguredError if Stripe is not configured
+   * @throws WebhookSignatureError if signature verification fails
+   */
+  async handleStripeWebhook(rawBody: string, signature: string): Promise<void> {
+    const stripeConfig = await ProviderConfigEntity.findOne({
+      where: { provider_type: 'stripe' },
+    });
+
+    if (!stripeConfig) {
+      throw new ProviderNotConfiguredError('Stripe provider not configured');
+    }
+
+    const providerConfig = stripeConfig.toModel();
+    const adapter = ProviderFactory.getAdapter(providerConfig);
+
+    if (!adapter.verifyWebhookSignature(rawBody, signature)) {
+      throw new WebhookSignatureError();
+    }
+
+    const webhookEvent = adapter.parseWebhookEvent(rawBody);
+    await this.processWebhookEvent(webhookEvent, stripeConfig.id);
+  }
+
   /**
    * Process webhook event from payment provider
    *
@@ -1133,17 +1167,17 @@ export default class FundingService {
 
       // Emit appropriate event based on status transition
       if (previousStatus === 'active' && event.status === 'past_due') {
-        this.eventBus.emit('funding_plan:payment_failed', {
+        this.eventBus.emit('funding:plan:payment_failed', {
           fundingPlan: fundingPlanRecord.toModel(),
         });
       }
       else if (previousStatus === 'past_due' && event.status === 'suspended') {
-        this.eventBus.emit('funding_plan:suspended', {
+        this.eventBus.emit('funding:plan:suspended', {
           fundingPlan: fundingPlanRecord.toModel(),
         });
       }
       else if (event.status === 'active' && previousStatus !== 'active') {
-        this.eventBus.emit('funding_plan:reactivated', {
+        this.eventBus.emit('funding:plan:reactivated', {
           fundingPlan: fundingPlanRecord.toModel(),
         });
       }
@@ -1280,7 +1314,7 @@ export default class FundingService {
       }
     }
 
-    this.eventBus.emit('funding_plan:created', {
+    this.eventBus.emit('funding:plan:created', {
       fundingPlan: fundingPlan,
     });
   }
@@ -1309,7 +1343,7 @@ export default class FundingService {
       fundingPlanRecord.suspended_at = new Date();
       await fundingPlanRecord.save();
 
-      this.eventBus.emit('funding_plan:suspended', {
+      this.eventBus.emit('funding:plan:suspended', {
         fundingPlan: fundingPlanRecord.toModel(),
       });
     }

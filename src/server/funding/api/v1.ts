@@ -1,10 +1,10 @@
 import express, { Application } from 'express';
 import { EventEmitter } from 'events';
-import AdminRouteHandlers from '@/server/funding/api/v1/admin';
-import FundingPlanRouteHandlers from '@/server/funding/api/v1/funding-plan';
+import AdminRoutes from '@/server/funding/api/v1/admin';
+import FundingPlanRoutes from '@/server/funding/api/v1/funding-plan';
 import CalendarFundingPlanRoutes from '@/server/funding/api/v1/calendar-funding-plan';
 import CheckoutSessionRoutes from '@/server/funding/api/v1/checkout-session';
-import WebhookRouteHandlers from '@/server/funding/api/v1/webhooks';
+import WebhookRoutes from '@/server/funding/api/v1/webhooks';
 import ProviderConnectionRoutes from '@/server/funding/api/v1/provider_connection';
 import FundingInterface from '@/server/funding/interface';
 import { ProviderConnectionService } from '@/server/funding/service/provider_connection';
@@ -22,7 +22,7 @@ export default class FundingApiV1 {
     const providerConnectionService = new ProviderConnectionService(eventBus);
 
     // Install admin routes
-    const adminRoutes = new AdminRouteHandlers(internalAPI, providerConnectionService);
+    const adminRoutes = new AdminRoutes(internalAPI, providerConnectionService);
     adminRoutes.installHandlers(app, '/api/funding/v1');
 
     // Install provider connection routes
@@ -30,7 +30,7 @@ export default class FundingApiV1 {
     providerRoutes.installHandlers(app, '/api/funding/v1');
 
     // Install user funding plan routes
-    const fundingPlanRoutes = new FundingPlanRouteHandlers(internalAPI);
+    const fundingPlanRoutes = new FundingPlanRoutes(internalAPI);
     fundingPlanRoutes.installHandlers(app, '/api/funding/v1');
 
     // Install calendar funding plan routes
@@ -43,7 +43,7 @@ export default class FundingApiV1 {
 
     // Install webhook routes (separate prefix, no /v1)
     // Webhooks use raw body parsing, handled within the webhook routes
-    const webhookRoutes = new WebhookRouteHandlers(internalAPI);
+    const webhookRoutes = new WebhookRoutes(internalAPI);
     webhookRoutes.installHandlers(app, '/api/funding');
   }
 }

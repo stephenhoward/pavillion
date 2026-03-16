@@ -3,7 +3,7 @@ import { useTranslation } from 'i18next-vue';
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import FundingService from '@/client/service/funding';
 import type { FundingOptions, FundingProvider } from '@/client/service/funding';
-import { loadStripe } from '@/client/composables/useStripeCheckout';
+import { loadStripe } from '@/client/service/stripe-loader';
 
 const ALLOWED_CHECKOUT_ORIGINS = [
   'https://www.paypal.com',

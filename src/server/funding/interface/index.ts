@@ -2,7 +2,7 @@ import { EventEmitter } from 'events';
 import FundingService from '@/server/funding/service/funding';
 import { FundingPlan, FundingSettings, ProviderConfig, FundingStatus, BillingCycle } from '@/common/model/funding-plan';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
-import { ProviderSubscription, WebhookEvent, CheckoutSessionResult } from '@/server/funding/service/provider/adapter';
+import { CheckoutSessionResult } from '@/server/funding/service/provider/adapter';
 import type CalendarInterface from '@/server/calendar/interface';
 
 /**
@@ -262,7 +262,7 @@ export default class FundingInterface {
 
   // Webhook processing
 
-  async processWebhookEvent(event: WebhookEvent, providerConfigId: string): Promise<void> {
-    return this.fundingService.processWebhookEvent(event, providerConfigId);
+  async handleStripeWebhook(rawBody: string, signature: string): Promise<void> {
+    return this.fundingService.handleStripeWebhook(rawBody, signature);
   }
 }

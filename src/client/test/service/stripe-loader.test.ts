@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { loadStripe } from '@/client/composables/useStripeCheckout';
+import { loadStripe } from '@/client/service/stripe-loader';
 
 describe('loadStripe', () => {
   let mockStripeInstance: any;

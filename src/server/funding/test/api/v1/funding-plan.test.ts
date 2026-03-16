@@ -3,7 +3,7 @@ import express, { Request, Response } from 'express';
 import request from 'supertest';
 import sinon from 'sinon';
 import FundingService from '@/server/funding/service/funding';
-import FundingPlanRouteHandlers from '@/server/funding/api/v1/funding-plan';
+import FundingPlanRoutes from '@/server/funding/api/v1/funding-plan';
 import { Account } from '@/common/model/account';
 import { FundingPlan, ProviderConfig } from '@/common/model/funding-plan';
 import { testApp } from '@/server/common/test/lib/express';
@@ -11,7 +11,7 @@ import { testApp } from '@/server/common/test/lib/express';
 describe('User Subscription API Routes', () => {
   let router: express.Router;
   let service: FundingService;
-  let subscriptionHandlers: FundingPlanRouteHandlers;
+  let subscriptionHandlers: FundingPlanRoutes;
   let sandbox: sinon.SinonSandbox;
   let mockAccount: Account;
 
@@ -24,7 +24,7 @@ describe('User Subscription API Routes', () => {
     service = new FundingService(eventBus);
 
     // Create handlers
-    subscriptionHandlers = new FundingPlanRouteHandlers(service);
+    subscriptionHandlers = new FundingPlanRoutes(service);
 
     // Create mock account
     mockAccount = new Account('test-account-id');

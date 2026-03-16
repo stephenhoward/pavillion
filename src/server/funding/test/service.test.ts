@@ -19,6 +19,7 @@ import {
   ActiveFundingPlanExistsError,
   ProviderNotConfiguredError,
   InvalidSessionIdError,
+  WebhookSignatureError,
   FundingPlanNotFoundError,
 } from '@/server/funding/exceptions';
 import { ValidationError } from '@/common/exceptions/base';
@@ -283,6 +284,92 @@ describe('FundingService', () => {
 
       expect(mockEntity.status).toBe('past_due');
       expect(mockEntity.save.called).toBe(true);
+    });
+  });
+
+  describe('handleStripeWebhook', () => {
+    const rawBody = JSON.stringify({
+      id: 'evt_handle_test',
+      type: 'invoice.paid',
+      data: {
+        object: {
+          subscription: 'sub_handle_test',
+          customer: 'cus_handle_test',
+        },
+      },
+    });
+
+    const signature = 'valid_signature';
+
+    function makeStripeConfigEntity(id: string): any {
+      return {
+        id,
+        provider_type: 'stripe',
+        enabled: true,
+        display_name: 'Credit Card',
+        credentials: JSON.stringify({ apiKey: 'sk_test_mock' }),
+        webhook_secret: 'whsec_test',
+        toModel: function() {
+          const config = new ProviderConfig(this.id, this.provider_type);
+          config.enabled = this.enabled;
+          config.displayName = this.display_name;
+          config.credentials = this.credentials;
+          config.webhookSecret = this.webhook_secret;
+          return config;
+        },
+      };
+    }
+
+    it('should throw ProviderNotConfiguredError when Stripe is not configured', async () => {
+      sandbox.stub(ProviderConfigEntity, 'findOne').resolves(null);
+
+      await expect(
+        service.handleStripeWebhook(rawBody, signature),
+      ).rejects.toThrow(ProviderNotConfiguredError);
+    });
+
+    it('should throw WebhookSignatureError when signature is invalid', async () => {
+      const configId = uuidv4();
+      sandbox.stub(ProviderConfigEntity, 'findOne').resolves(makeStripeConfigEntity(configId) as any);
+
+      const mockAdapter = {
+        providerType: 'stripe' as const,
+        verifyWebhookSignature: sandbox.stub().returns(false),
+        parseWebhookEvent: sandbox.stub(),
+      };
+      sandbox.stub(ProviderFactory, 'getAdapter').returns(mockAdapter as any);
+
+      await expect(
+        service.handleStripeWebhook(rawBody, signature),
+      ).rejects.toThrow(WebhookSignatureError);
+
+      expect(mockAdapter.parseWebhookEvent.called).toBe(false);
+    });
+
+    it('should parse and process event when signature is valid', async () => {
+      const configId = uuidv4();
+      sandbox.stub(ProviderConfigEntity, 'findOne').resolves(makeStripeConfigEntity(configId) as any);
+
+      const parsedEvent: WebhookEvent = {
+        eventId: 'evt_handle_test',
+        eventType: 'invoice.paid',
+        subscriptionId: 'sub_handle_test',
+        rawPayload: {},
+      };
+
+      const mockAdapter = {
+        providerType: 'stripe' as const,
+        verifyWebhookSignature: sandbox.stub().returns(true),
+        parseWebhookEvent: sandbox.stub().returns(parsedEvent),
+      };
+      sandbox.stub(ProviderFactory, 'getAdapter').returns(mockAdapter as any);
+      const processStub = sandbox.stub(service, 'processWebhookEvent').resolves();
+
+      await service.handleStripeWebhook(rawBody, signature);
+
+      expect(mockAdapter.verifyWebhookSignature.calledWith(rawBody, signature)).toBe(true);
+      expect(mockAdapter.parseWebhookEvent.calledWith(rawBody)).toBe(true);
+      expect(processStub.calledWith(parsedEvent, configId)).toBe(true);
     });
   });
 

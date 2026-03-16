@@ -20,10 +20,10 @@ import { MAX_CALENDAR_IDS } from '@/server/funding/service/funding';
  * All routes require authentication via ExpressHelper.loggedInOnly.
  */
 export default class CheckoutSessionRoutes {
-  private interface: FundingInterface;
+  private service: FundingInterface;
 
   constructor(fundingInterface: FundingInterface) {
-    this.interface = fundingInterface;
+    this.service = fundingInterface;
   }
 
   /**
@@ -98,7 +98,7 @@ export default class CheckoutSessionRoutes {
         }
       }
 
-      const result = await this.interface.createCheckoutSession(
+      const result = await this.service.createCheckoutSession(
         account.id,
         billing_cycle,
         return_url,
@@ -143,7 +143,7 @@ export default class CheckoutSessionRoutes {
 
       const { sessionId } = req.params;
 
-      const result = await this.interface.getCheckoutSessionStatus(
+      const result = await this.service.getCheckoutSessionStatus(
         account.id,
         sessionId,
       );

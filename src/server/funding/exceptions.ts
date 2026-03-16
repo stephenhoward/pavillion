@@ -124,3 +124,11 @@ export class InvalidSessionIdError extends ValidationError {
     Object.setPrototypeOf(this, InvalidSessionIdError.prototype);
   }
 }
+
+export class WebhookSignatureError extends Error {
+  constructor(message?: string) {
+    super(message || 'Webhook signature verification failed');
+    this.name = 'WebhookSignatureError';
+    Object.setPrototypeOf(this, WebhookSignatureError.prototype);
+  }
+}

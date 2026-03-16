@@ -3,7 +3,7 @@ import express, { Request, Response } from 'express';
 import request from 'supertest';
 import sinon from 'sinon';
 import FundingService from '@/server/funding/service/funding';
-import AdminRouteHandlers from '@/server/funding/api/v1/admin';
+import AdminRoutes from '@/server/funding/api/v1/admin';
 import { ProviderConnectionService } from '@/server/funding/service/provider_connection';
 import { FundingSettings, ProviderConfig } from '@/common/model/funding-plan';
 import { testApp } from '@/server/common/test/lib/express';
@@ -12,7 +12,7 @@ describe('Admin Funding API', () => {
   let router: express.Router;
   let service: FundingService;
   let providerConnectionService: ProviderConnectionService;
-  let adminHandlers: AdminRouteHandlers;
+  let adminHandlers: AdminRoutes;
   let sandbox: sinon.SinonSandbox;
 
   beforeEach(() => {
@@ -25,7 +25,7 @@ describe('Admin Funding API', () => {
     providerConnectionService = new ProviderConnectionService(eventBus);
 
     // Create handlers
-    adminHandlers = new AdminRouteHandlers(service, providerConnectionService);
+    adminHandlers = new AdminRoutes(service, providerConnectionService);
   });
 
   afterEach(() => {

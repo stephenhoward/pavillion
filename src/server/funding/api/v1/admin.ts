@@ -17,15 +17,15 @@ import { logError } from '@/server/common/helper/error-logger';
  *
  * All routes require admin authentication via ExpressHelper.adminOnly
  */
-export default class AdminRouteHandlers {
-  private interface: FundingInterface;
+export default class AdminRoutes {
+  private service: FundingInterface;
   private providerConnectionService: ProviderConnectionService;
 
   constructor(
     fundingInterface: FundingInterface,
     providerConnectionService: ProviderConnectionService,
   ) {
-    this.interface = fundingInterface;
+    this.service = fundingInterface;
     this.providerConnectionService = providerConnectionService;
   }
 
@@ -76,7 +76,7 @@ export default class AdminRouteHandlers {
    */
   async getSettings(req: Request, res: Response): Promise<void> {
     try {
-      const settings = await this.interface.getSettings();
+      const settings = await this.service.getSettings();
 
       res.json({
         enabled: settings.enabled,
@@ -133,7 +133,7 @@ export default class AdminRouteHandlers {
       settings.payWhatYouCan = payWhatYouCan;
       settings.gracePeriodDays = gracePeriodDays;
 
-      await this.interface.updateSettings(settings);
+      await this.service.updateSettings(settings);
 
       res.json({ success: true });
     }
@@ -149,7 +149,7 @@ export default class AdminRouteHandlers {
    */
   async listProviders(req: Request, res: Response): Promise<void> {
     try {
-      const providers = await this.interface.getProviders();
+      const providers = await this.service.getProviders();
 
       // Enhance provider data with configured status from ProviderConnectionService
       const sanitizedProviders = await Promise.all(
@@ -186,7 +186,7 @@ export default class AdminRouteHandlers {
       const { providerType } = req.params;
       const { displayName, enabled } = req.body;
 
-      await this.interface.updateProvider(providerType, displayName, enabled);
+      await this.service.updateProvider(providerType, displayName, enabled);
 
       res.json({ success: true });
     }
@@ -219,7 +219,7 @@ export default class AdminRouteHandlers {
       const parsedLimit = parseInt(req.query.limit as string, 10);
       const limit = Math.min(parsedLimit > 0 ? parsedLimit : DEFAULT_LIMIT, MAX_LIMIT);
 
-      const result = await this.interface.listFundingPlans(page, limit);
+      const result = await this.service.listFundingPlans(page, limit);
 
       res.json(result);
     }
@@ -237,7 +237,7 @@ export default class AdminRouteHandlers {
     try {
       const { id } = req.params;
 
-      await this.interface.forceCancel(id);
+      await this.service.forceCancel(id);
 
       res.json({ success: true });
     }
@@ -263,7 +263,7 @@ export default class AdminRouteHandlers {
     try {
       const includeRevoked = req.query.includeRevoked === 'true';
 
-      const grants = await this.interface.listGrants(includeRevoked);
+      const grants = await this.service.listGrants(includeRevoked);
 
       res.json(grants.map((grant) => grant.toObject()));
     }
@@ -320,7 +320,7 @@ export default class AdminRouteHandlers {
       // grantedBy is always set from the authenticated user — never from the request body
       const grantedBy = adminUser.id;
 
-      const grant = await this.interface.createGrant(calendarId, grantedBy, reason, expiresAtDate);
+      const grant = await this.service.createGrant(calendarId, grantedBy, reason, expiresAtDate);
 
       res.status(201).json(grant.toObject());
     }
@@ -365,7 +365,7 @@ export default class AdminRouteHandlers {
       // revokedBy is always set from the authenticated user — never from the request body
       const revokedBy = adminUser.id;
 
-      await this.interface.revokeGrant(id, revokedBy);
+      await this.service.revokeGrant(id, revokedBy);
 
       res.status(204).send();
     }

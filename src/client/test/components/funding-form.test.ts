@@ -36,7 +36,7 @@ vi.mock('@/client/service/funding', () => {
   return { default: MockClass };
 });
 
-vi.mock('@/client/composables/useStripeCheckout', () => ({
+vi.mock('@/client/service/stripe-loader', () => ({
   loadStripe: (...args: any[]) => mockLoadStripe(...args),
 }));
 

@@ -1,8 +1,6 @@
 import express, { Request, Response, Application, Router } from 'express';
-import Stripe from 'stripe';
 import FundingInterface from '@/server/funding/interface';
-import { ProviderConfigEntity } from '@/server/funding/entity/provider_config';
-import { ProviderFactory } from '@/server/funding/service/provider/factory';
+import { ProviderNotConfiguredError, WebhookSignatureError } from '@/server/funding/exceptions';
 import { logError } from '@/server/common/helper/error-logger';
 
 /**
@@ -13,11 +11,11 @@ import { logError } from '@/server/common/helper/error-logger';
  * is implemented (see TODO below).
  * Uses raw body parsing for signature verification.
  */
-export default class WebhookRouteHandlers {
-  private interface: FundingInterface;
+export default class WebhookRoutes {
+  private service: FundingInterface;
 
   constructor(fundingInterface: FundingInterface) {
-    this.interface = fundingInterface;
+    this.service = fundingInterface;
   }
 
   /**
@@ -50,8 +48,9 @@ export default class WebhookRouteHandlers {
   /**
    * Handle Stripe webhook events
    *
-   * Verifies the webhook signature using Stripe's static method, then
-   * delegates event parsing to the StripeAdapter via ProviderFactory.
+   * Extracts the raw body and stripe-signature header, then delegates all
+   * business logic (config lookup, signature verification, event parsing,
+   * and processing) to the service layer.
    *
    * @param req - Express request with raw body
    * @param res - Express response
@@ -64,45 +63,28 @@ export default class WebhookRouteHandlers {
       return;
     }
 
-    // Get raw body as string
     const rawBody = req.body.toString('utf8');
 
     try {
-      // Get Stripe provider configuration to access webhook secret
-      const stripeConfig = await ProviderConfigEntity.findOne({
-        where: { provider_type: 'stripe' },
-      });
-
-      if (!stripeConfig) {
-        res.status(400).json({ error: 'Stripe provider not configured', errorName: 'ValidationError' });
+      await this.service.handleStripeWebhook(rawBody, signature);
+      res.status(200).json({ received: true });
+    }
+    catch (error) {
+      if (error instanceof ProviderNotConfiguredError) {
+        // Stripe retries non-2xx responses for up to 72 hours. Returning 200
+        // acknowledges receipt gracefully — the event simply has no handler on
+        // this instance. This also avoids leaking configuration state to callers.
+        console.info('[WebhookRoutes] Stripe webhook received but Stripe provider is not configured — discarding event');
+        res.status(200).json({ received: true });
         return;
       }
 
-      // Get decrypted webhook secret
-      const providerConfig = stripeConfig.toModel();
-      const webhookSecret = providerConfig.webhookSecret;
-
-      // Verify webhook signature using static method
-      try {
-        Stripe.Webhook.constructEvent(rawBody, signature, webhookSecret);
-      }
-      catch (err) {
-        logError(err, 'Stripe webhook signature verification failed');
+      if (error instanceof WebhookSignatureError) {
+        logError(error, 'Stripe webhook signature verification failed');
         res.status(400).json({ error: 'Webhook signature verification failed', errorName: 'ValidationError' });
         return;
       }
 
-      // Delegate event parsing to the adapter (service layer)
-      const adapter = ProviderFactory.getAdapter(providerConfig);
-      const webhookEvent = adapter.parseWebhookEvent(rawBody);
-
-      // Process webhook event
-      await this.interface.processWebhookEvent(webhookEvent, stripeConfig.id);
-
-      // Acknowledge receipt immediately
-      res.status(200).json({ received: true });
-    }
-    catch (error) {
       logError(error, 'Error processing Stripe webhook');
       res.status(500).json({ error: 'Internal server error' });
     }

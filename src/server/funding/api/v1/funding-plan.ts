@@ -42,11 +42,11 @@ function extractPublishableKey(provider: ProviderConfig): string | undefined {
  *
  * All routes require authentication via ExpressHelper.loggedInOnly
  */
-export default class FundingPlanRouteHandlers {
-  private interface: FundingInterface;
+export default class FundingPlanRoutes {
+  private service: FundingInterface;
 
   constructor(fundingInterface: FundingInterface) {
-    this.interface = fundingInterface;
+    this.service = fundingInterface;
   }
 
   /**
@@ -74,7 +74,7 @@ export default class FundingPlanRouteHandlers {
    */
   async getOptions(req: Request, res: Response): Promise<void> {
     try {
-      const options = await this.interface.getOptions();
+      const options = await this.service.getOptions();
 
       // Return only enabled providers with sanitized data
       // Include publishableKey for Stripe providers (safe to expose to client)
@@ -142,7 +142,7 @@ export default class FundingPlanRouteHandlers {
         }
       }
 
-      const fundingPlan = await this.interface.subscribe(
+      const fundingPlan = await this.service.subscribe(
         account.id,
         account.email,
         providerConfigId,
@@ -185,7 +185,7 @@ export default class FundingPlanRouteHandlers {
         return;
       }
 
-      const fundingPlan = await this.interface.getStatus(account.id);
+      const fundingPlan = await this.service.getStatus(account.id);
 
       if (!fundingPlan) {
         res.status(404).json({ error: 'No funding plan found', errorName: 'FundingPlanNotFoundError' });
@@ -214,7 +214,7 @@ export default class FundingPlanRouteHandlers {
       }
 
       // Get user's funding plan to get the ID
-      const fundingPlan = await this.interface.getStatus(account.id);
+      const fundingPlan = await this.service.getStatus(account.id);
 
       if (!fundingPlan) {
         res.status(404).json({ error: 'No funding plan found', errorName: 'FundingPlanNotFoundError' });
@@ -222,7 +222,7 @@ export default class FundingPlanRouteHandlers {
       }
 
       // Cancel at end of period (immediate = false)
-      await this.interface.cancel(fundingPlan.id, false);
+      await this.service.cancel(fundingPlan.id, false);
 
       res.json({ success: true });
     }
@@ -252,7 +252,7 @@ export default class FundingPlanRouteHandlers {
 
       const returnUrl = req.query.returnUrl as string;
 
-      const portalUrl = await this.interface.getBillingPortalUrl(account.id, returnUrl);
+      const portalUrl = await this.service.getBillingPortalUrl(account.id, returnUrl);
 
       res.json({ portalUrl });
     }

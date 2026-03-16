@@ -20,10 +20,10 @@ import { logError } from '@/server/common/helper/error-logger';
  * authentication and ownership verification.
  */
 export default class CalendarFundingPlanRoutes {
-  private interface: FundingInterface;
+  private service: FundingInterface;
 
   constructor(fundingInterface: FundingInterface) {
-    this.interface = fundingInterface;
+    this.service = fundingInterface;
   }
 
   /**
@@ -90,7 +90,7 @@ export default class CalendarFundingPlanRoutes {
         return;
       }
 
-      await this.interface.addCalendarToFundingPlan(
+      await this.service.addCalendarToFundingPlan(
         account.id,
         calendarId,
         amount,
@@ -138,7 +138,7 @@ export default class CalendarFundingPlanRoutes {
         return;
       }
 
-      await this.interface.removeCalendarFromFundingPlan(
+      await this.service.removeCalendarFromFundingPlan(
         account.id,
         calendarId,
       );
@@ -185,7 +185,7 @@ export default class CalendarFundingPlanRoutes {
         return;
       }
 
-      const fundingStatus = await this.interface.getFundingStatusForCalendar(account.id, calendarId);
+      const fundingStatus = await this.service.getFundingStatusForCalendar(account.id, calendarId);
 
       res.json({ calendarId, fundingStatus });
     }
