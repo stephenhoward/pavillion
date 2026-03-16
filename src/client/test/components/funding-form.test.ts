@@ -1,0 +1,533 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { flushPromises } from '@vue/test-utils';
+import { createMemoryHistory, createRouter, Router } from 'vue-router';
+import { RouteRecordRaw } from 'vue-router';
+import { ref } from 'vue';
+
+import { mountComponent } from '@/client/test/lib/vue';
+
+// Shared mock fns -- vi.hoisted ensures they're available before vi.mock runs
+const {
+  mockGetOptions,
+  mockSubscribe,
+  mockCreateCheckoutSession,
+  mockGetCheckoutSessionStatus,
+  mockUseStripeCheckout,
+} = vi.hoisted(() => ({
+  mockGetOptions: vi.fn(),
+  mockSubscribe: vi.fn(),
+  mockCreateCheckoutSession: vi.fn(),
+  mockGetCheckoutSessionStatus: vi.fn(),
+  mockUseStripeCheckout: vi.fn(),
+}));
+
+vi.mock('@/client/service/funding', () => {
+  const MockClass = vi.fn().mockImplementation(() => ({
+    getOptions: mockGetOptions,
+    subscribe: mockSubscribe,
+    createCheckoutSession: mockCreateCheckoutSession,
+    getCheckoutSessionStatus: mockGetCheckoutSessionStatus,
+  }));
+  MockClass.formatCurrency = (millicents: number, currency: string) => {
+    const amount = millicents / 100000;
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount);
+  };
+  MockClass.displayToMillicents = (amount: number) => Math.round(amount * 100000);
+  MockClass.millicentsToDisplay = (millicents: number) => millicents / 100000;
+  return { default: MockClass };
+});
+
+vi.mock('@/client/composables/useStripeCheckout', () => ({
+  useStripeCheckout: (...args: any[]) => mockUseStripeCheckout(...args),
+}));
+
+// Import component after mocks are set up
+import FundingForm from '@/client/components/account/FundingForm.vue';
+
+const routes: RouteRecordRaw[] = [
+  { path: '/', component: {}, name: 'home' },
+];
+
+function makeStripeOptions(overrides: Record<string, any> = {}) {
+  return {
+    enabled: true,
+    providers: [
+      { providerType: 'stripe', displayName: 'Credit Card', publishableKey: 'pk_test_abc123' },
+    ],
+    monthlyPrice: 1000000,
+    yearlyPrice: 10000000,
+    currency: 'USD',
+    payWhatYouCan: false,
+    ...overrides,
+  };
+}
+
+function makePayPalOptions() {
+  return {
+    enabled: true,
+    providers: [
+      { providerType: 'paypal', displayName: 'PayPal' },
+    ],
+    monthlyPrice: 1000000,
+    yearlyPrice: 10000000,
+    currency: 'USD',
+    payWhatYouCan: false,
+  };
+}
+
+function makeMultiProviderOptions() {
+  return {
+    enabled: true,
+    providers: [
+      { providerType: 'stripe', displayName: 'Credit Card', publishableKey: 'pk_test_abc123' },
+      { providerType: 'paypal', displayName: 'PayPal' },
+    ],
+    monthlyPrice: 1000000,
+    yearlyPrice: 10000000,
+    currency: 'USD',
+    payWhatYouCan: false,
+  };
+}
+
+const mountFundingForm = async (props: Record<string, any> = {}) => {
+  const router: Router = createRouter({
+    history: createMemoryHistory(),
+    routes,
+  });
+
+  await router.push('/');
+  await router.isReady();
+
+  const wrapper = mountComponent(FundingForm, router, { props });
+
+  // Wait for loadOptions to complete
+  await flushPromises();
+
+  return wrapper;
+};
+
+describe('FundingForm', () => {
+  let currentWrapper: any = null;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    if (currentWrapper) {
+      currentWrapper.unmount();
+      currentWrapper = null;
+    }
+  });
+
+  describe('Configure state', () => {
+    it('renders loading state initially', async () => {
+      mockGetOptions.mockReturnValue(new Promise(() => {}));
+
+      const router = createRouter({
+        history: createMemoryHistory(),
+        routes,
+      });
+      await router.push('/');
+      await router.isReady();
+
+      const wrapper = mountComponent(FundingForm, router, {});
+      currentWrapper = wrapper;
+
+      expect(wrapper.find('.loading').exists()).toBe(true);
+    });
+
+    it('renders billing cycle options after loading', async () => {
+      mockGetOptions.mockResolvedValue(makeStripeOptions());
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      expect(wrapper.find('.loading').exists()).toBe(false);
+      expect(wrapper.findAll('.cycle-option')).toHaveLength(2);
+    });
+
+    it('renders provider selection when multiple providers', async () => {
+      mockGetOptions.mockResolvedValue(makeMultiProviderOptions());
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      expect(wrapper.find('.provider-options').exists()).toBe(true);
+    });
+
+    it('hides provider selection when single provider', async () => {
+      mockGetOptions.mockResolvedValue(makeStripeOptions());
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      expect(wrapper.find('.provider-options').exists()).toBe(false);
+    });
+
+    it('shows PWYC amount input when payWhatYouCan is true', async () => {
+      mockGetOptions.mockResolvedValue(makeStripeOptions({ payWhatYouCan: true }));
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      expect(wrapper.find('input[type="number"]').exists()).toBe(true);
+    });
+
+    it('hides PWYC amount input when payWhatYouCan is false', async () => {
+      mockGetOptions.mockResolvedValue(makeStripeOptions());
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      expect(wrapper.find('input[type="number"]').exists()).toBe(false);
+    });
+
+    it('renders confirm button', async () => {
+      mockGetOptions.mockResolvedValue(makeStripeOptions());
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      const button = wrapper.find('button.primary');
+      expect(button.exists()).toBe(true);
+    });
+
+    it('shows error when loading options fails', async () => {
+      mockGetOptions.mockRejectedValue(new Error('Network error'));
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      expect(wrapper.find('.error-message').exists()).toBe(true);
+    });
+  });
+
+  describe('Stripe embedded checkout flow', () => {
+    it('creates checkout session when submit clicked with Stripe provider', async () => {
+      mockGetOptions.mockResolvedValue(makeStripeOptions());
+
+      const mockCheckout = { mount: vi.fn(), destroy: vi.fn() };
+      const mockStripeInstance = {
+        initEmbeddedCheckout: vi.fn().mockResolvedValue(mockCheckout),
+      };
+
+      mockUseStripeCheckout.mockReturnValue({
+        stripe: ref(mockStripeInstance),
+        loading: ref(false),
+        error: ref(null),
+      });
+
+      mockCreateCheckoutSession.mockResolvedValue({
+        client_secret: 'cs_test_secret',
+        session_id: 'cs_test_session',
+      });
+
+      mockGetCheckoutSessionStatus.mockReturnValue(new Promise(() => {}));
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      await wrapper.find('button.primary').trigger('click');
+      await flushPromises();
+
+      expect(mockCreateCheckoutSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          billing_cycle: 'monthly',
+          return_url: expect.any(String),
+        }),
+      );
+    });
+
+    it('passes calendar_ids when calendarId prop is provided', async () => {
+      mockGetOptions.mockResolvedValue(makeStripeOptions());
+
+      const mockCheckout = { mount: vi.fn(), destroy: vi.fn() };
+      const mockStripeInstance = {
+        initEmbeddedCheckout: vi.fn().mockResolvedValue(mockCheckout),
+      };
+
+      mockUseStripeCheckout.mockReturnValue({
+        stripe: ref(mockStripeInstance),
+        loading: ref(false),
+        error: ref(null),
+      });
+
+      mockCreateCheckoutSession.mockResolvedValue({
+        client_secret: 'cs_test_secret',
+        session_id: 'cs_test_session',
+      });
+
+      mockGetCheckoutSessionStatus.mockReturnValue(new Promise(() => {}));
+
+      const wrapper = await mountFundingForm({ calendarId: 'cal-123' });
+      currentWrapper = wrapper;
+
+      await wrapper.find('button.primary').trigger('click');
+      await flushPromises();
+
+      expect(mockCreateCheckoutSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          calendar_ids: ['cal-123'],
+        }),
+      );
+    });
+
+    it('switches to checkout state after session creation', async () => {
+      mockGetOptions.mockResolvedValue(makeStripeOptions());
+
+      const mockCheckout = { mount: vi.fn(), destroy: vi.fn() };
+      const mockStripeInstance = {
+        initEmbeddedCheckout: vi.fn().mockResolvedValue(mockCheckout),
+      };
+
+      mockUseStripeCheckout.mockReturnValue({
+        stripe: ref(mockStripeInstance),
+        loading: ref(false),
+        error: ref(null),
+      });
+
+      mockCreateCheckoutSession.mockResolvedValue({
+        client_secret: 'cs_test_secret',
+        session_id: 'cs_test_session',
+      });
+
+      mockGetCheckoutSessionStatus.mockReturnValue(new Promise(() => {}));
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      await wrapper.find('button.primary').trigger('click');
+      await flushPromises();
+      await new Promise(resolve => setTimeout(resolve, 10));
+      await flushPromises();
+
+      expect(wrapper.find('.stripe-checkout-container').exists()).toBe(true);
+    });
+
+    it('shows error when Stripe fails to load', async () => {
+      mockGetOptions.mockResolvedValue(makeStripeOptions());
+
+      mockUseStripeCheckout.mockReturnValue({
+        stripe: ref(null),
+        loading: ref(false),
+        error: ref('Failed to load Stripe.js'),
+      });
+
+      mockCreateCheckoutSession.mockResolvedValue({
+        client_secret: 'cs_test_secret',
+        session_id: 'cs_test_session',
+      });
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      await wrapper.find('button.primary').trigger('click');
+      await flushPromises();
+
+      expect(wrapper.find('.error-message').exists()).toBe(true);
+    });
+  });
+
+  describe('PayPal redirect flow', () => {
+    it('uses subscribe redirect flow for PayPal', async () => {
+      mockGetOptions.mockResolvedValue(makePayPalOptions());
+
+      const originalLocation = window.location;
+      Object.defineProperty(window, 'location', {
+        value: { ...originalLocation, href: 'http://localhost/' },
+        writable: true,
+        configurable: true,
+      });
+
+      mockSubscribe.mockResolvedValue({
+        redirectUrl: 'https://www.sandbox.paypal.com/checkout',
+      });
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      await wrapper.find('button.primary').trigger('click');
+      await flushPromises();
+
+      expect(mockSubscribe).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider_type: 'paypal',
+          billing_cycle: 'monthly',
+        }),
+        undefined,
+      );
+
+      Object.defineProperty(window, 'location', {
+        value: originalLocation,
+        writable: true,
+        configurable: true,
+      });
+    });
+
+    it('rejects redirect to non-allowed origins', async () => {
+      mockGetOptions.mockResolvedValue(makePayPalOptions());
+
+      mockSubscribe.mockResolvedValue({
+        redirectUrl: 'https://evil.com/checkout',
+      });
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      await wrapper.find('button.primary').trigger('click');
+      await flushPromises();
+
+      expect(wrapper.find('.error-message').exists()).toBe(true);
+    });
+  });
+
+  describe('Result state', () => {
+    it('shows success message after checkout completion', async () => {
+      mockGetOptions.mockResolvedValue(makeStripeOptions());
+
+      const mockCheckout = { mount: vi.fn(), destroy: vi.fn() };
+      const mockStripeInstance = {
+        initEmbeddedCheckout: vi.fn().mockResolvedValue(mockCheckout),
+      };
+
+      mockUseStripeCheckout.mockReturnValue({
+        stripe: ref(mockStripeInstance),
+        loading: ref(false),
+        error: ref(null),
+      });
+
+      mockCreateCheckoutSession.mockResolvedValue({
+        client_secret: 'cs_test_secret',
+        session_id: 'cs_test_session',
+      });
+
+      mockGetCheckoutSessionStatus.mockResolvedValue({
+        status: 'complete',
+        customer_email: 'test@example.com',
+      });
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      await wrapper.find('button.primary').trigger('click');
+      await flushPromises();
+      await new Promise(resolve => setTimeout(resolve, 2200));
+      await flushPromises();
+
+      expect(wrapper.find('.success-message').exists()).toBe(true);
+    });
+
+    it('shows error message when session expires', async () => {
+      mockGetOptions.mockResolvedValue(makeStripeOptions());
+
+      const mockCheckout = { mount: vi.fn(), destroy: vi.fn() };
+      const mockStripeInstance = {
+        initEmbeddedCheckout: vi.fn().mockResolvedValue(mockCheckout),
+      };
+
+      mockUseStripeCheckout.mockReturnValue({
+        stripe: ref(mockStripeInstance),
+        loading: ref(false),
+        error: ref(null),
+      });
+
+      mockCreateCheckoutSession.mockResolvedValue({
+        client_secret: 'cs_test_secret',
+        session_id: 'cs_test_session',
+      });
+
+      mockGetCheckoutSessionStatus.mockResolvedValue({
+        status: 'expired',
+      });
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      await wrapper.find('button.primary').trigger('click');
+      await flushPromises();
+      await new Promise(resolve => setTimeout(resolve, 2200));
+      await flushPromises();
+
+      expect(wrapper.find('.error-message').exists()).toBe(true);
+    });
+
+    it('emits subscribed when done button clicked after success', async () => {
+      mockGetOptions.mockResolvedValue(makeStripeOptions());
+
+      const mockCheckout = { mount: vi.fn(), destroy: vi.fn() };
+      const mockStripeInstance = {
+        initEmbeddedCheckout: vi.fn().mockResolvedValue(mockCheckout),
+      };
+
+      mockUseStripeCheckout.mockReturnValue({
+        stripe: ref(mockStripeInstance),
+        loading: ref(false),
+        error: ref(null),
+      });
+
+      mockCreateCheckoutSession.mockResolvedValue({
+        client_secret: 'cs_test_secret',
+        session_id: 'cs_test_session',
+      });
+
+      mockGetCheckoutSessionStatus.mockResolvedValue({
+        status: 'complete',
+      });
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      await wrapper.find('button.primary').trigger('click');
+      await flushPromises();
+      await new Promise(resolve => setTimeout(resolve, 2200));
+      await flushPromises();
+
+      const doneButton = wrapper.find('.result-state button.primary');
+      expect(doneButton.exists()).toBe(true);
+      await doneButton.trigger('click');
+      await flushPromises();
+
+      expect(wrapper.emitted('subscribed')).toBeTruthy();
+    });
+
+    it('returns to configure state when try again clicked after error', async () => {
+      mockGetOptions.mockResolvedValue(makeStripeOptions());
+
+      const mockCheckout = { mount: vi.fn(), destroy: vi.fn() };
+      const mockStripeInstance = {
+        initEmbeddedCheckout: vi.fn().mockResolvedValue(mockCheckout),
+      };
+
+      mockUseStripeCheckout.mockReturnValue({
+        stripe: ref(mockStripeInstance),
+        loading: ref(false),
+        error: ref(null),
+      });
+
+      mockCreateCheckoutSession.mockResolvedValue({
+        client_secret: 'cs_test_secret',
+        session_id: 'cs_test_session',
+      });
+
+      mockGetCheckoutSessionStatus.mockResolvedValue({
+        status: 'expired',
+      });
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      await wrapper.find('button.primary').trigger('click');
+      await flushPromises();
+      await new Promise(resolve => setTimeout(resolve, 2200));
+      await flushPromises();
+
+      const tryAgainButton = wrapper.find('.result-state button.secondary');
+      expect(tryAgainButton.exists()).toBe(true);
+      await tryAgainButton.trigger('click');
+      await flushPromises();
+
+      expect(wrapper.findAll('.cycle-option')).toHaveLength(2);
+    });
+  });
+});

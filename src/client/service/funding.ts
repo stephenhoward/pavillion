@@ -69,18 +69,24 @@ export type FundingPlanStatus = {
 };
 
 /**
+ * Provider info returned from the options API
+ */
+export type FundingProvider = {
+  providerType: string;
+  displayName: string;
+  publishableKey?: string;
+};
+
+/**
  * Funding options available to users
  */
 export type FundingOptions = {
   enabled: boolean;
-  providers: Array<{
-    provider_type: string;
-    display_name: string;
-  }>;
-  monthly_price: number;
-  yearly_price: number;
+  providers: FundingProvider[];
+  monthlyPrice: number;
+  yearlyPrice: number;
   currency: string;
-  pay_what_you_can: boolean;
+  payWhatYouCan: boolean;
 };
 
 /**
@@ -115,6 +121,22 @@ export type FundingStatus = {
 export type ResolvedCalendar = {
   id: string;
   title: string;
+};
+
+/**
+ * Checkout session creation response
+ */
+export type CheckoutSessionResponse = {
+  client_secret: string;
+  session_id: string;
+};
+
+/**
+ * Checkout session status response
+ */
+export type CheckoutSessionStatus = {
+  status: string;
+  customer_email?: string;
 };
 
 /**
@@ -557,6 +579,53 @@ export default class FundingService {
     }
     catch (error) {
       console.error('Failed to get portal URL:', error);
+      throw error;
+    }
+  }
+
+  // ========================================
+  // Checkout Session Methods (Stripe Embedded Checkout)
+  // ========================================
+
+  /**
+   * Create a Stripe checkout session for embedded checkout
+   *
+   * @param {object} params - Checkout session parameters
+   * @param {string} params.billing_cycle - Billing cycle ('monthly' or 'yearly')
+   * @param {string} params.return_url - URL to redirect to after checkout
+   * @param {number} params.amount - Optional custom amount in millicents (for PWYC)
+   * @param {string[]} params.calendar_ids - Optional array of calendar IDs
+   * @returns {Promise<CheckoutSessionResponse>} Client secret and session ID
+   */
+  async createCheckoutSession(params: {
+    billing_cycle: string;
+    return_url: string;
+    amount?: number;
+    calendar_ids?: string[];
+  }): Promise<CheckoutSessionResponse> {
+    try {
+      const response = await axios.post('/api/funding/v1/checkout-sessions', params);
+      return response.data;
+    }
+    catch (error) {
+      console.error('Failed to create checkout session:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get the status of a checkout session
+   *
+   * @param {string} sessionId - The checkout session ID
+   * @returns {Promise<CheckoutSessionStatus>} Session status
+   */
+  async getCheckoutSessionStatus(sessionId: string): Promise<CheckoutSessionStatus> {
+    try {
+      const response = await axios.get(`/api/funding/v1/checkout-sessions/${sessionId}/status`);
+      return response.data;
+    }
+    catch (error) {
+      console.error('Failed to get checkout session status:', error);
       throw error;
     }
   }

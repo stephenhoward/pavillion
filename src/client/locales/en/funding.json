@@ -24,6 +24,9 @@
   "subscribe_success": "Funding plan created successfully!",
   "subscribe_error": "Failed to create funding plan. Please try again.",
 
+  "checkout_done_button": "Done",
+  "checkout_try_again_button": "Try Again",
+
   "current_funding_plan": "Current Funding Plan",
   "status_label": "Status",
   "billing_cycle_label": "Billing Cycle",
