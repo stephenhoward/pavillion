@@ -17,9 +17,10 @@ export function buildDefaultCSP(): string {
     "frame-src https://*.stripe.com",
   ];
 
-  // In development, Vite HMR uses WebSocket connections to the dev server
+  // In development, Vite HMR uses WebSocket connections and injects inline styles
   if (isDev) {
     directives.push("connect-src 'self' ws://localhost:5173 http://localhost:5173");
+    directives.push("style-src 'self' 'unsafe-inline'");
   }
 
   return directives.join('; ');

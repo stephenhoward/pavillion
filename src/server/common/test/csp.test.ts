@@ -71,6 +71,18 @@ describe('buildDefaultCSP', () => {
     expect(csp).toMatch(/connect-src[^;]*ws:\/\/localhost:5173/);
   });
 
+  it('should include style-src with unsafe-inline in development for Vite style injection', () => {
+    process.env.NODE_ENV = 'development';
+    const csp = buildDefaultCSP();
+    expect(csp).toMatch(/style-src[^;]*'unsafe-inline'/);
+  });
+
+  it('should not include style-src unsafe-inline in production', () => {
+    process.env.NODE_ENV = 'production';
+    const csp = buildDefaultCSP();
+    expect(csp).not.toMatch(/style-src[^;]*'unsafe-inline'/);
+  });
+
   it('should not include overly broad rules like unsafe-inline or unsafe-eval', () => {
     process.env.NODE_ENV = 'production';
     const csp = buildDefaultCSP();
