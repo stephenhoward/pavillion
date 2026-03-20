@@ -22,6 +22,7 @@ export type ProviderConfig = {
   enabled: boolean;
   display_name: string;
   configured: boolean;
+  webhook_url?: string;
 };
 
 /**

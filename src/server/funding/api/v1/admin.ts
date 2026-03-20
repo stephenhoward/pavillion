@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import ExpressHelper from '@/server/common/helper/express';
 import FundingInterface from '@/server/funding/interface';
 import { ProviderConnectionService } from '@/server/funding/service/provider_connection';
+import { WebhookManager } from '@/server/funding/service/provider/webhook_manager';
 import { FundingSettings } from '@/common/model/funding-plan';
 import { ValidationError } from '@/common/exceptions/base';
 import {
@@ -150,6 +151,7 @@ export default class AdminRoutes {
   async listProviders(req: Request, res: Response): Promise<void> {
     try {
       const providers = await this.service.getProviders();
+      const webhookManager = new WebhookManager();
 
       // Enhance provider data with configured status from ProviderConnectionService
       const sanitizedProviders = await Promise.all(
@@ -164,6 +166,7 @@ export default class AdminRoutes {
             enabled: provider.enabled,
             display_name: provider.displayName, // Use snake_case for frontend compatibility
             configured: status.configured,
+            webhook_url: webhookManager.generateWebhookUrl(provider.providerType),
             // Do NOT return credentials or webhook secrets
           };
         }),

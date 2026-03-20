@@ -49,6 +49,7 @@ const stripeErrors = ref({
   secretKey: '',
   webhookSecret: '',
 });
+const webhookUrlCopied = ref(false);
 
 // Computed
 const totalSteps = computed(() => 3);
@@ -223,6 +224,25 @@ function validateStripeField(field: 'publishableKey' | 'secretKey' | 'webhookSec
 }
 
 /**
+ * Copy webhook URL to clipboard
+ */
+async function copyWebhookUrl() {
+  const url = selectedProviderConfig.value?.webhook_url;
+  if (!url) return;
+
+  try {
+    await navigator.clipboard.writeText(url);
+    webhookUrlCopied.value = true;
+    setTimeout(() => {
+      webhookUrlCopied.value = false;
+    }, 2000);
+  }
+  catch {
+    // Fallback: select text for manual copy
+  }
+}
+
+/**
  * Handle PayPal configuration submission
  */
 async function configurePayPal() {
@@ -379,10 +399,14 @@ function handleSuccess() {
                 :class="{ 'has-error': stripeErrors.publishableKey }"
                 :placeholder="t('step2.stripe_publishable_key_placeholder')"
                 :disabled="connecting"
+                :aria-describedby="stripeErrors.publishableKey ? 'stripe-pk-error' : 'stripe-pk-help'"
                 @blur="validateStripeField('publishableKey')"
               />
-              <div v-if="stripeErrors.publishableKey" class="error-message-inline">
+              <div v-if="stripeErrors.publishableKey" id="stripe-pk-error" class="error-message-inline">
                 {{ stripeErrors.publishableKey }}
+              </div>
+              <div v-else id="stripe-pk-help" class="form-help">
+                {{ t('step2.stripe_publishable_key_help') }}
               </div>
             </div>
 
@@ -399,10 +423,14 @@ function handleSuccess() {
                 :class="{ 'has-error': stripeErrors.secretKey }"
                 :placeholder="t('step2.stripe_secret_key_placeholder')"
                 :disabled="connecting"
+                :aria-describedby="stripeErrors.secretKey ? 'stripe-sk-error' : 'stripe-sk-help'"
                 @blur="validateStripeField('secretKey')"
               />
-              <div v-if="stripeErrors.secretKey" class="error-message-inline">
+              <div v-if="stripeErrors.secretKey" id="stripe-sk-error" class="error-message-inline">
                 {{ stripeErrors.secretKey }}
+              </div>
+              <div v-else id="stripe-sk-help" class="form-help">
+                {{ t('step2.stripe_secret_key_help') }}
               </div>
             </div>
 
@@ -419,10 +447,23 @@ function handleSuccess() {
                 :class="{ 'has-error': stripeErrors.webhookSecret }"
                 :placeholder="t('step2.stripe_webhook_secret_placeholder')"
                 :disabled="connecting"
+                :aria-describedby="stripeErrors.webhookSecret ? 'stripe-wh-error' : 'stripe-wh-help'"
                 @blur="validateStripeField('webhookSecret')"
               />
-              <div v-if="stripeErrors.webhookSecret" class="error-message-inline">
+              <div v-if="stripeErrors.webhookSecret" id="stripe-wh-error" class="error-message-inline">
                 {{ stripeErrors.webhookSecret }}
+              </div>
+              <div v-else id="stripe-wh-help" class="form-help">
+                {{ t('step2.stripe_webhook_secret_help') }}
+                <div v-if="selectedProviderConfig?.webhook_url" class="webhook-url-hint">
+                  <span class="webhook-url-label">{{ t('step2.stripe_webhook_url_label') }}</span>
+                  <code
+                    class="webhook-url"
+                    :title="t('step2.stripe_webhook_url_label')"
+                    @click="copyWebhookUrl"
+                  >{{ selectedProviderConfig.webhook_url }}</code>
+                  <span v-if="webhookUrlCopied" class="copied-badge">Copied!</span>
+                </div>
               </div>
             </div>
 
@@ -455,10 +496,14 @@ function handleSuccess() {
                 :class="{ 'has-error': paypalErrors.clientId }"
                 :placeholder="t('step2.paypal_client_id_placeholder')"
                 :disabled="connecting"
+                :aria-describedby="paypalErrors.clientId ? 'paypal-id-error' : 'paypal-id-help'"
                 @blur="validatePayPalField('clientId')"
               />
-              <div v-if="paypalErrors.clientId" class="error-message-inline">
+              <div v-if="paypalErrors.clientId" id="paypal-id-error" class="error-message-inline">
                 {{ paypalErrors.clientId }}
+              </div>
+              <div v-else id="paypal-id-help" class="form-help">
+                {{ t('step2.paypal_client_id_help') }}
               </div>
             </div>
 
@@ -475,10 +520,14 @@ function handleSuccess() {
                 :class="{ 'has-error': paypalErrors.clientSecret }"
                 :placeholder="t('step2.paypal_client_secret_placeholder')"
                 :disabled="connecting"
+                :aria-describedby="paypalErrors.clientSecret ? 'paypal-secret-error' : 'paypal-secret-help'"
                 @blur="validatePayPalField('clientSecret')"
               />
-              <div v-if="paypalErrors.clientSecret" class="error-message-inline">
+              <div v-if="paypalErrors.clientSecret" id="paypal-secret-error" class="error-message-inline">
                 {{ paypalErrors.clientSecret }}
+              </div>
+              <div v-else id="paypal-secret-help" class="form-help">
+                {{ t('step2.paypal_client_secret_help') }}
               </div>
             </div>
 
@@ -493,13 +542,17 @@ function handleSuccess() {
                 class="form-input"
                 :class="{ 'has-error': paypalErrors.environment }"
                 :disabled="connecting"
+                :aria-describedby="paypalErrors.environment ? 'paypal-env-error' : 'paypal-env-help'"
                 @blur="validatePayPalField('environment')"
               >
                 <option value="sandbox">{{ t('step2.paypal_environment_sandbox') }}</option>
                 <option value="production">{{ t('step2.paypal_environment_production') }}</option>
               </select>
-              <div v-if="paypalErrors.environment" class="error-message-inline">
+              <div v-if="paypalErrors.environment" id="paypal-env-error" class="error-message-inline">
                 {{ paypalErrors.environment }}
+              </div>
+              <div v-else id="paypal-env-help" class="form-help">
+                {{ t('step2.paypal_environment_help') }}
               </div>
             </div>
 
@@ -745,6 +798,50 @@ function handleSuccess() {
       margin-top: 0.5rem;
       font-size: 0.875rem;
       color: #dc3545;
+    }
+
+    .form-help {
+      margin-top: 0.375rem;
+      font-size: 0.8125rem;
+      line-height: 1.4;
+      color: var(--pav-color-text-secondary);
+
+      .webhook-url-hint {
+        margin-top: 0.375rem;
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 0.375rem;
+
+        .webhook-url-label {
+          font-weight: var(--pav-font-weight-medium);
+        }
+
+        .webhook-url {
+          padding: 0.125rem 0.375rem;
+          background: var(--pav-color-surface-tertiary, rgba(0, 0, 0, 0.05));
+          border: 1px solid var(--pav-color-border-primary);
+          border-radius: 4px;
+          font-size: 0.75rem;
+          cursor: pointer;
+          user-select: all;
+          word-break: break-all;
+
+          &:hover {
+            background: var(--pav-color-surface-hover, rgba(0, 0, 0, 0.08));
+          }
+        }
+
+        .copied-badge {
+          font-size: 0.75rem;
+          color: #155724;
+          font-weight: var(--pav-font-weight-medium);
+
+          @media (prefers-color-scheme: dark) {
+            color: #7fd68a;
+          }
+        }
+      }
     }
   }
 }
