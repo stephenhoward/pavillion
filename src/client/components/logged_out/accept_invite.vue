@@ -124,7 +124,7 @@ async function checkInvitationCode() {
   state.form_error = '';
   try {
     const response = await authn.check_invite_token(state.invite_code);
-    if ( response.message == 'ok' ) {
+    if ( response.valid ) {
       state.codeValidated = true;
     }
     else {
