@@ -138,7 +138,8 @@ class EmailServiceClass {
    * @returns The configured mail transport instance
    */
   private createTransport(): MailTransport {
-    console.log('Creating mail transport:', this.mailConfig.transport);
+    const { transport, from } = this.mailConfig;
+    console.log(`[Email] Initializing transport: ${transport}, from: ${from}`);
     switch (this.mailConfig.transport) {
       case 'smtp':
         return new SmtpTransport(this.mailConfig);
@@ -165,6 +166,7 @@ class EmailServiceClass {
    * @returns Promise resolving to the message info or null if sending failed
    */
   public async sendEmail(data: MailData): Promise<SentMessageInfo | null> {
+    console.log(`[Email] Sending via ${this.transportType}: to=${data.emailAddress}, subject="${data.subject}"`);
     try {
       const info = await this.transportInstance.sendMail({
         from: process.env.MAIL_FROM || this.mailConfig.from,
@@ -174,11 +176,11 @@ class EmailServiceClass {
         html: data.htmlMessage,
       });
 
-      console.log(`Message sent (${this.mailConfig.transport}):`, info.messageId);
+      console.log(`[Email] Sent successfully (${this.transportType}): messageId=${info.messageId}`);
       return info;
     }
     catch (error) {
-      logError(error, '[Email] Error sending email');
+      logError(error, `[Email] Failed to send via ${this.transportType} to=${data.emailAddress}, subject="${data.subject}"`);
       return null;
     }
   }
