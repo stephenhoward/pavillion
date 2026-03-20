@@ -169,7 +169,7 @@ export default class AccountService {
         const existingAccount = await this.getAccountByEmail(email);
         if (existingAccount) {
           const message = new AccountAlreadyExistsEmail(existingAccount);
-          this.emailInterface.sendEmail(message.buildMessage(existingAccount.language));
+          await this.emailInterface.sendEmail(message.buildMessage(existingAccount.language));
         }
         throw error;
       }
@@ -177,7 +177,7 @@ export default class AccountService {
     }
 
     const message = new AccountRegistrationEmail(accountInfo.account, accountInfo.password_code);
-    this.emailInterface.sendEmail(message.buildMessage(accountInfo.account.language));
+    await this.emailInterface.sendEmail(message.buildMessage(accountInfo.account.language));
     return accountInfo.account;
   }
 
@@ -225,7 +225,7 @@ export default class AccountService {
 
     // Send acknowledgment email to applicant
     const emailMessage = new ApplicationAcknowledgmentEmail(application);
-    this.emailInterface.sendEmail(emailMessage.buildMessage('en'));
+    await this.emailInterface.sendEmail(emailMessage.buildMessage('en'));
 
     return true;
   }
@@ -450,7 +450,7 @@ export default class AccountService {
       ? new EditorInvitationEmail(invitation.toModel(), invitation.invitation_code, calendar)
       : new AccountInvitationEmail(invitation.toModel(), invitation.invitation_code);
 
-    this.emailInterface.sendEmail(message.buildMessage('en'));
+    await this.emailInterface.sendEmail(message.buildMessage('en'));
     return true;
   }
 
@@ -473,7 +473,7 @@ export default class AccountService {
 
     // Send email before destroying the application
     const message = new ApplicationAcceptedEmail(accountInfo.account, accountInfo.password_code);
-    this.emailInterface.sendEmail(message.buildMessage(accountInfo.account.language));
+    await this.emailInterface.sendEmail(message.buildMessage(accountInfo.account.language));
 
     // Delete the application now that it's been accepted and account created
     await application.destroy();
