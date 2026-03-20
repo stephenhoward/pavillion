@@ -52,6 +52,9 @@ services:
       - JWT_SECRET=${JWT_SECRET:-}
       - SESSION_SECRET=${SESSION_SECRET:-}
       - S3_SECRET_KEY=${S3_SECRET_KEY:-}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-}
+      - SMTP_USER=${SMTP_USER:-}
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}
       - EMAIL_HASH_SECRET=${EMAIL_HASH_SECRET:-}
       # Docker secrets via _FILE pattern (recommended for production)
