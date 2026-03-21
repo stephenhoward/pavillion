@@ -161,6 +161,22 @@ export default class AuthenticationService {
     }
   }
 
+  async revoke_invitation(id: string) {
+    try {
+      let response = await axios.delete( this._accountUrl('/invitations/' + id));
+      return response.data;
+    }
+    catch (error) {
+      if (axios.isAxiosError(error)) {
+        const axiosError = error as AxiosError;
+        if (axiosError.response) {
+          throw(axiosError.response.status);
+        }
+      }
+      throw(error);
+    }
+  }
+
   /**
    * Validates an invitation token/code.
    *
