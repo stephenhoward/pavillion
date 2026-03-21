@@ -97,7 +97,7 @@ export function createSetupModeMiddleware(setupInterface: SetupInterface) {
     catch (error) {
       // If there's an error checking setup mode, log it and continue
       // This prevents the middleware from breaking the entire app
-      logger.error({ error }, 'Error in setup mode middleware');
+      logger.error({ err: error }, 'Error in setup mode middleware');
       next();
     }
   };

@@ -42,7 +42,7 @@ export default class SetupRouteHandlers {
       res.json({ setupRequired });
     }
     catch (error) {
-      logger.error({ error }, 'Error checking setup status');
+      logger.error({ err: error }, 'Error checking setup status');
       res.status(500).json({ error: 'Failed to check setup status' });
     }
   }
@@ -126,7 +126,7 @@ export default class SetupRouteHandlers {
       });
     }
     catch (error) {
-      logger.error({ error }, 'Error completing setup');
+      logger.error({ err: error }, 'Error completing setup');
       res.status(500).json({ error: 'Failed to complete setup' });
     }
   }

@@ -878,7 +878,7 @@ class ProcessInboxService {
     });
 
     if (existingShare) {
-      logger.info('Skip: Already shared', { existingShareId: existingShare.id, autoPosted: existingShare.auto_posted });
+      logger.info({ existingShareId: existingShare.id, autoPosted: existingShare.auto_posted }, 'Skip: Already shared');
       // Already shared, skip
       return;
     }

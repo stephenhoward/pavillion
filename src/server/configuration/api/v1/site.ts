@@ -60,7 +60,7 @@ export default class SiteRouteHandlers {
       return;
     }
     catch (error) {
-      logger.error({ error }, 'Error updating service settings');
+      logger.error({ err: error }, 'Error updating service settings');
       res.status(500).json({ error: 'Internal server error' });
       return;
     }
