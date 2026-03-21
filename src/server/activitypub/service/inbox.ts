@@ -907,7 +907,7 @@ class ProcessInboxService {
       );
     }
     catch (error) {
-      logger.warn('Category mapping or assignment failed, proceeding without categories:', error);
+      logger.warn({ err: error }, 'Category mapping or assignment failed, proceeding without categories');
     }
 
     // Emit eventReposted so downstream handlers (e.g. event instance building)
@@ -917,7 +917,7 @@ class ProcessInboxService {
       this.eventBus.emit('eventReposted', { event, calendar });
     }
 
-    logger.info(✅ SUCCESS: Auto-reposted event ${eventApId} from ${sourceActorUri} (isOriginal: ${isOriginal})`);
+    logger.info({ eventApId, sourceActorUri, isOriginal }, 'Auto-reposted event');
   }
 
   /**

@@ -44,8 +44,14 @@ vi.mock('@/server/activitypub/helper/remote-fetch', () => ({
   fetchRemoteObject: vi.fn(),
 }));
 
-// Import after mock is set up
+// Mock the rejection logger so we can verify it was called with correct args
+vi.mock('@/server/activitypub/helper/rejection-logger', () => ({
+  logActivityRejection: vi.fn(),
+}));
+
+// Import after mocks are set up
 import { fetchRemoteObject } from '@/server/activitypub/helper/remote-fetch';
+import { logActivityRejection } from '@/server/activitypub/helper/rejection-logger';
 
 
 describe('processInboxMessage', () => {
@@ -971,8 +977,6 @@ describe('isAuthorizedRemoteEditor caching', () => {
 describe('Structured Logging for Activity Rejections', () => {
   let service: ProcessInboxService;
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
-  let consoleWarnStub: sinon.SinonStub;
-  let consoleErrorStub: sinon.SinonStub;
 
   const TEST_CALENDAR_ID = 'test-calendar-id';
   const TEST_CALENDAR_URL_NAME = 'testcalendar';
@@ -981,34 +985,19 @@ describe('Structured Logging for Activity Rejections', () => {
   const BLOCKED_DOMAIN = 'blocked.example.com';
   const BLOCKED_ACTOR_URL = `https://${BLOCKED_DOMAIN}/users/badactor`;
 
+  const mockLogActivityRejection = logActivityRejection as ReturnType<typeof vi.fn>;
+
   beforeEach(() => {
     const eventBus = new EventEmitter();
     const calendarInterface = new CalendarInterface(eventBus);
     const moderationInterface = new ModerationInterface(eventBus);
     service = new ProcessInboxService(eventBus, calendarInterface, moderationInterface);
-    consoleWarnStub = sandbox.stub(console, 'warn');
-    consoleErrorStub = sandbox.stub(console, 'error');
+    mockLogActivityRejection.mockClear();
   });
 
   afterEach(() => {
     sandbox.restore();
   });
-
-  // Helper to find JSON log entries from console.warn calls
-  const findJsonLogEntry = (stub: sinon.SinonStub) => {
-    for (let i = 0; i < stub.callCount; i++) {
-      try {
-        const arg = stub.getCall(i).args[0];
-        if (typeof arg === 'string' && arg.includes('"rejection_type"')) {
-          return JSON.parse(arg);
-        }
-      }
-      catch (e) {
-        // Not JSON, skip
-      }
-    }
-    return null;
-  };
 
   describe('Blocked Instance Rejection', () => {
     it('should log structured output when instance is blocked', async () => {
@@ -1034,7 +1023,7 @@ describe('Structured Logging for Activity Rejections', () => {
 
       await service.processInboxMessage(message);
 
-      const logEntry = findJsonLogEntry(consoleWarnStub);
+      const logEntry = mockLogActivityRejection.mock.calls[0]?.[0];
       expect(logEntry).toBeDefined();
       expect(logEntry.rejection_type).toBe('blocked_instance');
       expect(logEntry.activity_type).toBe('Create');
@@ -1097,7 +1086,7 @@ describe('Structured Logging for Activity Rejections', () => {
         // Expected to throw
       }
 
-      const logEntry = findJsonLogEntry(consoleWarnStub);
+      const logEntry = mockLogActivityRejection.mock.calls[0]?.[0];
       expect(logEntry).toBeDefined();
       expect(logEntry.rejection_type).toBe('unauthorized_editor');
       expect(logEntry.activity_type).toBe('Create');
@@ -1137,7 +1126,7 @@ describe('Structured Logging for Activity Rejections', () => {
         // Expected to throw
       }
 
-      const logEntry = findJsonLogEntry(consoleWarnStub);
+      const logEntry = mockLogActivityRejection.mock.calls[0]?.[0];
       expect(logEntry).toBeDefined();
       expect(logEntry.rejection_type).toBe('ownership_verification_failed');
       expect(logEntry.activity_type).toBe('Create');
@@ -1174,7 +1163,7 @@ describe('Structured Logging for Activity Rejections', () => {
         // Expected to throw
       }
 
-      const logEntry = findJsonLogEntry(consoleWarnStub);
+      const logEntry = mockLogActivityRejection.mock.calls[0]?.[0];
       expect(logEntry).toBeDefined();
       expect(logEntry.rejection_type).toBe('unauthorized_editor');
       expect(logEntry.activity_type).toBe('Update');
@@ -1208,7 +1197,7 @@ describe('Structured Logging for Activity Rejections', () => {
         // Expected to throw
       }
 
-      const logEntry = findJsonLogEntry(consoleWarnStub);
+      const logEntry = mockLogActivityRejection.mock.calls[0]?.[0];
       expect(logEntry).toBeDefined();
       expect(logEntry.rejection_type).toBe('unauthorized_editor');
       expect(logEntry.activity_type).toBe('Delete');
@@ -1242,10 +1231,9 @@ describe('Structured Logging for Activity Rejections', () => {
 
       await service.processInboxMessage(message);
 
-      // Parse failures should use console.error
-      const logEntry = findJsonLogEntry(consoleErrorStub);
+      // Parse failures should be logged with parse_failure rejection type
+      const logEntry = mockLogActivityRejection.mock.calls[0]?.[0];
       expect(logEntry).toBeDefined();
-      expect(logEntry.level).toBe('error');
       expect(logEntry.rejection_type).toBe('parse_failure');
       expect(logEntry.activity_type).toBe('Create');
     });
@@ -1275,11 +1263,8 @@ describe('Structured Logging for Activity Rejections', () => {
 
       await service.processInboxMessage(message);
 
-      const logEntry = findJsonLogEntry(consoleWarnStub);
+      const logEntry = mockLogActivityRejection.mock.calls[0]?.[0];
       expect(logEntry).toBeDefined();
-      expect(logEntry.timestamp).toBeDefined();
-      expect(logEntry.level).toBeDefined();
-      expect(logEntry.context).toBe('activitypub.inbox.rejection');
       expect(logEntry.rejection_type).toBeDefined();
       expect(logEntry.activity_type).toBeDefined();
       expect(logEntry.actor_uri).toBeDefined();
@@ -1695,7 +1680,8 @@ describe('Relationship-Based Inbox Filtering', () => {
     });
 
     it('should log rejection with no_relationship type when filtering', async () => {
-      const consoleWarnStub = sandbox.stub(console, 'warn');
+      const mockLogRejection = logActivityRejection as ReturnType<typeof vi.fn>;
+      mockLogRejection.mockClear();
 
       sandbox.stub(service.remoteCalendarService, 'getByActorUri').resolves(null);
 
@@ -1714,25 +1700,11 @@ describe('Relationship-Based Inbox Filtering', () => {
 
       await service.processInboxMessage(message);
 
-      // Find JSON log entry in console.warn calls
-      let logEntry: any = null;
-      for (let i = 0; i < consoleWarnStub.callCount; i++) {
-        try {
-          const arg = consoleWarnStub.getCall(i).args[0];
-          if (typeof arg === 'string' && arg.includes('"rejection_type"')) {
-            logEntry = JSON.parse(arg);
-            break;
-          }
-        }
-        catch (e) {
-          // not JSON
-        }
-      }
-
-      expect(logEntry).toBeDefined();
-      expect(logEntry.rejection_type).toBe('no_relationship');
-      expect(logEntry.activity_type).toBe('Create');
-      expect(logEntry.actor_uri).toBe(REMOTE_CALENDAR_ACTOR_URL);
+      expect(mockLogRejection).toHaveBeenCalledOnce();
+      const context = mockLogRejection.mock.calls[0][0];
+      expect(context.rejection_type).toBe('no_relationship');
+      expect(context.activity_type).toBe('Create');
+      expect(context.actor_uri).toBe(REMOTE_CALENDAR_ACTOR_URL);
     });
   });
 });
