@@ -47,6 +47,7 @@ export function createAccountRateLimiter(
 
       res.status(429).json({
         error: `Too many ${endpointName} requests for this account, please try again later.`,
+        errorName: 'RateLimitError',
       });
     },
 

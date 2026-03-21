@@ -40,6 +40,7 @@ export function createIpRateLimiter(
 
       res.status(429).json({
         error: errorMessage,
+        errorName: 'RateLimitError',
       });
     },
 

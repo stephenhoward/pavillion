@@ -10,7 +10,8 @@
     "UnknownLogin": "unknown email or password",
     "MissingLogin": "missing email or password",
     "400": "bad sign in",
-    "unknown_error": "An unknown error occurred"
+    "unknown_error": "An unknown error occurred",
+    "RateLimitError": "Too many requests. Please try again later."
   },
   "forgot_password": {
     "title": "Forgot your password?",
@@ -25,7 +26,8 @@
     "error_500": "Oops. The server ran into an error. Please contact support",
     "no_email_provided": "Please enter your email address",
     "unknown_error": "An error occurred. Please try again.",
-    "PasswordResetGenerationError": "Unable to send reset email. Please try again later."
+    "PasswordResetGenerationError": "Unable to send reset email. Please try again later.",
+    "RateLimitError": "Too many requests. Please try again later."
   },
   "reset_password": {
     "check_email_title": "Password Reset Sent",

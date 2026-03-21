@@ -56,6 +56,7 @@ export function createCredentialRateLimiter(
 
       res.status(429).json({
         error: errorMessage,
+        errorName: 'RateLimitError',
       });
     },
 
