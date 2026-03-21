@@ -32,7 +32,7 @@ describe('Password Validation Integration', () => {
       });
 
       const defaultAuthn = {
-        check_invite_token: vi.fn().mockResolvedValue({ message: 'ok' }),
+        check_invite_token: vi.fn().mockResolvedValue({ valid: true }),
         accept_invitation: vi.fn().mockResolvedValue({ calendars: [] }),
       };
 
@@ -47,7 +47,7 @@ describe('Password Validation Integration', () => {
 
     it('should show error for passwords that are too short', async () => {
       const { wrapper } = mountAcceptInvite({
-        check_invite_token: vi.fn().mockResolvedValue({ message: 'ok' }),
+        check_invite_token: vi.fn().mockResolvedValue({ valid: true }),
         accept_invitation: vi.fn(),
       });
 
@@ -74,7 +74,7 @@ describe('Password Validation Integration', () => {
 
     it('should show error for passwords lacking character variety', async () => {
       const { wrapper } = mountAcceptInvite({
-        check_invite_token: vi.fn().mockResolvedValue({ message: 'ok' }),
+        check_invite_token: vi.fn().mockResolvedValue({ valid: true }),
         accept_invitation: vi.fn(),
       });
 
@@ -101,7 +101,7 @@ describe('Password Validation Integration', () => {
     it('should accept valid passwords', async () => {
       const acceptInvitationMock = vi.fn().mockResolvedValue({ calendars: [] });
       const { wrapper, router } = mountAcceptInvite({
-        check_invite_token: vi.fn().mockResolvedValue({ message: 'ok' }),
+        check_invite_token: vi.fn().mockResolvedValue({ valid: true }),
         accept_invitation: acceptInvitationMock,
       });
 
