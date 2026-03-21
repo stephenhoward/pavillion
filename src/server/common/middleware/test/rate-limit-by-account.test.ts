@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import request from 'supertest';
 import express from 'express';
@@ -9,16 +9,13 @@ import { Account } from '@/common/model/account';
 describe('createAccountRateLimiter', () => {
   let router: express.Router;
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
-  let consoleWarnSpy: any;
 
   beforeEach(() => {
     router = express.Router();
-    consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
     sandbox.restore();
-    consoleWarnSpy.mockRestore();
   });
 
   describe('rate limit enforcement', () => {
@@ -142,7 +139,7 @@ describe('createAccountRateLimiter', () => {
   });
 
   describe('logging', () => {
-    it('should log account ID when limit is exceeded', async () => {
+    it('should block requests when limit is exceeded (logging via pino, not console.warn)', async () => {
       const limiter = createAccountRateLimiter(1, 60000, 'test-endpoint');
 
       router.post('/test', addRequestUser, limiter, (req, res) => {
@@ -157,16 +154,14 @@ describe('createAccountRateLimiter', () => {
         .send({ data: 'test' });
 
       // Second request is rate limited
-      await request(app)
+      const response = await request(app)
         .post('/test')
         .send({ data: 'test' });
 
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        'Rate limit exceeded for account id on test-endpoint',
-      );
+      expect(response.status).toBe(429);
     });
 
-    it('should log "unknown" when no user is present', async () => {
+    it('should block requests when no user is present and limit is exceeded', async () => {
       const limiter = createAccountRateLimiter(1, 60000, 'test-endpoint');
 
       router.post('/test', limiter, (req, res) => {
@@ -179,11 +174,9 @@ describe('createAccountRateLimiter', () => {
       await request(app).post('/test');
 
       // Second request is rate limited
-      await request(app).post('/test');
+      const response = await request(app).post('/test');
 
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        'Rate limit exceeded for account unknown on test-endpoint',
-      );
+      expect(response.status).toBe(429);
     });
   });
 

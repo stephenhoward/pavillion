@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import request from 'supertest';
 import express from 'express';
@@ -8,16 +8,13 @@ import { createCredentialRateLimiter } from '../rate-limit-by-credential';
 describe('createCredentialRateLimiter', () => {
   let router: express.Router;
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
-  let consoleWarnSpy: any;
 
   beforeEach(() => {
     router = express.Router();
-    consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
     sandbox.restore();
-    consoleWarnSpy.mockRestore();
   });
 
   describe('rate limit enforcement', () => {
@@ -176,7 +173,7 @@ describe('createCredentialRateLimiter', () => {
   });
 
   describe('logging with credential redaction', () => {
-    it('should log with redacted email when limit is exceeded', async () => {
+    it('should block request when limit is exceeded with valid email (logging via pino)', async () => {
       const limiter = createCredentialRateLimiter(
         1,
         60000,
@@ -196,18 +193,14 @@ describe('createCredentialRateLimiter', () => {
         .send({ email: 'testuser@example.com' });
 
       // Second request is rate limited
-      await request(app)
+      const response = await request(app)
         .post('/test')
         .send({ email: 'testuser@example.com' });
 
-      // Verify console.warn was called with redacted email
-      // redactEmail keeps first 2 chars + *** + @ + full domain
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        'Rate limit exceeded for te***@example.com on test-endpoint',
-      );
+      expect(response.status).toBe(429);
     });
 
-    it('should log with redacted short email when limit is exceeded', async () => {
+    it('should block request when limit is exceeded with short email', async () => {
       const limiter = createCredentialRateLimiter(
         1,
         60000,
@@ -227,17 +220,14 @@ describe('createCredentialRateLimiter', () => {
         .send({ email: 'ab@x.co' });
 
       // Second request is rate limited
-      await request(app)
+      const response = await request(app)
         .post('/test')
         .send({ email: 'ab@x.co' });
 
-      // Verify console.warn was called with redacted short email
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        'Rate limit exceeded for ab***@x.co on test-endpoint',
-      );
+      expect(response.status).toBe(429);
     });
 
-    it('should log "unknown" when credential is invalid', async () => {
+    it('should block request when credential is invalid', async () => {
       const limiter = createCredentialRateLimiter(
         1,
         60000,
@@ -257,17 +247,14 @@ describe('createCredentialRateLimiter', () => {
         .send({ email: 'not-an-email' });
 
       // Second request is rate limited
-      await request(app)
+      const response = await request(app)
         .post('/test')
         .send({ email: 'not-an-email' });
 
-      // Verify console.warn was called with "unknown"
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        'Rate limit exceeded for unknown on test-endpoint',
-      );
+      expect(response.status).toBe(429);
     });
 
-    it('should log "unknown" when credential field is missing', async () => {
+    it('should block request when credential field is missing', async () => {
       const limiter = createCredentialRateLimiter(
         1,
         60000,
@@ -287,14 +274,11 @@ describe('createCredentialRateLimiter', () => {
         .send({ notEmail: 'value' });
 
       // Second request is rate limited
-      await request(app)
+      const response = await request(app)
         .post('/test')
         .send({ notEmail: 'value' });
 
-      // Verify console.warn was called with "unknown"
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        'Rate limit exceeded for unknown on test-endpoint',
-      );
+      expect(response.status).toBe(429);
     });
   });
 

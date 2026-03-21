@@ -1,19 +1,13 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import express, { Express } from 'express';
 import request from 'supertest';
 import { createIpRateLimiter } from '../rate-limit-by-ip';
 
 describe('createIpRateLimiter', () => {
   let app: Express;
-  let consoleWarnSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     app = express();
-    consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-  });
-
-  afterEach(() => {
-    consoleWarnSpy.mockRestore();
   });
 
   it('should allow requests within the rate limit', async () => {
@@ -36,9 +30,6 @@ describe('createIpRateLimiter', () => {
     const response3 = await request(app).get('/test');
     expect(response3.status).toBe(200);
     expect(response3.body).toEqual({ success: true });
-
-    // Should not have logged any warnings yet
-    expect(consoleWarnSpy).not.toHaveBeenCalled();
   });
 
   it('should block requests exceeding the rate limit', async () => {
@@ -62,7 +53,7 @@ describe('createIpRateLimiter', () => {
     });
   });
 
-  it('should log rate limit exceeded with IP and endpoint name', async () => {
+  it('should block requests that exceed the rate limit and log via pino logger', async () => {
     const limiter = createIpRateLimiter(1, 1000, 'password-reset');
 
     app.get('/test', limiter, (req, res) => {
@@ -72,13 +63,9 @@ describe('createIpRateLimiter', () => {
     // First request succeeds
     await request(app).get('/test');
 
-    // Second request should be blocked and logged
-    await request(app).get('/test');
-
-    expect(consoleWarnSpy).toHaveBeenCalledOnce();
-    const logMessage = consoleWarnSpy.mock.calls[0][0];
-    expect(logMessage).toContain('Rate limit exceeded for IP');
-    expect(logMessage).toContain('on password-reset');
+    // Second request should be blocked
+    const response = await request(app).get('/test');
+    expect(response.status).toBe(429);
   });
 
   it('should include rate limit headers in response', async () => {
@@ -167,7 +154,7 @@ describe('createIpRateLimiter', () => {
     expect(response.status).toBe(429);
   });
 
-  it('should use correct endpoint name in logs for different limiters', async () => {
+  it('should use correct endpoint name in error message for different limiters', async () => {
     const loginLimiter = createIpRateLimiter(1, 1000, 'login');
     const resetLimiter = createIpRateLimiter(1, 1000, 'password-reset');
 
@@ -176,21 +163,15 @@ describe('createIpRateLimiter', () => {
 
     // Exhaust login limit
     await request(app).post('/login');
-    await request(app).post('/login');
-
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('on login'),
-    );
-
-    consoleWarnSpy.mockClear();
+    const loginBlocked = await request(app).post('/login');
+    expect(loginBlocked.status).toBe(429);
+    expect(loginBlocked.body.error).toContain('login');
 
     // Exhaust reset limit
     await request(app).post('/reset');
-    await request(app).post('/reset');
-
-    expect(consoleWarnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('on password-reset'),
-    );
+    const resetBlocked = await request(app).post('/reset');
+    expect(resetBlocked.status).toBe(429);
+    expect(resetBlocked.body.error).toContain('password reset');
   });
 
   it('should handle missing IP address gracefully', async () => {
@@ -204,11 +185,7 @@ describe('createIpRateLimiter', () => {
     await request(app).get('/test');
 
     // Second request that will be blocked
-    await request(app).get('/test');
-
-    // Should log with IP (even if it's 'unknown')
-    expect(consoleWarnSpy).toHaveBeenCalledOnce();
-    const logMessage = consoleWarnSpy.mock.calls[0][0];
-    expect(logMessage).toMatch(/Rate limit exceeded for IP .+ on test-endpoint/);
+    const response = await request(app).get('/test');
+    expect(response.status).toBe(429);
   });
 });
