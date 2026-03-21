@@ -58,6 +58,7 @@ describe('createIpRateLimiter', () => {
     expect(response.status).toBe(429);
     expect(response.body).toEqual({
       error: "Too many test-endpoint requests from this IP, please try again later.",
+      errorName: 'RateLimitError',
     });
   });
 

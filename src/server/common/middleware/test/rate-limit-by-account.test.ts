@@ -68,6 +68,7 @@ describe('createAccountRateLimiter', () => {
       expect(response.body.error).toBe(
         'Too many test-endpoint requests for this account, please try again later.',
       );
+      expect(response.body.errorName).toBe('RateLimitError');
     });
 
     it('should track limits per account separately', async () => {

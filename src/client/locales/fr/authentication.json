@@ -10,7 +10,8 @@
     "UnknownLogin": "adresse e-mail ou mot de passe inconnu",
     "MissingLogin": "adresse e-mail ou mot de passe manquant",
     "400": "erreur de connexion",
-    "unknown_error": "Une erreur inconnue s'est produite"
+    "unknown_error": "Une erreur inconnue s'est produite",
+    "RateLimitError": "Trop de demandes. Veuillez réessayer plus tard."
   },
   "forgot_password": {
     "title": "Mot de passe oublié ?",
@@ -21,7 +22,8 @@
     "error_400": "Il y a un problème avec l'adresse e-mail que vous avez saisie",
     "error_404": "Nous n'avons pas trouvé de compte avec cette adresse e-mail",
     "error_500": "Oups. Le serveur a rencontré une erreur. Veuillez contacter le support",
-    "no_email_provided": "Veuillez entrer votre adresse e-mail"
+    "no_email_provided": "Veuillez entrer votre adresse e-mail",
+    "RateLimitError": "Trop de demandes. Veuillez réessayer plus tard."
   },
   "reset_password": {
     "check_email_title": "Réinitialisation envoyée",

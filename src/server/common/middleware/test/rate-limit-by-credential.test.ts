@@ -354,6 +354,7 @@ describe('createCredentialRateLimiter', () => {
       expect(response.body.error).toBe(
         'Too many test-endpoint requests for this email, please try again later.',
       );
+      expect(response.body).toHaveProperty('errorName', 'RateLimitError');
     });
 
     it('should include rate limit headers', async () => {

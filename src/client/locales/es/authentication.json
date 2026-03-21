@@ -10,7 +10,8 @@
     "UnknownLogin": "correo o contraseña desconocidos",
     "MissingLogin": "falta correo o contraseña",
     "400": "error al iniciar sesión",
-    "unknown_error": "Ocurrió un error desconocido"
+    "unknown_error": "Ocurrió un error desconocido",
+    "RateLimitError": "Demasiadas solicitudes. Por favor intenta de nuevo más tarde."
   },
   "forgot_password": {
     "title": "¿Olvidaste tu contraseña?",
@@ -21,7 +22,8 @@
     "error_400": "Hay un problema con el correo que enviaste",
     "error_404": "No pudimos encontrar una cuenta con ese correo electrónico",
     "error_500": "Ups. El servidor tuvo un error. Por favor contacta a soporte",
-    "no_email_provided": "Por favor ingresa tu correo electrónico"
+    "no_email_provided": "Por favor ingresa tu correo electrónico",
+    "RateLimitError": "Demasiadas solicitudes. Por favor intenta de nuevo más tarde."
   },
   "reset_password": {
     "check_email_title": "Restablecimiento de Contraseña Enviado",
