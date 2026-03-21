@@ -1,4 +1,7 @@
 import express, { Request, Response, Application } from 'express';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('calendar');
 
 import { Account } from '@/common/model/account';
 import ExpressHelper from '@/server/common/helper/express';
@@ -80,7 +83,7 @@ class WidgetConfigRoutes {
         });
       }
       else {
-        console.error("Error getting widget domain:", error);
+        logger.error({ err: error }, 'Error getting widget domain');
         res.status(500).json({
           "error": "An error occurred while getting widget domain",
         });
@@ -164,7 +167,7 @@ class WidgetConfigRoutes {
         });
       }
       else {
-        console.error("Error setting widget domain:", error);
+        logger.error({ err: error }, 'Error setting widget domain');
         res.status(500).json({
           "error": "An error occurred while setting widget domain",
         });
@@ -223,7 +226,7 @@ class WidgetConfigRoutes {
         });
       }
       else {
-        console.error("Error clearing widget domain:", error);
+        logger.error({ err: error }, 'Error clearing widget domain');
         res.status(500).json({
           "error": "An error occurred while clearing widget domain",
         });

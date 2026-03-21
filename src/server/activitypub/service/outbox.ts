@@ -2,6 +2,9 @@ import { DateTime } from "luxon";
 import { EventEmitter } from "events";
 import axios from "axios";
 import { logError } from '@/server/common/helper/error-logger';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('activitypub');
 
 import { Calendar } from "@/common/model/calendar";
 import { ActivityPubOutboxMessageEntity, EventActivityEntity, FollowerCalendarEntity, FollowingCalendarEntity } from "@/server/activitypub/entity/activitypub";
@@ -69,7 +72,7 @@ class ProcessOutboxService {
     let activity = null;
     let recipients: string[] = [];
 
-    console.log(`[OUTBOX] Processing ${message.type} activity for calendar ${calendar.urlName}`);
+    logger.info({ activityType: message.type, calendarUrlName: calendar.urlName }, 'Processing outbox activity');
 
     switch( message.type ) {
       case 'Create':
@@ -128,7 +131,7 @@ class ProcessOutboxService {
         // Check if the activity has explicit recipients in the 'to' field
         if (activity.to && activity.to.length > 0) {
           recipients = activity.to;
-          console.log(`[OUTBOX] Using explicit recipients from 'to' field for Undo activity: ${recipients.join(', ')}`);
+          logger.info({ recipients }, 'Using explicit recipients from to field for Undo activity');
         }
         else {
           recipients = await this.getRecipients(calendar, activity.object);
@@ -142,13 +145,13 @@ class ProcessOutboxService {
         // For Flag activities, use explicit 'to' field if present
         if (activity.to && activity.to.length > 0) {
           recipients = activity.to;
-          console.log(`[OUTBOX] Using explicit recipients from 'to' field for Flag activity: ${recipients.join(', ')}`);
+          logger.info({ recipients }, 'Using explicit recipients from to field for Flag activity');
         }
         break;
     }
 
     if ( activity ) {
-      console.log(`[OUTBOX] Found ${recipients.length} recipients for ${message.type} activity`);
+      logger.info({ recipientCount: recipients.length, activityType: message.type }, 'Found recipients for activity');
 
       let deliveryErrors: string[] = [];
 

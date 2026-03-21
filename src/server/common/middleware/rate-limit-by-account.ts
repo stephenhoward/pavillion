@@ -1,6 +1,9 @@
 import rateLimit from 'express-rate-limit';
 import type { Request, Response } from 'express';
 import { Account } from '@/common/model/account';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('ratelimit');
 
 /**
  * Creates an account-based rate limiter middleware using express-rate-limit.
@@ -41,9 +44,7 @@ export function createAccountRateLimiter(
       const account = req.user as Account;
       const accountId = account?.id || 'unknown';
 
-      console.warn(
-        `Rate limit exceeded for account ${accountId} on ${endpointName}`,
-      );
+      logger.warn({ accountId, endpoint: endpointName }, 'Rate limit exceeded');
 
       res.status(429).json({
         error: `Too many ${endpointName} requests for this account, please try again later.`,

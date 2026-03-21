@@ -25,6 +25,9 @@ import EditorInvitationEmail from '@/server/calendar/model/editor_invitation_ema
 import { isValidLanguageCode } from '@/common/i18n/languages';
 import { ValidationError } from '@/common/exceptions/base';
 import { logError } from '@/server/common/helper/error-logger';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('accounts');
 
 type AccountInfo = {
   account: Account,
@@ -411,7 +414,7 @@ export default class AccountService {
 
       const grantingAccount = await this.getAccountById(inv.invited_by);
       if (!grantingAccount) {
-        console.error('Inviting account not found for invitation ID:', inv.id);
+        logger.error({ invitationId: inv.id }, 'Inviting account not found for invitation');
         continue; // Skip this invitation but continue with others
       }
 

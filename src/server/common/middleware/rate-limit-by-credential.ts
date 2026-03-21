@@ -1,6 +1,9 @@
 import rateLimit from 'express-rate-limit';
 import type { Request, Response } from 'express';
 import { redactEmail } from '@/server/common/helpers/redact-email';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('ratelimit');
 
 /**
  * Creates a credential-based rate limiter middleware using express-rate-limit.
@@ -43,9 +46,7 @@ export function createCredentialRateLimiter(
       const credential = req.body?.[credentialField];
       const redactedCredential = redactEmail(credential);
 
-      console.warn(
-        `Rate limit exceeded for ${redactedCredential} on ${endpointName}`,
-      );
+      logger.warn({ credential: redactedCredential, endpoint: endpointName }, 'Rate limit exceeded');
 
       // Generate endpoint-specific error message
       const errorMessage = endpointName === 'password-reset'

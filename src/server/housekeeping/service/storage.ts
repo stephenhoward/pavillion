@@ -2,6 +2,9 @@ import * as fs from 'fs';
 import config from 'config';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
 import { logError } from '@/server/common/helper/error-logger';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('housekeeping');
 
 /**
  * Storage statistics for backup storage volume
@@ -60,10 +63,10 @@ export default class StorageService {
     try {
       if (fs.existsSync(filename)) {
         fs.unlinkSync(filename);
-        console.log(`[Storage] Deleted backup file: ${filename}`);
+        logger.info({ filename }, 'Deleted backup file');
       }
       else {
-        console.warn(`[Storage] Backup file not found, skipping deletion: ${filename}`);
+        logger.warn({ filename }, 'Backup file not found, skipping deletion');
       }
     }
     catch (error) {

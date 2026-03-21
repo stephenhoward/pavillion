@@ -9,6 +9,9 @@ import AccountsInterface from '@/server/accounts/interface';
 import { EmailAlreadyExistsError, InvalidPasswordError } from '@/server/authentication/exceptions';
 import AuthenticationInterface from '@/server/authentication/interface';
 import { logError } from '@/server/common/helper/error-logger';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('authentication');
 import {
   passwordResetByIp,
   passwordResetByEmail,
@@ -89,7 +92,7 @@ export default class AuthenticationRouteHandlers {
     }
     catch (error) {
       if ( error instanceof noAccountExistsError ) {
-        console.info('Password reset code requested for non-existent account');
+        logger.info('Password reset code requested for non-existent account');
       }
       else {
         logError(error, 'Error generating password reset code');

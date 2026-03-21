@@ -2,6 +2,9 @@ import express, { Request, Response, Application } from 'express';
 import SetupInterface from '@/server/setup/interface';
 import { validatePassword } from '@/common/validation/password';
 import { isValidLanguageCode, DEFAULT_LANGUAGE_CODE } from '@/common/i18n/languages';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('setup');
 
 /**
  * API route handlers for first-run setup.
@@ -39,7 +42,7 @@ export default class SetupRouteHandlers {
       res.json({ setupRequired });
     }
     catch (error) {
-      console.error('Error checking setup status:', error);
+      logger.error({ error }, 'Error checking setup status');
       res.status(500).json({ error: 'Failed to check setup status' });
     }
   }
@@ -123,7 +126,7 @@ export default class SetupRouteHandlers {
       });
     }
     catch (error) {
-      console.error('Error completing setup:', error);
+      logger.error({ error }, 'Error completing setup');
       res.status(500).json({ error: 'Failed to complete setup' });
     }
   }

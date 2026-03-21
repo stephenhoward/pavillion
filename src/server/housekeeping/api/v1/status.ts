@@ -7,6 +7,9 @@ import BackupService from '@/server/housekeeping/service/backup';
 import StorageService from '@/server/housekeeping/service/storage';
 import DiskMonitorService from '@/server/housekeeping/service/disk-monitor';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('housekeeping');
 
 /**
  * Route handlers for housekeeping status API.
@@ -84,7 +87,7 @@ export default class HousekeepingStatusRoutes {
       });
     }
     catch (error) {
-      console.error('[Housekeeping Status API] Error getting status:', error);
+      logger.error({ err: error }, 'Error getting housekeeping status');
       res.status(500).json({ error: 'Failed to get housekeeping status' });
     }
   }

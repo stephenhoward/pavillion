@@ -2,6 +2,9 @@ import PgBoss from 'pg-boss';
 import config from 'config';
 import { Client } from 'pg';
 import { logError } from '@/server/common/helper/error-logger';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('housekeeping');
 
 /**
  * Database configuration interface matching Sequelize config structure
@@ -82,7 +85,7 @@ export default class JobQueueService {
 
       await this.boss.start();
       this.started = true;
-      console.log('[JobQueue] pg-boss connected and started');
+      logger.info('pg-boss connected and started');
     }
     catch (error) {
       logError(error, '[Housekeeping] Failed to start pg-boss');
@@ -98,7 +101,7 @@ export default class JobQueueService {
     if (this.boss) {
       await this.boss.stop();
       this.started = false;
-      console.log('[JobQueue] pg-boss stopped');
+      logger.info('pg-boss stopped');
     }
   }
 
@@ -116,7 +119,7 @@ export default class JobQueueService {
     }
 
     const jobId = await this.boss.send(jobName, data);
-    console.log(`[JobQueue] Published job ${jobName} with ID ${jobId}`);
+    logger.info({ jobName, jobId }, 'Published job');
     return jobId;
   }
 
@@ -168,10 +171,10 @@ export default class JobQueueService {
       const result = await client.query(query, values);
 
       if (result.rows.length > 0) {
-        console.log(`[JobQueue] Created queue: ${queueName}`);
+        logger.info({ queueName }, 'Created queue');
       }
       else {
-        console.log(`[JobQueue] Queue already exists: ${queueName}`);
+        logger.info({ queueName }, 'Queue already exists');
       }
     }
     catch (error) {
@@ -200,9 +203,9 @@ export default class JobQueueService {
 
     await this.boss.work(jobName, async (job) => {
       try {
-        console.log(`[JobQueue] Processing job ${jobName} (ID: ${job.id})`);
+        logger.info({ jobName, jobId: job.id }, 'Processing job');
         await handler(job.data);
-        console.log(`[JobQueue] Completed job ${jobName} (ID: ${job.id})`);
+        logger.info({ jobName, jobId: job.id }, 'Completed job');
       }
       catch (error) {
         logError(error, `[Housekeeping] Error processing job ${jobName} (ID: ${job.id})`);
@@ -210,7 +213,7 @@ export default class JobQueueService {
       }
     });
 
-    console.log(`[JobQueue] Subscribed to ${jobName}`);
+    logger.info({ jobName }, 'Subscribed to job queue');
   }
 
   /**
@@ -231,7 +234,7 @@ export default class JobQueueService {
 
     // Schedule the job with cron expression
     await this.boss.schedule(jobName, cronExpression, data || {} as T);
-    console.log(`[JobQueue] Scheduled ${jobName} with cron: ${cronExpression}`);
+    logger.info({ jobName, cronExpression }, 'Scheduled job');
   }
 
   /**

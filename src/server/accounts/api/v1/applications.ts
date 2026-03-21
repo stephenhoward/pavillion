@@ -7,6 +7,9 @@ import {
   AccountApplicationsClosedError,
 } from '@/server/accounts/exceptions';
 import { logError } from '@/server/common/helper/error-logger';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('accounts');
 
 export default class AccountApplicationRouteHandlers {
   private service: AccountsInterface;
@@ -30,11 +33,11 @@ export default class AccountApplicationRouteHandlers {
     catch (error) {
       if (error instanceof AccountAlreadyExistsError) {
         // Log internally but don't reveal account existence to requester
-        console.info('Application attempted for existing account:', req.body.email);
+        logger.info({ email: req.body.email }, 'Application attempted for existing account');
       }
       else if (error instanceof AccountApplicationAlreadyExistsError) {
         // Log internally but don't reveal application existence to requester
-        console.info('Duplicate application attempted for:', req.body.email);
+        logger.info({ email: req.body.email }, 'Duplicate application attempted');
       }
       else if (error instanceof AccountApplicationsClosedError) {
         // This is a system state error, not an enumeration risk, so reveal it

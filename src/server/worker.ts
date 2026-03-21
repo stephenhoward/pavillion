@@ -13,6 +13,9 @@ import CalendarInterface from '@/server/calendar/interface';
 import IpCleanupService from '@/server/moderation/service/ip-cleanup';
 import NotificationService from '@/server/notifications/service/notification';
 import ActivityPubInterface from '@/server/activitypub/interface';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('worker');
 
 /**
  * Worker mode entrypoint for Pavillion.
@@ -43,42 +46,42 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
 
   // Manual backup job handler (triggered via API/CLI)
   await queue.subscribe('backup:create', async (data: any) => {
-    console.log('[Worker] Executing manual backup job');
+    logger.info('Executing manual backup job');
     try {
       const type = data?.type || 'manual';
       const metadata = await backupService.createBackup(type);
-      console.log(`[Worker] Manual backup completed: ${metadata.filename}`);
+      logger.info({ filename: metadata.filename }, 'Manual backup completed');
 
       // Trigger retention enforcement after successful manual backup
-      console.log('[Worker] Triggering retention enforcement');
+      logger.info('Triggering retention enforcement');
       await retentionService.enforceRetention();
     }
     catch (error) {
-      console.error('[Worker] Manual backup failed:', error);
+      logger.error({ err: error }, 'Manual backup failed');
       throw error;
     }
   });
 
   // Backup job handler (scheduled daily at 2 AM)
   await queue.schedule('backup:daily', '0 2 * * *', async (data) => {
-    console.log('[Worker] Executing backup:daily job');
+    logger.info('Executing backup:daily job');
     try {
       const metadata = await backupService.createBackup('scheduled');
-      console.log(`[Worker] Backup completed: ${metadata.filename}`);
+      logger.info({ filename: metadata.filename }, 'Backup completed');
 
       // Trigger retention enforcement after successful backup
-      console.log('[Worker] Triggering retention enforcement');
+      logger.info('Triggering retention enforcement');
       await retentionService.enforceRetention();
     }
     catch (error) {
-      console.error('[Worker] Backup failed:', error);
+      logger.error({ err: error }, 'Backup failed');
       throw error;
     }
   });
 
   // Disk check job handler (runs hourly)
   await queue.schedule('disk:check', '0 * * * *', async (data) => {
-    console.log('[Worker] Executing disk:check job');
+    logger.info('Executing disk:check job');
     try {
       // Get configuration
       const backupPath = config.get<string>('housekeeping.backup.path');
@@ -88,12 +91,11 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
       // Check disk usage
       const usage = await diskMonitorService.checkDiskUsage(backupPath);
 
-      console.log(`[Worker] Disk usage check: ${usage.percentageUsed.toFixed(1)}% used at ${backupPath}`);
-      console.log(`[Worker] Free space: ${diskMonitorService.formatBytes(usage.freeBytes)}`);
+      logger.info({ percentageUsed: usage.percentageUsed.toFixed(1), backupPath, freeBytes: diskMonitorService.formatBytes(usage.freeBytes) }, 'Disk usage check');
 
       // Check thresholds and send alerts
       if (diskMonitorService.isCriticalThreshold(usage.percentageUsed, criticalThreshold)) {
-        console.log(`[Worker] CRITICAL threshold exceeded (${criticalThreshold}%)`);
+        logger.warn({ criticalThreshold }, 'CRITICAL disk threshold exceeded');
         await alertsService.sendDiskCritical(
           usage.percentageUsed,
           criticalThreshold,
@@ -103,7 +105,7 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
         );
       }
       else if (diskMonitorService.isWarningThreshold(usage.percentageUsed, warningThreshold, criticalThreshold)) {
-        console.log(`[Worker] Warning threshold exceeded (${warningThreshold}%)`);
+        logger.warn({ warningThreshold }, 'Warning disk threshold exceeded');
         await alertsService.sendDiskWarning(
           usage.percentageUsed,
           warningThreshold,
@@ -113,46 +115,46 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
         );
       }
       else {
-        console.log('[Worker] Disk usage within normal limits');
+        logger.info('Disk usage within normal limits');
       }
     }
     catch (error) {
-      console.error('[Worker] Disk check failed:', error);
+      logger.error({ err: error }, 'Disk check failed');
       // Don't throw - allow monitoring to continue on next scheduled check
     }
   });
 
   // IP cleanup job handler (runs daily at 3 AM)
   await queue.schedule('moderation:ip-cleanup', '0 3 * * *', async (data) => {
-    console.log('[Worker] Executing moderation:ip-cleanup job');
+    logger.info('Executing moderation:ip-cleanup job');
     try {
       // Get retention configuration
       const hashRetentionDays = config.get<number>('moderation.retention.ipHash');
       const subnetRetentionDays = config.get<number>('moderation.retention.ipSubnet');
 
-      console.log(`[Worker] IP cleanup policy: ${hashRetentionDays} days for hashes, ${subnetRetentionDays} days for subnets`);
+      logger.info({ hashRetentionDays, subnetRetentionDays }, 'IP cleanup policy');
 
       // Execute cleanup
       const result = await ipCleanupService.cleanupExpiredIpData(hashRetentionDays, subnetRetentionDays);
 
-      console.log(`[Worker] IP cleanup completed: ${result.hashCleared} hashes cleared, ${result.subnetCleared} subnets cleared`);
+      logger.info({ hashCleared: result.hashCleared, subnetCleared: result.subnetCleared }, 'IP cleanup completed');
     }
     catch (error) {
-      console.error('[Worker] IP cleanup failed:', error);
+      logger.error({ err: error }, 'IP cleanup failed');
       throw error;
     }
   });
 
   // Notification cleanup job handler (runs daily at 4 AM)
   await queue.schedule('notifications:cleanup', '0 4 * * *', async () => {
-    console.log('[Worker] Executing notifications:cleanup job');
+    logger.info('Executing notifications:cleanup job');
     try {
       const service = new NotificationService();
       await service.deleteOldNotifications();
-      console.log('[Worker] Notification cleanup completed');
+      logger.info('Notification cleanup completed');
     }
     catch (error) {
-      console.error('[Worker] Notification cleanup failed:', error);
+      logger.error({ err: error }, 'Notification cleanup failed');
       throw error;
     }
   });
@@ -162,15 +164,15 @@ async function registerJobHandlers(queue: JobQueueService): Promise<void> {
     'inbox:cleanup',
     config.get<string>('housekeeping.inbox.schedule'),
     async () => {
-      console.log('[Worker] Executing inbox:cleanup job');
+      logger.info('Executing inbox:cleanup job');
       try {
         const retentionDays = config.get<number>('housekeeping.inbox.retentionDays');
         const batchSize = config.get<number>('housekeeping.inbox.batchSize');
         const count = await activityPubInterface.cleanupProcessedInboxMessages(retentionDays, batchSize);
-        console.log(`[Worker] Inbox cleanup completed: ${count} messages deleted`);
+        logger.info({ count }, 'Inbox cleanup completed');
       }
       catch (error) {
-        console.error('[Worker] Inbox cleanup failed:', error);
+        logger.error({ err: error }, 'Inbox cleanup failed');
         throw error;
       }
     },
@@ -212,30 +214,33 @@ function getNextRunTime(cronExpression: string): string {
  * Logs prominent startup messages showing worker mode and registered jobs.
  */
 function logStartupMessages(): void {
-  console.log('[Pavillion] Starting in worker mode');
-  console.log('[Pavillion] pg-boss queue: connected');
-  console.log('[Pavillion] Scheduled jobs registered:');
-  console.log(`  - backup:daily at 2:00 AM (next: ${getNextRunTime('0 2 * * *')})`);
-  console.log(`  - moderation:ip-cleanup at 3:00 AM (next: ${getNextRunTime('0 3 * * *')})`);
-  console.log(`  - disk:check hourly (next: ${getNextRunTime('0 * * * *')})`);
-  console.log(`  - notifications:cleanup at 4:00 AM (next: ${getNextRunTime('0 4 * * *')})`);
-  console.log(`  - inbox:cleanup at 5:00 AM (next: ${getNextRunTime('0 5 * * *')})`);
-  console.log('  - backup:create (manual backups via CLI/API)');
-  console.log('[Pavillion] Worker ready, processing jobs...');
+  logger.info('Starting in worker mode');
+  logger.info('pg-boss queue: connected');
+  logger.info({
+    jobs: {
+      'backup:daily': `next: ${getNextRunTime('0 2 * * *')}`,
+      'moderation:ip-cleanup': `next: ${getNextRunTime('0 3 * * *')}`,
+      'disk:check': `next: ${getNextRunTime('0 * * * *')}`,
+      'notifications:cleanup': `next: ${getNextRunTime('0 4 * * *')}`,
+      'inbox:cleanup': `next: ${getNextRunTime('0 5 * * *')}`,
+      'backup:create': 'manual',
+    },
+  }, 'Scheduled jobs registered');
+  logger.info('Worker ready, processing jobs...');
 }
 
 /**
  * Handles graceful shutdown of worker process.
  */
 async function handleShutdown(signal: string): Promise<void> {
-  console.log(`[Worker] Received ${signal}, shutting down gracefully...`);
+  logger.info({ signal }, 'Received signal, shutting down gracefully');
 
   if (jobQueue) {
     await jobQueue.stop();
   }
 
   await db.close();
-  console.log('[Worker] Shutdown complete');
+  logger.info('Shutdown complete');
   process.exit(0);
 }
 
@@ -245,9 +250,9 @@ async function handleShutdown(signal: string): Promise<void> {
 async function startWorker(): Promise<void> {
   try {
     // Initialize database connection
-    console.log('[Worker] Connecting to database...');
+    logger.info('Connecting to database...');
     await db.authenticate();
-    console.log('[Worker] Database connected');
+    logger.info('Database connected');
 
     // Initialize pg-boss in processing mode
     jobQueue = new JobQueueService();
@@ -264,7 +269,7 @@ async function startWorker(): Promise<void> {
     process.on('SIGINT', () => handleShutdown('SIGINT'));
   }
   catch (error) {
-    console.error('[Worker] Failed to start:', error);
+    logger.error({ err: error }, 'Failed to start worker');
     process.exit(1);
   }
 }

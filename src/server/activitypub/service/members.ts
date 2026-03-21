@@ -2,6 +2,10 @@ import { EventEmitter } from "events";
 import config from 'config';
 import axios from 'axios';
 
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('activitypub');
+
 import { Account } from "@/common/model/account";
 import { Calendar } from "@/common/model/calendar";
 import { FollowingCalendar, FollowerCalendar } from "@/common/model/follow";
@@ -189,7 +193,7 @@ class ActivityPubService {
 
     let actor = await this.actorUrl(calendar);
 
-    console.log(`[MemberService] Following ${orgIdentifier} with ActivityPub URL: ${remoteActorUrl}`);
+    logger.info({ orgIdentifier, remoteActorUrl }, 'Following remote calendar');
 
     // Create Follow activity targeting the remote calendar's actor URL
     let followActivity = new FollowActivity(actor, remoteActorUrl);
@@ -299,7 +303,7 @@ class ActivityPubService {
     }
 
     if (!eventUrl.match("^https:\/\/")) {
-      console.warn('[MemberService] shareEvent rejected invalid event URL (not https):', eventUrl);
+      logger.warn({ eventUrl }, 'shareEvent rejected invalid event URL (not https)');
       throw new InvalidSharedEventUrlError('Invalid shared event URL');
     }
 
@@ -338,7 +342,7 @@ class ActivityPubService {
                 ap_id: canonicalEventUrl,
                 attributed_to: localActorUrl,
               });
-              console.log('[MemberService] shareEvent: created EventObjectEntity on-the-fly for local event:', localEvent.id);
+              logger.info({ eventId: localEvent.id }, 'shareEvent: created EventObjectEntity on-the-fly for local event');
             }
           }
         }
@@ -348,7 +352,7 @@ class ActivityPubService {
     // Step 3: If we still have no EventObjectEntity, the provided URL does not correspond
     // to a valid local event or a known remote event. Reject the request.
     if (!eventObject) {
-      console.warn('[MemberService] shareEvent: no EventObjectEntity found for URL:', eventUrl);
+      logger.warn({ eventUrl }, 'shareEvent: no EventObjectEntity found for URL');
       throw new InvalidSharedEventUrlError('Invalid shared event URL');
     }
 

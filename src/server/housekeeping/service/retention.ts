@@ -4,6 +4,9 @@ import config from 'config';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
 import { logError } from '@/server/common/helper/error-logger';
 import { Op } from 'sequelize';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('housekeeping');
 
 /**
  * Retention service for managing backup lifecycle according to GFS policy.
@@ -29,8 +32,7 @@ export default class RetentionService {
    * backups exceeding the configured retention limits.
    */
   async enforceRetention(): Promise<void> {
-    console.log('[Retention] Enforcing GFS retention policy');
-    console.log(`[Retention] Limits: ${this.retentionLimits.daily} daily, ${this.retentionLimits.weekly} weekly, ${this.retentionLimits.monthly} monthly`);
+    logger.info({ limits: this.retentionLimits }, 'Enforcing GFS retention policy');
 
     try {
       // Enforce retention for each category
@@ -38,7 +40,7 @@ export default class RetentionService {
       await this.enforceRetentionForCategory('weekly', this.retentionLimits.weekly);
       await this.enforceRetentionForCategory('monthly', this.retentionLimits.monthly);
 
-      console.log('[Retention] Retention enforcement completed');
+      logger.info('Retention enforcement completed');
     }
     catch (error) {
       logError(error, '[Housekeeping] Failed to enforce retention policy');
@@ -66,13 +68,13 @@ export default class RetentionService {
     });
 
     if (backups.length <= limit) {
-      console.log(`[Retention] ${category}: ${backups.length} backups (within limit of ${limit})`);
+      logger.info({ category, count: backups.length, limit }, 'Backups within retention limit');
       return;
     }
 
     // Identify excess backups (beyond retention limit)
     const excessBackups = backups.slice(limit);
-    console.log(`[Retention] ${category}: Deleting ${excessBackups.length} excess backups (${backups.length} total, limit ${limit})`);
+    logger.info({ category, excessCount: excessBackups.length, total: backups.length, limit }, 'Deleting excess backups');
 
     // Delete excess backup files
     for (const backup of excessBackups) {
@@ -92,10 +94,10 @@ export default class RetentionService {
       // Delete file from filesystem
       if (fs.existsSync(fullPath)) {
         fs.unlinkSync(fullPath);
-        console.log(`[Retention] Deleted backup file: ${backup.filename}`);
+        logger.info({ filename: backup.filename }, 'Deleted backup file');
       }
       else {
-        console.warn(`[Retention] Backup file not found, skipping deletion: ${backup.filename}`);
+        logger.warn({ filename: backup.filename }, 'Backup file not found, skipping deletion');
       }
 
       // Update metadata to mark as deleted
@@ -103,7 +105,7 @@ export default class RetentionService {
         verified: false, // Mark as no longer verified since file is gone
       });
 
-      console.log(`[Retention] Updated metadata for deleted backup: ${backup.id}`);
+      logger.info({ backupId: backup.id }, 'Updated metadata for deleted backup');
     }
     catch (error) {
       logError(error, `[Housekeeping] Failed to delete backup ${backup.filename}`);

@@ -2,6 +2,9 @@ import { Umzug, SequelizeStorage } from 'umzug';
 import { Sequelize } from 'sequelize-typescript';
 import path from 'path';
 import fs from 'fs';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('migrations');
 
 /**
  * Result of a migration run.
@@ -54,7 +57,7 @@ export function createMigrationRunner(
     },
     context: sequelize,
     storage: new SequelizeStorage({ sequelize }),
-    logger: console,
+    logger,
   });
 }
 
@@ -77,7 +80,7 @@ export async function runMigrations(
     const pendingNames = pending.map((m) => m.name);
 
     if (pendingNames.length === 0) {
-      console.log('No pending migrations to run.');
+      logger.info('No pending migrations to run');
       return {
         success: true,
         executed: [],
@@ -85,13 +88,13 @@ export async function runMigrations(
       };
     }
 
-    console.log(`Found ${pendingNames.length} pending migration(s): ${pendingNames.join(', ')}`);
+    logger.info({ count: pendingNames.length, migrations: pendingNames }, 'Pending migrations found');
 
     // Run all pending migrations
     const executed = await umzug.up();
     const executedNames = executed.map((m) => m.name);
 
-    console.log(`Successfully executed ${executedNames.length} migration(s).`);
+    logger.info({ count: executedNames.length }, 'Migrations executed successfully');
 
     return {
       success: true,
@@ -100,7 +103,7 @@ export async function runMigrations(
     };
   }
   catch (error) {
-    console.error('Migration failed:', error);
+    logger.error({ err: error }, 'Migration failed');
     return {
       success: false,
       executed: [],

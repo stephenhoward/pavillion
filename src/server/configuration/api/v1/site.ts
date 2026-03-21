@@ -2,6 +2,9 @@ import config from 'config';
 import express, { Request, Response } from 'express';
 import ExpressHelper from '../../../common/helper/express';
 import ConfigurationInterface from '@/server/configuration/interface';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('configuration');
 
 // Settings keys whose values are serialized as JSON strings for storage
 const JSON_SETTINGS = new Set(['enabledLanguages']);
@@ -57,7 +60,7 @@ export default class SiteRouteHandlers {
       return;
     }
     catch (error) {
-      console.error('Error updating service settings:', error);
+      logger.error({ error }, 'Error updating service settings');
       res.status(500).json({ error: 'Internal server error' });
       return;
     }

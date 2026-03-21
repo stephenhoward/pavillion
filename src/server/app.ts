@@ -2,6 +2,7 @@ import config from 'config';
 import express from 'express';
 import { isWorkerMode } from '@/server/common/helper/app-mode';
 import initPavillionServer from '@/server/server';
+import logger from '@/server/common/helper/logger';
 
 /**
  * Entrypoint for the Pavillion server application.
@@ -15,8 +16,8 @@ import initPavillionServer from '@/server/server';
 const main = async (providedApp?: express.Application): Promise<express.Application> => {
   // Check if running in worker mode
   if (isWorkerMode()) {
-    console.log('[Pavillion] Starting in worker mode');
-    console.log('[Pavillion] Job processing: enabled');
+    logger.info('Starting in worker mode');
+    logger.info('Job processing: enabled');
 
     // Import and start worker instead of web server
     await import('@/server/worker');
@@ -26,8 +27,8 @@ const main = async (providedApp?: express.Application): Promise<express.Applicat
   }
 
   // Web mode: start HTTP server
-  console.log('[Pavillion] Starting in web mode');
-  console.log('[Pavillion] Job processing: disabled (use worker container)');
+  logger.info('Starting in web mode');
+  logger.info('Job processing: disabled (use worker container)');
 
   const app: express.Application = providedApp || express();
   await initPavillionServer(app, config.get('host.port'));

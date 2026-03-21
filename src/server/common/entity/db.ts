@@ -3,6 +3,7 @@ import { Sequelize } from 'sequelize-typescript';
 import path from 'path';
 import fs from 'fs/promises';
 import { v4 as uuidv4 } from 'uuid';
+import logger from '@/server/common/helper/logger';
 
 // tests
 const db = new Sequelize( config.get('database') );
@@ -171,7 +172,7 @@ export const seedMediaFiles = async () => {
       await fs.copyFile(sourcePath, finalPath);
     }
     catch {
-      console.warn(`[seedMediaFiles] Source file not found: ${record.original_filename}`);
+      logger.warn({ filename: record.original_filename }, 'seedMediaFiles: source file not found');
     }
   }
 };
@@ -204,7 +205,7 @@ export const seedFollowData = async () => {
   }) as any;
 
   if (!followedActor) {
-    console.warn('[seedFollowData] CalendarActor for testuser_calendar not found — skipping follow seed.');
+    logger.warn('seedFollowData: CalendarActor for testuser_calendar not found, skipping follow seed');
     return;
   }
 
