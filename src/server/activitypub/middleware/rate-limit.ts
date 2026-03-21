@@ -1,5 +1,8 @@
 import { Request, Response, NextFunction, RequestHandler } from 'express';
 import config from 'config';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('activitypub');
 
 /**
  * Rate limit entry tracking request count and window expiration
@@ -281,7 +284,7 @@ export function createActorRateLimiter(
     // If no actor can be identified, allow the request but log a warning
     // The downstream handler should validate the request anyway
     if (!actorId) {
-      console.warn('[RateLimit] Could not extract actor from request, allowing request');
+      logger.warn('Could not extract actor from request, allowing request');
       return next();
     }
 
@@ -291,9 +294,7 @@ export function createActorRateLimiter(
       const retryAfterMs = store.getRetryAfter(actorId);
       const retryAfterSeconds = Math.ceil(retryAfterMs / 1000);
 
-      console.warn(
-        `[RateLimit] Rate limit exceeded for actor ${actorId} (${result.count}/${finalMaxRequests} requests)`,
-      );
+      logger.warn({ actorId, count: result.count, max: finalMaxRequests }, 'Rate limit exceeded for actor');
 
       res.setHeader('Retry-After', String(retryAfterSeconds));
       res.status(429).json({
@@ -343,7 +344,7 @@ export function createCalendarRateLimiter(
     // If no calendar can be identified, allow the request but log a warning
     // The downstream handler should validate the request anyway
     if (!calendarUrlName) {
-      console.warn('[RateLimit] Could not extract calendar from request, allowing request');
+      logger.warn('Could not extract calendar from request, allowing request');
       return next();
     }
 
@@ -353,9 +354,7 @@ export function createCalendarRateLimiter(
       const retryAfterMs = store.getRetryAfter(calendarUrlName);
       const retryAfterSeconds = Math.ceil(retryAfterMs / 1000);
 
-      console.warn(
-        `[RateLimit] Rate limit exceeded for calendar ${calendarUrlName} (${result.count}/${finalMaxRequests} requests)`,
-      );
+      logger.warn({ calendarUrlName, count: result.count, max: finalMaxRequests }, 'Rate limit exceeded for calendar');
 
       res.setHeader('Retry-After', String(retryAfterSeconds));
       res.status(429).json({

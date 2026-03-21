@@ -3,6 +3,9 @@ import { EventEmitter } from 'events';
 import { DomainEventHandlers } from '@/server/common/types/domain';
 import NotificationService from '@/server/notifications/service/notification';
 import CalendarInterface from '@/server/calendar/interface';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('notifications');
 
 export interface CalendarFollowedPayload {
   calendarId: string;
@@ -46,7 +49,7 @@ export default class NotificationEventHandlers implements DomainEventHandlers {
       }
     }
     catch (error) {
-      console.error('[Notifications] Error handling activitypub:calendar:followed:', error);
+      logger.error({ err: error }, 'Error handling activitypub:calendar:followed');
     }
   }
 
@@ -65,7 +68,7 @@ export default class NotificationEventHandlers implements DomainEventHandlers {
       }
     }
     catch (error) {
-      console.error('[Notifications] Error handling activitypub:event:reposted:', error);
+      logger.error({ err: error }, 'Error handling activitypub:event:reposted');
     }
   }
 }

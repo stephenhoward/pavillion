@@ -2,6 +2,9 @@ import axios from 'axios';
 import { logError } from '@/server/common/helper/error-logger';
 import { REMOTE_OBJECT_FETCH_TIMEOUT_MS } from '@/server/activitypub/constants';
 import { validateUrlNotPrivate } from '@/server/activitypub/helper/ip-validation';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('activitypub');
 
 /**
  * User agent string for ActivityPub federation requests.
@@ -47,11 +50,7 @@ export async function fetchRemoteObject(uri: string): Promise<Record<string, unk
     }
     catch (error) {
       if (error instanceof Error) {
-        console.error('[SECURITY] SSRF block: refused outbound fetch', {
-          event: 'ssrf_blocked',
-          uri,
-          reason: error.message,
-        });
+        logger.error({ uri, reason: error.message }, 'SSRF block: refused outbound fetch');
       }
       return null;
     }
@@ -66,7 +65,7 @@ export async function fetchRemoteObject(uri: string): Promise<Record<string, unk
     });
 
     if (response.status !== 200) {
-      console.error(`Failed to fetch remote object from ${uri}, status: ${response.status}`);
+      logger.error({ uri, status: response.status }, 'Failed to fetch remote object');
       return null;
     }
 

@@ -1,4 +1,7 @@
 import { QueryInterface } from 'sequelize';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('migrations');
 
 /**
  * Check whether a column exists on a table.
@@ -33,7 +36,7 @@ export async function addColumnIfNotExists(
   attributes: Parameters<QueryInterface['addColumn']>[2],
 ): Promise<void> {
   if (await columnExists(queryInterface, tableName, columnName)) {
-    console.log(`Column ${tableName}.${columnName} already exists, skipping.`);
+    logger.info({ table: tableName, column: columnName }, 'Column already exists, skipping');
     return;
   }
   await queryInterface.addColumn(tableName, columnName, attributes);
@@ -48,7 +51,7 @@ export async function removeColumnIfExists(
   columnName: string,
 ): Promise<void> {
   if (!(await columnExists(queryInterface, tableName, columnName))) {
-    console.log(`Column ${tableName}.${columnName} does not exist, skipping removal.`);
+    logger.info({ table: tableName, column: columnName }, 'Column does not exist, skipping removal');
     return;
   }
   await queryInterface.removeColumn(tableName, columnName);
@@ -65,11 +68,11 @@ export async function renameColumnIfExists(
 ): Promise<void> {
   const desc = await queryInterface.describeTable(tableName);
   if (newName in desc) {
-    console.log(`Column ${tableName}.${newName} already exists, skipping rename from ${oldName}.`);
+    logger.info({ table: tableName, column: newName }, 'Column already exists, skipping rename');
     return;
   }
   if (!(oldName in desc)) {
-    console.log(`Column ${tableName}.${oldName} does not exist, skipping rename to ${newName}.`);
+    logger.info({ table: tableName, column: oldName }, 'Column does not exist, skipping rename');
     return;
   }
   await queryInterface.renameColumn(tableName, oldName, newName);
@@ -85,7 +88,7 @@ export async function createTableIfNotExists(
   options?: Parameters<QueryInterface['createTable']>[2],
 ): Promise<void> {
   if (await tableExists(queryInterface, tableName)) {
-    console.log(`Table ${tableName} already exists, skipping creation.`);
+    logger.info({ table: tableName }, 'Table already exists, skipping creation');
     return;
   }
   await queryInterface.createTable(tableName, attributes, options);

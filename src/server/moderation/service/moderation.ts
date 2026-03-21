@@ -30,6 +30,9 @@ import FlagActivityBuilder from '@/server/moderation/service/flag-activity-build
 import EmailBlockingService from '@/server/moderation/service/email-blocking';
 import { PatternDetectionService } from '@/server/moderation/service/pattern-detection';
 import { hashIp } from '@/server/moderation/service/ip-utils';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('moderation');
 
 /** Token expiration duration in hours. */
 const VERIFICATION_TOKEN_EXPIRY_HOURS = 24;
@@ -1738,7 +1741,7 @@ class ModerationService {
 
     // Sender validation: the sender must be from the same instance the report was forwarded to
     if (!entity.forwarded_to_actor_uri) {
-      console.warn(`[MODERATION] Cannot validate Accept sender: forwarded_to_actor_uri is null for report ${entity.id}`);
+      logger.warn({ reportId: entity.id }, 'Cannot validate Accept sender: forwarded_to_actor_uri is null');
       return false;
     }
 
@@ -1750,12 +1753,12 @@ class ModerationService {
       const targetHostname = new URL(entity.forwarded_to_actor_uri).hostname;
       const senderHostname = new URL(senderActorUri).hostname;
       if (targetHostname !== senderHostname) {
-        console.warn(`[MODERATION] Accept sender hostname mismatch: expected ${targetHostname}, got ${senderHostname} for report ${entity.id}`);
+        logger.warn({ reportId: entity.id, targetHostname, senderHostname }, 'Accept sender hostname mismatch');
         return false;
       }
     }
     catch {
-      console.warn(`[MODERATION] Invalid URI in sender validation for report ${entity.id}`);
+      logger.warn({ reportId: entity.id }, 'Invalid URI in sender validation');
       return false;
     }
     // Idempotency: if already acknowledged, return true without updating

@@ -1,5 +1,8 @@
 import { Op } from 'sequelize';
 import { ReportEntity } from '@/server/moderation/entity/report';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('moderation');
 
 /**
  * Result object returned by IP cleanup operations.
@@ -38,15 +41,15 @@ class IpCleanupService {
     hashRetentionDays: number = 30,
     subnetRetentionDays: number = 90,
   ): Promise<IpCleanupResult> {
-    console.log(`[IP Cleanup] Starting IP data cleanup with retention policy: ip_hash=${hashRetentionDays} days, ip_subnet=${subnetRetentionDays} days`);
+    logger.info({ hashRetentionDays, subnetRetentionDays }, 'Starting IP data cleanup with retention policy');
 
     try {
       // Calculate date thresholds
       const hashThreshold = new Date(Date.now() - hashRetentionDays * 24 * 60 * 60 * 1000);
       const subnetThreshold = new Date(Date.now() - subnetRetentionDays * 24 * 60 * 60 * 1000);
 
-      console.log(`[IP Cleanup] Hash threshold: reports created before ${hashThreshold.toISOString()}`);
-      console.log(`[IP Cleanup] Subnet threshold: reports created before ${subnetThreshold.toISOString()}`);
+      logger.info({ hashThreshold: hashThreshold.toISOString() }, 'Hash threshold calculated');
+      logger.info({ subnetThreshold: subnetThreshold.toISOString() }, 'Subnet threshold calculated');
 
       // Clear ip_hash for reports older than hashRetentionDays
       const [hashCleared] = await ReportEntity.update(
@@ -59,7 +62,7 @@ class IpCleanupService {
         },
       );
 
-      console.log(`[IP Cleanup] Cleared ip_hash from ${hashCleared} report(s) older than ${hashRetentionDays} days`);
+      logger.info({ hashCleared, hashRetentionDays }, 'Cleared ip_hash from reports');
 
       // Clear ip_subnet for reports older than subnetRetentionDays
       const [subnetCleared] = await ReportEntity.update(
@@ -72,9 +75,9 @@ class IpCleanupService {
         },
       );
 
-      console.log(`[IP Cleanup] Cleared ip_subnet from ${subnetCleared} report(s) older than ${subnetRetentionDays} days`);
+      logger.info({ subnetCleared, subnetRetentionDays }, 'Cleared ip_subnet from reports');
 
-      console.log(`[IP Cleanup] Cleanup completed successfully: ${hashCleared} hash(es) cleared, ${subnetCleared} subnet(s) cleared`);
+      logger.info({ hashCleared, subnetCleared }, 'Cleanup completed successfully');
 
       return {
         hashCleared,
@@ -82,7 +85,7 @@ class IpCleanupService {
       };
     }
     catch (error) {
-      console.error('[IP Cleanup] Cleanup operation failed:', error);
+      logger.error({ err: error }, 'Cleanup operation failed');
       throw error;
     }
   }

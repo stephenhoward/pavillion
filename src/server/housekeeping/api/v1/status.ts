@@ -119,7 +119,7 @@ export default class HousekeepingStatusRoutes {
       };
     }
     catch (error) {
-      console.error('[Housekeeping Status API] Error fetching last backup info:', error);
+      logger.error({ err: error }, 'Error fetching last backup info');
       return null;
     }
   }
@@ -160,7 +160,7 @@ export default class HousekeepingStatusRoutes {
       return null;
     }
     catch (error) {
-      console.error('[Housekeeping Status API] Error calculating next backup time:', error);
+      logger.error({ err: error }, 'Error calculating next backup time');
       return null;
     }
   }
@@ -190,7 +190,7 @@ export default class HousekeepingStatusRoutes {
       };
     }
     catch (error) {
-      console.error('[Housekeeping Status API] Disk usage unavailable:', error);
+      logger.warn({ err: error }, 'Disk usage unavailable');
       return null;
     }
   }
@@ -246,7 +246,7 @@ export default class HousekeepingStatusRoutes {
       };
     }
     catch (error) {
-      console.error('[Housekeeping Status API] Error fetching retention stats:', error);
+      logger.error({ err: error }, 'Error fetching retention stats');
       const dailyTarget = config.get<number>('housekeeping.backup.retention.daily');
       const weeklyTarget = config.get<number>('housekeeping.backup.retention.weekly');
       const monthlyTarget = config.get<number>('housekeeping.backup.retention.monthly');

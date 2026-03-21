@@ -2,6 +2,9 @@ import express, { Request, Response, Application, RequestHandler } from 'express
 
 import UserActorService from '@/server/activitypub/service/user_actor';
 import { verifyHttpSignature } from '@/server/activitypub/helper/http_signature';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('activitypub');
 
 /**
  * Routes for User (Person) ActivityPub actors
@@ -102,8 +105,8 @@ export default class UserActorRoutes {
       return;
     }
 
-    console.log(`[USER INBOX] Received activity type: ${req.body.type} for user ${username}`);
-    console.log(`[USER INBOX] Activity body:`, JSON.stringify(req.body, null, 2));
+    logger.info({ activityType: req.body.type, username }, 'Received user inbox activity');
+    logger.info({ activityBody: req.body }, 'User inbox activity body');
 
     const activity = req.body;
 
@@ -120,13 +123,13 @@ export default class UserActorRoutes {
           break;
 
         default:
-          console.log(`[USER INBOX] Unhandled activity type: ${activity.type}`);
+          logger.info({ activityType: activity.type }, 'Unhandled user inbox activity type');
       }
 
       res.status(200).send('Activity processed');
     }
     catch (error) {
-      console.error(`[USER INBOX] Error processing activity:`, error);
+      logger.error({ err: error }, 'Error processing user inbox activity');
       res.status(500).send('Error processing activity');
     }
   }

@@ -6,6 +6,9 @@ import BackupService from '@/server/housekeeping/service/backup';
 import StorageService from '@/server/housekeeping/service/storage';
 import DiskMonitorService from '@/server/housekeeping/service/disk-monitor';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('housekeeping');
 
 /**
  * Status information returned by getStatus method
@@ -140,7 +143,7 @@ export default class HousekeepingInterface {
       return null;
     }
     catch (error) {
-      console.error('[Housekeeping Interface] Error calculating next backup time:', error);
+      logger.error({ err: error }, 'Error calculating next backup time');
       return null;
     }
   }

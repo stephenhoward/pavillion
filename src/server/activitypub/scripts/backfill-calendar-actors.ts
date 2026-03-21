@@ -15,6 +15,9 @@ import db from '@/server/common/entity/db';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import CalendarActorService from '@/server/activitypub/service/calendar_actor';
 import CalendarInterface from '@/server/calendar/interface';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('activitypub');
 
 /**
  * Backfills CalendarActor entities for all calendars that don't have one
@@ -24,7 +27,7 @@ import CalendarInterface from '@/server/calendar/interface';
  */
 export async function backfillCalendarActors(domain?: string, verbose: boolean = true): Promise<{ created: number; skipped: number; errors: number }> {
   if (verbose) {
-    console.log('Starting CalendarActor backfill...\n');
+    logger.info('Starting CalendarActor backfill');
   }
 
   try {
@@ -35,13 +38,13 @@ export async function backfillCalendarActors(domain?: string, verbose: boolean =
     }
 
     if (verbose) {
-      console.log(`Domain: ${domainToUse}`);
+      logger.info({ domain: domainToUse }, 'Using domain');
     }
 
     // Retrieve all calendars
     const calendars = await CalendarEntity.findAll();
     if (verbose) {
-      console.log(`Found ${calendars.length} total calendars\n`);
+      logger.info({ count: calendars.length }, 'Found total calendars');
     }
 
     // Track progress
@@ -59,7 +62,7 @@ export async function backfillCalendarActors(domain?: string, verbose: boolean =
       // Skip calendars without URL name
       if (!calendar.urlName || calendar.urlName.trim() === '') {
         if (verbose) {
-          console.log(`⚠️  Skipped calendar ${calendar.id}: No URL name set`);
+          logger.warn({ calendarId: calendar.id }, 'Skipped calendar: no URL name set');
         }
         skippedCount++;
         continue;
@@ -70,7 +73,7 @@ export async function backfillCalendarActors(domain?: string, verbose: boolean =
         const existingActor = await calendarActorService.getActorByCalendarId(calendar.id);
         if (existingActor) {
           if (verbose) {
-            console.log(`✓  Skipped calendar ${calendar.urlName}: CalendarActor already exists`);
+            logger.info({ urlName: calendar.urlName }, 'Skipped calendar: CalendarActor already exists');
           }
           skippedCount++;
           continue;
@@ -80,42 +83,40 @@ export async function backfillCalendarActors(domain?: string, verbose: boolean =
         const calendarActor = await calendarActorService.createActor(calendar, domainToUse);
 
         if (verbose) {
-          console.log(`✓  Created CalendarActor for ${calendar.urlName} (${calendarActor.actorUri})`);
+          logger.info({ urlName: calendar.urlName, actorUri: calendarActor.actorUri }, 'Created CalendarActor');
         }
         createdCount++;
       }
       catch (error) {
-        console.error(`✗  Error creating CalendarActor for ${calendar.urlName}:`, error);
+        logger.error({ err: error, urlName: calendar.urlName }, 'Error creating CalendarActor');
         errorCount++;
       }
     }
 
     // Print summary
     if (verbose) {
-      console.log('\n' + '='.repeat(60));
-      console.log('Backfill Summary:');
-      console.log('='.repeat(60));
-      console.log(`Total calendars processed: ${calendars.length}`);
-      console.log(`CalendarActors created: ${createdCount}`);
-      console.log(`Calendars skipped: ${skippedCount}`);
-      console.log(`Errors: ${errorCount}`);
-      console.log('='.repeat(60));
+      logger.info({
+        totalCalendars: calendars.length,
+        created: createdCount,
+        skipped: skippedCount,
+        errors: errorCount,
+      }, 'CalendarActor backfill summary');
 
       if (errorCount > 0) {
-        console.log('\n⚠️  Some calendars failed to generate CalendarActors. Review errors above.');
+        logger.warn({ errorCount }, 'Some calendars failed to generate CalendarActors');
       }
       else if (createdCount > 0) {
-        console.log('\n✅ Backfill completed successfully!');
+        logger.info('Backfill completed successfully');
       }
       else {
-        console.log('\n✅ No new CalendarActors needed.');
+        logger.info('No new CalendarActors needed');
       }
     }
 
     return { created: createdCount, skipped: skippedCount, errors: errorCount };
   }
   catch (error) {
-    console.error('\n✗ Fatal error during backfill:', error);
+    logger.error({ err: error }, 'Fatal error during backfill');
     throw error;
   }
 }
@@ -138,7 +139,7 @@ async function runBackfillScript() {
     }
   }
   catch (error) {
-    console.error('\n✗ Fatal error during backfill:', error);
+    logger.error({ err: error }, 'Fatal error during backfill');
     process.exit(1);
   }
 }

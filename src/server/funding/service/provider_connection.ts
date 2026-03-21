@@ -14,6 +14,9 @@ import {
   MissingRequiredFieldError,
   InvalidCredentialsError,
 } from '@/server/funding/exceptions';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('funding');
 
 /**
  * User object for admin operations
@@ -110,7 +113,7 @@ export class ProviderConnectionService {
     }
     catch (error) {
       // Log warning but don't block configuration
-      console.warn('Failed to register PayPal webhook:', error);
+      logger.warn({ err: error }, 'Failed to register PayPal webhook');
     }
 
     // Store credentials with webhook info
@@ -285,7 +288,7 @@ export class ProviderConnectionService {
     }
     catch (error) {
       // Log warning but proceed with disconnection
-      console.warn('Failed to delete webhook:', error);
+      logger.warn({ err: error }, 'Failed to delete webhook');
     }
 
     // Delete provider configuration

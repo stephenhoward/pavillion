@@ -4,6 +4,9 @@ import { EventEmitter } from "events";
 import { logError } from '@/server/common/helper/error-logger';
 import { logActivityRejection } from '../helper/rejection-logger';
 import { validateActorUriProtocol } from '../helper/actor-uri';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('activitypub');
 
 import CreateActivity from "@/server/activitypub/model/action/create";
 import UpdateActivity from "@/server/activitypub/model/action/update";
@@ -253,7 +256,7 @@ class ProcessInboxService {
           const isBlocked = await this.moderationInterface.isInstanceBlocked(domain);
 
           if (isBlocked) {
-            console.log(`[INBOX] Rejected activity from blocked instance: ${domain} (actor: ${actorUri})`);
+            logger.info({ domain, actorUri }, '[INBOX] Rejected activity from blocked instance');
 
             // Log the rejection
             logActivityRejection({
@@ -495,26 +498,26 @@ class ProcessInboxService {
    */
   async processFlagActivity(calendar: Calendar, message: any): Promise<void> {
     if (!this.moderationInterface) {
-      console.warn('[INBOX] processFlagActivity called but moderationInterface not available');
+      logger.warn('[INBOX] processFlagActivity called but moderationInterface not available');
       return;
     }
 
     if (!message || !message.object) {
-      console.warn('[INBOX] Flag activity missing object');
+      logger.warn('[INBOX] Flag activity missing object');
       return;
     }
 
     // Extract event ID from object URI
     const objectUri = typeof message.object === 'string' ? message.object : message.object.id;
     if (!objectUri) {
-      console.warn('[INBOX] Flag activity object missing id');
+      logger.warn('[INBOX] Flag activity object missing id');
       return;
     }
 
     // Parse event ID from URI (last path segment)
     const eventIdMatch = objectUri.match(/\/events\/([a-f0-9-]+)$/i);
     if (!eventIdMatch) {
-      console.warn(`[INBOX] Could not parse event ID from object URI: ${objectUri}`);
+      logger.warn({ objectUri }, '[INBOX] Could not parse event ID from object URI');
       return;
     }
     const eventId = eventIdMatch[1];
@@ -522,7 +525,7 @@ class ProcessInboxService {
     // Look up the event to verify it exists
     const event = await this.calendarInterface.getEventById(eventId);
     if (!event || !event.calendarId) {
-      console.warn(`[INBOX] Flag activity references unknown event: ${eventId}`);
+      logger.warn({ eventId }, '[INBOX] Flag activity references unknown event');
       return;
     }
 
@@ -554,7 +557,7 @@ class ProcessInboxService {
         forwardedReportId: message.id,
       });
 
-      console.log(`[INBOX] Created federation report ${report.id} for event ${eventId} from ${domain}`);
+      logger.info({ reportId: report.id, eventId, domain }, '[INBOX] Created federation report');
 
       // Emit domain event
       this.eventBus.emit('reportReceived', { report });
@@ -582,7 +585,7 @@ class ProcessInboxService {
       : message.object?.id;
 
     if (!objectUri) {
-      console.warn('[INBOX] actorOwnsObject: No object URI found in message');
+      logger.warn('[INBOX] actorOwnsObject: No object URI found in message');
       return false;
     }
 
@@ -590,7 +593,7 @@ class ProcessInboxService {
     const remoteObject = await fetchRemoteObject(objectUri);
 
     if (!remoteObject) {
-      console.warn(`[INBOX] actorOwnsObject: Failed to fetch remote object from ${objectUri}`);
+      logger.warn({ objectUri }, '[INBOX] actorOwnsObject: Failed to fetch remote object');
       return false;
     }
 
@@ -598,7 +601,7 @@ class ProcessInboxService {
     const attributedTo = remoteObject.attributedTo;
 
     if (!attributedTo) {
-      console.warn(`[INBOX] actorOwnsObject: No attributedTo found on remote object ${objectUri}`);
+      logger.warn({ objectUri }, '[INBOX] actorOwnsObject: No attributedTo found on remote object');
       return false;
     }
 
@@ -629,7 +632,7 @@ class ProcessInboxService {
       return (attributedTo as { id: string }).id === actorUri;
     }
 
-    console.warn(`[INBOX] actorOwnsObject: Unexpected attributedTo format on remote object ${objectUri}`);
+    logger.warn({ objectUri }, '[INBOX] actorOwnsObject: Unexpected attributedTo format on remote object');
     return false;
   }
 
@@ -645,7 +648,7 @@ class ProcessInboxService {
    */
   async processCreateEvent(calendar: Calendar, message: CreateActivity): Promise<CalendarEvent | null> {
     if (!message.object || !message.object.id) {
-      console.warn(`[INBOX] Create activity missing object or object.id`);
+      logger.warn('[INBOX] Create activity missing object or object.id');
       logActivityRejection({
         rejection_type: 'invalid_object',
         activity_type: 'Create',
@@ -679,7 +682,7 @@ class ProcessInboxService {
       const isAuthorizedEditor = await this.isAuthorizedRemoteEditor(calendar.id, actorUri);
 
       if (!isAuthorizedEditor) {
-        console.warn(`[INBOX] Person actor ${actorUri} is not authorized to create events on calendar ${calendar.urlName}`);
+        logger.warn({ actorUri, calendarUrlName: calendar.urlName }, '[INBOX] Person actor is not authorized to create events on calendar');
         logActivityRejection({
           rejection_type: 'unauthorized_editor',
           activity_type: 'Create',
@@ -692,13 +695,13 @@ class ProcessInboxService {
         throw new Error('Actor is not an authorized editor of this calendar');
       }
 
-      console.log(`[INBOX] Processing Create from authorized remote editor: ${actorUri}`);
+      logger.info({ actorUri }, '[INBOX] Processing Create from authorized remote editor');
     }
     else {
       // Traditional calendar-to-calendar federation - verify ownership
       const ok = await this.actorOwnsObject(message);
       if (!ok) {
-        console.warn(`[INBOX] Actor ownership verification failed for event ${apObjectId}`);
+        logger.warn({ apObjectId }, '[INBOX] Actor ownership verification failed for event');
         logActivityRejection({
           rejection_type: 'ownership_verification_failed',
           activity_type: 'Create',
@@ -778,7 +781,7 @@ class ProcessInboxService {
 
     const createdEvent = await this.calendarInterface.addRemoteEvent(calendar, eventParams);
 
-    console.log(`[INBOX] Created event ${localEventId} from ${isPersonActor ? 'Person' : 'Calendar'} actor ${actorUri}`);
+    logger.info({ localEventId, actorType: isPersonActor ? 'Person' : 'Calendar', actorUri }, '[INBOX] Created event');
 
     // Check for auto-repost (skip if Person actor or no event created)
     if (!isPersonActor && createdEvent) {
@@ -806,7 +809,7 @@ class ProcessInboxService {
     eventApId: string,
     isOriginal: boolean,
   ): Promise<void> {
-    console.log('[AUTO-REPOST] Called with:', { calendarId: calendar.id, sourceActorUri, eventApId, isOriginal });
+    logger.info({ calendarId: calendar.id, sourceActorUri, eventApId, isOriginal }, '[AUTO-REPOST] Called');
 
     // Find CalendarActorEntity for sourceActorUri
     const remoteCalendar = await this.remoteCalendarService.findOrCreateByActorUri(sourceActorUri);
@@ -820,23 +823,23 @@ class ProcessInboxService {
     });
 
     if (!follow) {
-      console.log('[AUTO-REPOST] Skip: Not following source', { sourceActorUri, calendarId: calendar.id });
+      logger.info({ sourceActorUri, calendarId: calendar.id }, '[AUTO-REPOST] Skip: Not following source');
       // Not following this source, skip
       return;
     }
 
-    console.log('[AUTO-REPOST] Follow found:', {
+    logger.info({
       followId: follow.id,
       autoRepostOriginals: follow.auto_repost_originals,
       autoRepostReposts: follow.auto_repost_reposts,
       isOriginal,
-    });
+    }, '[AUTO-REPOST] Follow found');
 
     // Check policy
     const shouldRepost = isOriginal ? follow.auto_repost_originals : follow.auto_repost_reposts;
-    console.log('[AUTO-REPOST] Policy check:', { shouldRepost, isOriginal, policy: isOriginal ? 'originals' : 'reposts' });
+    logger.info({ shouldRepost, isOriginal, policy: isOriginal ? 'originals' : 'reposts' }, '[AUTO-REPOST] Policy check');
     if (!shouldRepost) {
-      console.log('[AUTO-REPOST] Skip: Policy disabled');
+      logger.info('[AUTO-REPOST] Skip: Policy disabled');
       return;
     }
 
@@ -846,23 +849,23 @@ class ProcessInboxService {
     });
 
     if (!eventObject) {
-      console.warn(`[INBOX] Auto-repost skipped: EventObjectEntity not found for ${eventApId}`);
+      logger.warn({ eventApId }, '[INBOX] Auto-repost skipped: EventObjectEntity not found');
       return;
     }
 
     // For original events (Create), verify the actor owns the event.
     // For reposts (Announce), the sharer intentionally differs from the original author.
     if (isOriginal && eventObject.attributed_to !== sourceActorUri) {
-      console.warn(`[AUTO-REPOST] Skip: attributed_to mismatch - expected ${sourceActorUri}, got ${eventObject.attributed_to}`);
+      logger.warn({ sourceActorUri, attributedTo: eventObject.attributed_to }, '[AUTO-REPOST] Skip: attributed_to mismatch');
       return;
     }
 
-    console.log('[AUTO-REPOST] Attribution verified:', { attributed_to: eventObject.attributed_to });
+    logger.info({ attributed_to: eventObject.attributed_to }, '[AUTO-REPOST] Attribution verified');
 
     // LOOP GUARD: Never repost own events
     const localActorUrl = ActivityPubActor.actorUrl(calendar);
     if (eventObject.attributed_to === localActorUrl) {
-      console.log('[AUTO-REPOST] Skip: Loop prevention - event originated from this calendar');
+      logger.info('Skip: Loop prevention - event originated from this calendar');
       return;
     }
 
@@ -875,11 +878,11 @@ class ProcessInboxService {
     });
 
     if (existingShare) {
-      console.log('[AUTO-REPOST] Skip: Already shared', { existingShareId: existingShare.id, autoPosted: existingShare.auto_posted });
+      logger.info('Skip: Already shared', { existingShareId: existingShare.id, autoPosted: existingShare.auto_posted });
       // Already shared, skip
       return;
     }
-    console.log('[AUTO-REPOST] Creating SharedEventEntity and adding to outbox...');
+    logger.info('Creating SharedEventEntity and adding to outbox...');
 
     // Create SharedEventEntity with auto_posted: true
     const announceActivity = new AnnounceActivity(localActorUrl, eventApId);
@@ -904,7 +907,7 @@ class ProcessInboxService {
       );
     }
     catch (error) {
-      console.warn('[AUTO-REPOST] Category mapping or assignment failed, proceeding without categories:', error);
+      logger.warn('Category mapping or assignment failed, proceeding without categories:', error);
     }
 
     // Emit eventReposted so downstream handlers (e.g. event instance building)
@@ -914,7 +917,7 @@ class ProcessInboxService {
       this.eventBus.emit('eventReposted', { event, calendar });
     }
 
-    console.log(`[AUTO-REPOST] ✅ SUCCESS: Auto-reposted event ${eventApId} from ${sourceActorUri} (isOriginal: ${isOriginal})`);
+    logger.info(✅ SUCCESS: Auto-reposted event ${eventApId} from ${sourceActorUri} (isOriginal: ${isOriginal})`);
   }
 
   /**
@@ -1195,7 +1198,7 @@ class ProcessInboxService {
    */
   async processUpdateEvent(calendar: Calendar, message: UpdateActivity): Promise<CalendarEvent | null> {
     if (!message.object || !message.object.id) {
-      console.warn(`[INBOX] Update activity missing object or object.id`);
+      logger.warn(`Update activity missing object or object.id`);
       logActivityRejection({
         rejection_type: 'invalid_object',
         activity_type: 'Update',
@@ -1238,7 +1241,7 @@ class ProcessInboxService {
 
     if (!existingEvent) {
       // Event not found - can't update
-      console.warn(`[INBOX] Update activity for unknown event: ${apObjectId}`);
+      logger.warn(`Update activity for unknown event: ${apObjectId}`);
       return null;
     }
 
@@ -1250,7 +1253,7 @@ class ProcessInboxService {
       const isAuthorizedEditor = await this.isAuthorizedRemoteEditor(calendar.id, actorUri);
 
       if (!isAuthorizedEditor) {
-        console.warn(`[INBOX] Person actor ${actorUri} is not authorized to update events on calendar ${calendar.urlName}`);
+        logger.warn(`Person actor ${actorUri} is not authorized to update events on calendar ${calendar.urlName}`);
         logActivityRejection({
           rejection_type: 'unauthorized_editor',
           activity_type: 'Update',
@@ -1263,7 +1266,7 @@ class ProcessInboxService {
         throw new Error('Actor is not an authorized editor of this calendar');
       }
 
-      console.log(`[INBOX] Processing Update from authorized remote editor: ${actorUri}`);
+      logger.info(`Processing Update from authorized remote editor: ${actorUri}`);
     }
     else {
       // Traditional calendar-to-calendar federation
@@ -1341,7 +1344,7 @@ class ProcessInboxService {
       }
     }
 
-    console.log(`[INBOX] Updated event ${apObject.event_id} from ${isPersonActor ? 'Person' : 'Calendar'} actor ${actorUri}`);
+    logger.info(`Updated event ${apObject.event_id} from ${isPersonActor ? 'Person' : 'Calendar'} actor ${actorUri}`);
 
     return updatedEvent;
   }
@@ -1366,7 +1369,7 @@ class ProcessInboxService {
         : !!(message.object as any).id);
 
     if (!objectPresent) {
-      console.warn(`[INBOX] Delete activity missing object or object.id`);
+      logger.warn(`Delete activity missing object or object.id`);
       logActivityRejection({
         rejection_type: 'invalid_object',
         activity_type: 'Delete',
@@ -1416,7 +1419,7 @@ class ProcessInboxService {
 
     if (!existingEvent || !eventIdToDelete) {
       // Event not found - nothing to delete
-      console.warn(`[INBOX] Delete activity for unknown event: ${apObjectId}`);
+      logger.warn(`Delete activity for unknown event: ${apObjectId}`);
       return;
     }
 
@@ -1428,7 +1431,7 @@ class ProcessInboxService {
       const isAuthorizedEditor = await this.isAuthorizedRemoteEditor(calendar.id, actorUri);
 
       if (!isAuthorizedEditor) {
-        console.warn(`[INBOX] Person actor ${actorUri} is not authorized to delete events on calendar ${calendar.urlName}`);
+        logger.warn(`Person actor ${actorUri} is not authorized to delete events on calendar ${calendar.urlName}`);
         logActivityRejection({
           rejection_type: 'unauthorized_editor',
           activity_type: 'Delete',
@@ -1441,7 +1444,7 @@ class ProcessInboxService {
         throw new Error('Actor is not an authorized editor of this calendar');
       }
 
-      console.log(`[INBOX] Processing Delete from authorized remote editor: ${actorUri}`);
+      logger.info(`Processing Delete from authorized remote editor: ${actorUri}`);
     }
     else {
       // Traditional calendar-to-calendar federation
@@ -1472,7 +1475,7 @@ class ProcessInboxService {
       await apObject.destroy();
     }
 
-    console.log(`[INBOX] Deleted event ${eventIdToDelete} from ${isPersonActor ? 'Person' : 'Calendar'} actor ${actorUri}`);
+    logger.info(`Deleted event ${eventIdToDelete} from ${isPersonActor ? 'Person' : 'Calendar'} actor ${actorUri}`);
   }
 
   /**
@@ -1484,7 +1487,7 @@ class ProcessInboxService {
    * @returns {Promise<void>}
    */
   async processFollowAccount(calendar: Calendar, message: FollowActivity) {
-    console.log(`[INBOX] Processing Follow activity from ${message.actor} for calendar ${calendar.urlName}`);
+    logger.info(`Processing Follow activity from ${message.actor} for calendar ${calendar.urlName}`);
 
     // Get or create CalendarActorEntity for the follower
     const remoteCalendar = await this.remoteCalendarService.findOrCreateByActorUri(message.actor);
@@ -1497,7 +1500,7 @@ class ProcessInboxService {
     });
 
     if (!existingFollow) {
-      console.log(`[INBOX] Creating new follower relationship for ${message.actor}`);
+      logger.info(`Creating new follower relationship for ${message.actor}`);
 
       // Create the follower relationship
       await FollowerCalendarEntity.create({
@@ -1506,17 +1509,17 @@ class ProcessInboxService {
         calendar_id: calendar.id,
       });
 
-      console.log(`[INBOX] Follower relationship created successfully`);
+      logger.info(`Follower relationship created successfully`);
 
       // Queue Accept activity for asynchronous delivery
       const actorUrl = ActivityPubActor.actorUrl(calendar);
       const acceptActivity = new AcceptActivity(actorUrl, message);
 
-      console.log(`[INBOX] Queueing Accept activity to ${message.actor}`);
+      logger.info(`Queueing Accept activity to ${message.actor}`);
 
       await addToOutbox(this.eventBus, calendar, acceptActivity);
 
-      console.log(`[INBOX] Accept activity queued for delivery`);
+      logger.info(`Accept activity queued for delivery`);
 
       // Emit domain event for notification system (fire-and-forget)
       this.eventBus.emit('activitypub:calendar:followed', {
@@ -1526,7 +1529,7 @@ class ProcessInboxService {
       });
     }
     else {
-      console.log(`[INBOX] Follow relationship already exists for ${message.actor}, skipping`);
+      logger.info(`Follow relationship already exists for ${message.actor}, skipping`);
     }
   }
   /**
@@ -1543,38 +1546,38 @@ class ProcessInboxService {
    * @returns {Promise<void>}
    */
   async processAcceptActivity(calendar: Calendar, message: AcceptActivity) {
-    console.log(`[INBOX] Processing Accept activity from ${message.actor} for calendar ${calendar.urlName}`);
+    logger.info(`Processing Accept activity from ${message.actor} for calendar ${calendar.urlName}`);
 
     // The Accept activity's object should be the original activity (Follow or Flag)
     const acceptedObject = message.object;
 
     if (!acceptedObject) {
-      console.warn(`[INBOX] Accept activity missing object`);
+      logger.warn(`Accept activity missing object`);
       return;
     }
 
     // Check if this is an Accept for a Flag activity (object is inline Flag object)
     if (typeof acceptedObject === 'object' && acceptedObject.type === 'Flag') {
-      console.log(`[INBOX] Accept confirms Flag activity`);
+      logger.info(`Accept confirms Flag activity`);
 
       const flagId = acceptedObject.id;
 
       if (!flagId) {
-        console.warn(`[INBOX] Accept for Flag missing Flag ID`);
+        logger.warn(`Accept for Flag missing Flag ID`);
         return;
       }
 
       if (this.moderationInterface) {
         const acknowledged = await this.moderationInterface.acknowledgeForwardedReport(flagId, message.actor);
         if (acknowledged) {
-          console.log(`[INBOX] Updated forward_status to 'acknowledged' for Flag ID: ${flagId}`);
+          logger.info(`Updated forward_status to 'acknowledged' for Flag ID: ${flagId}`);
         }
         else {
-          console.warn(`[INBOX] No report found for Flag ID: ${flagId}`);
+          logger.warn(`No report found for Flag ID: ${flagId}`);
         }
       }
       else {
-        console.warn('[INBOX] Accept for Flag received but moderationInterface not available');
+        logger.warn('Accept for Flag received but moderationInterface not available');
       }
       return;
     }
@@ -1583,7 +1586,7 @@ class ProcessInboxService {
     if (typeof acceptedObject === 'string') {
       try {
         if (!validateActorUriProtocol(acceptedObject)) {
-          console.warn(`[INBOX] Accept activity has object URI with invalid scheme: ${acceptedObject}`);
+          logger.warn(`Accept activity has object URI with invalid scheme: ${acceptedObject}`);
           return;
         }
 
@@ -1597,12 +1600,12 @@ class ProcessInboxService {
           if (this.moderationInterface) {
             const acknowledged = await this.moderationInterface.acknowledgeForwardedReport(acceptedObject, message.actor);
             if (acknowledged) {
-              console.log(`[INBOX] Updated forward_status to 'acknowledged' for Flag URI: ${acceptedObject}`);
+              logger.info(`Updated forward_status to 'acknowledged' for Flag URI: ${acceptedObject}`);
               return;
             }
           }
 
-          console.warn(`[INBOX] Accept with string URI object has hostname mismatch and no matching forwarded report: ${acceptedObject}`);
+          logger.warn(`Accept with string URI object has hostname mismatch and no matching forwarded report: ${acceptedObject}`);
           return;
         }
 
@@ -1617,15 +1620,15 @@ class ProcessInboxService {
           });
 
           if (followingRecord) {
-            console.log(`[INBOX] Follow relationship confirmed for calendar ${calendar.id} via string URI Accept from ${message.actor}`);
+            logger.info(`Follow relationship confirmed for calendar ${calendar.id} via string URI Accept from ${message.actor}`);
             return;
           }
         }
 
-        console.warn(`[INBOX] Accept with string URI object could not be matched to a known Follow: ${acceptedObject}`);
+        logger.warn(`Accept with string URI object could not be matched to a known Follow: ${acceptedObject}`);
       }
       catch {
-        console.warn(`[INBOX] Accept activity has invalid URI as object: ${acceptedObject}`);
+        logger.warn(`Accept activity has invalid URI as object: ${acceptedObject}`);
       }
       return;
     }
@@ -1634,14 +1637,14 @@ class ProcessInboxService {
     if (typeof acceptedObject === 'object' && acceptedObject.type === 'Follow') {
       const followActivity = acceptedObject as FollowActivity;
 
-      console.log(`[INBOX] Accept confirms Follow of ${followActivity.object}`);
+      logger.info(`Accept confirms Follow of ${followActivity.object}`);
 
       // Find the CalendarActorEntity for the remote calendar we're following
       const remoteActorUrl = followActivity.object as string;
       const remoteCalendar = await this.remoteCalendarService.getByActorUri(remoteActorUrl);
 
       if (!remoteCalendar) {
-        console.warn(`[INBOX] No CalendarActorEntity found for ${remoteActorUrl}, Accept may be for unknown follow`);
+        logger.warn(`No CalendarActorEntity found for ${remoteActorUrl}, Accept may be for unknown follow`);
         return;
       }
 
@@ -1657,14 +1660,14 @@ class ProcessInboxService {
         // The follow relationship is now confirmed
         // In the future, we could add a "confirmed" status field
         // For now, the existence of the record means it's active
-        console.log(`[INBOX] Follow relationship confirmed for calendar ${calendar.id} following ${followActivity.object}`);
+        logger.info(`Follow relationship confirmed for calendar ${calendar.id} following ${followActivity.object}`);
       }
       else {
-        console.warn(`[INBOX] No FollowingCalendarEntity found for ${followActivity.object}, Accept may be for unknown follow`);
+        logger.warn(`No FollowingCalendarEntity found for ${followActivity.object}, Accept may be for unknown follow`);
       }
     }
     else {
-      console.warn(`[INBOX] Accept activity does not contain valid Follow or Flag object`);
+      logger.warn(`Accept activity does not contain valid Follow or Flag object`);
     }
   }
 
@@ -1679,7 +1682,7 @@ class ProcessInboxService {
   async processUnfollowAccount(calendar: Calendar, message: any) {
     // Extract the actor from the original Follow activity message
     if (!message || (!message.message && !message.actor)) {
-      console.warn(`[INBOX] Unfollow message missing required actor information`);
+      logger.warn(`Unfollow message missing required actor information`);
       return;
     }
 
@@ -1688,14 +1691,14 @@ class ProcessInboxService {
       : message.actor;
 
     if (!actor) {
-      console.warn(`[INBOX] Unfollow message actor is null or undefined`);
+      logger.warn(`Unfollow message actor is null or undefined`);
       return;
     }
 
     // Find the CalendarActorEntity for this actor
     const remoteCalendar = await this.remoteCalendarService.getByActorUri(actor);
     if (!remoteCalendar) {
-      console.warn(`[INBOX] No CalendarActorEntity found for ${actor}, cannot unfollow`);
+      logger.warn(`No CalendarActorEntity found for ${actor}, cannot unfollow`);
       return;
     }
 
@@ -1717,7 +1720,7 @@ class ProcessInboxService {
   async processShareEvent(calendar: Calendar, message: AnnounceActivity) {
     // Extract event URL from the object (either a string URL or an object with id)
     if (!message.object) {
-      console.warn(`[INBOX] Announce activity missing object`);
+      logger.warn(`Announce activity missing object`);
       return;
     }
 
@@ -1726,7 +1729,7 @@ class ProcessInboxService {
       : (message.object as any)?.id;
 
     if (!apObjectId || typeof apObjectId !== 'string') {
-      console.warn(`[INBOX] Announce activity object missing id`);
+      logger.warn(`Announce activity object missing id`);
       return;
     }
 
@@ -1740,12 +1743,7 @@ class ProcessInboxService {
       // SECURITY: fetchRemoteObject validates the URL against private IP ranges (SSRF protection)
       const remoteData = await fetchRemoteObject(apObjectId);
       if (!remoteData) {
-        console.warn('[INBOX] Failed to fetch remote event object — network error', {
-          event: 'announce_fetch_failed',
-          actorId: message.actor,
-          objectId: apObjectId,
-          activityType: 'Announce',
-        });
+        logger.warn({ actorId: message.actor, objectId: apObjectId, activityType: 'Announce' }, 'Failed to fetch remote event object — network error');
         return;
       }
 
@@ -1827,7 +1825,7 @@ class ProcessInboxService {
   async processUnshareEvent(calendar: Calendar, message: any) {
     // Extract event ID from the object (either a string URL or an object with id)
     if (!message || !message.object) {
-      console.warn(`[INBOX] Unshare message missing object`);
+      logger.warn(`Unshare message missing object`);
       return;
     }
 
@@ -1836,13 +1834,13 @@ class ProcessInboxService {
       : message.object?.id;
 
     if (!eventId) {
-      console.warn(`[INBOX] Unshare message object missing id`);
+      logger.warn(`Unshare message object missing id`);
       return;
     }
 
     // Extract the actor from the original Announce activity message
     if (!message.message && !message.actor) {
-      console.warn(`[INBOX] Unshare message missing actor information`);
+      logger.warn(`Unshare message missing actor information`);
       return;
     }
 
@@ -1851,14 +1849,14 @@ class ProcessInboxService {
       : message.actor;
 
     if (!actor) {
-      console.warn(`[INBOX] Unshare message actor is null or undefined`);
+      logger.warn(`Unshare message actor is null or undefined`);
       return;
     }
 
     // Find the CalendarActorEntity for this actor
     const remoteCalendar = await this.remoteCalendarService.getByActorUri(actor);
     if (!remoteCalendar) {
-      console.warn(`[INBOX] No CalendarActorEntity found for ${actor}, cannot unshare`);
+      logger.warn(`No CalendarActorEntity found for ${actor}, cannot unshare`);
       return;
     }
 

@@ -14,6 +14,9 @@
 
 import dns from 'dns';
 import { promisify } from 'util';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('activitypub');
 
 const dnsLookup = promisify(dns.lookup);
 
@@ -219,7 +222,7 @@ export async function resolvesToPrivateIP(hostname: string): boolean {
   }
   catch (error) {
     // If DNS resolution fails, treat as potentially unsafe
-    console.error(`DNS resolution failed for ${hostname}:`, error);
+    logger.error({ err: error, hostname }, 'DNS resolution failed');
     return true;
   }
 }
@@ -272,7 +275,7 @@ export async function validateUrlNotPrivate(url: string): Promise<boolean> {
       if (process.env.NODE_ENV === 'production') {
         throw new Error('ALLOW_PRIVATE_FEDERATION cannot be used in production');
       }
-      console.warn('SECURITY WARNING: ALLOW_PRIVATE_FEDERATION is set — skipping DNS-based private IP check. Never use in production.');
+      logger.warn('SECURITY WARNING: ALLOW_PRIVATE_FEDERATION is set - skipping DNS-based private IP check. Never use in production.');
       return true;
     }
 

@@ -10,6 +10,9 @@ import { PUBLIC_KEY_FETCH_TIMEOUT_MS, MAX_REQUEST_AGE_MS } from '@/server/activi
 import { objectUriSchema } from '@/server/activitypub/validation/schemas';
 import { validateUrlNotPrivate } from '@/server/activitypub/helper/ip-validation';
 import { logError } from '@/server/common/helper/error-logger';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('activitypub');
 
 // A key cache to prevent frequent key fetching
 const keyCache = new Cache<string>(60 * 60 * 1000); // 1 hour expiration
@@ -65,13 +68,7 @@ function shouldSkipSignatures(): boolean {
  */
 function logBypassWarning(): void {
   if (!bypassWarningLogged) {
-    console.warn('');
-    console.warn('========================================');
-    console.warn('WARNING: HTTP Signature verification DISABLED');
-    console.warn('This should ONLY be used for local testing!');
-    console.warn('Never deploy to production with SKIP_SIGNATURES=true');
-    console.warn('========================================');
-    console.warn('');
+    logger.warn('HTTP Signature verification DISABLED - should ONLY be used for local testing, never in production');
     bypassWarningLogged = true;
   }
 }
@@ -322,7 +319,7 @@ async function verifyActorPermission(requestActor: string|null, keyId: string): 
   // where an attacker could use an actor URL like "https://example.com/users/alice-fake"
   // to match "https://example.com/users/alice"
   if (requestActor !== actorUrl) {
-    console.warn(`Actor mismatch: request actor ${requestActor} does not match key actor ${actorUrl}`);
+    logger.warn({ requestActor, actorUrl }, 'Actor mismatch: request actor does not match key actor');
     return false;
   }
 
