@@ -14,6 +14,7 @@ import AnnounceActivity from "@/server/activitypub/model/action/announce";
 import { ActivityPubInboxMessageEntity, EventActivityEntity, FollowerCalendarEntity, FollowingCalendarEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
 import { EventObjectEntity } from "@/server/activitypub/entity/event_object";
 import RemoteCalendarService from "@/server/activitypub/service/remote_calendar";
+import { EventObject } from "@/server/activitypub/model/object/event";
 import { ActivityPubActor } from "@/server/activitypub/model/base";
 import CalendarInterface from "@/server/calendar/interface";
 import ModerationInterface from "@/server/moderation/interface";
@@ -762,7 +763,7 @@ class ProcessInboxService {
     // calendarId is intentionally omitted for calendar-actor federation;
     // addRemoteEvent will set it to null for remote federated events
     const eventParams: Record<string, any> = {
-      ...message.object,
+      ...EventObject.fromActivityPubObject(message.object),
       id: localEventId,
       eventSourceUrl: apObjectId,
     };
@@ -1310,7 +1311,7 @@ class ProcessInboxService {
 
     // Create event params with local UUID for database
     const eventParams = {
-      ...message.object,
+      ...EventObject.fromActivityPubObject(message.object),
       id: apObject.event_id,
       eventSourceUrl: apObjectId,
     };

@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
+import { DateTime } from 'luxon';
 import { Calendar } from '@/common/model/calendar';
-import { CalendarEvent } from '@/common/model/events';
+import { CalendarEvent, CalendarEventContent, CalendarEventSchedule } from '@/common/model/events';
 import { EventCategory } from '@/common/model/event_category';
 import { EventSeries } from '@/common/model/event_series';
 import { EventSeriesContent } from '@/common/model/event_series_content';
+import { EventLocation } from '@/common/model/location';
 import { EventObject } from '@/server/activitypub/model/object/event';
 
 describe('EventObject', () => {
@@ -110,6 +112,284 @@ describe('EventObject', () => {
       const obj = new EventObject(calendar, event);
 
       expect(obj.series).toMatch(/^https:\/\/pavillion\.dev\//);
+    });
+
+  });
+
+  describe('toActivityPubObject()', () => {
+
+    it('should serialize a basic event with standard AS properties', () => {
+      const calendar = new Calendar('calendar-uuid', 'mycal');
+      const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+      event.addContent(new CalendarEventContent('en', 'Test Event', 'A test description'));
+      const startDt = DateTime.fromISO('2026-04-15T09:00:00.000Z');
+      const endDt = DateTime.fromISO('2026-04-15T12:00:00.000Z');
+      event.schedules = [new CalendarEventSchedule('s1', startDt, endDt)];
+      event.location = new EventLocation('loc-id', 'City Park');
+
+      const obj = new EventObject(calendar, event);
+      const result = obj.toActivityPubObject();
+
+      expect(result.type).toBe('Event');
+      expect(result.id).toMatch(/^https:\/\/pavillion\.dev\/calendars\/mycal\/events\/event-uuid$/);
+      expect(result.attributedTo).toBe('https://pavillion.dev/calendars/mycal');
+      expect(result.name).toBe('Test Event');
+      expect(result.summary).toBe('A test description');
+      expect(result.startTime).toBe(startDt.toISO());
+      expect(result.endTime).toBe(endDt.toISO());
+      expect(result.to).toContain('https://www.w3.org/ns/activitystreams#Public');
+      expect(result.cc).toContain('https://pavillion.dev/calendars/mycal/followers');
+      expect(result.location).toBeDefined();
+      expect(result.location.type).toBe('Place');
+      expect(result.location.name).toBe('City Park');
+      expect(result['pavillion:content']).toBeDefined();
+      expect(result['pavillion:categories']).toBeDefined();
+      expect(result['pavillion:series']).toBeDefined();
+      expect(result['pavillion:schedules']).toBeDefined();
+    });
+
+    it('should include nameMap and summaryMap for multilingual events', () => {
+      const calendar = new Calendar('calendar-uuid', 'mycal');
+      const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+      event.addContent(new CalendarEventContent('en', 'English Name', 'English Desc'));
+      event.addContent(new CalendarEventContent('es', 'Spanish Name', 'Spanish Desc'));
+
+      const obj = new EventObject(calendar, event);
+      const result = obj.toActivityPubObject();
+
+      expect(result.name).toBe('English Name');
+      expect(result.nameMap).toEqual({ en: 'English Name', es: 'Spanish Name' });
+      expect(result.summaryMap).toEqual({ en: 'English Desc', es: 'Spanish Desc' });
+
+      // Single-language events should NOT have nameMap/summaryMap
+      const singleEvent = new CalendarEvent('event-2', 'calendar-uuid');
+      singleEvent.addContent(new CalendarEventContent('en', 'Only English', 'Only Desc'));
+      const singleObj = new EventObject(calendar, singleEvent);
+      const singleResult = singleObj.toActivityPubObject();
+
+      expect(singleResult).not.toHaveProperty('nameMap');
+      expect(singleResult).not.toHaveProperty('summaryMap');
+    });
+
+    it('should fall back to date field when no schedules exist', () => {
+      const calendar = new Calendar('calendar-uuid', 'mycal');
+      const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+      event.date = '2026-04-15';
+      event.addContent(new CalendarEventContent('en', 'No Schedule Event', ''));
+
+      const obj = new EventObject(calendar, event);
+      const result = obj.toActivityPubObject();
+
+      expect(result.startTime).toBe('2026-04-15T00:00:00.000Z');
+      expect(result).not.toHaveProperty('endTime');
+    });
+
+    it('should omit location when event has no location', () => {
+      const calendar = new Calendar('calendar-uuid', 'mycal');
+      const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+      event.addContent(new CalendarEventContent('en', 'No Location', ''));
+
+      const obj = new EventObject(calendar, event);
+      const result = obj.toActivityPubObject();
+
+      expect(result).not.toHaveProperty('location');
+    });
+
+    it('should use "Untitled Event" when content is empty', () => {
+      const calendar = new Calendar('calendar-uuid', 'mycal');
+      const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+
+      const obj = new EventObject(calendar, event);
+      const result = obj.toActivityPubObject();
+
+      expect(result.name).toBe('Untitled Event');
+    });
+
+    it('should include pavillion:* extensions and exclude internal properties', () => {
+      const calendar = new Calendar('calendar-uuid', 'mycal');
+      const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+      event.addContent(new CalendarEventContent('en', 'Test', 'Desc'));
+      const startDt = DateTime.fromISO('2026-04-15T09:00:00.000Z');
+      event.schedules = [new CalendarEventSchedule('s1', startDt)];
+
+      const cat = new EventCategory('cat-1', 'calendar-uuid');
+      event.categories = [cat];
+
+      const series = new EventSeries('series-1', 'calendar-uuid', 'myseries');
+      series.addContent(new EventSeriesContent('en', 'Series', ''));
+      event.series = series;
+
+      const obj = new EventObject(calendar, event);
+      const result = obj.toActivityPubObject();
+
+      expect(result['pavillion:content']).toEqual(event.toObject().content);
+      expect(result['pavillion:categories']).toBeInstanceOf(Array);
+      expect(result['pavillion:categories'].length).toBe(1);
+      expect(result['pavillion:series']).toMatch(/^https:\/\//);
+      expect(result['pavillion:schedules']).toBeInstanceOf(Array);
+      expect(result['pavillion:schedules'].length).toBe(1);
+
+      // Internal properties should NOT leak into AP output
+      expect(result).not.toHaveProperty('date');
+      expect(result).not.toHaveProperty('parentEvent');
+      expect(result).not.toHaveProperty('childEvents');
+    });
+
+    it('should not affect existing EventObject instance properties (regression guard)', () => {
+      const calendar = new Calendar('calendar-uuid', 'mycal');
+      const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+      event.addContent(new CalendarEventContent('en', 'Test', 'Desc'));
+      event.date = '2026-04-15';
+
+      const cat = new EventCategory('cat-1', 'calendar-uuid');
+      event.categories = [cat];
+
+      const obj = new EventObject(calendar, event);
+
+      // Instance properties should still use old shape (unprefixed)
+      expect(obj.content).toHaveProperty('en');
+      expect(obj.date).toBeDefined();
+      expect(obj.categories).toBeInstanceOf(Array);
+      expect(typeof obj.categories[0]).toBe('string');
+
+      // Calling toActivityPubObject should not alter instance
+      obj.toActivityPubObject();
+      expect(obj.content).toHaveProperty('en');
+      expect(obj.date).toBeDefined();
+    });
+
+  });
+
+  describe('fromActivityPubObject()', () => {
+
+    it('should normalize standard AS input into eventParams shape', () => {
+      const apObject = {
+        name: 'Test',
+        startTime: '2026-04-15T09:00:00-05:00',
+        endTime: '2026-04-15T12:00:00-05:00',
+        summary: 'A description',
+      };
+
+      const result = EventObject.fromActivityPubObject(apObject);
+
+      expect(result.content.en.name).toBe('Test');
+      expect(result.content.en.description).toBe('A description');
+      expect(result.date).toBe('2026-04-15');
+      expect(result.schedules[0].start).toBe('2026-04-15T09:00:00-05:00');
+      expect(result.schedules[0].end).toBe('2026-04-15T12:00:00-05:00');
+    });
+
+    it('should normalize multilingual AS input with nameMap and summaryMap', () => {
+      const apObject = {
+        nameMap: { en: 'English', es: 'Spanish' },
+        summaryMap: { en: 'Eng desc', es: 'Esp desc' },
+      };
+
+      const result = EventObject.fromActivityPubObject(apObject);
+
+      expect(result.content.en.name).toBe('English');
+      expect(result.content.es.name).toBe('Spanish');
+      expect(result.content.en.description).toBe('Eng desc');
+      expect(result.content.es.description).toBe('Esp desc');
+    });
+
+    it('should pass through new Pavillion format with pavillion:* prefixes', () => {
+      const apObject = {
+        'pavillion:content': { en: { name: 'Test', description: 'Desc' } },
+        'pavillion:categories': ['uri1'],
+        'pavillion:series': 'series-uri',
+        'pavillion:schedules': [{ id: 's1', start: '2026-04-15T09:00:00Z', end: '2026-04-15T12:00:00Z' }],
+      };
+
+      const result = EventObject.fromActivityPubObject(apObject);
+
+      expect(result.content).toEqual({ en: { name: 'Test', description: 'Desc' } });
+      expect(result.categories).toEqual(['uri1']);
+      expect(result.series).toBe('series-uri');
+      expect(result.schedules).toEqual([{ id: 's1', start: '2026-04-15T09:00:00Z', end: '2026-04-15T12:00:00Z' }]);
+    });
+
+    it('should pass through old Pavillion format (backward compat)', () => {
+      const apObject = {
+        content: { en: { name: 'Old', description: 'Format' } },
+        categories: ['cat-uri'],
+        schedules: [{ id: 's1' }],
+      };
+
+      const result = EventObject.fromActivityPubObject(apObject);
+
+      expect(result.content).toEqual({ en: { name: 'Old', description: 'Format' } });
+      expect(result.categories).toEqual(['cat-uri']);
+      expect(result.schedules).toEqual([{ id: 's1' }]);
+    });
+
+    it('should give pavillion:content precedence over AS name/summary', () => {
+      const apObject = {
+        name: 'AS Name',
+        'pavillion:content': { en: { name: 'Pavillion Name', description: 'Pav Desc' } },
+      };
+
+      const result = EventObject.fromActivityPubObject(apObject);
+
+      expect(result.content.en.name).toBe('Pavillion Name');
+    });
+
+    it('should normalize AP Place location with PostalAddress', () => {
+      const apObject = {
+        location: {
+          type: 'Place',
+          name: 'Park',
+          address: {
+            type: 'PostalAddress',
+            streetAddress: '123 Main St',
+            addressLocality: 'Springfield',
+            addressRegion: 'IL',
+            postalCode: '62701',
+            addressCountry: 'US',
+          },
+        },
+      };
+
+      const result = EventObject.fromActivityPubObject(apObject);
+
+      expect(result.location.name).toBe('Park');
+      expect(result.location.address).toBe('123 Main St');
+      expect(result.location.city).toBe('Springfield');
+      expect(result.location.state).toBe('IL');
+      expect(result.location.postalCode).toBe('62701');
+      expect(result.location.country).toBe('US');
+
+      // String location should be wrapped
+      const stringResult = EventObject.fromActivityPubObject({ location: 'Some Place' });
+      expect(stringResult.location.name).toBe('Some Place');
+    });
+
+    it('should round-trip through toActivityPubObject and fromActivityPubObject', () => {
+      const calendar = new Calendar('calendar-uuid', 'mycal');
+      const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+      event.addContent(new CalendarEventContent('en', 'Round Trip', 'Test description'));
+      event.date = '2026-04-15';
+      const startDt = DateTime.fromISO('2026-04-15T09:00:00.000Z');
+      const endDt = DateTime.fromISO('2026-04-15T12:00:00.000Z');
+      event.schedules = [new CalendarEventSchedule('s1', startDt, endDt)];
+      event.location = new EventLocation('loc-id', 'City Park', '123 Main', 'Springfield', 'IL', '62701', 'US');
+
+      const obj = new EventObject(calendar, event);
+      const apOutput = obj.toActivityPubObject();
+      const normalized = EventObject.fromActivityPubObject(apOutput);
+      const reconstituted = CalendarEvent.fromObject(normalized);
+
+      // Content should match
+      expect(reconstituted._content.en.name).toBe('Round Trip');
+      expect(reconstituted._content.en.description).toBe('Test description');
+
+      // Date should match
+      expect(reconstituted.date).toBe('2026-04-15');
+
+      // Schedule start/end times should match
+      expect(reconstituted.schedules.length).toBeGreaterThan(0);
+      expect(reconstituted.schedules[0].startDate?.toISO()).toBe(startDt.toISO());
+      expect(reconstituted.schedules[0].endDate?.toISO()).toBe(endDt.toISO());
     });
 
   });
