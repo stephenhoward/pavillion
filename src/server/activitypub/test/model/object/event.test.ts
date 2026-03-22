@@ -235,6 +235,56 @@ describe('EventObject', () => {
       expect(result).not.toHaveProperty('childEvents');
     });
 
+    it('should emit content as HTML-wrapped primary description', () => {
+      const calendar = new Calendar('calendar-uuid', 'mycal');
+      const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+      event.addContent(new CalendarEventContent('en', 'Test Event', 'A test description'));
+
+      const obj = new EventObject(calendar, event);
+      const result = obj.toActivityPubObject();
+
+      expect(result.content).toBe('<p>A test description</p>');
+    });
+
+    it('should emit contentMap with HTML-wrapped descriptions for multilingual events', () => {
+      const calendar = new Calendar('calendar-uuid', 'mycal');
+      const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+      event.addContent(new CalendarEventContent('en', 'English Name', 'English Desc'));
+      event.addContent(new CalendarEventContent('es', 'Spanish Name', 'Spanish Desc'));
+
+      const obj = new EventObject(calendar, event);
+      const result = obj.toActivityPubObject();
+
+      expect(result.contentMap).toEqual({
+        en: '<p>English Desc</p>',
+        es: '<p>Spanish Desc</p>',
+      });
+    });
+
+    it('should not emit content or contentMap when description is empty', () => {
+      const calendar = new Calendar('calendar-uuid', 'mycal');
+      const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+      event.addContent(new CalendarEventContent('en', 'Title Only', ''));
+
+      const obj = new EventObject(calendar, event);
+      const result = obj.toActivityPubObject();
+
+      expect(result).not.toHaveProperty('content');
+      expect(result).not.toHaveProperty('contentMap');
+    });
+
+    it('should not emit contentMap for single-language events', () => {
+      const calendar = new Calendar('calendar-uuid', 'mycal');
+      const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+      event.addContent(new CalendarEventContent('en', 'Test', 'A description'));
+
+      const obj = new EventObject(calendar, event);
+      const result = obj.toActivityPubObject();
+
+      expect(result.content).toBe('<p>A description</p>');
+      expect(result).not.toHaveProperty('contentMap');
+    });
+
     it('should not affect existing EventObject instance properties (regression guard)', () => {
       const calendar = new Calendar('calendar-uuid', 'mycal');
       const event = new CalendarEvent('event-uuid', 'calendar-uuid');

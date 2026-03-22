@@ -108,6 +108,8 @@ class EventObject extends ActivityPubObject {
     const primaryDescription = primaryContent?.description || '';
     if (primaryDescription.trim().length > 0) {
       result.summary = primaryDescription;
+      // content: HTML-wrapped description for interop (Mobilizon, Gancio, Friendica)
+      result.content = `<p>${primaryDescription}</p>`;
     }
 
     // endTime: only when first schedule has endDate
@@ -147,6 +149,12 @@ class EventObject extends ActivityPubObject {
       }
       if (hasSummaryEntries) {
         result.summaryMap = summaryMap;
+        // contentMap: HTML-wrapped descriptions for interop (Mobilizon, Gancio, Friendica)
+        const contentMap: Record<string, string> = {};
+        for (const [lang, desc] of Object.entries(summaryMap)) {
+          contentMap[lang] = `<p>${desc}</p>`;
+        }
+        result.contentMap = contentMap;
       }
     }
 
