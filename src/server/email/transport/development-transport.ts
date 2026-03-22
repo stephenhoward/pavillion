@@ -3,6 +3,9 @@ import path from 'path';
 import fs from 'fs/promises';
 import { MailConfig } from '@/server/email/model/types';
 import { MailTransport } from '@/server/email/transport/mail-transport';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('email');
 
 /**
  * Development transport that writes emails to the file system.
@@ -50,7 +53,7 @@ export class DevelopmentTransport extends MailTransport {
             await fs.mkdir(outputDir, { recursive: true });
           }
           catch (err) {
-            console.error(`Failed to create mail output directory: ${outputDir}`, err);
+            logger.error({ err, outputDir }, 'Failed to create mail output directory');
           }
 
           // Generate filename with timestamp, recipient and subject
@@ -62,12 +65,7 @@ export class DevelopmentTransport extends MailTransport {
 
           // Log to console if enabled
           if (consoleOutput) {
-            console.log('\n--- Email Sent (Development Mode) ---');
-            console.log(`From: ${from}`);
-            console.log(`To: ${to}`);
-            console.log(`Subject: ${subject}`);
-            console.log(`Saved to: ${filePath}`);
-            console.log('--- End Email ---\n');
+            logger.info({ from, to, subject, filePath }, 'Email sent (development mode)');
           }
 
           // Return success
@@ -78,7 +76,7 @@ export class DevelopmentTransport extends MailTransport {
           });
         }
         catch (err) {
-          console.error('Failed to save email to file', err);
+          logger.error({ err }, 'Failed to save email to file');
           callback(err as Error);
         }
       },

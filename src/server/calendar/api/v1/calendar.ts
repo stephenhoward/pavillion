@@ -1,4 +1,7 @@
 import express, { Request, Response, Application } from 'express';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('calendar');
 
 import { Account } from '@/common/model/account';
 import ExpressHelper from '@/server/common/helper/express';
@@ -94,7 +97,7 @@ class CalendarRoutes {
         });
       }
       else {
-        console.error("Error creating calendar:", error);
+        logger.error({ err: error }, 'Error creating calendar');
         res.status(500).json({
           "error": "An error occurred while creating the calendar",
         });
@@ -142,7 +145,7 @@ class CalendarRoutes {
         });
       }
       else {
-        console.error("Error updating calendar settings:", error);
+        logger.error({ err: error }, 'Error updating calendar settings');
         res.status(500).json({
           "error": "An error occurred while updating calendar settings",
         });

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 import {
@@ -11,16 +11,12 @@ import {
 } from '../rate-limit';
 
 describe('createActorRateLimiter', () => {
-  let consoleWarnSpy: ReturnType<typeof vi.spyOn>;
-
   beforeEach(() => {
     // Reset the store before each test
     resetActorRateLimitStore();
-    consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
-    consoleWarnSpy.mockRestore();
     resetActorRateLimitStore();
   });
 
@@ -223,11 +219,7 @@ describe('createActorRateLimiter', () => {
         .send({ type: 'Follow' });
 
       expect(response.status).toBe(200);
-
-      // Should log a warning
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        '[RateLimit] Could not extract actor from request, allowing request',
-      );
+      expect(getActorRateLimitStore().size).toBe(0);
     });
 
     it('should allow request when body is empty', async () => {
@@ -284,7 +276,7 @@ describe('createActorRateLimiter', () => {
   });
 
   describe('logging', () => {
-    it('should log when rate limit is exceeded', async () => {
+    it('should block request when rate limit is exceeded (logging via pino)', async () => {
       const app = express();
       app.use(express.json());
 
@@ -299,13 +291,11 @@ describe('createActorRateLimiter', () => {
         .send({ actor: 'https://remote.example/users/alice', type: 'Follow' });
 
       // Second request is rate limited
-      await request(app)
+      const response = await request(app)
         .post('/inbox')
         .send({ actor: 'https://remote.example/users/alice', type: 'Follow' });
 
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        '[RateLimit] Rate limit exceeded for actor https://remote.example/users/alice (2/1 requests)',
-      );
+      expect(response.status).toBe(429);
     });
   });
 
@@ -481,16 +471,12 @@ describe('createActorRateLimiter', () => {
 });
 
 describe('createCalendarRateLimiter', () => {
-  let consoleWarnSpy: ReturnType<typeof vi.spyOn>;
-
   beforeEach(() => {
     // Reset the store before each test
     resetCalendarRateLimitStore();
-    consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
-    consoleWarnSpy.mockRestore();
     resetCalendarRateLimitStore();
   });
 
@@ -697,11 +683,7 @@ describe('createCalendarRateLimiter', () => {
         .send({ actor: 'https://remote.example/users/alice', type: 'Follow' });
 
       expect(response.status).toBe(200);
-
-      // Should log a warning
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        '[RateLimit] Could not extract calendar from request, allowing request',
-      );
+      expect(getCalendarRateLimitStore().size).toBe(0);
     });
   });
 
@@ -743,7 +725,7 @@ describe('createCalendarRateLimiter', () => {
   });
 
   describe('logging', () => {
-    it('should log when rate limit is exceeded', async () => {
+    it('should return 429 when rate limit is exceeded', async () => {
       const app = express();
       app.use(express.json());
 
@@ -758,13 +740,11 @@ describe('createCalendarRateLimiter', () => {
         .send({ actor: 'https://remote.example/users/alice', type: 'Follow' });
 
       // Second request is rate limited
-      await request(app)
+      const response = await request(app)
         .post('/calendars/my-calendar/inbox')
         .send({ actor: 'https://remote.example/users/alice', type: 'Follow' });
 
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        '[RateLimit] Rate limit exceeded for calendar my-calendar (2/1 requests)',
-      );
+      expect(response.status).toBe(429);
     });
   });
 

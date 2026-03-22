@@ -23,6 +23,9 @@ import { noAccountExistsError } from '@/server/accounts/exceptions';
 import AccountsInterface from '@/server/accounts/interface';
 import EmailInterface from '@/server/email/interface';
 import { logError } from '@/server/common/helper/error-logger';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('calendar');
 import FundingInterface from '@/server/funding/interface';
 import EditorNotificationEmail from '@/server/calendar/model/editor_notification_email';
 import db from '@/server/common/entity/db';
@@ -802,7 +805,7 @@ class CalendarService {
           'Content-Type': 'application/activity+json',
         },
       });
-      console.log(`[CALENDAR] Sent Add activity to ${remoteUser.inbox}`);
+      logger.info({ inbox: remoteUser.inbox }, 'Sent Add activity to remote user');
     }
     catch (error: any) {
       // Log but don't fail - the local record is created, notification is best-effort

@@ -2,6 +2,12 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import sinon from 'sinon';
 import { EventEmitter } from 'events';
 
+// Mock the rejection-logger so we can verify it was called with the right context
+vi.mock('@/server/activitypub/helper/rejection-logger', () => ({
+  logActivityRejection: vi.fn(),
+}));
+
+import { logActivityRejection } from '@/server/activitypub/helper/rejection-logger';
 import ProcessInboxService from '@/server/activitypub/service/inbox';
 import ModerationService from '@/server/moderation/service/moderation';
 import ModerationInterface from '@/server/moderation/interface';
@@ -261,8 +267,8 @@ describe('ProcessInboxService - Blocked Instance Filtering', () => {
       calendar.urlName = 'test-calendar';
       (calendarInterface.getCalendar as sinon.SinonStub).resolves(calendar);
 
-      // Spy on console.warn to verify structured audit logging
-      const consoleWarnSpy = sandbox.spy(console, 'warn');
+      const mockLogRejection = logActivityRejection as ReturnType<typeof vi.fn>;
+      mockLogRejection.mockClear();
 
       const objectData = {
         id: 'https://malicious.example.com/events/spam',
@@ -284,24 +290,17 @@ describe('ProcessInboxService - Blocked Instance Filtering', () => {
 
       await inboxService.processInboxMessage(mockMessage);
 
-      // Verify structured audit log was written
-      expect(consoleWarnSpy.calledOnce).toBe(true);
-      const logCall = consoleWarnSpy.getCall(0);
-      const logOutput = logCall.args[0];
-
-      // Parse the JSON log output
-      const logEntry = JSON.parse(logOutput);
-
-      // Verify structured log contains expected fields
-      expect(logEntry.context).toBe('activitypub.inbox.rejection');
-      expect(logEntry.rejection_type).toBe('blocked_instance');
-      expect(logEntry.activity_type).toBe('Create');
-      expect(logEntry.actor_uri).toBe(actorUri);
-      expect(logEntry.actor_domain).toBe(blockedDomain);
-      expect(logEntry.calendar_id).toBe('test-cal-id');
-      expect(logEntry.calendar_url_name).toBe('test-calendar');
-      expect(logEntry.message_id).toBe('msg-spam');
-      expect(logEntry.reason).toContain(blockedDomain);
+      // Verify logActivityRejection was called with the expected context
+      expect(mockLogRejection).toHaveBeenCalledOnce();
+      const context = mockLogRejection.mock.calls[0][0];
+      expect(context.rejection_type).toBe('blocked_instance');
+      expect(context.activity_type).toBe('Create');
+      expect(context.actor_uri).toBe(actorUri);
+      expect(context.actor_domain).toBe(blockedDomain);
+      expect(context.calendar_id).toBe('test-cal-id');
+      expect(context.calendar_url_name).toBe('test-calendar');
+      expect(context.message_id).toBe('msg-spam');
+      expect(context.reason).toContain(blockedDomain);
     });
   });
 });

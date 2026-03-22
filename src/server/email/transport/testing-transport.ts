@@ -1,6 +1,9 @@
 import nodemailer from 'nodemailer';
 import { MailConfig } from '@/server/email/model/types';
 import { MailTransport } from '@/server/email/transport/mail-transport';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('email');
 
 /**
  * Interface for email storage in testing transport
@@ -133,11 +136,7 @@ export class TestingTransport extends MailTransport {
           });
 
           if (process.env.NODE_ENV === 'test' && process.env.MAIL_TEST_VERBOSE === 'true') {
-            console.log('\n--- Email Sent (Testing Transport) ---');
-            console.log(`From: ${from}`);
-            console.log(`To: ${to}`);
-            console.log(`Subject: ${subject}`);
-            console.log('--- End Email ---\n');
+            logger.info({ from, to, subject }, 'Email sent (testing transport)');
           }
 
           // Return success
@@ -148,7 +147,7 @@ export class TestingTransport extends MailTransport {
           });
         }
         catch (err) {
-          console.error('Failed to store email in memory', err);
+          logger.error({ err }, 'Failed to store email in memory');
           callback(err);
         }
       },

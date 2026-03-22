@@ -1,6 +1,10 @@
 import { generateKeyPairSync, createSign } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('activitypub');
+
 import { Account } from '@/common/model/account';
 import { UserActorEntity, UserActor } from '@/server/activitypub/entity/user_actor';
 import { AccountEntity } from '@/server/common/entity/account';
@@ -218,14 +222,14 @@ export default class UserActorService {
   async processAddActivity(username: string, activity: any): Promise<boolean> {
     // Validate the activity structure
     if (activity.type !== 'Add') {
-      console.error(`[USER INBOX] Invalid activity type: ${activity.type}`);
+      logger.error({ activityType: activity.type }, 'Invalid activity type in user inbox');
       return false;
     }
 
     // Get the local user actor
     const actor = await this.getActorByUsername(username);
     if (!actor) {
-      console.error(`[USER INBOX] User not found: ${username}`);
+      logger.error({ username }, 'User not found in user inbox');
       return false;
     }
 
@@ -235,7 +239,7 @@ export default class UserActorService {
 
     // Verify the object is us
     if (object !== actor.actorUri) {
-      console.error(`[USER INBOX] Add activity object doesn't match our actor: ${object} vs ${actor.actorUri}`);
+      logger.error({ object, actorUri: actor.actorUri }, 'Add activity object does not match our actor');
       return false;
     }
 
@@ -245,7 +249,7 @@ export default class UserActorService {
     const remoteCalendarId = activity.calendarId || null; // The remote calendar's UUID
 
     if (!calendarActorUri) {
-      console.error('[USER INBOX] Missing calendar actor URI in Add activity');
+      logger.error('Missing calendar actor URI in Add activity');
       return false;
     }
 
@@ -255,7 +259,7 @@ export default class UserActorService {
     });
 
     if (!account) {
-      console.error(`[USER INBOX] Account not found for username: ${username}`);
+      logger.error({ username }, 'Account not found for username in user inbox');
       return false;
     }
 
@@ -283,7 +287,7 @@ export default class UserActorService {
     // Record the editor access on the remote calendar via CalendarInterface
     await this.calendarInterface.grantRemoteEditorAccess(account.id, remoteCalendarActor.id);
 
-    console.log(`[USER INBOX] Created remote calendar membership for user ${username} to calendar ${calendarActorUri}`);
+    logger.info({ username, calendarActorUri }, 'Created remote calendar membership for user');
     return true;
   }
 
@@ -297,14 +301,14 @@ export default class UserActorService {
   async processRemoveActivity(username: string, activity: any): Promise<boolean> {
     // Validate the activity structure
     if (activity.type !== 'Remove') {
-      console.error(`[USER INBOX] Invalid activity type: ${activity.type}`);
+      logger.error({ activityType: activity.type }, 'Invalid activity type in user inbox');
       return false;
     }
 
     // Get the local user actor
     const actor = await this.getActorByUsername(username);
     if (!actor) {
-      console.error(`[USER INBOX] User not found: ${username}`);
+      logger.error({ username }, 'User not found in user inbox');
       return false;
     }
 
@@ -312,7 +316,7 @@ export default class UserActorService {
     const calendarActorUri = activity.actor;
 
     if (!calendarActorUri) {
-      console.error('[USER INBOX] Missing calendar actor URI in Remove activity');
+      logger.error('Missing calendar actor URI in Remove activity');
       return false;
     }
 
@@ -322,7 +326,7 @@ export default class UserActorService {
     });
 
     if (!account) {
-      console.error(`[USER INBOX] Account not found for username: ${username}`);
+      logger.error({ username }, 'Account not found for username in user inbox');
       return false;
     }
 
@@ -331,14 +335,14 @@ export default class UserActorService {
     const remoteCalendarActor = await remoteCalendarService.getByActorUri(calendarActorUri);
 
     if (!remoteCalendarActor) {
-      console.log(`[USER INBOX] Remote calendar actor not found for URI: ${calendarActorUri}`);
+      logger.info({ calendarActorUri }, 'Remote calendar actor not found for URI');
       return false;
     }
 
     // Remove the editor access record via CalendarInterface
     const deleted = await this.calendarInterface.removeRemoteEditorAccess(account.id, remoteCalendarActor.id);
 
-    console.log(`[USER INBOX] Removed remote calendar membership for user ${username} to calendar ${calendarActorUri} (deleted: ${deleted})`);
+    logger.info({ username, calendarActorUri, deleted }, 'Removed remote calendar membership for user');
     return true;
   }
 }

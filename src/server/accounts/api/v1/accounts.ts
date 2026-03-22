@@ -5,6 +5,9 @@ import { AccountAlreadyExistsError, AccountRegistrationClosedError } from '@/ser
 import { Account } from '@/common/model/account';
 import { logError } from '@/server/common/helper/error-logger';
 import { ValidationError } from '@/common/exceptions/base';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('accounts');
 
 export default class AccountRouteHandlers {
   private service: AccountsInterface;
@@ -31,7 +34,7 @@ export default class AccountRouteHandlers {
     }
     catch (error) {
       if ( error instanceof AccountAlreadyExistsError ) {
-        console.info('Registration attempt for existing account');
+        logger.info('Registration attempt for existing account');
       }
       else if ( error instanceof AccountRegistrationClosedError ) {
         res.status(400).json({ error: 'registration_closed', errorName: 'AccountRegistrationClosedError' });

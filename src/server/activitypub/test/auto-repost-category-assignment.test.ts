@@ -53,9 +53,6 @@ describe('ProcessInboxService - auto-repost category assignment', () => {
     testCalendar.addContent('en', new CalendarContent('en'));
     testCalendar.content('en').title = 'Test Calendar';
 
-    // Suppress console output during tests
-    sandbox.stub(console, 'log');
-    sandbox.stub(console, 'warn');
   });
 
   afterEach(() => {

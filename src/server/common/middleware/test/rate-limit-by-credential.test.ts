@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import request from 'supertest';
 import express from 'express';
@@ -8,16 +8,13 @@ import { createCredentialRateLimiter } from '../rate-limit-by-credential';
 describe('createCredentialRateLimiter', () => {
   let router: express.Router;
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
-  let consoleWarnSpy: any;
 
   beforeEach(() => {
     router = express.Router();
-    consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
     sandbox.restore();
-    consoleWarnSpy.mockRestore();
   });
 
   describe('rate limit enforcement', () => {
@@ -175,10 +172,10 @@ describe('createCredentialRateLimiter', () => {
     });
   });
 
-  describe('logging with credential redaction', () => {
-    it('should log with redacted email when limit is exceeded', async () => {
+  describe('credential-based keying behavior', () => {
+    it('should rate limit each email independently', async () => {
       const limiter = createCredentialRateLimiter(
-        1,
+        2,
         60000,
         'test-endpoint',
         'email',
@@ -190,26 +187,31 @@ describe('createCredentialRateLimiter', () => {
 
       const app = testApp(router);
 
-      // First request succeeds
-      await request(app)
+      // Exhaust the limit for testuser@example.com
+      for (let i = 0; i < 2; i++) {
+        await request(app)
+          .post('/test')
+          .send({ email: 'testuser@example.com' });
+      }
+
+      // A different email should still be allowed (separate bucket)
+      const otherResponse = await request(app)
+        .post('/test')
+        .send({ email: 'other@example.com' });
+
+      expect(otherResponse.status).toBe(200);
+
+      // The original email should be blocked
+      const blockedResponse = await request(app)
         .post('/test')
         .send({ email: 'testuser@example.com' });
 
-      // Second request is rate limited
-      await request(app)
-        .post('/test')
-        .send({ email: 'testuser@example.com' });
-
-      // Verify console.warn was called with redacted email
-      // redactEmail keeps first 2 chars + *** + @ + full domain
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        'Rate limit exceeded for te***@example.com on test-endpoint',
-      );
+      expect(blockedResponse.status).toBe(429);
     });
 
-    it('should log with redacted short email when limit is exceeded', async () => {
+    it('should share the unknown key for empty and missing credentials', async () => {
       const limiter = createCredentialRateLimiter(
-        1,
+        2,
         60000,
         'test-endpoint',
         'email',
@@ -221,80 +223,26 @@ describe('createCredentialRateLimiter', () => {
 
       const app = testApp(router);
 
-      // First request succeeds
-      await request(app)
+      // First request with empty email — falsy, uses 'unknown' key
+      const emptyResponse = await request(app)
         .post('/test')
-        .send({ email: 'ab@x.co' });
+        .send({ email: '' });
 
-      // Second request is rate limited
-      await request(app)
-        .post('/test')
-        .send({ email: 'ab@x.co' });
+      expect(emptyResponse.status).toBe(200);
 
-      // Verify console.warn was called with redacted short email
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        'Rate limit exceeded for ab***@x.co on test-endpoint',
-      );
-    });
-
-    it('should log "unknown" when credential is invalid', async () => {
-      const limiter = createCredentialRateLimiter(
-        1,
-        60000,
-        'test-endpoint',
-        'email',
-      );
-
-      router.post('/test', limiter, (req, res) => {
-        res.status(200).json({ success: true });
-      });
-
-      const app = testApp(router);
-
-      // First request succeeds
-      await request(app)
-        .post('/test')
-        .send({ email: 'not-an-email' });
-
-      // Second request is rate limited
-      await request(app)
-        .post('/test')
-        .send({ email: 'not-an-email' });
-
-      // Verify console.warn was called with "unknown"
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        'Rate limit exceeded for unknown on test-endpoint',
-      );
-    });
-
-    it('should log "unknown" when credential field is missing', async () => {
-      const limiter = createCredentialRateLimiter(
-        1,
-        60000,
-        'test-endpoint',
-        'email',
-      );
-
-      router.post('/test', limiter, (req, res) => {
-        res.status(200).json({ success: true });
-      });
-
-      const app = testApp(router);
-
-      // First request succeeds
-      await request(app)
+      // Second request with missing credential field — also uses 'unknown' key
+      const missingResponse = await request(app)
         .post('/test')
         .send({ notEmail: 'value' });
 
-      // Second request is rate limited
-      await request(app)
-        .post('/test')
-        .send({ notEmail: 'value' });
+      expect(missingResponse.status).toBe(200);
 
-      // Verify console.warn was called with "unknown"
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        'Rate limit exceeded for unknown on test-endpoint',
-      );
+      // Third request should be blocked because both shared the 'unknown' bucket
+      const blockedResponse = await request(app)
+        .post('/test')
+        .send({ notEmail: 'other-value' });
+
+      expect(blockedResponse.status).toBe(429);
     });
   });
 

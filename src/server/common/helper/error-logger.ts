@@ -6,6 +6,8 @@
  * to clients.
  */
 
+import logger from '@/server/common/helper/logger';
+
 /**
  * Logs an error with context information for debugging.
  *
@@ -13,17 +15,11 @@
  * @param context - Additional context about where/when the error occurred
  */
 export function logError(error: unknown, context: string): void {
-  const timestamp = new Date().toISOString();
-  console.error(`[${timestamp}] ${context}:`);
-
   if (error instanceof Error) {
-    console.error(`  Error: ${error.message}`);
-    if (error.stack) {
-      console.error(`  Stack: ${error.stack}`);
-    }
+    logger.error({ err: error, context }, error.message);
   }
   else {
-    console.error(`  Error:`, error);
+    logger.error({ error, context }, 'Non-Error object thrown');
   }
 }
 

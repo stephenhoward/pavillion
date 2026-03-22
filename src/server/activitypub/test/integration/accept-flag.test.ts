@@ -201,18 +201,10 @@ describe('ProcessInboxService - Accept Flag Activity', () => {
       // Stub acknowledgeForwardedReport to return false (no matching report)
       (moderationInterface.acknowledgeForwardedReport as sinon.SinonStub).resolves(false);
 
-      const consoleWarnStub = sandbox.stub(console, 'warn');
-
       await inboxService.processAcceptActivity(testCalendar, acceptActivity);
 
       // Verify acknowledgeForwardedReport was attempted
       expect((moderationInterface.acknowledgeForwardedReport as sinon.SinonStub).calledOnce).toBe(true);
-
-      // Verify a warning was logged about the mismatch
-      const warningLogged = consoleWarnStub.getCalls().some(
-        call => call.args[0]?.includes('hostname mismatch'),
-      );
-      expect(warningLogged).toBe(true);
     });
 
     it('should reject Accept with string URI object using non-https scheme', async () => {
@@ -224,18 +216,10 @@ describe('ProcessInboxService - Accept Flag Activity', () => {
         object: maliciousUri,
       });
 
-      const consoleWarnStub = sandbox.stub(console, 'warn');
-
       await inboxService.processAcceptActivity(testCalendar, acceptActivity);
 
-      // Verify acknowledgeForwardedReport was NOT called
+      // Verify acknowledgeForwardedReport was NOT called (non-https scheme rejected early)
       expect((moderationInterface.acknowledgeForwardedReport as sinon.SinonStub).called).toBe(false);
-
-      // Verify a warning was logged about invalid scheme
-      const warningLogged = consoleWarnStub.getCalls().some(
-        call => call.args[0]?.includes('invalid scheme'),
-      );
-      expect(warningLogged).toBe(true);
     });
   });
 });

@@ -31,6 +31,7 @@ import { backfillUserActors } from '@/server/activitypub/scripts/backfill-user-a
 import { backfillCalendarActors } from '@/server/activitypub/scripts/backfill-calendar-actors';
 import { globalErrorHandler } from '@/server/common/middleware/error-handler';
 import { createI18nConfig } from '@/common/i18n/config';
+import logger from '@/server/common/helper/logger';
 
 /**
  * Validates production environment configuration.
@@ -42,9 +43,9 @@ import { createI18nConfig } from '@/common/i18n/config';
  */
 function validateProductionEnvironment(): void {
   if (process.env.NODE_ENV === 'production') {
-    console.log('Production mode: Validating secrets configuration...');
+    logger.info('Production mode: Validating secrets configuration...');
     validateProductionSecrets();
-    console.log('Secrets validation passed.');
+    logger.info('Secrets validation passed.');
   }
 }
 
@@ -65,23 +66,23 @@ async function initializeDatabase(): Promise<void> {
 
     if (skipReset) {
       // Sync schema without dropping tables (creates missing tables, preserves data)
-      console.log('Development mode: Syncing database schema (preserving existing data)...');
+      logger.info('Development mode: Syncing database schema (preserving existing data)...');
       await db.sync({ force: false });
-      console.log('Database schema synced (data preserved).');
+      logger.info('Database schema synced (data preserved).');
     }
     else if (process.env.NODE_ENV === 'test') {
       // Test mode: sync database schema without seeding
       // This creates all tables defined by registered entities (including new ones like blocked_reporter)
-      console.log('Test mode: Syncing database schema without seeding...');
+      logger.info('Test mode: Syncing database schema without seeding...');
       try {
         await db.sync({ force: true });
-        console.log('Test database schema synced successfully.');
+        logger.info('Test database schema synced successfully.');
       }
       catch (error: any) {
         // In test mode, if sync fails due to existing indexes/tables (SQLite race condition),
         // the database is already initialized from a previous test run - skip sync
         if (error.parent?.code === 'SQLITE_ERROR' && error.message.includes('already exists')) {
-          console.log('Database already initialized, skipping sync...');
+          logger.info('Database already initialized, skipping sync...');
         }
         else {
           throw error;
@@ -94,39 +95,39 @@ async function initializeDatabase(): Promise<void> {
       if (process.env.NODE_ENV === 'federation') envLabel = 'Federation';
       if (process.env.NODE_ENV === 'e2e') envLabel = 'E2E';
 
-      console.log(`${envLabel} mode: Syncing database schema...`);
+      logger.info(`${envLabel} mode: Syncing database schema...`);
       await db.sync({ force: true });
       await seedDB();
       await seedMediaFiles();
-      console.log('Database synced and seeded successfully.');
+      logger.info('Database synced and seeded successfully.');
 
       // Backfill UserActors and CalendarActors for seeded accounts/calendars
       await backfillUserActors(undefined, false);
-      console.log('User actors backfilled successfully.');
+      logger.info('User actors backfilled successfully.');
       await backfillCalendarActors(undefined, false);
-      console.log('Calendar actors backfilled successfully.');
+      logger.info('Calendar actors backfilled successfully.');
 
       // Seed follow relationships and category mappings (needs actor IDs from backfill)
       await seedFollowData();
-      console.log('Follow data seeded successfully.');
+      logger.info('Follow data seeded successfully.');
     }
   }
   else {
     // Production mode: run migrations
-    console.log('Production mode: Running database migrations...');
+    logger.info('Production mode: Running database migrations...');
     const migrationsPath = path.join(process.cwd(), 'migrations');
     const result = await runMigrations(db, migrationsPath);
 
     if (!result.success) {
-      console.error('Migration failed:', result.error?.message);
+      logger.error({ err: result.error }, 'Migration failed');
       throw new Error(`Database migration failed: ${result.error?.message}`);
     }
 
     if (result.executed.length > 0) {
-      console.log(`Successfully executed ${result.executed.length} migration(s): ${result.executed.join(', ')}`);
+      logger.info({ migrations: result.executed, count: result.executed.length }, 'Migrations executed successfully');
     }
     else {
-      console.log('No pending migrations to run.');
+      logger.info('No pending migrations to run.');
     }
   }
 }
@@ -343,7 +344,7 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
     // without needing the server to actually listen on a port
     if (process.env.NODE_ENV !== 'test') {
       const server = app.listen(port, () => {
-        console.log(`Pavillion listening at http://localhost:${port}/`);
+        logger.info({ port }, 'Pavillion listening');
       });
 
       // Add graceful shutdown handlers for clean server termination
@@ -359,27 +360,27 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
       }
       else if (process.env.NODE_ENV !== 'test') {
         const gracefulShutdown = async (signal: string) => {
-          console.log(`${signal} received. Starting graceful shutdown...`);
+          logger.info({ signal }, 'Received signal, starting graceful shutdown');
 
           try {
             // Close database connections first
             await db.close();
-            console.log('Database connection closed.');
+            logger.info('Database connection closed.');
 
             // Then close the HTTP server
             server.close(() => {
-              console.log('HTTP server closed.');
+              logger.info('HTTP server closed.');
               process.exit(0);
             });
 
             // Force exit if server.close() doesn't complete quickly (10 seconds)
             setTimeout(() => {
-              console.log('Server close timeout - forcing exit');
+              logger.warn('Server close timeout - forcing exit');
               process.exit(0);
             }, 10000).unref();
           }
           catch (error) {
-            console.error('Error during shutdown:', error);
+            logger.error({ err: error }, 'Error during shutdown');
             process.exit(1);
           }
         };
@@ -394,7 +395,7 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
     return null;
   }
   catch (error) {
-    console.error('Failed to initialize database:', error);
+    logger.error({ err: error }, 'Failed to initialize database');
     process.exit(1);
   }
 };

@@ -1,5 +1,8 @@
 import { EventEmitter } from 'events';
 import { DomainEventHandlers } from '@/server/common/types/domain';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('funding');
 
 /**
  * Funding domain event handlers
@@ -17,29 +20,27 @@ export default class FundingEventHandlers implements DomainEventHandlers {
     // Register event handlers for subscription lifecycle events
 
     eventBus.on('funding_plan:created', (data: { funding_plan: any }) => {
-      console.log(`[FundingPlan] Created: ${data.subscription.id}`);
+      logger.info({ id: data.subscription.id }, 'Funding plan created');
       // Future: Send confirmation email, update analytics, etc.
     });
 
     eventBus.on('funding_plan:cancelled', (data: { funding_plan: any; immediate: boolean }) => {
-      console.log(
-        `[FundingPlan] Cancelled: ${data.subscription.id} (immediate: ${data.immediate})`,
-      );
+      logger.info({ id: data.subscription.id, immediate: data.immediate }, 'Funding plan cancelled');
       // Future: Send cancellation confirmation email
     });
 
     eventBus.on('funding_plan:suspended', (data: { funding_plan: any }) => {
-      console.log(`[FundingPlan] Suspended: ${data.subscription.id}`);
+      logger.info({ id: data.subscription.id }, 'Funding plan suspended');
       // Future: Send suspension notification email
     });
 
     eventBus.on('funding_plan:reactivated', (data: { funding_plan: any }) => {
-      console.log(`[FundingPlan] Reactivated: ${data.subscription.id}`);
+      logger.info({ id: data.subscription.id }, 'Funding plan reactivated');
       // Future: Send reactivation confirmation email
     });
 
     eventBus.on('funding_plan:payment_failed', (data: { funding_plan: any }) => {
-      console.log(`[FundingPlan] Payment failed: ${data.subscription.id}`);
+      logger.info({ id: data.subscription.id }, 'Funding plan payment failed');
       // Future: Send payment failure notification email
     });
   }

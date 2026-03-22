@@ -23,6 +23,9 @@ import CalendarInterface from '@/server/calendar/interface';
 import { Account } from '@/common/model/account';
 import { logError } from '@/server/common/helper/error-logger';
 import { Calendar } from '@/common/model/calendar';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('activitypub');
 
 export default class ActivityPubEventHandlers implements DomainEventHandlers {
   private service: ActivityPubInterface;
@@ -104,7 +107,7 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
       }
     }
     else {
-      console.error("outbox message not found for processing");
+      logger.error('Outbox message not found for processing');
     }
   }
 
@@ -112,7 +115,7 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
     let message = await ActivityPubInboxMessageEntity.findByPk(e.id);
 
     if ( ! message ) {
-      console.error("inbox message not found for processing");
+      logger.error('Inbox message not found for processing');
       return;
     }
     if ( ! message.processed_time ) {
@@ -124,13 +127,13 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
     try {
       // Only create UserActor if username is set
       if (!payload.username) {
-        console.log(`[ActivityPub] Skipping UserActor creation for account ${payload.accountId}: no username set`);
+        logger.info({ accountId: payload.accountId }, 'Skipping UserActor creation: no username set');
         return;
       }
 
       const domain = payload.domain || config.get<string>('domain');
       if (!domain) {
-        console.error(`[ActivityPub] Cannot create UserActor for account ${payload.accountId}: domain not configured`);
+        logger.error({ accountId: payload.accountId }, 'Cannot create UserActor: domain not configured');
         return;
       }
 
@@ -138,7 +141,7 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
       const account = new Account(payload.accountId, payload.username, '');
 
       await this.userActorService.createActor(account, domain);
-      console.log(`[ActivityPub] Created UserActor for account ${payload.username} (${payload.accountId})`);
+      logger.info({ username: payload.username, accountId: payload.accountId }, 'Created UserActor for account');
     }
     catch (error) {
       // Log error but don't throw - UserActor creation failure should not break account creation
@@ -148,20 +151,20 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
 
   private handleRemoteEditorRevoked(payload: RemoteEditorRevokedPayload): void {
     this.service.invalidateAuthorizationCache(payload.calendarId, payload.actorUri);
-    console.log(`[ActivityPub] Invalidated authorization cache for actor ${payload.actorUri} on calendar ${payload.calendarId}`);
+    logger.info({ actorUri: payload.actorUri, calendarId: payload.calendarId }, 'Invalidated authorization cache for actor');
   }
 
   private async handleCalendarCreated(payload: CalendarCreatedPayload): Promise<void> {
     try {
       // Only create CalendarActor if urlName is set
       if (!payload.urlName) {
-        console.log(`[ActivityPub] Skipping CalendarActor creation for calendar ${payload.calendarId}: no urlName set`);
+        logger.info({ calendarId: payload.calendarId }, 'Skipping CalendarActor creation: no urlName set');
         return;
       }
 
       const domain = payload.domain || config.get<string>('domain');
       if (!domain) {
-        console.error(`[ActivityPub] Cannot create CalendarActor for calendar ${payload.calendarId}: domain not configured`);
+        logger.error({ calendarId: payload.calendarId }, 'Cannot create CalendarActor: domain not configured');
         return;
       }
 
@@ -169,7 +172,7 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
       const calendar = new Calendar(payload.calendarId, payload.urlName);
 
       await this.calendarActorService.createActor(calendar, domain);
-      console.log(`[ActivityPub] Created CalendarActor for calendar ${payload.urlName} (${payload.calendarId})`);
+      logger.info({ urlName: payload.urlName, calendarId: payload.calendarId }, 'Created CalendarActor for calendar');
     }
     catch (error) {
       // Log error but don't throw - CalendarActor creation failure should not break calendar creation

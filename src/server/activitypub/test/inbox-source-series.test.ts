@@ -62,9 +62,6 @@ describe('ProcessInboxService - source_series parsing', () => {
     // Stub checkAndPerformAutoRepost to avoid follow-up processing
     sandbox.stub(inboxService as any, 'checkAndPerformAutoRepost').resolves();
 
-    // Suppress console output during tests
-    sandbox.stub(console, 'log');
-    sandbox.stub(console, 'warn');
   });
 
   afterEach(() => {

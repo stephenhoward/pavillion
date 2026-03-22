@@ -1,6 +1,9 @@
 import { EventEmitter } from 'events';
 import FundingService from './funding';
 import { logError } from '@/server/common/helper/error-logger';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('funding');
 
 /**
  * Shared event bus for subscription jobs
@@ -21,7 +24,7 @@ const subscriptionService = new FundingService(eventBus);
 export async function checkGracePeriodExpiry(): Promise<void> {
   try {
     await subscriptionService.suspendExpiredSubscriptions();
-    console.log('[SubscriptionJobs] Grace period check completed');
+    logger.info('Grace period check completed');
   }
   catch (error) {
     logError(error, '[Subscription] Error checking grace period expiry');
@@ -35,7 +38,7 @@ export async function checkGracePeriodExpiry(): Promise<void> {
  * @returns Function to stop all jobs
  */
 export function startScheduledJobs(): () => void {
-  console.log('[SubscriptionJobs] Starting scheduled jobs');
+  logger.info('Starting scheduled jobs');
 
   // Run grace period check every hour
   const gracePeriodInterval = setInterval(() => {
@@ -53,7 +56,7 @@ export function startScheduledJobs(): () => void {
 
   // Return cleanup function
   return () => {
-    console.log('[SubscriptionJobs] Stopping scheduled jobs');
+    logger.info('Stopping scheduled jobs');
     clearInterval(gracePeriodInterval);
   };
 }
