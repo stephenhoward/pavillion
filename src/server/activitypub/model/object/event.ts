@@ -1,10 +1,20 @@
 import config from 'config';
+import he from 'he';
 import { DateTime } from 'luxon';
+import striptags from 'striptags';
+
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent, CalendarEventSchedule } from '@/common/model/events';
 import { EventLocation } from '@/common/model/location';
 import { ActivityPubObject } from '@/server/activitypub/model/base';
 import { SeriesObject } from '@/server/activitypub/model/object/series';
+
+/**
+ * Strips HTML tags and decodes HTML entities from a string.
+ */
+function stripHtmlTags(html: string): string {
+  return striptags(he.decode(html)).trim();
+}
 
 class EventObject extends ActivityPubObject {
   type: string = 'Event';
@@ -200,30 +210,34 @@ class EventObject extends ActivityPubObject {
     }
     else {
       // Standard AS format: build content from name/summary/nameMap/summaryMap
+      // Falls back to content/contentMap (HTML) when summary/summaryMap are absent
       const content: Record<string, { name: string; description: string }> = {};
 
       // nameMap and summaryMap provide per-language content
       const nameMap = apObject.nameMap || {};
       const summaryMap = apObject.summaryMap || {};
-      const allLanguages = new Set([...Object.keys(nameMap), ...Object.keys(summaryMap)]);
+      const contentMap = apObject.contentMap || {};
+      const allLanguages = new Set([...Object.keys(nameMap), ...Object.keys(summaryMap), ...Object.keys(contentMap)]);
 
-      // If there's a bare name/summary but no maps, use 'en' as default language
-      if (allLanguages.size === 0 && (apObject.name || apObject.summary)) {
+      // Resolve description: prefer summary, fall back to content (strip HTML)
+      const bareDescription = apObject.summary
+        || (typeof apObject.content === 'string' ? stripHtmlTags(apObject.content) : '')
+        || '';
+
+      // If there's a bare name/summary/content but no maps, use 'en' as default language
+      if (allLanguages.size === 0 && (apObject.name || bareDescription)) {
         content.en = {
           name: apObject.name || '',
-          description: apObject.summary || '',
+          description: bareDescription,
         };
       }
       else {
         for (const lang of allLanguages) {
           content[lang] = {
             name: nameMap[lang] || '',
-            description: summaryMap[lang] || '',
+            description: summaryMap[lang] || (contentMap[lang] ? stripHtmlTags(contentMap[lang]) : ''),
           };
         }
-
-        // If bare name exists and isn't in nameMap, it represents the primary language
-        // but since we already have all languages from maps, we skip adding it again
       }
 
       if (Object.keys(content).length > 0) {

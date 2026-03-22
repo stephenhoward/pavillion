@@ -442,6 +442,91 @@ describe('EventObject', () => {
       expect(reconstituted.schedules[0].endDate?.toISO()).toBe(endDt.toISO());
     });
 
+    it('should use string content (HTML) as description fallback when summary is absent', () => {
+      const apObject = {
+        type: 'Event',
+        id: 'https://gancio.example/events/123',
+        name: 'Gancio Event',
+        content: '<p>A <strong>great</strong> event description</p>',
+        startTime: '2026-05-01T10:00:00Z',
+      };
+
+      const result = EventObject.fromActivityPubObject(apObject);
+      expect(result.content.en.name).toBe('Gancio Event');
+      expect(result.content.en.description).toBe('A great event description');
+    });
+
+    it('should prefer summary over string content when both are present', () => {
+      const apObject = {
+        type: 'Event',
+        id: 'https://example.com/events/1',
+        name: 'Test Event',
+        summary: 'Short summary',
+        content: '<p>Longer HTML description</p>',
+        startTime: '2026-05-01T10:00:00Z',
+      };
+
+      const result = EventObject.fromActivityPubObject(apObject);
+      expect(result.content.en.description).toBe('Short summary');
+    });
+
+    it('should use contentMap as description fallback when summaryMap is absent', () => {
+      const apObject = {
+        type: 'Event',
+        id: 'https://mobilizon.example/events/456',
+        nameMap: { en: 'English Title', fr: 'Titre Français' },
+        contentMap: { en: '<p>English description</p>', fr: '<p>Description française</p>' },
+        startTime: '2026-05-01T10:00:00Z',
+      };
+
+      const result = EventObject.fromActivityPubObject(apObject);
+      expect(result.content.en.name).toBe('English Title');
+      expect(result.content.en.description).toBe('English description');
+      expect(result.content.fr.name).toBe('Titre Français');
+      expect(result.content.fr.description).toBe('Description française');
+    });
+
+    it('should prefer summaryMap over contentMap when both are present', () => {
+      const apObject = {
+        type: 'Event',
+        id: 'https://example.com/events/2',
+        nameMap: { en: 'Title' },
+        summaryMap: { en: 'Summary text' },
+        contentMap: { en: '<p>HTML content</p>' },
+        startTime: '2026-05-01T10:00:00Z',
+      };
+
+      const result = EventObject.fromActivityPubObject(apObject);
+      expect(result.content.en.description).toBe('Summary text');
+    });
+
+    it('should handle content with HTML entities', () => {
+      const apObject = {
+        type: 'Event',
+        id: 'https://example.com/events/3',
+        name: 'Entity Event',
+        content: '<p>Rock &amp; Roll &quot;Night&quot;</p>',
+        startTime: '2026-05-01T10:00:00Z',
+      };
+
+      const result = EventObject.fromActivityPubObject(apObject);
+      expect(result.content.en.description).toBe('Rock & Roll "Night"');
+    });
+
+    it('should include contentMap languages in allLanguages set', () => {
+      const apObject = {
+        type: 'Event',
+        id: 'https://example.com/events/4',
+        nameMap: { en: 'English Only Name' },
+        contentMap: { en: '<p>English</p>', de: '<p>Deutsch</p>' },
+        startTime: '2026-05-01T10:00:00Z',
+      };
+
+      const result = EventObject.fromActivityPubObject(apObject);
+      expect(result.content.de).toBeDefined();
+      expect(result.content.de.description).toBe('Deutsch');
+    });
+
   });
 
 });
