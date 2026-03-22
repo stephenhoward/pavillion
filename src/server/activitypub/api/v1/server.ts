@@ -172,9 +172,8 @@ export default class ActivityPubServerRoutes {
       const EventObject = (await import('@/server/activitypub/model/object/event')).EventObject;
       const eventObject = new EventObject(calendar, event);
 
-      // EventObject is a plain class - serialize it directly
       res.setHeader('Content-Type', 'application/activity+json');
-      res.json(eventObject);
+      res.json(eventObject.toActivityPubObject());
     }
     catch (error) {
       logError(error, `Error fetching event ${req.params.eventid}`);
@@ -201,7 +200,7 @@ export default class ActivityPubServerRoutes {
       const seriesList = await this.calendarService.getSeriesForCalendar(calendar.id);
       const { SeriesObject } = await import('@/server/activitypub/model/object/series');
 
-      const items = seriesList.map(series => new SeriesObject(calendar, series));
+      const items = seriesList.map(series => new SeriesObject(calendar, series).toActivityPubObject());
       const collection = {
         '@context': 'https://www.w3.org/ns/activitystreams',
         type: 'OrderedCollection',
@@ -236,11 +235,16 @@ export default class ActivityPubServerRoutes {
       }
 
       const series = await this.calendarService.getSeries(seriesid, calendar.id);
+      if (!series) {
+        res.status(404).send('Series not found');
+        return;
+      }
+
       const { SeriesObject } = await import('@/server/activitypub/model/object/series');
       const seriesObject = new SeriesObject(calendar, series);
 
       res.setHeader('Content-Type', 'application/activity+json');
-      res.json(seriesObject);
+      res.json(seriesObject.toActivityPubObject());
     }
     catch (error) {
       logError(error, `Error fetching series ${req.params.seriesid}`);

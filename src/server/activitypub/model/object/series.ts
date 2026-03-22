@@ -32,6 +32,44 @@ class SeriesObject extends ActivityPubObject {
       ]),
     );
   }
+
+  /**
+   * Serializes this series as a standard ActivityPub object with AS properties
+   * and pavillion:* prefixed extensions for federation.
+   */
+  toActivityPubObject(): Record<string, any> {
+    const contentLanguages = Object.keys(this.content).filter(
+      lang => this.content[lang] && this.content[lang].name,
+    );
+
+    // Determine primary language
+    const primaryLanguage = this.content['en']?.name
+      ? 'en'
+      : contentLanguages[0] || 'en';
+
+    const name = this.content[primaryLanguage]?.name || 'Untitled Series';
+
+    const result: Record<string, any> = {
+      type: this.type,
+      id: this.id,
+      attributedTo: this.attributedTo,
+      name,
+    };
+
+    // nameMap: only when 2+ languages have content
+    if (contentLanguages.length >= 2) {
+      const nameMap: Record<string, string> = {};
+      for (const lang of contentLanguages) {
+        nameMap[lang] = this.content[lang].name;
+      }
+      result.nameMap = nameMap;
+    }
+
+    // pavillion:content extension for full multilingual data
+    result['pavillion:content'] = this.content;
+
+    return result;
+  }
 }
 
 export { SeriesObject };
