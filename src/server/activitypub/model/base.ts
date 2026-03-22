@@ -21,8 +21,10 @@ class ActivityPubActivity {
       id: this.id,
       type: this.type,
       actor: this.actor,
-      object: typeof this.object === 'object' && this.object !== null && 'toObject' in this.object
-        ? this.object.toObject()
+      object: typeof this.object === 'object' && this.object !== null
+        ? ('toActivityPubObject' in this.object
+          ? (this.object as any).toActivityPubObject()
+          : ('toObject' in this.object ? (this.object as any).toObject() : this.object))
         : this.object,
     };
 
