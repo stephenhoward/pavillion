@@ -219,6 +219,7 @@ describe('createActorRateLimiter', () => {
         .send({ type: 'Follow' });
 
       expect(response.status).toBe(200);
+      expect(getActorRateLimitStore().size).toBe(0);
     });
 
     it('should allow request when body is empty', async () => {
@@ -682,6 +683,7 @@ describe('createCalendarRateLimiter', () => {
         .send({ actor: 'https://remote.example/users/alice', type: 'Follow' });
 
       expect(response.status).toBe(200);
+      expect(getCalendarRateLimitStore().size).toBe(0);
     });
   });
 

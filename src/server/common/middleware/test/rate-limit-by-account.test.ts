@@ -138,30 +138,44 @@ describe('createAccountRateLimiter', () => {
     });
   });
 
-  describe('logging', () => {
-    it('should block requests when limit is exceeded (logging via pino, not console.warn)', async () => {
+  describe('account-based keying behavior', () => {
+    it('should rate limit each account independently', async () => {
       const limiter = createAccountRateLimiter(1, 60000, 'test-endpoint');
 
-      router.post('/test', addRequestUser, limiter, (req, res) => {
+      const setUser = (req: express.Request, _res: express.Response, next: express.NextFunction): void => {
+        const userId = req.headers['x-test-user-id'] as string || 'default-id';
+        req.user = new Account(userId, 'testuser', 'test@test.com');
+        next();
+      };
+
+      router.post('/test', setUser, limiter, (req, res) => {
         res.status(200).json({ success: true });
       });
 
       const app = testApp(router);
 
-      // First request succeeds
+      // Exhaust the limit for account-a
       await request(app)
         .post('/test')
+        .set('x-test-user-id', 'account-a')
         .send({ data: 'test' });
 
-      // Second request is rate limited
-      const response = await request(app)
+      // account-a is now rate limited
+      const blockedResponse = await request(app)
         .post('/test')
+        .set('x-test-user-id', 'account-a')
         .send({ data: 'test' });
+      expect(blockedResponse.status).toBe(429);
 
-      expect(response.status).toBe(429);
+      // account-b should still be allowed (separate bucket)
+      const allowedResponse = await request(app)
+        .post('/test')
+        .set('x-test-user-id', 'account-b')
+        .send({ data: 'test' });
+      expect(allowedResponse.status).toBe(200);
     });
 
-    it('should block requests when no user is present and limit is exceeded', async () => {
+    it('should share rate limit bucket for unauthenticated requests', async () => {
       const limiter = createAccountRateLimiter(1, 60000, 'test-endpoint');
 
       router.post('/test', limiter, (req, res) => {
@@ -170,13 +184,45 @@ describe('createAccountRateLimiter', () => {
 
       const app = testApp(router);
 
-      // First request succeeds
-      await request(app).post('/test');
+      // First unauthenticated request succeeds
+      const firstResponse = await request(app).post('/test');
+      expect(firstResponse.status).toBe(200);
 
-      // Second request is rate limited
-      const response = await request(app).post('/test');
+      // Second unauthenticated request shares the "unknown" bucket and is blocked
+      const secondResponse = await request(app).post('/test');
+      expect(secondResponse.status).toBe(429);
+    });
 
-      expect(response.status).toBe(429);
+    it('should not share bucket between authenticated and unauthenticated requests', async () => {
+      const limiter = createAccountRateLimiter(1, 60000, 'test-endpoint');
+
+      const optionalUser = (req: express.Request, _res: express.Response, next: express.NextFunction): void => {
+        const userId = req.headers['x-test-user-id'] as string;
+        if (userId) {
+          req.user = new Account(userId, 'testuser', 'test@test.com');
+        }
+        next();
+      };
+
+      router.post('/test', optionalUser, limiter, (req, res) => {
+        res.status(200).json({ success: true });
+      });
+
+      const app = testApp(router);
+
+      // Exhaust the limit for unauthenticated ("unknown") bucket
+      await request(app).post('/test').send({ data: 'test' });
+
+      // Unauthenticated is now blocked
+      const blockedResponse = await request(app).post('/test').send({ data: 'test' });
+      expect(blockedResponse.status).toBe(429);
+
+      // Authenticated request should still succeed (different bucket)
+      const allowedResponse = await request(app)
+        .post('/test')
+        .set('x-test-user-id', 'authenticated-user')
+        .send({ data: 'test' });
+      expect(allowedResponse.status).toBe(200);
     });
   });
 
