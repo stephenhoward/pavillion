@@ -157,23 +157,25 @@ describe('Auto-Repost Integration Tests', () => {
     });
   });
 
-  // TODO: Re-enable when validation is restored in bead pv-5fk
-  describe.skip('Test 2: Auto-repost reposts when policy enabled', () => {
+  describe('Test 2: Auto-repost reposts when policy enabled', () => {
     it('should create SharedEventEntity with auto_posted=true when processing Announce', async () => {
-      // Setup: Create remote Calendar B actor and follow with auto_repost_reposts=true
+      // Setup: Calendar A follows Calendar B with auto_repost_reposts=true
       const calendarBActorUri = 'https://remote.example.com/calendars/calendarb2';
       await createFollowingRelationship(calendarA.id, calendarBActorUri, false, true);
 
-      // Create original event from Calendar C
+      // Create Calendar C actor (the original author, different from B who's sharing)
+      const calendarCActorUri = 'https://remote.example.com/calendars/calendarc2';
+      await getOrCreateRemoteCalendarActor(calendarCActorUri);
+
+      // Create event attributed to Calendar C (not B)
       const eventApId = 'https://remote.example.com/events/event2';
       const eventId = uuidv4();
 
-      // For Announce activities, the event should already exist
-      // EventObjectEntity should be attributed to B (the one sharing it)
+      // EventObjectEntity attributed to C — B is only sharing it
       await EventObjectEntity.create({
         event_id: eventId,
         ap_id: eventApId,
-        attributed_to: calendarBActorUri, // B is sharing it
+        attributed_to: calendarCActorUri,
       });
 
       // Stub addRemoteEvent
@@ -182,7 +184,12 @@ describe('Auto-Repost Integration Tests', () => {
         calendarId: null,
       } as any);
 
-      // Build AnnounceActivity from Calendar B sharing the event
+      // Stub getEventById to avoid EventNotFoundError (addRemoteEvent is stubbed
+      // so no real EventEntity exists, but processShareEvent calls getEventById
+      // to emit repost notifications)
+      sandbox.stub(calendarInterface, 'getEventById').resolves(null as any);
+
+      // Build AnnounceActivity from Calendar B sharing Calendar C's event
       const announceActivity = new AnnounceActivity(
         calendarBActorUri,
         eventApId,
@@ -195,7 +202,7 @@ describe('Auto-Repost Integration Tests', () => {
       // Assert: SharedEventEntity created with auto_posted=true
       const sharedEvent = await SharedEventEntity.findOne({
         where: {
-          event_id: eventId,  // Query by local UUID, not AP URL
+          event_id: eventId,
           calendar_id: calendarA.id,
         },
       });

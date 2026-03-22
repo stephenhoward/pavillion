@@ -15,6 +15,7 @@ import {
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import CalendarInterface from '@/server/calendar/interface';
+import { InvalidRepostPolicySettingsError } from '@/common/exceptions/activitypub';
 
 /**
  * Helper to create a CalendarEvent for use in getFeed tests.
@@ -241,8 +242,7 @@ describe("ActivityPub Feed Service Methods", () => {
       ).rejects.toThrow('Follow relationship not found');
     });
 
-    // TODO: Re-enable when validation is restored in bead pv-5fk
-    it.skip('should validate that autoRepostReposts cannot be true when autoRepostOriginals is false', async () => {
+    it('should validate that autoRepostReposts cannot be true when autoRepostOriginals is false', async () => {
       const mockFollow = FollowingCalendarEntity.build({
         id: 'follow-1',
         calendar_id: calendar.id,
@@ -255,7 +255,7 @@ describe("ActivityPub Feed Service Methods", () => {
 
       await expect(
         service.updateFollowPolicy(calendar, 'follow-1', false, true),
-      ).rejects.toThrow('Invalid auto-repost policy settings');
+      ).rejects.toThrow(InvalidRepostPolicySettingsError);
     });
   });
 
