@@ -201,7 +201,6 @@ describe('ActivityPub Social API Routes', () => {
       expect(response.autoRepostReposts).toBe(true);
     });
 
-    // TODO: Re-enable when validation is restored in bead pv-5fk
     it('should reject when autoRepostReposts is true but autoRepostOriginals is false', async () => {
       const req = {
         user: testAccount,
