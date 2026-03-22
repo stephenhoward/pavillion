@@ -1757,8 +1757,9 @@ class ProcessInboxService {
       const attributedTo = remoteData.attributedTo || message.actor;
 
       // Store the event locally with null calendar_id (remote event)
+      // Normalize the fetched AP object into internal eventParams shape
       const eventParams = {
-        ...remoteData,
+        ...EventObject.fromActivityPubObject(remoteData as Record<string, any>),
         id: localEventId,
         eventSourceUrl: apObjectId,
       };
