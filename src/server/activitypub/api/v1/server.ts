@@ -1,4 +1,5 @@
 import express, { Request, Response, Application, RequestHandler } from 'express';
+import config from 'config';
 
 import CreateActivity from '@/server/activitypub/model/action/create';
 import UpdateActivity from '@/server/activitypub/model/action/update';
@@ -409,15 +410,101 @@ export default class ActivityPubServerRoutes {
   }
 
   /**
-   * Read the outbox of a calendar
+   * Read the outbox of a calendar as a paginated OrderedCollection.
+   *
+   * Without a `page` query param, returns an OrderedCollection summary
+   * with totalItems and a link to the first page.
+   * With `page=true`, returns an OrderedCollectionPage with activity items.
+   * Supports cursor-based paging via `max_time` query param (ISO 8601).
    *
    * @param urlname - the URL name of the outbox owner
-   * @returns a list of messages in the outbox
+   * @returns OrderedCollection or OrderedCollectionPage
    * reference: https://www.w3.org/TR/activitypub/#outbox
    */
-  // TODO: paging or other limits to the quantity of messages returned
   async readOutbox(req: Request, res: Response): Promise<void> {
-    // Implementation needed
-    res.status(501).send('Not implemented');
+    const { urlname } = req.params;
+    const VALID_URLNAME = /^[a-z0-9][a-z0-9_]{2,23}$/i;
+
+    if (!VALID_URLNAME.test(urlname)) {
+      res.status(400).send('Invalid calendar name');
+      return;
+    }
+
+    try {
+      const calendar = await this.calendarService.getCalendarByName(urlname);
+      if (!calendar) {
+        res.status(404).send('Calendar not found');
+        return;
+      }
+
+      const domain: string = config.get('domain');
+      const outboxUrl = `https://${domain}/api/ap/v1/calendars/${calendar.urlName}/outbox`;
+
+      // If no page param, return the collection summary
+      if (req.query.page !== 'true') {
+        const { totalItems } = await this.service.readOutbox(calendar.id);
+
+        res.setHeader('Content-Type', 'application/activity+json');
+        res.json({
+          '@context': 'https://www.w3.org/ns/activitystreams',
+          type: 'OrderedCollection',
+          id: outboxUrl,
+          totalItems,
+          first: `${outboxUrl}?page=true`,
+        });
+        return;
+      }
+
+      // Parse and validate cursor
+      let cursor: Date | undefined;
+      if (req.query.max_time && typeof req.query.max_time === 'string') {
+        const parsed = new Date(req.query.max_time);
+        if (isNaN(parsed.getTime())) {
+          res.status(400).send('Invalid cursor: max_time must be a valid ISO 8601 timestamp');
+          return;
+        }
+        cursor = parsed;
+      }
+
+      const { items, totalItems } = await this.service.readOutbox(calendar.id, cursor);
+
+      // Build page URL
+      const pageId = cursor
+        ? `${outboxUrl}?page=true&max_time=${cursor.toISOString()}`
+        : `${outboxUrl}?page=true`;
+
+      // Serialize activities from the stored message JSON
+      const orderedItems = items.map(item => {
+        const message = { ...(item.message as Record<string, any>) };
+        // Strip bcc/bto per AP spec
+        delete message.bcc;
+        delete message.bto;
+        return message;
+      });
+
+      // Build next link if we have a full page
+      const PAGE_SIZE = 20;
+      const page: Record<string, any> = {
+        '@context': 'https://www.w3.org/ns/activitystreams',
+        type: 'OrderedCollectionPage',
+        id: pageId,
+        partOf: outboxUrl,
+        totalItems,
+        orderedItems,
+      };
+
+      if (items.length === PAGE_SIZE) {
+        const lastItem = items[items.length - 1];
+        const nextCursor = lastItem.message_time.toISOString();
+        page.next = `${outboxUrl}?page=true&max_time=${nextCursor}`;
+      }
+
+      res.setHeader('Content-Type', 'application/activity+json');
+      res.json(page);
+    }
+    catch (error) {
+      logError(error, `Error reading outbox for calendar ${urlname}`);
+      res.status(500).send('Internal server error');
+    }
   }
 }

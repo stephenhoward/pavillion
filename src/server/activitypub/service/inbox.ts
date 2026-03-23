@@ -219,7 +219,6 @@ class ProcessInboxService {
 
     let messages: ActivityPubInboxMessageEntity[] = [];
 
-    // TODO: messageTime based cursor, perhaps, so we don't keep reprocessing the same messages if they never get processed
     do {
       messages = await ActivityPubInboxMessageEntity.findAll({
         where: { processedAt: null },
