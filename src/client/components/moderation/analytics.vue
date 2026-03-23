@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
+import i18next from 'i18next';
 import ModerationAnalyticsService, { type AnalyticsData } from '@/client/service/moderation-analytics';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
 
@@ -299,7 +300,7 @@ defineExpose({
                 fill="var(--pav-color-text-muted)"
                 transform="rotate(45)"
               >
-                {{ new Date(point.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) }}
+                {{ new Date(point.date).toLocaleDateString(i18next.language, { month: 'short', day: 'numeric' }) }}
               </text>
             </g>
           </svg>
