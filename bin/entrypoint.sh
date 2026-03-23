@@ -24,6 +24,7 @@
 #   - JWT_SECRET_FILE         -> JWT_SECRET
 #   - SESSION_SECRET_FILE     -> SESSION_SECRET
 #   - EMAIL_HASH_SECRET_FILE  -> EMAIL_HASH_SECRET
+#   - ENCRYPTION_KEY_FILE     -> ENCRYPTION_KEY
 #   - S3_SECRET_KEY_FILE      -> S3_SECRET_KEY
 #   - SMTP_PASSWORD_FILE      -> SMTP_PASSWORD
 #
@@ -281,6 +282,7 @@ main() {
     file_env 'JWT_SECRET'
     file_env 'SESSION_SECRET'
     file_env 'EMAIL_HASH_SECRET'
+    file_env 'ENCRYPTION_KEY'
     file_env 'S3_SECRET_KEY'
     file_env 'SMTP_PASSWORD'
   fi

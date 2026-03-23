@@ -115,8 +115,9 @@ create_env_file() {
   local jwt_secret="$1"
   local session_secret="$2"
   local email_hash_secret="$3"
-  local db_password="$4"
-  local domain="$5"
+  local encryption_key="$4"
+  local db_password="$5"
+  local domain="$6"
 
   cat > .env << EOF
 # Pavillion Environment Variables
@@ -152,6 +153,9 @@ SESSION_SECRET=${session_secret}
 
 # Email hash secret for anonymous reporter privacy
 EMAIL_HASH_SECRET=${email_hash_secret}
+
+# Encryption key for funding provider API keys stored at rest
+ENCRYPTION_KEY=${encryption_key}
 
 # Database password for PostgreSQL
 DB_PASSWORD=${db_password}
@@ -205,7 +209,8 @@ create_secrets_directory() {
   local jwt_secret="$1"
   local session_secret="$2"
   local email_hash_secret="$3"
-  local db_password="$4"
+  local encryption_key="$4"
+  local db_password="$5"
 
   # Create secrets directory if it doesn't exist
   mkdir -p secrets
@@ -222,6 +227,9 @@ create_secrets_directory() {
 
   echo -n "${email_hash_secret}" > secrets/email_hash_secret.txt
   chmod 600 secrets/email_hash_secret.txt
+
+  echo -n "${encryption_key}" > secrets/encryption_key.txt
+  chmod 600 secrets/encryption_key.txt
 
   print_success "Created secrets/ directory with individual secret files"
 }
@@ -255,7 +263,8 @@ display_secrets() {
   local jwt_secret="$1"
   local session_secret="$2"
   local email_hash_secret="$3"
-  local db_password="$4"
+  local encryption_key="$4"
+  local db_password="$5"
 
   echo ""
   echo -e "${BOLD}${BLUE}========================================${NC}"
@@ -273,6 +282,9 @@ display_secrets() {
   echo ""
   echo -e "${BOLD}EMAIL_HASH_SECRET:${NC}"
   echo "  ${email_hash_secret}"
+  echo ""
+  echo -e "${BOLD}ENCRYPTION_KEY:${NC}"
+  echo "  ${encryption_key}"
   echo ""
   echo -e "${BOLD}DB_PASSWORD:${NC}"
   echo "  ${db_password}"
@@ -338,9 +350,10 @@ main() {
   jwt_secret=$(generate_secret)
   session_secret=$(generate_secret)
   email_hash_secret=$(generate_secret)
+  encryption_key=$(generate_secret)
   db_password=$(generate_secret)
 
-  print_success "Generated 4 unique secrets"
+  print_success "Generated 5 unique secrets"
 
   # Prompt for domain if not provided via flag
   if [ -z "$domain" ]; then
@@ -360,12 +373,12 @@ main() {
 
   # Create configuration files
   print_info "Creating configuration files..."
-  create_env_file "$jwt_secret" "$session_secret" "$email_hash_secret" "$db_password" "$domain"
-  create_secrets_directory "$jwt_secret" "$session_secret" "$email_hash_secret" "$db_password"
+  create_env_file "$jwt_secret" "$session_secret" "$email_hash_secret" "$encryption_key" "$db_password" "$domain"
+  create_secrets_directory "$jwt_secret" "$session_secret" "$email_hash_secret" "$encryption_key" "$db_password"
   configure_local_yaml "$domain"
 
   # Display secrets for backup
-  display_secrets "$jwt_secret" "$session_secret" "$email_hash_secret" "$db_password"
+  display_secrets "$jwt_secret" "$session_secret" "$email_hash_secret" "$encryption_key" "$db_password"
 
   # Display next steps
   display_next_steps
