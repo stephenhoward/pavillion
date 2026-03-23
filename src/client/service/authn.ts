@@ -162,6 +162,29 @@ export default class AuthenticationService {
   }
 
   /**
+   * Revokes (cancels) a pending account invitation.
+   *
+   * @param {string} id - ID of the invitation to revoke
+   * @returns {Promise<any>} Response data from the server
+   * @throws Will throw the response status code or error if revocation fails
+   */
+  async revoke_invitation(id: string) {
+    try {
+      let response = await axios.delete( this._accountUrl('/invitations/' + id));
+      return response.data;
+    }
+    catch (error) {
+      if (axios.isAxiosError(error)) {
+        const axiosError = error as AxiosError;
+        if (axiosError.response) {
+          throw(axiosError.response.status);
+        }
+      }
+      throw(error);
+    }
+  }
+
+  /**
    * Validates an invitation token/code.
    *
    * @param {string} code - Invitation code to validate

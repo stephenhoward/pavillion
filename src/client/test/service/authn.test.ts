@@ -174,6 +174,35 @@ describe('Token Setting', () => {
   });
 });
 
+describe('Invitation Management', () => {
+  it('revoke_invitation calls DELETE on the invitation endpoint', async () => {
+    let authentication = new AuthenticationService( new LocalStore() );
+    const axios_delete = sandbox.stub(axios, 'delete');
+    axios_delete.resolves({ status: 200, data: { success: true } });
+
+    const result = await authentication.revoke_invitation('inv-123');
+
+    expect(axios_delete.calledOnce).toBe(true);
+    expect(axios_delete.firstCall.args[0]).toBe('/api/v1/invitations/inv-123');
+    expect(result).toEqual({ success: true });
+  });
+
+  it('revoke_invitation throws response status on error', async () => {
+    let authentication = new AuthenticationService( new LocalStore() );
+    const axios_delete = sandbox.stub(axios, 'delete');
+    const error = new axios.AxiosError('Not found', '404', undefined, undefined, {
+      status: 404,
+      data: { error: 'Not found' },
+      statusText: 'Not Found',
+      headers: {},
+      config: {} as any,
+    } as any);
+    axios_delete.rejects(error);
+
+    await expect(authentication.revoke_invitation('inv-123')).rejects.toBe(404);
+  });
+});
+
 describe('Token Refresh', () => {
   it ( '_refresh_login 0 timer', () => {
 

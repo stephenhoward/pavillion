@@ -7,11 +7,9 @@ import { REMOTE_OBJECT_FETCH_TIMEOUT_MS } from '@/server/activitypub/constants';
 describe('fetchRemoteObject', () => {
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();
   let axiosGetStub: sinon.SinonStub;
-  let consoleErrorStub: sinon.SinonStub;
 
   beforeEach(() => {
     axiosGetStub = sandbox.stub(axios, 'get');
-    consoleErrorStub = sandbox.stub(console, 'error');
   });
 
   afterEach(() => {
@@ -92,7 +90,6 @@ describe('fetchRemoteObject', () => {
     const result = await fetchRemoteObject('https://remote.example/events/notfound');
 
     expect(result).toBeNull();
-    expect(consoleErrorStub.calledOnce).toBe(true);
   });
 
   it('should return null on network error', async () => {
@@ -105,7 +102,6 @@ describe('fetchRemoteObject', () => {
     const result = await fetchRemoteObject('https://unreachable.example/events/123');
 
     expect(result).toBeNull();
-    expect(consoleErrorStub.called).toBe(true);
   });
 
   it('should return null on timeout', async () => {
@@ -118,7 +114,6 @@ describe('fetchRemoteObject', () => {
     const result = await fetchRemoteObject('https://slow.example/events/123');
 
     expect(result).toBeNull();
-    expect(consoleErrorStub.called).toBe(true);
   });
 
   it('should return null on HTTP error response', async () => {
@@ -131,7 +126,6 @@ describe('fetchRemoteObject', () => {
     const result = await fetchRemoteObject('https://remote.example/events/error');
 
     expect(result).toBeNull();
-    expect(consoleErrorStub.called).toBe(true);
   });
 
   it('should return null on unexpected error', async () => {
@@ -142,7 +136,6 @@ describe('fetchRemoteObject', () => {
     const result = await fetchRemoteObject('https://remote.example/events/123');
 
     expect(result).toBeNull();
-    expect(consoleErrorStub.called).toBe(true);
   });
 
   it('should handle axios error without response or request', async () => {
@@ -154,7 +147,6 @@ describe('fetchRemoteObject', () => {
     const result = await fetchRemoteObject('https://remote.example/events/123');
 
     expect(result).toBeNull();
-    expect(consoleErrorStub.called).toBe(true);
   });
 
   it('should return null when axios throws a 302 redirect AxiosError', async () => {
@@ -167,7 +159,6 @@ describe('fetchRemoteObject', () => {
     const result = await fetchRemoteObject('https://remote.example/events/123');
 
     expect(result).toBeNull();
-    expect(consoleErrorStub.called).toBe(true);
   });
 
   it('should return the full object with nested properties', async () => {
@@ -207,8 +198,6 @@ describe('fetchRemoteObject', () => {
 
       expect(result).toBeNull();
       expect(axiosGetStub.called).toBe(false);
-      expect(consoleErrorStub.called).toBe(true);
-      expect(consoleErrorStub.args.some((args: unknown[]) => (args[1] as Record<string, unknown>)?.event === 'ssrf_blocked')).toBe(true);
     });
 
     it('should reject URI with private IPv4 address (192.168.0.0/16)', async () => {
@@ -216,8 +205,6 @@ describe('fetchRemoteObject', () => {
 
       expect(result).toBeNull();
       expect(axiosGetStub.called).toBe(false);
-      expect(consoleErrorStub.called).toBe(true);
-      expect(consoleErrorStub.args.some((args: unknown[]) => (args[1] as Record<string, unknown>)?.event === 'ssrf_blocked')).toBe(true);
     });
 
     it('should reject URI with loopback address (127.0.0.1)', async () => {
@@ -225,8 +212,6 @@ describe('fetchRemoteObject', () => {
 
       expect(result).toBeNull();
       expect(axiosGetStub.called).toBe(false);
-      expect(consoleErrorStub.called).toBe(true);
-      expect(consoleErrorStub.args.some((args: unknown[]) => (args[1] as Record<string, unknown>)?.event === 'ssrf_blocked')).toBe(true);
     });
 
     it('should reject URI with link-local address (169.254.169.254 - AWS metadata)', async () => {
@@ -234,8 +219,6 @@ describe('fetchRemoteObject', () => {
 
       expect(result).toBeNull();
       expect(axiosGetStub.called).toBe(false);
-      expect(consoleErrorStub.called).toBe(true);
-      expect(consoleErrorStub.args.some((args: unknown[]) => (args[1] as Record<string, unknown>)?.event === 'ssrf_blocked')).toBe(true);
     });
 
     it('should reject URI with private IPv6 address (::1)', async () => {
@@ -243,8 +226,6 @@ describe('fetchRemoteObject', () => {
 
       expect(result).toBeNull();
       expect(axiosGetStub.called).toBe(false);
-      expect(consoleErrorStub.called).toBe(true);
-      expect(consoleErrorStub.args.some((args: unknown[]) => (args[1] as Record<string, unknown>)?.event === 'ssrf_blocked')).toBe(true);
     });
 
     it('should reject URI with IPv6 link-local address (fe80::)', async () => {
@@ -252,8 +233,6 @@ describe('fetchRemoteObject', () => {
 
       expect(result).toBeNull();
       expect(axiosGetStub.called).toBe(false);
-      expect(consoleErrorStub.called).toBe(true);
-      expect(consoleErrorStub.args.some((args: unknown[]) => (args[1] as Record<string, unknown>)?.event === 'ssrf_blocked')).toBe(true);
     });
 
     it('should allow URI with public IP address', async () => {

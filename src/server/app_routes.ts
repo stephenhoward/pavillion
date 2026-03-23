@@ -5,6 +5,7 @@ import config from 'config';
 import { stripLocalePrefix, addLocalePrefix } from '@/common/i18n/locale-url';
 import { isValidLanguageCode, DEFAULT_LANGUAGE_CODE, getDefaultEnabledLanguageCodes } from '@/common/i18n/languages';
 import ConfigurationInterface from '@/server/configuration/interface';
+import logger from '@/server/common/helper/logger';
 
 const environment = process.env.NODE_ENV;
 
@@ -285,7 +286,7 @@ export function createRouter(configInterface: ConfigurationInterface) {
         res.send(widgetContent);
       }
       catch (error) {
-        console.error('Error serving widget JavaScript:', error);
+        logger.error({ err: error }, 'Error serving widget JavaScript');
         res.status(404).send('Widget JavaScript not found');
       }
     },

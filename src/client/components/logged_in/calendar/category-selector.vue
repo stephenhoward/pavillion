@@ -42,8 +42,9 @@
 </template>
 
 <script setup>
-import { reactive, onMounted, watch } from 'vue';
+import { reactive, computed, onMounted, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
+import i18next from 'i18next';
 import CategoryService from '@/client/service/category';
 import ToggleChip from '@/client/components/common/toggle-chip.vue';
 
@@ -65,7 +66,7 @@ const { t } = useTranslation('event_editor', {
 });
 
 const categoryService = new CategoryService();
-const currentLanguage = 'en'; // TODO: Get from language picker/preference
+const currentLanguage = computed(() => i18next.language);
 
 const state = reactive({
   availableCategories: [],

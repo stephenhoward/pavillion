@@ -1,4 +1,7 @@
 import express, { Request, Response, Application, NextFunction } from 'express';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('calendar');
 
 import CalendarInterface from '../../interface';
 import WidgetDomainService from '../../service/widget_domain';
@@ -96,7 +99,7 @@ class WidgetRoutes {
       next();
     }
     catch (error) {
-      console.error('Error in Origin validation:', error);
+      logger.error({ err: error }, 'Error in Origin validation');
       res.status(500).json({
         "error": "Failed to validate Origin",
       });
@@ -140,7 +143,7 @@ class WidgetRoutes {
         return;
       }
 
-      console.error('Error fetching calendar for widget:', error);
+      logger.error({ err: error }, 'Error fetching calendar for widget');
       res.status(500).json({
         "error": "Failed to fetch calendar",
       });

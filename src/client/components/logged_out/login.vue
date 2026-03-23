@@ -58,7 +58,7 @@
   </form>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { reactive, inject } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
@@ -96,19 +96,25 @@ async function doLogin() {
   }
   catch(error) {
 
-    let error_text = "unknown_error";
+    let errorKey = 'unknown_error';
 
-    if ( typeof error  == "object" && "message" in error ) {
-      error_text = error.message;
+    if (error && typeof error === 'object' && 'response' in error) {
+      const responseError = error as any;
+      if (responseError.response && responseError.response.data) {
+        const data = responseError.response.data;
+        if (data.errorName && typeof data.errorName === 'string') {
+          errorKey = data.errorName;
+        }
+        else if (data.error && typeof data.error === 'string') {
+          errorKey = data.error;
+        }
+      }
     }
-    else if ( typeof error == "string" ) {
-      error_text = error;
-    }
-    else {
-      console.log(error);
+    else if (typeof error === 'string') {
+      errorKey = error;
     }
 
-    state.err = t(error_text) || error_text;
+    state.err = t(errorKey);
   }
 }
 </script>

@@ -4,6 +4,9 @@ import HousekeepingInterface from './interface';
 import HousekeepingStatusRoutes from './api/v1/status';
 import EmailInterface from '@/server/email/interface';
 import AccountsInterface from '@/server/accounts/interface';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('housekeeping');
 
 /**
  * Housekeeping domain for automated server maintenance.
@@ -47,7 +50,7 @@ export default class HousekeepingDomain {
     const statusRoutes = new HousekeepingStatusRoutes(this.interface);
     statusRoutes.installHandlers(app, '/api/v1/admin/housekeeping');
 
-    console.log('[Housekeeping] API routes initialized');
+    logger.info('API routes initialized');
   }
 
   /**
@@ -55,6 +58,6 @@ export default class HousekeepingDomain {
    */
   public installEventHandlers(): void {
     // Event handlers will be implemented as needed
-    console.log('[Housekeeping] Event handlers initialized');
+    logger.info('Event handlers initialized');
   }
 }

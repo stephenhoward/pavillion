@@ -55,7 +55,6 @@ describe('AlertsService', () => {
   let sandbox: sinon.SinonSandbox;
   let sendEmailStub: sinon.SinonStub;
   let getAdminsStub: sinon.SinonStub;
-  let consoleWarnStub: sinon.SinonStub;
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
@@ -74,8 +73,6 @@ describe('AlertsService', () => {
       getAdmins: sandbox.stub().resolves(mockAdmins),
     } as any;
     getAdminsStub = mockAccountsInterface.getAdmins as sinon.SinonStub;
-
-    consoleWarnStub = sandbox.stub(console, 'warn');
 
     service = new AlertsService(mockEmailInterface, mockAccountsInterface);
   });
@@ -124,9 +121,6 @@ describe('AlertsService', () => {
 
       // Should not attempt to send emails
       expect(sendEmailStub.callCount).toBe(0);
-
-      // Should log warning about no admins
-      expect(consoleWarnStub.calledWith('[Alerts] No admin accounts found, skipping warning alert')).toBe(true);
     });
   });
 
@@ -161,9 +155,6 @@ describe('AlertsService', () => {
 
       // Should not attempt to send emails
       expect(sendEmailStub.callCount).toBe(0);
-
-      // Should log warning about no admins
-      expect(consoleWarnStub.calledWith('[Alerts] No admin accounts found, skipping critical alert')).toBe(true);
     });
   });
 });

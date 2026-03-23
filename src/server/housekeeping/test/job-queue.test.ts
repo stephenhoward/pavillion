@@ -145,16 +145,11 @@ describe('JobQueueService', () => {
 
   describe('Error Handling', () => {
     it('should log connection errors gracefully', async () => {
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const error = new Error('Connection failed');
 
       (PgBoss.prototype.start as any).mockRejectedValue(error);
 
       await expect(service.start()).rejects.toThrow('Connection failed');
-      expect(consoleErrorSpy).toHaveBeenCalled();
-      expect(consoleErrorSpy.mock.calls[0][0]).toContain('Failed to start pg-boss');
-
-      consoleErrorSpy.mockRestore();
     });
 
     it('should register error event handler', async () => {

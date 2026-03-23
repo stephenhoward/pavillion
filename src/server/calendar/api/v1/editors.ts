@@ -1,4 +1,7 @@
 import express, { Request, Response, Application } from 'express';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('calendar');
 
 import { Account } from '@/common/model/account';
 import ExpressHelper from '@/server/common/helper/express';
@@ -71,7 +74,7 @@ class EditorRoutes {
         });
       }
       else {
-        console.error("Error listing calendar editors:", error);
+        logger.error({ err: error }, 'Error listing calendar editors');
         res.status(500).json({
           "error": "An error occurred while listing calendar editors",
         });
@@ -136,7 +139,7 @@ class EditorRoutes {
         });
       }
       else {
-        console.error("Error granting edit access:", error);
+        logger.error({ err: error }, 'Error granting edit access');
         res.status(500).json({
           "error": "An error occurred while granting edit access",
         });
@@ -184,7 +187,7 @@ class EditorRoutes {
         });
       }
       else {
-        console.error("Error revoking edit access:", error);
+        logger.error({ err: error }, 'Error revoking edit access');
         res.status(500).json({
           "error": "An error occurred while revoking edit access",
         });
@@ -241,7 +244,7 @@ class EditorRoutes {
         });
       }
       else {
-        console.error("Error removing remote editor:", error);
+        logger.error({ err: error }, 'Error removing remote editor');
         res.status(500).json({
           "error": "An error occurred while removing the remote editor",
         });
@@ -294,7 +297,7 @@ class EditorRoutes {
         });
       }
       else {
-        console.error("Error canceling invitation:", error);
+        logger.error({ err: error }, 'Error canceling invitation');
         res.status(500).json({
           "error": "An error occurred while canceling the invitation",
         });
@@ -354,7 +357,7 @@ class EditorRoutes {
         });
       }
       else {
-        console.error("Error resending invitation:", error);
+        logger.error({ err: error }, 'Error resending invitation');
         res.status(500).json({
           "error": "An error occurred while resending the invitation",
         });

@@ -10,6 +10,9 @@ import UndoActivity from '@/server/activitypub/model/action/undo';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import { logError } from '@/server/common/helper/error-logger';
 import CalendarInterface from '@/server/calendar/interface';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('activitypub');
 import { verifyHttpSignature } from '@/server/activitypub/helper/http_signature';
 import {
   createActorRateLimiter,
@@ -75,9 +78,9 @@ export default class ActivityPubServerRoutes {
    */
   async lookupUser(req: Request, res: Response): Promise<void> {
     if (typeof req.query.resource === 'string') {
-      console.log('[API] WebFinger resource:', req.query.resource);
+      logger.info({ resource: req.query.resource }, 'WebFinger resource lookup');
       const parsed = this.service.parseWebFingerResource(req.query.resource);
-      console.log('[API] Parsed:', parsed);
+      logger.info({ parsed }, 'WebFinger parsed');
 
       if (parsed.type === 'unknown' || !parsed.name || !parsed.domain) {
         res.status(400).send('Invalid resource format');
@@ -172,9 +175,8 @@ export default class ActivityPubServerRoutes {
       const EventObject = (await import('@/server/activitypub/model/object/event')).EventObject;
       const eventObject = new EventObject(calendar, event);
 
-      // EventObject is a plain class - serialize it directly
       res.setHeader('Content-Type', 'application/activity+json');
-      res.json(eventObject);
+      res.json(eventObject.toActivityPubObject());
     }
     catch (error) {
       logError(error, `Error fetching event ${req.params.eventid}`);
@@ -201,7 +203,7 @@ export default class ActivityPubServerRoutes {
       const seriesList = await this.calendarService.getSeriesForCalendar(calendar.id);
       const { SeriesObject } = await import('@/server/activitypub/model/object/series');
 
-      const items = seriesList.map(series => new SeriesObject(calendar, series));
+      const items = seriesList.map(series => new SeriesObject(calendar, series).toActivityPubObject());
       const collection = {
         '@context': 'https://www.w3.org/ns/activitystreams',
         type: 'OrderedCollection',
@@ -236,11 +238,16 @@ export default class ActivityPubServerRoutes {
       }
 
       const series = await this.calendarService.getSeries(seriesid, calendar.id);
+      if (!series) {
+        res.status(404).send('Series not found');
+        return;
+      }
+
       const { SeriesObject } = await import('@/server/activitypub/model/object/series');
       const seriesObject = new SeriesObject(calendar, series);
 
       res.setHeader('Content-Type', 'application/activity+json');
-      res.json(seriesObject);
+      res.json(seriesObject.toActivityPubObject());
     }
     catch (error) {
       logError(error, `Error fetching series ${req.params.seriesid}`);
@@ -264,14 +271,14 @@ export default class ActivityPubServerRoutes {
       return;
     }
 
-    console.log(`[INBOX] Received activity type: ${req.body.type} for calendar ${calendarName}`);
-    console.log(`[INBOX] Activity body:`, JSON.stringify(req.body, null, 2));
+    logger.info({ activityType: req.body.type, calendarName }, 'Received inbox activity');
+    logger.info({ activityBody: req.body }, 'Inbox activity body');
 
     // Validate actor URI
     const actorUri = req.body.actor;
     const actorValidation = actorUriSchema.safeParse(actorUri);
     if (!actorValidation.success) {
-      console.error(`[INBOX] Invalid actor URI:`, actorValidation.error.issues);
+      logger.error({ issues: actorValidation.error.issues }, 'Invalid actor URI');
       res.status(400).json({
         error: 'Invalid actor URI',
         details: actorValidation.error.issues,
@@ -314,7 +321,7 @@ export default class ActivityPubServerRoutes {
     }
 
     if (!activityValidation.success) {
-      console.error(`[INBOX] Invalid ${req.body.type} activity:`, activityValidation.error.issues);
+      logger.error({ activityType: req.body.type, issues: activityValidation.error.issues }, 'Invalid activity');
       res.status(400).json({
         error: `Invalid ${req.body.type} activity`,
         details: activityValidation.error.issues,

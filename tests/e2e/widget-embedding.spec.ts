@@ -17,11 +17,16 @@ import { startTestServer, TestEnvironment } from './helpers/test-server';
  * - Widget SDK and widget page served from localhost:3100-3200 (test server)
  * - Different ports = different origins = true cross-origin testing
  *
- * The embedding page (tests/e2e/test-widget-embedding.html) accepts a
- * ?serverUrl= query parameter to configure which test server to use.
+ * The embedding page (tests/e2e/test-widget-embedding.html) accepts
+ * ?serverUrl=, ?calendar=, and ?view= query parameters.
  */
 
 let env: TestEnvironment;
+
+function embeddingUrl(options?: { view?: string }): string {
+  const base = `http://localhost:8080/test-widget-embedding.html?serverUrl=${encodeURIComponent(env.baseURL)}&calendar=test_calendar`;
+  return options?.view ? `${base}&view=${options.view}` : base;
+}
 
 // Configure tests to run serially since they share a test server
 test.describe.configure({ mode: 'serial' });
@@ -50,8 +55,7 @@ test.describe('Widget Embedding', () => {
 
     // Step 1: Navigate to embedding page on port 8080 (different origin from test server)
     // The ?serverUrl= parameter tells the embedding page where to load the widget SDK from
-    const embeddingUrl = `http://localhost:8080/test-widget-embedding.html?serverUrl=${encodeURIComponent(env.baseURL)}&calendar=test_calendar`;
-    await page.goto(embeddingUrl);
+    await page.goto(embeddingUrl());
 
     // Step 2: Wait for widget SDK to load and become a function
     // This validates bug #1 (Content-Type) and bug #2 (CORS/CORP headers):
@@ -110,9 +114,7 @@ test.describe('Widget Embedding', () => {
   });
 
   test('widget iframe src uses correct server origin', async ({ page }) => {
-    // Navigate to embedding page
-    const embeddingUrl = `http://localhost:8080/test-widget-embedding.html?serverUrl=${encodeURIComponent(env.baseURL)}&calendar=test_calendar`;
-    await page.goto(embeddingUrl);
+    await page.goto(embeddingUrl());
 
     // Wait for SDK to initialize and create the iframe
     await page.waitForFunction(
@@ -138,9 +140,7 @@ test.describe('Widget Embedding', () => {
   });
 
   test('widget status indicator shows successful load', async ({ page }) => {
-    // Navigate to embedding page
-    const embeddingUrl = `http://localhost:8080/test-widget-embedding.html?serverUrl=${encodeURIComponent(env.baseURL)}&calendar=test_calendar`;
-    await page.goto(embeddingUrl);
+    await page.goto(embeddingUrl());
 
     // Wait for the SDK script to load (the embedding page updates #status on script load)
     await page.waitForFunction(
@@ -154,5 +154,100 @@ test.describe('Widget Embedding', () => {
     await expect(statusEl).toBeVisible();
     await expect(statusEl).toHaveClass(/ready/, { timeout: 15000 });
     await expect(statusEl).not.toHaveClass(/error/);
+  });
+
+  test('event detail click-through and back navigation', async ({ page }) => {
+    await page.goto(embeddingUrl());
+
+    await page.waitForSelector('iframe[src*="/widget/"]', { timeout: 15000 });
+    const iframe = page.frameLocator('iframe[src*="/widget/"]');
+
+    // Wait for events to render in list view
+    await expect(iframe.locator('li.event').first()).toBeVisible({ timeout: 15000 });
+
+    // Click the first event to open detail overlay
+    await iframe.locator('li.event').first().click();
+
+    // Verify event detail overlay appears with event name
+    await expect(iframe.locator('.event-detail-overlay')).toBeVisible({ timeout: 10000 });
+    await expect(iframe.locator('.event-detail-overlay h1')).toBeVisible();
+
+    // Click back button to return to list view
+    await iframe.locator('.back-button').first().click();
+
+    // Verify list view is restored
+    await expect(iframe.locator('li.event').first()).toBeVisible({ timeout: 10000 });
+  });
+
+  test('theme parameters apply inside iframe', async ({ page }) => {
+    // The embedding HTML sets accentColor=#ff9131 and colorMode=light
+    await page.goto(embeddingUrl());
+
+    await page.waitForSelector('iframe[src*="/widget/"]', { timeout: 15000 });
+    const iframe = page.frameLocator('iframe[src*="/widget/"]');
+    await expect(iframe.locator('body')).toBeVisible({ timeout: 20000 });
+
+    // Verify light theme class is applied
+    await expect(iframe.locator('.widget-root')).toHaveClass(/widget-theme-light/, { timeout: 10000 });
+
+    // Verify accent color CSS custom property is set (non-empty check, not exact value)
+    const accentColor = await iframe.locator('.widget-root').evaluate(
+      (el) => el.style.getPropertyValue('--widget-accent-color'),
+    );
+    expect(accentColor).toBeTruthy();
+  });
+
+  test('month view renders from view parameter', async ({ page }) => {
+    await page.goto(embeddingUrl({ view: 'month' }));
+
+    await page.waitForSelector('iframe[src*="/widget/"]', { timeout: 15000 });
+    const iframe = page.frameLocator('iframe[src*="/widget/"]');
+    await expect(iframe.locator('body')).toBeVisible({ timeout: 20000 });
+
+    // Verify month grid renders (Desktop Chrome guarantees desktop layout)
+    await expect(iframe.locator('.month-grid')).toBeVisible({ timeout: 15000 });
+
+    // Verify month title is displayed
+    await expect(iframe.locator('.month-title')).toBeVisible();
+    await expect(iframe.locator('.month-title')).not.toBeEmpty();
+  });
+
+  test('week view renders from view parameter', async ({ page }) => {
+    await page.goto(embeddingUrl({ view: 'week' }));
+
+    await page.waitForSelector('iframe[src*="/widget/"]', { timeout: 15000 });
+    const iframe = page.frameLocator('iframe[src*="/widget/"]');
+    await expect(iframe.locator('body')).toBeVisible({ timeout: 20000 });
+
+    // Verify week grid renders
+    await expect(iframe.locator('.week-grid')).toBeVisible({ timeout: 15000 });
+
+    // Verify week title (date range) is displayed
+    await expect(iframe.locator('.week-title')).toBeVisible();
+    await expect(iframe.locator('.week-title')).not.toBeEmpty();
+  });
+
+  test('postMessage resize events reach the embedding page', async ({ page }) => {
+    await page.goto(embeddingUrl());
+
+    await page.waitForSelector('iframe[src*="/widget/"]', { timeout: 15000 });
+    const iframe = page.frameLocator('iframe[src*="/widget/"]');
+
+    // Wait for widget to fully load with events
+    await expect(iframe.locator('li.event').first()).toBeVisible({ timeout: 15000 });
+
+    // Wait for at least one pavillion:resize message to arrive on the embedding page.
+    // The widget debounces resize notifications by 100ms, so poll until one appears.
+    await page.waitForFunction(
+      () => (window as any).__messages.some((m: any) => m.type === 'pavillion:resize'),
+      { timeout: 10000 },
+    );
+
+    const resizeMessages = await page.evaluate(
+      () => (window as any).__messages.filter((m: any) => m.type === 'pavillion:resize'),
+    );
+    expect(resizeMessages.length).toBeGreaterThanOrEqual(1);
+    expect(resizeMessages[0]).toHaveProperty('height');
+    expect(typeof resizeMessages[0].height).toBe('number');
   });
 });

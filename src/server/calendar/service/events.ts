@@ -34,6 +34,9 @@ import { validateUrlNotPrivate } from '@/server/activitypub/helper/ip-validation
 import { FEDERATION_HTTP_TIMEOUT_MS } from '@/server/activitypub/constants';
 import db from '@/server/common/entity/db';
 import { logError } from '@/server/common/helper/error-logger';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('calendar');
 import { Op, literal, where, fn, col, type Transaction } from 'sequelize';
 
 /**
@@ -297,7 +300,7 @@ class EventService {
       throw new CalendarNotFoundError('Remote calendar inbox URL not configured');
     }
 
-    console.log(`[EVENTS] Sending Create activity to remote calendar: ${inboxUrl}`);
+    logger.info({ inboxUrl }, 'Sending Create activity to remote calendar');
 
     // SECURITY: Validate that the inbox URL does not point to a private IP address
     // to prevent SSRF attacks where a malicious remote calendar advertises an internal
@@ -320,7 +323,7 @@ class EventService {
         },
       });
 
-      console.log(`[EVENTS] Remote calendar accepted Create activity (status: ${response.status})`);
+      logger.info({ status: response.status }, 'Remote calendar accepted Create activity');
 
       // The remote calendar should return the created event as JSON
       if (response.data && typeof response.data === 'object' && response.data.id) {
@@ -422,7 +425,7 @@ class EventService {
       throw new CalendarNotFoundError('Remote calendar inbox URL not configured');
     }
 
-    console.log(`[EVENTS] Sending Update activity to remote calendar: ${inboxUrl}`);
+    logger.info({ inboxUrl }, 'Sending Update activity to remote calendar');
 
     // SECURITY: Validate that the inbox URL does not point to a private IP address
     // to prevent SSRF attacks where a malicious remote calendar advertises an internal
@@ -445,7 +448,7 @@ class EventService {
         },
       });
 
-      console.log(`[EVENTS] Remote calendar accepted Update activity (status: ${response.status})`);
+      logger.info({ status: response.status }, 'Remote calendar accepted Update activity');
 
       // Construct a local representation of the updated event
       const event = new CalendarEvent(
@@ -521,7 +524,7 @@ class EventService {
       throw new CalendarNotFoundError('Remote calendar inbox URL not configured');
     }
 
-    console.log(`[EVENTS] Sending Delete activity to remote calendar: ${inboxUrl}`);
+    logger.info({ inboxUrl }, 'Sending Delete activity to remote calendar');
 
     // SECURITY: Validate that the inbox URL does not point to a private IP address
     // to prevent SSRF attacks where a malicious remote calendar advertises an internal
@@ -544,7 +547,7 @@ class EventService {
         },
       });
 
-      console.log(`[EVENTS] Remote calendar accepted Delete activity (status: ${response.status})`);
+      logger.info({ status: response.status }, 'Remote calendar accepted Delete activity');
     }
     catch (error: any) {
       logError(error, '[Calendar] Failed to delete event on remote calendar');

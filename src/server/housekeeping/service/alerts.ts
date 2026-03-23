@@ -2,6 +2,9 @@ import EmailInterface from '@/server/email/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import DiskWarningEmail from '@/server/housekeeping/model/disk-warning-email';
 import DiskCriticalEmail from '@/server/housekeeping/model/disk-critical-email';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('housekeeping');
 
 /**
  * Service for sending disk space alert emails.
@@ -51,7 +54,7 @@ export default class AlertsService {
       const adminAccounts = await this.accountsInterface.getAdmins();
 
       if (adminAccounts.length === 0) {
-        console.warn('[Alerts] No admin accounts found, skipping warning alert');
+        logger.warn('No admin accounts found, skipping warning alert');
         return;
       }
 
@@ -74,16 +77,16 @@ export default class AlertsService {
           sentCount++;
         }
         catch (error: any) {
-          console.warn(`[Alerts] Failed to send warning to ${admin.email}:`, error.message);
+          logger.warn({ err: error, adminEmail: admin.email }, 'Failed to send disk warning email');
         }
       }
 
-      console.log(`[Alerts] Warning emails sent to ${sentCount}/${adminAccounts.length} admins for ${usagePercent.toFixed(1)}% disk usage`);
+      logger.info({ sentCount, totalAdmins: adminAccounts.length, usagePercent }, 'Warning emails sent');
     }
     catch (error: any) {
       // Gracefully handle email failures - log but don't throw
       // This allows monitoring to continue even if SMTP is not configured
-      console.warn('[Alerts] Failed to send warning alert:', error.message);
+      logger.warn({ err: error }, 'Failed to send warning alert');
     }
   }
 
@@ -112,7 +115,7 @@ export default class AlertsService {
       const adminAccounts = await this.accountsInterface.getAdmins();
 
       if (adminAccounts.length === 0) {
-        console.warn('[Alerts] No admin accounts found, skipping critical alert');
+        logger.warn('No admin accounts found, skipping critical alert');
         return;
       }
 
@@ -135,16 +138,16 @@ export default class AlertsService {
           sentCount++;
         }
         catch (error: any) {
-          console.warn(`[Alerts] Failed to send critical alert to ${admin.email}:`, error.message);
+          logger.warn({ err: error, adminEmail: admin.email }, 'Failed to send disk critical alert email');
         }
       }
 
-      console.log(`[Alerts] CRITICAL emails sent to ${sentCount}/${adminAccounts.length} admins for ${usagePercent.toFixed(1)}% disk usage`);
+      logger.info({ sentCount, totalAdmins: adminAccounts.length, usagePercent }, 'Critical disk alert emails sent');
     }
     catch (error: any) {
       // Gracefully handle email failures - log but don't throw
       // This allows monitoring to continue even if SMTP is not configured
-      console.warn('[Alerts] Failed to send critical alert:', error.message);
+      logger.warn({ err: error }, 'Failed to send critical alert');
     }
   }
 

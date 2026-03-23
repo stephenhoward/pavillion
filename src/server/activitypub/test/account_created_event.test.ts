@@ -93,23 +93,23 @@ describe('ActivityPub account.created event handler', () => {
     expect(userActor).toBeNull();
   });
 
-  it('should log error but not fail when UserActor creation fails', async () => {
-    const consoleErrorSpy = sandbox.stub(console, 'error');
-
+  it('should not fail when UserActor creation fails', async () => {
     const accountPayload = {
       accountId: 'test-account-id-3',
       username: 'testuser2',
       domain: '', // Missing domain will cause error
     };
 
-    // Emit the event
+    // Emit the event - should not throw
     eventBus.emit('account.created', accountPayload);
 
     // Wait a bit for async event handler to complete
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    // Verify error was logged
-    expect(consoleErrorSpy.called).toBe(true);
-    expect(consoleErrorSpy.firstCall.args[0]).toContain('[ActivityPub]');
+    // Verify no UserActor was created (error was handled gracefully)
+    const userActor = await UserActorEntity.findOne({
+      where: { account_id: accountPayload.accountId },
+    });
+    expect(userActor).toBeNull();
   });
 });

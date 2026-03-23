@@ -1,5 +1,8 @@
 import rateLimit from 'express-rate-limit';
 import type { Request, Response } from 'express';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('ratelimit');
 
 /**
  * Creates an IP-based rate limiter middleware using express-rate-limit.
@@ -29,7 +32,7 @@ export function createIpRateLimiter(
     handler: (req: Request, res: Response) => {
       const ip = req.ip || req.socket.remoteAddress || 'unknown';
 
-      console.warn(`Rate limit exceeded for IP ${ip} on ${endpointName}`);
+      logger.warn({ ip, endpoint: endpointName }, 'Rate limit exceeded');
 
       // Generate endpoint-specific error message
       const errorMessage = endpointName === 'password-reset'
@@ -40,6 +43,7 @@ export function createIpRateLimiter(
 
       res.status(429).json({
         error: errorMessage,
+        errorName: 'RateLimitError',
       });
     },
 

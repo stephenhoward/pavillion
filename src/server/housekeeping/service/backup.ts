@@ -7,6 +7,9 @@ import * as path from 'path';
 import config from 'config';
 import { BackupEntity } from '@/server/housekeeping/entity/backup';
 import { logError } from '@/server/common/helper/error-logger';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('housekeeping');
 
 /**
  * Backup metadata returned after backup creation
@@ -80,7 +83,7 @@ export default class BackupService {
     const filename = this.generateFilename(timestamp, type);
     const fullPath = path.join(this.backupPath, filename);
 
-    console.log(`[Backup] Creating ${type} backup: ${filename}`);
+    logger.info({ type, filename }, 'Creating backup');
 
     try {
       // Build pg_dump arguments or write a stub file for SQLite environments
@@ -93,7 +96,7 @@ export default class BackupService {
       else {
         await this.executeCommand(pgArgs.file, pgArgs.args, pgArgs.env);
       }
-      console.log(`[Backup] pg_dump completed successfully`);
+      logger.info('pg_dump completed successfully');
 
       // Verify backup
       const verification = this.verifyBackup(fullPath);
@@ -125,7 +128,7 @@ export default class BackupService {
         storage_location: metadata.storage_location,
       });
 
-      console.log(`[Backup] Backup created: ${filename} (${verification.size} bytes, ${category}, verified: ${verification.verified})`);
+      logger.info({ filename, size: verification.size, category, verified: verification.verified }, 'Backup created');
 
       // Check for optional S3 upload configuration
       this.checkS3Upload();
@@ -151,8 +154,8 @@ export default class BackupService {
 
         // Check if S3 is enabled (would be set via environment variables in production)
         if (s3Config && typeof s3Config === 'object' && 's3Enabled' in s3Config && s3Config.s3Enabled) {
-          console.log('[Backup] S3 upload configured but not yet implemented (future enhancement)');
-          console.log('[Backup] Backup stored locally only at this time');
+          logger.info('S3 upload configured but not yet implemented (future enhancement)');
+          logger.info('Backup stored locally only at this time');
         }
       }
     }
@@ -223,7 +226,7 @@ export default class BackupService {
     try {
       // Check file exists
       if (!fs.existsSync(filePath)) {
-        console.warn(`[Backup] Verification failed: file does not exist`);
+        logger.warn('Backup verification failed: file does not exist');
         return { verified: false, size: 0 };
       }
 
@@ -232,7 +235,7 @@ export default class BackupService {
       const size = stats.size;
 
       if (size < this.minBackupSize) {
-        console.warn(`[Backup] Verification failed: file size (${size} bytes) below minimum (${this.minBackupSize} bytes)`);
+        logger.warn({ size, minSize: this.minBackupSize }, 'Backup verification failed: file size below minimum');
         return { verified: false, size };
       }
 

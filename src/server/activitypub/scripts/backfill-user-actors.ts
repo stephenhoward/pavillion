@@ -14,6 +14,9 @@ import db from '@/server/common/entity/db';
 import { AccountEntity } from '@/server/common/entity/account';
 import UserActorService from '@/server/activitypub/service/user_actor';
 import CalendarInterface from '@/server/calendar/interface';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('activitypub');
 
 /**
  * Backfills UserActor entities for all accounts that don't have one
@@ -23,7 +26,7 @@ import CalendarInterface from '@/server/calendar/interface';
  */
 export async function backfillUserActors(domain?: string, verbose: boolean = true): Promise<{ created: number; skipped: number; errors: number }> {
   if (verbose) {
-    console.log('Starting UserActor backfill...\n');
+    logger.info('Starting UserActor backfill');
   }
 
   try {
@@ -34,13 +37,13 @@ export async function backfillUserActors(domain?: string, verbose: boolean = tru
     }
 
     if (verbose) {
-      console.log(`Domain: ${domainToUse}`);
+      logger.info({ domain: domainToUse }, 'Using domain');
     }
 
     // Retrieve all accounts
     const accounts = await AccountEntity.findAll();
     if (verbose) {
-      console.log(`Found ${accounts.length} total accounts\n`);
+      logger.info({ count: accounts.length }, 'Found total accounts');
     }
 
     // Track progress
@@ -57,7 +60,7 @@ export async function backfillUserActors(domain?: string, verbose: boolean = tru
       // Skip accounts without username
       if (!account.username || account.username.trim() === '') {
         if (verbose) {
-          console.log(`⚠️  Skipped account ${account.id} (${account.email}): No username set`);
+          logger.warn({ accountId: account.id, email: account.email }, 'Skipped account: no username set');
         }
         skippedCount++;
         continue;
@@ -68,7 +71,7 @@ export async function backfillUserActors(domain?: string, verbose: boolean = tru
         const existingActor = await userActorService.getActorByAccountId(account.id);
         if (existingActor) {
           if (verbose) {
-            console.log(`✓  Skipped account ${account.username}: UserActor already exists`);
+            logger.info({ username: account.username }, 'Skipped account: UserActor already exists');
           }
           skippedCount++;
           continue;
@@ -78,42 +81,40 @@ export async function backfillUserActors(domain?: string, verbose: boolean = tru
         const userActor = await userActorService.createActor(account, domainToUse);
 
         if (verbose) {
-          console.log(`✓  Created UserActor for ${account.username} (${userActor.actorUri})`);
+          logger.info({ username: account.username, actorUri: userActor.actorUri }, 'Created UserActor');
         }
         createdCount++;
       }
       catch (error) {
-        console.error(`✗  Error creating UserActor for ${account.username}:`, error);
+        logger.error({ err: error, username: account.username }, 'Error creating UserActor');
         errorCount++;
       }
     }
 
     // Print summary
     if (verbose) {
-      console.log('\n' + '='.repeat(60));
-      console.log('Backfill Summary:');
-      console.log('='.repeat(60));
-      console.log(`Total accounts processed: ${accounts.length}`);
-      console.log(`UserActors created: ${createdCount}`);
-      console.log(`Accounts skipped: ${skippedCount}`);
-      console.log(`Errors: ${errorCount}`);
-      console.log('='.repeat(60));
+      logger.info({
+        totalAccounts: accounts.length,
+        created: createdCount,
+        skipped: skippedCount,
+        errors: errorCount,
+      }, 'UserActor backfill summary');
 
       if (errorCount > 0) {
-        console.log('\n⚠️  Some accounts failed to generate UserActors. Review errors above.');
+        logger.warn({ errorCount }, 'Some accounts failed to generate UserActors');
       }
       else if (createdCount > 0) {
-        console.log('\n✅ Backfill completed successfully!');
+        logger.info('Backfill completed successfully');
       }
       else {
-        console.log('\n✅ No new UserActors needed.');
+        logger.info('No new UserActors needed');
       }
     }
 
     return { created: createdCount, skipped: skippedCount, errors: errorCount };
   }
   catch (error) {
-    console.error('\n✗ Fatal error during backfill:', error);
+    logger.error({ err: error }, 'Fatal error during backfill');
     throw error;
   }
 }
@@ -136,7 +137,7 @@ async function runBackfillScript() {
     }
   }
   catch (error) {
-    console.error('\n✗ Fatal error during backfill:', error);
+    logger.error({ err: error }, 'Fatal error during backfill');
     process.exit(1);
   }
 }

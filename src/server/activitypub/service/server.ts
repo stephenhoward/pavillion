@@ -1,6 +1,7 @@
 import { EventEmitter } from "events";
 import config from 'config';
 
+import { createLogger } from '@/server/common/helper/logger';
 import { Calendar } from "@/common/model/calendar";
 import { WebFingerResponse } from "@/server/activitypub/model/webfinger";
 import { UserProfileResponse } from "@/server/activitypub/model/userprofile";
@@ -10,6 +11,8 @@ import CalendarInterface from "@/server/calendar/interface";
 import AccountsInterface from "@/server/accounts/interface";
 import CalendarActorService from "@/server/activitypub/service/calendar_actor";
 
+
+const logger = createLogger('activitypub');
 
 export default class ActivityPubService {
   private eventBus: EventEmitter;
@@ -77,32 +80,32 @@ export default class ActivityPubService {
    * @returns WebFingerResponse message or null if not found
    */
   async lookupWebFinger(name: string, domain: string, type: 'user' | 'calendar'): Promise<WebFingerResponse|null> {
-    console.log('[WebFinger] Lookup request:', { name, domain, type, configDomain: config.get('domain') });
+    logger.info({ name, domain, type, configDomain: config.get('domain') }, 'WebFinger lookup request');
 
     // Only respond for our domain
     if (domain !== config.get('domain')) {
-      console.log('[WebFinger] Domain mismatch, returning null');
+      logger.info({ domain }, 'WebFinger domain mismatch, returning null');
       return null;
     }
 
     if (type === 'user') {
-      console.log('[WebFinger] Looking up user:', name);
+      logger.info({ name }, 'WebFinger looking up user');
       const account = await this.accountsService.getAccountByUsername(name);
-      console.log('[WebFinger] Account found:', account ? 'yes' : 'no');
+      logger.info({ name, found: !!account }, 'WebFinger account lookup result');
       if (account) {
         return new WebFingerResponse(name, domain, 'user');
       }
     }
     else if (type === 'calendar') {
-      console.log('[WebFinger] Looking up calendar:', name);
+      logger.info({ name }, 'WebFinger looking up calendar');
       const calendar = await this.calendarService.getCalendarByName(name);
-      console.log('[WebFinger] Calendar found:', calendar ? 'yes' : 'no');
+      logger.info({ name, found: !!calendar }, 'WebFinger calendar lookup result');
       if (calendar) {
         return new WebFingerResponse(calendar.urlName, domain, 'calendar');
       }
     }
 
-    console.log('[WebFinger] Returning null - not found');
+    logger.info('WebFinger returning null - not found');
     return null;
   }
 
@@ -172,12 +175,14 @@ export default class ActivityPubService {
   }
 
   /**
-     * Add provided message to the calendar's inbox
-     * @param calendar
-     * @param message
-     * @returns null
-     */
-  // TODO permissions? block lists? rate limiting?
+   * Add provided message to the calendar's inbox.
+   * Rate limiting, HTTP signature auth, and blocked-instance checks are handled
+   * upstream: see inbox POST middleware in api/v1/server.ts and
+   * InboxService.processInboxMessage() for block-list filtering.
+   * @param calendar
+   * @param message
+   * @returns null
+   */
   async addToInbox(calendar: Calendar, message: ActivityPubActivity ): Promise<null> {
     let foundCalendar = await this.calendarService.getCalendar(calendar.id);
 

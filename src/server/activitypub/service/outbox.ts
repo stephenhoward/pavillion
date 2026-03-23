@@ -2,6 +2,9 @@ import { DateTime } from "luxon";
 import { EventEmitter } from "events";
 import axios from "axios";
 import { logError } from '@/server/common/helper/error-logger';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('activitypub');
 
 import { Calendar } from "@/common/model/calendar";
 import { ActivityPubOutboxMessageEntity, EventActivityEntity, FollowerCalendarEntity, FollowingCalendarEntity } from "@/server/activitypub/entity/activitypub";
@@ -69,7 +72,7 @@ class ProcessOutboxService {
     let activity = null;
     let recipients: string[] = [];
 
-    console.log(`[OUTBOX] Processing ${message.type} activity for calendar ${calendar.urlName}`);
+    logger.info({ activityType: message.type, calendarUrlName: calendar.urlName }, 'Processing outbox activity');
 
     switch( message.type ) {
       case 'Create':
@@ -128,7 +131,7 @@ class ProcessOutboxService {
         // Check if the activity has explicit recipients in the 'to' field
         if (activity.to && activity.to.length > 0) {
           recipients = activity.to;
-          console.log(`[OUTBOX] Using explicit recipients from 'to' field for Undo activity: ${recipients.join(', ')}`);
+          logger.info({ recipients }, 'Using explicit recipients from to field for Undo activity');
         }
         else {
           recipients = await this.getRecipients(calendar, activity.object);
@@ -142,13 +145,13 @@ class ProcessOutboxService {
         // For Flag activities, use explicit 'to' field if present
         if (activity.to && activity.to.length > 0) {
           recipients = activity.to;
-          console.log(`[OUTBOX] Using explicit recipients from 'to' field for Flag activity: ${recipients.join(', ')}`);
+          logger.info({ recipients }, 'Using explicit recipients from to field for Flag activity');
         }
         break;
     }
 
     if ( activity ) {
-      console.log(`[OUTBOX] Found ${recipients.length} recipients for ${message.type} activity`);
+      logger.info({ recipientCount: recipients.length, activityType: message.type }, 'Found recipients for activity');
 
       let deliveryErrors: string[] = [];
 
@@ -170,10 +173,9 @@ class ProcessOutboxService {
           }
 
           try {
-            console.log(`[OUTBOX] Delivering ${message.type} to ${inboxUrl}`);
+            logger.info({ activityType: message.type, inboxUrl }, 'Delivering activity');
 
             const activityData = activity.toObject();
-            console.log(`[OUTBOX] Activity data:`, JSON.stringify(activityData, null, 2));
 
             await axios.post(inboxUrl, activityData, {
               timeout: FEDERATION_HTTP_TIMEOUT_MS,
@@ -182,7 +184,7 @@ class ProcessOutboxService {
                 'Content-Type': 'application/activity+json',
               },
             });
-            console.log(`[OUTBOX] Successfully delivered ${message.type} to ${recipient}`);
+            logger.info({ activityType: message.type, recipient }, 'Successfully delivered activity');
           }
           catch (error: any) {
             const errorMsg = `Failed to deliver to ${recipient}: ${error.message}`;
@@ -191,7 +193,7 @@ class ProcessOutboxService {
           }
         }
         else {
-          console.log(`[OUTBOX] Skipping message to ${recipient} because no inbox found`);
+          logger.info({ recipient }, 'Skipping message because no inbox found');
         }
       }
 
@@ -203,7 +205,7 @@ class ProcessOutboxService {
       });
     }
     else {
-      console.error(`[OUTBOX] Bad message type: ${message.type}`);
+      logger.error({ activityType: message.type }, 'Bad message type');
       await message.update({
         processed_time: DateTime.now().toJSDate(),
         processed_status: 'bad message type',
@@ -238,17 +240,17 @@ class ProcessOutboxService {
     // Check if the object is a Follow ID (for Undo(Follow) activities)
     // Follow IDs have the format: https://domain/calendars/calendar/follows/uuid
     if (object_id.includes('/follows/')) {
-      console.log(`[OUTBOX] Detected Follow ID in object, looking up follow relationship: ${object_id}`);
+      logger.info({ object_id }, 'Detected Follow ID in object, looking up follow relationship');
       const followEntity = await FollowingCalendarEntity.findOne({
         where: { id: object_id },
         include: [{ model: CalendarActorEntity, as: 'calendarActor' }],
       });
       if (followEntity?.calendarActor?.actor_uri) {
-        console.log(`[OUTBOX] Found follow relationship, adding recipient: ${followEntity.calendarActor.actor_uri}`);
+        logger.info({ actorUri: followEntity.calendarActor.actor_uri }, 'Found follow relationship, adding recipient');
         recipients.push(followEntity.calendarActor.actor_uri);
       }
       else {
-        console.log(`[OUTBOX] No follow relationship found for ID: ${object_id}`);
+        logger.info({ object_id }, 'No follow relationship found for ID');
       }
     }
 
@@ -278,18 +280,18 @@ class ProcessOutboxService {
   async resolveInboxUrl(remote_user: string): Promise<string|null> {
     let profileUrl: string | null = null;
 
-    console.log(`[OUTBOX] Resolving inbox for recipient: ${remote_user}`);
+    logger.info({ remote_user }, 'Resolving inbox for recipient');
 
     // Check if remote_user is a full URL (starts with http:// or https://)
     if (remote_user.startsWith('http://') || remote_user.startsWith('https://')) {
       // It's a full actor URL, use it directly as the profile URL
       profileUrl = remote_user;
-      console.log(`[OUTBOX] Using full URL as profile URL: ${profileUrl}`);
+      logger.info({ profileUrl }, 'Using full URL as profile URL');
     }
     else {
       // It's a username@domain format, resolve via WebFinger
       profileUrl = await this.fetchProfileUrl(remote_user);
-      console.log(`[OUTBOX] Resolved WebFinger profile URL: ${profileUrl}`);
+      logger.info({ profileUrl }, 'Resolved WebFinger profile URL');
     }
 
     if ( profileUrl ) {
@@ -305,19 +307,19 @@ class ProcessOutboxService {
         return null;
       }
 
-      console.log(`[OUTBOX] Fetching actor document from: ${profileUrl}`);
+      logger.info({ profileUrl }, 'Fetching actor document');
       let response = await axios.get(profileUrl, {
         timeout: FEDERATION_HTTP_TIMEOUT_MS,
         maxRedirects: 0,
       });
 
       if ( response && response.data ) {
-        console.log(`[OUTBOX] Resolved inbox URL: ${response.data.inbox}`);
+        logger.info({ inboxUrl: response.data.inbox }, 'Resolved inbox URL');
         return response.data.inbox;
       }
     }
 
-    console.log(`[OUTBOX] Failed to resolve inbox for ${remote_user}`);
+    logger.info({ remote_user }, 'Failed to resolve inbox');
     return null;
   }
 
@@ -332,11 +334,11 @@ class ProcessOutboxService {
    */
   async fetchProfileUrl(remote_user: string): Promise<string|null> {
     const [username, domain] = remote_user.split('@');
-    console.log(`[OUTBOX] WebFinger lookup for ${remote_user}: username=${username}, domain=${domain}`);
+    logger.info({ remote_user, username, domain }, 'WebFinger lookup');
 
     if ( username && domain ) {
       const webfingerUrl = 'https://' + domain + '/.well-known/webfinger?resource=acct:' + username + '@' + domain;
-      console.log(`[OUTBOX] Fetching WebFinger from: ${webfingerUrl}`);
+      logger.info({ webfingerUrl }, 'Fetching WebFinger');
 
       // SECURITY: Validate that the WebFinger URL does not point to a private IP address
       // to prevent SSRF attacks where a remote actor uses a domain that resolves to an
@@ -360,7 +362,7 @@ class ProcessOutboxService {
         if ( response && response.data && response.data.links ) {
           const profileLink = (await response).data.links.filter((link: any) => link.rel === 'self');
           if ( profileLink.length > 0 ) {
-            console.log(`[OUTBOX] WebFinger resolved to: ${profileLink[0].href}`);
+            logger.info({ profileUrl: profileLink[0].href }, 'WebFinger resolved');
             return profileLink[0].href;
           }
         }

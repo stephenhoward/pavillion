@@ -9,6 +9,9 @@ import { DevelopmentTransport } from '@/server/email/transport/development-trans
 import { TestingTransport } from '@/server/email/transport/testing-transport';
 import { MailpitTransport } from '@/server/email/transport/mailpit-transport';
 import { logError } from '@/server/common/helper/error-logger';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('email');
 
 /**
  * Email Service for sending messages via various transports.
@@ -86,7 +89,7 @@ class EmailServiceClass {
       }
     }
     catch (err) {
-      console.warn('Mail configuration not found, using defaults');
+      logger.warn('Mail configuration not found, using defaults');
     }
 
     // Check for Mailpit (Docker development) - detected by SMTP_HOST=mailpit
@@ -138,7 +141,8 @@ class EmailServiceClass {
    * @returns The configured mail transport instance
    */
   private createTransport(): MailTransport {
-    console.log('Creating mail transport:', this.mailConfig.transport);
+    const { transport, from } = this.mailConfig;
+    logger.info({ transport, from }, 'Initializing email transport');
     switch (this.mailConfig.transport) {
       case 'smtp':
         return new SmtpTransport(this.mailConfig);
@@ -165,6 +169,7 @@ class EmailServiceClass {
    * @returns Promise resolving to the message info or null if sending failed
    */
   public async sendEmail(data: MailData): Promise<SentMessageInfo | null> {
+    logger.info({ transport: this.transportType, to: data.emailAddress, subject: data.subject }, 'Sending email');
     try {
       const info = await this.transportInstance.sendMail({
         from: process.env.MAIL_FROM || this.mailConfig.from,
@@ -174,11 +179,11 @@ class EmailServiceClass {
         html: data.htmlMessage,
       });
 
-      console.log(`Message sent (${this.mailConfig.transport}):`, info.messageId);
+      logger.info({ transport: this.transportType, messageId: info.messageId }, 'Email sent successfully');
       return info;
     }
     catch (error) {
-      logError(error, '[Email] Error sending email');
+      logError(error, `[Email] Failed to send via ${this.transportType} to=${data.emailAddress}, subject="${data.subject}"`);
       return null;
     }
   }

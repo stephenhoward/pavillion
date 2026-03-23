@@ -14,6 +14,9 @@ import {
   MissingRequiredFieldError,
   InvalidCredentialsError,
 } from '@/common/exceptions/funding';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('funding');
 
 /**
  * User object for admin operations

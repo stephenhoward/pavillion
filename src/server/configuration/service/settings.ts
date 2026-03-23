@@ -2,6 +2,9 @@ import config from 'config';
 import ServiceSettingEntity from "@/server/configuration/entity/settings";
 import type { DefaultDateRange } from '@/common/model/calendar';
 import { isValidLanguageCode, DEFAULT_LANGUAGE_CODE, getDefaultEnabledLanguageCodes } from '@/common/i18n/languages';
+import { createLogger } from '@/server/common/helper/logger';
+
+const logger = createLogger('configuration');
 
 type Config = {
   registrationMode: 'open' | 'apply' | 'invitation' | 'closed';
@@ -129,7 +132,7 @@ class ServiceSettings {
     // Validate the mode
     if ( parameter == 'registrationMode' ) {
       if (!['open', 'apply', 'invitation', 'closed'].includes(value as string)) {
-        console.error('Invalid registration mode:', value);
+        logger.error({ value }, 'Invalid registration mode');
         return false;
       }
     }
@@ -137,7 +140,7 @@ class ServiceSettings {
     // Validate the defaultDateRange
     if ( parameter == 'defaultDateRange' ) {
       if (!['1week', '2weeks', '1month'].includes(value as string)) {
-        console.error('Invalid default date range:', value);
+        logger.error({ value }, 'Invalid default date range');
         return false;
       }
     }
@@ -145,7 +148,7 @@ class ServiceSettings {
     // Validate the defaultLanguage
     if ( parameter == 'defaultLanguage' ) {
       if (!isValidLanguageCode(value as string)) {
-        console.error('Invalid default language:', value);
+        logger.error({ value }, 'Invalid default language');
         return false;
       }
     }
@@ -155,12 +158,12 @@ class ServiceSettings {
       try {
         const parsed = typeof value === 'string' ? JSON.parse(value) : value;
         if (!Array.isArray(parsed) || parsed.length === 0 || !parsed.every(isValidLanguageCode)) {
-          console.error('Invalid enabledLanguages:', value);
+          logger.error({ value }, 'Invalid enabledLanguages');
           return false;
         }
       }
       catch {
-        console.error('Invalid enabledLanguages JSON:', value);
+        logger.error({ value }, 'Invalid enabledLanguages JSON');
         return false;
       }
     }
@@ -169,7 +172,7 @@ class ServiceSettings {
     if ( parameter == 'forceLanguage' ) {
       const strValue = value as string;
       if (strValue !== '' && strValue !== 'null' && !isValidLanguageCode(strValue)) {
-        console.error('Invalid forceLanguage:', value);
+        logger.error({ value }, 'Invalid forceLanguage');
         return false;
       }
     }
@@ -191,7 +194,7 @@ class ServiceSettings {
           this.config.registrationMode = value as 'open' | 'apply' | 'invitation' | 'closed';
         }
         else {
-          console.error('Invalid registration mode:', value);
+          logger.error({ value }, 'Invalid registration mode');
           return false;
         }
         break;
@@ -203,7 +206,7 @@ class ServiceSettings {
           this.config.eventInstanceMonths = value as number;
         }
         else {
-          console.error('Invalid event instance months:', value);
+          logger.error({ value }, 'Invalid event instance months');
           return false;
         }
         break;
@@ -212,7 +215,7 @@ class ServiceSettings {
           this.config.defaultDateRange = value as DefaultDateRange;
         }
         else {
-          console.error('Invalid default date range:', value);
+          logger.error({ value }, 'Invalid default date range');
           return false;
         }
         break;
@@ -221,7 +224,7 @@ class ServiceSettings {
           this.config.defaultLanguage = value as string;
         }
         else {
-          console.error('Invalid default language:', value);
+          logger.error({ value }, 'Invalid default language');
           return false;
         }
         break;
@@ -262,15 +265,15 @@ class ServiceSettings {
     // Validate moderation.autoEscalationThreshold
     if (parameter === 'moderation.autoEscalationThreshold') {
       if (typeof value !== 'number') {
-        console.error('Invalid moderation.autoEscalationThreshold: must be a number, got', typeof value);
+        logger.error({ value, type: typeof value }, 'Invalid moderation.autoEscalationThreshold: must be a number');
         return false;
       }
       if (!Number.isInteger(value)) {
-        console.error('Invalid moderation.autoEscalationThreshold: must be an integer, got', value);
+        logger.error({ value }, 'Invalid moderation.autoEscalationThreshold: must be an integer');
         return false;
       }
       if (value < 0) {
-        console.error('Invalid moderation.autoEscalationThreshold: must be >= 0, got', value);
+        logger.error({ value }, 'Invalid moderation.autoEscalationThreshold: must be >= 0');
         return false;
       }
     }
@@ -278,15 +281,15 @@ class ServiceSettings {
     // Validate moderation.ipHashRetentionDays
     if (parameter === 'moderation.ipHashRetentionDays') {
       if (typeof value !== 'number') {
-        console.error('Invalid moderation.ipHashRetentionDays: must be a number, got', typeof value);
+        logger.error({ value, type: typeof value }, 'Invalid moderation.ipHashRetentionDays: must be a number');
         return false;
       }
       if (!Number.isInteger(value)) {
-        console.error('Invalid moderation.ipHashRetentionDays: must be an integer, got', value);
+        logger.error({ value }, 'Invalid moderation.ipHashRetentionDays: must be an integer');
         return false;
       }
       if (value <= 0) {
-        console.error('Invalid moderation.ipHashRetentionDays: must be > 0, got', value);
+        logger.error({ value }, 'Invalid moderation.ipHashRetentionDays: must be > 0');
         return false;
       }
     }
@@ -294,15 +297,15 @@ class ServiceSettings {
     // Validate moderation.ipSubnetRetentionDays
     if (parameter === 'moderation.ipSubnetRetentionDays') {
       if (typeof value !== 'number') {
-        console.error('Invalid moderation.ipSubnetRetentionDays: must be a number, got', typeof value);
+        logger.error({ value, type: typeof value }, 'Invalid moderation.ipSubnetRetentionDays: must be a number');
         return false;
       }
       if (!Number.isInteger(value)) {
-        console.error('Invalid moderation.ipSubnetRetentionDays: must be an integer, got', value);
+        logger.error({ value }, 'Invalid moderation.ipSubnetRetentionDays: must be an integer');
         return false;
       }
       if (value <= 0) {
-        console.error('Invalid moderation.ipSubnetRetentionDays: must be > 0, got', value);
+        logger.error({ value }, 'Invalid moderation.ipSubnetRetentionDays: must be > 0');
         return false;
       }
     }

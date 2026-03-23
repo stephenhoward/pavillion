@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, nextTick, onMounted, onUnmounted } from 'vue';
 import { useTranslation } from 'i18next-vue';
+import i18next from 'i18next';
 import { DateTime } from 'luxon';
 import { useFeedStore } from '@/client/stores/feedStore';
 import { useToast } from '@/client/composables/useToast';
@@ -73,7 +74,7 @@ const getEventTitle = (event: FeedEvent) => {
   if (!event || typeof event.content !== 'function') {
     return '';
   }
-  const content = event.content('en'); // TODO: Use user's preferred language
+  const content = event.content(i18next.language);
   return content?.name || t('untitled_event');
 };
 
@@ -81,7 +82,7 @@ const getEventTitle = (event: FeedEvent) => {
  * Get the event description in the appropriate language
  */
 const getEventDescription = (event: FeedEvent) => {
-  const content = event.content('en'); // TODO: Use user's preferred language
+  const content = event.content(i18next.language);
   return content?.description || '';
 };
 
