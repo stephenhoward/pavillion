@@ -707,25 +707,20 @@ describe('Payment Provider Adapters', () => {
       expect(paypalAdapter.supportsAmountUpdates()).toBe(false);
     });
 
-    it('should verify webhook signature with valid and invalid signatures', () => {
+    it('should reject all webhook signatures until async verification is implemented', () => {
       const payload = JSON.stringify({
         id: 'WH-TEST123',
         event_type: 'BILLING.SUBSCRIPTION.ACTIVATED',
         resource: { id: 'I-TEST123' },
       });
 
-      // Test with signature present
+      // PayPal webhook verification requires an async API call to PayPal's
+      // verify-webhook-signature endpoint. Until the adapter interface supports
+      // async verification, all PayPal webhooks must be rejected.
       const validSignature = 'mock-signature-hash';
-      const validResult = paypalAdapter.verifyWebhookSignature(payload, validSignature);
-      expect(validResult).toBe(true);
-
-      // Test with empty signature
-      const invalidResult = paypalAdapter.verifyWebhookSignature(payload, '');
-      expect(invalidResult).toBe(false);
-
-      // Test with empty payload
-      const invalidResult2 = paypalAdapter.verifyWebhookSignature('', validSignature);
-      expect(invalidResult2).toBe(false);
+      expect(paypalAdapter.verifyWebhookSignature(payload, validSignature)).toBe(false);
+      expect(paypalAdapter.verifyWebhookSignature(payload, '')).toBe(false);
+      expect(paypalAdapter.verifyWebhookSignature('', validSignature)).toBe(false);
     });
 
     it('should throw when createCheckoutSession is called', async () => {
