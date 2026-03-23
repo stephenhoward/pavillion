@@ -88,14 +88,16 @@ describe('Event API', () => {
     });
     let entity = await EventEntity.findOne({ where: { id: response.body.id } });
 
-    // wait for create event to propagate to activitypub service:
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    // Get the most recent outbox message (the Create activity, not the earlier Accept from follow setup)
-    let message = await ActivityPubOutboxMessageEntity.findOne({
-      where: { calendar_id: calendar.id },
-      order: [['message_time', 'DESC']],
-    });
+    // Poll for the outbox message to be processed (ARM CI runners need more time)
+    let message: ActivityPubOutboxMessageEntity | null = null;
+    for (let i = 0; i < 20; i++) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      message = await ActivityPubOutboxMessageEntity.findOne({
+        where: { calendar_id: calendar.id },
+        order: [['message_time', 'DESC']],
+      });
+      if (message?.processed_time) break;
+    }
 
     expect(response.status,"api call succeeded").toBe(201);
     expect(response.body.id,"got back an object with an id").toBeDefined();

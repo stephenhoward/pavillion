@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 // Mock the ip-validation module so tests can control SSRF validation behaviour
 // without performing real DNS lookups. Defaults to resolving safely (no throw).
-vi.mock('@/server/activitypub/helper/ip-validation', () => ({
+vi.mock('@/server/common/helper/ip-validation', () => ({
   validateUrlNotPrivate: vi.fn().mockResolvedValue(true),
 }));
-import { validateUrlNotPrivate } from '@/server/activitypub/helper/ip-validation';
+import { validateUrlNotPrivate } from '@/server/common/helper/ip-validation';
 
 import { v4 as uuidv4 } from 'uuid';
 import sinon from 'sinon';

@@ -6,9 +6,9 @@ import { ClientRequest } from 'http';
 import crypto from 'crypto';
 import config from 'config';
 import { Cache } from '@/server/activitypub/helper/cache';
-import { PUBLIC_KEY_FETCH_TIMEOUT_MS, MAX_REQUEST_AGE_MS } from '@/server/activitypub/constants';
+import { PUBLIC_KEY_FETCH_TIMEOUT_MS, MAX_REQUEST_AGE_MS } from '@/server/common/constants';
 import { objectUriSchema } from '@/server/activitypub/validation/schemas';
-import { validateUrlNotPrivate } from '@/server/activitypub/helper/ip-validation';
+import { validateUrlNotPrivate } from '@/server/common/helper/ip-validation';
 import { logError } from '@/server/common/helper/error-logger';
 import { createLogger } from '@/server/common/helper/logger';
 

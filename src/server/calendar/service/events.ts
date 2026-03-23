@@ -30,8 +30,8 @@ import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_ca
 import { EventInstanceEntity } from '@/server/calendar/entity/event_instance';
 import { EventRepostEntity } from '@/server/calendar/entity/event_repost';
 import { SharedEventEntity } from '@/server/activitypub/entity/activitypub';
-import { validateUrlNotPrivate } from '@/server/activitypub/helper/ip-validation';
-import { FEDERATION_HTTP_TIMEOUT_MS } from '@/server/activitypub/constants';
+import { validateUrlNotPrivate } from '@/server/common/helper/ip-validation';
+import { FEDERATION_HTTP_TIMEOUT_MS } from '@/server/common/constants';
 import db from '@/server/common/entity/db';
 import { logError } from '@/server/common/helper/error-logger';
 import { createLogger } from '@/server/common/helper/logger';

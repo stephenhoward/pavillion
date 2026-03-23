@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { logError } from '@/server/common/helper/error-logger';
-import { REMOTE_OBJECT_FETCH_TIMEOUT_MS } from '@/server/activitypub/constants';
-import { validateUrlNotPrivate } from '@/server/activitypub/helper/ip-validation';
+import { REMOTE_OBJECT_FETCH_TIMEOUT_MS } from '@/server/common/constants';
+import { validateUrlNotPrivate } from '@/server/common/helper/ip-validation';
 import { createLogger } from '@/server/common/helper/logger';
 
 const logger = createLogger('activitypub');

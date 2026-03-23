@@ -16,7 +16,7 @@ import dns from 'dns';
 import { promisify } from 'util';
 import { createLogger } from '@/server/common/helper/logger';
 
-const logger = createLogger('activitypub');
+const logger = createLogger('ip-validation');
 
 const dnsLookup = promisify(dns.lookup);
 

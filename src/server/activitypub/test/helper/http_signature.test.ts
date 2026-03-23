@@ -5,7 +5,7 @@ import axios from 'axios';
 import sinon from 'sinon';
 import { Cache } from '@/server/activitypub/helper/cache';
 import { verifyHttpSignature } from '@/server/activitypub/helper/http_signature';
-import { MAX_REQUEST_AGE_MS } from '@/server/activitypub/constants';
+import { MAX_REQUEST_AGE_MS } from '@/server/common/constants';
 import crypto from 'crypto';
 
 describe('HTTP Signature Verification', () => {

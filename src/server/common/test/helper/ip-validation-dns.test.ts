@@ -18,7 +18,7 @@ vi.mock('dns', () => ({
 }));
 
 import dns from 'dns';
-import { resolvesToPrivateIP } from '@/server/activitypub/helper/ip-validation';
+import { resolvesToPrivateIP } from '@/server/common/helper/ip-validation';
 
 describe('resolvesToPrivateIP - DNS rebinding', () => {
   it('should return true when hostname resolves to a private IPv4 address', async () => {

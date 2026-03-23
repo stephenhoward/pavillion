@@ -17,7 +17,7 @@ import { Account } from '@/common/model/account';
 import { CalendarActor } from '@/server/activitypub/entity/calendar_actor';
 import { UserActorEntity } from '@/server/activitypub/entity/user_actor';
 import EventService from '@/server/calendar/service/events';
-import * as ipValidation from '@/server/activitypub/helper/ip-validation';
+import * as ipValidation from '@/server/common/helper/ip-validation';
 
 const REMOTE_INBOX_URL = 'https://remote.example.com/inbox';
 const PRIVATE_INBOX_URL = 'https://192.168.1.1/inbox';

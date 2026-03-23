@@ -25,7 +25,7 @@ import {
 import CalendarInterface from '@/server/calendar/interface';
 import ConfigurationInterface from '@/server/configuration/interface';
 import ActivityPubInterface from '@/server/activitypub/interface';
-import { validateActorUriProtocol } from '@/server/activitypub/helper/actor-uri';
+import { validateActorUriProtocol } from '@/server/common/helper/uri-validation';
 import FlagActivityBuilder from '@/server/moderation/service/flag-activity-builder';
 import EmailBlockingService from '@/server/moderation/service/email-blocking';
 import { PatternDetectionService } from '@/server/moderation/service/pattern-detection';
