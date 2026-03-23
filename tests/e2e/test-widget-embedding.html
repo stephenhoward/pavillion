@@ -50,9 +50,19 @@
     var params = new URLSearchParams(window.location.search);
     var serverUrl = params.get('serverUrl') || 'http://localhost:3000';
     var calendarName = params.get('calendar') || 'test_calendar';
+    var viewMode = params.get('view') || 'list';
 
     console.log('[Test Page] Page origin:', window.location.origin);
     console.log('[Test Page] Widget server URL:', serverUrl);
+
+    // Capture postMessage events from widget iframe for test assertions.
+    // Each test calls page.goto() which resets this array to a clean slate.
+    window.__messages = [];
+    window.addEventListener('message', function(event) {
+      if (event.data && typeof event.data.type === 'string' && event.data.type.startsWith('pavillion:')) {
+        window.__messages.push(event.data);
+      }
+    });
 
     // Queue init command before widget script loads (async loading pattern)
     window.Pavillion = window.Pavillion || function() {
@@ -63,7 +73,7 @@
     Pavillion('init', {
       calendar: calendarName,
       container: '#calendar-widget',
-      view: 'list',
+      view: viewMode,
       accentColor: '#ff9131',
       colorMode: 'light',
       onResize: function(height) {
@@ -92,24 +102,6 @@
       document.getElementById('status').className = 'error';
     };
     document.head.appendChild(script);
-
-    // Verify iframe creation and origin after widget initializes
-    setTimeout(function() {
-      var iframe = document.querySelector('#calendar-widget iframe');
-      if (iframe) {
-        console.log('[Test Page] Iframe src:', iframe.src);
-        var iframeUrl = new URL(iframe.src);
-        console.log('[Test Page] Iframe origin:', iframeUrl.origin);
-
-        if (iframeUrl.origin === serverUrl.replace(/\/$/, '')) {
-          console.log('[Test Page] SUCCESS: Widget iframe origin matches server URL');
-        } else {
-          console.error('[Test Page] MISMATCH: Iframe origin', iframeUrl.origin, 'does not match server', serverUrl);
-        }
-      } else {
-        console.warn('[Test Page] No iframe found yet (may still be loading)');
-      }
-    }, 2000);
   </script>
 </body>
 </html>
