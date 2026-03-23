@@ -36,6 +36,7 @@ const filteredEventsByDay = computed(() => publicCalendarStore.getFilteredEvents
 const hasActiveFilters = computed(() => publicCalendarStore.hasActiveFilters);
 const hasNonDateFilters = computed(() => publicCalendarStore.hasNonDateFilters);
 const hasOnlyDateFilters = computed(() => publicCalendarStore.hasOnlyDateFilters);
+const defaultEventImage = computed(() => publicCalendarStore.defaultEventImage);
 
 /**
  * Clears all active filters and resets the URL query params.
@@ -173,6 +174,7 @@ onBeforeMount(async () => {
               <EventCard
                 :instance="instance"
                 :calendar-url-name="calendarUrlName"
+                :default-image="defaultEventImage"
               />
             </li>
           </ul>

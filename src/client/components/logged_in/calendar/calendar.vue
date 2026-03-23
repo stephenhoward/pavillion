@@ -105,6 +105,21 @@ const { handleTabKeydown } = useTabNavigation(ORDERED_TABS, activeTab, activateT
 // Computed property to get events for the current calendar
 const calendarEvents = computed(() => store.eventsForCalendar(state.calendar?.id));
 
+/**
+ * Resolves the effective image for an event.
+ * Falls back to the calendar's default event image for locally-owned events.
+ * Reposted events do NOT get the local calendar's default image.
+ */
+const resolveEventImage = (event: any) => {
+  if (event.media) {
+    return event.media;
+  }
+  if (event.isRepost) {
+    return null;
+  }
+  return state.calendar?.defaultEventImage ?? null;
+};
+
 // Bulk selection functionality
 const {
   selectedEvents,
@@ -793,7 +808,7 @@ const selectAllAriaLabel = computed(() => {
                 @click="handleEditEvent(event, $event)"
                 class="event-article"
               >
-                <EventImage :media="event.media" size="small" />
+                <EventImage :media="resolveEventImage(event)" size="small" />
                 <div class="event-content">
                   <div class="event-title-row">
                     <h3 :id="`event-title-${event.id}`">{{ event.content("en").name }}</h3>

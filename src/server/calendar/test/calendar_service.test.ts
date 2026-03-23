@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
+import { EventEmitter } from 'events';
 
 import { Account } from '@/common/model/account';
 import { Calendar, CalendarContent } from '@/common/model/calendar';
@@ -10,6 +11,9 @@ import { CalendarMemberEntity } from '@/server/calendar/entity/calendar_member';
 import { AccountEntity } from '@/server/common/entity/account';
 import CalendarService from '@/server/calendar/service/calendar';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
+import { ValidationError } from '@/common/exceptions/base';
+import { MediaNotFoundError } from '@/common/exceptions/media';
+import { MediaEntity } from '@/server/media/entity/media';
 import db from '@/server/common/entity/db';
 
 describe('isValidUrlName', () => {
@@ -409,7 +413,7 @@ describe('getPrimaryCalendarForUser', () => {
       include: [{
         model: CalendarEntity,
         as: 'calendar',
-        include: [CalendarContentEntity],
+        include: [CalendarContentEntity, { model: MediaEntity, as: 'defaultEventImage', required: false, where: { status: 'approved' } }],
       }],
     })).toBe(true);
   });
@@ -426,7 +430,7 @@ describe('getPrimaryCalendarForUser', () => {
       include: [{
         model: CalendarEntity,
         as: 'calendar',
-        include: [CalendarContentEntity],
+        include: [CalendarContentEntity, { model: MediaEntity, as: 'defaultEventImage', required: false, where: { status: 'approved' } }],
       }],
     })).toBe(true);
   });
@@ -1140,5 +1144,162 @@ describe('getEditorsForCalendar', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe('owner-id');
+  });
+});
+
+// --- updateCalendarSettings: defaultEventImageId tests ---
+describe('updateCalendarSettings - defaultEventImageId', () => {
+  let sandbox: sinon.SinonSandbox;
+  let service: CalendarService;
+  let ownerAccount: Account;
+  const calendarId = '550e8400-e29b-41d4-a716-446655440000';
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    service = new CalendarService();
+    ownerAccount = new Account('owner-id');
+    ownerAccount.email = 'owner@example.com';
+
+    // Stub getCalendar to return a valid calendar
+    const cal = new Calendar(calendarId, 'test-calendar');
+    sandbox.stub(service, 'getCalendar').resolves(cal);
+
+    // Stub isCalendarOwner (private, but accessed via prototype)
+    sandbox.stub(service as any, 'isCalendarOwner').resolves(true);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('should set defaultEventImageId when media is valid and approved', async () => {
+    const mediaId = '660e8400-e29b-41d4-a716-446655440001';
+    const calendarEntityStub = {
+      update: sandbox.stub().resolves(),
+      toModel: () => new Calendar(calendarId, 'test-calendar'),
+    };
+
+    sandbox.stub(CalendarEntity, 'findByPk')
+      .onFirstCall().resolves(calendarEntityStub as any)
+      .onSecondCall().resolves(calendarEntityStub as any);
+
+    sandbox.stub(MediaEntity, 'findByPk').resolves({
+      id: mediaId,
+      calendar_id: calendarId,
+      status: 'approved',
+    } as any);
+
+    await service.updateCalendarSettings(ownerAccount, calendarId, { defaultEventImageId: mediaId });
+
+    expect(calendarEntityStub.update.calledWith({ default_event_image_id: mediaId })).toBe(true);
+  });
+
+  it('should clear defaultEventImageId when null is passed', async () => {
+    const calendarEntityStub = {
+      update: sandbox.stub().resolves(),
+      toModel: () => new Calendar(calendarId, 'test-calendar'),
+    };
+
+    sandbox.stub(CalendarEntity, 'findByPk')
+      .onFirstCall().resolves(calendarEntityStub as any)
+      .onSecondCall().resolves(calendarEntityStub as any);
+
+    await service.updateCalendarSettings(ownerAccount, calendarId, { defaultEventImageId: null });
+
+    expect(calendarEntityStub.update.calledWith({ default_event_image_id: null })).toBe(true);
+  });
+
+  it('should throw MediaNotFoundError when media does not exist', async () => {
+    const mediaId = '660e8400-e29b-41d4-a716-446655440001';
+
+    sandbox.stub(CalendarEntity, 'findByPk').resolves({
+      update: sandbox.stub().resolves(),
+      toModel: () => new Calendar(calendarId, 'test-calendar'),
+    } as any);
+
+    sandbox.stub(MediaEntity, 'findByPk').resolves(null);
+
+    await expect(
+      service.updateCalendarSettings(ownerAccount, calendarId, { defaultEventImageId: mediaId }),
+    ).rejects.toThrow(MediaNotFoundError);
+  });
+
+  it('should throw ValidationError when media belongs to a different calendar', async () => {
+    const mediaId = '660e8400-e29b-41d4-a716-446655440001';
+    const otherCalendarId = '770e8400-e29b-41d4-a716-446655440002';
+
+    sandbox.stub(CalendarEntity, 'findByPk').resolves({
+      update: sandbox.stub().resolves(),
+      toModel: () => new Calendar(calendarId, 'test-calendar'),
+    } as any);
+
+    sandbox.stub(MediaEntity, 'findByPk').resolves({
+      id: mediaId,
+      calendar_id: otherCalendarId,
+      status: 'approved',
+    } as any);
+
+    await expect(
+      service.updateCalendarSettings(ownerAccount, calendarId, { defaultEventImageId: mediaId }),
+    ).rejects.toThrow(ValidationError);
+
+    await expect(
+      service.updateCalendarSettings(ownerAccount, calendarId, { defaultEventImageId: mediaId }),
+    ).rejects.toThrow('Media does not belong to this calendar');
+  });
+
+  it('should accept pending media and emit mediaAttachedToCalendar event', async () => {
+    const mediaId = '660e8400-e29b-41d4-a716-446655440001';
+    const eventBus = new EventEmitter();
+    const emitSpy = sandbox.spy(eventBus, 'emit');
+    const serviceWithBus = new CalendarService(undefined, undefined, eventBus);
+
+    const cal = new Calendar(calendarId, 'test-calendar');
+    sandbox.stub(serviceWithBus, 'getCalendar').resolves(cal);
+    sandbox.stub(serviceWithBus as any, 'isCalendarOwner').resolves(true);
+
+    const calendarEntityStub = {
+      update: sandbox.stub().resolves(),
+      toModel: () => new Calendar(calendarId, 'test-calendar'),
+    };
+
+    sandbox.stub(CalendarEntity, 'findByPk')
+      .onFirstCall().resolves(calendarEntityStub as any)
+      .onSecondCall().resolves(calendarEntityStub as any);
+
+    sandbox.stub(MediaEntity, 'findByPk').resolves({
+      id: mediaId,
+      calendar_id: calendarId,
+      status: 'pending',
+    } as any);
+
+    await serviceWithBus.updateCalendarSettings(ownerAccount, calendarId, { defaultEventImageId: mediaId });
+
+    expect(calendarEntityStub.update.calledWith({ default_event_image_id: mediaId })).toBe(true);
+    expect(emitSpy.calledWith('mediaAttachedToCalendar', { mediaId, calendarId })).toBe(true);
+  });
+
+  it('should not emit mediaAttachedToCalendar when clearing default image', async () => {
+    const eventBus = new EventEmitter();
+    const emitSpy = sandbox.spy(eventBus, 'emit');
+    const serviceWithBus = new CalendarService(undefined, undefined, eventBus);
+
+    const cal = new Calendar(calendarId, 'test-calendar');
+    sandbox.stub(serviceWithBus, 'getCalendar').resolves(cal);
+    sandbox.stub(serviceWithBus as any, 'isCalendarOwner').resolves(true);
+
+    const calendarEntityStub = {
+      update: sandbox.stub().resolves(),
+      toModel: () => new Calendar(calendarId, 'test-calendar'),
+    };
+
+    sandbox.stub(CalendarEntity, 'findByPk')
+      .onFirstCall().resolves(calendarEntityStub as any)
+      .onSecondCall().resolves(calendarEntityStub as any);
+
+    await serviceWithBus.updateCalendarSettings(ownerAccount, calendarId, { defaultEventImageId: null });
+
+    expect(calendarEntityStub.update.calledWith({ default_event_image_id: null })).toBe(true);
+    expect(emitSpy.calledWith('mediaAttachedToCalendar')).toBe(false);
   });
 });

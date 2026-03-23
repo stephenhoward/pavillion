@@ -3,6 +3,22 @@ import PublicCalendarInterface from '../../interface';
 import { SeriesNotFoundError } from '@/common/exceptions/series';
 import { logError } from '@/server/common/helper/error-logger';
 
+/**
+ * Strips sensitive fields from a defaultEventImage object for public responses.
+ * Only id and mimeType are exposed; internal fields like originalFilename,
+ * fileSize, status, sha256, calendarId, and storageFilename are removed.
+ */
+function stripDefaultEventImage(calendarObj: Record<string, any>): Record<string, any> {
+  if (!calendarObj.defaultEventImage) return calendarObj;
+  return {
+    ...calendarObj,
+    defaultEventImage: {
+      id: calendarObj.defaultEventImage.id,
+      mimeType: calendarObj.defaultEventImage.mimeType,
+    },
+  };
+}
+
 export default class CalendarRoutes {
   service: PublicCalendarInterface;
 
@@ -26,7 +42,8 @@ export default class CalendarRoutes {
 
     const calendar = await this.service.getCalendarByName(req.params.urlName);
     if (calendar) {
-      res.json(calendar.toObject());
+      const calendarObj = calendar.toObject();
+      res.json(stripDefaultEventImage(calendarObj));
     }
     else {
       res.status(404).json({

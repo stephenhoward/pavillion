@@ -1,4 +1,5 @@
 import { Model, TranslatedContentModel, TranslatedModel } from '@/common/model/model';
+import { Media } from '@/common/model/media';
 
 /**
  * Valid options for default date range on public calendar views.
@@ -15,6 +16,8 @@ class Calendar extends TranslatedModel<CalendarContent> {
   description: string = '';
   defaultDateRange: DefaultDateRange | null = null;
   widgetAllowedDomain: string | null = null;
+  defaultEventImageId: string | null = null;
+  defaultEventImage: Media | null = null;
   _content: Record<string, CalendarContent> = {};
 
   /**
@@ -52,6 +55,8 @@ class Calendar extends TranslatedModel<CalendarContent> {
       languages: this.languages,
       defaultDateRange: this.defaultDateRange,
       widgetAllowedDomain: this.widgetAllowedDomain,
+      defaultEventImageId: this.defaultEventImageId,
+      defaultEventImage: this.defaultEventImage?.toObject() ?? null,
       content: Object.fromEntries(
         Object.entries(this._content)
           .map(([language, strings]: [string, CalendarContent]) => [language, strings.toObject()]),
@@ -71,6 +76,8 @@ class Calendar extends TranslatedModel<CalendarContent> {
     calendar.description = obj.description;
     calendar.defaultDateRange = obj.defaultDateRange || null;
     calendar.widgetAllowedDomain = obj.widgetAllowedDomain || null;
+    calendar.defaultEventImageId = obj.defaultEventImageId || null;
+    calendar.defaultEventImage = obj.defaultEventImage ? Media.fromObject(obj.defaultEventImage) : null;
 
     // Deserialize content if present
     if (obj.content && typeof obj.content === 'object') {

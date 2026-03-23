@@ -6,6 +6,7 @@ import { EventCategory } from '@/common/model/event_category';
 import { EventSeries } from '@/common/model/event_series';
 import { EventSeriesContent } from '@/common/model/event_series_content';
 import { EventLocation } from '@/common/model/location';
+import { Media } from '@/common/model/media';
 import { EventObject } from '@/server/activitypub/model/object/event';
 
 describe('EventObject', () => {
@@ -306,6 +307,66 @@ describe('EventObject', () => {
       obj.toActivityPubObject();
       expect(obj.content).toHaveProperty('en');
       expect(obj.date).toBeDefined();
+    });
+
+    it('should include image when event has its own media', () => {
+      const calendar = new Calendar('calendar-uuid', 'mycal');
+      const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+      event.addContent(new CalendarEventContent('en', 'Event With Image', ''));
+      event.media = new Media('media-uuid', 'calendar-uuid', 'abc123', 'photo.jpg', 'image/jpeg', 1024, 'approved');
+
+      const obj = new EventObject(calendar, event);
+      const result = obj.toActivityPubObject();
+
+      expect(result.image).toEqual({
+        type: 'Image',
+        url: 'https://pavillion.dev/api/v1/media/media-uuid',
+        mediaType: 'image/jpeg',
+      });
+    });
+
+    it('should fall back to calendar defaultEventImage when event has no media', () => {
+      const calendar = new Calendar('calendar-uuid', 'mycal');
+      calendar.defaultEventImage = new Media('default-img-uuid', 'calendar-uuid', 'def456', 'default.png', 'image/png', 2048, 'approved');
+      const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+      event.addContent(new CalendarEventContent('en', 'Event Without Image', ''));
+
+      const obj = new EventObject(calendar, event);
+      const result = obj.toActivityPubObject();
+
+      expect(result.image).toEqual({
+        type: 'Image',
+        url: 'https://pavillion.dev/api/v1/media/default-img-uuid',
+        mediaType: 'image/png',
+      });
+    });
+
+    it('should omit image when neither event media nor calendar default exists', () => {
+      const calendar = new Calendar('calendar-uuid', 'mycal');
+      const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+      event.addContent(new CalendarEventContent('en', 'No Image Event', ''));
+
+      const obj = new EventObject(calendar, event);
+      const result = obj.toActivityPubObject();
+
+      expect(result).not.toHaveProperty('image');
+    });
+
+    it('should prefer event media over calendar default image', () => {
+      const calendar = new Calendar('calendar-uuid', 'mycal');
+      calendar.defaultEventImage = new Media('default-img-uuid', 'calendar-uuid', 'def456', 'default.png', 'image/png', 2048, 'approved');
+      const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+      event.addContent(new CalendarEventContent('en', 'Event With Own Image', ''));
+      event.media = new Media('event-img-uuid', 'calendar-uuid', 'ghi789', 'event.jpg', 'image/jpeg', 3072, 'approved');
+
+      const obj = new EventObject(calendar, event);
+      const result = obj.toActivityPubObject();
+
+      expect(result.image).toEqual({
+        type: 'Image',
+        url: 'https://pavillion.dev/api/v1/media/event-img-uuid',
+        mediaType: 'image/jpeg',
+      });
     });
 
   });

@@ -114,6 +114,52 @@ describe('MediaEventHandlers', () => {
     });
   });
 
+  describe('mediaAttachedToCalendar', () => {
+    it('should call checkFileSafety for pending media when mediaAttachedToCalendar is emitted', async () => {
+      mockMediaInterface.getMediaById.resolves(makePendingMedia('media-cal-1'));
+      mockMediaInterface.checkFileSafety.resolves(true);
+
+      eventBus.emit('mediaAttachedToCalendar', { mediaId: 'media-cal-1', calendarId: 'calendar-123' });
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      expect(mockMediaInterface.getMediaById.calledOnceWith('media-cal-1')).toBe(true);
+      expect(mockMediaInterface.checkFileSafety.calledOnceWith('media-cal-1')).toBe(true);
+    });
+
+    it('should NOT call checkFileSafety when calendar media is already approved', async () => {
+      mockMediaInterface.getMediaById.resolves(makeApprovedMedia('media-cal-2'));
+
+      eventBus.emit('mediaAttachedToCalendar', { mediaId: 'media-cal-2', calendarId: 'calendar-123' });
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      expect(mockMediaInterface.getMediaById.calledOnce).toBe(true);
+      expect(mockMediaInterface.checkFileSafety.called).toBe(false);
+    });
+
+    it('should NOT call checkFileSafety when calendar media is not found', async () => {
+      mockMediaInterface.getMediaById.resolves(null);
+
+      eventBus.emit('mediaAttachedToCalendar', { mediaId: 'media-cal-3', calendarId: 'calendar-123' });
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      expect(mockMediaInterface.checkFileSafety.called).toBe(false);
+    });
+
+    it('should not throw when checkFileSafety fails for calendar media', async () => {
+      mockMediaInterface.getMediaById.resolves(makePendingMedia('media-cal-4'));
+      mockMediaInterface.checkFileSafety.rejects(new Error('storage error'));
+
+      eventBus.emit('mediaAttachedToCalendar', { mediaId: 'media-cal-4', calendarId: 'calendar-123' });
+
+      // Should complete without throwing
+      await expect(new Promise(resolve => setTimeout(resolve, 10))).resolves.not.toThrow();
+      expect(mockMediaInterface.checkFileSafety.calledOnce).toBe(true);
+    });
+  });
+
   describe('isolation between event types', () => {
     it('mediaAttachedToSeries should not trigger the mediaAttachedToEvent handler', async () => {
       mockMediaInterface.getMediaById.resolves(makePendingMedia('media-666'));
@@ -138,6 +184,18 @@ describe('MediaEventHandlers', () => {
       await new Promise(resolve => setTimeout(resolve, 10));
 
       // checkFileSafety should be called exactly once (by the event handler)
+      expect(mockMediaInterface.checkFileSafety.callCount).toBe(1);
+    });
+
+    it('mediaAttachedToCalendar should not trigger event or series handlers', async () => {
+      mockMediaInterface.getMediaById.resolves(makePendingMedia('media-888'));
+      mockMediaInterface.checkFileSafety.resolves(true);
+
+      eventBus.emit('mediaAttachedToCalendar', { mediaId: 'media-888', calendarId: 'calendar-123' });
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // checkFileSafety should be called exactly once (by the calendar handler)
       expect(mockMediaInterface.checkFileSafety.callCount).toBe(1);
     });
   });

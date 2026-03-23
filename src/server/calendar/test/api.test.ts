@@ -981,3 +981,170 @@ describe('Editor API', () => {
     });
   });
 });
+
+// Import CalendarRoutes for settings API tests
+import CalendarRoutes from '@/server/calendar/api/v1/calendar';
+import { Media } from '@/common/model/media';
+import { ValidationError } from '@/common/exceptions/base';
+
+describe('Calendar Settings API', () => {
+  let routes: CalendarRoutes;
+  let router: express.Router;
+  let calendarInterface: CalendarInterface;
+  let settingsSandbox: sinon.SinonSandbox = sinon.createSandbox();
+
+  beforeEach(() => {
+    calendarInterface = new CalendarInterface(new EventEmitter());
+    routes = new CalendarRoutes(calendarInterface);
+    router = express.Router();
+  });
+
+  afterEach(() => {
+    settingsSandbox.restore();
+  });
+
+  describe('PATCH /calendars/:calendarId/settings', () => {
+    it('should fail without account', async () => {
+      router.patch('/handler', (req, res) => {
+        req.params.calendarId = 'cal-id';
+        routes.updateCalendarSettings(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .patch('/handler')
+        .send({ defaultEventImageId: 'media-id' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.errorName).toBe('AuthenticationError');
+    });
+
+    it('should pass defaultEventImageId to service', async () => {
+      const calendar = new Calendar('cal-id', 'test-calendar');
+      const mediaId = '550e8400-e29b-41d4-a716-446655440099';
+      let updateStub = settingsSandbox.stub(calendarInterface, 'updateCalendarSettings');
+      updateStub.resolves(calendar);
+
+      router.patch('/handler', addRequestUser, (req, res) => {
+        req.params.calendarId = 'cal-id';
+        routes.updateCalendarSettings(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .patch('/handler')
+        .send({ defaultEventImageId: mediaId });
+
+      expect(response.status).toBe(200);
+      expect(updateStub.called).toBe(true);
+      const settingsArg = updateStub.firstCall.args[2];
+      expect(settingsArg.defaultEventImageId).toBe(mediaId);
+    });
+
+    it('should pass null defaultEventImageId to clear the image', async () => {
+      const calendar = new Calendar('cal-id', 'test-calendar');
+      let updateStub = settingsSandbox.stub(calendarInterface, 'updateCalendarSettings');
+      updateStub.resolves(calendar);
+
+      router.patch('/handler', addRequestUser, (req, res) => {
+        req.params.calendarId = 'cal-id';
+        routes.updateCalendarSettings(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .patch('/handler')
+        .send({ defaultEventImageId: null });
+
+      expect(response.status).toBe(200);
+      expect(updateStub.called).toBe(true);
+      const settingsArg = updateStub.firstCall.args[2];
+      expect(settingsArg.defaultEventImageId).toBeNull();
+    });
+
+    it('should pass defaultEventImageId alongside other settings', async () => {
+      const calendar = new Calendar('cal-id', 'test-calendar');
+      const mediaId = '550e8400-e29b-41d4-a716-446655440099';
+      let updateStub = settingsSandbox.stub(calendarInterface, 'updateCalendarSettings');
+      updateStub.resolves(calendar);
+
+      router.patch('/handler', addRequestUser, (req, res) => {
+        req.params.calendarId = 'cal-id';
+        routes.updateCalendarSettings(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .patch('/handler')
+        .send({
+          defaultEventImageId: mediaId,
+          defaultDateRange: 'week',
+          content: { en: { name: 'Test' } },
+        });
+
+      expect(response.status).toBe(200);
+      const settingsArg = updateStub.firstCall.args[2];
+      expect(settingsArg.defaultEventImageId).toBe(mediaId);
+      expect(settingsArg.defaultDateRange).toBe('week');
+      expect(settingsArg.content).toEqual({ en: { name: 'Test' } });
+    });
+
+    it('should return 404 when calendar not found', async () => {
+      let updateStub = settingsSandbox.stub(calendarInterface, 'updateCalendarSettings');
+      updateStub.rejects(new CalendarNotFoundError('Calendar not found'));
+
+      router.patch('/handler', addRequestUser, (req, res) => {
+        req.params.calendarId = 'nonexistent';
+        routes.updateCalendarSettings(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .patch('/handler')
+        .send({ defaultEventImageId: 'media-id' });
+
+      expect(response.status).toBe(404);
+      expect(response.body.errorName).toBe('CalendarNotFoundError');
+    });
+
+    it('should return 403 when user lacks permission', async () => {
+      let updateStub = settingsSandbox.stub(calendarInterface, 'updateCalendarSettings');
+      updateStub.rejects(new CalendarEditorPermissionError('Permission denied'));
+
+      router.patch('/handler', addRequestUser, (req, res) => {
+        req.params.calendarId = 'cal-id';
+        routes.updateCalendarSettings(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .patch('/handler')
+        .send({ defaultEventImageId: 'media-id' });
+
+      expect(response.status).toBe(403);
+      expect(response.body.errorName).toBe('CalendarEditorPermissionError');
+    });
+
+    it('should return calendar with defaultEventImage in response', async () => {
+      const calendar = new Calendar('cal-id', 'test-calendar');
+      const media = new Media('media-id', 'cal-id', 'abc123', 'photo.jpg', 'image/jpeg', 12345, 'approved');
+      calendar.defaultEventImageId = 'media-id';
+      calendar.defaultEventImage = media;
+
+      let updateStub = settingsSandbox.stub(calendarInterface, 'updateCalendarSettings');
+      updateStub.resolves(calendar);
+
+      router.patch('/handler', addRequestUser, (req, res) => {
+        req.params.calendarId = 'cal-id';
+        routes.updateCalendarSettings(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .patch('/handler')
+        .send({ defaultEventImageId: 'media-id' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.defaultEventImageId).toBe('media-id');
+      expect(response.body.defaultEventImage).toBeDefined();
+      expect(response.body.defaultEventImage.id).toBe('media-id');
+      expect(response.body.defaultEventImage.mimeType).toBe('image/jpeg');
+      // Authenticated responses include all fields
+      expect(response.body.defaultEventImage.originalFilename).toBe('photo.jpg');
+      expect(response.body.defaultEventImage.fileSize).toBe(12345);
+    });
+  });
+});

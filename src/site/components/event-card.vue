@@ -7,10 +7,12 @@ import EventImage from './event-image.vue';
 import { useLocalizedContent } from '@/site/composables/useLocalizedContent';
 import { useLocale } from '@/site/composables/useLocale';
 import type CalendarEventInstance from '@/common/model/event_instance';
+import type { Media } from '@/common/model/media';
 
 const props = defineProps<{
   instance: CalendarEventInstance;
   calendarUrlName: string;
+  defaultImage?: Media | null;
 }>();
 
 const { t } = useTranslation('system');
@@ -71,10 +73,14 @@ const isRecurring = computed(() => {
 });
 
 /**
- * Returns the event media object or null.
+ * Returns the effective media for the event card.
+ * Fallback logic: event.media ?? (isRepost ? null : defaultImage) ?? null
+ * Reposted events do NOT get the local calendar's default image.
  */
 const media = computed(() => {
-  return props.instance.event.media ?? null;
+  return props.instance.event.media
+    ?? (props.instance.event.isRepost ? null : props.defaultImage)
+    ?? null;
 });
 
 /**

@@ -32,6 +32,7 @@ import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor'
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
 import { EventEntity } from '@/server/calendar/entity/event';
+import { MediaEntity } from '@/server/media/entity/media';
 
 /**
  * Setup ActivityPub database schema for unit tests
@@ -53,6 +54,9 @@ export async function setupActivityPubSchema(): Promise<void> {
   await EventActivityEntity.sync({ force: true });
   await ActivityPubInboxMessageEntity.sync({ force: true });
   await ActivityPubOutboxMessageEntity.sync({ force: true });
+
+  // Sync MediaEntity before EventEntity (EventEntity has FK to media)
+  await MediaEntity.sync({ force: true });
 
   // Sync EventEntity last
   await EventEntity.sync({ force: true });
@@ -77,6 +81,7 @@ export async function teardownActivityPubSchema(): Promise<void> {
   await FollowerCalendarEntity.drop();
   await FollowingCalendarEntity.drop();
   await EventEntity.drop();
+  await MediaEntity.drop();
   await CalendarActorEntity.drop();
   await CalendarEntity.drop();
 }

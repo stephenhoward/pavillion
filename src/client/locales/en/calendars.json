@@ -335,6 +335,9 @@
         "date_range_1week": "1 week",
         "date_range_2weeks": "2 weeks",
         "date_range_1month": "1 month",
+        "default_event_image_label": "Default Event Image",
+        "default_event_image_help": "This image will be used for events that don't have their own image. It appears on public calendar views and when sharing events.",
+        "default_event_image_remove_button": "Remove Image",
         "save_success": "Settings saved successfully",
         "error_loading": "Failed to load settings",
         "error_saving": "Failed to save settings"

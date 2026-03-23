@@ -168,6 +168,16 @@ class EventObject extends ActivityPubObject {
       }
     }
 
+    // image: event's own media takes precedence, then calendar default; omit if neither exists
+    const media = event.media ?? calendar.defaultEventImage;
+    if (media && media.status === 'approved') {
+      result.image = {
+        type: 'Image',
+        url: `https://${domain}/api/v1/media/${media.id}`,
+        mediaType: media.mimeType,
+      };
+    }
+
     // pavillion:* extensions
     result['pavillion:content'] = event.toObject().content;
     result['pavillion:categories'] = this.categories;

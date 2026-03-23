@@ -15,6 +15,21 @@ const widgetStore = useWidgetStore();
 // Computed properties for store data
 const filteredEventsByDay = computed(() => publicStore.getFilteredEventsByDay);
 
+/**
+ * Resolves the effective image for an event instance.
+ * Falls back to the calendar's default event image for locally-owned events.
+ * Reposted events do NOT get the local calendar's default image.
+ */
+const resolveEventImage = (instance: any) => {
+  if (instance.event.media) {
+    return instance.event.media;
+  }
+  if (instance.event.isRepost) {
+    return null;
+  }
+  return publicStore.defaultEventImage ?? null;
+};
+
 const openEvent = (instance: any) => {
   router.push({
     name: 'widget-event-detail',
@@ -42,7 +57,7 @@ onBeforeMount(() => {
               v-for="instance in filteredEventsByDay[day]"
               :key="instance.id"
               @click="openEvent(instance)">
-            <EventImage :media="instance.event.media" context="card" :lazy="true" />
+            <EventImage :media="resolveEventImage(instance)" context="card" :lazy="true" />
             <h3>{{ instance.event.content("en").name }}</h3>
             <div class="event-time">{{ instance.start.toLocal().toLocaleString(DateTime.TIME_SIMPLE) }}</div>
           </li>
