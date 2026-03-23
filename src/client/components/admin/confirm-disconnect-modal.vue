@@ -16,7 +16,7 @@ const props = defineProps({
     type: String,
     required: true,
   },
-  activeSubscriptionCount: {
+  activeFundingPlanCount: {
     type: Number,
     required: true,
   },
@@ -118,7 +118,7 @@ function resetState() {
 
         <div class="warning-message">
           <p class="message-primary">
-            {{ t('message', { provider: providerName, count: activeSubscriptionCount }) }}
+            {{ t('message', { provider: providerName, count: activeFundingPlanCount }) }}
           </p>
           <p class="message-secondary">
             {{ t('consequence') }}

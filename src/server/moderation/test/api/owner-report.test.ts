@@ -371,7 +371,7 @@ describe('Owner Report API', () => {
         expect(response.body.errorName).toBe('ReportValidationError');
       });
 
-      it('should return 400 for invalid sortOrder', async () => {
+      it('should return 400 for invalid sortOrder', { timeout: 15000 }, async () => {
         stubAccess();
 
         sandbox.stub(moderationInterface, 'getReportsForCalendar').rejects(

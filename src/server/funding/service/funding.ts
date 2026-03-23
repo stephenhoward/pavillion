@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
 import { Op } from 'sequelize';
+import config from 'config';
 import {
   FundingSettings,
   ProviderConfig,
@@ -15,10 +16,15 @@ import { ProviderConfigEntity } from '@/server/funding/entity/provider_config';
 import { FundingPlanEntity } from '@/server/funding/entity/funding_plan';
 import { FundingEventEntity } from '@/server/funding/entity/funding_event';
 import { ComplimentaryGrantEntity } from '@/server/funding/entity/complimentary_grant';
-import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_subscription';
+import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_funding_plan';
 import { AccountEntity, AccountRoleEntity } from '@/server/common/entity/account';
 import { ProviderFactory } from '@/server/funding/service/provider/factory';
-import { WebhookEvent, CreateSubscriptionParams } from '@/server/funding/service/provider/adapter';
+import {
+  WebhookEvent,
+  CreateCheckoutSessionParams,
+  CheckoutSessionResult,
+  CheckoutSessionStatus,
+} from '@/server/funding/service/provider/adapter';
 import {
   InvalidBillingCycleError,
   InvalidAmountError,
@@ -27,12 +33,16 @@ import {
   InvalidProviderTypeError,
   DuplicateGrantError,
   GrantNotFoundError,
-  SubscriptionNotFoundError,
-  CalendarSubscriptionNotFoundError,
-  DuplicateCalendarSubscriptionError,
-  CalendarNotFoundError,
-} from '@/server/funding/exceptions';
+  FundingPlanNotFoundError,
+  CalendarFundingPlanNotFoundError,
+  DuplicateCalendarFundingPlanError,
+  ActiveFundingPlanExistsError,
+  ProviderNotConfiguredError,
+  InvalidSessionIdError,
+  WebhookSignatureError,
+} from '@/common/exceptions/funding';
 import { ValidationError } from '@/common/exceptions/base';
+import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import type CalendarInterface from '@/server/calendar/interface';
 
 // UUID v4 validation regex
@@ -40,6 +50,13 @@ const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[
 
 // Maximum number of calendar IDs allowed in a single subscribe call
 export const MAX_CALENDAR_IDS = 50;
+
+// Checkout session ID format: cs_test_ or cs_live_ prefix, then 1-190 alphanumeric/underscore chars
+const CHECKOUT_SESSION_ID_REGEX = /^cs_(test|live)_[a-zA-Z0-9_]{1,190}$/;
+
+// PWYC amount bounds in millicents
+export const MIN_PWYC_AMOUNT = 100000; // $1.00
+export const MAX_PWYC_AMOUNT = 10000000000; // $100,000.00
 
 /**
  * Validates if a string is a valid UUID v4
@@ -51,7 +68,7 @@ function isValidUUID(id: string): boolean {
 /**
  * Service for managing funding operations
  *
- * Handles subscription lifecycle, provider management, and webhook processing.
+ * Handles funding plan lifecycle, provider management, and webhook processing.
  */
 export default class FundingService {
   private eventBus: EventEmitter;
@@ -72,9 +89,9 @@ export default class FundingService {
   }
 
   /**
-   * Get instance subscription settings
+   * Get instance funding settings
    *
-   * @returns Subscription settings or default settings if none exist
+   * @returns Funding settings or default settings if none exist
    */
   async getSettings(): Promise<FundingSettings> {
     const entity = await FundingSettingsEntity.findOne();
@@ -95,12 +112,12 @@ export default class FundingService {
   }
 
   /**
-   * Update instance subscription settings
+   * Update instance funding settings
    *
    * @param settings - Updated settings
    * @returns True if update successful
    */
-  async updateSettings(settings: FundingSettings): Promise<boolean> {
+  async updateSettings(settings: FundingSettings): Promise<void> {
     // Validate settings
     if (settings.monthlyPrice < 0 || settings.yearlyPrice < 0) {
       throw new InvalidAmountError('Prices must be non-negative');
@@ -134,7 +151,6 @@ export default class FundingService {
       await entity.save();
     }
 
-    return true;
   }
 
   /**
@@ -267,8 +283,8 @@ export default class FundingService {
       return false;
     }
 
-    // Check if any active subscriptions use this provider
-    const activeSubscriptions = await FundingPlanEntity.count({
+    // Check if any active funding plans use this provider
+    const activeFundingPlans = await FundingPlanEntity.count({
       where: {
         provider_config_id: entity.id,
         status: {
@@ -277,9 +293,9 @@ export default class FundingService {
       },
     });
 
-    if (activeSubscriptions > 0) {
+    if (activeFundingPlans > 0) {
       throw new Error(
-        `Cannot disconnect provider with ${activeSubscriptions} active subscription(s)`,
+        `Cannot disconnect provider with ${activeFundingPlans} active funding plan(s)`,
       );
     }
 
@@ -291,9 +307,9 @@ export default class FundingService {
   }
 
   /**
-   * Get subscription options available to users
+   * Get funding plan options available to users
    *
-   * @returns Subscription options including providers and pricing
+   * @returns Funding plan options including providers and pricing
    */
   async getOptions(): Promise<{
     enabled: boolean;
@@ -339,15 +355,49 @@ export default class FundingService {
   }
 
   /**
-   * Calculate the total amount from all active calendar subscriptions for a subscription
+   * Validates that a return URL origin matches the configured instance domain.
+   * Defense in depth: prevents open redirect attacks by ensuring the return URL
+   * points back to this Pavillion instance.
    *
-   * @param subscriptionId - Subscription ID
+   * @param returnUrl - The URL to validate
+   * @throws ValidationError if the URL is unparseable, uses a disallowed scheme,
+   *   or its origin does not match the configured domain
+   */
+  private validateReturnUrlOrigin(returnUrl: string): void {
+    let parsed: URL;
+    try {
+      parsed = new URL(returnUrl);
+    }
+    catch {
+      throw new ValidationError('returnUrl is not a valid URL');
+    }
+
+    // Reject non-http(s) schemes (javascript:, data:, ftp:, etc.)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new ValidationError('returnUrl must use http or https scheme');
+    }
+
+    // Build expected origin from configured domain
+    const instanceDomain = config.get<string>('domain');
+    const expectedOrigin = instanceDomain.includes('localhost')
+      ? `http://${instanceDomain}`
+      : `https://${instanceDomain}`;
+
+    if (parsed.origin !== expectedOrigin) {
+      throw new ValidationError('returnUrl origin does not match this instance');
+    }
+  }
+
+  /**
+   * Calculate the total amount from all active calendar funding plan allocations
+   *
+   * @param fundingPlanId - Funding plan ID
    * @returns Total amount in millicents
    */
-  private async calculateActiveCalendarTotal(subscriptionId: string): Promise<number> {
+  private async calculateActiveCalendarTotal(fundingPlanId: string): Promise<number> {
     const activeCalendarSubs = await CalendarFundingPlanEntity.findAll({
       where: {
-        funding_plan_id: subscriptionId,
+        funding_plan_id: fundingPlanId,
         end_time: { [Op.is]: null as any },
       },
     });
@@ -356,19 +406,19 @@ export default class FundingService {
   }
 
   /**
-   * Update the subscription amount at the payment provider
+   * Update the funding plan amount at the payment provider
    *
    * Skips the provider call if the adapter does not support in-place amount updates
-   * (e.g. PayPal subscriptions have fixed amounts set at creation time).
+   * (e.g. PayPal funding plans have fixed amounts set at creation time).
    *
-   * @param subscriptionEntity - Subscription entity
+   * @param fundingPlanEntity - Funding plan entity
    * @param newAmount - New total amount in millicents
    */
   private async updateProviderAmount(
-    subscriptionEntity: FundingPlanEntity,
+    fundingPlanEntity: FundingPlanEntity,
     newAmount: number,
   ): Promise<void> {
-    const providerEntity = await ProviderConfigEntity.findByPk(subscriptionEntity.provider_config_id);
+    const providerEntity = await ProviderConfigEntity.findByPk(fundingPlanEntity.provider_config_id);
     if (!providerEntity) {
       throw new Error('Provider configuration not found');
     }
@@ -376,158 +426,53 @@ export default class FundingService {
     const providerConfig = providerEntity.toModel();
     const adapter = ProviderFactory.getAdapter(providerConfig);
 
-    // PayPal subscriptions have fixed amounts; skip the provider-side update
+    // PayPal funding plans have fixed amounts; skip the provider-side update
     if (!adapter.supportsAmountUpdates()) {
       return;
     }
 
     await adapter.updateSubscriptionAmount(
-      subscriptionEntity.provider_subscription_id,
+      fundingPlanEntity.provider_subscription_id,
       newAmount,
-      subscriptionEntity.currency,
+      fundingPlanEntity.currency,
     );
   }
 
   /**
-   * Resolve the active subscription for an account
+   * Resolve the active funding plan for an account
    *
    * @param accountId - Account ID
-   * @returns Active subscription entity
-   * @throws SubscriptionNotFoundError if no active subscription exists
+   * @returns Active funding plan entity
+   * @throws FundingPlanNotFoundError if no active funding plan exists
    */
-  private async resolveActiveSubscription(accountId: string): Promise<FundingPlanEntity> {
-    const subscriptionEntity = await FundingPlanEntity.findOne({
+  private async resolveActiveFundingPlan(accountId: string): Promise<FundingPlanEntity> {
+    const fundingPlanEntity = await FundingPlanEntity.findOne({
       where: { account_id: accountId, status: 'active' },
     });
 
-    if (!subscriptionEntity) {
-      throw new SubscriptionNotFoundError(accountId);
+    if (!fundingPlanEntity) {
+      throw new FundingPlanNotFoundError(accountId);
     }
 
-    return subscriptionEntity;
+    return fundingPlanEntity;
   }
 
   /**
-   * Create a new subscription for a user
+   * Resolve the enabled Stripe provider configuration
    *
-   * @param accountId - Account ID
-   * @param accountEmail - Account email
-   * @param providerConfigId - Provider configuration ID
-   * @param billingCycle - monthly or yearly
-   * @param amount - Amount in millicents (for PWYC)
-   * @param calendarIds - Optional array of calendar IDs to fund (max 50, UUID validated)
-   * @returns Created subscription
+   * @returns Enabled Stripe provider config entity
+   * @throws ProviderNotConfiguredError if no Stripe provider is configured or enabled
    */
-  async subscribe(
-    accountId: string,
-    accountEmail: string,
-    providerConfigId: string,
-    billingCycle: BillingCycle,
-    amount: number,
-    calendarIds?: string[],
-  ): Promise<FundingPlan> {
-    // Validate required fields
-    if (!providerConfigId) {
-      throw new MissingRequiredFieldError('providerConfigId');
+  private async resolveEnabledStripeProvider(): Promise<ProviderConfigEntity> {
+    const stripeEntity = await ProviderConfigEntity.findOne({
+      where: { provider_type: 'stripe', enabled: true },
+    });
+
+    if (!stripeEntity) {
+      throw new ProviderNotConfiguredError();
     }
 
-    if (!billingCycle) {
-      throw new MissingRequiredFieldError('billingCycle');
-    }
-
-    // Validate billing cycle
-    if (billingCycle !== 'monthly' && billingCycle !== 'yearly') {
-      throw new InvalidBillingCycleError();
-    }
-
-    // Validate amount for PWYC
-    if (amount !== undefined && amount < 0) {
-      throw new InvalidAmountError();
-    }
-
-    // Validate calendarIds if provided
-    if (calendarIds !== undefined) {
-      if (calendarIds.length > MAX_CALENDAR_IDS) {
-        throw new ValidationError(`calendarIds must not exceed ${MAX_CALENDAR_IDS} entries`);
-      }
-
-      for (const cId of calendarIds) {
-        if (!isValidUUID(cId)) {
-          throw new ValidationError(`Invalid calendarId: ${cId} must be a valid UUID`);
-        }
-      }
-
-      // Verify ownership for all calendars
-      for (const cId of calendarIds) {
-        await this.verifyCalendarOwnership(accountId, cId);
-      }
-    }
-
-    // Get provider configuration
-    const providerEntity = await ProviderConfigEntity.findByPk(providerConfigId);
-    if (!providerEntity) {
-      throw new Error('Provider not found');
-    }
-
-    const providerConfig = providerEntity.toModel();
-
-    if (!providerConfig.enabled) {
-      throw new Error('Provider is not enabled');
-    }
-
-    // Get adapter
-    const adapter = ProviderFactory.getAdapter(providerConfig);
-
-    // Get settings for currency
-    const settings = await this.getSettings();
-
-    // Create subscription parameters
-    const params: CreateSubscriptionParams = {
-      accountEmail,
-      accountId,
-      amount,
-      currency: settings.currency,
-      billingCycle,
-    };
-
-    // Create subscription via provider
-    const providerSubscription = await adapter.createSubscription(params);
-
-    // Create subscription entity
-    const subscription = new FundingPlan(uuidv4());
-    subscription.accountId = accountId;
-    subscription.providerConfigId = providerConfigId;
-    subscription.providerSubscriptionId = providerSubscription.providerSubscriptionId;
-    subscription.providerCustomerId = providerSubscription.providerCustomerId;
-    subscription.status = providerSubscription.status;
-    subscription.billingCycle = billingCycle;
-    subscription.amount = amount;
-    subscription.currency = providerSubscription.currency;
-    subscription.currentPeriodStart = providerSubscription.currentPeriodStart;
-    subscription.currentPeriodEnd = providerSubscription.currentPeriodEnd;
-
-    const entity = FundingPlanEntity.fromModel(subscription);
-    await entity.save();
-
-    // Create calendar subscription rows if calendarIds provided
-    if (calendarIds && calendarIds.length > 0) {
-      const perCalendarAmount = Math.floor(amount / calendarIds.length);
-
-      for (const calendarId of calendarIds) {
-        await CalendarFundingPlanEntity.create({
-          id: uuidv4(),
-          funding_plan_id: subscription.id,
-          calendar_id: calendarId,
-          amount: perCalendarAmount,
-          end_time: null,
-        });
-      }
-    }
-
-    // Emit event
-    this.eventBus.emit('funding_plan:created', { subscription });
-
-    return subscription;
+    return stripeEntity;
   }
 
   /**
@@ -558,37 +503,37 @@ export default class FundingService {
       throw new InvalidAmountError();
     }
 
-    // Resolve the active subscription for this account
-    const subscriptionEntity = await this.resolveActiveSubscription(accountId);
+    // Resolve the active funding plan for this account
+    const fundingPlanEntity = await this.resolveActiveFundingPlan(accountId);
 
     // Verify account owns the calendar
     await this.verifyCalendarOwnership(accountId, calendarId);
 
-    // Check for existing active calendar subscription
+    // Check for existing active calendar funding plan
     const existing = await CalendarFundingPlanEntity.findOne({
       where: {
-        funding_plan_id: subscriptionEntity.id,
+        funding_plan_id: fundingPlanEntity.id,
         calendar_id: calendarId,
         end_time: { [Op.is]: null as any },
       },
     });
 
     if (existing) {
-      throw new DuplicateCalendarSubscriptionError(subscriptionEntity.id, calendarId);
+      throw new DuplicateCalendarFundingPlanError(fundingPlanEntity.id, calendarId);
     }
 
-    // Create the calendar subscription row
+    // Create the calendar funding plan row
     await CalendarFundingPlanEntity.create({
       id: uuidv4(),
-      funding_plan_id: subscriptionEntity.id,
+      funding_plan_id: fundingPlanEntity.id,
       calendar_id: calendarId,
       amount,
       end_time: null,
     });
 
     // Recalculate total and update provider
-    const newTotal = await this.calculateActiveCalendarTotal(subscriptionEntity.id);
-    await this.updateProviderAmount(subscriptionEntity, newTotal);
+    const newTotal = await this.calculateActiveCalendarTotal(fundingPlanEntity.id);
+    await this.updateProviderAmount(fundingPlanEntity, newTotal);
   }
 
   /**
@@ -614,45 +559,45 @@ export default class FundingService {
       throw new ValidationError('Invalid calendarId: must be a valid UUID');
     }
 
-    // Resolve the active subscription for this account
-    const subscriptionEntity = await this.resolveActiveSubscription(accountId);
+    // Resolve the active funding plan for this account
+    const fundingPlanEntity = await this.resolveActiveFundingPlan(accountId);
 
     // Verify account owns the calendar
     await this.verifyCalendarOwnership(accountId, calendarId);
 
-    // Find the active calendar subscription
+    // Find the active calendar funding plan
     const calendarSub = await CalendarFundingPlanEntity.findOne({
       where: {
-        funding_plan_id: subscriptionEntity.id,
+        funding_plan_id: fundingPlanEntity.id,
         calendar_id: calendarId,
         end_time: { [Op.is]: null as any },
       },
     });
 
     if (!calendarSub) {
-      throw new CalendarSubscriptionNotFoundError(subscriptionEntity.id, calendarId);
+      throw new CalendarFundingPlanNotFoundError(fundingPlanEntity.id, calendarId);
     }
 
-    // Set end_time to subscription's current_period_end
-    calendarSub.end_time = subscriptionEntity.current_period_end;
+    // Set end_time to funding plan's current_period_end
+    calendarSub.end_time = fundingPlanEntity.current_period_end;
     await calendarSub.save();
 
-    // Check remaining active calendar subscriptions
+    // Check remaining active calendar funding plans
     const remainingActive = await CalendarFundingPlanEntity.findAll({
       where: {
-        funding_plan_id: subscriptionEntity.id,
+        funding_plan_id: fundingPlanEntity.id,
         end_time: { [Op.is]: null as any },
       },
     });
 
     if (remainingActive.length === 0) {
-      // Last calendar removed: cancel the entire subscription
-      await this.cancel(subscriptionEntity.id, false);
+      // Last calendar removed: cancel the entire funding plan
+      await this.cancel(fundingPlanEntity.id, false);
     }
     else {
       // Recalculate total and update provider
       const newTotal = remainingActive.reduce((sum, cs) => sum + cs.amount, 0);
-      await this.updateProviderAmount(subscriptionEntity, newTotal);
+      await this.updateProviderAmount(fundingPlanEntity, newTotal);
     }
   }
 
@@ -660,7 +605,7 @@ export default class FundingService {
    * Get the funding status for a calendar
    *
    * Checks in priority order: ownership verification, admin exemption, active grant,
-   * active calendar subscription.
+   * active calendar funding plan.
    *
    * @param accountId - Account ID requesting the funding status (must own the calendar)
    * @param calendarId - Calendar ID to check
@@ -709,7 +654,7 @@ export default class FundingService {
       return 'grant';
     }
 
-    // Check for active calendar subscription
+    // Check for active calendar funding plan
     const calendarSub = await CalendarFundingPlanEntity.findOne({
       where: {
         calendar_id: calendarId,
@@ -728,13 +673,165 @@ export default class FundingService {
   }
 
   /**
-   * Cancel a subscription
+   * Create a Stripe checkout session for embedded payment UI
    *
-   * @param subscriptionId - Subscription ID
+   * Validates all inputs before delegating to the Stripe adapter:
+   * - Rejects if user already has an active funding plan
+   * - Rejects if no Stripe provider is configured/enabled
+   * - Validates calendarId ownership via calendar interface
+   * - Enforces PWYC amount bounds when amount is provided
+   * - accountId comes from the authenticated account, never from request body
+   *
+   * @param accountId - Authenticated account ID
+   * @param billingCycle - 'monthly' or 'yearly'
+   * @param returnUrl - URL to return to after checkout
+   * @param amount - Optional amount in millicents (for PWYC pricing)
+   * @param calendarIds - Optional array of calendar IDs to fund
+   * @returns Client secret and session ID for the embedded checkout
+   */
+  async createCheckoutSession(
+    accountId: string,
+    billingCycle: BillingCycle,
+    returnUrl: string,
+    amount?: number,
+    calendarIds?: string[],
+  ): Promise<CheckoutSessionResult> {
+    // Validate billing cycle
+    if (billingCycle !== 'monthly' && billingCycle !== 'yearly') {
+      throw new InvalidBillingCycleError();
+    }
+
+    // Validate return URL origin (defense in depth)
+    this.validateReturnUrlOrigin(returnUrl);
+
+    // Check if user already has an active funding plan
+    const existingPlan = await FundingPlanEntity.findOne({
+      where: { account_id: accountId, status: 'active' },
+    });
+
+    if (existingPlan) {
+      throw new ActiveFundingPlanExistsError(accountId);
+    }
+
+    // Check for enabled Stripe provider
+    const stripeEntity = await this.resolveEnabledStripeProvider();
+    const providerConfig = stripeEntity.toModel();
+
+    // Get settings for pricing
+    const settings = await this.getSettings();
+
+    // Validate and resolve calendarIds if provided
+    if (calendarIds !== undefined) {
+      if (calendarIds.length > MAX_CALENDAR_IDS) {
+        throw new ValidationError(`calendarIds must not exceed ${MAX_CALENDAR_IDS} entries`);
+      }
+
+      for (const cId of calendarIds) {
+        if (!isValidUUID(cId)) {
+          throw new ValidationError(`Invalid calendarId: ${cId} must be a valid UUID`);
+        }
+      }
+
+      // Verify ownership for all calendars
+      for (const cId of calendarIds) {
+        await this.verifyCalendarOwnership(accountId, cId);
+      }
+    }
+
+    // Determine pricing: either use fixed price from settings or PWYC amount
+    let checkoutAmount: number | undefined;
+
+    if (amount !== undefined) {
+      // PWYC: validate amount bounds
+      if (!Number.isInteger(amount)) {
+        throw new InvalidAmountError('Amount must be a positive integer in millicents');
+      }
+      if (amount < MIN_PWYC_AMOUNT) {
+        throw new InvalidAmountError(`Amount must be at least ${MIN_PWYC_AMOUNT} millicents ($1.00)`);
+      }
+      if (amount > MAX_PWYC_AMOUNT) {
+        throw new InvalidAmountError(`Amount must not exceed ${MAX_PWYC_AMOUNT} millicents ($100,000.00)`);
+      }
+      checkoutAmount = amount;
+    }
+    else {
+      // Fixed pricing: use the settings price for the selected billing cycle
+      checkoutAmount = billingCycle === 'monthly' ? settings.monthlyPrice : settings.yearlyPrice;
+    }
+
+    // Map billing cycle to Stripe interval
+    const interval: 'month' | 'year' = billingCycle === 'monthly' ? 'month' : 'year';
+
+    // Build checkout session params
+    const adapter = ProviderFactory.getAdapter(providerConfig);
+    const params: CreateCheckoutSessionParams = {
+      amount: checkoutAmount,
+      currency: settings.currency,
+      interval,
+      accountId,
+      calendarIds,
+      returnUrl,
+    };
+
+    return adapter.createCheckoutSession(params);
+  }
+
+  /**
+   * Retrieve the status of a Stripe checkout session
+   *
+   * Validates sessionId format and performs IDOR protection by comparing the
+   * session metadata accountId to the requesting user's accountId.
+   * Returns 404-style error (not 403) on mismatch to avoid leaking session existence.
+   *
+   * @param accountId - Authenticated account ID
+   * @param sessionId - The checkout session ID to check
+   * @returns Status and customer email for the checkout session
+   */
+  async getCheckoutSessionStatus(
+    accountId: string,
+    sessionId: string,
+  ): Promise<{ status: string }> {
+    // Validate sessionId format
+    if (!sessionId || typeof sessionId !== 'string') {
+      throw new InvalidSessionIdError('Session ID is required');
+    }
+
+    if (sessionId.length > 200) {
+      throw new InvalidSessionIdError('Session ID must not exceed 200 characters');
+    }
+
+    if (!CHECKOUT_SESSION_ID_REGEX.test(sessionId)) {
+      throw new InvalidSessionIdError('Invalid session ID format');
+    }
+
+    // Resolve enabled Stripe provider
+    const stripeEntity = await this.resolveEnabledStripeProvider();
+    const providerConfig = stripeEntity.toModel();
+    const adapter = ProviderFactory.getAdapter(providerConfig);
+
+    // Retrieve session status from provider
+    const sessionStatus: CheckoutSessionStatus = await adapter.getCheckoutSessionStatus(sessionId);
+
+    // IDOR check: compare metadata.accountId to requesting user
+    // Return generic "not found" error (not 403) to avoid leaking session existence
+    // Guard against missing metadata first to prevent empty/undefined bypass
+    if (!sessionStatus.metadata.accountId || sessionStatus.metadata.accountId !== accountId) {
+      throw new FundingPlanNotFoundError(sessionId);
+    }
+
+    return {
+      status: sessionStatus.status,
+    };
+  }
+
+  /**
+   * Cancel a funding plan
+   *
+   * @param fundingPlanId - Funding plan ID
    * @param immediate - If true, cancel immediately; otherwise at period end
    */
-  async cancel(subscriptionId: string, immediate: boolean = false): Promise<void> {
-    const entity = await FundingPlanEntity.findByPk(subscriptionId);
+  async cancel(fundingPlanId: string, immediate: boolean = false): Promise<void> {
+    const entity = await FundingPlanEntity.findByPk(fundingPlanId);
     if (!entity) {
       throw new Error('Funding plan not found');
     }
@@ -757,17 +854,17 @@ export default class FundingService {
     await entity.save();
 
     // Emit event
-    this.eventBus.emit('funding_plan:cancelled', {
-      subscription: entity.toModel(),
+    this.eventBus.emit('funding:plan:cancelled', {
+      fundingPlan: entity.toModel(),
       immediate,
     });
   }
 
   /**
-   * Get subscription status for an account
+   * Get funding plan status for an account
    *
    * @param accountId - Account ID
-   * @returns Subscription or undefined if no subscription exists
+   * @returns Funding plan or null if none exists
    */
   async getStatus(accountId: string): Promise<FundingPlan | undefined> {
     const entity = await FundingPlanEntity.findOne({
@@ -779,7 +876,7 @@ export default class FundingService {
   }
 
   /**
-   * Get billing portal URL for subscription management
+   * Get billing portal URL for funding plan management
    *
    * @param accountId - Account ID
    * @param returnUrl - URL to return to after portal session
@@ -791,13 +888,13 @@ export default class FundingService {
       throw new MissingRequiredFieldError('returnUrl');
     }
 
-    const subscription = await this.getStatus(accountId);
-    if (!subscription) {
-      throw new Error('No subscription found');
+    const fundingPlan = await this.getStatus(accountId);
+    if (!fundingPlan) {
+      throw new Error('No funding plan found');
     }
 
     // Get provider configuration
-    const providerEntity = await ProviderConfigEntity.findByPk(subscription.providerConfigId);
+    const providerEntity = await ProviderConfigEntity.findByPk(fundingPlan.providerConfigId);
     if (!providerEntity) {
       throw new Error('Provider configuration not found');
     }
@@ -805,7 +902,7 @@ export default class FundingService {
     const providerConfig = providerEntity.toModel();
     const adapter = ProviderFactory.getAdapter(providerConfig);
 
-    return adapter.getBillingPortalUrl(subscription.providerCustomerId, returnUrl);
+    return adapter.getBillingPortalUrl(fundingPlan.providerCustomerId, returnUrl);
   }
 
   /**
@@ -855,6 +952,39 @@ export default class FundingService {
     await this.cancel(fundingPlanId, true);
   }
 
+
+  /**
+   * Handle a raw Stripe webhook request by looking up provider config,
+   * verifying the signature, parsing the event, and delegating to processWebhookEvent.
+   *
+   * This method encapsulates all business logic that was previously in the API handler,
+   * following the service-layer pattern where handlers only extract HTTP params.
+   *
+   * @param rawBody - Raw request body string for signature verification
+   * @param signature - Value of the stripe-signature header
+   * @throws ProviderNotConfiguredError if Stripe is not configured
+   * @throws WebhookSignatureError if signature verification fails
+   */
+  async handleStripeWebhook(rawBody: string, signature: string): Promise<void> {
+    const stripeConfig = await ProviderConfigEntity.findOne({
+      where: { provider_type: 'stripe' },
+    });
+
+    if (!stripeConfig) {
+      throw new ProviderNotConfiguredError('Stripe provider not configured');
+    }
+
+    const providerConfig = stripeConfig.toModel();
+    const adapter = ProviderFactory.getAdapter(providerConfig);
+
+    if (!adapter.verifyWebhookSignature(rawBody, signature)) {
+      throw new WebhookSignatureError();
+    }
+
+    const webhookEvent = adapter.parseWebhookEvent(rawBody);
+    await this.processWebhookEvent(webhookEvent, stripeConfig.id);
+  }
+
   /**
    * Process webhook event from payment provider
    *
@@ -872,77 +1002,209 @@ export default class FundingService {
       return;
     }
 
-    // Log event
+    // Handle checkout.session.completed: create a new FundingPlan
+    // Event logging is deferred until after the FundingPlan is created,
+    // because funding_plan_id is a FK that requires a valid local UUID
+    if (event.eventType === 'checkout.session.completed') {
+      await this.processCheckoutCompleted(event, providerConfigId);
+      return;
+    }
+
+    // Find the local FundingPlan by provider subscription ID before logging,
+    // so we can store the local UUID (not the Stripe sub_xxx ID) in funding_plan_id FK
+    const fundingPlanRecord = event.subscriptionId
+      ? await FundingPlanEntity.findOne({
+        where: {
+          provider_subscription_id: event.subscriptionId,
+          provider_config_id: providerConfigId,
+        },
+      })
+      : null;
+
+    // Log event for funding plan lifecycle events
     const eventEntity = new FundingEventEntity();
     eventEntity.id = uuidv4();
-    eventEntity.funding_plan_id = event.subscriptionId || '';
+    eventEntity.funding_plan_id = fundingPlanRecord?.id || '';
     eventEntity.event_type = event.eventType;
     eventEntity.provider_event_id = event.eventId;
     eventEntity.payload = JSON.stringify(event.rawPayload);
     eventEntity.processed_at = new Date();
     await eventEntity.save();
 
-    // Find subscription by provider subscription ID
-    if (!event.subscriptionId) {
+    if (!fundingPlanRecord) {
       return;
     }
 
-    const subscription = await FundingPlanEntity.findOne({
+    // Update funding plan based on event
+    if (event.status) {
+      const previousStatus = fundingPlanRecord.status;
+      fundingPlanRecord.status = event.status;
+
+      // Emit appropriate event based on status transition
+      if (previousStatus === 'active' && event.status === 'past_due') {
+        this.eventBus.emit('funding:plan:payment_failed', {
+          fundingPlan: fundingPlanRecord.toModel(),
+        });
+      }
+      else if (previousStatus === 'past_due' && event.status === 'suspended') {
+        this.eventBus.emit('funding:plan:suspended', {
+          fundingPlan: fundingPlanRecord.toModel(),
+        });
+      }
+      else if (event.status === 'active' && previousStatus !== 'active') {
+        this.eventBus.emit('funding:plan:reactivated', {
+          fundingPlan: fundingPlanRecord.toModel(),
+        });
+      }
+    }
+
+    if (event.currentPeriodStart) {
+      fundingPlanRecord.current_period_start = event.currentPeriodStart;
+    }
+
+    if (event.currentPeriodEnd) {
+      fundingPlanRecord.current_period_end = event.currentPeriodEnd;
+    }
+
+    await fundingPlanRecord.save();
+  }
+
+  /**
+   * Process a checkout.session.completed webhook event
+   *
+   * Creates a local FundingPlan record from the completed checkout session,
+   * retrieves subscription details from the provider, re-validates calendar
+   * ownership, and allocates funding to validated calendars.
+   *
+   * @param event - Webhook event with checkout session data
+   * @param providerConfigId - Provider configuration ID
+   * @private
+   */
+  private async processCheckoutCompleted(event: WebhookEvent, providerConfigId: string): Promise<void> {
+    if (!event.subscriptionId || !event.customerId || !event.accountId) {
+      return;
+    }
+
+    // Idempotency: check if a FundingPlan already exists for this provider subscription
+    const existingPlan = await FundingPlanEntity.findOne({
       where: {
         provider_subscription_id: event.subscriptionId,
         provider_config_id: providerConfigId,
       },
     });
 
-    if (!subscription) {
+    if (existingPlan) {
       return;
     }
 
-    // Update subscription based on event
-    if (event.status) {
-      const previousStatus = subscription.status;
-      subscription.status = event.status;
+    // Validate accountId from metadata
+    if (!isValidUUID(event.accountId)) {
+      return;
+    }
 
-      // Emit appropriate event based on status transition
-      if (previousStatus === 'active' && event.status === 'past_due') {
-        this.eventBus.emit('funding_plan:payment_failed', {
-          subscription: subscription.toModel(),
-        });
+    // Retrieve subscription details from the provider for amount/currency/period
+    const providerEntity = await ProviderConfigEntity.findByPk(providerConfigId);
+    if (!providerEntity) {
+      return;
+    }
+
+    const providerConfig = providerEntity.toModel();
+    const adapter = ProviderFactory.getAdapter(providerConfig);
+    const providerSubscription = await adapter.getSubscription(event.subscriptionId);
+
+    // Determine billing cycle from provider subscription period
+    const periodMs = providerSubscription.currentPeriodEnd.getTime()
+      - providerSubscription.currentPeriodStart.getTime();
+    const billingCycle: BillingCycle = periodMs > 60 * 24 * 60 * 60 * 1000 ? 'yearly' : 'monthly';
+
+    // Create local FundingPlan record
+    const fundingPlan = new FundingPlan(uuidv4());
+    fundingPlan.accountId = event.accountId;
+    fundingPlan.providerConfigId = providerConfigId;
+    fundingPlan.providerSubscriptionId = event.subscriptionId;
+    fundingPlan.providerCustomerId = event.customerId;
+    fundingPlan.status = providerSubscription.status;
+    fundingPlan.billingCycle = billingCycle;
+    fundingPlan.amount = providerSubscription.amount;
+    fundingPlan.currency = providerSubscription.currency;
+    fundingPlan.currentPeriodStart = providerSubscription.currentPeriodStart;
+    fundingPlan.currentPeriodEnd = providerSubscription.currentPeriodEnd;
+
+    const entity = FundingPlanEntity.fromModel(fundingPlan);
+    await entity.save();
+
+    // Log the checkout event now that we have a valid funding_plan_id
+    const eventEntity = new FundingEventEntity();
+    eventEntity.id = uuidv4();
+    eventEntity.funding_plan_id = fundingPlan.id;
+    eventEntity.event_type = event.eventType;
+    eventEntity.provider_event_id = event.eventId;
+    eventEntity.payload = JSON.stringify(event.rawPayload);
+    eventEntity.processed_at = new Date();
+    await eventEntity.save();
+
+    // Parse and re-validate calendarIds from metadata
+    if (event.calendarIds) {
+      let calendarIds: string[];
+      try {
+        calendarIds = JSON.parse(event.calendarIds);
       }
-      else if (previousStatus === 'past_due' && event.status === 'suspended') {
-        this.eventBus.emit('funding_plan:suspended', {
-          subscription: subscription.toModel(),
-        });
+      catch {
+        // Invalid JSON in calendarIds metadata, skip calendar allocation
+        return;
       }
-      else if (event.status === 'active' && previousStatus !== 'active') {
-        this.eventBus.emit('funding_plan:reactivated', {
-          subscription: subscription.toModel(),
-        });
+
+      if (!Array.isArray(calendarIds)) {
+        return;
+      }
+
+      // Filter to only valid UUIDs
+      const validCalendarIds = calendarIds.filter((cId) => isValidUUID(cId));
+
+      // Re-validate ownership for each calendar
+      const ownedCalendarIds: string[] = [];
+      for (const cId of validCalendarIds) {
+        try {
+          await this.verifyCalendarOwnership(event.accountId, cId);
+          ownedCalendarIds.push(cId);
+        }
+        catch {
+          // Calendar not owned by this account, skip it
+        }
+      }
+
+      // Allocate funding to validated calendars
+      if (ownedCalendarIds.length > 0) {
+        const perCalendarAmount = Math.floor(fundingPlan.amount / ownedCalendarIds.length);
+
+        for (const calendarId of ownedCalendarIds) {
+          await CalendarFundingPlanEntity.create({
+            id: uuidv4(),
+            funding_plan_id: fundingPlan.id,
+            calendar_id: calendarId,
+            amount: perCalendarAmount,
+            end_time: null,
+          });
+        }
       }
     }
 
-    if (event.currentPeriodStart) {
-      subscription.current_period_start = event.currentPeriodStart;
-    }
-
-    if (event.currentPeriodEnd) {
-      subscription.current_period_end = event.currentPeriodEnd;
-    }
-
-    await subscription.save();
+    this.eventBus.emit('funding:plan:created', {
+      fundingPlan: fundingPlan,
+    });
   }
 
   /**
-   * Suspend subscriptions that have exceeded grace period
+   * Suspend funding plans that have exceeded grace period
    *
    * Called by scheduled job to handle expired grace periods
    */
-  async suspendExpiredSubscriptions(): Promise<void> {
+  async suspendExpiredFundingPlans(): Promise<void> {
     const settings = await this.getSettings();
     const gracePeriodMs = settings.gracePeriodDays * 24 * 60 * 60 * 1000;
     const cutoffDate = new Date(Date.now() - gracePeriodMs);
 
-    const expiredSubscriptions = await FundingPlanEntity.findAll({
+    const expiredFundingPlans = await FundingPlanEntity.findAll({
       where: {
         status: 'past_due',
         updatedAt: {
@@ -951,13 +1213,13 @@ export default class FundingService {
       },
     });
 
-    for (const subscription of expiredSubscriptions) {
-      subscription.status = 'suspended';
-      subscription.suspended_at = new Date();
-      await subscription.save();
+    for (const fundingPlanRecord of expiredFundingPlans) {
+      fundingPlanRecord.status = 'suspended';
+      fundingPlanRecord.suspended_at = new Date();
+      await fundingPlanRecord.save();
 
-      this.eventBus.emit('funding_plan:suspended', {
-        subscription: subscription.toModel(),
+      this.eventBus.emit('funding:plan:suspended', {
+        fundingPlan: fundingPlanRecord.toModel(),
       });
     }
   }
@@ -1217,7 +1479,7 @@ export default class FundingService {
       if (hasGrant) return true;
     }
     catch {
-      // Grant check failed; fall through to subscription check which may still deny access
+      // Grant check failed; fall through to funding plan check which may still deny access
     }
 
     try {
@@ -1225,7 +1487,7 @@ export default class FundingService {
       return hasSub;
     }
     catch {
-      // Fail-secure: deny access on subscription check error
+      // Fail-secure: deny access on funding plan check error
       return false;
     }
   }

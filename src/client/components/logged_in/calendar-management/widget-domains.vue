@@ -12,8 +12,8 @@
         <router-link
           to="/funding"
           class="subscription-link"
-          :aria-label="t('subscribe_action_full_context')">
-          {{ t('subscribe_action') }}
+          :aria-label="t('funding_plan_action_full_context')">
+          {{ t('funding_plan_action') }}
         </router-link>
       </span>
     </div>
@@ -200,7 +200,7 @@ const addDomain = async () => {
     // Admin users should not see subscription errors (they bypass subscription checks)
     if (error.response?.status === 402 && error.response?.data?.errorName === 'SubscriptionRequiredError') {
       if (!authn.isAdmin()) {
-        state.error = t('subscription_required');
+        state.error = t('funding_plan_required');
         state.isSubscriptionError = true;
         // Don't auto-clear subscription errors - user needs to see them
         clearMessages(10000); // Longer timeout for subscription errors

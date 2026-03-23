@@ -22,6 +22,7 @@ export type ProviderConfig = {
   enabled: boolean;
   display_name: string;
   configured: boolean;
+  webhook_url?: string;
 };
 
 /**
@@ -31,6 +32,15 @@ export type PayPalCredentials = {
   client_id: string;
   client_secret: string;
   environment: 'sandbox' | 'production';
+};
+
+/**
+ * Stripe configuration credentials
+ */
+export type StripeCredentials = {
+  publishable_key: string;
+  secret_key: string;
+  webhook_secret: string;
 };
 
 /**
@@ -60,27 +70,24 @@ export type FundingPlanStatus = {
 };
 
 /**
+ * Provider info returned from the options API
+ */
+export type FundingProvider = {
+  providerType: string;
+  displayName: string;
+  publishableKey?: string;
+};
+
+/**
  * Funding options available to users
  */
 export type FundingOptions = {
   enabled: boolean;
-  providers: Array<{
-    provider_type: string;
-    display_name: string;
-  }>;
-  monthly_price: number;
-  yearly_price: number;
+  providers: FundingProvider[];
+  monthlyPrice: number;
+  yearlyPrice: number;
   currency: string;
-  pay_what_you_can: boolean;
-};
-
-/**
- * Funding plan request parameters
- */
-export type FundingParams = {
-  provider_type: 'stripe' | 'paypal';
-  billing_cycle: 'monthly' | 'yearly';
-  amount?: number; // For PWYC
+  payWhatYouCan: boolean;
 };
 
 /**
@@ -106,6 +113,22 @@ export type FundingStatus = {
 export type ResolvedCalendar = {
   id: string;
   title: string;
+};
+
+/**
+ * Checkout session creation response
+ */
+export type CheckoutSessionResponse = {
+  clientSecret: string;
+  sessionId: string;
+};
+
+/**
+ * Checkout session status response
+ */
+export type CheckoutSessionStatus = {
+  status: string;
+  customer_email?: string;
 };
 
 /**
@@ -206,6 +229,23 @@ export default class FundingService {
     }
     catch (error) {
       console.error('Failed to configure PayPal:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Configure Stripe credentials manually (admin only)
+   *
+   * @param {StripeCredentials} credentials - Stripe credentials
+   * @returns {Promise<boolean>} True if configuration was successful
+   */
+  async configureStripe(credentials: StripeCredentials): Promise<boolean> {
+    try {
+      const response = await axios.post('/api/funding/v1/admin/providers/stripe/configure', credentials);
+      return response.status === 200;
+    }
+    catch (error) {
+      console.error('Failed to configure Stripe:', error);
       throw error;
     }
   }
@@ -466,25 +506,6 @@ export default class FundingService {
   }
 
   /**
-   * Create a new funding plan for the current user
-   *
-   * @param {FundingParams} params - Funding plan parameters
-   * @param {string[]} calendarIds - Optional array of calendar IDs to include
-   * @returns {Promise<any>} Funding plan result (may include redirect URL for payment)
-   */
-  async subscribe(params: FundingParams, calendarIds?: string[]): Promise<any> {
-    try {
-      const body = calendarIds ? { ...params, calendarIds } : params;
-      const response = await axios.post('/api/funding/v1/subscribe', body);
-      return response.data;
-    }
-    catch (error) {
-      console.error('Failed to create funding plan:', error);
-      throw error;
-    }
-  }
-
-  /**
    * Get current funding plan status for the authenticated user
    *
    * @returns {Promise<FundingPlanStatus | null>} Current funding plan status or null if none
@@ -531,6 +552,53 @@ export default class FundingService {
     }
     catch (error) {
       console.error('Failed to get portal URL:', error);
+      throw error;
+    }
+  }
+
+  // ========================================
+  // Checkout Session Methods (Stripe Embedded Checkout)
+  // ========================================
+
+  /**
+   * Create a Stripe checkout session for embedded checkout
+   *
+   * @param {object} params - Checkout session parameters
+   * @param {string} params.billingCycle - Billing cycle ('monthly' or 'yearly')
+   * @param {string} params.returnUrl - URL to redirect to after checkout
+   * @param {number} params.amount - Optional custom amount in millicents (for PWYC)
+   * @param {string[]} params.calendarIds - Optional array of calendar IDs
+   * @returns {Promise<CheckoutSessionResponse>} Client secret and session ID
+   */
+  async createCheckoutSession(params: {
+    billingCycle: string;
+    returnUrl: string;
+    amount?: number;
+    calendarIds?: string[];
+  }): Promise<CheckoutSessionResponse> {
+    try {
+      const response = await axios.post('/api/funding/v1/checkout-sessions', params);
+      return response.data;
+    }
+    catch (error) {
+      console.error('Failed to create checkout session:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get the status of a checkout session
+   *
+   * @param {string} sessionId - The checkout session ID
+   * @returns {Promise<CheckoutSessionStatus>} Session status
+   */
+  async getCheckoutSessionStatus(sessionId: string): Promise<CheckoutSessionStatus> {
+    try {
+      const response = await axios.get(`/api/funding/v1/checkout-sessions/${sessionId}/status`);
+      return response.data;
+    }
+    catch (error) {
+      console.error('Failed to get checkout session status:', error);
       throw error;
     }
   }

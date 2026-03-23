@@ -1,10 +1,11 @@
 import {
   PaymentProviderAdapter,
-  CreateSubscriptionParams,
+  CreateCheckoutSessionParams,
+  CheckoutSessionResult,
+  CheckoutSessionStatus,
   ProviderSubscription,
   ProviderCredentials,
   WebhookEvent,
-  WebhookRegistration,
 } from './adapter';
 import { ProviderType } from '@/common/model/funding-plan';
 
@@ -18,10 +19,27 @@ export interface UpdateSubscriptionAmountCall {
 }
 
 /**
+ * Recorded call for createCheckoutSession
+ */
+export interface CreateCheckoutSessionCall {
+  params: CreateCheckoutSessionParams;
+}
+
+/**
+ * Recorded call for createPrice
+ */
+export interface CreatePriceCall {
+  amount: number;
+  currency: string;
+  interval: 'month' | 'year';
+}
+
+/**
  * Mock Stripe Adapter for Testing
  *
  * Returns mock data without making real API calls.
- * Enabled when MOCK_OAUTH=true environment variable is set.
+ * Webhook registration is managed manually by the instance administrator
+ * via the Stripe dashboard, so no registerWebhook/deleteWebhook methods exist.
  */
 export class MockStripeAdapter implements PaymentProviderAdapter {
   readonly providerType: ProviderType = 'stripe';
@@ -29,67 +47,28 @@ export class MockStripeAdapter implements PaymentProviderAdapter {
   /** Recorded calls to updateSubscriptionAmount for test verification */
   updateSubscriptionAmountCalls: UpdateSubscriptionAmountCall[] = [];
 
-  /**
-   * Register a webhook endpoint (mock)
-   *
-   * @param webhookUrl - The URL to receive webhook events
-   * @param credentials - Provider credentials
-   * @returns Mock webhook registration
-   */
-  async registerWebhook(
-    webhookUrl: string,
-    credentials: ProviderCredentials,
-  ): Promise<WebhookRegistration> {
-    const timestamp = Date.now();
+  /** Recorded calls to createCheckoutSession for test verification */
+  createCheckoutSessionCalls: CreateCheckoutSessionCall[] = [];
 
-    return {
-      webhookId: `we_mock_${timestamp}`,
-      webhookSecret: `whsec_mock_${timestamp}`,
-    };
-  }
+  /** Recorded calls to createPrice for test verification */
+  createPriceCalls: CreatePriceCall[] = [];
 
-  /**
-   * Delete a webhook endpoint (mock)
-   *
-   * @param webhookId - The webhook endpoint ID to delete
-   * @param credentials - Provider credentials
-   */
-  async deleteWebhook(webhookId: string, credentials: ProviderCredentials): Promise<void> {
-    // Mock deletion - no actual API call
-    return Promise.resolve();
-  }
+  /** Counter for generating unique mock IDs */
+  private idCounter = 0;
 
   /**
    * Validate provider credentials (mock)
    *
+   * Checks that apiKey is present. No stripeUserId required.
+   *
    * @param credentials - Provider credentials to validate
-   * @returns Always returns true for mock
+   * @returns True if apiKey is present
    */
   async validateCredentials(credentials: ProviderCredentials): Promise<boolean> {
-    // Mock validation - always returns true
+    if (!credentials.apiKey) {
+      return false;
+    }
     return true;
-  }
-
-  /**
-   * Create a new subscription (mock)
-   *
-   * @param params - Subscription creation parameters
-   * @returns Mock subscription data
-   */
-  async createSubscription(params: CreateSubscriptionParams): Promise<ProviderSubscription> {
-    const now = new Date();
-    const periodEnd = new Date(now);
-    periodEnd.setMonth(periodEnd.getMonth() + (params.billingCycle === 'monthly' ? 1 : 12));
-
-    return {
-      providerSubscriptionId: `sub_mock_${Date.now()}`,
-      providerCustomerId: `cus_mock_${Date.now()}`,
-      status: 'active',
-      currentPeriodStart: now,
-      currentPeriodEnd: periodEnd,
-      amount: params.amount,
-      currency: params.currency,
-    };
   }
 
   /**
@@ -102,6 +81,7 @@ export class MockStripeAdapter implements PaymentProviderAdapter {
     // Mock cancellation - no actual API call
     return Promise.resolve();
   }
+
   /**
    * Mock Stripe supports amount updates
    *
@@ -195,6 +175,59 @@ export class MockStripeAdapter implements PaymentProviderAdapter {
       rawPayload: event,
     };
   }
+
+  /**
+   * Create a checkout session (mock)
+   *
+   * Records the call parameters for test verification and returns mock data.
+   *
+   * @param params - Checkout session parameters
+   * @returns Mock client secret and session ID
+   */
+  async createCheckoutSession(params: CreateCheckoutSessionParams): Promise<CheckoutSessionResult> {
+    this.createCheckoutSessionCalls.push({ params });
+    this.idCounter++;
+
+    return {
+      clientSecret: `cs_mock_secret_${this.idCounter}`,
+      sessionId: `cs_mock_${this.idCounter}`,
+    };
+  }
+
+  /**
+   * Get checkout session status (mock)
+   *
+   * @param sessionId - The checkout session ID
+   * @returns Mock checkout session status
+   */
+  async getCheckoutSessionStatus(sessionId: string): Promise<CheckoutSessionStatus> {
+    return {
+      status: 'complete',
+      subscriptionId: 'sub_mock_123',
+      customerId: 'cus_mock_123',
+      metadata: {
+        accountId: 'acc_mock_123',
+        calendarIds: JSON.stringify(['cal_mock_1']),
+      },
+    };
+  }
+
+  /**
+   * Create a recurring price (mock)
+   *
+   * Records the call parameters for test verification.
+   *
+   * @param amount - Amount in millicents
+   * @param currency - ISO 4217 currency code
+   * @param interval - Billing interval
+   * @returns Mock price ID
+   */
+  async createPrice(amount: number, currency: string, interval: 'month' | 'year'): Promise<string> {
+    this.createPriceCalls.push({ amount, currency, interval });
+    this.idCounter++;
+
+    return `price_mock_${this.idCounter}`;
+  }
 }
 
 /**
@@ -210,70 +243,13 @@ export class MockPayPalAdapter implements PaymentProviderAdapter {
   updateSubscriptionAmountCalls: UpdateSubscriptionAmountCall[] = [];
 
   /**
-   * Register a webhook endpoint (mock)
-   *
-   * @param webhookUrl - The URL to receive webhook events
-   * @param credentials - Provider credentials
-   * @returns Mock webhook registration
-   */
-  async registerWebhook(
-    webhookUrl: string,
-    credentials: ProviderCredentials,
-  ): Promise<WebhookRegistration> {
-    const timestamp = Date.now();
-
-    return {
-      webhookId: `WH-MOCK-${timestamp}`,
-      webhookSecret: `paypal_webhook_secret_mock_${timestamp}`,
-    };
-  }
-
-  /**
-   * Delete a webhook endpoint (mock)
-   *
-   * @param webhookId - The webhook endpoint ID to delete
-   * @param credentials - Provider credentials
-   */
-  async deleteWebhook(webhookId: string, credentials: ProviderCredentials): Promise<void> {
-    // Mock deletion - no actual API call
-    return Promise.resolve();
-  }
-
-  /**
    * Validate provider credentials (mock)
    *
    * @param credentials - Provider credentials to validate
    * @returns Always returns true for mock
    */
-  async validateCredentials(credentials: ProviderCredentials): Promise<boolean> {
-    // Mock validation - always returns true
-    // Check that required fields exist
-    if (credentials.clientId && credentials.secret) {
-      return true;
-    }
-    return true; // Accept any credentials in mock mode
-  }
-
-  /**
-   * Create a new subscription (mock)
-   *
-   * @param params - Subscription creation parameters
-   * @returns Mock subscription data
-   */
-  async createSubscription(params: CreateSubscriptionParams): Promise<ProviderSubscription> {
-    const now = new Date();
-    const periodEnd = new Date(now);
-    periodEnd.setMonth(periodEnd.getMonth() + (params.billingCycle === 'monthly' ? 1 : 12));
-
-    return {
-      providerSubscriptionId: `I-MOCK${Date.now()}`,
-      providerCustomerId: params.accountEmail,
-      status: 'active',
-      currentPeriodStart: now,
-      currentPeriodEnd: periodEnd,
-      amount: params.amount,
-      currency: params.currency,
-    };
+  async validateCredentials(_credentials: ProviderCredentials): Promise<boolean> {
+    return true;
   }
 
   /**
@@ -286,6 +262,7 @@ export class MockPayPalAdapter implements PaymentProviderAdapter {
     // Mock cancellation - no actual API call
     return Promise.resolve();
   }
+
   /**
    * Mock PayPal does not support amount updates
    *
@@ -378,5 +355,43 @@ export class MockPayPalAdapter implements PaymentProviderAdapter {
       status: 'active',
       rawPayload: event,
     };
+  }
+
+  /**
+   * Create a checkout session (mock)
+   *
+   * PayPal does not support embedded checkout sessions.
+   *
+   * @param params - Checkout session parameters
+   * @throws Error always
+   */
+  async createCheckoutSession(params: CreateCheckoutSessionParams): Promise<CheckoutSessionResult> {
+    throw new Error('createCheckoutSession is not implemented for PayPal');
+  }
+
+  /**
+   * Get checkout session status (mock)
+   *
+   * PayPal does not support checkout sessions.
+   *
+   * @param sessionId - The checkout session ID
+   * @throws Error always
+   */
+  async getCheckoutSessionStatus(sessionId: string): Promise<CheckoutSessionStatus> {
+    throw new Error('getCheckoutSessionStatus is not implemented for PayPal');
+  }
+
+  /**
+   * Create a recurring price (mock)
+   *
+   * PayPal does not support standalone price creation.
+   *
+   * @param amount - Amount in millicents
+   * @param currency - ISO 4217 currency code
+   * @param interval - Billing interval
+   * @throws Error always
+   */
+  async createPrice(amount: number, currency: string, interval: 'month' | 'year'): Promise<string> {
+    throw new Error('createPrice is not implemented for PayPal');
   }
 }

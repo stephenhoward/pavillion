@@ -9,38 +9,38 @@ const logger = createLogger('funding');
  *
  * Manages event handlers for funding plan lifecycle events.
  * Events emitted:
- * - funding_plan:created - When a new subscription is created
- * - funding_plan:cancelled - When a subscription is cancelled
- * - funding_plan:suspended - When a subscription is suspended
- * - funding_plan:reactivated - When a suspended subscription is reactivated
- * - funding_plan:payment_failed - When a payment fails
+ * - funding:plan:created - When a new funding plan is created
+ * - funding:plan:cancelled - When a funding plan is cancelled
+ * - funding:plan:suspended - When a funding plan is suspended
+ * - funding:plan:reactivated - When a suspended funding plan is reactivated
+ * - funding:plan:payment_failed - When a payment fails
  */
 export default class FundingEventHandlers implements DomainEventHandlers {
   install(eventBus: EventEmitter): void {
-    // Register event handlers for subscription lifecycle events
+    // Register event handlers for funding plan lifecycle events
 
-    eventBus.on('funding_plan:created', (data: { funding_plan: any }) => {
-      logger.info({ id: data.subscription.id }, 'Funding plan created');
+    eventBus.on('funding:plan:created', (data: { fundingPlan: any }) => {
+      logger.info({ id: data.fundingPlan.id }, 'Funding plan created');
       // Future: Send confirmation email, update analytics, etc.
     });
 
-    eventBus.on('funding_plan:cancelled', (data: { funding_plan: any; immediate: boolean }) => {
-      logger.info({ id: data.subscription.id, immediate: data.immediate }, 'Funding plan cancelled');
+    eventBus.on('funding:plan:cancelled', (data: { fundingPlan: any; immediate: boolean }) => {
+      logger.info({ id: data.fundingPlan.id, immediate: data.immediate }, 'Funding plan cancelled');
       // Future: Send cancellation confirmation email
     });
 
-    eventBus.on('funding_plan:suspended', (data: { funding_plan: any }) => {
-      logger.info({ id: data.subscription.id }, 'Funding plan suspended');
+    eventBus.on('funding:plan:suspended', (data: { fundingPlan: any }) => {
+      logger.info({ id: data.fundingPlan.id }, 'Funding plan suspended');
       // Future: Send suspension notification email
     });
 
-    eventBus.on('funding_plan:reactivated', (data: { funding_plan: any }) => {
-      logger.info({ id: data.subscription.id }, 'Funding plan reactivated');
+    eventBus.on('funding:plan:reactivated', (data: { fundingPlan: any }) => {
+      logger.info({ id: data.fundingPlan.id }, 'Funding plan reactivated');
       // Future: Send reactivation confirmation email
     });
 
-    eventBus.on('funding_plan:payment_failed', (data: { funding_plan: any }) => {
-      logger.info({ id: data.subscription.id }, 'Funding plan payment failed');
+    eventBus.on('funding:plan:payment_failed', (data: { fundingPlan: any }) => {
+      logger.info({ id: data.fundingPlan.id }, 'Funding plan payment failed');
       // Future: Send payment failure notification email
     });
   }

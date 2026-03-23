@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import db from '@/server/common/entity/db';
 import FundingService from '@/server/funding/service/funding';
 import { FundingPlanEntity } from '@/server/funding/entity/funding_plan';
-import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_subscription';
+import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_funding_plan';
 import { ComplimentaryGrantEntity } from '@/server/funding/entity/complimentary_grant';
 import { ProviderConfigEntity } from '@/server/funding/entity/provider_config';
 import { FundingSettingsEntity } from '@/server/funding/entity/funding_settings';
@@ -13,10 +13,10 @@ import { ProviderFactory } from '@/server/funding/service/provider/factory';
 import { FundingSettings, ProviderConfig, FundingPlan } from '@/common/model/funding-plan';
 import { ValidationError } from '@/common/exceptions/base';
 import {
-  SubscriptionNotFoundError,
-  CalendarSubscriptionNotFoundError,
-  DuplicateCalendarSubscriptionError,
-} from '@/server/funding/exceptions';
+  FundingPlanNotFoundError,
+  CalendarFundingPlanNotFoundError,
+  DuplicateCalendarFundingPlanError,
+} from '@/common/exceptions/funding';
 
 describe('FundingService - Calendar Subscription Methods', () => {
   let sandbox: sinon.SinonSandbox;
@@ -113,7 +113,7 @@ describe('FundingService - Calendar Subscription Methods', () => {
       expect(mockAdapter.updateSubscriptionAmount.called).toBe(true);
     });
 
-    it('should throw SubscriptionNotFoundError if no active subscription exists', async () => {
+    it('should throw FundingPlanNotFoundError if no active subscription exists', async () => {
       const accountId = uuidv4();
       const calendarId = uuidv4();
 
@@ -121,7 +121,7 @@ describe('FundingService - Calendar Subscription Methods', () => {
 
       await expect(
         service.addCalendarToFundingPlan(accountId, calendarId, 500000),
-      ).rejects.toThrow(SubscriptionNotFoundError);
+      ).rejects.toThrow(FundingPlanNotFoundError);
     });
 
     it('should throw ValidationError if account does not own the calendar', async () => {
@@ -145,7 +145,7 @@ describe('FundingService - Calendar Subscription Methods', () => {
       ).rejects.toThrow(ValidationError);
     });
 
-    it('should throw DuplicateCalendarSubscriptionError if active subscription already exists', async () => {
+    it('should throw DuplicateCalendarFundingPlanError if active subscription already exists', async () => {
       const accountId = uuidv4();
       const subscriptionId = uuidv4();
       const calendarId = uuidv4();
@@ -167,7 +167,7 @@ describe('FundingService - Calendar Subscription Methods', () => {
 
       await expect(
         service.addCalendarToFundingPlan(accountId, calendarId, 500000),
-      ).rejects.toThrow(DuplicateCalendarSubscriptionError);
+      ).rejects.toThrow(DuplicateCalendarFundingPlanError);
     });
 
     it('should throw error with InvalidAmountError name if amount is negative', async () => {
@@ -314,7 +314,7 @@ describe('FundingService - Calendar Subscription Methods', () => {
         supportsAmountUpdates: sandbox.stub().returns(true),
       };
 
-      // findOne is called for resolveActiveSubscription; findByPk is called in cancel()
+      // findOne is called for resolveActiveFundingPlan; findByPk is called in cancel()
       sandbox.stub(FundingPlanEntity, 'findOne').resolves(mockFundingPlanEntity as any);
       sandbox.stub(FundingPlanEntity, 'findByPk').resolves(mockFundingPlanEntity as any);
       mockCalendarInterface.isCalendarOwnerById
@@ -333,16 +333,16 @@ describe('FundingService - Calendar Subscription Methods', () => {
       expect(mockFundingPlanEntity.status).toBe('cancelled');
     });
 
-    it('should throw SubscriptionNotFoundError if no active subscription exists', async () => {
+    it('should throw FundingPlanNotFoundError if no active subscription exists', async () => {
       const accountId = uuidv4();
       sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
 
       await expect(
         service.removeCalendarFromFundingPlan(accountId, uuidv4()),
-      ).rejects.toThrow(SubscriptionNotFoundError);
+      ).rejects.toThrow(FundingPlanNotFoundError);
     });
 
-    it('should throw CalendarSubscriptionNotFoundError if no active calendar subscription', async () => {
+    it('should throw CalendarFundingPlanNotFoundError if no active calendar subscription', async () => {
       const accountId = uuidv4();
       const subscriptionId = uuidv4();
       const calendarId = uuidv4();
@@ -361,7 +361,7 @@ describe('FundingService - Calendar Subscription Methods', () => {
 
       await expect(
         service.removeCalendarFromFundingPlan(accountId, calendarId),
-      ).rejects.toThrow(CalendarSubscriptionNotFoundError);
+      ).rejects.toThrow(CalendarFundingPlanNotFoundError);
     });
 
     it('should throw ValidationError for invalid UUID parameters', async () => {
@@ -524,180 +524,5 @@ describe('FundingService - Calendar Subscription Methods', () => {
     });
   });
 
-  describe('subscribe with calendarIds', () => {
-    it('should create CalendarSubscription rows for each calendarId', async () => {
-      const accountId = uuidv4();
-      const providerConfigId = uuidv4();
-      const calendarId1 = uuidv4();
-      const calendarId2 = uuidv4();
-      const totalAmount = 1000000; // $10.00
-
-      const mockProviderConfig = {
-        id: providerConfigId,
-        provider_type: 'stripe',
-        enabled: true,
-        display_name: 'Credit Card',
-        credentials: '{"apiKey":"test"}',
-        webhook_secret: 'secret',
-        toModel: function() {
-          const config = new ProviderConfig(this.id, this.provider_type as any);
-          config.enabled = this.enabled;
-          config.displayName = this.display_name;
-          return config;
-        },
-      };
-
-      const mockSettings = {
-        currency: 'USD',
-        toModel: function() {
-          const settings = new FundingSettings();
-          settings.currency = this.currency;
-          return settings;
-        },
-      };
-
-      const mockAdapter = {
-        providerType: 'stripe' as const,
-        createSubscription: sandbox.stub().resolves({
-          providerSubscriptionId: 'sub_123',
-          providerCustomerId: 'cus_123',
-          status: 'active' as const,
-          currentPeriodStart: new Date(),
-          currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-          amount: totalAmount,
-          currency: 'USD',
-        }),
-      };
-
-      const subscriptionEntityId = uuidv4();
-      const mockFundingPlanEntity = {
-        id: subscriptionEntityId,
-        save: sandbox.stub().resolves(),
-        toModel: () => new FundingPlan(subscriptionEntityId),
-      };
-
-      sandbox.stub(ProviderConfigEntity, 'findByPk').resolves(mockProviderConfig as any);
-      sandbox.stub(FundingSettingsEntity, 'findOne').resolves(mockSettings as any);
-      sandbox.stub(ProviderFactory, 'getAdapter').returns(mockAdapter as any);
-      sandbox.stub(FundingPlanEntity, 'fromModel').returns(mockFundingPlanEntity as any);
-
-      // Ownership verification for both calendars via CalendarInterface
-      mockCalendarInterface.isCalendarOwnerById.resolves(true);
-
-      const createStub = sandbox.stub(CalendarFundingPlanEntity, 'create').resolves({} as any);
-
-      const subscription = await service.subscribe(
-        accountId,
-        'user@example.com',
-        providerConfigId,
-        'monthly',
-        totalAmount,
-        [calendarId1, calendarId2],
-      );
-
-      expect(subscription).toBeDefined();
-      expect(createStub.callCount).toBe(2);
-      // Each calendar gets proportional amount (total / count)
-      const firstCallAmount = createStub.firstCall.args[0].amount;
-      const secondCallAmount = createStub.secondCall.args[0].amount;
-      expect(firstCallAmount).toBe(500000);
-      expect(secondCallAmount).toBe(500000);
-    });
-
-    it('should throw ValidationError if calendarIds exceeds 50', async () => {
-      const calendarIds = Array.from({ length: 51 }, () => uuidv4());
-
-      await expect(
-        service.subscribe(uuidv4(), 'user@test.com', uuidv4(), 'monthly', 1000000, calendarIds),
-      ).rejects.toThrow(ValidationError);
-    });
-
-    it('should throw ValidationError if calendarIds contains invalid UUID', async () => {
-      const providerConfigId = uuidv4();
-
-      const mockProviderConfig = {
-        id: providerConfigId,
-        enabled: true,
-        toModel: function() {
-          const config = new ProviderConfig(this.id, 'stripe');
-          config.enabled = true;
-          return config;
-        },
-      };
-
-      sandbox.stub(ProviderConfigEntity, 'findByPk').resolves(mockProviderConfig as any);
-      sandbox.stub(FundingSettingsEntity, 'findOne').resolves({
-        toModel: () => {
-          const s = new FundingSettings();
-          s.currency = 'USD';
-          return s;
-        },
-      } as any);
-
-      await expect(
-        service.subscribe(uuidv4(), 'user@test.com', providerConfigId, 'monthly', 1000000, ['not-a-uuid']),
-      ).rejects.toThrow(ValidationError);
-    });
-
-    it('should work without calendarIds (backward compatible)', async () => {
-      const accountId = uuidv4();
-      const providerConfigId = uuidv4();
-
-      const mockProviderConfig = {
-        id: providerConfigId,
-        provider_type: 'stripe',
-        enabled: true,
-        toModel: function() {
-          const config = new ProviderConfig(this.id, 'stripe');
-          config.enabled = true;
-          return config;
-        },
-      };
-
-      const mockSettings = {
-        toModel: function() {
-          const settings = new FundingSettings();
-          settings.currency = 'USD';
-          return settings;
-        },
-      };
-
-      const mockAdapter = {
-        createSubscription: sandbox.stub().resolves({
-          providerSubscriptionId: 'sub_123',
-          providerCustomerId: 'cus_123',
-          status: 'active' as const,
-          currentPeriodStart: new Date(),
-          currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-          amount: 1000000,
-          currency: 'USD',
-        }),
-      };
-
-      const mockFundingPlanEntity = {
-        id: uuidv4(),
-        save: sandbox.stub().resolves(),
-        toModel: () => new FundingPlan(uuidv4()),
-      };
-
-      sandbox.stub(ProviderConfigEntity, 'findByPk').resolves(mockProviderConfig as any);
-      sandbox.stub(FundingSettingsEntity, 'findOne').resolves(mockSettings as any);
-      sandbox.stub(ProviderFactory, 'getAdapter').returns(mockAdapter as any);
-      sandbox.stub(FundingPlanEntity, 'fromModel').returns(mockFundingPlanEntity as any);
-
-      const createStub = sandbox.stub(CalendarFundingPlanEntity, 'create');
-
-      const subscription = await service.subscribe(
-        accountId,
-        'user@example.com',
-        providerConfigId,
-        'monthly',
-        1000000,
-      );
-
-      expect(subscription).toBeDefined();
-      // No calendar subscription rows should be created
-      expect(createStub.called).toBe(false);
-    });
-  });
 });
+

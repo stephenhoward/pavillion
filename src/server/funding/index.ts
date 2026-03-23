@@ -46,7 +46,7 @@ export default class FundingDomain {
 
   public installAPI(app: Application): void {
     // Install v1 API routes (admin, user, webhooks, provider connection)
-    FundingApiV1.install(app, this.interface, this.eventBus);
+    FundingApiV1.install(app, this.interface);
   }
 
   /**

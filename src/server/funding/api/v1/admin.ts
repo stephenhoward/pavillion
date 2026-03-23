@@ -2,14 +2,15 @@ import express, { Request, Response } from 'express';
 import ExpressHelper from '@/server/common/helper/express';
 import FundingInterface from '@/server/funding/interface';
 import { ProviderConnectionService } from '@/server/funding/service/provider_connection';
+import { WebhookManager } from '@/server/funding/service/provider/webhook_manager';
 import { FundingSettings } from '@/common/model/funding-plan';
 import { ValidationError } from '@/common/exceptions/base';
 import {
   AccountNotFoundError,
-  CalendarNotFoundError,
   DuplicateGrantError,
   GrantNotFoundError,
-} from '@/server/funding/exceptions';
+} from '@/common/exceptions/funding';
+import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { logError } from '@/server/common/helper/error-logger';
 
 /**
@@ -17,15 +18,15 @@ import { logError } from '@/server/common/helper/error-logger';
  *
  * All routes require admin authentication via ExpressHelper.adminOnly
  */
-export default class AdminRouteHandlers {
-  private interface: FundingInterface;
+export default class AdminRoutes {
+  private service: FundingInterface;
   private providerConnectionService: ProviderConnectionService;
 
   constructor(
     fundingInterface: FundingInterface,
     providerConnectionService: ProviderConnectionService,
   ) {
-    this.interface = fundingInterface;
+    this.service = fundingInterface;
     this.providerConnectionService = providerConnectionService;
   }
 
@@ -72,11 +73,11 @@ export default class AdminRouteHandlers {
 
   /**
    * GET /admin/settings
-   * Get instance subscription settings
+   * Get instance funding settings
    */
   async getSettings(req: Request, res: Response): Promise<void> {
     try {
-      const settings = await this.interface.getSettings();
+      const settings = await this.service.getSettings();
 
       res.json({
         enabled: settings.enabled,
@@ -95,7 +96,7 @@ export default class AdminRouteHandlers {
 
   /**
    * POST /admin/settings
-   * Update instance subscription settings
+   * Update instance funding settings
    */
   async updateSettings(req: Request, res: Response): Promise<void> {
     try {
@@ -133,12 +134,12 @@ export default class AdminRouteHandlers {
       settings.payWhatYouCan = payWhatYouCan;
       settings.gracePeriodDays = gracePeriodDays;
 
-      await this.interface.updateSettings(settings);
+      await this.service.updateSettings(settings);
 
       res.json({ success: true });
     }
     catch (error) {
-      logError(error, 'Error updating subscription settings');
+      logError(error, 'Error updating funding settings');
       res.status(500).json({ error: 'Internal server error' });
     }
   }
@@ -149,7 +150,8 @@ export default class AdminRouteHandlers {
    */
   async listProviders(req: Request, res: Response): Promise<void> {
     try {
-      const providers = await this.interface.getProviders();
+      const providers = await this.service.getProviders();
+      const webhookManager = new WebhookManager();
 
       // Enhance provider data with configured status from ProviderConnectionService
       const sanitizedProviders = await Promise.all(
@@ -164,6 +166,7 @@ export default class AdminRouteHandlers {
             enabled: provider.enabled,
             display_name: provider.displayName, // Use snake_case for frontend compatibility
             configured: status.configured,
+            webhook_url: webhookManager.generateWebhookUrl(provider.providerType),
             // Do NOT return credentials or webhook secrets
           };
         }),
@@ -186,7 +189,7 @@ export default class AdminRouteHandlers {
       const { providerType } = req.params;
       const { displayName, enabled } = req.body;
 
-      await this.interface.updateProvider(providerType, displayName, enabled);
+      await this.service.updateProvider(providerType, displayName, enabled);
 
       res.json({ success: true });
     }
@@ -209,11 +212,17 @@ export default class AdminRouteHandlers {
    * List all funding plans with pagination
    */
   async listFundingPlans(req: Request, res: Response): Promise<void> {
-    try {
-      const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 50;
+    const DEFAULT_LIMIT = 50;
+    const MAX_LIMIT = 100;
 
-      const result = await this.interface.listFundingPlans(page, limit);
+    try {
+      const parsedPage = parseInt(req.query.page as string, 10);
+      const page = parsedPage > 0 ? parsedPage : 1;
+
+      const parsedLimit = parseInt(req.query.limit as string, 10);
+      const limit = Math.min(parsedLimit > 0 ? parsedLimit : DEFAULT_LIMIT, MAX_LIMIT);
+
+      const result = await this.service.listFundingPlans(page, limit);
 
       res.json(result);
     }
@@ -231,7 +240,7 @@ export default class AdminRouteHandlers {
     try {
       const { id } = req.params;
 
-      await this.interface.forceCancel(id);
+      await this.service.forceCancel(id);
 
       res.json({ success: true });
     }
@@ -257,7 +266,7 @@ export default class AdminRouteHandlers {
     try {
       const includeRevoked = req.query.includeRevoked === 'true';
 
-      const grants = await this.interface.listGrants(includeRevoked);
+      const grants = await this.service.listGrants(includeRevoked);
 
       res.json(grants.map((grant) => grant.toObject()));
     }
@@ -314,7 +323,7 @@ export default class AdminRouteHandlers {
       // grantedBy is always set from the authenticated user — never from the request body
       const grantedBy = adminUser.id;
 
-      const grant = await this.interface.createGrant(calendarId, grantedBy, reason, expiresAtDate);
+      const grant = await this.service.createGrant(calendarId, grantedBy, reason, expiresAtDate);
 
       res.status(201).json(grant.toObject());
     }
@@ -359,7 +368,7 @@ export default class AdminRouteHandlers {
       // revokedBy is always set from the authenticated user — never from the request body
       const revokedBy = adminUser.id;
 
-      await this.interface.revokeGrant(id, revokedBy);
+      await this.service.revokeGrant(id, revokedBy);
 
       res.status(204).send();
     }

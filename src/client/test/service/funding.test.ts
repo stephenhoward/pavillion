@@ -346,64 +346,105 @@ describe('FundingService.getFundingStatus', () => {
   });
 });
 
-describe('FundingService.subscribe', () => {
+describe('FundingService.createCheckoutSession', () => {
   const service = new FundingService();
 
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  it('should call POST /api/funding/v1/subscribe without calendarIds by default', async () => {
+  it('should call POST /api/funding/v1/checkout-sessions with params', async () => {
     // Arrange
-    const params = { provider_type: 'stripe' as const, billing_cycle: 'monthly' as const };
-    const axiosPost = vi.mocked(axios.post);
-    axiosPost.mockResolvedValue({ data: { redirectUrl: 'https://stripe.com/pay' } });
-
-    // Act
-    await service.subscribe(params);
-
-    // Assert
-    expect(axiosPost).toHaveBeenCalledWith('/api/funding/v1/subscribe', params);
-  });
-
-  it('should include calendarIds when provided', async () => {
-    // Arrange
-    const params = { provider_type: 'stripe' as const, billing_cycle: 'monthly' as const };
-    const calendarIds = ['cal1', 'cal2', 'cal3'];
-    const axiosPost = vi.mocked(axios.post);
-    axiosPost.mockResolvedValue({ data: { redirectUrl: 'https://stripe.com/pay' } });
-
-    // Act
-    await service.subscribe(params, calendarIds);
-
-    // Assert
-    expect(axiosPost).toHaveBeenCalledWith('/api/funding/v1/subscribe', {
-      ...params,
-      calendarIds,
-    });
-  });
-
-  it('should return response data', async () => {
-    // Arrange
-    const params = { provider_type: 'stripe' as const, billing_cycle: 'monthly' as const };
-    const responseData = { redirectUrl: 'https://stripe.com/pay' };
+    const params = {
+      billingCycle: 'monthly',
+      returnUrl: 'http://localhost/funding',
+    };
+    const responseData = { clientSecret: 'cs_secret_123', sessionId: 'cs_session_123' };
     const axiosPost = vi.mocked(axios.post);
     axiosPost.mockResolvedValue({ data: responseData });
 
     // Act
-    const result = await service.subscribe(params);
+    const result = await service.createCheckoutSession(params);
 
     // Assert
-    expect(result).toEqual(responseData);
+    expect(axiosPost).toHaveBeenCalledWith('/api/funding/v1/checkout-sessions', params);
+    expect(result.clientSecret).toBe('cs_secret_123');
+    expect(result.sessionId).toBe('cs_session_123');
+  });
+
+  it('should include amount and calendarIds when provided', async () => {
+    // Arrange
+    const params = {
+      billingCycle: 'yearly',
+      returnUrl: 'http://localhost/funding',
+      amount: 2000000,
+      calendarIds: ['cal1', 'cal2'],
+    };
+    const axiosPost = vi.mocked(axios.post);
+    axiosPost.mockResolvedValue({ data: { clientSecret: 'cs_secret', sessionId: 'cs_session' } });
+
+    // Act
+    await service.createCheckoutSession(params);
+
+    // Assert
+    expect(axiosPost).toHaveBeenCalledWith('/api/funding/v1/checkout-sessions', params);
   });
 
   it('should throw error when API call fails', async () => {
     // Arrange
-    const params = { provider_type: 'stripe' as const, billing_cycle: 'monthly' as const };
     const axiosPost = vi.mocked(axios.post);
-    axiosPost.mockRejectedValue(new Error('Payment error'));
+    axiosPost.mockRejectedValue(new Error('Session creation failed'));
 
     // Act & Assert
-    await expect(service.subscribe(params)).rejects.toThrow('Payment error');
+    await expect(service.createCheckoutSession({
+      billingCycle: 'monthly',
+      returnUrl: 'http://localhost',
+    })).rejects.toThrow('Session creation failed');
+  });
+});
+
+describe('FundingService.getCheckoutSessionStatus', () => {
+  const service = new FundingService();
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should call GET /api/funding/v1/checkout-sessions/:sessionId/status', async () => {
+    // Arrange
+    const sessionId = 'cs_session_123';
+    const responseData = { status: 'complete', customer_email: 'test@example.com' };
+    const axiosGet = vi.mocked(axios.get);
+    axiosGet.mockResolvedValue({ data: responseData });
+
+    // Act
+    const result = await service.getCheckoutSessionStatus(sessionId);
+
+    // Assert
+    expect(axiosGet).toHaveBeenCalledWith(`/api/funding/v1/checkout-sessions/${sessionId}/status`);
+    expect(result.status).toBe('complete');
+    expect(result.customer_email).toBe('test@example.com');
+  });
+
+  it('should return open status for pending sessions', async () => {
+    // Arrange
+    const axiosGet = vi.mocked(axios.get);
+    axiosGet.mockResolvedValue({ data: { status: 'open' } });
+
+    // Act
+    const result = await service.getCheckoutSessionStatus('cs_session_456');
+
+    // Assert
+    expect(result.status).toBe('open');
+    expect(result.customer_email).toBeUndefined();
+  });
+
+  it('should throw error when API call fails', async () => {
+    // Arrange
+    const axiosGet = vi.mocked(axios.get);
+    axiosGet.mockRejectedValue(new Error('Not found'));
+
+    // Act & Assert
+    await expect(service.getCheckoutSessionStatus('invalid_session')).rejects.toThrow('Not found');
   });
 });

@@ -10,6 +10,7 @@ import yaml from 'yaml';
  * - Environment variable overrides work for database settings
  * - production.yaml provides appropriate production defaults
  * - Flydrive storage factory works with volume-mounted config
+ * - production.yaml does not contain a plaintext encryption key
  *
  * Note: These tests validate the committed production.yaml file and the
  * custom-environment-variables.yaml file to ensure production configuration
@@ -47,6 +48,15 @@ describe('Production Configuration', () => {
 
       // Should use SMTP transport in production
       expect(mailConfig.transport).toBe('smtp');
+    });
+
+    it('should not contain a plaintext subscription encryption key', () => {
+      // The encryption key must come from the ENCRYPTION_KEY environment variable only.
+      // Storing it in production.yaml would expose it in version control.
+      // The correct state is no subscription block at all in production.yaml.
+      const subscriptionConfig = productionConfig.subscription as Record<string, unknown> | undefined;
+      const hasPlaintextKey = subscriptionConfig !== undefined && subscriptionConfig.encryptionKey !== undefined;
+      expect(hasPlaintextKey).toBe(false);
     });
   });
 

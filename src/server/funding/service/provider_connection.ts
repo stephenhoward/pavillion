@@ -4,16 +4,16 @@ import { Op } from 'sequelize';
 import { ProviderType } from '@/common/model/funding-plan';
 import { ProviderConfigEntity } from '@/server/funding/entity/provider_config';
 import { FundingPlanEntity } from '@/server/funding/entity/funding_plan';
-import { WebhookManager } from '@/server/funding/service/provider/webhook_manager';
 import { ProviderFactory } from '@/server/funding/service/provider/factory';
 import { PaymentProviderAdapter, ProviderCredentials } from '@/server/funding/service/provider/adapter';
+import { StripeAdapter } from '@/server/funding/service/provider/stripe';
 import FundingService from '@/server/funding/service/funding';
 import {
   InvalidProviderTypeError,
   InvalidEnvironmentError,
   MissingRequiredFieldError,
   InvalidCredentialsError,
-} from '@/server/funding/exceptions';
+} from '@/common/exceptions/funding';
 import { createLogger } from '@/server/common/helper/logger';
 
 const logger = createLogger('funding');
@@ -24,6 +24,15 @@ const logger = createLogger('funding');
 interface AdminUser {
   id: string;
   email: string;
+}
+
+/**
+ * Stripe credential inputs for configuration
+ */
+interface StripeCredentialInputs {
+  publishable_key: string;
+  secret_key: string;
+  webhook_secret: string;
 }
 
 /**
@@ -41,7 +50,7 @@ interface ProviderStatus {
  */
 interface DisconnectionResult {
   requiresConfirmation?: boolean;
-  activeSubscriptionCount?: number;
+  activeFundingPlanCount?: number;
   message?: string;
 }
 
@@ -53,13 +62,92 @@ interface DisconnectionResult {
  */
 export class ProviderConnectionService {
   private eventBus: EventEmitter;
-  private webhookManager: WebhookManager;
-  private subscriptionService: FundingService;
+  private fundingService: FundingService;
 
   constructor(eventBus: EventEmitter) {
     this.eventBus = eventBus;
-    this.webhookManager = new WebhookManager();
-    this.subscriptionService = new FundingService(eventBus);
+    this.fundingService = new FundingService(eventBus);
+  }
+
+  /**
+   * Configure Stripe credentials via direct API key entry
+   *
+   * Validates key formats, encrypts, and stores Stripe credentials.
+   * Hard-fails if encryption key is unavailable (no plaintext fallback).
+   *
+   * @param credentials - Stripe credentials (publishable_key, secret_key, webhook_secret)
+   * @param adminUser - Admin user performing the configuration
+   * @returns True if configuration successful
+   */
+  async configureStripe(credentials: StripeCredentialInputs, adminUser: AdminUser): Promise<boolean> {
+    // Validate required fields
+    if (!credentials.publishable_key || credentials.publishable_key.trim() === '') {
+      throw new MissingRequiredFieldError('publishable_key');
+    }
+
+    if (!credentials.secret_key || credentials.secret_key.trim() === '') {
+      throw new MissingRequiredFieldError('secret_key');
+    }
+
+    if (!credentials.webhook_secret || credentials.webhook_secret.trim() === '') {
+      throw new MissingRequiredFieldError('webhook_secret');
+    }
+
+    // Validate key formats (prefix check only, no test API call)
+    const formatCheck = StripeAdapter.validateKeyFormats(
+      credentials.publishable_key,
+      credentials.secret_key,
+      credentials.webhook_secret,
+    );
+
+    if (!formatCheck.valid) {
+      throw new InvalidCredentialsError(formatCheck.error);
+    }
+
+    // Build credentials object for storage
+    // Store apiKey as secret_key for adapter compatibility
+    const storedCredentials = {
+      apiKey: credentials.secret_key,
+      publishableKey: credentials.publishable_key,
+    };
+
+    // Check if provider config already exists
+    let entity = await ProviderConfigEntity.findOne({
+      where: { provider_type: 'stripe' },
+    });
+
+    if (entity) {
+      // Update existing configuration
+      entity._decryptedCredentials = JSON.stringify(storedCredentials);
+      entity._decryptedWebhookSecret = credentials.webhook_secret;
+      await entity.save();
+    }
+    else {
+      // Create new configuration
+      entity = await ProviderConfigEntity.create({
+        id: uuidv4(),
+        provider_type: 'stripe',
+        enabled: false, // Admin must explicitly enable
+        display_name: 'Stripe',
+        credentials: JSON.stringify(storedCredentials),
+        webhook_secret: credentials.webhook_secret,
+      } as any);
+
+      // Set decrypted values for encryption hook
+      entity._decryptedCredentials = JSON.stringify(storedCredentials);
+      entity._decryptedWebhookSecret = credentials.webhook_secret;
+    }
+
+    // Clear cached adapter so new credentials are picked up
+    ProviderFactory.clearCache(entity.id);
+
+    // Emit event
+    this.eventBus.emit('provider:configured', {
+      providerType: 'stripe',
+      providerId: entity.id,
+    });
+
+    return true;
   }
 
   /**
@@ -99,28 +187,9 @@ export class ProviderConnectionService {
       throw new InvalidCredentialsError('Invalid PayPal credentials');
     }
 
-    // Generate webhook URL
-    const webhookUrl = this.webhookManager.generateWebhookUrl('paypal');
-
-    // Register webhook with provider
-    let webhookId: string | undefined;
-    let webhookSecret: string | undefined;
-
-    try {
-      const webhookRegistration = await adapter.registerWebhook(webhookUrl, credentials);
-      webhookId = webhookRegistration.webhookId;
-      webhookSecret = webhookRegistration.webhookSecret;
-    }
-    catch (error) {
-      // Log warning but don't block configuration
-      logger.warn({ err: error }, 'Failed to register PayPal webhook');
-    }
-
-    // Store credentials with webhook info
-    const credentialsWithWebhook = {
+    // Store credentials
+    const credentialsToStore = {
       ...credentials,
-      webhook_id: webhookId,
-      webhook_secret: webhookSecret,
     };
 
     // Check if provider config already exists
@@ -130,10 +199,7 @@ export class ProviderConnectionService {
 
     if (entity) {
       // Update existing configuration
-      entity._decryptedCredentials = JSON.stringify(credentialsWithWebhook);
-      if (webhookSecret) {
-        entity._decryptedWebhookSecret = webhookSecret;
-      }
+      entity._decryptedCredentials = JSON.stringify(credentialsToStore);
       await entity.save();
     }
     else {
@@ -143,15 +209,12 @@ export class ProviderConnectionService {
         provider_type: 'paypal',
         enabled: false, // Admin must explicitly enable
         display_name: 'PayPal',
-        credentials: JSON.stringify(credentialsWithWebhook),
-        webhook_secret: webhookSecret || '',
+        credentials: JSON.stringify(credentialsToStore),
+        webhook_secret: '',
       } as any);
 
       // Set decrypted values for encryption hook
-      entity._decryptedCredentials = JSON.stringify(credentialsWithWebhook);
-      if (webhookSecret) {
-        entity._decryptedWebhookSecret = webhookSecret;
-      }
+      entity._decryptedCredentials = JSON.stringify(credentialsToStore);
     }
 
     // Emit event
@@ -214,8 +277,8 @@ export class ProviderConnectionService {
   /**
    * Disconnect a payment provider
    *
-   * Checks for active subscriptions and requires confirmation before proceeding.
-   * If confirmed, cancels all active subscriptions, deletes webhook, and removes credentials.
+   * Checks for active funding plans and requires confirmation before proceeding.
+   * If confirmed, cancels all active funding plans, deletes webhook, and removes credentials.
    *
    * @param providerType - Type of provider to disconnect
    * @param confirmed - Whether admin has confirmed the disconnection
@@ -239,7 +302,7 @@ export class ProviderConnectionService {
       throw new Error('Provider not found');
     }
 
-    // Count active subscriptions
+    // Count active funding plans
     const activeCount = await FundingPlanEntity.count({
       where: {
         provider_config_id: entity.id,
@@ -249,19 +312,19 @@ export class ProviderConnectionService {
       },
     });
 
-    // If active subscriptions exist and not confirmed, return warning
+    // If active funding plans exist and not confirmed, return warning
     if (activeCount > 0 && !confirmed) {
       return {
         requiresConfirmation: true,
-        activeSubscriptionCount: activeCount,
-        message: `This provider has ${activeCount} active subscription(s). Disconnecting will cancel all active subscriptions.`,
+        activeFundingPlanCount: activeCount,
+        message: `This provider has ${activeCount} active funding plan(s). Disconnecting will cancel all active funding plans.`,
       };
     }
 
     // If confirmed, proceed with disconnection
     if (activeCount > 0 && confirmed) {
-      // Force-cancel all active subscriptions
-      const activeSubscriptions = await FundingPlanEntity.findAll({
+      // Force-cancel all active funding plans
+      const activeFundingPlans = await FundingPlanEntity.findAll({
         where: {
           provider_config_id: entity.id,
           status: {
@@ -270,25 +333,9 @@ export class ProviderConnectionService {
         },
       });
 
-      for (const subscription of activeSubscriptions) {
-        await this.subscriptionService.forceCancel(subscription.id);
+      for (const plan of activeFundingPlans) {
+        await this.fundingService.forceCancel(plan.id);
       }
-    }
-
-    // Delete webhook at provider
-    try {
-      const config = entity.toModel();
-      const credentials = JSON.parse(config.credentials);
-      const webhookId = credentials.webhook_id;
-
-      if (webhookId) {
-        const adapter = this.getAdapter(providerType, credentials);
-        await adapter.deleteWebhook(webhookId, credentials);
-      }
-    }
-    catch (error) {
-      // Log warning but proceed with disconnection
-      logger.warn({ err: error }, 'Failed to delete webhook');
     }
 
     // Delete provider configuration
@@ -304,12 +351,12 @@ export class ProviderConnectionService {
   }
 
   /**
-   * Get count of active subscriptions for a provider
+   * Get count of active funding plans for a provider
    *
    * @param providerType - Type of provider
-   * @returns Count of active subscriptions
+   * @returns Count of active funding plans
    */
-  async getActiveSubscriptionCount(providerType: ProviderType): Promise<number> {
+  async getActiveFundingPlanCount(providerType: ProviderType): Promise<number> {
     const entity = await ProviderConfigEntity.findOne({
       where: { provider_type: providerType },
     });

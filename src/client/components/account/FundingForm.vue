@@ -1,14 +1,11 @@
 <script setup lang="ts">
 import { useTranslation } from 'i18next-vue';
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import FundingService from '@/client/service/funding';
-import type { FundingOptions } from '@/client/service/funding';
+import type { FundingOptions, FundingProvider } from '@/client/service/funding';
+import { loadStripe } from '@/client/service/stripe-loader';
 
-const ALLOWED_CHECKOUT_ORIGINS = [
-  'https://checkout.stripe.com',
-  'https://www.paypal.com',
-  'https://www.sandbox.paypal.com',
-];
+type FormState = 'configure' | 'checkout' | 'result';
 
 const props = defineProps<{
   calendarId?: string;
@@ -26,23 +23,39 @@ const loading = ref(true);
 const processing = ref(false);
 const errorMessage = ref('');
 const options = ref<FundingOptions | null>(null);
+const formState = ref<FormState>('configure');
+const resultStatus = ref<'success' | 'error'>('success');
 
 const selectedProvider = ref('');
 const selectedCycle = ref<'monthly' | 'yearly'>('monthly');
 const customAmount = ref(10.00);
 
+// Template ref for the Stripe checkout container
+const checkoutContainerRef = ref<HTMLElement | null>(null);
+
+// Stripe embedded checkout state
+let checkoutInstance: any = null;
+
 const singleProvider = computed(() =>
   options.value?.providers.length === 1,
 );
 
+const selectedProviderInfo = computed<FundingProvider | undefined>(() =>
+  options.value?.providers.find(p => p.providerType === selectedProvider.value),
+);
+
+const isStripeProvider = computed(() =>
+  selectedProvider.value === 'stripe',
+);
+
 const monthlyPriceDisplay = computed(() => {
   if (!options.value) return '';
-  return FundingService.formatCurrency(options.value.monthly_price, options.value.currency);
+  return FundingService.formatCurrency(options.value.monthlyPrice, options.value.currency);
 });
 
 const yearlyPriceDisplay = computed(() => {
   if (!options.value) return '';
-  return FundingService.formatCurrency(options.value.yearly_price, options.value.currency);
+  return FundingService.formatCurrency(options.value.yearlyPrice, options.value.currency);
 });
 
 async function loadOptions() {
@@ -51,7 +64,7 @@ async function loadOptions() {
     options.value = await fundingService.getOptions();
 
     if (options.value.providers.length > 0) {
-      selectedProvider.value = options.value.providers[0].provider_type;
+      selectedProvider.value = options.value.providers[0].providerType;
     }
   }
   catch (error) {
@@ -63,19 +76,65 @@ async function loadOptions() {
   }
 }
 
-function isAllowedCheckoutOrigin(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    return ALLOWED_CHECKOUT_ORIGINS.includes(parsed.origin);
-  }
-  catch {
-    return false;
+/**
+ * Clean up any mounted Stripe checkout instance
+ */
+function destroyCheckout() {
+  if (checkoutInstance) {
+    try {
+      checkoutInstance.destroy();
+    }
+    catch {
+      // Ignore errors during cleanup
+    }
+    checkoutInstance = null;
   }
 }
 
-async function submitSubscribe() {
-  if (!selectedProvider.value) {
-    errorMessage.value = t('select_provider_error');
+/**
+ * Handle checkout completion callback from Stripe embedded checkout.
+ * Verifies the session status via our API before transitioning state.
+ */
+async function handleCheckoutComplete(sessionId: string) {
+  // If user already navigated away from checkout, ignore the callback
+  if (formState.value !== 'checkout') {
+    return;
+  }
+
+  try {
+    const status = await fundingService.getCheckoutSessionStatus(sessionId);
+
+    if (status.status === 'complete') {
+      destroyCheckout();
+      resultStatus.value = 'success';
+      formState.value = 'result';
+      return;
+    }
+
+    if (status.status === 'expired') {
+      destroyCheckout();
+      resultStatus.value = 'error';
+      formState.value = 'result';
+      return;
+    }
+  }
+  catch {
+    // If verification fails, show error — the onComplete callback fires when the form finishes, not when payment is verified
+    destroyCheckout();
+    resultStatus.value = 'error';
+    formState.value = 'result';
+  }
+}
+
+/**
+ * Handle the Stripe embedded checkout flow.
+ * Uses Stripe's onComplete callback instead of polling.
+ */
+async function startStripeCheckout() {
+  const provider = selectedProviderInfo.value;
+
+  if (!provider?.publishableKey) {
+    errorMessage.value = t('subscribe_error');
     return;
   }
 
@@ -83,66 +142,127 @@ async function submitSubscribe() {
   errorMessage.value = '';
 
   try {
+    // Build checkout session params
     const params: Record<string, any> = {
-      provider_type: selectedProvider.value,
-      billing_cycle: selectedCycle.value,
+      billingCycle: selectedCycle.value,
+      returnUrl: window.location.href,
     };
 
-    if (options.value?.pay_what_you_can) {
+    if (options.value?.payWhatYouCan) {
       params.amount = FundingService.displayToMillicents(customAmount.value);
     }
 
-    const calendarIds = props.calendarId ? [props.calendarId] : undefined;
-    const result = await fundingService.subscribe(params, calendarIds);
-
-    if (result.redirectUrl) {
-      if (!isAllowedCheckoutOrigin(result.redirectUrl)) {
-        errorMessage.value = t('subscribe_error');
-        return;
-      }
-      window.location.href = result.redirectUrl;
-      return;
+    if (props.calendarId) {
+      params.calendarIds = [props.calendarId];
     }
 
-    emit('subscribed');
+    // Create checkout session via API
+    const session = await fundingService.createCheckoutSession(params);
+
+    // Load Stripe.js and initialize with publishable key
+    const stripeInstance = await loadStripe(provider.publishableKey);
+
+    // Initialize embedded checkout with onComplete callback
+    checkoutInstance = await stripeInstance.initEmbeddedCheckout({
+      clientSecret: session.clientSecret,
+      onComplete: () => handleCheckoutComplete(session.sessionId),
+    });
+
+    // Switch to checkout state so the container is rendered
+    formState.value = 'checkout';
+    processing.value = false;
+
+    // Wait for DOM update so the container ref is available
+    await nextTick();
+
+    const container = checkoutContainerRef.value;
+
+    if (container) {
+      checkoutInstance.mount(container);
+    }
   }
   catch (error) {
-    console.error('Failed to create funding plan:', error);
+    console.error('Failed to start Stripe checkout:', error);
     errorMessage.value = t('subscribe_error');
-  }
-  finally {
+    formState.value = 'configure';
     processing.value = false;
   }
 }
 
+/**
+ * PayPal checkout — not yet implemented, placeholder for future implementation
+ */
+async function startPayPalCheckout() {
+  // TODO: Implement PayPal checkout flow
+  errorMessage.value = t('subscribe_error');
+}
+
+/**
+ * Submit handler dispatches to the appropriate provider flow
+ */
+async function submitSubscribe() {
+  if (!selectedProvider.value) {
+    errorMessage.value = t('select_provider_error');
+    return;
+  }
+
+  if (isStripeProvider.value) {
+    await startStripeCheckout();
+  }
+  else {
+    await startPayPalCheckout();
+  }
+}
+
+/**
+ * Return to configure state from checkout or result
+ */
+function backToConfigure() {
+  destroyCheckout();
+  errorMessage.value = '';
+  formState.value = 'configure';
+}
+
+/**
+ * Handle successful result acknowledgment
+ */
+function acknowledgeResult() {
+  emit('subscribed');
+}
+
 onMounted(loadOptions);
+
+onBeforeUnmount(() => {
+  destroyCheckout();
+});
 </script>
 
 <template>
   <div class="funding-form">
     <div v-if="loading" class="loading">{{ t("loading") }}</div>
 
-    <div v-else-if="errorMessage" class="error-message" role="alert">
+    <div v-else-if="errorMessage && formState === 'configure'" class="error-message" role="alert">
       {{ errorMessage }}
     </div>
 
-    <template v-else-if="options">
+    <!-- Configure state: select billing cycle, amount, provider -->
+    <template v-if="!loading && formState === 'configure' && options">
       <!-- Provider selection (skip when only one) -->
       <div v-if="!singleProvider" class="form-group">
         <label class="form-label">{{ t("select_provider") }}</label>
         <div class="provider-options">
           <label
             v-for="provider in options.providers"
-            :key="provider.provider_type"
+            :key="provider.providerType"
             class="provider-option"
           >
             <input
               type="radio"
-              :value="provider.provider_type"
+              :value="provider.providerType"
               v-model="selectedProvider"
               :disabled="processing"
             />
-            <span>{{ provider.display_name }}</span>
+            <span>{{ provider.displayName }}</span>
           </label>
         </div>
       </div>
@@ -173,7 +293,7 @@ onMounted(loadOptions);
       </div>
 
       <!-- PWYC amount -->
-      <div v-if="options.pay_what_you_can" class="form-group">
+      <div v-if="options.payWhatYouCan" class="form-group">
         <label class="form-label">{{ t("custom_amount_label") }}</label>
         <div class="form-field">
           <input
@@ -197,6 +317,55 @@ onMounted(loadOptions);
         >
           {{ t("confirm_subscribe_button") }}
         </button>
+      </div>
+    </template>
+
+    <!-- Checkout state: embedded Stripe checkout iframe -->
+    <template v-if="formState === 'checkout'">
+      <div class="checkout-state">
+        <div v-if="errorMessage" class="error-message" role="alert">
+          {{ errorMessage }}
+        </div>
+        <div ref="checkoutContainerRef" class="stripe-checkout-container" />
+        <div class="form-actions">
+          <button
+            type="button"
+            class="secondary"
+            @click="backToConfigure"
+          >
+            {{ t("cancel_button") }}
+          </button>
+        </div>
+      </div>
+    </template>
+
+    <!-- Result state: success or error after checkout -->
+    <template v-if="formState === 'result'">
+      <div class="result-state">
+        <div v-if="resultStatus === 'success'" class="success-message" role="status">
+          {{ t("subscribe_success") }}
+        </div>
+        <div v-else class="error-message" role="alert">
+          {{ t("subscribe_error") }}
+        </div>
+        <div class="form-actions">
+          <button
+            v-if="resultStatus === 'success'"
+            type="button"
+            class="primary"
+            @click="acknowledgeResult"
+          >
+            {{ t("checkout_done_button") }}
+          </button>
+          <button
+            v-else
+            type="button"
+            class="secondary"
+            @click="backToConfigure"
+          >
+            {{ t("checkout_try_again_button") }}
+          </button>
+        </div>
       </div>
     </template>
   </div>
@@ -274,11 +443,22 @@ onMounted(loadOptions);
   color: var(--pav-color-text-secondary);
 }
 
-.error-message {
-  padding: 0.75rem;
-  background-color: #fff0f0;
-  border: 1px solid #d87373;
-  color: #7d2a2a;
-  border-radius: 4px;
+.error-message,
+.success-message {
+  margin-bottom: 1rem;
+}
+
+.stripe-checkout-container {
+  min-height: 300px;
+  margin-bottom: 1rem;
+}
+
+.checkout-state,
+.result-state {
+  .form-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 2rem;
+  }
 }
 </style>

@@ -1,17 +1,37 @@
 import { ProviderType } from '@/common/model/funding-plan';
 
 /**
- * Parameters for creating a subscription
+ * Parameters for creating a checkout session
  */
-export interface CreateSubscriptionParams {
-  accountEmail: string;
-  accountId: string;
-  priceId?: string; // Provider-specific price ID (Stripe) or plan ID (PayPal)
-  amount: number; // in millicents
+export interface CreateCheckoutSessionParams {
+  priceId?: string; // Pre-created price ID for fixed pricing
+  amount?: number; // Amount in millicents for PWYC pricing
   currency: string; // ISO 4217 currency code
-  billingCycle: 'monthly' | 'yearly';
-  successUrl?: string; // Redirect URL after successful subscription
-  cancelUrl?: string; // Redirect URL if user cancels
+  interval: 'month' | 'year';
+  accountId: string;
+  calendarIds?: string[];
+  returnUrl: string;
+}
+
+/**
+ * Result of creating a checkout session
+ */
+export interface CheckoutSessionResult {
+  clientSecret: string;
+  sessionId: string;
+}
+
+/**
+ * Status of a checkout session
+ */
+export interface CheckoutSessionStatus {
+  status: 'complete' | 'open' | 'expired';
+  subscriptionId?: string;
+  customerId?: string;
+  metadata: {
+    accountId: string;
+    calendarIds?: string;
+  };
 }
 
 /**
@@ -48,14 +68,10 @@ export interface WebhookEvent {
   amount?: number; // in millicents
   currency?: string;
   rawPayload: any; // Provider-specific event data
-}
-
-/**
- * Webhook registration result
- */
-export interface WebhookRegistration {
-  webhookId: string;
-  webhookSecret: string;
+  /** Account ID from checkout session metadata (checkout.session.completed only) */
+  accountId?: string;
+  /** JSON string of calendar IDs from checkout session metadata (checkout.session.completed only) */
+  calendarIds?: string;
 }
 
 /**
@@ -63,7 +79,11 @@ export interface WebhookRegistration {
  *
  * This interface defines the contract that all payment provider implementations
  * must follow. It supports credential configuration, subscription management,
- * and webhook handling.
+ * checkout sessions, and webhook handling.
+ *
+ * Webhook registration for Stripe is managed manually by the instance
+ * administrator via the Stripe dashboard. The admin enters the webhook signing
+ * secret (whsec_) through the admin credential form.
  */
 export interface PaymentProviderAdapter {
   /**
@@ -72,40 +92,12 @@ export interface PaymentProviderAdapter {
   readonly providerType: ProviderType;
 
   /**
-   * Register a webhook endpoint with the provider
-   *
-   * @param webhookUrl - The URL to receive webhook events
-   * @param credentials - Provider credentials for authentication
-   * @returns Webhook ID and secret for verification
-   */
-  registerWebhook(
-    webhookUrl: string,
-    credentials: ProviderCredentials
-  ): Promise<WebhookRegistration>;
-
-  /**
-   * Delete a webhook endpoint from the provider
-   *
-   * @param webhookId - The webhook endpoint ID to delete
-   * @param credentials - Provider credentials for authentication
-   */
-  deleteWebhook(webhookId: string, credentials: ProviderCredentials): Promise<void>;
-
-  /**
    * Validate provider credentials format
    *
    * @param credentials - Provider credentials to validate
    * @returns True if credentials are valid format, false otherwise
    */
   validateCredentials(credentials: ProviderCredentials): Promise<boolean>;
-
-  /**
-   * Create a new subscription for a customer
-   *
-   * @param params - Subscription creation parameters
-   * @returns Provider subscription data
-   */
-  createSubscription(params: CreateSubscriptionParams): Promise<ProviderSubscription>;
 
   /**
    * Cancel an existing subscription
@@ -167,4 +159,33 @@ export interface PaymentProviderAdapter {
    * @returns Parsed webhook event data
    */
   parseWebhookEvent(payload: string): WebhookEvent;
+
+  /**
+   * Create a checkout session for embedded payment UI
+   *
+   * For fixed pricing, pass priceId. For PWYC pricing, pass amount
+   * which will be used to create a price on the fly.
+   *
+   * @param params - Checkout session parameters
+   * @returns Client secret and session ID for the embedded checkout
+   */
+  createCheckoutSession(params: CreateCheckoutSessionParams): Promise<CheckoutSessionResult>;
+
+  /**
+   * Retrieve the status of a checkout session
+   *
+   * @param sessionId - The checkout session ID
+   * @returns Current status, subscription/customer IDs, and metadata
+   */
+  getCheckoutSessionStatus(sessionId: string): Promise<CheckoutSessionStatus>;
+
+  /**
+   * Create a recurring price with the provider
+   *
+   * @param amount - Amount in millicents
+   * @param currency - ISO 4217 currency code
+   * @param interval - Billing interval ('month' or 'year')
+   * @returns Provider price ID
+   */
+  createPrice(amount: number, currency: string, interval: 'month' | 'year'): Promise<string>;
 }

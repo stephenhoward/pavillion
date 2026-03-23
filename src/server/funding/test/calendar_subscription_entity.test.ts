@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_subscription';
+import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_funding_plan';
 
 describe('CalendarFundingPlanEntity', () => {
   let sampleData: any;

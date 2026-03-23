@@ -4,30 +4,30 @@ import FundingInterface from '@/server/funding/interface';
 import { Account } from '@/common/model/account';
 import { ValidationError } from '@/common/exceptions/base';
 import {
-  SubscriptionNotFoundError,
-  CalendarSubscriptionNotFoundError,
-  DuplicateCalendarSubscriptionError,
-  CalendarNotFoundError,
-} from '@/server/funding/exceptions';
-import { calendarSubscriptionByAccount } from '@/server/common/middleware/rate-limiters';
+  FundingPlanNotFoundError,
+  CalendarFundingPlanNotFoundError,
+  DuplicateCalendarFundingPlanError,
+} from '@/common/exceptions/funding';
+import { CalendarNotFoundError } from '@/common/exceptions/calendar';
+import { calendarFundingPlanByAccount } from '@/server/common/middleware/rate-limiters';
 import { logError } from '@/server/common/helper/error-logger';
 
 /**
- * Calendar subscription route handlers
+ * Calendar funding plan route handlers
  *
- * Manages per-calendar subscription operations: adding/removing calendars
- * from a subscription and checking funding status. All routes require
+ * Manages per-calendar funding plan operations: adding/removing calendars
+ * from a funding plan and checking funding status. All routes require
  * authentication and ownership verification.
  */
-export default class CalendarSubscriptionRoutes {
-  private interface: FundingInterface;
+export default class CalendarFundingPlanRoutes {
+  private service: FundingInterface;
 
   constructor(fundingInterface: FundingInterface) {
-    this.interface = fundingInterface;
+    this.service = fundingInterface;
   }
 
   /**
-   * Install calendar subscription route handlers
+   * Install calendar funding plan route handlers
    *
    * @param app - Express application
    * @param routePrefix - Route prefix (e.g., '/api/funding/v1')
@@ -38,14 +38,14 @@ export default class CalendarSubscriptionRoutes {
     router.post(
       '/calendars',
       ...ExpressHelper.loggedInOnly,
-      calendarSubscriptionByAccount,
+      calendarFundingPlanByAccount,
       this.addCalendar.bind(this),
     );
 
     router.delete(
       '/calendars/:calendarId',
       ...ExpressHelper.loggedInOnly,
-      calendarSubscriptionByAccount,
+      calendarFundingPlanByAccount,
       this.removeCalendar.bind(this),
     );
 
@@ -60,7 +60,7 @@ export default class CalendarSubscriptionRoutes {
 
   /**
    * POST /calendars
-   * Add a calendar to the user's subscription
+   * Add a calendar to the user's funding plan
    *
    * Body: { calendarId: string, amount: number }
    */
@@ -90,7 +90,7 @@ export default class CalendarSubscriptionRoutes {
         return;
       }
 
-      await this.interface.addCalendarToFundingPlan(
+      await this.service.addCalendarToFundingPlan(
         account.id,
         calendarId,
         amount,
@@ -99,18 +99,18 @@ export default class CalendarSubscriptionRoutes {
       res.json({ success: true });
     }
     catch (error) {
-      logError(error, 'Error adding calendar to subscription');
+      logError(error, 'Error adding calendar to funding plan');
       if (error instanceof ValidationError) {
         ExpressHelper.sendValidationError(res, error);
       }
       else if (error instanceof CalendarNotFoundError) {
         res.status(404).json({ error: error.message, errorName: 'CalendarNotFoundError' });
       }
-      else if (error instanceof SubscriptionNotFoundError) {
-        res.status(404).json({ error: error.message, errorName: 'SubscriptionNotFoundError' });
+      else if (error instanceof FundingPlanNotFoundError) {
+        res.status(404).json({ error: error.message, errorName: 'FundingPlanNotFoundError' });
       }
-      else if (error instanceof DuplicateCalendarSubscriptionError) {
-        res.status(409).json({ error: error.message, errorName: 'DuplicateCalendarSubscriptionError' });
+      else if (error instanceof DuplicateCalendarFundingPlanError) {
+        res.status(409).json({ error: error.message, errorName: 'DuplicateCalendarFundingPlanError' });
       }
       else {
         res.status(500).json({ error: 'Internal server error' });
@@ -120,7 +120,7 @@ export default class CalendarSubscriptionRoutes {
 
   /**
    * DELETE /calendars/:calendarId
-   * Remove a calendar from the user's subscription
+   * Remove a calendar from the user's funding plan
    */
   async removeCalendar(req: Request, res: Response): Promise<void> {
     try {
@@ -138,7 +138,7 @@ export default class CalendarSubscriptionRoutes {
         return;
       }
 
-      await this.interface.removeCalendarFromFundingPlan(
+      await this.service.removeCalendarFromFundingPlan(
         account.id,
         calendarId,
       );
@@ -146,15 +146,15 @@ export default class CalendarSubscriptionRoutes {
       res.json({ success: true });
     }
     catch (error) {
-      logError(error, 'Error removing calendar from subscription');
+      logError(error, 'Error removing calendar from funding plan');
       if (error instanceof ValidationError) {
         ExpressHelper.sendValidationError(res, error);
       }
-      else if (error instanceof CalendarSubscriptionNotFoundError) {
-        res.status(404).json({ error: error.message, errorName: 'CalendarSubscriptionNotFoundError' });
+      else if (error instanceof CalendarFundingPlanNotFoundError) {
+        res.status(404).json({ error: error.message, errorName: 'CalendarFundingPlanNotFoundError' });
       }
-      else if (error instanceof SubscriptionNotFoundError) {
-        res.status(404).json({ error: error.message, errorName: 'SubscriptionNotFoundError' });
+      else if (error instanceof FundingPlanNotFoundError) {
+        res.status(404).json({ error: error.message, errorName: 'FundingPlanNotFoundError' });
       }
       else {
         res.status(500).json({ error: 'Internal server error' });
@@ -185,7 +185,7 @@ export default class CalendarSubscriptionRoutes {
         return;
       }
 
-      const fundingStatus = await this.interface.getFundingStatusForCalendar(account.id, calendarId);
+      const fundingStatus = await this.service.getFundingStatusForCalendar(account.id, calendarId);
 
       res.json({ calendarId, fundingStatus });
     }

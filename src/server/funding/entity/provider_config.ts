@@ -4,10 +4,15 @@ import db from '@/server/common/entity/db';
 import crypto from 'crypto';
 import config from 'config';
 
-// Get encryption key from config or generate a default (for development)
-const ENCRYPTION_KEY = config.has('subscription.encryptionKey')
-  ? config.get<string>('subscription.encryptionKey')
-  : '0123456789abcdef0123456789abcdef'; // 32 bytes for AES-256
+// Get encryption key from config - required; no fallback allowed
+if (!config.has('funding.encryptionKey')) {
+  throw new Error(
+    'Missing required configuration: funding.encryptionKey. ' +
+    'Set the ENCRYPTION_KEY environment variable or add funding.encryptionKey to your config.',
+  );
+}
+
+const ENCRYPTION_KEY = config.get<string>('funding.encryptionKey');
 
 const ALGORITHM = 'aes-256-cbc';
 const IV_LENGTH = 16;
@@ -43,14 +48,12 @@ function decrypt(text: string): string {
  *
  * Credentials JSON Structure:
  *
- * Stripe (via OAuth):
+ * Stripe (direct API keys - Embedded Checkout):
  * {
- *   stripe_user_id: string,    // The connected account ID (REQUIRED)
- *   scope: string,              // OAuth scope granted (read_write or read_only)
- *   livemode: boolean,          // Whether account is in live mode
- *   webhook_id: string,         // Webhook endpoint ID for deletion
- *   webhook_secret: string      // Webhook signing secret (moved from webhook_secret field)
+ *   apiKey: string,             // Stripe secret key (sk_test_ or sk_live_)
+ *   publishableKey: string      // Stripe publishable key (pk_test_ or pk_live_)
  * }
+ * The webhook signing secret (whsec_) is stored in the webhook_secret column.
  *
  * PayPal (manual configuration):
  * {

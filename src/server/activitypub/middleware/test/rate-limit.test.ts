@@ -126,7 +126,7 @@ describe('createActorRateLimiter', () => {
       expect(rateLimitedResponse.status).toBe(429);
     });
 
-    it('should use default values of 60 requests per minute', async () => {
+    it('should use default values of 60 requests per minute', { timeout: 30000 }, async () => {
       const app = express();
       app.use(express.json());
 

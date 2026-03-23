@@ -6,34 +6,34 @@ import { createLogger } from '@/server/common/helper/logger';
 const logger = createLogger('funding');
 
 /**
- * Shared event bus for subscription jobs
+ * Shared event bus for funding plan jobs
  */
 const eventBus = new EventEmitter();
 
 /**
- * Shared subscription service instance for jobs
+ * Shared funding service instance for jobs
  */
-const subscriptionService = new FundingService(eventBus);
+const fundingService = new FundingService(eventBus);
 
 /**
- * Check for subscriptions that have exceeded their grace period
+ * Check for funding plans that have exceeded their grace period
  * and transition them to suspended status.
  *
  * This job should be run on a regular schedule (e.g., hourly).
  */
 export async function checkGracePeriodExpiry(): Promise<void> {
   try {
-    await subscriptionService.suspendExpiredSubscriptions();
+    await fundingService.suspendExpiredFundingPlans();
     logger.info('Grace period check completed');
   }
   catch (error) {
-    logError(error, '[Subscription] Error checking grace period expiry');
+    logError(error, '[FundingJobs] Error checking grace period expiry');
     throw error;
   }
 }
 
 /**
- * Start all subscription scheduled jobs
+ * Start all funding plan scheduled jobs
  *
  * @returns Function to stop all jobs
  */
@@ -43,14 +43,14 @@ export function startScheduledJobs(): () => void {
   // Run grace period check every hour
   const gracePeriodInterval = setInterval(() => {
     checkGracePeriodExpiry().catch((error) => {
-      logError(error, '[Subscription] Grace period check failed');
+      logError(error, '[FundingJobs] Grace period check failed');
     });
   }, 60 * 60 * 1000); // 1 hour in milliseconds
 
   // Run initial check on startup (after 10 seconds to allow system to stabilize)
   setTimeout(() => {
     checkGracePeriodExpiry().catch((error) => {
-      logError(error, '[Subscription] Initial grace period check failed');
+      logError(error, '[FundingJobs] Initial grace period check failed');
     });
   }, 10000);
 

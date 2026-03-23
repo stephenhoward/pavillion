@@ -3,7 +3,7 @@ import express, { Request, Response } from 'express';
 import request from 'supertest';
 import sinon from 'sinon';
 import FundingService from '@/server/funding/service/funding';
-import FundingPlanRouteHandlers from '@/server/funding/api/v1/funding-plan';
+import FundingPlanRoutes from '@/server/funding/api/v1/funding-plan';
 import { Account } from '@/common/model/account';
 import { FundingPlan, ProviderConfig } from '@/common/model/funding-plan';
 import { testApp } from '@/server/common/test/lib/express';
@@ -11,7 +11,7 @@ import { testApp } from '@/server/common/test/lib/express';
 describe('User Subscription API Routes', () => {
   let router: express.Router;
   let service: FundingService;
-  let subscriptionHandlers: FundingPlanRouteHandlers;
+  let subscriptionHandlers: FundingPlanRoutes;
   let sandbox: sinon.SinonSandbox;
   let mockAccount: Account;
 
@@ -24,7 +24,7 @@ describe('User Subscription API Routes', () => {
     service = new FundingService(eventBus);
 
     // Create handlers
-    subscriptionHandlers = new FundingPlanRouteHandlers(service);
+    subscriptionHandlers = new FundingPlanRoutes(service);
 
     // Create mock account
     mockAccount = new Account('test-account-id');
@@ -86,175 +86,249 @@ describe('User Subscription API Routes', () => {
         payWhatYouCan: true,
       });
     });
-  });
 
-  describe('POST /subscribe', () => {
-    it('should create subscription with chosen provider', async () => {
-      const mockSubscription = new FundingPlan('sub-1');
-      mockSubscription.accountId = 'test-account-id';
-      mockSubscription.providerConfigId = 'provider-1';
-      mockSubscription.status = 'active';
-      mockSubscription.billingCycle = 'monthly';
-      mockSubscription.amount = 1000000;
-      mockSubscription.currency = 'USD';
-
-      sandbox.stub(service, 'subscribe').resolves(mockSubscription);
-
-      router.post('/handler', (req: Request, res: Response, next) => {
-        req.user = mockAccount;
-        next();
-      }, subscriptionHandlers.subscribe.bind(subscriptionHandlers));
-
-      const response = await request(testApp(router))
-        .post('/handler')
-        .send({
-          providerConfigId: 'provider-1',
-          billingCycle: 'monthly',
-          amount: 1000000,
-        })
-        .expect(200);
-
-      expect(response.body).toMatchObject({
-        id: 'sub-1',
-        accountId: 'test-account-id',
-        status: 'active',
-        billingCycle: 'monthly',
-        amount: 1000000,
+    it('should include publishableKey for Stripe providers with valid credentials', async () => {
+      const stripeProvider = new ProviderConfig('provider-1', 'stripe');
+      stripeProvider.enabled = true;
+      stripeProvider.displayName = 'Credit Card';
+      stripeProvider.credentials = JSON.stringify({
+        apiKey: 'sk_test_secret123',
+        publishableKey: 'pk_test_abc123',
       });
-    });
+      stripeProvider.webhookSecret = 'whsec_test_secret';
 
-    it('should pass calendarIds to the service when provided', async () => {
-      const mockSubscription = new FundingPlan('sub-1');
-      mockSubscription.accountId = 'test-account-id';
-      mockSubscription.status = 'active';
-      mockSubscription.billingCycle = 'monthly';
-      mockSubscription.amount = 1000000;
-      mockSubscription.currency = 'USD';
+      const mockOptions = {
+        enabled: true,
+        providers: [stripeProvider],
+        monthlyPrice: 1000000,
+        yearlyPrice: 10000000,
+        currency: 'USD',
+        payWhatYouCan: false,
+      };
 
-      const subscribeStub = sandbox.stub(service, 'subscribe').resolves(mockSubscription);
+      sandbox.stub(service, 'getOptions').resolves(mockOptions);
 
-      router.post('/handler', (req: Request, res: Response, next) => {
+      router.get('/handler', (req: Request, res: Response, next) => {
         req.user = mockAccount;
         next();
-      }, subscriptionHandlers.subscribe.bind(subscriptionHandlers));
+      }, subscriptionHandlers.getOptions.bind(subscriptionHandlers));
 
-      const calendarIds = [
-        'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d',
-        'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e',
-      ];
-
-      await request(testApp(router))
-        .post('/handler')
-        .send({
-          providerConfigId: 'provider-1',
-          billingCycle: 'monthly',
-          amount: 1000000,
-          calendarIds,
-        })
+      const response = await request(testApp(router))
+        .get('/handler')
         .expect(200);
 
-      expect(subscribeStub.calledOnce).toBe(true);
-      expect(subscribeStub.firstCall.args[5]).toEqual(calendarIds);
+      const stripeResult = response.body.providers[0];
+      expect(stripeResult.publishableKey).toBe('pk_test_abc123');
     });
 
-    it('should pass undefined calendarIds when not provided', async () => {
-      const mockSubscription = new FundingPlan('sub-1');
-      mockSubscription.accountId = 'test-account-id';
-      mockSubscription.status = 'active';
-      mockSubscription.billingCycle = 'monthly';
-      mockSubscription.amount = 1000000;
+    it('should include publishableKey for live Stripe keys', async () => {
+      const stripeProvider = new ProviderConfig('provider-1', 'stripe');
+      stripeProvider.enabled = true;
+      stripeProvider.displayName = 'Credit Card';
+      stripeProvider.credentials = JSON.stringify({
+        apiKey: 'sk_live_secret123',
+        publishableKey: 'pk_live_abc123',
+      });
 
-      const subscribeStub = sandbox.stub(service, 'subscribe').resolves(mockSubscription);
+      const mockOptions = {
+        enabled: true,
+        providers: [stripeProvider],
+        monthlyPrice: 1000000,
+        yearlyPrice: 10000000,
+        currency: 'USD',
+        payWhatYouCan: false,
+      };
 
-      router.post('/handler', (req: Request, res: Response, next) => {
+      sandbox.stub(service, 'getOptions').resolves(mockOptions);
+
+      router.get('/handler', (req: Request, res: Response, next) => {
         req.user = mockAccount;
         next();
-      }, subscriptionHandlers.subscribe.bind(subscriptionHandlers));
+      }, subscriptionHandlers.getOptions.bind(subscriptionHandlers));
 
-      await request(testApp(router))
-        .post('/handler')
-        .send({
-          providerConfigId: 'provider-1',
-          billingCycle: 'monthly',
-          amount: 1000000,
-        })
+      const response = await request(testApp(router))
+        .get('/handler')
         .expect(200);
 
-      expect(subscribeStub.calledOnce).toBe(true);
-      expect(subscribeStub.firstCall.args[5]).toBeUndefined();
+      expect(response.body.providers[0].publishableKey).toBe('pk_live_abc123');
     });
 
-    it('should return 400 when calendarIds is not an array', async () => {
-      sandbox.stub(service, 'subscribe').resolves(new FundingPlan());
+    it('should never expose secret_key, apiKey, or webhook_secret in options response', async () => {
+      const stripeProvider = new ProviderConfig('provider-1', 'stripe');
+      stripeProvider.enabled = true;
+      stripeProvider.displayName = 'Credit Card';
+      stripeProvider.credentials = JSON.stringify({
+        apiKey: 'sk_test_secret123',
+        publishableKey: 'pk_test_abc123',
+        webhook_secret: 'whsec_test_secret',
+      });
+      stripeProvider.webhookSecret = 'whsec_test_secret';
 
-      router.post('/handler', (req: Request, res: Response, next) => {
+      const mockOptions = {
+        enabled: true,
+        providers: [stripeProvider],
+        monthlyPrice: 1000000,
+        yearlyPrice: 10000000,
+        currency: 'USD',
+        payWhatYouCan: false,
+      };
+
+      sandbox.stub(service, 'getOptions').resolves(mockOptions);
+
+      router.get('/handler', (req: Request, res: Response, next) => {
         req.user = mockAccount;
         next();
-      }, subscriptionHandlers.subscribe.bind(subscriptionHandlers));
+      }, subscriptionHandlers.getOptions.bind(subscriptionHandlers));
 
       const response = await request(testApp(router))
-        .post('/handler')
-        .send({
-          providerConfigId: 'provider-1',
-          billingCycle: 'monthly',
-          amount: 1000000,
-          calendarIds: 'not-an-array',
-        })
-        .expect(400);
+        .get('/handler')
+        .expect(200);
 
-      expect(response.body.error).toBe('calendarIds must be an array');
-      expect(response.body.errorName).toBe('ValidationError');
+      const stripeResult = response.body.providers[0];
+      const responseText = JSON.stringify(response.body);
+
+      // Verify secret fields are not present in the provider object
+      expect(stripeResult.credentials).toBeUndefined();
+      expect(stripeResult.webhookSecret).toBeUndefined();
+      expect(stripeResult.apiKey).toBeUndefined();
+      expect(stripeResult.secret_key).toBeUndefined();
+      expect(stripeResult.webhook_secret).toBeUndefined();
+      expect(stripeResult.stripeUserId).toBeUndefined();
+
+      // Verify secret values do not appear anywhere in the response body
+      expect(responseText).not.toContain('sk_test_secret123');
+      expect(responseText).not.toContain('whsec_test_secret');
     });
 
-    it('should return 400 when calendarIds exceeds 50 entries', async () => {
-      sandbox.stub(service, 'subscribe').resolves(new FundingPlan());
+    it('should not include publishableKey for PayPal providers', async () => {
+      const paypalProvider = new ProviderConfig('provider-2', 'paypal');
+      paypalProvider.enabled = true;
+      paypalProvider.displayName = 'PayPal';
+      paypalProvider.credentials = JSON.stringify({
+        client_id: 'paypal_client_id',
+        client_secret: 'paypal_secret',
+      });
 
-      router.post('/handler', (req: Request, res: Response, next) => {
+      const mockOptions = {
+        enabled: true,
+        providers: [paypalProvider],
+        monthlyPrice: 1000000,
+        yearlyPrice: 10000000,
+        currency: 'USD',
+        payWhatYouCan: false,
+      };
+
+      sandbox.stub(service, 'getOptions').resolves(mockOptions);
+
+      router.get('/handler', (req: Request, res: Response, next) => {
         req.user = mockAccount;
         next();
-      }, subscriptionHandlers.subscribe.bind(subscriptionHandlers));
-
-      // Generate 51 valid UUIDs
-      const calendarIds = Array.from({ length: 51 }, (_, i) =>
-        `a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c${String(i).padStart(2, '0')}`,
-      );
+      }, subscriptionHandlers.getOptions.bind(subscriptionHandlers));
 
       const response = await request(testApp(router))
-        .post('/handler')
-        .send({
-          providerConfigId: 'provider-1',
-          billingCycle: 'monthly',
-          amount: 1000000,
-          calendarIds,
-        })
-        .expect(400);
+        .get('/handler')
+        .expect(200);
 
-      expect(response.body.error).toBe('calendarIds cannot exceed 50 entries');
-      expect(response.body.errorName).toBe('ValidationError');
+      const paypalResult = response.body.providers[0];
+      expect(paypalResult.publishableKey).toBeUndefined();
+      expect(paypalResult.credentials).toBeUndefined();
+
+      // Verify PayPal secrets do not appear in response
+      const responseText = JSON.stringify(response.body);
+      expect(responseText).not.toContain('paypal_client_id');
+      expect(responseText).not.toContain('paypal_secret');
     });
 
-    it('should return 400 when calendarIds contains invalid UUIDs', async () => {
-      sandbox.stub(service, 'subscribe').resolves(new FundingPlan());
+    it('should omit publishableKey when Stripe credentials have no publishableKey', async () => {
+      const stripeProvider = new ProviderConfig('provider-1', 'stripe');
+      stripeProvider.enabled = true;
+      stripeProvider.displayName = 'Credit Card';
+      stripeProvider.credentials = JSON.stringify({
+        apiKey: 'sk_test_secret123',
+      });
 
-      router.post('/handler', (req: Request, res: Response, next) => {
+      const mockOptions = {
+        enabled: true,
+        providers: [stripeProvider],
+        monthlyPrice: 1000000,
+        yearlyPrice: 10000000,
+        currency: 'USD',
+        payWhatYouCan: false,
+      };
+
+      sandbox.stub(service, 'getOptions').resolves(mockOptions);
+
+      router.get('/handler', (req: Request, res: Response, next) => {
         req.user = mockAccount;
         next();
-      }, subscriptionHandlers.subscribe.bind(subscriptionHandlers));
+      }, subscriptionHandlers.getOptions.bind(subscriptionHandlers));
 
       const response = await request(testApp(router))
-        .post('/handler')
-        .send({
-          providerConfigId: 'provider-1',
-          billingCycle: 'monthly',
-          amount: 1000000,
-          calendarIds: ['not-a-uuid', 'also-invalid'],
-        })
-        .expect(400);
+        .get('/handler')
+        .expect(200);
 
-      expect(response.body.error).toContain('Invalid calendar IDs');
-      expect(response.body.error).toContain('not-a-uuid');
-      expect(response.body.error).toContain('also-invalid');
-      expect(response.body.errorName).toBe('ValidationError');
+      expect(response.body.providers[0].publishableKey).toBeUndefined();
+    });
+
+    it('should omit publishableKey when credentials JSON is malformed', async () => {
+      const stripeProvider = new ProviderConfig('provider-1', 'stripe');
+      stripeProvider.enabled = true;
+      stripeProvider.displayName = 'Credit Card';
+      stripeProvider.credentials = 'not-valid-json';
+
+      const mockOptions = {
+        enabled: true,
+        providers: [stripeProvider],
+        monthlyPrice: 1000000,
+        yearlyPrice: 10000000,
+        currency: 'USD',
+        payWhatYouCan: false,
+      };
+
+      sandbox.stub(service, 'getOptions').resolves(mockOptions);
+
+      router.get('/handler', (req: Request, res: Response, next) => {
+        req.user = mockAccount;
+        next();
+      }, subscriptionHandlers.getOptions.bind(subscriptionHandlers));
+
+      const response = await request(testApp(router))
+        .get('/handler')
+        .expect(200);
+
+      expect(response.body.providers[0].publishableKey).toBeUndefined();
+    });
+
+    it('should reject publishableKey that does not start with pk_test_ or pk_live_', async () => {
+      const stripeProvider = new ProviderConfig('provider-1', 'stripe');
+      stripeProvider.enabled = true;
+      stripeProvider.displayName = 'Credit Card';
+      stripeProvider.credentials = JSON.stringify({
+        apiKey: 'sk_test_secret123',
+        publishableKey: 'sk_test_this_is_actually_a_secret_key',
+      });
+
+      const mockOptions = {
+        enabled: true,
+        providers: [stripeProvider],
+        monthlyPrice: 1000000,
+        yearlyPrice: 10000000,
+        currency: 'USD',
+        payWhatYouCan: false,
+      };
+
+      sandbox.stub(service, 'getOptions').resolves(mockOptions);
+
+      router.get('/handler', (req: Request, res: Response, next) => {
+        req.user = mockAccount;
+        next();
+      }, subscriptionHandlers.getOptions.bind(subscriptionHandlers));
+
+      const response = await request(testApp(router))
+        .get('/handler')
+        .expect(200);
+
+      expect(response.body.providers[0].publishableKey).toBeUndefined();
     });
   });
 
@@ -342,22 +416,15 @@ describe('User Subscription API Routes', () => {
   describe('Authentication', () => {
     it('should reject unauthenticated requests', async () => {
       // Stub service methods to prevent database access
-      sandbox.stub(service, 'subscribe').resolves(new FundingPlan());
       sandbox.stub(service, 'getStatus').resolves(undefined);
       sandbox.stub(service, 'cancel').resolves();
       sandbox.stub(service, 'getBillingPortalUrl').resolves('');
 
       // Test without adding req.user - handlers should return 401
       // Note: /options is NOT tested here as it may be public
-      router.post('/handler-subscribe', subscriptionHandlers.subscribe.bind(subscriptionHandlers));
       router.get('/handler-status', subscriptionHandlers.getStatus.bind(subscriptionHandlers));
       router.post('/handler-cancel', subscriptionHandlers.cancel.bind(subscriptionHandlers));
       router.get('/handler-portal', subscriptionHandlers.getPortal.bind(subscriptionHandlers));
-
-      await request(testApp(router))
-        .post('/handler-subscribe')
-        .send({})
-        .expect(401);
 
       await request(testApp(router))
         .get('/handler-status')

@@ -39,12 +39,12 @@ const canCancel = computed(() => hasFundingPlan.value && (isActive.value || isPa
 
 const monthlyPriceDisplay = computed(() => {
   if (!options.value) return '';
-  return FundingService.formatCurrency(options.value.monthly_price, options.value.currency);
+  return FundingService.formatCurrency(options.value.monthlyPrice, options.value.currency);
 });
 
 const yearlyPriceDisplay = computed(() => {
   if (!options.value) return '';
-  return FundingService.formatCurrency(options.value.yearly_price, options.value.currency);
+  return FundingService.formatCurrency(options.value.yearlyPrice, options.value.currency);
 });
 
 const currentAmountDisplay = computed(() => {

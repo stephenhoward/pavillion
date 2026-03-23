@@ -1,11 +1,12 @@
 import Stripe from 'stripe';
 import {
   PaymentProviderAdapter,
-  CreateSubscriptionParams,
+  CreateCheckoutSessionParams,
+  CheckoutSessionResult,
+  CheckoutSessionStatus,
   ProviderSubscription,
   ProviderCredentials,
   WebhookEvent,
-  WebhookRegistration,
 } from './adapter';
 import { ProviderType } from '@/common/model/funding-plan';
 
@@ -13,7 +14,12 @@ import { ProviderType } from '@/common/model/funding-plan';
  * Stripe payment provider adapter
  *
  * Implements the PaymentProviderAdapter interface using Stripe SDK.
- * Handles subscription management, webhook verification, and billing portal.
+ * Handles subscription management, checkout sessions, webhook verification,
+ * and billing portal.
+ *
+ * Webhook registration is managed manually by the instance administrator
+ * via the Stripe dashboard. The admin enters the webhook signing secret
+ * (whsec_) directly through the credential configuration form.
  */
 export class StripeAdapter implements PaymentProviderAdapter {
   readonly providerType: ProviderType = 'stripe';
@@ -41,132 +47,53 @@ export class StripeAdapter implements PaymentProviderAdapter {
   }
 
   /**
-   * Register a webhook endpoint with Stripe
-   *
-   * @param webhookUrl - The URL to receive webhook events
-   * @param credentials - Provider credentials for authentication
-   * @returns Webhook ID and secret for verification
-   */
-  async registerWebhook(
-    webhookUrl: string,
-    credentials: ProviderCredentials,
-  ): Promise<WebhookRegistration> {
-    const stripeUserId = credentials.stripeUserId as string;
-
-    // Define subscription-related events to listen for
-    const enabledEvents = [
-      'customer.subscription.created',
-      'customer.subscription.updated',
-      'customer.subscription.deleted',
-      'invoice.payment_succeeded',
-      'invoice.payment_failed',
-    ];
-
-    // Create webhook endpoint with Stripe-Account header for connected accounts
-    const webhookEndpoint = await this.stripe.webhookEndpoints.create(
-      {
-        url: webhookUrl,
-        enabled_events: enabledEvents,
-      },
-      {
-        stripeAccount: stripeUserId,
-      },
-    );
-
-    return {
-      webhookId: webhookEndpoint.id,
-      webhookSecret: webhookEndpoint.secret,
-    };
-  }
-
-  /**
-   * Delete a webhook endpoint from Stripe
-   *
-   * @param webhookId - The webhook endpoint ID to delete
-   * @param credentials - Provider credentials for authentication
-   */
-  async deleteWebhook(webhookId: string, credentials: ProviderCredentials): Promise<void> {
-    const stripeUserId = credentials.stripeUserId as string;
-
-    await this.stripe.webhookEndpoints.del(webhookId, {
-      stripeAccount: stripeUserId,
-    });
-  }
-
-  /**
    * Validate provider credentials format
+   *
+   * Checks that the apiKey field is present. No stripeUserId is required
+   * since Embedded Checkout uses direct API keys, not Connect accounts.
    *
    * @param credentials - Provider credentials to validate
    * @returns True if credentials are valid format
    */
   async validateCredentials(credentials: ProviderCredentials): Promise<boolean> {
-    // Check that required fields exist
-    if (!credentials.apiKey || !credentials.stripeUserId) {
+    if (!credentials.apiKey) {
       return false;
     }
 
-    // Optionally, could make a test API call to verify credentials work
-    // For now, just check format
     return true;
   }
 
   /**
-   * Create a new subscription for a customer
+   * Validate Stripe API key formats by prefix
    *
-   * @param params - Subscription creation parameters
-   * @returns Provider subscription data
+   * Checks that publishable key starts with pk_test_ or pk_live_,
+   * secret key starts with sk_test_ or sk_live_,
+   * and webhook secret starts with whsec_.
+   * Format check only - no test API call.
+   *
+   * @param publishableKey - Stripe publishable key
+   * @param secretKey - Stripe secret key
+   * @param webhookSecret - Stripe webhook signing secret
+   * @returns Object with valid flag and error message if invalid
    */
-  async createSubscription(params: CreateSubscriptionParams): Promise<ProviderSubscription> {
-    // Create or retrieve customer
-    let customer: Stripe.Customer;
-
-    // Try to find existing customer by email
-    const existingCustomers = await this.stripe.customers.list({
-      email: params.accountEmail,
-      limit: 1,
-    });
-
-    if (existingCustomers.data.length > 0) {
-      customer = existingCustomers.data[0];
-    }
-    else {
-      // Create new customer
-      customer = await this.stripe.customers.create({
-        email: params.accountEmail,
-        metadata: {
-          pavillion_account_id: params.accountId,
-        },
-      });
+  static validateKeyFormats(
+    publishableKey: string,
+    secretKey: string,
+    webhookSecret: string,
+  ): { valid: boolean; error?: string } {
+    if (!publishableKey || (!publishableKey.startsWith('pk_test_') && !publishableKey.startsWith('pk_live_'))) {
+      return { valid: false, error: 'Invalid publishable key format. Must start with pk_test_ or pk_live_' };
     }
 
-    // Create or use existing price
-    let priceId = params.priceId;
-    if (!priceId) {
-      // Create a price for this subscription
-      const price = await this.stripe.prices.create({
-        unit_amount: Math.round(params.amount / 1000), // Convert millicents to cents
-        currency: params.currency.toLowerCase(),
-        recurring: {
-          interval: params.billingCycle === 'monthly' ? 'month' : 'year',
-        },
-        product_data: {
-          name: 'Pavillion Subscription',
-        },
-      });
-      priceId = price.id;
+    if (!secretKey || (!secretKey.startsWith('sk_test_') && !secretKey.startsWith('sk_live_'))) {
+      return { valid: false, error: 'Invalid secret key format. Must start with sk_test_ or sk_live_' };
     }
 
-    // Create subscription
-    const subscription = await this.stripe.subscriptions.create({
-      customer: customer.id,
-      items: [{ price: priceId }],
-      metadata: {
-        pavillion_account_id: params.accountId,
-      },
-    });
+    if (!webhookSecret || !webhookSecret.startsWith('whsec_')) {
+      return { valid: false, error: 'Invalid webhook secret format. Must start with whsec_' };
+    }
 
-    // Convert Stripe subscription to ProviderSubscription format
-    return this.convertStripeSubscription(subscription);
+    return { valid: true };
   }
 
   /**
@@ -187,6 +114,7 @@ export class StripeAdapter implements PaymentProviderAdapter {
       });
     }
   }
+
   /**
    * Stripe supports in-place subscription amount updates
    *
@@ -293,6 +221,9 @@ export class StripeAdapter implements PaymentProviderAdapter {
   /**
    * Parse webhook event from Stripe
    *
+   * Handles all Stripe event types relevant to funding plan lifecycle:
+   * checkout completion, invoice payments, and subscription updates.
+   *
    * @param payload - Raw webhook payload (already verified)
    * @returns Parsed webhook event data
    */
@@ -308,6 +239,16 @@ export class StripeAdapter implements PaymentProviderAdapter {
 
     // Parse event-specific data
     switch (event.type) {
+      case 'checkout.session.completed': {
+        const session = event.data.object as Stripe.Checkout.Session;
+        webhookEvent.subscriptionId = session.subscription as string;
+        webhookEvent.customerId = session.customer as string;
+        webhookEvent.status = 'active';
+        webhookEvent.accountId = session.metadata?.pavillion_account_id;
+        webhookEvent.calendarIds = session.metadata?.pavillion_calendar_ids;
+        break;
+      }
+
       case 'invoice.paid':
       case 'invoice.payment_succeeded': {
         const invoice = event.data.object as Stripe.Invoice;
@@ -345,6 +286,102 @@ export class StripeAdapter implements PaymentProviderAdapter {
     }
 
     return webhookEvent;
+  }
+
+  /**
+   * Create a checkout session for Stripe embedded checkout
+   *
+   * Uses ui_mode: 'embedded' and mode: 'subscription'. For fixed pricing,
+   * uses the provided priceId directly. For PWYC pricing, creates a price
+   * on the fly using the provided amount.
+   *
+   * @param params - Checkout session parameters
+   * @returns Client secret and session ID
+   */
+  async createCheckoutSession(params: CreateCheckoutSessionParams): Promise<CheckoutSessionResult> {
+    // Determine the price to use
+    let priceId = params.priceId;
+
+    if (!priceId && params.amount) {
+      // PWYC: create a price on the fly
+      priceId = await this.createPrice(params.amount, params.currency, params.interval);
+    }
+
+    if (!priceId) {
+      throw new Error('Either priceId or amount must be provided');
+    }
+
+    // Build metadata
+    const metadata: Record<string, string> = {
+      pavillion_account_id: params.accountId,
+    };
+    if (params.calendarIds && params.calendarIds.length > 0) {
+      metadata.pavillion_calendar_ids = JSON.stringify(params.calendarIds);
+    }
+
+    // Create the embedded checkout session
+    const session = await this.stripe.checkout.sessions.create({
+      ui_mode: 'embedded',
+      mode: 'subscription',
+      line_items: [
+        {
+          price: priceId,
+          quantity: 1,
+        },
+      ],
+      metadata,
+      return_url: params.returnUrl,
+    });
+
+    return {
+      clientSecret: session.client_secret as string,
+      sessionId: session.id,
+    };
+  }
+
+  /**
+   * Retrieve the status of a checkout session
+   *
+   * @param sessionId - The checkout session ID
+   * @returns Current status, subscription/customer IDs, and metadata
+   */
+  async getCheckoutSessionStatus(sessionId: string): Promise<CheckoutSessionStatus> {
+    const session = await this.stripe.checkout.sessions.retrieve(sessionId);
+
+    return {
+      status: session.status as 'complete' | 'open' | 'expired',
+      subscriptionId: session.subscription as string | undefined,
+      customerId: session.customer as string | undefined,
+      metadata: {
+        accountId: session.metadata?.pavillion_account_id || '',
+        calendarIds: session.metadata?.pavillion_calendar_ids,
+      },
+    };
+  }
+
+  /**
+   * Create a recurring price in Stripe
+   *
+   * Converts millicents to Stripe's cents-based amount.
+   *
+   * @param amount - Amount in millicents
+   * @param currency - ISO 4217 currency code
+   * @param interval - Billing interval ('month' or 'year')
+   * @returns Stripe Price ID
+   */
+  async createPrice(amount: number, currency: string, interval: 'month' | 'year'): Promise<string> {
+    const price = await this.stripe.prices.create({
+      unit_amount: Math.round(amount / 1000), // Convert millicents to cents
+      currency: currency.toLowerCase(),
+      recurring: {
+        interval,
+      },
+      product_data: {
+        name: 'Pavillion Subscription',
+      },
+    });
+
+    return price.id;
   }
 
   /**

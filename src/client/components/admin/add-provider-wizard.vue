@@ -3,7 +3,7 @@ import { ref, computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import Modal from '@/client/components/common/modal.vue';
 import FundingService from '@/client/service/funding';
-import type { ProviderConfig, PayPalCredentials } from '@/client/service/funding';
+import type { ProviderConfig, PayPalCredentials, StripeCredentials } from '@/client/service/funding';
 
 const { t } = useTranslation('admin', {
   keyPrefix: 'funding.wizard',
@@ -40,6 +40,17 @@ const paypalErrors = ref({
   environment: '',
 });
 
+// Stripe form state
+const stripePublishableKey = ref('');
+const stripeSecretKey = ref('');
+const stripeWebhookSecret = ref('');
+const stripeErrors = ref({
+  publishableKey: '',
+  secretKey: '',
+  webhookSecret: '',
+});
+const webhookUrlCopied = ref(false);
+
 // Computed
 const totalSteps = computed(() => 3);
 
@@ -64,6 +75,15 @@ const isPayPalFormValid = computed(() => {
          !paypalErrors.value.clientId &&
          !paypalErrors.value.clientSecret &&
          !paypalErrors.value.environment;
+});
+
+const isStripeFormValid = computed(() => {
+  return stripePublishableKey.value.trim() &&
+         stripeSecretKey.value.trim() &&
+         stripeWebhookSecret.value.trim() &&
+         !stripeErrors.value.publishableKey &&
+         !stripeErrors.value.secretKey &&
+         !stripeErrors.value.webhookSecret;
 });
 
 /**
@@ -111,6 +131,7 @@ function resetWizard() {
   error.value = null;
   connecting.value = false;
   resetPayPalForm();
+  resetStripeForm();
 }
 
 /**
@@ -128,6 +149,20 @@ function resetPayPalForm() {
 }
 
 /**
+ * Reset Stripe form fields
+ */
+function resetStripeForm() {
+  stripePublishableKey.value = '';
+  stripeSecretKey.value = '';
+  stripeWebhookSecret.value = '';
+  stripeErrors.value = {
+    publishableKey: '',
+    secretKey: '',
+    webhookSecret: '',
+  };
+}
+
+/**
  * Validate PayPal form field on blur
  */
 function validatePayPalField(field: 'clientId' | 'clientSecret' | 'environment') {
@@ -139,6 +174,71 @@ function validatePayPalField(field: 'clientId' | 'clientSecret' | 'environment')
   }
   else if (field === 'environment') {
     paypalErrors.value.environment = paypalEnvironment.value ? '' : 'Environment is required';
+  }
+}
+
+/**
+ * Validate Stripe form field on blur
+ */
+function validateStripeField(field: 'publishableKey' | 'secretKey' | 'webhookSecret') {
+  const value = field === 'publishableKey'
+    ? stripePublishableKey.value.trim()
+    : field === 'secretKey'
+      ? stripeSecretKey.value.trim()
+      : stripeWebhookSecret.value.trim();
+
+  if (!value) {
+    if (field === 'publishableKey') {
+      stripeErrors.value.publishableKey = t('step2.stripe_publishable_key_required');
+    }
+    else if (field === 'secretKey') {
+      stripeErrors.value.secretKey = t('step2.stripe_secret_key_required');
+    }
+    else if (field === 'webhookSecret') {
+      stripeErrors.value.webhookSecret = t('step2.stripe_webhook_secret_required');
+    }
+    return;
+  }
+
+  // Format validation
+  if (field === 'publishableKey' && !value.startsWith('pk_test_') && !value.startsWith('pk_live_')) {
+    stripeErrors.value.publishableKey = t('step2.stripe_publishable_key_format');
+  }
+  else if (field === 'publishableKey') {
+    stripeErrors.value.publishableKey = '';
+  }
+
+  if (field === 'secretKey' && !value.startsWith('sk_test_') && !value.startsWith('sk_live_')) {
+    stripeErrors.value.secretKey = t('step2.stripe_secret_key_format');
+  }
+  else if (field === 'secretKey') {
+    stripeErrors.value.secretKey = '';
+  }
+
+  if (field === 'webhookSecret' && !value.startsWith('whsec_')) {
+    stripeErrors.value.webhookSecret = t('step2.stripe_webhook_secret_format');
+  }
+  else if (field === 'webhookSecret') {
+    stripeErrors.value.webhookSecret = '';
+  }
+}
+
+/**
+ * Copy webhook URL to clipboard
+ */
+async function copyWebhookUrl() {
+  const url = selectedProviderConfig.value?.webhook_url;
+  if (!url) return;
+
+  try {
+    await navigator.clipboard.writeText(url);
+    webhookUrlCopied.value = true;
+    setTimeout(() => {
+      webhookUrlCopied.value = false;
+    }, 2000);
+  }
+  catch {
+    // Fallback: select text for manual copy
   }
 }
 
@@ -178,6 +278,46 @@ async function configurePayPal() {
   }
   catch (err) {
     console.error('Failed to configure PayPal:', err);
+    error.value = t('errors.connection_failed', { provider: selectedProviderName.value });
+    connecting.value = false;
+  }
+}
+
+/**
+ * Handle Stripe configuration submission
+ */
+async function configureStripe() {
+  // Validate form
+  if (!isStripeFormValid.value) {
+    validateStripeField('publishableKey');
+    validateStripeField('secretKey');
+    validateStripeField('webhookSecret');
+    return;
+  }
+
+  try {
+    connecting.value = true;
+    error.value = null;
+
+    const credentials: StripeCredentials = {
+      publishable_key: stripePublishableKey.value.trim(),
+      secret_key: stripeSecretKey.value.trim(),
+      webhook_secret: stripeWebhookSecret.value.trim(),
+    };
+
+    const success = await fundingService.configureStripe(credentials);
+
+    if (success) {
+      currentStep.value = 3;
+      connecting.value = false;
+    }
+    else {
+      error.value = t('errors.connection_failed', { provider: selectedProviderName.value });
+      connecting.value = false;
+    }
+  }
+  catch (err) {
+    console.error('Failed to configure Stripe:', err);
     error.value = t('errors.connection_failed', { provider: selectedProviderName.value });
     connecting.value = false;
   }
@@ -240,12 +380,101 @@ function handleSuccess() {
 
       <!-- Step 2: Provider Configuration -->
       <div v-if="currentStep === 2" class="step-content">
-        <!-- Stripe Configuration Placeholder -->
+        <!-- Stripe Configuration -->
         <div v-if="selectedProvider === 'stripe'" class="provider-config">
           <h3 class="step-title">{{ t('step2.stripe_title') }}</h3>
-          <p class="step-description">
-            {{ t('step2.stripe_coming_soon') }}
-          </p>
+          <p class="step-description">{{ t('step2.stripe_description') }}</p>
+
+          <form @submit.prevent="configureStripe">
+            <div class="form-group">
+              <label for="stripe-publishable-key" class="form-label">
+                {{ t('step2.stripe_publishable_key_label') }}
+                <span class="required">*</span>
+              </label>
+              <input
+                id="stripe-publishable-key"
+                v-model="stripePublishableKey"
+                type="text"
+                class="form-input"
+                :class="{ 'has-error': stripeErrors.publishableKey }"
+                :placeholder="t('step2.stripe_publishable_key_placeholder')"
+                :disabled="connecting"
+                :aria-describedby="stripeErrors.publishableKey ? 'stripe-pk-error' : 'stripe-pk-help'"
+                @blur="validateStripeField('publishableKey')"
+              />
+              <div v-if="stripeErrors.publishableKey" id="stripe-pk-error" class="error-message-inline">
+                {{ stripeErrors.publishableKey }}
+              </div>
+              <div v-else id="stripe-pk-help" class="form-help">
+                {{ t('step2.stripe_publishable_key_help') }}
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="stripe-secret-key" class="form-label">
+                {{ t('step2.stripe_secret_key_label') }}
+                <span class="required">*</span>
+              </label>
+              <input
+                id="stripe-secret-key"
+                v-model="stripeSecretKey"
+                type="password"
+                class="form-input"
+                :class="{ 'has-error': stripeErrors.secretKey }"
+                :placeholder="t('step2.stripe_secret_key_placeholder')"
+                :disabled="connecting"
+                :aria-describedby="stripeErrors.secretKey ? 'stripe-sk-error' : 'stripe-sk-help'"
+                @blur="validateStripeField('secretKey')"
+              />
+              <div v-if="stripeErrors.secretKey" id="stripe-sk-error" class="error-message-inline">
+                {{ stripeErrors.secretKey }}
+              </div>
+              <div v-else id="stripe-sk-help" class="form-help">
+                {{ t('step2.stripe_secret_key_help') }}
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="stripe-webhook-secret" class="form-label">
+                {{ t('step2.stripe_webhook_secret_label') }}
+                <span class="required">*</span>
+              </label>
+              <input
+                id="stripe-webhook-secret"
+                v-model="stripeWebhookSecret"
+                type="password"
+                class="form-input"
+                :class="{ 'has-error': stripeErrors.webhookSecret }"
+                :placeholder="t('step2.stripe_webhook_secret_placeholder')"
+                :disabled="connecting"
+                :aria-describedby="stripeErrors.webhookSecret ? 'stripe-wh-error' : 'stripe-wh-help'"
+                @blur="validateStripeField('webhookSecret')"
+              />
+              <div v-if="stripeErrors.webhookSecret" id="stripe-wh-error" class="error-message-inline">
+                {{ stripeErrors.webhookSecret }}
+              </div>
+              <div v-else id="stripe-wh-help" class="form-help">
+                {{ t('step2.stripe_webhook_secret_help') }}
+                <div v-if="selectedProviderConfig?.webhook_url" class="webhook-url-hint">
+                  <span class="webhook-url-label">{{ t('step2.stripe_webhook_url_label') }}</span>
+                  <code
+                    class="webhook-url"
+                    :title="t('step2.stripe_webhook_url_label')"
+                    @click="copyWebhookUrl"
+                  >{{ selectedProviderConfig.webhook_url }}</code>
+                  <span v-if="webhookUrlCopied" class="copied-badge">Copied!</span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              class="primary connect-button"
+              :disabled="!isStripeFormValid || connecting"
+            >
+              {{ connecting ? t('connecting_button', { defaultValue: 'Connecting...' }) : t('step2.stripe_configure_button') }}
+            </button>
+          </form>
         </div>
 
         <!-- PayPal Configuration -->
@@ -267,10 +496,14 @@ function handleSuccess() {
                 :class="{ 'has-error': paypalErrors.clientId }"
                 :placeholder="t('step2.paypal_client_id_placeholder')"
                 :disabled="connecting"
+                :aria-describedby="paypalErrors.clientId ? 'paypal-id-error' : 'paypal-id-help'"
                 @blur="validatePayPalField('clientId')"
               />
-              <div v-if="paypalErrors.clientId" class="error-message-inline">
+              <div v-if="paypalErrors.clientId" id="paypal-id-error" class="error-message-inline">
                 {{ paypalErrors.clientId }}
+              </div>
+              <div v-else id="paypal-id-help" class="form-help">
+                {{ t('step2.paypal_client_id_help') }}
               </div>
             </div>
 
@@ -287,10 +520,14 @@ function handleSuccess() {
                 :class="{ 'has-error': paypalErrors.clientSecret }"
                 :placeholder="t('step2.paypal_client_secret_placeholder')"
                 :disabled="connecting"
+                :aria-describedby="paypalErrors.clientSecret ? 'paypal-secret-error' : 'paypal-secret-help'"
                 @blur="validatePayPalField('clientSecret')"
               />
-              <div v-if="paypalErrors.clientSecret" class="error-message-inline">
+              <div v-if="paypalErrors.clientSecret" id="paypal-secret-error" class="error-message-inline">
                 {{ paypalErrors.clientSecret }}
+              </div>
+              <div v-else id="paypal-secret-help" class="form-help">
+                {{ t('step2.paypal_client_secret_help') }}
               </div>
             </div>
 
@@ -305,13 +542,17 @@ function handleSuccess() {
                 class="form-input"
                 :class="{ 'has-error': paypalErrors.environment }"
                 :disabled="connecting"
+                :aria-describedby="paypalErrors.environment ? 'paypal-env-error' : 'paypal-env-help'"
                 @blur="validatePayPalField('environment')"
               >
                 <option value="sandbox">{{ t('step2.paypal_environment_sandbox') }}</option>
                 <option value="production">{{ t('step2.paypal_environment_production') }}</option>
               </select>
-              <div v-if="paypalErrors.environment" class="error-message-inline">
+              <div v-if="paypalErrors.environment" id="paypal-env-error" class="error-message-inline">
                 {{ paypalErrors.environment }}
+              </div>
+              <div v-else id="paypal-env-help" class="form-help">
+                {{ t('step2.paypal_environment_help') }}
               </div>
             </div>
 
@@ -557,6 +798,50 @@ function handleSuccess() {
       margin-top: 0.5rem;
       font-size: 0.875rem;
       color: #dc3545;
+    }
+
+    .form-help {
+      margin-top: 0.375rem;
+      font-size: 0.8125rem;
+      line-height: 1.4;
+      color: var(--pav-color-text-secondary);
+
+      .webhook-url-hint {
+        margin-top: 0.375rem;
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 0.375rem;
+
+        .webhook-url-label {
+          font-weight: var(--pav-font-weight-medium);
+        }
+
+        .webhook-url {
+          padding: 0.125rem 0.375rem;
+          background: var(--pav-color-surface-tertiary, rgba(0, 0, 0, 0.05));
+          border: 1px solid var(--pav-color-border-primary);
+          border-radius: 4px;
+          font-size: 0.75rem;
+          cursor: pointer;
+          user-select: all;
+          word-break: break-all;
+
+          &:hover {
+            background: var(--pav-color-surface-hover, rgba(0, 0, 0, 0.08));
+          }
+        }
+
+        .copied-badge {
+          font-size: 0.75rem;
+          color: #155724;
+          font-weight: var(--pav-font-weight-medium);
+
+          @media (prefers-color-scheme: dark) {
+            color: #7fd68a;
+          }
+        }
+      }
     }
   }
 }

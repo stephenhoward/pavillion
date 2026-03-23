@@ -1,8 +1,9 @@
 import { EventEmitter } from 'events';
 import FundingService from '@/server/funding/service/funding';
-import { FundingPlan, FundingSettings, ProviderConfig, FundingStatus } from '@/common/model/funding-plan';
+import { ProviderConnectionService } from '@/server/funding/service/provider_connection';
+import { FundingPlan, FundingSettings, ProviderConfig, FundingStatus, BillingCycle } from '@/common/model/funding-plan';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
-import { ProviderSubscription, WebhookEvent } from '@/server/funding/service/provider/adapter';
+import { CheckoutSessionResult } from '@/server/funding/service/provider/adapter';
 import type CalendarInterface from '@/server/calendar/interface';
 
 /**
@@ -13,9 +14,11 @@ import type CalendarInterface from '@/server/calendar/interface';
  */
 export default class FundingInterface {
   private fundingService: FundingService;
+  readonly providerConnectionService: ProviderConnectionService;
 
   constructor(eventBus: EventEmitter) {
     this.fundingService = new FundingService(eventBus);
+    this.providerConnectionService = new ProviderConnectionService(eventBus);
   }
 
   /**
@@ -89,17 +92,6 @@ export default class FundingInterface {
     return this.fundingService.getOptions();
   }
 
-  async subscribe(
-    accountId: string,
-    accountEmail: string,
-    providerConfigId: string,
-    billingCycle: 'monthly' | 'yearly',
-    amount: number,
-    calendarIds?: string[],
-  ): Promise<FundingPlan> {
-    return this.fundingService.subscribe(accountId, accountEmail, providerConfigId, billingCycle, amount, calendarIds);
-  }
-
   async getStatus(accountId: string): Promise<FundingPlan | null> {
     return this.fundingService.getStatus(accountId);
   }
@@ -110,6 +102,44 @@ export default class FundingInterface {
 
   async getBillingPortalUrl(accountId: string, returnUrl: string): Promise<string> {
     return this.fundingService.getBillingPortalUrl(accountId, returnUrl);
+  }
+
+  // Checkout session operations
+
+  /**
+   * Create a Stripe checkout session for embedded checkout
+   *
+   * @param accountId - Authenticated account ID
+   * @param billingCycle - 'monthly' or 'yearly'
+   * @param returnUrl - URL to return to after checkout
+   * @param amount - Optional amount in millicents (for PWYC pricing)
+   * @param calendarIds - Optional array of calendar IDs to fund
+   * @returns Client secret and session ID for the embedded checkout
+   */
+  async createCheckoutSession(
+    accountId: string,
+    billingCycle: BillingCycle,
+    returnUrl: string,
+    amount?: number,
+    calendarIds?: string[],
+  ): Promise<CheckoutSessionResult> {
+    return this.fundingService.createCheckoutSession(accountId, billingCycle, returnUrl, amount, calendarIds);
+  }
+
+  /**
+   * Get the status of a checkout session
+   *
+   * Validates sessionId format and performs IDOR protection.
+   *
+   * @param accountId - Authenticated account ID
+   * @param sessionId - The checkout session ID to check
+   * @returns Status of the checkout session
+   */
+  async getCheckoutSessionStatus(
+    accountId: string,
+    sessionId: string,
+  ): Promise<{ status: string }> {
+    return this.fundingService.getCheckoutSessionStatus(accountId, sessionId);
   }
 
   // Calendar funding plan operations
@@ -224,7 +254,7 @@ export default class FundingInterface {
 
   // Webhook processing
 
-  async processWebhookEvent(event: WebhookEvent, providerConfigId: string): Promise<void> {
-    return this.fundingService.processWebhookEvent(event, providerConfigId);
+  async handleStripeWebhook(rawBody: string, signature: string): Promise<void> {
+    return this.fundingService.handleStripeWebhook(rawBody, signature);
   }
 }

@@ -125,10 +125,10 @@ test.describe('Calendar FundingTab — Subscribe Sheet', () => {
     const unfundedBadge = page.locator('.funding-status-badge--unfunded');
     await expect(unfundedBadge).toBeVisible();
 
-    // Should show "Subscribe to Fund" button, NOT the regular "Add to Subscription" button
+    // Should show "Create a Funding Plan" button
     const subscribeButton = page.locator('.funding-button--primary');
     await expect(subscribeButton).toBeVisible();
-    await expect(subscribeButton).toContainText('Subscribe');
+    await expect(subscribeButton).toContainText('Create a Funding Plan');
   });
 
   test('opens SubscribeSheet when subscribe button is clicked', async ({ page }) => {

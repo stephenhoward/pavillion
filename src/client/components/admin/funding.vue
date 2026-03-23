@@ -46,7 +46,7 @@ const showDisconnectModal = ref(false); // Control disconnect confirmation modal
 const disconnectModalData = ref({
   providerType: '',
   providerName: '',
-  activeSubscriptionCount: 0,
+  activeFundingPlanCount: 0,
 }); // Data for disconnect confirmation modal
 
 // Wizard state
@@ -361,12 +361,12 @@ async function disconnectProvider(providerType) {
     const result = await fundingService.disconnectProvider(providerType, false);
 
     if (result.requiresConfirmation) {
-      // Show confirmation modal with active subscription count
+      // Show confirmation modal with active funding plan count
       const provider = providers.value.find(p => p.providerType === providerType);
       disconnectModalData.value = {
         providerType: providerType,
         providerName: provider?.displayName || providerType,
-        activeSubscriptionCount: result.activeSubscriptionCount || 0,
+        activeFundingPlanCount: result.activeFundingPlanCount || 0,
       };
       showDisconnectModal.value = true;
     }
@@ -580,7 +580,7 @@ onMounted(async () => {
             class="subtab"
             @click="activeSubTab = 'subscriptions'"
           >
-            {{ t("subscriptions_section_title") }}
+            {{ t("funding_plans_section_title") }}
             <span
               v-if="subscriptions.length > 0"
               class="subtab-badge"
@@ -640,23 +640,23 @@ onMounted(async () => {
                aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
           </svg>
-          <p class="empty-title">{{ t("no_subscriptions") }}</p>
-          <p class="empty-description">{{ t("subscriptions_empty_state") }}</p>
+          <p class="empty-title">{{ t("no_funding_plans") }}</p>
+          <p class="empty-description">{{ t("funding_plans_empty_state") }}</p>
         </div>
 
         <!-- Subscriptions list -->
         <div v-else class="subscriptions-card">
           <!-- Desktop Table -->
           <div class="subscriptions-table-desktop">
-            <table class="subscriptions-table" role="table" :aria-label="t('subscriptions_table_aria')">
+            <table class="subscriptions-table" role="table" :aria-label="t('funding_plans_table_aria')">
               <thead>
                 <tr>
-                  <th scope="col">{{ t("subscription_user_column") }}</th>
-                  <th scope="col">{{ t("subscription_amount_column") }}</th>
-                  <th scope="col">{{ t("subscription_cycle_column") }}</th>
-                  <th scope="col">{{ t("subscription_status_column") }}</th>
-                  <th scope="col">{{ t("subscription_period_column") }}</th>
-                  <th scope="col" class="col-actions">{{ t("subscription_actions_column") }}</th>
+                  <th scope="col">{{ t("funding_plan_user_column") }}</th>
+                  <th scope="col">{{ t("funding_plan_amount_column") }}</th>
+                  <th scope="col">{{ t("funding_plan_cycle_column") }}</th>
+                  <th scope="col">{{ t("funding_plan_status_column") }}</th>
+                  <th scope="col">{{ t("funding_plan_period_column") }}</th>
+                  <th scope="col" class="col-actions">{{ t("funding_plan_actions_column") }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -708,7 +708,7 @@ onMounted(async () => {
               </div>
               <div class="subscription-card-footer">
                 <p class="subscription-card-period">
-                  {{ t("subscription_period_end") }} {{ formatDate(sub.current_period_end) }}
+                  {{ t("funding_plan_period_end") }} {{ formatDate(sub.current_period_end) }}
                 </p>
                 <button
                   v-if="sub.status === 'active'"
@@ -886,7 +886,7 @@ onMounted(async () => {
           <template v-if="enabled && hasConfiguredProvider">
             <section class="pricing-card">
               <div class="card-header card-header--border-only">
-                <h2 class="card-title">{{ t("subscription_pricing_title") }}</h2>
+                <h2 class="card-title">{{ t("funding_plan_pricing_title") }}</h2>
               </div>
 
               <form class="pricing-form" @submit.prevent="updateSettings">
@@ -1130,7 +1130,7 @@ onMounted(async () => {
     <ConfirmDisconnectModal
       :show="showDisconnectModal"
       :provider-name="disconnectModalData.providerName"
-      :active-subscription-count="disconnectModalData.activeSubscriptionCount"
+      :active-funding-plan-count="disconnectModalData.activeFundingPlanCount"
       @close="showDisconnectModal = false"
       @confirm="confirmDisconnect"
     />

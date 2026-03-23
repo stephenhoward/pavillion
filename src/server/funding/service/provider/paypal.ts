@@ -1,10 +1,11 @@
 import {
   PaymentProviderAdapter,
-  CreateSubscriptionParams,
+  CreateCheckoutSessionParams,
+  CheckoutSessionResult,
+  CheckoutSessionStatus,
   ProviderSubscription,
   ProviderCredentials,
   WebhookEvent,
-  WebhookRegistration,
 } from './adapter';
 import { ProviderType } from '@/common/model/funding-plan';
 import { Client as PayPalClient } from '@paypal/paypal-server-sdk';
@@ -50,123 +51,6 @@ export class PayPalAdapter implements PaymentProviderAdapter {
   }
 
   /**
-   * Register a webhook endpoint with PayPal
-   *
-   * @param webhookUrl - The URL to receive webhook events
-   * @param credentials - Provider credentials for authentication
-   * @returns Webhook ID and secret for verification
-   */
-  async registerWebhook(
-    webhookUrl: string,
-    credentials: ProviderCredentials,
-  ): Promise<WebhookRegistration> {
-    const mode = (credentials.mode as string) || 'sandbox';
-    const baseUrl =
-      mode === 'live' ? 'https://api.paypal.com' : 'https://api.sandbox.paypal.com';
-    const clientId = credentials.clientId as string;
-    const secret = credentials.secret as string;
-
-    // Get access token
-    const tokenResponse = await fetch(`${baseUrl}/v1/oauth2/token`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Authorization: `Basic ${Buffer.from(`${clientId}:${secret}`).toString('base64')}`,
-      },
-      body: new URLSearchParams({
-        grant_type: 'client_credentials',
-      }),
-    });
-
-    if (!tokenResponse.ok) {
-      throw new Error('Failed to obtain PayPal access token');
-    }
-
-    const tokenData = await tokenResponse.json();
-    const accessToken = tokenData.access_token;
-
-    // Define subscription-related events
-    const eventTypes = [
-      { name: 'BILLING.SUBSCRIPTION.CREATED' },
-      { name: 'BILLING.SUBSCRIPTION.ACTIVATED' },
-      { name: 'BILLING.SUBSCRIPTION.UPDATED' },
-      { name: 'BILLING.SUBSCRIPTION.CANCELLED' },
-      { name: 'BILLING.SUBSCRIPTION.SUSPENDED' },
-      { name: 'BILLING.SUBSCRIPTION.PAYMENT.FAILED' },
-      { name: 'PAYMENT.SALE.COMPLETED' },
-    ];
-
-    // Create webhook
-    const webhookResponse = await fetch(`${baseUrl}/v1/notifications/webhooks`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
-        url: webhookUrl,
-        event_types: eventTypes,
-      }),
-    });
-
-    if (!webhookResponse.ok) {
-      throw new Error('Failed to create PayPal webhook');
-    }
-
-    const webhookData = await webhookResponse.json();
-
-    return {
-      webhookId: webhookData.id,
-      webhookSecret: webhookData.id, // PayPal uses webhook ID for verification
-    };
-  }
-
-  /**
-   * Delete a webhook endpoint from PayPal
-   *
-   * @param webhookId - The webhook endpoint ID to delete
-   * @param credentials - Provider credentials for authentication
-   */
-  async deleteWebhook(webhookId: string, credentials: ProviderCredentials): Promise<void> {
-    const mode = (credentials.mode as string) || 'sandbox';
-    const baseUrl =
-      mode === 'live' ? 'https://api.paypal.com' : 'https://api.sandbox.paypal.com';
-    const clientId = credentials.clientId as string;
-    const secret = credentials.secret as string;
-
-    // Get access token
-    const tokenResponse = await fetch(`${baseUrl}/v1/oauth2/token`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Authorization: `Basic ${Buffer.from(`${clientId}:${secret}`).toString('base64')}`,
-      },
-      body: new URLSearchParams({
-        grant_type: 'client_credentials',
-      }),
-    });
-
-    if (!tokenResponse.ok) {
-      throw new Error('Failed to obtain PayPal access token');
-    }
-
-    const tokenData = await tokenResponse.json();
-    const accessToken = tokenData.access_token;
-
-    // Delete webhook
-    const deleteResponse = await fetch(`${baseUrl}/v1/notifications/webhooks/${webhookId}`, {
-      method: 'DELETE',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
-
-    if (!deleteResponse.ok && deleteResponse.status !== 404) {
-      throw new Error('Failed to delete PayPal webhook');
-    }
-  }
-
-  /**
    * Validate provider credentials format
    *
    * @param credentials - Provider credentials to validate
@@ -181,51 +65,6 @@ export class PayPalAdapter implements PaymentProviderAdapter {
     // Optionally, could make a test API call to verify credentials work
     // For now, just check format
     return true;
-  }
-
-  /**
-   * Create a new subscription for a customer
-   *
-   * @param params - Subscription creation parameters
-   * @returns Provider subscription data
-   */
-  async createSubscription(params: CreateSubscriptionParams): Promise<ProviderSubscription> {
-    // Create or use existing plan
-    let planId = params.priceId;
-
-    if (!planId) {
-      // Create a billing plan for this subscription
-      const plan = await this.createBillingPlan(params);
-      planId = plan.id;
-    }
-
-    // Create subscription
-    const subscriptionData = {
-      planId: planId,
-      subscriber: {
-        emailAddress: params.accountEmail,
-      },
-      applicationContext: {
-        brandName: 'Pavillion',
-        shippingPreference: 'NO_SHIPPING',
-        userAction: 'SUBSCRIBE_NOW',
-        returnUrl: params.successUrl || `${process.env.BASE_URL}/subscription/success`,
-        cancelUrl: params.cancelUrl || `${process.env.BASE_URL}/subscription/cancel`,
-      },
-    };
-
-    // Note: The PayPal SDK typing may need adjustment
-    // This is a placeholder that matches the general structure
-    const response = await (this.client as any).subscriptions.subscriptionsCreate({
-      body: subscriptionData,
-    });
-
-    if (!response.result || !response.result.id) {
-      throw new Error('Failed to create PayPal subscription');
-    }
-
-    // Convert PayPal subscription to ProviderSubscription format
-    return this.convertPayPalSubscription(response.result);
   }
 
   /**
@@ -244,6 +83,7 @@ export class PayPalAdapter implements PaymentProviderAdapter {
       },
     });
   }
+
   /**
    * PayPal does not support in-place subscription amount updates
    *
@@ -389,47 +229,44 @@ export class PayPalAdapter implements PaymentProviderAdapter {
   }
 
   /**
-   * Create a billing plan for subscription
+   * Create a checkout session for PayPal
    *
-   * @param params - Subscription creation parameters
-   * @returns PayPal plan object
-   * @private
+   * PayPal does not support embedded checkout sessions in the same way as Stripe.
+   * This is a stub that throws an error.
+   *
+   * @param params - Checkout session parameters
+   * @throws Error always, as PayPal does not support embedded checkout sessions
    */
-  private async createBillingPlan(params: CreateSubscriptionParams): Promise<any> {
-    const planData = {
-      product_id: 'PAVILLION_SUBSCRIPTION', // Should be a pre-created product ID
-      name: 'Pavillion Subscription',
-      description: `${params.billingCycle} subscription`,
-      billing_cycles: [
-        {
-          frequency: {
-            interval_unit: params.billingCycle === 'monthly' ? 'MONTH' : 'YEAR',
-            interval_count: 1,
-          },
-          tenure_type: 'REGULAR',
-          sequence: 1,
-          total_cycles: 0, // Infinite
-          pricing_scheme: {
-            fixed_price: {
-              value: (params.amount / 100000).toFixed(2), // Convert millicents to decimal
-              currency_code: params.currency.toUpperCase(),
-            },
-          },
-        },
-      ],
-      payment_preferences: {
-        auto_bill_outstanding: true,
-        payment_failure_threshold: 3,
-      },
-    };
+  async createCheckoutSession(params: CreateCheckoutSessionParams): Promise<CheckoutSessionResult> {
+    throw new Error('createCheckoutSession is not implemented for PayPal');
+  }
 
-    // Note: This is a simplified implementation
-    // In production, you would use the PayPal Catalog Products API
-    // to create products and plans
-    return {
-      id: `PLAN_${Date.now()}`,
-      ...planData,
-    };
+  /**
+   * Get checkout session status for PayPal
+   *
+   * PayPal does not support checkout sessions.
+   * This is a stub that throws an error.
+   *
+   * @param sessionId - The checkout session ID
+   * @throws Error always, as PayPal does not support checkout sessions
+   */
+  async getCheckoutSessionStatus(sessionId: string): Promise<CheckoutSessionStatus> {
+    throw new Error('getCheckoutSessionStatus is not implemented for PayPal');
+  }
+
+  /**
+   * Create a recurring price for PayPal
+   *
+   * PayPal does not support standalone price creation.
+   * This is a stub that throws an error.
+   *
+   * @param amount - Amount in millicents
+   * @param currency - ISO 4217 currency code
+   * @param interval - Billing interval
+   * @throws Error always, as PayPal uses billing plans instead
+   */
+  async createPrice(amount: number, currency: string, interval: 'month' | 'year'): Promise<string> {
+    throw new Error('createPrice is not implemented for PayPal');
   }
 
   /**
