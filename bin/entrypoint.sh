@@ -145,20 +145,21 @@ wait_for_db() {
   while [ $elapsed -lt $DB_WAIT_TIMEOUT ]; do
     # Try to connect using Node.js with a simple connection test
     if node -e "
-      const { Sequelize } = require('sequelize');
-      const sequelize = new Sequelize({
-        dialect: 'postgres',
-        host: process.env.DB_HOST,
-        port: parseInt(process.env.DB_PORT || '5432'),
-        database: process.env.DB_NAME || 'pavillion',
-        username: process.env.DB_USER,
-        password: process.env.DB_PASSWORD,
-        logging: false,
-      });
-      sequelize.authenticate()
-        .then(() => { sequelize.close(); process.exit(0); })
-        .catch(() => process.exit(1));
-    " 2>/dev/null; then
+      import('sequelize').then(({ Sequelize }) => {
+        const sequelize = new Sequelize({
+          dialect: 'postgres',
+          host: process.env.DB_HOST,
+          port: parseInt(process.env.DB_PORT || '5432'),
+          database: process.env.DB_NAME || 'pavillion',
+          username: process.env.DB_USER,
+          password: process.env.DB_PASSWORD,
+          logging: false,
+        });
+        sequelize.authenticate()
+          .then(() => { sequelize.close(); process.exit(0); })
+          .catch((err) => { console.error('DB auth failed:', err.message); process.exit(1); });
+      }).catch((err) => { console.error('Failed to load sequelize:', err.message); process.exit(1); });
+    "; then
       log_info "PostgreSQL is ready!"
       return 0
     fi
