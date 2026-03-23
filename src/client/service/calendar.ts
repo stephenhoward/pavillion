@@ -328,6 +328,7 @@ export default class CalendarService {
     calendarId: string,
     settings: {
       defaultDateRange?: DefaultDateRange;
+      defaultEventImageId?: string | null;
       content?: Record<string, { name?: string; description?: string }>;
     },
   ): Promise<Calendar> {

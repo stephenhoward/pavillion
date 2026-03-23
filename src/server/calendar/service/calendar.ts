@@ -9,6 +9,7 @@ import { PUBLIC_KEY_FETCH_TIMEOUT_MS, FEDERATION_HTTP_TIMEOUT_MS } from '@/serve
 import { Calendar, DefaultDateRange } from '@/common/model/calendar';
 import { Account } from '@/common/model/account';
 import { CalendarEntity, CalendarContentEntity } from '@/server/calendar/entity/calendar';
+import { MediaEntity } from '@/server/media/entity/media';
 import { CalendarMemberEntity } from '@/server/calendar/entity/calendar_member';
 import { CalendarEditor } from '@/common/model/calendar_editor';
 import { CalendarMember } from '@/common/model/calendar_member';
@@ -17,6 +18,7 @@ import { UserActorEntity } from '@/server/activitypub/entity/user_actor';
 import AccountInvitation from '@/common/model/invitation';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { ValidationError } from '@/common/exceptions/base';
+import { MediaNotFoundError } from '@/common/exceptions/media';
 import { CalendarEditorPermissionError, EditorAlreadyExistsError, EditorNotFoundError } from '@/common/exceptions/editor';
 import { SubscriptionRequiredError } from '@/common/exceptions/subscription';
 import { noAccountExistsError } from '@/server/accounts/exceptions';
@@ -74,7 +76,7 @@ class CalendarService {
       return null;
     }
     const calendar = await CalendarEntity.findByPk(id, {
-      include: [CalendarContentEntity],
+      include: [CalendarContentEntity, { model: MediaEntity, as: 'defaultEventImage', required: false, where: { status: 'approved' } }],
     });
     return calendar ? calendar.toModel() : null;
   }
@@ -132,7 +134,7 @@ class CalendarService {
     // Single query on CalendarMemberEntity for all memberships
     const memberships = await CalendarMemberEntity.findAll({
       where: { account_id: account.id },
-      include: [{ model: CalendarEntity, as: 'calendar', include: [CalendarContentEntity] }],
+      include: [{ model: CalendarEntity, as: 'calendar', include: [CalendarContentEntity, { model: MediaEntity, as: 'defaultEventImage', required: false, where: { status: 'approved' } }] }],
     });
 
     return memberships
@@ -155,7 +157,7 @@ class CalendarService {
     // Single query on CalendarMemberEntity for all memberships
     const memberships = await CalendarMemberEntity.findAll({
       where: { account_id: account.id },
-      include: [{ model: CalendarEntity, as: 'calendar', include: [CalendarContentEntity] }],
+      include: [{ model: CalendarEntity, as: 'calendar', include: [CalendarContentEntity, { model: MediaEntity, as: 'defaultEventImage', required: false, where: { status: 'approved' } }] }],
     });
 
     return memberships
@@ -220,7 +222,7 @@ class CalendarService {
     if (!name || ! this.isValidUrlName(name)) {
       return null;
     }
-    let calendar = await CalendarEntity.findOne({ where: { url_name: name }, include: [CalendarContentEntity] });
+    let calendar = await CalendarEntity.findOne({ where: { url_name: name }, include: [CalendarContentEntity, { model: MediaEntity, as: 'defaultEventImage', required: false, where: { status: 'approved' } }] });
     return calendar ? calendar.toModel() : null;
   }
 
@@ -1161,7 +1163,7 @@ class CalendarService {
       include: [{
         model: CalendarEntity,
         as: 'calendar',
-        include: [CalendarContentEntity],
+        include: [CalendarContentEntity, { model: MediaEntity, as: 'defaultEventImage', required: false, where: { status: 'approved' } }],
       }],
     });
     return membership?.calendar ? membership.calendar.toModel() : null;
@@ -1310,6 +1312,7 @@ class CalendarService {
     calendarId: string,
     settings: {
       defaultDateRange?: DefaultDateRange;
+      defaultEventImageId?: string | null;
       content?: Record<string, { name?: string; description?: string }>;
     },
   ): Promise<Calendar> {
@@ -1325,6 +1328,14 @@ class CalendarService {
         throw new ValidationError('Invalid defaultDateRange. Must be one of: 1week, 2weeks, 1month');
       }
     }
+
+    // Validate defaultEventImageId format if provided (null is allowed to clear)
+    if (settings.defaultEventImageId !== undefined && settings.defaultEventImageId !== null) {
+      if (!this.isValidUUID(settings.defaultEventImageId)) {
+        throw new ValidationError('defaultEventImageId must be a valid UUID or null');
+      }
+    }
+
     const calendar = await this.getCalendar(calendarId);
     if (!calendar) {
       throw new CalendarNotFoundError();
@@ -1348,6 +1359,33 @@ class CalendarService {
       await calendarEntity.update({ default_date_range: settings.defaultDateRange });
     }
 
+    // Update defaultEventImageId if provided
+    if (settings.defaultEventImageId !== undefined) {
+      if (settings.defaultEventImageId === null) {
+        // Clear the default image
+        await calendarEntity.update({ default_event_image_id: null });
+      }
+      else {
+        // Validate that the media exists and belongs to this calendar
+        const media = await MediaEntity.findByPk(settings.defaultEventImageId);
+        if (!media) {
+          throw new MediaNotFoundError(settings.defaultEventImageId);
+        }
+        if (media.calendar_id !== calendarId) {
+          throw new ValidationError('Media does not belong to this calendar');
+        }
+        await calendarEntity.update({ default_event_image_id: settings.defaultEventImageId });
+
+        // Trigger media approval for pending uploads (same flow as event/series media)
+        if (this.eventBus) {
+          this.eventBus.emit('mediaAttachedToCalendar', {
+            mediaId: settings.defaultEventImageId,
+            calendarId,
+          });
+        }
+      }
+    }
+
     // Update content translations if provided
     if (settings.content) {
       const calendar = calendarEntity.toModel();
@@ -1363,9 +1401,9 @@ class CalendarService {
       }
     }
 
-    // Re-fetch with content included to return complete data
+    // Re-fetch with content and default image included to return complete data
     const updatedEntity = await CalendarEntity.findByPk(calendarId, {
-      include: [CalendarContentEntity],
+      include: [CalendarContentEntity, { model: MediaEntity, as: 'defaultEventImage', required: false, where: { status: 'approved' } }],
     });
     return updatedEntity!.toModel();
   }

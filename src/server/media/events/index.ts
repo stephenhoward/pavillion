@@ -38,5 +38,19 @@ export default class MediaEventHandlers implements DomainEventHandlers {
         logError(error, '[Media] Error processing series media approval');
       }
     });
+
+    // When media is set as a calendar default image, approve it and move to final storage
+    // Only process new uploads (status: 'pending'), not already-approved media
+    eventBus.on('mediaAttachedToCalendar', async (e: { mediaId: string; calendarId: string }) => {
+      try {
+        const media = await this.service.getMediaById(e.mediaId);
+        if (media && media.status === 'pending') {
+          await this.service.checkFileSafety(e.mediaId);
+        }
+      }
+      catch (error) {
+        logError(error, '[Media] Error processing calendar default image media approval');
+      }
+    });
   }
 }

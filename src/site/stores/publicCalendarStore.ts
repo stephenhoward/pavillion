@@ -3,6 +3,7 @@ import { EventCategory } from '@/common/model/event_category';
 import CalendarEventInstance from '@/common/model/event_instance';
 import { getDefaultDateRange } from '@/common/utils/datePresets';
 import type { DefaultDateRange } from '@/common/model/calendar';
+import type { Media } from '@/common/model/media';
 import ModelService from '@/client/service/models';
 
 export interface PublicCalendarState {
@@ -10,6 +11,7 @@ export interface PublicCalendarState {
   currentCalendarUrlName: string | null;
   serverDefaultDateRange: DefaultDateRange;
   calendarDefaultDateRange: DefaultDateRange;
+  defaultEventImage: Media | null;
   isCalendarSettingsLoaded: boolean;
 
   // Category filtering
@@ -48,6 +50,7 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
     currentCalendarUrlName: null,
     serverDefaultDateRange: '2weeks',
     calendarDefaultDateRange: '2weeks',
+    defaultEventImage: null,
     isCalendarSettingsLoaded: false,
     availableCategories: [],
     selectedCategoryIds: [],
@@ -169,7 +172,7 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
     },
 
     /**
-     * Load calendar data to get settings like defaultDateRange
+     * Load calendar data to get settings like defaultDateRange and defaultEventImage
      */
     async loadCalendar(calendarUrlName: string) {
       try {
@@ -185,11 +188,15 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
           // Fall back to the server-level default
           this.calendarDefaultDateRange = this.serverDefaultDateRange;
         }
+
+        // Extract the default event image (public API returns { id, mimeType } or null)
+        this.defaultEventImage = calendarData?.defaultEventImage ?? null;
       }
       catch (error) {
         console.error('Error loading calendar:', error);
         // Fall back to server default if we can't load the calendar
         this.calendarDefaultDateRange = this.serverDefaultDateRange;
+        this.defaultEventImage = null;
       }
       finally {
         this.isCalendarSettingsLoaded = true;
@@ -347,6 +354,7 @@ export const usePublicCalendarStore = defineStore('publicCalendar', {
      */
     clearAll() {
       this.calendarDefaultDateRange = this.serverDefaultDateRange;
+      this.defaultEventImage = null;
       this.isCalendarSettingsLoaded = false;
       this.availableCategories = [];
       this.selectedCategoryIds = [];

@@ -64,6 +64,37 @@
             <option value="1month">{{ t('date_range_1month') }}</option>
           </select>
         </div>
+
+        <!-- Default Event Image -->
+        <div class="setting-card">
+          <h3 class="setting-label">{{ t('default_event_image_label') }}</h3>
+          <p class="setting-description">{{ t('default_event_image_help') }}</p>
+
+          <!-- Existing image preview -->
+          <div v-if="state.defaultEventImage" class="default-image-preview">
+            <EventImage
+              :media="state.defaultEventImage"
+              size="medium"
+            />
+            <button
+              type="button"
+              class="remove-image-btn"
+              :disabled="state.isSaving"
+              @click="removeDefaultImage"
+            >
+              {{ t('default_event_image_remove_button') }}
+            </button>
+          </div>
+
+          <!-- Upload zone (shown when no image is set) -->
+          <div v-else class="default-image-upload">
+            <ImageUpload
+              :calendar-id="props.calendarId"
+              :multiple="false"
+              @upload-complete="handleDefaultImageUpload"
+            />
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -74,6 +105,8 @@ import { reactive, onMounted } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import CalendarService from '@/client/service/calendar';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
+import ImageUpload from '@/client/components/common/media/image-upload.vue';
+import EventImage from '@/client/components/common/media/event-image.vue';
 
 // Props
 const props = defineProps({
@@ -100,6 +133,7 @@ const state = reactive({
   defaultDateRange: '2weeks',
   calendarTitle: '',
   calendarDescription: '',
+  defaultEventImage: null,
 });
 
 /**
@@ -126,6 +160,7 @@ const loadSettings = async () => {
       const content = calendar.content('en');
       state.calendarTitle = content.name || '';
       state.calendarDescription = content.description || '';
+      state.defaultEventImage = calendar.defaultEventImage || null;
     }
   }
   catch (error) {
@@ -162,6 +197,64 @@ const saveSettings = async () => {
   }
   catch (error) {
     console.error('Error saving settings:', error);
+    state.error = t('error_saving');
+    clearMessages();
+  }
+  finally {
+    state.isSaving = false;
+  }
+};
+
+/**
+ * Handle default image upload completion
+ */
+const handleDefaultImageUpload = async (results) => {
+  const successResult = results.find((r) => r.success && r.media);
+  if (!successResult) return;
+
+  try {
+    state.isSaving = true;
+    state.error = '';
+    state.success = '';
+
+    const updatedCalendar = await calendarService.updateCalendarSettings(props.calendarId, {
+      defaultEventImageId: successResult.media.id,
+    });
+
+    // Update local state with the response; image may be null while processing
+    state.defaultEventImage = updatedCalendar.defaultEventImage || successResult.media;
+    state.success = t('save_success');
+    clearMessages();
+  }
+  catch (error) {
+    console.error('Error saving default image:', error);
+    state.error = t('error_saving');
+    clearMessages();
+  }
+  finally {
+    state.isSaving = false;
+  }
+};
+
+/**
+ * Remove the default event image
+ */
+const removeDefaultImage = async () => {
+  try {
+    state.isSaving = true;
+    state.error = '';
+    state.success = '';
+
+    await calendarService.updateCalendarSettings(props.calendarId, {
+      defaultEventImageId: null,
+    });
+
+    state.defaultEventImage = null;
+    state.success = t('save_success');
+    clearMessages();
+  }
+  catch (error) {
+    console.error('Error removing default image:', error);
     state.error = t('error_saving');
     clearMessages();
   }
@@ -328,6 +421,50 @@ onMounted(loadSettings);
     background: var(--pav-color-stone-800);
     color: var(--pav-color-stone-100);
   }
+}
+
+.default-image-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pav-space-3);
+  max-width: 24rem;
+}
+
+.remove-image-btn {
+  align-self: flex-start;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--pav-color-red-300);
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--pav-color-red-600);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+
+  &:hover {
+    background: var(--pav-color-red-50);
+    color: var(--pav-color-red-700);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    border-color: var(--pav-color-red-700);
+    color: var(--pav-color-red-400);
+
+    &:hover {
+      background: rgba(239, 68, 68, 0.1);
+      color: var(--pav-color-red-300);
+    }
+  }
+}
+
+.default-image-upload {
+  max-width: 24rem;
 }
 
 .alert {

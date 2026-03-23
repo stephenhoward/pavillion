@@ -104,3 +104,16 @@ export class MediaEntity extends Model {
 
 // Register the models with the database
 db.addModels([MediaEntity]);
+
+/**
+ * Define Calendar <-> Media (default event image) association.
+ *
+ * Defined programmatically here to avoid circular dependency between
+ * CalendarEntity and MediaEntity. CalendarEntity already has the
+ * default_event_image_id column; this adds the BelongsTo side for
+ * eager loading.
+ */
+CalendarEntity.belongsTo(MediaEntity, {
+  foreignKey: 'default_event_image_id',
+  as: 'defaultEventImage',
+});

@@ -228,3 +228,92 @@ describe('Public Calendar API', () => {
     });
   });
 });
+
+import { Media } from '@/common/model/media';
+
+describe('Public Calendar API - Default Event Image Field Stripping', () => {
+  let routes: CalendarRoutes;
+  let router: express.Router;
+  let publicInterface: PublicCalendarInterface;
+  let calendarInterface: CalendarInterface;
+  let apiSandbox: sinon.SinonSandbox = sinon.createSandbox();
+
+  beforeEach(() => {
+    calendarInterface = new CalendarInterface(new EventEmitter());
+    publicInterface = new PublicCalendarInterface(new EventEmitter(), calendarInterface);
+    routes = new CalendarRoutes(publicInterface);
+    router = express.Router();
+  });
+
+  afterEach(() => {
+    apiSandbox.restore();
+  });
+
+  describe('GET /calendar/:urlName', () => {
+    it('should strip sensitive fields from defaultEventImage', async () => {
+      const calendar = new Calendar('cal-id', 'test-calendar');
+      const media = new Media('media-id', 'cal-id', 'abc123hash', 'photo.jpg', 'image/jpeg', 12345, 'approved');
+      calendar.defaultEventImageId = 'media-id';
+      calendar.defaultEventImage = media;
+
+      let calendarStub = apiSandbox.stub(publicInterface, 'getCalendarByName');
+      calendarStub.resolves(calendar);
+
+      router.get('/handler', (req, res) => {
+        req.params.urlName = 'test-calendar';
+        routes.getCalendar(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .get('/handler');
+
+      expect(response.status).toBe(200);
+      expect(response.body.defaultEventImage).toBeDefined();
+      // Only id and mimeType should be present
+      expect(response.body.defaultEventImage.id).toBe('media-id');
+      expect(response.body.defaultEventImage.mimeType).toBe('image/jpeg');
+      // Sensitive fields should be stripped
+      expect(response.body.defaultEventImage.originalFilename).toBeUndefined();
+      expect(response.body.defaultEventImage.fileSize).toBeUndefined();
+      expect(response.body.defaultEventImage.status).toBeUndefined();
+      expect(response.body.defaultEventImage.sha256).toBeUndefined();
+      expect(response.body.defaultEventImage.calendarId).toBeUndefined();
+    });
+
+    it('should handle null defaultEventImage gracefully', async () => {
+      const calendar = new Calendar('cal-id', 'test-calendar');
+      calendar.defaultEventImageId = null;
+      calendar.defaultEventImage = null;
+
+      let calendarStub = apiSandbox.stub(publicInterface, 'getCalendarByName');
+      calendarStub.resolves(calendar);
+
+      router.get('/handler', (req, res) => {
+        req.params.urlName = 'test-calendar';
+        routes.getCalendar(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .get('/handler');
+
+      expect(response.status).toBe(200);
+      expect(response.body.defaultEventImage).toBeNull();
+    });
+
+    it('should return 404 for non-existent calendar', async () => {
+      let calendarStub = apiSandbox.stub(publicInterface, 'getCalendarByName');
+      calendarStub.resolves(null);
+
+      router.get('/handler', (req, res) => {
+        req.params.urlName = 'nonexistent';
+        routes.getCalendar(req, res);
+      });
+
+      const response = await request(testApp(router))
+        .get('/handler');
+
+      expect(response.status).toBe(404);
+      expect(response.body.errorName).toBe('CalendarNotFoundError');
+    });
+  });
+});

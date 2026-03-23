@@ -9,6 +9,7 @@
  * - Category badges are rendered for each assigned category.
  * - Recurrence badge shows when isRecurring is true; hidden when false.
  * - No-image fallback renders when event has no media.
+ * - Default image fallback: event.media ?? (isRepost ? null : defaultImage) ?? null
  */
 import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
@@ -70,6 +71,7 @@ function makeEvent(overrides: Record<string, any> = {}): CalendarEvent {
     media: overrides.media ?? null,
     categories: overrides.categories ?? [],
     isRecurring: overrides.isRecurring ?? false,
+    isRepost: overrides.isRepost ?? false,
     series: null,
   };
   return event as unknown as CalendarEvent;
@@ -101,7 +103,11 @@ function makeCategory(id: string, name: string): EventCategory {
 /**
  * Mount EventCard with the required plugins.
  */
-async function mountEventCard(instance: CalendarEventInstance, calendarUrlName = 'test-calendar') {
+async function mountEventCard(
+  instance: CalendarEventInstance,
+  calendarUrlName = 'test-calendar',
+  extraProps: Record<string, any> = {},
+) {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -125,6 +131,7 @@ async function mountEventCard(instance: CalendarEventInstance, calendarUrlName =
     props: {
       instance,
       calendarUrlName,
+      ...extraProps,
     },
   });
 
@@ -356,6 +363,67 @@ describe('EventCard', () => {
       const wrapper = await mountEventCard(instance);
 
       expect(wrapper.find('.no-image-fallback').exists()).toBe(true);
+      wrapper.unmount();
+    });
+  });
+
+  describe('default image fallback', () => {
+    const defaultImage = { id: 'default-img-1', mimeType: 'image/jpeg' };
+
+    it('should use event media when event has its own image (ignoring defaultImage)', async () => {
+      const eventMedia = { id: 'event-media-1', originalFilename: 'event-photo.jpg' };
+      const event = makeEvent({ media: eventMedia });
+      const instance = makeInstance(event, '2026-07-15T19:00:00');
+      const wrapper = await mountEventCard(instance, 'test-calendar', { defaultImage });
+
+      // EventImage stub should be rendered (media is present)
+      expect(wrapper.find('.event-image-stub').exists()).toBe(true);
+      // No-image fallback should NOT be shown
+      expect(wrapper.find('.no-image-fallback').exists()).toBe(false);
+      wrapper.unmount();
+    });
+
+    it('should use defaultImage when event has no media and is not a repost', async () => {
+      const event = makeEvent({ media: null, isRepost: false });
+      const instance = makeInstance(event, '2026-07-15T19:00:00');
+      const wrapper = await mountEventCard(instance, 'test-calendar', { defaultImage });
+
+      // EventImage stub should be rendered (defaultImage used as fallback)
+      expect(wrapper.find('.event-image-stub').exists()).toBe(true);
+      // No-image fallback should NOT be shown since defaultImage is provided
+      expect(wrapper.find('.no-image-fallback').exists()).toBe(false);
+      wrapper.unmount();
+    });
+
+    it('should NOT use defaultImage when event is a repost without media', async () => {
+      const event = makeEvent({ media: null, isRepost: true });
+      const instance = makeInstance(event, '2026-07-15T19:00:00');
+      const wrapper = await mountEventCard(instance, 'test-calendar', { defaultImage });
+
+      // No-image fallback should be shown (repost suppresses default image)
+      expect(wrapper.find('.no-image-fallback').exists()).toBe(true);
+      wrapper.unmount();
+    });
+
+    it('should show no-image fallback when no media and no defaultImage provided', async () => {
+      const event = makeEvent({ media: null, isRepost: false });
+      const instance = makeInstance(event, '2026-07-15T19:00:00');
+      const wrapper = await mountEventCard(instance, 'test-calendar');
+
+      // No defaultImage prop passed, so fallback SVG should render
+      expect(wrapper.find('.no-image-fallback').exists()).toBe(true);
+      wrapper.unmount();
+    });
+
+    it('should use event media even when event is a repost with its own media', async () => {
+      const eventMedia = { id: 'repost-media-1', originalFilename: 'repost-photo.jpg' };
+      const event = makeEvent({ media: eventMedia, isRepost: true });
+      const instance = makeInstance(event, '2026-07-15T19:00:00');
+      const wrapper = await mountEventCard(instance, 'test-calendar', { defaultImage });
+
+      // Event's own media takes priority even for reposts
+      expect(wrapper.find('.event-image-stub').exists()).toBe(true);
+      expect(wrapper.find('.no-image-fallback').exists()).toBe(false);
       wrapper.unmount();
     });
   });

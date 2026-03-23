@@ -55,5 +55,24 @@ describe('CalendarService - Validation', () => {
         service.updateCalendarSettings(mockAccount, 'cal-123', { defaultDateRange: 'invalid' as any }),
       ).rejects.toThrow('Invalid defaultDateRange. Must be one of: 1week, 2weeks, 1month');
     });
+
+    it('should throw ValidationError when defaultEventImageId is not a valid UUID', async () => {
+      await expect(
+        service.updateCalendarSettings(mockAccount, 'cal-123', { defaultEventImageId: 'not-a-uuid' }),
+      ).rejects.toThrow(ValidationError);
+
+      await expect(
+        service.updateCalendarSettings(mockAccount, 'cal-123', { defaultEventImageId: 'not-a-uuid' }),
+      ).rejects.toThrow('defaultEventImageId must be a valid UUID or null');
+    });
+
+    it('should not throw ValidationError when defaultEventImageId is null', async () => {
+      // null means "clear the image" - should pass validation and proceed to calendar lookup
+      // which will fail with CalendarNotFoundError since we have no stubs, but that's fine
+      // -- the point is it doesn't throw ValidationError
+      await expect(
+        service.updateCalendarSettings(mockAccount, 'cal-123', { defaultEventImageId: null }),
+      ).rejects.not.toThrow(ValidationError);
+    });
   });
 });

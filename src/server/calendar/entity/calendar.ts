@@ -22,8 +22,17 @@ class CalendarEntity extends Model {
   @Column({ type: DataType.STRING, allowNull: true })
   declare widget_allowed_domain: string | null;
 
+  @Column({ type: DataType.UUID, allowNull: true })
+  declare default_event_image_id: string | null;
+
   @HasMany(() => CalendarContentEntity)
   declare contentEntities: CalendarContentEntity[];
+
+  /**
+   * Association with MediaEntity defined programmatically in media.ts
+   * to avoid circular dependency.
+   */
+  declare defaultEventImage: any;
 
   /**
    * Association with EventEntity defined programmatically in event.ts
@@ -41,6 +50,11 @@ class CalendarEntity extends Model {
     }
     calendar.defaultDateRange = this.default_date_range as DefaultDateRange || null;
     calendar.widgetAllowedDomain = this.widget_allowed_domain || null;
+    calendar.defaultEventImageId = this.default_event_image_id || null;
+
+    if (this.defaultEventImage) {
+      calendar.defaultEventImage = this.defaultEventImage.toModel();
+    }
 
     // Load content from associated content entities if available
     if (this.contentEntities && this.contentEntities.length > 0) {
@@ -59,6 +73,7 @@ class CalendarEntity extends Model {
       languages: calendar.languages.join(','),
       default_date_range: calendar.defaultDateRange,
       widget_allowed_domain: calendar.widgetAllowedDomain,
+      default_event_image_id: calendar.defaultEventImageId,
     });
   }
 };
