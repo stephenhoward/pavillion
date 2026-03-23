@@ -175,12 +175,14 @@ export default class ActivityPubService {
   }
 
   /**
-     * Add provided message to the calendar's inbox
-     * @param calendar
-     * @param message
-     * @returns null
-     */
-  // TODO permissions? block lists? rate limiting?
+   * Add provided message to the calendar's inbox.
+   * Rate limiting, HTTP signature auth, and blocked-instance checks are handled
+   * upstream: see inbox POST middleware in api/v1/server.ts and
+   * InboxService.processInboxMessage() for block-list filtering.
+   * @param calendar
+   * @param message
+   * @returns null
+   */
   async addToInbox(calendar: Calendar, message: ActivityPubActivity ): Promise<null> {
     let foundCalendar = await this.calendarService.getCalendar(calendar.id);
 

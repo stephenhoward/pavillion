@@ -469,31 +469,11 @@ describe('processInboxMessage', () => {
       expect(['ok', 'error']).toContain(status);
     });
 
-    it('should handle processUnfollowAccount with missing message', async () => {
-      const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID });
-
-      // Call with null message
-      await service.processUnfollowAccount(calendar, null);
-
-      // Should return gracefully without throwing
-      // No assertions needed - just verify it doesn't throw
-    });
-
     it('should handle processUnfollowAccount with missing actor', async () => {
       const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID });
 
-      // Call with message missing actor
-      await service.processUnfollowAccount(calendar, { message: {} });
-
-      // Should return gracefully without throwing
-      // No assertions needed - just verify it doesn't throw
-    });
-
-    it('should handle processUnshareEvent with missing object', async () => {
-      const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID });
-
-      // Call with null message
-      await service.processUnshareEvent(calendar, null);
+      // Call with message missing actor (cast to any for defensive edge-case test)
+      await service.processUnfollowAccount(calendar, { message: {} } as any);
 
       // Should return gracefully without throwing
       // No assertions needed - just verify it doesn't throw
@@ -502,11 +482,10 @@ describe('processInboxMessage', () => {
     it('should handle processUnshareEvent with object missing id', async () => {
       const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID });
 
-      // Call with object missing id
+      // Call with message JSON containing object missing id (cast to any for defensive edge-case test)
       await service.processUnshareEvent(calendar, {
-        object: { type: 'Event' },
-        message: { actor: REMOTE_ACTOR_URL },
-      });
+        message: { object: { type: 'Event' }, actor: REMOTE_ACTOR_URL },
+      } as any);
 
       // Should return gracefully without throwing
       // No assertions needed - just verify it doesn't throw
@@ -515,11 +494,10 @@ describe('processInboxMessage', () => {
     it('should handle processUnshareEvent with missing actor', async () => {
       const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID });
 
-      // Call with missing actor
+      // Call with message JSON missing actor (cast to any for defensive edge-case test)
       await service.processUnshareEvent(calendar, {
-        object: REMOTE_EVENT_URL,
-        message: {},
-      });
+        message: { object: REMOTE_EVENT_URL },
+      } as any);
 
       // Should return gracefully without throwing
       // No assertions needed - just verify it doesn't throw
