@@ -475,6 +475,51 @@ describe('EventObject', () => {
       expect(stringResult.location.name).toBe('Some Place');
     });
 
+    it('should sanitize HTML in pavillion:content name and description fields', () => {
+      const apObject = {
+        'pavillion:content': {
+          en: { name: '<script>alert("xss")</script>Event', description: '<img src=x onerror=alert(1)>Desc' },
+          es: { name: '<b>Evento</b>', description: 'Normal' },
+        },
+      };
+
+      const result = EventObject.fromActivityPubObject(apObject);
+      expect(result.content.en.name).toBe('alert("xss")Event');
+      expect(result.content.en.description).toBe('Desc');
+      expect(result.content.es.name).toBe('Evento');
+      expect(result.content.es.description).toBe('Normal');
+    });
+
+    it('should sanitize HTML in old Pavillion format content', () => {
+      const apObject = {
+        content: {
+          en: { name: '<script>xss</script>Title', description: 'Clean' },
+        },
+      };
+
+      const result = EventObject.fromActivityPubObject(apObject);
+      expect(result.content.en.name).toBe('xssTitle');
+    });
+
+    it('should sanitize HTML in location name and address fields', () => {
+      const apObject = {
+        location: {
+          type: 'Place',
+          name: '<script>alert(1)</script>Park',
+          address: {
+            type: 'PostalAddress',
+            streetAddress: '<b>123</b> Main St',
+            addressLocality: '<em>Springfield</em>',
+          },
+        },
+      };
+
+      const result = EventObject.fromActivityPubObject(apObject);
+      expect(result.location.name).toBe('alert(1)Park');
+      expect(result.location.address).toBe('123 Main St');
+      expect(result.location.city).toBe('Springfield');
+    });
+
     it('should round-trip through toActivityPubObject and fromActivityPubObject', () => {
       const calendar = new Calendar('calendar-uuid', 'mycal');
       const event = new CalendarEvent('event-uuid', 'calendar-uuid');
@@ -572,6 +617,65 @@ describe('EventObject', () => {
 
       const result = EventObject.fromActivityPubObject(apObject);
       expect(result.content.en.description).toBe('Rock & Roll "Night"');
+    });
+
+    it('should sanitize script tags from name field', () => {
+      const apObject = {
+        name: '<script>alert("xss")</script>My Event',
+        startTime: '2026-05-01T10:00:00Z',
+      };
+
+      const result = EventObject.fromActivityPubObject(apObject);
+      expect(result.content.en.name).toBe('alert("xss")My Event');
+      expect(result.content.en.name).not.toContain('<script>');
+    });
+
+    it('should sanitize HTML from nameMap values', () => {
+      const apObject = {
+        nameMap: { en: '<b>Bold</b> Title', es: '<img src=x onerror=alert(1)>Evento' },
+        summaryMap: { en: 'Desc', es: 'Desc' },
+        startTime: '2026-05-01T10:00:00Z',
+      };
+
+      const result = EventObject.fromActivityPubObject(apObject);
+      expect(result.content.en.name).toBe('Bold Title');
+      expect(result.content.es.name).toBe('Evento');
+    });
+
+    it('should sanitize HTML from summary field', () => {
+      const apObject = {
+        name: 'Test',
+        summary: '<script>steal(cookies)</script>A safe description',
+        startTime: '2026-05-01T10:00:00Z',
+      };
+
+      const result = EventObject.fromActivityPubObject(apObject);
+      expect(result.content.en.description).toBe('steal(cookies)A safe description');
+      expect(result.content.en.description).not.toContain('<script>');
+    });
+
+    it('should sanitize HTML from summaryMap values', () => {
+      const apObject = {
+        nameMap: { en: 'Title' },
+        summaryMap: { en: '<div onmouseover="alert(1)">Hoverable</div>', fr: '<a href="javascript:void(0)">Lien</a>' },
+        startTime: '2026-05-01T10:00:00Z',
+      };
+
+      const result = EventObject.fromActivityPubObject(apObject);
+      expect(result.content.en.description).toBe('Hoverable');
+      expect(result.content.fr.description).toBe('Lien');
+    });
+
+    it('should decode HTML entities in name and summary fields', () => {
+      const apObject = {
+        name: 'Rock &amp; Roll &quot;Night&quot;',
+        summary: 'Fun &amp; Games ahead',
+        startTime: '2026-05-01T10:00:00Z',
+      };
+
+      const result = EventObject.fromActivityPubObject(apObject);
+      expect(result.content.en.name).toBe('Rock & Roll "Night"');
+      expect(result.content.en.description).toBe('Fun & Games ahead');
     });
 
     it('should include contentMap languages in allLanguages set', () => {

@@ -211,12 +211,14 @@ class EventObject extends ActivityPubObject {
 
     // --- Content resolution ---
     // Priority: pavillion:content > bare content (old format) > name/summary/nameMap/summaryMap
+    // All paths sanitize text fields — even pavillion:content from trusted instances,
+    // since any remote instance can include this key in its AP payload.
     if (apObject['pavillion:content']) {
-      result.content = apObject['pavillion:content'];
+      result.content = EventObject._sanitizeContentObject(apObject['pavillion:content']);
     }
     else if (apObject.content && typeof apObject.content === 'object' && !Array.isArray(apObject.content)) {
       // Old Pavillion format: bare content object with language keys
-      result.content = apObject.content;
+      result.content = EventObject._sanitizeContentObject(apObject.content);
     }
     else {
       // Standard AS format: build content from name/summary/nameMap/summaryMap
@@ -231,21 +233,21 @@ class EventObject extends ActivityPubObject {
 
       // Resolve description: prefer summary, fall back to content (strip HTML)
       const bareDescription = apObject.summary
-        || (typeof apObject.content === 'string' ? stripHtmlTags(apObject.content) : '')
-        || '';
+        ? stripHtmlTags(apObject.summary)
+        : (typeof apObject.content === 'string' ? stripHtmlTags(apObject.content) : '');
 
       // If there's a bare name/summary/content but no maps, use 'en' as default language
       if (allLanguages.size === 0 && (apObject.name || bareDescription)) {
         content.en = {
-          name: apObject.name || '',
+          name: apObject.name ? stripHtmlTags(apObject.name) : '',
           description: bareDescription,
         };
       }
       else {
         for (const lang of allLanguages) {
           content[lang] = {
-            name: nameMap[lang] || '',
-            description: summaryMap[lang] || (contentMap[lang] ? stripHtmlTags(contentMap[lang]) : ''),
+            name: nameMap[lang] ? stripHtmlTags(nameMap[lang]) : '',
+            description: summaryMap[lang] ? stripHtmlTags(summaryMap[lang]) : (contentMap[lang] ? stripHtmlTags(contentMap[lang]) : ''),
           };
         }
       }
@@ -309,38 +311,61 @@ class EventObject extends ActivityPubObject {
   }
 
   /**
+   * Sanitizes a Pavillion content object (language-keyed { name, description } entries).
+   * Applies stripHtmlTags to all string values to prevent XSS from federated sources.
+   */
+  private static _sanitizeContentObject(content: Record<string, any>): Record<string, any> {
+    const sanitized: Record<string, any> = {};
+    for (const lang of Object.keys(content)) {
+      const entry = content[lang];
+      if (entry && typeof entry === 'object') {
+        sanitized[lang] = {
+          ...entry,
+          name: typeof entry.name === 'string' ? stripHtmlTags(entry.name) : entry.name,
+          description: typeof entry.description === 'string' ? stripHtmlTags(entry.description) : entry.description,
+        };
+      }
+      else {
+        sanitized[lang] = entry;
+      }
+    }
+    return sanitized;
+  }
+
+  /**
    * Normalizes an AP location value into the EventLocation-compatible shape.
    * Handles Place objects with optional PostalAddress, and plain strings.
+   * All string values are sanitized against XSS.
    */
   private static _normalizeLocation(location: any): Record<string, any> {
     if (typeof location === 'string') {
-      return { name: location };
+      return { name: stripHtmlTags(location) };
     }
 
     if (typeof location === 'object' && location !== null) {
       const normalized: Record<string, any> = {};
 
       if (location.name) {
-        normalized.name = location.name;
+        normalized.name = stripHtmlTags(location.name);
       }
 
       // Extract PostalAddress fields if address is a sub-object
       const addr = location.address;
       if (addr && typeof addr === 'object') {
-        if (addr.streetAddress) normalized.address = addr.streetAddress;
-        if (addr.addressLocality) normalized.city = addr.addressLocality;
-        if (addr.addressRegion) normalized.state = addr.addressRegion;
-        if (addr.postalCode) normalized.postalCode = addr.postalCode;
-        if (addr.addressCountry) normalized.country = addr.addressCountry;
+        if (addr.streetAddress) normalized.address = stripHtmlTags(addr.streetAddress);
+        if (addr.addressLocality) normalized.city = stripHtmlTags(addr.addressLocality);
+        if (addr.addressRegion) normalized.state = stripHtmlTags(addr.addressRegion);
+        if (addr.postalCode) normalized.postalCode = stripHtmlTags(addr.postalCode);
+        if (addr.addressCountry) normalized.country = stripHtmlTags(addr.addressCountry);
       }
       else if (typeof addr === 'string') {
-        normalized.address = addr;
+        normalized.address = stripHtmlTags(addr);
       }
 
       return normalized;
     }
 
-    return { name: String(location) };
+    return { name: stripHtmlTags(String(location)) };
   }
 
   /**
