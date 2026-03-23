@@ -33,6 +33,23 @@ export async function checkGracePeriodExpiry(): Promise<void> {
 }
 
 /**
+ * Check for complimentary grants that have passed their expiration date
+ * and auto-revoke them.
+ *
+ * This job should be run on a regular schedule (e.g., hourly).
+ */
+export async function checkGrantExpiration(): Promise<void> {
+  try {
+    await fundingService.revokeExpiredGrants();
+    logger.info('Grant expiration check completed');
+  }
+  catch (error) {
+    logError(error, '[FundingJobs] Error checking grant expiration');
+    throw error;
+  }
+}
+
+/**
  * Start all funding plan scheduled jobs
  *
  * @returns Function to stop all jobs
@@ -47,10 +64,20 @@ export function startScheduledJobs(): () => void {
     });
   }, 60 * 60 * 1000); // 1 hour in milliseconds
 
-  // Run initial check on startup (after 10 seconds to allow system to stabilize)
+  // Run grant expiration check every hour
+  const grantExpirationInterval = setInterval(() => {
+    checkGrantExpiration().catch((error) => {
+      logError(error, '[FundingJobs] Grant expiration check failed');
+    });
+  }, 60 * 60 * 1000); // 1 hour in milliseconds
+
+  // Run initial checks on startup (after 10 seconds to allow system to stabilize)
   setTimeout(() => {
     checkGracePeriodExpiry().catch((error) => {
       logError(error, '[FundingJobs] Initial grace period check failed');
+    });
+    checkGrantExpiration().catch((error) => {
+      logError(error, '[FundingJobs] Initial grant expiration check failed');
     });
   }, 10000);
 
@@ -58,5 +85,6 @@ export function startScheduledJobs(): () => void {
   return () => {
     logger.info('Stopping scheduled jobs');
     clearInterval(gracePeriodInterval);
+    clearInterval(grantExpirationInterval);
   };
 }

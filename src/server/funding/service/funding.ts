@@ -1225,6 +1225,36 @@ export default class FundingService {
   }
 
   /**
+   * Revoke complimentary grants that have passed their expiration date.
+   *
+   * Finds all grants where expires_at is in the past and revoked_at is null,
+   * then soft-deletes them by setting revoked_at to now.
+   *
+   * Called by scheduled job to auto-revoke expired grants.
+   */
+  async revokeExpiredGrants(): Promise<void> {
+    const expiredGrants = await ComplimentaryGrantEntity.findAll({
+      where: {
+        revoked_at: { [Op.is]: null as any },
+        expires_at: {
+          [Op.not]: null as any,
+          [Op.lte]: new Date(),
+        },
+      },
+    });
+
+    for (const grant of expiredGrants) {
+      grant.revoked_at = new Date();
+      grant.revoked_by = null; // Auto-revoked by system, not by an admin
+      await grant.save();
+
+      this.eventBus.emit('funding:grant:expired', {
+        grant: grant.toModel(),
+      });
+    }
+  }
+
+  /**
    * Check if a calendar has an active funding plan via the calendar_funding_plan join table.
    *
    * Queries CalendarFundingPlanEntity for the given calendarId where the linked
