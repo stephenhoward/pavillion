@@ -334,7 +334,8 @@ class EventObject extends ActivityPubObject {
 
   /**
    * Normalizes an AP location value into the EventLocation-compatible shape.
-   * Handles Place objects with optional PostalAddress, and plain strings.
+   * Handles Place objects with optional PostalAddress, plain strings, and
+   * arrays (Mobilizon hybrid events send [Place, VirtualLocation]).
    * All string values are sanitized against XSS.
    */
   private static _normalizeLocation(location: any): Record<string, any> {
@@ -342,30 +343,68 @@ class EventObject extends ActivityPubObject {
       return { name: stripHtmlTags(location) };
     }
 
+    // Handle arrays: find first Place, optionally extract VirtualLocation URL
+    if (Array.isArray(location)) {
+      const place = location.find((item: any) =>
+        item && typeof item === 'object' && item.type === 'Place',
+      );
+      const virtual = location.find((item: any) =>
+        item && typeof item === 'object' && item.type === 'VirtualLocation',
+      );
+
+      if (place) {
+        const normalized = EventObject._normalizeSingleLocation(place);
+        if (virtual?.url) {
+          normalized.virtualUrl = virtual.url;
+        }
+        return normalized;
+      }
+
+      if (virtual?.url) {
+        return { name: stripHtmlTags(virtual.name || virtual.url), virtualUrl: virtual.url };
+      }
+
+      // Fallback: try the first non-null element
+      const first = location.find((item: any) => item != null);
+      if (first) {
+        return EventObject._normalizeLocation(first);
+      }
+
+      return {};
+    }
+
     if (typeof location === 'object' && location !== null) {
-      const normalized: Record<string, any> = {};
-
-      if (location.name) {
-        normalized.name = stripHtmlTags(location.name);
-      }
-
-      // Extract PostalAddress fields if address is a sub-object
-      const addr = location.address;
-      if (addr && typeof addr === 'object') {
-        if (addr.streetAddress) normalized.address = stripHtmlTags(addr.streetAddress);
-        if (addr.addressLocality) normalized.city = stripHtmlTags(addr.addressLocality);
-        if (addr.addressRegion) normalized.state = stripHtmlTags(addr.addressRegion);
-        if (addr.postalCode) normalized.postalCode = stripHtmlTags(addr.postalCode);
-        if (addr.addressCountry) normalized.country = stripHtmlTags(addr.addressCountry);
-      }
-      else if (typeof addr === 'string') {
-        normalized.address = stripHtmlTags(addr);
-      }
-
-      return normalized;
+      return EventObject._normalizeSingleLocation(location);
     }
 
     return { name: stripHtmlTags(String(location)) };
+  }
+
+  /**
+   * Normalizes a single AP location object (Place or similar) into the
+   * EventLocation-compatible shape. All string values are sanitized against XSS.
+   */
+  private static _normalizeSingleLocation(location: Record<string, any>): Record<string, any> {
+    const normalized: Record<string, any> = {};
+
+    if (location.name) {
+      normalized.name = stripHtmlTags(location.name);
+    }
+
+    // Extract PostalAddress fields if address is a sub-object
+    const addr = location.address;
+    if (addr && typeof addr === 'object') {
+      if (addr.streetAddress) normalized.address = stripHtmlTags(addr.streetAddress);
+      if (addr.addressLocality) normalized.city = stripHtmlTags(addr.addressLocality);
+      if (addr.addressRegion) normalized.state = stripHtmlTags(addr.addressRegion);
+      if (addr.postalCode) normalized.postalCode = stripHtmlTags(addr.postalCode);
+      if (addr.addressCountry) normalized.country = stripHtmlTags(addr.addressCountry);
+    }
+    else if (typeof addr === 'string') {
+      normalized.address = stripHtmlTags(addr);
+    }
+
+    return normalized;
   }
 
   /**
