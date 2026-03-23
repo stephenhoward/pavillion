@@ -19,14 +19,16 @@
 #   --repo=<url>           Git repository URL (default: GitHub repo)
 #
 # What this script does:
-#   1. Creates a 'pavillion' deploy user with sudo access
-#   2. Hardens SSH (disables password auth and root login)
-#   3. Configures UFW firewall (allows SSH, HTTP, HTTPS)
-#   4. Installs Docker CE from official repository
-#   5. Adds deploy user to docker group
-#   6. Creates application directory at /opt/pavillion
-#   7. Clones the repo and runs setup.sh
-#   8. (Staging) Configures webhook auto-deploy
+#   1. Configures locale (suppresses perl warnings on fresh Debian)
+#   2. Creates a 'pavillion' deploy user with sudo access
+#   3. Hardens SSH (disables password auth and root login)
+#   4. Configures UFW firewall (allows SSH, HTTP, HTTPS)
+#   5. Installs Docker CE from official repository
+#   6. Adds deploy user to docker group
+#   7. Creates application directory at /opt/pavillion
+#   8. Clones the repo and runs setup.sh
+#   9. Creates runtime directories (backups, media storage)
+#  10. (Staging) Configures webhook auto-deploy
 #
 # Requirements:
 #   - Fresh Debian 12 (Bookworm) or later
@@ -80,6 +82,22 @@ print_warning() {
 
 print_error() {
   echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# --- Fix locale (suppresses perl warnings on fresh Debian) ------------------
+
+configure_locale() {
+  if locale 2>&1 | grep -q "Cannot set LC_"; then
+    print_step "Configuring locale"
+    apt-get update -qq
+    apt-get install -y -qq locales > /dev/null
+    sed -i 's/^# *en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen
+    locale-gen > /dev/null 2>&1
+    update-locale LANG=en_US.UTF-8
+    export LANG=en_US.UTF-8
+    export LC_ALL=en_US.UTF-8
+    print_success "Configured en_US.UTF-8 locale"
+  fi
 }
 
 # --- Preflight checks --------------------------------------------------------
@@ -273,6 +291,12 @@ create_app_directory() {
   mkdir -p "${APP_DIR}"
   chown "${DEPLOY_USER}:${DEPLOY_USER}" "${APP_DIR}"
   print_success "Created ${APP_DIR} (owned by ${DEPLOY_USER})"
+}
+
+# --- Create runtime directories (after clone) --------------------------------
+
+create_runtime_directories() {
+  print_step "Creating runtime directories"
 
   # Create backup directory owned by the container user (uid/gid 1001).
   # The container's pavillion user is hardcoded to uid 1001 in the Dockerfile.
@@ -474,6 +498,7 @@ main() {
 
   print_header
   preflight
+  configure_locale
   create_deploy_user
   harden_ssh
   configure_firewall
@@ -486,6 +511,7 @@ main() {
   fi
 
   clone_and_setup || print_warning "Clone/setup had errors — see above. Complete manually if needed."
+  create_runtime_directories
 
   if [ "$STAGING_MODE" = true ]; then
     configure_staging || print_warning "Staging configuration had errors — see above."
