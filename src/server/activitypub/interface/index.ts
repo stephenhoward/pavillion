@@ -103,8 +103,8 @@ export default class ActivityPubInterface {
     return this.serverService.addToInbox(calendar, message);
   }
 
-  async readOutbox(calendar: Calendar): Promise<ActivityPubActivity[]> {
-    return this.serverService.readOutbox(calendar);
+  async readOutbox(calendarId: string, cursor?: Date, limit?: number): Promise<{ items: ActivityPubOutboxMessageEntity[], totalItems: number }> {
+    return this.serverService.readOutbox(calendarId, cursor, limit);
   }
 
   parseWebFingerResource(resource: string): { type: 'user' | 'calendar' | 'unknown'; name: string; domain: string } {

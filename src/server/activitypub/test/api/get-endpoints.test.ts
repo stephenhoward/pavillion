@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import sinon from 'sinon';
 import { EventEmitter } from 'events';
 import { DateTime } from 'luxon';
@@ -250,5 +250,186 @@ describe('GET /calendars/:urlname/series (collection)', () => {
     expect(result.orderedItems[0].name).toBe('First Series');
     expect(result.orderedItems[1].name).toBe('Second Series');
     expect(result.orderedItems[0]['pavillion:content']).toBeDefined();
+  });
+});
+
+describe('GET /calendars/:urlname/outbox', () => {
+  let routes: ActivityPubServerRoutes;
+  let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+  let calendarAPI: CalendarInterface;
+  let apInterface: ActivityPubInterface;
+
+  beforeEach(() => {
+    const eventBus = new EventEmitter();
+    apInterface = new ActivityPubInterface(eventBus);
+    calendarAPI = new CalendarInterface(eventBus);
+    routes = new ActivityPubServerRoutes(apInterface, calendarAPI);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+    vi.restoreAllMocks();
+  });
+
+  it('should return 400 for invalid urlname', async () => {
+    const req = { params: { urlname: '!!invalid!!' }, query: {} };
+    const res = { status: sinon.stub(), send: sinon.stub(), setHeader: sinon.stub(), json: sinon.stub() };
+    res.status.returns(res);
+
+    await routes.readOutbox(req as any, res as any);
+
+    expect(res.status.calledWith(400)).toBe(true);
+    expect(res.send.calledWith('Invalid calendar name')).toBe(true);
+  });
+
+  it('should return 404 when calendar not found', async () => {
+    sandbox.stub(calendarAPI, 'getCalendarByName').resolves(null);
+
+    const req = { params: { urlname: 'nonexistent' }, query: {} };
+    const res = { status: sinon.stub(), send: sinon.stub(), setHeader: sinon.stub(), json: sinon.stub() };
+    res.status.returns(res);
+
+    await routes.readOutbox(req as any, res as any);
+
+    expect(res.status.calledWith(404)).toBe(true);
+    expect(res.send.calledWith('Calendar not found')).toBe(true);
+  });
+
+  it('should return OrderedCollection summary without page param', async () => {
+    const calendar = new Calendar('cal-id', 'mycal');
+    sandbox.stub(calendarAPI, 'getCalendarByName').resolves(calendar);
+    sandbox.stub(apInterface, 'readOutbox').resolves({ items: [], totalItems: 5 });
+
+    const req = { params: { urlname: 'mycal' }, query: {} };
+    const res = { setHeader: sinon.stub(), json: sinon.stub() };
+
+    await routes.readOutbox(req as any, res as any);
+
+    expect(res.setHeader.calledWith('Content-Type', 'application/activity+json')).toBe(true);
+    expect(res.json.calledOnce).toBe(true);
+
+    const result = res.json.firstCall.args[0];
+    expect(result['@context']).toBe('https://www.w3.org/ns/activitystreams');
+    expect(result.type).toBe('OrderedCollection');
+    expect(result.totalItems).toBe(5);
+    expect(result.first).toContain('?page=true');
+    expect(result.orderedItems).toBeUndefined();
+  });
+
+  it('should return OrderedCollectionPage with page=true', async () => {
+    const calendar = new Calendar('cal-id', 'mycal');
+    const mockItems = [
+      { message: { type: 'Announce', id: 'act-1', actor: 'https://ex.com/calendars/mycal' }, message_time: new Date('2026-03-20T10:00:00Z') },
+      { message: { type: 'Update', id: 'act-2', actor: 'https://ex.com/calendars/mycal' }, message_time: new Date('2026-03-19T10:00:00Z') },
+    ];
+
+    sandbox.stub(calendarAPI, 'getCalendarByName').resolves(calendar);
+    sandbox.stub(apInterface, 'readOutbox').resolves({ items: mockItems as any, totalItems: 2 });
+
+    const req = { params: { urlname: 'mycal' }, query: { page: 'true' } };
+    const res = { setHeader: sinon.stub(), json: sinon.stub() };
+
+    await routes.readOutbox(req as any, res as any);
+
+    const result = res.json.firstCall.args[0];
+    expect(result.type).toBe('OrderedCollectionPage');
+    expect(result.partOf).toContain('/outbox');
+    expect(result.orderedItems).toHaveLength(2);
+    expect(result.orderedItems[0].type).toBe('Announce');
+    expect(result.next).toBeUndefined(); // Less than 20 items, no next
+  });
+
+  it('should include next link when page is full', async () => {
+    const calendar = new Calendar('cal-id', 'mycal');
+    const mockItems = Array.from({ length: 20 }, (_, i) => ({
+      message: { type: 'Announce', id: `act-${i}` },
+      message_time: new Date(`2026-03-${String(20 - i).padStart(2, '0')}T10:00:00Z`),
+    }));
+
+    sandbox.stub(calendarAPI, 'getCalendarByName').resolves(calendar);
+    sandbox.stub(apInterface, 'readOutbox').resolves({ items: mockItems as any, totalItems: 30 });
+
+    const req = { params: { urlname: 'mycal' }, query: { page: 'true' } };
+    const res = { setHeader: sinon.stub(), json: sinon.stub() };
+
+    await routes.readOutbox(req as any, res as any);
+
+    const result = res.json.firstCall.args[0];
+    expect(result.next).toBeDefined();
+    expect(result.next).toContain('max_time=');
+    expect(result.totalItems).toBe(30);
+  });
+
+  it('should return 400 for invalid cursor', async () => {
+    const calendar = new Calendar('cal-id', 'mycal');
+    sandbox.stub(calendarAPI, 'getCalendarByName').resolves(calendar);
+
+    const req = { params: { urlname: 'mycal' }, query: { page: 'true', max_time: 'not-a-date' } };
+    const res = { status: sinon.stub(), send: sinon.stub(), setHeader: sinon.stub(), json: sinon.stub() };
+    res.status.returns(res);
+
+    await routes.readOutbox(req as any, res as any);
+
+    expect(res.status.calledWith(400)).toBe(true);
+  });
+
+  it('should strip bcc and bto from served messages', async () => {
+    const calendar = new Calendar('cal-id', 'mycal');
+    const mockItems = [{
+      message: {
+        type: 'Announce',
+        id: 'act-1',
+        actor: 'https://ex.com/calendars/mycal',
+        bcc: ['https://private.example/inbox'],
+        bto: ['https://secret.example/inbox'],
+        to: ['https://www.w3.org/ns/activitystreams#Public'],
+      },
+      message_time: new Date('2026-03-20T10:00:00Z'),
+    }];
+
+    sandbox.stub(calendarAPI, 'getCalendarByName').resolves(calendar);
+    sandbox.stub(apInterface, 'readOutbox').resolves({ items: mockItems as any, totalItems: 1 });
+
+    const req = { params: { urlname: 'mycal' }, query: { page: 'true' } };
+    const res = { setHeader: sinon.stub(), json: sinon.stub() };
+
+    await routes.readOutbox(req as any, res as any);
+
+    const result = res.json.firstCall.args[0];
+    expect(result.orderedItems[0].bcc).toBeUndefined();
+    expect(result.orderedItems[0].bto).toBeUndefined();
+    expect(result.orderedItems[0].to).toBeDefined();
+  });
+
+  it('should treat non-true page values as collection summary', async () => {
+    const calendar = new Calendar('cal-id', 'mycal');
+    sandbox.stub(calendarAPI, 'getCalendarByName').resolves(calendar);
+    sandbox.stub(apInterface, 'readOutbox').resolves({ items: [], totalItems: 3 });
+
+    const req = { params: { urlname: 'mycal' }, query: { page: 'false' } };
+    const res = { setHeader: sinon.stub(), json: sinon.stub() };
+
+    await routes.readOutbox(req as any, res as any);
+
+    const result = res.json.firstCall.args[0];
+    expect(result.type).toBe('OrderedCollection');
+  });
+
+  it('should pass cursor to service when max_time provided', async () => {
+    const calendar = new Calendar('cal-id', 'mycal');
+    sandbox.stub(calendarAPI, 'getCalendarByName').resolves(calendar);
+    const readOutboxStub = sandbox.stub(apInterface, 'readOutbox').resolves({ items: [], totalItems: 0 });
+
+    const cursorDate = '2026-03-15T10:00:00.000Z';
+    const req = { params: { urlname: 'mycal' }, query: { page: 'true', max_time: cursorDate } };
+    const res = { setHeader: sinon.stub(), json: sinon.stub() };
+
+    await routes.readOutbox(req as any, res as any);
+
+    expect(readOutboxStub.calledOnce).toBe(true);
+    const [calendarId, cursor] = readOutboxStub.firstCall.args;
+    expect(calendarId).toBe('cal-id');
+    expect(cursor).toBeInstanceOf(Date);
+    expect(cursor.toISOString()).toBe(cursorDate);
   });
 });

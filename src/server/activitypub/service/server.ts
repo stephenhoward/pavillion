@@ -6,7 +6,7 @@ import { Calendar } from "@/common/model/calendar";
 import { WebFingerResponse } from "@/server/activitypub/model/webfinger";
 import { UserProfileResponse } from "@/server/activitypub/model/userprofile";
 import { ActivityPubActivity } from "@/server/activitypub/model/base";
-import { ActivityPubInboxMessageEntity, FollowerCalendarEntity } from "@/server/activitypub/entity/activitypub";
+import { ActivityPubInboxMessageEntity, ActivityPubOutboxMessageEntity, FollowerCalendarEntity } from "@/server/activitypub/entity/activitypub";
 import CalendarInterface from "@/server/calendar/interface";
 import AccountsInterface from "@/server/accounts/interface";
 import CalendarActorService from "@/server/activitypub/service/calendar_actor";
@@ -208,19 +208,44 @@ export default class ActivityPubService {
   }
 
   /**
-     *
-     * @param calendar Retrieve messages from the outbox of the provided calendar
-     * @param limit
-     * @returns a list of ActivityPubMessage objects
-     */
-  // TODO: implement date ranges or other limits
-  async readOutbox(calendar: Calendar): Promise<ActivityPubActivity[]> {
-    let messageEntities = await ActivityPubInboxMessageEntity.findAll({
-      where: { calendar_id: calendar.id },
-      order: [['created_at', 'DESC']],
-    });
+   * Retrieve paginated outbox messages for a calendar.
+   * Returns only public activity types (Announce, Update, Delete) that were
+   * successfully processed.
+   *
+   * @param calendarId - The calendar ID to query
+   * @param cursor - Optional ISO 8601 timestamp cursor for paging (exclusive upper bound)
+   * @param limit - Page size (default 20)
+   * @returns Object with items array and totalItems count
+   */
+  async readOutbox(calendarId: string, cursor?: Date, limit: number = 20): Promise<{ items: ActivityPubOutboxMessageEntity[], totalItems: number }> {
+    const publicTypes = ['Announce', 'Update', 'Delete'];
+    const where: Record<string, any> = {
+      calendar_id: calendarId,
+      type: publicTypes,
+      processed_status: 'ok',
+    };
 
-    return messageEntities.map( (message) => message.toModel() );
+    if (cursor) {
+      const { Op } = await import('sequelize');
+      where.message_time = { [Op.lt]: cursor };
+    }
+
+    const [items, totalItems] = await Promise.all([
+      ActivityPubOutboxMessageEntity.findAll({
+        where,
+        order: [['message_time', 'DESC']],
+        limit,
+      }),
+      ActivityPubOutboxMessageEntity.count({
+        where: {
+          calendar_id: calendarId,
+          type: publicTypes,
+          processed_status: 'ok',
+        },
+      }),
+    ]);
+
+    return { items, totalItems };
   }
 
 }
