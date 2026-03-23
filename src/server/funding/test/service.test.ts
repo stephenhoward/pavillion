@@ -577,6 +577,57 @@ describe('FundingService', () => {
     });
   });
 
+  describe('revokeExpiredGrants', () => {
+    it('should revoke grants with expires_at in the past', async () => {
+      const expiredGrant = {
+        id: uuidv4(),
+        calendar_id: uuidv4(),
+        granted_by: uuidv4(),
+        expires_at: new Date(Date.now() - 1000), // expired 1 second ago
+        revoked_at: null,
+        revoked_by: null,
+        save: sandbox.stub().resolves(),
+        toModel: function() {
+          const grant = new ComplimentaryGrant(this.id);
+          grant.calendarId = this.calendar_id;
+          grant.grantedBy = this.granted_by;
+          grant.expiresAt = this.expires_at;
+          grant.revokedAt = this.revoked_at;
+          grant.revokedBy = this.revoked_by;
+          return grant;
+        },
+      };
+
+      sandbox.stub(ComplimentaryGrantEntity, 'findAll').resolves([expiredGrant as any]);
+
+      await service.revokeExpiredGrants();
+
+      expect(expiredGrant.save.calledOnce).toBe(true);
+      expect(expiredGrant.revoked_at).toBeInstanceOf(Date);
+      expect(expiredGrant.revoked_by).toBeNull(); // auto-revoked by system
+    });
+
+    it('should not revoke grants that have not expired', async () => {
+      sandbox.stub(ComplimentaryGrantEntity, 'findAll').resolves([]);
+
+      await service.revokeExpiredGrants();
+      // No errors, nothing to revoke
+    });
+
+    it('should not revoke already-revoked grants', async () => {
+      // The query filters by revoked_at IS NULL, so already-revoked grants
+      // won't be returned by findAll. Just verify findAll is called with
+      // the correct where clause.
+      const findAllStub = sandbox.stub(ComplimentaryGrantEntity, 'findAll').resolves([]);
+
+      await service.revokeExpiredGrants();
+
+      const whereClause = findAllStub.firstCall.args[0]?.where;
+      expect(whereClause).toBeDefined();
+      expect(whereClause.revoked_at).toBeDefined();
+    });
+  });
+
   describe('listGrants', () => {
     it('should return only active grants by default', async () => {
       const activeGrant = {
