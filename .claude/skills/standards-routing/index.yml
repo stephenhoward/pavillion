@@ -113,6 +113,32 @@ security:
     description: v-html with user data, Handlebars triple-brace, translation key injection
     skill: security-playbook
 
+privacy:
+  api-responses:
+    description: Public vs authenticated API field exposure, toObject() auditing, account ID leakage
+    skill: privacy-playbook
+  data-storage:
+    description: IP hashing, email hashing, retention policies, data minimization in entities
+    skill: privacy-playbook
+  email-communications:
+    description: PII in email bodies, headers, reply-to addresses, template data
+    skill: privacy-playbook
+  error-responses:
+    description: Account enumeration, PII in validation errors, internal IDs in errors
+    skill: privacy-playbook
+  federation:
+    description: AP actor profiles, event attribution, follower lists, report forwarding PII
+    skill: privacy-playbook
+  frontend-exposure:
+    description: Cookies for anonymous visitors, browser storage, analytics absence, DevTools visibility
+    skill: privacy-playbook
+  logging:
+    description: Pino structured logging, IP addresses, email/username/account ID in logs
+    skill: privacy-playbook
+  moderation-privacy:
+    description: Reporter anonymity, admin visibility, IP lifecycle, reporter-to-reported isolation
+    skill: privacy-playbook
+
 complexity:
   principles:
     description: Scope creep, YAGNI, consistency, maintainability, simplicity
