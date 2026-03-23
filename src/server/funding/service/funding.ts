@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
-import { Op } from 'sequelize';
+import { Op, Transaction } from 'sequelize';
 import config from 'config';
 import {
   FundingSettings,
@@ -18,6 +18,7 @@ import { FundingEventEntity } from '@/server/funding/entity/funding_event';
 import { ComplimentaryGrantEntity } from '@/server/funding/entity/complimentary_grant';
 import { CalendarFundingPlanEntity } from '@/server/funding/entity/calendar_funding_plan';
 import { AccountEntity, AccountRoleEntity } from '@/server/common/entity/account';
+import db from '@/server/common/entity/db';
 import { ProviderFactory } from '@/server/funding/service/provider/factory';
 import {
   WebhookEvent,
@@ -1117,33 +1118,8 @@ export default class FundingService {
       - providerSubscription.currentPeriodStart.getTime();
     const billingCycle: BillingCycle = periodMs > 60 * 24 * 60 * 60 * 1000 ? 'yearly' : 'monthly';
 
-    // Create local FundingPlan record
-    const fundingPlan = new FundingPlan(uuidv4());
-    fundingPlan.accountId = event.accountId;
-    fundingPlan.providerConfigId = providerConfigId;
-    fundingPlan.providerSubscriptionId = event.subscriptionId;
-    fundingPlan.providerCustomerId = event.customerId;
-    fundingPlan.status = providerSubscription.status;
-    fundingPlan.billingCycle = billingCycle;
-    fundingPlan.amount = providerSubscription.amount;
-    fundingPlan.currency = providerSubscription.currency;
-    fundingPlan.currentPeriodStart = providerSubscription.currentPeriodStart;
-    fundingPlan.currentPeriodEnd = providerSubscription.currentPeriodEnd;
-
-    const entity = FundingPlanEntity.fromModel(fundingPlan);
-    await entity.save();
-
-    // Log the checkout event now that we have a valid funding_plan_id
-    const eventEntity = new FundingEventEntity();
-    eventEntity.id = uuidv4();
-    eventEntity.funding_plan_id = fundingPlan.id;
-    eventEntity.event_type = event.eventType;
-    eventEntity.provider_event_id = event.eventId;
-    eventEntity.payload = JSON.stringify(event.rawPayload);
-    eventEntity.processed_at = new Date();
-    await eventEntity.save();
-
-    // Parse and re-validate calendarIds from metadata
+    // Parse and re-validate calendarIds from metadata before entering the transaction
+    let ownedCalendarIds: string[] = [];
     if (event.calendarIds) {
       let calendarIds: string[];
       try {
@@ -1162,7 +1138,6 @@ export default class FundingService {
       const validCalendarIds = calendarIds.filter((cId) => isValidUUID(cId));
 
       // Re-validate ownership for each calendar
-      const ownedCalendarIds: string[] = [];
       for (const cId of validCalendarIds) {
         try {
           await this.verifyCalendarOwnership(event.accountId, cId);
@@ -1172,22 +1147,53 @@ export default class FundingService {
           // Calendar not owned by this account, skip it
         }
       }
+    }
+
+    // Wrap all mutations in a transaction to prevent orphaned records
+    const fundingPlan = await db.transaction(async (t: Transaction) => {
+      // Create local FundingPlan record
+      const plan = new FundingPlan(uuidv4());
+      plan.accountId = event.accountId!;
+      plan.providerConfigId = providerConfigId;
+      plan.providerSubscriptionId = event.subscriptionId!;
+      plan.providerCustomerId = event.customerId!;
+      plan.status = providerSubscription.status;
+      plan.billingCycle = billingCycle;
+      plan.amount = providerSubscription.amount;
+      plan.currency = providerSubscription.currency;
+      plan.currentPeriodStart = providerSubscription.currentPeriodStart;
+      plan.currentPeriodEnd = providerSubscription.currentPeriodEnd;
+
+      const entity = FundingPlanEntity.fromModel(plan);
+      await entity.save({ transaction: t });
+
+      // Log the checkout event
+      const eventEntity = new FundingEventEntity();
+      eventEntity.id = uuidv4();
+      eventEntity.funding_plan_id = plan.id;
+      eventEntity.event_type = event.eventType;
+      eventEntity.provider_event_id = event.eventId;
+      eventEntity.payload = JSON.stringify(event.rawPayload);
+      eventEntity.processed_at = new Date();
+      await eventEntity.save({ transaction: t });
 
       // Allocate funding to validated calendars
       if (ownedCalendarIds.length > 0) {
-        const perCalendarAmount = Math.floor(fundingPlan.amount / ownedCalendarIds.length);
+        const perCalendarAmount = Math.floor(plan.amount / ownedCalendarIds.length);
 
         for (const calendarId of ownedCalendarIds) {
           await CalendarFundingPlanEntity.create({
             id: uuidv4(),
-            funding_plan_id: fundingPlan.id,
+            funding_plan_id: plan.id,
             calendar_id: calendarId,
             amount: perCalendarAmount,
             end_time: null,
-          });
+          }, { transaction: t });
         }
       }
-    }
+
+      return plan;
+    });
 
     this.eventBus.emit('funding:plan:created', {
       fundingPlan: fundingPlan,
