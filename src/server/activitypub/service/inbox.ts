@@ -1676,20 +1676,18 @@ class ProcessInboxService {
    * Processes an Unfollow action (via Undo) by removing a follower relationship.
    *
    * @param {Calendar} calendar - The calendar being unfollowed
-   * @param {any} message - The message containing the unfollow information
+   * @param {ActivityPubInboxMessageEntity} message - The original Follow inbox message entity
    * @returns {Promise<void>}
    */
-  // TODO: proper message type
-  async processUnfollowAccount(calendar: Calendar, message: any) {
-    // Extract the actor from the original Follow activity message
-    if (!message || (!message.message && !message.actor)) {
+  async processUnfollowAccount(calendar: Calendar, message: ActivityPubInboxMessageEntity) {
+    // Extract the actor from the original Follow activity's stored JSON
+    const activityJson = message.message as Record<string, unknown> | undefined;
+    if (!activityJson) {
       logger.warn(`Unfollow message missing required actor information`);
       return;
     }
 
-    const actor = (typeof message.message === 'object' && message.message?.actor)
-      ? message.message.actor
-      : message.actor;
+    const actor = activityJson.actor as string | undefined;
 
     if (!actor) {
       logger.warn(`Unfollow message actor is null or undefined`);
@@ -1820,20 +1818,21 @@ class ProcessInboxService {
    * Processes an Unshare action (via Undo) for an event.
    *
    * @param {Calendar} calendar - The calendar context for the unshare
-   * @param {any} message - The message containing the unshare information
+   * @param {ActivityPubInboxMessageEntity} message - The original Announce inbox message entity
    * @returns {Promise<void>}
    */
-  // TODO: proper message type
-  async processUnshareEvent(calendar: Calendar, message: any) {
-    // Extract event ID from the object (either a string URL or an object with id)
-    if (!message || !message.object) {
+  async processUnshareEvent(calendar: Calendar, message: ActivityPubInboxMessageEntity) {
+    // Extract event ID and actor from the original Announce activity's stored JSON
+    const activityJson = message.message as Record<string, unknown> | undefined;
+    if (!activityJson) {
       logger.warn(`Unshare message missing object`);
       return;
     }
 
-    const eventId = typeof message.object === 'string'
-      ? message.object
-      : message.object?.id;
+    const objectField = activityJson.object;
+    const eventId = typeof objectField === 'string'
+      ? objectField
+      : (objectField as Record<string, unknown> | undefined)?.id as string | undefined;
 
     if (!eventId) {
       logger.warn(`Unshare message object missing id`);
@@ -1841,14 +1840,7 @@ class ProcessInboxService {
     }
 
     // Extract the actor from the original Announce activity message
-    if (!message.message && !message.actor) {
-      logger.warn(`Unshare message missing actor information`);
-      return;
-    }
-
-    const actor = (typeof message.message === 'object' && message.message?.actor)
-      ? message.message.actor
-      : message.actor;
+    const actor = activityJson.actor as string | undefined;
 
     if (!actor) {
       logger.warn(`Unshare message actor is null or undefined`);
