@@ -513,6 +513,65 @@ describe('EventObject', () => {
       expect(result.content.en.description).toBe('Rock & Roll "Night"');
     });
 
+    it('should sanitize script tags from name field', () => {
+      const apObject = {
+        name: '<script>alert("xss")</script>My Event',
+        startTime: '2026-05-01T10:00:00Z',
+      };
+
+      const result = EventObject.fromActivityPubObject(apObject);
+      expect(result.content.en.name).toBe('alert("xss")My Event');
+      expect(result.content.en.name).not.toContain('<script>');
+    });
+
+    it('should sanitize HTML from nameMap values', () => {
+      const apObject = {
+        nameMap: { en: '<b>Bold</b> Title', es: '<img src=x onerror=alert(1)>Evento' },
+        summaryMap: { en: 'Desc', es: 'Desc' },
+        startTime: '2026-05-01T10:00:00Z',
+      };
+
+      const result = EventObject.fromActivityPubObject(apObject);
+      expect(result.content.en.name).toBe('Bold Title');
+      expect(result.content.es.name).toBe('Evento');
+    });
+
+    it('should sanitize HTML from summary field', () => {
+      const apObject = {
+        name: 'Test',
+        summary: '<script>steal(cookies)</script>A safe description',
+        startTime: '2026-05-01T10:00:00Z',
+      };
+
+      const result = EventObject.fromActivityPubObject(apObject);
+      expect(result.content.en.description).toBe('steal(cookies)A safe description');
+      expect(result.content.en.description).not.toContain('<script>');
+    });
+
+    it('should sanitize HTML from summaryMap values', () => {
+      const apObject = {
+        nameMap: { en: 'Title' },
+        summaryMap: { en: '<div onmouseover="alert(1)">Hoverable</div>', fr: '<a href="javascript:void(0)">Lien</a>' },
+        startTime: '2026-05-01T10:00:00Z',
+      };
+
+      const result = EventObject.fromActivityPubObject(apObject);
+      expect(result.content.en.description).toBe('Hoverable');
+      expect(result.content.fr.description).toBe('Lien');
+    });
+
+    it('should decode HTML entities in name and summary fields', () => {
+      const apObject = {
+        name: 'Rock &amp; Roll &quot;Night&quot;',
+        summary: 'Fun &amp; Games ahead',
+        startTime: '2026-05-01T10:00:00Z',
+      };
+
+      const result = EventObject.fromActivityPubObject(apObject);
+      expect(result.content.en.name).toBe('Rock & Roll "Night"');
+      expect(result.content.en.description).toBe('Fun & Games ahead');
+    });
+
     it('should include contentMap languages in allLanguages set', () => {
       const apObject = {
         type: 'Event',

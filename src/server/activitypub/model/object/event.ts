@@ -221,21 +221,21 @@ class EventObject extends ActivityPubObject {
 
       // Resolve description: prefer summary, fall back to content (strip HTML)
       const bareDescription = apObject.summary
-        || (typeof apObject.content === 'string' ? stripHtmlTags(apObject.content) : '')
-        || '';
+        ? stripHtmlTags(apObject.summary)
+        : (typeof apObject.content === 'string' ? stripHtmlTags(apObject.content) : '');
 
       // If there's a bare name/summary/content but no maps, use 'en' as default language
       if (allLanguages.size === 0 && (apObject.name || bareDescription)) {
         content.en = {
-          name: apObject.name || '',
+          name: apObject.name ? stripHtmlTags(apObject.name) : '',
           description: bareDescription,
         };
       }
       else {
         for (const lang of allLanguages) {
           content[lang] = {
-            name: nameMap[lang] || '',
-            description: summaryMap[lang] || (contentMap[lang] ? stripHtmlTags(contentMap[lang]) : ''),
+            name: nameMap[lang] ? stripHtmlTags(nameMap[lang]) : '',
+            description: summaryMap[lang] ? stripHtmlTags(summaryMap[lang]) : (contentMap[lang] ? stripHtmlTags(contentMap[lang]) : ''),
           };
         }
       }
