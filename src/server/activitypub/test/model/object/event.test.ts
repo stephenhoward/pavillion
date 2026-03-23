@@ -520,6 +520,66 @@ describe('EventObject', () => {
       expect(result.location.city).toBe('Springfield');
     });
 
+    it('should handle Mobilizon hybrid location arrays with Place and VirtualLocation', () => {
+      const apObject = {
+        location: [
+          {
+            type: 'Place',
+            name: 'Conference Center',
+            address: {
+              type: 'PostalAddress',
+              streetAddress: '456 Oak Ave',
+              addressLocality: 'Portland',
+            },
+          },
+          {
+            type: 'VirtualLocation',
+            url: 'https://meet.example.com/room-123',
+          },
+        ],
+      };
+
+      const result = EventObject.fromActivityPubObject(apObject);
+
+      expect(result.location.name).toBe('Conference Center');
+      expect(result.location.address).toBe('456 Oak Ave');
+      expect(result.location.city).toBe('Portland');
+      expect(result.location.virtualUrl).toBe('https://meet.example.com/room-123');
+    });
+
+    it('should handle location array with only VirtualLocation', () => {
+      const apObject = {
+        location: [
+          {
+            type: 'VirtualLocation',
+            name: 'Online Meeting',
+            url: 'https://zoom.example.com/meeting',
+          },
+        ],
+      };
+
+      const result = EventObject.fromActivityPubObject(apObject);
+
+      expect(result.location.name).toBe('Online Meeting');
+      expect(result.location.virtualUrl).toBe('https://zoom.example.com/meeting');
+    });
+
+    it('should handle location array with Place only (no VirtualLocation)', () => {
+      const apObject = {
+        location: [
+          {
+            type: 'Place',
+            name: 'City Hall',
+          },
+        ],
+      };
+
+      const result = EventObject.fromActivityPubObject(apObject);
+
+      expect(result.location.name).toBe('City Hall');
+      expect(result.location.virtualUrl).toBeUndefined();
+    });
+
     it('should round-trip through toActivityPubObject and fromActivityPubObject', () => {
       const calendar = new Calendar('calendar-uuid', 'mycal');
       const event = new CalendarEvent('event-uuid', 'calendar-uuid');
