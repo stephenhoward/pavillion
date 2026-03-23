@@ -1,6 +1,7 @@
 <script setup>
-import { reactive, onMounted, watch } from 'vue';
+import { reactive, computed, onMounted, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
+import i18next from 'i18next';
 import SeriesService from '@/client/service/series';
 
 const props = defineProps({
@@ -25,7 +26,7 @@ const { t } = useTranslation('event_editor', {
 });
 
 const seriesService = new SeriesService();
-const currentLanguage = 'en'; // TODO: Get from language picker/preference
+const currentLanguage = computed(() => i18next.language);
 
 const state = reactive({
   availableSeries: [],
@@ -68,7 +69,7 @@ function handleChange(event) {
  * Get the display name for a series
  */
 function getSeriesName(series) {
-  return series.content(currentLanguage)?.name || series.urlName || series.id;
+  return series.content(currentLanguage.value)?.name || series.urlName || series.id;
 }
 
 // Watch for calendarId changes to reload series

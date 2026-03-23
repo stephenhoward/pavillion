@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
+import i18next from 'i18next';
 import { DateTime } from 'luxon';
 import { type FeedEvent } from '@/client/service/feed';
 
@@ -62,7 +63,7 @@ const eventTitle = computed(() => {
   if (!props.event || typeof props.event.content !== 'function') {
     return '';
   }
-  const content = props.event.content('en'); // TODO: Use user's preferred language
+  const content = props.event.content(i18next.language);
   return content?.name || t('untitled_event');
 });
 
@@ -70,7 +71,7 @@ const eventTitle = computed(() => {
  * Get the event description in the appropriate language (full, not truncated).
  */
 const eventDescription = computed(() => {
-  const content = props.event.content('en'); // TODO: Use user's preferred language
+  const content = props.event.content(i18next.language);
   return content?.description || '';
 });
 
