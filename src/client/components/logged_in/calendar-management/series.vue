@@ -1,6 +1,7 @@
 <script setup>
-import { reactive, onMounted, nextTick } from 'vue';
+import { reactive, computed, onMounted, nextTick } from 'vue';
 import { useTranslation } from 'i18next-vue';
+import i18next from 'i18next';
 import { Plus, Pencil, Trash2, ExternalLink } from 'lucide-vue-next';
 import { EventSeries } from '@/common/model/event_series';
 import { EventSeriesContent } from '@/common/model/event_series_content';
@@ -31,7 +32,7 @@ const { t } = useTranslation('series', {
 
 const toast = useToast();
 const seriesService = new SeriesService();
-const currentLanguage = 'en'; // TODO: Get from language picker/preference
+const currentLanguage = computed(() => i18next.language);
 
 const state = reactive({
   series: [],
@@ -82,7 +83,7 @@ function openCreateEditor() {
   );
   // Initialize with current language
   newSeries.addContent(EventSeriesContent.fromObject({
-    language: 'en',
+    language: currentLanguage.value,
     name: '',
     description: '',
   }));

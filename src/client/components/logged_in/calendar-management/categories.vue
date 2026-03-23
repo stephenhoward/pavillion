@@ -247,6 +247,7 @@
 <script setup>
 import { reactive, onMounted, ref, computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
+import i18next from 'i18next';
 import { Plus, Pencil, Trash2, Languages } from 'lucide-vue-next';
 import { EventCategory } from '@/common/model/event_category';
 import CategoryService from '@/client/service/category';
@@ -274,7 +275,7 @@ const { t } = useTranslation('calendars', {
 
 const toast = useToast();
 const categoryService = new CategoryService();
-const currentLanguage = 'en'; // TODO: Get from language picker/preference
+const currentLanguage = computed(() => i18next.language);
 
 const state = reactive({
   categories: [],
@@ -388,7 +389,7 @@ function openCreateEditor() {
   );
   // Initialize with current language
   newCategory.addContent(EventCategoryContent.fromObject({
-    language: 'en',
+    language: currentLanguage.value,
     name: '',
   }));
   state.categoryToEdit = newCategory;
