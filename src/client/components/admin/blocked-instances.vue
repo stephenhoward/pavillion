@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive } from 'vue';
 import { useTranslation } from 'i18next-vue';
+import i18next from 'i18next';
 import { useModerationStore } from '@/client/stores/moderation-store';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
 import type { BlockedInstance } from '@/common/model/blocked_instance';
@@ -128,7 +129,7 @@ async function confirmUnblock() {
 
 function formatDate(dateString: string): string {
   const date = new Date(dateString);
-  return new Intl.DateTimeFormat('en-US', {
+  return new Intl.DateTimeFormat(i18next.language, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',

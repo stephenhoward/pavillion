@@ -1,4 +1,5 @@
 import axios from 'axios';
+import i18next from 'i18next';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
 
 /**
@@ -157,7 +158,7 @@ export default class FundingService {
    */
   static formatCurrency(millicents: number, currency: string): string {
     const amount = this.millicentsToDisplay(millicents);
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat(i18next.language, {
       style: 'currency',
       currency: currency,
     }).format(amount);

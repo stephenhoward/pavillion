@@ -227,6 +227,7 @@
 <script setup lang="ts">
 import { reactive, computed, ref, onMounted, onUnmounted, watch } from 'vue';
 import { useTranslation } from 'i18next-vue';
+import i18next from 'i18next';
 import { useRoute, useRouter } from 'vue-router';
 import { usePublicCalendarStore } from '../stores/publicCalendarStore';
 import CategoryPillSelector from './category-pill-selector.vue';
@@ -308,7 +309,7 @@ const clearButtonLabel = computed(() => {
 // Format a date nicely
 const formatDate = (dateStr: string): string => {
   const date = new Date(dateStr + 'T00:00:00'); // Prevent timezone issues
-  const month = date.toLocaleDateString('en-US', { month: 'short' });
+  const month = date.toLocaleDateString(i18next.language, { month: 'short' });
   const day = date.getDate();
   return `${month} ${day}`;
 };
@@ -325,7 +326,7 @@ const formatDateRange = (start: string, end: string): string => {
 
   // Same date: show just the date (e.g. 'Feb 24') not 'Feb 24-24'
   if (start === end) {
-    const month = startDate.toLocaleDateString('en-US', { month: 'short' });
+    const month = startDate.toLocaleDateString(i18next.language, { month: 'short' });
     return `${month} ${startDate.getDate()}`;
   }
 
@@ -334,12 +335,12 @@ const formatDateRange = (start: string, end: string): string => {
   // When dates span different years, include the year in both labels (e.g., "Dec 30, 2025 – Jan 5, 2026")
   if (crossesYear) {
     const formatWithYear = (d: Date) =>
-      d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      d.toLocaleDateString(i18next.language, { month: 'short', day: 'numeric', year: 'numeric' });
     return `${formatWithYear(startDate)} – ${formatWithYear(endDate)}`;
   }
 
-  const startMonth = startDate.toLocaleDateString('en-US', { month: 'short' });
-  const endMonth = endDate.toLocaleDateString('en-US', { month: 'short' });
+  const startMonth = startDate.toLocaleDateString(i18next.language, { month: 'short' });
+  const endMonth = endDate.toLocaleDateString(i18next.language, { month: 'short' });
   const startDay = startDate.getDate();
   const endDay = endDate.getDate();
 
