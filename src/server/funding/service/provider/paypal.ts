@@ -149,25 +149,25 @@ export class PayPalAdapter implements PaymentProviderAdapter {
   /**
    * Verify webhook signature from PayPal
    *
+   * PayPal webhook verification requires an async API call to PayPal's
+   * /v1/notifications/verify-webhook-signature endpoint, which is incompatible
+   * with the current synchronous adapter interface. Until the interface is made
+   * async and a PayPal webhook route is implemented, all PayPal webhooks are
+   * rejected to prevent processing unverified payloads.
+   *
    * @param payload - Raw webhook payload (string)
    * @param signature - Signature header from webhook request
-   * @returns True if signature is valid, false otherwise
+   * @returns Always false — PayPal webhook verification is not yet implemented
    */
-  verifyWebhookSignature(payload: string, signature: string): boolean {
-    // PayPal webhook verification uses multiple headers
-    // This is a simplified implementation
-    // In production, use PayPal's webhook verification API
-
-    try {
-      // PayPal webhook verification would typically involve:
-      // 1. Extracting transmission ID, timestamp, and signature from headers
-      // 2. Calling PayPal's webhook verification API
-      // For now, we'll do basic validation
-      return signature.length > 0 && payload.length > 0;
-    }
-    catch (err) {
-      return false;
-    }
+  verifyWebhookSignature(_payload: string, _signature: string): boolean {
+    // PayPal webhook verification requires calling PayPal's API:
+    //   POST /v1/notifications/verify-webhook-signature
+    // with transmission_id, transmission_time, cert_url, auth_algo,
+    // transmission_sig, and webhook_id. This is inherently async.
+    //
+    // The adapter interface must be made async before this can be implemented.
+    // Until then, reject all PayPal webhooks to avoid processing unverified data.
+    return false;
   }
 
   /**
