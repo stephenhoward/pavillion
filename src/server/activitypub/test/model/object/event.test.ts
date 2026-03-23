@@ -414,6 +414,51 @@ describe('EventObject', () => {
       expect(stringResult.location.name).toBe('Some Place');
     });
 
+    it('should sanitize HTML in pavillion:content name and description fields', () => {
+      const apObject = {
+        'pavillion:content': {
+          en: { name: '<script>alert("xss")</script>Event', description: '<img src=x onerror=alert(1)>Desc' },
+          es: { name: '<b>Evento</b>', description: 'Normal' },
+        },
+      };
+
+      const result = EventObject.fromActivityPubObject(apObject);
+      expect(result.content.en.name).toBe('alert("xss")Event');
+      expect(result.content.en.description).toBe('Desc');
+      expect(result.content.es.name).toBe('Evento');
+      expect(result.content.es.description).toBe('Normal');
+    });
+
+    it('should sanitize HTML in old Pavillion format content', () => {
+      const apObject = {
+        content: {
+          en: { name: '<script>xss</script>Title', description: 'Clean' },
+        },
+      };
+
+      const result = EventObject.fromActivityPubObject(apObject);
+      expect(result.content.en.name).toBe('xssTitle');
+    });
+
+    it('should sanitize HTML in location name and address fields', () => {
+      const apObject = {
+        location: {
+          type: 'Place',
+          name: '<script>alert(1)</script>Park',
+          address: {
+            type: 'PostalAddress',
+            streetAddress: '<b>123</b> Main St',
+            addressLocality: '<em>Springfield</em>',
+          },
+        },
+      };
+
+      const result = EventObject.fromActivityPubObject(apObject);
+      expect(result.location.name).toBe('alert(1)Park');
+      expect(result.location.address).toBe('123 Main St');
+      expect(result.location.city).toBe('Springfield');
+    });
+
     it('should round-trip through toActivityPubObject and fromActivityPubObject', () => {
       const calendar = new Calendar('calendar-uuid', 'mycal');
       const event = new CalendarEvent('event-uuid', 'calendar-uuid');
