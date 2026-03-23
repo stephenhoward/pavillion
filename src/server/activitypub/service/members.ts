@@ -20,8 +20,8 @@ import UndoActivity from "../model/action/undo";
 import CalendarInterface from "@/server/calendar/interface";
 import { EventObject } from "@/server/activitypub/model/object/event";
 import { addToOutbox as addToOutboxHelper } from "@/server/activitypub/helper/outbox";
-import { validateUrlNotPrivate } from "@/server/activitypub/helper/ip-validation";
-import { PUBLIC_KEY_FETCH_TIMEOUT_MS } from "@/server/activitypub/constants";
+import { validateUrlNotPrivate } from "@/server/common/helper/ip-validation";
+import { PUBLIC_KEY_FETCH_TIMEOUT_MS } from "@/server/common/constants";
 import {
   InvalidRemoteCalendarIdentifierError,
   InvalidSharedEventUrlError,

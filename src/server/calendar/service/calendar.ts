@@ -3,8 +3,8 @@ import { Op, UniqueConstraintError } from 'sequelize';
 import { EventEmitter } from 'events';
 import config from 'config';
 import axios from 'axios';
-import { validateUrlNotPrivate } from '@/server/activitypub/helper/ip-validation';
-import { PUBLIC_KEY_FETCH_TIMEOUT_MS, FEDERATION_HTTP_TIMEOUT_MS } from '@/server/activitypub/constants';
+import { validateUrlNotPrivate } from '@/server/common/helper/ip-validation';
+import { PUBLIC_KEY_FETCH_TIMEOUT_MS, FEDERATION_HTTP_TIMEOUT_MS } from '@/server/common/constants';
 
 import { Calendar, DefaultDateRange } from '@/common/model/calendar';
 import { Account } from '@/common/model/account';

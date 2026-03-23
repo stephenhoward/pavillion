@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import axios from 'axios';
 import sinon from 'sinon';
 import { fetchRemoteObject } from '@/server/activitypub/helper/remote-fetch';
-import { REMOTE_OBJECT_FETCH_TIMEOUT_MS } from '@/server/activitypub/constants';
+import { REMOTE_OBJECT_FETCH_TIMEOUT_MS } from '@/server/common/constants';
 
 describe('fetchRemoteObject', () => {
   let sandbox: sinon.SinonSandbox = sinon.createSandbox();

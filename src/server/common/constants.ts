@@ -1,7 +1,7 @@
 /**
- * ActivityPub Federation Constants
+ * Federation Constants
  *
- * Shared constants used across the ActivityPub federation implementation.
+ * Shared constants used across federation-related operations.
  */
 
 /**

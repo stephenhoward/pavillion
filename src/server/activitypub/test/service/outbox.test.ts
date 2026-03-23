@@ -44,11 +44,11 @@ import {
 
 // Mock the ip-validation module so tests can control SSRF validation behaviour
 // without performing real DNS lookups. Defaults to resolving safely (no throw).
-vi.mock('@/server/activitypub/helper/ip-validation', () => ({
+vi.mock('@/server/common/helper/ip-validation', () => ({
   validateUrlNotPrivate: vi.fn().mockResolvedValue(true),
 }));
 
-import { validateUrlNotPrivate } from '@/server/activitypub/helper/ip-validation';
+import { validateUrlNotPrivate } from '@/server/common/helper/ip-validation';
 
 
 // Test constants for consistent URLs across tests

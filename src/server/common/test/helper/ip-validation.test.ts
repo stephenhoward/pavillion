@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import sinon from 'sinon';
 import dns from 'dns';
 import { promisify } from 'util';
-import * as ipValidation from '@/server/activitypub/helper/ip-validation';
-import { isPrivateIP } from '@/server/activitypub/helper/ip-validation';
+import * as ipValidation from '@/server/common/helper/ip-validation';
+import { isPrivateIP } from '@/server/common/helper/ip-validation';
 
 describe('IP Validation', () => {
   let sandbox: sinon.SinonSandbox;

@@ -19,8 +19,8 @@ import UndoActivity from "@/server/activitypub/model/action/undo";
 import FlagActivity from "@/server/activitypub/model/action/flag";
 import { ActivityPubObject } from "@/server/activitypub/model/base";
 import CalendarInterface from "@/server/calendar/interface";
-import { FEDERATION_HTTP_TIMEOUT_MS } from "@/server/activitypub/constants";
-import { validateUrlNotPrivate } from "@/server/activitypub/helper/ip-validation";
+import { FEDERATION_HTTP_TIMEOUT_MS } from "@/server/common/constants";
+import { validateUrlNotPrivate } from "@/server/common/helper/ip-validation";
 
 /**
  * Service responsible for processing and distributing outgoing ActivityPub messages.
