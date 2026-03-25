@@ -30,12 +30,12 @@ export class EventSeries extends TranslatedModel<EventSeriesContent> {
 
   /**
    * Validates that the series has required information.
-   * urlName must match the same pattern as Calendar.urlName: /^[a-z0-9][a-z0-9_]{2,23}$/i
+   * urlName must match the same pattern as Calendar.urlName: /^[a-z0-9][a-z0-9_-]{1,22}[a-z0-9_]$/i
    */
   isValid(): boolean {
     return (
       this.calendarId.length > 0 &&
-      /^[a-z0-9][a-z0-9_]{2,23}$/i.test(this.urlName) &&
+      /^[a-z0-9][a-z0-9_-]{1,22}[a-z0-9_]$/i.test(this.urlName) &&
       this.getLanguages().length > 0 &&
       this.getLanguages().every(lang => this.hasContent(lang))
     );

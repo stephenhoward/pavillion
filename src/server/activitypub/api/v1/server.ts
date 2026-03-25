@@ -423,7 +423,7 @@ export default class ActivityPubServerRoutes {
    */
   async readOutbox(req: Request, res: Response): Promise<void> {
     const { urlname } = req.params;
-    const VALID_URLNAME = /^[a-z0-9][a-z0-9_]{2,23}$/i;
+    const VALID_URLNAME = /^[a-z0-9][a-z0-9_-]{1,22}[a-z0-9_]$/i;
 
     if (!VALID_URLNAME.test(urlname)) {
       res.status(400).send('Invalid calendar name');

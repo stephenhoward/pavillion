@@ -56,6 +56,8 @@ describe('SeriesService', () => {
       expect(seriesService.isValidUrlName('my_series')).toBe(true);
       expect(seriesService.isValidUrlName('series123')).toBe(true);
       expect(seriesService.isValidUrlName('abc')).toBe(true);
+      expect(seriesService.isValidUrlName('has-hyphen')).toBe(true);
+      expect(seriesService.isValidUrlName('my-series-name')).toBe(true);
     });
 
     it('should return false for invalid URL names', () => {
@@ -64,7 +66,8 @@ describe('SeriesService', () => {
       expect(seriesService.isValidUrlName('thisisamuchtoolongusernamethatexceeds')).toBe(false);
       expect(seriesService.isValidUrlName('no spaces')).toBe(false);
       expect(seriesService.isValidUrlName('')).toBe(false);
-      expect(seriesService.isValidUrlName('has-hyphen')).toBe(false);
+      expect(seriesService.isValidUrlName('-leadhyphen')).toBe(false);
+      expect(seriesService.isValidUrlName('trailhyphen-')).toBe(false);
     });
   });
 

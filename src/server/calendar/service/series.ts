@@ -39,13 +39,13 @@ class SeriesService {
 
   /**
    * Validate a series URL name against the allowed pattern.
-   * Same regex as Calendar.isValidUrlName: /^[a-z0-9][a-z0-9_]{2,23}$/i
+   * Same regex as Calendar.isValidUrlName: /^[a-z0-9][a-z0-9_-]{1,22}[a-z0-9_]$/i
    *
    * @param urlName - The URL name to validate
    * @returns true if valid, false otherwise
    */
   isValidUrlName(urlName: string): boolean {
-    return /^[a-z0-9][a-z0-9_]{2,23}$/i.test(urlName);
+    return /^[a-z0-9][a-z0-9_-]{1,22}[a-z0-9_]$/i.test(urlName);
   }
 
   /**
