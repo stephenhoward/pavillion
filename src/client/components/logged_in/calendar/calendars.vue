@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeMount, reactive, ref } from 'vue';
+import { onBeforeMount, reactive, ref, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import CalendarService from '@/client/service/calendar';
@@ -24,6 +24,18 @@ const state = reactive({
 });
 
 const showCreateSheet = ref(false);
+const createSheetTriggerEl = ref<HTMLElement | null>(null);
+
+function openCreateSheet(event: MouseEvent) {
+  createSheetTriggerEl.value = (event?.currentTarget as HTMLElement) ?? null;
+  showCreateSheet.value = true;
+}
+
+async function closeCreateSheet() {
+  showCreateSheet.value = false;
+  await nextTick();
+  createSheetTriggerEl.value?.focus();
+}
 
 onBeforeMount(async () => {
   loadCalendars();
@@ -67,8 +79,7 @@ async function loadCalendars() {
           <h2>{{ t('my_calendars_header') }}</h2>
           <PillButton
             variant="primary"
-            :aria-label="t('aria_create_new_calendar')"
-            @click="showCreateSheet = true"
+            @click="openCreateSheet"
           >
             {{ t('create_new_calendar_button') }}
           </PillButton>
@@ -90,7 +101,7 @@ async function loadCalendars() {
 
     <CreateCalendarSheet
       v-if="showCreateSheet"
-      @close="showCreateSheet = false"
+      @close="closeCreateSheet"
     />
   </main>
 </template>

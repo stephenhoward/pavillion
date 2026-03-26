@@ -229,8 +229,9 @@ async function createCalendar() {
     background: var(--pav-color-surface-primary);
     color: var(--pav-color-text-primary);
 
-    &:focus {
-      outline: none;
+    &:focus-visible {
+      outline: 2px solid var(--pav-border-color-focus);
+      outline-offset: 2px;
       border-color: var(--pav-border-color-focus);
     }
   }
@@ -246,10 +247,10 @@ div.calendar-url {
     font-size: 100%;
     color: var(--pav-color-text-primary);
     text-align: end;
-    &:focus {
+    &:focus-visible {
       outline: none;
-      border-bottom: 1px solid var(--pav-border-color-focus);
-      box-shadow: none;
+      border-bottom: 2px solid var(--pav-border-color-focus);
+      box-shadow: 0 2px 0 0 var(--pav-border-color-focus);
     }
   }
   &.calendar-url--error #calendar-name {

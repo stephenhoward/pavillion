@@ -156,6 +156,18 @@ const showReportDialog = ref(false);
 
 // Create calendar sheet state
 const showCreateCalendarSheet = ref(false);
+const createCalendarSheetTriggerEl = ref<HTMLElement | null>(null);
+
+function openCreateCalendarSheet(event: MouseEvent) {
+  createCalendarSheetTriggerEl.value = (event?.currentTarget as HTMLElement) ?? null;
+  showCreateCalendarSheet.value = true;
+}
+
+async function closeCreateCalendarSheet() {
+  showCreateCalendarSheet.value = false;
+  await nextTick();
+  createCalendarSheetTriggerEl.value?.focus();
+}
 const reportEventId = ref('');
 const reportEventTitle = ref('');
 
@@ -667,8 +679,7 @@ const selectAllAriaLabel = computed(() => {
             <div class="header-actions">
               <PillButton
                 variant="ghost"
-                @click="showCreateCalendarSheet = true"
-                :aria-label="tList('aria_create_new_calendar')"
+                @click="openCreateCalendarSheet"
               >
                 {{ tList('create_new_calendar_button') }}
               </PillButton>
@@ -1027,7 +1038,7 @@ const selectAllAriaLabel = computed(() => {
     <!-- Create Calendar Sheet -->
     <CreateCalendarSheet
       v-if="showCreateCalendarSheet"
-      @close="showCreateCalendarSheet = false"
+      @close="closeCreateCalendarSheet"
     />
   </div>
 </template>
