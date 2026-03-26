@@ -206,15 +206,17 @@ async function createCalendar() {
 </template>
 
 <style scoped lang="scss">
+@use '@/client/assets/style/tokens/breakpoint-mixins' as *;
+
 .calendar-title-field {
-  margin-bottom: var(--pav-space-md);
+  margin-block-end: var(--pav-space-md);
 
   label {
     display: block;
     font-size: var(--pav-font-size-body);
     font-weight: var(--pav-font-weight-medium);
     color: var(--pav-color-text-primary);
-    margin-bottom: var(--pav-space-xs);
+    margin-block-end: var(--pav-space-xs);
   }
 
   .title-input {
@@ -235,7 +237,7 @@ async function createCalendar() {
 }
 
 div.calendar-url {
-  font-size: 12pt;
+  font-size: var(--pav-font-size-body);
   color: var(--pav-color-text-secondary);
   #calendar-name {
     border: 0;
@@ -253,16 +255,15 @@ div.calendar-url {
   &.calendar-url--error #calendar-name {
     border-bottom-color: var(--pav-color-border-error);
   }
-  @media (min-width: 768px) {
-    font-size: 14pt;
+  @include pav-media('md') {
+    font-size: var(--pav-font-size-body-large);
   }
 }
 
 .help-text {
   color: var(--pav-color-text-secondary);
-  font-size: 0.85rem;
-  margin-top: 0.5rem;
-  margin-bottom: 0.5rem;
-  line-height: 1.4;
+  font-size: var(--pav-font-size-small);
+  margin-block: var(--pav-space-xs);
+  line-height: var(--pav-line-height-body);
 }
 </style>

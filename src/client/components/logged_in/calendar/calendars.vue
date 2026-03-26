@@ -101,7 +101,7 @@ async function loadCalendars() {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--pav-space-md);
+  margin-block-end: var(--pav-space-md);
 }
 
 /* Semantic nav styling */
