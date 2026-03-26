@@ -24,6 +24,7 @@ import RepostCategoriesModal from '@/client/components/logged_in/repost-categori
 import CategoriesTab from '@/client/components/logged_in/calendar-management/categories.vue';
 import SeriesTab from '@/client/components/logged_in/calendar-management/series.vue';
 import PlacesTab from '@/client/components/logged_in/calendar/places-tab.vue';
+import CreateCalendarSheet from './CreateCalendarSheet.vue';
 
 const { t } = useTranslation('calendars',{
   keyPrefix: 'calendar',
@@ -41,6 +42,11 @@ const { t: tReport } = useTranslation('system', {
 
 // For repost edit dialog translations
 const { t: tFeed } = useTranslation('feed');
+
+// For create calendar button translations
+const { t: tList } = useTranslation('calendars', {
+  keyPrefix: 'list',
+});
 
 const eventService = new EventService();
 const calendarStore = useCalendarStore();
@@ -147,6 +153,9 @@ const initialFilters = reactive({
 
 // Report dialog state
 const showReportDialog = ref(false);
+
+// Create calendar sheet state
+const showCreateCalendarSheet = ref(false);
 const reportEventId = ref('');
 const reportEventTitle = ref('');
 
@@ -656,6 +665,13 @@ const selectAllAriaLabel = computed(() => {
               <span v-else>{{ calendarUrlName }}</span>
             </h1>
             <div class="header-actions">
+              <PillButton
+                variant="ghost"
+                @click="showCreateCalendarSheet = true"
+                :aria-label="tList('aria_create_new_calendar')"
+              >
+                {{ tList('create_new_calendar_button') }}
+              </PillButton>
               <RouterLink
                 v-if="state.calendar"
                 :to="{ name: 'calendar_management', params: { calendar: state.calendar.urlName } }"
@@ -1006,6 +1022,12 @@ const selectAllAriaLabel = computed(() => {
       :confirm-label="tFeed('categoryMapping.save')"
       @confirm="handleRepostCategoryUpdate"
       @cancel="handleRepostModalCancel"
+    />
+
+    <!-- Create Calendar Sheet -->
+    <CreateCalendarSheet
+      v-if="showCreateCalendarSheet"
+      @close="showCreateCalendarSheet = false"
     />
   </div>
 </template>
