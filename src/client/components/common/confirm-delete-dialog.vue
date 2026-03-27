@@ -56,10 +56,10 @@ function handleConfirm() {
     @close="handleClose"
   >
     <div class="delete-dialog">
-      <p class="delete-description">
+      <p class="dialog-description">
         {{ message }}
       </p>
-      <div class="delete-actions">
+      <div class="dialog-actions">
         <button
           type="button"
           class="btn-ghost"

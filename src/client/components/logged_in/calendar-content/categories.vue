@@ -101,7 +101,7 @@
       @close="cancelDeleteCategory"
     >
       <div class="delete-dialog">
-        <p class="delete-description">
+        <p class="dialog-description">
           Are you sure you want to delete "<strong>{{ state.categoryToDelete.content(currentLanguage)?.name || 'Unnamed Category' }}</strong>"?
           <span v-if="(state.categoryToDelete.eventCount || 0) > 0">
             This category is assigned to <strong>{{ t('event_count', { count: state.categoryToDelete.eventCount }) }}</strong>.
@@ -157,7 +157,7 @@
           </label>
         </div>
 
-        <div class="delete-actions">
+        <div class="dialog-actions">
           <button
             type="button"
             class="btn-ghost"
@@ -215,7 +215,7 @@
           {{ t('total_affected_events') }}: <span class="total-count">{{ totalAffectedEvents }}</span>
         </div>
 
-        <div class="delete-actions">
+        <div class="dialog-actions">
           <button
             type="button"
             class="btn-ghost"
@@ -666,7 +666,7 @@ onMounted(async () => {
 .delete-dialog {
   @include admin-dialog-layout;
 
-  .delete-description {
+  .dialog-description {
     margin-bottom: var(--pav-space-4);
   }
 

@@ -173,13 +173,13 @@
   }
 }
 
-// Delete dialog layout pattern (confirmation modals)
+// Confirmation dialog layout pattern (delete, merge, etc.)
 @mixin admin-dialog-layout {
   display: flex;
   flex-direction: column;
   gap: var(--pav-space-4);
 
-  .delete-description {
+  .dialog-description {
     margin: 0;
     color: var(--pav-color-stone-600);
     font-size: 0.875rem;
@@ -190,7 +190,7 @@
     }
   }
 
-  .delete-actions {
+  .dialog-actions {
     display: flex;
     gap: var(--pav-space-3);
     justify-content: flex-end;
