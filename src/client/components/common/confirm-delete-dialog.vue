@@ -1,9 +1,8 @@
 <script setup>
-import { nextTick } from 'vue';
 import ModalLayout from '@/client/components/common/modal.vue';
 import PillButton from '@/client/components/common/pill-button.vue';
 
-const props = defineProps({
+defineProps({
   visible: {
     type: Boolean,
     required: true,
@@ -36,17 +35,12 @@ const props = defineProps({
     type: String,
     default: '',
   },
-  triggerElement: {
-    type: Object,
-    default: null,
-  },
 });
 
 const emit = defineEmits(['confirm', 'close']);
 
 function handleClose() {
   emit('close');
-  nextTick(() => props.triggerElement?.focus());
 }
 
 function handleConfirm() {
@@ -90,6 +84,6 @@ function handleConfirm() {
 @use '../../assets/style/components/calendar-admin' as *;
 
 .delete-dialog {
-  @include admin-delete-dialog;
+  @include admin-dialog-layout;
 }
 </style>

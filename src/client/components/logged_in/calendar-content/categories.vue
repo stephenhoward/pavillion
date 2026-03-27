@@ -664,7 +664,7 @@ onMounted(async () => {
 }
 
 .delete-dialog {
-  @include admin-delete-dialog;
+  @include admin-dialog-layout;
 
   .delete-description {
     margin-bottom: var(--pav-space-4);
@@ -780,7 +780,7 @@ onMounted(async () => {
 }
 
 .merge-dialog {
-  @include admin-delete-dialog;
+  @include admin-dialog-layout;
 
   .merge-description {
     margin-bottom: var(--pav-space-4);

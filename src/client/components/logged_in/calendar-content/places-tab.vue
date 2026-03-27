@@ -119,10 +119,12 @@ function confirmDelete(location, event) {
  * Cancel delete dialog
  */
 function cancelDelete() {
+  const trigger = state.triggerElement;
   state.locationToDelete = null;
   state.showDeleteDialog = false;
   state.isDeleting = '';
   state.triggerElement = null;
+  nextTick(() => trigger?.focus());
 }
 
 /**
@@ -269,7 +271,6 @@ onMounted(async () => {
       :delete-label="t('delete_button')"
       :deleting-label="t('deleting')"
       :cancel-label="t('cancel')"
-      :trigger-element="state.triggerElement"
       modal-class="delete-place-modal"
       @confirm="deleteLocation"
       @close="cancelDelete"

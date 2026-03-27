@@ -174,7 +174,7 @@
 }
 
 // Delete dialog layout pattern (confirmation modals)
-@mixin admin-delete-dialog {
+@mixin admin-dialog-layout {
   display: flex;
   flex-direction: column;
   gap: var(--pav-space-4);

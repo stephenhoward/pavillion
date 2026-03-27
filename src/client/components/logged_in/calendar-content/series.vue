@@ -160,10 +160,12 @@ function confirmDelete(series, event) {
  * Cancel delete dialog
  */
 function cancelDelete() {
+  const trigger = state.triggerElement;
   state.seriesToDelete = null;
   state.showDeleteDialog = false;
   state.isDeleting = '';
   state.triggerElement = null;
+  nextTick(() => trigger?.focus());
 }
 
 /**
@@ -299,7 +301,6 @@ onMounted(async () => {
       :delete-label="t('delete_button')"
       :deleting-label="t('deleting')"
       :cancel-label="t('cancel_button')"
-      :trigger-element="state.triggerElement"
       modal-class="delete-series-modal"
       @confirm="deleteSeries"
       @close="cancelDelete"
