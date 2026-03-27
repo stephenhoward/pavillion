@@ -3,7 +3,7 @@ import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { RouteRecordRaw } from 'vue-router';
 import { nextTick } from 'vue';
 import { mountComponent } from '@/client/test/lib/vue';
-import SeriesTab from '@/client/components/logged_in/calendar-management/series.vue';
+import SeriesTab from '@/client/components/logged_in/calendar-content/series.vue';
 import SeriesService from '@/client/service/series';
 import { EventSeries } from '@/common/model/event_series';
 import { EventSeriesContent } from '@/common/model/event_series_content';

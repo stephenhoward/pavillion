@@ -3,7 +3,7 @@ import { createMemoryHistory, createRouter, Router } from 'vue-router';
 import { RouteRecordRaw } from 'vue-router';
 import { nextTick } from 'vue';
 import { mountComponent } from '@/client/test/lib/vue';
-import PlacesTab from '@/client/components/logged_in/calendar/places-tab.vue';
+import PlacesTab from '@/client/components/logged_in/calendar-content/places-tab.vue';
 import LocationService from '@/client/service/location';
 import { EventLocation } from '@/common/model/location';
 
