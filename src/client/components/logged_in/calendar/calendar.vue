@@ -3,7 +3,7 @@ import { onBeforeMount, reactive, ref, watch, computed, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
-import { Calendar, MapPin, Languages, Repeat, Pencil, Copy, Flag } from 'lucide-vue-next';
+import { Plus, Calendar, MapPin, Languages, Repeat, Pencil, Copy, Flag } from 'lucide-vue-next';
 import { useEventStore } from '@/client/stores/eventStore';
 import { useToast } from '@/client/composables/useToast';
 import { useTabNavigation } from '@/client/composables/useTabNavigation';
@@ -24,6 +24,7 @@ import RepostCategoriesModal from '@/client/components/logged_in/repost-categori
 import CategoriesTab from '@/client/components/logged_in/calendar-management/categories.vue';
 import SeriesTab from '@/client/components/logged_in/calendar-management/series.vue';
 import PlacesTab from '@/client/components/logged_in/calendar/places-tab.vue';
+import CreateCalendarSheet from './CreateCalendarSheet.vue';
 
 const { t } = useTranslation('calendars',{
   keyPrefix: 'calendar',
@@ -41,6 +42,11 @@ const { t: tReport } = useTranslation('system', {
 
 // For repost edit dialog translations
 const { t: tFeed } = useTranslation('feed');
+
+// For create calendar button translations
+const { t: tList } = useTranslation('calendars', {
+  keyPrefix: 'list',
+});
 
 const eventService = new EventService();
 const calendarStore = useCalendarStore();
@@ -147,6 +153,21 @@ const initialFilters = reactive({
 
 // Report dialog state
 const showReportDialog = ref(false);
+
+// Create calendar sheet state
+const showCreateCalendarSheet = ref(false);
+const createCalendarSheetTriggerEl = ref<HTMLElement | null>(null);
+
+function openCreateCalendarSheet(event: MouseEvent) {
+  createCalendarSheetTriggerEl.value = (event?.currentTarget as HTMLElement) ?? null;
+  showCreateCalendarSheet.value = true;
+}
+
+async function closeCreateCalendarSheet() {
+  showCreateCalendarSheet.value = false;
+  await nextTick();
+  createCalendarSheetTriggerEl.value?.focus();
+}
 const reportEventId = ref('');
 const reportEventTitle = ref('');
 
@@ -656,6 +677,12 @@ const selectAllAriaLabel = computed(() => {
               <span v-else>{{ calendarUrlName }}</span>
             </h1>
             <div class="header-actions">
+              <PillButton
+                variant="ghost"
+                @click="openCreateCalendarSheet"
+              >
+                {{ tList('create_new_calendar_button') }}
+              </PillButton>
               <RouterLink
                 v-if="state.calendar"
                 :to="{ name: 'calendar_management', params: { calendar: state.calendar.urlName } }"
@@ -670,13 +697,6 @@ const selectAllAriaLabel = computed(() => {
                   {{ t('manage_calendar') }}
                 </PillButton>
               </RouterLink>
-              <PillButton
-                variant="primary"
-                @click="newEvent"
-                :aria-label="t('createEvent')"
-              >
-                {{ t('createEvent') }}
-              </PillButton>
             </div>
           </div>
 
@@ -751,14 +771,6 @@ const selectAllAriaLabel = computed(() => {
         class="calendar-panel"
         tabindex="-1"
       >
-        <!-- Search and Filter Controls -->
-        <SearchFilter
-          v-if="state.calendar && (calendarEvents.length > 0 || hasActiveFilters)"
-          :calendar-id="state.calendar?.id"
-          :initial-filters="initialFilters"
-          @filters-changed="handleFiltersChanged"
-        />
-
         <!-- Loading State -->
         <div
           v-if="state.isLoading"
@@ -769,11 +781,34 @@ const selectAllAriaLabel = computed(() => {
           {{ t('loading_events') }}
         </div>
 
+        <!-- Search and Filter Controls — kept outside the loading-gated section so the
+             component is not destroyed and re-mounted on each filter change, which would
+             cause it to lose its internal search state. The isLoading guard is intentionally
+             absent here: the store retains previous results during a reload, so
+             calendarEvents.length stays > 0, and SearchFilter remains mounted and
+             preserves its search/category state across filter-triggered reloads. -->
+        <SearchFilter
+          v-if="state.calendar && (calendarEvents && calendarEvents.length > 0 || hasActiveFilters)"
+          :calendar-id="state.calendar?.id"
+          :initial-filters="initialFilters"
+          @filters-changed="handleFiltersChanged"
+        />
+
         <!-- Events Display Section -->
         <section v-if="!state.isLoading && calendarEvents && calendarEvents.length > 0"
                  :aria-label="t('events_section_label')"
                  :class="{ 'events-section': true, 'has-bulk-toolbar': hasSelection }">
-          <h2 class="sr-only">{{ t('events_heading') }}</h2>
+          <div class="tab-header">
+            <h2 class="events-title">{{ t('events_heading') }}</h2>
+            <PillButton
+              variant="primary"
+              @click="newEvent"
+              :aria-label="t('createEvent')" >
+              <Plus :size="20" :stroke-width="2" />
+              {{ t('createEvent') }}
+            </PillButton>
+          </div>
+
 
           <!-- Select All Controls -->
           <div class="event-controls">
@@ -887,6 +922,7 @@ const selectAllAriaLabel = computed(() => {
                      :title="t('noEvents')"
                      :description="t('noEventsDescription')">
           <PillButton variant="primary" @click="newEvent()">
+            <Plus :size="20" :stroke-width="2" />
             {{ t('createEvent') }}
           </PillButton>
         </EmptyLayout>
@@ -1007,11 +1043,18 @@ const selectAllAriaLabel = computed(() => {
       @confirm="handleRepostCategoryUpdate"
       @cancel="handleRepostModalCancel"
     />
+
+    <!-- Create Calendar Sheet -->
+    <CreateCalendarSheet
+      v-if="showCreateCalendarSheet"
+      @close="closeCreateCalendarSheet"
+    />
   </div>
 </template>
 
 <style scoped lang="scss">
 @use '@/client/assets/style/mixins/tabs' as *;
+@use '../../../assets/style/components/calendar-admin' as *;
 
 /* Screen reader only class for accessibility */
 .sr-only {
@@ -1086,6 +1129,11 @@ const selectAllAriaLabel = computed(() => {
   .calendar-tab {
     @include tab-button;
   }
+
+  .events-title {
+  @include admin-section-title;
+  font-size: 1.5rem;
+}
 
   @media (max-width: 768px) {
     .header-title-section {

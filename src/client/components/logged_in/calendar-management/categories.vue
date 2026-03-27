@@ -10,7 +10,7 @@
 
     <!-- Categories List -->
     <div v-else-if="state.categories.length > 0" class="categories-content">
-      <div class="categories-header">
+      <div class="tab-header">
         <h2 class="categories-title">{{ t('event_categories') }}</h2>
         <PillButton
           variant="primary"

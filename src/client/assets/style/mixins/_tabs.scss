@@ -57,6 +57,13 @@
   }
 }
 
+.tab-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin: 1rem 0;
+}
+
 /**
  * Individual tab button styles with active indicator
  * Includes hover, focus, and active states with bottom indicator bar

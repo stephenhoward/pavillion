@@ -181,7 +181,7 @@ onMounted(async () => {
 
     <!-- Places List -->
     <div v-else-if="state.locations.length > 0" class="places-content">
-      <div class="places-header">
+      <div class="tab-header">
         <h2 class="places-title">{{ t('title') }}</h2>
         <PillButton
           ref="addPlaceButtonRef"

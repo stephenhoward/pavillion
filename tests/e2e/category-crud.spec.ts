@@ -71,8 +71,8 @@ test.describe('Category CRUD Workflow', () => {
       }
     });
 
-    // Wait for either category list or "Add Category" button
-    await page.waitForSelector('.pill-button--primary, .category-card', { timeout: 10000 });
+    // Wait for either category list or "Add Category" button within the categories panel
+    await page.waitForSelector('#categories-panel .pill-button--primary, #categories-panel .category-card', { timeout: 10000 });
 
     // Verify no 404 errors occurred
     expect(failed404Requests).toHaveLength(0);
