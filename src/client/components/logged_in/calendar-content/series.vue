@@ -205,7 +205,12 @@ onMounted(async () => {
   <div class="vstack stack--lg" :aria-busy="state.isLoading ? 'true': 'false'">
 
     <!-- Error Display -->
-    <div v-if="state.error" class="alert alert--error">
+    <div
+      v-if="state.error"
+      class="alert alert--error"
+      role="alert"
+      aria-live="polite"
+    >
       {{ state.error }}
     </div>
 
@@ -247,7 +252,7 @@ onMounted(async () => {
               class="icon-button"
               :aria-label="t('view_public_page')"
             >
-              <ExternalLink :size="20" :stroke-width="2" />
+              <ExternalLink :size="20" :stroke-width="2" aria-hidden="true" />
             </a>
             <button
               type="button"
@@ -256,7 +261,7 @@ onMounted(async () => {
               :disabled="state.isDeleting === series.id"
               :aria-label="t('edit_button')"
             >
-              <Pencil :size="20" :stroke-width="2" />
+              <Pencil :size="20" :stroke-width="2" aria-hidden="true" />
             </button>
             <button
               type="button"
@@ -265,7 +270,7 @@ onMounted(async () => {
               :disabled="state.isDeleting === series.id"
               :aria-label="t('delete_button')"
             >
-              <Trash2 :size="20" :stroke-width="2" />
+              <Trash2 :size="20" :stroke-width="2" aria-hidden="true" />
             </button>
           </div>
         </div>
