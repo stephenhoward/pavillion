@@ -341,6 +341,7 @@
         "default_event_image_help": "This image will be used for events that don't have their own image. It appears on public calendar views and when sharing events.",
         "default_event_image_remove_button": "Remove Image",
         "save_success": "Settings saved successfully",
+        "remove_language": "Remove {{language}} translation",
         "error_loading": "Failed to load settings",
         "error_saving": "Failed to save settings"
     },
