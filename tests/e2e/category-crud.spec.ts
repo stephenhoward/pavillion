@@ -117,8 +117,8 @@ test.describe('Category CRUD Workflow', () => {
     // Wait for dialog to close
     await page.waitForSelector('dialog[open]', { state: 'hidden', timeout: 5000 });
 
-    // Verify category appears in list (uses .category-name class)
-    await expect(page.locator(`.category-name:has-text("${categoryName}")`)).toBeVisible({ timeout: 10000 });
+    // Verify category appears in list
+    await expect(page.locator(`.category-info__name:has-text("${categoryName}")`)).toBeVisible({ timeout: 10000 });
 
     // Verify no console errors occurred
     const relevantErrors = consoleErrors.filter(err =>
@@ -164,7 +164,7 @@ test.describe('Category CRUD Workflow', () => {
       await page.waitForSelector('dialog[open]', { state: 'hidden', timeout: 5000 });
 
       // Verify updated category appears in list
-      await expect(page.locator(`.category-name:has-text("${updatedName}")`)).toBeVisible({ timeout: 10000 });
+      await expect(page.locator(`.category-info__name:has-text("${updatedName}")`)).toBeVisible({ timeout: 10000 });
     } else {
       // No categories to edit - create one first
       const addButton = page.locator('.pill-button--primary').filter({ hasText: /add.*category/i }).first();
@@ -193,7 +193,7 @@ test.describe('Category CRUD Workflow', () => {
       await saveButton.click();
       await page.waitForSelector('dialog[open]', { state: 'hidden' });
 
-      await expect(page.locator(`.category-name:has-text("${updatedName}")`)).toBeVisible({ timeout: 10000 });
+      await expect(page.locator(`.category-info__name:has-text("${updatedName}")`)).toBeVisible({ timeout: 10000 });
     }
   });
 
@@ -221,7 +221,7 @@ test.describe('Category CRUD Workflow', () => {
     await page.waitForSelector('dialog[open]', { state: 'hidden' });
 
     // Verify category was created
-    await expect(page.locator(`.category-name:has-text("${categoryName}")`)).toBeVisible();
+    await expect(page.locator(`.category-info__name:has-text("${categoryName}")`)).toBeVisible();
 
     // Find the category card containing this category
     const categoryItem = page.locator('.category-card').filter({ hasText: categoryName });
@@ -245,6 +245,6 @@ test.describe('Category CRUD Workflow', () => {
     await page.waitForSelector('dialog[open]', { state: 'hidden', timeout: 5000 });
 
     // Verify category is removed from list
-    await expect(page.locator(`.category-name:has-text("${categoryName}")`)).not.toBeVisible({ timeout: 5000 });
+    await expect(page.locator(`.category-info__name:has-text("${categoryName}")`)).not.toBeVisible({ timeout: 5000 });
   });
 });
