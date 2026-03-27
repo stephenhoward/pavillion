@@ -7,7 +7,7 @@ import { EventSeries } from '@/common/model/event_series';
 import { EventSeriesContent } from '@/common/model/event_series_content';
 import SeriesService from '@/client/service/series';
 import SeriesEditor from './series-editor.vue';
-import ModalLayout from '@/client/components/common/modal.vue';
+import ConfirmDeleteDialog from '@/client/components/common/confirm-delete-dialog.vue';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
 import PillButton from '@/client/components/common/pill-button.vue';
@@ -205,7 +205,12 @@ onMounted(async () => {
   <div class="vstack stack--lg" :aria-busy="state.isLoading ? 'true': 'false'">
 
     <!-- Error Display -->
-    <div v-if="state.error" class="alert alert--error">
+    <div
+      v-if="state.error"
+      class="alert alert--error"
+      role="alert"
+      aria-live="polite"
+    >
       {{ state.error }}
     </div>
 
@@ -231,11 +236,11 @@ onMounted(async () => {
           class="series-card"
         >
           <div class="series-info">
-            <div class="series-name">
+            <div class="series-info__name">
               {{ series.content(currentLanguage)?.name || series.urlName }}
             </div>
-            <div class="series-meta">
-              <span class="event-count">{{ t('event_count', { count: series.eventCount || 0 }) }}</span>
+            <div class="series-info__meta">
+              <span>{{ t('event_count', { count: series.eventCount || 0 }) }}</span>
             </div>
           </div>
 
@@ -247,7 +252,7 @@ onMounted(async () => {
               class="icon-button"
               :aria-label="t('view_public_page')"
             >
-              <ExternalLink :size="20" :stroke-width="2" />
+              <ExternalLink :size="20" :stroke-width="2" aria-hidden="true" />
             </a>
             <button
               type="button"
@@ -256,7 +261,7 @@ onMounted(async () => {
               :disabled="state.isDeleting === series.id"
               :aria-label="t('edit_button')"
             >
-              <Pencil :size="20" :stroke-width="2" />
+              <Pencil :size="20" :stroke-width="2" aria-hidden="true" />
             </button>
             <button
               type="button"
@@ -265,7 +270,7 @@ onMounted(async () => {
               :disabled="state.isDeleting === series.id"
               :aria-label="t('delete_button')"
             >
-              <Trash2 :size="20" :stroke-width="2" />
+              <Trash2 :size="20" :stroke-width="2" aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -293,36 +298,18 @@ onMounted(async () => {
     />
 
     <!-- Delete Confirmation Modal -->
-    <ModalLayout
-      v-if="state.showDeleteDialog && state.seriesToDelete"
+    <ConfirmDeleteDialog
+      :visible="state.showDeleteDialog && !!state.seriesToDelete"
       :title="t('confirm_delete_title')"
+      :message="t('confirm_delete_message')"
+      :is-deleting="state.isDeleting === state.seriesToDelete?.id"
+      :delete-label="t('delete_button')"
+      :deleting-label="t('deleting')"
+      :cancel-label="t('cancel_button')"
       modal-class="delete-series-modal"
+      @confirm="deleteSeries"
       @close="cancelDelete"
-    >
-      <div class="delete-dialog">
-        <p class="delete-description">
-          {{ t('confirm_delete_message') }}
-        </p>
-
-        <div class="delete-actions">
-          <button
-            type="button"
-            class="btn-ghost"
-            @click="cancelDelete"
-            :disabled="state.isDeleting === state.seriesToDelete?.id"
-          >
-            {{ t('cancel_button') }}
-          </button>
-          <PillButton
-            variant="danger"
-            @click="deleteSeries"
-            :disabled="state.isDeleting === state.seriesToDelete?.id"
-          >
-            {{ state.isDeleting === state.seriesToDelete?.id ? t('deleting') : t('delete_button') }}
-          </PillButton>
-        </div>
-      </div>
-    </ModalLayout>
+    />
   </div>
 </template>
 
@@ -342,9 +329,7 @@ onMounted(async () => {
 }
 
 .series-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--pav-space-3);
+  @include admin-item-list;
 }
 
 .series-card {
@@ -360,81 +345,18 @@ onMounted(async () => {
 }
 
 .series-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: var(--pav-space-2);
-}
-
-.series-name {
-  font-weight: 500;
-  font-size: 1rem;
-  color: var(--pav-color-stone-900);
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-100);
-  }
-}
-
-.series-meta {
-  display: flex;
-  align-items: center;
-  gap: var(--pav-space-3);
-  font-size: 0.875rem;
-  color: var(--pav-color-stone-600);
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-400);
-  }
-}
-
-.event-count {
-  color: var(--pav-color-stone-600);
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-400);
-  }
+  @include admin-item-info;
 }
 
 .series-actions {
-  display: flex;
-  gap: var(--pav-space-2);
-  align-items: center;
+  @include admin-item-actions;
 }
 
 .icon-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--pav-space-2);
-  background: none;
-  border: none;
-  border-radius: 0.375rem;
-  color: var(--pav-color-stone-500);
-  cursor: pointer;
-  transition: color 0.2s, background-color 0.2s;
+  @include admin-icon-button;
 
-  &:hover {
-    color: var(--pav-color-orange-600);
-    background: var(--pav-color-stone-100);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-orange-400);
-      background: var(--pav-color-stone-800);
-    }
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  &--danger:hover {
-    color: var(--pav-color-red-600);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-red-400);
-    }
+  &--danger {
+    @include admin-icon-button--danger;
   }
 }
 
@@ -443,68 +365,7 @@ onMounted(async () => {
   max-width: 500px !important;
 }
 
-.delete-dialog {
-  display: flex;
-  flex-direction: column;
-  gap: var(--pav-space-4);
-
-  .delete-description {
-    margin: 0;
-    color: var(--pav-color-stone-600);
-    font-size: 0.875rem;
-    line-height: 1.5;
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-400);
-    }
-  }
-
-  .delete-actions {
-    display: flex;
-    gap: var(--pav-space-3);
-    justify-content: flex-end;
-    padding-top: var(--pav-space-4);
-    border-top: 1px solid var(--pav-border-primary);
-  }
-
-  .btn-ghost {
-    padding: var(--pav-space-2) var(--pav-space-4);
-    background: none;
-    border: none;
-    color: var(--pav-color-stone-600);
-    font-weight: 500;
-    cursor: pointer;
-    transition: color 0.2s;
-
-    &:hover {
-      color: var(--pav-color-stone-900);
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-stone-100);
-      }
-    }
-
-    &:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-  }
-}
-
 .alert {
-  padding: var(--pav-space-3);
-  margin-bottom: var(--pav-space-4);
-  border-radius: 0.75rem;
-  font-size: 0.875rem;
-
-  &.alert--error {
-    background-color: rgba(239, 68, 68, 0.1);
-    border: 1px solid rgba(239, 68, 68, 0.2);
-    color: var(--pav-color-red-700);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-red-400);
-    }
-  }
+  @include admin-alert;
 }
 </style>

@@ -121,7 +121,7 @@ describe('Series Tab Component', () => {
         return wrapper.vm.state.series.length > 0;
       }, { timeout: 1000 });
 
-      const names = wrapper.findAll('.series-name');
+      const names = wrapper.findAll('.series-info__name');
       expect(names.length).toBe(2);
       expect(names[0].text()).toContain('Summer Festival');
       expect(names[1].text()).toContain('Winter Concerts');
@@ -142,7 +142,7 @@ describe('Series Tab Component', () => {
         return wrapper.vm.state.series.length > 0;
       }, { timeout: 1000 });
 
-      const eventCounts = wrapper.findAll('.event-count');
+      const eventCounts = wrapper.findAll('.series-info__meta');
       expect(eventCounts[0].text()).toContain('5');
       expect(eventCounts[1].text()).toContain('3');
     });
