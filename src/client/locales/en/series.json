@@ -1,6 +1,6 @@
 {
   "management": {
-    "title": "Series",
+    "title": "Event Series",
     "add_series_button": "Add Series",
     "loading": "Loading series...",
     "no_series": "No series found",

@@ -46,7 +46,7 @@
         "manage_calendar": "Manage Calendar",
         "manage_calendar_label": "Manage calendar: {{name}}",
         "events_section_label": "Calendar Events",
-        "events_heading": "Events in this Calendar",
+        "events_heading": "Calendar Events",
         "loading_events": "Loading events...",
         "no_events_filtered_title": "No events found",
         "no_events_filtered_description": "No events match your current search criteria. Try adjusting your filters or clearing them to see all events.",

@@ -129,6 +129,13 @@
     }
   }
 
+  .tab-header {
+    display: flex;
+    justify-content: end;
+    align-items: start;
+    margin: 1rem 0;
+  }
+
   /* Tab indicators (optional decorative elements) */
   &__indicator {
     position: absolute;

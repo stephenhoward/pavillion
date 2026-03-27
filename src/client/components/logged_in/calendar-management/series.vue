@@ -213,7 +213,7 @@ onMounted(async () => {
 
     <!-- Series List -->
     <div v-else-if="state.series.length > 0" class="series-content">
-      <div class="series-header">
+      <div class="tab-header">
         <h2 class="series-title">{{ t('title') }}</h2>
         <PillButton
           variant="primary"
