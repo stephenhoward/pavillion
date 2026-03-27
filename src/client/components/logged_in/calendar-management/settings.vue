@@ -20,7 +20,7 @@
       <div class="settings-container">
         <!-- Calendar Title & Description (Translatable) -->
         <div class="setting-card">
-          <h3 class="setting-label">{{ t('calendar_title_label') }}</h3>
+          <h3 class="setting-label">{{ t('calendar_content_section') }}</h3>
           <p class="setting-description">{{ t('calendar_title_help') }}</p>
 
           <LanguageTabSelector

@@ -326,6 +326,7 @@
     "settings": {
         "title": "Calendar Settings",
         "loading": "Loading settings...",
+        "calendar_content_section": "Calendar Title & Description",
         "calendar_title_label": "Calendar Title",
         "calendar_title_help": "The display name for your calendar. This is shown to visitors on your public calendar page.",
         "calendar_title_placeholder": "My Community Calendar",
