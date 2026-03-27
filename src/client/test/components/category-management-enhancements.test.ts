@@ -100,13 +100,13 @@ describe('Category Management Enhancements - Frontend UI', () => {
         return wrapper.vm.state.categories.length > 0;
       }, { timeout: 1000 });
 
-      const categoryNames = wrapper.findAll('.category-name');
+      const categoryNames = wrapper.findAll('.category-info__name');
       expect(categoryNames[0].text()).toContain('Music');
       expect(categoryNames[1].text()).toContain('Sports');
       expect(categoryNames[2].text()).toContain('Arts');
 
-      // Event counts are displayed in a separate .event-count element
-      const eventCounts = wrapper.findAll('.event-count');
+      // Event counts are displayed in a separate .category-info__meta element
+      const eventCounts = wrapper.findAll('.category-info__meta');
       expect(eventCounts[0].text()).toContain('23');
       expect(eventCounts[1].text()).toContain('10');
       expect(eventCounts[2].text()).toContain('0');
@@ -317,7 +317,7 @@ describe('Category Management Enhancements - Frontend UI', () => {
       await nextTick();
 
       // Confirm deletion - PillButton with variant="danger" in the delete dialog
-      const confirmButton = wrapper.find('.delete-actions .pill-button--danger');
+      const confirmButton = wrapper.find('.dialog-actions .pill-button--danger');
       await confirmButton.trigger('click');
       await nextTick();
 
@@ -357,7 +357,7 @@ describe('Category Management Enhancements - Frontend UI', () => {
       await nextTick();
 
       // Confirm deletion
-      const confirmButton = wrapper.find('.delete-actions .pill-button--danger');
+      const confirmButton = wrapper.find('.dialog-actions .pill-button--danger');
       await confirmButton.trigger('click');
 
       await vi.waitFor(() => {
@@ -394,7 +394,7 @@ describe('Category Management Enhancements - Frontend UI', () => {
       await nextTick();
 
       // Confirm deletion
-      const confirmButton = wrapper.find('.delete-actions .pill-button--danger');
+      const confirmButton = wrapper.find('.dialog-actions .pill-button--danger');
       await confirmButton.trigger('click');
 
       await vi.waitFor(() => {
@@ -507,7 +507,7 @@ describe('Category Management Enhancements - Frontend UI', () => {
       await nextTick();
 
       // Confirm merge - PillButton with variant="primary" in the merge dialog
-      const confirmButton = wrapper.find('.merge-actions .pill-button--primary');
+      const confirmButton = wrapper.find('.dialog-actions .pill-button--primary');
       await confirmButton.trigger('click');
       await nextTick();
 
@@ -552,7 +552,7 @@ describe('Category Management Enhancements - Frontend UI', () => {
       await nextTick();
 
       // Confirm merge
-      const confirmButton = wrapper.find('.merge-actions .pill-button--primary');
+      const confirmButton = wrapper.find('.dialog-actions .pill-button--primary');
       await confirmButton.trigger('click');
 
       await vi.waitFor(() => {
@@ -595,7 +595,7 @@ describe('Category Management Enhancements - Frontend UI', () => {
       await nextTick();
 
       // Confirm merge
-      const confirmButton = wrapper.find('.merge-actions .pill-button--primary');
+      const confirmButton = wrapper.find('.dialog-actions .pill-button--primary');
       await confirmButton.trigger('click');
 
       await vi.waitFor(() => {
