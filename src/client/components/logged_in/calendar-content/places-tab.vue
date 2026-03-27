@@ -1,10 +1,10 @@
 <script setup>
-import { reactive, ref, onMounted, nextTick } from 'vue';
+import { reactive, ref, computed, onMounted, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import { Plus, Pencil, Trash2, MapPin } from 'lucide-vue-next';
 import LocationService from '@/client/service/location';
-import ModalLayout from '@/client/components/common/modal.vue';
+import ConfirmDeleteDialog from '@/client/components/common/confirm-delete-dialog.vue';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
 import PillButton from '@/client/components/common/pill-button.vue';
@@ -96,6 +96,16 @@ function formatAddress(location) {
   return parts.join(', ');
 }
 
+const deleteMessage = computed(() => {
+  if (!state.locationToDelete) return '';
+  const name = state.locationToDelete.name || t('unnamed_place');
+  let msg = t('confirm_delete_message', { name });
+  if ((state.locationToDelete.eventCount || 0) > 0) {
+    msg += ' ' + t('confirm_delete_event_count', { count: state.locationToDelete.eventCount });
+  }
+  return msg;
+});
+
 /**
  * Open delete confirmation dialog
  */
@@ -109,12 +119,10 @@ function confirmDelete(location, event) {
  * Cancel delete dialog
  */
 function cancelDelete() {
-  const trigger = state.triggerElement;
   state.locationToDelete = null;
   state.showDeleteDialog = false;
   state.isDeleting = '';
   state.triggerElement = null;
-  nextTick(() => trigger?.focus());
 }
 
 /**
@@ -204,14 +212,14 @@ onMounted(async () => {
           </div>
 
           <div class="place-info">
-            <div class="place-name">
+            <div class="place-info__name">
               {{ location.name || t('unnamed_place') }}
             </div>
-            <div v-if="formatAddress(location)" class="place-meta">
-              <span class="place-address">{{ formatAddress(location) }}</span>
+            <div v-if="formatAddress(location)" class="place-info__meta">
+              <span>{{ formatAddress(location) }}</span>
             </div>
-            <div v-if="location.eventCount !== undefined" class="place-meta">
-              <span class="event-count">{{ t('event_count', { count: location.eventCount || 0 }) }}</span>
+            <div v-if="location.eventCount !== undefined" class="place-info__meta">
+              <span>{{ t('event_count', { count: location.eventCount || 0 }) }}</span>
             </div>
           </div>
 
@@ -253,39 +261,19 @@ onMounted(async () => {
     </EmptyLayout>
 
     <!-- Delete Confirmation Modal -->
-    <ModalLayout
-      v-if="state.showDeleteDialog && state.locationToDelete"
+    <ConfirmDeleteDialog
+      :visible="state.showDeleteDialog && !!state.locationToDelete"
       :title="t('confirm_delete_title')"
+      :message="deleteMessage"
+      :is-deleting="state.isDeleting === state.locationToDelete?.id"
+      :delete-label="t('delete_button')"
+      :deleting-label="t('deleting')"
+      :cancel-label="t('cancel')"
+      :trigger-element="state.triggerElement"
       modal-class="delete-place-modal"
+      @confirm="deleteLocation"
       @close="cancelDelete"
-    >
-      <div class="delete-dialog">
-        <p class="delete-description">
-          {{ t('confirm_delete_message', { name: state.locationToDelete.name || t('unnamed_place') }) }}
-          <span v-if="(state.locationToDelete.eventCount || 0) > 0">
-            {{ t('confirm_delete_event_count', { count: state.locationToDelete.eventCount }) }}
-          </span>
-        </p>
-
-        <div class="delete-actions">
-          <button
-            type="button"
-            class="btn-ghost"
-            @click="cancelDelete"
-            :disabled="state.isDeleting === state.locationToDelete?.id"
-          >
-            {{ t('cancel') }}
-          </button>
-          <PillButton
-            variant="danger"
-            @click="deleteLocation"
-            :disabled="state.isDeleting === state.locationToDelete?.id"
-          >
-            {{ state.isDeleting === state.locationToDelete?.id ? t('deleting') : t('delete_button') }}
-          </PillButton>
-        </div>
-      </div>
-    </ModalLayout>
+    />
   </div>
 </template>
 
@@ -305,9 +293,7 @@ onMounted(async () => {
 }
 
 .places-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--pav-space-3);
+  @include admin-item-list;
 }
 
 .place-card {
@@ -335,89 +321,18 @@ onMounted(async () => {
 }
 
 .place-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: var(--pav-space-2);
-}
-
-.place-name {
-  font-weight: 500;
-  font-size: 1rem;
-  color: var(--pav-color-stone-900);
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-100);
-  }
-}
-
-.place-meta {
-  display: flex;
-  align-items: center;
-  gap: var(--pav-space-3);
-  font-size: 0.875rem;
-  color: var(--pav-color-stone-600);
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-400);
-  }
-}
-
-.place-address {
-  color: var(--pav-color-stone-600);
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-400);
-  }
-}
-
-.event-count {
-  color: var(--pav-color-stone-600);
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-400);
-  }
+  @include admin-item-info;
 }
 
 .place-actions {
-  display: flex;
-  gap: var(--pav-space-2);
-  align-items: center;
+  @include admin-item-actions;
 }
 
 .icon-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--pav-space-2);
-  background: none;
-  border: none;
-  border-radius: 0.375rem;
-  color: var(--pav-color-stone-500);
-  cursor: pointer;
-  transition: color 0.2s, background-color 0.2s;
+  @include admin-icon-button;
 
-  &:hover {
-    color: var(--pav-color-orange-600);
-    background: var(--pav-color-stone-100);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-orange-400);
-      background: var(--pav-color-stone-800);
-    }
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  &--danger:hover {
-    color: var(--pav-color-red-600);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-red-400);
-    }
+  &--danger {
+    @include admin-icon-button--danger;
   }
 }
 
@@ -426,68 +341,7 @@ onMounted(async () => {
   max-width: 500px !important;
 }
 
-.delete-dialog {
-  display: flex;
-  flex-direction: column;
-  gap: var(--pav-space-4);
-
-  .delete-description {
-    margin: 0;
-    color: var(--pav-color-stone-600);
-    font-size: 0.875rem;
-    line-height: 1.5;
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-stone-400);
-    }
-  }
-
-  .delete-actions {
-    display: flex;
-    gap: var(--pav-space-3);
-    justify-content: flex-end;
-    padding-top: var(--pav-space-4);
-    border-top: 1px solid var(--pav-border-primary);
-  }
-
-  .btn-ghost {
-    padding: var(--pav-space-2) var(--pav-space-4);
-    background: none;
-    border: none;
-    color: var(--pav-color-stone-600);
-    font-weight: 500;
-    cursor: pointer;
-    transition: color 0.2s;
-
-    &:hover {
-      color: var(--pav-color-stone-900);
-
-      @media (prefers-color-scheme: dark) {
-        color: var(--pav-color-stone-100);
-      }
-    }
-
-    &:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-  }
-}
-
 .alert {
-  padding: var(--pav-space-3);
-  margin-bottom: var(--pav-space-4);
-  border-radius: 0.75rem;
-  font-size: 0.875rem;
-
-  &.alert--error {
-    background-color: rgba(239, 68, 68, 0.1);
-    border: 1px solid rgba(239, 68, 68, 0.2);
-    color: var(--pav-color-red-700);
-
-    @media (prefers-color-scheme: dark) {
-      color: var(--pav-color-red-400);
-    }
-  }
+  @include admin-alert;
 }
 </style>
