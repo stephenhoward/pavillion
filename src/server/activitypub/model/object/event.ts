@@ -122,10 +122,16 @@ class EventObject extends ActivityPubObject {
       result.content = `<p>${primaryDescription}</p>`;
     }
 
-    // endTime: only when first schedule has endDate
+    // endTime: use endDate when available, otherwise synthesize startTime + 1 hour
     const firstSchedule = event.schedules[0];
     if (firstSchedule?.endDate) {
       result.endTime = firstSchedule.endDate.toISO();
+    } else {
+      // Synthesize endTime = startTime + 1 hour; setZone preserves the original offset
+      const synthesizedEnd = DateTime.fromISO(startTime, { setZone: true }).plus({ hours: 1 });
+      if (synthesizedEnd.isValid) {
+        result.endTime = synthesizedEnd.toISO();
+      }
     }
 
     // location: emitted as Place with optional PostalAddress; omitted if no location

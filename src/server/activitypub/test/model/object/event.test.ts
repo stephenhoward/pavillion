@@ -172,7 +172,7 @@ describe('EventObject', () => {
       expect(singleResult).not.toHaveProperty('summaryMap');
     });
 
-    it('should fall back to date field when no schedules exist', () => {
+    it('should synthesize endTime as startTime + 1 hour when no schedules exist', () => {
       const calendar = new Calendar('calendar-uuid', 'mycal');
       const event = new CalendarEvent('event-uuid', 'calendar-uuid');
       event.date = '2026-04-15';
@@ -182,7 +182,37 @@ describe('EventObject', () => {
       const result = obj.toActivityPubObject();
 
       expect(result.startTime).toBe('2026-04-15T00:00:00.000Z');
-      expect(result).not.toHaveProperty('endTime');
+      expect(result).toHaveProperty('endTime');
+      const startMs = DateTime.fromISO(result.startTime).toMillis();
+      const endMs = DateTime.fromISO(result.endTime).toMillis();
+      expect(endMs - startMs).toBe(3600000); // 1 hour in milliseconds
+    });
+
+    it('should synthesize endTime as startTime + 1 hour when schedule has no endDate', () => {
+      const calendar = new Calendar('calendar-uuid', 'mycal');
+      const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+      const startDt = DateTime.fromISO('2026-04-15T09:00:00.000Z');
+      event.schedules = [new CalendarEventSchedule('s1', startDt)];
+      event.addContent(new CalendarEventContent('en', 'No End Date Event', ''));
+
+      const obj = new EventObject(calendar, event);
+      const result = obj.toActivityPubObject();
+
+      expect(result).toHaveProperty('endTime');
+      const startMs = DateTime.fromISO(result.startTime).toMillis();
+      const endMs = DateTime.fromISO(result.endTime).toMillis();
+      expect(endMs - startMs).toBe(3600000);
+    });
+
+    it('should always include endTime in output', () => {
+      const calendar = new Calendar('calendar-uuid', 'mycal');
+      const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+      event.addContent(new CalendarEventContent('en', 'Minimal Event', ''));
+
+      const obj = new EventObject(calendar, event);
+      const result = obj.toActivityPubObject();
+
+      expect(result).toHaveProperty('endTime');
     });
 
     it('should omit location when event has no location', () => {
@@ -604,8 +634,46 @@ describe('EventObject', () => {
 
       // Schedule start/end times should match
       expect(reconstituted.schedules.length).toBeGreaterThan(0);
-      expect(reconstituted.schedules[0].startDate?.toISO()).toBe(startDt.toISO());
-      expect(reconstituted.schedules[0].endDate?.toISO()).toBe(endDt.toISO());
+      expect(reconstituted.schedules[0].startDate?.toMillis()).toBe(startDt.toMillis());
+      expect(reconstituted.schedules[0].endDate?.toMillis()).toBe(endDt.toMillis());
+    });
+
+    it('should round-trip with synthesized endTime when no endDate exists', () => {
+      const calendar = new Calendar('calendar-uuid', 'mycal');
+      const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+      event.addContent(new CalendarEventContent('en', 'No End', 'Test'));
+      event.date = '2026-04-15';
+      const startDt = DateTime.fromISO('2026-04-15T09:00:00.000Z');
+      event.schedules = [new CalendarEventSchedule('s1', startDt)];
+
+      const obj = new EventObject(calendar, event);
+      const apOutput = obj.toActivityPubObject();
+
+      // The AP output should have a synthesized endTime
+      expect(apOutput).toHaveProperty('endTime');
+
+      const normalized = EventObject.fromActivityPubObject(apOutput);
+      const reconstituted = CalendarEvent.fromObject(normalized);
+
+      // pavillion:schedules preserves the original schedule (no endDate),
+      // so the reconstituted event should NOT have an endDate despite the synthesized endTime
+      expect(reconstituted.schedules[0].startDate?.toMillis()).toBe(startDt.toMillis());
+      expect(reconstituted.schedules[0].endDate).toBeNull();
+    });
+
+    it('should map standard AS endTime into schedule end when no pavillion:schedules present', () => {
+      // Simulates what a non-Pavillion AS consumer would receive
+      const apObject = {
+        name: 'External Event',
+        startTime: '2026-04-15T09:00:00.000Z',
+        endTime: '2026-04-15T10:00:00.000Z',
+        summary: 'From external source',
+      };
+
+      const result = EventObject.fromActivityPubObject(apObject);
+
+      expect(result.schedules[0].start).toBe('2026-04-15T09:00:00.000Z');
+      expect(result.schedules[0].end).toBe('2026-04-15T10:00:00.000Z');
     });
 
     it('should use string content (HTML) as description fallback when summary is absent', () => {
