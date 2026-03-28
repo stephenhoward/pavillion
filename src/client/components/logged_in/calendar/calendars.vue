@@ -2,7 +2,9 @@
 import { onBeforeMount, reactive, ref, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
+import { Calendar, ChevronRight, Crown } from 'lucide-vue-next';
 import CalendarService from '@/client/service/calendar';
+import { CalendarInfo } from '@/common/model/calendar_info';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
 import PillButton from '@/client/components/common/pill-button.vue';
 import CreateCalendarForm from './CreateCalendarForm.vue';
@@ -18,7 +20,7 @@ const router = useRouter();
 const route = useRoute();
 const state = reactive({
   err: '',
-  calendars: [],
+  calendars: [] as CalendarInfo[],
   isLoading: false,
   showCreationForm: false,
 });
@@ -37,6 +39,15 @@ async function closeCreateSheet() {
   createSheetTriggerEl.value?.focus();
 }
 
+/**
+ * Returns the display description for a calendar card.
+ * Falls back to /urlName when no description is available.
+ */
+function getDescription(info: CalendarInfo): string {
+  const desc = info.calendar.content('en').description;
+  return desc || `/${info.calendar.urlName}`;
+}
+
 onBeforeMount(async () => {
   loadCalendars();
   state.isLoading = true;
@@ -45,7 +56,7 @@ onBeforeMount(async () => {
 // Load calendar data and handle routing
 async function loadCalendars() {
   try {
-    const calendars = await calendarService.loadCalendars();
+    const calendarInfos = await calendarService.loadCalendarsWithRelationship();
 
     // If the route is /calendar/new, always show the creation form
     if (route.path === '/calendar/new') {
@@ -54,11 +65,11 @@ async function loadCalendars() {
     }
 
     // If there is only one calendar, redirect to it
-    if (calendars.length === 1) {
-      router.push({ path: '/calendar/' + calendars[0].urlName });
+    if (calendarInfos.length === 1) {
+      router.push({ path: '/calendar/' + calendarInfos[0].calendar.urlName });
     }
     else {
-      state.calendars = calendars;
+      state.calendars = calendarInfos;
     }
   }
   catch (error) {
@@ -76,7 +87,12 @@ async function loadCalendars() {
     <nav v-if="state.calendars.length > 0 && !state.showCreationForm" :aria-label="t('aria_my_calendars_navigation')">
       <section>
         <div class="calendars-header">
-          <h2>{{ t('my_calendars_header') }}</h2>
+          <div class="calendars-header__text">
+            <h2>{{ t('my_calendars_header') }}</h2>
+            <p class="calendars-header__count">
+              {{ t('calendar_count', { count: state.calendars.length }) }}
+            </p>
+          </div>
           <PillButton
             variant="primary"
             @click="openCreateSheet"
@@ -84,12 +100,47 @@ async function loadCalendars() {
             {{ t('create_new_calendar_button') }}
           </PillButton>
         </div>
-        <ul role="list">
-          <li v-for="calendar in state.calendars" :key="calendar.id" role="listitem">
+        <ul class="calendar-cards" role="list">
+          <li
+            v-for="info in state.calendars"
+            :key="info.calendar.id"
+            role="listitem"
+          >
             <RouterLink
-              :to="`/calendar/${calendar.urlName}`"
-              :aria-label="t('aria_view_calendar', { calendarName: calendar.content('en').name || calendar.urlName })">
-              {{ calendar.content("en").name || calendar.urlName }}
+              :to="`/calendar/${info.calendar.urlName}`"
+              class="calendar-card"
+              :aria-label="t('aria_navigate_calendar', {
+                calendarName: info.calendar.content('en').name || info.calendar.urlName,
+                role: info.isOwner ? t('role_owner') : t('role_editor'),
+              })"
+            >
+              <div class="calendar-card__icon">
+                <Calendar :size="24" aria-hidden="true" />
+              </div>
+
+              <div class="calendar-card__body">
+                <div class="calendar-card__title-row">
+                  <span class="calendar-card__name">
+                    {{ info.calendar.content('en').name || info.calendar.urlName }}
+                  </span>
+
+                  <span v-if="info.isOwner" class="calendar-card__badge calendar-card__badge--owner">
+                    <Crown :size="12" aria-hidden="true" />
+                    {{ t('role_owner') }}
+                  </span>
+                  <span v-else class="calendar-card__badge calendar-card__badge--editor">
+                    {{ t('role_editor') }}
+                  </span>
+                </div>
+
+                <p class="calendar-card__description">
+                  {{ getDescription(info) }}
+                </p>
+              </div>
+
+              <div class="calendar-card__chevron">
+                <ChevronRight :size="20" aria-hidden="true" />
+              </div>
             </RouterLink>
           </li>
         </ul>
@@ -111,8 +162,20 @@ async function loadCalendars() {
 .calendars-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-block-end: var(--pav-space-md);
+  align-items: flex-start;
+  margin-block-end: var(--pav-space-lg);
+
+  &__text {
+    display: flex;
+    flex-direction: column;
+    gap: var(--pav-space-xs);
+  }
+
+  &__count {
+    font-size: var(--pav-font-size-body-small);
+    color: var(--pav-color-text-secondary);
+    margin: 0;
+  }
 }
 
 /* Semantic nav styling */
@@ -129,34 +192,122 @@ nav {
     color: var(--pav-color-text-primary);
     margin: 0;
   }
+}
 
-  ul {
-    list-style: none;
-    padding: 0;
+.calendar-cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pav-space-sm);
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.calendar-card {
+  display: flex;
+  align-items: center;
+  gap: var(--pav-space-md);
+  padding: var(--pav-space-md) var(--pav-space-lg);
+  background: var(--pav-color-surface-primary);
+  border: var(--pav-border-width-1) solid var(--pav-color-border-primary);
+  border-radius: var(--pav-border-radius-lg);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    border-color: var(--pav-color-accent);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  }
+
+  &:focus-visible {
+    outline: var(--pav-border-width-2) solid var(--pav-border-color-focus);
+    outline-offset: var(--pav-space-xs);
+  }
+
+  &__icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 3rem;
+    height: 3rem;
+    border-radius: var(--pav-border-radius-md);
+    background: var(--pav-color-accent-light, rgba(249, 115, 22, 0.1));
+    color: var(--pav-color-accent);
+  }
+
+  &__body {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__title-row {
+    display: flex;
+    align-items: center;
+    gap: var(--pav-space-sm);
+    flex-wrap: wrap;
+    margin-block-end: var(--pav-space-xs);
+  }
+
+  &__name {
+    font-size: var(--pav-font-size-body);
+    font-weight: var(--pav-font-weight-medium);
+    color: var(--pav-color-text-primary);
     margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 
-    li {
-      margin-bottom: var(--pav-space-sm);
+  &__badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.125rem 0.5rem;
+    font-size: var(--pav-font-size-body-small);
+    font-weight: var(--pav-font-weight-medium);
+    border-radius: var(--pav-border-radius-full, 9999px);
+    flex-shrink: 0;
 
-      a {
-        display: block;
-        padding: var(--pav-space-sm) var(--pav-space-md);
-        color: var(--pav-color-text-primary);
-        text-decoration: none;
-        border-radius: var(--pav-border-radius-md);
-        transition: background-color 0.2s ease;
-
-        &:hover, &:focus {
-          background-color: var(--pav-color-surface-secondary);
-          text-decoration: underline;
-        }
-
-        &:focus-visible {
-          outline: var(--pav-border-width-2) solid var(--pav-border-color-focus);
-          outline-offset: var(--pav-space-xs);
-        }
-      }
+    &--owner {
+      background-color: rgba(245, 158, 11, 0.15);
+      color: #b45309;
     }
+
+    &--editor {
+      background-color: var(--pav-color-surface-secondary);
+      color: var(--pav-color-text-secondary);
+    }
+  }
+
+  &__description {
+    font-size: var(--pav-font-size-body-small);
+    color: var(--pav-color-text-secondary);
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__chevron {
+    flex-shrink: 0;
+    color: var(--pav-color-text-tertiary, var(--pav-color-text-secondary));
+    transition: color 0.2s ease;
+  }
+
+  &:hover &__chevron {
+    color: var(--pav-color-accent);
+  }
+}
+
+// Dark mode adjustments for owner badge
+@media (prefers-color-scheme: dark) {
+  .calendar-card__badge--owner {
+    background-color: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
   }
 }
 
