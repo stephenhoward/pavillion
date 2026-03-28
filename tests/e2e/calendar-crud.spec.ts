@@ -132,7 +132,7 @@ test.describe('Calendar CRUD Workflow', () => {
       await page.waitForTimeout(1000);
 
       // Find the title input within the settings panel
-      const titleInput = page.locator('#settings-panel input#calendarTitle');
+      const titleInput = page.locator('#settings-panel input[id^="calendarTitle"]');
       await expect(titleInput).toBeVisible({ timeout: 5000 });
 
       // Clear and type a new title
@@ -165,7 +165,7 @@ test.describe('Calendar CRUD Workflow', () => {
       await page.waitForTimeout(1000);
 
       // Find the description textarea
-      const descriptionTextarea = page.locator('#settings-panel textarea#calendarDescription');
+      const descriptionTextarea = page.locator('#settings-panel textarea[id^="calendarDescription"]');
       await expect(descriptionTextarea).toBeVisible({ timeout: 5000 });
 
       // Clear and type a new description
@@ -196,7 +196,7 @@ test.describe('Calendar CRUD Workflow', () => {
       await page.waitForTimeout(1000);
 
       // Update the title
-      const titleInput = page.locator('#settings-panel input#calendarTitle');
+      const titleInput = page.locator('#settings-panel input[id^="calendarTitle"]');
       await expect(titleInput).toBeVisible({ timeout: 5000 });
 
       const persistedTitle = `Persisted Title ${Date.now()}`;
@@ -219,7 +219,7 @@ test.describe('Calendar CRUD Workflow', () => {
       await page.waitForTimeout(1000);
 
       // Verify the title persisted
-      const titleInputAfterReload = page.locator('#settings-panel input#calendarTitle');
+      const titleInputAfterReload = page.locator('#settings-panel input[id^="calendarTitle"]');
       await expect(titleInputAfterReload).toBeVisible({ timeout: 5000 });
       await expect(titleInputAfterReload).toHaveValue(persistedTitle);
     });

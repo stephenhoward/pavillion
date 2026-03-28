@@ -11,7 +11,7 @@
     </div>
 
     <!-- Loading State -->
-    <LoadingMessage v-if="state.isLoading" :description="t('loading')" />
+    <LoadingMessage v-if="state.isLoading || !localCalendar" :description="t('loading')" />
 
     <!-- Settings Form -->
     <div v-else class="settings-content">
