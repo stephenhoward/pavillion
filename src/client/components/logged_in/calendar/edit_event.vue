@@ -717,14 +717,18 @@ button {
       aria-label="Event Editor"
       class="editor-main"
     >
-      <form id="event-form" @submit.prevent="handleSaveEvent()" aria-label="Event Information Form">
+      <form
+        id="event-form"
+        @submit.prevent="handleSaveEvent()"
+        aria-label="Event Information Form"
+        novalidate
+      >
 
         <!-- Error Display -->
         <div v-if="editorState.err"
              ref="errorContainer"
              class="error"
-             role="alert"
-             aria-live="polite">
+             role="alert">
           <button
             class="error-dismiss"
             type="button"
@@ -778,9 +782,8 @@ button {
                     v-model="editorState.event.content(currentLanguage).name"
                     class="field-input"
                     :class="{ 'field-input--error': fieldErrors.title }"
-                    :aria-invalid="fieldErrors.title ? 'true' : 'false'"
+                    :aria-invalid="fieldErrors.title ? 'true' : undefined"
                     :aria-describedby="fieldErrors.title ? 'event-title-error' : undefined"
-                    required
                     @input="clearFieldError('title')"
                   />
                   <p
@@ -893,6 +896,7 @@ button {
                 role="group"
                 aria-label="Event Schedules"
                 :aria-describedby="fieldErrors.schedule ? 'event-schedule-error' : undefined"
+                :aria-invalid="fieldErrors.schedule ? 'true' : undefined"
               >
                 <div
                   v-for="(schedule, index) in editorState.event.schedules"
@@ -1229,6 +1233,12 @@ const handleSaveEvent = async () => {
   await saveEvent(t, () => {
     resetSnapshot(editorState.event, selectedCategories.value, mediaId.value);
   });
+  // Move focus to first errored field for keyboard/screen reader users
+  await nextTick();
+  if (Object.keys(fieldErrors).length > 0) {
+    const firstInvalid = document.querySelector<HTMLElement>('[aria-invalid="true"]');
+    firstInvalid?.focus();
+  }
 };
 
 // Watch for location picker visibility and show/hide the modal
