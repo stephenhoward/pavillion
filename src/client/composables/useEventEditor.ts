@@ -509,7 +509,6 @@ export function useEventEditor(defaultLanguage: string = 'en') {
     selectedSeriesId,
     mediaId,
     fieldErrors,
-    validateEvent,
     clearFieldError,
     initializeEvent,
     saveEvent,

@@ -313,8 +313,8 @@ form {
 }
 
 .form-error {
-  margin: 0.25rem 0 0;
-  font-size: 0.8125rem;
+  margin: var(--pav-space-1) 0 0;
+  font-size: var(--pav-font-size-xs);
   color: var(--pav-color-red-600);
 
   @media (prefers-color-scheme: dark) {
