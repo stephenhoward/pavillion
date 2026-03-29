@@ -11,41 +11,70 @@
     </div>
 
     <!-- Loading State -->
-    <LoadingMessage v-if="state.isLoading" :description="t('loading')" />
+    <LoadingMessage v-if="state.isLoading || !localCalendar" :description="t('loading')" />
 
     <!-- Settings Form -->
     <div v-else class="settings-content">
       <h2 class="settings-title">{{ t('title') }}</h2>
 
       <div class="settings-container">
-        <!-- Calendar Title -->
+        <!-- Calendar Title & Description (Translatable) -->
         <div class="setting-card">
-          <h3 class="setting-label">{{ t('calendar_title_label') }}</h3>
+          <h3 class="setting-label">{{ t('calendar_content_section') }}</h3>
           <p class="setting-description">{{ t('calendar_title_help') }}</p>
-          <input
-            id="calendarTitle"
-            type="text"
-            class="setting-input"
-            v-model="state.calendarTitle"
-            :disabled="state.isSaving"
-            :placeholder="t('calendar_title_placeholder')"
-            @blur="saveSettings"
-          />
-        </div>
 
-        <!-- Calendar Description -->
-        <div class="setting-card">
-          <h3 class="setting-label">{{ t('calendar_description_label') }}</h3>
-          <p class="setting-description">{{ t('calendar_description_help') }}</p>
-          <textarea
-            id="calendarDescription"
-            class="setting-textarea"
-            v-model="state.calendarDescription"
-            :disabled="state.isSaving"
-            :placeholder="t('calendar_description_placeholder')"
-            rows="3"
-            @blur="saveSettings"
+          <LanguageTabSelector
+            v-model="state.currentLanguage"
+            :languages="localCalendar ? localCalendar.getLanguages() : []"
+            :errored-tabs="erroredTabs"
+            @add-language="state.showLanguagePicker = true"
+            @remove-language="removeLanguage"
           />
+
+          <div
+            :dir="iso6391.getDir(state.currentLanguage) === 'rtl' ? 'rtl' : 'ltr'"
+            class="translatable-fields"
+          >
+            <div class="form-field">
+              <label class="field-label" :for="`calendarTitle-${state.currentLanguage}`">
+                {{ t('calendar_title_label') }}
+              </label>
+              <input
+                :id="`calendarTitle-${state.currentLanguage}`"
+                type="text"
+                class="setting-input"
+                v-model="localCalendar.content(state.currentLanguage).name"
+                :disabled="state.isSaving"
+                :placeholder="t('calendar_title_placeholder')"
+                @blur="saveSettings"
+              />
+            </div>
+
+            <div class="form-field">
+              <label class="field-label" :for="`calendarDescription-${state.currentLanguage}`">
+                {{ t('calendar_description_label') }}
+              </label>
+              <p class="setting-description">{{ t('calendar_description_help') }}</p>
+              <textarea
+                :id="`calendarDescription-${state.currentLanguage}`"
+                class="setting-textarea"
+                v-model="localCalendar.content(state.currentLanguage).description"
+                :disabled="state.isSaving"
+                :placeholder="t('calendar_description_placeholder')"
+                rows="3"
+                @blur="saveSettings"
+              />
+            </div>
+
+            <button
+              v-if="localCalendar && localCalendar.getLanguages().length > 1"
+              type="button"
+              class="remove-translation-link"
+              @click="removeLanguage(state.currentLanguage)"
+            >
+              {{ t('remove_language', { language: iso6391.getName(state.currentLanguage) }) }}
+            </button>
+          </div>
         </div>
 
         <!-- Default Date Range -->
@@ -98,15 +127,27 @@
       </div>
     </div>
   </div>
+
+  <LanguagePicker
+    v-if="state.showLanguagePicker"
+    :languages="availableLanguages"
+    :selectedLanguages="localCalendar ? localCalendar.getLanguages() : []"
+    @select="addLanguage"
+    @close="state.showLanguagePicker = false"
+  />
 </template>
 
 <script setup>
-import { reactive, onMounted } from 'vue';
+import { reactive, ref, computed, onMounted } from 'vue';
 import { useTranslation } from 'i18next-vue';
+import iso6391 from 'iso-639-1-dir';
+import { CalendarContent } from '@/common/model/calendar';
 import CalendarService from '@/client/service/calendar';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
 import ImageUpload from '@/client/components/common/media/image-upload.vue';
 import EventImage from '@/client/components/common/media/event-image.vue';
+import LanguageTabSelector from '@/client/components/common/language-tab-selector.vue';
+import LanguagePicker from '@/client/components/common/language-picker.vue';
 
 // Props
 const props = defineProps({
@@ -124,16 +165,32 @@ const { t } = useTranslation('calendars', {
 // Services
 const calendarService = new CalendarService();
 
+const defaultLanguage = 'en';
+let allLanguages = iso6391.getAllCodes();
+allLanguages.unshift(defaultLanguage);
+const availableLanguages = ref([...new Set(allLanguages)]);
+
+// Local calendar clone for translatable content editing
+const localCalendar = ref(null);
+
 // Component state
 const state = reactive({
   isLoading: false,
   isSaving: false,
   error: '',
   success: '',
+  currentLanguage: defaultLanguage,
+  showLanguagePicker: false,
   defaultDateRange: '2weeks',
-  calendarTitle: '',
-  calendarDescription: '',
   defaultEventImage: null,
+});
+
+const erroredTabs = computed(() => {
+  if (!localCalendar.value) return [];
+  return localCalendar.value.getLanguages().filter(lang => {
+    const content = localCalendar.value.content(lang);
+    return !content || !content.name || content.name.trim().length === 0;
+  });
 });
 
 /**
@@ -156,11 +213,14 @@ const loadSettings = async () => {
 
     const calendar = await calendarService.getCalendarById(props.calendarId);
     if (calendar) {
+      localCalendar.value = calendar.clone();
       state.defaultDateRange = calendar.defaultDateRange || '2weeks';
-      const content = calendar.content('en');
-      state.calendarTitle = content.name || '';
-      state.calendarDescription = content.description || '';
       state.defaultEventImage = calendar.defaultEventImage || null;
+
+      const languages = localCalendar.value.getLanguages();
+      if (languages.length > 0) {
+        state.currentLanguage = languages[0];
+      }
     }
   }
   catch (error) {
@@ -182,14 +242,20 @@ const saveSettings = async () => {
     state.error = '';
     state.success = '';
 
+    const contentPayload = {};
+    if (localCalendar.value) {
+      for (const lang of localCalendar.value.getLanguages()) {
+        const c = localCalendar.value.content(lang);
+        contentPayload[lang] = {
+          name: c.name,
+          description: c.description,
+        };
+      }
+    }
+
     await calendarService.updateCalendarSettings(props.calendarId, {
       defaultDateRange: state.defaultDateRange,
-      content: {
-        en: {
-          name: state.calendarTitle,
-          description: state.calendarDescription,
-        },
-      },
+      content: contentPayload,
     });
 
     state.success = t('save_success');
@@ -202,6 +268,40 @@ const saveSettings = async () => {
   }
   finally {
     state.isSaving = false;
+  }
+};
+
+/**
+ * Add a new language translation
+ */
+const addLanguage = (language) => {
+  if (!localCalendar.value) return;
+
+  if (localCalendar.value.getLanguages().includes(language)) {
+    state.showLanguagePicker = false;
+    return;
+  }
+
+  localCalendar.value.addContent(new CalendarContent(language, '', ''));
+  state.currentLanguage = language;
+  state.showLanguagePicker = false;
+};
+
+/**
+ * Remove a language translation
+ */
+const removeLanguage = (language) => {
+  if (!localCalendar.value) return;
+
+  if (localCalendar.value.getLanguages().length <= 1) {
+    return;
+  }
+
+  localCalendar.value.dropContent(language);
+
+  const remainingLanguages = localCalendar.value.getLanguages();
+  if (remainingLanguages.length > 0) {
+    state.currentLanguage = remainingLanguages[0];
   }
 };
 
@@ -420,6 +520,54 @@ onMounted(loadSettings);
   @media (prefers-color-scheme: dark) {
     background: var(--pav-color-stone-800);
     color: var(--pav-color-stone-100);
+  }
+}
+
+.translatable-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pav-space-4);
+  margin-top: var(--pav-space-4);
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pav-space-2);
+}
+
+.field-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--pav-color-stone-700);
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-stone-300);
+  }
+}
+
+.remove-translation-link {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--pav-color-red-600);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s ease;
+
+  &:hover {
+    color: var(--pav-color-red-700);
+    text-decoration: underline;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-red-400);
+
+    &:hover {
+      color: var(--pav-color-red-300);
+    }
   }
 }
 
