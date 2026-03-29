@@ -1,5 +1,6 @@
 <script setup>
 import { useTranslation } from 'i18next-vue';
+import i18next from 'i18next';
 import { ref, computed, onMounted } from 'vue';
 import FundingService from '@/client/service/funding';
 import FundingForm from '@/client/components/account/FundingForm.vue';
@@ -138,7 +139,7 @@ async function openBillingPortal() {
  * Format date for display
  */
 function formatDate(dateString) {
-  return new Date(dateString).toLocaleDateString();
+  return new Date(dateString).toLocaleDateString(i18next.language);
 }
 
 // Load data on mount

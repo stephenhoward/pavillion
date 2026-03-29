@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useTranslation } from 'i18next-vue';
+import i18next from 'i18next';
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import FundingService from '@/client/service/funding';
@@ -458,7 +459,7 @@ function formatAmount(millicents, curr) {
  */
 function formatDate(dateString) {
   if (!dateString) return t('grants.never_expires');
-  return new Date(dateString).toLocaleDateString();
+  return new Date(dateString).toLocaleDateString(i18next.language);
 }
 
 /**

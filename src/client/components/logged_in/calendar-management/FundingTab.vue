@@ -117,6 +117,7 @@
 <script setup lang="ts">
 import { reactive, onMounted } from 'vue';
 import { useTranslation } from 'i18next-vue';
+import i18next from 'i18next';
 import { useRoute } from 'vue-router';
 import FundingService from '@/client/service/funding';
 import type { FundingStatus } from '@/client/service/funding';
@@ -161,7 +162,7 @@ const clearMessages = (delay = 5000) => {
  */
 const formatDate = (dateString: string): string => {
   try {
-    return new Date(dateString).toLocaleDateString();
+    return new Date(dateString).toLocaleDateString(i18next.language);
   }
   catch {
     return dateString;
