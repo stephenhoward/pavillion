@@ -79,6 +79,7 @@
     "event_accessibility_event": "Event Accessibility",
     "event_accessibility_venue": "Venue Accessibility",
     "event_recurring": "Recurring Event",
+    "event_add_to_calendar": "Add to Calendar",
     "report": {
         "link_text": "Report Event",
         "form_title": "Report this Event",

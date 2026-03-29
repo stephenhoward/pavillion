@@ -13,6 +13,7 @@ import EventImage from './event-image.vue';
 import ReportEvent from './report-event.vue';
 import { useLocale } from '@/site/composables/useLocale';
 import { getRecurrenceText } from '@/common/utils/recurrence-text';
+import AddToCalendar from './add-to-calendar.vue';
 
 const { t } = useTranslation('system');
 const route = useRoute();
@@ -232,6 +233,9 @@ onBeforeMount(async () => {
             </div>
             <p class="recurrence-text">{{ recurrenceText }}</p>
           </div>
+
+          <!-- Add to Calendar -->
+          <AddToCalendar :event="state.instance.event" :instance="state.instance" />
         </aside>
       </div>
 
