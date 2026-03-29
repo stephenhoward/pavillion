@@ -10,6 +10,7 @@ import NotFound from './not-found.vue';
 import EventImage from './event-image.vue';
 import ReportEvent from './report-event.vue';
 import { useLocale } from '@/site/composables/useLocale';
+import AddToCalendar from './add-to-calendar.vue';
 
 const { t } = useTranslation('system');
 const route = useRoute();
@@ -172,6 +173,9 @@ function closeReportModal() {
             </div>
             <p class="accessibility-info">{{ locationAccessibilityInfo }}</p>
           </div>
+
+          <!-- Add to Calendar -->
+          <AddToCalendar v-if="state.event.schedules?.length" :event="state.event" />
         </aside>
       </div>
 
@@ -549,7 +553,8 @@ footer {
 .report-link {
   background: none;
   border: none;
-  padding: 0;
+  padding: $public-space-sm $public-space-md;
+  min-height: 44px;
   font-family: $public-font-family;
   font-size: $public-font-size-sm;
   color: $public-text-tertiary-light;

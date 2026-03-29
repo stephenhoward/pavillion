@@ -148,11 +148,12 @@ test.describe('Event CRUD', () => {
     // Click the confirm delete button inside the modal
     await confirmModal.locator('button.pill-button--danger').click();
 
-    // Wait for deletion to complete (event count should decrease)
+    // Wait for deletion to complete and list to reload with expected count
+    const expectedCount = initialCount - 1;
     await page.waitForFunction(
-      (count) => document.querySelectorAll('.event-item').length < count,
-      initialCount,
-      { timeout: 10000 },
+      (count) => document.querySelectorAll('.event-item').length === count,
+      expectedCount,
+      { timeout: 15000 },
     );
 
     // Verify the deleted event is no longer in the list
@@ -163,7 +164,7 @@ test.describe('Event CRUD', () => {
 
     // Verify event count decreased
     const finalCount = await page.locator('.event-item').count();
-    expect(finalCount).toBe(initialCount - 1);
+    expect(finalCount).toBe(expectedCount);
   });
 
   test('should create an event with category assignment', async ({ page }) => {
