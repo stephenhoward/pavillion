@@ -3,7 +3,26 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Pavillion</title>
+    <title><%= (typeof meta !== 'undefined' && meta && meta.title) ? meta.title : 'Pavillion' %></title>
+    <% if (typeof meta !== 'undefined' && meta && meta.description) { %>
+    <meta name="description" content="<%= meta.description %>" />
+    <% } %>
+    <% if (typeof meta !== 'undefined' && meta) { %>
+    <meta property="og:title" content="<%= meta.title %>" />
+    <meta property="og:description" content="<%= meta.description %>" />
+    <meta property="og:type" content="<%= meta.type %>" />
+    <meta property="og:url" content="<%= meta.url %>" />
+    <meta property="og:site_name" content="<%= meta.siteName %>" />
+    <% if (meta.image) { %>
+    <meta property="og:image" content="<%= meta.image %>" />
+    <% } %>
+    <meta name="twitter:card" content="<%= meta.image ? 'summary_large_image' : 'summary' %>" />
+    <meta name="twitter:title" content="<%= meta.title %>" />
+    <meta name="twitter:description" content="<%= meta.description %>" />
+    <% if (meta.image) { %>
+    <meta name="twitter:image" content="<%= meta.image %>" />
+    <% } %>
+    <% } %>
     <% if (typeof hreflangLinks !== 'undefined' && hreflangLinks && hreflangLinks.length > 0) { %>
     <% hreflangLinks.forEach(function(link) { %>
     <link rel="alternate" hreflang="<%= link.hreflang %>" href="<%= link.href %>" />
