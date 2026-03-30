@@ -15,6 +15,7 @@ export function buildDefaultCSP(): string {
     "frame-ancestors 'none'",
     `script-src 'self'${isDev ? ' http://localhost:5173' : ''} https://js.stripe.com`,
     "frame-src https://*.stripe.com",
+    "img-src 'self' data:",
   ];
 
   // In development, Vite HMR uses WebSocket connections and injects inline styles
