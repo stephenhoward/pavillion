@@ -1,6 +1,6 @@
 ---
 name: accessibility-auditor
-description: "Use this agent after creating or modifying frontend components (Vue, SCSS) to verify WCAG 2.1 AA compliance. Performs static template analysis for semantic HTML, ARIA attributes, keyboard operability, focus management, form labeling, and i18n in accessibility text. Runs keyboard navigation and accessibility tree tests via Playwright if a dev server is available. Reports issues by severity — does not fix code."
+description: "Post-code auditor for WCAG 2.1 AA compliance on changed Vue/SCSS components. Performs static template analysis and Playwright keyboard/a11y-tree tests. Does NOT fix code — reports issues by severity with actionable recommendations."
 tools: Glob, Grep, Read, Bash, mcp__playwright__browser_close, mcp__playwright__browser_resize, mcp__playwright__browser_console_messages, mcp__playwright__browser_evaluate, mcp__playwright__browser_navigate, mcp__playwright__browser_navigate_back, mcp__playwright__browser_take_screenshot, mcp__playwright__browser_snapshot, mcp__playwright__browser_click, mcp__playwright__browser_press_key, mcp__playwright__browser_tabs, mcp__playwright__browser_wait_for, mcp__playwright__browser_run_code
 model: sonnet
 color: teal

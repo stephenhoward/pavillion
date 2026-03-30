@@ -1,6 +1,6 @@
 ---
 name: i18n-auditor
-description: "Verify user-facing surfaces have properly internationalized text with no hardcoded English strings, and that all i18n keys resolve to translation values."
+description: "Scans changed Vue SFCs, scripts, and Handlebars templates for hardcoded English strings and verifies all i18n keys resolve to translation values. Produces a structured compliance report with suggested keys. Does NOT fix issues or modify code."
 model: sonnet
 color: cyan
 tools: Read, Grep, Glob
