@@ -33,6 +33,7 @@ import { backfillCalendarActors } from '@/server/activitypub/scripts/backfill-ca
 import { globalErrorHandler } from '@/server/common/middleware/error-handler';
 import { createI18nConfig } from '@/common/i18n/config';
 import logger from '@/server/common/helper/logger';
+import { PublicInterfaceHolder } from '@/server/common/helper/meta-tags';
 
 /**
  * Validates production environment configuration.
@@ -271,8 +272,15 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
   // → URL prefix → account language → cookie → Accept-Language → instance default.
   app.use(createLocaleMiddleware(configurationDomain.interface));
 
+  // Late-binding holder for the public calendar interface. The page router is
+  // mounted here (before domain initialization) so that route order is correct,
+  // but PublicCalendarDomain is not constructed until after CalendarDomain.
+  // The holder pattern lets the router reference the interface at request-time
+  // rather than at mount-time, avoiding a circular initialization dependency.
+  const publicInterfaceHolder: PublicInterfaceHolder = { current: null };
+
   // Mount the page router with ConfigurationInterface injected for settings access
-  const { router: indexRoutes } = createRouter(configurationDomain.interface);
+  const { router: indexRoutes } = createRouter(configurationDomain.interface, publicInterfaceHolder);
   app.use('/', indexRoutes);
 
   // Initialize Email domain (provides interface for cross-domain email sending)
@@ -317,7 +325,12 @@ const initPavillionServer = async (app: express.Application, port: number): Prom
   // TODO: move invites into a separate domain to avoid circular dependency
   accountsDomain.interface.setCalendarInterface(calendarDomain.interface);
 
-  new PublicCalendarDomain(eventBus,calendarDomain).initialize(app);
+  const publicDomain = new PublicCalendarDomain(eventBus, calendarDomain);
+  publicDomain.initialize(app);
+
+  // Set the public interface on the holder now that PublicCalendarDomain is initialized.
+  // Page route handlers will use this at request-time for meta tag resolution.
+  publicInterfaceHolder.current = publicDomain.interface;
 
   const mediaDomain = new MediaDomain(eventBus, calendarDomain.interface);
   mediaDomain.initialize(app);

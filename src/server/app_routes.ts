@@ -6,6 +6,7 @@ import { stripLocalePrefix, addLocalePrefix } from '@/common/i18n/locale-url';
 import { isValidLanguageCode, DEFAULT_LANGUAGE_CODE, getDefaultEnabledLanguageCodes } from '@/common/i18n/languages';
 import ConfigurationInterface from '@/server/configuration/interface';
 import logger from '@/server/common/helper/logger';
+import { PublicInterfaceHolder, parseEventPageParams, buildEventMetaTags, MetaTagData } from '@/server/common/helper/meta-tags';
 
 const environment = process.env.NODE_ENV;
 
@@ -129,12 +130,38 @@ export function buildHreflangLinks(
 }
 
 /**
+ * Resolves meta tag data for event pages, returning null for non-event pages.
+ *
+ * @param publicInterfaceHolder - Holder for the public calendar interface
+ * @param canonicalPath - The canonical path without locale prefix
+ * @param locale - The resolved locale for content
+ * @param baseUrl - The site base URL
+ * @returns MetaTagData or null
+ */
+async function resolveMetaTags(
+  publicInterfaceHolder: PublicInterfaceHolder,
+  canonicalPath: string,
+  locale: string,
+  baseUrl: string,
+): Promise<MetaTagData | null> {
+  const params = parseEventPageParams(canonicalPath);
+  if (!params) {
+    return null;
+  }
+  return buildEventMetaTags(publicInterfaceHolder, params, locale, baseUrl);
+}
+
+/**
  * Creates the application router with all page and asset routes.
  *
  * @param configInterface - ConfigurationInterface for reading instance settings
+ * @param publicInterfaceHolder - Late-binding holder for the public calendar interface (used for meta tag resolution)
  * @returns Object containing the configured Express router and handlers
  */
-export function createRouter(configInterface: ConfigurationInterface) {
+export function createRouter(
+  configInterface: ConfigurationInterface,
+  publicInterfaceHolder: PublicInterfaceHolder = { current: null },
+) {
   const router = Router();
 
   const handlers = {
@@ -166,13 +193,17 @@ export function createRouter(configInterface: ConfigurationInterface) {
     site_index: async (req: Request, res: Response) => {
       const instanceDefault = await resolveInstanceDefaultLanguage(configInterface);
       const { path: canonicalPath } = stripLocalePrefix(req.path);
+      const baseUrl = getSiteBaseUrl(req);
+
+      const meta = await resolveMetaTags(publicInterfaceHolder, canonicalPath, req.locale, baseUrl);
 
       const data = {
         environment,
         manifest: await parseManifest(),
         locale: req.locale,
-        siteBaseUrl: getSiteBaseUrl(req),
+        siteBaseUrl: baseUrl,
         hreflangLinks: buildHreflangLinks(req, canonicalPath, instanceDefault),
+        meta,
       };
       res.render("site.index.html.ejs", data);
     },
@@ -195,12 +226,17 @@ export function createRouter(configInterface: ConfigurationInterface) {
       if (!locale) {
         const instanceDefault = await resolveInstanceDefaultLanguage(configInterface);
         const { path: canonicalPath } = stripLocalePrefix(req.path);
+        const baseUrl = getSiteBaseUrl(req);
+
+        const meta = await resolveMetaTags(publicInterfaceHolder, canonicalPath, req.locale, baseUrl);
+
         const data = {
           environment,
           manifest: await parseManifest(),
           locale: req.locale,
-          siteBaseUrl: getSiteBaseUrl(req),
+          siteBaseUrl: baseUrl,
           hreflangLinks: buildHreflangLinks(req, canonicalPath, instanceDefault),
+          meta,
         };
         res.render("site.index.html.ejs", data);
         return;
@@ -218,12 +254,17 @@ export function createRouter(configInterface: ConfigurationInterface) {
       }
 
       // Serve site SPA with the locale from the URL prefix
+      const baseUrl = getSiteBaseUrl(req);
+
+      const meta = await resolveMetaTags(publicInterfaceHolder, strippedPath, locale, baseUrl);
+
       const data = {
         environment,
         manifest: await parseManifest(),
         locale: req.locale,
-        siteBaseUrl: getSiteBaseUrl(req),
+        siteBaseUrl: baseUrl,
         hreflangLinks: buildHreflangLinks(req, strippedPath, instanceDefault),
+        meta,
       };
       res.render("site.index.html.ejs", data);
     },
