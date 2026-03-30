@@ -170,6 +170,15 @@ architecture:
     skill: architecture-playbook
 
 testing:
+  test-tiers:
+    description: Which test type to use (unit, integration, e2e), testing boundaries, tier selection rules
+    skill: testing-playbook
+  coverage-strategy:
+    description: What behavior to validate, assertion quality, happy path vs edge cases, coverage targeting
+    skill: testing-playbook
+  test-maintainability:
+    description: Test size, readability, fixture patterns, DRY vs clarity, test suite bloat
+    skill: testing-playbook
   playwright-verification:
     description: Use Playwright MCP to verify actual behavior as ground truth
     skill: testing-playwright
