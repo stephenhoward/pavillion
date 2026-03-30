@@ -364,7 +364,10 @@
     "force_language_description": "When set, all users will see the interface in this language regardless of their preferences.",
     "saving": "Saving...",
     "settings_subtitle": "Monitor system health and configure instance settings",
-    "instance_settings": "Instance Settings"
+    "instance_settings": "Instance Settings",
+    "instance_description": "Instance Description",
+    "instance_description_placeholder": "Describe your instance...",
+    "instance_description_help": "A short description of your instance shown on public pages and in federation metadata. Maximum 500 characters."
   },
   "federation": {
     "title": "Federation",

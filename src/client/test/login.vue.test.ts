@@ -156,6 +156,129 @@ describe('Login Screen', () => {
 
 });
 
+describe('Login Info Panel', () => {
+
+  const defaultDescription = 'Your community\'s events, all in one place. Browse what\'s happening without an account, or sign in to share your own.';
+
+  describe('default copy fallback', () => {
+
+    it('renders default copy when instanceDescription is undefined', () => {
+      const router = createRouter({
+        history: createMemoryHistory(),
+        routes: routes,
+      });
+      const wrapper = mountComponent(Login, router, {
+        provide: {
+          site_config: {
+            settings: () => ({}),
+          },
+        },
+      });
+
+      const aside = wrapper.find('aside.welcome-card-info');
+      expect(aside.exists()).toBe(true);
+      expect(aside.text()).toContain(defaultDescription);
+    });
+
+    it('renders default copy when instanceDescription is empty object', () => {
+      const router = createRouter({
+        history: createMemoryHistory(),
+        routes: routes,
+      });
+      const wrapper = mountComponent(Login, router, {
+        provide: {
+          site_config: {
+            settings: () => ({
+              instanceDescription: {},
+            }),
+          },
+        },
+      });
+
+      const aside = wrapper.find('aside.welcome-card-info');
+      expect(aside.exists()).toBe(true);
+      expect(aside.text()).toContain(defaultDescription);
+    });
+  });
+
+  describe('configured instance description', () => {
+
+    it('renders instance description for current language when configured', () => {
+      const router = createRouter({
+        history: createMemoryHistory(),
+        routes: routes,
+      });
+      const customDescription = 'Welcome to our community events hub!';
+      const wrapper = mountComponent(Login, router, {
+        provide: {
+          site_config: {
+            settings: () => ({
+              instanceDescription: {
+                en: customDescription,
+              },
+            }),
+          },
+        },
+      });
+
+      const aside = wrapper.find('aside.welcome-card-info');
+      expect(aside.exists()).toBe(true);
+      expect(aside.text()).toContain(customDescription);
+      expect(aside.text()).not.toContain(defaultDescription);
+    });
+
+    it('falls back to defaultLanguage when current language is not in instanceDescription', () => {
+      const router = createRouter({
+        history: createMemoryHistory(),
+        routes: routes,
+      });
+      // i18next.language is 'en' by default from initI18Next,
+      // but we only provide a French description with defaultLanguage set to 'fr'
+      const frenchDescription = 'Bienvenue dans notre communaut\u00e9';
+      const wrapper = mountComponent(Login, router, {
+        provide: {
+          site_config: {
+            settings: () => ({
+              instanceDescription: {
+                fr: frenchDescription,
+              },
+              defaultLanguage: 'fr',
+            }),
+          },
+        },
+      });
+
+      const aside = wrapper.find('aside.welcome-card-info');
+      expect(aside.exists()).toBe(true);
+      expect(aside.text()).toContain(frenchDescription);
+      expect(aside.text()).not.toContain(defaultDescription);
+    });
+  });
+
+  describe('learn more link', () => {
+
+    it('has correct href, target, and rel attributes', () => {
+      const router = createRouter({
+        history: createMemoryHistory(),
+        routes: routes,
+      });
+      const wrapper = mountComponent(Login, router, {
+        provide: {
+          site_config: {
+            settings: () => ({}),
+          },
+        },
+      });
+
+      const learnMoreLink = wrapper.find('a.learn-more');
+      expect(learnMoreLink.exists()).toBe(true);
+      expect(learnMoreLink.attributes('href')).toContain('pavillion.social');
+      expect(learnMoreLink.attributes('target')).toBe('_blank');
+      expect(learnMoreLink.attributes('rel')).toContain('noopener');
+    });
+  });
+});
+
 describe('Login Behavior', () => {
 
   it('missing email', async () => {

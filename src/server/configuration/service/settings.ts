@@ -1,10 +1,13 @@
 import config from 'config';
 import ServiceSettingEntity from "@/server/configuration/entity/settings";
+import SettingsContentEntity from "@/server/configuration/entity/settings_content";
 import type { DefaultDateRange } from '@/common/model/calendar';
 import { isValidLanguageCode, DEFAULT_LANGUAGE_CODE, getDefaultEnabledLanguageCodes } from '@/common/i18n/languages';
 import { createLogger } from '@/server/common/helper/logger';
 
 const logger = createLogger('configuration');
+
+const MAX_INSTANCE_DESCRIPTION_KEYS = 20;
 
 type Config = {
   registrationMode: 'open' | 'apply' | 'invitation' | 'closed';
@@ -102,6 +105,81 @@ class ServiceSettings {
    */
   getEnabledLanguages(): string[] {
     return this.config.enabledLanguages;
+  }
+
+  /**
+   * Returns the instance description as a language-keyed object,
+   * loaded from the settings_content table.
+   */
+  async getInstanceDescription(): Promise<Record<string, string>> {
+    const rows = await SettingsContentEntity.findAll();
+    const result: Record<string, string> = {};
+    for (const row of rows) {
+      result[row.language] = row.description;
+    }
+    return result;
+  }
+
+  /**
+   * Replaces instance descriptions with the provided language-keyed object.
+   * Validates language codes and description length, then creates/updates/deletes
+   * rows in the settings_content table to match.
+   *
+   * @param descriptions - Language-keyed object of description strings
+   * @returns true if update succeeded, false if validation failed
+   */
+  async setInstanceDescription(descriptions: Record<string, string>): Promise<boolean> {
+    if (!descriptions || typeof descriptions !== 'object' || Array.isArray(descriptions)) {
+      logger.error({ descriptions }, 'Invalid instanceDescription: must be an object');
+      return false;
+    }
+
+    const keys = Object.keys(descriptions);
+    if (keys.length > MAX_INSTANCE_DESCRIPTION_KEYS) {
+      logger.error({ count: keys.length }, 'Invalid instanceDescription: too many language keys');
+      return false;
+    }
+
+    for (const key of keys) {
+      if (!isValidLanguageCode(key)) {
+        logger.error({ key }, 'Invalid instanceDescription: invalid language code');
+        return false;
+      }
+      const val = descriptions[key];
+      if (typeof val !== 'string') {
+        logger.error({ key, type: typeof val }, 'Invalid instanceDescription: value must be a string');
+        return false;
+      }
+      if (val.length > 500) {
+        logger.error({ key, length: val.length }, 'Invalid instanceDescription: value exceeds 500 characters');
+        return false;
+      }
+    }
+
+    // Delete rows for languages no longer present
+    const existingRows = await SettingsContentEntity.findAll();
+    for (const row of existingRows) {
+      if (!(row.language in descriptions) || descriptions[row.language] === '') {
+        await row.destroy();
+      }
+    }
+
+    // Create or update rows for each language
+    for (const [language, description] of Object.entries(descriptions)) {
+      if (description === '') continue;
+
+      const [entity, created] = await SettingsContentEntity.findOrCreate({
+        where: { language },
+        defaults: { language, description },
+      });
+
+      if (!created) {
+        entity.description = description;
+        await entity.save();
+      }
+    }
+
+    return true;
   }
 
   /**

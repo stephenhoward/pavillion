@@ -4,5 +4,19 @@
             "parameter": "registrationMode",
             "value": "apply"
         }
+    ],
+    "SettingsContentEntity": [
+        {
+            "language": "en",
+            "description": "Welcome to the Pavillion development instance. This is a federated events calendar for discovering and sharing community events."
+        },
+        {
+            "language": "es",
+            "description": "Bienvenido a la instancia de desarrollo de Pavillion. Este es un calendario de eventos federado para descubrir y compartir eventos comunitarios."
+        },
+        {
+            "language": "fr",
+            "description": "Bienvenue sur l'instance de developpement de Pavillion. Ceci est un calendrier d'evenements federe pour decouvrir et partager des evenements communautaires."
+        }
     ]
 }

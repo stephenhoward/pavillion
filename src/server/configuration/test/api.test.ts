@@ -26,6 +26,7 @@ describe('Site API', () => {
     sandbox.stub(configurationInterface, 'getSetting').withArgs('registrationMode').resolves('testValue');
     sandbox.stub(configurationInterface, 'getEnabledLanguages').resolves(['en', 'es']);
     sandbox.stub(configurationInterface, 'getForceLanguage').resolves(null);
+    sandbox.stub(configurationInterface, 'getInstanceDescription').resolves({});
 
     router.get('/handler', siteHandlers.getSettings.bind(siteHandlers));
 
@@ -39,6 +40,7 @@ describe('Site API', () => {
     sandbox.stub(configurationInterface, 'getSetting').resolves(undefined);
     sandbox.stub(configurationInterface, 'getEnabledLanguages').resolves(['en']);
     sandbox.stub(configurationInterface, 'getForceLanguage').resolves('es');
+    sandbox.stub(configurationInterface, 'getInstanceDescription').resolves({});
 
     router.get('/handler', siteHandlers.getSettings.bind(siteHandlers));
 
@@ -48,6 +50,50 @@ describe('Site API', () => {
     expect(response.body.enabledLanguages).toEqual(['en']);
     expect(response.body.forceLanguage).toBe('es');
     expect(response.body.localeDetectionMethods).toBeUndefined();
+  });
+
+  describe('getSettings instanceDescription', () => {
+    it('should include instanceDescription in the response', async () => {
+      sandbox.stub(configurationInterface, 'getSetting').resolves(undefined);
+      sandbox.stub(configurationInterface, 'getEnabledLanguages').resolves(['en']);
+      sandbox.stub(configurationInterface, 'getForceLanguage').resolves(null);
+      sandbox.stub(configurationInterface, 'getInstanceDescription').resolves({ en: 'Community events calendar' });
+
+      router.get('/handler', siteHandlers.getSettings.bind(siteHandlers));
+
+      const response = await request(testApp(router)).get('/handler');
+
+      expect(response.status).toBe(200);
+      expect(response.body.instanceDescription).toEqual({ en: 'Community events calendar' });
+    });
+
+    it('should return empty object when instanceDescription is not configured', async () => {
+      sandbox.stub(configurationInterface, 'getSetting').resolves(undefined);
+      sandbox.stub(configurationInterface, 'getEnabledLanguages').resolves(['en']);
+      sandbox.stub(configurationInterface, 'getForceLanguage').resolves(null);
+      sandbox.stub(configurationInterface, 'getInstanceDescription').resolves({});
+
+      router.get('/handler', siteHandlers.getSettings.bind(siteHandlers));
+
+      const response = await request(testApp(router)).get('/handler');
+
+      expect(response.status).toBe(200);
+      expect(response.body.instanceDescription).toEqual({});
+    });
+
+    it('should return multi-language instanceDescription', async () => {
+      sandbox.stub(configurationInterface, 'getSetting').resolves(undefined);
+      sandbox.stub(configurationInterface, 'getEnabledLanguages').resolves(['en', 'es']);
+      sandbox.stub(configurationInterface, 'getForceLanguage').resolves(null);
+      sandbox.stub(configurationInterface, 'getInstanceDescription').resolves({ en: 'Welcome', es: 'Bienvenido' });
+
+      router.get('/handler', siteHandlers.getSettings.bind(siteHandlers));
+
+      const response = await request(testApp(router)).get('/handler');
+
+      expect(response.status).toBe(200);
+      expect(response.body.instanceDescription).toEqual({ en: 'Welcome', es: 'Bienvenido' });
+    });
   });
 
   describe('updateSettings', () => {
@@ -105,6 +151,48 @@ describe('Site API', () => {
 
       expect(response.status).toBe(200);
       expect(mockSaveStub.callCount).toBe(0);
+    });
+
+    it('should call setInstanceDescription for instanceDescription', async () => {
+      const mockDescStub = sandbox.stub(configurationInterface, 'setInstanceDescription').resolves(true);
+      sandbox.stub(configurationInterface, 'setSetting').resolves(true);
+
+      router.post('/handler', siteHandlers.updateSettings.bind(siteHandlers));
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .send({ instanceDescription: { en: 'Community events' } });
+
+      expect(response.status).toBe(200);
+      expect(mockDescStub.calledWith({ en: 'Community events' })).toBe(true);
+    });
+
+    it('should return 400 when instanceDescription validation fails', async () => {
+      const mockDescStub = sandbox.stub(configurationInterface, 'setInstanceDescription').resolves(false);
+
+      router.post('/handler', siteHandlers.updateSettings.bind(siteHandlers));
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .send({ instanceDescription: { en: 'Some description' } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('instanceDescription');
+      expect(mockDescStub.calledOnce).toBe(true);
+    });
+
+    it('should persist multi-language instanceDescription', async () => {
+      const mockDescStub = sandbox.stub(configurationInterface, 'setInstanceDescription').resolves(true);
+      sandbox.stub(configurationInterface, 'setSetting').resolves(true);
+
+      router.post('/handler', siteHandlers.updateSettings.bind(siteHandlers));
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .send({ instanceDescription: { en: 'Welcome', es: 'Bienvenido' } });
+
+      expect(response.status).toBe(200);
+      expect(mockDescStub.calledWith({ en: 'Welcome', es: 'Bienvenido' })).toBe(true);
     });
   });
 });

@@ -11,7 +11,13 @@
     "MissingLogin": "missing email or password",
     "400": "bad sign in",
     "unknown_error": "An unknown error occurred",
-    "RateLimitError": "Too many requests. Please try again later."
+    "RateLimitError": "Too many requests. Please try again later.",
+    "info_panel": {
+      "welcome": "Welcome to",
+      "default_description": "Your community's events, all in one place. Browse what's happening without an account, or sign in to share your own.",
+      "powered_by": "Built on <1>Pavillion</1>, an open community events platform.",
+      "learn_more": "Learn more about Pavillion"
+    }
   },
   "forgot_password": {
     "title": "Forgot your password?",
