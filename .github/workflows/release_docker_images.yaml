@@ -54,9 +54,12 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          target: production
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          build-args: |
+            BUILD_SHA=${{ github.sha }}
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=${{ github.ref_name }}-${{ env.PLATFORM_PAIR }}
           cache-to: type=gha,mode=max,scope=${{ github.ref_name }}-${{ env.PLATFORM_PAIR }}
