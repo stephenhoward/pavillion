@@ -365,6 +365,7 @@ async function updateSettings() {
             min-height: 6rem;
             resize: vertical;
             line-height: var(--pav-line-height-normal);
+            border-radius: var(--pav-border-radius-md);
           }
 
           .form-select {

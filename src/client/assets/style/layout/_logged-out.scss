@@ -71,7 +71,7 @@
     margin-inline: auto;
     background-color: white;
     border-radius: 1rem; /* 16px - rounded-2xl */
-    padding: 2.5rem; /* 40px */
+    padding: var(--pav-space-10);
     box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
     box-shadow: var(--pav-shadow-lg), 0 0 0 1px rgb(231 229 228 / 0.5);
 
@@ -87,6 +87,10 @@
       @media (min-width: 768px) {
         display: grid;
         grid-template-columns: 3fr 2fr;
+
+        .welcome-card-form {
+          padding-inline-end: var(--pav-space-10);
+        }
       }
     }
 
@@ -95,7 +99,7 @@
       font-weight: var(--pav-font-weight-light);
       color: var(--pav-color-stone-800);
       text-align: center;
-      margin-bottom: 2.5rem; /* 40px */
+      margin-block-end: var(--pav-space-10);
 
       @media (prefers-color-scheme: dark) {
         color: var(--pav-color-stone-100);

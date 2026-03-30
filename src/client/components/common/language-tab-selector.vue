@@ -93,12 +93,8 @@ const addLanguage = () => {
   display: flex;
   align-items: center;
   padding: 0;
-  border-bottom: 1px solid var(--pav-color-stone-200);
-  margin-bottom: 1.5rem;
+  margin-bottom: var(--pav-space-4);
 
-  @media (prefers-color-scheme: dark) {
-    border-bottom-color: var(--pav-color-stone-700);
-  }
 }
 
 .tabs-container {
@@ -225,3 +221,4 @@ const addLanguage = () => {
   }
 }
 </style>
+
