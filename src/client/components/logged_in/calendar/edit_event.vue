@@ -303,6 +303,30 @@ form {
   }
 }
 
+.field-input--error {
+  border-color: var(--pav-color-red-400);
+
+  &:focus {
+    border-color: var(--pav-color-red-500);
+    box-shadow: 0 0 0 3px var(--pav-color-red-100);
+  }
+}
+
+.form-error {
+  margin: var(--pav-space-1) 0 0;
+  font-size: var(--pav-font-size-xs);
+  color: var(--pav-color-red-600);
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-red-400);
+  }
+}
+
+.form-required {
+  color: var(--pav-color-red-500);
+  margin-inline-start: 0.125rem;
+}
+
 .field-textarea {
   resize: vertical;
   min-height: 80px;
@@ -693,14 +717,18 @@ button {
       aria-label="Event Editor"
       class="editor-main"
     >
-      <form id="event-form" @submit.prevent="handleSaveEvent()" aria-label="Event Information Form">
+      <form
+        id="event-form"
+        @submit.prevent="handleSaveEvent()"
+        aria-label="Event Information Form"
+        novalidate
+      >
 
         <!-- Error Display -->
         <div v-if="editorState.err"
              ref="errorContainer"
              class="error"
-             role="alert"
-             aria-live="polite">
+             role="alert">
           <button
             class="error-dismiss"
             type="button"
@@ -743,15 +771,29 @@ button {
                 class="event-fields"
               >
                 <div class="form-field">
-                  <label :for="`event-name-${currentLanguage}`" class="field-label">Event Title</label>
+                  <label :for="`event-name-${currentLanguage}`" class="field-label">
+                    Event Title
+                    <span class="form-required" aria-hidden="true">*</span>
+                  </label>
                   <input
                     :id="`event-name-${currentLanguage}`"
                     type="text"
                     name="name"
                     v-model="editorState.event.content(currentLanguage).name"
                     class="field-input"
-                    required
+                    :class="{ 'field-input--error': fieldErrors.title }"
+                    :aria-invalid="fieldErrors.title ? 'true' : undefined"
+                    :aria-describedby="fieldErrors.title ? 'event-title-error' : undefined"
+                    @input="clearFieldError('title')"
                   />
+                  <p
+                    v-if="fieldErrors.title"
+                    id="event-title-error"
+                    class="form-error"
+                    role="alert"
+                  >
+                    {{ fieldErrors.title }}
+                  </p>
                 </div>
 
                 <div class="form-field">
@@ -849,7 +891,13 @@ button {
             <h2 class="section-header">DATE & TIME</h2>
 
             <div class="section-card">
-              <div class="schedule-list" role="group" aria-label="Event Schedules">
+              <div
+                class="schedule-list"
+                role="group"
+                aria-label="Event Schedules"
+                :aria-describedby="fieldErrors.schedule ? 'event-schedule-error' : undefined"
+                :aria-invalid="fieldErrors.schedule ? 'true' : undefined"
+              >
                 <div
                   v-for="(schedule, index) in editorState.event.schedules"
                   :key="index"
@@ -875,6 +923,15 @@ button {
 
               <p class="schedule-help-text">
                 Add multiple schedules to create events that occur at different times or with different patterns.
+              </p>
+
+              <p
+                v-if="fieldErrors.schedule"
+                id="event-schedule-error"
+                class="form-error"
+                role="alert"
+              >
+                {{ fieldErrors.schedule }}
               </p>
             </div>
           </section>
@@ -998,6 +1055,8 @@ const {
   selectedCategories,
   selectedSeriesId,
   mediaId,
+  fieldErrors,
+  clearFieldError,
   initializeEvent,
   saveEvent,
   pageTitle,
@@ -1174,6 +1233,12 @@ const handleSaveEvent = async () => {
   await saveEvent(t, () => {
     resetSnapshot(editorState.event, selectedCategories.value, mediaId.value);
   });
+  // Move focus to first errored field for keyboard/screen reader users
+  await nextTick();
+  if (Object.keys(fieldErrors).length > 0) {
+    const firstInvalid = document.querySelector<HTMLElement>('[aria-invalid="true"]');
+    firstInvalid?.focus();
+  }
 };
 
 // Watch for location picker visibility and show/hide the modal
@@ -1288,6 +1353,7 @@ defineExpose({
   selectedCategories,
   selectedSeriesId,
   mediaId,
+  fieldErrors,
   confirmLeave,
   cancelLeave,
   // Expose checkDirtyState for manual triggering in tests

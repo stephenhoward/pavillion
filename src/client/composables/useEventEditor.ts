@@ -80,6 +80,63 @@ export function useEventEditor(defaultLanguage: string = 'en') {
   const selectedSeriesId = ref<string | null>(null);
   const mediaId = ref<string | null>(null);
 
+  // Field-level validation errors keyed by field name
+  const fieldErrors = reactive<Record<string, string>>({});
+
+  /**
+   * Clear a specific field error when the user modifies the field
+   *
+   * @param fieldName - The field name to clear the error for
+   */
+  const clearFieldError = (fieldName: string): void => {
+    delete fieldErrors[fieldName];
+  };
+
+  /**
+   * Clear all field errors
+   */
+  const clearAllFieldErrors = (): void => {
+    for (const key of Object.keys(fieldErrors)) {
+      delete fieldErrors[key];
+    }
+  };
+
+  /**
+   * Validate the event before saving.
+   * Checks that required fields are populated and populates fieldErrors.
+   *
+   * @param t - Translation function for error messages
+   * @returns true if the event is valid
+   */
+  const validateEvent = (t: (key: string) => string): boolean => {
+    clearAllFieldErrors();
+
+    const model = state.event;
+    if (!model) {
+      return false;
+    }
+
+    // Title required: at least one language must have a non-empty title
+    const languages = model.getLanguages();
+    const hasTitle = languages.some((lang: string) => {
+      const name = model.content(lang).name;
+      return name && name.trim().length > 0;
+    });
+    if (!hasTitle) {
+      fieldErrors.title = t('error_title_required');
+    }
+
+    // Schedule required: at least one schedule must have a start date
+    const hasValidSchedule = model.schedules && model.schedules.some(
+      (schedule: any) => schedule.startDate,
+    );
+    if (!hasValidSchedule) {
+      fieldErrors.schedule = t('error_date_required');
+    }
+
+    return Object.keys(fieldErrors).length === 0;
+  };
+
   /**
    * Determine the editor mode based on route parameters
    * - Edit mode: /event/:eventId
@@ -319,6 +376,7 @@ export function useEventEditor(defaultLanguage: string = 'en') {
     // Clear previous validation errors
     state.err = '';
     state.errDetail = '';
+    clearAllFieldErrors();
 
     // Ensure we have a calendarId
     if (!model.calendarId && state.availableCalendars.length > 0) {
@@ -331,13 +389,8 @@ export function useEventEditor(defaultLanguage: string = 'en') {
       return;
     }
 
-    // Validate that at least one schedule has a date and start time
-    const hasValidSchedule = model.schedules && model.schedules.some(
-      (schedule: any) => schedule.startDate,
-    );
-    if (!hasValidSchedule) {
-      state.err = t('error_date_required');
-      state.errDetail = '';
+    // Run client-side field validation
+    if (!validateEvent(t)) {
       return;
     }
 
@@ -422,6 +475,16 @@ export function useEventEditor(defaultLanguage: string = 'en') {
         || error?.message
         || '';
       state.errDetail = typeof serverMessage === 'string' ? serverMessage : '';
+
+      // Parse server field-level errors if present
+      const serverFields = error?.response?.data?.fields;
+      if (serverFields && typeof serverFields === 'object') {
+        for (const [field, message] of Object.entries(serverFields)) {
+          if (typeof message === 'string') {
+            fieldErrors[field] = message;
+          }
+        }
+      }
     }
   };
 
@@ -445,6 +508,8 @@ export function useEventEditor(defaultLanguage: string = 'en') {
     selectedCategories,
     selectedSeriesId,
     mediaId,
+    fieldErrors,
+    clearFieldError,
     initializeEvent,
     saveEvent,
     pageTitle,

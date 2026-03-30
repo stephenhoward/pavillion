@@ -499,6 +499,7 @@ describe('useEventEditor', () => {
 
       await initializeEvent();
 
+      state.event!.content('en').name = 'Test Event';
       state.event!.schedules[0].startDate = DateTime.now();
 
       const mockT = vi.fn((key) => key);
@@ -523,6 +524,7 @@ describe('useEventEditor', () => {
 
       await initializeEvent();
 
+      state.event!.content('en').name = 'Test Event';
       state.event!.schedules[0].startDate = DateTime.now();
 
       const mockT = vi.fn((key) => key);
@@ -550,6 +552,7 @@ describe('useEventEditor', () => {
 
       // Duplicate mode strips event, so add a schedule with startDate
       state.event!.addSchedule();
+      state.event!.content('en').name = 'Test Event';
       state.event!.schedules[0].startDate = DateTime.now();
 
       const mockT = vi.fn((key) => key);
@@ -575,6 +578,7 @@ describe('useEventEditor', () => {
       await initializeEvent('event-123');
 
       state.event!.addSchedule();
+      state.event!.content('en').name = 'Test Event';
       state.event!.schedules[0].startDate = DateTime.now();
 
       const mockT = vi.fn((key) => key);
@@ -611,6 +615,7 @@ describe('useEventEditor', () => {
 
       await initializeEvent();
 
+      state.event!.content('en').name = 'Test Event';
       state.event!.schedules[0].startDate = DateTime.now();
       selectedCategories.value = ['cat-1', 'cat-2'];
 
@@ -632,6 +637,7 @@ describe('useEventEditor', () => {
 
       await initializeEvent();
 
+      state.event!.content('en').name = 'Test Event';
       state.event!.schedules[0].startDate = DateTime.now();
       selectedCategories.value = ['cat-1'];
 
@@ -653,6 +659,7 @@ describe('useEventEditor', () => {
 
       await initializeEvent();
 
+      state.event!.content('en').name = 'Test Event';
       state.event!.schedules[0].startDate = DateTime.now();
       mediaId.value = 'media-123';
 
@@ -690,22 +697,23 @@ describe('useEventEditor', () => {
       expect(state.err).toBe('error_no_calendar');
     });
 
-    it('should return error when no date set on schedule', async () => {
+    it('should return field error when no date set on schedule', async () => {
       const calendar = new Calendar('cal-1', 'test-calendar');
 
       sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
 
-      const { state, initializeEvent, saveEvent } = useEventEditor();
+      const { state, fieldErrors, initializeEvent, saveEvent } = useEventEditor();
 
       await initializeEvent();
 
-      // Do not set startDate - schedule has null startDate by default
+      // Set title but do not set startDate - schedule has null startDate by default
+      state.event!.content('en').name = 'Test Event';
 
       const mockT = vi.fn((key) => key);
       await saveEvent(mockT);
 
       expect(mockT).toHaveBeenCalledWith('error_date_required');
-      expect(state.err).toBe('error_date_required');
+      expect(fieldErrors.schedule).toBe('error_date_required');
     });
 
     it('should handle save API error', async () => {
@@ -718,6 +726,7 @@ describe('useEventEditor', () => {
 
       await initializeEvent();
 
+      state.event!.content('en').name = 'Test Event';
       state.event!.schedules[0].startDate = DateTime.now();
 
       const mockT = vi.fn((key) => key);
@@ -738,6 +747,7 @@ describe('useEventEditor', () => {
 
       await initializeEvent();
 
+      state.event!.content('en').name = 'Test Event';
       state.event!.schedules[0].startDate = DateTime.now();
 
       const mockT = vi.fn((key) => key);
@@ -758,6 +768,7 @@ describe('useEventEditor', () => {
 
       await initializeEvent();
 
+      state.event!.content('en').name = 'Test Event';
       state.event!.schedules[0].startDate = DateTime.now();
       // Force the event to have a different calendar ID that doesn't exist
       state.event!.calendarId = 'cal-2';
@@ -779,6 +790,7 @@ describe('useEventEditor', () => {
 
       await initializeEvent();
 
+      state.event!.content('en').name = 'Test Event';
       state.event!.schedules[0].startDate = DateTime.now();
       state.event!.locationId = 'location-123';
 
@@ -805,6 +817,7 @@ describe('useEventEditor', () => {
       expect(state.event!.location!.id).toBe('');
       expect(state.event!.location!.name).toBe('');
 
+      state.event!.content('en').name = 'Test Event';
       state.event!.schedules[0].startDate = DateTime.now();
 
       const mockT = vi.fn((key) => key);
@@ -826,6 +839,7 @@ describe('useEventEditor', () => {
 
       await initializeEvent();
 
+      state.event!.content('en').name = 'Test Event';
       state.event!.schedules[0].startDate = DateTime.now();
       // Set a valid location with a name
       state.event!.location = new EventLocation('loc-1', 'Community Center', '123 Main St');
@@ -850,6 +864,7 @@ describe('useEventEditor', () => {
 
       await initializeEvent();
 
+      state.event!.content('en').name = 'Test Event';
       state.event!.schedules[0].startDate = DateTime.now();
       // Explicitly set an empty location (simulates form with no location input)
       state.event!.location = new EventLocation('', '', '', '', '', '', '');
@@ -1016,6 +1031,7 @@ describe('useEventEditor', () => {
 
       await initializeEvent();
 
+      state.event!.content('en').name = 'Test Event';
       state.event!.schedules[0].startDate = DateTime.now();
       state.err = 'Previous error';
 
@@ -1078,6 +1094,258 @@ describe('useEventEditor', () => {
 
       // After re-initialization, a new event is created with the first available calendar
       expect(state.calendar?.id).toBe('cal-1');
+    });
+  });
+
+  describe('Field-Level Validation', () => {
+    it('should initialize fieldErrors as empty object', () => {
+      const { fieldErrors } = useEventEditor();
+
+      expect(Object.keys(fieldErrors)).toEqual([]);
+    });
+
+    it('should set title field error when no language has a title', async () => {
+      const calendar = new Calendar('cal-1', 'test-calendar');
+
+      sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
+
+      const { state, fieldErrors, initializeEvent, saveEvent } = useEventEditor();
+
+      await initializeEvent();
+
+      // Event has default language content but title is empty
+      state.event!.schedules[0].startDate = DateTime.now();
+
+      const mockT = vi.fn((key) => key);
+      await saveEvent(mockT);
+
+      expect(fieldErrors.title).toBe('error_title_required');
+      expect(mockT).toHaveBeenCalledWith('error_title_required');
+    });
+
+    it('should set schedule field error when no schedule has a start date', async () => {
+      const calendar = new Calendar('cal-1', 'test-calendar');
+
+      sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
+
+      const { state, fieldErrors, initializeEvent, saveEvent } = useEventEditor();
+
+      await initializeEvent();
+
+      // Set a title but no schedule date
+      state.event!.content('en').name = 'Test Event';
+
+      const mockT = vi.fn((key) => key);
+      await saveEvent(mockT);
+
+      expect(fieldErrors.schedule).toBe('error_date_required');
+    });
+
+    it('should set both title and schedule errors when both are missing', async () => {
+      const calendar = new Calendar('cal-1', 'test-calendar');
+
+      sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
+
+      const { state, fieldErrors, initializeEvent, saveEvent } = useEventEditor();
+
+      await initializeEvent();
+
+      // No title, no schedule date
+
+      const mockT = vi.fn((key) => key);
+      await saveEvent(mockT);
+
+      expect(fieldErrors.title).toBe('error_title_required');
+      expect(fieldErrors.schedule).toBe('error_date_required');
+    });
+
+    it('should not set field errors when title and schedule are valid', async () => {
+      const calendar = new Calendar('cal-1', 'test-calendar');
+      const savedEvent = new CalendarEvent('event-123', 'cal-1');
+
+      sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
+      sandbox.stub(EventService.prototype, 'saveEvent').resolves(savedEvent);
+
+      const { state, fieldErrors, initializeEvent, saveEvent } = useEventEditor();
+
+      await initializeEvent();
+
+      state.event!.content('en').name = 'Valid Title';
+      state.event!.schedules[0].startDate = DateTime.now();
+
+      const mockT = vi.fn((key) => key);
+      await saveEvent(mockT);
+
+      expect(Object.keys(fieldErrors).length).toBe(0);
+    });
+
+    it('should not call saveEvent API when validation fails', async () => {
+      const calendar = new Calendar('cal-1', 'test-calendar');
+
+      sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
+      const saveStub = sandbox.stub(EventService.prototype, 'saveEvent');
+
+      const { state, initializeEvent, saveEvent } = useEventEditor();
+
+      await initializeEvent();
+
+      // No title, no schedule date - validation should fail
+      const mockT = vi.fn((key) => key);
+      await saveEvent(mockT);
+
+      sinon.assert.notCalled(saveStub);
+    });
+
+    it('should accept title in any language as valid', async () => {
+      const calendar = new Calendar('cal-1', 'test-calendar');
+      const savedEvent = new CalendarEvent('event-123', 'cal-1');
+
+      sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
+      sandbox.stub(EventService.prototype, 'saveEvent').resolves(savedEvent);
+
+      const { state, fieldErrors, initializeEvent, saveEvent } = useEventEditor();
+
+      await initializeEvent();
+
+      // Leave default language empty, set title in French
+      state.event!.content('fr').name = 'Titre en francais';
+      state.event!.schedules[0].startDate = DateTime.now();
+
+      const mockT = vi.fn((key) => key);
+      await saveEvent(mockT);
+
+      expect(fieldErrors.title).toBeUndefined();
+    });
+
+    it('should clear field errors on next save attempt', async () => {
+      const calendar = new Calendar('cal-1', 'test-calendar');
+      const savedEvent = new CalendarEvent('event-123', 'cal-1');
+
+      sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
+      sandbox.stub(EventService.prototype, 'saveEvent').resolves(savedEvent);
+
+      const { state, fieldErrors, initializeEvent, saveEvent } = useEventEditor();
+
+      await initializeEvent();
+
+      const mockT = vi.fn((key) => key);
+
+      // First save with missing title - should produce field error
+      state.event!.schedules[0].startDate = DateTime.now();
+      await saveEvent(mockT);
+      expect(fieldErrors.title).toBe('error_title_required');
+
+      // Second save with title filled - field error should be cleared
+      state.event!.content('en').name = 'Now has title';
+      await saveEvent(mockT);
+      expect(fieldErrors.title).toBeUndefined();
+    });
+
+    it('should clear individual field error via clearFieldError', async () => {
+      const calendar = new Calendar('cal-1', 'test-calendar');
+
+      sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
+
+      const { state, fieldErrors, clearFieldError, initializeEvent, saveEvent } = useEventEditor();
+
+      await initializeEvent();
+
+      const mockT = vi.fn((key) => key);
+      await saveEvent(mockT);
+
+      expect(fieldErrors.title).toBeDefined();
+
+      clearFieldError('title');
+      expect(fieldErrors.title).toBeUndefined();
+    });
+  });
+
+  describe('Server Field Error Parsing', () => {
+    it('should parse server field-level errors from response', async () => {
+      const calendar = new Calendar('cal-1', 'test-calendar');
+
+      sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
+
+      const serverError = {
+        response: {
+          data: {
+            error: 'Validation failed',
+            fields: {
+              title: 'Title is too long',
+              schedule: 'Invalid schedule configuration',
+            },
+          },
+        },
+      };
+      sandbox.stub(EventService.prototype, 'saveEvent').rejects(serverError);
+
+      const { state, fieldErrors, initializeEvent, saveEvent } = useEventEditor();
+
+      await initializeEvent();
+
+      state.event!.content('en').name = 'Some Title';
+      state.event!.schedules[0].startDate = DateTime.now();
+
+      const mockT = vi.fn((key) => key);
+      await saveEvent(mockT);
+
+      expect(fieldErrors.title).toBe('Title is too long');
+      expect(fieldErrors.schedule).toBe('Invalid schedule configuration');
+      expect(state.err).toBe('error_saving_event');
+    });
+
+    it('should still show generic error when server returns no field errors', async () => {
+      const calendar = new Calendar('cal-1', 'test-calendar');
+
+      sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
+      sandbox.stub(EventService.prototype, 'saveEvent').rejects(new Error('Network error'));
+
+      const { state, fieldErrors, initializeEvent, saveEvent } = useEventEditor();
+
+      await initializeEvent();
+
+      state.event!.content('en').name = 'Some Title';
+      state.event!.schedules[0].startDate = DateTime.now();
+
+      const mockT = vi.fn((key) => key);
+      await saveEvent(mockT);
+
+      expect(state.err).toBe('error_saving_event');
+      expect(Object.keys(fieldErrors).length).toBe(0);
+    });
+
+    it('should ignore non-string values in server field errors', async () => {
+      const calendar = new Calendar('cal-1', 'test-calendar');
+
+      sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar]);
+
+      const serverError = {
+        response: {
+          data: {
+            error: 'Validation failed',
+            fields: {
+              title: 'Valid error message',
+              badField: 123,
+              anotherBad: null,
+            },
+          },
+        },
+      };
+      sandbox.stub(EventService.prototype, 'saveEvent').rejects(serverError);
+
+      const { state, fieldErrors, initializeEvent, saveEvent } = useEventEditor();
+
+      await initializeEvent();
+
+      state.event!.content('en').name = 'Some Title';
+      state.event!.schedules[0].startDate = DateTime.now();
+
+      const mockT = vi.fn((key) => key);
+      await saveEvent(mockT);
+
+      expect(fieldErrors.title).toBe('Valid error message');
+      expect(fieldErrors.badField).toBeUndefined();
+      expect(fieldErrors.anotherBad).toBeUndefined();
     });
   });
 });
