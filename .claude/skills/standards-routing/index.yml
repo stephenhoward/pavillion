@@ -139,6 +139,26 @@ privacy:
     description: Reporter anonymity, admin visibility, IP lifecycle, reporter-to-reported isolation
     skill: privacy-playbook
 
+stylesheet:
+  tokens:
+    description: Design token usage, CSS custom properties, hardcoded value detection
+    skill: stylesheet-playbook
+  structure:
+    description: Style placement, scoped vs extracted, component library extraction thresholds
+    skill: stylesheet-playbook
+  dark-mode:
+    description: Theme support, semantic token usage, dark mode gaps
+    skill: stylesheet-playbook
+  duplication:
+    description: Duplicated styles, component library bypass, pattern reuse
+    skill: stylesheet-playbook
+  i18n:
+    description: Logical properties for LTR/RTL, physical direction property avoidance
+    skill: stylesheet-playbook
+  scss-patterns:
+    description: SCSS nesting depth, BEM naming, CSS layers, mixin usage, specificity
+    skill: stylesheet-playbook
+
 complexity:
   principles:
     description: Scope creep, YAGNI, consistency, maintainability, simplicity

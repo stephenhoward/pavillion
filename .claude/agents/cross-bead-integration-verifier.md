@@ -1,6 +1,6 @@
 ---
 name: cross-bead-integration-verifier
-description: "Use this agent after a wave of parallel bead implementations completes to verify the beads integrate correctly with each other. Catches conflicts, duplication, and inconsistencies that per-bead verification misses because each bead was implemented in isolation."
+description: "Post-code agent that verifies integration between beads implemented in parallel. Catches file conflicts, broken cross-references, duplicated code, and type mismatches that per-bead verification misses. Does NOT check individual code quality, convention drift, or architectural alignment."
 tools: Glob, Grep, Read, Bash, mcp__serena__list_dir, mcp__serena__find_file, mcp__serena__search_for_pattern, mcp__serena__get_symbols_overview, mcp__serena__find_symbol, mcp__serena__find_referencing_symbols, mcp__serena__think_about_collected_information
 model: sonnet
 color: orange

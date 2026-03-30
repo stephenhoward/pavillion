@@ -1,6 +1,6 @@
 ---
 name: test-failure-investigator
-description: "Investigate failing tests and determine whether to fix the test or the code. Follows 'test validity first' philosophy — never assumes tests are correct just because they exist. Uses structured analysis to determine root cause, then implements the correct fix while adhering to project standards."
+description: "Post-code investigator that diagnoses failing Vitest/Playwright tests and determines whether to fix the test or the code. Follows 'test validity first' philosophy -- never assumes tests are correct just because they exist. Does NOT blindly make tests pass without root-cause analysis."
 model: sonnet
 color: blue
 ---
