@@ -62,10 +62,13 @@ RUN npm ci
 COPY src/ ./src/
 COPY migrations/ ./migrations/
 COPY config/default.yaml config/production.yaml config/custom-environment-variables.yaml ./config/
-COPY tsconfig.json vite.config.ts ./
+COPY tsconfig.json vite.config.ts vite.widget-sdk.config.ts ./
 
-# Build frontend assets with Vite
-RUN npm run build:frontend
+# Build all frontend assets (client, site, widget app, and widget SDK)
+# The commit SHA arg ensures this layer is never served from cache,
+# so CSS and JS bundles are always built together from the same source.
+ARG BUILD_SHA
+RUN npm run build
 
 # ==============================================================================
 # Stage 2: Production runtime
