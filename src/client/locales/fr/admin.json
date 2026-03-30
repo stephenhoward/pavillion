@@ -29,6 +29,9 @@
     "force_language_description": "Lorsque défini, tous les utilisateurs verront l'interface dans cette langue, indépendamment de leurs préférences.",
     "saving": "Enregistrement...",
     "settings_subtitle": "Surveillez l'état du système et configurez les paramètres de l'instance",
-    "instance_settings": "Paramètres de l'instance"
+    "instance_settings": "Paramètres de l'instance",
+    "instance_description": "Description de l’instance",
+    "instance_description_placeholder": "Décrivez votre instance...",
+    "instance_description_help": "Une courte description de votre instance affichée sur les pages publiques et dans les métadonnées de fédération. 500 caractères maximum."
   }
 }

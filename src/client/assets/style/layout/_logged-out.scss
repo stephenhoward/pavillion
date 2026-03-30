@@ -36,7 +36,6 @@
   /* Main content area */
   section {
     width: 100%;
-    max-width: 28rem; /* 448px */
   }
 
   /* Footer with Pavillion branding */
@@ -68,6 +67,8 @@
 
   /* Auth card styles */
   .welcome-card {
+    max-width: 28rem; /* 448px - default for narrow auth pages */
+    margin-inline: auto;
     background-color: white;
     border-radius: 1rem; /* 16px - rounded-2xl */
     padding: 2.5rem; /* 40px */
@@ -77,6 +78,16 @@
     @media (prefers-color-scheme: dark) {
       background-color: var(--pav-color-stone-800);
       box-shadow: none;
+    }
+
+    /* Two-column layout for login card with info panel */
+    &:has(.welcome-card-info) {
+      max-width: var(--pav-container-md);
+
+      @media (min-width: 768px) {
+        display: grid;
+        grid-template-columns: 3fr 2fr;
+      }
     }
 
     h3 {
@@ -236,6 +247,48 @@
         &:hover {
           color: var(--pav-color-orange-300);
         }
+      }
+    }
+  }
+
+  /* Login info panel (aside within two-column login card) */
+  .welcome-card-info {
+    border-block-start: var(--pav-border-width-1) solid var(--pav-border-color-subtle);
+    padding-block-start: var(--pav-space-6);
+    margin-block-start: var(--pav-space-6);
+
+    @media (min-width: 768px) {
+      border-block-start: none;
+      padding-block-start: 0;
+      margin-block-start: 0;
+      border-inline-start: var(--pav-border-width-1) solid var(--pav-border-color-subtle);
+      padding-inline-start: var(--pav-space-6);
+    }
+
+    h3 {
+      font-size: var(--pav-font-size-md);
+      font-weight: var(--pav-font-weight-semibold);
+      color: var(--pav-color-text-secondary);
+      margin-block-end: var(--pav-space-3);
+    }
+
+    p,
+    li {
+      font-size: var(--pav-font-size-sm);
+      color: var(--pav-color-text-secondary);
+    }
+
+    p {
+      margin-block-end: var(--pav-space-3);
+    }
+
+    ul {
+      list-style: none;
+      padding-inline-start: 0;
+      margin-block-end: var(--pav-space-4);
+
+      li {
+        padding-block-end: var(--pav-space-2);
       }
     }
   }

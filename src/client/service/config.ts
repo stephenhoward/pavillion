@@ -3,10 +3,12 @@ import type { DefaultDateRange } from '@/common/model/calendar';
 
 type Settings = {
   registrationMode: string;
+  siteTitle?: string;
   defaultDateRange: DefaultDateRange;
   defaultLanguage: string;
   enabledLanguages?: string[];
   forceLanguage?: string | null;
+  instanceDescription?: Record<string, string>;
 };
 
 /**

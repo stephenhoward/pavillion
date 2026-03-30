@@ -1,9 +1,11 @@
-<script setup>
+<script setup lang="ts">
+import iso6391 from 'iso-639-1-dir';
 import { useTranslation } from 'i18next-vue';
-import { inject, ref } from 'vue';
+import { inject, onMounted, reactive, ref } from 'vue';
 import Config from '../../service/config';
 import HousekeepingStatus from './housekeeping-status.vue';
 import LanguageSettings from './language-settings.vue';
+import LanguageTabSelector from '../common/language-tab-selector.vue';
 
 const site_config = inject('site_config');
 const { t } = useTranslation('admin', {
@@ -20,6 +22,13 @@ const selectedRegistrationMode = ref(site_config.settings().registrationMode || 
 const siteTitle = ref(site_config.settings().siteTitle);
 const selectedDateRange = ref(site_config.settings().defaultDateRange || '2weeks');
 
+// Instance description state
+const descriptionState = reactive({
+  selectedLanguage: '',
+  descriptions: {},
+  enabledLanguages: [],
+});
+
 // Registration mode options
 const registrationModes = [
   { value: 'open', label: t('registration_mode_open') },
@@ -35,6 +44,27 @@ const dateRangeOptions = [
   { value: '1month', label: t('date_range_1month') },
 ];
 
+onMounted(async () => {
+  try {
+    const configService = await Config.init();
+    const settings = configService.settings();
+    const languages = settings.enabledLanguages ?? ['en'];
+    descriptionState.enabledLanguages = languages;
+    descriptionState.selectedLanguage = languages[0] || 'en';
+    descriptionState.descriptions = { ...settings.instanceDescription } || {};
+  }
+  catch (error) {
+    console.error('Error loading instance description settings:', error);
+  }
+});
+
+/**
+ * Returns the text direction for the currently selected description language.
+ */
+function currentLanguageDir() {
+  return iso6391.getDir(descriptionState.selectedLanguage) === 'rtl' ? 'rtl' : 'ltr';
+}
+
 /**
  * Updates the site settings
  */
@@ -49,6 +79,7 @@ async function updateSettings() {
       registrationMode: selectedRegistrationMode.value,
       siteTitle: siteTitle.value,
       defaultDateRange: selectedDateRange.value,
+      instanceDescription: descriptionState.descriptions,
     });
 
     if (success) {
@@ -141,6 +172,26 @@ async function updateSettings() {
               v-model="siteTitle"
             />
             <p id="site-title-description" class="form-description">{{ t("site_title_description") }}</p>
+          </div>
+
+          <!-- Instance Description -->
+          <div class="form-group">
+            <label for="instanceDescription" class="form-label">{{ t("instance_description") }}</label>
+            <LanguageTabSelector
+              v-model="descriptionState.selectedLanguage"
+              :languages="descriptionState.enabledLanguages"
+            />
+            <textarea
+              id="instanceDescription"
+              class="form-textarea"
+              :disabled="saving"
+              :maxlength="500"
+              :dir="currentLanguageDir()"
+              :placeholder="t('instance_description_placeholder')"
+              aria-describedby="instance-description-help"
+              v-model="descriptionState.descriptions[descriptionState.selectedLanguage]"
+            />
+            <p id="instance-description-help" class="form-description">{{ t("instance_description_help") }}</p>
           </div>
 
           <!-- Registration Mode -->
@@ -282,7 +333,8 @@ async function updateSettings() {
           }
 
           .form-input,
-          .form-select {
+          .form-select,
+          .form-textarea {
             display: block;
             max-width: 28rem;
             width: 100%;
@@ -307,6 +359,12 @@ async function updateSettings() {
               cursor: not-allowed;
               background: var(--pav-color-surface-secondary);
             }
+          }
+
+          .form-textarea {
+            min-height: 6rem;
+            resize: vertical;
+            line-height: var(--pav-line-height-normal);
           }
 
           .form-select {
@@ -384,7 +442,8 @@ async function updateSettings() {
         .settings-form {
           .form-group {
             .form-input,
-            .form-select {
+            .form-select,
+            .form-textarea {
               background: var(--pav-color-surface-secondary);
               border-color: var(--pav-color-stone-600);
 

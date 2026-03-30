@@ -6,15 +6,48 @@ import { createLogger } from '@/server/common/helper/logger';
 
 const logger = createLogger('configuration');
 
+const MAX_INSTANCE_DESCRIPTION_KEYS = 20;
+
 type Config = {
   registrationMode: 'open' | 'apply' | 'invitation' | 'closed';
   siteTitle: string;
+  instanceDescription: Record<string, string>;
   eventInstanceMonths: number;
   defaultDateRange: DefaultDateRange;
   defaultLanguage: string;
   enabledLanguages: string[];
   forceLanguage: string | null;
 };
+
+/**
+ * Validates that an instanceDescription object has valid language keys
+ * and well-formed string values within size limits.
+ *
+ * @param parsed - The parsed object to validate
+ * @returns true if the object is a valid instanceDescription
+ */
+function isValidInstanceDescription(parsed: unknown): parsed is Record<string, string> {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return false;
+  }
+  const keys = Object.keys(parsed as Record<string, unknown>);
+  if (keys.length > MAX_INSTANCE_DESCRIPTION_KEYS) {
+    return false;
+  }
+  for (const key of keys) {
+    if (!isValidLanguageCode(key)) {
+      return false;
+    }
+    const val = (parsed as Record<string, unknown>)[key];
+    if (typeof val !== 'string') {
+      return false;
+    }
+    if (val.length > 500) {
+      return false;
+    }
+  }
+  return true;
+}
 
 class ServiceSettings {
   private static instance: ServiceSettings;
@@ -24,6 +57,7 @@ class ServiceSettings {
     this.config = {
       registrationMode: 'invitation',
       siteTitle: config.get('domain'),
+      instanceDescription: {},
       eventInstanceMonths: 6,
       defaultDateRange: '2weeks',
       defaultLanguage: DEFAULT_LANGUAGE_CODE,
@@ -43,6 +77,17 @@ class ServiceSettings {
       }
       if( entity.parameter == 'siteTitle' ) {
         this.config.siteTitle = entity.value;
+      }
+      if ( entity.parameter == 'instanceDescription' ) {
+        try {
+          const parsed = JSON.parse(entity.value);
+          if (isValidInstanceDescription(parsed)) {
+            this.config.instanceDescription = parsed;
+          }
+        }
+        catch {
+          // Invalid JSON — keep default
+        }
       }
       if ( entity.parameter == 'defaultDateRange' ) {
         if ( ['1week', '2weeks', '1month'].includes(entity.value) ) {
@@ -102,6 +147,13 @@ class ServiceSettings {
    */
   getEnabledLanguages(): string[] {
     return this.config.enabledLanguages;
+  }
+
+  /**
+   * Returns the instance description as a language-keyed object.
+   */
+  getInstanceDescription(): Record<string, string> {
+    return this.config.instanceDescription;
   }
 
   /**
@@ -177,6 +229,21 @@ class ServiceSettings {
       }
     }
 
+    // Validate instanceDescription (stored as JSON string)
+    if ( parameter == 'instanceDescription' ) {
+      try {
+        const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+        if (!isValidInstanceDescription(parsed)) {
+          logger.error({ value }, 'Invalid instanceDescription: must be an object with valid language keys, string values (max 500 chars), and at most 20 keys');
+          return false;
+        }
+      }
+      catch {
+        logger.error({ value }, 'Invalid instanceDescription JSON');
+        return false;
+      }
+    }
+
     // Update or create the setting in the database
     const [entity, created] = await ServiceSettingEntity.findOrCreate({
       where: { parameter },
@@ -201,6 +268,11 @@ class ServiceSettings {
       case 'siteTitle':
         this.config.siteTitle = value as string;
         break;
+      case 'instanceDescription': {
+        const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+        this.config.instanceDescription = parsed;
+        break;
+      }
       case 'eventInstanceMonths':
         if (typeof value === 'number' && value > 0) {
           this.config.eventInstanceMonths = value as number;

@@ -11,7 +11,13 @@
     "MissingLogin": "adresse e-mail ou mot de passe manquant",
     "400": "erreur de connexion",
     "unknown_error": "Une erreur inconnue s'est produite",
-    "RateLimitError": "Trop de demandes. Veuillez réessayer plus tard."
+    "RateLimitError": "Trop de demandes. Veuillez réessayer plus tard.",
+    "info_panel": {
+      "welcome": "Bienvenue sur",
+      "default_description": "Les événements de votre communauté, tous au même endroit. Parcourez ce qui se passe sans compte, ou connectez-vous pour partager les vôtres.",
+      "powered_by": "Propulsé par <1>Pavillion</1>, une plateforme ouverte d'événements communautaires.",
+      "learn_more": "En savoir plus sur Pavillion"
+    }
   },
   "forgot_password": {
     "title": "Mot de passe oublié ?",

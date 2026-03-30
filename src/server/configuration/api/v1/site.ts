@@ -7,10 +7,10 @@ import { createLogger } from '@/server/common/helper/logger';
 const logger = createLogger('configuration');
 
 // Settings keys whose values are serialized as JSON strings for storage
-const JSON_SETTINGS = new Set(['enabledLanguages']);
+const JSON_SETTINGS = new Set(['enabledLanguages', 'instanceDescription']);
 
 // Allowlist of keys that may be updated via the API
-const ALLOWED_SETTINGS = new Set(['registrationMode', 'defaultLanguage', 'enabledLanguages', 'forceLanguage']);
+const ALLOWED_SETTINGS = new Set(['registrationMode', 'defaultLanguage', 'enabledLanguages', 'forceLanguage', 'siteTitle', 'instanceDescription']);
 
 export default class SiteRouteHandlers {
   private service: ConfigurationInterface;
@@ -33,6 +33,7 @@ export default class SiteRouteHandlers {
       domain: config.get('domain'),
       enabledLanguages: await this.service.getEnabledLanguages(),
       forceLanguage: await this.service.getForceLanguage(),
+      instanceDescription: await this.service.getInstanceDescription(),
     });
   }
 
@@ -51,7 +52,7 @@ export default class SiteRouteHandlers {
           : rawValue;
         const success = await this.service.setSetting(key, value);
         if (!success) {
-          res.status(500).json({ error: 'Failed to update service setting: "' + key + '"' });
+          res.status(400).json({ error: 'Invalid value for setting: "' + key + '"' });
           return;
         }
       }

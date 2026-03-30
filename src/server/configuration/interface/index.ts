@@ -94,4 +94,19 @@ export default class ConfigurationInterface {
     }
   }
 
+  /**
+   * Returns the instance description as a language-keyed object.
+   *
+   * @returns Promise resolving to a Record mapping language codes to description strings
+   */
+  async getInstanceDescription(): Promise<Record<string, string>> {
+    try {
+      const settings = await SettingsService.getInstance();
+      return settings.getInstanceDescription();
+    }
+    catch {
+      return {};
+    }
+  }
+
 }

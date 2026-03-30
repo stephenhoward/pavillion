@@ -31,6 +31,9 @@
     "force_language_description": "Cuando se establece, todos los usuarios verán la interfaz en este idioma independientemente de sus preferencias.",
     "saving": "Guardando...",
     "settings_subtitle": "Supervisa el estado del sistema y configura los ajustes de la instancia",
-    "instance_settings": "Configuración de la Instancia"
+    "instance_settings": "Configuración de la Instancia",
+    "instance_description": "Descripción de la Instancia",
+    "instance_description_placeholder": "Describe tu instancia...",
+    "instance_description_help": "Una breve descripción de tu instancia que se muestra en las páginas públicas y en los metadatos de federación. Máximo 500 caracteres."
   }
 }

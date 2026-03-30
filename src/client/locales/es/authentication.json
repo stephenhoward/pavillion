@@ -11,7 +11,13 @@
     "MissingLogin": "falta correo o contraseña",
     "400": "error al iniciar sesión",
     "unknown_error": "Ocurrió un error desconocido",
-    "RateLimitError": "Demasiadas solicitudes. Por favor intenta de nuevo más tarde."
+    "RateLimitError": "Demasiadas solicitudes. Por favor intenta de nuevo más tarde.",
+    "info_panel": {
+      "welcome": "Bienvenido a",
+      "default_description": "Los eventos de tu comunidad, todos en un solo lugar. Explora lo que está pasando sin necesidad de una cuenta, o inicia sesión para compartir los tuyos.",
+      "powered_by": "Creado con <1>Pavillion</1>, una plataforma abierta de eventos comunitarios.",
+      "learn_more": "Más información sobre Pavillion"
+    }
   },
   "forgot_password": {
     "title": "¿Olvidaste tu contraseña?",
