@@ -153,8 +153,9 @@ describe('Site API', () => {
       expect(mockSaveStub.callCount).toBe(0);
     });
 
-    it('should serialize instanceDescription as JSON for storage', async () => {
-      const mockSaveStub = sandbox.stub(configurationInterface, 'setSetting').resolves(true);
+    it('should call setInstanceDescription for instanceDescription', async () => {
+      const mockDescStub = sandbox.stub(configurationInterface, 'setInstanceDescription').resolves(true);
+      sandbox.stub(configurationInterface, 'setSetting').resolves(true);
 
       router.post('/handler', siteHandlers.updateSettings.bind(siteHandlers));
 
@@ -163,11 +164,11 @@ describe('Site API', () => {
         .send({ instanceDescription: { en: 'Community events' } });
 
       expect(response.status).toBe(200);
-      expect(mockSaveStub.calledWith('instanceDescription', JSON.stringify({ en: 'Community events' }))).toBe(true);
+      expect(mockDescStub.calledWith({ en: 'Community events' })).toBe(true);
     });
 
     it('should return 400 when instanceDescription validation fails', async () => {
-      const mockSaveStub = sandbox.stub(configurationInterface, 'setSetting').resolves(false);
+      const mockDescStub = sandbox.stub(configurationInterface, 'setInstanceDescription').resolves(false);
 
       router.post('/handler', siteHandlers.updateSettings.bind(siteHandlers));
 
@@ -177,11 +178,12 @@ describe('Site API', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('instanceDescription');
-      expect(mockSaveStub.calledOnce).toBe(true);
+      expect(mockDescStub.calledOnce).toBe(true);
     });
 
     it('should persist multi-language instanceDescription', async () => {
-      const mockSaveStub = sandbox.stub(configurationInterface, 'setSetting').resolves(true);
+      const mockDescStub = sandbox.stub(configurationInterface, 'setInstanceDescription').resolves(true);
+      sandbox.stub(configurationInterface, 'setSetting').resolves(true);
 
       router.post('/handler', siteHandlers.updateSettings.bind(siteHandlers));
 
@@ -190,7 +192,7 @@ describe('Site API', () => {
         .send({ instanceDescription: { en: 'Welcome', es: 'Bienvenido' } });
 
       expect(response.status).toBe(200);
-      expect(mockSaveStub.calledWith('instanceDescription', JSON.stringify({ en: 'Welcome', es: 'Bienvenido' }))).toBe(true);
+      expect(mockDescStub.calledWith({ en: 'Welcome', es: 'Bienvenido' })).toBe(true);
     });
   });
 });

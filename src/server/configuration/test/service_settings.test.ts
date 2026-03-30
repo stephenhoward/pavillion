@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
 import ServiceSettings from '@/server/configuration/service/settings';
 import ServiceSettingEntity from '@/server/configuration/entity/settings';
+import SettingsContentEntity from '@/server/configuration/entity/settings_content';
 
 describe('ServiceSettings', () => {
   const sandbox = sinon.createSandbox();
@@ -579,92 +580,54 @@ describe('ServiceSettings', () => {
     });
 
     describe('instanceDescription', () => {
-      it('should accept a valid language-keyed object as JSON string', async () => {
-        const mockSettingEntity = {
-          parameter: 'instanceDescription',
-          value: '{"en":"Hello","es":"Hola"}',
-          save: sandbox.stub().resolves(),
-        };
-        sandbox.stub(ServiceSettingEntity, 'findOrCreate').resolves([
-          mockSettingEntity as unknown as ServiceSettingEntity,
-          true,
-        ]);
+      it('should accept a valid language-keyed object', async () => {
         sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+        sandbox.stub(SettingsContentEntity, 'findAll').resolves([]);
+        const findOrCreateStub = sandbox.stub(SettingsContentEntity, 'findOrCreate');
+        findOrCreateStub.resolves([{ language: 'en', description: 'Hello', save: sandbox.stub().resolves() } as unknown as SettingsContentEntity, true]);
 
         const settings = await ServiceSettings.getInstance();
-        const result = await settings.set('instanceDescription', '{"en":"Hello","es":"Hola"}');
+        const result = await settings.setInstanceDescription({ en: 'Hello', es: 'Hola' });
 
         expect(result).toBe(true);
-        expect(settings.getInstanceDescription()).toEqual({ en: 'Hello', es: 'Hola' });
+        expect(findOrCreateStub.callCount).toBe(2);
       });
 
       it('should accept an empty object', async () => {
-        const mockSettingEntity = {
-          parameter: 'instanceDescription',
-          value: '{}',
-          save: sandbox.stub().resolves(),
-        };
-        sandbox.stub(ServiceSettingEntity, 'findOrCreate').resolves([
-          mockSettingEntity as unknown as ServiceSettingEntity,
-          true,
-        ]);
         sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+        sandbox.stub(SettingsContentEntity, 'findAll').resolves([]);
 
         const settings = await ServiceSettings.getInstance();
-        const result = await settings.set('instanceDescription', '{}');
+        const result = await settings.setInstanceDescription({});
 
         expect(result).toBe(true);
-        expect(settings.getInstanceDescription()).toEqual({});
       });
 
       it('should reject an array value', async () => {
         sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
 
         const settings = await ServiceSettings.getInstance();
-        const result = await settings.set('instanceDescription', '["not","an","object"]');
+        const result = await settings.setInstanceDescription([] as unknown as Record<string, string>);
 
         expect(result).toBe(false);
-        expect(settings.getInstanceDescription()).toEqual({});
       });
 
-      it('should reject a plain string value', async () => {
+      it('should reject a null value', async () => {
         sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
 
         const settings = await ServiceSettings.getInstance();
-        const result = await settings.set('instanceDescription', '"just a string"');
+        const result = await settings.setInstanceDescription(null as unknown as Record<string, string>);
 
         expect(result).toBe(false);
-        expect(settings.getInstanceDescription()).toEqual({});
-      });
-
-      it('should reject a number value', async () => {
-        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
-
-        const settings = await ServiceSettings.getInstance();
-        const result = await settings.set('instanceDescription', '42');
-
-        expect(result).toBe(false);
-        expect(settings.getInstanceDescription()).toEqual({});
-      });
-
-      it('should reject invalid JSON', async () => {
-        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
-
-        const settings = await ServiceSettings.getInstance();
-        const result = await settings.set('instanceDescription', 'not-json');
-
-        expect(result).toBe(false);
-        expect(settings.getInstanceDescription()).toEqual({});
       });
 
       it('should reject values that are not strings', async () => {
         sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
 
         const settings = await ServiceSettings.getInstance();
-        const result = await settings.set('instanceDescription', '{"en":123}');
+        const result = await settings.setInstanceDescription({ en: 123 } as unknown as Record<string, string>);
 
         expect(result).toBe(false);
-        expect(settings.getInstanceDescription()).toEqual({});
       });
 
       it('should reject values exceeding 500 characters', async () => {
@@ -672,86 +635,108 @@ describe('ServiceSettings', () => {
 
         const longText = 'a'.repeat(501);
         const settings = await ServiceSettings.getInstance();
-        const result = await settings.set('instanceDescription', JSON.stringify({ en: longText }));
+        const result = await settings.setInstanceDescription({ en: longText });
 
         expect(result).toBe(false);
-        expect(settings.getInstanceDescription()).toEqual({});
       });
 
       it('should accept values at exactly 500 characters', async () => {
         const exactText = 'a'.repeat(500);
-        const mockSettingEntity = {
-          parameter: 'instanceDescription',
-          value: JSON.stringify({ en: exactText }),
-          save: sandbox.stub().resolves(),
-        };
-        sandbox.stub(ServiceSettingEntity, 'findOrCreate').resolves([
-          mockSettingEntity as unknown as ServiceSettingEntity,
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+        sandbox.stub(SettingsContentEntity, 'findAll').resolves([]);
+        sandbox.stub(SettingsContentEntity, 'findOrCreate').resolves([
+          { language: 'en', description: exactText, save: sandbox.stub().resolves() } as unknown as SettingsContentEntity,
           true,
         ]);
-        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
 
         const settings = await ServiceSettings.getInstance();
-        const result = await settings.set('instanceDescription', JSON.stringify({ en: exactText }));
+        const result = await settings.setInstanceDescription({ en: exactText });
 
         expect(result).toBe(true);
-        expect(settings.getInstanceDescription()).toEqual({ en: exactText });
       });
 
       it('should reject an object with more than 20 language keys', async () => {
         sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
 
-        // Build an object with 21 keys to exceed MAX_INSTANCE_DESCRIPTION_KEYS (20).
-        // The key count check fires before the per-key language code validation,
-        // so the keys themselves do not need to be valid language codes.
         const tooManyKeys: Record<string, string> = {};
         for (let i = 0; i < 21; i++) {
           tooManyKeys[`k${i}`] = `value ${i}`;
         }
 
         const settings = await ServiceSettings.getInstance();
-        const result = await settings.set('instanceDescription', JSON.stringify(tooManyKeys));
+        const result = await settings.setInstanceDescription(tooManyKeys);
 
         expect(result).toBe(false);
-        expect(settings.getInstanceDescription()).toEqual({});
       });
 
-      it('should load instanceDescription from database on init', async () => {
-        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([
-          { parameter: 'instanceDescription', value: '{"en":"Welcome","fr":"Bienvenue"}' } as unknown as ServiceSettingEntity,
-        ]);
-
-        const settings = await ServiceSettings.getInstance();
-
-        expect(settings.getInstanceDescription()).toEqual({ en: 'Welcome', fr: 'Bienvenue' });
-      });
-
-      it('should default to empty object when not in database', async () => {
+      it('should reject invalid language codes', async () => {
         sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
 
         const settings = await ServiceSettings.getInstance();
+        const result = await settings.setInstanceDescription({ zz: 'invalid lang' });
 
-        expect(settings.getInstanceDescription()).toEqual({});
+        expect(result).toBe(false);
       });
 
-      it('should keep default when database contains invalid JSON', async () => {
-        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([
-          { parameter: 'instanceDescription', value: 'not-json' } as unknown as ServiceSettingEntity,
+      it('should load instanceDescription from database', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+        sandbox.stub(SettingsContentEntity, 'findAll').resolves([
+          { language: 'en', description: 'Welcome' } as unknown as SettingsContentEntity,
+          { language: 'fr', description: 'Bienvenue' } as unknown as SettingsContentEntity,
         ]);
 
         const settings = await ServiceSettings.getInstance();
+        const result = await settings.getInstanceDescription();
 
-        expect(settings.getInstanceDescription()).toEqual({});
+        expect(result).toEqual({ en: 'Welcome', fr: 'Bienvenue' });
       });
 
-      it('should keep default when database contains an array', async () => {
-        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([
-          { parameter: 'instanceDescription', value: '["bad"]' } as unknown as ServiceSettingEntity,
+      it('should return empty object when no descriptions exist', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+        sandbox.stub(SettingsContentEntity, 'findAll').resolves([]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.getInstanceDescription();
+
+        expect(result).toEqual({});
+      });
+
+      it('should delete removed languages when updating', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+        const destroyStub = sandbox.stub().resolves();
+        sandbox.stub(SettingsContentEntity, 'findAll').resolves([
+          { language: 'en', description: 'Hello', destroy: destroyStub } as unknown as SettingsContentEntity,
+          { language: 'fr', description: 'Bonjour', destroy: destroyStub } as unknown as SettingsContentEntity,
+        ]);
+        sandbox.stub(SettingsContentEntity, 'findOrCreate').resolves([
+          { language: 'en', description: 'Updated', save: sandbox.stub().resolves() } as unknown as SettingsContentEntity,
+          false,
         ]);
 
         const settings = await ServiceSettings.getInstance();
+        const result = await settings.setInstanceDescription({ en: 'Updated' });
 
-        expect(settings.getInstanceDescription()).toEqual({});
+        expect(result).toBe(true);
+        // 'fr' should have been destroyed since it's not in the new set
+        expect(destroyStub.calledOnce).toBe(true);
+      });
+
+      it('should update existing descriptions', async () => {
+        sandbox.stub(ServiceSettingEntity, 'findAll').resolves([]);
+        const saveStub = sandbox.stub().resolves();
+        sandbox.stub(SettingsContentEntity, 'findAll').resolves([
+          { language: 'en', description: 'Old', destroy: sandbox.stub().resolves() } as unknown as SettingsContentEntity,
+        ]);
+        sandbox.stub(SettingsContentEntity, 'findOrCreate').resolves([
+          { language: 'en', description: 'Old', save: saveStub } as unknown as SettingsContentEntity,
+          false,
+        ]);
+
+        const settings = await ServiceSettings.getInstance();
+        const result = await settings.setInstanceDescription({ en: 'New' });
+
+        expect(result).toBe(true);
+        expect(saveStub.calledOnce).toBe(true);
       });
     });
   });

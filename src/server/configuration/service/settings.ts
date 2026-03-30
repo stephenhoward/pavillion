@@ -1,5 +1,6 @@
 import config from 'config';
 import ServiceSettingEntity from "@/server/configuration/entity/settings";
+import SettingsContentEntity from "@/server/configuration/entity/settings_content";
 import type { DefaultDateRange } from '@/common/model/calendar';
 import { isValidLanguageCode, DEFAULT_LANGUAGE_CODE, getDefaultEnabledLanguageCodes } from '@/common/i18n/languages';
 import { createLogger } from '@/server/common/helper/logger';
@@ -11,43 +12,12 @@ const MAX_INSTANCE_DESCRIPTION_KEYS = 20;
 type Config = {
   registrationMode: 'open' | 'apply' | 'invitation' | 'closed';
   siteTitle: string;
-  instanceDescription: Record<string, string>;
   eventInstanceMonths: number;
   defaultDateRange: DefaultDateRange;
   defaultLanguage: string;
   enabledLanguages: string[];
   forceLanguage: string | null;
 };
-
-/**
- * Validates that an instanceDescription object has valid language keys
- * and well-formed string values within size limits.
- *
- * @param parsed - The parsed object to validate
- * @returns true if the object is a valid instanceDescription
- */
-function isValidInstanceDescription(parsed: unknown): parsed is Record<string, string> {
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return false;
-  }
-  const keys = Object.keys(parsed as Record<string, unknown>);
-  if (keys.length > MAX_INSTANCE_DESCRIPTION_KEYS) {
-    return false;
-  }
-  for (const key of keys) {
-    if (!isValidLanguageCode(key)) {
-      return false;
-    }
-    const val = (parsed as Record<string, unknown>)[key];
-    if (typeof val !== 'string') {
-      return false;
-    }
-    if (val.length > 500) {
-      return false;
-    }
-  }
-  return true;
-}
 
 class ServiceSettings {
   private static instance: ServiceSettings;
@@ -57,7 +27,6 @@ class ServiceSettings {
     this.config = {
       registrationMode: 'invitation',
       siteTitle: config.get('domain'),
-      instanceDescription: {},
       eventInstanceMonths: 6,
       defaultDateRange: '2weeks',
       defaultLanguage: DEFAULT_LANGUAGE_CODE,
@@ -77,17 +46,6 @@ class ServiceSettings {
       }
       if( entity.parameter == 'siteTitle' ) {
         this.config.siteTitle = entity.value;
-      }
-      if ( entity.parameter == 'instanceDescription' ) {
-        try {
-          const parsed = JSON.parse(entity.value);
-          if (isValidInstanceDescription(parsed)) {
-            this.config.instanceDescription = parsed;
-          }
-        }
-        catch {
-          // Invalid JSON — keep default
-        }
       }
       if ( entity.parameter == 'defaultDateRange' ) {
         if ( ['1week', '2weeks', '1month'].includes(entity.value) ) {
@@ -150,10 +108,78 @@ class ServiceSettings {
   }
 
   /**
-   * Returns the instance description as a language-keyed object.
+   * Returns the instance description as a language-keyed object,
+   * loaded from the settings_content table.
    */
-  getInstanceDescription(): Record<string, string> {
-    return this.config.instanceDescription;
+  async getInstanceDescription(): Promise<Record<string, string>> {
+    const rows = await SettingsContentEntity.findAll();
+    const result: Record<string, string> = {};
+    for (const row of rows) {
+      result[row.language] = row.description;
+    }
+    return result;
+  }
+
+  /**
+   * Replaces instance descriptions with the provided language-keyed object.
+   * Validates language codes and description length, then creates/updates/deletes
+   * rows in the settings_content table to match.
+   *
+   * @param descriptions - Language-keyed object of description strings
+   * @returns true if update succeeded, false if validation failed
+   */
+  async setInstanceDescription(descriptions: Record<string, string>): Promise<boolean> {
+    if (!descriptions || typeof descriptions !== 'object' || Array.isArray(descriptions)) {
+      logger.error({ descriptions }, 'Invalid instanceDescription: must be an object');
+      return false;
+    }
+
+    const keys = Object.keys(descriptions);
+    if (keys.length > MAX_INSTANCE_DESCRIPTION_KEYS) {
+      logger.error({ count: keys.length }, 'Invalid instanceDescription: too many language keys');
+      return false;
+    }
+
+    for (const key of keys) {
+      if (!isValidLanguageCode(key)) {
+        logger.error({ key }, 'Invalid instanceDescription: invalid language code');
+        return false;
+      }
+      const val = descriptions[key];
+      if (typeof val !== 'string') {
+        logger.error({ key, type: typeof val }, 'Invalid instanceDescription: value must be a string');
+        return false;
+      }
+      if (val.length > 500) {
+        logger.error({ key, length: val.length }, 'Invalid instanceDescription: value exceeds 500 characters');
+        return false;
+      }
+    }
+
+    // Delete rows for languages no longer present
+    const existingRows = await SettingsContentEntity.findAll();
+    for (const row of existingRows) {
+      if (!(row.language in descriptions) || descriptions[row.language] === '') {
+        await row.destroy();
+      }
+    }
+
+    // Create or update rows for each language
+    for (const [language, description] of Object.entries(descriptions)) {
+      if (description === '') continue;
+
+      const [entity, created] = await SettingsContentEntity.findOrCreate({
+        where: { language },
+        defaults: { language, description },
+      });
+
+      if (!created) {
+        entity.description = description;
+        await entity.save();
+      }
+    }
+
+    return true;
   }
 
   /**
@@ -229,21 +255,6 @@ class ServiceSettings {
       }
     }
 
-    // Validate instanceDescription (stored as JSON string)
-    if ( parameter == 'instanceDescription' ) {
-      try {
-        const parsed = typeof value === 'string' ? JSON.parse(value) : value;
-        if (!isValidInstanceDescription(parsed)) {
-          logger.error({ value }, 'Invalid instanceDescription: must be an object with valid language keys, string values (max 500 chars), and at most 20 keys');
-          return false;
-        }
-      }
-      catch {
-        logger.error({ value }, 'Invalid instanceDescription JSON');
-        return false;
-      }
-    }
-
     // Update or create the setting in the database
     const [entity, created] = await ServiceSettingEntity.findOrCreate({
       where: { parameter },
@@ -268,11 +279,6 @@ class ServiceSettings {
       case 'siteTitle':
         this.config.siteTitle = value as string;
         break;
-      case 'instanceDescription': {
-        const parsed = typeof value === 'string' ? JSON.parse(value) : value;
-        this.config.instanceDescription = parsed;
-        break;
-      }
       case 'eventInstanceMonths':
         if (typeof value === 'number' && value > 0) {
           this.config.eventInstanceMonths = value as number;

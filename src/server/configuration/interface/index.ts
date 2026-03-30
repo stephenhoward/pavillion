@@ -102,11 +102,22 @@ export default class ConfigurationInterface {
   async getInstanceDescription(): Promise<Record<string, string>> {
     try {
       const settings = await SettingsService.getInstance();
-      return settings.getInstanceDescription();
+      return await settings.getInstanceDescription();
     }
     catch {
       return {};
     }
+  }
+
+  /**
+   * Updates the instance description for all provided languages.
+   *
+   * @param descriptions - Language-keyed object of description strings
+   * @returns Promise resolving to true if update succeeded
+   */
+  async setInstanceDescription(descriptions: Record<string, string>): Promise<boolean> {
+    const settings = await SettingsService.getInstance();
+    return settings.setInstanceDescription(descriptions);
   }
 
 }

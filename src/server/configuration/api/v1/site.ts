@@ -7,10 +7,10 @@ import { createLogger } from '@/server/common/helper/logger';
 const logger = createLogger('configuration');
 
 // Settings keys whose values are serialized as JSON strings for storage
-const JSON_SETTINGS = new Set(['enabledLanguages', 'instanceDescription']);
+const JSON_SETTINGS = new Set(['enabledLanguages']);
 
-// Allowlist of keys that may be updated via the API
-const ALLOWED_SETTINGS = new Set(['registrationMode', 'defaultLanguage', 'enabledLanguages', 'forceLanguage', 'siteTitle', 'instanceDescription']);
+// Allowlist of keys that may be updated via the API (key-value settings only)
+const ALLOWED_SETTINGS = new Set(['registrationMode', 'defaultLanguage', 'enabledLanguages', 'forceLanguage', 'siteTitle']);
 
 export default class SiteRouteHandlers {
   private service: ConfigurationInterface;
@@ -39,14 +39,23 @@ export default class SiteRouteHandlers {
 
   async updateSettings(req: Request, res: Response): Promise<void> {
     try {
-      // TODO: wrap this in a transaction so we don't update some settings but not others:
+      // Handle instanceDescription separately via its dedicated content table
+      if (req.body.instanceDescription !== undefined) {
+        const success = await this.service.setInstanceDescription(req.body.instanceDescription);
+        if (!success) {
+          res.status(400).json({ error: 'Invalid value for setting: "instanceDescription"' });
+          return;
+        }
+      }
+
+      // Handle key-value settings
       for ( const key in req.body ) {
         // Defense-in-depth: only process known, allowed setting keys
         if (!ALLOWED_SETTINGS.has(key)) {
           continue;
         }
         const rawValue = req.body[key];
-        // Serialize complex values (arrays, objects) to JSON strings for storage
+        // Serialize complex values (arrays) to JSON strings for storage
         const value = JSON_SETTINGS.has(key)
           ? JSON.stringify(rawValue)
           : rawValue;
