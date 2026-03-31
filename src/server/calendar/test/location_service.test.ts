@@ -105,21 +105,20 @@ describe('LocationService', () => {
       let saveStub = sandbox.stub(LocationEntity.prototype, 'save');
       let eventSpy = sandbox.spy(LocationEntity, 'fromModel');
 
-      // Stub getLocationById to return the created location
+      // Stub getLocationById to return the created location with UUID id
       const getLocationByIdStub = sandbox.stub(service, 'getLocationById');
-      const expectedLocation = new EventLocation(
-        'https://pavillion.dev/places/test-id',
-        'testName',
-      );
-      getLocationByIdStub.resolves(expectedLocation);
+      getLocationByIdStub.callsFake((_calendar, id) => {
+        return Promise.resolve(new EventLocation(id, 'testName'));
+      });
 
       let location = await service.createLocation(
         new Calendar('testCalendarId', 'testme'),
         new EventLocation('', 'testName'),
       );
 
+      // Regression: entity.id was set to a full URL instead of a UUID, causing PostgreSQL crash
       expect(location.id).toBeDefined();
-      expect(location.id).toMatch(/^https:\/\/pavillion.dev\/places\/[a-z0-9-]+$/);
+      expect(location.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
       expect(eventSpy.returnValues[0].calendar_id).toBe('testCalendarId');
       expect(saveStub.called).toBe(true);
     });

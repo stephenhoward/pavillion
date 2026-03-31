@@ -24,7 +24,7 @@ describe('LocationService - Enhanced Methods', () => {
       const calendar = new Calendar('cal-123', 'testcalendar');
 
       const location1 = LocationEntity.build({
-        id: 'https://pavillion.dev/places/loc-1',
+        id: 'a1b2c3d4-0001-4000-8000-000000000001',
         calendar_id: 'cal-123',
         name: 'Washington Park',
         address: '4033 SW Canyon Rd',
@@ -34,7 +34,7 @@ describe('LocationService - Enhanced Methods', () => {
       });
 
       const location2 = LocationEntity.build({
-        id: 'https://pavillion.dev/places/loc-2',
+        id: 'a1b2c3d4-0002-4000-8000-000000000002',
         calendar_id: 'cal-123',
         name: 'Community Center',
         address: '123 Main St',
@@ -62,14 +62,14 @@ describe('LocationService - Enhanced Methods', () => {
       const calendar = new Calendar('cal-123', 'testcalendar');
 
       const location = LocationEntity.build({
-        id: 'https://pavillion.dev/places/loc-1',
+        id: 'a1b2c3d4-0001-4000-8000-000000000001',
         calendar_id: 'cal-123',
         name: 'Washington Park',
       });
 
       const contentEntity = LocationContentEntity.build({
         id: 'content-1',
-        location_id: 'https://pavillion.dev/places/loc-1',
+        location_id: 'a1b2c3d4-0001-4000-8000-000000000001',
         language: 'en',
         accessibility_info: 'Wheelchair accessible paths.',
       });
@@ -105,7 +105,7 @@ describe('LocationService - Enhanced Methods', () => {
       const calendar = new Calendar('cal-123', 'testcalendar');
 
       const locationEntity = LocationEntity.build({
-        id: 'https://pavillion.dev/places/loc-1',
+        id: 'a1b2c3d4-0001-4000-8000-000000000001',
         calendar_id: 'cal-123',
         name: 'Washington Park',
         address: '4033 SW Canyon Rd',
@@ -114,7 +114,7 @@ describe('LocationService - Enhanced Methods', () => {
       const findByPkStub = sandbox.stub(LocationEntity, 'findByPk');
       findByPkStub.resolves(locationEntity);
 
-      const location = await service.getLocationById(calendar, 'https://pavillion.dev/places/loc-1');
+      const location = await service.getLocationById(calendar, 'a1b2c3d4-0001-4000-8000-000000000001');
 
       expect(location).toBeInstanceOf(EventLocation);
       expect(location?.name).toBe('Washington Park');
@@ -125,7 +125,7 @@ describe('LocationService - Enhanced Methods', () => {
       const calendar = new Calendar('cal-123', 'testcalendar');
 
       const locationEntity = LocationEntity.build({
-        id: 'https://pavillion.dev/places/loc-1',
+        id: 'a1b2c3d4-0001-4000-8000-000000000001',
         calendar_id: 'cal-456', // Different calendar
         name: 'Washington Park',
       });
@@ -133,7 +133,7 @@ describe('LocationService - Enhanced Methods', () => {
       const findByPkStub = sandbox.stub(LocationEntity, 'findByPk');
       findByPkStub.resolves(locationEntity);
 
-      const location = await service.getLocationById(calendar, 'https://pavillion.dev/places/loc-1');
+      const location = await service.getLocationById(calendar, 'a1b2c3d4-0001-4000-8000-000000000001');
 
       expect(location).toBeNull();
       expect(findByPkStub.calledOnce).toBe(true);
@@ -145,7 +145,7 @@ describe('LocationService - Enhanced Methods', () => {
       const findByPkStub = sandbox.stub(LocationEntity, 'findByPk');
       findByPkStub.resolves(null);
 
-      const location = await service.getLocationById(calendar, 'https://pavillion.dev/places/nonexistent');
+      const location = await service.getLocationById(calendar, 'a1b2c3d4-9999-4000-8000-000000000099');
 
       expect(location).toBeNull();
       expect(findByPkStub.calledOnce).toBe(true);
@@ -155,14 +155,14 @@ describe('LocationService - Enhanced Methods', () => {
       const calendar = new Calendar('cal-123', 'testcalendar');
 
       const locationEntity = LocationEntity.build({
-        id: 'https://pavillion.dev/places/loc-1',
+        id: 'a1b2c3d4-0001-4000-8000-000000000001',
         calendar_id: 'cal-123',
         name: 'Washington Park',
       });
 
       const contentEntity = LocationContentEntity.build({
         id: 'content-1',
-        location_id: 'https://pavillion.dev/places/loc-1',
+        location_id: 'a1b2c3d4-0001-4000-8000-000000000001',
         language: 'es',
         accessibility_info: 'Caminos accesibles.',
       });
@@ -172,7 +172,7 @@ describe('LocationService - Enhanced Methods', () => {
       const findByPkStub = sandbox.stub(LocationEntity, 'findByPk');
       findByPkStub.resolves(locationEntity);
 
-      const location = await service.getLocationById(calendar, 'https://pavillion.dev/places/loc-1');
+      const location = await service.getLocationById(calendar, 'a1b2c3d4-0001-4000-8000-000000000001');
 
       expect(location?.getLanguages()).toHaveLength(1);
       expect(location?.content('es').accessibilityInfo).toBe('Caminos accesibles.');
@@ -202,7 +202,7 @@ describe('LocationService - Enhanced Methods', () => {
       // Stub getLocationById to return the created location
       const getLocationByIdStub = sandbox.stub(service, 'getLocationById');
       const expectedLocation = new EventLocation(
-        'https://pavillion.dev/places/new-id',
+        'a1b2c3d4-0003-4000-8000-000000000003',
         'Community Center',
         '123 Main St',
         'Portland',
@@ -236,7 +236,7 @@ describe('LocationService - Enhanced Methods', () => {
       // Stub getLocationById to return the created location
       const getLocationByIdStub = sandbox.stub(service, 'getLocationById');
       const expectedLocation = new EventLocation(
-        'https://pavillion.dev/places/new-id',
+        'a1b2c3d4-0003-4000-8000-000000000003',
         'Simple Venue',
         '456 Oak St',
       );
@@ -270,7 +270,7 @@ describe('LocationService - Enhanced Methods', () => {
       // Stub getLocationById to return the created location
       const getLocationByIdStub = sandbox.stub(service, 'getLocationById');
       const expectedLocation = new EventLocation(
-        'https://pavillion.dev/places/new-id',
+        'a1b2c3d4-0003-4000-8000-000000000003',
         'International Center',
         '789 Global Ave',
       );
@@ -299,7 +299,8 @@ describe('LocationService - Enhanced Methods', () => {
       await expect(service.createLocation(calendar, location)).rejects.toThrow('Location name is required');
     });
 
-    it('should generate ActivityPub URI for location id', async () => {
+    // Regression: entity.id was set to a full URL instead of a UUID, causing PostgreSQL crash
+    it('should generate UUID for location id', async () => {
       const calendar = new Calendar('cal-123', 'testcalendar');
 
       const location = new EventLocation(
@@ -310,18 +311,15 @@ describe('LocationService - Enhanced Methods', () => {
 
       const saveStub = sandbox.stub(LocationEntity.prototype, 'save');
 
-      // Stub getLocationById to return the created location
+      // Stub getLocationById to echo back the actual ID assigned by createLocation
       const getLocationByIdStub = sandbox.stub(service, 'getLocationById');
-      const expectedLocation = new EventLocation(
-        'https://pavillion.dev/places/a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-        'Test Venue',
-        '123 Test St',
-      );
-      getLocationByIdStub.resolves(expectedLocation);
+      getLocationByIdStub.callsFake((_calendar, id) => {
+        return Promise.resolve(new EventLocation(id, 'Test Venue', '123 Test St'));
+      });
 
       const createdLocation = await service.createLocation(calendar, location);
 
-      expect(createdLocation.id).toMatch(/^https:\/\/.*\/places\/[a-f0-9-]+$/);
+      expect(createdLocation.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
       expect(saveStub.calledOnce).toBe(true);
     });
   });

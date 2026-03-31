@@ -1,6 +1,4 @@
 import { v4 as uuidv4 } from 'uuid';
-import config from 'config';
-
 import { Calendar } from '@/common/model/calendar';
 import { EventLocation } from '@/common/model/location';
 import { LocationValidationError } from '@/common/exceptions/calendar';
@@ -84,19 +82,6 @@ export default class LocationService {
   }
 
   /**
-   * Generate a unique URL identifier for a new location.
-   *
-   * Creates a location URI using the configured domain and a random UUID.
-   * Format: https://[domain]/places/[uuid]
-   *
-   * @returns Location URI string
-   */
-  generateLocationUrl(): string {
-    const domain = config.get('domain');
-    return 'https://' + domain + '/places/' + uuidv4();
-  }
-
-  /**
    * Create a new location with optional accessibility content.
    *
    * @param calendar - The calendar that will own the location
@@ -112,7 +97,7 @@ export default class LocationService {
 
     // Create location entity
     const entity = LocationEntity.fromModel(location);
-    entity.id = this.generateLocationUrl();
+    entity.id = uuidv4();
     entity.calendar_id = calendar.id;
     await entity.save();
 
