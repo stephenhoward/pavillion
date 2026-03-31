@@ -1604,6 +1604,9 @@ class ModerationService {
     if (!this.calendarInterface) {
       throw new Error('CalendarInterface is required for forwardReport');
     }
+    if (!validateActorUriProtocol(targetActorUri)) {
+      throw new Error(`Invalid targetActorUri scheme: ${targetActorUri}`);
+    }
     // Get the report
     const report = await this.getReportById(reportId);
     if (!report) {

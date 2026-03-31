@@ -1500,10 +1500,16 @@ describe('ModerationService', () => {
         );
       });
 
+      it('should throw error if targetActorUri uses non-HTTPS scheme', async () => {
+        await expect(service.forwardReport('report-id', 'http://remote.instance/calendars/test')).rejects.toThrow(
+          'Invalid targetActorUri scheme',
+        );
+      });
+
       it('should throw ReportNotFoundError if report does not exist', async () => {
         sandbox.stub(service, 'getReportById').resolves(null);
 
-        await expect(service.forwardReport('nonexistent-report', 'remote-actor')).rejects.toThrow(
+        await expect(service.forwardReport('nonexistent-report', 'https://remote.instance/calendars/test')).rejects.toThrow(
           ReportNotFoundError,
         );
       });
@@ -1522,7 +1528,7 @@ describe('ModerationService', () => {
         sandbox.stub(service, 'getReportById').resolves(mockReport);
         sandbox.stub(mockCalendarInterface, 'getEventById').rejects(new EventNotFoundError());
 
-        await expect(service.forwardReport('report-id', 'remote-actor')).rejects.toThrow(
+        await expect(service.forwardReport('report-id', 'https://remote.instance/calendars/test')).rejects.toThrow(
           EventNotFoundError,
         );
       });

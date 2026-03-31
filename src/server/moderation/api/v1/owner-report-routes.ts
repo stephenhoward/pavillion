@@ -448,7 +448,7 @@ export default class OwnerReportRoutes {
       // Event source URL format: https://remote.instance/events/event-id
       // We need to derive the calendar owner's actor URI
       const url = new URL(event.eventSourceUrl);
-      const targetActorUri = `${url.protocol}//${url.host}/calendars/${url.pathname.split('/')[1] || 'calendar'}`;
+      const targetActorUri = `https://${url.host}/calendars/${url.pathname.split('/')[1] || 'calendar'}`;
 
       // Call ModerationService.forwardReport()
       await this.moderationInterface.forwardReport(ctx.reportId!, targetActorUri);

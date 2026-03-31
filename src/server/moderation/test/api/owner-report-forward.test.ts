@@ -174,6 +174,31 @@ describe('POST /calendars/:calendarId/reports/:reportId/forward - Forward report
       const actorUri = forwardStub.firstCall.args[1];
       expect(actorUri).toMatch(/^https:\/\/remote\.instance/);
     });
+
+    it('should enforce https scheme even if eventSourceUrl has http', async () => {
+      stubAccess();
+
+      const report = createTestReport();
+      const remoteEvent = createTestEvent({ calendarId: null });
+      remoteEvent.eventSourceUrl = 'http://remote.instance/events/abc123';
+
+      sandbox.stub(moderationInterface, 'getReportForCalendar').resolves(report);
+      sandbox.stub(calendarInterface, 'getEventById').resolves(remoteEvent);
+      const forwardStub = sandbox.stub(moderationInterface, 'forwardReport').resolves();
+
+      router.post('/calendars/:calendarId/reports/:reportId/forward', addRequestUser, (req, res) => {
+        routes.forwardReport(req, res);
+      });
+
+      await request(testApp(router))
+        .post(`/calendars/${TEST_CALENDAR_ID}/reports/${TEST_REPORT_ID}/forward`)
+        .send({});
+
+      expect(forwardStub.calledOnce).toBe(true);
+      const actorUri = forwardStub.firstCall.args[1];
+      expect(actorUri).toMatch(/^https:\/\//);
+      expect(actorUri).not.toMatch(/^http:\/\//);
+    });
   });
 
   describe('validation errors - 400', () => {
