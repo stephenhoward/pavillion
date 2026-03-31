@@ -477,6 +477,14 @@ export default class CalendarInterface {
     return this.eventService.bulkAssignCategories(account, eventIds, categoryIds);
   }
 
+  async replaceEventCategories(
+    account: Account,
+    eventId: string,
+    categoryIds: string[],
+  ): Promise<CalendarEvent> {
+    return this.eventService.replaceEventCategories(account, eventId, categoryIds);
+  }
+
   // Calendar settings operations
   async updateCalendarSettings(
     account: Account,

@@ -319,6 +319,30 @@ export default class CalendarService {
   }
 
   /**
+   * Replace all category assignments for a single event
+   * @param eventId The ID of the event to update
+   * @param categoryIds Array of category IDs to assign (empty array clears all)
+   * @returns Promise<CalendarEvent> The updated event with its categories
+   */
+  async replaceEventCategories(eventId: string, categoryIds: string[]): Promise<CalendarEvent> {
+    if (!eventId || typeof eventId !== 'string') {
+      throw new EmptyValueError('eventId must be a non-empty string');
+    }
+    if (!Array.isArray(categoryIds)) {
+      throw new EmptyValueError('categoryIds must be an array');
+    }
+
+    try {
+      const response = await axios.put(`/api/v1/events/${eventId}/categories`, { categoryIds });
+      return CalendarEvent.fromObject(response.data);
+    }
+    catch (error: unknown) {
+      console.error('Error replacing event categories:', error);
+      handleApiError(error, errorMap);
+    }
+  }
+
+  /**
    * Update calendar settings including content translations
    * @param calendarId The ID of the calendar
    * @param settings The settings to update

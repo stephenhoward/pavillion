@@ -1384,6 +1384,119 @@ class EventService {
   }
 
   /**
+   * Replace all category assignments on a single event with a new set.
+   * Empty categoryIds clears all assignments.
+   *
+   * @param account - The account performing the operation
+   * @param eventId - The event ID to replace categories on
+   * @param categoryIds - Array of category IDs to assign (empty clears all)
+   * @returns Promise resolving to the updated CalendarEvent
+   */
+  async replaceEventCategories(
+    account: Account,
+    eventId: string,
+    categoryIds: string[],
+  ): Promise<CalendarEvent> {
+    // Validate eventId is a valid UUID
+    if (!this.isValidUUID(eventId)) {
+      throw new ValidationError('eventId must be a valid UUID');
+    }
+
+    // Validate categoryIds is an array
+    if (!Array.isArray(categoryIds)) {
+      throw new ValidationError('categoryIds must be an array');
+    }
+
+    // Validate array size cap
+    if (categoryIds.length > 100) {
+      throw new ValidationError('categoryIds array exceeds maximum of 100 elements');
+    }
+
+    // Validate each categoryId is a valid UUID
+    if (categoryIds.length > 0) {
+      const invalidCategoryIds = categoryIds.filter(id => !this.isValidUUID(id));
+      if (invalidCategoryIds.length > 0) {
+        throw new ValidationError('invalid UUID format in categoryIds', { invalidIds: invalidCategoryIds });
+      }
+    }
+
+    let wasRepost = false;
+
+    const transaction = await db.transaction();
+
+    try {
+      // 1. Find the event
+      const event = await EventEntity.findOne({
+        where: { id: eventId },
+        transaction,
+      });
+
+      if (!event) {
+        throw new EventNotFoundError('Event not found');
+      }
+
+      // 2. Resolve effective calendar (handles repost lookup)
+      const {
+        effectiveCalendarId,
+        wasRepost: resolvedAsRepost,
+        userCalendars,
+      } = await this.resolveEffectiveCalendarId(account, event.calendar_id, [eventId], transaction);
+      wasRepost = resolvedAsRepost;
+
+      // 3. Check user has permission
+      const hasPermission = userCalendars.some(cal => cal.id === effectiveCalendarId);
+      if (!hasPermission) {
+        throw new InsufficientCalendarPermissionsError('Insufficient permissions to modify events in this calendar');
+      }
+
+      // 4. Validate categories belong to effective calendar (only if non-empty)
+      if (categoryIds.length > 0) {
+        const categories = await EventCategoryEntity.findAll({
+          where: {
+            id: categoryIds,
+            calendar_id: effectiveCalendarId,
+          },
+          transaction,
+        });
+
+        if (categories.length !== categoryIds.length) {
+          throw new CategoriesNotFoundError('Some categories were not found in the calendar');
+        }
+      }
+
+      // 5. Destroy all existing assignments for this event
+      await EventCategoryAssignmentEntity.destroy({
+        where: { event_id: eventId },
+        transaction,
+      });
+
+      // 6. Bulk create new assignments (skip if empty)
+      if (categoryIds.length > 0) {
+        const assignmentsToCreate = categoryIds.map(categoryId => ({
+          id: uuidv4(),
+          event_id: eventId,
+          category_id: categoryId,
+        }));
+
+        await EventCategoryAssignmentEntity.bulkCreate(assignmentsToCreate, { transaction });
+      }
+
+      await transaction.commit();
+    }
+    catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+
+    // Return updated event (after successful commit)
+    const updatedEvent = await this.getEventById(eventId);
+    updatedEvent.isRepost = wasRepost;
+
+    return updatedEvent;
+  }
+
+
+  /**
    * Delete an event
    * @param account - The account attempting to delete the event
    * @param eventId - The ID of the event to delete

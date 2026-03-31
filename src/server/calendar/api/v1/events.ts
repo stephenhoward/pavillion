@@ -22,6 +22,7 @@ export default class EventRoutes {
     router.put('/events/:id', ExpressHelper.loggedInOnly, this.updateEvent.bind(this));
     router.delete('/events/:id', ExpressHelper.loggedInOnly, this.deleteEvent.bind(this));
     router.post('/events/bulk-assign-categories', ExpressHelper.loggedInOnly, this.bulkAssignCategories.bind(this));
+    router.put('/events/:id/categories', ExpressHelper.loggedInOnly, this.replaceEventCategories.bind(this));
     app.use(routePrefix, router);
   }
 
@@ -302,6 +303,75 @@ export default class EventRoutes {
       }
     }
   }
+
+  async replaceEventCategories(req: Request, res: Response) {
+    const account = req.user as Account;
+
+    if (!account) {
+      res.status(400).json({
+        "error": "missing account for category replacement. Not logged in?",
+        errorName: 'AuthenticationError',
+      });
+      return;
+    }
+
+    const eventId = req.params.id;
+    if (!eventId) {
+      res.status(400).json({
+        "error": "missing event ID",
+        errorName: 'ValidationError',
+      });
+      return;
+    }
+
+    // Validate UUID format
+    if (!ExpressHelper.isValidUUID(eventId)) {
+      res.status(400).json({
+        "error": "invalid UUID format in event ID",
+        errorName: 'ValidationError',
+      });
+      return;
+    }
+
+    const { categoryIds } = req.body;
+
+    if (!Array.isArray(categoryIds)) {
+      res.status(400).json({
+        "error": "categoryIds must be an array",
+        errorName: 'ValidationError',
+      });
+      return;
+    }
+
+    try {
+      const event = await this.service.replaceEventCategories(account, eventId, categoryIds);
+      res.json(event.toObject());
+    }
+    catch (error) {
+      if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
+      }
+      else if (
+        error instanceof EventNotFoundError ||
+        error instanceof InsufficientCalendarPermissionsError ||
+        error instanceof CategoriesNotFoundError
+      ) {
+        // Unified 404 prevents event ID enumeration
+        res.status(404).json({
+          "error": "Event not found",
+          "errorName": "NotFoundError",
+        });
+      }
+      else {
+        logError(error, "Error in category replacement");
+        res.status(500).json({
+          "error": "An error occurred while replacing categories",
+        });
+      }
+    }
+  }
+
+
 
 
   async deleteEvent(req: Request, res: Response) {
