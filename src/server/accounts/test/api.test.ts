@@ -122,6 +122,20 @@ describe('Account API', () => {
     expect(stub.called).toBe(true);
   });
 
+  it('register: should return 400 with field errors for invalid email format', async () => {
+    stub.rejects(new ValidationError('Invalid email format', { email: ['invalid_email_format'] }));
+    router.post('/handler', accountHandlers.registerHandler.bind(accountHandlers));
+
+    const response = await request(testApp(router))
+      .post('/handler')
+      .send({email: 'not-an-email'});
+
+    expect(response.status).toBe(400);
+    expect(response.body.errorName).toBe('ValidationError');
+    expect(response.body.fields).toHaveProperty('email');
+    expect(stub.called).toBe(true);
+  });
+
   it('GET /me: should return current user profile', async () => {
     const testAccount = new Account('user-id', 'testuser', 'test@example.com');
     testAccount.displayName = 'Test User';
@@ -719,6 +733,21 @@ describe ('Invitations API', () => {
     expect(stub2.called).toBe(true);
   });
 
+  it('invite new account: should return 400 with field errors for invalid email format', async () => {
+    let stub2 = sandbox.stub(accountsInterface,'inviteNewAccount');
+    stub2.rejects(new ValidationError('Invalid email format', { email: ['invalid_email_format'] }));
+    router.post('/handler', inviteHandlers.inviteToRegister.bind(inviteHandlers));
+
+    const response = await request(testApp(router))
+      .post('/handler')
+      .send({email: 'not-an-email'});
+
+    expect(response.status).toBe(400);
+    expect(response.body.errorName).toBe('ValidationError');
+    expect(response.body.fields).toHaveProperty('email');
+    expect(stub2.called).toBe(true);
+  });
+
   it('check invite code: should succeed', async () => {
     let stub2 = sandbox.stub(accountsInterface,'validateInviteCode');
     const mockInvitation = { invitation_code: 'test_code' } as any;
@@ -863,6 +892,21 @@ describe('Applications API', () => {
 
     expect(response.status).toBe(500);
     expect(response.body.error).toBe('application_processing_error');
+    expect(stub2.called).toBe(true);
+  });
+
+  it('apply to register: should return 400 with field errors for invalid email format', async () => {
+    let stub2 = sandbox.stub(accountsInterface,'applyForNewAccount');
+    stub2.rejects(new ValidationError('Invalid email format', { email: ['invalid_email_format'] }));
+    router.post('/handler', applicationHandlers.applyToRegister.bind(applicationHandlers));
+
+    const response = await request(testApp(router))
+      .post('/handler')
+      .send({email: 'not-an-email', message: 'I want to join'});
+
+    expect(response.status).toBe(400);
+    expect(response.body.errorName).toBe('ValidationError');
+    expect(response.body.fields).toHaveProperty('email');
     expect(stub2.called).toBe(true);
   });
 
