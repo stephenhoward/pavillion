@@ -56,7 +56,7 @@ describe('Location API Tests', () => {
   describe('GET /api/v1/calendars/:calendarId/locations', () => {
     it('should return all locations for a calendar', async () => {
       const location1 = new EventLocation(
-        'https://pavillion.dev/places/loc-1',
+        'c3d4e5f6-0001-4000-8000-000000000001',
         'Washington Park',
         '4033 SW Canyon Rd',
         'Portland',
@@ -65,7 +65,7 @@ describe('Location API Tests', () => {
       );
 
       const location2 = new EventLocation(
-        'https://pavillion.dev/places/loc-2',
+        'c3d4e5f6-0002-4000-8000-000000000002',
         'Community Center',
         '123 Main St',
         'Portland',
@@ -112,7 +112,7 @@ describe('Location API Tests', () => {
 
     it('should include location content in response', async () => {
       const location = new EventLocation(
-        'https://pavillion.dev/places/loc-1',
+        'c3d4e5f6-0001-4000-8000-000000000001',
         'Community Center',
         '123 Main St',
       );
@@ -144,7 +144,7 @@ describe('Location API Tests', () => {
       };
 
       const createdLocation = new EventLocation(
-        'https://pavillion.dev/places/new-loc',
+        'c3d4e5f6-0003-4000-8000-000000000003',
         'New Venue',
         '456 Oak St',
         'Portland',
@@ -178,7 +178,7 @@ describe('Location API Tests', () => {
       };
 
       const createdLocation = new EventLocation(
-        'https://pavillion.dev/places/new-loc',
+        'c3d4e5f6-0003-4000-8000-000000000003',
         'Accessible Venue',
         '789 Pine St',
       );
@@ -242,7 +242,7 @@ describe('Location API Tests', () => {
 
   describe('GET /api/v1/calendars/:calendarId/locations/:locationId', () => {
     it('should return a specific location', async () => {
-      const locationId = 'https://pavillion.dev/places/loc-1';
+      const locationId = 'c3d4e5f6-0001-4000-8000-000000000001';
       const location = new EventLocation(
         locationId,
         'Washington Park',
@@ -264,7 +264,7 @@ describe('Location API Tests', () => {
     });
 
     it('should return location with content', async () => {
-      const locationId = 'https://pavillion.dev/places/loc-1';
+      const locationId = 'c3d4e5f6-0001-4000-8000-000000000001';
       const location = new EventLocation(
         locationId,
         'Community Center',
@@ -324,7 +324,7 @@ describe('Location API Tests', () => {
 
   describe('PUT /api/v1/calendars/:calendarId/locations/:locationId', () => {
     it('should update a location', async () => {
-      const locationId = 'https://pavillion.dev/places/loc-1';
+      const locationId = 'c3d4e5f6-0001-4000-8000-000000000001';
       const updatedLocation = new EventLocation(
         locationId,
         'Updated Venue',
@@ -348,7 +348,7 @@ describe('Location API Tests', () => {
     });
 
     it('should update location with accessibility content', async () => {
-      const locationId = 'https://pavillion.dev/places/loc-1';
+      const locationId = 'c3d4e5f6-0001-4000-8000-000000000001';
       const updatedLocation = new EventLocation(
         locationId,
         'Accessible Venue',
@@ -434,7 +434,7 @@ describe('Location API Tests', () => {
 
   describe('DELETE /api/v1/calendars/:calendarId/locations/:locationId', () => {
     it('should delete a location', async () => {
-      const locationId = 'https://pavillion.dev/places/loc-1';
+      const locationId = 'c3d4e5f6-0001-4000-8000-000000000001';
 
       (calendarInterface.getCalendar as sinon.SinonStub).resolves(testCalendar);
       (calendarInterface.userCanModifyCalendar as sinon.SinonStub).resolves(true);

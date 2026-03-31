@@ -23,7 +23,7 @@ describe('LocationService - Event Update Location Handling (LOC-003)', () => {
   it('should find existing location when location id is provided', async () => {
     // Create an existing location with an ID
     const existingLocation = new EventLocation(
-      'https://localhost:3000/places/existing-location-id',
+      'b2c3d4e5-0001-4000-8000-000000000001',
       'Test Venue',
       '123 Main St',
       'Springfield',
@@ -91,17 +91,6 @@ describe('LocationService - Event Update Location Handling (LOC-003)', () => {
     // Mock LocationEntity.findOne to return null (location not found by field matching)
     const findOneStub = sandbox.stub(LocationEntity, 'findOne').resolves(null);
 
-    // Create the expected result location
-    const expectedLocation = new EventLocation(
-      'https://localhost:3000/places/new-location-id',
-      locationParams.name,
-      locationParams.address,
-      locationParams.city,
-      locationParams.state,
-      locationParams.postalCode,
-      locationParams.country,
-    );
-
     // Mock LocationEntity.fromModel and save
     const mockEntity = {
       id: '',
@@ -110,24 +99,28 @@ describe('LocationService - Event Update Location Handling (LOC-003)', () => {
     };
     sandbox.stub(LocationEntity, 'fromModel').returns(mockEntity as any);
 
-    // Mock getLocationById to return the created location
-    sandbox.stub(locationService, 'getLocationById').resolves(expectedLocation);
+    // Mock getLocationById to echo back the actual ID assigned by createLocation
+    sandbox.stub(locationService, 'getLocationById').callsFake((_calendar, id) => {
+      return Promise.resolve(new EventLocation(
+        id, locationParams.name, locationParams.address,
+        locationParams.city, locationParams.state, locationParams.postalCode, locationParams.country,
+      ));
+    });
 
     const result = await locationService.findOrCreateLocation(testCalendar, locationParams);
 
     // Verify findOne was called (because id was empty/falsy)
     expect(findOneStub.calledOnce).toBe(true);
 
-    // Verify a new location was created with a generated URL ID
-    expect(result.id).toContain('https://');
-    expect(result.id).toContain('/places/');
+    // Verify a new location was created with a generated UUID
+    expect(result.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
   });
 
   it('should reuse existing location when updating event with same location data', async () => {
     // Simulate updating an event where the location data hasn't changed
     // but the id is included in the params
     const existingLocation = new EventLocation(
-      'https://localhost:3000/places/existing-id',
+      'b2c3d4e5-0003-4000-8000-000000000003',
       'Test Venue',
       '123 Main St',
       'Springfield',
@@ -187,17 +180,6 @@ describe('LocationService - Event Update Location Handling (LOC-003)', () => {
     // Mock findOne to return null (new location doesn't exist yet)
     sandbox.stub(LocationEntity, 'findOne').resolves(null);
 
-    // Create the expected result location
-    const expectedLocation = new EventLocation(
-      'https://localhost:3000/places/new-venue-id',
-      newLocationParams.name,
-      newLocationParams.address,
-      newLocationParams.city,
-      newLocationParams.state,
-      newLocationParams.postalCode,
-      newLocationParams.country,
-    );
-
     // Mock creation of new location
     const mockEntity = {
       id: '',
@@ -206,14 +188,19 @@ describe('LocationService - Event Update Location Handling (LOC-003)', () => {
     };
     sandbox.stub(LocationEntity, 'fromModel').returns(mockEntity as any);
 
-    // Mock getLocationById to return the created location
-    sandbox.stub(locationService, 'getLocationById').resolves(expectedLocation);
+    // Mock getLocationById to echo back the actual ID assigned by createLocation
+    sandbox.stub(locationService, 'getLocationById').callsFake((_calendar, id) => {
+      return Promise.resolve(new EventLocation(
+        id, newLocationParams.name, newLocationParams.address,
+        newLocationParams.city, newLocationParams.state, newLocationParams.postalCode, newLocationParams.country,
+      ));
+    });
 
     const result = await locationService.findOrCreateLocation(testCalendar, newLocationParams);
 
     // Verify a new location was created
     expect(result.name).toBe('New Venue');
     expect(result.address).toBe('456 Oak Ave');
-    expect(result.id).toContain('https://');
+    expect(result.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
   });
 });
