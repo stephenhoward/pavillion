@@ -33,7 +33,11 @@ export default class AccountRouteHandlers {
       }
     }
     catch (error) {
-      if ( error instanceof AccountAlreadyExistsError ) {
+      if ( error instanceof ValidationError ) {
+        ExpressHelper.sendValidationError(res, error);
+        return;
+      }
+      else if ( error instanceof AccountAlreadyExistsError ) {
         logger.info('Registration attempt for existing account');
       }
       else if ( error instanceof AccountRegistrationClosedError ) {

@@ -24,6 +24,7 @@ import { EventEmitter } from 'events';
 import EditorInvitationEmail from '@/server/calendar/model/editor_invitation_email';
 import { isValidLanguageCode } from '@/common/i18n/languages';
 import { ValidationError } from '@/common/exceptions/base';
+import { isValidEmail } from '@/common/validation/email';
 import { logError } from '@/server/common/helper/error-logger';
 import { createLogger } from '@/server/common/helper/logger';
 
@@ -70,6 +71,10 @@ export default class AccountService {
     * @throws AccountInvitationPermissionError if the inviter lacks permission to send invitations
     */
   async inviteNewAccount(inviter: Account, email:string, message: string, calendarId?: string): Promise<AccountInvitation> {
+
+    if (!isValidEmail(email)) {
+      throw new ValidationError('Invalid email format', { email: ['invalid_email_format'] });
+    }
 
     // Check if user has permission to send invitations based on registration mode
     const settings = await this.configurationInterface.getAllSettings();
@@ -158,6 +163,10 @@ export default class AccountService {
     */
   async registerNewAccount(email:string): Promise<Account> {
 
+    if (!isValidEmail(email)) {
+      throw new ValidationError('Invalid email format', { email: ['invalid_email_format'] });
+    }
+
     const settings = await this.configurationInterface.getAllSettings();
     if ( settings.registrationMode != 'open' ) {
       throw new AccountRegistrationClosedError();
@@ -195,6 +204,11 @@ export default class AccountService {
     * @throws AccountApplicationsClosedError if the system is not accepting applications
     */
   async applyForNewAccount(email: string, message?: string): Promise<boolean> {
+
+    if (!isValidEmail(email)) {
+      throw new ValidationError('Invalid email format', { email: ['invalid_email_format'] });
+    }
+
     const settings = await this.configurationInterface.getAllSettings();
 
     if (settings.registrationMode !== 'apply') {

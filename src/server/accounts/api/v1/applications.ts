@@ -6,6 +6,7 @@ import {
   AccountApplicationAlreadyExistsError,
   AccountApplicationsClosedError,
 } from '@/server/accounts/exceptions';
+import { ValidationError } from '@/common/exceptions/base';
 import { logError } from '@/server/common/helper/error-logger';
 import { createLogger } from '@/server/common/helper/logger';
 
@@ -31,7 +32,11 @@ export default class AccountApplicationRouteHandlers {
       await this.service.applyForNewAccount(req.body.email, req.body.message);
     }
     catch (error) {
-      if (error instanceof AccountAlreadyExistsError) {
+      if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
+        return;
+      }
+      else if (error instanceof AccountAlreadyExistsError) {
         // Log internally but don't reveal account existence to requester
         logger.info({ email: req.body.email }, 'Application attempted for existing account');
       }

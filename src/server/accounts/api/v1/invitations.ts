@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import { Account } from '@/common/model/account';
 import { validatePassword } from '@/common/validation/password';
+import { ValidationError } from '@/common/exceptions/base';
 import AccountsInterface from '@/server/accounts/interface';
 import ExpressHelper from '@/server/common/helper/express';
 import { logError } from '@/server/common/helper/error-logger';
@@ -45,11 +46,22 @@ export default class AccountInvitationRouteHandlers {
   }
 
   async inviteToRegister(req: Request, res: Response) {
-    const invitation = await this.service.inviteNewAccount(req.user! as Account, req.body.email, req.body.message);
-    if( invitation ) {
-      res.json(invitation);
+    try {
+      const invitation = await this.service.inviteNewAccount(req.user! as Account, req.body.email, req.body.message);
+      if( invitation ) {
+        res.json(invitation);
+      }
+      else {
+        res.status(400);
+        res.json({ error: 'Failed to create invitation', errorName: 'InvitationCreationError' });
+      }
     }
-    else {
+    catch (error) {
+      if (error instanceof ValidationError) {
+        ExpressHelper.sendValidationError(res, error);
+        return;
+      }
+      logError(error, 'Error creating invitation');
       res.status(400);
       res.json({ error: 'Failed to create invitation', errorName: 'InvitationCreationError' });
     }

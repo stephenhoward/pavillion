@@ -42,9 +42,9 @@ describe('inviteNewAccount', () => {
     let getAllSettingsStub = sandbox.stub(ConfigurationInterface.prototype, 'getAllSettings');
 
     getAllSettingsStub.resolves({ registrationMode: 'invitation' });
-    getAccountStub.resolves(new Account('id', 'test_email', 'testme'));
+    getAccountStub.resolves(new Account('id', 'test_user', 'testme'));
 
-    await expect( accountService.inviteNewAccount(adminUser,'test_email','test_message')).rejects
+    await expect( accountService.inviteNewAccount(adminUser,'test@example.com','test_message')).rejects
       .toThrow(AccountAlreadyExistsError);
   });
 
@@ -55,8 +55,8 @@ describe('inviteNewAccount', () => {
 
     getAllSettingsStub.resolves({ registrationMode: 'invitation' });
     getAccountStub.resolves(undefined);
-    findInviteStub.resolves(AccountInvitationEntity.build({ email: 'test_email' }));
-    await expect(accountService.inviteNewAccount(adminUser,'test_email','test_message')).rejects
+    findInviteStub.resolves(AccountInvitationEntity.build({ email: 'test@example.com' }));
+    await expect(accountService.inviteNewAccount(adminUser,'test@example.com','test_message')).rejects
       .toThrow(AccountInviteAlreadyExistsError);
   });
 
@@ -71,8 +71,8 @@ describe('inviteNewAccount', () => {
     getAccountStub.resolves(undefined);
     findInvitationStub.resolves(undefined);
 
-    let invitation = await accountService.inviteNewAccount(adminUser,'test_email','test_message');
-    expect(invitation.email).toBe('test_email');
+    let invitation = await accountService.inviteNewAccount(adminUser,'test@example.com','test_message');
+    expect(invitation.email).toBe('test@example.com');
     expect(sendInviteStub.called).toBe(true);
     expect(saveInviteStub.called).toBe(true);
   });
@@ -99,15 +99,31 @@ describe('inviteNewAccount', () => {
       getAccountStub.resolves(undefined);
       findInvitationStub.resolves(undefined);
 
-      let invitation = await accountService.inviteNewAccount(regularUser,'test_email','test_message');
-      expect(invitation.email).toBe('test_email');
+      let invitation = await accountService.inviteNewAccount(regularUser,'test@example.com','test_message');
+      expect(invitation.email).toBe('test@example.com');
       expect(sendInviteStub.called).toBe(true);
       expect(saveInviteStub.called).toBe(true);
     }
     else {
       // For modes that should deny invitations, expect an error
-      await expect(accountService.inviteNewAccount(regularUser,'test_email','test_message')).rejects
+      await expect(accountService.inviteNewAccount(regularUser,'test@example.com','test_message')).rejects
         .toThrow(AccountInvitationPermissionError);
+    }
+  });
+
+  it('should throw ValidationError for invalid email format', async () => {
+    await expect(accountService.inviteNewAccount(adminUser, 'not-an-email', 'test_message')).rejects
+      .toThrow(ValidationError);
+  });
+
+  it('should include field-level error for invalid email', async () => {
+    try {
+      await accountService.inviteNewAccount(adminUser, 'not-an-email', 'test_message');
+      expect.fail('Should have thrown');
+    }
+    catch (error) {
+      expect(error).toBeInstanceOf(ValidationError);
+      expect((error as ValidationError).fields).toHaveProperty('email');
     }
   });
 
@@ -123,9 +139,9 @@ describe('inviteNewAccount', () => {
     findInvitationStub.resolves(undefined);
 
     const calendarId = 'test-calendar-id';
-    const invitation = await accountService.inviteNewAccount(adminUser,'test_email','test_message', calendarId);
+    const invitation = await accountService.inviteNewAccount(adminUser,'test@example.com','test_message', calendarId);
 
-    expect(invitation.email).toBe('test_email');
+    expect(invitation.email).toBe('test@example.com');
     expect(invitation.calendarId).toBe(calendarId);
     expect(sendInviteStub.called).toBe(true);
     expect(saveInviteStub.called).toBe(true);
@@ -150,6 +166,22 @@ describe('registerNewAccount', () => {
     sandbox.restore();
   });
 
+  it('should throw ValidationError for invalid email format', async () => {
+    await expect(accountService.registerNewAccount('not-an-email')).rejects
+      .toThrow(ValidationError);
+  });
+
+  it('should include field-level error for invalid email', async () => {
+    try {
+      await accountService.registerNewAccount('bad-email');
+      expect.fail('Should have thrown');
+    }
+    catch (error) {
+      expect(error).toBeInstanceOf(ValidationError);
+      expect((error as ValidationError).fields).toHaveProperty('email');
+    }
+  });
+
   it('no registration allowed', async () => {
     let getSettingStub = sandbox.stub(ServiceSettings.prototype, 'get');
     let initSettingsStub = sandbox.stub(ServiceSettings.prototype, 'init');
@@ -157,7 +189,7 @@ describe('registerNewAccount', () => {
 
     for (let mode of ['closed', 'apply', 'invite']) {
       getSettingStub.withArgs('registrationMode').returns(mode);
-      await expect(accountService.registerNewAccount('test_email')).rejects
+      await expect(accountService.registerNewAccount('test@example.com')).rejects
         .toThrow(AccountRegistrationClosedError);
       expect(emailStub.called).toBe(false);
     }
@@ -170,11 +202,11 @@ describe('registerNewAccount', () => {
     let emailStub = sandbox.stub(emailInterface, 'sendEmail');
 
     getSettingStub.withArgs('registrationMode').returns('open');
-    setupAccountStub.resolves({ account: new Account('id', 'testme', 'test_email'), password_code: 'test_code' });
+    setupAccountStub.resolves({ account: new Account('id', 'testme', 'test@example.com'), password_code: 'test_code' });
 
-    let account = await accountService.registerNewAccount('test_email');
+    let account = await accountService.registerNewAccount('test@example.com');
 
-    expect(account.email).toBe('test_email');
+    expect(account.email).toBe('test@example.com');
     expect(emailStub.called).toBe(true);
   });
 
@@ -187,16 +219,16 @@ describe('registerNewAccount', () => {
     getSettingStub.withArgs('registrationMode').returns('open');
     setupAccountStub.rejects(new AccountAlreadyExistsError());
 
-    const existingAccount = new Account('existing-id', 'existinguser', 'test_email');
+    const existingAccount = new Account('existing-id', 'existinguser', 'test@example.com');
     existingAccount.language = 'fr';
     getAccountStub.resolves(existingAccount);
 
-    await expect(accountService.registerNewAccount('test_email')).rejects
+    await expect(accountService.registerNewAccount('test@example.com')).rejects
       .toThrow(AccountAlreadyExistsError);
 
     expect(emailStub.calledOnce).toBe(true);
     const mailData = emailStub.firstCall.args[0];
-    expect(mailData.emailAddress).toBe('test_email');
+    expect(mailData.emailAddress).toBe('test@example.com');
   });
 });
 
@@ -217,12 +249,17 @@ describe('applyForNewAccount', () => {
     applySandbox.restore();
   });
 
+  it('should throw ValidationError for invalid email format', async () => {
+    await expect(accountService.applyForNewAccount('not-an-email', 'test_message')).rejects
+      .toThrow(ValidationError);
+  });
+
   it('no applications allowed', async () => {
     let getSettingStub = applySandbox.stub(ServiceSettings.prototype, 'get');
 
     for (let mode of ['closed', 'open', 'invite']) {
       getSettingStub.withArgs('registrationMode').returns(mode);
-      await expect(accountService.applyForNewAccount('test_email','test_message')).rejects
+      await expect(accountService.applyForNewAccount('test@example.com','test_message')).rejects
         .toThrow(AccountApplicationsClosedError);
     }
   });
@@ -234,9 +271,9 @@ describe('applyForNewAccount', () => {
 
     getAllSettingsStub.resolves({ registrationMode: 'apply' });
     getAccountByEmailStub.resolves(undefined);
-    findApplicationStub.resolves(AccountApplicationEntity.build({ email: 'test_email' }));
+    findApplicationStub.resolves(AccountApplicationEntity.build({ email: 'test@example.com' }));
 
-    await expect(accountService.applyForNewAccount('test_email','test_message')).rejects
+    await expect(accountService.applyForNewAccount('test@example.com','test_message')).rejects
       .toThrow(AccountApplicationAlreadyExistsError);
   });
 
@@ -251,7 +288,7 @@ describe('applyForNewAccount', () => {
     getAccountByEmailStub.resolves(undefined);
     findApplicationStub.resolves(undefined);
 
-    let result = await accountService.applyForNewAccount('test_email','test_message');
+    let result = await accountService.applyForNewAccount('test@example.com','test_message');
 
     expect(result).toBe(true);
     expect(saveApplicationStub.called).toBe(true);
@@ -595,11 +632,11 @@ describe('acceptAccountApplication', () => {
     let setupAccountStub = acceptSandbox.stub(accountService, '_setupAccount');
     let sendEmailStub = acceptSandbox.stub(emailInterface, 'sendEmail');
 
-    const application = AccountApplicationEntity.build({ email: 'test_email' });
+    const application = AccountApplicationEntity.build({ email: 'test@example.com' });
     const destroyStub = acceptSandbox.stub(application, 'destroy').resolves();
 
     findApplicationStub.resolves(application);
-    setupAccountStub.resolves({ account: new Account('id', 'testme', 'test_email'), password_code: 'test_code' });
+    setupAccountStub.resolves({ account: new Account('id', 'testme', 'test@example.com'), password_code: 'test_code' });
 
     let account = await accountService.acceptAccountApplication('test_id');
 
@@ -640,7 +677,7 @@ describe('rejectAccountApplication', () => {
     let sendEmailStub = rejectSandbox.stub(emailInterface, 'sendEmail');
 
     const application = AccountApplicationEntity.build({
-      email: 'test_email',
+      email: 'test@example.com',
       message: 'test message',
     });
     const saveStub = rejectSandbox.stub(application, 'save').resolves();
@@ -659,7 +696,7 @@ describe('rejectAccountApplication', () => {
     let sendEmailStub = rejectSandbox.stub(emailInterface, 'sendEmail');
 
     const application = AccountApplicationEntity.build({
-      email: 'test_email',
+      email: 'test@example.com',
       message: 'test message',
     });
     const saveStub = rejectSandbox.stub(application, 'save').resolves();
@@ -694,9 +731,9 @@ describe('_setupAccount', () => {
   it('should fail to create an account with an existing email', async () => {
     let accountServiceStub = setupSandbox.stub(accountService, 'getAccountByEmail');
 
-    accountServiceStub.resolves(new Account('id', 'testme', 'test_email'));
+    accountServiceStub.resolves(new Account('id', 'testme', 'test@example.com'));
 
-    await expect(accountService._setupAccount('test_email','test_password')).rejects
+    await expect(accountService._setupAccount('test@example.com','test_password')).rejects
       .toThrow(AccountAlreadyExistsError);
   });
 
@@ -713,9 +750,9 @@ describe('_setupAccount', () => {
     accountServiceStub.resolves(undefined);
     accountRoleFindAllStub.resolves([]); // No existing admins
 
-    let accountInfo = await accountService._setupAccount('test_email');
+    let accountInfo = await accountService._setupAccount('test@example.com');
 
-    expect(accountInfo.account.email).toBe('test_email');
+    expect(accountInfo.account.email).toBe('test@example.com');
     expect(accountInfo.password_code).toBeTruthy();
     expect(accountSaveStub.called).toBe(true);
     expect(accountSecretsSaveStub.called).toBe(true);
@@ -735,9 +772,9 @@ describe('_setupAccount', () => {
     setPasswordStub.resolves(true);
     accountRoleFindAllStub.resolves([]); // No existing admins
 
-    let accountInfo = await accountService._setupAccount('test_email','test_password');
+    let accountInfo = await accountService._setupAccount('test@example.com','test_password');
 
-    expect(accountInfo.account.email).toBe('test_email');
+    expect(accountInfo.account.email).toBe('test@example.com');
     expect(accountInfo.password_code).toBe('');
     expect(accountSaveStub.called).toBe(true);
     expect(passwordCodeStub.called).toBe(false);
