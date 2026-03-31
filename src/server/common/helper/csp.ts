@@ -16,11 +16,11 @@ export function buildDefaultCSP(): string {
     `script-src 'self'${isDev ? ' http://localhost:5173' : ''} https://js.stripe.com`,
     "frame-src https://*.stripe.com",
     "img-src 'self' data:",
+    `connect-src 'self' https://api.stripe.com https://errors.stripe.com https://m.stripe.com https://q.stripe.com${isDev ? ' ws://localhost:5173 http://localhost:5173' : ''}`,
   ];
 
-  // In development, Vite HMR uses WebSocket connections and injects inline styles
+  // In development, Vite injects inline styles
   if (isDev) {
-    directives.push("connect-src 'self' ws://localhost:5173 http://localhost:5173");
     directives.push("style-src 'self' 'unsafe-inline'");
   }
 

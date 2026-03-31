@@ -56,7 +56,16 @@ describe('buildDefaultCSP', () => {
     process.env.NODE_ENV = 'production';
     const csp = buildDefaultCSP();
     expect(csp).not.toContain('localhost:5173');
-    expect(csp).not.toContain('connect-src');
+  });
+
+  it('should include connect-src with Stripe API domains in production', () => {
+    process.env.NODE_ENV = 'production';
+    const csp = buildDefaultCSP();
+    expect(csp).toMatch(/connect-src[^;]*'self'/);
+    expect(csp).toMatch(/connect-src[^;]*https:\/\/api\.stripe\.com/);
+    expect(csp).toMatch(/connect-src[^;]*https:\/\/errors\.stripe\.com/);
+    expect(csp).toMatch(/connect-src[^;]*https:\/\/m\.stripe\.com/);
+    expect(csp).toMatch(/connect-src[^;]*https:\/\/q\.stripe\.com/);
   });
 
   it('should include Vite dev server in script-src in development', () => {
@@ -65,10 +74,11 @@ describe('buildDefaultCSP', () => {
     expect(csp).toMatch(/script-src[^;]*http:\/\/localhost:5173/);
   });
 
-  it('should include connect-src for Vite HMR WebSocket in development', () => {
+  it('should include connect-src with Vite HMR and Stripe domains in development', () => {
     process.env.NODE_ENV = 'development';
     const csp = buildDefaultCSP();
     expect(csp).toMatch(/connect-src[^;]*ws:\/\/localhost:5173/);
+    expect(csp).toMatch(/connect-src[^;]*https:\/\/api\.stripe\.com/);
   });
 
   it('should include style-src with unsafe-inline in development for Vite style injection', () => {
