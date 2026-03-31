@@ -129,8 +129,7 @@ class EventContentEntity extends Model {
   @Column({ type: DataType.STRING })
   declare name: string;
 
-  @Index('idx_event_content_description')
-  @Column({ type: DataType.STRING })
+  @Column({ type: DataType.TEXT })
   declare description: string;
 
   @BelongsTo(() => EventEntity)

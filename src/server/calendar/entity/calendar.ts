@@ -94,7 +94,7 @@ class CalendarContentEntity extends Model {
   @Column({ type: DataType.STRING })
   declare name: string;
 
-  @Column({ type: DataType.STRING })
+  @Column({ type: DataType.TEXT })
   declare description: string;
 
   @BelongsTo(() => CalendarEntity)
