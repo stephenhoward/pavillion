@@ -3,6 +3,7 @@ import { reactive, inject, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import i18next from 'i18next';
+import { isValidEmail } from '@/common/validation/email';
 import ErrorAlert from './error-alert.vue';
 
 const router = useRouter();
@@ -46,6 +47,10 @@ const siteTitle = computed(() => settings.value.siteTitle || '');
 async function doLogin() {
   if ( state.email == '' || state.password == '' ) {
     state.err = t('MissingLogin');
+    return;
+  }
+  if ( !isValidEmail(state.email) ) {
+    state.err = t('InvalidEmail');
     return;
   }
   try {

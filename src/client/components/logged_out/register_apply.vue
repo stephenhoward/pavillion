@@ -1,77 +1,80 @@
 <template>
-  <!-- Success state -->
-  <div v-if="state.showSuccess" class="welcome-card">
-    <SuccessState>
-      <h3>{{ t('title') }}</h3>
-      <p class="success-message">
-        {{ t('application_submitted') }}
-      </p>
-    </SuccessState>
-  </div>
-
-  <!-- Form state -->
-  <form
-    v-else
-    class="welcome-card"
-    @submit.prevent="doApply"
-    novalidate
-  >
-    <h3>{{ t('title') }}</h3>
-
-    <ErrorAlert :error="state.err" />
-
-    <div class="form-stack">
-      <label for="apply-email" class="sr-only">{{ t('email') }}</label>
-      <input
-        type="email"
-        id="apply-email"
-        :class="{ 'form-control--error': state.err }"
-        :placeholder="t('email')"
-        v-model="state.email"
-        :aria-invalid="state.err ? 'true' : 'false'"
-        :aria-describedby="state.err ? 'apply-error' : undefined"
-        autocomplete="email"
-        required
-      />
-
-      <div class="textarea-field">
-        <label for="apply-message" class="textarea-label">
-          {{ t('message_label') }}
-        </label>
-        <textarea
-          id="apply-message"
-          class="textarea"
-          :class="{ 'form-control--error': state.err }"
-          v-model="state.message"
-          :aria-invalid="state.err ? 'true' : 'false'"
-          :aria-describedby="state.err ? 'apply-error' : undefined"
-          rows="6"
-          required
-        />
-      </div>
-
-      <button
-        class="primary"
-        type="submit"
-        :aria-describedby="state.err ? 'apply-error' : undefined"
-      >
-        {{ t("create_button") }}
-      </button>
+  <div>
+    <!-- Success state -->
+    <div v-show="state.showSuccess" class="welcome-card">
+      <SuccessState>
+        <h3>{{ t('title') }}</h3>
+        <p class="success-message">
+          {{ t('application_submitted') }}
+        </p>
+      </SuccessState>
     </div>
 
-    <router-link
-      class="forgot"
-      :to="{ name: 'login', query: { email: state.email}}"
+    <!-- Form state -->
+    <form
+      v-show="!state.showSuccess"
+      class="welcome-card"
+      @submit.prevent="doApply"
+      novalidate
     >
-      {{ t("go_login") }}
-    </router-link>
-  </form>
+      <h3>{{ t('title') }}</h3>
+
+      <ErrorAlert :error="state.err" />
+
+      <div class="form-stack">
+        <label for="apply-email" class="sr-only">{{ t('email') }}</label>
+        <input
+          type="email"
+          id="apply-email"
+          :class="{ 'form-control--error': state.err }"
+          :placeholder="t('email')"
+          v-model="state.email"
+          :aria-invalid="state.err ? 'true' : 'false'"
+          :aria-describedby="state.err ? 'apply-error' : undefined"
+          autocomplete="email"
+          required
+        />
+
+        <div class="textarea-field">
+          <label for="apply-message" class="textarea-label">
+            {{ t('message_label') }}
+          </label>
+          <textarea
+            id="apply-message"
+            class="textarea"
+            :class="{ 'form-control--error': state.err }"
+            v-model="state.message"
+            :aria-invalid="state.err ? 'true' : 'false'"
+            :aria-describedby="state.err ? 'apply-error' : undefined"
+            rows="6"
+            required
+          />
+        </div>
+
+        <button
+          class="primary"
+          type="submit"
+          :aria-describedby="state.err ? 'apply-error' : undefined"
+        >
+          {{ t("create_button") }}
+        </button>
+      </div>
+
+      <router-link
+        class="forgot"
+        :to="{ name: 'login', query: { email: state.email}}"
+      >
+        {{ t("go_login") }}
+      </router-link>
+    </form>
+  </div>
 </template>
 
 <script setup>
 import { reactive, onBeforeMount, inject } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
+import { isValidEmail } from '@/common/validation/email';
 import ErrorAlert from './error-alert.vue';
 import SuccessState from './success-state.vue';
 
@@ -102,6 +105,10 @@ onBeforeMount(() => {
 async function doApply() {
   if ( state.email == '' || state.message == '' ) {
     state.err = t('MissingFields');
+    return;
+  }
+  if ( !isValidEmail(state.email) ) {
+    state.err = t('InvalidEmail');
     return;
   }
   try {
