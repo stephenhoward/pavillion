@@ -298,6 +298,22 @@ describe('Login Behavior', () => {
     expect(loginStub.called).toBe(false);
   });
 
+  it('invalid email format', async () => {
+    const { wrapper, router, authn } = mountedLogin();
+    let pushStub = sinon.createSandbox().stub(router, 'push');
+    let loginStub = sinon.createSandbox().stub(authn, 'login');
+
+    await wrapper.find('input[type="email"]').setValue('not-an-email');
+    await wrapper.find('input[type="password"]').setValue('password');
+
+    await wrapper.find('form').trigger('submit.prevent');
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find('[role="alert"]').exists()).toBe(true);
+    expect(pushStub.called).toBe(false);
+    expect(loginStub.called).toBe(false);
+  });
+
   it('missing password', async () => {
     const { wrapper, router, authn } = mountedLogin();
     let pushStub = sinon.createSandbox().stub(router, 'push');
@@ -323,7 +339,7 @@ describe('Login Behavior', () => {
 
     loginStub.resolves(false);
 
-    await wrapper.find('input[type="email"]').setValue('email');
+    await wrapper.find('input[type="email"]').setValue('user@example.com');
     await wrapper.find('input[type="password"]').setValue('password');
 
     // Trigger form submission using the submit event
@@ -342,7 +358,7 @@ describe('Login Behavior', () => {
 
     loginStub.throws("ouch");
 
-    await wrapper.find('input[type="email"]').setValue('email');
+    await wrapper.find('input[type="email"]').setValue('user@example.com');
     await wrapper.find('input[type="password"]').setValue('password');
 
     // Trigger form submission using the submit event
@@ -361,7 +377,7 @@ describe('Login Behavior', () => {
 
     loginStub.resolves(true);
 
-    await wrapper.find('input[type="email"]').setValue('email');
+    await wrapper.find('input[type="email"]').setValue('user@example.com');
     await wrapper.find('input[type="password"]').setValue('password');
 
     // Trigger form submission using the submit event

@@ -56,6 +56,7 @@
 import { reactive, onBeforeMount, inject } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
+import { isValidEmail } from '@/common/validation/email';
 import ErrorAlert from './error-alert.vue';
 import SuccessState from './success-state.vue';
 
@@ -94,6 +95,10 @@ onBeforeMount(() => {
 async function doRegister() {
   if ( state.email == '' ) {
     state.err = t('MissingEmail');
+    return;
+  }
+  if ( !isValidEmail(state.email) ) {
+    state.err = t('InvalidEmail');
     return;
   }
   try {

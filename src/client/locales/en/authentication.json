@@ -9,6 +9,7 @@
     "apply_button": "Apply for an Account",
     "UnknownLogin": "unknown email or password",
     "MissingLogin": "missing email or password",
+    "InvalidEmail": "please enter a valid email address",
     "400": "bad sign in",
     "unknown_error": "An unknown error occurred",
     "RateLimitError": "Too many requests. Please try again later.",

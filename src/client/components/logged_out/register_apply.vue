@@ -72,6 +72,7 @@
 import { reactive, onBeforeMount, inject } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
+import { isValidEmail } from '@/common/validation/email';
 import ErrorAlert from './error-alert.vue';
 import SuccessState from './success-state.vue';
 
@@ -102,6 +103,10 @@ onBeforeMount(() => {
 async function doApply() {
   if ( state.email == '' || state.message == '' ) {
     state.err = t('MissingFields');
+    return;
+  }
+  if ( !isValidEmail(state.email) ) {
+    state.err = t('InvalidEmail');
     return;
   }
   try {
