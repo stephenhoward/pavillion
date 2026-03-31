@@ -32,6 +32,9 @@ const mountedRegister = () => {
       },
       authn,
     },
+    stubs: {
+      SuccessState: { template: '<div class="success-stub"><slot /></div>' },
+    },
   });
 
   return { wrapper, router, authn };
@@ -39,13 +42,17 @@ const mountedRegister = () => {
 
 describe('Register Form Validation', () => {
   const sandbox = sinon.createSandbox();
+  let currentWrapper: ReturnType<typeof mountedRegister>['wrapper'] | null = null;
 
   afterEach(() => {
+    currentWrapper?.unmount();
+    currentWrapper = null;
     sandbox.restore();
   });
 
   it('missing email shows error', async () => {
     const { wrapper, authn } = mountedRegister();
+    currentWrapper = wrapper;
     let registerStub = sandbox.stub(authn, 'register');
 
     await wrapper.find('input[type="email"]').setValue('');
@@ -59,6 +66,7 @@ describe('Register Form Validation', () => {
 
   it('invalid email format shows error', async () => {
     const { wrapper, authn } = mountedRegister();
+    currentWrapper = wrapper;
     let registerStub = sandbox.stub(authn, 'register');
 
     await wrapper.find('input[type="email"]').setValue('not-an-email');
@@ -72,6 +80,7 @@ describe('Register Form Validation', () => {
 
   it('valid email proceeds to registration', async () => {
     const { wrapper, authn } = mountedRegister();
+    currentWrapper = wrapper;
     let registerStub = sandbox.stub(authn, 'register');
     registerStub.resolves();
 
@@ -80,7 +89,7 @@ describe('Register Form Validation', () => {
     await wrapper.find('form').trigger('submit.prevent');
     await flushPromises();
 
-    expect(registerStub.called).toBe(true);
-    expect(wrapper.find('form').exists()).toBe(false);
+    expect(registerStub.calledWith('user@example.com')).toBe(true);
+    expect(wrapper.find('.success-stub').isVisible()).toBe(true);
   });
 });

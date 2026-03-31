@@ -32,6 +32,9 @@ const mountedApply = () => {
       },
       authn,
     },
+    stubs: {
+      SuccessState: { template: '<div class="success-stub"><slot /></div>' },
+    },
   });
 
   return { wrapper, router, authn };
@@ -39,13 +42,17 @@ const mountedApply = () => {
 
 describe('Register Apply Form Validation', () => {
   const sandbox = sinon.createSandbox();
+  let currentWrapper: ReturnType<typeof mountedApply>['wrapper'] | null = null;
 
   afterEach(() => {
+    currentWrapper?.unmount();
+    currentWrapper = null;
     sandbox.restore();
   });
 
   it('missing email shows error', async () => {
     const { wrapper, authn } = mountedApply();
+    currentWrapper = wrapper;
     let applyStub = sandbox.stub(authn, 'register_apply');
 
     await wrapper.find('input[type="email"]').setValue('');
@@ -59,6 +66,7 @@ describe('Register Apply Form Validation', () => {
 
   it('missing message with valid email shows error', async () => {
     const { wrapper, authn } = mountedApply();
+    currentWrapper = wrapper;
     let applyStub = sandbox.stub(authn, 'register_apply');
 
     await wrapper.find('input[type="email"]').setValue('user@example.com');
@@ -72,6 +80,7 @@ describe('Register Apply Form Validation', () => {
 
   it('invalid email format shows error', async () => {
     const { wrapper, authn } = mountedApply();
+    currentWrapper = wrapper;
     let applyStub = sandbox.stub(authn, 'register_apply');
 
     await wrapper.find('input[type="email"]').setValue('not-an-email');
@@ -86,6 +95,7 @@ describe('Register Apply Form Validation', () => {
 
   it('valid email with message proceeds to apply', async () => {
     const { wrapper, authn } = mountedApply();
+    currentWrapper = wrapper;
     let applyStub = sandbox.stub(authn, 'register_apply');
     applyStub.resolves();
 
@@ -95,7 +105,7 @@ describe('Register Apply Form Validation', () => {
     await wrapper.find('form').trigger('submit.prevent');
     await flushPromises();
 
-    expect(applyStub.called).toBe(true);
-    expect(wrapper.find('form').exists()).toBe(false);
+    expect(applyStub.calledWith('user@example.com', 'I would like to join')).toBe(true);
+    expect(wrapper.find('.success-stub').isVisible()).toBe(true);
   });
 });

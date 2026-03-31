@@ -1,55 +1,57 @@
 <template>
-  <!-- Success state -->
-  <div v-if="state.showSuccess" class="welcome-card">
-    <SuccessState>
-      <h3>{{ t('title') }}</h3>
-      <p class="success-message">
-        {{ t('registration_submitted') }}
-      </p>
-    </SuccessState>
-  </div>
-
-  <!-- Form state -->
-  <form
-    v-else
-    class="welcome-card"
-    @submit.prevent="doRegister"
-    novalidate
-  >
-    <h3>{{ t('title') }}</h3>
-
-    <ErrorAlert :error="state.err" />
-
-    <div class="form-stack">
-      <label for="register-email" class="sr-only">{{ t('email') }}</label>
-      <input
-        type="email"
-        id="register-email"
-        :class="{ 'form-control--error': state.err }"
-        :placeholder="t('email')"
-        v-model="state.email"
-        :aria-invalid="state.err ? 'true' : 'false'"
-        :aria-describedby="state.err ? 'register-error' : undefined"
-        autocomplete="email"
-        required
-      />
-
-      <button
-        class="primary"
-        type="submit"
-        :aria-describedby="state.err ? 'register-error' : undefined"
-      >
-        {{ t("create_button") }}
-      </button>
+  <div>
+    <!-- Success state -->
+    <div v-show="state.showSuccess" class="welcome-card">
+      <SuccessState>
+        <h3>{{ t('title') }}</h3>
+        <p class="success-message">
+          {{ t('registration_submitted') }}
+        </p>
+      </SuccessState>
     </div>
 
-    <router-link
-      class="forgot"
-      :to="{ name: 'login', query: { email: state.email}}"
+    <!-- Form state -->
+    <form
+      v-show="!state.showSuccess"
+      class="welcome-card"
+      @submit.prevent="doRegister"
+      novalidate
     >
-      {{ t("go_login") }}
-    </router-link>
-  </form>
+      <h3>{{ t('title') }}</h3>
+
+      <ErrorAlert :error="state.err" />
+
+      <div class="form-stack">
+        <label for="register-email" class="sr-only">{{ t('email') }}</label>
+        <input
+          type="email"
+          id="register-email"
+          :class="{ 'form-control--error': state.err }"
+          :placeholder="t('email')"
+          v-model="state.email"
+          :aria-invalid="state.err ? 'true' : 'false'"
+          :aria-describedby="state.err ? 'register-error' : undefined"
+          autocomplete="email"
+          required
+        />
+
+        <button
+          class="primary"
+          type="submit"
+          :aria-describedby="state.err ? 'register-error' : undefined"
+        >
+          {{ t("create_button") }}
+        </button>
+      </div>
+
+      <router-link
+        class="forgot"
+        :to="{ name: 'login', query: { email: state.email}}"
+      >
+        {{ t("go_login") }}
+      </router-link>
+    </form>
+  </div>
 </template>
 
 <script setup>
