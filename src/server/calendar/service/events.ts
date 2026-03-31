@@ -1555,6 +1555,21 @@ class EventService {
               ),
             },
           },
+          // Events reposted by followed local calendars (pv-ru1j)
+          // Note: No calendar_id outer filter — includes both local-origin and
+          // remote-origin reposted events. EventRepostEntity stores event_id
+          // directly, so filtering by calendar_id would incorrectly exclude
+          // valid reposts where the original event belongs to a different calendar.
+          {
+            id: {
+              [Op.in]: EventEntity.sequelize!.literal(
+                `(SELECT er.event_id FROM event_repost er
+                  JOIN calendar_actor ca ON er.calendar_id = ca.calendar_id AND ca.actor_type = 'local'
+                  JOIN ap_following f ON f.calendar_actor_id = ca.id
+                  WHERE f.calendar_id = ${escapedCalendarId})`,
+              ),
+            },
+          },
         ],
       },
       include: [
