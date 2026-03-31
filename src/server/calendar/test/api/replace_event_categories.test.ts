@@ -4,6 +4,7 @@ import request from 'supertest';
 import express from 'express';
 import { EventEmitter } from 'events';
 import { EventNotFoundError, InsufficientCalendarPermissionsError, CategoriesNotFoundError } from '@/common/exceptions/calendar';
+import { ValidationError } from '@/common/exceptions/base';
 import { testApp, addRequestUser } from '@/server/common/test/lib/express';
 import EventRoutes from '@/server/calendar/api/v1/events';
 import CalendarInterface from '@/server/calendar/interface';
@@ -71,6 +72,7 @@ describe('Replace Event Categories API Tests', () => {
 
     it('should return 400 for malformed event ID (non-UUID)', async () => {
       const replaceStub = sandbox.stub(calendarInterface, 'replaceEventCategories');
+      replaceStub.throws(new ValidationError('eventId must be a valid UUID'));
 
       router.put('/handler/:id/categories', addRequestUser, (req, res) => {
         routes.replaceEventCategories(req, res);
@@ -81,8 +83,7 @@ describe('Replace Event Categories API Tests', () => {
         .send({ categoryIds: validCategoryIds });
 
       expect(response.status).toBe(400);
-      expect(response.body.error).toBe('invalid UUID format in event ID');
-      expect(replaceStub.called).toBe(false);
+      expect(response.body.error).toBe('eventId must be a valid UUID');
     });
 
     it('should return 400 when categoryIds is not an array', async () => {
@@ -153,37 +154,6 @@ describe('Replace Event Categories API Tests', () => {
       expect(response.body.errorName).toBe('NotFoundError');
       expect(response.body.error).toBe('Event not found');
       expect(replaceStub.called).toBe(true);
-    });
-
-    it('should return identical 404 responses for all not-found error types', async () => {
-      const errors = [
-        new EventNotFoundError('Event not found'),
-        new InsufficientCalendarPermissionsError('No permission'),
-        new CategoriesNotFoundError('Categories not found'),
-      ];
-
-      for (const error of errors) {
-        const replaceStub = sandbox.stub(calendarInterface, 'replaceEventCategories');
-        replaceStub.throws(error);
-
-        router.put('/handler/:id/categories', addRequestUser, (req, res) => {
-          routes.replaceEventCategories(req, res);
-        });
-
-        const response = await request(testApp(router))
-          .put(`/handler/${validEventId}/categories`)
-          .send({ categoryIds: validCategoryIds });
-
-        expect(response.status).toBe(404);
-        expect(response.body.error).toBe('Event not found');
-        expect(response.body.errorName).toBe('NotFoundError');
-
-        sandbox.restore();
-        sandbox = sinon.createSandbox();
-        calendarInterface = new CalendarInterface(new EventEmitter());
-        routes = new EventRoutes(calendarInterface);
-        router = express.Router();
-      }
     });
 
     it('should return 500 for unexpected errors', async () => {

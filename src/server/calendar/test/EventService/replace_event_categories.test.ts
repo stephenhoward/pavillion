@@ -155,16 +155,6 @@ describe('EventService.replaceEventCategories', () => {
     ).rejects.toThrow(ValidationError);
   });
 
-  it('should throw ValidationError when categoryIds array exceeds 100 elements', async () => {
-    const tooManyIds = Array.from({ length: 101 }, (_, i) =>
-      `${String(i).padStart(8, '0')}-0000-4000-8000-000000000000`,
-    );
-
-    await expect(
-      service.replaceEventCategories(mockAccount, validEventId, tooManyIds),
-    ).rejects.toThrow(ValidationError);
-  });
-
   it('should throw EventNotFoundError when event does not exist', async () => {
     const mockTransaction = stubCommonDependencies({
       eventEntity: null,

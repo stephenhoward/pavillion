@@ -1402,23 +1402,16 @@ class EventService {
       throw new ValidationError('eventId must be a valid UUID');
     }
 
-    // Validate categoryIds is an array
-    if (!Array.isArray(categoryIds)) {
-      throw new ValidationError('categoryIds must be an array');
-    }
-
-    // Validate array size cap
-    if (categoryIds.length > 100) {
-      throw new ValidationError('categoryIds array exceeds maximum of 100 elements');
-    }
-
     // Validate each categoryId is a valid UUID
     if (categoryIds.length > 0) {
       const invalidCategoryIds = categoryIds.filter(id => !this.isValidUUID(id));
       if (invalidCategoryIds.length > 0) {
-        throw new ValidationError('invalid UUID format in categoryIds', { invalidIds: invalidCategoryIds });
+        throw new ValidationError('invalid UUID format in categoryIds');
       }
     }
+
+    // Deduplicate categoryIds to prevent false count mismatches
+    const uniqueCategoryIds = [...new Set(categoryIds)];
 
     let wasRepost = false;
 
@@ -1450,16 +1443,16 @@ class EventService {
       }
 
       // 4. Validate categories belong to effective calendar (only if non-empty)
-      if (categoryIds.length > 0) {
+      if (uniqueCategoryIds.length > 0) {
         const categories = await EventCategoryEntity.findAll({
           where: {
-            id: categoryIds,
+            id: uniqueCategoryIds,
             calendar_id: effectiveCalendarId,
           },
           transaction,
         });
 
-        if (categories.length !== categoryIds.length) {
+        if (categories.length !== uniqueCategoryIds.length) {
           throw new CategoriesNotFoundError('Some categories were not found in the calendar');
         }
       }
@@ -1471,8 +1464,8 @@ class EventService {
       });
 
       // 6. Bulk create new assignments (skip if empty)
-      if (categoryIds.length > 0) {
-        const assignmentsToCreate = categoryIds.map(categoryId => ({
+      if (uniqueCategoryIds.length > 0) {
+        const assignmentsToCreate = uniqueCategoryIds.map(categoryId => ({
           id: uuidv4(),
           event_id: eventId,
           category_id: categoryId,
@@ -1494,7 +1487,6 @@ class EventService {
 
     return updatedEvent;
   }
-
 
   /**
    * Delete an event

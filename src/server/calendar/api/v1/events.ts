@@ -316,23 +316,6 @@ export default class EventRoutes {
     }
 
     const eventId = req.params.id;
-    if (!eventId) {
-      res.status(400).json({
-        "error": "missing event ID",
-        errorName: 'ValidationError',
-      });
-      return;
-    }
-
-    // Validate UUID format
-    if (!ExpressHelper.isValidUUID(eventId)) {
-      res.status(400).json({
-        "error": "invalid UUID format in event ID",
-        errorName: 'ValidationError',
-      });
-      return;
-    }
-
     const { categoryIds } = req.body;
 
     if (!Array.isArray(categoryIds)) {
@@ -356,10 +339,11 @@ export default class EventRoutes {
         error instanceof InsufficientCalendarPermissionsError ||
         error instanceof CategoriesNotFoundError
       ) {
-        // Unified 404 prevents event ID enumeration
+        // Unified 404: all three errors return identical responses to prevent
+        // event ID enumeration and repost relationship disclosure via error differentiation
         res.status(404).json({
           "error": "Event not found",
-          "errorName": "NotFoundError",
+          errorName: 'NotFoundError',
         });
       }
       else {
@@ -370,9 +354,6 @@ export default class EventRoutes {
       }
     }
   }
-
-
-
 
   async deleteEvent(req: Request, res: Response) {
     const account = req.user as Account;

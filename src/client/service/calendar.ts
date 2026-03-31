@@ -325,13 +325,6 @@ export default class CalendarService {
    * @returns Promise<CalendarEvent> The updated event with its categories
    */
   async replaceEventCategories(eventId: string, categoryIds: string[]): Promise<CalendarEvent> {
-    if (!eventId || typeof eventId !== 'string') {
-      throw new EmptyValueError('eventId must be a non-empty string');
-    }
-    if (!Array.isArray(categoryIds)) {
-      throw new EmptyValueError('categoryIds must be an array');
-    }
-
     try {
       const response = await axios.put(`/api/v1/events/${eventId}/categories`, { categoryIds });
       return CalendarEvent.fromObject(response.data);
