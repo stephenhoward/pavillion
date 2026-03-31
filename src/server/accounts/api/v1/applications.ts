@@ -33,6 +33,7 @@ export default class AccountApplicationRouteHandlers {
     }
     catch (error) {
       if (error instanceof ValidationError) {
+        // Safe to reveal: format errors don't indicate account existence (validation runs before DB queries)
         ExpressHelper.sendValidationError(res, error);
         return;
       }

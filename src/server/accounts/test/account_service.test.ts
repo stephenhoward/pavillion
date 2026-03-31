@@ -111,20 +111,11 @@ describe('inviteNewAccount', () => {
     }
   });
 
-  it('should throw ValidationError for invalid email format', async () => {
-    await expect(accountService.inviteNewAccount(adminUser, 'not-an-email', 'test_message')).rejects
-      .toThrow(ValidationError);
-  });
-
-  it('should include field-level error for invalid email', async () => {
-    try {
-      await accountService.inviteNewAccount(adminUser, 'not-an-email', 'test_message');
-      expect.fail('Should have thrown');
-    }
-    catch (error) {
-      expect(error).toBeInstanceOf(ValidationError);
-      expect((error as ValidationError).fields).toHaveProperty('email');
-    }
+  it('should throw ValidationError with email field error for invalid email format', async () => {
+    const error = await accountService.inviteNewAccount(adminUser, 'not-an-email', 'test_message')
+      .catch(e => e);
+    expect(error).toBeInstanceOf(ValidationError);
+    expect((error as ValidationError).fields).toHaveProperty('email');
   });
 
   it('should store calendar_id when creating calendar editor invitation', async () => {
@@ -166,20 +157,11 @@ describe('registerNewAccount', () => {
     sandbox.restore();
   });
 
-  it('should throw ValidationError for invalid email format', async () => {
-    await expect(accountService.registerNewAccount('not-an-email')).rejects
-      .toThrow(ValidationError);
-  });
-
-  it('should include field-level error for invalid email', async () => {
-    try {
-      await accountService.registerNewAccount('bad-email');
-      expect.fail('Should have thrown');
-    }
-    catch (error) {
-      expect(error).toBeInstanceOf(ValidationError);
-      expect((error as ValidationError).fields).toHaveProperty('email');
-    }
+  it('should throw ValidationError with email field error for invalid email format', async () => {
+    const error = await accountService.registerNewAccount('not-an-email')
+      .catch(e => e);
+    expect(error).toBeInstanceOf(ValidationError);
+    expect((error as ValidationError).fields).toHaveProperty('email');
   });
 
   it('no registration allowed', async () => {
@@ -249,9 +231,11 @@ describe('applyForNewAccount', () => {
     applySandbox.restore();
   });
 
-  it('should throw ValidationError for invalid email format', async () => {
-    await expect(accountService.applyForNewAccount('not-an-email', 'test_message')).rejects
-      .toThrow(ValidationError);
+  it('should throw ValidationError with email field error for invalid email format', async () => {
+    const error = await accountService.applyForNewAccount('not-an-email', 'test_message')
+      .catch(e => e);
+    expect(error).toBeInstanceOf(ValidationError);
+    expect((error as ValidationError).fields).toHaveProperty('email');
   });
 
   it('no applications allowed', async () => {
