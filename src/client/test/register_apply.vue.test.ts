@@ -1,4 +1,5 @@
-import { expect, describe, it } from 'vitest';
+import { expect, describe, it, afterEach } from 'vitest';
+import { flushPromises } from '@vue/test-utils';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import { RouteRecordRaw } from 'vue-router';
 import sinon from 'sinon';
@@ -37,10 +38,15 @@ const mountedApply = () => {
 };
 
 describe('Register Apply Form Validation', () => {
+  const sandbox = sinon.createSandbox();
 
-  it('missing fields shows error', async () => {
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('missing email shows error', async () => {
     const { wrapper, authn } = mountedApply();
-    let applyStub = sinon.createSandbox().stub(authn, 'register_apply');
+    let applyStub = sandbox.stub(authn, 'register_apply');
 
     await wrapper.find('input[type="email"]').setValue('');
 
@@ -51,9 +57,22 @@ describe('Register Apply Form Validation', () => {
     expect(applyStub.called).toBe(false);
   });
 
+  it('missing message with valid email shows error', async () => {
+    const { wrapper, authn } = mountedApply();
+    let applyStub = sandbox.stub(authn, 'register_apply');
+
+    await wrapper.find('input[type="email"]').setValue('user@example.com');
+
+    await wrapper.find('form').trigger('submit.prevent');
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find('[role="alert"]').exists()).toBe(true);
+    expect(applyStub.called).toBe(false);
+  });
+
   it('invalid email format shows error', async () => {
     const { wrapper, authn } = mountedApply();
-    let applyStub = sinon.createSandbox().stub(authn, 'register_apply');
+    let applyStub = sandbox.stub(authn, 'register_apply');
 
     await wrapper.find('input[type="email"]').setValue('not-an-email');
     await wrapper.find('textarea').setValue('I would like to join');
@@ -67,15 +86,16 @@ describe('Register Apply Form Validation', () => {
 
   it('valid email with message proceeds to apply', async () => {
     const { wrapper, authn } = mountedApply();
-    let applyStub = sinon.createSandbox().stub(authn, 'register_apply');
+    let applyStub = sandbox.stub(authn, 'register_apply');
     applyStub.resolves();
 
     await wrapper.find('input[type="email"]').setValue('user@example.com');
     await wrapper.find('textarea').setValue('I would like to join');
 
     await wrapper.find('form').trigger('submit.prevent');
-    await wrapper.vm.$nextTick();
+    await flushPromises();
 
     expect(applyStub.called).toBe(true);
+    expect(wrapper.find('form').exists()).toBe(false);
   });
 });

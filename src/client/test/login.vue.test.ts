@@ -319,7 +319,7 @@ describe('Login Behavior', () => {
     let pushStub = sinon.createSandbox().stub(router, 'push');
     let loginStub = sinon.createSandbox().stub(authn, 'login');
 
-    await wrapper.find('input[type="email"]').setValue('email');
+    await wrapper.find('input[type="email"]').setValue('user@example.com');
     await wrapper.find('input[type="password"]').setValue('');
 
     // Trigger form submission using the submit event

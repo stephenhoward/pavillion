@@ -1,4 +1,5 @@
-import { expect, describe, it } from 'vitest';
+import { expect, describe, it, afterEach } from 'vitest';
+import { flushPromises } from '@vue/test-utils';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import { RouteRecordRaw } from 'vue-router';
 import sinon from 'sinon';
@@ -37,10 +38,15 @@ const mountedRegister = () => {
 };
 
 describe('Register Form Validation', () => {
+  const sandbox = sinon.createSandbox();
+
+  afterEach(() => {
+    sandbox.restore();
+  });
 
   it('missing email shows error', async () => {
     const { wrapper, authn } = mountedRegister();
-    let registerStub = sinon.createSandbox().stub(authn, 'register');
+    let registerStub = sandbox.stub(authn, 'register');
 
     await wrapper.find('input[type="email"]').setValue('');
 
@@ -53,7 +59,7 @@ describe('Register Form Validation', () => {
 
   it('invalid email format shows error', async () => {
     const { wrapper, authn } = mountedRegister();
-    let registerStub = sinon.createSandbox().stub(authn, 'register');
+    let registerStub = sandbox.stub(authn, 'register');
 
     await wrapper.find('input[type="email"]').setValue('not-an-email');
 
@@ -66,14 +72,15 @@ describe('Register Form Validation', () => {
 
   it('valid email proceeds to registration', async () => {
     const { wrapper, authn } = mountedRegister();
-    let registerStub = sinon.createSandbox().stub(authn, 'register');
+    let registerStub = sandbox.stub(authn, 'register');
     registerStub.resolves();
 
     await wrapper.find('input[type="email"]').setValue('user@example.com');
 
     await wrapper.find('form').trigger('submit.prevent');
-    await wrapper.vm.$nextTick();
+    await flushPromises();
 
     expect(registerStub.called).toBe(true);
+    expect(wrapper.find('form').exists()).toBe(false);
   });
 });
