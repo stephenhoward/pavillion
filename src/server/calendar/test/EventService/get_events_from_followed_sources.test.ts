@@ -90,25 +90,30 @@ describe('EventService.getEventsFromFollowedSources', () => {
     const queryOptions = findAllStub.firstCall.args[0] as any;
     const orConditions = queryOptions.where[Op.or];
 
-    // Extract the raw SQL from all three literal objects
+    // Extract the raw SQL from all four literal objects
     const remoteOriginalsLiteral: string = orConditions[0].id[Op.in].val;
     const remoteAnnouncementsLiteral: string = orConditions[1].id[Op.in].val;
     const localLiteral: string = orConditions[2].calendar_id[Op.in].val;
+    // Regression: pv-ru1j — 4th condition for local calendar reposts
+    const localRepostsLiteral: string = orConditions[3].id[Op.in].val;
 
     // The unescaped injection pattern must NOT appear in any literal
     const unescapedPattern = `= '${maliciousId}`;
     expect(remoteOriginalsLiteral).not.toContain(unescapedPattern);
     expect(remoteAnnouncementsLiteral).not.toContain(unescapedPattern);
     expect(localLiteral).not.toContain(unescapedPattern);
+    expect(localRepostsLiteral).not.toContain(unescapedPattern);
 
     // The escaped form must be present (sequelize.escape wraps and escapes the value)
     const escapedValue = EventEntity.sequelize!.escape(maliciousId);
     expect(remoteOriginalsLiteral).toContain(`= ${escapedValue}`);
     expect(remoteAnnouncementsLiteral).toContain(`= ${escapedValue}`);
     expect(localLiteral).toContain(`= ${escapedValue}`);
+    expect(localRepostsLiteral).toContain(`= ${escapedValue}`);
   });
 
-  it('builds the correct three-condition OR query for followed sources', async () => {
+  // Regression: pv-ru1j — updated from three-condition to four-condition
+  it('builds the correct four-condition OR query for followed sources', async () => {
     const findAllStub = sandbox.stub(EventEntity, 'findAll').resolves([]);
 
     const calendar = new Calendar('test-id', 'testcal');
@@ -116,11 +121,11 @@ describe('EventService.getEventsFromFollowedSources', () => {
 
     const queryOptions = findAllStub.firstCall.args[0] as any;
 
-    // Verify the where clause uses Op.or with three conditions
+    // Verify the where clause uses Op.or with four conditions
     expect(queryOptions.where).toBeDefined();
     expect(queryOptions.where[Op.or]).toBeDefined();
     expect(Array.isArray(queryOptions.where[Op.or])).toBe(true);
-    expect(queryOptions.where[Op.or].length).toBe(3);
+    expect(queryOptions.where[Op.or].length).toBe(4);
 
     // First condition: remote events authored by followed remote calendars (calendar_id = null)
     const remoteOriginalsCondition = queryOptions.where[Op.or][0];
@@ -135,6 +140,19 @@ describe('EventService.getEventsFromFollowedSources', () => {
     // Third condition: local events from followed local calendars
     const localCondition = queryOptions.where[Op.or][2];
     expect(localCondition.calendar_id[Op.in]).toBeDefined();
+
+    // Fourth condition: events reposted by followed local calendars (pv-ru1j)
+    // Uses id[Op.in] (not calendar_id) because reposted events may be local or remote origin
+    const localRepostsCondition = queryOptions.where[Op.or][3];
+    expect(localRepostsCondition.id).toBeDefined();
+    expect(localRepostsCondition.id[Op.in]).toBeDefined();
+    // Must NOT have calendar_id filter — reposts can be local or remote origin
+    expect(localRepostsCondition.calendar_id).toBeUndefined();
+    // SQL literal must reference event_repost table
+    const repostSql: string = localRepostsCondition.id[Op.in].val;
+    expect(repostSql).toContain('event_repost');
+    expect(repostSql).toContain('calendar_actor');
+    expect(repostSql).toContain('ap_following');
   });
 
   it('respects pagination parameters (page and pageSize)', async () => {
