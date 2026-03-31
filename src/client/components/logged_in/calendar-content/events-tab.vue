@@ -221,20 +221,16 @@ const handleEditButtonClick = (event, domEvent) => {
 const handleRepostCategoryUpdate = async (categoryIds) => {
   if (!repostEventForModal.value) return;
 
-  if (categoryIds.length > 0) {
-    try {
-      const updatedEvents = await calendarService.bulkAssignCategories(
-        [repostEventForModal.value.id],
-        categoryIds,
-      );
-      updatedEvents.forEach(event => {
-        store.updateEvent(props.calendar?.id, event);
-      });
-    }
-    catch (error) {
-      console.error('Error updating repost event categories:', error);
-      toast.error(tFeed('errors.UnknownError'));
-    }
+  try {
+    const updatedEvent = await calendarService.replaceEventCategories(
+      repostEventForModal.value.id,
+      categoryIds,
+    );
+    store.updateEvent(props.calendar?.id, updatedEvent);
+  }
+  catch (error) {
+    console.error('Error updating repost event categories:', error);
+    toast.error(tFeed('errors.UnknownError'));
   }
 
   repostEventForModal.value = null;
