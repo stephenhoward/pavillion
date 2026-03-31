@@ -82,7 +82,7 @@ class ActivityPubService {
   }
 
   static isValidUsername(username: string): boolean {
-    return username.match(/^[a-z0-9_]{3,24}$/) !== null;
+    return username.match(/^[a-z0-9][a-z0-9_-]{1,22}[a-z0-9]$/i) !== null;
   }
 
   static isValidOrgIdentifier(identifier: string): boolean {
