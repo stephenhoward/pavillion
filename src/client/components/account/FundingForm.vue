@@ -36,8 +36,12 @@ const checkoutContainerRef = ref<HTMLElement | null>(null);
 // Stripe embedded checkout state
 let checkoutInstance: any = null;
 
+const availableProviders = computed(() =>
+  options.value?.providers.filter(p => p.providerType !== 'paypal') ?? [],
+);
+
 const singleProvider = computed(() =>
-  options.value?.providers.length === 1,
+  availableProviders.value.length === 1,
 );
 
 const selectedProviderInfo = computed<FundingProvider | undefined>(() =>
@@ -63,8 +67,8 @@ async function loadOptions() {
     loading.value = true;
     options.value = await fundingService.getOptions();
 
-    if (options.value.providers.length > 0) {
-      selectedProvider.value = options.value.providers[0].providerType;
+    if (availableProviders.value.length > 0) {
+      selectedProvider.value = availableProviders.value[0].providerType;
     }
   }
   catch (error) {
@@ -252,7 +256,7 @@ onBeforeUnmount(() => {
         <label class="form-label">{{ t("select_provider") }}</label>
         <div class="provider-options">
           <label
-            v-for="provider in options.providers"
+            v-for="provider in availableProviders"
             :key="provider.providerType"
             class="provider-option"
           >

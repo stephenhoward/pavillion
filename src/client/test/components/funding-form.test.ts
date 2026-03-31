@@ -168,13 +168,13 @@ describe('FundingForm', () => {
       expect(wrapper.findAll('.cycle-option')).toHaveLength(2);
     });
 
-    it('renders provider selection when multiple providers', async () => {
+    it('hides provider selection when only available provider is stripe (paypal filtered)', async () => {
       mockGetOptions.mockResolvedValue(makeMultiProviderOptions());
 
       const wrapper = await mountFundingForm();
       currentWrapper = wrapper;
 
-      expect(wrapper.find('.provider-options').exists()).toBe(true);
+      expect(wrapper.find('.provider-options').exists()).toBe(false);
     });
 
     it('hides provider selection when single provider', async () => {
