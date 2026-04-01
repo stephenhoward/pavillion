@@ -3,7 +3,7 @@ import express, { Express, Request, Response } from 'express';
 import request from 'supertest';
 import sinon from 'sinon';
 import config from 'config';
-import { createRouter, getSiteBaseUrl, buildHreflangLinks, resolveInstanceDefaultLanguage } from '@/server/app_routes';
+import { createRouter, getSiteBaseUrl, buildHreflangLinks, resolveInstanceDefaultLanguage, collectEntryCSS } from '@/server/app_routes';
 import ConfigurationInterface from '@/server/configuration/interface';
 
 /**
@@ -356,6 +356,130 @@ describe('app_routes', () => {
       for (const link of links) {
         expect(link.href).not.toContain('evil.com');
       }
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // collectEntryCSS — Vite manifest CSS resolution
+  // -----------------------------------------------------------------------
+
+  describe('collectEntryCSS', () => {
+    it('should collect CSS listed directly on the entry', () => {
+      const manifest = {
+        'src/app.ts': {
+          file: 'assets/app.js',
+          css: ['assets/app.css'],
+        },
+      };
+
+      expect(collectEntryCSS(manifest, 'src/app.ts')).toEqual(['assets/app.css']);
+    });
+
+    it('should collect CSS from imported chunks', () => {
+      const manifest = {
+        'src/app.ts': {
+          file: 'assets/app.js',
+          css: ['assets/app.css'],
+          imports: ['_shared-abc.js'],
+        },
+        '_shared-abc.js': {
+          file: 'assets/shared-abc.js',
+          css: ['assets/shared.css'],
+        },
+      };
+
+      const result = collectEntryCSS(manifest, 'src/app.ts');
+      expect(result).toContain('assets/app.css');
+      expect(result).toContain('assets/shared.css');
+      expect(result).toHaveLength(2);
+    });
+
+    it('should collect CSS from transitively imported chunks', () => {
+      const manifest = {
+        'src/app.ts': {
+          file: 'assets/app.js',
+          imports: ['_chunk-a.js'],
+        },
+        '_chunk-a.js': {
+          file: 'assets/chunk-a.js',
+          imports: ['_chunk-b.js'],
+        },
+        '_chunk-b.js': {
+          file: 'assets/chunk-b.js',
+          css: ['assets/deep.css'],
+        },
+      };
+
+      expect(collectEntryCSS(manifest, 'src/app.ts')).toEqual(['assets/deep.css']);
+    });
+
+    it('should deduplicate CSS referenced by multiple chunks', () => {
+      const manifest = {
+        'src/app.ts': {
+          file: 'assets/app.js',
+          imports: ['_chunk-a.js', '_chunk-b.js'],
+        },
+        '_chunk-a.js': {
+          file: 'assets/chunk-a.js',
+          css: ['assets/shared.css'],
+        },
+        '_chunk-b.js': {
+          file: 'assets/chunk-b.js',
+          css: ['assets/shared.css'],
+        },
+      };
+
+      expect(collectEntryCSS(manifest, 'src/app.ts')).toEqual(['assets/shared.css']);
+    });
+
+    it('should handle circular imports without infinite recursion', () => {
+      const manifest = {
+        'src/app.ts': {
+          file: 'assets/app.js',
+          css: ['assets/app.css'],
+          imports: ['_chunk-a.js'],
+        },
+        '_chunk-a.js': {
+          file: 'assets/chunk-a.js',
+          css: ['assets/chunk-a.css'],
+          imports: ['src/app.ts'],
+        },
+      };
+
+      const result = collectEntryCSS(manifest, 'src/app.ts');
+      expect(result).toContain('assets/app.css');
+      expect(result).toContain('assets/chunk-a.css');
+      expect(result).toHaveLength(2);
+    });
+
+    it('should return empty array for a missing entry key', () => {
+      expect(collectEntryCSS({}, 'src/nonexistent.ts')).toEqual([]);
+    });
+
+    it('should handle chunks with no css property', () => {
+      const manifest = {
+        'src/app.ts': {
+          file: 'assets/app.js',
+          imports: ['_util.js'],
+        },
+        '_util.js': {
+          file: 'assets/util.js',
+        },
+      };
+
+      expect(collectEntryCSS(manifest, 'src/app.ts')).toEqual([]);
+    });
+
+    it('should handle chunks that reference missing import keys', () => {
+      const manifest = {
+        'src/app.ts': {
+          file: 'assets/app.js',
+          css: ['assets/app.css'],
+          imports: ['_missing.js'],
+        },
+      };
+
+      expect(collectEntryCSS(manifest, 'src/app.ts')).toEqual(['assets/app.css']);
     });
   });
 
