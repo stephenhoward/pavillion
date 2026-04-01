@@ -365,14 +365,14 @@ const handleClose = () => {
       <div class="modal-actions">
         <button
           type="button"
-          class="secondary"
+          class="btn btn--secondary"
           @click="handleClose"
         >
           {{ t('add_calendar_modal.cancel_button') }}
         </button>
         <button
           type="button"
-          class="primary"
+          class="btn btn--primary"
           :disabled="!canFollow"
           :aria-disabled="!canFollow"
           @click="handleFollow"
@@ -402,14 +402,14 @@ const handleClose = () => {
       <div class="modal-actions">
         <button
           type="button"
-          class="secondary"
+          class="btn btn--secondary"
           @click="handleClose"
         >
           {{ t('add_calendar_modal.mapping_skip_button') }}
         </button>
         <button
           type="button"
-          class="primary"
+          class="btn btn--primary"
           :disabled="isSavingMappings"
           :aria-disabled="isSavingMappings"
           @click="saveMappingsAndClose"

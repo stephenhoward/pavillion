@@ -69,7 +69,7 @@ const handleFollowSuccess = async () => {
       <h2>{{ t('title') }}</h2>
       <button
         type="button"
-        class="primary add-button"
+        class="btn btn--primary add-button"
         @click="handleOpenAddModal"
       >
         {{ t('follow_button') }}
@@ -92,7 +92,7 @@ const handleFollowSuccess = async () => {
   >
     <button
       type="button"
-      class="primary"
+      class="btn btn--primary"
       @click="handleOpenAddModal"
     >
       {{ t('follow_button') }}

@@ -210,7 +210,7 @@ describe('FundingForm', () => {
       const wrapper = await mountFundingForm();
       currentWrapper = wrapper;
 
-      const button = wrapper.find('button.primary');
+      const button = wrapper.find('button.btn--primary');
       expect(button.exists()).toBe(true);
     });
 
@@ -239,7 +239,7 @@ describe('FundingForm', () => {
       const wrapper = await mountFundingForm();
       currentWrapper = wrapper;
 
-      await wrapper.find('button.primary').trigger('click');
+      await wrapper.find('button.btn--primary').trigger('click');
       await flushPromises();
 
       expect(mockCreateCheckoutSession).toHaveBeenCalledWith(
@@ -264,7 +264,7 @@ describe('FundingForm', () => {
       const wrapper = await mountFundingForm();
       currentWrapper = wrapper;
 
-      await wrapper.find('button.primary').trigger('click');
+      await wrapper.find('button.btn--primary').trigger('click');
       await flushPromises();
 
       expect(mockStripeInstance.initEmbeddedCheckout).toHaveBeenCalledWith(
@@ -289,7 +289,7 @@ describe('FundingForm', () => {
       const wrapper = await mountFundingForm({ calendarId: 'cal-123' });
       currentWrapper = wrapper;
 
-      await wrapper.find('button.primary').trigger('click');
+      await wrapper.find('button.btn--primary').trigger('click');
       await flushPromises();
 
       expect(mockCreateCheckoutSession).toHaveBeenCalledWith(
@@ -313,7 +313,7 @@ describe('FundingForm', () => {
       const wrapper = await mountFundingForm();
       currentWrapper = wrapper;
 
-      await wrapper.find('button.primary').trigger('click');
+      await wrapper.find('button.btn--primary').trigger('click');
       await flushPromises();
 
       expect(wrapper.find('.stripe-checkout-container').exists()).toBe(true);
@@ -332,7 +332,7 @@ describe('FundingForm', () => {
       const wrapper = await mountFundingForm();
       currentWrapper = wrapper;
 
-      await wrapper.find('button.primary').trigger('click');
+      await wrapper.find('button.btn--primary').trigger('click');
       await flushPromises();
 
       expect(wrapper.find('.error-message').exists()).toBe(true);
@@ -346,7 +346,7 @@ describe('FundingForm', () => {
       const wrapper = await mountFundingForm();
       currentWrapper = wrapper;
 
-      await wrapper.find('button.primary').trigger('click');
+      await wrapper.find('button.btn--primary').trigger('click');
       await flushPromises();
 
       expect(wrapper.find('.error-message').exists()).toBe(true);
@@ -373,7 +373,7 @@ describe('FundingForm', () => {
       const wrapper = await mountFundingForm();
       currentWrapper = wrapper;
 
-      await wrapper.find('button.primary').trigger('click');
+      await wrapper.find('button.btn--primary').trigger('click');
       await flushPromises();
 
       // Trigger the onComplete callback that Stripe would fire
@@ -402,7 +402,7 @@ describe('FundingForm', () => {
       const wrapper = await mountFundingForm();
       currentWrapper = wrapper;
 
-      await wrapper.find('button.primary').trigger('click');
+      await wrapper.find('button.btn--primary').trigger('click');
       await flushPromises();
 
       triggerOnComplete();
@@ -427,7 +427,7 @@ describe('FundingForm', () => {
       const wrapper = await mountFundingForm();
       currentWrapper = wrapper;
 
-      await wrapper.find('button.primary').trigger('click');
+      await wrapper.find('button.btn--primary').trigger('click');
       await flushPromises();
 
       triggerOnComplete();
@@ -455,13 +455,13 @@ describe('FundingForm', () => {
       const wrapper = await mountFundingForm();
       currentWrapper = wrapper;
 
-      await wrapper.find('button.primary').trigger('click');
+      await wrapper.find('button.btn--primary').trigger('click');
       await flushPromises();
 
       triggerOnComplete();
       await flushPromises();
 
-      const doneButton = wrapper.find('.result-state button.primary');
+      const doneButton = wrapper.find('.result-state button.btn--primary');
       expect(doneButton.exists()).toBe(true);
       await doneButton.trigger('click');
       await flushPromises();
@@ -487,13 +487,13 @@ describe('FundingForm', () => {
       const wrapper = await mountFundingForm();
       currentWrapper = wrapper;
 
-      await wrapper.find('button.primary').trigger('click');
+      await wrapper.find('button.btn--primary').trigger('click');
       await flushPromises();
 
       triggerOnComplete();
       await flushPromises();
 
-      const tryAgainButton = wrapper.find('.result-state button.secondary');
+      const tryAgainButton = wrapper.find('.result-state button.btn--secondary');
       expect(tryAgainButton.exists()).toBe(true);
       await tryAgainButton.trigger('click');
       await flushPromises();

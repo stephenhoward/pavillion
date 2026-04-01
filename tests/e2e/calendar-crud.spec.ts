@@ -66,7 +66,7 @@ test.describe('Calendar CRUD Workflow', () => {
       expect(autoSlug).toBe('my-test-calendar');
 
       // Submit the form
-      const submitButton = page.locator('button[type="submit"].primary');
+      const submitButton = page.locator('button[type="submit"].btn--primary');
       await submitButton.click();
 
       // Wait for navigation to the new calendar page
@@ -97,7 +97,7 @@ test.describe('Calendar CRUD Workflow', () => {
       await nameInput.fill('custom_name_cal');
 
       // Submit the form
-      const submitButton = page.locator('button[type="submit"].primary');
+      const submitButton = page.locator('button[type="submit"].btn--primary');
       await submitButton.click();
 
       // Wait for navigation to the new calendar

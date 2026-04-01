@@ -469,7 +469,7 @@ function handleSuccess() {
 
             <button
               type="submit"
-              class="primary connect-button"
+              class="btn btn--primary connect-button"
               :disabled="!isStripeFormValid || connecting"
             >
               {{ connecting ? t('connecting_button', { defaultValue: 'Connecting...' }) : t('step2.stripe_configure_button') }}
@@ -558,7 +558,7 @@ function handleSuccess() {
 
             <button
               type="submit"
-              class="primary connect-button"
+              class="btn btn--primary connect-button"
               :disabled="!isPayPalFormValid || connecting"
             >
               {{ connecting ? t('connecting_button', { defaultValue: 'Connecting...' }) : t('step2.paypal_configure_button', { defaultValue: 'Configure PayPal' }) }}
@@ -584,7 +584,7 @@ function handleSuccess() {
       <template v-if="currentStep === 1">
         <button
           type="button"
-          class="secondary cancel-button"
+          class="btn btn--secondary cancel-button"
           @click="closeWizard"
           :disabled="connecting"
         >
@@ -592,7 +592,7 @@ function handleSuccess() {
         </button>
         <button
           type="button"
-          class="primary continue-button"
+          class="btn btn--primary continue-button"
           @click="goToNextStep"
           :disabled="!selectedProvider || connecting"
         >
@@ -604,7 +604,7 @@ function handleSuccess() {
       <template v-if="currentStep === 2">
         <button
           type="button"
-          class="secondary back-button"
+          class="btn btn--secondary back-button"
           @click="goToPreviousStep"
           :disabled="connecting"
         >
@@ -612,7 +612,7 @@ function handleSuccess() {
         </button>
         <button
           type="button"
-          class="secondary cancel-button"
+          class="btn btn--secondary cancel-button"
           @click="closeWizard"
           :disabled="connecting"
         >
@@ -624,7 +624,7 @@ function handleSuccess() {
       <template v-if="currentStep === 3">
         <button
           type="button"
-          class="primary done-button"
+          class="btn btn--primary done-button"
           @click="handleSuccess"
         >
           {{ t('done_button') }}

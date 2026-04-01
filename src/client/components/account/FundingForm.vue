@@ -315,7 +315,7 @@ onBeforeUnmount(() => {
       <div class="form-actions">
         <button
           type="button"
-          class="primary"
+          class="btn btn--primary"
           :disabled="processing"
           @click="submitSubscribe"
         >
@@ -334,7 +334,7 @@ onBeforeUnmount(() => {
         <div class="form-actions">
           <button
             type="button"
-            class="secondary"
+            class="btn btn--secondary"
             @click="backToConfigure"
           >
             {{ t("cancel_button") }}
@@ -356,7 +356,7 @@ onBeforeUnmount(() => {
           <button
             v-if="resultStatus === 'success'"
             type="button"
-            class="primary"
+            class="btn btn--primary"
             @click="acknowledgeResult"
           >
             {{ t("checkout_done_button") }}
@@ -364,7 +364,7 @@ onBeforeUnmount(() => {
           <button
             v-else
             type="button"
-            class="secondary"
+            class="btn btn--secondary"
             @click="backToConfigure"
           >
             {{ t("checkout_try_again_button") }}

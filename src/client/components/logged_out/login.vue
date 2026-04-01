@@ -121,7 +121,7 @@ async function doLogin() {
                @keyup.enter="doLogin"
                required/>
 
-        <button class="primary"
+        <button class="btn btn--primary"
                 type="submit"
                 :aria-describedby="state.err ? 'login-error' : undefined">
           {{ t("login_button") }}

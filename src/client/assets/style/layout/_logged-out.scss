@@ -149,9 +149,8 @@
       }
     }
 
-    /* Buttons */
-    button[type="submit"],
-    button.primary {
+    /* Primary buttons — pill-shaped auth card aesthetic */
+    .btn--primary {
       width: 100%;
       border-radius: 9999px;
       padding: 1.125rem 1.5rem; /* 18px 24px */
@@ -160,30 +159,24 @@
       background-color: var(--pav-color-orange-500);
       color: white;
       border: none;
-      cursor: pointer;
-      transition: all 0.2s ease-in-out;
 
-      &:hover {
+      &:hover:not(:disabled) {
         opacity: 0.9;
       }
 
-      &:focus {
+      &:focus-visible {
         outline: none;
         box-shadow: 0 0 0 2px var(--pav-color-orange-500), 0 0 0 4px rgb(249 115 22 / 0.4);
-
-        @media (prefers-color-scheme: dark) {
-          box-shadow: 0 0 0 2px var(--pav-color-orange-500), 0 0 0 4px rgb(249 115 22 / 0.4);
-        }
       }
 
-      &:active {
+      &:active:not(:disabled) {
         transform: scale(0.98);
       }
     }
 
-    /* Secondary buttons and links styled as buttons */
+    /* Secondary buttons — pill-shaped outlined */
     a[role="button"],
-    button:not([type="submit"]):not(.primary):not(.forgot) {
+    .btn--secondary {
       display: block;
       width: 100%;
       border-radius: 9999px;
@@ -193,21 +186,19 @@
       background-color: white;
       color: var(--pav-color-stone-700);
       border: 1px solid var(--pav-color-stone-300);
-      cursor: pointer;
       text-decoration: none;
       text-align: center;
-      transition: all 0.2s ease-in-out;
 
-      &:hover {
+      &:hover:not(:disabled) {
         background-color: var(--pav-color-stone-50);
       }
 
-      &:focus {
+      &:focus-visible {
         outline: none;
         box-shadow: 0 0 0 2px var(--pav-color-stone-400), 0 0 0 4px rgb(168 162 158 / 0.3);
       }
 
-      &:active {
+      &:active:not(:disabled) {
         transform: scale(0.98);
       }
 
@@ -216,7 +207,7 @@
         border-color: var(--pav-color-stone-600);
         color: var(--pav-color-stone-200);
 
-        &:hover {
+        &:hover:not(:disabled) {
           background-color: var(--pav-color-stone-600);
         }
       }

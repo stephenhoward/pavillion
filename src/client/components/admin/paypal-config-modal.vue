@@ -233,7 +233,7 @@ function validateField(field) {
           <div class="modal-actions">
             <button
               type="button"
-              class="secondary"
+              class="btn btn--secondary"
               @click="handleClose"
               :disabled="submitting"
             >
@@ -241,7 +241,7 @@ function validateField(field) {
             </button>
             <button
               type="submit"
-              class="primary"
+              class="btn btn--primary"
               :disabled="!isFormValid || submitting"
             >
               {{ submitting ? t('submitting_button') : t('submit_button') }}

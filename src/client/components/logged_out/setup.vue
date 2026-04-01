@@ -7,7 +7,7 @@
         <p class="success-message">{{ t('success_message') }}</p>
       </SuccessState>
 
-      <button type="button" @click="navigateToLogin">
+      <button class="btn btn--primary" type="button" @click="navigateToLogin">
         {{ t('continue_to_login') }}
       </button>
     </div>
@@ -35,7 +35,7 @@
           </select>
         </div>
 
-        <button type="button" @click="proceedToSetup">
+        <button class="btn btn--primary" type="button" @click="proceedToSetup">
           {{ t('continue_button') }}
         </button>
       </div>
@@ -111,10 +111,10 @@
         </div>
 
         <div class="button-group">
-          <button class="secondary" type="button" @click="goBackToLanguage">
+          <button class="btn btn--secondary" type="button" @click="goBackToLanguage">
             {{ t('back_button') }}
           </button>
-          <button type="submit" :disabled="state.submitting">
+          <button class="btn btn--primary" type="submit" :disabled="state.submitting">
             {{ state.submitting ? t('submitting_button') : t('submit_button') }}
           </button>
         </div>
@@ -395,27 +395,13 @@ async function handleSubmit() {
     flex: 1;
   }
 
-  button.secondary {
-    border-radius: 9999px;
-    padding: 1.125rem 1.5rem; /* 18px 24px */
-    font-size: 1.125rem; /* 18px */
-    font-weight: var(--pav-font-weight-medium);
-    background-color: white;
-    border: 1px solid var(--pav-color-stone-300);
-    color: var(--pav-color-stone-700);
-    cursor: pointer;
-    transition: all 0.2s ease-in-out;
-
+  .btn--secondary {
     &:hover:not(:disabled) {
       border-color: var(--pav-color-orange-400);
       color: var(--pav-color-orange-600);
     }
 
     @media (prefers-color-scheme: dark) {
-      background-color: var(--pav-color-stone-800);
-      border-color: var(--pav-color-stone-600);
-      color: var(--pav-color-stone-300);
-
       &:hover:not(:disabled) {
         border-color: var(--pav-color-orange-400);
         color: var(--pav-color-orange-400);

@@ -36,7 +36,7 @@
         />
 
         <button
-          class="primary"
+          class="btn btn--primary"
           type="submit"
           :aria-describedby="state.err ? 'register-error' : undefined"
         >
