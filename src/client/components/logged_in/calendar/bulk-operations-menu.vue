@@ -99,6 +99,7 @@ const deleteEvents = (event) => {
 
 <style scoped lang="scss">
 @use '../../../assets/style/components/event-management' as *;
+@use '../../../assets/style/mixins' as *;
 
 .bulk-operations-menu {
   @include bulk-actions-bar;
@@ -115,6 +116,16 @@ const deleteEvents = (event) => {
     display: flex;
     gap: 0.75rem;
     align-items: center;
+
+    @include pav-media-down(md) {
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.5rem;
+
+      > * {
+        flex: 1 1 100%;
+      }
+    }
 
     // Sky-500 for assign categories button
     .assign-btn {
