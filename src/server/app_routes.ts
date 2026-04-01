@@ -47,6 +47,45 @@ const parseManifest = async () => {
 };
 
 /**
+ * Collects all CSS files for a manifest entry, including CSS from imported chunks.
+ *
+ * Per Vite's Backend Integration guide, the entry's direct `css` array only lists
+ * CSS bundled with the entry itself. Shared chunks created by code splitting may
+ * carry additional CSS that must also be included in the server-rendered HTML.
+ * This function walks the `imports` tree to collect all chunk CSS.
+ *
+ * @param manifest - Parsed Vite manifest object
+ * @param entryKey - Entry point key (e.g. 'src/site/app.ts')
+ * @returns De-duplicated array of CSS file paths from the entry and all its imported chunks
+ */
+export const collectEntryCSS = (manifest: Record<string, any>, entryKey: string): string[] => {
+  const css = new Set<string>();
+  const visited = new Set<string>();
+
+  const walk = (key: string) => {
+    if (visited.has(key)) return;
+    visited.add(key);
+
+    const chunk = manifest[key];
+    if (!chunk) return;
+
+    if (chunk.css) {
+      for (const file of chunk.css) {
+        css.add(file);
+      }
+    }
+    if (chunk.imports) {
+      for (const imp of chunk.imports) {
+        walk(imp);
+      }
+    }
+  };
+
+  walk(entryKey);
+  return Array.from(css);
+};
+
+/**
  * Resolves the instance default language from the configuration service.
  *
  * Falls back to DEFAULT_LANGUAGE_CODE if the configuration interface is unavailable
@@ -174,9 +213,11 @@ export function createRouter(
      * @returns {Promise<void>}
      */
     client_index: async (req: Request, res: Response) => {
+      const manifest = await parseManifest();
       const data = {
         environment,
-        manifest: await parseManifest(),
+        manifest,
+        cssFiles: collectEntryCSS(manifest, 'src/client/app.ts'),
       };
 
       res.render("client.index.html.ejs", data);
@@ -196,10 +237,12 @@ export function createRouter(
       const baseUrl = getSiteBaseUrl(req);
 
       const meta = await resolveMetaTags(publicInterfaceHolder, canonicalPath, req.locale, baseUrl);
+      const manifest = await parseManifest();
 
       const data = {
         environment,
-        manifest: await parseManifest(),
+        manifest,
+        cssFiles: collectEntryCSS(manifest, 'src/site/app.ts'),
         locale: req.locale,
         siteBaseUrl: baseUrl,
         hreflangLinks: buildHreflangLinks(req, canonicalPath, instanceDefault),
@@ -229,10 +272,12 @@ export function createRouter(
         const baseUrl = getSiteBaseUrl(req);
 
         const meta = await resolveMetaTags(publicInterfaceHolder, canonicalPath, req.locale, baseUrl);
+        const manifest = await parseManifest();
 
         const data = {
           environment,
-          manifest: await parseManifest(),
+          manifest,
+          cssFiles: collectEntryCSS(manifest, 'src/site/app.ts'),
           locale: req.locale,
           siteBaseUrl: baseUrl,
           hreflangLinks: buildHreflangLinks(req, canonicalPath, instanceDefault),
@@ -257,10 +302,12 @@ export function createRouter(
       const baseUrl = getSiteBaseUrl(req);
 
       const meta = await resolveMetaTags(publicInterfaceHolder, strippedPath, locale, baseUrl);
+      const manifest = await parseManifest();
 
       const data = {
         environment,
-        manifest: await parseManifest(),
+        manifest,
+        cssFiles: collectEntryCSS(manifest, 'src/site/app.ts'),
         locale: req.locale,
         siteBaseUrl: baseUrl,
         hreflangLinks: buildHreflangLinks(req, strippedPath, instanceDefault),
@@ -278,9 +325,11 @@ export function createRouter(
      * @returns {Promise<void>}
      */
     widget_index: async (req: Request, res: Response) => {
+      const manifest = await parseManifest();
       const data = {
         environment,
-        manifest: await parseManifest(),
+        manifest,
+        cssFiles: collectEntryCSS(manifest, 'src/widget/app.ts'),
       };
       res.render("widget.index.html.ejs", data);
     },

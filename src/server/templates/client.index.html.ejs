@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pavillion</title>
-    <% if ((environment === 'production' || environment === 'e2e') && manifest['src/client/app.ts']?.css) { %>
-    <% manifest['src/client/app.ts'].css.forEach(function(cssFile) { %>
+    <% if ((environment === 'production' || environment === 'e2e') && cssFiles) { %>
+    <% cssFiles.forEach(function(cssFile) { %>
     <link rel="stylesheet" href="/<%= cssFile %>" />
     <% }); %>
     <% } %>
