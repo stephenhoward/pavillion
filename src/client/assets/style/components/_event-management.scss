@@ -1,6 +1,8 @@
 // Event Management Component Styles
 // Mixins and patterns for event list and event editor screens
 
+@use '../mixins' as *;
+
 // ======================
 // Animations
 // ======================
@@ -218,6 +220,15 @@
   @media (prefers-color-scheme: dark) {
     background: var(--pav-color-stone-800);
     box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
+  }
+
+  @include pav-media-down(md) {
+    bottom: calc(var(--pav-shell-bottom-nav-height) + var(--pav-shell-safe-area-bottom) + 1rem);
+    max-width: calc(100vw - 2rem);
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
   }
 }
 
