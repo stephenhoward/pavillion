@@ -402,7 +402,7 @@ onUnmounted(() => {
     >
       <button
         type="button"
-        class="primary"
+        class="btn btn--primary"
         @click="handleFollowCalendar($event)"
       >
         {{ t("follow_button") }}
@@ -638,26 +638,6 @@ div.events-container {
     }
   }
 
-  // Empty state styling (inherits from EmptyLayout component)
-  button.primary {
-    background: var(--pav-color-orange-500);
-    color: var(--pav-color-text-inverse);
-    border: none;
-    padding: var(--pav-space-3) var(--pav-space-6);
-    border-radius: var(--pav-border-radius-md);
-    font-size: var(--pav-font-size-sm);
-    font-weight: var(--pav-font-weight-medium);
-    cursor: pointer;
-    transition: background 0.2s ease;
-
-    &:hover {
-      background: var(--pav-color-orange-600);
-    }
-
-    &:active {
-      background: var(--pav-color-orange-700);
-    }
-  }
 
   p.empty-waiting-message {
     margin: 0;

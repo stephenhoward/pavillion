@@ -139,7 +139,7 @@ function resetState() {
         <div class="modal-actions">
           <button
             type="button"
-            class="secondary"
+            class="btn btn--secondary"
             @click="handleClose"
             :disabled="disconnecting"
           >

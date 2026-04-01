@@ -52,7 +52,7 @@
         </div>
 
         <button
-          class="primary"
+          class="btn btn--primary"
           type="submit"
           :aria-describedby="state.err ? 'apply-error' : undefined"
         >

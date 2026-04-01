@@ -179,7 +179,7 @@ onMounted(async () => {
           </div>
         </div>
 
-        <button type="button" class="primary" @click="startSubscribe">
+        <button type="button" class="btn btn--primary" @click="startSubscribe">
           {{ t("subscribe_button") }}
         </button>
       </div>
@@ -190,7 +190,7 @@ onMounted(async () => {
         <FundingForm @subscribed="onSubscribed" />
         <div class="form-actions">
           <button type="button"
-                  class="secondary"
+                  class="btn btn--secondary"
                   @click="showFundingForm = false">
             {{ t("cancel_button") }}
           </button>
@@ -246,7 +246,7 @@ onMounted(async () => {
           <button
             v-if="isActive || isPastDue"
             type="button"
-            class="secondary"
+            class="btn btn--secondary"
             @click="openBillingPortal"
           >
             {{ t("manage_payment_button") }}

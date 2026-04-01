@@ -39,7 +39,7 @@
         required
       />
 
-      <button type="submit">
+      <button class="btn btn--primary" type="submit">
         {{ t('go_button') }}
       </button>
     </div>

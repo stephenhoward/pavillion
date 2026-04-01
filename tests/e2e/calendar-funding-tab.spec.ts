@@ -161,7 +161,7 @@ test.describe('Calendar FundingTab — Subscribe Sheet', () => {
     await expect(yearlyOption).toBeVisible();
 
     // Should have a confirm/subscribe button
-    const confirmButton = dialog.locator('button.primary');
+    const confirmButton = dialog.locator('button.btn--primary');
     await expect(confirmButton).toBeVisible();
   });
 

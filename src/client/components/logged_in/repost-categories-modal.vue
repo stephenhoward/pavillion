@@ -209,14 +209,14 @@ function getEventSource(url: string): string | null {
       <div class="modal-actions">
         <button
           type="button"
-          class="secondary"
+          class="btn btn--secondary"
           @click="handleCancel"
         >
           {{ t('categoryMapping.cancel') }}
         </button>
         <button
           type="button"
-          class="primary"
+          class="btn btn--primary"
           @click="handleConfirm"
         >
           {{ confirmLabel ?? t('categoryMapping.repostConfirm') }}

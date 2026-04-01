@@ -22,7 +22,7 @@
         required
       />
 
-      <button type="submit">
+      <button class="btn btn--primary" type="submit">
         {{ t('reset_button') }}
       </button>
     </div>
@@ -70,7 +70,7 @@
         required
       />
 
-      <button type="submit">
+      <button class="btn btn--primary" type="submit">
         {{ t("set_password_button") }}
       </button>
     </div>

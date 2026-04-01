@@ -77,7 +77,7 @@
         required
       />
 
-      <button type="submit">
+      <button class="btn btn--primary" type="submit">
         {{ t('set_password_button') || 'Set Password' }}
       </button>
     </div>
