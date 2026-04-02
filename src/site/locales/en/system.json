@@ -73,6 +73,7 @@
         "date_range_invalid": "Invalid date range"
     },
     "event_location": "Location",
+    "get_directions": "Get directions",
     "about_this_event": "About This Event",
     "event_categories": "Categories",
     "event_accessibility": "Accessibility",

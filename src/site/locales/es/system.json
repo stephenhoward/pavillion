@@ -73,6 +73,7 @@
         "date_range_invalid": "Rango de fechas no válido"
     },
     "event_location": "Ubicación",
+    "get_directions": "Cómo llegar",
     "about_this_event": "Acerca de este evento",
     "event_categories": "Categorías",
     "event_accessibility": "Accesibilidad",

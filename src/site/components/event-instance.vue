@@ -208,11 +208,17 @@ onBeforeMount(async () => {
             </div>
             <p class="location-name">{{ state.instance.event.location.name }}</p>
             <p v-if="state.instance.event.location.address" class="location-address">
-              {{ state.instance.event.location.address }}
-              <template v-if="state.instance.event.location.city">
-                <br />{{ state.instance.event.location.city }}<template v-if="state.instance.event.location.state">, {{ state.instance.event.location.state }}</template>
-                <template v-if="state.instance.event.location.postalCode">{{ ' ' + state.instance.event.location.postalCode }}</template>
-              </template>
+              <a :href="'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent([state.instance.event.location.address, state.instance.event.location.city, state.instance.event.location.state].filter(Boolean).join(', '))"
+                 target="_blank"
+                 rel="noopener"
+                 :aria-label="t('get_directions')"
+              >
+                {{ state.instance.event.location.address }}
+                <template v-if="state.instance.event.location.city">
+                  <br />{{ state.instance.event.location.city }}<template v-if="state.instance.event.location.state">, {{ state.instance.event.location.state }}</template>
+                  <template v-if="state.instance.event.location.postalCode">{{ ' ' + state.instance.event.location.postalCode }}</template>
+                </template>
+              </a>
             </p>
           </div>
 

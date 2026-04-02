@@ -157,11 +157,17 @@ function closeReportModal() {
             </div>
             <p class="location-name">{{ state.event.location.name }}</p>
             <p v-if="state.event.location.address" class="location-address">
-              {{ state.event.location.address }}
-              <template v-if="state.event.location.city">
-                <br />{{ state.event.location.city }}<template v-if="state.event.location.state">, {{ state.event.location.state }}</template>
-                <template v-if="state.event.location.postalCode">{{ ' ' + state.event.location.postalCode }}</template>
-              </template>
+              <a :href="'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent([state.event.location.address, state.event.location.city, state.event.location.state].filter(Boolean).join(', '))"
+                 target="_blank"
+                 rel="noopener"
+                 :aria-label="t('get_directions')"
+              >
+                {{ state.event.location.address }}
+                <template v-if="state.event.location.city">
+                  <br />{{ state.event.location.city }}<template v-if="state.event.location.state">, {{ state.event.location.state }}</template>
+                  <template v-if="state.event.location.postalCode">{{ ' ' + state.event.location.postalCode }}</template>
+                </template>
+              </a>
             </p>
           </div>
 
