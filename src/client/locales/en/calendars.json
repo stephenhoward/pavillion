@@ -27,7 +27,8 @@
         "calendar_count_other": "{{count}} calendars you can edit",
         "role_owner": "Owner",
         "role_editor": "Editor",
-        "aria_navigate_calendar": "Navigate to calendar: {{calendarName}}, role: {{role}}"
+        "aria_navigate_calendar": "Navigate to calendar: {{calendarName}}, role: {{role}}",
+        "aria_view_public_calendar": "View public calendar: {{name}} (opens in new tab)"
     },
     "selector": {
         "select_calendar_title": "Select Calendar",
@@ -48,6 +49,7 @@
         "noEvents": "No events",
         "noEventsDescription": "You don't have any events in this calendar yet.",
         "createEvent": "Create an Event",
+        "view_public_calendar_label": "View public calendar: {{name}} (opens in new tab)",
         "manage_calendar": "Manage Calendar",
         "manage_calendar_label": "Manage calendar: {{name}}",
         "events_section_label": "Calendar Events",

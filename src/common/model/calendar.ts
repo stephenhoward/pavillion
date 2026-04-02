@@ -12,6 +12,7 @@ export type DefaultDateRange = '1week' | '2weeks' | '1month';
  */
 class Calendar extends TranslatedModel<CalendarContent> {
   urlName: string = '';
+  publicUrl: string = '';
   languages: string[] = ['en'];
   description: string = '';
   defaultDateRange: DefaultDateRange | null = null;
@@ -51,6 +52,7 @@ class Calendar extends TranslatedModel<CalendarContent> {
     return {
       id: this.id,
       urlName: this.urlName,
+      publicUrl: this.publicUrl,
       description: this.description,
       languages: this.languages,
       defaultDateRange: this.defaultDateRange,
@@ -72,6 +74,7 @@ class Calendar extends TranslatedModel<CalendarContent> {
    */
   static fromObject(obj: Record<string,any>): Calendar {
     let calendar = new Calendar(obj.id, obj.urlName);
+    calendar.publicUrl = obj.publicUrl || '';
     calendar.languages = obj.languages;
     calendar.description = obj.description;
     calendar.defaultDateRange = obj.defaultDateRange || null;

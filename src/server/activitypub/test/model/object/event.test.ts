@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import config from 'config';
 import { DateTime } from 'luxon';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent, CalendarEventContent, CalendarEventSchedule } from '@/common/model/events';
@@ -8,6 +9,8 @@ import { EventSeriesContent } from '@/common/model/event_series_content';
 import { EventLocation } from '@/common/model/location';
 import { Media } from '@/common/model/media';
 import { EventObject } from '@/server/activitypub/model/object/event';
+
+const domain = config.get<string>('domain');
 
 describe('EventObject', () => {
 
@@ -33,8 +36,8 @@ describe('EventObject', () => {
       const obj = new EventObject(calendar, event);
 
       expect(obj.categories).toEqual([
-        'https://pavillion.dev/api/public/v1/calendar/mycal/categories/cat-uuid-1',
-        'https://pavillion.dev/api/public/v1/calendar/mycal/categories/cat-uuid-2',
+        `https://${domain}/api/public/v1/calendar/mycal/categories/cat-uuid-1`,
+        `https://${domain}/api/public/v1/calendar/mycal/categories/cat-uuid-2`,
       ]);
     });
 
@@ -61,7 +64,7 @@ describe('EventObject', () => {
 
       const obj = new EventObject(calendar, event);
 
-      expect(obj.categories[0]).toMatch(/^https:\/\/pavillion\.dev\//);
+      expect(obj.categories[0]).toMatch(new RegExp(`^https://${domain.replace(/\./g, '\\.')}/`));
     });
 
   });
@@ -87,7 +90,7 @@ describe('EventObject', () => {
 
       const obj = new EventObject(calendar, event);
 
-      expect(obj.series).toBe('https://pavillion.dev/calendars/mycal/series/series-uuid-1234');
+      expect(obj.series).toBe(`https://${domain}/calendars/mycal/series/series-uuid-1234`);
     });
 
     it('should use the calendar urlName and series UUID in the series URL', () => {
@@ -112,7 +115,7 @@ describe('EventObject', () => {
 
       const obj = new EventObject(calendar, event);
 
-      expect(obj.series).toMatch(/^https:\/\/pavillion\.dev\//);
+      expect(obj.series).toMatch(new RegExp(`^https://${domain.replace(/\./g, '\\.')}/`));
     });
 
   });
@@ -132,14 +135,14 @@ describe('EventObject', () => {
       const result = obj.toActivityPubObject();
 
       expect(result.type).toBe('Event');
-      expect(result.id).toMatch(/^https:\/\/pavillion\.dev\/calendars\/mycal\/events\/event-uuid$/);
-      expect(result.attributedTo).toBe('https://pavillion.dev/calendars/mycal');
+      expect(result.id).toMatch(new RegExp(`^https://${domain.replace(/\./g, '\\.')}/calendars/mycal/events/event-uuid$`));
+      expect(result.attributedTo).toBe(`https://${domain}/calendars/mycal`);
       expect(result.name).toBe('Test Event');
       expect(result.summary).toBe('A test description');
       expect(result.startTime).toBe(startDt.toISO());
       expect(result.endTime).toBe(endDt.toISO());
       expect(result.to).toContain('https://www.w3.org/ns/activitystreams#Public');
-      expect(result.cc).toContain('https://pavillion.dev/calendars/mycal/followers');
+      expect(result.cc).toContain(`https://${domain}/calendars/mycal/followers`);
       expect(result.location).toBeDefined();
       expect(result.location.type).toBe('Place');
       expect(result.location.name).toBe('City Park');
@@ -350,7 +353,7 @@ describe('EventObject', () => {
 
       expect(result.image).toEqual({
         type: 'Image',
-        url: 'https://pavillion.dev/api/v1/media/media-uuid',
+        url: `https://${domain}/api/v1/media/media-uuid`,
         mediaType: 'image/jpeg',
       });
     });
@@ -366,7 +369,7 @@ describe('EventObject', () => {
 
       expect(result.image).toEqual({
         type: 'Image',
-        url: 'https://pavillion.dev/api/v1/media/default-img-uuid',
+        url: `https://${domain}/api/v1/media/default-img-uuid`,
         mediaType: 'image/png',
       });
     });
@@ -394,7 +397,7 @@ describe('EventObject', () => {
 
       expect(result.image).toEqual({
         type: 'Image',
-        url: 'https://pavillion.dev/api/v1/media/event-img-uuid',
+        url: `https://${domain}/api/v1/media/event-img-uuid`,
         mediaType: 'image/jpeg',
       });
     });

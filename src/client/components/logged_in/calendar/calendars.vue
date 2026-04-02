@@ -2,7 +2,7 @@
 import { onBeforeMount, reactive, ref, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
-import { Calendar, ChevronRight, Crown } from 'lucide-vue-next';
+import { Calendar, ChevronRight, Crown, ExternalLink } from 'lucide-vue-next';
 import CalendarService from '@/client/service/calendar';
 import { CalendarInfo } from '@/common/model/calendar_info';
 import EmptyLayout from '@/client/components/common/empty_state.vue';
@@ -106,14 +106,7 @@ async function loadCalendars() {
             :key="info.calendar.id"
             role="listitem"
           >
-            <RouterLink
-              :to="`/calendar/${info.calendar.urlName}`"
-              class="calendar-card"
-              :aria-label="t('aria_navigate_calendar', {
-                calendarName: info.calendar.content('en').name || info.calendar.urlName,
-                role: info.isOwner ? t('role_owner') : t('role_editor'),
-              })"
-            >
+            <div class="calendar-card">
               <div class="calendar-card__icon">
                 <Calendar :size="24" aria-hidden="true" />
               </div>
@@ -131,6 +124,16 @@ async function loadCalendars() {
                   <span v-else class="calendar-card__badge calendar-card__badge--editor">
                     {{ t('role_editor') }}
                   </span>
+
+                  <a
+                    :href="`/view/${info.calendar.urlName}`"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="calendar-card__public-link"
+                    :aria-label="t('aria_view_public_calendar', { name: info.calendar.content('en').name || info.calendar.urlName })"
+                  >
+                    <ExternalLink :size="14" aria-hidden="true" />
+                  </a>
                 </div>
 
                 <p class="calendar-card__description">
@@ -141,7 +144,16 @@ async function loadCalendars() {
               <div class="calendar-card__chevron">
                 <ChevronRight :size="20" aria-hidden="true" />
               </div>
-            </RouterLink>
+
+              <RouterLink
+                :to="`/calendar/${info.calendar.urlName}`"
+                class="calendar-card__link"
+                :aria-label="t('aria_navigate_calendar', {
+                  calendarName: info.calendar.content('en').name || info.calendar.urlName,
+                  role: info.isOwner ? t('role_owner') : t('role_editor'),
+                })"
+              />
+            </div>
           </li>
         </ul>
       </section>
@@ -204,6 +216,7 @@ nav {
 }
 
 .calendar-card {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--pav-space-md);
@@ -211,20 +224,25 @@ nav {
   background: var(--pav-color-surface-primary);
   border: var(--pav-border-width-1) solid var(--pav-color-border-primary);
   border-radius: var(--pav-border-radius-lg);
-  text-decoration: none;
-  color: inherit;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
   cursor: pointer;
 
   &:hover,
-  &:focus-visible {
+  &:focus-within {
     border-color: var(--pav-color-accent);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
   }
 
-  &:focus-visible {
-    outline: var(--pav-border-width-2) solid var(--pav-border-color-focus);
-    outline-offset: var(--pav-space-xs);
+  &__link {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    z-index: 0;
+
+    &:focus-visible {
+      outline: var(--pav-border-width-2) solid var(--pav-border-color-focus);
+      outline-offset: var(--pav-space-xs);
+    }
   }
 
   &__icon {
@@ -280,6 +298,28 @@ nav {
     &--editor {
       background-color: var(--pav-color-surface-secondary);
       color: var(--pav-color-text-secondary);
+    }
+  }
+
+  &__public-link {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    color: var(--pav-color-text-tertiary, var(--pav-color-text-secondary));
+    text-decoration: none;
+    padding: 0.125rem;
+    border-radius: var(--pav-border-radius-sm);
+
+    &:hover,
+    &:focus-visible {
+      color: var(--pav-color-accent);
+    }
+
+    &:focus-visible {
+      outline: var(--pav-border-width-2) solid var(--pav-border-color-focus);
+      outline-offset: 2px;
     }
   }
 
