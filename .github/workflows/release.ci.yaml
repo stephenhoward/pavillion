@@ -1,0 +1,12 @@
+name: Release Pipeline
+
+on:
+  release:
+    types: [released]
+
+jobs:
+  publish_images:
+    uses: ./.github/workflows/release_docker_images.yaml
+    permissions:
+      contents: read
+      packages: write
