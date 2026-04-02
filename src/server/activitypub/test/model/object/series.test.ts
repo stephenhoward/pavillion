@@ -1,8 +1,11 @@
 import { describe, it, expect } from 'vitest';
+import config from 'config';
 import { Calendar } from '@/common/model/calendar';
 import { EventSeries } from '@/common/model/event_series';
 import { EventSeriesContent } from '@/common/model/event_series_content';
 import { SeriesObject } from '@/server/activitypub/model/object/series';
+
+const domain = config.get<string>('domain');
 
 describe('SeriesObject', () => {
 
@@ -21,7 +24,7 @@ describe('SeriesObject', () => {
 
       const obj = new SeriesObject(calendar, series);
 
-      expect(obj.id).toBe('https://pavillion.dev/calendars/mycal/series/series-uuid-1234');
+      expect(obj.id).toBe(`https://${domain}/calendars/mycal/series/series-uuid-1234`);
     });
 
     it('should use calendar urlName in the AP ID', () => {
@@ -44,7 +47,7 @@ describe('SeriesObject', () => {
 
       const url = SeriesObject.seriesUrl(calendar, series);
 
-      expect(url).toBe('https://pavillion.dev/calendars/mycal/series/series-uuid');
+      expect(url).toBe(`https://${domain}/calendars/mycal/series/series-uuid`);
     });
 
     it('should accept a string series ID', () => {
@@ -52,7 +55,7 @@ describe('SeriesObject', () => {
 
       const url = SeriesObject.seriesUrl(calendar, 'some-uuid');
 
-      expect(url).toBe('https://pavillion.dev/calendars/mycal/series/some-uuid');
+      expect(url).toBe(`https://${domain}/calendars/mycal/series/some-uuid`);
     });
 
     it('should return an already-absolute URL unchanged', () => {
@@ -73,7 +76,7 @@ describe('SeriesObject', () => {
 
       const obj = new SeriesObject(calendar, series);
 
-      expect(obj.attributedTo).toBe('https://pavillion.dev/calendars/mycal');
+      expect(obj.attributedTo).toBe(`https://${domain}/calendars/mycal`);
     });
 
   });

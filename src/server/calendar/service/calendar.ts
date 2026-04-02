@@ -71,6 +71,11 @@ class CalendarService {
     return typeof uuid === 'string' && UUID_V4_REGEX.test(uuid);
   }
 
+  private withPublicUrl(calendar: Calendar): Calendar {
+    calendar.publicUrl = 'https://' + config.get('domain') + '/view/' + calendar.urlName;
+    return calendar;
+  }
+
   async getCalendar(id: string): Promise<Calendar|null> {
     if (!this.isValidUUID(id)) {
       return null;
@@ -78,7 +83,7 @@ class CalendarService {
     const calendar = await CalendarEntity.findByPk(id, {
       include: [CalendarContentEntity, { model: MediaEntity, as: 'defaultEventImage', required: false, where: { status: 'approved' } }],
     });
-    return calendar ? calendar.toModel() : null;
+    return calendar ? this.withPublicUrl(calendar.toModel()) : null;
   }
 
   isValidUrlName(username: string): boolean {
@@ -139,7 +144,7 @@ class CalendarService {
 
     return memberships
       .filter(m => m.calendar)
-      .map(m => m.calendar.toModel());
+      .map(m => this.withPublicUrl(m.calendar.toModel()));
   }
 
   /**
@@ -163,7 +168,7 @@ class CalendarService {
     return memberships
       .filter(m => m.calendar)
       .map(m => ({
-        calendar: m.calendar.toModel(),
+        calendar: this.withPublicUrl(m.calendar.toModel()),
         role: m.role as 'owner' | 'editor',
       }));
   }
@@ -223,7 +228,7 @@ class CalendarService {
       return null;
     }
     let calendar = await CalendarEntity.findOne({ where: { url_name: name }, include: [CalendarContentEntity, { model: MediaEntity, as: 'defaultEventImage', required: false, where: { status: 'approved' } }] });
-    return calendar ? calendar.toModel() : null;
+    return calendar ? this.withPublicUrl(calendar.toModel()) : null;
   }
 
   /**
@@ -1166,7 +1171,7 @@ class CalendarService {
         include: [CalendarContentEntity, { model: MediaEntity, as: 'defaultEventImage', required: false, where: { status: 'approved' } }],
       }],
     });
-    return membership?.calendar ? membership.calendar.toModel() : null;
+    return membership?.calendar ? this.withPublicUrl(membership.calendar.toModel()) : null;
   }
 
   /**
@@ -1217,7 +1222,7 @@ class CalendarService {
       return entity;
     });
 
-    const calendar = calendarEntity.toModel();
+    const calendar = this.withPublicUrl(calendarEntity.toModel());
 
     // Set the calendar name if provided
     if (name) {
@@ -1405,7 +1410,7 @@ class CalendarService {
     const updatedEntity = await CalendarEntity.findByPk(calendarId, {
       include: [CalendarContentEntity, { model: MediaEntity, as: 'defaultEventImage', required: false, where: { status: 'approved' } }],
     });
-    return updatedEntity!.toModel();
+    return this.withPublicUrl(updatedEntity!.toModel());
   }
 
   /**

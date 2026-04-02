@@ -5,6 +5,7 @@ import { useTranslation } from 'i18next-vue';
 import { useTabNavigation } from '@/client/composables/useTabNavigation';
 import CalendarService from '@/client/service/calendar';
 import EventService from '@/client/service/event';
+import { ExternalLink } from 'lucide-vue-next';
 import PillButton from '@/client/components/common/pill-button.vue';
 import EventsTab from '@/client/components/logged_in/calendar-content/events-tab.vue';
 import CategoriesTab from '@/client/components/logged_in/calendar-content/categories.vue';
@@ -172,10 +173,23 @@ const handleLoadEvents = async (filters) => {
       <header class="calendar-header">
         <div class="header-content">
           <div class="header-title-section">
-            <h1>
-              <span v-if="state.calendar">{{ state.calendar.content('en').name || state.calendar.urlName }}</span>
-              <span v-else>{{ calendarUrlName }}</span>
-            </h1>
+            <div class="header-title-group">
+              <h1>
+                <span v-if="state.calendar">{{ state.calendar.content('en').name || state.calendar.urlName }}</span>
+                <span v-else>{{ calendarUrlName }}</span>
+              </h1>
+              <a
+                v-if="state.calendar"
+                :href="`/view/${state.calendar.urlName}`"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="calendar-public-link"
+                :aria-label="t('view_public_calendar_label', { name: state.calendar.content('en').name || state.calendar.urlName })"
+              >
+                {{ state.calendar.publicUrl }}
+                <ExternalLink :size="14" aria-hidden="true" />
+              </a>
+            </div>
             <div class="header-actions">
               <PillButton
                 variant="ghost"
@@ -375,6 +389,12 @@ const handleLoadEvents = async (filters) => {
     align-items: center;
     gap: 1rem;
 
+    .header-title-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
     h1 {
       font-size: 2.25rem;
       font-weight: 300;
@@ -383,6 +403,27 @@ const handleLoadEvents = async (filters) => {
 
       @media (prefers-color-scheme: dark) {
         color: var(--pav-color-stone-100);
+      }
+    }
+
+    .calendar-public-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      font-size: var(--pav-font-size-body-small);
+      color: var(--pav-color-text-secondary);
+      text-decoration: none;
+
+      &:hover,
+      &:focus-visible {
+        color: var(--pav-color-accent);
+        text-decoration: underline;
+      }
+
+      &:focus-visible {
+        outline: var(--pav-border-width-2) solid var(--pav-border-color-focus);
+        outline-offset: 2px;
+        text-decoration: none;
       }
     }
 
@@ -409,6 +450,10 @@ const handleLoadEvents = async (filters) => {
 
       h1 {
         font-size: 1.5rem;
+      }
+
+      .header-title-group {
+        width: 100%;
       }
 
       .header-actions {
