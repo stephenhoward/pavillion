@@ -1,9 +1,12 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
 import { DateTime, Duration } from 'luxon';
 import { v4 as uuidv4 } from 'uuid';
+import sinon from 'sinon';
 import { CalendarEvent, CalendarEventSchedule, EventFrequency } from '@/common/model/events';
 import EventInstanceService from '@/server/calendar/service/event_instance';
+import EventService from '@/server/calendar/service/events';
+import { EventScheduleEntity } from '@/server/calendar/entity/event';
 
 /**
  * Tests for instance generation duration logic in EventInstanceService.
@@ -162,28 +165,41 @@ describe('EventInstanceService.generateInstances', () => {
   });
 });
 
-describe('endDate/eventEndTime sync for non-recurring schedules', () => {
-  it('should set endDate to eventEndTime for non-recurring schedules', () => {
-    // This tests the sync rule: when frequency is null and eventEndTime is set,
-    // endDate should be set to match eventEndTime.
-    const schedule = CalendarEventSchedule.fromObject({
-      id: uuidv4(),
+/**
+ * Tests for the endDate/eventEndTime sync rule inside EventService.createEventSchedule.
+ *
+ * These tests call through the real service method with EventScheduleEntity.prototype.save
+ * stubbed so that no database is required. This verifies the sync logic is actually
+ * exercised by the service, not merely re-implemented inline.
+ */
+describe('EventService.createEventSchedule — endDate/eventEndTime sync', () => {
+  let service: EventService;
+  let sandbox: sinon.SinonSandbox;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    service = new EventService(new EventEmitter());
+    sandbox.stub(EventScheduleEntity.prototype, 'save').resolves();
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('should set endDate to eventEndTime for non-recurring schedules', async () => {
+    const eventId = uuidv4();
+    const schedule = await service.createEventSchedule(eventId, {
       start: '2026-04-10T10:00:00',
       eventEndTime: '2026-04-10T12:00:00',
     });
-
-    // Simulate the sync logic from createEventSchedule
-    if (!schedule.frequency && schedule.eventEndTime) {
-      schedule.endDate = schedule.eventEndTime;
-    }
 
     expect(schedule.endDate).not.toBeNull();
     expect(schedule.endDate!.toISO()).toBe(schedule.eventEndTime!.toISO());
   });
 
-  it('should not override endDate for recurring schedules', () => {
-    const schedule = CalendarEventSchedule.fromObject({
-      id: uuidv4(),
+  it('should not override endDate for recurring schedules', async () => {
+    const eventId = uuidv4();
+    const schedule = await service.createEventSchedule(eventId, {
       start: '2026-04-10T10:00:00',
       end: '2026-06-10T10:00:00',
       eventEndTime: '2026-04-10T12:00:00',
@@ -191,28 +207,18 @@ describe('endDate/eventEndTime sync for non-recurring schedules', () => {
       interval: 1,
     });
 
-    const originalEndDate = schedule.endDate;
-
-    // Sync logic should NOT apply because frequency is set
-    if (!schedule.frequency && schedule.eventEndTime) {
-      schedule.endDate = schedule.eventEndTime;
-    }
-
     // endDate should remain the recurrence end, not eventEndTime
-    expect(schedule.endDate!.toISO()).toBe(originalEndDate!.toISO());
     expect(schedule.endDate!.toISO()).not.toBe(schedule.eventEndTime!.toISO());
+    expect(schedule.endDate!.toISO()).toBe(
+      DateTime.fromISO('2026-06-10T10:00:00').toISO(),
+    );
   });
 
-  it('should not set endDate when eventEndTime is absent', () => {
-    const schedule = CalendarEventSchedule.fromObject({
-      id: uuidv4(),
+  it('should not set endDate when eventEndTime is absent', async () => {
+    const eventId = uuidv4();
+    const schedule = await service.createEventSchedule(eventId, {
       start: '2026-04-10T10:00:00',
     });
-
-    // Sync logic should not apply
-    if (!schedule.frequency && schedule.eventEndTime) {
-      schedule.endDate = schedule.eventEndTime;
-    }
 
     expect(schedule.endDate).toBeNull();
   });
