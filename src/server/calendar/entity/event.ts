@@ -171,8 +171,8 @@ class EventScheduleEntity extends Model {
   @Column({ type: DataType.DATE })
   declare end_date: Date;
 
-  @Column({ type: DataType.DATE })
-  declare event_end_time: Date;
+  @Column({ type: DataType.DATE, allowNull: true })
+  declare event_end_time: Date | null;
 
   @Column({ type: DataType.STRING })
   declare frequency: string;
