@@ -681,6 +681,13 @@ class EventService {
   async createEventSchedule(eventId: string, scheduleParams: Record<string,any>): Promise<CalendarEventSchedule> {
     const schedule = CalendarEventSchedule.fromObject(scheduleParams);
 
+    // For non-recurring events, sync endDate to eventEndTime so the database
+    // consistently reflects when the event ends for both instance generation
+    // and direct schedule queries.
+    if (!schedule.frequency && schedule.eventEndTime) {
+      schedule.endDate = schedule.eventEndTime;
+    }
+
     schedule.id = uuidv4();
     const scheduleEntity = EventScheduleEntity.fromModel(schedule);
     scheduleEntity.event_id = eventId;
@@ -866,6 +873,7 @@ class EventService {
           await scheduleEntity.update({
             start_date: schedule.startDate ?? scheduleEntity.start_date,
             end_date: schedule.endDate ?? scheduleEntity.end_date,
+            event_end_time: schedule.eventEndTime ?? scheduleEntity.event_end_time,
             frequency: schedule.frequency ?? scheduleEntity.frequency,
             interval: schedule.interval ?? scheduleEntity.interval,
             count: schedule.count ?? scheduleEntity.count,
@@ -1065,6 +1073,7 @@ class EventService {
           await scheduleEntity.update({
             start_date: schedule.startDate ?? scheduleEntity.start_date,
             end_date: schedule.endDate ?? scheduleEntity.end_date,
+            event_end_time: schedule.eventEndTime ?? scheduleEntity.event_end_time,
             frequency: schedule.frequency ?? scheduleEntity.frequency,
             interval: schedule.interval ?? scheduleEntity.interval,
             count: schedule.count ?? scheduleEntity.count,

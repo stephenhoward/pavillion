@@ -86,6 +86,11 @@
     "after": "after",
     "occurrences": "occurrences",
     "on_date": "on",
-    "remove_schedule": "Remove this schedule"
+    "remove_schedule": "Remove this schedule",
+    "start_date_label": "Date",
+    "start_time_label": "Time",
+    "end_date_label": "End Date",
+    "end_time_label": "End Time",
+    "timezone_label": "Timezone"
   }
 }

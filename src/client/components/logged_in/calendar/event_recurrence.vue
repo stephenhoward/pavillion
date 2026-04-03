@@ -64,6 +64,10 @@
     gap: 0.5rem;
   }
 
+  .grid-field--full {
+    grid-column: 1 / -1;
+  }
+
   .grid-label {
     font-size: 0.875rem;
     font-weight: 500;
@@ -490,16 +494,16 @@
     <!-- Date/Time Grid -->
     <div class="schedule-grid">
       <div class="grid-field">
-        <label class="grid-label">Date</label>
+        <label class="grid-label">{{ t('start_date_label') }}</label>
         <input type="date"
                v-model="state.date"
-               @input="updateStartDate()"
+               @input="onStartDateChange()"
                class="grid-input"
                required />
       </div>
 
       <div class="grid-field">
-        <label class="grid-label">Time</label>
+        <label class="grid-label">{{ t('start_time_label') }}</label>
         <input type="time"
                v-model="state.time"
                @input="updateStartDate()"
@@ -508,17 +512,23 @@
       </div>
 
       <div class="grid-field">
-        <label class="grid-label">Duration (minutes)</label>
-        <input type="number"
-               v-model="state.duration"
-               @input="compileRecurrence()"
-               class="grid-input"
-               min="0"
-               step="15"/>
+        <label class="grid-label">{{ t('end_date_label') }}</label>
+        <input type="date"
+               v-model="state.eventEndDate"
+               @input="onEndDateManualChange()"
+               class="grid-input" />
       </div>
 
       <div class="grid-field">
-        <label class="grid-label">Timezone</label>
+        <label class="grid-label">{{ t('end_time_label') }}</label>
+        <input type="time"
+               v-model="state.eventEndTime"
+               @input="compileRecurrence()"
+               class="grid-input" />
+      </div>
+
+      <div class="grid-field grid-field--full">
+        <label class="grid-label">{{ t('timezone_label') }}</label>
         <select v-model="state.timezone" @change="compileRecurrence()" class="grid-input">
           <option v-for="tz in timezones" :key="tz" :value="tz">
             {{ formatTimezone(tz) }}
@@ -745,6 +755,28 @@ const initDateTime = () => {
 };
 
 /**
+ * Initializes end date and end time fields from the schedule's eventEndTime.
+ * Defaults end date to the start date if no eventEndTime is set.
+ */
+const initEndDateTime = () => {
+  if (props.schedule.eventEndTime) {
+    const dt = props.schedule.eventEndTime;
+    return {
+      eventEndDate: dt.toFormat('yyyy-MM-dd'),
+      eventEndTime: dt.toFormat('HH:mm'),
+      eventEndDateManuallySet: true,
+    };
+  }
+  // Default end date to start date
+  const startDate = props.schedule.startDate;
+  return {
+    eventEndDate: startDate ? startDate.toFormat('yyyy-MM-dd') : '',
+    eventEndTime: '',
+    eventEndDateManuallySet: false,
+  };
+};
+
+/**
  * Determines the end-type string from existing schedule data.
  * Used to restore the correct radio button state when editing or duplicating
  * a recurring event that already has count or endDate set.
@@ -794,6 +826,7 @@ const initMonthlyWeekdayCheckboxes = (): Record<string, boolean> => {
 };
 
 const { date: initialDate, time: initialTime } = initDateTime();
+const { eventEndDate: initialEndDate, eventEndTime: initialEndTime, eventEndDateManuallySet: initialEndDateManuallySet } = initEndDateTime();
 
 const state = reactive({
   // Show the recurrence form immediately when the schedule already has a frequency
@@ -803,7 +836,9 @@ const state = reactive({
   frequency: (props.schedule.frequency as string) || '',
   date: initialDate,
   time: initialTime,
-  duration: 60, // Default duration in minutes
+  eventEndDate: initialEndDate,
+  eventEndTime: initialEndTime,
+  eventEndDateManuallySet: initialEndDateManuallySet,
   timezone: getLocalTimezone(),
   endDate: props.schedule.endDate ? props.schedule.endDate.toISO() : '',
   // Restore end-type from existing schedule so the correct radio is selected
@@ -820,7 +855,7 @@ const state = reactive({
  * Using { zone: state.timezone } ensures Luxon interprets the wall-clock time
  * in the selected timezone rather than the system's local timezone. This
  * preserves the user's intended time across DST boundaries when recurring
- * event instances are generated — without this, RRule would see a UTC-naive
+ * event instances are generated -- without this, RRule would see a UTC-naive
  * date and produce instances that shift by 1 hour after a DST transition.
  */
 const updateStartDate = () => {
@@ -828,6 +863,39 @@ const updateStartDate = () => {
     const dateTimeString = `${state.date}T${state.time}`;
     props.schedule.startDate = DateTime.fromISO(dateTimeString, { zone: state.timezone });
   }
+  compileRecurrence();
+};
+
+/**
+ * Handles start date input changes. Updates the start date and auto-syncs
+ * the end date if the user has not manually overridden it.
+ */
+const onStartDateChange = () => {
+  if (!state.eventEndDateManuallySet && state.date) {
+    state.eventEndDate = state.date;
+  }
+  updateStartDate();
+};
+
+/**
+ * Handles manual end date changes. Marks the end date as manually set
+ * so it no longer auto-syncs with the start date.
+ */
+const onEndDateManualChange = () => {
+  state.eventEndDateManuallySet = true;
+  compileRecurrence();
+};
+
+/**
+ * Builds a timezone-aware DateTime for eventEndTime from the end date and
+ * end time fields, following the same pattern as updateStartDate().
+ */
+const buildEventEndTime = (): DateTime | null => {
+  if (state.eventEndDate && state.eventEndTime) {
+    const dateTimeString = `${state.eventEndDate}T${state.eventEndTime}`;
+    return DateTime.fromISO(dateTimeString, { zone: state.timezone });
+  }
+  return null;
 };
 
 /**
@@ -841,7 +909,18 @@ const onFrequencyChange = () => {
 
 const compileRecurrence = () => {
   // Update startDate from separate date/time fields
-  updateStartDate();
+  if (state.date && state.time) {
+    const dateTimeString = `${state.date}T${state.time}`;
+    props.schedule.startDate = DateTime.fromISO(dateTimeString, { zone: state.timezone });
+  }
+
+  // Build eventEndTime from end date/time fields
+  props.schedule.eventEndTime = buildEventEndTime();
+
+  // For non-recurring events, keep endDate in sync with eventEndTime
+  if (!props.schedule.frequency && props.schedule.eventEndTime) {
+    props.schedule.endDate = props.schedule.eventEndTime;
+  }
 
   props.schedule.interval = props.schedule.frequency ? props.schedule.interval || 1 : 0;
   props.schedule.count = props.schedule.frequency && state.endType == 'after' ? props.schedule.count : 0;

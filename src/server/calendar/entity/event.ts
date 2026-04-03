@@ -171,6 +171,9 @@ class EventScheduleEntity extends Model {
   @Column({ type: DataType.DATE })
   declare end_date: Date;
 
+  @Column({ type: DataType.DATE, allowNull: true })
+  declare event_end_time: Date | null;
+
   @Column({ type: DataType.STRING })
   declare frequency: string;
 
@@ -214,6 +217,7 @@ class EventScheduleEntity extends Model {
       toLocalDT(this.start_date) ?? undefined,
       toLocalDT(this.end_date) ?? undefined,
     );
+    schedule.eventEndTime = toLocalDT(this.event_end_time);
     schedule.frequency = this.frequency
       ? CalendarEventSchedule.parseFrequency(this.frequency)
       : null;
@@ -238,6 +242,7 @@ class EventScheduleEntity extends Model {
       timezone: tz,
       start_date: toStorageDate(schedule.startDate),
       end_date: toStorageDate(schedule.endDate),
+      event_end_time: toStorageDate(schedule.eventEndTime),
       frequency: schedule.frequency as string,
       interval: schedule.interval,
       count: schedule.count,

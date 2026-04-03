@@ -303,6 +303,7 @@ class CalendarEventSchedule extends Model {
   id: string = '';
   startDate: DateTime | null = null;
   endDate: DateTime | null = null;
+  eventEndTime: DateTime | null = null;
   count: number = 0;
   frequency: EventFrequency | null = null;
   interval: number = 0;
@@ -361,6 +362,13 @@ class CalendarEventSchedule extends Model {
     schedule.byDay = obj.byDay;
     schedule.isExclusion = obj.isException;
 
+    if ( obj.eventEndTime ) {
+      const parsed = DateTime.fromISO(obj.eventEndTime);
+      if (parsed.isValid) {
+        schedule.eventEndTime = parsed;
+      }
+    }
+
     return schedule;
   }
 
@@ -374,6 +382,7 @@ class CalendarEventSchedule extends Model {
       id: this.id,
       start: this.startDate?.toISO(),
       end: this.endDate?.toISO(),
+      eventEndTime: this.eventEndTime?.toISO(),
       frequency: this.frequency as string,
       interval: this.interval,
       count: this.count,
