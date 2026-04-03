@@ -1,3 +1,4 @@
+import http from 'http';
 import config from 'config';
 import { EventEmitter } from 'events';
 import { DateTime } from 'luxon';
@@ -22,10 +23,15 @@ const logger = createLogger('worker');
  *
  * This file initializes the worker container which processes background jobs
  * from the pg-boss queue. Unlike the web container, this does not start an
- * HTTP server and focuses solely on job processing.
+ * Express application server. It does start a minimal HTTP health check server
+ * on port 3001 so that container orchestration tools (e.g. Docker healthcheck,
+ * autoheal) can verify the worker is alive and processing jobs.
  */
 
 let jobQueue: JobQueueService | null = null;
+let healthServer: http.Server | null = null;
+
+const HEALTH_PORT = 3001;
 
 /**
  * Registers job handlers for scheduled tasks.
@@ -230,10 +236,48 @@ function logStartupMessages(): void {
 }
 
 /**
+ * Creates and starts the HTTP health check server.
+ *
+ * @returns The HTTP server instance
+ */
+function startHealthServer(): http.Server {
+  const server = http.createServer((req, res) => {
+    if (req.method !== 'GET' || req.url !== '/health') {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Not found' }));
+      return;
+    }
+
+    const started = jobQueue?.isStarted() ?? false;
+    const status = started ? 200 : 503;
+    const body = JSON.stringify({ status: started ? 'ok' : 'unavailable' });
+
+    res.writeHead(status, { 'Content-Type': 'application/json' });
+    res.end(body);
+  });
+
+  server.listen(HEALTH_PORT, '127.0.0.1', () => {
+    logger.info({ port: HEALTH_PORT }, 'Health check server listening');
+  });
+
+  return server;
+}
+
+/**
  * Handles graceful shutdown of worker process.
  */
 async function handleShutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'Received signal, shutting down gracefully');
+
+  if (healthServer) {
+    await new Promise<void>((resolve) => {
+      healthServer!.close(() => {
+        logger.info('Health check server closed');
+        resolve();
+      });
+      setTimeout(resolve, 5000).unref();
+    });
+  }
 
   if (jobQueue) {
     await jobQueue.stop();
@@ -257,6 +301,9 @@ async function startWorker(): Promise<void> {
     // Initialize pg-boss in processing mode
     jobQueue = new JobQueueService();
     await jobQueue.start();
+
+    // Start health check server
+    healthServer = startHealthServer();
 
     // Register job handlers
     await registerJobHandlers(jobQueue);
