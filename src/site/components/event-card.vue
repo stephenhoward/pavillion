@@ -2,7 +2,7 @@
 import { computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { DateTime } from 'luxon';
-import { MapPin, Repeat } from 'lucide-vue-next';
+import { Calendar, MapPin, Repeat } from 'lucide-vue-next';
 import EventImage from './event-image.vue';
 import { useLocalizedContent } from '@/site/composables/useLocalizedContent';
 import { useLocale } from '@/site/composables/useLocale';
@@ -81,6 +81,29 @@ const media = computed(() => {
   return props.instance.event.media
     ?? (props.instance.event.isRepost ? null : props.defaultImage)
     ?? null;
+});
+
+/**
+ * Returns the source calendar metadata for reposted events, or null.
+ */
+const sourceCalendar = computed(() => {
+  return props.instance.event.sourceCalendar ?? null;
+});
+
+/**
+ * Returns the display label for the source calendar pill (urlName@host).
+ */
+const sourceCalendarLabel = computed(() => {
+  if (!sourceCalendar.value) return '';
+  return `${sourceCalendar.value.urlName}@${sourceCalendar.value.host}`;
+});
+
+/**
+ * Returns true when the source calendar URL is a remote (external) link.
+ */
+const isRemoteSourceCalendar = computed(() => {
+  if (!sourceCalendar.value) return false;
+  return sourceCalendar.value.url.startsWith('http');
 });
 
 /**
@@ -188,6 +211,20 @@ const detailPath = computed(() => {
           class="category-badge"
         >{{ localizedContent(cat).name }}</span>
       </div>
+      <a
+        v-if="sourceCalendar"
+        :href="sourceCalendar.url"
+        class="source-calendar-pill"
+        :aria-label="t('event_source_calendar_label', { name: sourceCalendarLabel })"
+        :target="isRemoteSourceCalendar ? '_blank' : undefined"
+        :rel="isRemoteSourceCalendar ? 'noopener noreferrer' : undefined"
+      >
+        <Calendar
+          :size="14"
+          aria-hidden="true"
+        />
+        <span>{{ sourceCalendarLabel }}</span>
+      </a>
     </div>
   </article>
 </template>
@@ -387,5 +424,14 @@ h3 {
 
 .category-badge {
   @include public-category-badge;
+}
+
+// ================================================================
+// SOURCE CALENDAR PILL
+// ================================================================
+
+.source-calendar-pill {
+  @include public-source-calendar-pill;
+  align-self: flex-start;
 }
 </style>

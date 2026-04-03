@@ -2,7 +2,7 @@
 import { reactive, onBeforeMount, ref, computed } from 'vue';
 import { useTranslation } from 'i18next-vue';
 import { useRoute } from 'vue-router';
-import { ArrowLeft, MapPin, Accessibility } from 'lucide-vue-next';
+import { ArrowLeft, Calendar, MapPin, Accessibility } from 'lucide-vue-next';
 
 import CalendarService from '../service/calendar';
 import { useLocalizedContent } from '../composables/useLocalizedContent';
@@ -44,6 +44,29 @@ const locationAccessibilityInfo = computed(() => {
   catch {
     return '';
   }
+});
+
+/**
+ * Returns the source calendar metadata for reposted events, or null.
+ */
+const sourceCalendar = computed(() => {
+  return state.event?.sourceCalendar ?? null;
+});
+
+/**
+ * Returns the display label for the source calendar pill (urlName@host).
+ */
+const sourceCalendarLabel = computed(() => {
+  if (!sourceCalendar.value) return '';
+  return `${sourceCalendar.value.urlName}@${sourceCalendar.value.host}`;
+});
+
+/**
+ * Returns true when the source calendar URL is a remote (external) link.
+ */
+const isRemoteSourceCalendar = computed(() => {
+  if (!sourceCalendar.value) return false;
+  return sourceCalendar.value.url.startsWith('http');
 });
 
 onBeforeMount(async () => {
@@ -121,6 +144,19 @@ function closeReportModal() {
       <div class="hero-image-wrapper">
         <EventImage :media="state.event.media" context="feature" :alt="localizedContent(state.event).name" />
       </div>
+
+      <!-- Source calendar pill -->
+      <a
+        v-if="sourceCalendar"
+        :href="sourceCalendar.url"
+        class="source-calendar-pill"
+        :aria-label="t('event_source_calendar_label', { name: sourceCalendarLabel })"
+        :target="isRemoteSourceCalendar ? '_blank' : undefined"
+        :rel="isRemoteSourceCalendar ? 'noopener noreferrer' : undefined"
+      >
+        <Calendar :size="14" aria-hidden="true" />
+        <span>{{ sourceCalendarLabel }}</span>
+      </a>
 
       <!-- Event title -->
       <h1 class="event-title">{{ localizedContent(state.event).name }}</h1>
@@ -313,6 +349,15 @@ function closeReportModal() {
     height: 100%;
     border-radius: 0;
   }
+}
+
+// ================================================================
+// SOURCE CALENDAR PILL
+// ================================================================
+
+.source-calendar-pill {
+  @include public-source-calendar-pill;
+  margin-bottom: $public-space-md;
 }
 
 // ================================================================

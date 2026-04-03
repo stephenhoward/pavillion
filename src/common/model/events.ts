@@ -67,6 +67,12 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
    * Default: false. Must be explicitly set after retrieval if needed.
    */
   isRepost: boolean = false;
+  /**
+   * Source calendar information for reposted events.
+   * Contains the originating calendar's urlName, host, and URL.
+   * Null for locally-owned events or when source is unknown.
+   */
+  sourceCalendar: { urlName: string; host: string; url: string } | null = null;
 
   /**
    * Constructor for CalendarEvent.
@@ -149,6 +155,7 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
     event.media = obj.media ? Media.fromObject(obj.media) : null;
     event.mediaId = obj.mediaId || null;
     event.isRepost = obj.isRepost ?? false;
+    event.sourceCalendar = obj.sourceCalendar ?? null;
 
     if ( obj.content ) {
       for( let [language,strings] of Object.entries(obj.content) ) {
@@ -190,6 +197,7 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
       date: this.date,
       calendarId: this.calendarId,
       isRepost: this.isRepost,
+      sourceCalendar: this.sourceCalendar,
       locationId: this.locationId,
       location: this.location?.toObject(),
       media: this.media?.toObject(),

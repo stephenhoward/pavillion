@@ -58,6 +58,14 @@ $public-success-dark: #86efac;
 $public-success-bg-light: #f0fdf4;
 $public-success-bg-dark: #14532d;
 
+// Source calendar pill (blue accent for federated origin)
+$public-source-pill-bg-light: rgba(59, 130, 246, 0.1);
+$public-source-pill-color-light: #2563eb;
+$public-source-pill-hover-bg-light: rgba(59, 130, 246, 0.2);
+$public-source-pill-bg-dark: rgba(96, 165, 250, 0.15);
+$public-source-pill-color-dark: #93bbfd;
+$public-source-pill-hover-bg-dark: rgba(96, 165, 250, 0.25);
+
 // Interactive states
 $public-hover-overlay-light: rgba(0, 0, 0, 0.04);
 $public-hover-overlay-dark: rgba(255, 255, 255, 0.08);
@@ -640,6 +648,40 @@ $public-transition-slow: all $public-duration-slow $public-ease-in-out;
   @media (prefers-color-scheme: dark) {
     background-color: rgba(12, 74, 110, 0.3);
     color: #7dd3fc;
+  }
+}
+
+// ===== SOURCE CALENDAR PILL COMPONENT =====
+
+@mixin public-source-calendar-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: $public-space-xs;
+  padding: $public-space-xs 0.625rem;
+  border-radius: $public-radius-full;
+  font-size: $public-font-size-xs;
+  font-weight: $public-font-weight-medium;
+  background-color: $public-source-pill-bg-light;
+  color: $public-source-pill-color-light;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color $public-duration-fast $public-ease-out;
+
+  &:hover {
+    background-color: $public-source-pill-hover-bg-light;
+  }
+
+  &:focus-visible {
+    @include public-focus-visible;
+  }
+
+  @include public-dark-mode {
+    background-color: $public-source-pill-bg-dark;
+    color: $public-source-pill-color-dark;
+
+    &:hover {
+      background-color: $public-source-pill-hover-bg-dark;
+    }
   }
 }
 

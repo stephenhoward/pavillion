@@ -22,6 +22,7 @@ import { getRecurrenceText } from '@/common/utils/recurrence-text';
 // but is needed here to find all calendars that repost an event. This follows the
 // same cross-domain pattern used in events.ts for federation-related queries.
 import { SharedEventEntity } from "@/server/activitypub/entity/activitypub";
+import { resolveSourceCalendars, type RepostContext } from '../helper/source_calendar';
 
 const { RRule, RRuleSet } = rrule;
 
@@ -51,11 +52,19 @@ export default class EventInstanceService {
       where: { calendar_id: calendar.id },
       include: [{
         model: EventEntity,
-        include: [EventContentEntity, LocationEntity, EventScheduleEntity, MediaEntity],
+        include: [EventContentEntity, LocationEntity, EventScheduleEntity, MediaEntity, CalendarEntity],
       }],
     });
 
-    return eventInstances.map((instance) => instance.toModel());
+    const instances = eventInstances.map((instance) => instance.toModel());
+    const repostContexts: RepostContext[] = eventInstances.map((entity, i) => ({
+      event: instances[i].event,
+      displayCalendarId: entity.calendar_id,
+      eventCalendarId: entity.event?.calendar_id ?? null,
+      sourceCalendarUrlName: entity.event?.calendar?.url_name,
+    }));
+    await resolveSourceCalendars(repostContexts);
+    return instances;
   };
 
   async getEventInstanceById(instanceId: string): Promise<CalendarEventInstance> {
@@ -119,6 +128,7 @@ export default class EventInstanceService {
           include: [
             LocationEntity,
             MediaEntity,
+            CalendarEntity,
             {
               model: EventCategoryAssignmentEntity,
               as: 'categoryAssignments',
@@ -212,10 +222,10 @@ export default class EventInstanceService {
     }
 
     // Execute the query
-    const instances = await EventInstanceEntity.findAll(queryOptions);
+    const instanceEntities = await EventInstanceEntity.findAll(queryOptions);
 
     // Convert entities to models and augment with isRecurring
-    const mappedInstances = instances
+    const mappedInstances = instanceEntities
       // Belt-and-suspenders: eventInclude.required=true should prevent null events,
       // but guard defensively since Sequelize JOIN propagation can vary by dialect.
       .filter(instanceEntity => instanceEntity.event != null)
@@ -256,6 +266,16 @@ export default class EventInstanceService {
         return instance;
       });
 
+    // Resolve source calendar information for reposted events
+    const validEntities = instanceEntities.filter(e => e.event != null);
+    const repostContexts: RepostContext[] = validEntities.map((entity, i) => ({
+      event: mappedInstances[i].event,
+      displayCalendarId: entity.calendar_id,
+      eventCalendarId: entity.event?.calendar_id ?? null,
+      sourceCalendarUrlName: entity.event?.calendar?.url_name,
+    }));
+    await resolveSourceCalendars(repostContexts);
+
     return mappedInstances;
   }
 
@@ -282,6 +302,7 @@ export default class EventInstanceService {
           },
           EventScheduleEntity,
           MediaEntity,
+          CalendarEntity,
         ],
       }],
     });
@@ -308,6 +329,14 @@ export default class EventInstanceService {
 
     // Populate categories via the category service
     instance.event.categories = await this.categoryService.getEventCategories(instance.event.id);
+
+    // Resolve source calendar information for reposted events
+    await resolveSourceCalendars([{
+      event: instance.event,
+      displayCalendarId: eventInstance.calendar_id,
+      eventCalendarId: eventInstance.event?.calendar_id ?? null,
+      sourceCalendarUrlName: eventInstance.event?.calendar?.url_name,
+    }]);
 
     return instance;
   }

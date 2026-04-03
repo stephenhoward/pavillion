@@ -10,6 +10,11 @@
  * - Recurrence badge shows when isRecurring is true; hidden when false.
  * - No-image fallback renders when event has no media.
  * - Default image fallback: event.media ?? (isRepost ? null : defaultImage) ?? null
+ * - Source calendar pill renders for reposted events with sourceCalendar data.
+ * - Source calendar pill does NOT render when sourceCalendar is null.
+ * - Source calendar pill displays urlName@host format.
+ * - Source calendar pill links to source calendar URL.
+ * - Remote source calendar links open in new tab.
  */
 import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
@@ -72,6 +77,7 @@ function makeEvent(overrides: Record<string, any> = {}): CalendarEvent {
     categories: overrides.categories ?? [],
     isRecurring: overrides.isRecurring ?? false,
     isRepost: overrides.isRepost ?? false,
+    sourceCalendar: overrides.sourceCalendar ?? null,
     series: null,
   };
   return event as unknown as CalendarEvent;
@@ -152,6 +158,8 @@ beforeAll(async () => {
           system: {
             event_recurring: 'Recurring Event',
             event_location: 'Location',
+            event_source_calendar: 'Source Calendar',
+            event_source_calendar_label: 'View source calendar {{name}}',
           },
         },
       },
@@ -161,6 +169,8 @@ beforeAll(async () => {
     i18next.addResourceBundle('en', 'system', {
       event_recurring: 'Recurring Event',
       event_location: 'Location',
+      event_source_calendar: 'Source Calendar',
+      event_source_calendar_label: 'View source calendar {{name}}',
     }, true, true);
   }
 });
@@ -424,6 +434,98 @@ describe('EventCard', () => {
       // Event's own media takes priority even for reposts
       expect(wrapper.find('.event-image-stub').exists()).toBe(true);
       expect(wrapper.find('.no-image-fallback').exists()).toBe(false);
+      wrapper.unmount();
+    });
+  });
+
+  describe('source calendar pill', () => {
+    it('should show source calendar pill when event has sourceCalendar', async () => {
+      const event = makeEvent({
+        sourceCalendar: {
+          urlName: 'community-events',
+          host: 'other.instance.org',
+          url: 'https://other.instance.org/view/community-events',
+        },
+      });
+      const instance = makeInstance(event, '2026-07-15T19:00:00');
+      const wrapper = await mountEventCard(instance);
+
+      const pill = wrapper.find('.source-calendar-pill');
+      expect(pill.exists()).toBe(true);
+      wrapper.unmount();
+    });
+
+    it('should not show source calendar pill when sourceCalendar is null', async () => {
+      const event = makeEvent({ sourceCalendar: null });
+      const instance = makeInstance(event, '2026-07-15T19:00:00');
+      const wrapper = await mountEventCard(instance);
+
+      expect(wrapper.find('.source-calendar-pill').exists()).toBe(false);
+      wrapper.unmount();
+    });
+
+    it('should display urlName@host format in the pill text', async () => {
+      const event = makeEvent({
+        sourceCalendar: {
+          urlName: 'downtown-cal',
+          host: 'events.city.gov',
+          url: 'https://events.city.gov/view/downtown-cal',
+        },
+      });
+      const instance = makeInstance(event, '2026-07-15T19:00:00');
+      const wrapper = await mountEventCard(instance);
+
+      const pill = wrapper.find('.source-calendar-pill');
+      expect(pill.text()).toContain('downtown-cal@events.city.gov');
+      wrapper.unmount();
+    });
+
+    it('should link to the source calendar URL', async () => {
+      const event = makeEvent({
+        sourceCalendar: {
+          urlName: 'my-cal',
+          host: 'example.com',
+          url: 'https://example.com/view/my-cal',
+        },
+      });
+      const instance = makeInstance(event, '2026-07-15T19:00:00');
+      const wrapper = await mountEventCard(instance);
+
+      const pill = wrapper.find('.source-calendar-pill');
+      expect(pill.attributes('href')).toBe('https://example.com/view/my-cal');
+      wrapper.unmount();
+    });
+
+    it('should open remote links in a new tab with noopener noreferrer', async () => {
+      const event = makeEvent({
+        sourceCalendar: {
+          urlName: 'remote-cal',
+          host: 'remote.org',
+          url: 'https://remote.org/view/remote-cal',
+        },
+      });
+      const instance = makeInstance(event, '2026-07-15T19:00:00');
+      const wrapper = await mountEventCard(instance);
+
+      const pill = wrapper.find('.source-calendar-pill');
+      expect(pill.attributes('target')).toBe('_blank');
+      expect(pill.attributes('rel')).toBe('noopener noreferrer');
+      wrapper.unmount();
+    });
+
+    it('should have an aria-label with the source calendar name', async () => {
+      const event = makeEvent({
+        sourceCalendar: {
+          urlName: 'arts-cal',
+          host: 'arts.org',
+          url: 'https://arts.org/view/arts-cal',
+        },
+      });
+      const instance = makeInstance(event, '2026-07-15T19:00:00');
+      const wrapper = await mountEventCard(instance);
+
+      const pill = wrapper.find('.source-calendar-pill');
+      expect(pill.attributes('aria-label')).toContain('arts-cal@arts.org');
       wrapper.unmount();
     });
   });
