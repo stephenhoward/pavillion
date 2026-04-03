@@ -258,7 +258,8 @@ describe('EventObject', () => {
       const result = obj.toActivityPubObject();
 
       // endDate is for recurrence only — AP endTime should be synthesized as startTime + 1 hour
-      const expectedSynthesized = startDt.plus({ hours: 1 }).toISO();
+      // Use fromISO with setZone to match the production code's zone-preserving behavior
+      const expectedSynthesized = DateTime.fromISO(startDt.toISO()!, { setZone: true }).plus({ hours: 1 }).toISO();
       expect(result.endTime).toBe(expectedSynthesized);
     });
 
