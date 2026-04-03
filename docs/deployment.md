@@ -114,8 +114,10 @@ Check that containers are running:
 docker compose ps
 ```
 
-You should see two containers running:
+You should see four containers running:
 - `pavillion-app` - The application server
+- `pavillion-worker` - The background job processor
+- `pavillion-autoheal` - Container health monitor and auto-restarter
 - `pavillion-db` - The PostgreSQL database
 
 Test the health endpoint:
@@ -295,6 +297,7 @@ chmod 600 secrets/*.txt
 | Port | Service | Description |
 |------|---------|-------------|
 | 3000 | Application | HTTP application server (map to 80/443 via reverse proxy) |
+| 3001 | Worker | Health check endpoint (container-internal only, not exposed to host) |
 | 80 | Caddy | HTTP (standalone mode only, redirects to HTTPS) |
 | 443 | Caddy | HTTPS (standalone mode only, automatic Let's Encrypt) |
 | 5432 | PostgreSQL | Database (internal only, not exposed by default) |
@@ -308,6 +311,69 @@ chmod 600 secrets/*.txt
 | `./config/local.yaml` | `/app/config/local.yaml` | Instance configuration (bind mount) |
 | `pavillion-caddy-data` | `/data` | Caddy TLS certificates and state (standalone mode) |
 | `pavillion-caddy-config` | `/config` | Caddy runtime configuration (standalone mode) |
+
+## Health Monitoring & Auto-Recovery
+
+Pavillion includes automatic health monitoring and container recovery using [autoheal](https://github.com/willfarrell/docker-autoheal). When a monitored container becomes unhealthy, autoheal automatically restarts it without manual intervention.
+
+### How It Works
+
+The `pavillion-autoheal` container (`willfarrell/autoheal:1.2.0`) watches Docker health events and restarts any container that Docker reports as unhealthy. It runs as a lightweight Alpine-based sidecar (~5 MB) alongside the application stack.
+
+Monitoring is **scoped by label**: only containers with the `autoheal=true` label are monitored. In the default Compose configuration, this includes the `app` and `worker` containers. The database and Caddy containers are not monitored by autoheal and rely on their own `restart: unless-stopped` policies.
+
+### Health Check Endpoints
+
+Each monitored container has a Docker-native healthcheck that polls an HTTP endpoint:
+
+- **App container** (`pavillion-app`): `GET http://localhost:3000/health` -- the same public health endpoint used for deployment verification. Checked every 30 seconds with a 60-second start period.
+- **Worker container** (`pavillion-worker`): `GET http://localhost:3001/health` -- a minimal internal health server bound to `127.0.0.1:3001`. This port is container-internal only and is not exposed to the host or other containers. Checked every 30 seconds with a 120-second start period (longer because the worker waits for the app to be healthy first).
+
+### Autoheal Configuration
+
+The autoheal service uses the following settings:
+
+| Setting | Value | Description |
+|---------|-------|-------------|
+| `AUTOHEAL_CONTAINER_LABEL` | `autoheal` | Only restart containers with this label set to `true` |
+| `AUTOHEAL_INTERVAL` | `30` | Seconds between health check polls |
+| `AUTOHEAL_START_PERIOD` | `120` | Seconds to wait after autoheal starts before acting on unhealthy containers |
+
+### Viewing Restart Events
+
+Autoheal logs every restart action to stdout. To check whether any containers have been restarted:
+
+```bash
+# View autoheal logs
+docker compose logs autoheal
+
+# Follow autoheal logs in real time
+docker compose logs -f autoheal
+```
+
+You can also check the health status of all containers:
+
+```bash
+docker compose ps
+```
+
+The `STATUS` column will show `healthy`, `unhealthy`, or `health: starting` for containers with healthchecks configured.
+
+### No External Alerting
+
+Autoheal is a self-healing mechanism, not a monitoring or alerting system. Restart events are logged to the container's stdout and are visible through `docker compose logs`, but no external notifications are sent. If you need alerting for persistent failures, consider adding an external monitoring tool that watches container health status.
+
+### Docker Socket Security Note
+
+Autoheal requires read-write access to the Docker socket (`/var/run/docker.sock`) so it can issue restart commands to the Docker daemon. This is a common pattern for container management tools but grants the autoheal container the ability to manage other containers on the host.
+
+This is an accepted trade-off for automated recovery. To limit exposure:
+
+- Autoheal only acts on containers with the `autoheal=true` label, not all containers on the host
+- The autoheal image is pinned to a specific version (`1.2.0`) to avoid unexpected changes from upstream
+- The container runs with `restart: unless-stopped` so it recovers from its own failures
+
+If your security policy does not permit Docker socket access from containers, you can remove the `autoheal` service from `docker-compose.yml` and rely on Docker's built-in `restart: unless-stopped` policy for basic recovery. This provides restart-on-crash but not restart-on-unhealthy behavior.
 
 ## Podman Compatibility
 

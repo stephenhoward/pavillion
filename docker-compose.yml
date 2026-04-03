@@ -81,6 +81,8 @@ services:
       - jwt_secret
       - session_secret
       - encryption_key
+    labels:
+      - "autoheal=true"
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -141,6 +143,31 @@ services:
       - jwt_secret
       - session_secret
       - encryption_key
+    labels:
+      - "autoheal=true"
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      start_period: 120s
+      retries: 3
+
+  # Autoheal monitors container health and restarts unhealthy containers
+  autoheal:
+    image: willfarrell/autoheal:1.2.0
+    container_name: pavillion-autoheal
+    environment:
+      - AUTOHEAL_CONTAINER_LABEL=autoheal
+      - AUTOHEAL_INTERVAL=30
+      - AUTOHEAL_START_PERIOD=120
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
     logging:
       driver: "json-file"

@@ -11,6 +11,7 @@ import fs from 'fs';
  * - Database health check prevents premature app startup
  * - Development compose mounts source code correctly
  * - Named volumes persist data across restarts
+ * - Autoheal service and healthcheck configuration
  *
  * Note: These tests require Docker and Docker Compose to be installed.
  * Integration tests that start containers are skipped if Docker is unavailable.
@@ -108,6 +109,31 @@ describe('Docker Compose Configuration', () => {
 
       // Should use variable substitution for secrets
       expect(content).toMatch(/\$\{?DB_PASSWORD/);
+    });
+
+    it('should include autoheal service', () => {
+      const composePath = path.join(PROJECT_ROOT, 'docker-compose.yml');
+      const content = fs.readFileSync(composePath, 'utf8');
+
+      expect(content).toMatch(/\bautoheal:/);
+      expect(content).toMatch(/willfarrell\/autoheal:1\.2\.0/);
+    });
+
+    it('should configure autoheal labels on app and worker services', () => {
+      const composePath = path.join(PROJECT_ROOT, 'docker-compose.yml');
+      const content = fs.readFileSync(composePath, 'utf8');
+
+      // Both services should have autoheal=true label
+      // Match label within service blocks
+      expect(content).toMatch(/autoheal=true/);
+    });
+
+    it('should configure worker healthcheck targeting port 3001', () => {
+      const composePath = path.join(PROJECT_ROOT, 'docker-compose.yml');
+      const content = fs.readFileSync(composePath, 'utf8');
+
+      // Worker healthcheck should point to port 3001
+      expect(content).toMatch(/localhost:3001\/health/);
     });
   });
 

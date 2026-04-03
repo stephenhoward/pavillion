@@ -67,6 +67,101 @@ describe('Docker Configuration', () => {
     });
   });
 
+  describe('docker-compose.yml autoheal service', () => {
+    it('should include autoheal service with pinned image version', () => {
+      const composeContent = readFileSync('docker-compose.yml', 'utf-8');
+      const config = parseYaml(composeContent);
+
+      expect(config.services.autoheal).toBeDefined();
+      expect(config.services.autoheal.image).toBe('willfarrell/autoheal:1.2.0');
+    });
+
+    it('should configure autoheal environment variables', () => {
+      const composeContent = readFileSync('docker-compose.yml', 'utf-8');
+      const config = parseYaml(composeContent);
+
+      const env = config.services.autoheal.environment;
+      expect(env).toBeDefined();
+      expect(env).toContain('AUTOHEAL_CONTAINER_LABEL=autoheal');
+      expect(env).toContain('AUTOHEAL_INTERVAL=30');
+      expect(env).toContain('AUTOHEAL_START_PERIOD=120');
+    });
+
+    it('should mount Docker socket for autoheal', () => {
+      const composeContent = readFileSync('docker-compose.yml', 'utf-8');
+      const config = parseYaml(composeContent);
+
+      const volumes = config.services.autoheal.volumes;
+      expect(volumes).toBeDefined();
+
+      const hasDockerSocket = volumes.some((volume: string) =>
+        volume.includes('/var/run/docker.sock'),
+      );
+      expect(hasDockerSocket).toBe(true);
+    });
+
+    it('should set autoheal restart policy', () => {
+      const composeContent = readFileSync('docker-compose.yml', 'utf-8');
+      const config = parseYaml(composeContent);
+
+      expect(config.services.autoheal.restart).toBe('unless-stopped');
+    });
+  });
+
+  describe('docker-compose.yml autoheal labels', () => {
+    it('should set autoheal=true label on app service', () => {
+      const composeContent = readFileSync('docker-compose.yml', 'utf-8');
+      const config = parseYaml(composeContent);
+
+      const labels = config.services.app.labels;
+      expect(labels).toBeDefined();
+      expect(labels).toContain('autoheal=true');
+    });
+
+    it('should set autoheal=true label on worker service', () => {
+      const composeContent = readFileSync('docker-compose.yml', 'utf-8');
+      const config = parseYaml(composeContent);
+
+      const labels = config.services.worker.labels;
+      expect(labels).toBeDefined();
+      expect(labels).toContain('autoheal=true');
+    });
+  });
+
+  describe('docker-compose.yml worker healthcheck', () => {
+    it('should have a healthcheck block on the worker service', () => {
+      const composeContent = readFileSync('docker-compose.yml', 'utf-8');
+      const config = parseYaml(composeContent);
+
+      const healthcheck = config.services.worker.healthcheck;
+      expect(healthcheck).toBeDefined();
+    });
+
+    it('should configure worker healthcheck to query port 3001', () => {
+      const composeContent = readFileSync('docker-compose.yml', 'utf-8');
+      const config = parseYaml(composeContent);
+
+      const healthcheck = config.services.worker.healthcheck;
+      const testCmd = Array.isArray(healthcheck.test)
+        ? healthcheck.test.join(' ')
+        : healthcheck.test;
+
+      expect(testCmd).toContain('3001');
+      expect(testCmd).toContain('/health');
+    });
+
+    it('should configure worker healthcheck timing parameters', () => {
+      const composeContent = readFileSync('docker-compose.yml', 'utf-8');
+      const config = parseYaml(composeContent);
+
+      const healthcheck = config.services.worker.healthcheck;
+      expect(healthcheck.interval).toBeDefined();
+      expect(healthcheck.timeout).toBeDefined();
+      expect(healthcheck.retries).toBeGreaterThanOrEqual(1);
+      expect(healthcheck.start_period).toBeDefined();
+    });
+  });
+
   describe('bin/entrypoint.sh', () => {
     it('should detect --worker argument in command', () => {
       const entrypointContent = readFileSync('bin/entrypoint.sh', 'utf-8');
