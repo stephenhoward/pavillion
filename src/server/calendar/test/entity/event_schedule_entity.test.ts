@@ -32,6 +32,27 @@ describe('EventScheduleEntity', () => {
       expect(entity.end_date.getUTCHours()).toBe(10);
     });
 
+    it('stores local time digits as UTC in event_end_time', () => {
+      const startDate = DateTime.fromISO('2025-05-24T08:00:00.000', { zone: 'America/Los_Angeles' });
+      const schedule = new CalendarEventSchedule('sched-1', startDate);
+      schedule.eventEndTime = DateTime.fromISO('2025-05-24T17:30:00.000', { zone: 'America/Los_Angeles' });
+
+      const entity = EventScheduleEntity.fromModel(schedule);
+
+      expect(entity.event_end_time.getUTCHours()).toBe(17);
+      expect(entity.event_end_time.getUTCMinutes()).toBe(30);
+    });
+
+    it('stores undefined for event_end_time when eventEndTime is null', () => {
+      const startDate = DateTime.fromISO('2025-05-24T08:00:00.000', { zone: 'America/Los_Angeles' });
+      const schedule = new CalendarEventSchedule('sched-1', startDate);
+      schedule.eventEndTime = null;
+
+      const entity = EventScheduleEntity.fromModel(schedule);
+
+      expect(entity.event_end_time).toBeUndefined();
+    });
+
     it('falls back to UTC timezone when startDate is null', () => {
       const schedule = new CalendarEventSchedule('sched-1');
 
@@ -84,6 +105,46 @@ describe('EventScheduleEntity', () => {
       // And the local hour must be 8 (not converted back to UTC equivalent)
       expect(model.startDate?.hour).toBe(8);
       expect(model.endDate?.hour).toBe(10);
+    });
+
+    it('reinterprets UTC-stored event_end_time as the event timezone', () => {
+      const entity = EventScheduleEntity.build({
+        id: 'sched-et',
+        timezone: 'America/Los_Angeles',
+        start_date: new Date('2025-05-24T08:00:00.000Z'),
+        end_date: null,
+        event_end_time: new Date('2025-05-24T17:30:00.000Z'),
+        frequency: null,
+        interval: 0,
+        count: 0,
+        by_day: '',
+        is_exclusion: false,
+      });
+
+      const model = entity.toModel();
+
+      expect(model.eventEndTime?.zoneName).toBe('America/Los_Angeles');
+      expect(model.eventEndTime?.hour).toBe(17);
+      expect(model.eventEndTime?.minute).toBe(30);
+    });
+
+    it('handles null event_end_time gracefully', () => {
+      const entity = EventScheduleEntity.build({
+        id: 'sched-etn',
+        timezone: 'America/Chicago',
+        start_date: new Date('2025-05-24T08:00:00.000Z'),
+        end_date: null,
+        event_end_time: null,
+        frequency: null,
+        interval: 0,
+        count: 0,
+        by_day: '',
+        is_exclusion: false,
+      });
+
+      const model = entity.toModel();
+
+      expect(model.eventEndTime).toBeNull();
     });
 
     it('falls back to UTC zone when timezone field is empty', () => {
@@ -144,6 +205,19 @@ describe('EventScheduleEntity', () => {
       expect(recovered.startDate?.minute).toBe(0);
       expect(recovered.endDate?.hour).toBe(10);
       expect(recovered.endDate?.minute).toBe(30);
+    });
+
+    it('preserves eventEndTime through fromModel -> toModel', () => {
+      const localStart = DateTime.fromISO('2025-05-24T08:00:00.000', { zone: 'America/Los_Angeles' });
+      const schedule = new CalendarEventSchedule('sched-rt-et', localStart);
+      schedule.eventEndTime = DateTime.fromISO('2025-05-24T17:30:00.000', { zone: 'America/Los_Angeles' });
+
+      const entity = EventScheduleEntity.fromModel(schedule);
+      const recovered = entity.toModel();
+
+      expect(recovered.eventEndTime?.zoneName).toBe('America/Los_Angeles');
+      expect(recovered.eventEndTime?.hour).toBe(17);
+      expect(recovered.eventEndTime?.minute).toBe(30);
     });
 
     it('preserves timezone info through fromModel -> toModel', () => {

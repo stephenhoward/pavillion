@@ -681,6 +681,13 @@ class EventService {
   async createEventSchedule(eventId: string, scheduleParams: Record<string,any>): Promise<CalendarEventSchedule> {
     const schedule = CalendarEventSchedule.fromObject(scheduleParams);
 
+    // For non-recurring events, sync endDate to eventEndTime so the database
+    // consistently reflects when the event ends for both instance generation
+    // and direct schedule queries.
+    if (!schedule.frequency && schedule.eventEndTime) {
+      schedule.endDate = schedule.eventEndTime;
+    }
+
     schedule.id = uuidv4();
     const scheduleEntity = EventScheduleEntity.fromModel(schedule);
     scheduleEntity.event_id = eventId;

@@ -9,7 +9,7 @@ import { EventInstanceEntity } from "@/server/calendar/entity/event_instance";
 import { CalendarEntity } from "@/server/calendar/entity/calendar";
 import { MediaEntity } from "@/server/media/entity/media";
 import { Calendar } from "@/common/model/calendar";
-import { DateTime } from 'luxon';
+import { DateTime, Duration } from 'luxon';
 import rrule from 'rrule';
 import { LocationEntity, LocationContentEntity } from "@/server/calendar/entity/location";
 import { EventSeriesEntity, EventSeriesContentEntity } from '@/server/calendar/entity/event_series';
@@ -530,13 +530,27 @@ export default class EventInstanceService {
     return rruleSet;
   }
 
+  /**
+   * Generates event instances from the event's schedules using RRule.
+   * Computes instance end times by applying the duration derived from the first
+   * non-exclusion schedule's eventEndTime. If no eventEndTime is set, instances
+   * receive null end times.
+   *
+   * @param event - The event containing schedules to generate instances from
+   * @param count - Maximum number of instances to generate
+   * @returns Array of CalendarEventInstance with computed start and end times
+   */
   private generateInstances(event: CalendarEvent, count: number): CalendarEventInstance[] {
     const rruleSet = this.rrules(event);
 
-    let startToEndMatches: Record<string,DateTime> = {};
-    for (let schedule of event.schedules) {
-      if ( schedule.startDate && schedule.endDate ) {
-        startToEndMatches[schedule.startDate.toISO()!] = schedule.endDate;
+    // Compute duration from the first non-exclusion schedule that has both
+    // startDate and eventEndTime. This duration is applied to every generated
+    // instance so recurring occurrences inherit the correct event length.
+    let duration: Duration | null = null;
+    for (const schedule of event.schedules) {
+      if (!schedule.isExclusion && schedule.startDate && schedule.eventEndTime) {
+        duration = schedule.eventEndTime.diff(schedule.startDate);
+        break;
       }
     }
 
@@ -544,9 +558,7 @@ export default class EventInstanceService {
       .all((date: Date, i: number) => { return i < count; })
       .map((date: Date) => {
         const startDate = DateTime.fromJSDate(date);
-        const endDate = ( startDate.toISO()! in startToEndMatches )
-          ? startToEndMatches[startDate.toISO()!]
-          : null;
+        const endDate = duration ? startDate.plus(duration) : null;
 
         return CalendarEventInstance.fromObject({
           id: uuidv4(),

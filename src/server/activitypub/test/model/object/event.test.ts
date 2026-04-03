@@ -207,6 +207,38 @@ describe('EventObject', () => {
       expect(endMs - startMs).toBe(3600000);
     });
 
+    it('should use eventEndTime for AP endTime when eventEndTime is set', () => {
+      const calendar = new Calendar('calendar-uuid', 'mycal');
+      const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+      const startDt = DateTime.fromISO('2026-04-15T09:00:00.000Z');
+      const endDt = DateTime.fromISO('2026-04-15T12:00:00.000Z');
+      const eventEndTimeDt = DateTime.fromISO('2026-04-15T11:00:00.000Z');
+      const schedule = new CalendarEventSchedule('s1', startDt, endDt);
+      schedule.eventEndTime = eventEndTimeDt;
+      event.schedules = [schedule];
+      event.addContent(new CalendarEventContent('en', 'Event With End Time', ''));
+
+      const obj = new EventObject(calendar, event);
+      const result = obj.toActivityPubObject();
+
+      expect(result.endTime).toBe(eventEndTimeDt.toISO());
+    });
+
+    it('should fall back to endDate for AP endTime when eventEndTime is not set', () => {
+      const calendar = new Calendar('calendar-uuid', 'mycal');
+      const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+      const startDt = DateTime.fromISO('2026-04-15T09:00:00.000Z');
+      const endDt = DateTime.fromISO('2026-04-15T12:00:00.000Z');
+      const schedule = new CalendarEventSchedule('s1', startDt, endDt);
+      event.schedules = [schedule];
+      event.addContent(new CalendarEventContent('en', 'Event With End Date Only', ''));
+
+      const obj = new EventObject(calendar, event);
+      const result = obj.toActivityPubObject();
+
+      expect(result.endTime).toBe(endDt.toISO());
+    });
+
     it('should always include endTime in output', () => {
       const calendar = new Calendar('calendar-uuid', 'mycal');
       const event = new CalendarEvent('event-uuid', 'calendar-uuid');
