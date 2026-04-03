@@ -873,6 +873,7 @@ class EventService {
           await scheduleEntity.update({
             start_date: schedule.startDate ?? scheduleEntity.start_date,
             end_date: schedule.endDate ?? scheduleEntity.end_date,
+            event_end_time: schedule.eventEndTime ?? scheduleEntity.event_end_time,
             frequency: schedule.frequency ?? scheduleEntity.frequency,
             interval: schedule.interval ?? scheduleEntity.interval,
             count: schedule.count ?? scheduleEntity.count,
@@ -1072,6 +1073,7 @@ class EventService {
           await scheduleEntity.update({
             start_date: schedule.startDate ?? scheduleEntity.start_date,
             end_date: schedule.endDate ?? scheduleEntity.end_date,
+            event_end_time: schedule.eventEndTime ?? scheduleEntity.event_end_time,
             frequency: schedule.frequency ?? scheduleEntity.frequency,
             interval: schedule.interval ?? scheduleEntity.interval,
             count: schedule.count ?? scheduleEntity.count,
