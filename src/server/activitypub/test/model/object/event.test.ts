@@ -128,7 +128,9 @@ describe('EventObject', () => {
       event.addContent(new CalendarEventContent('en', 'Test Event', 'A test description'));
       const startDt = DateTime.fromISO('2026-04-15T09:00:00.000Z');
       const endDt = DateTime.fromISO('2026-04-15T12:00:00.000Z');
-      event.schedules = [new CalendarEventSchedule('s1', startDt, endDt)];
+      const schedule = new CalendarEventSchedule('s1', startDt, endDt);
+      schedule.eventEndTime = endDt;
+      event.schedules = [schedule];
       event.location = new EventLocation('loc-id', 'City Park');
 
       const obj = new EventObject(calendar, event);
@@ -243,7 +245,7 @@ describe('EventObject', () => {
     });
 
 
-    it('should fall back to endDate for AP endTime when eventEndTime is not set', () => {
+    it('should synthesize endTime when only endDate is set (endDate is not used for AP endTime)', () => {
       const calendar = new Calendar('calendar-uuid', 'mycal');
       const event = new CalendarEvent('event-uuid', 'calendar-uuid');
       const startDt = DateTime.fromISO('2026-04-15T09:00:00.000Z');
@@ -255,7 +257,9 @@ describe('EventObject', () => {
       const obj = new EventObject(calendar, event);
       const result = obj.toActivityPubObject();
 
-      expect(result.endTime).toBe(endDt.toISO());
+      // endDate is for recurrence only — AP endTime should be synthesized as startTime + 1 hour
+      const expectedSynthesized = startDt.plus({ hours: 1 }).toISO();
+      expect(result.endTime).toBe(expectedSynthesized);
     });
 
     it('should always include endTime in output', () => {

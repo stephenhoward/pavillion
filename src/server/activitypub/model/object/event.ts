@@ -122,9 +122,9 @@ class EventObject extends ActivityPubObject {
       result.content = `<p>${primaryDescription}</p>`;
     }
 
-    // endTime: prefer eventEndTime, fall back to endDate, otherwise synthesize startTime + 1 hour
+    // endTime: use eventEndTime if available, otherwise synthesize startTime + 1 hour
     const firstSchedule = event.schedules[0];
-    const endDateTime = firstSchedule?.eventEndTime ?? firstSchedule?.endDate;
+    const endDateTime = firstSchedule?.eventEndTime;
     if (endDateTime?.isValid) {
       result.endTime = endDateTime.toISO();
     }
