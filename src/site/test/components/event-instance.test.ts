@@ -19,6 +19,8 @@
  * - Location sidebar card displays location name and address.
  * - Accessibility sidebar card displays location accessibility info.
  * - Recurrence sidebar card displays human-readable recurrence text.
+ * - Source calendar pill renders for reposted events with sourceCalendar data.
+ * - Source calendar pill does NOT render when sourceCalendar is null.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises, VueWrapper } from '@vue/test-utils';
@@ -91,6 +93,13 @@ let mockSchedules: Array<{
   endDate: unknown;
 }> = [];
 
+// Mutable source calendar state so individual tests can inject source calendar data
+let mockSourceCalendar: {
+  urlName: string;
+  host: string;
+  url: string;
+} | null = null;
+
 vi.mock('@/site/service/calendar', () => {
   return {
     default: vi.fn().mockImplementation(() => ({
@@ -121,6 +130,7 @@ vi.mock('@/site/service/calendar', () => {
             location: mockLocation,
             series: mockSeries,
             schedules: mockSchedules,
+            sourceCalendar: mockSourceCalendar,
           },
         }),
       ),
@@ -290,6 +300,8 @@ beforeAll(async () => {
             event_accessibility: 'Accessibility',
             event_recurring: 'Recurring Event',
             event_location: 'Location',
+            event_source_calendar: 'Source Calendar',
+            event_source_calendar_label: 'View source calendar {{name}}',
           },
         },
       },
@@ -307,6 +319,8 @@ beforeAll(async () => {
       event_accessibility: 'Accessibility',
       event_recurring: 'Recurring Event',
       event_location: 'Location',
+      event_source_calendar: 'Source Calendar',
+      event_source_calendar_label: 'View source calendar {{name}}',
     }, true, true);
   }
 });
@@ -325,6 +339,7 @@ describe('eventInstance breadcrumb locale behaviour', () => {
     mockEventName = 'Test Event';
     mockSeries = null;
     mockSchedules = [];
+    mockSourceCalendar = null;
   });
 
   afterEach(() => {
@@ -404,6 +419,7 @@ describe('eventInstance category badge locale behaviour', () => {
     mockEventName = 'Test Event';
     mockSeries = null;
     mockSchedules = [];
+    mockSourceCalendar = null;
   });
 
   afterEach(() => {
@@ -586,6 +602,7 @@ describe('eventInstance location display', () => {
     mockEventName = 'Test Event';
     mockSeries = null;
     mockSchedules = [];
+    mockSourceCalendar = null;
   });
 
   afterEach(() => {
@@ -723,6 +740,7 @@ describe('eventInstance end time display', () => {
     mockEventName = 'Test Event';
     mockSeries = null;
     mockSchedules = [];
+    mockSourceCalendar = null;
   });
 
   afterEach(() => {
@@ -804,6 +822,7 @@ describe('eventInstance document.title', () => {
     mockEventName = 'Test Event';
     mockSeries = null;
     mockSchedules = [];
+    mockSourceCalendar = null;
     document.title = 'Pavillion'; // Reset to default before each test
   });
 
@@ -847,6 +866,7 @@ describe('eventInstance series link display', () => {
     mockEventName = 'Test Event';
     mockSeries = null;
     mockSchedules = [];
+    mockSourceCalendar = null;
   });
 
   afterEach(() => {
@@ -949,6 +969,7 @@ describe('eventInstance recurrence display', () => {
     mockEventName = 'Test Event';
     mockSeries = null;
     mockSchedules = [];
+    mockSourceCalendar = null;
   });
 
   afterEach(() => {
@@ -1032,6 +1053,122 @@ describe('eventInstance recurrence display', () => {
 
     expect(wrapper.find('.recurrence-badge').exists()).toBe(false);
     expect(wrapper.find('.recurrence-card').exists()).toBe(false);
+    wrapper.unmount();
+  });
+});
+
+describe('eventInstance source calendar pill', () => {
+  beforeEach(() => {
+    mockLocalizedPath.mockReset();
+    mockCurrentLocale.value = 'en';
+    mockCategories = [];
+    mockLocation = null;
+    mockEnd = null;
+    mockEventName = 'Test Event';
+    mockSeries = null;
+    mockSchedules = [];
+    mockSourceCalendar = null;
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should show source calendar pill when event has sourceCalendar', async () => {
+    mockSourceCalendar = {
+      urlName: 'community-events',
+      host: 'other.instance.org',
+      url: 'https://other.instance.org/view/community-events',
+    };
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    const pill = wrapper.find('.source-calendar-pill');
+    expect(pill.exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('should not show source calendar pill when sourceCalendar is null', async () => {
+    mockSourceCalendar = null;
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    expect(wrapper.find('.source-calendar-pill').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('should display urlName@host format in the pill text', async () => {
+    mockSourceCalendar = {
+      urlName: 'downtown-cal',
+      host: 'events.city.gov',
+      url: 'https://events.city.gov/view/downtown-cal',
+    };
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    const pill = wrapper.find('.source-calendar-pill');
+    expect(pill.text()).toContain('downtown-cal@events.city.gov');
+    wrapper.unmount();
+  });
+
+  it('should link to the source calendar URL', async () => {
+    mockSourceCalendar = {
+      urlName: 'my-cal',
+      host: 'example.com',
+      url: 'https://example.com/view/my-cal',
+    };
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    const pill = wrapper.find('.source-calendar-pill');
+    expect(pill.attributes('href')).toBe('https://example.com/view/my-cal');
+    wrapper.unmount();
+  });
+
+  it('should open remote links in a new tab with noopener noreferrer', async () => {
+    mockSourceCalendar = {
+      urlName: 'remote-cal',
+      host: 'remote.org',
+      url: 'https://remote.org/view/remote-cal',
+    };
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    const pill = wrapper.find('.source-calendar-pill');
+    expect(pill.attributes('target')).toBe('_blank');
+    expect(pill.attributes('rel')).toBe('noopener noreferrer');
+    wrapper.unmount();
+  });
+
+  it('should have an aria-label with the source calendar name', async () => {
+    mockSourceCalendar = {
+      urlName: 'arts-cal',
+      host: 'arts.org',
+      url: 'https://arts.org/view/arts-cal',
+    };
+
+    const wrapper = await mountInstance(
+      '/view/test_calendar/events/evt-1/inst-1',
+      (path) => path,
+    );
+
+    const pill = wrapper.find('.source-calendar-pill');
+    expect(pill.attributes('aria-label')).toContain('arts-cal@arts.org');
     wrapper.unmount();
   });
 });

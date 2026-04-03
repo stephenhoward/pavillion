@@ -85,6 +85,29 @@ const locationAccessibilityInfo = computed(() => {
   }
 });
 
+/**
+ * Returns the source calendar metadata for reposted events, or null.
+ */
+const sourceCalendar = computed(() => {
+  return state.instance?.event?.sourceCalendar ?? null;
+});
+
+/**
+ * Returns the display label for the source calendar pill (urlName@host).
+ */
+const sourceCalendarLabel = computed(() => {
+  if (!sourceCalendar.value) return '';
+  return `${sourceCalendar.value.urlName}@${sourceCalendar.value.host}`;
+});
+
+/**
+ * Returns true when the source calendar URL is a remote (external) link.
+ */
+const isRemoteSourceCalendar = computed(() => {
+  if (!sourceCalendar.value) return false;
+  return sourceCalendar.value.url.startsWith('http');
+});
+
 onBeforeMount(async () => {
   try {
     state.isLoading = true;
@@ -155,6 +178,19 @@ onBeforeMount(async () => {
         <Repeat :size="14" aria-hidden="true" />
         <span>{{ recurrenceText }}</span>
       </div>
+
+      <!-- Source calendar pill -->
+      <a
+        v-if="sourceCalendar"
+        :href="sourceCalendar.url"
+        class="source-calendar-pill"
+        :aria-label="t('event_source_calendar_label', { name: sourceCalendarLabel })"
+        :target="isRemoteSourceCalendar ? '_blank' : undefined"
+        :rel="isRemoteSourceCalendar ? 'noopener noreferrer' : undefined"
+      >
+        <Calendar :size="14" aria-hidden="true" />
+        <span>{{ sourceCalendarLabel }}</span>
+      </a>
 
       <!-- Event title -->
       <h1 class="instance-title">{{ localizedContent(state.instance.event).name }}</h1>
@@ -393,6 +429,43 @@ onBeforeMount(async () => {
   @include public-dark-mode {
     background-color: rgba(30, 30, 35, 0.85);
     color: $public-text-primary-dark;
+  }
+}
+
+// ================================================================
+// SOURCE CALENDAR PILL
+// ================================================================
+
+.source-calendar-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: $public-radius-full;
+  font-size: $public-font-size-xs;
+  font-weight: $public-font-weight-medium;
+  background-color: rgba(59, 130, 246, 0.1);
+  color: #2563eb;
+  text-decoration: none;
+  white-space: nowrap;
+  margin-bottom: $public-space-md;
+  transition: background-color $public-duration-fast $public-ease-out;
+
+  &:hover {
+    background-color: rgba(59, 130, 246, 0.2);
+  }
+
+  &:focus-visible {
+    @include public-focus-visible;
+  }
+
+  @include public-dark-mode {
+    background-color: rgba(96, 165, 250, 0.15);
+    color: #93bbfd;
+
+    &:hover {
+      background-color: rgba(96, 165, 250, 0.25);
+    }
   }
 }
 

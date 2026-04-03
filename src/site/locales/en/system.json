@@ -81,6 +81,8 @@
     "event_accessibility_venue": "Venue Accessibility",
     "event_recurring": "Recurring Event",
     "event_add_to_calendar": "Add to Calendar",
+    "event_source_calendar": "Source Calendar",
+    "event_source_calendar_label": "View source calendar {{name}}",
     "report": {
         "link_text": "Report Event",
         "form_title": "Report this Event",
