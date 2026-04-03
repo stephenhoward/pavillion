@@ -224,6 +224,25 @@ describe('EventObject', () => {
       expect(result.endTime).toBe(eventEndTimeDt.toISO());
     });
 
+    it('should use eventEndTime for AP endTime when eventEndTime is set and endDate is null (recurring events)', () => {
+      const calendar = new Calendar('calendar-uuid', 'mycal');
+      const event = new CalendarEvent('event-uuid', 'calendar-uuid');
+      const startDt = DateTime.fromISO('2026-04-15T09:00:00.000Z');
+      const eventEndTimeDt = DateTime.fromISO('2026-04-15T11:00:00.000Z');
+      const schedule = new CalendarEventSchedule('s1', startDt);
+      schedule.eventEndTime = eventEndTimeDt;
+      // endDate is null (typical for recurring events where endDate tracks recurrence end)
+      schedule.endDate = null;
+      event.schedules = [schedule];
+      event.addContent(new CalendarEventContent('en', 'Recurring Event With End Time', ''));
+
+      const obj = new EventObject(calendar, event);
+      const result = obj.toActivityPubObject();
+
+      expect(result.endTime).toBe(eventEndTimeDt.toISO());
+    });
+
+
     it('should fall back to endDate for AP endTime when eventEndTime is not set', () => {
       const calendar = new Calendar('calendar-uuid', 'mycal');
       const event = new CalendarEvent('event-uuid', 'calendar-uuid');
