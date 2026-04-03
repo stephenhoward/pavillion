@@ -363,7 +363,10 @@ class CalendarEventSchedule extends Model {
     schedule.isExclusion = obj.isException;
 
     if ( obj.eventEndTime ) {
-      schedule.eventEndTime = DateTime.fromISO(obj.eventEndTime);
+      const parsed = DateTime.fromISO(obj.eventEndTime);
+      if (parsed.isValid) {
+        schedule.eventEndTime = parsed;
+      }
     }
 
     return schedule;
