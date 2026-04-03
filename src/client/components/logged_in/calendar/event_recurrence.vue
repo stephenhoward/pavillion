@@ -207,17 +207,23 @@
         color: var(--pav-color-stone-300);
       }
 
-      > label:first-of-type {
-        display: block;
-        margin-bottom: 0.75rem;
-        font-weight: 500;
+      .weekday-chips {
+        display: flex;
+        gap: 0.5rem;
+        padding-bottom: 0.25rem;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        scrollbar-width: none;
+
+        &::-webkit-scrollbar {
+          display: none;
+        }
       }
 
       label {
         display: inline-flex;
         align-items: center;
-        margin-right: 0.5rem;
-        margin-bottom: 0.5rem;
+        flex-shrink: 0;
 
         input[type="checkbox"] {
           // Hide the actual checkbox
@@ -556,9 +562,11 @@
 
       <div class="week-parameters" v-if="props.schedule.frequency === 'weekly'">
         {{ t('on_weekday_label') }}:
-        <label v-for="day in Object.keys(state.weekdays)">
-          <input type="checkbox" v-model="state.weekdays[day]" @change="compileRecurrence()" /> {{ t(day) }}
-        </label>
+        <div class="weekday-chips">
+          <label v-for="day in Object.keys(state.weekdays)">
+            <input type="checkbox" v-model="state.weekdays[day]" @change="compileRecurrence()" /> <span>{{ t(day) }}</span>
+          </label>
+        </div>
       </div>
 
       <div class="month-parameters" v-if="props.schedule.frequency == 'monthly'" >
