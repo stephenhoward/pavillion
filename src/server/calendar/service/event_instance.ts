@@ -1,5 +1,6 @@
 import { EventEmitter } from "events";
 import { v4 as uuidv4 } from 'uuid';
+import config from 'config';
 import { CalendarEvent, EventFrequency } from "@/common/model/events";
 import CalendarEventInstance from "@/common/model/event_instance";
 import { EventContentEntity, EventEntity, EventScheduleEntity } from "@/server/calendar/entity/event";
@@ -22,6 +23,9 @@ import { getRecurrenceText } from '@/common/utils/recurrence-text';
 // but is needed here to find all calendars that repost an event. This follows the
 // same cross-domain pattern used in events.ts for federation-related queries.
 import { SharedEventEntity } from "@/server/activitypub/entity/activitypub";
+// Deliberate cross-domain import: EventObjectEntity is needed to resolve the
+// attributed_to actor URI for remote reposted events.
+import { EventObjectEntity } from "@/server/activitypub/entity/event_object";
 
 const { RRule, RRuleSet } = rrule;
 
@@ -51,11 +55,13 @@ export default class EventInstanceService {
       where: { calendar_id: calendar.id },
       include: [{
         model: EventEntity,
-        include: [EventContentEntity, LocationEntity, EventScheduleEntity, MediaEntity],
+        include: [EventContentEntity, LocationEntity, EventScheduleEntity, MediaEntity, CalendarEntity],
       }],
     });
 
-    return eventInstances.map((instance) => instance.toModel());
+    const instances = eventInstances.map((instance) => instance.toModel());
+    await this.resolveSourceCalendars(instances, eventInstances);
+    return instances;
   };
 
   async getEventInstanceById(instanceId: string): Promise<CalendarEventInstance> {
@@ -119,6 +125,7 @@ export default class EventInstanceService {
           include: [
             LocationEntity,
             MediaEntity,
+            CalendarEntity,
             {
               model: EventCategoryAssignmentEntity,
               as: 'categoryAssignments',
@@ -212,10 +219,10 @@ export default class EventInstanceService {
     }
 
     // Execute the query
-    const instances = await EventInstanceEntity.findAll(queryOptions);
+    const instanceEntities = await EventInstanceEntity.findAll(queryOptions);
 
     // Convert entities to models and augment with isRecurring
-    const mappedInstances = instances
+    const mappedInstances = instanceEntities
       // Belt-and-suspenders: eventInclude.required=true should prevent null events,
       // but guard defensively since Sequelize JOIN propagation can vary by dialect.
       .filter(instanceEntity => instanceEntity.event != null)
@@ -256,6 +263,9 @@ export default class EventInstanceService {
         return instance;
       });
 
+    // Resolve source calendar information for reposted events
+    await this.resolveSourceCalendars(mappedInstances, instanceEntities.filter(e => e.event != null));
+
     return mappedInstances;
   }
 
@@ -282,6 +292,7 @@ export default class EventInstanceService {
           },
           EventScheduleEntity,
           MediaEntity,
+          CalendarEntity,
         ],
       }],
     });
@@ -308,6 +319,9 @@ export default class EventInstanceService {
 
     // Populate categories via the category service
     instance.event.categories = await this.categoryService.getEventCategories(instance.event.id);
+
+    // Resolve source calendar information for reposted events
+    await this.resolveSourceCalendars([instance], [eventInstance]);
 
     return instance;
   }
@@ -450,6 +464,116 @@ export default class EventInstanceService {
           event: event.toModel(),
         });
       }
+    }
+  }
+
+  /**
+   * Resolves source calendar information for reposted events in a batch of instances.
+   * Detects local and remote reposts, then populates isRepost and sourceCalendar
+   * on each instance's event model.
+   *
+   * Repost detection:
+   * - event.calendar_id !== null && !== instance.calendar_id -> local repost
+   * - event.calendar_id === null -> remote repost (federated event)
+   *
+   * @param instances - Model instances to augment (mutated in place)
+   * @param entities - Corresponding entity instances for reading calendar_id and eager-loaded calendar
+   */
+  private async resolveSourceCalendars(
+    instances: CalendarEventInstance[],
+    entities: EventInstanceEntity[],
+  ): Promise<void> {
+    // Build a map from instance ID to entity for quick lookup
+    const entityMap = new Map<string, EventInstanceEntity>();
+    for (const entity of entities) {
+      entityMap.set(entity.id, entity);
+    }
+
+    // Collect remote event IDs that need EventObjectEntity lookup
+    const remoteEventIds: string[] = [];
+
+    for (const instance of instances) {
+      const entity = entityMap.get(instance.id);
+      if (!entity) continue;
+
+      const eventCalendarId = entity.event?.calendar_id ?? instance.event.calendarId;
+      const instanceCalendarId = entity.calendar_id;
+
+      if (eventCalendarId === null) {
+        // Remote repost - will resolve via EventObjectEntity below
+        instance.event.isRepost = true;
+        remoteEventIds.push(instance.event.id);
+      }
+      else if (eventCalendarId !== instanceCalendarId) {
+        // Local repost - resolve from eager-loaded CalendarEntity
+        instance.event.isRepost = true;
+        const calendar = entity.event?.calendar;
+        if (calendar) {
+          const domain: string = config.get('domain');
+          instance.event.sourceCalendar = {
+            urlName: calendar.url_name,
+            host: domain,
+            url: `/view/${calendar.url_name}`,
+          };
+        }
+      }
+      // else: not a repost, defaults are already correct (isRepost=false, sourceCalendar=null)
+    }
+
+    // Batch-resolve remote reposts via EventObjectEntity
+    if (remoteEventIds.length > 0) {
+      const eventObjects = await EventObjectEntity.findAll({
+        where: { event_id: { [Op.in]: remoteEventIds } },
+      });
+
+      const objectMap = new Map<string, EventObjectEntity>();
+      for (const obj of eventObjects) {
+        objectMap.set(obj.event_id, obj);
+      }
+
+      for (const instance of instances) {
+        if (instance.event.isRepost && instance.event.sourceCalendar === null) {
+          const eventObject = objectMap.get(instance.event.id);
+          if (eventObject?.attributed_to) {
+            const parsed = this.parseAttributedToUri(eventObject.attributed_to);
+            if (parsed) {
+              instance.event.sourceCalendar = parsed;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Parses an ActivityPub attributed_to URI to extract source calendar information.
+   * Expected format: https://{host}/calendars/{urlName}
+   *
+   * @param uri - The attributed_to URI to parse
+   * @returns Source calendar info or null if parsing fails
+   */
+  private parseAttributedToUri(uri: string): { urlName: string; host: string; url: string } | null {
+    try {
+      const url = new URL(uri);
+      // Remove trailing slash and split path segments
+      const segments = url.pathname.replace(/\/$/, '').split('/').filter(Boolean);
+
+      // Expected pattern: /calendars/{urlName}
+      const calendarIndex = segments.indexOf('calendars');
+      if (calendarIndex === -1 || calendarIndex + 1 >= segments.length) {
+        return null;
+      }
+
+      const urlName = segments[calendarIndex + 1];
+      return {
+        urlName,
+        host: url.host,
+        url: `${url.protocol}//${url.host}/view/${urlName}`,
+      };
+    }
+    catch {
+      // Malformed URI - return null gracefully
+      return null;
     }
   }
 
