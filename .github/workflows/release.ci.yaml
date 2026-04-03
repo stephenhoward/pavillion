@@ -4,8 +4,37 @@ on:
   release:
     types: [released]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  arm_tests:
+    uses: ./.github/workflows/run_tests.yaml
+    with:
+      platform: linux/arm64
+      runner: ubuntu-24.04-arm
+  x86_tests:
+    uses: ./.github/workflows/run_tests.yaml
+    with:
+      platform: linux/amd64
+      runner: ubuntu-latest
+  arm_e2e:
+    needs: arm_tests
+    uses: ./.github/workflows/run_e2e_tests.yaml
+    with:
+      platform: linux/arm64
+      runner: ubuntu-24.04-arm
+  x86_e2e:
+    needs: x86_tests
+    uses: ./.github/workflows/run_e2e_tests.yaml
+    with:
+      platform: linux/amd64
+      runner: ubuntu-latest
+  federation_tests:
+    uses: ./.github/workflows/run_federation_tests.yaml
   publish_images:
+    needs: [arm_e2e, x86_e2e, federation_tests]
     uses: ./.github/workflows/release_docker_images.yaml
     permissions:
       contents: read
