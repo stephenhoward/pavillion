@@ -431,35 +431,7 @@ h3 {
 // ================================================================
 
 .source-calendar-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.25rem 0.625rem;
-  border-radius: $public-radius-full;
-  font-size: $public-font-size-xs;
-  font-weight: $public-font-weight-medium;
-  background-color: rgba(59, 130, 246, 0.1);
-  color: #2563eb;
-  text-decoration: none;
-  white-space: nowrap;
-  transition: background-color $public-duration-fast $public-ease-out;
+  @include public-source-calendar-pill;
   align-self: flex-start;
-
-  &:hover {
-    background-color: rgba(59, 130, 246, 0.2);
-  }
-
-  &:focus-visible {
-    @include public-focus-visible;
-  }
-
-  @include public-dark-mode {
-    background-color: rgba(96, 165, 250, 0.15);
-    color: #93bbfd;
-
-    &:hover {
-      background-color: rgba(96, 165, 250, 0.25);
-    }
-  }
 }
 </style>
