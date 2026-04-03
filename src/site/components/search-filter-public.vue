@@ -721,7 +721,7 @@ onUnmounted(() => {
 
 .search-filter-public {
   @include filter-container;
-  // All layout styles provided by mixin
+  @include public-container-constrained;
 }
 
 // Search + Date Row (side-by-side at all viewport widths)
