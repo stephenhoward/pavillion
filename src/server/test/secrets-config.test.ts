@@ -76,11 +76,11 @@ describe('Secrets Configuration', () => {
       expect(typeof fundingConfig.encryptionKey).toBe('string');
     });
 
-    it('should mark funding.encryptionKey as development-only', () => {
+    it('should have a valid 64-character hex encryption key for development', () => {
       const fundingConfig = defaultConfig.funding as Record<string, unknown>;
 
-      // Should be clearly marked as development-only so operators know to replace it
-      expect(fundingConfig.encryptionKey).toContain('development-only');
+      // Must be a 64-char hex string (32 bytes for AES-256-CBC)
+      expect(fundingConfig.encryptionKey).toMatch(/^[0-9a-f]{64}$/);
     });
   });
 
