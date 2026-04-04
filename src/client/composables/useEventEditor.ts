@@ -312,7 +312,7 @@ export function useEventEditor(defaultLanguage: string = 'en') {
       else {
         // Create mode: Initialize new event
         // Check for pre-selected calendar from store
-        const preSelectedCalendar = calendarStore.getLastInteractedCalendar;
+        const preSelectedCalendar = calendarStore.selectedCalendar;
 
         if (preSelectedCalendar) {
           state.event = initializeNewEvent(preSelectedCalendar);
