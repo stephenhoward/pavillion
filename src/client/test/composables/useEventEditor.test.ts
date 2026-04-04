@@ -23,7 +23,7 @@ const mockRouter = {
 };
 
 const mockCalendarStore = {
-  getLastInteractedCalendar: null,
+  selectedCalendar: null,
   setSelectedCalendar: vi.fn(),
 };
 
@@ -79,7 +79,7 @@ describe('useEventEditor', () => {
     mockRoute.params = {};
     mockRoute.query = {};
     mockRouter.push.mockClear();
-    mockCalendarStore.getLastInteractedCalendar = null;
+    mockCalendarStore.selectedCalendar = null;
     mockCalendarStore.setSelectedCalendar.mockClear();
     mockStripEventForDuplication.mockClear();
     mockToast.success.mockClear();
@@ -210,7 +210,7 @@ describe('useEventEditor', () => {
     it('should use preselected calendar from store', async () => {
       const calendar1 = new Calendar('cal-1', 'calendar-1');
       const calendar2 = new Calendar('cal-2', 'calendar-2');
-      mockCalendarStore.getLastInteractedCalendar = calendar2;
+      mockCalendarStore.selectedCalendar = calendar2;
 
       sandbox.stub(CalendarService.prototype, 'loadCalendars').resolves([calendar1, calendar2]);
 
@@ -1013,7 +1013,7 @@ describe('useEventEditor', () => {
 
       const { state, initializeEvent } = useEventEditor();
 
-      mockCalendarStore.getLastInteractedCalendar = calendar2;
+      mockCalendarStore.selectedCalendar = calendar2;
 
       await initializeEvent();
 

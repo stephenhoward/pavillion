@@ -129,8 +129,8 @@ vi.mock('@/client/composables/useEventDuplication', () => ({
 vi.mock('@/client/stores/calendarStore', () => ({
   useCalendarStore: () => ({
 
-    getLastInteractedCalendar: null,
-    setLastInteractedCalendar: vi.fn(),
+    selectedCalendar: null,
+    setSelectedCalendar: vi.fn(),
     calendars: [],
     addCalendar: vi.fn(),
   }),

@@ -67,7 +67,7 @@ const newEvent = async () => {
       return;
     }
     else if (calendars.length === 1) {
-      calendarStore.setLastInteractedCalendar(calendars[0].id);
+      calendarStore.setSelectedCalendar(calendars[0].id);
       router.push({ name: 'event_new' });
     }
     else {
@@ -84,7 +84,7 @@ const newEvent = async () => {
  */
 const onCalendarSelected = (calendar: { id: string }) => {
   showCalendarSelector.value = false;
-  calendarStore.setLastInteractedCalendar(calendar.id);
+  calendarStore.setSelectedCalendar(calendar.id);
   router.push({ name: 'event_new' });
 };
 
