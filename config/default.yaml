@@ -39,7 +39,7 @@ session:
 # In production, ENCRYPTION_KEY must be set via environment variable
 # Generate with: openssl rand -hex 32
 funding:
-  encryptionKey: 'development-only-do-not-use-prod'
+  encryptionKey: '0a301f6ce8380d582acb2d5eb29109beeb722423261ae8bdad142210d89fe095'
 
 # Moderation configuration
 moderation:

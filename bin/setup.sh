@@ -110,6 +110,11 @@ generate_secret() {
   openssl rand -base64 32
 }
 
+# Generate a 32-byte hex key for AES-256-CBC encryption
+generate_encryption_key() {
+  openssl rand -hex 32
+}
+
 # Create the .env file
 create_env_file() {
   local jwt_secret="$1"
@@ -350,7 +355,7 @@ main() {
   jwt_secret=$(generate_secret)
   session_secret=$(generate_secret)
   email_hash_secret=$(generate_secret)
-  encryption_key=$(generate_secret)
+  encryption_key=$(generate_encryption_key)
   db_password=$(generate_secret)
 
   print_success "Generated 5 unique secrets"
