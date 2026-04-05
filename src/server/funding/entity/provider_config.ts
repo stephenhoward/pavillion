@@ -12,7 +12,15 @@ if (!config.has('funding.encryptionKey')) {
   );
 }
 
-const ENCRYPTION_KEY = config.get<string>('funding.encryptionKey');
+const ENCRYPTION_KEY_HEX = config.get<string>('funding.encryptionKey');
+const ENCRYPTION_KEY = Buffer.from(ENCRYPTION_KEY_HEX, 'hex');
+
+if (ENCRYPTION_KEY.length !== 32) {
+  throw new Error(
+    `Invalid encryption key: expected 32 bytes (64 hex chars), got ${ENCRYPTION_KEY.length} bytes. ` +
+    'Generate with: openssl rand -hex 32',
+  );
+}
 
 const ALGORITHM = 'aes-256-cbc';
 const IV_LENGTH = 16;
@@ -24,10 +32,7 @@ function encrypt(text: string): string {
   // TODO: REMOVE DEBUG LOGGING - Stripe credential save debugging
   console.log('[DEBUG][ENTITY] encrypt() called, input length:', text?.length);
   const iv = crypto.randomBytes(IV_LENGTH);
-  const keyBuffer = Buffer.from(ENCRYPTION_KEY);
-  // TODO: REMOVE DEBUG LOGGING - Stripe credential save debugging
-  console.log('[DEBUG][ENTITY] encryption key buffer length:', keyBuffer.length, '(must be 32 for aes-256-cbc)');
-  const cipher = crypto.createCipheriv(ALGORITHM, keyBuffer, iv);
+  const cipher = crypto.createCipheriv(ALGORITHM, ENCRYPTION_KEY, iv);
   let encrypted = cipher.update(text, 'utf8', 'hex');
   encrypted += cipher.final('hex');
   const result = iv.toString('hex') + ':' + encrypted;
@@ -43,7 +48,7 @@ function decrypt(text: string): string {
   const parts = text.split(':');
   const iv = Buffer.from(parts[0], 'hex');
   const encryptedText = parts[1];
-  const decipher = crypto.createDecipheriv(ALGORITHM, Buffer.from(ENCRYPTION_KEY), iv);
+  const decipher = crypto.createDecipheriv(ALGORITHM, ENCRYPTION_KEY, iv);
   let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
   decrypted += decipher.final('utf8');
   return decrypted;
