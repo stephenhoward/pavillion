@@ -52,6 +52,13 @@ describe('Event Deletion and Update Authorization - IDOR Prevention', () => {
     const setupInterface = new SetupInterface();
     accountsInterface = new AccountsInterface(eventBus, configurationInterface, setupInterface);
     calendarInterface = new CalendarInterface(eventBus, accountsInterface, configurationInterface);
+
+    // Inject a minimal AP interface stub. No AP domain is wired in this test
+    // environment; returning null/[] keeps local-only code paths correct.
+    calendarInterface.setActivityPubInterface({
+      getSharedEventIds: async () => [],
+      findCalendarActorByCalendarId: async () => null,
+    } as any);
     accountService = new AccountService(eventBus, configurationInterface, setupInterface);
 
     // Create owner account and calendar

@@ -1,4 +1,6 @@
 import { EventEmitter } from 'events';
+import { Op } from 'sequelize';
+import { v4 as uuidv4 } from 'uuid';
 import { Account } from '@/common/model/account';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent } from '@/common/model/events';
@@ -10,8 +12,10 @@ import ActivityPubMemberService from '@/server/activitypub/service/members';
 import ActivityPubServerService from '@/server/activitypub/service/server';
 import ProcessInboxService from '../service/inbox';
 import ProcessOutboxService from '../service/outbox';
-import { ActivityPubOutboxMessageEntity, ActivityPubInboxMessageEntity } from '@/server/activitypub/entity/activitypub';
+import { ActivityPubOutboxMessageEntity, ActivityPubInboxMessageEntity, FollowingCalendarEntity, SharedEventEntity } from '@/server/activitypub/entity/activitypub';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
+import { CalendarActorEntity, CalendarActor } from '@/server/activitypub/entity/calendar_actor';
+import { UserActorEntity } from '@/server/activitypub/entity/user_actor';
 import CalendarInterface from '@/server/calendar/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import ModerationInterface from '@/server/moderation/interface';
@@ -231,5 +235,165 @@ export default class ActivityPubInterface {
   async getEventSourceActorUri(eventId: string): Promise<string | null> {
     const eventObject = await EventObjectEntity.findOne({ where: { event_id: eventId } });
     return eventObject?.attributed_to ?? null;
+  }
+
+  /**
+   * Finds the CalendarActor for a given calendar ID.
+   * Checks remote_calendar_id first (for remote calendars whose UUID was sent
+   * in an Add activity), then falls back to calendar_id (for local actors).
+   *
+   * @param calendarId - The calendar UUID to look up
+   * @returns The CalendarActor model, or null if not found
+   */
+  async findCalendarActorByCalendarId(calendarId: string): Promise<CalendarActor | null> {
+    const byRemoteId = await CalendarActorEntity.findOne({
+      where: { remote_calendar_id: calendarId },
+    });
+    if (byRemoteId) {
+      return byRemoteId.toModel();
+    }
+
+    const byLocalId = await CalendarActorEntity.findOne({
+      where: { calendar_id: calendarId },
+    });
+    return byLocalId?.toModel() ?? null;
+  }
+
+  /**
+   * Gets the IDs of all events shared (reposted) to a given calendar.
+   *
+   * @param calendarId - The calendar UUID
+   * @returns Array of event ID strings
+   */
+  async getSharedEventIds(calendarId: string): Promise<string[]> {
+    const sharedEvents = await SharedEventEntity.findAll({
+      where: { calendar_id: calendarId },
+      attributes: ['event_id'],
+    });
+    return sharedEvents.map((se) => se.event_id);
+  }
+
+  /**
+   * Gets the IDs of all calendars that have shared (reposted) a given event.
+   *
+   * @param eventId - The event UUID
+   * @returns Array of calendar ID strings
+   */
+  async getCalendarIdsForSharedEvent(eventId: string): Promise<string[]> {
+    const sharedEvents = await SharedEventEntity.findAll({
+      where: { event_id: eventId },
+    });
+    return sharedEvents.map((se) => se.calendar_id);
+  }
+
+  /**
+   * Gets the ActivityPub actor URI for a user account.
+   *
+   * @param accountId - The account UUID
+   * @returns The actor URI string, or null if no user actor exists
+   */
+  async getUserActorUri(accountId: string): Promise<string | null> {
+    const userActor = await UserActorEntity.findOne({
+      where: { account_id: accountId },
+    });
+    return userActor?.actor_uri ?? null;
+  }
+
+  /**
+   * Finds a user actor by its ActivityPub URI.
+   *
+   * @param actorUri - The ActivityPub actor URI to look up
+   * @returns Plain object with id and actorUri, or null if not found
+   */
+  async findUserActorByUri(actorUri: string): Promise<{ id: string; actorUri: string } | null> {
+    const userActor = await UserActorEntity.findOne({
+      where: { actor_uri: actorUri },
+    });
+    if (!userActor) {
+      return null;
+    }
+    return { id: userActor.id, actorUri: userActor.actor_uri };
+  }
+
+  /**
+   * Finds or creates a remote user actor entity.
+   * Used when processing federation activities from remote Person actors.
+   *
+   * @param actorUri - The remote actor's ActivityPub URI
+   * @param preferredUsername - The remote actor's preferred username
+   * @param domain - The remote actor's domain
+   * @param publicKey - Optional public key for HTTP signature verification
+   * @returns Object with the actor's id
+   */
+  async findOrCreateRemoteUserActor(
+    actorUri: string,
+    preferredUsername: string,
+    domain: string,
+    publicKey?: string,
+  ): Promise<{ id: string }> {
+    const [entity] = await UserActorEntity.findOrCreate({
+      where: { actor_uri: actorUri },
+      defaults: {
+        id: uuidv4(),
+        actor_type: 'remote',
+        account_id: null,
+        actor_uri: actorUri,
+        remote_username: preferredUsername,
+        remote_domain: domain,
+        public_key: publicKey || null,
+        private_key: null,
+      },
+    });
+    return { id: entity.id };
+  }
+
+  /**
+   * Validates that a calendar actor exists and is in the following list for a calendar.
+   * Throws if the actor is not found or is not being followed.
+   *
+   * @param calendarId - The calendar UUID
+   * @param actorId - The calendar actor UUID
+   * @returns The CalendarActor model
+   * @throws Error if actor not found or not in following list
+   */
+  async getActorInFollowing(calendarId: string, actorId: string): Promise<CalendarActor> {
+    const actor = await CalendarActorEntity.findByPk(actorId);
+    if (!actor) {
+      throw new Error('actor not found');
+    }
+
+    const follow = await FollowingCalendarEntity.findOne({
+      where: { calendar_actor_id: actorId, calendar_id: calendarId },
+    });
+    if (!follow) {
+      throw new Error('actor is not in the following list for this calendar');
+    }
+
+    return actor.toModel();
+  }
+
+  /**
+   * Batch-resolves the source actor URIs for a set of event IDs.
+   * Returns a map from event ID to the attributed_to actor URI.
+   *
+   * @param eventIds - Array of event UUIDs to look up
+   * @returns Map from event ID to attributed_to actor URI
+   */
+  async getEventSourceActorUris(eventIds: string[]): Promise<Map<string, string>> {
+    if (eventIds.length === 0) {
+      return new Map();
+    }
+
+    const eventObjects = await EventObjectEntity.findAll({
+      where: { event_id: { [Op.in]: eventIds } },
+    });
+
+    const result = new Map<string, string>();
+    for (const obj of eventObjects) {
+      if (obj.attributed_to) {
+        result.set(obj.event_id, obj.attributed_to);
+      }
+    }
+    return result;
   }
 }

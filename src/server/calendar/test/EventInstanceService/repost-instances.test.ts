@@ -6,17 +6,27 @@ import { CalendarEvent, CalendarEventSchedule } from '@/common/model/events';
 import { EventScheduleEntity } from '../../entity/event';
 import { EventInstanceEntity } from '../../entity/event_instance';
 import { EventRepostEntity } from '../../entity/event_repost';
-import { SharedEventEntity } from '@/server/activitypub/entity/activitypub';
 import { CalendarEntity } from '../../entity/calendar';
 import { DateTime } from 'luxon';
 
 describe('EventInstanceService repost instance methods', () => {
   let sandbox: sinon.SinonSandbox;
   let service: EventInstanceService;
+  let mockApInterface: {
+    getCalendarIdsForSharedEvent: sinon.SinonStub;
+    getEventSourceActorUris: sinon.SinonStub;
+    actorUrl: sinon.SinonStub;
+  };
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
     service = new EventInstanceService(new EventEmitter());
+    mockApInterface = {
+      getCalendarIdsForSharedEvent: sandbox.stub().resolves([]),
+      getEventSourceActorUris: sandbox.stub().resolves(new Map()),
+      actorUrl: sandbox.stub().resolves(''),
+    };
+    service.setActivityPubInterface(mockApInterface as any);
   });
 
   afterEach(() => {
@@ -154,11 +164,10 @@ describe('EventInstanceService repost instance methods', () => {
   });
 
   describe('rebuildAllRepostInstances', () => {
-    it('should query both EventRepostEntity and SharedEventEntity', async () => {
+    it('should query EventRepostEntity and AP interface for shared events', async () => {
       const event = createTestEvent('event-123', 'original-calendar');
 
       const repostFindAllStub = sandbox.stub(EventRepostEntity, 'findAll').resolves([]);
-      const sharedFindAllStub = sandbox.stub(SharedEventEntity, 'findAll').resolves([]);
 
       await service.rebuildAllRepostInstances(event);
 
@@ -166,10 +175,8 @@ describe('EventInstanceService repost instance methods', () => {
       expect(repostFindAllStub.firstCall.args[0]).toEqual({
         where: { event_id: event.id },
       });
-      expect(sharedFindAllStub.calledOnce).toBe(true);
-      expect(sharedFindAllStub.firstCall.args[0]).toEqual({
-        where: { event_id: event.id },
-      });
+      expect(mockApInterface.getCalendarIdsForSharedEvent.calledOnce).toBe(true);
+      expect(mockApInterface.getCalendarIdsForSharedEvent.firstCall.args[0]).toBe(event.id);
     });
 
     it('should filter out the original calendar', async () => {
@@ -179,7 +186,6 @@ describe('EventInstanceService repost instance methods', () => {
         { calendar_id: 'original-calendar' } as any,
         { calendar_id: 'repost-calendar-1' } as any,
       ]);
-      sandbox.stub(SharedEventEntity, 'findAll').resolves([]);
 
       sandbox.stub(CalendarEntity, 'findByPk').resolves({ id: 'repost-calendar-1' } as any);
 
@@ -199,15 +205,13 @@ describe('EventInstanceService repost instance methods', () => {
       expect(calendarIds).toContain('repost-calendar-1');
     });
 
-    it('should deduplicate calendars across EventRepostEntity and SharedEventEntity', async () => {
+    it('should deduplicate calendars across EventRepostEntity and AP shared events', async () => {
       const event = createTestEvent('event-123', 'original-calendar');
 
       sandbox.stub(EventRepostEntity, 'findAll').resolves([
         { calendar_id: 'repost-calendar-1' } as any,
       ]);
-      sandbox.stub(SharedEventEntity, 'findAll').resolves([
-        { calendar_id: 'repost-calendar-1' } as any,
-      ]);
+      mockApInterface.getCalendarIdsForSharedEvent.resolves(['repost-calendar-1']);
 
       sandbox.stub(CalendarEntity, 'findByPk').resolves({ id: 'repost-calendar-1' } as any);
 
@@ -220,7 +224,7 @@ describe('EventInstanceService repost instance methods', () => {
 
       await service.rebuildAllRepostInstances(event);
 
-      // Should only rebuild once despite appearing in both tables
+      // Should only rebuild once despite appearing in both sources
       const destroyCalls = destroyStub.getCalls().filter(
         c => c.args[0]?.where?.calendar_id === 'repost-calendar-1',
       );
@@ -234,7 +238,6 @@ describe('EventInstanceService repost instance methods', () => {
         { calendar_id: 'deleted-calendar' } as any,
         { calendar_id: 'existing-calendar' } as any,
       ]);
-      sandbox.stub(SharedEventEntity, 'findAll').resolves([]);
 
       const findByPkStub = sandbox.stub(CalendarEntity, 'findByPk');
       findByPkStub.withArgs('deleted-calendar').resolves(null);
@@ -260,7 +263,6 @@ describe('EventInstanceService repost instance methods', () => {
       const event = createTestEvent('event-123', 'original-calendar');
 
       sandbox.stub(EventRepostEntity, 'findAll').resolves([]);
-      sandbox.stub(SharedEventEntity, 'findAll').resolves([]);
 
       const destroyStub = sandbox.stub(EventInstanceEntity, 'destroy').resolves(0);
 

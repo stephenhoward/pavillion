@@ -14,8 +14,7 @@ import axios from 'axios';
 import { EventEmitter } from 'events';
 
 import { Account } from '@/common/model/account';
-import { CalendarActor } from '@/server/activitypub/entity/calendar_actor';
-import { UserActorEntity } from '@/server/activitypub/entity/user_actor';
+import type { CalendarActor } from '@/server/activitypub/entity/calendar_actor';
 import EventService from '@/server/calendar/service/events';
 import * as ipValidation from '@/server/common/helper/ip-validation';
 
@@ -44,6 +43,16 @@ function buildRemoteCalendarActor(inboxUrl: string): CalendarActor {
   } as CalendarActor;
 }
 
+/**
+ * Creates a mock ActivityPubInterface with getUserActorUri stubbed to return
+ * a test actor URI.
+ */
+function buildMockApInterface() {
+  return {
+    getUserActorUri: sinon.stub().resolves('https://local.example.com/users/test'),
+  } as any;
+}
+
 describe('EventService', () => {
   describe('createRemoteEvent', () => {
     let service: EventService;
@@ -55,13 +64,8 @@ describe('EventService', () => {
     beforeEach(() => {
       sandbox = sinon.createSandbox();
       service = new EventService(new EventEmitter());
+      service.setActivityPubInterface(buildMockApInterface());
       account = new Account('account-123', 'test@example.com', 'test@example.com');
-
-      // Stub UserActorEntity so the method can proceed past the identity check
-      sandbox.stub(UserActorEntity, 'findOne').resolves({
-        account_id: account.id,
-        actor_uri: 'https://local.example.com/users/test',
-      } as any);
 
       postStub = sandbox.stub(axios, 'post');
 
@@ -120,12 +124,8 @@ describe('EventService', () => {
     beforeEach(() => {
       sandbox = sinon.createSandbox();
       service = new EventService(new EventEmitter());
+      service.setActivityPubInterface(buildMockApInterface());
       account = new Account('account-123', 'test@example.com', 'test@example.com');
-
-      sandbox.stub(UserActorEntity, 'findOne').resolves({
-        account_id: account.id,
-        actor_uri: 'https://local.example.com/users/test',
-      } as any);
 
       postStub = sandbox.stub(axios, 'post');
 
@@ -185,12 +185,8 @@ describe('EventService', () => {
     beforeEach(() => {
       sandbox = sinon.createSandbox();
       service = new EventService(new EventEmitter());
+      service.setActivityPubInterface(buildMockApInterface());
       account = new Account('account-123', 'test@example.com', 'test@example.com');
-
-      sandbox.stub(UserActorEntity, 'findOne').resolves({
-        account_id: account.id,
-        actor_uri: 'https://local.example.com/users/test',
-      } as any);
 
       postStub = sandbox.stub(axios, 'post');
 

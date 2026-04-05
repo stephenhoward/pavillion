@@ -28,6 +28,12 @@ describe('EventService - Calendar ID Storage', () => {
     calendarService = new CalendarService();
     categoryService = new CategoryService();
 
+    // Inject a minimal AP interface stub so listEvents does not crash when
+    // no real ActivityPub domain is wired up in these unit tests.
+    (eventService as any).activityPubInterface = {
+      getSharedEventIds: async () => [],
+    };
+
     // Setup test account
     account = new Account('test-account-id', 'test@example.com', true, true);
 

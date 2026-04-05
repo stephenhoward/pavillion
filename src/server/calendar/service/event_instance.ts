@@ -14,25 +14,40 @@ import rrule from 'rrule';
 import { LocationEntity, LocationContentEntity } from "@/server/calendar/entity/location";
 import { EventSeriesEntity, EventSeriesContentEntity } from '@/server/calendar/entity/event_series';
 import CategoryService from "./categories";
-import { ActivityPubActor } from "@/server/activitypub/model/base";
 import { Op, literal } from 'sequelize';
 import { EventRepostEntity } from "@/server/calendar/entity/event_repost";
 import { getRecurrenceText } from '@/common/utils/recurrence-text';
-// Deliberate cross-domain import: SharedEventEntity lives in the activitypub domain
-// but is needed here to find all calendars that repost an event. This follows the
-// same cross-domain pattern used in events.ts for federation-related queries.
-import { SharedEventEntity } from "@/server/activitypub/entity/activitypub";
 import { resolveSourceCalendars, type RepostContext } from '../helper/source_calendar';
+import type ActivityPubInterface from '@/server/activitypub/interface';
 
 const { RRule, RRuleSet } = rrule;
 
 export default class EventInstanceService {
   private eventBus: EventEmitter;
   private categoryService: CategoryService;
+  private activityPubInterface?: ActivityPubInterface;
 
   constructor(eventBus: EventEmitter) {
     this.eventBus = eventBus;
     this.categoryService = new CategoryService();
+  }
+
+  setActivityPubInterface(apInterface: ActivityPubInterface): void {
+    this.activityPubInterface = apInterface;
+  }
+
+  /**
+   * Fetches remote actor URIs for a set of event IDs via the AP interface.
+   * Returns an empty map if no IDs are provided or if the AP interface is not set.
+   *
+   * @param remoteEventIds - Event IDs to resolve actor URIs for
+   * @returns Map of eventId to attributed_to actor URI
+   */
+  private async fetchRemoteActorUriMap(remoteEventIds: string[]): Promise<Map<string, string>> {
+    if (remoteEventIds.length === 0 || !this.activityPubInterface) {
+      return new Map<string, string>();
+    }
+    return this.activityPubInterface.getEventSourceActorUris(remoteEventIds);
   }
 
   async listEventInstances(event: CalendarEvent): Promise<CalendarEventInstance[]> {
@@ -63,7 +78,14 @@ export default class EventInstanceService {
       eventCalendarId: entity.event?.calendar_id ?? null,
       sourceCalendarUrlName: entity.event?.calendar?.url_name,
     }));
-    await resolveSourceCalendars(repostContexts);
+
+    // Collect remote event IDs and fetch actor URIs via AP interface
+    const remoteEventIds = repostContexts
+      .filter(ctx => ctx.eventCalendarId === null)
+      .map(ctx => ctx.event.id);
+    const remoteActorUriMap = await this.fetchRemoteActorUriMap(remoteEventIds);
+
+    await resolveSourceCalendars(repostContexts, remoteActorUriMap);
     return instances;
   };
 
@@ -274,7 +296,14 @@ export default class EventInstanceService {
       eventCalendarId: entity.event?.calendar_id ?? null,
       sourceCalendarUrlName: entity.event?.calendar?.url_name,
     }));
-    await resolveSourceCalendars(repostContexts);
+
+    // Collect remote event IDs and fetch actor URIs via AP interface
+    const remoteEventIds = repostContexts
+      .filter(ctx => ctx.eventCalendarId === null)
+      .map(ctx => ctx.event.id);
+    const remoteActorUriMap = await this.fetchRemoteActorUriMap(remoteEventIds);
+
+    await resolveSourceCalendars(repostContexts, remoteActorUriMap);
 
     return mappedInstances;
   }
@@ -331,12 +360,16 @@ export default class EventInstanceService {
     instance.event.categories = await this.categoryService.getEventCategories(instance.event.id);
 
     // Resolve source calendar information for reposted events
-    await resolveSourceCalendars([{
+    const repostContext: RepostContext = {
       event: instance.event,
       displayCalendarId: eventInstance.calendar_id,
       eventCalendarId: eventInstance.event?.calendar_id ?? null,
       sourceCalendarUrlName: eventInstance.event?.calendar?.url_name,
-    }]);
+    };
+    const remoteEventIds = repostContext.eventCalendarId === null ? [instance.event.id] : [];
+    const remoteActorUriMap = await this.fetchRemoteActorUriMap(remoteEventIds);
+
+    await resolveSourceCalendars([repostContext], remoteActorUriMap);
 
     return instance;
   }
@@ -404,17 +437,18 @@ export default class EventInstanceService {
 
   /**
    * Rebuilds event instances for all local calendars that repost the given event.
-   * Queries both EventRepostEntity and SharedEventEntity to find all reposters,
+   * Queries EventRepostEntity and the AP interface to find all reposters,
    * deduplicates them, filters out the original calendar, and verifies each
    * calendar still exists before rebuilding.
    *
    * @param event - The event whose repost instances should be rebuilt
    */
   async rebuildAllRepostInstances(event: CalendarEvent): Promise<void> {
-    const [reposts, shares] = await Promise.all([
+    const [reposts, shareCalendarIds] = await Promise.all([
       EventRepostEntity.findAll({ where: { event_id: event.id } }),
-      // Deliberate cross-domain query: SharedEventEntity is in the activitypub domain
-      SharedEventEntity.findAll({ where: { event_id: event.id } }),
+      this.activityPubInterface
+        ? this.activityPubInterface.getCalendarIdsForSharedEvent(event.id)
+        : Promise.resolve([] as string[]),
     ]);
 
     // Collect and deduplicate calendar IDs, filtering out the original calendar
@@ -424,9 +458,9 @@ export default class EventInstanceService {
         repostCalendarIds.add(repost.calendar_id);
       }
     }
-    for (const share of shares) {
-      if (share.calendar_id !== event.calendarId) {
-        repostCalendarIds.add(share.calendar_id);
+    for (const calId of shareCalendarIds) {
+      if (calId !== event.calendarId) {
+        repostCalendarIds.add(calId);
       }
     }
 
@@ -450,14 +484,17 @@ export default class EventInstanceService {
     for (const calendarEntity of localCalendars) {
       const calendar = calendarEntity.toModel();
       const uuid = calendar.id;
-      const apId = ActivityPubActor.actorUrl(calendar);
 
-      // Map both UUID and AP identifier to the calendar for lookup
+      // Map UUID to the calendar for lookup
       calendarMap.set(uuid, calendar);
-      calendarMap.set(apId, calendar);
+      calendarIdConditions.push(uuid);
 
-      // Support both UUID and AP identifier during transition
-      calendarIdConditions.push(uuid, apId);
+      // Also map the AP actor URL for transition support
+      if (this.activityPubInterface) {
+        const apId = await this.activityPubInterface.actorUrl(calendar);
+        calendarMap.set(apId, calendar);
+        calendarIdConditions.push(apId);
+      }
     }
 
     // Only get events for local calendars (not remote federated events)

@@ -6,8 +6,16 @@ import { Calendar } from '@/common/model/calendar';
 import { EventEntity, EventContentEntity } from '@/server/calendar/entity/event';
 import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_category_assignment';
 import { EventRepostEntity } from '@/server/calendar/entity/event_repost';
-import { SharedEventEntity } from '@/server/activitypub/entity/activitypub';
 import EventService from '@/server/calendar/service/events';
+
+/**
+ * Creates a mock ActivityPubInterface with getSharedEventIds stubbed.
+ */
+function buildMockApInterface(sharedEventIds: string[] = []) {
+  return {
+    getSharedEventIds: sinon.stub().resolves(sharedEventIds),
+  } as any;
+}
 
 describe('listEvents', () => {
   let service: EventService;
@@ -15,10 +23,9 @@ describe('listEvents', () => {
 
   beforeEach(() => {
     service = new EventService(new EventEmitter());
+    service.setActivityPubInterface(buildMockApInterface());
     // Stub EventRepostEntity.findAll to return empty array (no reposts)
     sandbox.stub(EventRepostEntity, 'findAll').resolves([]);
-    // Stub SharedEventEntity.findAll to return empty array (no auto-reposted events)
-    sandbox.stub(SharedEventEntity, 'findAll').resolves([]);
   });
   afterEach(() => {
     sandbox.restore();
@@ -73,9 +80,9 @@ describe('listEvents', () => {
 
     it('should mark events as isRepost=true when they are in SharedEventEntity (auto-repost)', async () => {
       const autoRepostId = '550e8400-e29b-41d4-a716-446655440000';
-      (SharedEventEntity.findAll as sinon.SinonStub).resolves([
-        { event_id: autoRepostId },
-      ]);
+      // Provide shared event IDs via the mock AP interface
+      service.setActivityPubInterface(buildMockApInterface([autoRepostId]));
+
       const entity = EventEntity.build({ id: autoRepostId });
       sandbox.stub(EventEntity, 'findAll').resolves([entity]);
 

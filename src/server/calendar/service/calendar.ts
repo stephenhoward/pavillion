@@ -14,7 +14,6 @@ import { CalendarMemberEntity } from '@/server/calendar/entity/calendar_member';
 import { CalendarEditor } from '@/common/model/calendar_editor';
 import { CalendarMember } from '@/common/model/calendar_member';
 import { AccountEntity } from '@/server/common/entity/account';
-import { UserActorEntity } from '@/server/activitypub/entity/user_actor';
 import AccountInvitation from '@/common/model/invitation';
 import { UrlNameAlreadyExistsError, InvalidUrlNameError, CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { ValidationError } from '@/common/exceptions/base';
@@ -31,6 +30,7 @@ const logger = createLogger('calendar');
 import FundingInterface from '@/server/funding/interface';
 import EditorNotificationEmail from '@/server/calendar/model/editor_notification_email';
 import db from '@/server/common/entity/db';
+import type ActivityPubInterface from '@/server/activitypub/interface';
 
 // Import the interface type (this avoids circular dependency)
 type CalendarEditorsResponse = {
@@ -55,6 +55,7 @@ type GrantEditAccessResult = {
 class CalendarService {
   private eventBus?: EventEmitter;
   private readonly fundingInterface?: FundingInterface;
+  private activityPubInterface?: ActivityPubInterface;
 
   constructor(
     private accountsInterface?: AccountsInterface,
@@ -64,6 +65,10 @@ class CalendarService {
   ) {
     this.eventBus = eventBus;
     this.fundingInterface = fundingInterface;
+  }
+
+  setActivityPubInterface(apInterface: ActivityPubInterface): void {
+    this.activityPubInterface = apInterface;
   }
 
   private isValidUUID(uuid: string): boolean {
@@ -371,9 +376,7 @@ class CalendarService {
    * @returns True if the actor has editor access to the calendar
    */
   async isEditorOfCalendar(actorUri: string, calendarId: string): Promise<boolean> {
-    const userActor = await UserActorEntity.findOne({
-      where: { actor_uri: actorUri },
-    });
+    const userActor = await this.activityPubInterface!.findUserActorByUri(actorUri);
 
     if (!userActor) {
       return false;
@@ -736,26 +739,19 @@ class CalendarService {
     // Look up the remote user via WebFinger
     const remoteUser = await this.lookupRemoteUser(remoteUsername, remoteDomain);
 
-    // Find or create UserActorEntity for this remote user
-    const [userActorEntity] = await UserActorEntity.findOrCreate({
-      where: { actor_uri: remoteUser.actorUri },
-      defaults: {
-        id: uuidv4(),
-        actor_type: 'remote',
-        account_id: null,
-        actor_uri: remoteUser.actorUri,
-        remote_username: remoteUser.preferredUsername,
-        remote_domain: remoteDomain,
-        public_key: remoteUser.publicKey || null,
-        private_key: null,
-      },
-    });
+    // Find or create user actor for this remote user
+    const userActorResult = await this.activityPubInterface!.findOrCreateRemoteUserActor(
+      remoteUser.actorUri,
+      remoteUser.preferredUsername,
+      remoteDomain,
+      remoteUser.publicKey || undefined,
+    );
 
     // Check if already an editor via CalendarMemberEntity
     const existingMember = await CalendarMemberEntity.findOne({
       where: {
         calendar_id: calendarId,
-        user_actor_id: userActorEntity.id,
+        user_actor_id: userActorResult.id,
       },
     });
 
@@ -767,7 +763,7 @@ class CalendarService {
     await CalendarMemberEntity.create({
       id: uuidv4(),
       calendar_id: calendarId,
-      user_actor_id: userActorEntity.id,
+      user_actor_id: userActorResult.id,
       role: 'editor',
       granted_by: grantingAccount.id,
     });
@@ -908,8 +904,8 @@ class CalendarService {
       throw new CalendarEditorPermissionError('Permission denied: only calendar owner can revoke remote editor access');
     }
 
-    // Find the UserActorEntity for this remote actor
-    const userActor = await UserActorEntity.findOne({ where: { actor_uri: actorUri } });
+    // Find the user actor for this remote actor
+    const userActor = await this.activityPubInterface!.findUserActorByUri(actorUri);
     if (!userActor) {
       throw new EditorNotFoundError();
     }
@@ -1035,10 +1031,7 @@ class CalendarService {
           as: 'account',
           attributes: ['id', 'email', 'username', 'display_name'],
         },
-        {
-          model: UserActorEntity,
-          as: 'userActor',
-        },
+        { association: 'userActor' },
       ],
     });
 

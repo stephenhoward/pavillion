@@ -1,8 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import sinon from 'sinon';
+import { describe, it, expect } from 'vitest';
 import config from 'config';
 import { CalendarEvent } from '@/common/model/events';
-import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import { resolveSourceCalendars, parseAttributedToUri, type RepostContext } from '../../helper/source_calendar';
 
 const TEST_DOMAIN: string = config.get('domain');
@@ -22,16 +20,6 @@ function buildContext(overrides: {
 }
 
 describe('resolveSourceCalendars', () => {
-  let sandbox: sinon.SinonSandbox;
-
-  beforeEach(() => {
-    sandbox = sinon.createSandbox();
-  });
-
-  afterEach(() => {
-    sandbox.restore();
-  });
-
   it('should not mark non-reposted events', async () => {
     const ctx = buildContext({
       eventId: 'evt-1',
@@ -39,7 +27,7 @@ describe('resolveSourceCalendars', () => {
       eventCalendarId: 'cal-A',
     });
 
-    await resolveSourceCalendars([ctx]);
+    await resolveSourceCalendars([ctx], new Map());
 
     expect(ctx.event.isRepost).toBe(false);
     expect(ctx.event.sourceCalendar).toBeNull();
@@ -53,7 +41,7 @@ describe('resolveSourceCalendars', () => {
       sourceCalendarUrlName: 'original-cal',
     });
 
-    await resolveSourceCalendars([ctx]);
+    await resolveSourceCalendars([ctx], new Map());
 
     expect(ctx.event.isRepost).toBe(true);
     expect(ctx.event.sourceCalendar).not.toBeNull();
@@ -70,24 +58,24 @@ describe('resolveSourceCalendars', () => {
       // no sourceCalendarUrlName — calendar entity wasn't eager-loaded
     });
 
-    await resolveSourceCalendars([ctx]);
+    await resolveSourceCalendars([ctx], new Map());
 
     expect(ctx.event.isRepost).toBe(true);
     expect(ctx.event.sourceCalendar).toBeNull();
   });
 
-  it('should resolve remote reposts via EventObjectEntity', async () => {
+  it('should resolve remote reposts via pre-resolved actor URI map', async () => {
     const ctx = buildContext({
       eventId: 'evt-3',
       displayCalendarId: 'cal-B',
       eventCalendarId: null,
     });
 
-    sandbox.stub(EventObjectEntity, 'findAll').resolves([
-      { event_id: 'evt-3', attributed_to: 'https://remote.example.com/calendars/remote-cal' } as any,
+    const remoteActorUriMap = new Map<string, string>([
+      ['evt-3', 'https://remote.example.com/calendars/remote-cal'],
     ]);
 
-    await resolveSourceCalendars([ctx]);
+    await resolveSourceCalendars([ctx], remoteActorUriMap);
 
     expect(ctx.event.isRepost).toBe(true);
     expect(ctx.event.sourceCalendar!.urlName).toBe('remote-cal');
@@ -95,16 +83,14 @@ describe('resolveSourceCalendars', () => {
     expect(ctx.event.sourceCalendar!.url).toBe('https://remote.example.com/view/remote-cal');
   });
 
-  it('should handle remote repost with no EventObjectEntity record', async () => {
+  it('should handle remote repost with no entry in actor URI map', async () => {
     const ctx = buildContext({
       eventId: 'evt-4',
       displayCalendarId: 'cal-B',
       eventCalendarId: null,
     });
 
-    sandbox.stub(EventObjectEntity, 'findAll').resolves([]);
-
-    await resolveSourceCalendars([ctx]);
+    await resolveSourceCalendars([ctx], new Map());
 
     expect(ctx.event.isRepost).toBe(true);
     expect(ctx.event.sourceCalendar).toBeNull();
@@ -128,11 +114,11 @@ describe('resolveSourceCalendars', () => {
       eventCalendarId: null,
     });
 
-    sandbox.stub(EventObjectEntity, 'findAll').resolves([
-      { event_id: 'evt-7', attributed_to: 'https://other.example.org/calendars/other-cal' } as any,
+    const remoteActorUriMap = new Map<string, string>([
+      ['evt-7', 'https://other.example.org/calendars/other-cal'],
     ]);
 
-    await resolveSourceCalendars([nonRepost, localRepost, remoteRepost]);
+    await resolveSourceCalendars([nonRepost, localRepost, remoteRepost], remoteActorUriMap);
 
     expect(nonRepost.event.isRepost).toBe(false);
     expect(nonRepost.event.sourceCalendar).toBeNull();

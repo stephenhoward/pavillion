@@ -4,7 +4,6 @@ import config from 'config';
 import { EventEmitter } from 'events';
 import EventInstanceService from '../../service/event_instance';
 import { EventInstanceEntity } from '../../entity/event_instance';
-import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import { CalendarEvent } from '@/common/model/events';
 import CalendarEventInstance from '@/common/model/event_instance';
 import { DateTime } from 'luxon';
@@ -64,6 +63,15 @@ function buildMockInstanceEntity(overrides: {
   };
 }
 
+/**
+ * Creates a mock ActivityPubInterface with getEventSourceActorUris stubbed.
+ */
+function buildMockApInterface(sandbox: sinon.SinonSandbox, uriMap: Map<string, string>): any {
+  return {
+    getEventSourceActorUris: sandbox.stub().resolves(uriMap),
+  };
+}
+
 describe('EventInstanceService sourceCalendar resolution', () => {
   let sandbox: sinon.SinonSandbox;
   let service: EventInstanceService;
@@ -87,6 +95,7 @@ describe('EventInstanceService sourceCalendar resolution', () => {
       });
 
       sandbox.stub(EventInstanceEntity, 'findAll').resolves([instanceEntity]);
+      service.setActivityPubInterface(buildMockApInterface(sandbox, new Map()));
 
       const calendar: any = { id: 'cal-A' };
       const results = await service.listEventInstancesForCalendar(calendar);
@@ -106,6 +115,7 @@ describe('EventInstanceService sourceCalendar resolution', () => {
       });
 
       sandbox.stub(EventInstanceEntity, 'findAll').resolves([instanceEntity]);
+      service.setActivityPubInterface(buildMockApInterface(sandbox, new Map()));
 
       const calendar: any = { id: 'cal-B' };
       const results = await service.listEventInstancesForCalendar(calendar);
@@ -127,12 +137,11 @@ describe('EventInstanceService sourceCalendar resolution', () => {
       });
 
       sandbox.stub(EventInstanceEntity, 'findAll').resolves([instanceEntity]);
-      sandbox.stub(EventObjectEntity, 'findAll').resolves([
-        {
-          event_id: 'evt-3',
-          attributed_to: 'https://remote.example.com/calendars/remote-cal',
-        } as any,
+
+      const uriMap = new Map<string, string>([
+        ['evt-3', 'https://remote.example.com/calendars/remote-cal'],
       ]);
+      service.setActivityPubInterface(buildMockApInterface(sandbox, uriMap));
 
       const calendar: any = { id: 'cal-B' };
       const results = await service.listEventInstancesForCalendar(calendar);
@@ -145,7 +154,7 @@ describe('EventInstanceService sourceCalendar resolution', () => {
       expect(results[0].event.sourceCalendar!.url).toBe('https://remote.example.com/view/remote-cal');
     });
 
-    it('should gracefully handle remote repost with no EventObjectEntity record', async () => {
+    it('should gracefully handle remote repost with no entry in actor URI map', async () => {
       const instanceEntity = buildMockInstanceEntity({
         instanceId: 'inst-4',
         instanceCalendarId: 'cal-B',
@@ -154,7 +163,7 @@ describe('EventInstanceService sourceCalendar resolution', () => {
       });
 
       sandbox.stub(EventInstanceEntity, 'findAll').resolves([instanceEntity]);
-      sandbox.stub(EventObjectEntity, 'findAll').resolves([]);
+      service.setActivityPubInterface(buildMockApInterface(sandbox, new Map()));
 
       const calendar: any = { id: 'cal-B' };
       const results = await service.listEventInstancesForCalendar(calendar);
@@ -186,12 +195,11 @@ describe('EventInstanceService sourceCalendar resolution', () => {
       });
 
       sandbox.stub(EventInstanceEntity, 'findAll').resolves([nonRepost, localRepost, remoteRepost]);
-      sandbox.stub(EventObjectEntity, 'findAll').resolves([
-        {
-          event_id: 'evt-7',
-          attributed_to: 'https://other.example.org/calendars/other-cal',
-        } as any,
+
+      const uriMap = new Map<string, string>([
+        ['evt-7', 'https://other.example.org/calendars/other-cal'],
       ]);
+      service.setActivityPubInterface(buildMockApInterface(sandbox, uriMap));
 
       const calendar: any = { id: 'cal-A' };
       const results = await service.listEventInstancesForCalendar(calendar);
