@@ -2,6 +2,7 @@ import { EventEmitter } from 'events';
 import FundingService from '@/server/funding/service/funding';
 import { ProviderConnectionService } from '@/server/funding/service/provider_connection';
 import { FundingPlan, FundingSettings, ProviderConfig, FundingStatus, BillingCycle } from '@/common/model/funding-plan';
+import type { ProviderInfo } from '@/server/funding/service/funding';
 import { ComplimentaryGrant } from '@/common/model/complimentary_grant';
 import { CheckoutSessionResult } from '@/server/funding/service/provider/adapter';
 import type CalendarInterface from '@/server/calendar/interface';
@@ -83,7 +84,7 @@ export default class FundingInterface {
 
   async getOptions(): Promise<{
     enabled: boolean;
-    providers: ProviderConfig[];
+    providers: ProviderInfo[];
     monthlyPrice: number;
     yearlyPrice: number;
     currency: string;

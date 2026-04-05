@@ -2,7 +2,7 @@ import { PaymentProviderAdapter, ProviderCredentials } from './adapter';
 import { StripeAdapter } from './stripe';
 import { PayPalAdapter } from './paypal';
 import { MockStripeAdapter, MockPayPalAdapter } from './mock_adapters';
-import { ProviderConfig } from '@/common/model/funding-plan';
+import { ProviderConfigEntity } from '@/server/funding/entity/provider_config';
 
 /**
  * Factory for instantiating payment provider adapters
@@ -14,50 +14,53 @@ export class ProviderFactory {
   private static adapterCache: Map<string, PaymentProviderAdapter> = new Map();
 
   /**
-   * Create or retrieve cached adapter instance for a provider config
+   * Create or retrieve cached adapter instance for a provider config entity.
+   * Decrypts credentials on demand — never passes through the domain model.
    *
-   * @param config - Provider configuration with encrypted credentials
+   * @param entity - Provider config entity with encrypted credentials
    * @returns Initialized payment provider adapter
    */
-  static getAdapter(config: ProviderConfig): PaymentProviderAdapter {
+  static getAdapter(entity: ProviderConfigEntity): PaymentProviderAdapter {
     // Check cache first
-    const cached = this.adapterCache.get(config.id);
+    const cached = this.adapterCache.get(entity.id);
     if (cached) {
       return cached;
     }
 
-    // Parse credentials from JSON string
+    // Decrypt and parse credentials
     let credentials: ProviderCredentials;
     try {
-      credentials = JSON.parse(config.credentials);
+      credentials = JSON.parse(entity.decryptCredentials());
     }
     catch (err) {
-      throw new Error(`Invalid credentials format for provider ${config.id}`);
+      throw new Error(`Invalid credentials format for provider ${entity.id}`);
     }
+
+    const webhookSecret = entity.decryptWebhookSecret();
 
     // Create adapter based on provider type
     let adapter: PaymentProviderAdapter;
     const useMock = this.shouldUseMock(credentials);
 
-    switch (config.providerType) {
+    switch (entity.provider_type) {
       case 'stripe':
         adapter = useMock
           ? new MockStripeAdapter()
-          : new StripeAdapter(credentials, config.webhookSecret);
+          : new StripeAdapter(credentials, webhookSecret);
         break;
 
       case 'paypal':
         adapter = useMock
           ? new MockPayPalAdapter()
-          : new PayPalAdapter(credentials, config.webhookSecret);
+          : new PayPalAdapter(credentials, webhookSecret);
         break;
 
       default:
-        throw new Error(`Unsupported provider type: ${config.providerType}`);
+        throw new Error(`Unsupported provider type: ${entity.provider_type}`);
     }
 
     // Cache the adapter instance
-    this.adapterCache.set(config.id, adapter);
+    this.adapterCache.set(entity.id, adapter);
 
     return adapter;
   }

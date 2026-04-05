@@ -70,8 +70,6 @@ export class ProviderConfig extends PrimaryModel {
   providerType: ProviderType = 'stripe';
   enabled: boolean = false;
   displayName: string = '';
-  credentials: string = '{}'; // JSON string of encrypted credentials
-  webhookSecret: string = '';
 
   constructor(id?: string, providerType?: ProviderType) {
     super(id);
@@ -86,8 +84,6 @@ export class ProviderConfig extends PrimaryModel {
       providerType: this.providerType,
       enabled: this.enabled,
       displayName: this.displayName,
-      credentials: this.credentials,
-      webhookSecret: this.webhookSecret,
     };
   }
 
@@ -95,8 +91,6 @@ export class ProviderConfig extends PrimaryModel {
     const config = new ProviderConfig(obj.id, obj.providerType);
     config.enabled = obj.enabled ?? false;
     config.displayName = obj.displayName ?? '';
-    config.credentials = obj.credentials ?? '{}';
-    config.webhookSecret = obj.webhookSecret ?? '';
     return config;
   }
 
@@ -130,9 +124,6 @@ export class FundingPlan extends PrimaryModel {
     return {
       id: this.id,
       accountId: this.accountId,
-      providerConfigId: this.providerConfigId,
-      providerSubscriptionId: this.providerSubscriptionId,
-      providerCustomerId: this.providerCustomerId,
       status: this.status,
       billingCycle: this.billingCycle,
       amount: this.amount,
