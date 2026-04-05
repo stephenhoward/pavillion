@@ -32,6 +32,8 @@ function encrypt(text: string): string {
   // TODO: REMOVE DEBUG LOGGING - Stripe credential save debugging
   console.log('[DEBUG][ENTITY] encrypt() called, input length:', text?.length);
   const iv = crypto.randomBytes(IV_LENGTH);
+  // TODO: REMOVE DEBUG LOGGING - Stripe credential save debugging
+  console.log('[DEBUG][ENTITY] encryption key buffer length:', ENCRYPTION_KEY.length, '(must be 32 for aes-256-cbc)');
   const cipher = crypto.createCipheriv(ALGORITHM, ENCRYPTION_KEY, iv);
   let encrypted = cipher.update(text, 'utf8', 'hex');
   encrypted += cipher.final('hex');
