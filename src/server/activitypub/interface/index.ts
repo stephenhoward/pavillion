@@ -11,6 +11,7 @@ import ActivityPubServerService from '@/server/activitypub/service/server';
 import ProcessInboxService from '../service/inbox';
 import ProcessOutboxService from '../service/outbox';
 import { ActivityPubOutboxMessageEntity, ActivityPubInboxMessageEntity } from '@/server/activitypub/entity/activitypub';
+import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import CalendarInterface from '@/server/calendar/interface';
 import AccountsInterface from '@/server/accounts/interface';
 import ModerationInterface from '@/server/moderation/interface';
@@ -217,5 +218,18 @@ export default class ActivityPubInterface {
    */
   invalidateAuthorizationCache(calendarId: string, actorUri: string): void {
     this.inboxSerivce.invalidateAuthorizationCache(calendarId, actorUri);
+  }
+
+  /**
+   * Looks up the ActivityPub actor URI that owns a given event.
+   * Returns the attributed_to field from the EventObjectEntity, which is
+   * the authoritative source for the calendar actor that created/owns the event.
+   *
+   * @param eventId - The local event UUID
+   * @returns The actor URI string, or null if no AP identity exists for this event
+   */
+  async getEventSourceActorUri(eventId: string): Promise<string | null> {
+    const eventObject = await EventObjectEntity.findOne({ where: { event_id: eventId } });
+    return eventObject?.attributed_to ?? null;
   }
 }
