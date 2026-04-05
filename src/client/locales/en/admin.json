@@ -593,7 +593,9 @@
         "expired": "Expired"
       },
       "never_expires": "Never"
-    }
+    },
+    "currency_required": "Please select a currency",
+    "price_required": "At least one price must be greater than $0"
   },
   "blocked_instances": {
     "title": "Blocked Instances",

@@ -36,9 +36,9 @@ vi.mock('@/client/service/funding', () => {
   }));
 
   // Add static methods to the mock class
-  MockFundingService.formatCurrency = vi.fn((millicents, currency) => `${currency} ${(millicents / 1000000).toFixed(2)}`);
-  MockFundingService.millicentsToDisplay = vi.fn((millicents) => millicents / 1000000);
-  MockFundingService.displayToMillicents = vi.fn((amount) => amount * 1000000);
+  MockFundingService.formatCurrency = vi.fn((millicents, currency) => `${currency} ${(millicents / 100000).toFixed(2)}`);
+  MockFundingService.millicentsToDisplay = vi.fn((millicents) => millicents / 100000);
+  MockFundingService.displayToMillicents = vi.fn((amount) => amount * 100000);
 
   return {
     default: MockFundingService,
@@ -352,5 +352,95 @@ describe('Funding Page Wizard Integration', () => {
 
     wizardComponent = wrapper.findComponent(AddProviderWizard);
     expect(wizardComponent.props('show')).toBe(false);
+  });
+
+  describe('Settings form validation', () => {
+    function mountSettings(overrides: Record<string, any> = {}) {
+      vi.mocked(FundingService).mockImplementation(() => ({
+        getSettings: vi.fn().mockResolvedValue({
+          enabled: true,
+          monthlyPrice: 0,
+          yearlyPrice: 0,
+          currency: 'USD',
+          payWhatYouCan: false,
+          gracePeriodDays: 7,
+          ...overrides,
+        }),
+        getProviders: vi.fn().mockResolvedValue([]),
+        listFundingPlans: vi.fn().mockResolvedValue({ subscriptions: [], total: 0 }),
+        updateSettings: vi.fn().mockResolvedValue(true),
+      } as any));
+
+      return mount(funding, {
+        global: {
+          plugins: [[I18NextVue, { i18next }]],
+          stubs: {
+            PayPalConfigModal: true,
+            ConfirmDisconnectModal: true,
+            AddProviderWizard: true,
+            GrantForm: true,
+          },
+        },
+      });
+    }
+
+    it('shows price error and blocks API when payWhatYouCan=false and both prices are zero', async () => {
+      wrapper = mountSettings({ monthlyPrice: 0, yearlyPrice: 0, payWhatYouCan: false });
+      await wrapper.vm.$nextTick();
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      await (wrapper.vm as any).updateSettings();
+      await wrapper.vm.$nextTick();
+
+      expect((wrapper.vm as any).fieldErrors.monthlyPrice).toBeTruthy();
+      expect((wrapper.vm as any).fieldErrors.yearlyPrice).toBeTruthy();
+      const mockInstance = vi.mocked(FundingService).mock.results[0].value;
+      expect(mockInstance.updateSettings).not.toHaveBeenCalled();
+    });
+
+    it('shows currency error and blocks API when currency is empty', async () => {
+      wrapper = mountSettings({ currency: '' });
+      await wrapper.vm.$nextTick();
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      await (wrapper.vm as any).updateSettings();
+      await wrapper.vm.$nextTick();
+
+      expect((wrapper.vm as any).fieldErrors.currency).toBeTruthy();
+      const mockInstance = vi.mocked(FundingService).mock.results[0].value;
+      expect(mockInstance.updateSettings).not.toHaveBeenCalled();
+    });
+
+    it('calls API when prices are valid (happy path)', async () => {
+      wrapper = mountSettings({ monthlyPrice: 10000000, yearlyPrice: 100000000, currency: 'USD' });
+      await wrapper.vm.$nextTick();
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const mockInstance = vi.mocked(FundingService).mock.results[0].value;
+
+      await (wrapper.vm as any).updateSettings();
+      await wrapper.vm.$nextTick();
+
+      expect((wrapper.vm as any).fieldErrors.monthlyPrice).toBeFalsy();
+      expect((wrapper.vm as any).fieldErrors.currency).toBeFalsy();
+      expect(mockInstance.updateSettings).toHaveBeenCalledWith(expect.objectContaining({
+        currency: 'USD',
+        monthlyPrice: expect.any(Number),
+      }));
+    });
+
+    it('calls API when payWhatYouCan=true even with zero prices', async () => {
+      wrapper = mountSettings({ monthlyPrice: 0, yearlyPrice: 0, payWhatYouCan: true, currency: 'USD' });
+      await wrapper.vm.$nextTick();
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const mockInstance = vi.mocked(FundingService).mock.results[0].value;
+
+      await (wrapper.vm as any).updateSettings();
+      await wrapper.vm.$nextTick();
+
+      expect((wrapper.vm as any).fieldErrors.monthlyPrice).toBeFalsy();
+      expect(mockInstance.updateSettings).toHaveBeenCalled();
+    });
   });
 });

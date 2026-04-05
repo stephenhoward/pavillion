@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useTranslation } from 'i18next-vue';
 import i18next from 'i18next';
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, reactive, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useToast } from '@/client/composables/useToast';
 import FundingService from '@/client/service/funding';
@@ -38,6 +38,9 @@ const currency = ref('USD');
 const payWhatYouCan = ref(false);
 const payWhatYouCanYearlyDiscount = ref(0);
 const gracePeriodDays = ref(7);
+
+// Field-level validation errors
+const fieldErrors = reactive<Record<string, string>>({});
 
 // Provider management state
 const providers = ref([]);
@@ -273,6 +276,16 @@ async function toggleEnabled() {
  * Update subscription settings
  */
 async function updateSettings() {
+  Object.keys(fieldErrors).forEach(k => delete fieldErrors[k]);
+  if (!currency.value) {
+    fieldErrors.currency = t("currency_required");
+  }
+  if (!payWhatYouCan.value && monthlyPrice.value <= 0 && yearlyPrice.value <= 0) {
+    fieldErrors.monthlyPrice = t("price_required");
+    fieldErrors.yearlyPrice = t("price_required");
+  }
+  if (Object.keys(fieldErrors).length > 0) { return; }
+
   saving.value = true;
 
   try {
@@ -850,11 +863,21 @@ onMounted(async () => {
                       v-model="currency"
                       :disabled="saving"
                       class="form-select"
+                      :class="{ 'form-select--error': fieldErrors.currency }"
+                      :aria-invalid="fieldErrors.currency ? 'true' : undefined"
+                      :aria-describedby="fieldErrors.currency ? 'funding-currency-error' : undefined"
                     >
                       <option v-for="curr in currencyOptions" :key="curr.value" :value="curr.value">
                         {{ curr.label }}
                       </option>
                     </select>
+                    <p
+                      v-if="fieldErrors.currency"
+                      id="funding-currency-error"
+                      class="form-error"
+                      role="alert"
+                      aria-live="polite"
+                    >{{ fieldErrors.currency }}</p>
                   </div>
 
                   <!-- Monthly Price -->
@@ -868,7 +891,17 @@ onMounted(async () => {
                       min="0"
                       :disabled="saving"
                       class="form-input"
+                      :class="{ 'form-input--error': fieldErrors.monthlyPrice }"
+                      :aria-invalid="fieldErrors.monthlyPrice ? 'true' : undefined"
+                      :aria-describedby="fieldErrors.monthlyPrice ? 'funding-monthly-error' : undefined"
                     />
+                    <p
+                      v-if="fieldErrors.monthlyPrice"
+                      id="funding-monthly-error"
+                      class="form-error"
+                      role="alert"
+                      aria-live="polite"
+                    >{{ fieldErrors.monthlyPrice }}</p>
                     <p class="form-hint">{{ t("monthly_price_description") }}</p>
                   </div>
 
@@ -883,7 +916,17 @@ onMounted(async () => {
                       min="0"
                       :disabled="saving"
                       class="form-input"
+                      :class="{ 'form-input--error': fieldErrors.yearlyPrice }"
+                      :aria-invalid="fieldErrors.yearlyPrice ? 'true' : undefined"
+                      :aria-describedby="fieldErrors.yearlyPrice ? 'funding-yearly-error' : undefined"
                     />
+                    <p
+                      v-if="fieldErrors.yearlyPrice"
+                      id="funding-yearly-error"
+                      class="form-error"
+                      role="alert"
+                      aria-live="polite"
+                    >{{ fieldErrors.yearlyPrice }}</p>
                     <p class="form-hint">{{ t("yearly_price_description") }}</p>
                   </div>
                 </div>
@@ -1834,6 +1877,14 @@ onMounted(async () => {
       outline: none;
       border-color: var(--pav-color-orange-400);
       box-shadow: 0 0 0 3px var(--pav-color-orange-100);
+    }
+
+    &--error {
+      border-color: var(--pav-color-red-400);
+
+      &:focus {
+        box-shadow: 0 0 0 3px var(--pav-color-red-100);
+      }
     }
   }
 
