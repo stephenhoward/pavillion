@@ -36,6 +36,13 @@ interface StripeCredentialInputs {
 }
 
 /**
+ * Result of Stripe configuration including connection verification status
+ */
+interface StripeConfigureResult {
+  connectionVerified: boolean;
+}
+
+/**
  * Provider status information
  */
 interface ProviderStatus {
@@ -73,13 +80,14 @@ export class ProviderConnectionService {
    * Configure Stripe credentials via direct API key entry
    *
    * Validates key formats, encrypts, and stores Stripe credentials.
-   * Hard-fails if encryption key is unavailable (no plaintext fallback).
+   * After saving, attempts to verify the connection by calling
+   * the Stripe API. Verification failure never aborts the save.
    *
    * @param credentials - Stripe credentials (publishable_key, secret_key, webhook_secret)
    * @param adminUser - Admin user performing the configuration
-   * @returns True if configuration successful
+   * @returns Object with connectionVerified indicating if Stripe API call succeeded
    */
-  async configureStripe(credentials: StripeCredentialInputs, adminUser: AdminUser): Promise<boolean> {
+  async configureStripe(credentials: StripeCredentialInputs, adminUser: AdminUser): Promise<StripeConfigureResult> {
     // Validate required fields
     if (!credentials.publishable_key || credentials.publishable_key.trim() === '') {
       throw new MissingRequiredFieldError('publishable_key');
@@ -146,7 +154,19 @@ export class ProviderConnectionService {
       providerId: entity.id,
     });
 
-    return true;
+    // Attempt post-save credential verification via Stripe API
+    let connectionVerified = false;
+    try {
+      const adapter = ProviderFactory.getAdapter(entity);
+      connectionVerified = await adapter.validateCredentials({});
+    }
+    catch (err) {
+      logger.warn('Stripe connection test failed after save', {
+        errorType: err instanceof Error ? err.constructor.name : 'unknown',
+      });
+    }
+
+    return { connectionVerified };
   }
 
   /**

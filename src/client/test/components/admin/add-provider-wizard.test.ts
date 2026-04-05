@@ -149,7 +149,7 @@ describe('AddProviderWizard', () => {
     expect(wrapper.emitted('close')).toHaveLength(1);
   });
 
-  it('should emit provider-connected event when Done is clicked on step 3', async () => {
+  it('should emit provider-connected event when Done is clicked on verified step 3', async () => {
     const wrapper = mountWithI18n({
       props: {
         show: true,
@@ -157,10 +157,11 @@ describe('AddProviderWizard', () => {
       },
     });
 
-    // Manually set component to step 3 success state
+    // Manually set component to step 3 verified state
     const vm = wrapper.vm as any;
     vm.currentStep = 3;
     vm.selectedProvider = 'stripe';
+    vm.connectionVerified = true;
     await nextTick();
 
     const doneButton = wrapper.find('.done-button');
@@ -382,7 +383,8 @@ describe('AddProviderWizard', () => {
     });
 
     it('should call configureStripe on form submission with valid credentials', async () => {
-      const mockConfigureStripe = vi.spyOn(FundingService.prototype, 'configureStripe').mockResolvedValue(true);
+      const mockConfigureStripe = vi.spyOn(FundingService.prototype, 'configureStripe')
+        .mockResolvedValue({ success: true, connectionVerified: true });
 
       const wrapper = mountWithI18n({
         props: {
@@ -415,8 +417,9 @@ describe('AddProviderWizard', () => {
       mockConfigureStripe.mockRestore();
     });
 
-    it('should navigate to success step after successful configuration', async () => {
-      vi.spyOn(FundingService.prototype, 'configureStripe').mockResolvedValue(true);
+    it('should navigate to success step after successful verified configuration', async () => {
+      vi.spyOn(FundingService.prototype, 'configureStripe')
+        .mockResolvedValue({ success: true, connectionVerified: true });
 
       const wrapper = mountWithI18n({
         props: {
@@ -441,6 +444,8 @@ describe('AddProviderWizard', () => {
 
       expect(wrapper.text()).toContain('Step 3 of 3');
       expect(wrapper.text()).toContain('Provider Connected');
+      expect(wrapper.find('.success-content').exists()).toBe(true);
+      expect(wrapper.find('.done-button').exists()).toBe(true);
     });
 
     it('should show error message when configuration fails', async () => {
@@ -472,8 +477,8 @@ describe('AddProviderWizard', () => {
     });
 
     it('should disable form inputs during submission', async () => {
-      let resolvePromise: (value: boolean) => void;
-      const configurePromise = new Promise<boolean>(resolve => {
+      let resolvePromise: (value: { success: boolean; connectionVerified: boolean }) => void;
+      const configurePromise = new Promise<{ success: boolean; connectionVerified: boolean }>(resolve => {
         resolvePromise = resolve;
       });
       vi.spyOn(FundingService.prototype, 'configureStripe').mockReturnValue(configurePromise);
@@ -504,7 +509,7 @@ describe('AddProviderWizard', () => {
       expect(wrapper.find('#stripe-webhook-secret').attributes('disabled')).toBeDefined();
 
       // Resolve the promise to clean up
-      resolvePromise!(true);
+      resolvePromise!({ success: true, connectionVerified: true });
       await nextTick();
     });
 
@@ -542,6 +547,152 @@ describe('AddProviderWizard', () => {
       await nextTick();
 
       expect(wrapper.text()).not.toContain('Secret Key must start with');
+    });
+  });
+
+  describe('Step 3: Connection verification states', () => {
+    it('should show warning when connectionVerified is false', async () => {
+      const wrapper = mountWithI18n({
+        props: {
+          show: true,
+          unconfiguredProviders: mockUnconfiguredProviders,
+        },
+      });
+
+      // Manually set component to step 3 unverified state
+      const vm = wrapper.vm as any;
+      vm.currentStep = 3;
+      vm.selectedProvider = 'stripe';
+      vm.connectionVerified = false;
+      await nextTick();
+
+      expect(wrapper.find('.warning-content').exists()).toBe(true);
+      expect(wrapper.text()).toContain('Credentials saved');
+      expect(wrapper.text()).toContain('connection test failed');
+      expect(wrapper.find('.success-content').exists()).toBe(false);
+      expect(wrapper.find('.done-button').exists()).toBe(false);
+    });
+
+    it('should show Close button (not Done) when connectionVerified is false', async () => {
+      const wrapper = mountWithI18n({
+        props: {
+          show: true,
+          unconfiguredProviders: mockUnconfiguredProviders,
+        },
+      });
+
+      const vm = wrapper.vm as any;
+      vm.currentStep = 3;
+      vm.selectedProvider = 'stripe';
+      vm.connectionVerified = false;
+      await nextTick();
+
+      expect(wrapper.find('.close-button').exists()).toBe(true);
+      expect(wrapper.find('.close-button').text()).toBe('Close');
+      expect(wrapper.find('.done-button').exists()).toBe(false);
+    });
+
+    it('should NOT emit provider-connected when Close is clicked on unverified step 3', async () => {
+      const wrapper = mountWithI18n({
+        props: {
+          show: true,
+          unconfiguredProviders: mockUnconfiguredProviders,
+        },
+      });
+
+      const vm = wrapper.vm as any;
+      vm.currentStep = 3;
+      vm.selectedProvider = 'stripe';
+      vm.connectionVerified = false;
+      await nextTick();
+
+      const closeButton = wrapper.find('.close-button');
+      await closeButton.trigger('click');
+
+      expect(wrapper.emitted('close')).toBeTruthy();
+      expect(wrapper.emitted('provider-connected')).toBeFalsy();
+    });
+
+    it('should show success content when connectionVerified is true', async () => {
+      const wrapper = mountWithI18n({
+        props: {
+          show: true,
+          unconfiguredProviders: mockUnconfiguredProviders,
+        },
+      });
+
+      const vm = wrapper.vm as any;
+      vm.currentStep = 3;
+      vm.selectedProvider = 'stripe';
+      vm.connectionVerified = true;
+      await nextTick();
+
+      expect(wrapper.find('.success-content').exists()).toBe(true);
+      expect(wrapper.text()).toContain('Provider Connected');
+      expect(wrapper.find('.warning-content').exists()).toBe(false);
+      expect(wrapper.find('.done-button').exists()).toBe(true);
+    });
+
+    it('should navigate to warning step when configureStripe returns unverified', async () => {
+      vi.spyOn(FundingService.prototype, 'configureStripe')
+        .mockResolvedValue({ success: true, connectionVerified: false });
+
+      const wrapper = mountWithI18n({
+        props: {
+          show: true,
+          unconfiguredProviders: mockUnconfiguredProviders,
+        },
+      });
+
+      // Navigate to step 2
+      const stripeCard = wrapper.findAll('.provider-card').at(0);
+      await stripeCard?.trigger('click');
+      await nextTick();
+      await wrapper.find('.continue-button').trigger('click');
+      await nextTick();
+
+      // Fill in valid credentials
+      await wrapper.find('#stripe-publishable-key').setValue('pk_test_abc123');
+      await wrapper.find('#stripe-publishable-key').trigger('blur');
+      await wrapper.find('#stripe-secret-key').setValue('sk_test_abc123');
+      await wrapper.find('#stripe-secret-key').trigger('blur');
+      await wrapper.find('#stripe-webhook-secret').setValue('whsec_abc123');
+      await wrapper.find('#stripe-webhook-secret').trigger('blur');
+      await nextTick();
+
+      // Submit form
+      await wrapper.find('form').trigger('submit');
+      await nextTick();
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // Should be on step 3 with warning
+      expect(wrapper.text()).toContain('Step 3 of 3');
+      expect(wrapper.find('.warning-content').exists()).toBe(true);
+      expect(wrapper.text()).toContain('Credentials saved');
+      expect(wrapper.find('.close-button').exists()).toBe(true);
+    });
+
+    it('should reset connectionVerified when wizard resets', async () => {
+      const wrapper = mountWithI18n({
+        props: {
+          show: true,
+          unconfiguredProviders: mockUnconfiguredProviders,
+        },
+      });
+
+      // Set to verified state
+      const vm = wrapper.vm as any;
+      vm.currentStep = 3;
+      vm.selectedProvider = 'stripe';
+      vm.connectionVerified = true;
+      await nextTick();
+
+      // Click Done to trigger reset
+      await wrapper.find('.done-button').trigger('click');
+      await nextTick();
+
+      // connectionVerified should be reset
+      expect(vm.connectionVerified).toBe(false);
     });
   });
 });

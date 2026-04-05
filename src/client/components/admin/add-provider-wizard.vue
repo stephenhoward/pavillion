@@ -29,6 +29,7 @@ const currentStep = ref(1);
 const selectedProvider = ref<string | null>(null);
 const error = ref<string | null>(null);
 const connecting = ref(false);
+const connectionVerified = ref(false);
 
 // PayPal form state
 const paypalClientId = ref('');
@@ -130,6 +131,7 @@ function resetWizard() {
   selectedProvider.value = null;
   error.value = null;
   connecting.value = false;
+  connectionVerified.value = false;
   resetPayPalForm();
   resetStripeForm();
 }
@@ -268,6 +270,7 @@ async function configurePayPal() {
 
     if (success) {
       // Move to success step
+      connectionVerified.value = true;
       currentStep.value = 3;
       connecting.value = false;
     }
@@ -305,9 +308,10 @@ async function configureStripe() {
       webhook_secret: stripeWebhookSecret.value.trim(),
     };
 
-    const success = await fundingService.configureStripe(credentials);
+    const result = await fundingService.configureStripe(credentials);
 
-    if (success) {
+    if (result.success) {
+      connectionVerified.value = result.connectionVerified;
       currentStep.value = 3;
       connecting.value = false;
     }
@@ -567,14 +571,26 @@ function handleSuccess() {
         </div>
       </div>
 
-      <!-- Step 3: Success -->
-      <div v-if="currentStep === 3" class="step-content success-content">
-        <div class="success-icon">&#x2713;</div>
-        <h3 class="step-title">{{ t('step3.title') }}</h3>
-        <p class="success-message">
-          {{ t('step3.success_message', { provider: selectedProviderName }) }}
-        </p>
-        <p class="ready-message">{{ t('step3.ready_message') }}</p>
+      <!-- Step 3: Success or Warning -->
+      <div v-if="currentStep === 3" class="step-content">
+        <!-- Verified: Success -->
+        <div v-if="connectionVerified" class="success-content">
+          <div class="success-icon">&#x2713;</div>
+          <h3 class="step-title">{{ t('step3.title') }}</h3>
+          <p class="success-message">
+            {{ t('step3.success_message', { provider: selectedProviderName }) }}
+          </p>
+          <p class="ready-message">{{ t('step3.ready_message') }}</p>
+        </div>
+
+        <!-- Not verified: Warning -->
+        <div v-else class="warning-content">
+          <div class="warning-icon">!</div>
+          <h3 class="step-title">{{ t('step3.connection_warning_title') }}</h3>
+          <p class="warning-message">
+            {{ t('step3.connection_warning_message') }}
+          </p>
+        </div>
       </div>
     </div>
 
@@ -623,11 +639,20 @@ function handleSuccess() {
       <!-- Step 3 Actions -->
       <template v-if="currentStep === 3">
         <button
+          v-if="connectionVerified"
           type="button"
           class="btn btn--primary done-button"
           @click="handleSuccess"
         >
           {{ t('done_button') }}
+        </button>
+        <button
+          v-else
+          type="button"
+          class="btn btn--secondary close-button"
+          @click="closeWizard"
+        >
+          {{ t('step3.close_button') }}
         </button>
       </template>
     </div>
@@ -878,6 +903,38 @@ function handleSuccess() {
 
   .ready-message {
     margin: 0;
+    color: var(--pav-color-text-secondary);
+  }
+}
+
+// Warning Step
+.warning-content {
+  text-align: center;
+  padding: 2rem 0;
+
+  .warning-icon {
+    width: 4rem;
+    height: 4rem;
+    margin: 0 auto 1.5rem;
+    background: #fff3cd;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    font-weight: bold;
+    color: #856404;
+
+    @media (prefers-color-scheme: dark) {
+      background: #4a3c00;
+      color: #ffd95c;
+    }
+  }
+
+  .warning-message {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.5;
     color: var(--pav-color-text-secondary);
   }
 }

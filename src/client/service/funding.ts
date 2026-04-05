@@ -249,19 +249,21 @@ export default class FundingService {
    * Configure Stripe credentials manually (admin only)
    *
    * @param {StripeCredentials} credentials - Stripe credentials
-   * @returns {Promise<boolean>} True if configuration was successful
+   * @returns {Promise<{ success: boolean; connectionVerified: boolean }>} Configuration result with connection verification status
    */
-  async configureStripe(credentials: StripeCredentials): Promise<boolean> {
+  async configureStripe(credentials: StripeCredentials): Promise<{ success: boolean; connectionVerified: boolean }> {
     try {
       const response = await axios.post('/api/funding/v1/admin/providers/stripe/configure', credentials);
-      return response.status === 200;
+      return {
+        success: response.status === 200,
+        connectionVerified: response.data?.connectionVerified ?? false,
+      };
     }
     catch (error) {
       console.error('Failed to configure Stripe:', error);
       throw error;
     }
   }
-
   /**
    * Update provider configuration (admin only)
    *

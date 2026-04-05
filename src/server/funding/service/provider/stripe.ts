@@ -47,20 +47,22 @@ export class StripeAdapter implements PaymentProviderAdapter {
   }
 
   /**
-   * Validate provider credentials format
+   * Validate provider credentials by making a test API call
    *
-   * Checks that the apiKey field is present. No stripeUserId is required
-   * since Embedded Checkout uses direct API keys, not Connect accounts.
+   * Attempts a balance.retrieve() call to verify that the configured
+   * API key is valid. All errors are swallowed and result in false.
    *
-   * @param credentials - Provider credentials to validate
-   * @returns True if credentials are valid format
+   * @param _credentials - Provider credentials (unused; adapter already initialized with key)
+   * @returns True if the Stripe API key is valid
    */
-  async validateCredentials(credentials: ProviderCredentials): Promise<boolean> {
-    if (!credentials.apiKey) {
+  async validateCredentials(_credentials: ProviderCredentials): Promise<boolean> {
+    try {
+      await this.stripe.balance.retrieve();
+      return true;
+    }
+    catch {
       return false;
     }
-
-    return true;
   }
 
   /**

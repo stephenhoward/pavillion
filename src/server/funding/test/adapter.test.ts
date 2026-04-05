@@ -95,6 +95,9 @@ describe('Payment Provider Adapters', () => {
         webhooks: {
           constructEvent: sandbox.stub(),
         },
+        balance: {
+          retrieve: sandbox.stub(),
+        },
       };
 
       // Create adapter
@@ -104,6 +107,26 @@ describe('Payment Provider Adapters', () => {
 
       // Replace the Stripe instance with our mock
       (stripeAdapter as any).stripe = mockStripe;
+    });
+
+    describe('validateCredentials', () => {
+      it('should return true when balance.retrieve() resolves', async () => {
+        mockStripe.balance.retrieve.resolves({ available: [], pending: [] });
+
+        const result = await stripeAdapter.validateCredentials({ apiKey: 'sk_test_123' });
+
+        expect(result).toBe(true);
+        expect(mockStripe.balance.retrieve.calledOnce).toBe(true);
+      });
+
+      it('should return false when balance.retrieve() rejects', async () => {
+        mockStripe.balance.retrieve.rejects(new Error('Invalid API Key provided'));
+
+        const result = await stripeAdapter.validateCredentials({ apiKey: 'sk_test_invalid' });
+
+        expect(result).toBe(false);
+        expect(mockStripe.balance.retrieve.calledOnce).toBe(true);
+      });
     });
 
     it('should update subscription amount via Stripe API', async () => {

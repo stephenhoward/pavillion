@@ -75,12 +75,14 @@ describe('ProviderConnectionService', () => {
       const buildStub = sandbox.stub(ProviderConfigEntity, 'build');
       buildStub.returns(mockEntity as any);
 
-      // Stub ProviderFactory.clearCache
+      // Stub ProviderFactory.clearCache and getAdapter
       const clearCacheStub = sandbox.stub(ProviderFactory, 'clearCache');
+      mockStripeAdapter.validateCredentials.resolves(true);
+      sandbox.stub(ProviderFactory, 'getAdapter').returns(mockStripeAdapter as any);
 
       const result = await service.configureStripe(validCredentials, adminUser);
 
-      expect(result).toBe(true);
+      expect(result).toEqual({ connectionVerified: true });
       expect(buildStub.calledOnce).toBe(true);
       expect(mockEntity.save.calledOnce).toBe(true);
 
@@ -116,16 +118,57 @@ describe('ProviderConnectionService', () => {
       findOneStub.resolves(mockEntity as any);
 
       sandbox.stub(ProviderFactory, 'clearCache');
+      mockStripeAdapter.validateCredentials.resolves(true);
+      sandbox.stub(ProviderFactory, 'getAdapter').returns(mockStripeAdapter as any);
 
       const result = await service.configureStripe(validCredentials, adminUser);
 
-      expect(result).toBe(true);
+      expect(result).toEqual({ connectionVerified: true });
       expect(mockEntity.save.calledOnce).toBe(true);
       expect(mockEntity._decryptedWebhookSecret).toBe('whsec_abc123def456');
 
       const storedCreds = JSON.parse(mockEntity._decryptedCredentials!);
       expect(storedCreds.apiKey).toBe('sk_test_abc123def456');
       expect(storedCreds.publishableKey).toBe('pk_test_abc123def456');
+    });
+
+    it('should return connectionVerified false when validateCredentials returns false', async () => {
+      const entityId = uuidv4();
+      const findOneStub = sandbox.stub(ProviderConfigEntity, 'findOne');
+      findOneStub.resolves(null);
+
+      sandbox.stub(ProviderConfigEntity, 'build').returns({
+        id: entityId,
+        provider_type: 'stripe',
+        save: sandbox.stub().resolves(),
+      } as any);
+
+      sandbox.stub(ProviderFactory, 'clearCache');
+      mockStripeAdapter.validateCredentials.resolves(false);
+      sandbox.stub(ProviderFactory, 'getAdapter').returns(mockStripeAdapter as any);
+
+      const result = await service.configureStripe(validCredentials, adminUser);
+
+      expect(result).toEqual({ connectionVerified: false });
+    });
+
+    it('should return connectionVerified false when ProviderFactory.getAdapter throws', async () => {
+      const entityId = uuidv4();
+      const findOneStub = sandbox.stub(ProviderConfigEntity, 'findOne');
+      findOneStub.resolves(null);
+
+      sandbox.stub(ProviderConfigEntity, 'build').returns({
+        id: entityId,
+        provider_type: 'stripe',
+        save: sandbox.stub().resolves(),
+      } as any);
+
+      sandbox.stub(ProviderFactory, 'clearCache');
+      sandbox.stub(ProviderFactory, 'getAdapter').throws(new Error('Invalid credentials format'));
+
+      const result = await service.configureStripe(validCredentials, adminUser);
+
+      expect(result).toEqual({ connectionVerified: false });
     });
 
     it('should throw error for missing publishable_key', async () => {
@@ -170,6 +213,8 @@ describe('ProviderConnectionService', () => {
       } as any);
 
       sandbox.stub(ProviderFactory, 'clearCache');
+      mockStripeAdapter.validateCredentials.resolves(true);
+      sandbox.stub(ProviderFactory, 'getAdapter').returns(mockStripeAdapter as any);
 
       const emitSpy = sandbox.spy(eventBus, 'emit');
 
@@ -198,9 +243,11 @@ describe('ProviderConnectionService', () => {
       } as any);
 
       sandbox.stub(ProviderFactory, 'clearCache');
+      mockStripeAdapter.validateCredentials.resolves(true);
+      sandbox.stub(ProviderFactory, 'getAdapter').returns(mockStripeAdapter as any);
 
       const result = await service.configureStripe(liveCreds, adminUser);
-      expect(result).toBe(true);
+      expect(result).toEqual({ connectionVerified: true });
     });
   });
 
