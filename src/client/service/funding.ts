@@ -11,6 +11,7 @@ export type FundingSettings = {
   yearlyPrice: number;
   currency: string;
   payWhatYouCan: boolean;
+  payWhatYouCanYearlyDiscount: number;
   gracePeriodDays: number;
 };
 
@@ -89,6 +90,7 @@ export type FundingOptions = {
   yearlyPrice: number;
   currency: string;
   payWhatYouCan: boolean;
+  payWhatYouCanYearlyDiscount: number;
 };
 
 /**
@@ -114,6 +116,15 @@ export type FundingStatus = {
 export type ResolvedCalendar = {
   id: string;
   title: string;
+};
+
+/**
+ * Calendar funding information within a user's funding plan
+ */
+export type FundedCalendarInfo = {
+  calendarId: string;
+  amount: number;
+  createdAt?: string;
 };
 
 /**
@@ -432,6 +443,22 @@ export default class FundingService {
   // ========================================
   // Calendar Funding Methods
   // ========================================
+
+  /**
+   * Get all calendars in the user's funding plan
+   *
+   * @returns {Promise<FundedCalendarInfo[]>} List of funded calendars with amounts
+   */
+  async getCalendarsInFundingPlan(): Promise<FundedCalendarInfo[]> {
+    try {
+      const response = await axios.get('/api/funding/v1/calendars');
+      return response.data;
+    }
+    catch (error) {
+      console.error('Failed to get calendars in funding plan:', error);
+      throw error;
+    }
+  }
 
   /**
    * Add a calendar to the user's funding plan

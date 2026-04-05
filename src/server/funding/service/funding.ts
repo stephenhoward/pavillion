@@ -159,6 +159,7 @@ export default class FundingService {
       entity.yearly_price = settings.yearlyPrice;
       entity.currency = settings.currency;
       entity.pay_what_you_can = settings.payWhatYouCan;
+      entity.pay_what_you_can_yearly_discount = settings.payWhatYouCanYearlyDiscount;
       entity.grace_period_days = settings.gracePeriodDays;
       await entity.save();
     }
@@ -330,6 +331,7 @@ export default class FundingService {
     yearlyPrice: number;
     currency: string;
     payWhatYouCan: boolean;
+    payWhatYouCanYearlyDiscount: number;
   }> {
     const settings = await this.getSettings();
 
@@ -369,6 +371,7 @@ export default class FundingService {
       yearlyPrice: settings.yearlyPrice,
       currency: settings.currency,
       payWhatYouCan: settings.payWhatYouCan,
+      payWhatYouCanYearlyDiscount: settings.payWhatYouCanYearlyDiscount,
     };
   }
 
@@ -635,6 +638,46 @@ export default class FundingService {
       const newTotal = remainingActive.reduce((sum, cs) => sum + cs.amount, 0);
       await this.updateProviderAmount(fundingPlanEntity, newTotal);
     }
+  }
+
+  /**
+   * Get all active calendar allocations for an account's funding plan
+   *
+   * Resolves the active funding plan for the account, then queries
+   * CalendarFundingPlanEntity for active allocations (end_time IS NULL).
+   * Returns an empty array if the account has no active funding plan
+   * (does not throw an error).
+   *
+   * @param accountId - Account ID
+   * @returns Array of active calendar allocations with calendarId, amount, and createdAt
+   */
+  async getCalendarsInFundingPlan(
+    accountId: string,
+  ): Promise<{ calendarId: string; amount: number; createdAt: Date }[]> {
+    if (!isValidUUID(accountId)) {
+      throw new ValidationError('Invalid accountId: must be a valid UUID');
+    }
+
+    const fundingPlanEntity = await FundingPlanEntity.findOne({
+      where: { account_id: accountId, status: 'active' },
+    });
+
+    if (!fundingPlanEntity) {
+      return [];
+    }
+
+    const activeAllocations = await CalendarFundingPlanEntity.findAll({
+      where: {
+        funding_plan_id: fundingPlanEntity.id,
+        end_time: { [Op.is]: null as any },
+      },
+    });
+
+    return activeAllocations.map((alloc) => ({
+      calendarId: alloc.calendar_id,
+      amount: alloc.amount,
+      createdAt: alloc.created_at,
+    }));
   }
 
   /**

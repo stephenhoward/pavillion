@@ -23,6 +23,9 @@ class FundingSettingsEntity extends Model {
   @Column({ type: DataType.BOOLEAN, defaultValue: false })
   declare pay_what_you_can: boolean;
 
+  @Column({ type: DataType.INTEGER, defaultValue: 0 })
+  declare pay_what_you_can_yearly_discount: number;
+
   @Column({ type: DataType.INTEGER, defaultValue: 7 })
   declare grace_period_days: number;
 
@@ -36,6 +39,7 @@ class FundingSettingsEntity extends Model {
     settings.yearlyPrice = this.yearly_price;
     settings.currency = this.currency;
     settings.payWhatYouCan = this.pay_what_you_can;
+    settings.payWhatYouCanYearlyDiscount = this.pay_what_you_can_yearly_discount;
     settings.gracePeriodDays = this.grace_period_days;
     return settings;
   }
@@ -51,6 +55,7 @@ class FundingSettingsEntity extends Model {
       yearly_price: settings.yearlyPrice,
       currency: settings.currency,
       pay_what_you_can: settings.payWhatYouCan,
+      pay_what_you_can_yearly_discount: settings.payWhatYouCanYearlyDiscount,
       grace_period_days: settings.gracePeriodDays,
     });
   }

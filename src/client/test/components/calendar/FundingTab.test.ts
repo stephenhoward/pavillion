@@ -7,17 +7,29 @@ import FundingTab from '@/client/components/logged_in/calendar-management/Fundin
 import FundingService from '@/client/service/funding';
 import { mountComponent } from '@/client/test/lib/vue';
 
+// Mock stripe-loader to avoid actual Stripe loading in tests
+vi.mock('@/client/service/stripe-loader', () => ({
+  loadStripe: vi.fn().mockResolvedValue({
+    initEmbeddedCheckout: vi.fn().mockResolvedValue({
+      mount: vi.fn(),
+      destroy: vi.fn(),
+    }),
+  }),
+}));
+
 const routes: RouteRecordRaw[] = [
   { path: '/manage/:calendar', component: {}, name: 'manage' },
+  { path: '/funding', component: {}, name: 'funding_plan' },
 ];
 
 const defaultOptions = {
   enabled: true,
-  providers: [{ provider_type: 'stripe', display_name: 'Stripe' }],
-  monthly_price: 500000,
-  yearly_price: 5000000,
+  providers: [{ providerType: 'stripe', displayName: 'Stripe', publishableKey: 'pk_test_fake' }],
+  monthlyPrice: 500000,
+  yearlyPrice: 5000000,
   currency: 'USD',
-  pay_what_you_can: false,
+  payWhatYouCan: false,
+  payWhatYouCanYearlyDiscount: 0,
 };
 
 const activeSubscription = {
@@ -32,7 +44,7 @@ const activeSubscription = {
 };
 
 /**
- * Set up default mocks for getStatus and getOptions.
+ * Set up default mocks for getStatus, getOptions, and getCalendarsInFundingPlan.
  * Individual tests can override these before mounting.
  */
 function setupDefaultMocks(overrides?: {
@@ -43,6 +55,8 @@ function setupDefaultMocks(overrides?: {
     .mockResolvedValue('status' in (overrides || {}) ? overrides!.status : activeSubscription);
   vi.spyOn(FundingService.prototype, 'getOptions')
     .mockResolvedValue(overrides?.options ?? defaultOptions);
+  vi.spyOn(FundingService.prototype, 'getCalendarsInFundingPlan')
+    .mockResolvedValue([]);
 }
 
 const mountFundingTab = async (calendarId: string = 'cal-uuid-1') => {
@@ -60,10 +74,6 @@ const mountFundingTab = async (calendarId: string = 'cal-uuid-1') => {
       LoadingMessage: {
         template: '<div class="loading-message"><slot /></div>',
         props: ['description'],
-      },
-      FundingSheet: {
-        template: '<div class="subscribe-sheet-stub"><slot /></div>',
-        props: ['calendarId'],
       },
     },
   });
@@ -178,7 +188,7 @@ describe('FundingTab', () => {
       await addButton.trigger('click');
       await flushPromises();
 
-      expect(addSpy).toHaveBeenCalledWith('cal-456', 0);
+      expect(addSpy).toHaveBeenCalledWith('cal-456', 500000);
     });
   });
 
@@ -197,14 +207,16 @@ describe('FundingTab', () => {
       expect(wrapper.find('.funding-status-badge--unfunded').exists()).toBe(true);
       const subscribeButton = wrapper.find('.funding-button--primary');
       expect(subscribeButton.exists()).toBe(true);
-      expect(wrapper.text()).toContain('Create a Funding Plan');
+      expect(wrapper.text()).toContain('Fund This Calendar');
     });
 
-    it('opens subscribe sheet when subscribe button is clicked', async () => {
+    it('calls createCheckoutSession when fund button is clicked', async () => {
       setupDefaultMocks({ status: null });
       vi.spyOn(FundingService.prototype, 'getFundingStatus').mockResolvedValue({
         status: 'unfunded',
       });
+      const checkoutSpy = vi.spyOn(FundingService.prototype, 'createCheckoutSession')
+        .mockResolvedValue({ clientSecret: 'cs_test', sessionId: 'sess_test' });
 
       const wrapper = await mountFundingTab();
       currentWrapper = wrapper;
@@ -215,7 +227,7 @@ describe('FundingTab', () => {
       await subscribeButton.trigger('click');
       await flushPromises();
 
-      expect(wrapper.find('.subscribe-sheet-stub').exists()).toBe(true);
+      expect(checkoutSpy).toHaveBeenCalled();
     });
   });
 
@@ -413,6 +425,218 @@ describe('FundingTab', () => {
 
       resolveAdd!();
       await flushPromises();
+    });
+  });
+
+  describe('PWYC mode (no existing funding plan)', () => {
+    const pwycOptions = {
+      ...defaultOptions,
+      payWhatYouCan: true,
+      payWhatYouCanYearlyDiscount: 15,
+    };
+
+    it('renders monthly amount input instead of pricing cards', async () => {
+      setupDefaultMocks({ status: null, options: pwycOptions });
+      vi.spyOn(FundingService.prototype, 'getFundingStatus').mockResolvedValue({
+        status: 'unfunded',
+      });
+
+      const wrapper = await mountFundingTab();
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      expect(wrapper.find('#pwyc-new-monthly').exists()).toBe(true);
+      expect(wrapper.find('.pricing-cards').exists()).toBe(false);
+    });
+
+    it('prefills monthly input from admin suggested price', async () => {
+      // monthlyPrice = 500000 millicents = $5.00
+      setupDefaultMocks({ status: null, options: pwycOptions });
+      vi.spyOn(FundingService.prototype, 'getFundingStatus').mockResolvedValue({
+        status: 'unfunded',
+      });
+
+      const wrapper = await mountFundingTab();
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      const input = wrapper.find('#pwyc-new-monthly');
+      expect((input.element as HTMLInputElement).value).toBe('5');
+    });
+
+    it('shows yearly opt-in checkbox with computed discounted amount', async () => {
+      // monthlyPrice = 500000 millicents = $5.00
+      // yearly = 5 * 12 * (1 - 15/100) = 5 * 12 * 0.85 = $51.00
+      setupDefaultMocks({ status: null, options: pwycOptions });
+      vi.spyOn(FundingService.prototype, 'getFundingStatus').mockResolvedValue({
+        status: 'unfunded',
+      });
+
+      const wrapper = await mountFundingTab();
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      const yearlyLabel = wrapper.find('.yearly-opt-in span');
+      expect(yearlyLabel.exists()).toBe(true);
+      expect(yearlyLabel.text()).toContain('$51.00');
+    });
+
+    it('shows discount note when discount is greater than 0', async () => {
+      setupDefaultMocks({ status: null, options: pwycOptions });
+      vi.spyOn(FundingService.prototype, 'getFundingStatus').mockResolvedValue({
+        status: 'unfunded',
+      });
+
+      const wrapper = await mountFundingTab();
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      const discountNote = wrapper.find('.yearly-discount-note');
+      expect(discountNote.exists()).toBe(true);
+      expect(discountNote.text()).toContain('15');
+    });
+
+    it('hides discount note when discount is 0', async () => {
+      const noPwycDiscount = { ...pwycOptions, payWhatYouCanYearlyDiscount: 0 };
+      setupDefaultMocks({ status: null, options: noPwycDiscount });
+      vi.spyOn(FundingService.prototype, 'getFundingStatus').mockResolvedValue({
+        status: 'unfunded',
+      });
+
+      const wrapper = await mountFundingTab();
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      expect(wrapper.find('.yearly-discount-note').exists()).toBe(false);
+    });
+  });
+
+  describe('PWYC mode (with existing funding plan)', () => {
+    const pwycOptions = {
+      ...defaultOptions,
+      payWhatYouCan: true,
+      payWhatYouCanYearlyDiscount: 15,
+    };
+
+    it('renders monthly amount input in unfunded-with-plan state', async () => {
+      setupDefaultMocks({ options: pwycOptions });
+      vi.spyOn(FundingService.prototype, 'getFundingStatus').mockResolvedValue({
+        status: 'unfunded',
+      });
+
+      const wrapper = await mountFundingTab();
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      expect(wrapper.find('#pwyc-add-monthly').exists()).toBe(true);
+      expect(wrapper.find('.pricing-cards').exists()).toBe(false);
+    });
+
+    it('shows yearly opt-in with correct discounted amount', async () => {
+      // monthlyPrice = 500000 millicents = $5.00
+      // yearly = 5 * 12 * 0.85 = $51.00
+      setupDefaultMocks({ options: pwycOptions });
+      vi.spyOn(FundingService.prototype, 'getFundingStatus').mockResolvedValue({
+        status: 'unfunded',
+      });
+
+      const wrapper = await mountFundingTab();
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      const yearlyLabel = wrapper.find('.yearly-opt-in span');
+      expect(yearlyLabel.exists()).toBe(true);
+      expect(yearlyLabel.text()).toContain('$51.00');
+    });
+  });
+
+  describe('PWYC discount precision', () => {
+    it('computes yearly = monthly * 12 * (1 - discount/100) precisely', async () => {
+      // monthlyPrice = 1000000 millicents = $10.00
+      // discount = 15% => yearly = 10 * 12 * 0.85 = $102.00
+      const precisionOptions = {
+        ...defaultOptions,
+        monthlyPrice: 1000000,
+        payWhatYouCan: true,
+        payWhatYouCanYearlyDiscount: 15,
+      };
+      setupDefaultMocks({ status: null, options: precisionOptions });
+      vi.spyOn(FundingService.prototype, 'getFundingStatus').mockResolvedValue({
+        status: 'unfunded',
+      });
+
+      const wrapper = await mountFundingTab();
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      const yearlyLabel = wrapper.find('.yearly-opt-in span');
+      expect(yearlyLabel.text()).toContain('$102.00');
+    });
+
+    it('computes yearly as monthly * 12 when discount is 0%', async () => {
+      // monthlyPrice = 1000000 millicents = $10.00
+      // discount = 0% => yearly = 10 * 12 = $120.00
+      const noDiscountOptions = {
+        ...defaultOptions,
+        monthlyPrice: 1000000,
+        payWhatYouCan: true,
+        payWhatYouCanYearlyDiscount: 0,
+      };
+      setupDefaultMocks({ status: null, options: noDiscountOptions });
+      vi.spyOn(FundingService.prototype, 'getFundingStatus').mockResolvedValue({
+        status: 'unfunded',
+      });
+
+      const wrapper = await mountFundingTab();
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      const yearlyLabel = wrapper.find('.yearly-opt-in span');
+      expect(yearlyLabel.text()).toContain('$120.00');
+    });
+  });
+
+  describe('Non-PWYC regression guard', () => {
+    it('renders pricing cards when payWhatYouCan is false', async () => {
+      setupDefaultMocks({ status: null });
+      vi.spyOn(FundingService.prototype, 'getFundingStatus').mockResolvedValue({
+        status: 'unfunded',
+      });
+
+      const wrapper = await mountFundingTab();
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      expect(wrapper.find('.pricing-cards').exists()).toBe(true);
+      expect(wrapper.findAll('.pricing-card')).toHaveLength(2);
+      expect(wrapper.find('#pwyc-new-monthly').exists()).toBe(false);
+      expect(wrapper.find('.yearly-opt-in').exists()).toBe(false);
+    });
+
+    it('displays formatted monthly and yearly prices on pricing cards', async () => {
+      setupDefaultMocks({ status: null });
+      vi.spyOn(FundingService.prototype, 'getFundingStatus').mockResolvedValue({
+        status: 'unfunded',
+      });
+
+      const wrapper = await mountFundingTab();
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      const cards = wrapper.findAll('.pricing-card');
+      expect(cards[0].text()).toContain('$5.00');
+      expect(cards[1].text()).toContain('$50.00');
     });
   });
 });

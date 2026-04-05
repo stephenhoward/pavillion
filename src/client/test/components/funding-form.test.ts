@@ -54,6 +54,7 @@ function makeStripeOptions(overrides: Record<string, any> = {}) {
     yearlyPrice: 10000000,
     currency: 'USD',
     payWhatYouCan: false,
+    payWhatYouCanYearlyDiscount: 0,
     ...overrides,
   };
 }
@@ -68,6 +69,7 @@ function makePayPalOptions() {
     yearlyPrice: 10000000,
     currency: 'USD',
     payWhatYouCan: false,
+    payWhatYouCanYearlyDiscount: 0,
   };
 }
 
@@ -82,6 +84,7 @@ function makeMultiProviderOptions() {
     yearlyPrice: 10000000,
     currency: 'USD',
     payWhatYouCan: false,
+    payWhatYouCanYearlyDiscount: 0,
   };
 }
 
@@ -158,7 +161,7 @@ describe('FundingForm', () => {
       expect(wrapper.find('.loading').exists()).toBe(true);
     });
 
-    it('renders billing cycle options after loading', async () => {
+    it('renders billing cycle options after loading (non-PWYC)', async () => {
       mockGetOptions.mockResolvedValue(makeStripeOptions());
 
       const wrapper = await mountFundingForm();
@@ -186,22 +189,22 @@ describe('FundingForm', () => {
       expect(wrapper.find('.provider-options').exists()).toBe(false);
     });
 
-    it('shows PWYC amount input when payWhatYouCan is true', async () => {
+    it('shows PWYC monthly amount input when payWhatYouCan is true', async () => {
       mockGetOptions.mockResolvedValue(makeStripeOptions({ payWhatYouCan: true }));
 
       const wrapper = await mountFundingForm();
       currentWrapper = wrapper;
 
-      expect(wrapper.find('input[type="number"]').exists()).toBe(true);
+      expect(wrapper.find('#pwyc-monthly-amount').exists()).toBe(true);
     });
 
-    it('hides PWYC amount input when payWhatYouCan is false', async () => {
+    it('hides PWYC monthly amount input when payWhatYouCan is false', async () => {
       mockGetOptions.mockResolvedValue(makeStripeOptions());
 
       const wrapper = await mountFundingForm();
       currentWrapper = wrapper;
 
-      expect(wrapper.find('input[type="number"]').exists()).toBe(false);
+      expect(wrapper.find('#pwyc-monthly-amount').exists()).toBe(false);
     });
 
     it('renders confirm button', async () => {
@@ -221,6 +224,179 @@ describe('FundingForm', () => {
       currentWrapper = wrapper;
 
       expect(wrapper.find('.error-message').exists()).toBe(true);
+    });
+  });
+
+  describe('PWYC mode', () => {
+    it('prefills monthly amount from admin suggested price', async () => {
+      // monthlyPrice = 1000000 millicents = $10.00
+      mockGetOptions.mockResolvedValue(makeStripeOptions({ payWhatYouCan: true }));
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      const input = wrapper.find('#pwyc-monthly-amount');
+      expect((input.element as HTMLInputElement).value).toBe('10');
+    });
+
+    it('hides billing cycle radios in PWYC mode', async () => {
+      mockGetOptions.mockResolvedValue(makeStripeOptions({ payWhatYouCan: true }));
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      expect(wrapper.findAll('.cycle-option')).toHaveLength(0);
+    });
+
+    it('shows yearly opt-in checkbox', async () => {
+      mockGetOptions.mockResolvedValue(makeStripeOptions({
+        payWhatYouCan: true,
+        payWhatYouCanYearlyDiscount: 15,
+      }));
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      expect(wrapper.find('.yearly-opt-in').exists()).toBe(true);
+      expect(wrapper.find('.yearly-opt-in input[type="checkbox"]').exists()).toBe(true);
+    });
+
+    it('displays computed discounted yearly amount on checkbox label', async () => {
+      // monthlyPrice = 1000000 millicents = $10.00
+      // yearly = 10 * 12 * (1 - 15/100) = 10 * 12 * 0.85 = $102.00
+      mockGetOptions.mockResolvedValue(makeStripeOptions({
+        payWhatYouCan: true,
+        payWhatYouCanYearlyDiscount: 15,
+      }));
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      const label = wrapper.find('.yearly-opt-in span');
+      expect(label.text()).toContain('$102.00');
+    });
+
+    it('computes yearly as monthly x 12 when discount is 0%', async () => {
+      // monthlyPrice = 1000000 millicents = $10.00
+      // yearly = 10 * 12 * (1 - 0/100) = $120.00
+      mockGetOptions.mockResolvedValue(makeStripeOptions({
+        payWhatYouCan: true,
+        payWhatYouCanYearlyDiscount: 0,
+      }));
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      const label = wrapper.find('.yearly-opt-in span');
+      expect(label.text()).toContain('$120.00');
+    });
+
+    it('shows discount note when discount > 0', async () => {
+      mockGetOptions.mockResolvedValue(makeStripeOptions({
+        payWhatYouCan: true,
+        payWhatYouCanYearlyDiscount: 15,
+      }));
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      expect(wrapper.find('.yearly-discount-note').exists()).toBe(true);
+    });
+
+    it('hides discount note when discount is 0', async () => {
+      mockGetOptions.mockResolvedValue(makeStripeOptions({
+        payWhatYouCan: true,
+        payWhatYouCanYearlyDiscount: 0,
+      }));
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      expect(wrapper.find('.yearly-discount-note').exists()).toBe(false);
+    });
+
+    it('sends monthly billingCycle and monthly amount when yearly is unchecked', async () => {
+      mockGetOptions.mockResolvedValue(makeStripeOptions({ payWhatYouCan: true }));
+
+      const { mockStripeInstance } = makeMockStripeWithCallbackCapture();
+      mockLoadStripe.mockResolvedValue(mockStripeInstance);
+
+      mockCreateCheckoutSession.mockResolvedValue({
+        clientSecret: 'cs_test_secret',
+        sessionId: 'cs_test_session',
+      });
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      await wrapper.find('button.btn--primary').trigger('click');
+      await flushPromises();
+
+      expect(mockCreateCheckoutSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          billingCycle: 'monthly',
+          amount: 1000000, // $10.00 in millicents
+        }),
+      );
+    });
+
+    it('sends yearly billingCycle and discounted yearly amount when yearly is checked', async () => {
+      // monthlyPrice = 1000000 = $10.00, discount = 15%
+      // yearly = 10 * 12 * 0.85 = $102.00 = 10200000 millicents
+      mockGetOptions.mockResolvedValue(makeStripeOptions({
+        payWhatYouCan: true,
+        payWhatYouCanYearlyDiscount: 15,
+      }));
+
+      const { mockStripeInstance } = makeMockStripeWithCallbackCapture();
+      mockLoadStripe.mockResolvedValue(mockStripeInstance);
+
+      mockCreateCheckoutSession.mockResolvedValue({
+        clientSecret: 'cs_test_secret',
+        sessionId: 'cs_test_session',
+      });
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      // Check the yearly opt-in checkbox
+      const checkbox = wrapper.find('.yearly-opt-in input[type="checkbox"]');
+      await checkbox.setValue(true);
+      await flushPromises();
+
+      await wrapper.find('button.btn--primary').trigger('click');
+      await flushPromises();
+
+      expect(mockCreateCheckoutSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          billingCycle: 'yearly',
+          amount: 10200000, // $102.00 in millicents
+        }),
+      );
+    });
+
+    it('prefills from initialAmount prop instead of suggested price when provided', async () => {
+      // initialAmount = 2000000 millicents = $20.00
+      mockGetOptions.mockResolvedValue(makeStripeOptions({ payWhatYouCan: true }));
+
+      const wrapper = await mountFundingForm({ initialAmount: 2000000 });
+      currentWrapper = wrapper;
+
+      const input = wrapper.find('#pwyc-monthly-amount');
+      expect((input.element as HTMLInputElement).value).toBe('20');
+    });
+  });
+
+  describe('Non-PWYC mode', () => {
+    it('renders billing cycle radios with fixed prices', async () => {
+      mockGetOptions.mockResolvedValue(makeStripeOptions());
+
+      const wrapper = await mountFundingForm();
+      currentWrapper = wrapper;
+
+      expect(wrapper.findAll('.cycle-option')).toHaveLength(2);
+      expect(wrapper.find('#pwyc-monthly-amount').exists()).toBe(false);
+      expect(wrapper.find('.yearly-opt-in').exists()).toBe(false);
     });
   });
 

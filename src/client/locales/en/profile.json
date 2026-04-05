@@ -38,5 +38,14 @@
       "close_button": "Close",
       "link_sent_message": "Password reset link sent to {{email}}",
       "change_email_failed_message": "Failed to change email address"
-  }
+  },
+  "funding_section": "FUNDING",
+  "funding_card_title": "Funding Plan",
+  "funding_card_status_active": "Active",
+  "funding_card_status_none": "No active plan",
+  "funding_card_cycle_month": "/mo",
+  "funding_card_cycle_year": "/yr",
+  "funding_card_summary": "{{count}} calendars, {{amount}}",
+  "funding_card_summary_one": "{{count}} calendar, {{amount}}",
+  "funding_card_action": "Manage Funding Plan"
 }

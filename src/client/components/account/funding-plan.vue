@@ -1,14 +1,16 @@
-<script setup>
+<script setup lang="ts">
 import { useTranslation } from 'i18next-vue';
 import i18next from 'i18next';
 import { ref, computed, onMounted } from 'vue';
 import FundingService from '@/client/service/funding';
-import FundingForm from '@/client/components/account/FundingForm.vue';
+import type { FundedCalendarInfo } from '@/client/service/funding';
+import { useCalendarStore } from '@/client/stores/calendarStore';
 
 const { t } = useTranslation('funding');
 
 // Service instance
 const fundingService = new FundingService();
+const calendarStore = useCalendarStore();
 
 // State management
 const loading = ref(true);
@@ -19,9 +21,7 @@ const errorMessage = ref('');
 // Data state
 const options = ref(null);
 const status = ref(null);
-
-// Funding form state
-const showFundingForm = ref(false);
+const fundedCalendars = ref<FundedCalendarInfo[]>([]);
 
 // Computed properties
 const hasFundingPlan = computed(() => status.value !== null);
@@ -34,24 +34,31 @@ const isSuspended = computed(() => status.value?.status === 'suspended');
 
 const isCancelled = computed(() => status.value?.status === 'cancelled');
 
-const canSubscribe = computed(() => options.value?.enabled && !hasFundingPlan.value);
-
 const canCancel = computed(() => hasFundingPlan.value && (isActive.value || isPastDue.value));
-
-const monthlyPriceDisplay = computed(() => {
-  if (!options.value) return '';
-  return FundingService.formatCurrency(options.value.monthlyPrice, options.value.currency);
-});
-
-const yearlyPriceDisplay = computed(() => {
-  if (!options.value) return '';
-  return FundingService.formatCurrency(options.value.yearlyPrice, options.value.currency);
-});
 
 const currentAmountDisplay = computed(() => {
   if (!status.value) return '';
   return FundingService.formatCurrency(status.value.amount, status.value.currency);
 });
+
+/**
+ * Get the display name for a funded calendar
+ */
+function getCalendarName(calendarId: string): string {
+  const calendar = calendarStore.getCalendarById(calendarId);
+  if (calendar) {
+    return calendar.content(i18next.language).name || calendarId;
+  }
+  return calendarId;
+}
+
+/**
+ * Format the per-calendar amount for display
+ */
+function formatCalendarAmount(amount: number): string {
+  if (!status.value) return '';
+  return FundingService.formatCurrency(amount, status.value.currency);
+}
 
 /**
  * Load funding options and current status
@@ -63,6 +70,16 @@ async function loadData() {
       fundingService.getOptions(),
       fundingService.getStatus(),
     ]);
+
+    if (status.value) {
+      try {
+        fundedCalendars.value = await fundingService.getCalendarsInFundingPlan();
+      }
+      catch (error) {
+        console.error('Failed to load funded calendars:', error);
+        fundedCalendars.value = [];
+      }
+    }
   }
   catch (error) {
     console.error('Failed to load funding data:', error);
@@ -71,22 +88,6 @@ async function loadData() {
   finally {
     loading.value = false;
   }
-}
-
-/**
- * Start funding plan flow
- */
-function startSubscribe() {
-  showFundingForm.value = true;
-}
-
-/**
- * Handle successful funding plan from FundingForm
- */
-async function onSubscribed() {
-  successMessage.value = t('subscribe_success');
-  showFundingForm.value = false;
-  await loadData();
 }
 
 /**
@@ -163,38 +164,10 @@ onMounted(async () => {
     <div v-if="loading" class="loading">{{ t("loading") }}</div>
 
     <div v-else class="funding-plan-content">
-      <!-- No funding plan - Show subscribe options -->
-      <div v-if="canSubscribe && !showFundingForm" class="no-funding-plan">
+      <!-- No funding plan - Direct user to calendar management -->
+      <div v-if="!hasFundingPlan && options?.enabled" class="no-funding-plan">
         <h2>{{ t("no_funding_plan") }}</h2>
-        <p>{{ t("no_funding_plan_description") }}</p>
-
-        <div class="pricing-info">
-          <div class="price-option">
-            <strong>{{ t("monthly_option") }}</strong>
-            <span class="price">{{ monthlyPriceDisplay }}</span>
-          </div>
-          <div class="price-option">
-            <strong>{{ t("yearly_option") }}</strong>
-            <span class="price">{{ yearlyPriceDisplay }}</span>
-          </div>
-        </div>
-
-        <button type="button" class="btn btn--primary" @click="startSubscribe">
-          {{ t("subscribe_button") }}
-        </button>
-      </div>
-
-      <!-- Funding form -->
-      <div v-if="showFundingForm" class="funding-form">
-        <h2>{{ t("subscribe_title") }}</h2>
-        <FundingForm @subscribed="onSubscribed" />
-        <div class="form-actions">
-          <button type="button"
-                  class="btn btn--secondary"
-                  @click="showFundingForm = false">
-            {{ t("cancel_button") }}
-          </button>
-        </div>
+        <p>{{ t("no_plan_redirect") }}</p>
       </div>
 
       <!-- Active funding plan - Show status and management -->
@@ -262,6 +235,22 @@ onMounted(async () => {
             {{ t("cancel_funding_plan_button") }}
           </button>
         </div>
+      </div>
+
+      <!-- Funded calendars list -->
+      <div v-if="hasFundingPlan" class="funded-calendars">
+        <h2>{{ t("funded_calendars_title") }}</h2>
+
+        <div v-if="fundedCalendars.length === 0" class="funded-calendars-empty">
+          <p>{{ t("no_funded_calendars") }}</p>
+        </div>
+
+        <ul v-else class="funded-calendars-list">
+          <li v-for="item in fundedCalendars" :key="item.calendarId" class="funded-calendar-item">
+            <span class="calendar-name">{{ getCalendarName(item.calendarId) }}</span>
+            <span class="calendar-amount">{{ t("funded_calendar_amount", { amount: formatCalendarAmount(item.amount) }) }}</span>
+          </li>
+        </ul>
       </div>
 
       <!-- Funding disabled message -->
@@ -340,98 +329,40 @@ h2 {
 .no-funding-plan {
   text-align: center;
   padding: 2rem;
-
-  .pricing-info {
-    display: flex;
-    justify-content: center;
-    gap: 2rem;
-    margin: 2rem 0;
-
-    .price-option {
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-      padding: 1rem;
-      border: 1px solid var(--pav-color-border-primary);
-      border-radius: 8px;
-      min-width: 150px;
-
-      .price {
-        font-size: 1.5rem;
-        font-weight: var(--pav-font-weight-semibold);
-        color: var(--pav-color-interactive-primary);
-      }
-    }
-  }
 }
 
-.funding-form {
-  padding: 2rem;
-  border: 1px solid var(--pav-color-border-primary);
-  border-radius: 8px;
-  background: var(--pav-color-surface-secondary);
+.funded-calendars {
+  .funded-calendars-empty {
+    padding: 1rem;
+    text-align: center;
+    color: var(--pav-color-text-secondary);
+  }
 
-  .form-group {
-    margin-bottom: 1.5rem;
+  .funded-calendars-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
 
-    .form-label {
-      display: block;
-      font-weight: var(--pav-font-weight-medium);
-      margin-bottom: 0.5rem;
-      color: var(--pav-color-text-primary);
-    }
-
-    .provider-options, .cycle-options {
+    .funded-calendar-item {
       display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem 1rem;
+      border: 1px solid var(--pav-color-border-primary);
+      border-radius: 8px;
+      background: var(--pav-color-surface-secondary);
+      margin-bottom: 0.5rem;
 
-      label {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.75rem;
-        border: 1px solid var(--pav-color-border-primary);
-        border-radius: 8px;
-        cursor: pointer;
-
-        &:hover {
-          background: var(--pav-color-surface-hover);
-        }
-
-        input[type="radio"] {
-          margin: 0;
-        }
-      }
-    }
-
-    .form-field {
-      input {
-        width: 100%;
-        max-width: 200px;
-        padding: 0.5rem;
-        border: 1px solid var(--pav-color-border-primary);
-        border-radius: 8px;
-        background: var(--pav-color-surface-secondary);
+      .calendar-name {
+        font-weight: var(--pav-font-weight-medium);
         color: var(--pav-color-text-primary);
-
-        @media (prefers-color-scheme: dark) {
-          background: var(--pav-color-surface-tertiary);
-        }
       }
 
-      .description {
-        margin-top: 0.5rem;
+      .calendar-amount {
         font-size: 0.875rem;
         color: var(--pav-color-text-secondary);
       }
     }
-  }
-
-  .form-actions {
-    display: flex;
-    gap: 1rem;
-    margin-top: 2rem;
   }
 }
 
