@@ -41,6 +41,7 @@ describe('Admin Funding API', () => {
       mockSettings.currency = 'USD';
       mockSettings.payWhatYouCan = false;
       mockSettings.gracePeriodDays = 7;
+      mockSettings.payWhatYouCanYearlyDiscount = 15;
 
       sandbox.stub(service, 'getSettings').resolves(mockSettings);
 
@@ -57,6 +58,7 @@ describe('Admin Funding API', () => {
         currency: 'USD',
         payWhatYouCan: false,
         gracePeriodDays: 7,
+        payWhatYouCanYearlyDiscount: 15,
       });
     });
   });
@@ -72,6 +74,7 @@ describe('Admin Funding API', () => {
         currency: 'USD',
         payWhatYouCan: true,
         gracePeriodDays: 14,
+        payWhatYouCanYearlyDiscount: 10,
       };
 
       router.post('/handler', adminHandlers.updateSettings.bind(adminHandlers));
@@ -97,6 +100,7 @@ describe('Admin Funding API', () => {
           currency: 'INVALID',
           payWhatYouCan: false,
           gracePeriodDays: 7,
+          payWhatYouCanYearlyDiscount: 0,
         })
         .expect(400);
 
@@ -115,10 +119,71 @@ describe('Admin Funding API', () => {
           currency: 'USD',
           payWhatYouCan: false,
           gracePeriodDays: 7,
+          payWhatYouCanYearlyDiscount: 0,
         })
         .expect(400);
 
       expect(response.body.error).toContain('must be non-negative');
+    });
+
+    it('should reject payWhatYouCanYearlyDiscount greater than 100', async () => {
+      router.post('/handler', adminHandlers.updateSettings.bind(adminHandlers));
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .send({
+          enabled: true,
+          monthlyPrice: 1000000,
+          yearlyPrice: 10000000,
+          currency: 'USD',
+          payWhatYouCan: true,
+          gracePeriodDays: 7,
+          payWhatYouCanYearlyDiscount: 101,
+        })
+        .expect(400);
+
+      expect(response.body.error).toContain('payWhatYouCanYearlyDiscount must be a number between 0 and 100');
+      expect(response.body.errorName).toBe('ValidationError');
+    });
+
+    it('should reject negative payWhatYouCanYearlyDiscount', async () => {
+      router.post('/handler', adminHandlers.updateSettings.bind(adminHandlers));
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .send({
+          enabled: true,
+          monthlyPrice: 1000000,
+          yearlyPrice: 10000000,
+          currency: 'USD',
+          payWhatYouCan: true,
+          gracePeriodDays: 7,
+          payWhatYouCanYearlyDiscount: -5,
+        })
+        .expect(400);
+
+      expect(response.body.error).toContain('payWhatYouCanYearlyDiscount must be a number between 0 and 100');
+      expect(response.body.errorName).toBe('ValidationError');
+    });
+
+    it('should reject non-numeric payWhatYouCanYearlyDiscount', async () => {
+      router.post('/handler', adminHandlers.updateSettings.bind(adminHandlers));
+
+      const response = await request(testApp(router))
+        .post('/handler')
+        .send({
+          enabled: true,
+          monthlyPrice: 1000000,
+          yearlyPrice: 10000000,
+          currency: 'USD',
+          payWhatYouCan: true,
+          gracePeriodDays: 7,
+          payWhatYouCanYearlyDiscount: 'ten',
+        })
+        .expect(400);
+
+      expect(response.body.error).toContain('payWhatYouCanYearlyDiscount must be a number between 0 and 100');
+      expect(response.body.errorName).toBe('ValidationError');
     });
   });
 

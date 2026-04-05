@@ -19,8 +19,9 @@ import { ValidationError } from '@/common/exceptions/base';
  * Tests for CalendarFundingPlanRoutes API handlers.
  *
  * These tests verify the HTTP-level behavior of POST /calendars,
- * DELETE /calendars/:calendarId, and GET /calendars/:calendarId/funding
- * without rate limiting middleware (bypassed via direct handler binding).
+ * GET /calendars, DELETE /calendars/:calendarId, and
+ * GET /calendars/:calendarId/funding without rate limiting middleware
+ * (bypassed via direct handler binding).
  */
 describe('CalendarFundingPlanRoutes API', () => {
   let sandbox: sinon.SinonSandbox;
@@ -175,6 +176,97 @@ describe('CalendarFundingPlanRoutes API', () => {
         .expect(400);
 
       expect(response.body.errorName).toBe('ValidationError');
+    });
+  });
+
+  describe('GET /calendars (getCalendars)', () => {
+    const bindGetCalendars = () => {
+      router.get('/handler', (req: Request, _res: Response, next) => {
+        req.user = mockAccount;
+        next();
+      }, routes['getCalendars'].bind(routes));
+    };
+
+    it('should return 200 with array of funded calendars', async () => {
+      mockInterface.getCalendarsInFundingPlan.resolves([
+        { calendarId: 'cal-1-uuid-aaaa-bbbb-ccccddddeeee', amount: 500000, createdAt: new Date('2026-01-01') },
+        { calendarId: 'cal-2-uuid-aaaa-bbbb-ccccddddeeee', amount: 300000, createdAt: new Date('2026-02-01') },
+      ]);
+
+      bindGetCalendars();
+
+      const response = await request(testApp(router))
+        .get('/handler')
+        .expect(200);
+
+      expect(response.body).toEqual([
+        { calendarId: 'cal-1-uuid-aaaa-bbbb-ccccddddeeee', amount: 500000 },
+        { calendarId: 'cal-2-uuid-aaaa-bbbb-ccccddddeeee', amount: 300000 },
+      ]);
+      expect(mockInterface.getCalendarsInFundingPlan.calledOnce).toBe(true);
+      expect(mockInterface.getCalendarsInFundingPlan.calledWith('test-account-id')).toBe(true);
+    });
+
+    it('should return 401 when not authenticated', async () => {
+      router.get('/handler', routes['getCalendars'].bind(routes));
+
+      await request(testApp(router))
+        .get('/handler')
+        .expect(401);
+    });
+
+    it('should return empty array when user has no funding plan', async () => {
+      mockInterface.getCalendarsInFundingPlan.resolves([]);
+
+      bindGetCalendars();
+
+      const response = await request(testApp(router))
+        .get('/handler')
+        .expect(200);
+
+      expect(response.body).toEqual([]);
+    });
+
+    it('should return empty array when user has funding plan but no calendars', async () => {
+      mockInterface.getCalendarsInFundingPlan.resolves([]);
+
+      bindGetCalendars();
+
+      const response = await request(testApp(router))
+        .get('/handler')
+        .expect(200);
+
+      expect(response.body).toEqual([]);
+    });
+
+    it('should not include createdAt in response', async () => {
+      mockInterface.getCalendarsInFundingPlan.resolves([
+        { calendarId: 'cal-1-uuid-aaaa-bbbb-ccccddddeeee', amount: 500000, createdAt: new Date('2026-01-01') },
+      ]);
+
+      bindGetCalendars();
+
+      const response = await request(testApp(router))
+        .get('/handler')
+        .expect(200);
+
+      expect(response.body[0]).not.toHaveProperty('createdAt');
+      expect(response.body[0]).toEqual({
+        calendarId: 'cal-1-uuid-aaaa-bbbb-ccccddddeeee',
+        amount: 500000,
+      });
+    });
+
+    it('should return 500 when service throws unexpected error', async () => {
+      mockInterface.getCalendarsInFundingPlan.rejects(new Error('Database error'));
+
+      bindGetCalendars();
+
+      const response = await request(testApp(router))
+        .get('/handler')
+        .expect(500);
+
+      expect(response.body.error).toBe('Internal server error');
     });
   });
 

@@ -89,6 +89,7 @@ export default class FundingInterface {
     yearlyPrice: number;
     currency: string;
     payWhatYouCan: boolean;
+    payWhatYouCanYearlyDiscount: number;
   }> {
     return this.fundingService.getOptions();
   }
@@ -144,6 +145,18 @@ export default class FundingInterface {
   }
 
   // Calendar funding plan operations
+
+  /**
+   * Get all calendars in the account's active funding plan
+   *
+   * @param accountId - Account ID to look up
+   * @returns Array of funded calendar allocations (calendarId, amount, createdAt)
+   */
+  async getCalendarsInFundingPlan(
+    accountId: string,
+  ): Promise<{ calendarId: string; amount: number; createdAt: Date }[]> {
+    return this.fundingService.getCalendarsInFundingPlan(accountId);
+  }
 
   /**
    * Add a calendar to the account's active funding plan

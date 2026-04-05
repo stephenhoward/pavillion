@@ -42,6 +42,12 @@ export default class CalendarFundingPlanRoutes {
       this.addCalendar.bind(this),
     );
 
+    router.get(
+      '/calendars',
+      ...ExpressHelper.loggedInOnly,
+      this.getCalendars.bind(this),
+    );
+
     router.delete(
       '/calendars/:calendarId',
       ...ExpressHelper.loggedInOnly,
@@ -115,6 +121,34 @@ export default class CalendarFundingPlanRoutes {
       else {
         res.status(500).json({ error: 'Internal server error' });
       }
+    }
+  }
+
+  /**
+   * GET /calendars
+   * Get all calendars in the authenticated user's funding plan
+   *
+   * Returns array of { calendarId, amount } for active calendar allocations.
+   */
+  async getCalendars(req: Request, res: Response): Promise<void> {
+    try {
+      const account = req.user as Account;
+
+      if (!account) {
+        res.status(401).json({ error: 'Authentication required' });
+        return;
+      }
+
+      const calendars = await this.service.getCalendarsInFundingPlan(account.id);
+
+      res.json(calendars.map((c) => ({
+        calendarId: c.calendarId,
+        amount: c.amount,
+      })));
+    }
+    catch (error) {
+      logError(error, 'Error fetching calendars in funding plan');
+      res.status(500).json({ error: 'Internal server error' });
     }
   }
 

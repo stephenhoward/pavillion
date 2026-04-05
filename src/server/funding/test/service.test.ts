@@ -25,6 +25,7 @@ import {
 import { ValidationError } from '@/common/exceptions/base';
 import { AccountEntity } from '@/server/common/entity/account';
 import { v4 as uuidv4 } from 'uuid';
+import config from 'config';
 
 describe('FundingService', () => {
   let sandbox: sinon.SinonSandbox;
@@ -106,6 +107,7 @@ describe('FundingService', () => {
         currency: 'USD',
         pay_what_you_can: false,
         grace_period_days: 7,
+        pay_what_you_can_yearly_discount: 0,
         save: sandbox.stub().resolves(),
       };
 
@@ -116,12 +118,14 @@ describe('FundingService', () => {
       updatedSettings.monthlyPrice = 1000000;
       updatedSettings.yearlyPrice = 10000000;
       updatedSettings.currency = 'USD';
+      updatedSettings.payWhatYouCanYearlyDiscount = 20;
 
       await service.updateSettings(updatedSettings);
 
       expect(existingEntity.enabled).toBe(true);
       expect(existingEntity.monthly_price).toBe(1000000);
       expect(existingEntity.yearly_price).toBe(10000000);
+      expect(existingEntity.pay_what_you_can_yearly_discount).toBe(20);
       expect(existingEntity.save.called).toBe(true);
     });
   });
@@ -858,6 +862,12 @@ describe('FundingService', () => {
     const calendarId = uuidv4();
     const providerConfigId = uuidv4();
     const returnUrl = 'https://pavillion.dev/return';
+
+    beforeEach(() => {
+      // Stub config domain so URL validation uses the same domain as the test returnUrl,
+      // regardless of local.yaml overrides in the developer's environment.
+      sandbox.stub(config, 'get').withArgs('domain').returns('pavillion.dev');
+    });
 
     function stubEnabledStripeProvider() {
       const mockEntity = {

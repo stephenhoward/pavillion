@@ -36,6 +36,7 @@ const monthlyPrice = ref(10.00);
 const yearlyPrice = ref(100.00);
 const currency = ref('USD');
 const payWhatYouCan = ref(false);
+const payWhatYouCanYearlyDiscount = ref(0);
 const gracePeriodDays = ref(7);
 
 // Provider management state
@@ -107,6 +108,7 @@ async function loadSettings() {
     yearlyPrice.value = FundingService.millicentsToDisplay(settings.yearlyPrice);
     currency.value = settings.currency;
     payWhatYouCan.value = settings.payWhatYouCan;
+    payWhatYouCanYearlyDiscount.value = settings.payWhatYouCanYearlyDiscount ?? 0;
     gracePeriodDays.value = settings.gracePeriodDays;
   }
   catch (error) {
@@ -245,6 +247,7 @@ async function toggleEnabled() {
       currency: currency.value,
       payWhatYouCan: payWhatYouCan.value,
       gracePeriodDays: gracePeriodDays.value,
+      payWhatYouCanYearlyDiscount: payWhatYouCanYearlyDiscount.value,
     });
 
     if (success) {
@@ -287,6 +290,7 @@ async function updateSettings() {
       currency: currency.value,
       payWhatYouCan: payWhatYouCan.value,
       gracePeriodDays: gracePeriodDays.value,
+      payWhatYouCanYearlyDiscount: payWhatYouCanYearlyDiscount.value,
     });
 
     if (success) {
@@ -950,6 +954,22 @@ onMounted(async () => {
                       <p class="toggle-description">{{ t("pwyc_description") }}</p>
                     </div>
                   </label>
+
+                  <!-- PWYC Yearly Discount -->
+                  <div v-if="payWhatYouCan" class="form-group form-group--inline">
+                    <label class="form-label" for="funding-pay-what-you-can-yearly-discount">{{ t("pay_what_you_can_yearly_discount_label") }}</label>
+                    <input
+                      id="funding-pay-what-you-can-yearly-discount"
+                      type="number"
+                      v-model.number="payWhatYouCanYearlyDiscount"
+                      min="0"
+                      max="100"
+                      step="1"
+                      :disabled="saving"
+                      class="form-input form-input--narrow"
+                    />
+                    <p class="form-hint">{{ t("pay_what_you_can_yearly_discount_description") }}</p>
+                  </div>
 
                   <!-- Grace Period -->
                   <div class="form-group form-group--inline">

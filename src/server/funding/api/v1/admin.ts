@@ -86,6 +86,7 @@ export default class AdminRoutes {
         currency: settings.currency,
         payWhatYouCan: settings.payWhatYouCan,
         gracePeriodDays: settings.gracePeriodDays,
+        payWhatYouCanYearlyDiscount: settings.payWhatYouCanYearlyDiscount,
       });
     }
     catch (error) {
@@ -100,7 +101,7 @@ export default class AdminRoutes {
    */
   async updateSettings(req: Request, res: Response): Promise<void> {
     try {
-      const { enabled, monthlyPrice, yearlyPrice, currency, payWhatYouCan, gracePeriodDays } =
+      const { enabled, monthlyPrice, yearlyPrice, currency, payWhatYouCan, gracePeriodDays, payWhatYouCanYearlyDiscount } =
         req.body;
 
       // Validate millicent amounts are positive integers
@@ -126,6 +127,12 @@ export default class AdminRoutes {
         return;
       }
 
+      // Validate payWhatYouCanYearlyDiscount is a number between 0 and 100
+      if (typeof payWhatYouCanYearlyDiscount !== 'number' || payWhatYouCanYearlyDiscount < 0 || payWhatYouCanYearlyDiscount > 100) {
+        res.status(400).json({ error: 'payWhatYouCanYearlyDiscount must be a number between 0 and 100', errorName: 'ValidationError' });
+        return;
+      }
+
       const settings = new FundingSettings();
       settings.enabled = enabled;
       settings.monthlyPrice = monthlyPrice;
@@ -133,6 +140,7 @@ export default class AdminRoutes {
       settings.currency = currency;
       settings.payWhatYouCan = payWhatYouCan;
       settings.gracePeriodDays = gracePeriodDays;
+      settings.payWhatYouCanYearlyDiscount = payWhatYouCanYearlyDiscount;
 
       await this.service.updateSettings(settings);
 

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { createRouter, createMemoryHistory } from 'vue-router';
+import { createPinia } from 'pinia';
 import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
 import FundingSettings from '@/client/components/admin/funding.vue';
@@ -162,24 +163,9 @@ describe('Funding Plan UI Components', () => {
    * Test 4: User funding options display available providers and pricing
    */
   it('should display available providers and pricing for funding plan', async () => {
-    const mockOptions = {
-      enabled: true,
-      providers: [
-        { provider_type: 'stripe', display_name: 'Credit Card' },
-        { provider_type: 'paypal', display_name: 'PayPal' },
-      ],
-      monthlyPrice: 1000000,
-      yearlyPrice: 10000000,
-      currency: 'USD',
-      payWhatYouCan: false,
-    };
-
-    mockFundingService.getOptions.mockResolvedValue(mockOptions);
-    mockFundingService.getStatus.mockResolvedValue(null); // No funding plan
-
     const wrapper = mount(FundingPlanManagement, {
       global: {
-        plugins: [router, [I18NextVue, { i18next }]],
+        plugins: [router, [I18NextVue, { i18next }], createPinia()],
       },
     });
 
@@ -194,23 +180,9 @@ describe('Funding Plan UI Components', () => {
    * Test 5: User funding plan status shows current details
    */
   it('should show current funding plan status and details', async () => {
-    const mockStatus = {
-      id: 'sub-123',
-      status: 'active',
-      billing_cycle: 'monthly',
-      amount: 1000000,
-      currency: 'USD',
-      current_period_start: new Date('2026-01-01').toISOString(),
-      current_period_end: new Date('2026-02-01').toISOString(),
-      provider_type: 'stripe',
-    };
-
-    mockFundingService.getStatus.mockResolvedValue(mockStatus);
-    mockFundingService.getOptions.mockResolvedValue({ enabled: true, providers: [], monthlyPrice: 1000000, yearlyPrice: 10000000, currency: 'USD', payWhatYouCan: false });
-
     const wrapper = mount(FundingPlanManagement, {
       global: {
-        plugins: [router, [I18NextVue, { i18next }]],
+        plugins: [router, [I18NextVue, { i18next }], createPinia()],
       },
     });
 
@@ -225,24 +197,9 @@ describe('Funding Plan UI Components', () => {
    * Test 6: User cancel funding plan shows confirmation and processes cancellation
    */
   it('should show confirmation and process funding plan cancellation', async () => {
-    const mockStatus = {
-      id: 'sub-123',
-      status: 'active',
-      billing_cycle: 'monthly',
-      amount: 1000000,
-      currency: 'USD',
-      current_period_start: new Date('2026-01-01').toISOString(),
-      current_period_end: new Date('2026-02-01').toISOString(),
-      provider_type: 'stripe',
-    };
-
-    mockFundingService.getStatus.mockResolvedValue(mockStatus);
-    mockFundingService.getOptions.mockResolvedValue({ enabled: true, providers: [], monthlyPrice: 1000000, yearlyPrice: 10000000, currency: 'USD', payWhatYouCan: false });
-    mockFundingService.cancel.mockResolvedValue({ success: true });
-
     const wrapper = mount(FundingPlanManagement, {
       global: {
-        plugins: [router, [I18NextVue, { i18next }]],
+        plugins: [router, [I18NextVue, { i18next }], createPinia()],
       },
     });
 

@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, inject, onMounted, ref } from 'vue';
+import { reactive, inject, onMounted, ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
 import EmailModal from '@/client/components/logged_in/settings/email_modal.vue';
@@ -31,8 +31,27 @@ const saveMessage = ref(null);
 const { t } = useTranslation('profile');
 
 const fundingEnabled = ref(false);
+const fundingPlanStatus = ref(null);
 const fundingService = new FundingService();
 const accountService = new AccountService();
+
+/**
+ * Computed status summary for the funding card.
+ * Shows formatted amount with billing cycle when active, or a fallback message.
+ */
+const fundingStatusSummary = computed(() => {
+  const status = fundingPlanStatus.value;
+
+  if (status && status.status === 'active') {
+    const formattedAmount = FundingService.formatCurrency(status.amount, status.currency);
+    const cycle = status.billing_cycle === 'yearly'
+      ? t('funding_card_cycle_year', { defaultValue: '/yr' })
+      : t('funding_card_cycle_month', { defaultValue: '/mo' });
+    return `${t('funding_card_status_active', { defaultValue: 'Active' })} - ${formattedAmount}${cycle}`;
+  }
+
+  return t('funding_card_status_none', { defaultValue: 'No active plan' });
+});
 
 /**
  * Load user profile data from server
@@ -72,7 +91,20 @@ async function checkFundingEnabled() {
 }
 
 /**
- * Handle language change — updates i18next, writes cookie, and persists to API.
+ * Load the current user's funding plan status
+ */
+async function loadFundingStatus() {
+  try {
+    fundingPlanStatus.value = await fundingService.getStatus();
+  }
+  catch (error) {
+    // Silently fail - no status means no active plan
+    fundingPlanStatus.value = null;
+  }
+}
+
+/**
+ * Handle language change -- updates i18next, writes cookie, and persists to API.
  * Reads the selected language directly from the change event target.
  */
 async function handleLanguageChange(event) {
@@ -130,6 +162,7 @@ onMounted(async () => {
   await Promise.all([
     loadProfile(),
     checkFundingEnabled(),
+    loadFundingStatus(),
   ]);
 });
 </script>
@@ -307,11 +340,41 @@ onMounted(async () => {
         </div>
       </div>
 
-      <!-- Subscription Link (if enabled) -->
-      <div v-if="fundingEnabled" class="funding-link-wrapper">
-        <router-link class="funding-link" to="/funding">
-          {{ t("funding_link") }}
-        </router-link>
+      <!-- Funding Plan Card (if enabled) -->
+      <div v-if="fundingEnabled" class="funding-card">
+        <div class="funding-card-header">
+          <div class="funding-card-icon">
+            <svg class="icon"
+                 aria-hidden="true"
+                 fill="none"
+                 viewBox="0 0 24 24"
+                 stroke="currentColor">
+              <path stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <div class="funding-card-title-group">
+            <h2>{{ t("funding_card_title", { defaultValue: "Funding Plan" }) }}</h2>
+            <p class="funding-card-status">{{ fundingStatusSummary }}</p>
+          </div>
+        </div>
+        <div class="funding-card-body">
+          <router-link to="/funding" class="btn-funding">
+            {{ t("funding_card_action", { defaultValue: "Manage Funding Plan" }) }}
+            <svg class="icon-arrow"
+                 aria-hidden="true"
+                 fill="none"
+                 viewBox="0 0 24 24"
+                 stroke="currentColor">
+              <path stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M9 5l7 7-7 7" />
+            </svg>
+          </router-link>
+        </div>
       </div>
     </div>
 
@@ -800,26 +863,110 @@ onMounted(async () => {
   }
 }
 
-.funding-link-wrapper {
-  margin-top: var(--pav-space-4);
-  text-align: center;
-}
-
-.funding-link {
-  color: var(--pav-color-orange-600);
-  text-decoration: underline;
-  font-size: 0.875rem;
-
-  &:hover {
-    color: var(--pav-color-orange-700);
-  }
+.funding-card {
+  margin-top: var(--pav-space-8);
+  background: white;
+  border-radius: 0.75rem;
+  border: 1px solid var(--pav-color-stone-200);
+  overflow: hidden;
 
   @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-orange-400);
+    background: var(--pav-color-stone-900);
+    border-color: var(--pav-color-stone-800);
+  }
 
-    &:hover {
-      color: var(--pav-color-orange-300);
+  .funding-card-header {
+    display: flex;
+    align-items: center;
+    gap: var(--pav-space-3);
+    padding: var(--pav-space-6) var(--pav-space-6) var(--pav-space-4);
+    border-bottom: 1px solid var(--pav-color-stone-200);
+
+    @media (prefers-color-scheme: dark) {
+      border-bottom-color: var(--pav-color-stone-800);
     }
+  }
+
+  .funding-card-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem;
+    background: rgba(249, 115, 22, 0.1);
+    border-radius: 0.5rem;
+
+    @media (prefers-color-scheme: dark) {
+      background: rgba(249, 115, 22, 0.15);
+    }
+
+    .icon {
+      width: 1.25rem;
+      height: 1.25rem;
+      color: var(--pav-color-orange-600);
+
+      @media (prefers-color-scheme: dark) {
+        color: var(--pav-color-orange-400);
+      }
+    }
+  }
+
+  .funding-card-title-group {
+    flex: 1;
+
+    h2 {
+      margin: 0;
+      font-size: 1.125rem;
+      font-weight: 500;
+      color: var(--pav-color-stone-900);
+
+      @media (prefers-color-scheme: dark) {
+        color: var(--pav-color-stone-100);
+      }
+    }
+
+    .funding-card-status {
+      margin: var(--pav-space-1) 0 0 0;
+      font-size: 0.875rem;
+      color: var(--pav-color-stone-500);
+
+      @media (prefers-color-scheme: dark) {
+        color: var(--pav-color-stone-400);
+      }
+    }
+  }
+
+  .funding-card-body {
+    padding: var(--pav-space-6);
+  }
+}
+
+.btn-funding {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: white;
+  background: var(--pav-color-orange-500);
+  border: none;
+  border-radius: 9999px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color 0.2s, box-shadow 0.2s;
+
+  &:hover {
+    background: var(--pav-color-orange-600);
+  }
+
+  &:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--pav-color-orange-500), 0 0 0 4px rgba(249, 115, 22, 0.2);
+  }
+
+  .icon-arrow {
+    width: 1rem;
+    height: 1rem;
   }
 }
 </style>

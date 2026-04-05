@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useTranslation } from 'i18next-vue';
+import i18next from 'i18next';
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import FundingService from '@/client/service/funding';
 import type { FundingOptions, FundingProvider } from '@/client/service/funding';
@@ -9,6 +10,8 @@ type FormState = 'configure' | 'checkout' | 'result';
 
 const props = defineProps<{
   calendarId?: string;
+  initialCycle?: 'monthly' | 'yearly';
+  initialAmount?: number;
 }>();
 
 const emit = defineEmits<{
@@ -29,6 +32,10 @@ const resultStatus = ref<'success' | 'error'>('success');
 const selectedProvider = ref('');
 const selectedCycle = ref<'monthly' | 'yearly'>('monthly');
 const customAmount = ref(10.00);
+
+// PWYC-specific state
+const monthlyAmount = ref(0);
+const yearlyOptIn = ref(false);
 
 // Template ref for the Stripe checkout container
 const checkoutContainerRef = ref<HTMLElement | null>(null);
@@ -52,6 +59,10 @@ const isStripeProvider = computed(() =>
   selectedProvider.value === 'stripe',
 );
 
+const isPwyc = computed(() =>
+  options.value?.payWhatYouCan ?? false,
+);
+
 const monthlyPriceDisplay = computed(() => {
   if (!options.value) return '';
   return FundingService.formatCurrency(options.value.monthlyPrice, options.value.currency);
@@ -62,6 +73,49 @@ const yearlyPriceDisplay = computed(() => {
   return FundingService.formatCurrency(options.value.yearlyPrice, options.value.currency);
 });
 
+/**
+ * Computed discounted yearly amount based on PWYC monthly input.
+ * Formula: monthly * 12 * (1 - discount/100)
+ */
+const pwycYearlyAmount = computed(() => {
+  const discount = options.value?.payWhatYouCanYearlyDiscount ?? 0;
+  return monthlyAmount.value * 12 * (1 - discount / 100);
+});
+
+/**
+ * Formatted PWYC yearly amount for display
+ */
+const pwycYearlyDisplay = computed(() => {
+  if (!options.value) return '';
+  const millicents = FundingService.displayToMillicents(pwycYearlyAmount.value);
+  return FundingService.formatCurrency(millicents, options.value.currency);
+});
+
+/**
+ * Currency symbol for PWYC inputs
+ */
+const currencySymbol = computed((): string => {
+  const currency = options.value?.currency ?? 'USD';
+  try {
+    return new Intl.NumberFormat(i18next.language, {
+      style: 'currency',
+      currency,
+      currencyDisplay: 'narrowSymbol',
+    }).formatToParts(0).find(p => p.type === 'currency')?.value ?? '$';
+  }
+  catch {
+    return '$';
+  }
+});
+
+/**
+ * Formatted suggested monthly amount for display
+ */
+const suggestedAmountDisplay = computed(() => {
+  if (!options.value) return '';
+  return FundingService.formatCurrency(options.value.monthlyPrice, options.value.currency);
+});
+
 async function loadOptions() {
   try {
     loading.value = true;
@@ -69,6 +123,25 @@ async function loadOptions() {
 
     if (availableProviders.value.length > 0) {
       selectedProvider.value = availableProviders.value[0].providerType;
+    }
+
+    // Apply initial values from props if provided
+    if (props.initialCycle) {
+      selectedCycle.value = props.initialCycle;
+    }
+
+    // Prefill PWYC monthly amount from admin's suggested price
+    if (options.value?.payWhatYouCan) {
+      if (props.initialAmount !== undefined) {
+        monthlyAmount.value = FundingService.millicentsToDisplay(props.initialAmount);
+      }
+      else {
+        monthlyAmount.value = FundingService.millicentsToDisplay(options.value.monthlyPrice);
+      }
+      customAmount.value = monthlyAmount.value;
+    }
+    else if (props.initialAmount !== undefined) {
+      customAmount.value = FundingService.millicentsToDisplay(props.initialAmount);
     }
   }
   catch (error) {
@@ -148,12 +221,23 @@ async function startStripeCheckout() {
   try {
     // Build checkout session params
     const params: Record<string, any> = {
-      billingCycle: selectedCycle.value,
       returnUrl: window.location.href,
     };
 
-    if (options.value?.payWhatYouCan) {
-      params.amount = FundingService.displayToMillicents(customAmount.value);
+    if (isPwyc.value) {
+      // PWYC mode: use monthly input and yearly opt-in
+      if (yearlyOptIn.value) {
+        params.billingCycle = 'yearly';
+        params.amount = FundingService.displayToMillicents(pwycYearlyAmount.value);
+      }
+      else {
+        params.billingCycle = 'monthly';
+        params.amount = FundingService.displayToMillicents(monthlyAmount.value);
+      }
+    }
+    else {
+      // Fixed pricing mode: use selected cycle
+      params.billingCycle = selectedCycle.value;
     }
 
     if (props.calendarId) {
@@ -271,45 +355,74 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <!-- Billing cycle -->
-      <div class="form-group">
-        <label class="form-label">{{ t("select_cycle") }}</label>
-        <div class="cycle-options">
-          <label class="cycle-option">
-            <input
-              type="radio"
-              value="monthly"
-              v-model="selectedCycle"
-              :disabled="processing"
-            />
-            <span>{{ t("billing_cycle_monthly") }} - {{ monthlyPriceDisplay }}</span>
+      <!-- PWYC mode: monthly amount input + yearly opt-in checkbox -->
+      <template v-if="isPwyc">
+        <div class="form-group">
+          <label class="form-label" for="pwyc-monthly-amount">
+            {{ t("monthly_amount_label") }}
           </label>
-          <label class="cycle-option">
-            <input
-              type="radio"
-              value="yearly"
-              v-model="selectedCycle"
-              :disabled="processing"
-            />
-            <span>{{ t("billing_cycle_yearly") }} - {{ yearlyPriceDisplay }}</span>
-          </label>
+          <div class="form-field">
+            <div class="currency-input">
+              <span class="currency-symbol">{{ currencySymbol }}</span>
+              <input
+                id="pwyc-monthly-amount"
+                type="number"
+                v-model.number="monthlyAmount"
+                step="0.01"
+                min="1"
+                :disabled="processing"
+              />
+            </div>
+            <div class="description">
+              {{ t("suggested_amount", { amount: suggestedAmountDisplay }) }}
+            </div>
+          </div>
         </div>
-      </div>
 
-      <!-- PWYC amount -->
-      <div v-if="options.payWhatYouCan" class="form-group">
-        <label class="form-label">{{ t("custom_amount_label") }}</label>
-        <div class="form-field">
-          <input
-            type="number"
-            v-model.number="customAmount"
-            step="0.01"
-            min="1"
-            :disabled="processing"
-          />
-          <div class="description">{{ t("custom_amount_description") }}</div>
+        <div class="form-group">
+          <label class="yearly-opt-in">
+            <input
+              type="checkbox"
+              v-model="yearlyOptIn"
+              :disabled="processing"
+            />
+            <span>{{ t("yearly_opt_in_label", { amount: pwycYearlyDisplay }) }}</span>
+          </label>
+          <div
+            v-if="options.payWhatYouCanYearlyDiscount > 0"
+            class="description yearly-discount-note"
+          >
+            {{ t("yearly_discount_note", { percent: options.payWhatYouCanYearlyDiscount }) }}
+          </div>
         </div>
-      </div>
+      </template>
+
+      <!-- Non-PWYC mode: billing cycle radios with fixed prices -->
+      <template v-else>
+        <div class="form-group">
+          <label class="form-label">{{ t("select_cycle") }}</label>
+          <div class="cycle-options">
+            <label class="cycle-option">
+              <input
+                type="radio"
+                value="monthly"
+                v-model="selectedCycle"
+                :disabled="processing"
+              />
+              <span>{{ t("billing_cycle_monthly") }} - {{ monthlyPriceDisplay }}</span>
+            </label>
+            <label class="cycle-option">
+              <input
+                type="radio"
+                value="yearly"
+                v-model="selectedCycle"
+                :disabled="processing"
+              />
+              <span>{{ t("billing_cycle_yearly") }} - {{ yearlyPriceDisplay }}</span>
+            </label>
+          </div>
+        </div>
+      </template>
 
       <!-- Submit -->
       <div class="form-actions">
@@ -412,6 +525,23 @@ onBeforeUnmount(() => {
     }
 
     .form-field {
+      .currency-input {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        max-width: 200px;
+
+        .currency-symbol {
+          font-weight: 500;
+          color: var(--pav-color-text-secondary);
+          font-size: 1rem;
+        }
+
+        input {
+          flex: 1;
+        }
+      }
+
       input {
         width: 100%;
         max-width: 200px;
@@ -431,6 +561,30 @@ onBeforeUnmount(() => {
         font-size: 0.875rem;
         color: var(--pav-color-text-secondary);
       }
+    }
+
+    .yearly-opt-in {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem;
+      border: 1px solid var(--pav-color-border-primary);
+      border-radius: 8px;
+      cursor: pointer;
+
+      &:hover {
+        background: var(--pav-color-surface-hover);
+      }
+
+      input[type="checkbox"] {
+        margin: 0;
+      }
+    }
+
+    .yearly-discount-note {
+      margin-top: 0.5rem;
+      font-size: 0.875rem;
+      color: var(--pav-color-text-secondary);
     }
   }
 

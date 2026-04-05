@@ -29,6 +29,7 @@ export class FundingSettings extends PrimaryModel {
   yearlyPrice: number = 0; // in millicents
   currency: string = 'USD';
   payWhatYouCan: boolean = false;
+  payWhatYouCanYearlyDiscount: number = 0;
   gracePeriodDays: number = 7;
 
   constructor(id?: string) {
@@ -43,6 +44,7 @@ export class FundingSettings extends PrimaryModel {
       yearlyPrice: this.yearlyPrice,
       currency: this.currency,
       payWhatYouCan: this.payWhatYouCan,
+      payWhatYouCanYearlyDiscount: this.payWhatYouCanYearlyDiscount,
       gracePeriodDays: this.gracePeriodDays,
     };
   }
@@ -54,6 +56,7 @@ export class FundingSettings extends PrimaryModel {
     settings.yearlyPrice = obj.yearlyPrice ?? 0;
     settings.currency = obj.currency ?? 'USD';
     settings.payWhatYouCan = obj.payWhatYouCan ?? false;
+    settings.payWhatYouCanYearlyDiscount = obj.payWhatYouCanYearlyDiscount ?? 0;
     settings.gracePeriodDays = obj.gracePeriodDays ?? 7;
     return settings;
   }

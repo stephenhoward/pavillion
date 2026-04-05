@@ -394,6 +394,8 @@
     "yearly_price_description": "Yearly funding plan price (also serves as suggested amount for pay-what-you-can).",
     "pwyc_label": "Enable Pay What You Can",
     "pwyc_description": "Allow users to set their own funding plan amount (using monthly/yearly prices as suggestions).",
+    "pay_what_you_can_yearly_discount_label": "Yearly Discount (%)",
+    "pay_what_you_can_yearly_discount_description": "Discount percentage applied to the annual price when users choose yearly billing in pay-what-you-can mode.",
     "grace_period_label": "Grace Period (days)",
     "grace_period_description": "Number of days before suspending a funding plan after payment failure.",
     "save_settings_button": "Save Settings",

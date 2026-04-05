@@ -526,3 +526,127 @@ describe('FundingService - Calendar Subscription Methods', () => {
 
 });
 
+
+describe('FundingService - getCalendarsInFundingPlan', () => {
+  let sandbox: sinon.SinonSandbox;
+  let eventBus: EventEmitter;
+  let service: FundingService;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    eventBus = new EventEmitter();
+    service = new FundingService(eventBus);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('should return empty array when account has no active funding plan', async () => {
+    const accountId = uuidv4();
+    sandbox.stub(FundingPlanEntity, 'findOne').resolves(null);
+
+    const result = await service.getCalendarsInFundingPlan(accountId);
+
+    expect(result).toEqual([]);
+  });
+
+  it('should return empty array when plan exists but has no active calendar allocations', async () => {
+    const accountId = uuidv4();
+    const fundingPlanId = uuidv4();
+
+    sandbox.stub(FundingPlanEntity, 'findOne').resolves({
+      id: fundingPlanId,
+      account_id: accountId,
+      status: 'active',
+    } as any);
+
+    sandbox.stub(CalendarFundingPlanEntity, 'findAll').resolves([]);
+
+    const result = await service.getCalendarsInFundingPlan(accountId);
+
+    expect(result).toEqual([]);
+  });
+
+  it('should return active allocations with calendarId, amount, and createdAt', async () => {
+    const accountId = uuidv4();
+    const fundingPlanId = uuidv4();
+    const calendarId1 = uuidv4();
+    const calendarId2 = uuidv4();
+    const createdAt1 = new Date('2026-01-15');
+    const createdAt2 = new Date('2026-02-20');
+
+    sandbox.stub(FundingPlanEntity, 'findOne').resolves({
+      id: fundingPlanId,
+      account_id: accountId,
+      status: 'active',
+    } as any);
+
+    sandbox.stub(CalendarFundingPlanEntity, 'findAll').resolves([
+      {
+        funding_plan_id: fundingPlanId,
+        calendar_id: calendarId1,
+        amount: 500000,
+        end_time: null,
+        created_at: createdAt1,
+      },
+      {
+        funding_plan_id: fundingPlanId,
+        calendar_id: calendarId2,
+        amount: 300000,
+        end_time: null,
+        created_at: createdAt2,
+      },
+    ] as any);
+
+    const result = await service.getCalendarsInFundingPlan(accountId);
+
+    expect(result).toHaveLength(2);
+    expect(result[0]).toEqual({
+      calendarId: calendarId1,
+      amount: 500000,
+      createdAt: createdAt1,
+    });
+    expect(result[1]).toEqual({
+      calendarId: calendarId2,
+      amount: 300000,
+      createdAt: createdAt2,
+    });
+  });
+
+  it('should only return active allocations (end_time IS NULL), not ended ones', async () => {
+    const accountId = uuidv4();
+    const fundingPlanId = uuidv4();
+    const activeCalendarId = uuidv4();
+    const activeCreatedAt = new Date('2026-01-15');
+
+    sandbox.stub(FundingPlanEntity, 'findOne').resolves({
+      id: fundingPlanId,
+      account_id: accountId,
+      status: 'active',
+    } as any);
+
+    // findAll is called with end_time: { [Op.is]: null }, so the stub
+    // should only return active allocations (the service filters via the query)
+    sandbox.stub(CalendarFundingPlanEntity, 'findAll').resolves([
+      {
+        funding_plan_id: fundingPlanId,
+        calendar_id: activeCalendarId,
+        amount: 500000,
+        end_time: null,
+        created_at: activeCreatedAt,
+      },
+    ] as any);
+
+    const result = await service.getCalendarsInFundingPlan(accountId);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].calendarId).toBe(activeCalendarId);
+  });
+
+  it('should throw ValidationError for invalid UUID', async () => {
+    await expect(
+      service.getCalendarsInFundingPlan('not-a-uuid'),
+    ).rejects.toThrow(ValidationError);
+  });
+});

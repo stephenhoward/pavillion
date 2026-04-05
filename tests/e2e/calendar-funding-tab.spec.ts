@@ -3,13 +3,13 @@ import { loginAsAdmin } from './helpers/auth';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
- * E2E Tests: Calendar FundingTab — Subscribe Sheet Workflow
+ * E2E Tests: Calendar FundingTab — Funding Workflow
  *
- * Tests the new FundingTab behaviors introduced by the SubscribeSheet feature:
+ * Tests the FundingTab behaviors:
  *   1. When subscriptions are enabled but the user has no subscription,
- *      FundingTab shows a "Subscribe to Fund" prompt instead of failing.
- *   2. Clicking the prompt opens the SubscribeSheet (bottom-sheet/modal).
- *   3. The SubscribeSheet displays the subscribe form with billing cycle options.
+ *      FundingTab shows a "Fund This Calendar" prompt with inline pricing cards.
+ *   2. Pricing cards (monthly/yearly) are shown inline for non-PWYC mode.
+ *   3. The "Fund This Calendar" button initiates Stripe inline checkout (no dialog).
  *   4. When subscriptions are disabled, FundingTab hides the funding UI entirely.
  *
  * All tests mock the subscription API endpoints to control state without
@@ -60,7 +60,7 @@ async function mockSubscriptionAPIs(page: import('@playwright/test').Page, optio
     }
   });
 
-  // Mock funding plan options
+  // Mock funding plan options — use camelCase to match real API response shape
   await page.route('**/api/funding/v1/options', async (route) => {
     await route.fulfill({
       status: 200,
@@ -68,12 +68,13 @@ async function mockSubscriptionAPIs(page: import('@playwright/test').Page, optio
       body: JSON.stringify({
         enabled: options.subscriptionsEnabled,
         providers: options.subscriptionsEnabled
-          ? [{ provider_type: 'stripe', display_name: 'Stripe' }]
+          ? [{ providerType: 'stripe', displayName: 'Stripe' }]
           : [],
-        monthly_price: 500000,
-        yearly_price: 5000000,
+        monthlyPrice: 500000,
+        yearlyPrice: 5000000,
         currency: 'USD',
-        pay_what_you_can: false,
+        payWhatYouCan: false,
+        payWhatYouCanYearlyDiscount: 0,
       }),
     });
   });
@@ -90,7 +91,7 @@ async function mockSubscriptionAPIs(page: import('@playwright/test').Page, optio
   });
 }
 
-test.describe('Calendar FundingTab — Subscribe Sheet', () => {
+test.describe('Calendar FundingTab — Funding Workflow', () => {
   test.beforeAll(async () => {
     env = await startTestServer();
   });
@@ -125,13 +126,13 @@ test.describe('Calendar FundingTab — Subscribe Sheet', () => {
     const unfundedBadge = page.locator('.funding-status-badge--unfunded');
     await expect(unfundedBadge).toBeVisible();
 
-    // Should show "Create a Funding Plan" button
+    // Should show "Fund This Calendar" button (inline checkout, no dialog)
     const subscribeButton = page.locator('.funding-button--primary');
     await expect(subscribeButton).toBeVisible();
-    await expect(subscribeButton).toContainText('Create a Funding Plan');
+    await expect(subscribeButton).toContainText('Fund This Calendar');
   });
 
-  test('opens SubscribeSheet when subscribe button is clicked', async ({ page }) => {
+  test('shows inline pricing cards for non-PWYC subscription option', async ({ page }) => {
     await mockSubscriptionAPIs(page, {
       hasSubscription: false,
       subscriptionsEnabled: true,
@@ -144,28 +145,28 @@ test.describe('Calendar FundingTab — Subscribe Sheet', () => {
     const fundingTab = page.locator('#funding-tab');
     await fundingTab.click();
 
-    // Wait for content and click subscribe button
-    const subscribeButton = page.locator('.funding-button--primary');
-    await expect(subscribeButton).toBeVisible({ timeout: 10000 });
-    await subscribeButton.click();
+    // Wait for FundingTab content to load
+    const fundingCard = page.locator('.funding-card');
+    await expect(fundingCard).toBeVisible({ timeout: 10000 });
 
-    // The Sheet/dialog should open
-    const dialog = page.locator('dialog.sheet-dialog');
-    await expect(dialog).toBeVisible({ timeout: 5000 });
+    // Pricing cards should be visible inline (no dialog needed)
+    const pricingCards = page.locator('.pricing-card');
+    await expect(pricingCards).toHaveCount(2);
 
-    // Should contain billing cycle radio buttons
-    const monthlyOption = dialog.locator('input[type="radio"][value="monthly"]');
-    await expect(monthlyOption).toBeVisible();
+    // Monthly and yearly options should be present
+    const monthlyCard = page.locator('.pricing-card').first();
+    await expect(monthlyCard).toBeVisible();
 
-    const yearlyOption = dialog.locator('input[type="radio"][value="yearly"]');
-    await expect(yearlyOption).toBeVisible();
+    const yearlyCard = page.locator('.pricing-card').last();
+    await expect(yearlyCard).toBeVisible();
 
-    // Should have a confirm/subscribe button
-    const confirmButton = dialog.locator('button.btn--primary');
-    await expect(confirmButton).toBeVisible();
+    // Fund This Calendar button should be present
+    const fundButton = page.locator('.funding-button--primary');
+    await expect(fundButton).toBeVisible();
+    await expect(fundButton).toContainText('Fund This Calendar');
   });
 
-  test('SubscribeSheet closes when close button is clicked', async ({ page }) => {
+  test('Fund This Calendar button is enabled and no dialog opens', async ({ page }) => {
     await mockSubscriptionAPIs(page, {
       hasSubscription: false,
       subscriptionsEnabled: true,
@@ -180,18 +181,13 @@ test.describe('Calendar FundingTab — Subscribe Sheet', () => {
 
     const subscribeButton = page.locator('.funding-button--primary');
     await expect(subscribeButton).toBeVisible({ timeout: 10000 });
-    await subscribeButton.click();
 
-    // Sheet should be open
+    // Button should be enabled (not disabled)
+    await expect(subscribeButton).not.toBeDisabled();
+
+    // No sheet dialog should exist in the DOM (FundingSheet removed from FundingTab)
     const dialog = page.locator('dialog.sheet-dialog');
-    await expect(dialog).toBeVisible({ timeout: 5000 });
-
-    // Click the close button (× in header)
-    const closeButton = dialog.locator('.sheet-header button');
-    await closeButton.click();
-
-    // Dialog should be hidden
-    await expect(dialog).not.toBeVisible({ timeout: 3000 });
+    await expect(dialog).toHaveCount(0);
   });
 
   test('hides funding UI when subscriptions are disabled', async ({ page }) => {

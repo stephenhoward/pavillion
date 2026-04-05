@@ -6,6 +6,7 @@
 
   "no_funding_plan": "No Active Funding Plan",
   "no_funding_plan_description": "Subscribe to support this instance and access premium features.",
+  "no_plan_redirect": "To start a funding plan, go to any calendar you own and open the Funding tab.",
   "monthly_option": "Monthly",
   "yearly_option": "Yearly",
   "subscribe_button": "Subscribe Now",
@@ -17,6 +18,10 @@
   "billing_cycle_yearly": "Yearly",
   "custom_amount_label": "Custom Amount (Optional)",
   "custom_amount_description": "Enter a custom amount to support this instance (pay what you can).",
+  "monthly_amount_label": "Monthly Amount",
+  "yearly_opt_in_label": "Make it yearly for {{amount}}",
+  "yearly_discount_note": "Save {{percent}}% with annual billing",
+  "suggested_amount": "Suggested: {{amount}}",
   "select_provider_error": "Please select a payment method.",
   "confirm_subscribe_button": "Confirm & Subscribe",
   "cancel_button": "Cancel",
@@ -53,5 +58,11 @@
 
   "funding_disabled": "Funding is not currently enabled on this instance.",
 
-  "subscribe_to_fund_title": "Subscribe to Fund Calendar"
+  "subscribe_to_fund_title": "Subscribe to Fund Calendar",
+
+  "redirect_message": "Redirecting to payment provider...",
+  "processing_message": "Processing your payment...",
+  "funded_calendars_title": "Funded Calendars",
+  "no_funded_calendars": "No calendars are currently funded under this plan.",
+  "funded_calendar_amount": "{{amount}} per billing cycle"
 }

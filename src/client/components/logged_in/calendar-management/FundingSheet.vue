@@ -5,6 +5,8 @@ import FundingForm from '@/client/components/account/FundingForm.vue';
 
 defineProps<{
   calendarId: string;
+  initialCycle?: 'monthly' | 'yearly';
+  initialAmount?: number;
 }>();
 
 const emit = defineEmits<{
@@ -22,6 +24,11 @@ function onSubscribed() {
 
 <template>
   <Sheet :title="t('subscribe_to_fund_title')" @close="emit('close')">
-    <FundingForm :calendarId="calendarId" @subscribed="onSubscribed" />
+    <FundingForm
+      :calendarId="calendarId"
+      :initialCycle="initialCycle"
+      :initialAmount="initialAmount"
+      @subscribed="onSubscribed"
+    />
   </Sheet>
 </template>
