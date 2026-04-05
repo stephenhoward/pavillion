@@ -467,6 +467,18 @@ export default class ModerationInterface {
   async getEventById(eventId: string): Promise<CalendarEvent> {
     return this.calendarInterface.getEventById(eventId);
   }
+
+  /**
+   * Looks up the ActivityPub actor URI that owns a given event.
+   * Used to determine the correct target actor when forwarding reports
+   * to remote calendar owners.
+   *
+   * @param eventId - The local event UUID
+   * @returns The actor URI string, or null if no AP identity exists for this event
+   */
+  async getEventSourceActorUri(eventId: string): Promise<string | null> {
+    return this.activityPubInterface.getEventSourceActorUri(eventId);
+  }
 }
 
 export type { CreateReportData, CreateReportForEventData, CreateAdminReportData, ReportFilters, PaginatedReports, EscalationRecord, ModerationSettings, ReceiveRemoteReportData };

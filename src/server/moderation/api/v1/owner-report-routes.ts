@@ -435,20 +435,15 @@ export default class OwnerReportRoutes {
         return;
       }
 
-      // Validate that the event has a source URL
-      if (!event.eventSourceUrl) {
+      // Look up the authoritative actor URI for the event's source calendar
+      const targetActorUri = await this.moderationInterface.getEventSourceActorUri(report.eventId);
+      if (!targetActorUri) {
         res.status(400).json({
-          error: 'Cannot forward report: event has no source URL',
+          error: 'Cannot forward report: unable to determine remote calendar owner',
           errorName: 'ValidationError',
         });
         return;
       }
-
-      // Extract the remote owner's actor URI from the event source URL
-      // Event source URL format: https://remote.instance/events/event-id
-      // We need to derive the calendar owner's actor URI
-      const url = new URL(event.eventSourceUrl);
-      const targetActorUri = `https://${url.host}/calendars/${url.pathname.split('/')[1] || 'calendar'}`;
 
       // Call ModerationService.forwardReport()
       await this.moderationInterface.forwardReport(ctx.reportId!, targetActorUri);
