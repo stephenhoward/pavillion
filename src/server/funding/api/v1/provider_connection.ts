@@ -62,12 +62,19 @@ export default class ProviderConnectionRoutes {
     try {
       const adminUser = req.user as any;
 
+      // TODO: REMOVE DEBUG LOGGING - Stripe credential save debugging
+      console.log('[DEBUG][API] configureStripe handler entered');
+      console.log('[DEBUG][API] adminUser present:', !!adminUser);
+
       if (!adminUser) {
         res.status(401).json({ error: 'Authentication required' });
         return;
       }
 
       const { publishable_key, secret_key, webhook_secret } = req.body;
+
+      // TODO: REMOVE DEBUG LOGGING - Stripe credential save debugging
+      console.log('[DEBUG][API] received fields - publishable_key:', !!publishable_key, 'secret_key:', !!secret_key, 'webhook_secret:', !!webhook_secret);
 
       const credentials = {
         publishable_key,
@@ -80,9 +87,15 @@ export default class ProviderConnectionRoutes {
         email: adminUser.email,
       });
 
+      // TODO: REMOVE DEBUG LOGGING - Stripe credential save debugging
+      console.log('[DEBUG][API] configureStripe service call completed successfully');
+
       res.json({ success: true });
     }
     catch (error) {
+      // TODO: REMOVE DEBUG LOGGING - Stripe credential save debugging
+      console.error('[DEBUG][API] configureStripe caught error:', error);
+
       // Log only key prefix, never full value
       logError(error, 'Error configuring Stripe');
 

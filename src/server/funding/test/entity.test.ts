@@ -67,17 +67,18 @@ describe('Subscription Entities', () => {
 
       const entity = ProviderConfigEntity.build(entityData);
 
-      // Set up private fields to simulate decryption
-      (entity as any)._decryptedCredentials = testCredentials;
-      (entity as any)._decryptedWebhookSecret = 'whsec_test';
+      // Set up temporary fields to simulate decryption
+      entity._decryptedCredentials = testCredentials;
+      entity._decryptedWebhookSecret = 'whsec_test';
 
+      // toModel() should NOT include credentials
       const model = entity.toModel();
-      expect(model.credentials).toBe(testCredentials);
-      expect(model.webhookSecret).toBe('whsec_test');
+      expect((model as any).credentials).toBeUndefined();
+      expect((model as any).webhookSecret).toBeUndefined();
 
-      const newEntity = ProviderConfigEntity.fromModel(model);
-      expect((newEntity as any)._decryptedCredentials).toBe(testCredentials);
-      expect((newEntity as any)._decryptedWebhookSecret).toBe('whsec_test');
+      // Decrypt methods should return plaintext values
+      expect(entity.decryptCredentials()).toBe(testCredentials);
+      expect(entity.decryptWebhookSecret()).toBe('whsec_test');
     });
   });
 

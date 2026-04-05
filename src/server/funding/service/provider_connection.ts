@@ -80,6 +80,9 @@ export class ProviderConnectionService {
    * @returns True if configuration successful
    */
   async configureStripe(credentials: StripeCredentialInputs, adminUser: AdminUser): Promise<boolean> {
+    // TODO: REMOVE DEBUG LOGGING - Stripe credential save debugging
+    console.log('[DEBUG][SERVICE] configureStripe entered');
+
     // Validate required fields
     if (!credentials.publishable_key || credentials.publishable_key.trim() === '') {
       throw new MissingRequiredFieldError('publishable_key');
@@ -93,6 +96,9 @@ export class ProviderConnectionService {
       throw new MissingRequiredFieldError('webhook_secret');
     }
 
+    // TODO: REMOVE DEBUG LOGGING - Stripe credential save debugging
+    console.log('[DEBUG][SERVICE] all required fields present, validating format');
+
     // Validate key formats (prefix check only, no test API call)
     const formatCheck = StripeAdapter.validateKeyFormats(
       credentials.publishable_key,
@@ -104,6 +110,9 @@ export class ProviderConnectionService {
       throw new InvalidCredentialsError(formatCheck.error);
     }
 
+    // TODO: REMOVE DEBUG LOGGING - Stripe credential save debugging
+    console.log('[DEBUG][SERVICE] key format validation passed');
+
     // Build credentials object for storage
     // Store apiKey as secret_key for adapter compatibility
     const storedCredentials = {
@@ -111,35 +120,55 @@ export class ProviderConnectionService {
       publishableKey: credentials.publishable_key,
     };
 
+    // TODO: REMOVE DEBUG LOGGING - Stripe credential save debugging
+    console.log('[DEBUG][SERVICE] storedCredentials built, looking for existing entity');
+
     // Check if provider config already exists
     let entity = await ProviderConfigEntity.findOne({
       where: { provider_type: 'stripe' },
     });
 
+    // TODO: REMOVE DEBUG LOGGING - Stripe credential save debugging
+    console.log('[DEBUG][SERVICE] existing entity found:', !!entity, entity ? `id=${entity.id}` : '');
+
     if (entity) {
       // Update existing configuration
+      // TODO: REMOVE DEBUG LOGGING - Stripe credential save debugging
+      console.log('[DEBUG][SERVICE] UPDATE path: setting _decryptedCredentials and _decryptedWebhookSecret');
+
       entity._decryptedCredentials = JSON.stringify(storedCredentials);
       entity._decryptedWebhookSecret = credentials.webhook_secret;
       await entity.save();
+
+      // TODO: REMOVE DEBUG LOGGING - Stripe credential save debugging
+      console.log('[DEBUG][SERVICE] UPDATE path: entity.save() completed');
     }
     else {
-      // Create new configuration
-      entity = await ProviderConfigEntity.create({
+      // TODO: REMOVE DEBUG LOGGING - Stripe credential save debugging
+      console.log('[DEBUG][SERVICE] CREATE path: building new ProviderConfigEntity');
+
+      // Build entity without plaintext credentials — the BeforeCreate hook
+      // encrypts from _decryptedCredentials/_decryptedWebhookSecret
+      entity = ProviderConfigEntity.build({
         id: uuidv4(),
         provider_type: 'stripe',
-        enabled: false, // Admin must explicitly enable
+        enabled: false,
         display_name: 'Stripe',
-        credentials: JSON.stringify(storedCredentials),
-        webhook_secret: credentials.webhook_secret,
       } as any);
 
-      // Set decrypted values for encryption hook
       entity._decryptedCredentials = JSON.stringify(storedCredentials);
       entity._decryptedWebhookSecret = credentials.webhook_secret;
+      await entity.save();
+
+      // TODO: REMOVE DEBUG LOGGING - Stripe credential save debugging
+      console.log('[DEBUG][SERVICE] CREATE path: entity saved, id:', entity.id);
     }
 
     // Clear cached adapter so new credentials are picked up
     ProviderFactory.clearCache(entity.id);
+
+    // TODO: REMOVE DEBUG LOGGING - Stripe credential save debugging
+    console.log('[DEBUG][SERVICE] configureStripe completed successfully');
 
     // Emit event
     this.eventBus.emit('provider:configured', {
@@ -203,18 +232,17 @@ export class ProviderConnectionService {
       await entity.save();
     }
     else {
-      // Create new configuration
-      entity = await ProviderConfigEntity.create({
+      // Build entity without plaintext credentials — the BeforeCreate hook
+      // encrypts from _decryptedCredentials/_decryptedWebhookSecret
+      entity = ProviderConfigEntity.build({
         id: uuidv4(),
         provider_type: 'paypal',
-        enabled: false, // Admin must explicitly enable
+        enabled: false,
         display_name: 'PayPal',
-        credentials: JSON.stringify(credentialsToStore),
-        webhook_secret: '',
       } as any);
 
-      // Set decrypted values for encryption hook
       entity._decryptedCredentials = JSON.stringify(credentialsToStore);
+      await entity.save();
     }
 
     // Emit event
@@ -249,11 +277,10 @@ export class ProviderConnectionService {
     }
 
     // Check if credentials exist and have required fields
-    const config = entity.toModel();
     let hasRequiredFields = false;
 
     try {
-      const credentials = JSON.parse(config.credentials);
+      const credentials = JSON.parse(entity.decryptCredentials());
 
       if (providerType === 'stripe') {
         hasRequiredFields = !!credentials.apiKey;
@@ -269,8 +296,8 @@ export class ProviderConnectionService {
     return {
       configured: hasRequiredFields,
       providerType,
-      enabled: config.enabled,
-      displayName: config.displayName,
+      enabled: entity.enabled,
+      displayName: entity.display_name,
     };
   }
 
@@ -384,15 +411,16 @@ export class ProviderConnectionService {
    * @private
    */
   private getAdapter(providerType: ProviderType, credentials: ProviderCredentials): PaymentProviderAdapter {
-    const dummyConfig = {
+    const entity = ProviderConfigEntity.build({
       id: 'dummy',
-      providerType,
+      provider_type: providerType,
       enabled: false,
-      displayName: providerType === 'stripe' ? 'Stripe' : 'PayPal',
-      credentials: JSON.stringify(credentials),
-      webhookSecret: '',
-    };
+      display_name: providerType === 'stripe' ? 'Stripe' : 'PayPal',
+    } as any);
 
-    return ProviderFactory.getAdapter(dummyConfig);
+    entity._decryptedCredentials = JSON.stringify(credentials);
+    entity._decryptedWebhookSecret = '';
+
+    return ProviderFactory.getAdapter(entity);
   }
 }

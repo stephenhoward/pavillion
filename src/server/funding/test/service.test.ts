@@ -231,21 +231,21 @@ describe('FundingService', () => {
     const signature = 'valid_signature';
 
     function makeStripeConfigEntity(id: string): any {
+      const creds = JSON.stringify({ apiKey: 'sk_test_mock' });
+      const whSecret = 'whsec_test';
       return {
         id,
         provider_type: 'stripe',
         enabled: true,
         display_name: 'Credit Card',
-        credentials: JSON.stringify({ apiKey: 'sk_test_mock' }),
-        webhook_secret: 'whsec_test',
         toModel: function() {
           const config = new ProviderConfig(this.id, this.provider_type);
           config.enabled = this.enabled;
           config.displayName = this.display_name;
-          config.credentials = this.credentials;
-          config.webhookSecret = this.webhook_secret;
           return config;
         },
+        decryptCredentials: () => creds,
+        decryptWebhookSecret: () => whSecret,
       };
     }
 
@@ -865,16 +865,14 @@ describe('FundingService', () => {
         provider_type: 'stripe',
         enabled: true,
         display_name: 'Stripe',
-        credentials: '{}',
-        webhook_secret: 'whsec_test',
         toModel: function() {
           const config = new ProviderConfig(this.id, 'stripe');
           config.enabled = true;
           config.displayName = this.display_name;
-          config.credentials = this.credentials;
-          config.webhookSecret = this.webhook_secret;
           return config;
         },
+        decryptCredentials: () => '{}',
+        decryptWebhookSecret: () => 'whsec_test',
       };
       sandbox.stub(ProviderConfigEntity, 'findOne').resolves(mockEntity as any);
       return mockEntity;
@@ -1145,15 +1143,13 @@ describe('FundingService', () => {
         provider_type: 'stripe',
         enabled: true,
         display_name: 'Stripe',
-        credentials: '{}',
-        webhook_secret: 'whsec_test',
         toModel: function() {
           const config = new ProviderConfig(this.id, 'stripe');
           config.enabled = true;
-          config.credentials = this.credentials;
-          config.webhookSecret = this.webhook_secret;
           return config;
         },
+        decryptCredentials: () => '{}',
+        decryptWebhookSecret: () => 'whsec_test',
       };
       sandbox.stub(ProviderConfigEntity, 'findOne').resolves(mockEntity as any);
     }

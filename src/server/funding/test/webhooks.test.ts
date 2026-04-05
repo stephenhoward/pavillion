@@ -178,9 +178,9 @@ describe('Webhook Handling', () => {
       const stripeModel = new ProviderConfig(uuidv4(), 'stripe');
       stripeModel.enabled = true;
       stripeModel.displayName = 'Credit Card';
-      stripeModel.credentials = JSON.stringify({ apiKey: 'sk_test_123' });
-      stripeModel.webhookSecret = 'whsec_test_stripe';
       stripeConfig = ProviderConfigEntity.fromModel(stripeModel);
+      stripeConfig._decryptedCredentials = JSON.stringify({ apiKey: 'sk_test_123' });
+      stripeConfig._decryptedWebhookSecret = 'whsec_test_stripe';
       await stripeConfig.save();
 
       app = express();

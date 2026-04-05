@@ -65,7 +65,6 @@ describe('ProviderConnectionService', () => {
       findOneStub.resolves(null);
 
       const entityId = uuidv4();
-      const createStub = sandbox.stub(ProviderConfigEntity, 'create');
       const mockEntity = {
         id: entityId,
         provider_type: 'stripe',
@@ -73,7 +72,8 @@ describe('ProviderConnectionService', () => {
         _decryptedWebhookSecret: undefined as string | undefined,
         save: sandbox.stub().resolves(),
       };
-      createStub.resolves(mockEntity as any);
+      const buildStub = sandbox.stub(ProviderConfigEntity, 'build');
+      buildStub.returns(mockEntity as any);
 
       // Stub ProviderFactory.clearCache
       const clearCacheStub = sandbox.stub(ProviderFactory, 'clearCache');
@@ -81,17 +81,22 @@ describe('ProviderConnectionService', () => {
       const result = await service.configureStripe(validCredentials, adminUser);
 
       expect(result).toBe(true);
-      expect(createStub.calledOnce).toBe(true);
+      expect(buildStub.calledOnce).toBe(true);
+      expect(mockEntity.save.calledOnce).toBe(true);
 
-      // Verify the stored credentials have correct structure
-      const createArgs = createStub.firstCall.args[0] as any;
-      const storedCreds = JSON.parse(createArgs.credentials);
+      // Verify the decrypted credentials were set correctly
+      const storedCreds = JSON.parse(mockEntity._decryptedCredentials!);
       expect(storedCreds.apiKey).toBe('sk_test_abc123def456');
       expect(storedCreds.publishableKey).toBe('pk_test_abc123def456');
-      expect(createArgs.webhook_secret).toBe('whsec_abc123def456');
-      expect(createArgs.provider_type).toBe('stripe');
-      expect(createArgs.enabled).toBe(false);
-      expect(createArgs.display_name).toBe('Stripe');
+      expect(mockEntity._decryptedWebhookSecret).toBe('whsec_abc123def456');
+
+      // Verify build args have non-sensitive fields only
+      const buildArgs = buildStub.firstCall.args[0] as any;
+      expect(buildArgs.provider_type).toBe('stripe');
+      expect(buildArgs.enabled).toBe(false);
+      expect(buildArgs.display_name).toBe('Stripe');
+      expect(buildArgs.credentials).toBeUndefined();
+      expect(buildArgs.webhook_secret).toBeUndefined();
 
       // Verify cache was cleared
       expect(clearCacheStub.calledWith(entityId)).toBe(true);
@@ -158,8 +163,7 @@ describe('ProviderConnectionService', () => {
       const findOneStub = sandbox.stub(ProviderConfigEntity, 'findOne');
       findOneStub.resolves(null);
 
-      const createStub = sandbox.stub(ProviderConfigEntity, 'create');
-      createStub.resolves({
+      sandbox.stub(ProviderConfigEntity, 'build').returns({
         id: entityId,
         provider_type: 'stripe',
         save: sandbox.stub().resolves(),
@@ -187,8 +191,7 @@ describe('ProviderConnectionService', () => {
       const findOneStub = sandbox.stub(ProviderConfigEntity, 'findOne');
       findOneStub.resolves(null);
 
-      const createStub = sandbox.stub(ProviderConfigEntity, 'create');
-      createStub.resolves({
+      sandbox.stub(ProviderConfigEntity, 'build').returns({
         id: uuidv4(),
         provider_type: 'stripe',
         save: sandbox.stub().resolves(),
@@ -218,13 +221,13 @@ describe('ProviderConnectionService', () => {
       const findOneStub = sandbox.stub(ProviderConfigEntity, 'findOne');
       findOneStub.resolves(null);
 
-      const createStub = sandbox.stub(ProviderConfigEntity, 'create');
+      const buildStub = sandbox.stub(ProviderConfigEntity, 'build');
       const mockEntity = {
         id: uuidv4(),
         provider_type: 'paypal',
         save: sandbox.stub().resolves(),
       };
-      createStub.resolves(mockEntity as any);
+      buildStub.returns(mockEntity as any);
 
       (service as any).webhookManager = webhookManager;
 
@@ -232,7 +235,7 @@ describe('ProviderConnectionService', () => {
 
       expect(result).toBe(true);
       expect(mockPayPalAdapter.validateCredentials.calledOnce).toBe(true);
-      expect(createStub.calledOnce).toBe(true);
+      expect(buildStub.calledOnce).toBe(true);
     });
 
     it('should throw error if credentials are invalid', async () => {
@@ -255,15 +258,9 @@ describe('ProviderConnectionService', () => {
       const mockEntity = {
         id: uuidv4(),
         provider_type: 'stripe',
-        credentials: JSON.stringify({ apiKey: 'sk_test_123' }),
-        toModel: () => ({
-          id: uuidv4(),
-          providerType: 'stripe' as ProviderType,
-          enabled: true,
-          displayName: 'Stripe',
-          credentials: JSON.stringify({ apiKey: 'sk_test_123' }),
-          webhookSecret: '',
-        }),
+        enabled: true,
+        display_name: 'Stripe',
+        decryptCredentials: () => JSON.stringify({ apiKey: 'sk_test_123' }),
       };
 
       const findOneStub = sandbox.stub(ProviderConfigEntity, 'findOne');

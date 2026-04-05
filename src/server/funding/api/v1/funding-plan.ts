@@ -2,39 +2,8 @@ import express, { Request, Response } from 'express';
 import ExpressHelper from '@/server/common/helper/express';
 import FundingInterface from '@/server/funding/interface';
 import { Account } from '@/common/model/account';
-import { ProviderConfig } from '@/common/model/funding-plan';
 import { ValidationError } from '@/common/exceptions/base';
 import { logError } from '@/server/common/helper/error-logger';
-
-/**
- * Extract the publishable key from a Stripe provider's credentials JSON.
- *
- * Returns undefined for non-Stripe providers or when credentials are
- * missing / malformed. Never returns secret keys or webhook secrets.
- *
- * @param provider - Provider configuration with credentials
- * @returns The Stripe publishable key, or undefined
- */
-function extractPublishableKey(provider: ProviderConfig): string | undefined {
-  if (provider.providerType !== 'stripe') {
-    return undefined;
-  }
-
-  try {
-    const credentials = JSON.parse(provider.credentials);
-    const key = credentials.publishableKey;
-
-    // Only return keys that look like Stripe publishable keys
-    if (typeof key === 'string' && (key.startsWith('pk_test_') || key.startsWith('pk_live_'))) {
-      return key;
-    }
-
-    return undefined;
-  }
-  catch {
-    return undefined;
-  }
-}
 
 /**
  * User funding plan route handlers
@@ -74,31 +43,7 @@ export default class FundingPlanRoutes {
     try {
       const options = await this.service.getOptions();
 
-      // Return only enabled providers with sanitized data
-      // Include publishableKey for Stripe providers (safe to expose to client)
-      const sanitizedProviders = options.providers.map((provider) => {
-        const result: Record<string, any> = {
-          id: provider.id,
-          providerType: provider.providerType,
-          displayName: provider.displayName,
-        };
-
-        const publishableKey = extractPublishableKey(provider);
-        if (publishableKey) {
-          result.publishableKey = publishableKey;
-        }
-
-        return result;
-      });
-
-      res.json({
-        enabled: options.enabled,
-        providers: sanitizedProviders,
-        monthlyPrice: options.monthlyPrice,
-        yearlyPrice: options.yearlyPrice,
-        currency: options.currency,
-        payWhatYouCan: options.payWhatYouCan,
-      });
+      res.json(options);
     }
     catch (error) {
       logError(error, 'Error fetching funding plan options');
@@ -126,7 +71,17 @@ export default class FundingPlanRoutes {
         return;
       }
 
-      res.json(fundingPlan.toObject());
+      res.json({
+        id: fundingPlan.id,
+        status: fundingPlan.status,
+        billingCycle: fundingPlan.billingCycle,
+        amount: fundingPlan.amount,
+        currency: fundingPlan.currency,
+        currentPeriodStart: fundingPlan.currentPeriodStart,
+        currentPeriodEnd: fundingPlan.currentPeriodEnd,
+        cancelledAt: fundingPlan.cancelledAt,
+        suspendedAt: fundingPlan.suspendedAt,
+      });
     }
     catch (error) {
       logError(error, 'Error fetching funding plan status');

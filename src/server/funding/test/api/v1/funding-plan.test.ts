@@ -5,7 +5,8 @@ import sinon from 'sinon';
 import FundingService from '@/server/funding/service/funding';
 import FundingPlanRoutes from '@/server/funding/api/v1/funding-plan';
 import { Account } from '@/common/model/account';
-import { FundingPlan, ProviderConfig } from '@/common/model/funding-plan';
+import { FundingPlan } from '@/common/model/funding-plan';
+import type { ProviderInfo } from '@/server/funding/service/funding';
 import { testApp } from '@/server/common/test/lib/express';
 
 describe('User Subscription API Routes', () => {
@@ -37,13 +38,17 @@ describe('User Subscription API Routes', () => {
 
   describe('GET /options', () => {
     it('should return available providers and pricing when authenticated', async () => {
-      const mockProvider1 = new ProviderConfig('provider-1', 'stripe');
-      mockProvider1.enabled = true;
-      mockProvider1.displayName = 'Credit Card';
+      const mockProvider1: ProviderInfo = {
+        id: 'provider-1',
+        providerType: 'stripe',
+        displayName: 'Credit Card',
+      };
 
-      const mockProvider2 = new ProviderConfig('provider-2', 'paypal');
-      mockProvider2.enabled = true;
-      mockProvider2.displayName = 'PayPal';
+      const mockProvider2: ProviderInfo = {
+        id: 'provider-2',
+        providerType: 'paypal',
+        displayName: 'PayPal',
+      };
 
       const mockOptions = {
         enabled: true,
@@ -88,14 +93,12 @@ describe('User Subscription API Routes', () => {
     });
 
     it('should include publishableKey for Stripe providers with valid credentials', async () => {
-      const stripeProvider = new ProviderConfig('provider-1', 'stripe');
-      stripeProvider.enabled = true;
-      stripeProvider.displayName = 'Credit Card';
-      stripeProvider.credentials = JSON.stringify({
-        apiKey: 'sk_test_secret123',
+      const stripeProvider: ProviderInfo = {
+        id: 'provider-1',
+        providerType: 'stripe',
+        displayName: 'Credit Card',
         publishableKey: 'pk_test_abc123',
-      });
-      stripeProvider.webhookSecret = 'whsec_test_secret';
+      };
 
       const mockOptions = {
         enabled: true,
@@ -122,13 +125,12 @@ describe('User Subscription API Routes', () => {
     });
 
     it('should include publishableKey for live Stripe keys', async () => {
-      const stripeProvider = new ProviderConfig('provider-1', 'stripe');
-      stripeProvider.enabled = true;
-      stripeProvider.displayName = 'Credit Card';
-      stripeProvider.credentials = JSON.stringify({
-        apiKey: 'sk_live_secret123',
+      const stripeProvider: ProviderInfo = {
+        id: 'provider-1',
+        providerType: 'stripe',
+        displayName: 'Credit Card',
         publishableKey: 'pk_live_abc123',
-      });
+      };
 
       const mockOptions = {
         enabled: true,
@@ -154,15 +156,13 @@ describe('User Subscription API Routes', () => {
     });
 
     it('should never expose secret_key, apiKey, or webhook_secret in options response', async () => {
-      const stripeProvider = new ProviderConfig('provider-1', 'stripe');
-      stripeProvider.enabled = true;
-      stripeProvider.displayName = 'Credit Card';
-      stripeProvider.credentials = JSON.stringify({
-        apiKey: 'sk_test_secret123',
+      // Service returns ProviderInfo which structurally cannot contain secrets
+      const stripeProvider: ProviderInfo = {
+        id: 'provider-1',
+        providerType: 'stripe',
+        displayName: 'Credit Card',
         publishableKey: 'pk_test_abc123',
-        webhook_secret: 'whsec_test_secret',
-      });
-      stripeProvider.webhookSecret = 'whsec_test_secret';
+      };
 
       const mockOptions = {
         enabled: true,
@@ -201,13 +201,11 @@ describe('User Subscription API Routes', () => {
     });
 
     it('should not include publishableKey for PayPal providers', async () => {
-      const paypalProvider = new ProviderConfig('provider-2', 'paypal');
-      paypalProvider.enabled = true;
-      paypalProvider.displayName = 'PayPal';
-      paypalProvider.credentials = JSON.stringify({
-        client_id: 'paypal_client_id',
-        client_secret: 'paypal_secret',
-      });
+      const paypalProvider: ProviderInfo = {
+        id: 'provider-2',
+        providerType: 'paypal',
+        displayName: 'PayPal',
+      };
 
       const mockOptions = {
         enabled: true,
@@ -240,12 +238,12 @@ describe('User Subscription API Routes', () => {
     });
 
     it('should omit publishableKey when Stripe credentials have no publishableKey', async () => {
-      const stripeProvider = new ProviderConfig('provider-1', 'stripe');
-      stripeProvider.enabled = true;
-      stripeProvider.displayName = 'Credit Card';
-      stripeProvider.credentials = JSON.stringify({
-        apiKey: 'sk_test_secret123',
-      });
+      // Service omits publishableKey when credentials lack it
+      const stripeProvider: ProviderInfo = {
+        id: 'provider-1',
+        providerType: 'stripe',
+        displayName: 'Credit Card',
+      };
 
       const mockOptions = {
         enabled: true,
@@ -271,10 +269,12 @@ describe('User Subscription API Routes', () => {
     });
 
     it('should omit publishableKey when credentials JSON is malformed', async () => {
-      const stripeProvider = new ProviderConfig('provider-1', 'stripe');
-      stripeProvider.enabled = true;
-      stripeProvider.displayName = 'Credit Card';
-      stripeProvider.credentials = 'not-valid-json';
+      // Service omits publishableKey when credentials are malformed
+      const stripeProvider: ProviderInfo = {
+        id: 'provider-1',
+        providerType: 'stripe',
+        displayName: 'Credit Card',
+      };
 
       const mockOptions = {
         enabled: true,
@@ -300,13 +300,12 @@ describe('User Subscription API Routes', () => {
     });
 
     it('should reject publishableKey that does not start with pk_test_ or pk_live_', async () => {
-      const stripeProvider = new ProviderConfig('provider-1', 'stripe');
-      stripeProvider.enabled = true;
-      stripeProvider.displayName = 'Credit Card';
-      stripeProvider.credentials = JSON.stringify({
-        apiKey: 'sk_test_secret123',
-        publishableKey: 'sk_test_this_is_actually_a_secret_key',
-      });
+      // Service rejects non-pk_ prefixed keys and omits publishableKey
+      const stripeProvider: ProviderInfo = {
+        id: 'provider-1',
+        providerType: 'stripe',
+        displayName: 'Credit Card',
+      };
 
       const mockOptions = {
         enabled: true,

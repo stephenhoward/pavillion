@@ -38,13 +38,9 @@ describe('Payment Provider Adapters', () => {
       expect(requiredMethods.length).toBe(11);
 
       // Verify StripeAdapter implements the interface
-      const stripeConfig = new ProviderConfig('test-stripe', 'stripe');
-      stripeConfig.credentials = JSON.stringify({ apiKey: 'sk_test_123' });
-      stripeConfig.webhookSecret = 'whsec_test';
-
       const stripeAdapter = new StripeAdapter(
-        JSON.parse(stripeConfig.credentials),
-        stripeConfig.webhookSecret,
+        { apiKey: 'sk_test_123' },
+        'whsec_test',
       );
 
       expect(stripeAdapter.providerType).toBe('stripe');
@@ -53,17 +49,9 @@ describe('Payment Provider Adapters', () => {
       });
 
       // Verify PayPalAdapter implements the interface
-      const paypalConfig = new ProviderConfig('test-paypal', 'paypal');
-      paypalConfig.credentials = JSON.stringify({
-        clientId: 'test_client',
-        secret: 'test_secret',
-        mode: 'sandbox',
-      });
-      paypalConfig.webhookSecret = 'paypal_webhook_secret';
-
       const paypalAdapter = new PayPalAdapter(
-        JSON.parse(paypalConfig.credentials),
-        paypalConfig.webhookSecret,
+        { clientId: 'test_client', secret: 'test_secret', mode: 'sandbox' },
+        'paypal_webhook_secret',
       );
 
       expect(paypalAdapter.providerType).toBe('paypal');
@@ -867,81 +855,71 @@ describe('Payment Provider Adapters', () => {
   });
 
   describe('ProviderFactory', () => {
+    function makeFakeEntity(id: string, providerType: string, creds: string, whSecret: string): any {
+      return {
+        id,
+        provider_type: providerType,
+        decryptCredentials: () => creds,
+        decryptWebhookSecret: () => whSecret,
+      };
+    }
+
     it('should instantiate correct adapter based on provider type', () => {
       // Test Stripe adapter instantiation
-      const stripeConfig = new ProviderConfig('config-1', 'stripe');
-      stripeConfig.credentials = JSON.stringify({ apiKey: 'sk_test_123' });
-      stripeConfig.webhookSecret = 'whsec_test';
-
-      const stripeAdapter = ProviderFactory.getAdapter(stripeConfig);
+      const stripeEntity = makeFakeEntity('config-1', 'stripe', JSON.stringify({ apiKey: 'sk_test_123' }), 'whsec_test');
+      const stripeAdapter = ProviderFactory.getAdapter(stripeEntity);
       expect(stripeAdapter.providerType).toBe('stripe');
       expect(stripeAdapter).toBeInstanceOf(StripeAdapter);
 
       // Test PayPal adapter instantiation
-      const paypalConfig = new ProviderConfig('config-2', 'paypal');
-      paypalConfig.credentials = JSON.stringify({
+      const paypalEntity = makeFakeEntity('config-2', 'paypal', JSON.stringify({
         clientId: 'test_client',
         secret: 'test_secret',
         mode: 'sandbox',
-      });
-      paypalConfig.webhookSecret = 'paypal_webhook_secret';
-
-      const paypalAdapter = ProviderFactory.getAdapter(paypalConfig);
+      }), 'paypal_webhook_secret');
+      const paypalAdapter = ProviderFactory.getAdapter(paypalEntity);
       expect(paypalAdapter.providerType).toBe('paypal');
       expect(paypalAdapter).toBeInstanceOf(PayPalAdapter);
     });
 
     it('should handle invalid provider type with error', () => {
-      const invalidConfig = new ProviderConfig('invalid', 'invalid_provider' as any);
-      invalidConfig.credentials = JSON.stringify({ test: 'data' });
-      invalidConfig.webhookSecret = 'test';
+      const invalidEntity = makeFakeEntity('invalid', 'invalid_provider', JSON.stringify({ test: 'data' }), 'test');
 
       expect(() => {
-        ProviderFactory.getAdapter(invalidConfig);
+        ProviderFactory.getAdapter(invalidEntity);
       }).toThrow('Unsupported provider type: invalid_provider');
     });
   });
 
   describe('Adapter Credential Initialization', () => {
-    it('should initialize adapter with decrypted credentials from ProviderConfig', () => {
-      // Test Stripe credential initialization
-      const stripeConfig = new ProviderConfig('config-1', 'stripe');
-      stripeConfig.enabled = true;
-      stripeConfig.displayName = 'Credit Card';
-      stripeConfig.credentials = JSON.stringify({
+    function makeFakeEntity(id: string, providerType: string, creds: string, whSecret: string): any {
+      return {
+        id,
+        provider_type: providerType,
+        decryptCredentials: () => creds,
+        decryptWebhookSecret: () => whSecret,
+      };
+    }
+
+    it('should initialize adapter with decrypted credentials from entity', () => {
+      const stripeCreds = JSON.stringify({
         apiKey: 'sk_test_123456',
         publishableKey: 'pk_test_123456',
       });
-      stripeConfig.webhookSecret = 'whsec_test_secret';
 
-      // Parse credentials (simulating what the factory does)
-      const credentials = JSON.parse(stripeConfig.credentials);
-
-      // Validate credential structure
-      expect(credentials.apiKey).toBe('sk_test_123456');
-      expect(credentials.publishableKey).toBe('pk_test_123456');
-      expect(stripeConfig.webhookSecret).toBe('whsec_test_secret');
-
-      // Create adapter using factory
-      const adapter = ProviderFactory.getAdapter(stripeConfig);
+      // Create adapter using factory with entity
+      const stripeEntity = makeFakeEntity('config-1', 'stripe', stripeCreds, 'whsec_test_secret');
+      const adapter = ProviderFactory.getAdapter(stripeEntity);
       expect(adapter.providerType).toBe('stripe');
 
       // Test PayPal credentials
-      const paypalConfig = new ProviderConfig('config-2', 'paypal');
-      paypalConfig.credentials = JSON.stringify({
+      const paypalCreds = JSON.stringify({
         clientId: 'paypal_client_id',
         secret: 'paypal_secret',
         mode: 'sandbox',
       });
-      paypalConfig.webhookSecret = 'paypal_webhook_secret';
-
-      const paypalCredentials = JSON.parse(paypalConfig.credentials);
-      expect(paypalCredentials.clientId).toBe('paypal_client_id');
-      expect(paypalCredentials.secret).toBe('paypal_secret');
-      expect(paypalCredentials.mode).toBe('sandbox');
-
-      // Create adapter using factory
-      const paypalAdapter = ProviderFactory.getAdapter(paypalConfig);
+      const paypalEntity = makeFakeEntity('config-2', 'paypal', paypalCreds, 'paypal_webhook_secret');
+      const paypalAdapter = ProviderFactory.getAdapter(paypalEntity);
       expect(paypalAdapter.providerType).toBe('paypal');
     });
   });

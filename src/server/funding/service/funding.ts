@@ -67,6 +67,17 @@ function isValidUUID(id: string): boolean {
 }
 
 /**
+ * Sanitized provider info safe for client responses.
+ * Never contains secret keys or webhook secrets.
+ */
+export interface ProviderInfo {
+  id: string;
+  providerType: ProviderType;
+  displayName: string;
+  publishableKey?: string;
+}
+
+/**
  * Service for managing funding operations
  *
  * Handles funding plan lifecycle, provider management, and webhook processing.
@@ -314,21 +325,46 @@ export default class FundingService {
    */
   async getOptions(): Promise<{
     enabled: boolean;
-    providers: ProviderConfig[];
+    providers: ProviderInfo[];
     monthlyPrice: number;
     yearlyPrice: number;
     currency: string;
     payWhatYouCan: boolean;
   }> {
     const settings = await this.getSettings();
-    const allProviders = await this.getProviders();
 
-    // Filter to only enabled providers
-    const enabledProviders = allProviders.filter((p) => p.enabled);
+    await this.ensureDefaultProviders();
+    const entities = await ProviderConfigEntity.findAll({
+      where: { enabled: true },
+    });
+
+    // Build sanitized provider info with publishable key extracted at the service layer
+    const providers: ProviderInfo[] = entities.map((entity) => {
+      const info: ProviderInfo = {
+        id: entity.id,
+        providerType: entity.provider_type,
+        displayName: entity.display_name,
+      };
+
+      if (entity.provider_type === 'stripe') {
+        try {
+          const creds = JSON.parse(entity.decryptCredentials());
+          const key = creds.publishableKey;
+          if (typeof key === 'string' && (key.startsWith('pk_test_') || key.startsWith('pk_live_'))) {
+            info.publishableKey = key;
+          }
+        }
+        catch {
+          // Malformed credentials — omit publishable key
+        }
+      }
+
+      return info;
+    });
 
     return {
       enabled: settings.enabled,
-      providers: enabledProviders,
+      providers,
       monthlyPrice: settings.monthlyPrice,
       yearlyPrice: settings.yearlyPrice,
       currency: settings.currency,
@@ -424,8 +460,7 @@ export default class FundingService {
       throw new Error('Provider configuration not found');
     }
 
-    const providerConfig = providerEntity.toModel();
-    const adapter = ProviderFactory.getAdapter(providerConfig);
+    const adapter = ProviderFactory.getAdapter(providerEntity);
 
     // PayPal funding plans have fixed amounts; skip the provider-side update
     if (!adapter.supportsAmountUpdates()) {
@@ -716,7 +751,6 @@ export default class FundingService {
 
     // Check for enabled Stripe provider
     const stripeEntity = await this.resolveEnabledStripeProvider();
-    const providerConfig = stripeEntity.toModel();
 
     // Get settings for pricing
     const settings = await this.getSettings();
@@ -764,7 +798,7 @@ export default class FundingService {
     const interval: 'month' | 'year' = billingCycle === 'monthly' ? 'month' : 'year';
 
     // Build checkout session params
-    const adapter = ProviderFactory.getAdapter(providerConfig);
+    const adapter = ProviderFactory.getAdapter(stripeEntity);
     const params: CreateCheckoutSessionParams = {
       amount: checkoutAmount,
       currency: settings.currency,
@@ -807,8 +841,7 @@ export default class FundingService {
 
     // Resolve enabled Stripe provider
     const stripeEntity = await this.resolveEnabledStripeProvider();
-    const providerConfig = stripeEntity.toModel();
-    const adapter = ProviderFactory.getAdapter(providerConfig);
+    const adapter = ProviderFactory.getAdapter(stripeEntity);
 
     // Retrieve session status from provider
     const sessionStatus: CheckoutSessionStatus = await adapter.getCheckoutSessionStatus(sessionId);
@@ -843,8 +876,7 @@ export default class FundingService {
       throw new Error('Provider configuration not found');
     }
 
-    const providerConfig = providerEntity.toModel();
-    const adapter = ProviderFactory.getAdapter(providerConfig);
+    const adapter = ProviderFactory.getAdapter(providerEntity);
 
     // Cancel via provider
     await adapter.cancelSubscription(entity.provider_subscription_id, immediate);
@@ -900,8 +932,7 @@ export default class FundingService {
       throw new Error('Provider configuration not found');
     }
 
-    const providerConfig = providerEntity.toModel();
-    const adapter = ProviderFactory.getAdapter(providerConfig);
+    const adapter = ProviderFactory.getAdapter(providerEntity);
 
     return adapter.getBillingPortalUrl(fundingPlan.providerCustomerId, returnUrl);
   }
@@ -975,8 +1006,7 @@ export default class FundingService {
       throw new ProviderNotConfiguredError('Stripe provider not configured');
     }
 
-    const providerConfig = stripeConfig.toModel();
-    const adapter = ProviderFactory.getAdapter(providerConfig);
+    const adapter = ProviderFactory.getAdapter(stripeConfig);
 
     if (!adapter.verifyWebhookSignature(rawBody, signature)) {
       throw new WebhookSignatureError();
@@ -1109,8 +1139,7 @@ export default class FundingService {
       return;
     }
 
-    const providerConfig = providerEntity.toModel();
-    const adapter = ProviderFactory.getAdapter(providerConfig);
+    const adapter = ProviderFactory.getAdapter(providerEntity);
     const providerSubscription = await adapter.getSubscription(event.subscriptionId);
 
     // Determine billing cycle from provider subscription period
