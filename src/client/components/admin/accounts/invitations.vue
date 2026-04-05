@@ -93,7 +93,7 @@
             <tbody>
               <tr v-for="invitation in activeInvitations" :key="invitation.id">
                 <td class="cell-email">{{ invitation.email }}</td>
-                <td class="cell-secondary">{{ invitation.invitedBy ? invitation.invitedBy.username || invitation.invitedBy : '' }}</td>
+                <td class="cell-secondary">{{ inviterName(invitation.invitedBy) }}</td>
                 <td class="cell-date">{{ formatDate(invitation.expirationTime) }}</td>
                 <td class="cell-actions">
                   <button type="button" class="action-link-resend" @click="resendInvitation(invitation)">
@@ -115,7 +115,7 @@
               <p class="invitation-card-email">{{ invitation.email }}</p>
               <p class="invitation-card-meta">
                 {{ t('invited_by_expires', {
-                  username: invitation.invitedBy ? invitation.invitedBy.username || invitation.invitedBy : '',
+                  username: inviterName(invitation.invitedBy),
                   date: formatDate(invitation.expirationTime)
                 }) }}
               </p>
@@ -145,7 +145,7 @@
           <tbody>
             <tr v-for="invitation in expiredInvitations" :key="invitation.id">
               <td class="cell-expired-email">{{ invitation.email }}</td>
-              <td class="cell-expired-secondary">{{ invitation.invitedBy ? invitation.invitedBy.username || invitation.invitedBy : '' }}</td>
+              <td class="cell-expired-secondary">{{ inviterName(invitation.invitedBy) }}</td>
               <td>
                 <span class="expired-badge">{{ t('expired_date', { date: formatDate(invitation.expirationTime) }) }}</span>
               </td>
@@ -235,6 +235,11 @@ const formatDate = (date) => {
   if (!date) return t('unknown_expiration');
   const dt = typeof date === 'string' ? DateTime.fromISO(date) : DateTime.fromJSDate(new Date(date));
   return dt.toLocaleString({ month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+const inviterName = (invitedBy) => {
+  if (!invitedBy) return '';
+  return invitedBy.username || invitedBy.displayName || invitedBy.email || '';
 };
 
 const openInviteForm = () => {
