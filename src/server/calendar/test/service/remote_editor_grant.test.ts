@@ -18,7 +18,39 @@ import { CalendarMemberEntity } from '@/server/calendar/entity/calendar_member';
 import { UserActorEntity } from '@/server/activitypub/entity/user_actor';
 import { Account } from '@/common/model/account';
 import AccountsInterface from '@/server/accounts/interface';
+import type ActivityPubInterface from '@/server/activitypub/interface';
 import { EventEmitter } from 'events';
+
+/**
+ * Creates a mock ActivityPubInterface that delegates user actor lookups
+ * to the real UserActorEntity database. This allows integration-style tests
+ * to create DB rows directly while the service uses interface-based calls.
+ */
+function createMockActivityPubInterface(): Partial<ActivityPubInterface> {
+  return {
+    async findUserActorByUri(actorUri: string) {
+      const entity = await UserActorEntity.findOne({ where: { actor_uri: actorUri } });
+      if (!entity) return null;
+      return { id: entity.id, actorUri: entity.actor_uri };
+    },
+    async findOrCreateRemoteUserActor(actorUri: string, preferredUsername: string, domain: string, publicKey?: string) {
+      const [entity] = await UserActorEntity.findOrCreate({
+        where: { actor_uri: actorUri },
+        defaults: {
+          id: uuidv4(),
+          actor_type: 'remote',
+          account_id: null,
+          actor_uri: actorUri,
+          remote_username: preferredUsername,
+          remote_domain: domain,
+          public_key: publicKey || null,
+          private_key: null,
+        },
+      });
+      return { id: entity.id };
+    },
+  };
+}
 
 /**
  * Tests for remote (federated) editor functionality in CalendarService.
@@ -76,6 +108,9 @@ describe('CalendarService.grantEditAccessByEmail - Remote Editors', () => {
       mockAccountsInterface as AccountsInterface,
       new EventEmitter(),
     );
+
+    // Wire up mock ActivityPub interface for user actor lookups
+    service.setActivityPubInterface(createMockActivityPubInterface() as ActivityPubInterface);
   });
 
   afterEach(async () => {

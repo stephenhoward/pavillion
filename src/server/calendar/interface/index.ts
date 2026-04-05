@@ -22,6 +22,7 @@ import AccountsInterface from '@/server/accounts/interface';
 import EmailInterface from '@/server/email/interface';
 import FundingInterface from '@/server/funding/interface';
 import type MediaInterface from '@/server/media/interface';
+import type ActivityPubInterface from '@/server/activitypub/interface';
 import { CalendarNotFoundError } from '@/common/exceptions/calendar';
 import { CalendarEditorPermissionError } from '@/common/exceptions/editor';
 
@@ -70,6 +71,19 @@ export default class CalendarInterface {
   setMediaInterface(mediaInterface: MediaInterface): void {
     this.eventService.setMediaInterface(mediaInterface);
     this.seriesService.setMediaInterface(mediaInterface);
+  }
+
+  /**
+   * Injects ActivityPubInterface into the services that need it for cross-domain AP lookups.
+   * Called after ActivityPubDomain is initialized to avoid circular construction dependencies.
+   *
+   * @param apInterface - The ActivityPubInterface instance from the activitypub domain
+   */
+  setActivityPubInterface(apInterface: ActivityPubInterface): void {
+    this.eventService.setActivityPubInterface(apInterface);
+    this.eventInstanceService.setActivityPubInterface(apInterface);
+    this.calendarService.setActivityPubInterface(apInterface);
+    this.categoryMappingService.setActivityPubInterface(apInterface);
   }
 
   // Calendar operations

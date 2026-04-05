@@ -4,9 +4,9 @@ import { CalendarCategoryMappingEntity } from '@/server/calendar/entity/category
 import type { CalendarCategoryMapping } from '@/server/calendar/entity/category_mapping';
 import { EventCategoryEntity } from '@/server/calendar/entity/event_category';
 import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_category_assignment';
-import { CalendarActorEntity, CalendarActor } from '@/server/activitypub/entity/calendar_actor';
-import { FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
+import type { CalendarActor } from '@/server/activitypub/entity/calendar_actor';
 import db from '@/server/common/entity/db';
+import type ActivityPubInterface from '@/server/activitypub/interface';
 
 const MAX_MAPPINGS = 100;
 
@@ -22,6 +22,12 @@ interface MappingInput {
  * category tags from followed remote calendars into their own local taxonomy.
  */
 class CategoryMappingService {
+  private activityPubInterface?: ActivityPubInterface;
+
+  setActivityPubInterface(apInterface: ActivityPubInterface): void {
+    this.activityPubInterface = apInterface;
+  }
+
   /**
    * Get all category mappings for a given calendar and source actor.
    *
@@ -154,19 +160,7 @@ class CategoryMappingService {
    * @throws Error if actor not found or not in following list
    */
   async getActorInFollowing(calendarId: string, actorId: string): Promise<CalendarActor> {
-    const actor = await CalendarActorEntity.findByPk(actorId);
-    if (!actor) {
-      throw new Error('actor not found');
-    }
-
-    const follow = await FollowingCalendarEntity.findOne({
-      where: { calendar_actor_id: actorId, calendar_id: calendarId },
-    });
-    if (!follow) {
-      throw new Error('actor is not in the following list for this calendar');
-    }
-
-    return actor.toModel();
+    return this.activityPubInterface!.getActorInFollowing(calendarId, actorId);
   }
 
   /**

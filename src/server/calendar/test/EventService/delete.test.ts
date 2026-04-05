@@ -11,7 +11,6 @@ import { LocationEntity } from '../../entity/location';
 import { MediaEntity } from '../../../media/entity/media';
 import { EventCategoryAssignmentEntity } from '../../entity/event_category_assignment';
 import { CalendarMemberEntity } from '../../entity/calendar_member';
-import { CalendarActorEntity } from '../../../activitypub/entity/calendar_actor';
 import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError } from '@/common/exceptions/calendar';
 import db from '@/server/common/entity/db';
 
@@ -140,8 +139,10 @@ describe('EventService.deleteEvent', () => {
     // Mock event not found locally
     sandbox.stub(EventEntity, 'findByPk').resolves(null);
 
-    // Mock no calendar actor found (so no remote membership check is performed)
-    sandbox.stub(CalendarActorEntity, 'findOne').resolves(null);
+    // Mock AP interface returning null (no calendar actor found)
+    eventService.setActivityPubInterface({
+      findCalendarActorByCalendarId: sinon.stub().resolves(null),
+    } as any);
 
     await expect(eventService.deleteEvent(account, eventId, calendarId))
       .rejects.toThrow(EventNotFoundError);
@@ -289,39 +290,43 @@ describe('EventService.deleteEvent', () => {
     // Mock event not found locally
     sandbox.stub(EventEntity, 'findByPk').resolves(null);
 
-    // Mock calendar actor found by remote_calendar_id lookup
-    const mockCalendarActor = {
-      id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', // Beta's CalendarActorEntity.id (different from calendarId)
-      actor_uri: 'https://remote.example.com/calendars/test-calendar',
-      inbox_url: 'https://remote.example.com/inbox',
-      toModel: sandbox.stub().returns({
-        id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-        actorType: 'remote' as const,
-        calendarId: null,
-        remoteCalendarId: calendarId,
-        actorUri: 'https://remote.example.com/calendars/test-calendar',
-        remoteDisplayName: 'Test Remote Calendar',
-        remoteDomain: 'remote.example.com',
-        inboxUrl: 'https://remote.example.com/inbox',
-        sharedInboxUrl: null,
-        lastFetched: new Date(),
-        publicKey: 'mock-public-key',
-        privateKey: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }),
+    // Mock CalendarActor returned by AP interface
+    const mockCalendarActorModel = {
+      id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      actorType: 'remote' as const,
+      calendarId: null,
+      remoteCalendarId: calendarId,
+      actorUri: 'https://remote.example.com/calendars/test-calendar',
+      remoteDisplayName: 'Test Remote Calendar',
+      remoteDomain: 'remote.example.com',
+      inboxUrl: 'https://remote.example.com/inbox',
+      sharedInboxUrl: null,
+      lastFetched: new Date(),
+      publicKey: 'mock-public-key',
+      privateKey: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
 
-    // Stub CalendarActorEntity.findOne to return the actor when searching by remote_calendar_id
-    sandbox.stub(CalendarActorEntity, 'findOne').resolves(mockCalendarActor as any);
+    // Inject mock AP interface that returns the CalendarActor model
+    const findCalendarActorStub = sinon.stub().resolves(mockCalendarActorModel);
+    eventService.setActivityPubInterface({
+      findCalendarActorByCalendarId: findCalendarActorStub,
+    } as any);
 
-    // Mock remote membership found using the CalendarActorEntity's id (not calendarId directly)
+    // Mock the calendarActor entity on the membership (loaded via Sequelize association)
+    const mockCalendarActorEntity = {
+      ...mockCalendarActorModel,
+      toModel: sandbox.stub().returns(mockCalendarActorModel),
+    };
+
+    // Mock remote membership found using the CalendarActor's id (not calendarId directly)
     const mockRemoteMembership = {
       account_id: 'account-123',
-      calendar_actor_id: mockCalendarActor.id,
+      calendar_actor_id: mockCalendarActorModel.id,
       calendar_id: null,
       role: 'editor',
-      calendarActor: mockCalendarActor,
+      calendarActor: mockCalendarActorEntity,
     };
 
     sandbox.stub(CalendarMemberEntity, 'findOne').resolves(mockRemoteMembership as any);
@@ -332,26 +337,24 @@ describe('EventService.deleteEvent', () => {
     // Call deleteEvent with calendarId (the remote calendar's UUID)
     await eventService.deleteEvent(account, eventId, calendarId);
 
-    // Verify CalendarActorEntity was looked up by remote_calendar_id first
-    expect((CalendarActorEntity.findOne as sinon.SinonStub).calledWith({
-      where: { remote_calendar_id: calendarId },
-    })).toBe(true);
+    // Verify AP interface was called with the calendarId
+    expect(findCalendarActorStub.calledWith(calendarId)).toBe(true);
 
-    // Verify CalendarMemberEntity.findOne was called with the CalendarActorEntity's id
+    // Verify CalendarMemberEntity.findOne was called with the CalendarActor's id
     // (not calendarId directly, which was the old buggy behavior)
     expect((CalendarMemberEntity.findOne as sinon.SinonStub).calledWith({
       where: {
         account_id: account.id,
-        calendar_actor_id: mockCalendarActor.id,
+        calendar_actor_id: mockCalendarActorModel.id,
         calendar_id: null,
       },
-      include: [{ model: CalendarActorEntity, as: 'calendarActor' }],
+      include: [{ association: 'calendarActor' }],
     })).toBe(true);
 
     // Verify deleteRemoteEventViaActivityPub was called with correct parameters
     expect(deleteRemoteStub.calledOnce).toBe(true);
     expect(deleteRemoteStub.firstCall.args[0]).toEqual(account);
-    expect(deleteRemoteStub.firstCall.args[1]).toEqual(mockCalendarActor.toModel());
+    expect(deleteRemoteStub.firstCall.args[1]).toEqual(mockCalendarActorModel);
     expect(deleteRemoteStub.firstCall.args[2]).toEqual(eventId);
   });
 });

@@ -5,8 +5,7 @@ import axios from 'axios';
 import { Account } from "@/common/model/account";
 import { Calendar } from "@/common/model/calendar";
 import { CalendarMemberEntity } from "@/server/calendar/entity/calendar_member";
-import { CalendarActorEntity, CalendarActor } from "@/server/activitypub/entity/calendar_actor";
-import { UserActorEntity } from "@/server/activitypub/entity/user_actor";
+import type { CalendarActor } from "@/server/activitypub/entity/calendar_actor";
 import { CalendarEvent, CalendarEventContent, CalendarEventSchedule } from "@/common/model/events";
 import { EventCategory } from "@/common/model/event_category";
 import { EventLocation, validateLocationHierarchy } from "@/common/model/location";
@@ -20,6 +19,7 @@ import { MediaEntity } from "@/server/media/entity/media";
 import LocationService from "@/server/calendar/service/locations";
 import { EventEmitter } from 'events';
 import type MediaInterface from '@/server/media/interface';
+import type ActivityPubInterface from '@/server/activitypub/interface';
 import { EventNotFoundError, InsufficientCalendarPermissionsError, CalendarNotFoundError, BulkEventsNotFoundError, MixedCalendarEventsError, CategoriesNotFoundError, LocationValidationError } from '@/common/exceptions/calendar';
 import { ValidationError } from '@/common/exceptions/base';
 import CategoryService from './categories';
@@ -29,7 +29,6 @@ import { EventCategoryContentEntity } from '@/server/calendar/entity/event_categ
 import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_category_assignment';
 import { EventInstanceEntity } from '@/server/calendar/entity/event_instance';
 import { EventRepostEntity } from '@/server/calendar/entity/event_repost';
-import { SharedEventEntity } from '@/server/activitypub/entity/activitypub';
 import { validateUrlNotPrivate } from '@/server/common/helper/ip-validation';
 import { FEDERATION_HTTP_TIMEOUT_MS } from '@/server/common/constants';
 import db from '@/server/common/entity/db';
@@ -51,6 +50,7 @@ class EventService {
   private categoryService: CategoryService;
   private eventBus: EventEmitter;
   private mediaInterface?: MediaInterface;
+  private activityPubInterface?: ActivityPubInterface;
 
   constructor(eventBus: EventEmitter) {
     this.locationService = new LocationService();
@@ -63,6 +63,10 @@ class EventService {
     this.mediaInterface = mediaInterface;
   }
 
+  setActivityPubInterface(apInterface: ActivityPubInterface): void {
+    this.activityPubInterface = apInterface;
+  }
+
   /**
    * Validates if a string is a valid UUID v4
    * @private
@@ -72,31 +76,6 @@ class EventService {
     return typeof uuid === 'string' && UUID_V4_REGEX.test(uuid);
   }
 
-  /**
-   * Finds the CalendarActorEntity for a given calendar ID.
-   * Checks remote_calendar_id first (for remote calendars whose UUID was sent
-   * in an Add activity), then falls back to calendar_id (for local actors).
-   * This enables looking up the correct actor when a user provides the remote
-   * calendar's UUID to identify the target calendar for event operations.
-   *
-   * @param calendarId - The calendar UUID to search for
-   * @returns The matching CalendarActorEntity, or null if not found
-   * @private
-   */
-  private async findCalendarActorByCalendarId(calendarId: string): Promise<CalendarActorEntity | null> {
-    // Check if there's a remote CalendarActorEntity that has this remote calendar UUID
-    const byRemoteId = await CalendarActorEntity.findOne({
-      where: { remote_calendar_id: calendarId },
-    });
-    if (byRemoteId) {
-      return byRemoteId;
-    }
-
-    // Fall back to local actors where calendar_id matches
-    return CalendarActorEntity.findOne({
-      where: { calendar_id: calendarId },
-    });
-  }
 
   /**
    * Retrieves events for the provided calendar.
@@ -119,17 +98,10 @@ class EventService {
       where: { calendar_id: calendar.id },
       attributes: ['event_id'],
     });
-    const shares = await SharedEventEntity.findAll({
-      where: { calendar_id: calendar.id },
-      attributes: ['event_id'],
-    });
-
-    // Combine reposts and shares into a single list of event UUIDs
-    // SharedEventEntity.event_id stores local UUIDs after our inbox.ts fix,
-    // but old records may still have AP URLs. Filter to only include valid UUIDs.
+    // Get shared event IDs via AP interface
+    // Filter to valid UUIDs for safety since old records may have AP URLs
     const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const shareEventIds = shares
-      .map(s => s.event_id)
+    const shareEventIds = (await this.activityPubInterface!.getSharedEventIds(calendar.id))
       .filter(id => UUID_REGEX.test(id));
 
     const repostedEventIds = [
@@ -262,12 +234,9 @@ class EventService {
     remoteCalendarActor: CalendarActor,
     eventParams: Record<string, any>,
   ): Promise<CalendarEvent> {
-    // Get the local user's actor for signing the activity
-    const userActor = await UserActorEntity.findOne({
-      where: { account_id: account.id },
-    });
-
-    if (!userActor) {
+    // Get the local user's actor URI for signing the activity
+    const actorUri = await this.activityPubInterface!.getUserActorUri(account.id);
+    if (!actorUri) {
       throw new InsufficientCalendarPermissionsError('User does not have an ActivityPub identity configured');
     }
 
@@ -279,7 +248,7 @@ class EventService {
       '@context': 'https://www.w3.org/ns/activitystreams',
       type: 'Create',
       id: `https://${localDomain}/activities/${uuidv4()}`,
-      actor: userActor.actor_uri,
+      actor: actorUri,
       to: [remoteCalendarActor.actorUri],
       object: {
         type: 'Event',
@@ -288,7 +257,7 @@ class EventService {
         summary: eventParams.content?.en?.description || eventParams.description || '',
         startTime: this.buildIsoDateTime(eventParams.start_date, eventParams.start_time),
         endTime: this.buildIsoDateTime(eventParams.end_date, eventParams.end_time),
-        attributedTo: userActor.actor_uri,
+        attributedTo: actorUri,
         calendarId: remoteCalendarActor.id,
         eventParams: eventParams,
       },
@@ -385,12 +354,9 @@ class EventService {
     eventId: string,
     eventParams: Record<string, any>,
   ): Promise<CalendarEvent> {
-    // Get the local user's actor for signing the activity
-    const userActor = await UserActorEntity.findOne({
-      where: { account_id: account.id },
-    });
-
-    if (!userActor) {
+    // Get the local user's actor URI for signing the activity
+    const actorUri = await this.activityPubInterface!.getUserActorUri(account.id);
+    if (!actorUri) {
       throw new InsufficientCalendarPermissionsError('User does not have an ActivityPub identity configured');
     }
 
@@ -404,7 +370,7 @@ class EventService {
       '@context': 'https://www.w3.org/ns/activitystreams',
       type: 'Update',
       id: `https://${localDomain}/activities/${uuidv4()}`,
-      actor: userActor.actor_uri,
+      actor: actorUri,
       to: [remoteCalendarActor.actorUri],
       object: {
         type: 'Event',
@@ -413,7 +379,7 @@ class EventService {
         summary: eventParams.content?.en?.description || eventParams.description || '',
         startTime: this.buildIsoDateTime(eventParams.start_date, eventParams.start_time),
         endTime: this.buildIsoDateTime(eventParams.end_date, eventParams.end_time),
-        attributedTo: userActor.actor_uri,
+        attributedTo: actorUri,
         calendarId: remoteCalendarActor.id,
         eventParams: eventParamsWithId,
       },
@@ -490,12 +456,9 @@ class EventService {
     remoteCalendarActor: CalendarActor,
     eventId: string,
   ): Promise<void> {
-    // Get the local user's actor for signing the activity
-    const userActor = await UserActorEntity.findOne({
-      where: { account_id: account.id },
-    });
-
-    if (!userActor) {
+    // Get the local user's actor URI for signing the activity
+    const actorUri = await this.activityPubInterface!.getUserActorUri(account.id);
+    if (!actorUri) {
       throw new InsufficientCalendarPermissionsError('User does not have an ActivityPub identity configured');
     }
 
@@ -507,7 +470,7 @@ class EventService {
       '@context': 'https://www.w3.org/ns/activitystreams',
       type: 'Delete',
       id: `https://${localDomain}/activities/${uuidv4()}`,
-      actor: userActor.actor_uri,
+      actor: actorUri,
       to: [remoteCalendarActor.actorUri],
       object: {
         type: 'Tombstone',
@@ -579,7 +542,7 @@ class EventService {
     else {
       // Calendar not found locally - check if it's a remote calendar we have access to.
       // Look up the CalendarActorEntity by the provided calendar UUID, then find membership.
-      const calendarActor = await this.findCalendarActorByCalendarId(eventParams.calendarId);
+      const calendarActor = await this.activityPubInterface!.findCalendarActorByCalendarId(eventParams.calendarId);
       if (calendarActor) {
         const remoteMembership = await CalendarMemberEntity.findOne({
           where: {
@@ -587,7 +550,7 @@ class EventService {
             calendar_actor_id: calendarActor.id,
             calendar_id: null, // Ensure this is remote calendar membership
           },
-          include: [{ model: CalendarActorEntity, as: 'calendarActor' }],
+          include: [{ association: 'calendarActor' }],
         });
 
         if (remoteMembership && remoteMembership.calendarActor) {
@@ -730,7 +693,7 @@ class EventService {
     if (!eventEntity) {
       // Check if the user has remote calendar membership for the specified calendarId
       if (eventParams.calendarId) {
-        const calendarActor = await this.findCalendarActorByCalendarId(eventParams.calendarId);
+        const calendarActor = await this.activityPubInterface!.findCalendarActorByCalendarId(eventParams.calendarId);
         if (calendarActor) {
           const remoteMembership = await CalendarMemberEntity.findOne({
             where: {
@@ -738,7 +701,7 @@ class EventService {
               calendar_actor_id: calendarActor.id,
               calendar_id: null, // Ensure this is remote calendar membership
             },
-            include: [{ model: CalendarActorEntity, as: 'calendarActor' }],
+            include: [{ association: 'calendarActor' }],
           });
 
           if (remoteMembership && remoteMembership.calendarActor) {
@@ -1523,7 +1486,7 @@ class EventService {
     if (!eventEntity) {
       // Check if the user has remote calendar membership for the specified calendarId
       if (calendarId) {
-        const calendarActor = await this.findCalendarActorByCalendarId(calendarId);
+        const calendarActor = await this.activityPubInterface!.findCalendarActorByCalendarId(calendarId);
         if (calendarActor) {
           const remoteMembership = await CalendarMemberEntity.findOne({
             where: {
@@ -1531,7 +1494,7 @@ class EventService {
               calendar_actor_id: calendarActor.id,
               calendar_id: null, // Ensure this is remote calendar membership
             },
-            include: [{ model: CalendarActorEntity, as: 'calendarActor' }],
+            include: [{ association: 'calendarActor' }],
           });
 
           if (remoteMembership && remoteMembership.calendarActor) {

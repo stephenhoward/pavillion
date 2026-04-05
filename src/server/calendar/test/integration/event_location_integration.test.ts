@@ -32,6 +32,13 @@ describe('EventService - Location Integration', () => {
 
     eventBus = new EventEmitter();
     calendarInterface = new CalendarInterface(eventBus);
+
+    // Inject a minimal AP interface stub so listEvents does not crash when
+    // no real ActivityPub domain is wired up in this test environment.
+    calendarInterface.setActivityPubInterface({
+      getSharedEventIds: async () => [],
+    } as any);
+
     const configurationInterface = new ConfigurationInterface();
     const setupInterface = new SetupInterface();
     const accountService = new AccountService(eventBus, configurationInterface, setupInterface);

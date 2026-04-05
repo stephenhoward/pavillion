@@ -25,6 +25,27 @@ describe('CategoryMappingRoutes - GET /calendars/:calendarId/following/:actorId/
   beforeEach(() => {
     sandbox = sinon.createSandbox();
     calendarInterface = new CalendarInterface(new EventEmitter());
+
+    // Inject a minimal AP interface whose getActorInFollowing delegates to the
+    // CalendarActorEntity / FollowingCalendarEntity methods that each test stubs
+    // individually with sinon.  This avoids wiring a full ActivityPub domain.
+    const mockApInterface = {
+      getActorInFollowing: async (calId: string, aId: string) => {
+        const actor = await CalendarActorEntity.findByPk(aId);
+        if (!actor) {
+          throw new Error('actor not found');
+        }
+        const follow = await FollowingCalendarEntity.findOne({
+          where: { calendar_actor_id: aId, calendar_id: calId },
+        });
+        if (!follow) {
+          throw new Error('actor is not in the following list for this calendar');
+        }
+        return actor.toModel();
+      },
+    };
+    (calendarInterface as any).categoryMappingService.setActivityPubInterface(mockApInterface as any);
+
     routes = new CategoryMappingRoutes(calendarInterface);
     router = express.Router();
   });

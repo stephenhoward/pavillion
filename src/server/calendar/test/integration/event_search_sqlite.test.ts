@@ -29,6 +29,12 @@ describe('Event Search Integration (SQLite)', () => {
     eventService = new EventService(eventBus);
     calendarService = new CalendarService();
 
+    // Inject a minimal AP interface stub so listEvents does not crash when
+    // no real ActivityPub domain is wired up in this test environment.
+    (eventService as any).activityPubInterface = {
+      getSharedEventIds: async () => [],
+    };
+
     // Create test account and calendar
     testAccount = new Account('test-account-id', 'testuser');
     testAccount.email = 'test@example.com';

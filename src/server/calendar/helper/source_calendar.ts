@@ -1,10 +1,5 @@
 import config from 'config';
-import { Op } from 'sequelize';
 import { CalendarEvent } from '@/common/model/events';
-// Deliberate cross-domain import: EventObjectEntity is needed to resolve the
-// attributed_to actor URI for remote reposted events. This is a known DEC-003
-// violation to be cleaned up in Phase 4 domain boundary work.
-import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 
 /**
  * Contextual information needed to detect whether an event is a repost
@@ -25,22 +20,32 @@ export interface RepostContext {
  * Enriches events with sourceCalendar information based on repost status.
  *
  * Repost detection:
- * - event.calendarId === null → remote repost (federated event)
- * - event.calendarId !== displayCalendarId → local repost
- * - otherwise → not a repost
+ * - event.calendarId === null -> remote repost (federated event)
+ * - event.calendarId !== displayCalendarId -> local repost
+ * - otherwise -> not a repost
  *
  * For local reposts, source calendar info is resolved from the eager-loaded
- * CalendarEntity. For remote reposts, EventObjectEntity is batch-queried
- * to parse the attributed_to actor URI.
+ * CalendarEntity. For remote reposts, the caller provides a pre-resolved map
+ * of eventId -> attributed_to actor URI (fetched via ActivityPubInterface).
+ *
+ * @param contexts - Array of repost contexts to enrich
+ * @param remoteActorUriMap - Pre-resolved map of eventId to attributed_to actor URI
  */
-export async function resolveSourceCalendars(contexts: RepostContext[]): Promise<void> {
-  const remoteEventIds: string[] = [];
-
+export async function resolveSourceCalendars(
+  contexts: RepostContext[],
+  remoteActorUriMap: Map<string, string>,
+): Promise<void> {
   for (const ctx of contexts) {
     if (ctx.eventCalendarId === null) {
-      // Remote repost — will resolve via EventObjectEntity below
+      // Remote repost — resolve via pre-resolved actor URI map
       ctx.event.isRepost = true;
-      remoteEventIds.push(ctx.event.id);
+      const attributedTo = remoteActorUriMap.get(ctx.event.id);
+      if (attributedTo) {
+        const parsed = parseAttributedToUri(attributedTo);
+        if (parsed) {
+          ctx.event.sourceCalendar = parsed;
+        }
+      }
     }
     else if (ctx.eventCalendarId !== ctx.displayCalendarId) {
       // Local repost — resolve from eager-loaded calendar data
@@ -55,30 +60,6 @@ export async function resolveSourceCalendars(contexts: RepostContext[]): Promise
       }
     }
     // else: not a repost — defaults are already correct
-  }
-
-  // Batch-resolve remote reposts via EventObjectEntity
-  if (remoteEventIds.length > 0) {
-    const eventObjects = await EventObjectEntity.findAll({
-      where: { event_id: { [Op.in]: remoteEventIds } },
-    });
-
-    const objectMap = new Map<string, EventObjectEntity>();
-    for (const obj of eventObjects) {
-      objectMap.set(obj.event_id, obj);
-    }
-
-    for (const ctx of contexts) {
-      if (ctx.event.isRepost && ctx.event.sourceCalendar === null) {
-        const eventObject = objectMap.get(ctx.event.id);
-        if (eventObject?.attributed_to) {
-          const parsed = parseAttributedToUri(eventObject.attributed_to);
-          if (parsed) {
-            ctx.event.sourceCalendar = parsed;
-          }
-        }
-      }
-    }
   }
 }
 

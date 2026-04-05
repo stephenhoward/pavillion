@@ -8,8 +8,6 @@ import { Calendar } from '@/common/model/calendar';
 import { testApp, addRequestUser } from '@/server/common/test/lib/express';
 import CategoryMappingRoutes from '@/server/calendar/api/v1/category_mappings';
 import CalendarInterface from '@/server/calendar/interface';
-import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
-import { FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
 import { EventCategoryEntity } from '@/server/calendar/entity/event_category';
 import { CalendarCategoryMappingEntity } from '@/server/calendar/entity/category_mapping';
 
@@ -23,17 +21,12 @@ describe('CategoryMappingRoutes - GET /calendars/:calendarId/following/:actorId/
   const actorId = '22222222-2222-4222-8222-222222222222';
 
   const mockCalendar = new Calendar(calendarId, 'test-calendar');
-  const mockActor = CalendarActorEntity.build({
+  const mockActorModel = {
     id: actorId,
-    actor_type: 'local',
-    calendar_id: '33333333-3333-4333-8333-333333333333',
-    actor_uri: 'https://example.com/calendars/sourcecal',
-  });
-  const mockFollow = FollowingCalendarEntity.build({
-    id: '44444444-4444-4444-8444-444444444444',
-    calendar_actor_id: actorId,
-    calendar_id: calendarId,
-  });
+    actorType: 'local',
+    calendarId: '33333333-3333-4333-8333-333333333333',
+    actorUri: 'https://example.com/calendars/sourcecal',
+  };
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
@@ -44,8 +37,10 @@ describe('CategoryMappingRoutes - GET /calendars/:calendarId/following/:actorId/
     // Default stubs for auth/calendar/follow checks
     sandbox.stub(calendarInterface, 'getCalendar').resolves(mockCalendar);
     sandbox.stub(calendarInterface, 'userCanModifyCalendar').resolves(true);
-    sandbox.stub(CalendarActorEntity, 'findByPk').resolves(mockActor);
-    sandbox.stub(FollowingCalendarEntity, 'findOne').resolves(mockFollow);
+    sandbox.stub(
+      (calendarInterface as any).categoryMappingService,
+      'getActorInFollowing',
+    ).resolves(mockActorModel);
   });
 
   afterEach(() => {
@@ -91,7 +86,8 @@ describe('CategoryMappingRoutes - GET /calendars/:calendarId/following/:actorId/
     });
 
     it('should return 404 when actor not found', async () => {
-      (CalendarActorEntity.findByPk as sinon.SinonStub).resolves(null);
+      ((calendarInterface as any).categoryMappingService.getActorInFollowing as sinon.SinonStub)
+        .rejects(new Error('actor not found'));
 
       router.get('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = calendarId;
@@ -105,7 +101,8 @@ describe('CategoryMappingRoutes - GET /calendars/:calendarId/following/:actorId/
     });
 
     it('should return 404 when actor is not in calendar following list', async () => {
-      (FollowingCalendarEntity.findOne as sinon.SinonStub).resolves(null);
+      ((calendarInterface as any).categoryMappingService.getActorInFollowing as sinon.SinonStub)
+        .rejects(new Error('actor is not in the following list for this calendar'));
 
       router.get('/handler', addRequestUser, (req, res) => {
         req.params.calendarId = calendarId;
@@ -191,17 +188,12 @@ describe('CategoryMappingRoutes - PUT /calendars/:calendarId/following/:actorId/
   const sourceCategoryId = '55555555-5555-4555-8555-555555555555';
 
   const mockCalendar = new Calendar(calendarId, 'test-calendar');
-  const mockActor = CalendarActorEntity.build({
+  const mockActorModel = {
     id: actorId,
-    actor_type: 'local',
-    calendar_id: '33333333-3333-4333-8333-333333333333',
-    actor_uri: 'https://example.com/calendars/sourcecal',
-  });
-  const mockFollow = FollowingCalendarEntity.build({
-    id: '44444444-4444-4444-8444-444444444444',
-    calendar_actor_id: actorId,
-    calendar_id: calendarId,
-  });
+    actorType: 'local',
+    calendarId: '33333333-3333-4333-8333-333333333333',
+    actorUri: 'https://example.com/calendars/sourcecal',
+  };
 
   beforeEach(() => {
     sandbox = sinon.createSandbox();
@@ -212,8 +204,10 @@ describe('CategoryMappingRoutes - PUT /calendars/:calendarId/following/:actorId/
     // Default stubs for auth/calendar/follow checks
     sandbox.stub(calendarInterface, 'getCalendar').resolves(mockCalendar);
     sandbox.stub(calendarInterface, 'userCanModifyCalendar').resolves(true);
-    sandbox.stub(CalendarActorEntity, 'findByPk').resolves(mockActor);
-    sandbox.stub(FollowingCalendarEntity, 'findOne').resolves(mockFollow);
+    sandbox.stub(
+      (calendarInterface as any).categoryMappingService,
+      'getActorInFollowing',
+    ).resolves(mockActorModel);
   });
 
   afterEach(() => {
@@ -257,7 +251,8 @@ describe('CategoryMappingRoutes - PUT /calendars/:calendarId/following/:actorId/
     });
 
     it('should return 404 when actor not found', async () => {
-      (CalendarActorEntity.findByPk as sinon.SinonStub).resolves(null);
+      ((calendarInterface as any).categoryMappingService.getActorInFollowing as sinon.SinonStub)
+        .rejects(new Error('actor not found'));
       setupPutHandler();
 
       const response = await request(testApp(router)).put('/handler').send({ mappings: [] });
@@ -266,7 +261,8 @@ describe('CategoryMappingRoutes - PUT /calendars/:calendarId/following/:actorId/
     });
 
     it('should return 404 when actor is not in following list', async () => {
-      (FollowingCalendarEntity.findOne as sinon.SinonStub).resolves(null);
+      ((calendarInterface as any).categoryMappingService.getActorInFollowing as sinon.SinonStub)
+        .rejects(new Error('actor is not in the following list for this calendar'));
       setupPutHandler();
 
       const response = await request(testApp(router)).put('/handler').send({ mappings: [] });
