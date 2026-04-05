@@ -29,18 +29,11 @@ const IV_LENGTH = 16;
  * Encrypt sensitive data
  */
 function encrypt(text: string): string {
-  // TODO: REMOVE DEBUG LOGGING - Stripe credential save debugging
-  console.log('[DEBUG][ENTITY] encrypt() called, input length:', text?.length);
   const iv = crypto.randomBytes(IV_LENGTH);
-  // TODO: REMOVE DEBUG LOGGING - Stripe credential save debugging
-  console.log('[DEBUG][ENTITY] encryption key buffer length:', ENCRYPTION_KEY.length, '(must be 32 for aes-256-cbc)');
   const cipher = crypto.createCipheriv(ALGORITHM, ENCRYPTION_KEY, iv);
   let encrypted = cipher.update(text, 'utf8', 'hex');
   encrypted += cipher.final('hex');
-  const result = iv.toString('hex') + ':' + encrypted;
-  // TODO: REMOVE DEBUG LOGGING - Stripe credential save debugging
-  console.log('[DEBUG][ENTITY] encrypt() succeeded, output length:', result.length);
-  return result;
+  return iv.toString('hex') + ':' + encrypted;
 }
 
 /**
@@ -151,20 +144,11 @@ class ProviderConfigEntity extends Model {
    */
   @BeforeCreate
   static encryptFieldsOnCreate(instance: ProviderConfigEntity) {
-    // TODO: REMOVE DEBUG LOGGING - Stripe credential save debugging
-    console.log('[DEBUG][ENTITY] BeforeCreate hook fired');
-    console.log('[DEBUG][ENTITY] BeforeCreate: _decryptedCredentials present?', !!instance._decryptedCredentials);
-    console.log('[DEBUG][ENTITY] BeforeCreate: _decryptedWebhookSecret present?', !!instance._decryptedWebhookSecret);
-
     if (instance._decryptedCredentials) {
       instance.credentials = encrypt(instance._decryptedCredentials);
-      // TODO: REMOVE DEBUG LOGGING - Stripe credential save debugging
-      console.log('[DEBUG][ENTITY] BeforeCreate: credentials encrypted successfully');
     }
     if (instance._decryptedWebhookSecret) {
       instance.webhook_secret = encrypt(instance._decryptedWebhookSecret);
-      // TODO: REMOVE DEBUG LOGGING - Stripe credential save debugging
-      console.log('[DEBUG][ENTITY] BeforeCreate: webhook_secret encrypted successfully');
     }
   }
 
@@ -173,20 +157,11 @@ class ProviderConfigEntity extends Model {
    */
   @BeforeUpdate
   static encryptFieldsOnUpdate(instance: ProviderConfigEntity) {
-    // TODO: REMOVE DEBUG LOGGING - Stripe credential save debugging
-    console.log('[DEBUG][ENTITY] BeforeUpdate hook fired');
-    console.log('[DEBUG][ENTITY] BeforeUpdate: _decryptedCredentials present?', !!instance._decryptedCredentials);
-    console.log('[DEBUG][ENTITY] BeforeUpdate: _decryptedWebhookSecret present?', !!instance._decryptedWebhookSecret);
-
     if (instance._decryptedCredentials && instance._decryptedCredentials.length > 1) {
       instance.credentials = encrypt(instance._decryptedCredentials);
-      // TODO: REMOVE DEBUG LOGGING - Stripe credential save debugging
-      console.log('[DEBUG][ENTITY] BeforeUpdate: credentials encrypted successfully');
     }
     if (instance._decryptedWebhookSecret && instance._decryptedWebhookSecret.length > 1) {
       instance.webhook_secret = encrypt(instance._decryptedWebhookSecret);
-      // TODO: REMOVE DEBUG LOGGING - Stripe credential save debugging
-      console.log('[DEBUG][ENTITY] BeforeUpdate: webhook_secret encrypted successfully');
     }
   }
 }
