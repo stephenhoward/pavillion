@@ -664,6 +664,21 @@ class ProcessInboxService {
     const apObjectId = message.object.id;
     const actorUri = message.actor;
 
+    // SECURITY: Validate eventSourceUrl protocol before storing
+    if (!validateActorUriProtocol(apObjectId)) {
+      logger.warn({ apObjectId, actorUri }, '[INBOX] Create activity object ID has invalid URI scheme');
+      logActivityRejection({
+        rejection_type: 'invalid_object_uri_scheme',
+        activity_type: 'Create',
+        actor_uri: actorUri,
+        actor_domain: this.extractDomain(actorUri),
+        calendar_id: calendar.id,
+        calendar_url_name: calendar.urlName,
+        reason: 'Object ID does not use HTTPS scheme',
+      });
+      return null;
+    }
+
     // Check if we already have this AP object by looking up EventObjectEntity
     const existingApObject = await EventObjectEntity.findOne({
       where: { ap_id: apObjectId },
@@ -1214,6 +1229,21 @@ class ProcessInboxService {
     const apObjectId = message.object.id;
     const actorUri = message.actor;
 
+    // SECURITY: Validate eventSourceUrl protocol before storing
+    if (!validateActorUriProtocol(apObjectId)) {
+      logger.warn({ apObjectId, actorUri }, '[INBOX] Update activity object ID has invalid URI scheme');
+      logActivityRejection({
+        rejection_type: 'invalid_object_uri_scheme',
+        activity_type: 'Update',
+        actor_uri: actorUri,
+        actor_domain: this.extractDomain(actorUri),
+        calendar_id: calendar.id,
+        calendar_url_name: calendar.urlName,
+        reason: 'Object ID does not use HTTPS scheme',
+      });
+      return null;
+    }
+
     // Look up the local event by its AP ID
     let apObject = await EventObjectEntity.findOne({
       where: { ap_id: apObjectId },
@@ -1728,6 +1758,21 @@ class ProcessInboxService {
 
     if (!apObjectId || typeof apObjectId !== 'string') {
       logger.warn(`Announce activity object missing id`);
+      return;
+    }
+
+    // SECURITY: Validate eventSourceUrl protocol before storing
+    if (!validateActorUriProtocol(apObjectId)) {
+      logger.warn({ apObjectId, actorUri: message.actor }, '[INBOX] Announce activity object ID has invalid URI scheme');
+      logActivityRejection({
+        rejection_type: 'invalid_object_uri_scheme',
+        activity_type: 'Announce',
+        actor_uri: message.actor,
+        actor_domain: this.extractDomain(message.actor),
+        calendar_id: calendar.id,
+        calendar_url_name: calendar.urlName,
+        reason: 'Object ID does not use HTTPS scheme',
+      });
       return;
     }
 
