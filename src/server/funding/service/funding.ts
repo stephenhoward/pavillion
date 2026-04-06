@@ -241,17 +241,12 @@ export default class FundingService {
    */
   async updateProvider(
     providerType: ProviderType,
-    displayName: string,
+    displayName: string | undefined,
     enabled: boolean,
   ): Promise<boolean> {
     // Validate provider type
     if (providerType !== 'stripe' && providerType !== 'paypal') {
       throw new InvalidProviderTypeError();
-    }
-
-    // Validate displayName and enabled
-    if (typeof displayName !== 'string') {
-      throw new MissingRequiredFieldError('displayName');
     }
 
     if (typeof enabled !== 'boolean') {
@@ -266,7 +261,9 @@ export default class FundingService {
       throw new Error(`Provider ${providerType} not found`);
     }
 
-    entity.display_name = displayName;
+    if (typeof displayName === 'string') {
+      entity.display_name = displayName;
+    }
     entity.enabled = enabled;
     await entity.save();
 
@@ -417,13 +414,24 @@ export default class FundingService {
       throw new ValidationError('returnUrl must use http or https scheme');
     }
 
-    // Build expected origin from configured domain
+    // Build allowed origins from configured domain and server host
     const instanceDomain = config.get<string>('domain');
-    const expectedOrigin = instanceDomain.includes('localhost')
-      ? `http://${instanceDomain}`
-      : `https://${instanceDomain}`;
+    const allowedOrigins = new Set<string>();
 
-    if (parsed.origin !== expectedOrigin) {
+    // Add the configured federation domain
+    allowedOrigins.add(
+      instanceDomain.includes('localhost')
+        ? `http://${instanceDomain}`
+        : `https://${instanceDomain}`,
+    );
+
+    // Add the local server origin (covers dev where domain differs from listen address)
+    const hostPort = config.get<number>('host.port');
+    if (hostPort) {
+      allowedOrigins.add(`http://localhost:${hostPort}`);
+    }
+
+    if (!allowedOrigins.has(parsed.origin)) {
       throw new ValidationError('returnUrl origin does not match this instance');
     }
   }

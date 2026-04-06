@@ -21,7 +21,7 @@
         <!-- Calendar Title & Description (Translatable) -->
         <div class="setting-card">
           <h3 class="setting-label">{{ t('calendar_content_section') }}</h3>
-          <p class="setting-description">{{ t('calendar_title_help') }}</p>
+          <p class="input-description">{{ t('calendar_title_help') }}</p>
 
           <LanguageTabSelector
             v-model="state.currentLanguage"
@@ -54,7 +54,7 @@
               <label class="field-label" :for="`calendarDescription-${state.currentLanguage}`">
                 {{ t('calendar_description_label') }}
               </label>
-              <p class="setting-description">{{ t('calendar_description_help') }}</p>
+              <p class="input-description">{{ t('calendar_description_help') }}</p>
               <textarea
                 :id="`calendarDescription-${state.currentLanguage}`"
                 class="setting-textarea"
@@ -80,7 +80,7 @@
         <!-- Default Date Range -->
         <div class="setting-card">
           <h3 class="setting-label">{{ t('default_date_range_label') }}</h3>
-          <p class="setting-description">{{ t('default_date_range_help') }}</p>
+          <p class="input-description">{{ t('default_date_range_help') }}</p>
           <select
             id="defaultDateRange"
             class="setting-select"
@@ -97,7 +97,7 @@
         <!-- Default Event Image -->
         <div class="setting-card">
           <h3 class="setting-label">{{ t('default_event_image_label') }}</h3>
-          <p class="setting-description">{{ t('default_event_image_help') }}</p>
+          <p class="input-description">{{ t('default_event_image_help') }}</p>
 
           <!-- Existing image preview -->
           <div v-if="state.defaultEventImage" class="default-image-preview">
@@ -124,6 +124,76 @@
             />
           </div>
         </div>
+
+        <!-- Extended Features -->
+        <div v-if="!state.fundingDisabled && !state.fundingLoading" class="setting-card">
+          <h3 class="setting-label">{{ t('extended_features_label') }}</h3>
+          <p class="input-description">
+            {{ t('extended_features_description', { instanceName: instanceName }) }}
+          </p>
+
+          <!-- Admin exempt -->
+          <div v-if="state.fundingStatus === 'admin-exempt'" class="setting-extended-status">
+            <span class="setting-badge setting-badge--enabled">
+              {{ t('extended_features_admin_exempt') }}
+            </span>
+          </div>
+
+          <!-- Grant -->
+          <div v-else-if="state.fundingStatus === 'grant'" class="setting-extended-status">
+            <span class="setting-badge setting-badge--enabled">
+              {{ t('extended_features_grant') }}
+            </span>
+          </div>
+
+          <!-- Funded -->
+          <div v-else-if="state.fundingStatus === 'funded'" class="setting-extended-status">
+            <span class="setting-badge setting-badge--enabled">
+              {{ t('extended_features_enabled') }}
+            </span>
+            <template v-if="!state.showDisableConfirm">
+              <button
+                type="button"
+                class="setting-disable-btn"
+                @click="state.showDisableConfirm = true"
+              >
+                {{ t('extended_features_disable_button') }}
+              </button>
+            </template>
+            <div v-else class="setting-confirm">
+              <p class="setting-confirm-message">{{ t('confirm_disable_message') }}</p>
+              <div class="setting-confirm-actions">
+                <button
+                  type="button"
+                  class="setting-disable-btn"
+                  :disabled="state.isDisabling"
+                  @click="disableExtendedFeatures"
+                >
+                  {{ state.isDisabling ? t('extended_features_disabling') : t('confirm_disable_button') }}
+                </button>
+                <button
+                  type="button"
+                  class="setting-cancel-btn"
+                  :disabled="state.isDisabling"
+                  @click="state.showDisableConfirm = false"
+                >
+                  {{ t('confirm_cancel_button') }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Unfunded -->
+          <div v-else class="setting-extended-status">
+            <button
+              type="button"
+              class="setting-enable-btn"
+              @click="state.showFundingSheet = true"
+            >
+              {{ t('extended_features_enable_button') }}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -135,6 +205,14 @@
     @select="addLanguage"
     @close="state.showLanguagePicker = false"
   />
+
+  <FundingSheet
+    v-if="state.showFundingSheet"
+    :calendarId="props.calendarId"
+    @close="state.showFundingSheet = false"
+    @subscribed="onSubscribed"
+    :instanceName="instanceName"
+  />
 </template>
 
 <script setup>
@@ -143,11 +221,14 @@ import { useTranslation } from 'i18next-vue';
 import iso6391 from 'iso-639-1-dir';
 import { CalendarContent } from '@/common/model/calendar';
 import CalendarService from '@/client/service/calendar';
+import FundingService from '@/client/service/funding';
+import Config from '@/client/service/config';
 import LoadingMessage from '@/client/components/common/loading_message.vue';
 import ImageUpload from '@/client/components/common/media/image-upload.vue';
 import EventImage from '@/client/components/common/media/event-image.vue';
 import LanguageTabSelector from '@/client/components/common/language-tab-selector.vue';
 import LanguagePicker from '@/client/components/common/language-picker.vue';
+import FundingSheet from './FundingSheet.vue';
 
 // Props
 const props = defineProps({
@@ -164,6 +245,10 @@ const { t } = useTranslation('calendars', {
 
 // Services
 const calendarService = new CalendarService();
+const fundingService = new FundingService();
+
+// Instance name for extended features description
+const instanceName = ref('this instance');
 
 const defaultLanguage = 'en';
 let allLanguages = iso6391.getAllCodes();
@@ -183,6 +268,12 @@ const state = reactive({
   showLanguagePicker: false,
   defaultDateRange: '2weeks',
   defaultEventImage: null,
+  fundingStatus: '',
+  fundingDisabled: false,
+  fundingLoading: false,
+  showFundingSheet: false,
+  isDisabling: false,
+  showDisableConfirm: false,
 });
 
 const erroredTabs = computed(() => {
@@ -363,8 +454,69 @@ const removeDefaultImage = async () => {
   }
 };
 
-// Load settings when component mounts
-onMounted(loadSettings);
+/**
+ * Load funding status for this calendar
+ */
+const loadFundingStatus = async () => {
+  try {
+    state.fundingLoading = true;
+    const options = await fundingService.getOptions();
+    state.fundingDisabled = !options.enabled || options.providers.length === 0;
+
+    if (options.enabled && options.providers.length > 0) {
+      const status = await fundingService.getFundingStatus(props.calendarId);
+      state.fundingStatus = status.status;
+    }
+  }
+  catch (error) {
+    console.error('Error loading funding status:', error);
+    state.fundingDisabled = true;
+  }
+  finally {
+    state.fundingLoading = false;
+  }
+};
+
+/**
+ * Disable extended features by removing calendar from funding plan
+ */
+const disableExtendedFeatures = async () => {
+  try {
+    state.isDisabling = true;
+    state.error = '';
+    await fundingService.removeCalendarFromFundingPlan(props.calendarId);
+    state.success = t('extended_features_disable_success');
+    state.showDisableConfirm = false;
+    clearMessages();
+    await loadFundingStatus();
+  }
+  catch (error) {
+    console.error('Error disabling extended features:', error);
+    state.error = t('extended_features_disable_error');
+    clearMessages();
+  }
+  finally {
+    state.isDisabling = false;
+  }
+};
+
+/**
+ * Handle successful funding subscription from FundingSheet
+ */
+const onSubscribed = async () => {
+  state.showFundingSheet = false;
+  state.success = t('extended_features_enabled_success');
+  clearMessages();
+  await loadFundingStatus();
+};
+
+// Load settings and funding status when component mounts
+onMounted(async () => {
+  loadSettings();
+  loadFundingStatus();
+  const config = await Config.init();
+  instanceName.value = config.settings().siteTitle || 'this instance';
+});
 </script>
 
 <style scoped lang="scss">
@@ -424,17 +576,6 @@ onMounted(loadSettings);
 
   @media (prefers-color-scheme: dark) {
     color: var(--pav-color-stone-100);
-  }
-}
-
-.setting-description {
-  margin: 0 0 var(--pav-space-4) 0;
-  color: var(--pav-color-stone-500);
-  font-size: 0.875rem;
-  line-height: 1.5;
-
-  @media (prefers-color-scheme: dark) {
-    color: var(--pav-color-stone-400);
   }
 }
 
@@ -613,6 +754,130 @@ onMounted(loadSettings);
 
 .default-image-upload {
   max-width: 24rem;
+}
+
+.setting-extended-status {
+  display: flex;
+  align-items: center;
+  gap: var(--pav-space-3);
+  flex-wrap: wrap;
+}
+
+.setting-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+
+  &--enabled {
+    background-color: rgba(34, 197, 94, 0.1);
+    color: var(--pav-color-green-700);
+
+    @media (prefers-color-scheme: dark) {
+      color: var(--pav-color-green-400);
+    }
+  }
+}
+
+.setting-enable-btn {
+  padding: 0.5rem 1rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: var(--pav-color-orange-500);
+  color: white;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+
+  &:hover {
+    background: var(--pav-color-orange-600);
+  }
+}
+
+.setting-disable-btn {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--pav-color-red-300);
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--pav-color-red-600);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+
+  &:hover {
+    background: var(--pav-color-red-50);
+    color: var(--pav-color-red-700);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    border-color: var(--pav-color-red-700);
+    color: var(--pav-color-red-400);
+
+    &:hover {
+      background: rgba(239, 68, 68, 0.1);
+      color: var(--pav-color-red-300);
+    }
+  }
+}
+
+.setting-cancel-btn {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--pav-color-stone-300);
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--pav-color-stone-600);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+
+  &:hover {
+    background: var(--pav-color-stone-100);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    border-color: var(--pav-color-stone-600);
+    color: var(--pav-color-stone-400);
+
+    &:hover {
+      background: var(--pav-color-stone-800);
+    }
+  }
+}
+
+.setting-confirm {
+  width: 100%;
+}
+
+.setting-confirm-message {
+  margin: 0 0 var(--pav-space-3) 0;
+  color: var(--pav-color-stone-600);
+  font-size: 0.875rem;
+
+  @media (prefers-color-scheme: dark) {
+    color: var(--pav-color-stone-400);
+  }
+}
+
+.setting-confirm-actions {
+  display: flex;
+  gap: var(--pav-space-2);
 }
 
 .alert {

@@ -7,6 +7,7 @@ defineProps<{
   calendarId: string;
   initialCycle?: 'monthly' | 'yearly';
   initialAmount?: number;
+  instanceName: string;
 }>();
 
 const emit = defineEmits<{
@@ -24,6 +25,9 @@ function onSubscribed() {
 
 <template>
   <Sheet :title="t('subscribe_to_fund_title')" @close="emit('close')">
+    <p class="input-description">
+      {{ t('subscribe_to_fund_description', { instanceName: instanceName }) }}
+    </p>
     <FundingForm
       :calendarId="calendarId"
       :initialCycle="initialCycle"
