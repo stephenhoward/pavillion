@@ -56,7 +56,8 @@ export default class ProviderConnectionRoutes {
    * Configure Stripe credentials via direct API key entry
    *
    * Accepts publishable_key, secret_key, and webhook_secret.
-   * Error responses never include submitted key values.
+   * Returns { success: true, connectionVerified: boolean } on success.
+   * Error responses never include submitted key values or connectionVerified.
    */
   async configureStripe(req: Request, res: Response): Promise<void> {
     try {
@@ -75,12 +76,12 @@ export default class ProviderConnectionRoutes {
         webhook_secret,
       };
 
-      await this.service.configureStripe(credentials, {
+      const result = await this.service.configureStripe(credentials, {
         id: adminUser.id,
         email: adminUser.email,
       });
 
-      res.json({ success: true });
+      res.json({ success: true, connectionVerified: result.connectionVerified });
     }
     catch (error) {
       // Log only key prefix, never full value

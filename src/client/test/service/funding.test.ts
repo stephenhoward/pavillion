@@ -448,3 +448,75 @@ describe('FundingService.getCheckoutSessionStatus', () => {
     await expect(service.getCheckoutSessionStatus('invalid_session')).rejects.toThrow('Not found');
   });
 });
+
+describe('FundingService.configureStripe', () => {
+  const service = new FundingService();
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should return success and connectionVerified when API returns both', async () => {
+    // Arrange
+    const credentials = { publishable_key: 'pk_test_123', secret_key: 'sk_test_123', webhook_secret: 'whsec_123' };
+    const axiosPost = vi.mocked(axios.post);
+    axiosPost.mockResolvedValue({ status: 200, data: { success: true, connectionVerified: true } });
+
+    // Act
+    const result = await service.configureStripe(credentials);
+
+    // Assert
+    expect(axiosPost).toHaveBeenCalledWith('/api/funding/v1/admin/providers/stripe/configure', credentials);
+    expect(result).toEqual({ success: true, connectionVerified: true });
+  });
+
+  it('should return connectionVerified false when API reports unverified connection', async () => {
+    // Arrange
+    const credentials = { publishable_key: 'pk_test_123', secret_key: 'sk_test_bad', webhook_secret: 'whsec_123' };
+    const axiosPost = vi.mocked(axios.post);
+    axiosPost.mockResolvedValue({ status: 200, data: { success: true, connectionVerified: false } });
+
+    // Act
+    const result = await service.configureStripe(credentials);
+
+    // Assert
+    expect(result).toEqual({ success: true, connectionVerified: false });
+  });
+
+  it('should default connectionVerified to false when field is missing from response', async () => {
+    // Arrange
+    const credentials = { publishable_key: 'pk_test_123', secret_key: 'sk_test_123', webhook_secret: 'whsec_123' };
+    const axiosPost = vi.mocked(axios.post);
+    axiosPost.mockResolvedValue({ status: 200, data: { success: true } });
+
+    // Act
+    const result = await service.configureStripe(credentials);
+
+    // Assert
+    expect(result).toEqual({ success: true, connectionVerified: false });
+  });
+
+  it('should return success false for non-200 status', async () => {
+    // Arrange
+    const credentials = { publishable_key: 'pk_test_123', secret_key: 'sk_test_123', webhook_secret: 'whsec_123' };
+    const axiosPost = vi.mocked(axios.post);
+    axiosPost.mockResolvedValue({ status: 201, data: {} });
+
+    // Act
+    const result = await service.configureStripe(credentials);
+
+    // Assert
+    expect(result.success).toBe(false);
+    expect(result.connectionVerified).toBe(false);
+  });
+
+  it('should throw error when API call fails', async () => {
+    // Arrange
+    const credentials = { publishable_key: 'pk_test_123', secret_key: 'sk_test_123', webhook_secret: 'whsec_123' };
+    const axiosPost = vi.mocked(axios.post);
+    axiosPost.mockRejectedValue(new Error('Network error'));
+
+    // Act & Assert
+    await expect(service.configureStripe(credentials)).rejects.toThrow('Network error');
+  });
+});

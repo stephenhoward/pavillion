@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { useTranslation } from 'i18next-vue';
 import i18next from 'i18next';
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, reactive, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { useToast } from '@/client/composables/useToast';
 import FundingService from '@/client/service/funding';
 import PayPalConfigModal from './paypal-config-modal.vue';
 import ConfirmDisconnectModal from './confirm-disconnect-modal.vue';
@@ -24,8 +25,7 @@ const router = useRouter();
 // State management
 const loading = ref(true);
 const saving = ref(false);
-const successMessage = ref('');
-const errorMessage = ref('');
+const toast = useToast();
 
 // Sub-tab state
 const activeSubTab = ref<'subscriptions' | 'settings' | 'grants'>('subscriptions');
@@ -38,6 +38,9 @@ const currency = ref('USD');
 const payWhatYouCan = ref(false);
 const payWhatYouCanYearlyDiscount = ref(0);
 const gracePeriodDays = ref(7);
+
+// Field-level validation errors
+const fieldErrors = reactive<Record<string, string>>({});
 
 // Provider management state
 const providers = ref([]);
@@ -113,7 +116,7 @@ async function loadSettings() {
   }
   catch (error) {
     console.error('Failed to load settings:', error);
-    errorMessage.value = t('load_settings_error');
+    toast.error(t('load_settings_error'), { duration: 0 });
   }
   finally {
     loading.value = false;
@@ -160,7 +163,7 @@ async function loadGrants() {
   }
   catch (error) {
     console.error('Failed to load grants:', error);
-    errorMessage.value = t('grants.load_error');
+    toast.error(t('grants.load_error'), { duration: 0 });
   }
   finally {
     grantsLoading.value = false;
@@ -196,7 +199,7 @@ function openGrantForm() {
  */
 async function onGrantCreated() {
   grantFormOpen.value = false;
-  successMessage.value = t('grants.created');
+  toast.success(t('grants.created'));
   await loadGrants();
 }
 
@@ -204,17 +207,14 @@ async function onGrantCreated() {
  * Revoke a grant
  */
 async function revokeGrant(grantId: string) {
-  errorMessage.value = '';
-  successMessage.value = '';
-
   try {
     await fundingService.revokeGrant(grantId);
-    successMessage.value = t('grants.revoked');
+    toast.success(t('grants.revoked'));
     await loadGrants();
   }
   catch (error) {
     console.error('Failed to revoke grant:', error);
-    errorMessage.value = t('grants.revoke_error');
+    toast.error(t('grants.revoke_error'));
   }
 }
 
@@ -236,8 +236,6 @@ function getGrantStatus(grant: ComplimentaryGrant): string {
  */
 async function toggleEnabled() {
   saving.value = true;
-  errorMessage.value = '';
-  successMessage.value = '';
 
   try {
     const success = await fundingService.updateSettings({
@@ -251,21 +249,21 @@ async function toggleEnabled() {
     });
 
     if (success) {
-      successMessage.value = t('settings_update_success');
+      toast.success(t('settings_update_success'));
       // Reload subscriptions if just enabled
       if (enabled.value) {
         await loadSubscriptions();
       }
     }
     else {
-      errorMessage.value = t('settings_update_failed');
+      toast.error(t('settings_update_failed'));
       // Revert checkbox on failure
       enabled.value = !enabled.value;
     }
   }
   catch (error) {
     console.error('Error updating settings:', error);
-    errorMessage.value = t('settings_update_failed');
+    toast.error(t('settings_update_failed'));
     // Revert checkbox on error
     enabled.value = !enabled.value;
   }
@@ -278,9 +276,17 @@ async function toggleEnabled() {
  * Update subscription settings
  */
 async function updateSettings() {
+  Object.keys(fieldErrors).forEach(k => delete fieldErrors[k]);
+  if (!currency.value) {
+    fieldErrors.currency = t("currency_required");
+  }
+  if (!payWhatYouCan.value && monthlyPrice.value <= 0 && yearlyPrice.value <= 0) {
+    fieldErrors.monthlyPrice = t("price_required");
+    fieldErrors.yearlyPrice = t("price_required");
+  }
+  if (Object.keys(fieldErrors).length > 0) { return; }
+
   saving.value = true;
-  errorMessage.value = '';
-  successMessage.value = '';
 
   try {
     const success = await fundingService.updateSettings({
@@ -294,15 +300,15 @@ async function updateSettings() {
     });
 
     if (success) {
-      successMessage.value = t('settings_update_success');
+      toast.success(t('settings_update_success'));
     }
     else {
-      errorMessage.value = t('settings_update_failed');
+      toast.error(t('settings_update_failed'));
     }
   }
   catch (error) {
     console.error('Error updating settings:', error);
-    errorMessage.value = t('settings_update_failed');
+    toast.error(t('settings_update_failed'));
   }
   finally {
     saving.value = false;
@@ -329,7 +335,7 @@ function handleWizardClose() {
 async function handleProviderConnected() {
   showWizard.value = false;
   await loadProviders();
-  successMessage.value = t('provider_connect_success', { provider: 'Provider' });
+  toast.success(t('provider_connect_success', { provider: 'Provider' }));
 }
 
 /**
@@ -343,15 +349,15 @@ async function toggleProvider(provider) {
 
     if (success) {
       provider.enabled = !provider.enabled;
-      successMessage.value = t('provider_update_success');
+      toast.success(t('provider_update_success'));
     }
     else {
-      errorMessage.value = t('provider_update_failed');
+      toast.error(t('provider_update_failed'));
     }
   }
   catch (error) {
     console.error('Failed to toggle provider:', error);
-    errorMessage.value = t('provider_update_failed');
+    toast.error(t('provider_update_failed'));
   }
 }
 
@@ -360,8 +366,6 @@ async function toggleProvider(provider) {
  */
 async function disconnectProvider(providerType) {
   try {
-    errorMessage.value = '';
-
     // First call to check if confirmation is needed
     const result = await fundingService.disconnectProvider(providerType, false);
 
@@ -377,16 +381,16 @@ async function disconnectProvider(providerType) {
     }
     else if (result.success) {
       // No confirmation needed, disconnect was successful
-      successMessage.value = t('provider_disconnect_success');
+      toast.success(t('provider_disconnect_success'));
       await loadProviders();
     }
     else {
-      errorMessage.value = t('provider_disconnect_failed');
+      toast.error(t('provider_disconnect_failed'));
     }
   }
   catch (error) {
     console.error('Failed to disconnect provider:', error);
-    errorMessage.value = t('provider_disconnect_failed');
+    toast.error(t('provider_disconnect_failed'));
   }
 }
 
@@ -395,8 +399,6 @@ async function disconnectProvider(providerType) {
  */
 async function confirmDisconnect() {
   try {
-    errorMessage.value = '';
-
     // Second call with confirmation=true to actually disconnect
     const result = await fundingService.disconnectProvider(
       disconnectModalData.value.providerType,
@@ -405,16 +407,16 @@ async function confirmDisconnect() {
 
     if (result.success) {
       showDisconnectModal.value = false;
-      successMessage.value = t('provider_disconnect_success');
+      toast.success(t('provider_disconnect_success'));
       await loadProviders();
     }
     else {
-      errorMessage.value = t('provider_disconnect_failed');
+      toast.error(t('provider_disconnect_failed'));
     }
   }
   catch (error) {
     console.error('Failed to disconnect provider:', error);
-    errorMessage.value = t('provider_disconnect_failed');
+    toast.error(t('provider_disconnect_failed'));
   }
 }
 
@@ -430,16 +432,16 @@ async function forceCancelFundingPlan(subscriptionId) {
     const success = await fundingService.forceCancelFundingPlan(subscriptionId);
 
     if (success) {
-      successMessage.value = t('force_cancel_success');
+      toast.success(t('force_cancel_success'));
       await loadSubscriptions();
     }
     else {
-      errorMessage.value = t('force_cancel_failed');
+      toast.error(t('force_cancel_failed'));
     }
   }
   catch (error) {
     console.error('Failed to force cancel subscription:', error);
-    errorMessage.value = t('force_cancel_failed');
+    toast.error(t('force_cancel_failed'));
   }
 }
 
@@ -480,14 +482,7 @@ function checkQueryParameters() {
       connection_failed: t('query_error.connection_failed', { provider: 'provider' }),
     };
 
-    errorMessage.value = errorMessages[error] || t('query_error.unknown');
-
-    // Auto-dismiss after 10 seconds
-    setTimeout(() => {
-      if (errorMessage.value === errorMessages[error]) {
-        errorMessage.value = '';
-      }
-    }, 10000);
+    toast.error(errorMessages[error] || t('query_error.unknown'));
 
     // Remove query parameter from URL
     router.replace({ query: {} });
@@ -533,42 +528,6 @@ onMounted(async () => {
         </svg>
         {{ t("grants.create_new_grant") }}
       </button>
-    </div>
-
-    <!-- Status Messages -->
-    <div role="status" aria-live="polite">
-      <div v-if="successMessage" class="alert alert--success">
-        <svg class="alert-icon"
-             width="20"
-             height="20"
-             viewBox="0 0 20 20"
-             fill="currentColor"
-             aria-hidden="true">
-          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-        </svg>
-        {{ successMessage }}
-      </div>
-      <div v-if="errorMessage" class="alert alert--error">
-        <svg class="alert-icon"
-             width="20"
-             height="20"
-             viewBox="0 0 24 24"
-             fill="none"
-             stroke="currentColor"
-             stroke-width="2"
-             aria-hidden="true">
-          <circle cx="12" cy="12" r="10" />
-          <line x1="12"
-                y1="8"
-                x2="12"
-                y2="12" />
-          <line x1="12"
-                y1="16"
-                x2="12.01"
-                y2="16" />
-        </svg>
-        {{ errorMessage }}
-      </div>
     </div>
 
     <div v-if="loading" class="loading-state">{{ t("loading") }}</div>
@@ -904,11 +863,21 @@ onMounted(async () => {
                       v-model="currency"
                       :disabled="saving"
                       class="form-select"
+                      :class="{ 'form-select--error': fieldErrors.currency }"
+                      :aria-invalid="fieldErrors.currency ? 'true' : undefined"
+                      :aria-describedby="fieldErrors.currency ? 'funding-currency-error' : undefined"
                     >
                       <option v-for="curr in currencyOptions" :key="curr.value" :value="curr.value">
                         {{ curr.label }}
                       </option>
                     </select>
+                    <p
+                      v-if="fieldErrors.currency"
+                      id="funding-currency-error"
+                      class="form-error"
+                      role="alert"
+                      aria-live="polite"
+                    >{{ fieldErrors.currency }}</p>
                   </div>
 
                   <!-- Monthly Price -->
@@ -922,7 +891,17 @@ onMounted(async () => {
                       min="0"
                       :disabled="saving"
                       class="form-input"
+                      :class="{ 'form-input--error': fieldErrors.monthlyPrice }"
+                      :aria-invalid="fieldErrors.monthlyPrice ? 'true' : undefined"
+                      :aria-describedby="fieldErrors.monthlyPrice ? 'funding-monthly-error' : undefined"
                     />
+                    <p
+                      v-if="fieldErrors.monthlyPrice"
+                      id="funding-monthly-error"
+                      class="form-error"
+                      role="alert"
+                      aria-live="polite"
+                    >{{ fieldErrors.monthlyPrice }}</p>
                     <p class="form-hint">{{ t("monthly_price_description") }}</p>
                   </div>
 
@@ -937,7 +916,17 @@ onMounted(async () => {
                       min="0"
                       :disabled="saving"
                       class="form-input"
+                      :class="{ 'form-input--error': fieldErrors.yearlyPrice }"
+                      :aria-invalid="fieldErrors.yearlyPrice ? 'true' : undefined"
+                      :aria-describedby="fieldErrors.yearlyPrice ? 'funding-yearly-error' : undefined"
                     />
+                    <p
+                      v-if="fieldErrors.yearlyPrice"
+                      id="funding-yearly-error"
+                      class="form-error"
+                      role="alert"
+                      aria-live="polite"
+                    >{{ fieldErrors.yearlyPrice }}</p>
                     <p class="form-hint">{{ t("yearly_price_description") }}</p>
                   </div>
                 </div>
@@ -1888,6 +1877,14 @@ onMounted(async () => {
       outline: none;
       border-color: var(--pav-color-orange-400);
       box-shadow: 0 0 0 3px var(--pav-color-orange-100);
+    }
+
+    &--error {
+      border-color: var(--pav-color-red-400);
+
+      &:focus {
+        box-shadow: 0 0 0 3px var(--pav-color-red-100);
+      }
     }
   }
 

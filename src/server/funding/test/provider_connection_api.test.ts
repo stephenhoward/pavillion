@@ -36,8 +36,8 @@ describe('Provider Connection API Routes', () => {
   });
 
   describe('POST /admin/providers/stripe/configure', () => {
-    it('should configure Stripe credentials successfully', async () => {
-      sandbox.stub(service, 'configureStripe').resolves(true);
+    it('should configure Stripe credentials successfully with connectionVerified true', async () => {
+      sandbox.stub(service, 'configureStripe').resolves({ connectionVerified: true });
 
       router.use(addRequestUser);
       router.post('/stripe/configure', routes.configureStripe.bind(routes));
@@ -51,11 +51,29 @@ describe('Provider Connection API Routes', () => {
         })
         .expect(200);
 
-      expect(response.body).toEqual({ success: true });
+      expect(response.body).toEqual({ success: true, connectionVerified: true });
+    });
+
+    it('should return connectionVerified false when service returns unverified', async () => {
+      sandbox.stub(service, 'configureStripe').resolves({ connectionVerified: false });
+
+      router.use(addRequestUser);
+      router.post('/stripe/configure', routes.configureStripe.bind(routes));
+
+      const response = await request(testApp(router))
+        .post('/stripe/configure')
+        .send({
+          publishable_key: 'pk_test_abc123',
+          secret_key: 'sk_test_abc123',
+          webhook_secret: 'whsec_abc123',
+        })
+        .expect(200);
+
+      expect(response.body).toEqual({ success: true, connectionVerified: false });
     });
 
     it('should pass correct credentials to service', async () => {
-      const configureStub = sandbox.stub(service, 'configureStripe').resolves(true);
+      const configureStub = sandbox.stub(service, 'configureStripe').resolves({ connectionVerified: true });
 
       router.use(addRequestUser);
       router.post('/stripe/configure', routes.configureStripe.bind(routes));
@@ -91,6 +109,7 @@ describe('Provider Connection API Routes', () => {
         .expect(400);
 
       expect(response.body.error).toContain('required');
+      expect(response.body).not.toHaveProperty('connectionVerified');
     });
 
     it('should return error for invalid key format', async () => {
@@ -111,6 +130,7 @@ describe('Provider Connection API Routes', () => {
         .expect(400);
 
       expect(response.body.error).toContain('Invalid');
+      expect(response.body).not.toHaveProperty('connectionVerified');
     });
 
     it('should require authentication', async () => {
@@ -127,6 +147,7 @@ describe('Provider Connection API Routes', () => {
         .expect(401);
 
       expect(response.body.error).toContain('Authentication required');
+      expect(response.body).not.toHaveProperty('connectionVerified');
     });
 
     it('should not include key values in error responses', async () => {
@@ -152,7 +173,7 @@ describe('Provider Connection API Routes', () => {
       expect(responseJson).not.toContain(secretKey);
     });
 
-    it('should return 500 for unexpected errors', async () => {
+    it('should return 500 for unexpected errors without connectionVerified', async () => {
       sandbox.stub(service, 'configureStripe').rejects(new Error('Unexpected database error'));
 
       router.use(addRequestUser);
@@ -168,6 +189,7 @@ describe('Provider Connection API Routes', () => {
         .expect(500);
 
       expect(response.body.error).toBe('Internal server error');
+      expect(response.body).not.toHaveProperty('connectionVerified');
     });
   });
 
