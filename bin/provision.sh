@@ -220,9 +220,11 @@ configure_firewall() {
   ufw allow 443/tcp > /dev/null
 
   # Staging: allow Docker containers to reach the webhook listener on port 9000
+  # Use subnet range (172.16.0.0/12) instead of interface name because Docker
+  # Compose creates its own bridge (br-<hash>), not the default docker0 bridge.
   if [ "$STAGING_MODE" = true ]; then
-    ufw allow in on docker0 to any port 9000 > /dev/null
-    print_success "Allowed Docker bridge traffic to webhook port 9000"
+    ufw allow from 172.16.0.0/12 to any port 9000 > /dev/null
+    print_success "Allowed Docker network traffic to webhook port 9000"
   fi
 
   # Enable firewall (--force skips the confirmation prompt)
