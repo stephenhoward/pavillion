@@ -354,6 +354,67 @@ describe('Funding Page Wizard Integration', () => {
     expect(wizardComponent.props('show')).toBe(false);
   });
 
+  it('refreshes provider list when wizard close event is emitted', async () => {
+    const mockService = {
+      getSettings: vi.fn().mockResolvedValue({
+        enabled: true,
+        monthlyPrice: 1000000,
+        yearlyPrice: 10000000,
+        currency: 'USD',
+        payWhatYouCan: false,
+        gracePeriodDays: 7,
+      }),
+      getProviders: vi.fn()
+        .mockResolvedValueOnce([
+          {
+            provider_type: 'stripe',
+            display_name: 'Stripe',
+            configured: false,
+            enabled: false,
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            provider_type: 'stripe',
+            display_name: 'Stripe',
+            configured: true,
+            enabled: true,
+          },
+        ]),
+      listFundingPlans: vi.fn().mockResolvedValue({ subscriptions: [], total: 0 }),
+    };
+
+    vi.mocked(FundingService).mockImplementation(() => mockService as any);
+
+    wrapper = mountWithI18n({
+      global: {
+        stubs: {
+          PayPalConfigModal: true,
+          ConfirmDisconnectModal: true,
+        },
+      },
+    });
+
+    await wrapper.vm.$nextTick();
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Initial load calls getProviders once
+    expect(mockService.getProviders).toHaveBeenCalledTimes(1);
+
+    // Open wizard
+    (wrapper.vm as any).openAddProviderWizard();
+    await wrapper.vm.$nextTick();
+
+    // Close wizard via close event (not provider-connected)
+    const wizardComponent = wrapper.findComponent(AddProviderWizard);
+    wizardComponent.vm.$emit('close');
+    await wrapper.vm.$nextTick();
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Verify getProviders was called again to refresh the list
+    expect(mockService.getProviders).toHaveBeenCalledTimes(2);
+  });
+
   describe('Settings form validation', () => {
     function mountSettings(overrides: Record<string, any> = {}) {
       vi.mocked(FundingService).mockImplementation(() => ({
