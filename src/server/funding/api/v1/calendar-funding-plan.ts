@@ -221,7 +221,7 @@ export default class CalendarFundingPlanRoutes {
 
       const fundingStatus = await this.service.getFundingStatusForCalendar(account.id, calendarId);
 
-      res.json({ calendarId, fundingStatus });
+      res.json({ status: fundingStatus });
     }
     catch (error) {
       logError(error, 'Error fetching funding status');
