@@ -19,9 +19,10 @@ export function buildDefaultCSP(): string {
     `connect-src 'self' https://api.stripe.com https://errors.stripe.com https://m.stripe.com https://q.stripe.com${isDev ? ' ws://localhost:5173 http://localhost:5173' : ''}`,
   ];
 
-  // In development, Vite injects inline styles
+  // In development, Vite injects inline styles and serves fonts
   if (isDev) {
     directives.push("style-src 'self' 'unsafe-inline'");
+    directives.push("font-src 'self' http://localhost:5173");
   }
 
   return directives.join('; ');

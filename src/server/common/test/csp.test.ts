@@ -87,6 +87,19 @@ describe('buildDefaultCSP', () => {
     expect(csp).toMatch(/style-src[^;]*'unsafe-inline'/);
   });
 
+  it('should include font-src with Vite dev server in development', () => {
+    process.env.NODE_ENV = 'development';
+    const csp = buildDefaultCSP();
+    expect(csp).toMatch(/font-src[^;]*'self'/);
+    expect(csp).toMatch(/font-src[^;]*http:\/\/localhost:5173/);
+  });
+
+  it('should not include font-src in production (falls back to default-src)', () => {
+    process.env.NODE_ENV = 'production';
+    const csp = buildDefaultCSP();
+    expect(csp).not.toContain('font-src');
+  });
+
   it('should not include style-src unsafe-inline in production', () => {
     process.env.NODE_ENV = 'production';
     const csp = buildDefaultCSP();
