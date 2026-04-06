@@ -906,6 +906,24 @@ export default class FundingService {
       throw new FundingPlanNotFoundError(sessionId);
     }
 
+    // When the session is complete, eagerly create the funding plan instead of
+    // waiting for the Stripe webhook. This closes the timing gap where the user
+    // returns to the app before the webhook arrives (or in local dev where
+    // webhooks never arrive without `stripe listen --forward-to`).
+    // The idempotency check in processCheckoutCompleted prevents duplicate
+    // creation if the webhook has already arrived or arrives later.
+    if (sessionStatus.status === 'complete' && sessionStatus.subscriptionId) {
+      await this.processCheckoutCompleted({
+        eventId: `session_return_${sessionId}`,
+        eventType: 'checkout.session.completed',
+        subscriptionId: sessionStatus.subscriptionId,
+        customerId: sessionStatus.customerId,
+        accountId: sessionStatus.metadata.accountId,
+        calendarIds: sessionStatus.metadata.calendarIds,
+        rawPayload: { source: 'session_verification', sessionId },
+      }, stripeEntity.id);
+    }
+
     return {
       status: sessionStatus.status,
     };
