@@ -230,9 +230,13 @@ async function startStripeCheckout() {
   errorMessage.value = '';
 
   try {
+    // Build return URL with tab=settings so redirect lands on the correct tab
+    const returnUrlObj = new URL(window.location.href);
+    returnUrlObj.searchParams.set('tab', 'settings');
+
     // Build checkout session params
     const params: Record<string, any> = {
-      returnUrl: window.location.href,
+      returnUrl: returnUrlObj.toString(),
     };
 
     if (isPwyc.value) {

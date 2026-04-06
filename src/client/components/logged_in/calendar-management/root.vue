@@ -43,6 +43,12 @@ onBeforeMount(async () => {
       (info) => info.calendar.urlName === calendarUrlName,
     );
     state.calendarInfo = found ?? null;
+
+    // Restore tab from query param (e.g. after Stripe checkout redirect)
+    const requestedTab = route.query.tab as string | undefined;
+    if (requestedTab && visibleTabs.value.includes(requestedTab)) {
+      state.activeTab = requestedTab;
+    }
   }
   catch (error) {
     console.error('Failed to load calendar:', error);
