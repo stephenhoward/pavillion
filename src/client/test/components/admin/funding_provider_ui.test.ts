@@ -88,10 +88,10 @@ describe('Funding Provider UI Components', () => {
     vi.spyOn(FundingService.prototype, 'disconnectProvider').mockImplementation(mockService.disconnectProvider);
 
     // Mock static methods
-    vi.spyOn(FundingService, 'millicentsToDisplay').mockImplementation((millicents: number) => millicents / 1000000);
-    vi.spyOn(FundingService, 'displayToMillicents').mockImplementation((amount: number) => amount * 1000000);
+    vi.spyOn(FundingService, 'millicentsToDisplay').mockImplementation((millicents: number) => millicents / 100000);
+    vi.spyOn(FundingService, 'displayToMillicents').mockImplementation((amount: number) => amount * 100000);
     vi.spyOn(FundingService, 'formatCurrency').mockImplementation((millicents: number, currency: string) =>
-      `${currency} ${(millicents / 1000000).toFixed(2)}`,
+      `${currency} ${(millicents / 100000).toFixed(2)}`,
     );
   });
 
