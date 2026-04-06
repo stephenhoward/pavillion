@@ -14,14 +14,14 @@ const routes: RouteRecordRaw[] = [
   { path: '/test', component: {}, name: 'test' },
 ];
 
-const mountRootComponent = async (calendarUrlName: string = 'my-calendar') => {
+const mountRootComponent = async (calendarUrlName: string = 'my-calendar', query: Record<string, string> = {}) => {
   const router: Router = createRouter({
     history: createMemoryHistory(),
     routes: routes,
   });
 
   // Navigate to the manage route before mounting so route.params.calendar is available
-  await router.push({ name: 'manage', params: { calendar: calendarUrlName } });
+  await router.push({ name: 'manage', params: { calendar: calendarUrlName }, query });
   await router.isReady();
 
   const wrapper = mountComponent(CalendarManagementRoot, router, {
@@ -69,6 +69,104 @@ describe('CalendarManagementRoot', () => {
       await flushPromises();
 
       expect((wrapper.vm as any).state.activeTab).toBe('editors');
+    });
+  });
+
+  describe('Tab restoration from query param', () => {
+    it('restores settings tab from ?tab=settings for owners', async () => {
+      const info = makeCalendarInfo('my-calendar', 'owner');
+      vi.spyOn(CalendarService.prototype, 'loadCalendarsWithRelationship').mockResolvedValue([info]);
+
+      const { wrapper } = await mountRootComponent('my-calendar', { tab: 'settings' });
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      expect((wrapper.vm as any).state.activeTab).toBe('settings');
+    });
+
+    it('restores widget tab from ?tab=widget for owners', async () => {
+      const info = makeCalendarInfo('my-calendar', 'owner');
+      vi.spyOn(CalendarService.prototype, 'loadCalendarsWithRelationship').mockResolvedValue([info]);
+
+      const { wrapper } = await mountRootComponent('my-calendar', { tab: 'widget' });
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      expect((wrapper.vm as any).state.activeTab).toBe('widget');
+    });
+
+    it('restores reports tab from ?tab=reports for owners', async () => {
+      const info = makeCalendarInfo('my-calendar', 'owner');
+      vi.spyOn(CalendarService.prototype, 'loadCalendarsWithRelationship').mockResolvedValue([info]);
+
+      const { wrapper } = await mountRootComponent('my-calendar', { tab: 'reports' });
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      expect((wrapper.vm as any).state.activeTab).toBe('reports');
+    });
+
+    it('ignores settings tab query param for non-owners', async () => {
+      const info = makeCalendarInfo('my-calendar', 'editor');
+      vi.spyOn(CalendarService.prototype, 'loadCalendarsWithRelationship').mockResolvedValue([info]);
+
+      const { wrapper } = await mountRootComponent('my-calendar', { tab: 'settings' });
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      expect((wrapper.vm as any).state.activeTab).toBe('editors');
+    });
+
+    it('ignores reports tab query param for non-owners', async () => {
+      const info = makeCalendarInfo('my-calendar', 'editor');
+      vi.spyOn(CalendarService.prototype, 'loadCalendarsWithRelationship').mockResolvedValue([info]);
+
+      const { wrapper } = await mountRootComponent('my-calendar', { tab: 'reports' });
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      expect((wrapper.vm as any).state.activeTab).toBe('editors');
+    });
+
+    it('ignores invalid tab query param values', async () => {
+      const info = makeCalendarInfo('my-calendar', 'owner');
+      vi.spyOn(CalendarService.prototype, 'loadCalendarsWithRelationship').mockResolvedValue([info]);
+
+      const { wrapper } = await mountRootComponent('my-calendar', { tab: 'nonexistent' });
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      expect((wrapper.vm as any).state.activeTab).toBe('editors');
+    });
+
+    it('defaults to editors when no tab query param is present', async () => {
+      const info = makeCalendarInfo('my-calendar', 'owner');
+      vi.spyOn(CalendarService.prototype, 'loadCalendarsWithRelationship').mockResolvedValue([info]);
+
+      const { wrapper } = await mountRootComponent('my-calendar');
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      expect((wrapper.vm as any).state.activeTab).toBe('editors');
+    });
+
+    it('allows widget tab for non-owners via query param', async () => {
+      const info = makeCalendarInfo('my-calendar', 'editor');
+      vi.spyOn(CalendarService.prototype, 'loadCalendarsWithRelationship').mockResolvedValue([info]);
+
+      const { wrapper } = await mountRootComponent('my-calendar', { tab: 'widget' });
+      currentWrapper = wrapper;
+
+      await flushPromises();
+
+      expect((wrapper.vm as any).state.activeTab).toBe('widget');
     });
   });
 
