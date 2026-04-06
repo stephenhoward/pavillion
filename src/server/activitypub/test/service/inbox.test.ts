@@ -1686,3 +1686,109 @@ describe('Relationship-Based Inbox Filtering', () => {
     });
   });
 });
+
+describe('AP Object ID URI Scheme Validation', () => {
+  let service: ProcessInboxService;
+  let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+
+  const TEST_CALENDAR_ID = 'test-calendar-id';
+  const TEST_CALENDAR_URL_NAME = 'testcalendar';
+  const REMOTE_ACTOR_URL = 'https://remote.federation.test/users/alice';
+  // Must NOT be localhost — validateActorUriProtocol permits http://localhost in test/dev
+  const HTTP_EVENT_URL = 'http://remote.federation.test/events/123';
+
+  const mockLogActivityRejection = logActivityRejection as ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    const eventBus = new EventEmitter();
+    const calendarInterface = new CalendarInterface(eventBus);
+    service = new ProcessInboxService(eventBus, calendarInterface);
+    mockLogActivityRejection.mockClear();
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it('should reject Create activity with non-HTTPS object ID', async () => {
+    const activityMessage = createMockCreateActivity(REMOTE_ACTOR_URL, {
+      type: 'Event',
+      id: HTTP_EVENT_URL,
+      name: 'Malicious Event',
+    });
+
+    const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME });
+
+    const result = await service.processCreateEvent(calendar, activityMessage);
+
+    expect(result).toBeNull();
+    expect(mockLogActivityRejection).toHaveBeenCalledOnce();
+    const logEntry = mockLogActivityRejection.mock.calls[0][0];
+    expect(logEntry.rejection_type).toBe('invalid_object_uri_scheme');
+    expect(logEntry.activity_type).toBe('Create');
+    expect(logEntry.actor_uri).toBe(REMOTE_ACTOR_URL);
+  });
+
+  it('should reject Update activity with non-HTTPS object ID', async () => {
+    const activityMessage = createMockUpdateActivity(REMOTE_ACTOR_URL, {
+      type: 'Event',
+      id: HTTP_EVENT_URL,
+      name: 'Malicious Update',
+    });
+
+    const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME });
+
+    const result = await service.processUpdateEvent(calendar, activityMessage);
+
+    expect(result).toBeNull();
+    expect(mockLogActivityRejection).toHaveBeenCalledOnce();
+    const logEntry = mockLogActivityRejection.mock.calls[0][0];
+    expect(logEntry.rejection_type).toBe('invalid_object_uri_scheme');
+    expect(logEntry.activity_type).toBe('Update');
+    expect(logEntry.actor_uri).toBe(REMOTE_ACTOR_URL);
+  });
+
+  it('should reject Announce activity with non-HTTPS object ID', async () => {
+    const activityMessage = createMockAnnounceActivity(REMOTE_ACTOR_URL, HTTP_EVENT_URL);
+
+    const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME });
+
+    await service.processShareEvent(calendar, activityMessage);
+
+    expect(mockLogActivityRejection).toHaveBeenCalledOnce();
+    const logEntry = mockLogActivityRejection.mock.calls[0][0];
+    expect(logEntry.rejection_type).toBe('invalid_object_uri_scheme');
+    expect(logEntry.activity_type).toBe('Announce');
+    expect(logEntry.actor_uri).toBe(REMOTE_ACTOR_URL);
+  });
+
+  it('should reject Create activity with ftp:// object ID', async () => {
+    const activityMessage = createMockCreateActivity(REMOTE_ACTOR_URL, {
+      type: 'Event',
+      id: 'ftp://remote.federation.test/events/123',
+      name: 'FTP Event',
+    });
+
+    const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME });
+
+    const result = await service.processCreateEvent(calendar, activityMessage);
+
+    expect(result).toBeNull();
+    expect(mockLogActivityRejection).toHaveBeenCalledOnce();
+  });
+
+  it('should reject Create activity with javascript: object ID', async () => {
+    const activityMessage = createMockCreateActivity(REMOTE_ACTOR_URL, {
+      type: 'Event',
+      id: 'javascript:alert(1)',
+      name: 'XSS Event',
+    });
+
+    const calendar = Calendar.fromObject({ id: TEST_CALENDAR_ID, urlName: TEST_CALENDAR_URL_NAME });
+
+    const result = await service.processCreateEvent(calendar, activityMessage);
+
+    expect(result).toBeNull();
+    expect(mockLogActivityRejection).toHaveBeenCalledOnce();
+  });
+});

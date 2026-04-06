@@ -16,6 +16,7 @@ export type RejectionType =
   | 'ownership_verification_failed'
   | 'parse_failure'
   | 'invalid_object'
+  | 'invalid_object_uri_scheme'
   | 'no_relationship';
 
 export interface RejectionContext {
