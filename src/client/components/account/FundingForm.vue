@@ -43,6 +43,17 @@ const checkoutContainerRef = ref<HTMLElement | null>(null);
 // Stripe embedded checkout state
 let checkoutInstance: any = null;
 
+/**
+ * Detect whether the user's current color mode is dark.
+ * Checks data-theme attribute first, then falls back to system preference.
+ */
+function isDarkMode(): boolean {
+  const theme = document.documentElement.getAttribute('data-theme');
+  if (theme === 'dark') return true;
+  if (theme === 'light') return false;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
 const availableProviders = computed(() =>
   options.value?.providers.filter(p => p.providerType !== 'paypal') ?? [],
 );
@@ -242,6 +253,10 @@ async function startStripeCheckout() {
 
     if (props.calendarId) {
       params.calendarIds = [props.calendarId];
+    }
+
+    if (isDarkMode()) {
+      params.colorMode = 'dark';
     }
 
     // Create checkout session via API

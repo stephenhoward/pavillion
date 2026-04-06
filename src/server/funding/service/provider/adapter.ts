@@ -11,6 +11,7 @@ export interface CreateCheckoutSessionParams {
   accountId: string;
   calendarIds?: string[];
   returnUrl: string;
+  colorMode?: 'light' | 'dark'; // Client theme for checkout branding
 }
 
 /**

@@ -782,6 +782,7 @@ export default class FundingService {
     returnUrl: string,
     amount?: number,
     calendarIds?: string[],
+    colorMode?: 'light' | 'dark',
   ): Promise<CheckoutSessionResult> {
     // Validate billing cycle
     if (billingCycle !== 'monthly' && billingCycle !== 'yearly') {
@@ -857,6 +858,7 @@ export default class FundingService {
       accountId,
       calendarIds,
       returnUrl,
+      colorMode,
     };
 
     return adapter.createCheckoutSession(params);

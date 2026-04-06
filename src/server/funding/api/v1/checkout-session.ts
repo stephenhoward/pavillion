@@ -66,7 +66,7 @@ export default class CheckoutSessionRoutes {
         return;
       }
 
-      const { billingCycle, returnUrl, amount, calendarIds } = req.body;
+      const { billingCycle, returnUrl, amount, calendarIds, colorMode } = req.body;
 
       // Validate required fields
       if (!billingCycle) {
@@ -98,12 +98,16 @@ export default class CheckoutSessionRoutes {
         }
       }
 
+      // Validate colorMode if provided
+      const validColorMode = colorMode === 'dark' ? 'dark' : undefined;
+
       const result = await this.service.createCheckoutSession(
         account.id,
         billingCycle,
         returnUrl,
         amount,
         calendarIds,
+        validColorMode,
       );
 
       res.json({
