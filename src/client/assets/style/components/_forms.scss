@@ -189,3 +189,11 @@
   min-height: 120px;
   resize: vertical;
 }
+
+.input-description {
+  margin: 0 0 var(--pav-space-4) 0;
+  color: var(--pav-text-muted);
+  font-size: 0.875rem;
+  line-height: 1.5;
+
+}

@@ -124,8 +124,9 @@ export default class FundingInterface {
     returnUrl: string,
     amount?: number,
     calendarIds?: string[],
+    colorMode?: 'light' | 'dark',
   ): Promise<CheckoutSessionResult> {
-    return this.fundingService.createCheckoutSession(accountId, billingCycle, returnUrl, amount, calendarIds);
+    return this.fundingService.createCheckoutSession(accountId, billingCycle, returnUrl, amount, calendarIds, colorMode);
   }
 
   /**

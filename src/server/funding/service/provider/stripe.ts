@@ -321,10 +321,22 @@ export class StripeAdapter implements PaymentProviderAdapter {
       metadata.pavillion_calendar_ids = JSON.stringify(params.calendarIds);
     }
 
+    // Build branding settings based on client color mode
+    const brandingSettings: Stripe.Checkout.SessionCreateParams.BrandingSettings = {};
+    if (params.colorMode === 'dark') {
+      brandingSettings.background_color = '#1C1917'; // Stone 900
+      brandingSettings.button_color = '#F97316'; // Orange 500
+    }
+
+    // Build return URL with session ID placeholder for redirect-based payments
+    const returnUrl = new URL(params.returnUrl);
+    returnUrl.searchParams.set('session_id', '{CHECKOUT_SESSION_ID}');
+
     // Create the embedded checkout session
     const session = await this.stripe.checkout.sessions.create({
       ui_mode: 'embedded',
       mode: 'subscription',
+      redirect_on_completion: 'if_required',
       line_items: [
         {
           price: priceId,
@@ -332,7 +344,8 @@ export class StripeAdapter implements PaymentProviderAdapter {
         },
       ],
       metadata,
-      return_url: params.returnUrl,
+      return_url: returnUrl.toString(),
+      ...(Object.keys(brandingSettings).length > 0 && { branding_settings: brandingSettings }),
     });
 
     return {

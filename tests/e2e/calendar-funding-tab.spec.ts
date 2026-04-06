@@ -3,16 +3,16 @@ import { loginAsAdmin } from './helpers/auth';
 import { startTestServer, TestEnvironment } from './helpers/test-server';
 
 /**
- * E2E Tests: Calendar FundingTab — Funding Workflow
+ * E2E Tests: Calendar Settings — Extended Features (Funding)
  *
- * Tests the FundingTab behaviors:
- *   1. When subscriptions are enabled but the user has no subscription,
- *      FundingTab shows a "Fund This Calendar" prompt with inline pricing cards.
- *   2. Pricing cards (monthly/yearly) are shown inline for non-PWYC mode.
- *   3. The "Fund This Calendar" button initiates Stripe inline checkout (no dialog).
- *   4. When subscriptions are disabled, FundingTab hides the funding UI entirely.
+ * Tests the funding workflow in the Settings tab's Extended Features section:
+ *   1. When funding is enabled and calendar is unfunded, shows an "Enable" button.
+ *   2. Clicking "Enable" opens the FundingSheet overlay.
+ *   3. When funding is enabled and calendar is funded, shows enabled badge with disable option.
+ *   4. When funding is disabled, the extended features section is hidden.
+ *   5. When calendar has admin-exempt status, shows admin-exempt badge.
  *
- * All tests mock the subscription API endpoints to control state without
+ * All tests mock the funding API endpoints to control state without
  * requiring real payment provider configuration.
  */
 
@@ -21,46 +21,22 @@ let env: TestEnvironment;
 test.describe.configure({ mode: 'serial' });
 
 /**
- * Mock subscription API endpoints to simulate a specific subscription state.
- *
- * @param page - Playwright page
- * @param options.hasSubscription - Whether the user has an active subscription
- * @param options.subscriptionsEnabled - Whether subscriptions are enabled on the instance
- * @param options.fundingStatus - The funding status of the calendar
+ * Mock funding API endpoints to simulate a specific funding state.
  */
-async function mockSubscriptionAPIs(page: import('@playwright/test').Page, options: {
-  hasSubscription: boolean;
+async function mockFundingAPIs(page: import('@playwright/test').Page, options: {
   subscriptionsEnabled: boolean;
   fundingStatus: 'funded' | 'unfunded' | 'grant' | 'admin-exempt';
 }) {
-  // Mock funding plan status
+  // Mock funding plan status (user's subscription)
   await page.route('**/api/funding/v1/status', async (route) => {
-    if (options.hasSubscription) {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          id: 'sub-mock-1',
-          status: 'active',
-          billing_cycle: 'monthly',
-          amount: 500000,
-          currency: 'USD',
-          current_period_start: '2026-03-01',
-          current_period_end: '2026-04-01',
-          provider_type: 'stripe',
-        }),
-      });
-    }
-    else {
-      await route.fulfill({
-        status: 404,
-        contentType: 'application/json',
-        body: JSON.stringify({ error: 'No subscription found' }),
-      });
-    }
+    await route.fulfill({
+      status: 404,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'No subscription found' }),
+    });
   });
 
-  // Mock funding plan options — use camelCase to match real API response shape
+  // Mock funding plan options
   await page.route('**/api/funding/v1/options', async (route) => {
     await route.fulfill({
       status: 200,
@@ -91,7 +67,18 @@ async function mockSubscriptionAPIs(page: import('@playwright/test').Page, optio
   });
 }
 
-test.describe('Calendar FundingTab — Funding Workflow', () => {
+/**
+ * Navigate to calendar settings tab.
+ */
+async function navigateToSettingsTab(page: import('@playwright/test').Page, baseURL: string) {
+  await page.goto(baseURL + '/calendar/test_calendar/manage');
+  await page.waitForSelector('.calendar-management-root__tabs', { timeout: 15000 });
+
+  const settingsTab = page.locator('#settings-tab');
+  await settingsTab.click();
+}
+
+test.describe('Calendar Settings — Extended Features (Funding)', () => {
   test.beforeAll(async () => {
     env = await startTestServer();
   });
@@ -104,140 +91,84 @@ test.describe('Calendar FundingTab — Funding Workflow', () => {
     await loginAsAdmin(page, env.baseURL);
   });
 
-  test('shows subscribe prompt when user has no subscription and calendar is unfunded', async ({ page }) => {
-    await mockSubscriptionAPIs(page, {
-      hasSubscription: false,
+  test('shows enable button when funding is enabled and calendar is unfunded', async ({ page }) => {
+    await mockFundingAPIs(page, {
       subscriptionsEnabled: true,
       fundingStatus: 'unfunded',
     });
 
-    // Navigate to calendar management and click Funding tab
-    await page.goto(env.baseURL + '/calendar/test_calendar/manage');
-    await page.waitForSelector('.calendar-management-root__tabs', { timeout: 15000 });
+    await navigateToSettingsTab(page, env.baseURL);
 
-    const fundingTab = page.locator('#funding-tab');
-    await fundingTab.click();
-
-    // Wait for FundingTab content to load
-    const fundingCard = page.locator('.funding-card');
-    await expect(fundingCard).toBeVisible({ timeout: 10000 });
-
-    // Should show unfunded badge
-    const unfundedBadge = page.locator('.funding-status-badge--unfunded');
-    await expect(unfundedBadge).toBeVisible();
-
-    // Should show "Fund This Calendar" button (inline checkout, no dialog)
-    const subscribeButton = page.locator('.funding-button--primary');
-    await expect(subscribeButton).toBeVisible();
-    await expect(subscribeButton).toContainText('Fund This Calendar');
+    // Extended features section should be visible with an enable button
+    const enableButton = page.locator('.setting-enable-btn');
+    await expect(enableButton).toBeVisible({ timeout: 10000 });
   });
 
-  test('shows inline pricing cards for non-PWYC subscription option', async ({ page }) => {
-    await mockSubscriptionAPIs(page, {
-      hasSubscription: false,
+  test('clicking enable button opens funding sheet', async ({ page }) => {
+    await mockFundingAPIs(page, {
       subscriptionsEnabled: true,
       fundingStatus: 'unfunded',
     });
 
-    await page.goto(env.baseURL + '/calendar/test_calendar/manage');
-    await page.waitForSelector('.calendar-management-root__tabs', { timeout: 15000 });
+    await navigateToSettingsTab(page, env.baseURL);
 
-    const fundingTab = page.locator('#funding-tab');
-    await fundingTab.click();
+    const enableButton = page.locator('.setting-enable-btn');
+    await expect(enableButton).toBeVisible({ timeout: 10000 });
+    await enableButton.click();
 
-    // Wait for FundingTab content to load
-    const fundingCard = page.locator('.funding-card');
-    await expect(fundingCard).toBeVisible({ timeout: 10000 });
-
-    // Pricing cards should be visible inline (no dialog needed)
-    const pricingCards = page.locator('.pricing-card');
-    await expect(pricingCards).toHaveCount(2);
-
-    // Monthly and yearly options should be present
-    const monthlyCard = page.locator('.pricing-card').first();
-    await expect(monthlyCard).toBeVisible();
-
-    const yearlyCard = page.locator('.pricing-card').last();
-    await expect(yearlyCard).toBeVisible();
-
-    // Fund This Calendar button should be present
-    const fundButton = page.locator('.funding-button--primary');
-    await expect(fundButton).toBeVisible();
-    await expect(fundButton).toContainText('Fund This Calendar');
+    // FundingSheet dialog should appear (Sheet component uses .sheet-dialog)
+    const fundingSheet = page.locator('.sheet-dialog');
+    await expect(fundingSheet).toBeVisible({ timeout: 10000 });
   });
 
-  test('Fund This Calendar button is enabled and no dialog opens', async ({ page }) => {
-    await mockSubscriptionAPIs(page, {
-      hasSubscription: false,
+  test('shows enabled badge when calendar is funded', async ({ page }) => {
+    await mockFundingAPIs(page, {
       subscriptionsEnabled: true,
-      fundingStatus: 'unfunded',
+      fundingStatus: 'funded',
     });
 
-    await page.goto(env.baseURL + '/calendar/test_calendar/manage');
-    await page.waitForSelector('.calendar-management-root__tabs', { timeout: 15000 });
+    await navigateToSettingsTab(page, env.baseURL);
 
-    const fundingTab = page.locator('#funding-tab');
-    await fundingTab.click();
+    // Should show enabled badge
+    const enabledBadge = page.locator('.setting-badge--enabled');
+    await expect(enabledBadge).toBeVisible({ timeout: 10000 });
 
-    const subscribeButton = page.locator('.funding-button--primary');
-    await expect(subscribeButton).toBeVisible({ timeout: 10000 });
-
-    // Button should be enabled (not disabled)
-    await expect(subscribeButton).not.toBeDisabled();
-
-    // No sheet dialog should exist in the DOM (FundingSheet removed from FundingTab)
-    const dialog = page.locator('dialog.sheet-dialog');
-    await expect(dialog).toHaveCount(0);
+    // Should show disable button
+    const disableButton = page.locator('.setting-disable-btn');
+    await expect(disableButton).toBeVisible();
   });
 
-  test('hides funding UI when subscriptions are disabled', async ({ page }) => {
-    await mockSubscriptionAPIs(page, {
-      hasSubscription: false,
+  test('hides extended features section when funding is disabled', async ({ page }) => {
+    await mockFundingAPIs(page, {
       subscriptionsEnabled: false,
       fundingStatus: 'unfunded',
     });
 
-    await page.goto(env.baseURL + '/calendar/test_calendar/manage');
-    await page.waitForSelector('.calendar-management-root__tabs', { timeout: 15000 });
+    await navigateToSettingsTab(page, env.baseURL);
 
-    const fundingTab = page.locator('#funding-tab');
-    await fundingTab.click();
+    // Wait for settings content to load
+    const settingsContent = page.locator('.settings-content');
+    await expect(settingsContent).toBeVisible({ timeout: 10000 });
 
-    // Wait a moment for content to load
-    await page.waitForTimeout(2000);
+    // Extended features enable button should NOT be visible
+    const enableButton = page.locator('.setting-enable-btn');
+    await expect(enableButton).not.toBeVisible();
 
-    // Funding content area should NOT be visible
-    const fundingContent = page.locator('.funding-content');
-    await expect(fundingContent).not.toBeVisible();
-
-    // No status badges should appear
-    const anyBadge = page.locator('.funding-status-badge');
-    await expect(anyBadge).toHaveCount(0);
+    // No enabled badges should appear
+    const enabledBadge = page.locator('.setting-badge--enabled');
+    await expect(enabledBadge).toHaveCount(0);
   });
 
-  test('shows add button when user has subscription and calendar is unfunded', async ({ page }) => {
-    await mockSubscriptionAPIs(page, {
-      hasSubscription: true,
+  test('shows admin-exempt badge for admin-exempt calendars', async ({ page }) => {
+    await mockFundingAPIs(page, {
       subscriptionsEnabled: true,
-      fundingStatus: 'unfunded',
+      fundingStatus: 'admin-exempt',
     });
 
-    await page.goto(env.baseURL + '/calendar/test_calendar/manage');
-    await page.waitForSelector('.calendar-management-root__tabs', { timeout: 15000 });
+    await navigateToSettingsTab(page, env.baseURL);
 
-    const fundingTab = page.locator('#funding-tab');
-    await fundingTab.click();
-
-    const fundingCard = page.locator('.funding-card');
-    await expect(fundingCard).toBeVisible({ timeout: 10000 });
-
-    // Should show unfunded badge
-    const unfundedBadge = page.locator('.funding-status-badge--unfunded');
-    await expect(unfundedBadge).toBeVisible();
-
-    // Should show the regular "Add to Subscription" button (not subscribe prompt)
-    const addButton = page.locator('.funding-button--primary');
-    await expect(addButton).toBeVisible();
-    await expect(addButton).toContainText('Add');
+    // Should show enabled badge (admin-exempt uses same badge style)
+    const enabledBadge = page.locator('.setting-badge--enabled');
+    await expect(enabledBadge).toBeVisible({ timeout: 10000 });
   });
 });

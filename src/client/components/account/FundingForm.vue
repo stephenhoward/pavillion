@@ -43,6 +43,17 @@ const checkoutContainerRef = ref<HTMLElement | null>(null);
 // Stripe embedded checkout state
 let checkoutInstance: any = null;
 
+/**
+ * Detect whether the user's current color mode is dark.
+ * Checks data-theme attribute first, then falls back to system preference.
+ */
+function isDarkMode(): boolean {
+  const theme = document.documentElement.getAttribute('data-theme');
+  if (theme === 'dark') return true;
+  if (theme === 'light') return false;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
 const availableProviders = computed(() =>
   options.value?.providers.filter(p => p.providerType !== 'paypal') ?? [],
 );
@@ -244,6 +255,10 @@ async function startStripeCheckout() {
       params.calendarIds = [props.calendarId];
     }
 
+    if (isDarkMode()) {
+      params.colorMode = 'dark';
+    }
+
     // Create checkout session via API
     const session = await fundingService.createCheckoutSession(params);
 
@@ -318,7 +333,27 @@ function acknowledgeResult() {
   emit('subscribed');
 }
 
-onMounted(loadOptions);
+onMounted(async () => {
+  const url = new URL(window.location.href);
+  const sessionId = url.searchParams.get('session_id');
+
+  if (sessionId) {
+    // Clean URL so session_id doesn't persist on refresh
+    url.searchParams.delete('session_id');
+    window.history.replaceState({}, '', url.toString());
+
+    // Set state so handleCheckoutComplete's guard passes
+    formState.value = 'checkout';
+    await handleCheckoutComplete(sessionId);
+
+    if (formState.value === 'result') {
+      loading.value = false;
+      return;
+    }
+  }
+
+  loadOptions();
+});
 
 onBeforeUnmount(() => {
   destroyCheckout();

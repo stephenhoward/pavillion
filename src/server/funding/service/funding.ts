@@ -241,17 +241,12 @@ export default class FundingService {
    */
   async updateProvider(
     providerType: ProviderType,
-    displayName: string,
+    displayName: string | undefined,
     enabled: boolean,
   ): Promise<boolean> {
     // Validate provider type
     if (providerType !== 'stripe' && providerType !== 'paypal') {
       throw new InvalidProviderTypeError();
-    }
-
-    // Validate displayName and enabled
-    if (typeof displayName !== 'string') {
-      throw new MissingRequiredFieldError('displayName');
     }
 
     if (typeof enabled !== 'boolean') {
@@ -266,7 +261,9 @@ export default class FundingService {
       throw new Error(`Provider ${providerType} not found`);
     }
 
-    entity.display_name = displayName;
+    if (typeof displayName === 'string') {
+      entity.display_name = displayName;
+    }
     entity.enabled = enabled;
     await entity.save();
 
@@ -417,13 +414,24 @@ export default class FundingService {
       throw new ValidationError('returnUrl must use http or https scheme');
     }
 
-    // Build expected origin from configured domain
+    // Build allowed origins from configured domain and server host
     const instanceDomain = config.get<string>('domain');
-    const expectedOrigin = instanceDomain.includes('localhost')
-      ? `http://${instanceDomain}`
-      : `https://${instanceDomain}`;
+    const allowedOrigins = new Set<string>();
 
-    if (parsed.origin !== expectedOrigin) {
+    // Add the configured federation domain
+    allowedOrigins.add(
+      instanceDomain.includes('localhost')
+        ? `http://${instanceDomain}`
+        : `https://${instanceDomain}`,
+    );
+
+    // Add the local server origin (covers dev where domain differs from listen address)
+    const hostPort = config.get<number>('host.port');
+    if (hostPort) {
+      allowedOrigins.add(`http://localhost:${hostPort}`);
+    }
+
+    if (!allowedOrigins.has(parsed.origin)) {
       throw new ValidationError('returnUrl origin does not match this instance');
     }
   }
@@ -774,6 +782,7 @@ export default class FundingService {
     returnUrl: string,
     amount?: number,
     calendarIds?: string[],
+    colorMode?: 'light' | 'dark',
   ): Promise<CheckoutSessionResult> {
     // Validate billing cycle
     if (billingCycle !== 'monthly' && billingCycle !== 'yearly') {
@@ -849,6 +858,7 @@ export default class FundingService {
       accountId,
       calendarIds,
       returnUrl,
+      colorMode,
     };
 
     return adapter.createCheckoutSession(params);
@@ -894,6 +904,24 @@ export default class FundingService {
     // Guard against missing metadata first to prevent empty/undefined bypass
     if (!sessionStatus.metadata.accountId || sessionStatus.metadata.accountId !== accountId) {
       throw new FundingPlanNotFoundError(sessionId);
+    }
+
+    // When the session is complete, eagerly create the funding plan instead of
+    // waiting for the Stripe webhook. This closes the timing gap where the user
+    // returns to the app before the webhook arrives (or in local dev where
+    // webhooks never arrive without `stripe listen --forward-to`).
+    // The idempotency check in processCheckoutCompleted prevents duplicate
+    // creation if the webhook has already arrived or arrives later.
+    if (sessionStatus.status === 'complete' && sessionStatus.subscriptionId) {
+      await this.processCheckoutCompleted({
+        eventId: `session_return_${sessionId}`,
+        eventType: 'checkout.session.completed',
+        subscriptionId: sessionStatus.subscriptionId,
+        customerId: sessionStatus.customerId,
+        accountId: sessionStatus.metadata.accountId,
+        calendarIds: sessionStatus.metadata.calendarIds,
+        rawPayload: { source: 'session_verification', sessionId },
+      }, stripeEntity.id);
     }
 
     return {

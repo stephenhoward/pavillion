@@ -58,7 +58,8 @@
 
   "funding_disabled": "Funding is not currently enabled on this instance.",
 
-  "subscribe_to_fund_title": "Subscribe to Fund Calendar",
+  "subscribe_to_fund_title": "Enable Calendar Features",
+  "subscribe_to_fund_description": "These features are available when you contribute to {{instanceName}}. Your contribution helps sustain this service for everyone.",
 
   "redirect_message": "Redirecting to payment provider...",
   "processing_message": "Processing your payment...",

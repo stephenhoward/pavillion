@@ -1177,6 +1177,9 @@ describe('FundingService', () => {
         }),
       };
       sandbox.stub(ProviderFactory, 'getAdapter').returns(mockAdapter as any);
+      // Stub idempotency check so processCheckoutCompleted returns early
+      // without needing full subscription/DB mocking
+      sandbox.stub(FundingPlanEntity, 'findOne').resolves({ id: uuidv4() } as any);
       return mockAdapter;
     }
 
@@ -1296,6 +1299,87 @@ describe('FundingService', () => {
       await expect(
         service.getCheckoutSessionStatus(accountId, 12345 as any),
       ).rejects.toThrow(InvalidSessionIdError);
+    });
+
+    it('should eagerly trigger processCheckoutCompleted when session is complete', async () => {
+      stubEnabledStripeProvider();
+      const mockAdapter = {
+        getCheckoutSessionStatus: sandbox.stub().resolves({
+          status: 'complete',
+          subscriptionId: 'sub_eager_123',
+          customerId: 'cus_eager_123',
+          metadata: {
+            accountId: accountId,
+            calendarIds: JSON.stringify([uuidv4()]),
+          },
+        }),
+      };
+      sandbox.stub(ProviderFactory, 'getAdapter').returns(mockAdapter as any);
+
+      // Idempotency check finds existing plan — processCheckoutCompleted returns early
+      // This proves the method was called without needing full DB mocking
+      const findOneStub = sandbox.stub(FundingPlanEntity, 'findOne').resolves({
+        id: uuidv4(),
+        provider_subscription_id: 'sub_eager_123',
+      } as any);
+
+      const result = await service.getCheckoutSessionStatus(accountId, 'cs_test_eager123');
+
+      expect(result.status).toBe('complete');
+      // Verify processCheckoutCompleted was entered by checking the idempotency query
+      expect(findOneStub.calledOnce).toBe(true);
+      expect(findOneStub.firstCall.args[0]).toEqual({
+        where: {
+          provider_subscription_id: 'sub_eager_123',
+          provider_config_id: providerConfigId,
+        },
+      });
+    });
+
+    it('should skip eager creation when session is not complete', async () => {
+      stubEnabledStripeProvider();
+      const mockAdapter = {
+        getCheckoutSessionStatus: sandbox.stub().resolves({
+          status: 'open',
+          subscriptionId: undefined,
+          customerId: undefined,
+          metadata: {
+            accountId: accountId,
+          },
+        }),
+      };
+      sandbox.stub(ProviderFactory, 'getAdapter').returns(mockAdapter as any);
+
+      const findOneSpy = sandbox.stub(FundingPlanEntity, 'findOne');
+
+      const result = await service.getCheckoutSessionStatus(accountId, 'cs_test_open123');
+
+      expect(result.status).toBe('open');
+      // processCheckoutCompleted should NOT have been called
+      expect(findOneSpy.called).toBe(false);
+    });
+
+    it('should skip eager creation when subscriptionId is missing', async () => {
+      stubEnabledStripeProvider();
+      const mockAdapter = {
+        getCheckoutSessionStatus: sandbox.stub().resolves({
+          status: 'complete',
+          subscriptionId: undefined,
+          customerId: 'cus_mock_123',
+          metadata: {
+            accountId: accountId,
+          },
+        }),
+      };
+      sandbox.stub(ProviderFactory, 'getAdapter').returns(mockAdapter as any);
+
+      const findOneSpy = sandbox.stub(FundingPlanEntity, 'findOne');
+
+      const result = await service.getCheckoutSessionStatus(accountId, 'cs_test_nosub123');
+
+      expect(result.status).toBe('complete');
+      // processCheckoutCompleted should NOT have been called
+      expect(findOneSpy.called).toBe(false);
     });
   });
 });

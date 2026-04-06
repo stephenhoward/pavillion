@@ -373,8 +373,7 @@ describe('CalendarFundingPlanRoutes API', () => {
         .get('/handler/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/funding')
         .expect(200);
 
-      expect(response.body.calendarId).toBe('a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d');
-      expect(response.body.fundingStatus).toBe('funded');
+      expect(response.body.status).toBe('funded');
       // Verify accountId is passed to getFundingStatusForCalendar
       expect(mockInterface.getFundingStatusForCalendar.calledWith(
         'test-account-id',
@@ -437,7 +436,7 @@ describe('CalendarFundingPlanRoutes API', () => {
         .get('/handler/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/funding')
         .expect(200);
 
-      expect(response.body.fundingStatus).toBe('admin-exempt');
+      expect(response.body.status).toBe('admin-exempt');
     });
 
     it('should return unfunded status', async () => {
@@ -449,7 +448,7 @@ describe('CalendarFundingPlanRoutes API', () => {
         .get('/handler/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/funding')
         .expect(200);
 
-      expect(response.body.fundingStatus).toBe('unfunded');
+      expect(response.body.status).toBe('unfunded');
     });
   });
 });

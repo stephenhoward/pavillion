@@ -605,6 +605,7 @@ export default class FundingService {
     returnUrl: string;
     amount?: number;
     calendarIds?: string[];
+    colorMode?: 'light' | 'dark';
   }): Promise<CheckoutSessionResponse> {
     try {
       const response = await axios.post('/api/funding/v1/checkout-sessions', params);
