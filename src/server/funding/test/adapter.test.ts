@@ -380,7 +380,9 @@ describe('Payment Provider Adapters', () => {
         expect(createArgs.line_items[0].quantity).toBe(1);
         expect(createArgs.metadata.pavillion_account_id).toBe('acc_123');
         expect(createArgs.metadata.pavillion_calendar_ids).toBe(JSON.stringify(['cal_1', 'cal_2']));
-        expect(createArgs.return_url).toBe('https://example.com/return');
+        expect(createArgs.redirect_on_completion).toBe('if_required');
+        expect(createArgs.return_url).toContain('session_id=');
+        expect(createArgs.return_url).toContain('CHECKOUT_SESSION_ID');
 
         // Should not have created a price since priceId was provided
         expect(mockStripe.prices.create.called).toBe(false);

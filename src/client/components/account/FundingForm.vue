@@ -333,7 +333,27 @@ function acknowledgeResult() {
   emit('subscribed');
 }
 
-onMounted(loadOptions);
+onMounted(async () => {
+  const url = new URL(window.location.href);
+  const sessionId = url.searchParams.get('session_id');
+
+  if (sessionId) {
+    // Clean URL so session_id doesn't persist on refresh
+    url.searchParams.delete('session_id');
+    window.history.replaceState({}, '', url.toString());
+
+    // Set state so handleCheckoutComplete's guard passes
+    formState.value = 'checkout';
+    await handleCheckoutComplete(sessionId);
+
+    if (formState.value === 'result') {
+      loading.value = false;
+      return;
+    }
+  }
+
+  loadOptions();
+});
 
 onBeforeUnmount(() => {
   destroyCheckout();

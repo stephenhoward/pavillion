@@ -328,10 +328,15 @@ export class StripeAdapter implements PaymentProviderAdapter {
       brandingSettings.button_color = '#F97316'; // Orange 500
     }
 
+    // Build return URL with session ID placeholder for redirect-based payments
+    const returnUrl = new URL(params.returnUrl);
+    returnUrl.searchParams.set('session_id', '{CHECKOUT_SESSION_ID}');
+
     // Create the embedded checkout session
     const session = await this.stripe.checkout.sessions.create({
       ui_mode: 'embedded',
       mode: 'subscription',
+      redirect_on_completion: 'if_required',
       line_items: [
         {
           price: priceId,
@@ -339,7 +344,7 @@ export class StripeAdapter implements PaymentProviderAdapter {
         },
       ],
       metadata,
-      return_url: params.returnUrl,
+      return_url: returnUrl.toString(),
       ...(Object.keys(brandingSettings).length > 0 && { branding_settings: brandingSettings }),
     });
 
