@@ -325,8 +325,9 @@ function openAddProviderWizard() {
 /**
  * Handle wizard close event
  */
-function handleWizardClose() {
+async function handleWizardClose() {
   showWizard.value = false;
+  await loadProviders();
 }
 
 /**
