@@ -169,13 +169,13 @@ function resetStripeForm() {
  */
 function validatePayPalField(field: 'clientId' | 'clientSecret' | 'environment') {
   if (field === 'clientId') {
-    paypalErrors.value.clientId = paypalClientId.value.trim() ? '' : 'Client ID is required';
+    paypalErrors.value.clientId = paypalClientId.value.trim() ? '' : t('step2.paypal_client_id_required');
   }
   else if (field === 'clientSecret') {
-    paypalErrors.value.clientSecret = paypalClientSecret.value.trim() ? '' : 'Client Secret is required';
+    paypalErrors.value.clientSecret = paypalClientSecret.value.trim() ? '' : t('step2.paypal_client_secret_required');
   }
   else if (field === 'environment') {
-    paypalErrors.value.environment = paypalEnvironment.value ? '' : 'Environment is required';
+    paypalErrors.value.environment = paypalEnvironment.value ? '' : t('step2.paypal_environment_required');
   }
 }
 
@@ -466,7 +466,7 @@ function handleSuccess() {
                     :title="t('step2.stripe_webhook_url_label')"
                     @click="copyWebhookUrl"
                   >{{ selectedProviderConfig.webhook_url }}</code>
-                  <span v-if="webhookUrlCopied" class="copied-badge">Copied!</span>
+                  <span v-if="webhookUrlCopied" class="copied-badge">{{ t('step2.stripe_webhook_url_copied') }}</span>
                 </div>
               </div>
             </div>
@@ -476,7 +476,7 @@ function handleSuccess() {
               class="btn btn--primary connect-button"
               :disabled="!isStripeFormValid || connecting"
             >
-              {{ connecting ? t('connecting_button', { defaultValue: 'Connecting...' }) : t('step2.stripe_configure_button') }}
+              {{ connecting ? t('step2.connecting_button') : t('step2.stripe_configure_button') }}
             </button>
           </form>
         </div>
@@ -565,7 +565,7 @@ function handleSuccess() {
               class="btn btn--primary connect-button"
               :disabled="!isPayPalFormValid || connecting"
             >
-              {{ connecting ? t('connecting_button', { defaultValue: 'Connecting...' }) : t('step2.paypal_configure_button', { defaultValue: 'Configure PayPal' }) }}
+              {{ connecting ? t('step2.connecting_button') : t('step2.paypal_configure_button') }}
             </button>
           </form>
         </div>

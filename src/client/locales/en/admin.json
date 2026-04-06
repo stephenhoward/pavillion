@@ -468,7 +468,12 @@
         "stripe_webhook_secret_help": "Create a webhook endpoint in Stripe Dashboard \u2192 Developers \u2192 Webhooks, then reveal the Signing secret. Starts with whsec_.",
         "stripe_webhook_url_label": "Your webhook endpoint URL:",
         "stripe_webhook_secret_required": "Webhook Signing Secret is required",
-        "stripe_webhook_secret_format": "Webhook Signing Secret must start with whsec_"
+        "stripe_webhook_secret_format": "Webhook Signing Secret must start with whsec_",
+        "stripe_webhook_url_copied": "Copied!",
+        "paypal_client_id_required": "Client ID is required",
+        "paypal_client_secret_required": "Client Secret is required",
+        "paypal_environment_required": "Environment is required",
+        "connecting_button": "Connecting..."
       },
       "step3": {
         "title": "Provider Connected!",
