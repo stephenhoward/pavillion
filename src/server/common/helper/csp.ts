@@ -14,7 +14,7 @@ export function buildDefaultCSP(): string {
     "default-src 'self'",
     "frame-ancestors 'none'",
     `script-src 'self'${isDev ? ' http://localhost:5173' : ''} https://js.stripe.com`,
-    "frame-src https://*.stripe.com",
+    "frame-src 'self' https://*.stripe.com",
     "img-src 'self' data:",
     `connect-src 'self' https://api.stripe.com https://errors.stripe.com https://m.stripe.com https://q.stripe.com${isDev ? ' ws://localhost:5173 http://localhost:5173' : ''}`,
   ];
