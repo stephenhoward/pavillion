@@ -519,12 +519,18 @@ form {
 
             <div class="section-card">
               <LanguageTabSelector
+                ref="accessibilityLangTabs"
                 v-model="currentLanguage"
                 :languages="languages"
                 @add-language="openLanguagePicker"
               />
 
-              <div class="place-fields">
+              <div
+                :id="accessibilityLangTabs?.panelId(currentLanguage)"
+                role="tabpanel"
+                :aria-labelledby="accessibilityLangTabs?.tabId(currentLanguage)"
+                class="place-fields"
+              >
                 <div class="form-field">
                   <label :for="`place-accessibility-${currentLanguage}`" class="field-label">
                     {{ t('field_accessibility_info') }}
@@ -612,6 +618,7 @@ const defaultLanguage = 'en';
 const languages = ref<string[]>([defaultLanguage]);
 const currentLanguage = ref(defaultLanguage);
 const showLanguagePicker = ref(false);
+const accessibilityLangTabs = ref<InstanceType<typeof LanguageTabSelector> | null>(null);
 
 /**
  * Scroll error container into view when an error occurs.

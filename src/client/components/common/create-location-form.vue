@@ -42,6 +42,7 @@ const emit = defineEmits<{
 
 const dialogRef = ref<HTMLDialogElement | null>(null);
 const currentLanguage = ref(props.languages[0] || 'en');
+const accessibilityLangTabs = ref<InstanceType<typeof LanguageTabSelector> | null>(null);
 
 // Form state
 const formData = reactive({
@@ -201,12 +202,18 @@ defineExpose({ close, dialogRef });
           <h3 class="section-title">Accessibility Information</h3>
 
           <LanguageTabSelector
+            ref="accessibilityLangTabs"
             v-model="currentLanguage"
             :languages="languages"
             @add-language="handleAddLanguage"
           />
 
-          <div class="form-field">
+          <div
+            :id="accessibilityLangTabs?.panelId(currentLanguage)"
+            role="tabpanel"
+            :aria-labelledby="accessibilityLangTabs?.tabId(currentLanguage)"
+            class="form-field"
+          >
             <textarea
               v-model="accessibilityInfo[currentLanguage]"
               class="form-textarea"
