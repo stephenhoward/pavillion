@@ -92,7 +92,22 @@ export async function compareSchemas(
       }
     }
 
-    // Check constraints for shared columns
+    // Check constraints for shared columns.
+    //
+    // NOTE: Column types are intentionally NOT compared. SQLite's type affinity
+    // system causes describeTable() to return different raw type strings for the
+    // same Sequelize DataType depending on whether a column was created via
+    // db.sync() or queryInterface.createTable() (e.g. VARCHAR(255) vs
+    // VARCHAR BINARY(255), CHAR(36) vs VARCHAR(36)). A normalization layer
+    // mapping all SQLite variants to canonical Sequelize types would be required
+    // to avoid false positives, and that layer would itself be fragile.
+    //
+    // Migration 0015 (STRING→TEXT on description columns) is a historical
+    // example of type drift that reached production before detection. Mitigate
+    // by code review of new migrations against entity definitions.
+    //
+    // If automated type checking is needed in the future, it should target a
+    // PostgreSQL-based test environment where column types are rigorous.
     const sharedCols = entityCols.filter((c) => migrationCols.includes(c));
     for (const col of sharedCols) {
       const mCol = migrationSchema[col];
