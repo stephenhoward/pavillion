@@ -131,13 +131,11 @@ async function doLogin() {
       <div v-if="state.registrationMode == 'open' || state.registrationMode == 'apply'"
            class="secondary-actions">
         <router-link v-if="state.registrationMode == 'open'"
-                     :to="{ name: 'register', query: { email: state.email}}"
-                     role="button">
+                     :to="{ name: 'register', query: { email: state.email}}">
           {{ t("register_button") }}
         </router-link>
         <router-link v-if="state.registrationMode == 'apply'"
-                     :to="{ name: 'register-apply', query: { email: state.email}}"
-                     role="button">
+                     :to="{ name: 'register-apply', query: { email: state.email}}">
           {{ t("apply_button") }}
         </router-link>
       </div>
