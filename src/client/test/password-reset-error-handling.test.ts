@@ -570,5 +570,48 @@ describe('Password Reset Error Handling Security', () => {
       expect(wrapper.find('[role="alert"]').exists()).toBe(true);
       expect((wrapper.vm as any).state.error).toBeTruthy();
     });
+
+    it('should not call reset_password when email is empty', async () => {
+      const resetPasswordMock = vi.fn().mockResolvedValue({});
+      const { wrapper } = mountPasswordForgot({
+        reset_password: resetPasswordMock,
+      });
+
+      await wrapper.vm.$nextTick();
+
+      // Leave email empty (default state) and submit
+      await wrapper.find('form').trigger('submit.prevent');
+      await wrapper.vm.$nextTick();
+
+      // reset_password should NOT have been called
+      expect(resetPasswordMock).not.toHaveBeenCalled();
+
+      // Error alert should be displayed
+      expect(wrapper.find('[role="alert"]').exists()).toBe(true);
+      expect((wrapper.vm as any).state.error).toBeTruthy();
+    });
+
+    it('should not call reset_password when email format is invalid', async () => {
+      const resetPasswordMock = vi.fn().mockResolvedValue({});
+      const { wrapper } = mountPasswordForgot({
+        reset_password: resetPasswordMock,
+      });
+
+      await wrapper.vm.$nextTick();
+
+      // Enter an invalid email format
+      await wrapper.find('#reset-email').setValue('notanemail');
+      await wrapper.vm.$nextTick();
+
+      await wrapper.find('form').trigger('submit.prevent');
+      await wrapper.vm.$nextTick();
+
+      // reset_password should NOT have been called
+      expect(resetPasswordMock).not.toHaveBeenCalled();
+
+      // Error alert should be displayed
+      expect(wrapper.find('[role="alert"]').exists()).toBe(true);
+      expect((wrapper.vm as any).state.error).toBeTruthy();
+    });
   });
 });

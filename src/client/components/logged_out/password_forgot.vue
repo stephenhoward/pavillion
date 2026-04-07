@@ -57,6 +57,7 @@
 import { reactive, inject } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useTranslation } from 'i18next-vue';
+import { isValidEmail } from '@/common/validation/email';
 import ErrorAlert from './error-alert.vue';
 import SuccessState from './success-state.vue';
 
@@ -68,12 +69,20 @@ const authentication = inject('authn');
 const router = useRouter();
 const route = useRoute();
 const state = reactive({
-  error: route.query.err,
-  email: route.query.email,
+  error: typeof route.query.err === 'string' ? route.query.err : '',
+  email: typeof route.query.email === 'string' ? route.query.email : '',
   showSuccess: false,
 });
 
 async function startReset() {
+  if (!state.email) {
+    state.error = t('no_email_provided');
+    return;
+  }
+  if (!isValidEmail(state.email)) {
+    state.error = t('InvalidEmail');
+    return;
+  }
   try {
     await authentication.reset_password( state.email );
     state.showSuccess = true;
