@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mount, VueWrapper } from '@vue/test-utils';
+import { mount, flushPromises, VueWrapper } from '@vue/test-utils';
 import i18next from 'i18next';
 import I18NextVue from 'i18next-vue';
 import funding from '@/client/components/admin/funding.vue';
@@ -100,8 +100,7 @@ describe('Funding Page Wizard Integration', () => {
     });
 
     // Wait for component to load data
-    await wrapper.vm.$nextTick();
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await flushPromises();
 
     const addProviderButton = wrapper.find('button.btn-text-orange');
     expect(addProviderButton.exists()).toBe(true);
@@ -147,8 +146,7 @@ describe('Funding Page Wizard Integration', () => {
       },
     });
 
-    await wrapper.vm.$nextTick();
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await flushPromises();
 
     const addProviderButton = wrapper.find('button.btn-text-orange');
     expect(addProviderButton.exists()).toBe(true);
@@ -194,9 +192,7 @@ describe('Funding Page Wizard Integration', () => {
     });
 
     // Wait for async data loading to complete
-    await wrapper.vm.$nextTick();
-    await new Promise(resolve => setTimeout(resolve, 500));
-    await wrapper.vm.$nextTick();
+    await flushPromises();
 
     // Verify the providers section is rendered
     const providersSection = wrapper.find('.providers-card');
@@ -277,8 +273,7 @@ describe('Funding Page Wizard Integration', () => {
       },
     });
 
-    await wrapper.vm.$nextTick();
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await flushPromises();
 
     // Open wizard
     const addProviderButton = wrapper.find('button.btn-text-orange');
@@ -288,8 +283,7 @@ describe('Funding Page Wizard Integration', () => {
     // Emit provider-connected event
     const wizardComponent = wrapper.findComponent(AddProviderWizard);
     wizardComponent.vm.$emit('provider-connected');
-    await wrapper.vm.$nextTick();
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await flushPromises();
 
     // Verify getProviders was called again
     expect(mockService.getProviders).toHaveBeenCalledTimes(2);
@@ -306,8 +300,7 @@ describe('Funding Page Wizard Integration', () => {
       },
     });
 
-    await wrapper.vm.$nextTick();
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await flushPromises();
 
     const providersSection = wrapper.find('.providers-card');
     expect(providersSection.exists()).toBe(true);
@@ -327,9 +320,7 @@ describe('Funding Page Wizard Integration', () => {
     });
 
     // Wait for async data loading to complete
-    await wrapper.vm.$nextTick();
-    await new Promise(resolve => setTimeout(resolve, 500));
-    await wrapper.vm.$nextTick();
+    await flushPromises();
 
     // Verify the providers section is rendered
     const providersSection = wrapper.find('.providers-card');
@@ -386,8 +377,7 @@ describe('Funding Page Wizard Integration', () => {
 
     it('shows price error and blocks API when payWhatYouCan=false and both prices are zero', async () => {
       wrapper = mountSettings({ monthlyPrice: 0, yearlyPrice: 0, payWhatYouCan: false });
-      await wrapper.vm.$nextTick();
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await flushPromises();
 
       await (wrapper.vm as any).updateSettings();
       await wrapper.vm.$nextTick();
@@ -400,8 +390,7 @@ describe('Funding Page Wizard Integration', () => {
 
     it('shows currency error and blocks API when currency is empty', async () => {
       wrapper = mountSettings({ currency: '' });
-      await wrapper.vm.$nextTick();
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await flushPromises();
 
       await (wrapper.vm as any).updateSettings();
       await wrapper.vm.$nextTick();
@@ -413,8 +402,7 @@ describe('Funding Page Wizard Integration', () => {
 
     it('calls API when prices are valid (happy path)', async () => {
       wrapper = mountSettings({ monthlyPrice: 10000000, yearlyPrice: 100000000, currency: 'USD' });
-      await wrapper.vm.$nextTick();
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await flushPromises();
 
       const mockInstance = vi.mocked(FundingService).mock.results[0].value;
 
@@ -431,8 +419,7 @@ describe('Funding Page Wizard Integration', () => {
 
     it('calls API when payWhatYouCan=true even with zero prices', async () => {
       wrapper = mountSettings({ monthlyPrice: 0, yearlyPrice: 0, payWhatYouCan: true, currency: 'USD' });
-      await wrapper.vm.$nextTick();
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await flushPromises();
 
       const mockInstance = vi.mocked(FundingService).mock.results[0].value;
 
