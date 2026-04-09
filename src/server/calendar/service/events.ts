@@ -827,21 +827,35 @@ class EventService {
           }
 
           existingScheduleIds = existingScheduleIds.filter( id => id !== schedule.id );
-          // TODO: validate schedule data so we don't store junk
-          // Convert byDay array to comma-separated string for database storage
-          const byDayValue = schedule.byDay !== undefined
-            ? (Array.isArray(schedule.byDay) ? schedule.byDay.join(',') : (schedule.byDay || ''))
+
+          // Parse incoming data through the model to get proper DateTime objects
+          // and correct property name mapping (start → startDate, end → endDate)
+          const parsed = CalendarEventSchedule.fromObject(schedule);
+
+          // For non-recurring events, sync endDate to eventEndTime (same as createEventSchedule)
+          if (!parsed.frequency && parsed.eventEndTime) {
+            parsed.endDate = parsed.eventEndTime;
+          }
+
+          const byDayValue = parsed.byDay !== undefined && parsed.byDay.length > 0
+            ? parsed.byDay.join(',')
             : scheduleEntity.by_day;
 
+          // Use parsed model values for fields present in the request.
+          // For clearable fields (end_date, count, frequency), check the raw
+          // request keys to distinguish "explicitly cleared" from "not sent".
+          // Raw key names: start/end/eventEndTime/frequency/interval/count/isException
+          const toStorage = EventScheduleEntity.toStorageDate;
           await scheduleEntity.update({
-            start_date: schedule.startDate ?? scheduleEntity.start_date,
-            end_date: schedule.endDate ?? scheduleEntity.end_date,
-            event_end_time: schedule.eventEndTime ?? scheduleEntity.event_end_time,
-            frequency: schedule.frequency ?? scheduleEntity.frequency,
-            interval: schedule.interval ?? scheduleEntity.interval,
-            count: schedule.count ?? scheduleEntity.count,
+            timezone: parsed.startDate?.zoneName ?? scheduleEntity.timezone,
+            start_date: toStorage(parsed.startDate) ?? scheduleEntity.start_date,
+            end_date: 'end' in schedule ? (toStorage(parsed.endDate) ?? null) : scheduleEntity.end_date,
+            event_end_time: 'eventEndTime' in schedule ? (toStorage(parsed.eventEndTime) ?? null) : scheduleEntity.event_end_time,
+            frequency: 'frequency' in schedule ? ((parsed.frequency as string) ?? null) : scheduleEntity.frequency,
+            interval: 'interval' in schedule ? (parsed.interval ?? 0) : scheduleEntity.interval,
+            count: 'count' in schedule ? (parsed.count ?? 0) : scheduleEntity.count,
             by_day: byDayValue,
-            is_exclusion: schedule.isExclusion ?? scheduleEntity.is_exclusion,
+            is_exclusion: 'isException' in schedule ? (parsed.isExclusion ?? false) : scheduleEntity.is_exclusion,
           });
           event.addSchedule(scheduleEntity.toModel());
         }

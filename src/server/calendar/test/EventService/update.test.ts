@@ -345,7 +345,113 @@ describe('updateEvent with schedules', () => {
     expect(updatedEvent.schedules[0].frequency).toBe(EventFrequency.DAILY);
   });
 
-  // TODO: test replacing an event schedule with another one
+  it('should update start_date when request sends "start" key (property name mapping)', async () => {
+    let scheduleEntity = EventScheduleEntity.build({
+      id: 'testScheduleId',
+      start_date: new Date('2026-01-01T10:00:00Z'),
+      end_date: new Date('2026-01-01T12:00:00Z'),
+      timezone: 'America/Los_Angeles',
+    });
+
+    let findEventStub = sandbox.stub(EventEntity, 'findByPk');
+    sandbox.stub(EventEntity.prototype, 'save');
+    let findSchedulesStub = sandbox.stub(EventScheduleEntity, 'findAll');
+    let updateScheduleStub = sandbox.stub(EventScheduleEntity.prototype, 'update');
+
+    findEventStub.resolves(EventEntity.build({ account_id: 'testAccountId', id: '11111111-1111-4111-8111-111111111111', calendar_id: 'testCalendarId' }));
+    findSchedulesStub.resolves([ scheduleEntity ]);
+    updateScheduleStub.callsFake(async (params) => {
+      for (let key in params) {
+        scheduleEntity.set(key, params[key]);
+      }
+      return scheduleEntity;
+    });
+
+    await service.updateEvent(new Account('testAccountId', 'testme', 'testme'), '11111111-1111-4111-8111-111111111111', {
+      schedules: [{
+        id: 'testScheduleId',
+        start: '2026-06-15T14:00:00',
+        end: '2026-06-15T16:00:00',
+        eventEndTime: '2026-06-15T16:00:00',
+      }],
+    });
+
+    const updateArgs = updateScheduleStub.firstCall.args[0];
+    expect(updateArgs.start_date).toBeInstanceOf(Date);
+    expect(updateArgs.start_date).not.toEqual(new Date('2026-01-01T10:00:00Z'));
+    expect(updateArgs.end_date).toBeInstanceOf(Date);
+  });
+
+  it('should preserve end_date when "end" key is absent from request', async () => {
+    const originalEndDate = new Date('2026-01-01T12:00:00Z');
+    let scheduleEntity = EventScheduleEntity.build({
+      id: 'testScheduleId',
+      start_date: new Date('2026-01-01T10:00:00Z'),
+      end_date: originalEndDate,
+      timezone: 'UTC',
+    });
+
+    let findEventStub = sandbox.stub(EventEntity, 'findByPk');
+    sandbox.stub(EventEntity.prototype, 'save');
+    let findSchedulesStub = sandbox.stub(EventScheduleEntity, 'findAll');
+    let updateScheduleStub = sandbox.stub(EventScheduleEntity.prototype, 'update');
+
+    findEventStub.resolves(EventEntity.build({ account_id: 'testAccountId', id: '11111111-1111-4111-8111-111111111111', calendar_id: 'testCalendarId' }));
+    findSchedulesStub.resolves([ scheduleEntity ]);
+    updateScheduleStub.callsFake(async (params) => {
+      for (let key in params) {
+        scheduleEntity.set(key, params[key]);
+      }
+      return scheduleEntity;
+    });
+
+    await service.updateEvent(new Account('testAccountId', 'testme', 'testme'), '11111111-1111-4111-8111-111111111111', {
+      schedules: [{
+        id: 'testScheduleId',
+        frequency: EventFrequency.DAILY,
+      }],
+    });
+
+    const updateArgs = updateScheduleStub.firstCall.args[0];
+    expect(updateArgs.end_date).toEqual(originalEndDate);
+  });
+
+  it('should clear end_date when "end" key is explicitly null', async () => {
+    let scheduleEntity = EventScheduleEntity.build({
+      id: 'testScheduleId',
+      start_date: new Date('2026-01-01T10:00:00Z'),
+      end_date: new Date('2026-06-01T00:00:00Z'),
+      count: 6,
+      timezone: 'UTC',
+    });
+
+    let findEventStub = sandbox.stub(EventEntity, 'findByPk');
+    sandbox.stub(EventEntity.prototype, 'save');
+    let findSchedulesStub = sandbox.stub(EventScheduleEntity, 'findAll');
+    let updateScheduleStub = sandbox.stub(EventScheduleEntity.prototype, 'update');
+
+    findEventStub.resolves(EventEntity.build({ account_id: 'testAccountId', id: '11111111-1111-4111-8111-111111111111', calendar_id: 'testCalendarId' }));
+    findSchedulesStub.resolves([ scheduleEntity ]);
+    updateScheduleStub.callsFake(async (params) => {
+      for (let key in params) {
+        scheduleEntity.set(key, params[key]);
+      }
+      return scheduleEntity;
+    });
+
+    await service.updateEvent(new Account('testAccountId', 'testme', 'testme'), '11111111-1111-4111-8111-111111111111', {
+      schedules: [{
+        id: 'testScheduleId',
+        end: null,
+        count: 0,
+      }],
+    });
+
+    const updateArgs = updateScheduleStub.firstCall.args[0];
+    expect(updateArgs.end_date).toBeNull();
+    expect(updateArgs.count).toBe(0);
+  });
+
   it('should remove an existing schedule and add a new one', async () => {
     let scheduleEntity = EventScheduleEntity.build({
       id: 'testScheduleId',

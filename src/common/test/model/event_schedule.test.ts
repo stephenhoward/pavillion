@@ -18,12 +18,12 @@ describe('CalendarEventSchedule.eventEndTime', () => {
     expect(obj.eventEndTime).toBe(endTime.toISO());
   });
 
-  it('should serialize null eventEndTime as undefined in toObject()', () => {
+  it('should serialize null eventEndTime as null in toObject()', () => {
     const schedule = new CalendarEventSchedule('s1');
     schedule.eventEndTime = null;
 
     const obj = schedule.toObject();
-    expect(obj.eventEndTime).toBeUndefined();
+    expect(obj.eventEndTime).toBeNull();
   });
 
   it('should deserialize eventEndTime from ISO string in fromObject()', () => {
@@ -55,6 +55,21 @@ describe('CalendarEventSchedule.eventEndTime', () => {
 
     const schedule = CalendarEventSchedule.fromObject(obj);
     expect(schedule.eventEndTime).toBeNull();
+  });
+
+  it('should serialize null startDate as null in toObject()', () => {
+    const schedule = new CalendarEventSchedule('s1');
+    expect(schedule.toObject().start).toBeNull();
+  });
+
+  it('should serialize null endDate as null in toObject()', () => {
+    const schedule = new CalendarEventSchedule('s1');
+    expect(schedule.toObject().end).toBeNull();
+  });
+
+  it('should serialize null frequency as null in toObject()', () => {
+    const schedule = new CalendarEventSchedule('s1');
+    expect(schedule.toObject().frequency).toBeNull();
   });
 
   it('should round-trip eventEndTime through toObject and fromObject', () => {
