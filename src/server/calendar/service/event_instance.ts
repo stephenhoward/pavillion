@@ -20,7 +20,34 @@ import { getRecurrenceText } from '@/common/utils/recurrence-text';
 import { resolveSourceCalendars, type RepostContext } from '../helper/source_calendar';
 import type ActivityPubInterface from '@/server/activitypub/interface';
 
-const { RRule, RRuleSet } = rrule;
+const { RRule, RRuleSet, Weekday, ALL_WEEKDAYS } = rrule;
+
+/**
+ * Parses a stored `by_day` entry (e.g. "MO", "1MO", "-1FR") into an rrule
+ * Weekday instance suitable for use in `byweekday`.
+ *
+ * The stored format is an optional signed ordinal (1..5 or -1..-5) followed by
+ * a two-letter ISO weekday code. An ordinal, when present, encodes "the Nth
+ * occurrence of that weekday in the period" (used with MONTHLY/YEARLY rules to
+ * express e.g. "first Monday of the month").
+ *
+ * Returns null for unparseable input so callers can skip malformed entries
+ * rather than silently coerce them into the wrong weekday. Note: rrule's
+ * Weekday.fromStr silently yields Weekday(-1) for unknown codes rather than
+ * throwing, so we explicitly validate the day code against ALL_WEEKDAYS.
+ */
+function parseByDay(entry: string): InstanceType<typeof Weekday> | null {
+  const match = entry.match(/^(-?\d+)?([A-Z]{2})$/);
+  if (!match) {
+    return null;
+  }
+  const [, ordinal, dayCode] = match;
+  if (!ALL_WEEKDAYS.includes(dayCode as any)) {
+    return null;
+  }
+  const weekday = Weekday.fromStr(dayCode as any);
+  return ordinal ? weekday.nth(parseInt(ordinal, 10)) : weekday;
+}
 
 export default class EventInstanceService {
   private eventBus: EventEmitter;
@@ -572,7 +599,12 @@ export default class EventInstanceService {
           options.until = schedule.endDate?.toJSDate();
         }
         if ( schedule.byDay?.length ) {
-          options.byweekday = schedule.byDay.map(day => parseInt(day));
+          const weekdays = schedule.byDay
+            .map(parseByDay)
+            .filter((w): w is InstanceType<typeof Weekday> => w !== null);
+          if (weekdays.length) {
+            options.byweekday = weekdays;
+          }
         }
         const rule = new RRule(options);
         if ( schedule.isExclusion ) {

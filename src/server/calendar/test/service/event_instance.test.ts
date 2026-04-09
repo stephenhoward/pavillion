@@ -31,6 +31,7 @@ describe('EventInstanceService.generateInstances', () => {
     interval?: number;
     count?: number;
     isExclusion?: boolean;
+    byDay?: string[];
   }): CalendarEventSchedule {
     const schedule = new CalendarEventSchedule(uuidv4(), opts.startDate, opts.endDate ?? undefined);
     schedule.eventEndTime = opts.eventEndTime ?? null;
@@ -38,6 +39,7 @@ describe('EventInstanceService.generateInstances', () => {
     schedule.interval = opts.interval ?? 0;
     schedule.count = opts.count ?? 0;
     schedule.isExclusion = opts.isExclusion ?? false;
+    schedule.byDay = opts.byDay ?? [];
     return schedule;
   }
 
@@ -162,6 +164,136 @@ describe('EventInstanceService.generateInstances', () => {
     const excludedISO = exclusionStart.toISO();
     const instanceStarts = instances.map((i: any) => i.start.toISO());
     expect(instanceStarts).not.toContain(excludedISO);
+  });
+
+  describe('byDay parsing', () => {
+    // Monthly "first Monday of the month" — the canonical bug case.
+    // Sept 2025 first Monday is the 1st; Oct is the 6th; Nov is the 3rd.
+    it('should generate "first Monday of the month" for monthly 1MO', () => {
+      const start = DateTime.fromISO('2025-09-01T09:00:00', { zone: 'utc' });
+      const event = createEvent([
+        createSchedule({
+          startDate: start,
+          frequency: EventFrequency.MONTHLY,
+          interval: 1,
+          byDay: ['1MO'],
+        }),
+      ]);
+
+      const instances = (service as any).generateInstances(event, 4);
+      const dates = instances.map((i: any) => i.start.toUTC().toISODate());
+
+      expect(dates).toEqual([
+        '2025-09-01', // first Monday of Sept 2025
+        '2025-10-06', // first Monday of Oct 2025
+        '2025-11-03', // first Monday of Nov 2025
+        '2025-12-01', // first Monday of Dec 2025
+      ]);
+    });
+
+    // Regression guard: when start_date happens to fall on Tuesday, the prior
+    // parseInt("1MO") bug silently yielded every Tuesday. Verify the day is
+    // honored from the by_day code, not inferred from start_date's weekday.
+    it('should honor MO day code even when start_date is a Tuesday', () => {
+      // 2025-09-02 is a Tuesday
+      const start = DateTime.fromISO('2025-09-02T00:30:00', { zone: 'utc' });
+      const event = createEvent([
+        createSchedule({
+          startDate: start,
+          frequency: EventFrequency.MONTHLY,
+          interval: 1,
+          byDay: ['1MO'],
+        }),
+      ]);
+
+      const instances = (service as any).generateInstances(event, 3);
+      // Every generated instance must be a Monday (Luxon weekday 1)
+      for (const inst of instances) {
+        expect(inst.start.toUTC().weekday).toBe(1);
+      }
+    });
+
+    it('should support negative ordinals like -1FR (last Friday of the month)', () => {
+      const start = DateTime.fromISO('2025-09-01T12:00:00', { zone: 'utc' });
+      const event = createEvent([
+        createSchedule({
+          startDate: start,
+          frequency: EventFrequency.MONTHLY,
+          interval: 1,
+          byDay: ['-1FR'],
+        }),
+      ]);
+
+      const instances = (service as any).generateInstances(event, 3);
+      const dates = instances.map((i: any) => i.start.toUTC().toISODate());
+
+      expect(dates).toEqual([
+        '2025-09-26', // last Friday of Sept 2025
+        '2025-10-31', // last Friday of Oct 2025
+        '2025-11-28', // last Friday of Nov 2025
+      ]);
+    });
+
+    it('should support plain weekday codes for weekly rules (MO, WE, FR)', () => {
+      const start = DateTime.fromISO('2025-09-01T09:00:00', { zone: 'utc' }); // Monday
+      const event = createEvent([
+        createSchedule({
+          startDate: start,
+          frequency: EventFrequency.WEEKLY,
+          interval: 1,
+          byDay: ['MO', 'WE', 'FR'],
+        }),
+      ]);
+
+      const instances = (service as any).generateInstances(event, 6);
+      const dates = instances.map((i: any) => i.start.toUTC().toISODate());
+
+      expect(dates).toEqual([
+        '2025-09-01', // Mon
+        '2025-09-03', // Wed
+        '2025-09-05', // Fri
+        '2025-09-08', // Mon
+        '2025-09-10', // Wed
+        '2025-09-12', // Fri
+      ]);
+    });
+
+    it('should skip unparseable byDay entries rather than coerce them', () => {
+      const start = DateTime.fromISO('2025-09-01T09:00:00', { zone: 'utc' });
+      const event = createEvent([
+        createSchedule({
+          startDate: start,
+          frequency: EventFrequency.MONTHLY,
+          interval: 1,
+          byDay: ['garbage', '1MO'],
+        }),
+      ]);
+
+      const instances = (service as any).generateInstances(event, 2);
+      const dates = instances.map((i: any) => i.start.toUTC().toISODate());
+
+      expect(dates).toEqual(['2025-09-01', '2025-10-06']);
+    });
+
+    // Regex-passing but semantically invalid weekday code: "1ZZ" matches the
+    // (-?\d+)?([A-Z]{2}) shape but Weekday.fromStr rejects "ZZ". Verify the
+    // try/catch path returns null and the entry is filtered out.
+    it('should skip byDay entries whose day code is not a real weekday', () => {
+      const start = DateTime.fromISO('2025-09-01T09:00:00', { zone: 'utc' });
+      const event = createEvent([
+        createSchedule({
+          startDate: start,
+          frequency: EventFrequency.MONTHLY,
+          interval: 1,
+          byDay: ['1ZZ', '1MO'],
+        }),
+      ]);
+
+      const instances = (service as any).generateInstances(event, 2);
+      const dates = instances.map((i: any) => i.start.toUTC().toISODate());
+
+      expect(dates).toEqual(['2025-09-01', '2025-10-06']);
+    });
   });
 });
 
