@@ -23,6 +23,27 @@ import type ActivityPubInterface from '@/server/activitypub/interface';
 const { RRule, RRuleSet, Weekday, ALL_WEEKDAYS } = rrule;
 
 /**
+ * Forward generation window for recurring event expansion, in months from
+ * "now".
+ *
+ * Recurring rrule expansions are materialized for a rolling window of
+ * [now, now + HORIZON]. On each regeneration (e.g. event create/update) the
+ * window shifts forward, so past recurring occurrences drop out and new
+ * future ones are materialized.
+ *
+ * Non-recurring single occurrences (rdates) are NOT subject to this window:
+ * they are always materialized 1:1 with their schedule, regardless of
+ * whether the start is in the past. This preserves stable shareable public
+ * URLs (per DEC-004) for one-off events, their per-event ICS downloads, and
+ * their OpenGraph / Twitter card meta tags across regenerations.
+ *
+ * Bounded recurring schedules (those with `count` or `until`) are still
+ * honored by rrule; `between()` simply intersects the bounded series with
+ * the window.
+ */
+export const GENERATION_HORIZON_MONTHS = 6;
+
+/**
  * Parses a stored `by_day` entry (e.g. "MO", "1MO", "-1FR") into an rrule
  * Weekday instance suitable for use in `byweekday`.
  *
@@ -401,7 +422,7 @@ export default class EventInstanceService {
     return instance;
   }
 
-  async buildEventInstances(event: CalendarEvent): Promise<void> {
+  async buildEventInstances(event: CalendarEvent, now: Date = new Date()): Promise<void> {
 
     await this.removeEventInstances(event);
 
@@ -413,7 +434,7 @@ export default class EventInstanceService {
       event.schedules = schedules.map(schedule => schedule.toModel());
     }
 
-    const instances = this.generateInstances(event,10);
+    const instances = this.generateInstances(event, now);
     for ( let instance of instances ) {
       const instanceEntity = EventInstanceEntity.fromModel(instance);
       instanceEntity.event_id = event.id;
@@ -457,9 +478,9 @@ export default class EventInstanceService {
    * @param event - The event to create instances for
    * @param repostCalendarId - The calendar ID that is reposting the event
    */
-  async buildRepostInstances(event: CalendarEvent, repostCalendarId: string): Promise<void> {
+  async buildRepostInstances(event: CalendarEvent, repostCalendarId: string, now: Date = new Date()): Promise<void> {
     await this.removeRepostInstances(event.id, repostCalendarId);
-    await this.buildInstancesForCalendar(event, repostCalendarId);
+    await this.buildInstancesForCalendar(event, repostCalendarId, now);
   }
 
   /**
@@ -553,7 +574,7 @@ export default class EventInstanceService {
    * @param event - The event to generate instances for
    * @param calendarId - The calendar ID to assign to the generated instances
    */
-  private async buildInstancesForCalendar(event: CalendarEvent, calendarId: string): Promise<void> {
+  private async buildInstancesForCalendar(event: CalendarEvent, calendarId: string, now: Date = new Date()): Promise<void> {
     if (!event.schedules || !event.schedules.length) {
       const schedules = await EventScheduleEntity.findAll({
         where: { event_id: event.id },
@@ -562,7 +583,7 @@ export default class EventInstanceService {
       event.schedules = schedules.map(schedule => schedule.toModel());
     }
 
-    const instances = this.generateInstances(event, 10);
+    const instances = this.generateInstances(event, now);
     for (const instance of instances) {
       const instanceEntity = EventInstanceEntity.fromModel(instance);
       instanceEntity.event_id = event.id;
@@ -630,15 +651,32 @@ export default class EventInstanceService {
 
   /**
    * Generates event instances from the event's schedules using RRule.
-   * Computes instance end times by applying the duration derived from the first
-   * non-exclusion schedule's eventEndTime. If no eventEndTime is set, instances
-   * receive null end times.
+   *
+   * Instance materialization differentiates between two schedule kinds:
+   *
+   * 1. **Recurring expansions (rrule)** are materialized for a forward
+   *    rolling window of [now, now + GENERATION_HORIZON_MONTHS]. Bounded
+   *    schedules (with `count` or `until`) are still honored by rrule —
+   *    `between()` intersects the bounded series with the window.
+   *
+   * 2. **Non-recurring single occurrences (rdate)** are materialized 1:1
+   *    with their schedule regardless of whether the start is in the past.
+   *    This preserves stable shareable public URLs (DEC-004) for one-off
+   *    events, per-event ICS downloads, and OG/Twitter card meta tags
+   *    across regenerations. Exclusion dates (exdate) still suppress
+   *    past rdates the same way they suppress future ones.
+   *
+   * Computes instance end times by applying the duration derived from the
+   * first non-exclusion schedule's eventEndTime. If no eventEndTime is set,
+   * instances receive null end times.
    *
    * @param event - The event containing schedules to generate instances from
-   * @param count - Maximum number of instances to generate
+   * @param now - The reference "now" for window computation. Defaults to the
+   *              current wall clock; tests may inject a fixed value for
+   *              determinism.
    * @returns Array of CalendarEventInstance with computed start and end times
    */
-  private generateInstances(event: CalendarEvent, count: number): CalendarEventInstance[] {
+  private generateInstances(event: CalendarEvent, now: Date = new Date()): CalendarEventInstance[] {
     const rruleSet = this.rrules(event);
 
     // Compute duration from the first non-exclusion schedule that has both
@@ -652,18 +690,44 @@ export default class EventInstanceService {
       }
     }
 
-    return rruleSet
-      .all((date: Date, i: number) => { return i < count; })
-      .map((date: Date) => {
-        const startDate = DateTime.fromJSDate(date);
-        const endDate = duration ? startDate.plus(duration) : null;
+    const windowEnd = DateTime.fromJSDate(now)
+      .plus({ months: GENERATION_HORIZON_MONTHS })
+      .toJSDate();
 
-        return CalendarEventInstance.fromObject({
-          id: uuidv4(),
-          event: event,
-          start: startDate,
-          end: endDate,
-        });
+    // Recurring expansions + any rdates that happen to fall inside the window.
+    const windowedDates = rruleSet.between(now, windowEnd, true);
+
+    // Past rdates below the window's lower bound must still be materialized,
+    // so that a one-off event's row (and its shareable anonymous URL) does
+    // not vanish on regeneration once the event date has passed. Apply
+    // exdates the same way rrule would have — past exclusions still suppress.
+    const exdateTimes = new Set(rruleSet.exdates().map((d: Date) => d.getTime()));
+    const nowTime = now.getTime();
+    const pastRdates = rruleSet
+      .rdates()
+      .filter((d: Date) => d.getTime() < nowTime && !exdateTimes.has(d.getTime()));
+
+    // Union, dedupe by timestamp, and sort chronologically.
+    const seen = new Set<number>();
+    const allDates: Date[] = [...pastRdates, ...windowedDates]
+      .filter(d => {
+        const t = d.getTime();
+        if (seen.has(t)) return false;
+        seen.add(t);
+        return true;
+      })
+      .sort((a, b) => a.getTime() - b.getTime());
+
+    return allDates.map((date: Date) => {
+      const startDate = DateTime.fromJSDate(date);
+      const endDate = duration ? startDate.plus(duration) : null;
+
+      return CalendarEventInstance.fromObject({
+        id: uuidv4(),
+        event: event,
+        start: startDate,
+        end: endDate,
       });
+    });
   }
 }
