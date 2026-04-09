@@ -32,6 +32,7 @@
     "error_404": "We could not find an account with that email address",
     "error_500": "Oops. The server ran into an error. Please contact support",
     "no_email_provided": "Please enter your email address",
+    "InvalidEmail": "please enter a valid email address",
     "unknown_error": "An error occurred. Please try again.",
     "PasswordResetGenerationError": "Unable to send reset email. Please try again later.",
     "RateLimitError": "Too many requests. Please try again later."

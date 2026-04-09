@@ -110,8 +110,8 @@ const { t } = useTranslation('authentication', {
 const authn = inject('authn');
 
 const state = reactive({
-  reset_code: route.query.code || '',
-  email: route.query.email || '',
+  reset_code: typeof route.query.code === 'string' ? route.query.code : '',
+  email: typeof route.query.email === 'string' ? route.query.email : '',
   codeValidated: false,
   isRegistration: false,
   password: '',
@@ -122,7 +122,6 @@ const state = reactive({
 
 onBeforeMount(async () => {
   if (state.reset_code) {
-    console.log("checking password reset token");
     await submitResetCode();
   }
 });

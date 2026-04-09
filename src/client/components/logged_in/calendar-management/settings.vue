@@ -24,6 +24,7 @@
           <p class="input-description">{{ t('calendar_title_help') }}</p>
 
           <LanguageTabSelector
+            ref="contentLangTabs"
             v-model="state.currentLanguage"
             :languages="localCalendar ? localCalendar.getLanguages() : []"
             :errored-tabs="erroredTabs"
@@ -32,6 +33,9 @@
           />
 
           <div
+            :id="contentLangTabs?.panelId(state.currentLanguage)"
+            role="tabpanel"
+            :aria-labelledby="contentLangTabs?.tabId(state.currentLanguage)"
             :dir="iso6391.getDir(state.currentLanguage) === 'rtl' ? 'rtl' : 'ltr'"
             class="translatable-fields"
           >
@@ -257,6 +261,7 @@ const availableLanguages = ref([...new Set(allLanguages)]);
 
 // Local calendar clone for translatable content editing
 const localCalendar = ref(null);
+const contentLangTabs = ref(null);
 
 // Component state
 const state = reactive({

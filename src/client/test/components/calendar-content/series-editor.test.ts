@@ -47,6 +47,10 @@ const createWrapper = (series: EventSeries) => {
         template: '<div class="language-tab-stub"></div>',
         props: ['modelValue', 'languages', 'erroredTabs'],
         emits: ['update:modelValue', 'add-language', 'remove-language'],
+        methods: {
+          panelId(lang: string) { return `stub-${lang}-panel`; },
+          tabId(lang: string) { return `stub-${lang}-tab`; },
+        },
       },
       LanguagePicker: {
         template: '<div class="language-picker-stub"></div>',

@@ -6,6 +6,7 @@
  * Replaces the dropdown language selector with horizontal tab chips.
  */
 
+import { useId } from 'vue';
 import { Plus } from 'lucide-vue-next';
 import iso6391 from 'iso-639-1-dir';
 import { useTranslation } from 'i18next-vue';
@@ -33,6 +34,10 @@ const emit = defineEmits<{
 
 const { tabsRef, canScrollLeft, canScrollRight } = useTabScroll();
 
+const uid = useId();
+const panelId = (lang: string) => `${uid}-${lang}-panel`;
+const tabId = (lang: string) => `${uid}-${lang}-tab`;
+
 const selectLanguage = (lang: string) => {
   emit('update:modelValue', lang);
 };
@@ -40,6 +45,35 @@ const selectLanguage = (lang: string) => {
 const addLanguage = () => {
   emit('add-language');
 };
+
+const onTabKeydown = (event: KeyboardEvent) => {
+  const langs = props.languages;
+  if (langs.length === 0) return;
+  const currentIdx = langs.indexOf(props.modelValue);
+  let nextIdx = currentIdx;
+  switch (event.key) {
+    case 'ArrowRight':
+      nextIdx = currentIdx < 0 ? 0 : (currentIdx + 1) % langs.length;
+      break;
+    case 'ArrowLeft':
+      nextIdx = currentIdx <= 0 ? langs.length - 1 : currentIdx - 1;
+      break;
+    case 'Home':
+      nextIdx = 0;
+      break;
+    case 'End':
+      nextIdx = langs.length - 1;
+      break;
+    default:
+      return;
+  }
+  event.preventDefault();
+  if (langs[nextIdx] !== props.modelValue) {
+    emit('update:modelValue', langs[nextIdx]);
+  }
+};
+
+defineExpose({ panelId, tabId });
 </script>
 
 <template>
@@ -56,11 +90,14 @@ const addLanguage = () => {
         :key="lang"
         type="button"
         role="tab"
+        :id="tabId(lang)"
         :aria-selected="lang === modelValue ? 'true' : 'false'"
-        :aria-controls="`content-${lang}`"
+        :aria-controls="panelId(lang)"
+        :tabindex="lang === modelValue ? 0 : -1"
         class="language-tab"
         :class="{ 'has-error': erroredTabs.includes(lang) }"
         @click="selectLanguage(lang)"
+        @keydown="onTabKeydown"
         :aria-label="erroredTabs.includes(lang)
           ? t('edit_content_error', { language: iso6391.getName(lang) })
           : t('edit_content', { language: iso6391.getName(lang) })"

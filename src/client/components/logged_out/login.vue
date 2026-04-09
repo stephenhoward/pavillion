@@ -16,7 +16,7 @@ const { t } = useTranslation('authentication', {
 
 const state = reactive({
   err      : '',
-  email    : route.query.email || '',
+  email    : typeof route.query.email === 'string' ? route.query.email : '',
   password : '',
   registrationMode : site_config.settings().registrationMode,
 });
