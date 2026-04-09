@@ -870,10 +870,14 @@ const updateStartDate = () => {
  * Handles start date input changes. Updates the start date and auto-syncs
  * the end date if the user has not manually overridden it.
  */
+let previousStartDate = initialDate;
 const onStartDateChange = () => {
-  if (!state.eventEndDateManuallySet && state.date) {
+  if (state.date && (!state.eventEndDateManuallySet || state.eventEndDate === previousStartDate)) {
+    // Auto-sync end date when it matched the previous start date (same-day event)
+    // or when the user hasn't manually changed the end date yet.
     state.eventEndDate = state.date;
   }
+  previousStartDate = state.date;
   updateStartDate();
 };
 
