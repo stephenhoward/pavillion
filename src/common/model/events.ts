@@ -388,10 +388,10 @@ class CalendarEventSchedule extends Model {
   toObject(): Record<string, any> {
     return {
       id: this.id,
-      start: this.startDate?.toISO(),
-      end: this.endDate?.toISO(),
-      eventEndTime: this.eventEndTime?.toISO(),
-      frequency: this.frequency as string,
+      start: this.startDate?.toISO() ?? null,
+      end: this.endDate?.toISO() ?? null,
+      eventEndTime: this.eventEndTime?.toISO() ?? null,
+      frequency: this.frequency as string ?? null,
       interval: this.interval,
       count: this.count,
       byDay: this.byDay,

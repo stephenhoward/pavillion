@@ -848,16 +848,19 @@ class EventService {
             ? parsed.byDay.join(',')
             : scheduleEntity.by_day;
 
+          // Use parsed model values for fields present in the request.
+          // For clearable fields (end_date, count, frequency), check the raw
+          // request to distinguish "explicitly cleared" from "not sent".
           await scheduleEntity.update({
             timezone: parsed.startDate?.zoneName ?? scheduleEntity.timezone,
             start_date: toStorageDate(parsed.startDate) ?? scheduleEntity.start_date,
-            end_date: toStorageDate(parsed.endDate) ?? scheduleEntity.end_date,
-            event_end_time: toStorageDate(parsed.eventEndTime) ?? scheduleEntity.event_end_time,
-            frequency: parsed.frequency ?? scheduleEntity.frequency,
-            interval: parsed.interval ?? scheduleEntity.interval,
-            count: parsed.count ?? scheduleEntity.count,
+            end_date: 'end' in schedule ? (toStorageDate(parsed.endDate) ?? null) : scheduleEntity.end_date,
+            event_end_time: 'eventEndTime' in schedule ? (toStorageDate(parsed.eventEndTime) ?? null) : scheduleEntity.event_end_time,
+            frequency: 'frequency' in schedule ? (parsed.frequency as string ?? null) : scheduleEntity.frequency,
+            interval: 'interval' in schedule ? (parsed.interval ?? 0) : scheduleEntity.interval,
+            count: 'count' in schedule ? (parsed.count ?? 0) : scheduleEntity.count,
             by_day: byDayValue,
-            is_exclusion: parsed.isExclusion ?? scheduleEntity.is_exclusion,
+            is_exclusion: 'isException' in schedule ? (parsed.isExclusion ?? false) : scheduleEntity.is_exclusion,
           });
           event.addSchedule(scheduleEntity.toModel());
         }
