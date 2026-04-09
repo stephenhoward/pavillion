@@ -36,11 +36,16 @@ describe('EventInstanceService repost instance methods', () => {
   /**
    * Helper to create a CalendarEvent with a single-date schedule.
    */
+  // Stable reference time for deterministic instance generation. Passed
+  // explicitly to buildRepostInstances so the test doesn't depend on the
+  // wall clock or on the production horizon constant.
+  const TEST_NOW = new Date('2026-04-01T00:00:00Z');
+
   function createTestEvent(eventId: string, calendarId: string | null): CalendarEvent {
     const event = new CalendarEvent(eventId, calendarId);
     const schedule = new CalendarEventSchedule();
-    schedule.startDate = DateTime.fromISO('2026-04-01T10:00:00.000Z');
-    schedule.endDate = DateTime.fromISO('2026-04-01T12:00:00.000Z');
+    schedule.startDate = DateTime.fromISO('2026-04-10T10:00:00.000Z');
+    schedule.endDate = DateTime.fromISO('2026-04-10T12:00:00.000Z');
     schedule.frequency = null;
     schedule.interval = 1;
     schedule.count = null;
@@ -94,7 +99,7 @@ describe('EventInstanceService repost instance methods', () => {
         calendar_id: '',
       } as any);
 
-      await service.buildRepostInstances(event, repostCalendarId);
+      await service.buildRepostInstances(event, repostCalendarId, TEST_NOW);
 
       // Should have called destroy for the removal step
       expect(destroyStub.calledOnce).toBe(true);
@@ -132,7 +137,7 @@ describe('EventInstanceService repost instance methods', () => {
         calendar_id: '',
       } as any);
 
-      await service.buildRepostInstances(event, repostCalendarId);
+      await service.buildRepostInstances(event, repostCalendarId, TEST_NOW);
 
       expect((EventScheduleEntity.findAll as sinon.SinonStub).calledOnce).toBe(true);
       expect((EventScheduleEntity.findAll as sinon.SinonStub).firstCall.args[0]).toEqual({
@@ -154,7 +159,7 @@ describe('EventInstanceService repost instance methods', () => {
         return entity as any;
       });
 
-      await service.buildRepostInstances(event, repostCalendarId);
+      await service.buildRepostInstances(event, repostCalendarId, TEST_NOW);
 
       expect(savedEntities.length).toBeGreaterThan(0);
       for (const entity of savedEntities) {

@@ -55,7 +55,7 @@ describe('EventInstanceService.generateInstances', () => {
       createSchedule({ startDate: start, eventEndTime: endTime }),
     ]);
 
-    const instances = (service as any).generateInstances(event, 10);
+    const instances = (service as any).generateInstances(event, new Date('2026-04-01T00:00:00Z'));
 
     expect(instances).toHaveLength(1);
     expect(instances[0].start.toISO()).toBe(start.toISO());
@@ -79,7 +79,7 @@ describe('EventInstanceService.generateInstances', () => {
       }),
     ]);
 
-    const instances = (service as any).generateInstances(event, 5);
+    const instances = (service as any).generateInstances(event, new Date('2026-04-01T00:00:00Z'));
 
     expect(instances.length).toBeGreaterThanOrEqual(2);
 
@@ -102,7 +102,7 @@ describe('EventInstanceService.generateInstances', () => {
       createSchedule({ startDate: start }),
     ]);
 
-    const instances = (service as any).generateInstances(event, 10);
+    const instances = (service as any).generateInstances(event, new Date('2026-04-01T00:00:00Z'));
 
     expect(instances).toHaveLength(1);
     expect(instances[0].start.toISO()).toBe(start.toISO());
@@ -122,7 +122,7 @@ describe('EventInstanceService.generateInstances', () => {
       }),
     ]);
 
-    const instances = (service as any).generateInstances(event, 5);
+    const instances = (service as any).generateInstances(event, new Date('2026-04-01T00:00:00Z'));
 
     expect(instances.length).toBeGreaterThanOrEqual(2);
     for (const instance of instances) {
@@ -151,7 +151,7 @@ describe('EventInstanceService.generateInstances', () => {
       }),
     ]);
 
-    const instances = (service as any).generateInstances(event, 10);
+    const instances = (service as any).generateInstances(event, new Date('2026-04-01T00:00:00Z'));
 
     // All instances should use the 2-hour duration from the non-exclusion schedule
     for (const instance of instances) {
@@ -180,14 +180,19 @@ describe('EventInstanceService.generateInstances', () => {
         }),
       ]);
 
-      const instances = (service as any).generateInstances(event, 4);
+      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
       const dates = instances.map((i: any) => i.start.toUTC().toISODate());
 
+      // With a 6-month window from now=2025-08-15, we expect the first Monday
+      // of each month from Sept 2025 through Feb 2026 (window ends 2026-02-15,
+      // so Feb 2's first-Monday is included but a hypothetical March entry is not).
       expect(dates).toEqual([
-        '2025-09-01', // first Monday of Sept 2025
-        '2025-10-06', // first Monday of Oct 2025
-        '2025-11-03', // first Monday of Nov 2025
-        '2025-12-01', // first Monday of Dec 2025
+        '2025-09-01',
+        '2025-10-06',
+        '2025-11-03',
+        '2025-12-01',
+        '2026-01-05',
+        '2026-02-02',
       ]);
     });
 
@@ -206,8 +211,9 @@ describe('EventInstanceService.generateInstances', () => {
         }),
       ]);
 
-      const instances = (service as any).generateInstances(event, 3);
+      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
       // Every generated instance must be a Monday (Luxon weekday 1)
+      expect(instances.length).toBeGreaterThan(0);
       for (const inst of instances) {
         expect(inst.start.toUTC().weekday).toBe(1);
       }
@@ -224,13 +230,17 @@ describe('EventInstanceService.generateInstances', () => {
         }),
       ]);
 
-      const instances = (service as any).generateInstances(event, 3);
+      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
       const dates = instances.map((i: any) => i.start.toUTC().toISODate());
 
+      // Feb 2026's last Friday is the 27th, which is past the 2026-02-15
+      // window end, so it is excluded.
       expect(dates).toEqual([
-        '2025-09-26', // last Friday of Sept 2025
-        '2025-10-31', // last Friday of Oct 2025
-        '2025-11-28', // last Friday of Nov 2025
+        '2025-09-26',
+        '2025-10-31',
+        '2025-11-28',
+        '2025-12-26',
+        '2026-01-30',
       ]);
     });
 
@@ -245,10 +255,12 @@ describe('EventInstanceService.generateInstances', () => {
         }),
       ]);
 
-      const instances = (service as any).generateInstances(event, 6);
+      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
       const dates = instances.map((i: any) => i.start.toUTC().toISODate());
 
-      expect(dates).toEqual([
+      // Assert the first 6 expansions (the full 6-month window contains many
+      // more; the shape of the expansion is what matters here, not the count).
+      expect(dates.slice(0, 6)).toEqual([
         '2025-09-01', // Mon
         '2025-09-03', // Wed
         '2025-09-05', // Fri
@@ -269,15 +281,24 @@ describe('EventInstanceService.generateInstances', () => {
         }),
       ]);
 
-      const instances = (service as any).generateInstances(event, 2);
+      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
       const dates = instances.map((i: any) => i.start.toUTC().toISODate());
 
-      expect(dates).toEqual(['2025-09-01', '2025-10-06']);
+      // Garbage entry is filtered out; "1MO" yields first-Monday-of-month
+      // expansion across the full 6-month window.
+      expect(dates).toEqual([
+        '2025-09-01',
+        '2025-10-06',
+        '2025-11-03',
+        '2025-12-01',
+        '2026-01-05',
+        '2026-02-02',
+      ]);
     });
 
     // Regex-passing but semantically invalid weekday code: "1ZZ" matches the
-    // (-?\d+)?([A-Z]{2}) shape but Weekday.fromStr rejects "ZZ". Verify the
-    // try/catch path returns null and the entry is filtered out.
+    // (-?\d+)?([A-Z]{2}) shape but "ZZ" is not in ALL_WEEKDAYS. Verify the
+    // validation path returns null and the entry is filtered out.
     it('should skip byDay entries whose day code is not a real weekday', () => {
       const start = DateTime.fromISO('2025-09-01T09:00:00', { zone: 'utc' });
       const event = createEvent([
@@ -289,10 +310,143 @@ describe('EventInstanceService.generateInstances', () => {
         }),
       ]);
 
-      const instances = (service as any).generateInstances(event, 2);
+      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
       const dates = instances.map((i: any) => i.start.toUTC().toISODate());
 
-      expect(dates).toEqual(['2025-09-01', '2025-10-06']);
+      expect(dates).toEqual([
+        '2025-09-01',
+        '2025-10-06',
+        '2025-11-03',
+        '2025-12-01',
+        '2026-01-05',
+        '2026-02-02',
+      ]);
+    });
+  });
+
+  describe('generation window', () => {
+    // Canonical demo-server bug: indefinite monthly schedule with a dtstart
+    // far in the past previously expanded the first 10 instances starting at
+    // dtstart (so all historical), regardless of "now". The new behavior is a
+    // rolling [now, now + 6 months] window anchored at now, so past
+    // occurrences wash out and only upcoming ones are materialized.
+    it('should generate only upcoming instances when dtstart is in the past', () => {
+      const start = DateTime.fromISO('2024-01-01T09:00:00', { zone: 'utc' }); // ~18 months before now
+      const event = createEvent([
+        createSchedule({
+          startDate: start,
+          frequency: EventFrequency.MONTHLY,
+          interval: 1,
+        }),
+      ]);
+
+      const now = new Date('2025-08-15T00:00:00Z');
+      const instances = (service as any).generateInstances(event, now);
+      const dates = instances.map((i: any) => i.start.toUTC().toISODate());
+
+      // None of the historical occurrences (2024-01 through 2025-07) should
+      // appear. First expected instance is 2025-09-01 (first monthly anchor
+      // on or after now). Horizon covers through 2026-02-15 so we get six.
+      expect(dates).toEqual([
+        '2025-09-01',
+        '2025-10-01',
+        '2025-11-01',
+        '2025-12-01',
+        '2026-01-01',
+        '2026-02-01',
+      ]);
+    });
+
+    it('should cover approximately 6 months of a weekly schedule', () => {
+      const start = DateTime.fromISO('2025-09-01T09:00:00', { zone: 'utc' });
+      const event = createEvent([
+        createSchedule({
+          startDate: start,
+          frequency: EventFrequency.WEEKLY,
+          interval: 1,
+        }),
+      ]);
+
+      // 6 months ≈ 26 weeks; allow a narrow tolerance for month-length drift.
+      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
+      expect(instances.length).toBeGreaterThanOrEqual(24);
+      expect(instances.length).toBeLessThanOrEqual(28);
+    });
+
+    it('should honor count-bounded schedules within the window', () => {
+      const start = DateTime.fromISO('2025-09-01T09:00:00', { zone: 'utc' });
+      const event = createEvent([
+        createSchedule({
+          startDate: start,
+          frequency: EventFrequency.WEEKLY,
+          interval: 1,
+          count: 3,
+        }),
+      ]);
+
+      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
+      // Exactly 3 from the bounded rule; between() intersects with the window
+      // but all 3 are well inside [2025-08-15, 2026-02-15].
+      expect(instances).toHaveLength(3);
+    });
+
+    it('should honor until-bounded schedules within the window', () => {
+      const start = DateTime.fromISO('2025-09-01T09:00:00', { zone: 'utc' });
+      const end = DateTime.fromISO('2025-09-22T09:00:00', { zone: 'utc' });
+      const event = createEvent([
+        createSchedule({
+          startDate: start,
+          endDate: end,
+          frequency: EventFrequency.WEEKLY,
+          interval: 1,
+        }),
+      ]);
+
+      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
+      const dates = instances.map((i: any) => i.start.toUTC().toISODate());
+
+      expect(dates).toEqual(['2025-09-01', '2025-09-08', '2025-09-15', '2025-09-22']);
+    });
+
+    it('should include a non-recurring event whose start is in the future window', () => {
+      const start = DateTime.fromISO('2025-10-10T09:00:00', { zone: 'utc' });
+      const event = createEvent([
+        createSchedule({ startDate: start }),
+      ]);
+
+      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
+      expect(instances).toHaveLength(1);
+      expect(instances[0].start.toUTC().toISODate()).toBe('2025-10-10');
+    });
+
+    // Regression guard against silent read-model drift (PR #182 audit):
+    // past non-recurring events MUST be preserved across regenerations so
+    // that their event_instance row, shareable anonymous URL (DEC-004),
+    // per-event ICS download, and OG meta tags remain stable once the
+    // event date has passed. This would previously have been dropped by a
+    // naive [now, now + 6mo] window.
+    it('should preserve a non-recurring event whose start is in the past', () => {
+      const start = DateTime.fromISO('2024-05-01T09:00:00', { zone: 'utc' });
+      const event = createEvent([
+        createSchedule({ startDate: start }),
+      ]);
+
+      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
+      expect(instances).toHaveLength(1);
+      expect(instances[0].start.toUTC().toISODate()).toBe('2024-05-01');
+    });
+
+    // Past rdates should still be suppressible by an exdate — exclusions
+    // apply uniformly regardless of whether the occurrence is past or future.
+    it('should still honor exdate suppression for a past non-recurring event', () => {
+      const start = DateTime.fromISO('2024-05-01T09:00:00', { zone: 'utc' });
+      const event = createEvent([
+        createSchedule({ startDate: start }),
+        createSchedule({ startDate: start, isExclusion: true }),
+      ]);
+
+      const instances = (service as any).generateInstances(event, new Date('2025-08-15T00:00:00Z'));
+      expect(instances).toHaveLength(0);
     });
   });
 });
