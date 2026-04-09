@@ -839,6 +839,7 @@ const state = reactive({
   eventEndDate: initialEndDate,
   eventEndTime: initialEndTime,
   eventEndDateManuallySet: initialEndDateManuallySet,
+  previousStartDate: initialDate,
   timezone: getLocalTimezone(),
   endDate: props.schedule.endDate ? props.schedule.endDate.toISO() : '',
   // Restore end-type from existing schedule so the correct radio is selected
@@ -870,14 +871,13 @@ const updateStartDate = () => {
  * Handles start date input changes. Updates the start date and auto-syncs
  * the end date if the user has not manually overridden it.
  */
-let previousStartDate = initialDate;
 const onStartDateChange = () => {
-  if (state.date && (!state.eventEndDateManuallySet || state.eventEndDate === previousStartDate)) {
+  if (state.date && (!state.eventEndDateManuallySet || state.eventEndDate === state.previousStartDate)) {
     // Auto-sync end date when it matched the previous start date (same-day event)
     // or when the user hasn't manually changed the end date yet.
     state.eventEndDate = state.date;
   }
-  previousStartDate = state.date;
+  state.previousStartDate = state.date;
   updateStartDate();
 };
 

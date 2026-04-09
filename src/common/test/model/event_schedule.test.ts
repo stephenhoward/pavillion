@@ -57,6 +57,21 @@ describe('CalendarEventSchedule.eventEndTime', () => {
     expect(schedule.eventEndTime).toBeNull();
   });
 
+  it('should serialize null startDate as null in toObject()', () => {
+    const schedule = new CalendarEventSchedule('s1');
+    expect(schedule.toObject().start).toBeNull();
+  });
+
+  it('should serialize null endDate as null in toObject()', () => {
+    const schedule = new CalendarEventSchedule('s1');
+    expect(schedule.toObject().end).toBeNull();
+  });
+
+  it('should serialize null frequency as null in toObject()', () => {
+    const schedule = new CalendarEventSchedule('s1');
+    expect(schedule.toObject().frequency).toBeNull();
+  });
+
   it('should round-trip eventEndTime through toObject and fromObject', () => {
     const schedule = new CalendarEventSchedule('s1');
     schedule.startDate = DateTime.fromISO('2026-04-03T10:00:00.000Z');

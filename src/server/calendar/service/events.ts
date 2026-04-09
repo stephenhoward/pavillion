@@ -1,7 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import config from 'config';
 import axios from 'axios';
-import { DateTime } from 'luxon';
 
 import { Account } from "@/common/model/account";
 import { Calendar } from "@/common/model/calendar";
@@ -838,25 +837,21 @@ class EventService {
             parsed.endDate = parsed.eventEndTime;
           }
 
-          // Convert DateTime to storage format with timezone-aware conversion
-          const toStorageDate = (dt: DateTime | null | undefined): Date | undefined => {
-            if (!dt) return undefined;
-            return dt.setZone('UTC', { keepLocalTime: true }).toJSDate();
-          };
-
           const byDayValue = parsed.byDay !== undefined && parsed.byDay.length > 0
             ? parsed.byDay.join(',')
             : scheduleEntity.by_day;
 
           // Use parsed model values for fields present in the request.
           // For clearable fields (end_date, count, frequency), check the raw
-          // request to distinguish "explicitly cleared" from "not sent".
+          // request keys to distinguish "explicitly cleared" from "not sent".
+          // Raw key names: start/end/eventEndTime/frequency/interval/count/isException
+          const toStorage = EventScheduleEntity.toStorageDate;
           await scheduleEntity.update({
             timezone: parsed.startDate?.zoneName ?? scheduleEntity.timezone,
-            start_date: toStorageDate(parsed.startDate) ?? scheduleEntity.start_date,
-            end_date: 'end' in schedule ? (toStorageDate(parsed.endDate) ?? null) : scheduleEntity.end_date,
-            event_end_time: 'eventEndTime' in schedule ? (toStorageDate(parsed.eventEndTime) ?? null) : scheduleEntity.event_end_time,
-            frequency: 'frequency' in schedule ? (parsed.frequency as string ?? null) : scheduleEntity.frequency,
+            start_date: toStorage(parsed.startDate) ?? scheduleEntity.start_date,
+            end_date: 'end' in schedule ? (toStorage(parsed.endDate) ?? null) : scheduleEntity.end_date,
+            event_end_time: 'eventEndTime' in schedule ? (toStorage(parsed.eventEndTime) ?? null) : scheduleEntity.event_end_time,
+            frequency: 'frequency' in schedule ? ((parsed.frequency as string) ?? null) : scheduleEntity.frequency,
             interval: 'interval' in schedule ? (parsed.interval ?? 0) : scheduleEntity.interval,
             count: 'count' in schedule ? (parsed.count ?? 0) : scheduleEntity.count,
             by_day: byDayValue,

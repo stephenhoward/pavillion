@@ -228,21 +228,25 @@ class EventScheduleEntity extends Model {
     return schedule;
   }
 
+  /**
+   * Converts a Luxon DateTime to a JS Date for database storage,
+   * preserving local-time digit values as UTC digits.
+   * Sequelize SQLite appends "+00:00" to naive strings, treating stored values as UTC.
+   * By converting with keepLocalTime: true, toModel() can reverse this correctly.
+   */
+  static toStorageDate(dt: DateTime | null | undefined): Date | undefined {
+    if (!dt) return undefined;
+    return dt.setZone('UTC', { keepLocalTime: true }).toJSDate();
+  }
+
   static fromModel(schedule: CalendarEventSchedule): EventScheduleEntity {
     const tz = schedule.startDate?.zoneName ?? 'UTC';
-    // Store dates so that the local-time digit values are preserved as UTC digits.
-    // Sequelize SQLite appends "+00:00" to naive strings, treating stored values as UTC.
-    // By converting with keepLocalTime: true, toModel() can reverse this correctly.
-    const toStorageDate = (dt: DateTime | null | undefined): Date | undefined => {
-      if (!dt) return undefined;
-      return dt.setZone('UTC', { keepLocalTime: true }).toJSDate();
-    };
     return EventScheduleEntity.build({
       id: schedule.id,
       timezone: tz,
-      start_date: toStorageDate(schedule.startDate),
-      end_date: toStorageDate(schedule.endDate),
-      event_end_time: toStorageDate(schedule.eventEndTime),
+      start_date: EventScheduleEntity.toStorageDate(schedule.startDate),
+      end_date: EventScheduleEntity.toStorageDate(schedule.endDate),
+      event_end_time: EventScheduleEntity.toStorageDate(schedule.eventEndTime),
       frequency: schedule.frequency as string,
       interval: schedule.interval,
       count: schedule.count,

@@ -391,7 +391,7 @@ class CalendarEventSchedule extends Model {
       start: this.startDate?.toISO() ?? null,
       end: this.endDate?.toISO() ?? null,
       eventEndTime: this.eventEndTime?.toISO() ?? null,
-      frequency: this.frequency as string ?? null,
+      frequency: (this.frequency as string) ?? null,
       interval: this.interval,
       count: this.count,
       byDay: this.byDay,
