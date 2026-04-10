@@ -23,6 +23,7 @@ import { TestEnvironment } from '@/server/test/lib/test_environment';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import { FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
 import { EventRepostEntity } from '@/server/calendar/entity/event_repost';
+import { SharedEventEntity } from '@/server/activitypub/entity/activitypub';
 import EventService from '@/server/calendar/service/events';
 
 describe('Feed includes reposts from followed local calendars (pv-ru1j)', () => {
@@ -225,5 +226,57 @@ describe('Feed includes reposts from followed local calendars (pv-ru1j)', () => 
 
     const feedEventIds = feed.map(e => e.id);
     expect(feedEventIds).toContain(remoteEventId);
+  });
+
+  it('includes an event auto-reposted (SharedEventEntity) by a followed local calendar', async () => {
+    // Self-contained: ensure A follows B
+    const existingActorB = await CalendarActorEntity.findOne({
+      where: { calendar_id: calendarB.id },
+    });
+    const actorBId = existingActorB?.id || uuidv4();
+    if (!existingActorB) {
+      await CalendarActorEntity.create({
+        id: actorBId,
+        actor_type: 'local',
+        calendar_id: calendarB.id,
+        actor_uri: `https://pavillion.dev/actor/${calendarB.urlName}`,
+      });
+    }
+    const existingFollow = await FollowingCalendarEntity.findOne({
+      where: { calendar_id: calendarA.id, calendar_actor_id: actorBId },
+    });
+    if (!existingFollow) {
+      await FollowingCalendarEntity.create({
+        id: uuidv4(),
+        calendar_actor_id: actorBId,
+        calendar_id: calendarA.id,
+        auto_repost_originals: false,
+        auto_repost_reposts: false,
+      });
+    }
+
+    // Calendar C owns an event
+    const sharedEvent = await calendarInterface.createEvent(accountC, {
+      calendarId: calendarC.id,
+      content: { en: { name: 'Auto-Reposted Event', description: 'Shared via AP' } },
+      start_date: '2026-08-01',
+      start_time: '10:00',
+      end_date: '2026-08-01',
+      end_time: '12:00',
+    });
+
+    // Calendar B auto-reposts the event (via AP auto-repost, stored in SharedEventEntity)
+    await SharedEventEntity.create({
+      id: uuidv4(),
+      event_id: sharedEvent.id,
+      calendar_id: calendarB.id,
+      auto_posted: true,
+    });
+
+    // Fetch Calendar A's feed — should include the auto-reposted event
+    const feed = await eventService.getEventsFromFollowedSources(calendarA);
+
+    const feedEventIds = feed.map(e => e.id);
+    expect(feedEventIds).toContain(sharedEvent.id);
   });
 });

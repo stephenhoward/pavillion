@@ -56,6 +56,14 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
       payload.calendar,
       new AnnounceActivity(actorUrl, eventUrl),
     );
+
+    // Trigger local auto-repost for same-instance followers
+    try {
+      await this.service.performLocalAutoReposts(payload.calendar, payload.event, true);
+    }
+    catch (error) {
+      logError(error, '[LOCAL-AUTO-REPOST] Failed during eventCreated');
+    }
   }
 
   /**

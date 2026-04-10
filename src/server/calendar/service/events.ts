@@ -1661,6 +1661,19 @@ class EventService {
               ),
             },
           },
+          // Events auto-reposted (shared via AP) by followed local calendars.
+          // Auto-repost creates SharedEventEntity records, not EventRepostEntity,
+          // so this condition is needed to surface multi-hop reposted events.
+          {
+            id: {
+              [Op.in]: EventEntity.sequelize!.literal(
+                `(SELECT se.event_id FROM ap_shared_event se
+                  JOIN calendar_actor ca ON se.calendar_id = ca.calendar_id AND ca.actor_type = 'local'
+                  JOIN ap_following f ON f.calendar_actor_id = ca.id
+                  WHERE f.calendar_id = ${escapedCalendarId})`,
+              ),
+            },
+          },
         ],
       },
       include: [
