@@ -1621,9 +1621,14 @@ class EventService {
               ),
             },
           },
-          // Remote events announced/shared by followed remote calendars
+          // Events announced/shared by followed remote calendars.
+          // Includes BOTH remote-origin events (calendar_id = null) and
+          // local-origin events (calendar_id = UUID) — the latter surfaces
+          // when a followed remote peer shares one of our own events back
+          // to us (e.g., cross-instance auto-repost self-origin loop). No
+          // calendar_id outer filter: the ea.type='share' + remote actor +
+          // ap_following joins are sufficient semantic filters.
           {
-            calendar_id: null,
             id: {
               [Op.in]: EventEntity.sequelize!.literal(
                 `(SELECT eo.event_id FROM ap_event_object eo

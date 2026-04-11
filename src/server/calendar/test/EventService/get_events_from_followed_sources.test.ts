@@ -136,9 +136,13 @@ describe('EventService.getEventsFromFollowedSources', () => {
     expect(remoteOriginalsCondition.calendar_id).toBeNull();
     expect(remoteOriginalsCondition.id[Op.in]).toBeDefined();
 
-    // Second condition: remote events announced/shared by followed remote calendars
+    // Second condition: events announced/shared by followed remote calendars.
+    // No calendar_id outer filter: the ea.type='share' + remote-actor +
+    // ap_following joins provide the semantic filter, and both remote-origin
+    // (calendar_id = null) and local-origin events (shared back via a
+    // cross-instance self-origin loop) must be surfaced.
     const remoteAnnouncementsCondition = queryOptions.where[Op.or][1];
-    expect(remoteAnnouncementsCondition.calendar_id).toBeNull();
+    expect(remoteAnnouncementsCondition.calendar_id).toBeUndefined();
     expect(remoteAnnouncementsCondition.id[Op.in]).toBeDefined();
 
     // Third condition: local events from followed local calendars
