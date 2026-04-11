@@ -17,8 +17,10 @@ import AnnounceActivity from "@/server/activitypub/model/action/announce";
 import CreateActivity from "@/server/activitypub/model/action/create";
 import UndoActivity from "@/server/activitypub/model/action/undo";
 import FlagActivity from "@/server/activitypub/model/action/flag";
-import { ActivityPubObject } from "@/server/activitypub/model/base";
+import { ActivityPubActivity, ActivityPubObject } from "@/server/activitypub/model/base";
 import CalendarInterface from "@/server/calendar/interface";
+import CalendarActorService from "@/server/activitypub/service/calendar_actor";
+import ProcessInboxService from "@/server/activitypub/service/inbox";
 import { FEDERATION_HTTP_TIMEOUT_MS } from "@/server/common/constants";
 import { validateUrlNotPrivate } from "@/server/common/helper/ip-validation";
 
@@ -28,9 +30,24 @@ import { validateUrlNotPrivate } from "@/server/common/helper/ip-validation";
  */
 class ProcessOutboxService {
   calendarService: CalendarInterface;
+  calendarActorService: CalendarActorService;
+  private inboxService: ProcessInboxService | null;
 
-  constructor(eventBus: EventEmitter) {
+  /**
+   * @param eventBus - Shared event bus
+   * @param inboxService - Required in production (wired by ActivityPubInterface).
+   *   Optional only to preserve backward compatibility with existing test
+   *   fixtures that construct ProcessOutboxService(eventBus). When null,
+   *   local recipients fall back to HTTP delivery — pre-Phase-3 behavior,
+   *   a test-only degradation.
+   */
+  constructor(eventBus: EventEmitter, inboxService?: ProcessInboxService) {
     this.calendarService = new CalendarInterface(eventBus);
+    this.calendarActorService = new CalendarActorService(this.calendarService);
+    this.inboxService = inboxService ?? null;
+    if (!this.inboxService) {
+      logger.warn('[OUTBOX] constructed without ProcessInboxService — local recipients will degrade to HTTP delivery (test-only path)');
+    }
   }
 
   /**
@@ -155,46 +172,53 @@ class ProcessOutboxService {
 
       let deliveryErrors: string[] = [];
 
-      for( const recipient of recipients ) {
-        const inboxUrl = await this.resolveInboxUrl(recipient);
+      for (const recipient of recipients) {
+        // Decide whether this recipient can be served in-process (local) or
+        // must be HTTP-delivered (remote). Only Announce activities are eligible
+        // for in-process dispatch; Create/Update/Delete fall through to HTTP
+        // regardless of actor type, pending pv-fs02 (HTTP signatures) and a
+        // decision about whether to extend local dispatch to all activity types.
+        const canDispatchLocally = this.inboxService !== null && message.type === 'Announce';
+        const localCalendar = canDispatchLocally
+          ? await this.calendarActorService.getLocalCalendarByActorUri(recipient)
+          : null;
 
-        if ( inboxUrl ) {
-          // SECURITY: Validate that the inbox URL does not point to a private IP address
-          // to prevent SSRF attacks where a malicious actor profile advertises an internal
-          // network address as its inbox.
+        if (localCalendar) {
+          // Local in-process path: skip HTTP entirely.
           try {
-            await validateUrlNotPrivate(inboxUrl);
-          }
-          catch (error) {
-            const errorMsg = `Security: Blocked delivery to private inbox URL for ${recipient}: ${error instanceof Error ? error.message : String(error)}`;
-            logError(error, `[SECURITY] Blocked delivery to private inbox URL for ${recipient}`);
-            deliveryErrors.push(errorMsg);
-            continue;
-          }
-
-          try {
-            logger.info({ activityType: message.type, inboxUrl }, 'Delivering activity');
-
-            const activityData = activity.toObject();
-
-            await axios.post(inboxUrl, activityData, {
-              timeout: FEDERATION_HTTP_TIMEOUT_MS,
-              maxRedirects: 0,
-              headers: {
-                'Content-Type': 'application/activity+json',
-              },
-            });
-            logger.info({ activityType: message.type, recipient }, 'Successfully delivered activity');
+            await this.inboxService!.handleLocalAnnounceDispatch(localCalendar, activity as AnnounceActivity);
+            logger.info({ recipient }, '[OUTBOX-LOCAL] Dispatched in-process');
           }
           catch (error: any) {
-            const errorMsg = `Failed to deliver to ${recipient}: ${error.message}`;
-            logError(error, `[ActivityPub] Failed to deliver to ${recipient}`);
+            const errorMsg = `Failed local dispatch to ${recipient}: ${error.message}`;
+            logError(error, `[ActivityPub] Failed local dispatch to ${recipient}`);
             deliveryErrors.push(errorMsg);
           }
+          continue;
         }
-        else {
-          logger.info({ recipient }, 'Skipping message because no inbox found');
+
+        // Defensive null-local-calendar guard: when in-process dispatch is
+        // available and the recipient URL shares a hostname with this
+        // outbox message's origin actor (i.e., the recipient looks like it
+        // belongs to a local calendar on this instance), a null result from
+        // getLocalCalendarByActorUri means the CalendarActorEntity row is
+        // missing or stale. HTTP-delivering to such a URL would loop back
+        // to ourselves and almost certainly fail with 404, so skip it.
+        //
+        // Remote recipients (different hostname) and WebFinger handles
+        // continue through deliverViaHttp unchanged.
+        if (canDispatchLocally && this.isSameHostAsActor(recipient, activity.actor)) {
+          logger.warn(
+            { recipient, actor: activity.actor },
+            '[OUTBOX-LOCAL] Skip: recipient looks local but has no CalendarActorEntity row',
+          );
+          continue;
         }
+
+        // Remote HTTP path (covers: remote actors on other hosts, WebFinger
+        // handles, local non-Announce activities, and the test-only
+        // null-inboxService fallback).
+        await this.deliverViaHttp(recipient, message, activity, deliveryErrors);
       }
 
       await message.update({
@@ -210,6 +234,85 @@ class ProcessOutboxService {
         processed_time: DateTime.now().toJSDate(),
         processed_status: 'bad message type',
       });
+    }
+  }
+
+  /**
+   * Delivers an activity to a recipient via HTTP POST to their inbox.
+   * Resolves the recipient's inbox URL, validates it against SSRF protection,
+   * and posts the activity payload. Errors are accumulated into the supplied
+   * deliveryErrors array rather than thrown, preserving the per-recipient
+   * partial-failure semantics of the parent loop.
+   *
+   * SECURITY: validateUrlNotPrivate is called before every HTTP POST to
+   * block delivery to private/internal IPs that a malicious actor profile
+   * could advertise via its inbox field.
+   *
+   * @param recipient - The recipient identifier (actor URI or handle)
+   * @param message - The outbox message entity being processed
+   * @param activity - The parsed activity to deliver
+   * @param deliveryErrors - Accumulator for per-recipient delivery errors
+   * @private
+   */
+  private async deliverViaHttp(
+    recipient: string,
+    message: ActivityPubOutboxMessageEntity,
+    activity: ActivityPubActivity,
+    deliveryErrors: string[],
+  ): Promise<void> {
+    const inboxUrl = await this.resolveInboxUrl(recipient);
+    if (!inboxUrl) {
+      logger.info({ recipient }, 'Skipping message because no inbox found');
+      return;
+    }
+    try {
+      await validateUrlNotPrivate(inboxUrl);
+    }
+    catch (error) {
+      const errorMsg = `Security: Blocked delivery to private inbox URL for ${recipient}: ${error instanceof Error ? error.message : String(error)}`;
+      logError(error, `[SECURITY] Blocked delivery to private inbox URL for ${recipient}`);
+      deliveryErrors.push(errorMsg);
+      return;
+    }
+    try {
+      logger.info({ activityType: message.type, inboxUrl }, 'Delivering activity');
+      const activityData = activity.toObject();
+      await axios.post(inboxUrl, activityData, {
+        timeout: FEDERATION_HTTP_TIMEOUT_MS,
+        maxRedirects: 0,
+        headers: {
+          'Content-Type': 'application/activity+json',
+        },
+      });
+      logger.info({ activityType: message.type, recipient }, 'Successfully delivered activity');
+    }
+    catch (error: any) {
+      const errorMsg = `Failed to deliver to ${recipient}: ${error.message}`;
+      logError(error, `[ActivityPub] Failed to deliver to ${recipient}`);
+      deliveryErrors.push(errorMsg);
+    }
+  }
+
+  /**
+   * Returns true when `recipient` is an HTTP(S) URL and its hostname matches
+   * the hostname of `actorUrl`. Used by the null-local-calendar defensive
+   * guard to detect recipients that look like they belong to this instance
+   * but have no CalendarActorEntity row. WebFinger handles (user@domain) and
+   * malformed URIs return false.
+   *
+   * @private
+   */
+  private isSameHostAsActor(recipient: string, actorUrl: string): boolean {
+    if (!recipient.startsWith('http://') && !recipient.startsWith('https://')) {
+      return false;
+    }
+    try {
+      const recipientHost = new URL(recipient).hostname;
+      const actorHost = new URL(actorUrl).hostname;
+      return recipientHost === actorHost;
+    }
+    catch {
+      return false;
     }
   }
 

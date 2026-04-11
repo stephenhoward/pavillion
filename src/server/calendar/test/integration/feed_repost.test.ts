@@ -21,8 +21,10 @@ import SetupInterface from '@/server/setup/interface';
 import AccountService from '@/server/accounts/service/account';
 import { TestEnvironment } from '@/server/test/lib/test_environment';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
-import { FollowingCalendarEntity } from '@/server/activitypub/entity/activitypub';
+import { FollowingCalendarEntity, EventActivityEntity } from '@/server/activitypub/entity/activitypub';
+import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import { EventRepostEntity } from '@/server/calendar/entity/event_repost';
+import { SharedEventEntity } from '@/server/activitypub/entity/activitypub';
 import EventService from '@/server/calendar/service/events';
 
 describe('Feed includes reposts from followed local calendars (pv-ru1j)', () => {
@@ -225,5 +227,119 @@ describe('Feed includes reposts from followed local calendars (pv-ru1j)', () => 
 
     const feedEventIds = feed.map(e => e.id);
     expect(feedEventIds).toContain(remoteEventId);
+  });
+
+  // Regression: Scenario 5 of auto-repost federation e2e (self-origin loop, cross-instance).
+  //
+  // When a followed REMOTE calendar announces an event that originated on this
+  // instance, the local owner should see it in their feed (that's how a feed
+  // surfaces reposts of one's own events via a followed actor). The share is
+  // tracked on this instance as an EventActivityEntity(type='share') linked to
+  // the remote actor, and the EventObjectEntity maps the AP id back to the
+  // local event row (which has a non-null calendar_id).
+  it('includes a local-origin event shared back by a followed remote calendar', async () => {
+    // Calendar A owns an event on this instance (local origin, non-null calendar_id)
+    const localEvent = await calendarInterface.createEvent(accountA, {
+      calendarId: calendarA.id,
+      content: { en: { name: 'Local Event Shared Back', description: 'Originated here' } },
+      start_date: '2026-09-01',
+      start_time: '10:00',
+      end_date: '2026-09-01',
+      end_time: '12:00',
+    });
+
+    // Track the AP identity for the local event (mirrors handleEventCreated's findOrCreate)
+    const localEventApId = `https://pavillion.dev/${calendarA.urlName}/events/${localEvent.id}`;
+    const localActorUri = `https://pavillion.dev/actor/${calendarA.urlName}`;
+    await EventObjectEntity.create({
+      event_id: localEvent.id,
+      ap_id: localEventApId,
+      attributed_to: localActorUri,
+    });
+
+    // Remote calendar that A follows
+    const remoteActor = await CalendarActorEntity.create({
+      id: uuidv4(),
+      actor_type: 'remote',
+      calendar_id: null,
+      actor_uri: 'https://remote.example.com/actor/peer',
+      remote_domain: 'remote.example.com',
+      private_key: null,
+    });
+    await FollowingCalendarEntity.create({
+      id: uuidv4(),
+      calendar_actor_id: remoteActor.id,
+      calendar_id: calendarA.id,
+      auto_repost_originals: false,
+      auto_repost_reposts: false,
+    });
+
+    // Remote peer announces (shares) A's local event back to us — mirrors what
+    // processShareEvent records when an Announce arrives from a followed remote
+    // for an event whose EventObjectEntity already exists locally.
+    await EventActivityEntity.create({
+      event_id: localEventApId,
+      calendar_actor_id: remoteActor.id,
+      type: 'share',
+    });
+
+    // Fetch Calendar A's feed — should include A's own event surfaced via the
+    // remote peer's share, even though calendar_id is non-null.
+    const feed = await eventService.getEventsFromFollowedSources(calendarA);
+
+    const feedEventIds = feed.map(e => e.id);
+    expect(feedEventIds).toContain(localEvent.id);
+  });
+
+  it('includes an event auto-reposted (SharedEventEntity) by a followed local calendar', async () => {
+    // Self-contained: ensure A follows B
+    const existingActorB = await CalendarActorEntity.findOne({
+      where: { calendar_id: calendarB.id },
+    });
+    const actorBId = existingActorB?.id || uuidv4();
+    if (!existingActorB) {
+      await CalendarActorEntity.create({
+        id: actorBId,
+        actor_type: 'local',
+        calendar_id: calendarB.id,
+        actor_uri: `https://pavillion.dev/actor/${calendarB.urlName}`,
+      });
+    }
+    const existingFollow = await FollowingCalendarEntity.findOne({
+      where: { calendar_id: calendarA.id, calendar_actor_id: actorBId },
+    });
+    if (!existingFollow) {
+      await FollowingCalendarEntity.create({
+        id: uuidv4(),
+        calendar_actor_id: actorBId,
+        calendar_id: calendarA.id,
+        auto_repost_originals: false,
+        auto_repost_reposts: false,
+      });
+    }
+
+    // Calendar C owns an event
+    const sharedEvent = await calendarInterface.createEvent(accountC, {
+      calendarId: calendarC.id,
+      content: { en: { name: 'Auto-Reposted Event', description: 'Shared via AP' } },
+      start_date: '2026-08-01',
+      start_time: '10:00',
+      end_date: '2026-08-01',
+      end_time: '12:00',
+    });
+
+    // Calendar B auto-reposts the event (via AP auto-repost, stored in SharedEventEntity)
+    await SharedEventEntity.create({
+      id: uuidv4(),
+      event_id: sharedEvent.id,
+      calendar_id: calendarB.id,
+      auto_posted: true,
+    });
+
+    // Fetch Calendar A's feed — should include the auto-reposted event
+    const feed = await eventService.getEventsFromFollowedSources(calendarA);
+
+    const feedEventIds = feed.map(e => e.id);
+    expect(feedEventIds).toContain(sharedEvent.id);
   });
 });

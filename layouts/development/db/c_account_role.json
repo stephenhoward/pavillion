@@ -15,6 +15,10 @@
         {
             "account_id": "a4ca1fd1-d365-4824-a78c-c6933f448c8d",
             "role": "user"
+        },
+        {
+            "account_id": "feed0000-0000-4000-8000-000000000001",
+            "role": "user"
         }
     ]
 }

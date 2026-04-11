@@ -90,12 +90,14 @@ describe('EventService.getEventsFromFollowedSources', () => {
     const queryOptions = findAllStub.firstCall.args[0] as any;
     const orConditions = queryOptions.where[Op.or];
 
-    // Extract the raw SQL from all four literal objects
+    // Extract the raw SQL from all five literal objects
     const remoteOriginalsLiteral: string = orConditions[0].id[Op.in].val;
     const remoteAnnouncementsLiteral: string = orConditions[1].id[Op.in].val;
     const localLiteral: string = orConditions[2].calendar_id[Op.in].val;
     // Regression: pv-ru1j — 4th condition for local calendar reposts
     const localRepostsLiteral: string = orConditions[3].id[Op.in].val;
+    // 5th condition: AP auto-reposts by followed local calendars
+    const apSharesLiteral: string = orConditions[4].id[Op.in].val;
 
     // The unescaped injection pattern must NOT appear in any literal
     const unescapedPattern = `= '${maliciousId}`;
@@ -103,6 +105,7 @@ describe('EventService.getEventsFromFollowedSources', () => {
     expect(remoteAnnouncementsLiteral).not.toContain(unescapedPattern);
     expect(localLiteral).not.toContain(unescapedPattern);
     expect(localRepostsLiteral).not.toContain(unescapedPattern);
+    expect(apSharesLiteral).not.toContain(unescapedPattern);
 
     // The escaped form must be present (sequelize.escape wraps and escapes the value)
     const escapedValue = EventEntity.sequelize!.escape(maliciousId);
@@ -110,6 +113,7 @@ describe('EventService.getEventsFromFollowedSources', () => {
     expect(remoteAnnouncementsLiteral).toContain(`= ${escapedValue}`);
     expect(localLiteral).toContain(`= ${escapedValue}`);
     expect(localRepostsLiteral).toContain(`= ${escapedValue}`);
+    expect(apSharesLiteral).toContain(`= ${escapedValue}`);
   });
 
   // Regression: pv-ru1j — updated from three-condition to four-condition
@@ -121,20 +125,24 @@ describe('EventService.getEventsFromFollowedSources', () => {
 
     const queryOptions = findAllStub.firstCall.args[0] as any;
 
-    // Verify the where clause uses Op.or with four conditions
+    // Verify the where clause uses Op.or with five conditions
     expect(queryOptions.where).toBeDefined();
     expect(queryOptions.where[Op.or]).toBeDefined();
     expect(Array.isArray(queryOptions.where[Op.or])).toBe(true);
-    expect(queryOptions.where[Op.or].length).toBe(4);
+    expect(queryOptions.where[Op.or].length).toBe(5);
 
     // First condition: remote events authored by followed remote calendars (calendar_id = null)
     const remoteOriginalsCondition = queryOptions.where[Op.or][0];
     expect(remoteOriginalsCondition.calendar_id).toBeNull();
     expect(remoteOriginalsCondition.id[Op.in]).toBeDefined();
 
-    // Second condition: remote events announced/shared by followed remote calendars
+    // Second condition: events announced/shared by followed remote calendars.
+    // No calendar_id outer filter: the ea.type='share' + remote-actor +
+    // ap_following joins provide the semantic filter, and both remote-origin
+    // (calendar_id = null) and local-origin events (shared back via a
+    // cross-instance self-origin loop) must be surfaced.
     const remoteAnnouncementsCondition = queryOptions.where[Op.or][1];
-    expect(remoteAnnouncementsCondition.calendar_id).toBeNull();
+    expect(remoteAnnouncementsCondition.calendar_id).toBeUndefined();
     expect(remoteAnnouncementsCondition.id[Op.in]).toBeDefined();
 
     // Third condition: local events from followed local calendars
@@ -153,6 +161,15 @@ describe('EventService.getEventsFromFollowedSources', () => {
     expect(repostSql).toContain('event_repost');
     expect(repostSql).toContain('calendar_actor');
     expect(repostSql).toContain('ap_following');
+
+    // Fifth condition: events auto-reposted (shared via AP) by followed local calendars
+    const apSharesCondition = queryOptions.where[Op.or][4];
+    expect(apSharesCondition.id).toBeDefined();
+    expect(apSharesCondition.id[Op.in]).toBeDefined();
+    const apSharesSql: string = apSharesCondition.id[Op.in].val;
+    expect(apSharesSql).toContain('ap_shared_event');
+    expect(apSharesSql).toContain('calendar_actor');
+    expect(apSharesSql).toContain('ap_following');
   });
 
   it('respects pagination parameters (page and pageSize)', async () => {

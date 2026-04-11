@@ -259,6 +259,19 @@
             "count": 0,
             "by_day": "",
             "is_exclusion": false
+        },
+        {
+            "id": "feed0007-0000-4000-8000-000000000001",
+            "event_id": "feed0005-0000-4000-8000-000000000001",
+            "timezone": "America/Los_Angeles",
+            "start_date": "2025-06-01T18:00:00.000",
+            "end_date": "2025-06-01T20:00:00.000",
+            "event_end_time": "2025-06-01T20:00:00.000",
+            "frequency": "",
+            "interval": 0,
+            "count": 0,
+            "by_day": "",
+            "is_exclusion": false
         }
     ]
 }

@@ -1621,9 +1621,14 @@ class EventService {
               ),
             },
           },
-          // Remote events announced/shared by followed remote calendars
+          // Events announced/shared by followed remote calendars.
+          // Includes BOTH remote-origin events (calendar_id = null) and
+          // local-origin events (calendar_id = UUID) — the latter surfaces
+          // when a followed remote peer shares one of our own events back
+          // to us (e.g., cross-instance auto-repost self-origin loop). No
+          // calendar_id outer filter: the ea.type='share' + remote actor +
+          // ap_following joins are sufficient semantic filters.
           {
-            calendar_id: null,
             id: {
               [Op.in]: EventEntity.sequelize!.literal(
                 `(SELECT eo.event_id FROM ap_event_object eo
@@ -1656,6 +1661,19 @@ class EventService {
               [Op.in]: EventEntity.sequelize!.literal(
                 `(SELECT er.event_id FROM event_repost er
                   JOIN calendar_actor ca ON er.calendar_id = ca.calendar_id AND ca.actor_type = 'local'
+                  JOIN ap_following f ON f.calendar_actor_id = ca.id
+                  WHERE f.calendar_id = ${escapedCalendarId})`,
+              ),
+            },
+          },
+          // Events auto-reposted (shared via AP) by followed local calendars.
+          // Auto-repost creates SharedEventEntity records, not EventRepostEntity,
+          // so this condition is needed to surface multi-hop reposted events.
+          {
+            id: {
+              [Op.in]: EventEntity.sequelize!.literal(
+                `(SELECT se.event_id FROM ap_shared_event se
+                  JOIN calendar_actor ca ON se.calendar_id = ca.calendar_id AND ca.actor_type = 'local'
                   JOIN ap_following f ON f.calendar_actor_id = ca.id
                   WHERE f.calendar_id = ${escapedCalendarId})`,
               ),

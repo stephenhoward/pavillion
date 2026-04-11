@@ -124,6 +124,28 @@ export default class CalendarActorService {
   }
 
   /**
+   * Resolves an ActivityPub actor URI to a local Calendar object, or null
+   * if the URI does not belong to a local calendar actor on this instance.
+   *
+   * Narrow read-only helper used by ProcessOutboxService to decide whether
+   * to route a recipient via in-process dispatch (local) or HTTP (remote).
+   * Deliberately does NOT call remote_calendar.ts's findOrCreateByActorUri,
+   * which has create-on-miss semantics inappropriate for dispatch lookup.
+   *
+   * @param actorUri - The actor URI to resolve
+   * @returns Promise resolving to Calendar or null if not a local actor
+   */
+  async getLocalCalendarByActorUri(actorUri: string): Promise<Calendar | null> {
+    const actor = await CalendarActorEntity.findOne({
+      where: { actor_uri: actorUri, actor_type: 'local' },
+    });
+    if (!actor || !actor.calendar_id) {
+      return null;
+    }
+    return await this.calendarInterface.getCalendar(actor.calendar_id);
+  }
+
+  /**
    * Signs an ActivityPub activity with HTTP signatures
    *
    * @param actorUri - The actor URI performing the activity

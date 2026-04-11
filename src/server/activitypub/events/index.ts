@@ -17,6 +17,7 @@ import DeleteActivity from '../model/action/delete';
 import AnnounceActivity from '../model/action/announce';
 import { EventObject } from '../model/object/event';
 import { ActivityPubOutboxMessageEntity, ActivityPubInboxMessageEntity } from '@/server/activitypub/entity/activitypub';
+import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import UserActorService from '../service/user_actor';
 import CalendarActorService from '../service/calendar_actor';
 import CalendarInterface from '@/server/calendar/interface';
@@ -52,6 +53,36 @@ export default class ActivityPubEventHandlers implements DomainEventHandlers {
   private async handleEventCreated(payload: ActivityPubEventCreatedPayload): Promise<void> {
     const actorUrl = await this.service.actorUrl(payload.calendar);
     const eventUrl = EventObject.eventUrl(payload.calendar, payload.event);
+
+    // Ensure the AP identity for this event exists before dispatching.
+    // checkAndPerformAutoRepost() in the inbox pipeline relies on
+    // EventObjectEntity.attributed_to for attribution and loop-guard checks.
+    const [eventObject, created] = await EventObjectEntity.findOrCreate({
+      where: { event_id: payload.event.id },
+      defaults: {
+        event_id: payload.event.id,
+        ap_id: eventUrl,
+        attributed_to: actorUrl,
+      },
+    });
+
+    // SECURITY: If a row already existed (e.g., a remote Announce arrived
+    // for this event ID before its local creation), verify the attribution
+    // matches this calendar's actor URL. A mismatch is an integrity signal
+    // that must not be silently accepted.
+    if (!created && eventObject.attributed_to !== actorUrl) {
+      logger.warn(
+        {
+          eventId: payload.event.id,
+          expected: actorUrl,
+          found: eventObject.attributed_to,
+        },
+        '[EVENT-CREATED] Pre-existing EventObjectEntity has unexpected attributed_to — not updating',
+      );
+    }
+
+    // The outbox dispatcher fans out to both local and remote followers.
+    // Local followers are routed in-process via ProcessInboxService.
     await this.service.addToOutbox(
       payload.calendar,
       new AnnounceActivity(actorUrl, eventUrl),

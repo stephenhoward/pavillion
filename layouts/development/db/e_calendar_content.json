@@ -41,6 +41,34 @@
             "language": "es",
             "name": "Eventos de MultiCalendar",
             "description": "Calendario de eventos de MultiCalendarTestUser para probar flujos de múltiples calendarios"
+        },
+        {
+            "id": "feed0002-0000-4000-8000-000000000001",
+            "calendar_id": "feed0001-0000-4000-8000-000000000001",
+            "language": "en",
+            "name": "Chain Source (A)",
+            "description": "Originator calendar in the multi-hop auto-repost demo. Publish an event here and watch it cascade through Chain Relay (B) to Chain End (C) and Chain Branch (X)."
+        },
+        {
+            "id": "feed0002-0000-4000-8000-000000000002",
+            "calendar_id": "feed0001-0000-4000-8000-000000000002",
+            "language": "en",
+            "name": "Chain Relay (B)",
+            "description": "Mid-hop reposter. Auto-reposts events from Chain Source (A) and cascades them downstream to Chain End (C) and Chain Branch (X)."
+        },
+        {
+            "id": "feed0002-0000-4000-8000-000000000003",
+            "calendar_id": "feed0001-0000-4000-8000-000000000003",
+            "language": "en",
+            "name": "Chain End (C)",
+            "description": "End of the main cascade chain. Verifies events from A propagate two hops through B to reach here."
+        },
+        {
+            "id": "feed0002-0000-4000-8000-000000000004",
+            "calendar_id": "feed0001-0000-4000-8000-000000000004",
+            "language": "en",
+            "name": "Chain Branch (X)",
+            "description": "Side-branch follower of B. Verifies non-main-chain followers of an intermediate hop still receive cascaded events."
         }
     ]
 }

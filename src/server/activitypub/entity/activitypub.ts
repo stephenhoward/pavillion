@@ -182,10 +182,10 @@ class SharedEventEntity extends Model {
   })
   declare id: string;
 
-  @Column({ type: DataType.STRING })
+  @Column({ type: DataType.UUID })
   declare event_id: string;
 
-  @Column({ type: DataType.STRING })
+  @Column({ type: DataType.UUID })
   declare calendar_id: string;
 
   @Column({

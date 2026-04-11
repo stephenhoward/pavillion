@@ -16,6 +16,7 @@ import AcceptActivity from "@/server/activitypub/model/action/accept";
 import AnnounceActivity from "@/server/activitypub/model/action/announce";
 import { ActivityPubInboxMessageEntity, EventActivityEntity, FollowerCalendarEntity, FollowingCalendarEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
 import { EventObjectEntity } from "@/server/activitypub/entity/event_object";
+import { CalendarActorEntity } from "@/server/activitypub/entity/calendar_actor";
 import RemoteCalendarService from "@/server/activitypub/service/remote_calendar";
 import { EventObject } from "@/server/activitypub/model/object/event";
 import { ActivityPubActor } from "@/server/activitypub/model/base";
@@ -1736,6 +1737,54 @@ class ProcessInboxService {
         calendar_id: calendar.id,
       },
     });
+  }
+
+  /**
+   * Public entry point for in-process local dispatch of an Announce from
+   * the outbox. Called by ProcessOutboxService when a recipient resolves
+   * to a local CalendarActorEntity.
+   *
+   * TRUST CONTRACT (SECURITY-CRITICAL):
+   *   This method SKIPS HTTP signature verification because the activity
+   *   originates from an ActivityPubOutboxMessageEntity on this same
+   *   instance — rows that were written exclusively by local code paths
+   *   via addToOutbox(). The caller must guarantee the activity came from
+   *   an outbox row that was produced by a local calendar actor.
+   *
+   *   DO NOT call this method from any code path that has not established
+   *   this guarantee. In particular, do NOT call it with activity data
+   *   originating from HTTP request bodies, user input, or untrusted
+   *   external sources. New callers must uphold the same contract.
+   *
+   *   Current authorized callers: ProcessOutboxService.processOutboxMessage
+   *   (after dispatching the recipient through
+   *   CalendarActorService.getLocalCalendarByActorUri).
+   *
+   * Unlike processShareEvent, this assumes the EventObjectEntity already
+   * exists (which Phase 1 guarantees for local events) and skips all
+   * remote-fetch paths.
+   */
+  async handleLocalAnnounceDispatch(calendar: Calendar, activity: AnnounceActivity): Promise<void> {
+    if (!activity.object) {
+      logger.warn('[LOCAL-DISPATCH] Announce activity missing object');
+      return;
+    }
+    const eventApId = typeof activity.object === 'string'
+      ? activity.object
+      : (activity.object as any)?.id;
+    if (!eventApId || typeof eventApId !== 'string') {
+      logger.warn('[LOCAL-DISPATCH] Announce activity object missing id');
+      return;
+    }
+
+    const apObject = await EventObjectEntity.findOne({ where: { ap_id: eventApId } });
+    if (!apObject) {
+      logger.warn({ eventApId }, '[LOCAL-DISPATCH] No EventObjectEntity for local event — cascade step skipped');
+      return;
+    }
+    const isOriginal = apObject.attributed_to === activity.actor;
+
+    await this.checkAndPerformAutoRepost(calendar, activity.actor, eventApId, isOriginal);
   }
 
   /**

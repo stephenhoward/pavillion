@@ -44,7 +44,7 @@ export default class ActivityPubInterface {
     this.memberService = new ActivityPubMemberService(eventBus, calendarInterface);
     this.serverService = new ActivityPubServerService(eventBus, calendarInterface, accountsInterface);
     this.inboxSerivce = new ProcessInboxService(eventBus, this.calendarInterface, moderationInterface);
-    this.outboxService = new ProcessOutboxService(eventBus);
+    this.outboxService = new ProcessOutboxService(eventBus, this.inboxSerivce);
   }
 
   async actorUrl(calendar: Calendar): Promise<string> {
