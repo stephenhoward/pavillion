@@ -271,6 +271,83 @@ export const seedFollowData = async () => {
       });
     }
   }
+
+  // --- Multi-hop auto-repost chain fixture ---
+  //
+  // Seeds a four-calendar chain that exercises PR #184's multi-hop cascade
+  // and feed-query SharedEventEntity fix:
+  //
+  //   chain_a ──► chain_b ──► chain_c
+  //                  │
+  //                  └──► chain_x
+  //
+  // Pre-seeded SharedEventEntity rows for chain_a's demo event live in
+  // layouts/development/db/xb_shared_event.json so the feed-query fix is
+  // visible on boot. Creating a new event on chain_a in the UI exercises
+  // the cascade write path through the unified outbox pipeline.
+  //
+  // Both auto_repost flags are true on every edge: this sidesteps any
+  // nuance about whether an intermediate hop's repost is classified as
+  // "original" or "repost" at the downstream follower's policy layer.
+
+  const chainActorUris = {
+    chain_a: `https://${domain}/calendars/chain_a`,
+    chain_b: `https://${domain}/calendars/chain_b`,
+    chain_c: `https://${domain}/calendars/chain_c`,
+    chain_x: `https://${domain}/calendars/chain_x`,
+  };
+
+  const chainCalendarIds = {
+    chain_a: 'cha10001-0000-4000-8000-000000000001',
+    chain_b: 'cha10001-0000-4000-8000-000000000002',
+    chain_c: 'cha10001-0000-4000-8000-000000000003',
+    chain_x: 'cha10001-0000-4000-8000-000000000004',
+  };
+
+  const chainActors: Record<string, any> = {};
+  for (const [label, uri] of Object.entries(chainActorUris)) {
+    const actor = await db.models['CalendarActorEntity'].findOne({
+      where: { actor_uri: uri },
+    });
+    if (!actor) {
+      logger.warn(
+        { actor: label, uri },
+        'seedFollowData: chain actor missing, skipping multi-hop chain seed',
+      );
+      return;
+    }
+    chainActors[label] = actor;
+  }
+
+  // Three edges: B follows A, C follows B, X follows B.
+  // calendar_actor_id is the followed calendar's actor; calendar_id is the follower calendar.
+  const chainFollows: Array<{ followed: string; follower: string }> = [
+    { followed: 'chain_a', follower: 'chain_b' },
+    { followed: 'chain_b', follower: 'chain_c' },
+    { followed: 'chain_b', follower: 'chain_x' },
+  ];
+
+  for (const edge of chainFollows) {
+    const followedActorId = (chainActors[edge.followed] as any).id;
+    const followerCalendarId = chainCalendarIds[edge.follower as keyof typeof chainCalendarIds];
+
+    const existing = await db.models['FollowingCalendarEntity'].findOne({
+      where: {
+        calendar_actor_id: followedActorId,
+        calendar_id: followerCalendarId,
+      },
+    });
+
+    if (!existing) {
+      await db.models['FollowingCalendarEntity'].create({
+        id: uuidv4(),
+        calendar_actor_id: followedActorId,
+        calendar_id: followerCalendarId,
+        auto_repost_originals: true,
+        auto_repost_reposts: true,
+      });
+    }
+  }
 };
 
 export default db;
