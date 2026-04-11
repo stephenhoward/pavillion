@@ -11,6 +11,7 @@ import {
   FollowingCalendarEntity,
   FollowerCalendarEntity,
   SharedEventEntity,
+  RepostDismissalEntity,
 } from '@/server/activitypub/entity/activitypub';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
@@ -52,6 +53,12 @@ describe("ActivityPub Feed Service Methods", () => {
 
     // Stub calendar service methods
     sandbox.stub(service.calendarService, 'userCanModifyCalendar').resolves(true);
+
+    // shareEvent wraps its mutations in db.transaction(...) and destroys any
+    // existing RepostDismissalEntity for the (event_id, calendar_id) pair before
+    // creating the new share. These pure-stub tests never sync the ap_repost_dismissal
+    // table, so stub destroy to a no-op to keep the transaction callback hermetic.
+    sandbox.stub(RepostDismissalEntity, 'destroy').resolves(0);
   });
 
   afterEach(() => {
@@ -699,6 +706,10 @@ describe("shareEvent - local events without EventObjectEntity (seed events)", ()
     calendar = Calendar.fromObject({ id: 'test-calendar-id', urlName: 'testcalendar' });
 
     sandbox.stub(service.calendarService, 'userCanModifyCalendar').resolves(true);
+
+    // shareEvent wraps mutations in db.transaction and destroys any prior dismissal
+    // row; these pure-stub tests do not sync ap_repost_dismissal, so no-op the destroy.
+    sandbox.stub(RepostDismissalEntity, 'destroy').resolves(0);
   });
 
   afterEach(() => {
