@@ -14,7 +14,7 @@ import DeleteActivity from "@/server/activitypub/model/action/delete";
 import FollowActivity from "@/server/activitypub/model/action/follow";
 import AcceptActivity from "@/server/activitypub/model/action/accept";
 import AnnounceActivity from "@/server/activitypub/model/action/announce";
-import { ActivityPubInboxMessageEntity, EventActivityEntity, FollowerCalendarEntity, FollowingCalendarEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
+import { ActivityPubInboxMessageEntity, EventActivityEntity, FollowerCalendarEntity, FollowingCalendarEntity, RepostDismissalEntity, SharedEventEntity } from "@/server/activitypub/entity/activitypub";
 import { EventObjectEntity } from "@/server/activitypub/entity/event_object";
 import { CalendarActorEntity } from "@/server/activitypub/entity/calendar_actor";
 import RemoteCalendarService from "@/server/activitypub/service/remote_calendar";
@@ -882,6 +882,21 @@ class ProcessInboxService {
     const localActorUrl = ActivityPubActor.actorUrl(calendar);
     if (eventObject.attributed_to === localActorUrl) {
       logger.info('Skip: Loop prevention - event originated from this calendar');
+      return;
+    }
+
+    // DISMISSAL GUARD: Check for sticky unpost dismissal by this calendar owner.
+    // If present, skip share creation entirely. Update activities that modify
+    // the underlying event still process normally elsewhere in the inbox.
+    const dismissal = await RepostDismissalEntity.findOne({
+      where: {
+        event_id: eventObject.event_id,
+        calendar_id: calendar.id,
+      },
+    });
+
+    if (dismissal) {
+      logger.info({ event_id: eventObject.event_id, calendar_id: calendar.id }, 'Skip: previously dismissed by calendar owner');
       return;
     }
 

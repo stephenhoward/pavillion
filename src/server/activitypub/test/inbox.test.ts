@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import ProcessInboxService from '@/server/activitypub/service/inbox';
 import * as remoteFetch from '@/server/activitypub/helper/remote-fetch';
-import { FollowerCalendarEntity, FollowingCalendarEntity, ActivityPubOutboxMessageEntity, EventActivityEntity } from '@/server/activitypub/entity/activitypub';
+import { FollowerCalendarEntity, FollowingCalendarEntity, ActivityPubOutboxMessageEntity, EventActivityEntity, SharedEventEntity, RepostDismissalEntity } from '@/server/activitypub/entity/activitypub';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import FollowActivity from '@/server/activitypub/model/action/follow';
@@ -618,6 +618,149 @@ describe('ProcessInboxService - checkAndPerformAutoRepost eventReposted emission
     expect(emittedEvents).toHaveLength(0);
   });
 
+});
+
+describe('ProcessInboxService - checkAndPerformAutoRepost dismissal gating', () => {
+  let sandbox: sinon.SinonSandbox;
+  let inboxService: ProcessInboxService;
+  let eventBus: EventEmitter;
+  let testCalendar: Calendar;
+  let calendarInterface: CalendarInterface;
+
+  const sourceActorUri = 'https://remote.instance/calendars/source-calendar';
+
+  beforeEach(async () => {
+    await setupActivityPubSchema();
+    sandbox = sinon.createSandbox();
+    eventBus = new EventEmitter();
+    calendarInterface = new CalendarInterface(eventBus);
+    inboxService = new ProcessInboxService(eventBus, calendarInterface);
+
+    testCalendar = new Calendar('test-calendar-id', 'test-calendar');
+    testCalendar.addContent('en', new CalendarContent('en'));
+    testCalendar.content('en').title = 'Test Calendar';
+
+    await CalendarEntity.create({
+      id: testCalendar.id,
+      url_name: testCalendar.urlName,
+      account_id: uuidv4(),
+      languages: 'en',
+    });
+
+    // Ensure FK enforcement is off for this describe — other test files may
+    // leave `PRAGMA foreign_keys = ON` set on the shared SQLite connection.
+    // setupActivityPubSchema() does not sync the full EventEntity graph.
+    const db = (await import('@/server/common/entity/db')).default;
+    await db.query('PRAGMA foreign_keys = OFF');
+
+    sandbox.stub(console, 'log');
+    sandbox.stub(console, 'warn');
+  });
+
+  afterEach(async () => {
+    sandbox.restore();
+    await teardownActivityPubSchema();
+  });
+
+  async function seedAutoRepostPrerequisites(eventId: string, eventApId: string) {
+    const remoteCalendarActorId = uuidv4();
+    await CalendarActorEntity.create({
+      id: remoteCalendarActorId,
+      actor_type: 'remote',
+      actor_uri: sourceActorUri,
+      remote_display_name: null,
+      remote_domain: 'remote.instance',
+      calendar_id: null,
+      private_key: null,
+    });
+
+    await FollowingCalendarEntity.create({
+      id: uuidv4(),
+      calendar_actor_id: remoteCalendarActorId,
+      calendar_id: testCalendar.id,
+      auto_repost_originals: true,
+      auto_repost_reposts: false,
+    });
+
+    await EventObjectEntity.create({
+      event_id: eventId,
+      ap_id: eventApId,
+      attributed_to: sourceActorUri,
+    });
+  }
+
+  it('skips SharedEventEntity creation and outbox write when a dismissal exists', async () => {
+    // Arrange
+    const eventId = uuidv4();
+    const eventApId = `https://remote.instance/events/${eventId}`;
+    await seedAutoRepostPrerequisites(eventId, eventApId);
+
+    // Sticky dismissal for this (event_id, calendar_id) pair
+    await RepostDismissalEntity.create({
+      id: uuidv4(),
+      event_id: eventId,
+      calendar_id: testCalendar.id,
+    });
+
+    // Stubs for downstream calls that should NOT be reached
+    const sharedCreateSpy = sandbox.spy(SharedEventEntity, 'create');
+    const outboxCreateSpy = sandbox.spy(ActivityPubOutboxMessageEntity, 'create');
+    const categorySpy = sandbox.stub(calendarInterface.categoryMappingService, 'assignAutoRepostCategories').resolves();
+    const getEventByIdSpy = sandbox.stub(calendarInterface, 'getEventById').resolves(new CalendarEvent(eventId, null));
+
+    const emittedEvents: any[] = [];
+    eventBus.on('eventReposted', (payload) => emittedEvents.push(payload));
+
+    // Act
+    await (inboxService as any).checkAndPerformAutoRepost(
+      testCalendar, sourceActorUri, eventApId, true,
+    );
+
+    // Assert
+    expect(sharedCreateSpy.called).toBe(false);
+    expect(outboxCreateSpy.called).toBe(false);
+    expect(categorySpy.called).toBe(false);
+    expect(getEventByIdSpy.called).toBe(false);
+    expect(emittedEvents).toHaveLength(0);
+
+    // The dismissal row should still be present after the skip.
+    const remaining = await RepostDismissalEntity.count({
+      where: { event_id: eventId, calendar_id: testCalendar.id },
+    });
+    expect(remaining).toBe(1);
+
+    // And no SharedEventEntity row should have been persisted.
+    const shares = await SharedEventEntity.count({
+      where: { event_id: eventId, calendar_id: testCalendar.id },
+    });
+    expect(shares).toBe(0);
+  });
+
+  it('creates SharedEventEntity normally when no dismissal exists', async () => {
+    // Arrange
+    const eventId = uuidv4();
+    const eventApId = `https://remote.instance/events/${eventId}`;
+    await seedAutoRepostPrerequisites(eventId, eventApId);
+
+    sandbox.stub(calendarInterface.categoryMappingService, 'assignAutoRepostCategories').resolves();
+    sandbox.stub(calendarInterface, 'getEventById').resolves(new CalendarEvent(eventId, null));
+
+    const emittedEvents: any[] = [];
+    eventBus.on('eventReposted', (payload) => emittedEvents.push(payload));
+
+    // Act
+    await (inboxService as any).checkAndPerformAutoRepost(
+      testCalendar, sourceActorUri, eventApId, true,
+    );
+
+    // Assert - the existing behavior is preserved.
+    const shares = await SharedEventEntity.count({
+      where: { event_id: eventId, calendar_id: testCalendar.id },
+    });
+    expect(shares).toBe(1);
+
+    expect(emittedEvents).toHaveLength(1);
+  });
 });
 
 describe('ProcessInboxService - processUpdateEvent', () => {
