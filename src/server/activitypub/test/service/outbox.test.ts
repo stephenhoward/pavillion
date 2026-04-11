@@ -464,10 +464,12 @@ describe('processOutboxMessage — local/remote dispatcher split', () => {
     const localCalendar = Calendar.fromObject({ id: 'local-cal-id' });
     const mockInbox = {
       handleLocalAnnounceDispatch: sandbox.stub().resolves(),
-      resolveLocalCalendarForDispatch: sandbox.stub().resolves(localCalendar),
     } as unknown as ProcessInboxService;
 
     const service = new ProcessOutboxService(eventBus, mockInbox);
+    const resolveLocalStub = sandbox
+      .stub(service.calendarActorService, 'getLocalCalendarByActorUri')
+      .resolves(localCalendar);
 
     // Build an Announce outbox message — this is the activity type used for
     // federation/auto-repost fan-out, which is the code path Phase 3 targets.
@@ -496,6 +498,10 @@ describe('processOutboxMessage — local/remote dispatcher split', () => {
     await service.processOutboxMessage(message);
 
     expect(
+      resolveLocalStub.calledOnceWith(LOCAL_RECIPIENT_URI),
+      'dispatcher must consult calendarActorService.getLocalCalendarByActorUri',
+    ).toBe(true);
+    expect(
       (mockInbox.handleLocalAnnounceDispatch as sinon.SinonStub).calledOnce,
       'handleLocalAnnounceDispatch must be called for a local recipient',
     ).toBe(true);
@@ -510,11 +516,13 @@ describe('processOutboxMessage — local/remote dispatcher split', () => {
     const eventBus = new EventEmitter();
     const mockInbox = {
       handleLocalAnnounceDispatch: sandbox.stub().resolves(),
-      // Remote recipient — not a local calendar actor
-      resolveLocalCalendarForDispatch: sandbox.stub().resolves(null),
     } as unknown as ProcessInboxService;
 
     const service = new ProcessOutboxService(eventBus, mockInbox);
+    // Remote recipient — not a local calendar actor
+    const resolveLocalStub = sandbox
+      .stub(service.calendarActorService, 'getLocalCalendarByActorUri')
+      .resolves(null);
 
     const announceMessage = createMockAnnounceActivity(
       LOCAL_ACTOR_URL,
@@ -539,8 +547,8 @@ describe('processOutboxMessage — local/remote dispatcher split', () => {
     await service.processOutboxMessage(message);
 
     expect(
-      (mockInbox.resolveLocalCalendarForDispatch as sinon.SinonStub).called,
-      'dispatcher must consult resolveLocalCalendarForDispatch for each recipient',
+      resolveLocalStub.called,
+      'dispatcher must consult calendarActorService.getLocalCalendarByActorUri for each recipient',
     ).toBe(true);
     expect(
       axiosPostStub.called,
@@ -553,15 +561,17 @@ describe('processOutboxMessage — local/remote dispatcher split', () => {
     expect(updateStub.calledOnce).toBe(true);
   });
 
-  it('skips dispatch when resolveLocalCalendarForDispatch returns null for a local-looking actor with missing calendar', async () => {
+  it('skips dispatch when getLocalCalendarByActorUri returns null for a local-looking actor with missing calendar', async () => {
     const eventBus = new EventEmitter();
     const mockInbox = {
       handleLocalAnnounceDispatch: sandbox.stub().resolves(),
-      // Null calendar: recipient actor_uri looks local but no Calendar row exists
-      resolveLocalCalendarForDispatch: sandbox.stub().resolves(null),
     } as unknown as ProcessInboxService;
 
     const service = new ProcessOutboxService(eventBus, mockInbox);
+    // Null calendar: recipient actor_uri looks local but no Calendar row exists
+    sandbox
+      .stub(service.calendarActorService, 'getLocalCalendarByActorUri')
+      .resolves(null);
 
     const announceMessage = createMockAnnounceActivity(
       LOCAL_ACTOR_URL,

@@ -19,6 +19,7 @@ import UndoActivity from "@/server/activitypub/model/action/undo";
 import FlagActivity from "@/server/activitypub/model/action/flag";
 import { ActivityPubActivity, ActivityPubObject } from "@/server/activitypub/model/base";
 import CalendarInterface from "@/server/calendar/interface";
+import CalendarActorService from "@/server/activitypub/service/calendar_actor";
 import ProcessInboxService from "@/server/activitypub/service/inbox";
 import { FEDERATION_HTTP_TIMEOUT_MS } from "@/server/common/constants";
 import { validateUrlNotPrivate } from "@/server/common/helper/ip-validation";
@@ -29,6 +30,7 @@ import { validateUrlNotPrivate } from "@/server/common/helper/ip-validation";
  */
 class ProcessOutboxService {
   calendarService: CalendarInterface;
+  calendarActorService: CalendarActorService;
   private inboxService: ProcessInboxService | null;
 
   /**
@@ -41,6 +43,7 @@ class ProcessOutboxService {
    */
   constructor(eventBus: EventEmitter, inboxService?: ProcessInboxService) {
     this.calendarService = new CalendarInterface(eventBus);
+    this.calendarActorService = new CalendarActorService(this.calendarService);
     this.inboxService = inboxService ?? null;
     if (!this.inboxService) {
       logger.warn('[OUTBOX] constructed without ProcessInboxService — local recipients will degrade to HTTP delivery (test-only path)');
@@ -177,7 +180,7 @@ class ProcessOutboxService {
         // decision about whether to extend local dispatch to all activity types.
         const canDispatchLocally = this.inboxService !== null && message.type === 'Announce';
         const localCalendar = canDispatchLocally
-          ? await this.inboxService!.resolveLocalCalendarForDispatch(recipient)
+          ? await this.calendarActorService.getLocalCalendarByActorUri(recipient)
           : null;
 
         if (localCalendar) {
@@ -198,8 +201,8 @@ class ProcessOutboxService {
         // available and the recipient URL shares a hostname with this
         // outbox message's origin actor (i.e., the recipient looks like it
         // belongs to a local calendar on this instance), a null result from
-        // resolveLocalCalendarForDispatch means the CalendarActorEntity row
-        // is missing or stale. HTTP-delivering to such a URL would loop back
+        // getLocalCalendarByActorUri means the CalendarActorEntity row is
+        // missing or stale. HTTP-delivering to such a URL would loop back
         // to ourselves and almost certainly fail with 404, so skip it.
         //
         // Remote recipients (different hostname) and WebFinger handles

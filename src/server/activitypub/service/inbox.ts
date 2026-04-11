@@ -1757,7 +1757,8 @@ class ProcessInboxService {
    *   external sources. New callers must uphold the same contract.
    *
    *   Current authorized callers: ProcessOutboxService.processOutboxMessage
-   *   (after dispatching the recipient through resolveLocalCalendarForDispatch).
+   *   (after dispatching the recipient through
+   *   CalendarActorService.getLocalCalendarByActorUri).
    *
    * Unlike processShareEvent, this assumes the EventObjectEntity already
    * exists (which Phase 1 guarantees for local events) and skips all
@@ -1784,25 +1785,6 @@ class ProcessInboxService {
     const isOriginal = apObject.attributed_to === activity.actor;
 
     await this.checkAndPerformAutoRepost(calendar, activity.actor, eventApId, isOriginal);
-  }
-
-  /**
-   * Resolves an ActivityPub actor URI to a local Calendar object, or null
-   * if the URI does not belong to a local calendar actor on this instance.
-   *
-   * Narrow read-only helper used by ProcessOutboxService to decide whether
-   * to route a recipient via in-process dispatch (local) or HTTP (remote).
-   * Deliberately does NOT call remote_calendar.ts's findOrCreateByActorUri,
-   * which has create-on-miss semantics inappropriate for dispatch lookup.
-   */
-  async resolveLocalCalendarForDispatch(actorUri: string): Promise<Calendar | null> {
-    const actor = await CalendarActorEntity.findOne({
-      where: { actor_uri: actorUri, actor_type: 'local' },
-    });
-    if (!actor || !actor.calendar_id) {
-      return null;
-    }
-    return await this.calendarInterface.getCalendar(actor.calendar_id);
   }
 
   /**
