@@ -43,6 +43,7 @@
         "reposted_button": "Reposted",
         "unrepost_aria_label": "Remove repost for: {{eventTitle}}",
         "auto_posted_label": "Auto-posted",
+        "unrepost_auto_aria_label": "Remove auto-repost for: {{eventTitle}}",
         "loading_more": "Loading more events...",
         "untitled_event": "Untitled Event",
         "unknown_calendar": "Unknown",
