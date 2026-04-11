@@ -9,11 +9,25 @@ import { EventRepostEntity } from '@/server/calendar/entity/event_repost';
 import EventService from '@/server/calendar/service/events';
 
 /**
- * Creates a mock ActivityPubInterface with getSharedEventIds stubbed.
+ * Creates a mock ActivityPubInterface with getSharedEventIds and
+ * getSharedEventStatusMap stubbed.
+ *
+ * @param sharedEventIds - Array of event IDs reposted to the calendar.
+ * @param statusOverrides - Optional map of eventId -> 'auto'|'manual' to
+ *   control the repostStatus resolution. Any id in sharedEventIds not in
+ *   statusOverrides defaults to 'manual'.
  */
-function buildMockApInterface(sharedEventIds: string[] = []) {
+function buildMockApInterface(
+  sharedEventIds: string[] = [],
+  statusOverrides: Record<string, 'auto' | 'manual'> = {},
+) {
+  const statusMap = new Map<string, 'auto' | 'manual'>();
+  for (const id of sharedEventIds) {
+    statusMap.set(id, statusOverrides[id] ?? 'manual');
+  }
   return {
     getSharedEventIds: sinon.stub().resolves(sharedEventIds),
+    getSharedEventStatusMap: sinon.stub().resolves(statusMap),
   } as any;
 }
 
@@ -103,6 +117,103 @@ describe('listEvents', () => {
       const reposted = events.find(e => e.id === 'reposted-id');
       expect(owned?.isRepost).toBe(false);
       expect(reposted?.isRepost).toBe(true);
+    });
+  });
+
+  describe('repostStatus field', () => {
+    it('should set repostStatus="none" for events owned by the calendar', async () => {
+      const entity = EventEntity.build({ id: 'owned-event-id', calendar_id: 'cal-id' });
+      sandbox.stub(EventEntity, 'findAll').resolves([entity]);
+
+      const events = await service.listEvents(new Calendar('cal-id', 'testcal'));
+      expect(events[0].repostStatus).toBe('none');
+      expect(events[0].isRepost).toBe(false);
+    });
+
+    it('should set repostStatus="manual" for events shared with auto_posted=false', async () => {
+      const manualRepostId = '550e8400-e29b-41d4-a716-446655440001';
+      service.setActivityPubInterface(
+        buildMockApInterface([manualRepostId], { [manualRepostId]: 'manual' }),
+      );
+
+      const entity = EventEntity.build({ id: manualRepostId });
+      sandbox.stub(EventEntity, 'findAll').resolves([entity]);
+
+      const events = await service.listEvents(new Calendar('cal-id', 'testcal'));
+      expect(events[0].repostStatus).toBe('manual');
+      expect(events[0].isRepost).toBe(true);
+    });
+
+    it('should set repostStatus="auto" for events shared with auto_posted=true', async () => {
+      const autoRepostId = '550e8400-e29b-41d4-a716-446655440002';
+      service.setActivityPubInterface(
+        buildMockApInterface([autoRepostId], { [autoRepostId]: 'auto' }),
+      );
+
+      const entity = EventEntity.build({ id: autoRepostId });
+      sandbox.stub(EventEntity, 'findAll').resolves([entity]);
+
+      const events = await service.listEvents(new Calendar('cal-id', 'testcal'));
+      expect(events[0].repostStatus).toBe('auto');
+      expect(events[0].isRepost).toBe(true);
+    });
+
+    it('should prefer SharedEventEntity status over legacy EventRepostEntity', async () => {
+      // An event present in both EventRepostEntity and SharedEventEntity
+      // should use the SharedEventEntity status (auto in this case).
+      const eventId = '550e8400-e29b-41d4-a716-446655440003';
+      (EventRepostEntity.findAll as sinon.SinonStub).resolves([
+        { event_id: eventId },
+      ]);
+      service.setActivityPubInterface(
+        buildMockApInterface([eventId], { [eventId]: 'auto' }),
+      );
+
+      const entity = EventEntity.build({ id: eventId });
+      sandbox.stub(EventEntity, 'findAll').resolves([entity]);
+
+      const events = await service.listEvents(new Calendar('cal-id', 'testcal'));
+      expect(events[0].repostStatus).toBe('auto');
+    });
+
+    it('should default legacy EventRepostEntity-only events to "manual"', async () => {
+      const legacyId = 'legacy-repost-id';
+      (EventRepostEntity.findAll as sinon.SinonStub).resolves([
+        { event_id: legacyId },
+      ]);
+
+      const entity = EventEntity.build({ id: legacyId });
+      sandbox.stub(EventEntity, 'findAll').resolves([entity]);
+
+      const events = await service.listEvents(new Calendar('cal-id', 'testcal'));
+      expect(events[0].repostStatus).toBe('manual');
+      expect(events[0].isRepost).toBe(true);
+    });
+
+    it('should resolve repost status via a single SharedEventEntity query (no N+1)', async () => {
+      // Verify the map is built once up front, not per-event.
+      const id1 = '550e8400-e29b-41d4-a716-446655440010';
+      const id2 = '550e8400-e29b-41d4-a716-446655440011';
+      const id3 = '550e8400-e29b-41d4-a716-446655440012';
+      const apMock = buildMockApInterface([id1, id2, id3], {
+        [id1]: 'auto',
+        [id2]: 'manual',
+        [id3]: 'auto',
+      });
+      service.setActivityPubInterface(apMock);
+
+      const entities = [
+        EventEntity.build({ id: id1 }),
+        EventEntity.build({ id: id2 }),
+        EventEntity.build({ id: id3 }),
+      ];
+      sandbox.stub(EventEntity, 'findAll').resolves(entities);
+
+      const events = await service.listEvents(new Calendar('cal-id', 'testcal'));
+
+      // getSharedEventStatusMap called exactly once regardless of event count
+      expect(apMock.getSharedEventStatusMap.callCount).toBe(1);
+      expect(events.map(e => e.repostStatus).sort()).toEqual(['auto', 'auto', 'manual']);
     });
   });
 

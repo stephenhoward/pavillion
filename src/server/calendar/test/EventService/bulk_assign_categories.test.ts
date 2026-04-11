@@ -357,7 +357,7 @@ describe('EventService.bulkAssignCategories', () => {
     // getEventById returns an event with isRepost=false (as it always does, since it
     // doesn't know about the repost relationship)
     const returnedEvent = new CalendarEvent(eventId, reposterCalendarId);
-    returnedEvent.isRepost = false;
+    returnedEvent.repostStatus = 'none';
     const getEventByIdStub = sandbox.stub(service, 'getEventById');
     getEventByIdStub.withArgs(eventId).resolves(returnedEvent);
 
@@ -409,7 +409,7 @@ describe('EventService.bulkAssignCategories', () => {
     sandbox.stub(EventCategoryAssignmentEntity, 'bulkCreate').resolves([]);
 
     const returnedEvent = new CalendarEvent(eventId, calendarId);
-    returnedEvent.isRepost = false;
+    returnedEvent.repostStatus = 'none';
     const getEventByIdStub = sandbox.stub(service, 'getEventById');
     getEventByIdStub.withArgs(eventId).resolves(returnedEvent);
 

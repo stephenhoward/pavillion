@@ -32,6 +32,7 @@ describe('EventService - Calendar ID Storage', () => {
     // no real ActivityPub domain is wired up in these unit tests.
     (eventService as any).activityPubInterface = {
       getSharedEventIds: async () => [],
+      getSharedEventStatusMap: async () => new Map<string, 'auto' | 'manual'>(),
     };
 
     // Setup test account

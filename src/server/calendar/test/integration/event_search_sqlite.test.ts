@@ -33,6 +33,7 @@ describe('Event Search Integration (SQLite)', () => {
     // no real ActivityPub domain is wired up in this test environment.
     (eventService as any).activityPubInterface = {
       getSharedEventIds: async () => [],
+      getSharedEventStatusMap: async () => new Map(),
     };
 
     // Create test account and calendar

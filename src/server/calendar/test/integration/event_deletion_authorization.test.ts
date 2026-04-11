@@ -57,6 +57,7 @@ describe('Event Deletion and Update Authorization - IDOR Prevention', () => {
     // environment; returning null/[] keeps local-only code paths correct.
     calendarInterface.setActivityPubInterface({
       getSharedEventIds: async () => [],
+      getSharedEventStatusMap: async () => new Map(),
       findCalendarActorByCalendarId: async () => null,
     } as any);
     accountService = new AccountService(eventBus, configurationInterface, setupInterface);

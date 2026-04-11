@@ -237,7 +237,7 @@ describe('EventService.replaceEventCategories', () => {
     sandbox.stub(EventCategoryAssignmentEntity, 'bulkCreate').resolves([]);
 
     const returnedEvent = new CalendarEvent(validEventId, reposterCalendarId);
-    returnedEvent.isRepost = false;
+    returnedEvent.repostStatus = 'none';
     sandbox.stub(service, 'getEventById').resolves(returnedEvent);
 
     const result = await service.replaceEventCategories(
@@ -285,7 +285,7 @@ describe('EventService.replaceEventCategories', () => {
     sandbox.stub(EventCategoryAssignmentEntity, 'destroy').resolves(0);
 
     const returnedEvent = new CalendarEvent(validEventId, calendarId);
-    returnedEvent.isRepost = false;
+    returnedEvent.repostStatus = 'none';
     sandbox.stub(service, 'getEventById').resolves(returnedEvent);
 
     const result = await service.replaceEventCategories(mockAccount, validEventId, []);

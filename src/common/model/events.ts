@@ -55,18 +55,31 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
   categories: EventCategory[] = [];
   series: EventSeries | null = null;
   /**
-   * Whether this event was obtained via a repost (SharedEventEntity) rather than direct ownership.
+   * Repost status of this event relative to the querying calendar:
+   * - 'none': owned directly by the calendar (not a repost)
+   * - 'manual': reposted to the calendar via an explicit user action
+   * - 'auto':  reposted to the calendar automatically by auto-repost policy
    *
-   * Populated by: EventService.listEvents() — sets true when the event has a corresponding
-   * SharedEventEntity for the querying calendar.
+   * Populated by: EventService.listEvents() — resolved from SharedEventEntity.auto_posted
+   * for events shared to the querying calendar, or 'manual' for legacy EventRepostEntity
+   * entries, or 'none' for owned events.
    *
    * NOT populated by: EventService.getEventById(), EventService.updateEvent(), or
    * EventService.bulkAssignCategories() (which calls getEventById() internally). Events
-   * returned by those methods will always have isRepost=false regardless of actual repost state.
+   * returned by those methods will always have repostStatus='none' regardless of actual
+   * repost state.
    *
-   * Default: false. Must be explicitly set after retrieval if needed.
+   * Default: 'none'. Must be explicitly set after retrieval if needed.
    */
-  isRepost: boolean = false;
+  repostStatus: 'none' | 'manual' | 'auto' = 'none';
+
+  /**
+   * Derived flag: true when this event was obtained via a repost (auto or manual)
+   * rather than direct ownership. Backed by {@link repostStatus}.
+   */
+  get isRepost(): boolean {
+    return this.repostStatus !== 'none';
+  }
   /**
    * Source calendar information for reposted events.
    * Contains the originating calendar's urlName, host, and URL.
@@ -154,7 +167,17 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
     event.location = obj.location ? EventLocation.fromObject(obj.location) : null;
     event.media = obj.media ? Media.fromObject(obj.media) : null;
     event.mediaId = obj.mediaId || null;
-    event.isRepost = obj.isRepost ?? false;
+    // Prefer repostStatus when present; fall back to legacy isRepost boolean for
+    // backward compatibility with older serialized payloads.
+    if (obj.repostStatus === 'manual' || obj.repostStatus === 'auto' || obj.repostStatus === 'none') {
+      event.repostStatus = obj.repostStatus;
+    }
+    else if (obj.isRepost === true) {
+      event.repostStatus = 'manual';
+    }
+    else {
+      event.repostStatus = 'none';
+    }
     event.sourceCalendar = obj.sourceCalendar ?? null;
 
     if ( obj.content ) {
@@ -196,6 +219,8 @@ class CalendarEvent extends TranslatedModel<CalendarEventContent> {
       id: this.id,
       date: this.date,
       calendarId: this.calendarId,
+      repostStatus: this.repostStatus,
+      // Kept for backward compatibility with frontend code still reading isRepost.
       isRepost: this.isRepost,
       sourceCalendar: this.sourceCalendar,
       locationId: this.locationId,
