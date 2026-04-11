@@ -1,7 +1,6 @@
 import { EventEmitter } from "events";
 import config from 'config';
 import axios from 'axios';
-import { v4 as uuidv4 } from 'uuid';
 
 import { createLogger } from '@/server/common/helper/logger';
 
@@ -9,7 +8,6 @@ const logger = createLogger('activitypub');
 
 import { Account } from "@/common/model/account";
 import { Calendar } from "@/common/model/calendar";
-import { CalendarEvent } from "@/common/model/events";
 import { FollowingCalendar, FollowerCalendar } from "@/common/model/follow";
 import { ActivityPubActivity } from "@/server/activitypub/model/base";
 import FollowActivity from "@/server/activitypub/model/action/follow";
@@ -785,140 +783,6 @@ class ActivityPubService {
     });
 
     return eventsWithRepostStatus;
-  }
-
-  /**
-   * Performs local auto-repost for same-instance calendar follows.
-   *
-   * When a local calendar creates or reposts an event, this finds all local
-   * calendars that follow it with the appropriate auto-repost policy enabled,
-   * and creates SharedEventEntity records + emits eventReposted for each.
-   *
-   * Uses breadth-first traversal with a visited set to safely handle
-   * cascading multi-hop chains and prevent infinite loops from circular
-   * follow graphs. The cascade is bounded by MAX_LOCAL_REPOST_DEPTH.
-   *
-   * The AP outbox pipeline handles remote followers; this method handles local
-   * followers directly to avoid the HTTP-to-self roundtrip.
-   *
-   * @param calendar - The calendar that owns or is reposting the event
-   * @param event - The event to auto-repost
-   * @param isOriginal - true if this is the event's originating calendar, false if reposting
-   */
-  async performLocalAutoReposts(calendar: Calendar, event: CalendarEvent, isOriginal: boolean): Promise<void> {
-    const MAX_LOCAL_REPOST_DEPTH = 10;
-    const visited = new Set<string>();
-
-    // BFS queue: each entry is [calendar to check for followers, isOriginal flag]
-    const queue: Array<{ calendar: Calendar; isOriginal: boolean }> = [
-      { calendar, isOriginal },
-    ];
-    // The source calendar is already "visited" — don't repost back to it
-    visited.add(calendar.id);
-
-    let depth = 0;
-    while (queue.length > 0 && depth < MAX_LOCAL_REPOST_DEPTH) {
-      const batch = queue.splice(0, queue.length);
-      depth++;
-
-      for (const entry of batch) {
-        const newReposts = await this.processLocalAutoRepostLevel(entry.calendar, event, entry.isOriginal, visited);
-        // Queue newly reposted calendars for cascade (as reposts, not originals)
-        for (const repostCalendar of newReposts) {
-          queue.push({ calendar: repostCalendar, isOriginal: false });
-        }
-      }
-    }
-
-    if (queue.length > 0) {
-      logger.warn({
-        eventId: event.id,
-        depth: MAX_LOCAL_REPOST_DEPTH,
-        remainingCalendars: queue.length,
-      }, '[LOCAL-AUTO-REPOST] Cascade depth limit reached');
-    }
-  }
-
-  /**
-   * Processes a single level of local auto-repost: finds eligible followers
-   * of the given calendar and creates SharedEventEntity records for each.
-   * Returns the Calendar objects for newly reposted calendars (for BFS cascade).
-   */
-  private async processLocalAutoRepostLevel(
-    calendar: Calendar,
-    event: CalendarEvent,
-    isOriginal: boolean,
-    visited: Set<string>,
-  ): Promise<Calendar[]> {
-    const calendarActor = await CalendarActorEntity.findOne({
-      where: { calendar_id: calendar.id, actor_type: 'local' },
-    });
-
-    if (!calendarActor) {
-      return [];
-    }
-
-    const policyField = isOriginal ? 'auto_repost_originals' : 'auto_repost_reposts';
-    const follows = await FollowingCalendarEntity.findAll({
-      where: {
-        calendar_actor_id: calendarActor.id,
-        [policyField]: true,
-      },
-    });
-
-    const newReposts: Calendar[] = [];
-
-    for (const follow of follows) {
-      const followerCalendarId = follow.calendar_id;
-
-      // Skip already-visited calendars (cycle prevention + dedup)
-      if (visited.has(followerCalendarId)) {
-        continue;
-      }
-      visited.add(followerCalendarId);
-
-      // Skip self-repost (event's own calendar)
-      if (followerCalendarId === event.calendarId) {
-        continue;
-      }
-
-      // Duplicate check against DB (in case of prior AP-path repost)
-      const existing = await SharedEventEntity.findOne({
-        where: { event_id: event.id, calendar_id: followerCalendarId },
-      });
-      if (existing) {
-        continue;
-      }
-
-      await SharedEventEntity.create({
-        id: uuidv4(),
-        event_id: event.id,
-        calendar_id: followerCalendarId,
-        auto_posted: true,
-      });
-
-      logger.info({
-        eventId: event.id,
-        sourceCalendarId: calendar.id,
-        repostCalendarId: followerCalendarId,
-        isOriginal,
-      }, '[LOCAL-AUTO-REPOST] Created local auto-repost');
-
-      // Emit eventReposted so event instances are built by the calendar domain.
-      // NOTE: The AP event handler does NOT listen for eventReposted — this
-      // emission is consumed only by the calendar domain for building instances.
-      // The multi-hop cascade is handled by the BFS loop in performLocalAutoReposts,
-      // not by re-entering through the event bus. If AP ever needs to react to
-      // eventReposted, it must not call performLocalAutoReposts again, as the
-      // visited set and depth limit are scoped to a single invocation.
-      const repostCalendar = await this.calendarService.getCalendar(followerCalendarId);
-      if (repostCalendar) {
-        this.eventBus.emit('eventReposted', { event, calendar: repostCalendar });
-        newReposts.push(repostCalendar);
-      }
-    }
-
-    return newReposts;
   }
 }
 

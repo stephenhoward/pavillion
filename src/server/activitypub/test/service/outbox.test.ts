@@ -27,6 +27,7 @@ import { EventEmitter } from 'events';
 
 import { Calendar } from '@/common/model/calendar';
 import ProcessOutboxService from '@/server/activitypub/service/outbox';
+import ProcessInboxService from '@/server/activitypub/service/inbox';
 import {
   EventActivityEntity,
   ActivityPubOutboxMessageEntity,
@@ -35,6 +36,7 @@ import {
 
 // Import Fedify mock helpers for creating well-formed ActivityPub activities
 import {
+  createMockAnnounceActivity,
   createMockCreateActivity,
   createMockFollowActivity,
   createMockFederation,
@@ -438,6 +440,166 @@ describe('processOutboxMessage', () => {
     expect(updateStub.getCalls()[0].args[0]['processed_time']).toBeDefined();
     // The delivery error should be recorded in processed_status
     expect(updateStub.getCalls()[0].args[0]['processed_status']).toMatch(/^partial:/);
+  });
+});
+
+
+describe('processOutboxMessage — local/remote dispatcher split', () => {
+  let sandbox: sinon.SinonSandbox = sinon.createSandbox();
+
+  beforeEach(() => {
+    vi.mocked(validateUrlNotPrivate).mockResolvedValue(true);
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+    vi.restoreAllMocks();
+  });
+
+  const LOCAL_RECIPIENT_URI = 'https://local.federation.test/calendars/localcal';
+  const BROKEN_LOCAL_RECIPIENT_URI = 'https://local.federation.test/calendars/broken';
+
+  it('routes local recipients to handleLocalAnnounceDispatch instead of HTTP', async () => {
+    const eventBus = new EventEmitter();
+    const localCalendar = Calendar.fromObject({ id: 'local-cal-id' });
+    const mockInbox = {
+      handleLocalAnnounceDispatch: sandbox.stub().resolves(),
+      resolveLocalCalendarForDispatch: sandbox.stub().resolves(localCalendar),
+    } as unknown as ProcessInboxService;
+
+    const service = new ProcessOutboxService(eventBus, mockInbox);
+
+    // Build an Announce outbox message — this is the activity type used for
+    // federation/auto-repost fan-out, which is the code path Phase 3 targets.
+    const announceMessage = createMockAnnounceActivity(
+      LOCAL_ACTOR_URL,
+      `${LOCAL_ACTOR_URL}/events/123`,
+    );
+    const message = ActivityPubOutboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Announce',
+      message: announceMessage,
+    });
+
+    const getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
+    const axiosPostStub = sandbox.stub(axios, 'post').resolves();
+    const updateStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'update');
+    const getRecipientsStub = sandbox.stub(service, 'getRecipients');
+    const resolveInboxStub = sandbox.stub(service, 'resolveInboxUrl');
+
+    getCalendarStub.resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID }));
+    getRecipientsStub.resolves([LOCAL_RECIPIENT_URI]);
+    // resolveInboxUrl should not be reached for local recipients, but stub
+    // defensively in case the current dispatcher still calls it.
+    resolveInboxStub.resolves('https://local.federation.test/calendars/localcal/inbox');
+
+    await service.processOutboxMessage(message);
+
+    expect(
+      (mockInbox.handleLocalAnnounceDispatch as sinon.SinonStub).calledOnce,
+      'handleLocalAnnounceDispatch must be called for a local recipient',
+    ).toBe(true);
+    expect(
+      axiosPostStub.called,
+      'HTTP POST must not be used for local recipients',
+    ).toBe(false);
+    expect(updateStub.calledOnce).toBe(true);
+  });
+
+  it('still HTTP POSTs to remote recipients', async () => {
+    const eventBus = new EventEmitter();
+    const mockInbox = {
+      handleLocalAnnounceDispatch: sandbox.stub().resolves(),
+      // Remote recipient — not a local calendar actor
+      resolveLocalCalendarForDispatch: sandbox.stub().resolves(null),
+    } as unknown as ProcessInboxService;
+
+    const service = new ProcessOutboxService(eventBus, mockInbox);
+
+    const announceMessage = createMockAnnounceActivity(
+      LOCAL_ACTOR_URL,
+      `${LOCAL_ACTOR_URL}/events/123`,
+    );
+    const message = ActivityPubOutboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Announce',
+      message: announceMessage,
+    });
+
+    const getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
+    const axiosPostStub = sandbox.stub(axios, 'post').resolves();
+    const updateStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'update');
+    const getRecipientsStub = sandbox.stub(service, 'getRecipients');
+    const resolveInboxStub = sandbox.stub(service, 'resolveInboxUrl');
+
+    getCalendarStub.resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID }));
+    getRecipientsStub.resolves([REMOTE_CALENDAR_HANDLE]);
+    resolveInboxStub.resolves(REMOTE_INBOX_URL);
+
+    await service.processOutboxMessage(message);
+
+    expect(
+      (mockInbox.resolveLocalCalendarForDispatch as sinon.SinonStub).called,
+      'dispatcher must consult resolveLocalCalendarForDispatch for each recipient',
+    ).toBe(true);
+    expect(
+      axiosPostStub.called,
+      'HTTP POST must be used for remote recipients',
+    ).toBe(true);
+    expect(
+      (mockInbox.handleLocalAnnounceDispatch as sinon.SinonStub).called,
+      'handleLocalAnnounceDispatch must not be called for remote recipients',
+    ).toBe(false);
+    expect(updateStub.calledOnce).toBe(true);
+  });
+
+  it('skips dispatch when resolveLocalCalendarForDispatch returns null for a local-looking actor with missing calendar', async () => {
+    const eventBus = new EventEmitter();
+    const mockInbox = {
+      handleLocalAnnounceDispatch: sandbox.stub().resolves(),
+      // Null calendar: recipient actor_uri looks local but no Calendar row exists
+      resolveLocalCalendarForDispatch: sandbox.stub().resolves(null),
+    } as unknown as ProcessInboxService;
+
+    const service = new ProcessOutboxService(eventBus, mockInbox);
+
+    const announceMessage = createMockAnnounceActivity(
+      LOCAL_ACTOR_URL,
+      `${LOCAL_ACTOR_URL}/events/123`,
+    );
+    const message = ActivityPubOutboxMessageEntity.build({
+      calendar_id: TEST_CALENDAR_ID,
+      type: 'Announce',
+      message: announceMessage,
+    });
+
+    const getCalendarStub = sandbox.stub(service.calendarService, 'getCalendar');
+    const axiosPostStub = sandbox.stub(axios, 'post').resolves();
+    const updateStub = sandbox.stub(ActivityPubOutboxMessageEntity.prototype, 'update');
+    const getRecipientsStub = sandbox.stub(service, 'getRecipients');
+    const resolveInboxStub = sandbox.stub(service, 'resolveInboxUrl');
+
+    getCalendarStub.resolves(Calendar.fromObject({ id: TEST_CALENDAR_ID }));
+    // A URI that belongs to this instance's host (would be a local actor) but
+    // resolves to no Calendar row. Dispatcher must treat this as the defensive
+    // null-calendar branch — neither in-process dispatch nor HTTP fallback.
+    getRecipientsStub.resolves([BROKEN_LOCAL_RECIPIENT_URI]);
+    // Even if the inbox IS resolvable, the null-calendar guard must fire
+    // first and skip delivery entirely. Today's dispatcher has no such guard
+    // and would HTTP POST to this inbox URL — that's what makes this test fail.
+    resolveInboxStub.resolves('https://local.federation.test/calendars/broken/inbox');
+
+    await service.processOutboxMessage(message);
+
+    expect(
+      (mockInbox.handleLocalAnnounceDispatch as sinon.SinonStub).called,
+      'handleLocalAnnounceDispatch must not be called when calendar is null',
+    ).toBe(false);
+    expect(
+      axiosPostStub.called,
+      'HTTP fallback must not run for null-calendar case',
+    ).toBe(false);
+    expect(updateStub.calledOnce).toBe(true);
   });
 });
 

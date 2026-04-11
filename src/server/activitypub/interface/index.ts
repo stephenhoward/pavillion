@@ -44,7 +44,7 @@ export default class ActivityPubInterface {
     this.memberService = new ActivityPubMemberService(eventBus, calendarInterface);
     this.serverService = new ActivityPubServerService(eventBus, calendarInterface, accountsInterface);
     this.inboxSerivce = new ProcessInboxService(eventBus, this.calendarInterface, moderationInterface);
-    this.outboxService = new ProcessOutboxService(eventBus);
+    this.outboxService = new ProcessOutboxService(eventBus, this.inboxSerivce);
   }
 
   async actorUrl(calendar: Calendar): Promise<string> {
@@ -395,20 +395,5 @@ export default class ActivityPubInterface {
       }
     }
     return result;
-  }
-
-  /**
-   * Performs local auto-repost for same-instance calendar follows.
-   *
-   * When a local calendar creates or reposts an event, cascades repost
-   * through all local followers with the appropriate auto-repost policy
-   * enabled. Delegates to ActivityPubMemberService.
-   *
-   * @param calendar - The calendar that owns or is reposting the event
-   * @param event - The event to auto-repost
-   * @param isOriginal - true if this is the event's originating calendar, false if reposting
-   */
-  async performLocalAutoReposts(calendar: Calendar, event: CalendarEvent, isOriginal: boolean): Promise<void> {
-    return this.memberService.performLocalAutoReposts(calendar, event, isOriginal);
   }
 }

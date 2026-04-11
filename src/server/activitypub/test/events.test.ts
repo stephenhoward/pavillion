@@ -1,13 +1,17 @@
 import { EventEmitter } from 'events';
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import sinon from 'sinon';
+import { v4 as uuidv4 } from 'uuid';
 
 import ActivityPubEventHandlers from '@/server/activitypub/events';
 import ActivityPubInterface from '@/server/activitypub/interface';
 import CalendarInterface from '@/server/calendar/interface';
 import { ActivityPubInboxMessageEntity, ActivityPubOutboxMessageEntity } from '@/server/activitypub/entity/activitypub';
+import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
+import { ActivityPubActor } from '@/server/activitypub/model/base';
 import { Calendar } from '@/common/model/calendar';
 import { CalendarEvent } from '@/common/model/events';
+import { setupActivityPubSchema, teardownActivityPubSchema } from '@/server/test/helpers/database';
 
 describe('inbox event listener', () => {
   let service: ActivityPubInterface;
@@ -188,5 +192,45 @@ describe('handleEventUpdated guard', () => {
     const outboxCall = addToOutboxStub.getCall(0);
     expect(outboxCall.args[0]).toBe(calendar);
     expect(outboxCall.args[1].type).toBe('Update');
+  });
+});
+
+describe('handleEventCreated', () => {
+  let service: ActivityPubInterface;
+  let handlers: ActivityPubEventHandlers;
+  let eventBus: EventEmitter;
+  let sandbox: sinon.SinonSandbox;
+
+  beforeEach(async () => {
+    await setupActivityPubSchema();
+    sandbox = sinon.createSandbox();
+    eventBus = new EventEmitter();
+    service = new ActivityPubInterface(eventBus);
+    handlers = new ActivityPubEventHandlers(service, new CalendarInterface(eventBus));
+    handlers.install(eventBus);
+  });
+
+  afterEach(async () => {
+    sandbox.restore();
+    await teardownActivityPubSchema();
+  });
+
+  it('creates an EventObjectEntity for the local event before dispatching Announce', async () => {
+    const calendar = Calendar.fromObject({ id: uuidv4(), urlName: 'my_calendar' });
+    const event = CalendarEvent.fromObject({ id: uuidv4() });
+    const actorUrl = ActivityPubActor.actorUrl(calendar);
+
+    // Stub the service methods that would otherwise hit the database / network
+    sandbox.stub(service, 'actorUrl').resolves(actorUrl);
+    const addToOutboxStub = sandbox.stub(service, 'addToOutbox').resolves();
+
+    // Invoke the private handler directly so we can deterministically assert
+    // on the persisted EventObjectEntity row.
+    await (handlers as any)['handleEventCreated']({ calendar, event });
+
+    const eventObject = await EventObjectEntity.findOne({ where: { event_id: event.id } });
+    expect(eventObject, 'EventObjectEntity must exist for local event').not.toBeNull();
+    expect(eventObject!.attributed_to).toBe(actorUrl);
+    expect(addToOutboxStub.calledOnce).toBe(true);
   });
 });
