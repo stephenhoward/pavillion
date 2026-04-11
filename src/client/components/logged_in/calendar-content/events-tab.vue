@@ -896,6 +896,11 @@ initializeFiltersFromURL();
             color: var(--pav-color-orange-500);
           }
 
+          &:focus-visible {
+            outline: 2px solid var(--pav-color-focus-ring, var(--pav-color-orange-500));
+            outline-offset: 2px;
+          }
+
           @media (prefers-color-scheme: dark) {
             color: var(--pav-color-stone-400);
 
