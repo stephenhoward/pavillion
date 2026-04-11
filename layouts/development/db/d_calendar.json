@@ -14,6 +14,26 @@
             "id": "c8569a35-dccb-4f97-a214-a4dec6c84262",
             "url_name": "multicalendar_calendar",
             "languages": "en,es"
+        },
+        {
+            "id": "cha10001-0000-4000-8000-000000000001",
+            "url_name": "chain_a",
+            "languages": "en"
+        },
+        {
+            "id": "cha10001-0000-4000-8000-000000000002",
+            "url_name": "chain_b",
+            "languages": "en"
+        },
+        {
+            "id": "cha10001-0000-4000-8000-000000000003",
+            "url_name": "chain_c",
+            "languages": "en"
+        },
+        {
+            "id": "cha10001-0000-4000-8000-000000000004",
+            "url_name": "chain_x",
+            "languages": "en"
         }
     ]
 }
