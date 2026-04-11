@@ -241,7 +241,28 @@ describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
     });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    // Drain pending cascades BEFORE restoring sinon. Earlier tests in this
+    // file often return as soon as their specific assertion is satisfied
+    // (e.g. waitFor B's share) while the A→B→C→D cascade is still processing
+    // in the background via the event bus. If we restore sinon immediately,
+    // those background cascades hit unstubbed axios and raise errors, and
+    // their still-in-flight SQLite transactions race the next test's
+    // transactions — on slower CI runners this backs up far enough that the
+    // multi-hop test's 3s wait for C's share expires before the cascade has
+    // finished processing. Waiting for the outbox queue to fully drain
+    // before tearing down sinon keeps each test isolated.
+    await waitForStableCount(
+      async () => ActivityPubOutboxMessageEntity.count({
+        where: { processed_time: null },
+      }),
+      { maxWaitMs: 5000, stableForMs: 150, label: 'afterEach outbox drain' },
+    ).catch(() => {
+      // Swallow drain timeouts — we still want sandbox.restore to run so
+      // subsequent tests get a clean stub set. A lingering cascade will
+      // surface as a later test failure, which is more informative than
+      // failing the drain itself.
+    });
     sandbox.restore();
   });
 
