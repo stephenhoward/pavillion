@@ -56,6 +56,14 @@ export default {
         allowNull: false,
         defaultValue: DataTypes.NOW,
       },
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+      },
+      updatedAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+      },
     });
 
     // Unique index enforcing one dismissal per (event, calendar) pair.
