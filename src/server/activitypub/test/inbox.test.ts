@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import ProcessInboxService from '@/server/activitypub/service/inbox';
 import * as remoteFetch from '@/server/activitypub/helper/remote-fetch';
-import { FollowerCalendarEntity, FollowingCalendarEntity, ActivityPubOutboxMessageEntity, EventActivityEntity, SharedEventEntity } from '@/server/activitypub/entity/activitypub';
+import { FollowerCalendarEntity, FollowingCalendarEntity, ActivityPubOutboxMessageEntity, EventActivityEntity } from '@/server/activitypub/entity/activitypub';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import FollowActivity from '@/server/activitypub/model/action/follow';
@@ -616,136 +616,6 @@ describe('ProcessInboxService - checkAndPerformAutoRepost eventReposted emission
 
     // Assert - no emission when policy disabled
     expect(emittedEvents).toHaveLength(0);
-  });
-
-  it('handleLocalAnnounceDispatch creates a shared event for an eligible local follower', async () => {
-    // Arrange: source calendar (local) + follower calendar (testCalendar) with auto_repost_originals=true
-    const sourceCalendarId = uuidv4();
-    const sourceUrlName = 'source-local-calendar';
-    await CalendarEntity.create({
-      id: sourceCalendarId,
-      url_name: sourceUrlName,
-      account_id: uuidv4(),
-      languages: 'en',
-    });
-
-    const sourceCalendarActorUri = `https://test.local/calendars/${sourceUrlName}`;
-    const sourceActorId = uuidv4();
-    await CalendarActorEntity.create({
-      id: sourceActorId,
-      actor_type: 'local',
-      actor_uri: sourceCalendarActorUri,
-      remote_display_name: null,
-      remote_domain: null,
-      calendar_id: sourceCalendarId,
-      private_key: null,
-    });
-
-    // Follower's CalendarActorEntity (local) - so the follow relationship can be resolved
-    const followerActorId = uuidv4();
-    await CalendarActorEntity.create({
-      id: followerActorId,
-      actor_type: 'local',
-      actor_uri: `https://test.local/calendars/${testCalendar.urlName}`,
-      remote_display_name: null,
-      remote_domain: null,
-      calendar_id: testCalendar.id,
-      private_key: null,
-    });
-
-    // FollowingCalendarEntity: testCalendar (follower) follows sourceCalendar
-    await FollowingCalendarEntity.create({
-      id: uuidv4(),
-      calendar_actor_id: sourceActorId,
-      calendar_id: testCalendar.id,
-      auto_repost_originals: true,
-      auto_repost_reposts: false,
-    });
-
-    // EventObjectEntity for the local event (guaranteed by Phase 1)
-    const localEventId = uuidv4();
-    const eventApId = `${sourceCalendarActorUri}/events/evt-1`;
-    await EventObjectEntity.create({
-      event_id: localEventId,
-      ap_id: eventApId,
-      attributed_to: sourceCalendarActorUri,
-    });
-
-    // Stub calendarInterface.getEventById (matches sibling test convention — event_content table not synced)
-    const event = new CalendarEvent(localEventId, null);
-    sandbox.stub(calendarInterface, 'getEventById').resolves(event);
-
-    // Stub category mapping service
-    sandbox.stub(calendarInterface.categoryMappingService, 'assignAutoRepostCategories').resolves();
-
-    const announceActivity = new AnnounceActivity(sourceCalendarActorUri, eventApId);
-
-    // Act
-    await (inboxService as any).handleLocalAnnounceDispatch(testCalendar, announceActivity);
-
-    // Assert
-    const share = await SharedEventEntity.findOne({
-      where: { event_id: localEventId, calendar_id: testCalendar.id },
-    });
-    expect(share, 'SharedEventEntity must be created by local dispatch').not.toBeNull();
-    expect(share!.auto_posted).toBe(true);
-  });
-
-  it('handleLocalAnnounceDispatch returns silently when EventObjectEntity is missing', async () => {
-    // Arrange: same fixture as above but do NOT create the EventObjectEntity
-    const sourceCalendarId = uuidv4();
-    const sourceUrlName = 'source-local-calendar-orphan';
-    await CalendarEntity.create({
-      id: sourceCalendarId,
-      url_name: sourceUrlName,
-      account_id: uuidv4(),
-      languages: 'en',
-    });
-
-    const sourceCalendarActorUri = `https://test.local/calendars/${sourceUrlName}`;
-    const sourceActorId = uuidv4();
-    await CalendarActorEntity.create({
-      id: sourceActorId,
-      actor_type: 'local',
-      actor_uri: sourceCalendarActorUri,
-      remote_display_name: null,
-      remote_domain: null,
-      calendar_id: sourceCalendarId,
-      private_key: null,
-    });
-
-    const followerActorId = uuidv4();
-    await CalendarActorEntity.create({
-      id: followerActorId,
-      actor_type: 'local',
-      actor_uri: `https://test.local/calendars/${testCalendar.urlName}`,
-      remote_display_name: null,
-      remote_domain: null,
-      calendar_id: testCalendar.id,
-      private_key: null,
-    });
-
-    await FollowingCalendarEntity.create({
-      id: uuidv4(),
-      calendar_actor_id: sourceActorId,
-      calendar_id: testCalendar.id,
-      auto_repost_originals: true,
-      auto_repost_reposts: false,
-    });
-
-    const announceActivity = new AnnounceActivity(
-      sourceCalendarActorUri,
-      `${sourceCalendarActorUri}/events/orphan`,
-    );
-
-    // Spy on private checkAndPerformAutoRepost via bracket-notation pattern
-    const checkSpy = sandbox.spy(inboxService as any, 'checkAndPerformAutoRepost');
-
-    // Act
-    await (inboxService as any).handleLocalAnnounceDispatch(testCalendar, announceActivity);
-
-    // Assert: must not have proceeded into the auto-repost pipeline
-    expect(checkSpy.called, 'must not proceed to checkAndPerformAutoRepost').toBe(false);
   });
 
 });

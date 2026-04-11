@@ -24,14 +24,19 @@ export async function waitFor<T>(
  * by at least `stableForMs` milliseconds — i.e., the count has stopped
  * changing. Used to wait for cascades that are "done" when no more outbox
  * rows are being produced.
+ *
+ * Throws on timeout (deadline reached without the count stabilizing). A silent
+ * return on timeout would mask tests where a cascade is still running — the
+ * count returned could be transient and later assertions would be unreliable.
  */
 export async function waitForStableCount(
   countFn: () => Promise<number>,
-  options: { maxWaitMs?: number; stableForMs?: number; intervalMs?: number } = {},
+  options: { maxWaitMs?: number; stableForMs?: number; intervalMs?: number; label?: string } = {},
 ): Promise<number> {
   const maxWaitMs = options.maxWaitMs ?? 2000;
   const stableForMs = options.stableForMs ?? 100;
   const intervalMs = options.intervalMs ?? 25;
+  const label = options.label ?? 'count';
   const deadline = Date.now() + maxWaitMs;
   let lastCount = -1;
   let stableSince = 0;
@@ -47,5 +52,7 @@ export async function waitForStableCount(
     }
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
-  return lastCount;
+  throw new Error(
+    `waitForStableCount(${label}) timed out after ${maxWaitMs}ms (last observed: ${lastCount})`,
+  );
 }

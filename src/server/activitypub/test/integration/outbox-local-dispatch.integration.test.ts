@@ -76,6 +76,7 @@ describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
   let actorB: CalendarActorEntity;
   let actorC: CalendarActorEntity;
   let actorD_remote: CalendarActorEntity;
+  let axiosPostStub: sinon.SinonStub;
 
   beforeAll(async () => {
     env = new TestEnvironment();
@@ -223,9 +224,21 @@ describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
     // Prevent real HTTP delivery to remote.example. Both axios.post (inbox
     // delivery) and axios.get (actor profile fetch inside resolveInboxUrl)
     // would otherwise attempt real network I/O and slow the test down or
-    // fail unpredictably. We only care about queue state, not delivery.
-    sandbox.stub(axios, 'post').resolves({ status: 202, data: {} } as any);
-    sandbox.stub(axios, 'get').rejects(new Error('Stubbed: no network in test'));
+    // fail unpredictably. We capture the post stub so the regression test
+    // can assert that delivery was actually dispatched to D's inbox URL.
+    axiosPostStub = sandbox.stub(axios, 'post').resolves({ status: 202, data: {} } as any);
+
+    // resolveInboxUrl() in outbox.ts calls axios.get on the actor profile URL
+    // to discover its inbox endpoint. For the remote actor D we return a
+    // minimal actor document pointing at D's inbox_url so that delivery
+    // actually reaches the axios.post branch. Unknown URLs reject, matching
+    // the previous "no network in test" safety net.
+    sandbox.stub(axios, 'get').callsFake(async (url: string) => {
+      if (url === actorD_remote.actor_uri) {
+        return { status: 200, data: { inbox: actorD_remote.inbox_url } } as any;
+      }
+      throw new Error(`Stubbed: no network in test (unexpected GET: ${url})`);
+    });
   });
 
   afterEach(() => {
@@ -298,6 +311,27 @@ describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
       recipients,
       'Recipient list for B Announce must include D actor URI',
     ).toContain(actorD_remote.actor_uri);
+
+    // Assertion 4: HTTP delivery is the actual regression signal. The
+    // entire point of the refactor is that D (a remote follower of the
+    // intermediate calendar B) receives the event. Prior assertions prove
+    // that B queues an Announce and that D is in the recipient list, but
+    // the observable contract is that axios.post must be called with D's
+    // inbox URL as the first argument. We poll because delivery happens
+    // asynchronously after B queues the outbox Announce.
+    await waitFor(
+      async () => axiosPostStub.getCalls().some(
+        (call) => call.args[0] === actorD_remote.inbox_url,
+      ) || null,
+      { maxWaitMs: 3000, label: 'HTTP delivery to D inbox_url' },
+    );
+    const deliveredToD = axiosPostStub.getCalls().some(
+      (call) => call.args[0] === actorD_remote.inbox_url,
+    );
+    expect(
+      deliveredToD,
+      'axios.post must be called with D inbox_url so the event actually reaches D',
+    ).toBe(true);
   });
 
   it('single-hop: B auto-reposts A event when B follows A with originals enabled', async () => {
@@ -368,7 +402,7 @@ describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
       // share; we use waitForStableCount to avoid a brittle fixed wait.
       await waitForStableCount(
         async () => SharedEventEntity.count({ where: { event_id: event.id } }),
-        { maxWaitMs: 1500, stableForMs: 200 },
+        { maxWaitMs: 1500, stableForMs: 200, label: 'policy-off cascade settlement' },
       );
 
       const share = await SharedEventEntity.findOne({
@@ -428,7 +462,7 @@ describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
       );
       await waitForStableCount(
         async () => SharedEventEntity.count({ where: { event_id: event.id } }),
-        { maxWaitMs: 2000, stableForMs: 200 },
+        { maxWaitMs: 2000, stableForMs: 200, label: '2-cycle total share count' },
       );
 
       // The loop guard assertion: A must NOT have a share for its own event,
@@ -549,7 +583,7 @@ describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
     );
     await waitForStableCount(
       async () => SharedEventEntity.count({ where: { event_id: event.id } }),
-      { maxWaitMs: 2000, stableForMs: 200 },
+      { maxWaitMs: 2000, stableForMs: 200, label: '3-cycle total share count' },
     );
 
     const shareY = await SharedEventEntity.findOne({
@@ -599,7 +633,7 @@ describe('Outbox Local Dispatch (cross-hop remote follower regression)', () => {
     await apInterface.addToOutbox(calendarA, new AnnounceActivity(actorUrl, eventUrl));
     await waitForStableCount(
       async () => SharedEventEntity.count({ where: { event_id: event.id, calendar_id: calendarB.id } }),
-      { maxWaitMs: 2000, stableForMs: 200 },
+      { maxWaitMs: 2000, stableForMs: 200, label: 'dedup share count on B' },
     );
 
     const count = await SharedEventEntity.count({

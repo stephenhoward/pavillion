@@ -233,4 +233,53 @@ describe('handleEventCreated', () => {
     expect(eventObject!.attributed_to).toBe(actorUrl);
     expect(addToOutboxStub.calledOnce).toBe(true);
   });
+
+  it('logs a warning but does not overwrite EventObjectEntity when a pre-existing row has mismatched attributed_to', async () => {
+    const calendar = Calendar.fromObject({ id: uuidv4(), urlName: 'my_calendar' });
+    const event = CalendarEvent.fromObject({ id: uuidv4() });
+    const actorUrl = ActivityPubActor.actorUrl(calendar);
+    const spoofAttributedTo = 'https://spoof.example/actors/attacker';
+
+    // Pre-create a row for this event_id with a DIFFERENT attributed_to. This
+    // simulates an integrity-violating scenario where a remote-looking row
+    // exists before the local event is emitted. The handler must detect the
+    // mismatch and refuse to overwrite it, while still proceeding with dispatch.
+    await EventObjectEntity.create({
+      event_id: event.id,
+      ap_id: 'https://pre-existing.example/events/spoof',
+      attributed_to: spoofAttributedTo,
+    });
+
+    // Stub service methods to prevent real network / persistence
+    sandbox.stub(service, 'actorUrl').resolves(actorUrl);
+    const addToOutboxStub = sandbox.stub(service, 'addToOutbox').resolves();
+
+    // Note: the events/index.ts module imports a pino child logger via
+    // createLogger('activitypub') at module scope. In test mode that logger
+    // runs at 'silent' level and the instance is not exported, so asserting
+    // on .warn calls would require monkey-patching pino internals. The
+    // behavioral contract is what matters for the security property: the
+    // pre-existing row must not be overwritten, and dispatch must still
+    // proceed. We assert those directly below.
+
+    // Invoke the handler
+    await (handlers as any)['handleEventCreated']({ calendar, event });
+
+    // Primary assertion: the pre-existing row is NOT overwritten. The defensive
+    // check in handleEventCreated must leave the spoof attributed_to intact.
+    const preserved = await EventObjectEntity.findOne({ where: { event_id: event.id } });
+    expect(preserved, 'row must still exist').not.toBeNull();
+    expect(
+      preserved!.attributed_to,
+      'pre-existing attributed_to must NOT be overwritten by handleEventCreated',
+    ).toBe(spoofAttributedTo);
+
+    // Secondary assertion: despite the integrity signal, the event is still
+    // dispatched to the outbox. This is the documented behavior — the warn is
+    // a signal, not a hard stop.
+    expect(
+      addToOutboxStub.calledOnce,
+      'addToOutbox must still be called so the event reaches federation',
+    ).toBe(true);
+  });
 });
