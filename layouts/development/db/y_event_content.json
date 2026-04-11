@@ -279,6 +279,13 @@
             "language": "es",
             "name": "Día de Limpieza Ambiental",
             "description": "Ayude a limpiar los parques locales y vías fluviales. Se proporcionan guantes y bolsas."
+        },
+        {
+            "id": "cha10006-0000-4000-8000-000000000001",
+            "event_id": "cha10005-0000-4000-8000-000000000001",
+            "language": "en",
+            "name": "Multi-Hop Cascade Demo Event",
+            "description": "Seed event on Chain Source (A) used to verify multi-hop auto-repost propagation. Should appear on Chain Relay (B), Chain End (C), and Chain Branch (X) feeds without any manual republishing."
         }
     ]
 }

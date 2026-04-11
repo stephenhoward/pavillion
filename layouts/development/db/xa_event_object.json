@@ -34,6 +34,13 @@
             "ap_id": "https://pavillion.dev/calendars/testuser_calendar/events/792895df-c319-4920-a09e-9a8749cd3d76",
             "attributed_to": "https://pavillion.dev/calendars/testuser_calendar",
             "source_categories": null
+        },
+        {
+            "id": "cha10008-0000-4000-8000-000000000001",
+            "event_id": "cha10005-0000-4000-8000-000000000001",
+            "ap_id": "https://pavillion.dev/calendars/chain_a/events/cha10005-0000-4000-8000-000000000001",
+            "attributed_to": "https://pavillion.dev/calendars/chain_a",
+            "source_categories": null
         }
     ]
 }

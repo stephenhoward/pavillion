@@ -165,6 +165,14 @@
             "event_source_url": "/multicalendar_calendar/evt-mc-5-6e87d5ca-4d89-42c1-aa9d-5ef437fe8855",
             "createdAt": "2026-01-03T14:00:00.000",
             "updatedAt": "2026-01-03T14:00:00.000"
+        },
+        {
+            "id": "cha10005-0000-4000-8000-000000000001",
+            "calendar_id": "cha10001-0000-4000-8000-000000000001",
+            "location_id": "cha10004-0000-4000-8000-000000000001",
+            "event_source_url": "/chain-a/evt-demo-cha10005",
+            "createdAt": "2025-06-01T09:00:00.000",
+            "updatedAt": "2025-06-01T09:00:00.000"
         }
     ]
 }
