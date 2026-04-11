@@ -59,7 +59,15 @@
         "no_events_filtered_description": "No events match your current search criteria. Try adjusting your filters or clearing them to see all events.",
         "event": {
             "edit_label": "Edit event: {{name}}",
-            "duplicate_label": "Duplicate event: {{name}}"
+            "duplicate_label": "Duplicate event: {{name}}",
+            "unpost_button_label": "Unpost",
+            "unpost_aria_label": "Remove repost of event: {{name}}",
+            "unpost_confirm_title": "Remove reposted event?",
+            "unpost_confirm_body": "Remove this reposted event from your calendar? It will not be automatically reposted again if the original calendar re-broadcasts it.",
+            "unpost_confirm_action": "Remove repost",
+            "unpost_cancel": "Cancel",
+            "unpost_success_toast": "Reposted event removed",
+            "unpost_error_toast": "Failed to remove reposted event"
         },
         "series_badge_label": "Series:",
         "tab_events": "Events",
