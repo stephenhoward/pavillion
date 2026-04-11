@@ -660,6 +660,10 @@ describe('ProcessInboxService - checkAndPerformAutoRepost dismissal gating', () 
   afterEach(async () => {
     sandbox.restore();
     await teardownActivityPubSchema();
+    // Restore connection-wide pragma so neighboring test files are not
+    // affected by the OFF state set in beforeEach.
+    const db = (await import('@/server/common/entity/db')).default;
+    await db.query('PRAGMA foreign_keys = ON');
   });
 
   async function seedAutoRepostPrerequisites(eventId: string, eventApId: string) {
@@ -760,6 +764,111 @@ describe('ProcessInboxService - checkAndPerformAutoRepost dismissal gating', () 
     expect(shares).toBe(1);
 
     expect(emittedEvents).toHaveLength(1);
+  });
+
+  it('isolates dismissals per calendar: a dismissal on calendar A does not affect calendar B', async () => {
+    // Arrange — two calendars both follow the same remote source with
+    // auto_repost_originals: true. Only calendar A has a dismissal for the
+    // event. The inbox dismissal lookup MUST scope by calendar_id; otherwise
+    // calendar B would incorrectly skip the share.
+    const calendarA = testCalendar; // already set up in beforeEach
+    const calendarBId = uuidv4();
+    const calendarB = new Calendar(calendarBId, 'test-calendar-b');
+    calendarB.addContent('en', new CalendarContent('en'));
+    calendarB.content('en').title = 'Test Calendar B';
+
+    await CalendarEntity.create({
+      id: calendarB.id,
+      url_name: calendarB.urlName,
+      account_id: uuidv4(),
+      languages: 'en',
+    });
+
+    const eventId = uuidv4();
+    const eventApId = `https://remote.instance/events/${eventId}`;
+
+    // Seed the remote actor + EventObjectEntity once
+    const remoteCalendarActorId = uuidv4();
+    await CalendarActorEntity.create({
+      id: remoteCalendarActorId,
+      actor_type: 'remote',
+      actor_uri: sourceActorUri,
+      remote_display_name: null,
+      remote_domain: 'remote.instance',
+      calendar_id: null,
+      private_key: null,
+    });
+
+    // Both calendars follow the same remote actor
+    await FollowingCalendarEntity.create({
+      id: uuidv4(),
+      calendar_actor_id: remoteCalendarActorId,
+      calendar_id: calendarA.id,
+      auto_repost_originals: true,
+      auto_repost_reposts: false,
+    });
+    await FollowingCalendarEntity.create({
+      id: uuidv4(),
+      calendar_actor_id: remoteCalendarActorId,
+      calendar_id: calendarB.id,
+      auto_repost_originals: true,
+      auto_repost_reposts: false,
+    });
+
+    await EventObjectEntity.create({
+      event_id: eventId,
+      ap_id: eventApId,
+      attributed_to: sourceActorUri,
+    });
+
+    // Dismissal exists ONLY for (eventId, calendarA)
+    await RepostDismissalEntity.create({
+      id: uuidv4(),
+      event_id: eventId,
+      calendar_id: calendarA.id,
+    });
+
+    sandbox.stub(calendarInterface.categoryMappingService, 'assignAutoRepostCategories').resolves();
+    sandbox.stub(calendarInterface, 'getEventById').resolves(new CalendarEvent(eventId, null));
+
+    // Act — calendar A first (should be skipped by dismissal guard)
+    await (inboxService as any).checkAndPerformAutoRepost(
+      calendarA, sourceActorUri, eventApId, true,
+    );
+
+    let sharesA = await SharedEventEntity.count({
+      where: { event_id: eventId, calendar_id: calendarA.id },
+    });
+    expect(sharesA).toBe(0);
+
+    // Act — calendar B next (no dismissal, should create the share)
+    await (inboxService as any).checkAndPerformAutoRepost(
+      calendarB, sourceActorUri, eventApId, true,
+    );
+
+    const sharesB = await SharedEventEntity.count({
+      where: { event_id: eventId, calendar_id: calendarB.id },
+    });
+    expect(sharesB).toBe(1);
+
+    // Re-confirm calendar A still has zero shares (calendar B's processing
+    // must not have leaked into calendar A's state).
+    sharesA = await SharedEventEntity.count({
+      where: { event_id: eventId, calendar_id: calendarA.id },
+    });
+    expect(sharesA).toBe(0);
+
+    // Calendar A's dismissal row should be untouched.
+    const dismissalsA = await RepostDismissalEntity.count({
+      where: { event_id: eventId, calendar_id: calendarA.id },
+    });
+    expect(dismissalsA).toBe(1);
+
+    // Calendar B should have NO dismissal row (sharing does not create one).
+    const dismissalsB = await RepostDismissalEntity.count({
+      where: { event_id: eventId, calendar_id: calendarB.id },
+    });
+    expect(dismissalsB).toBe(0);
   });
 });
 

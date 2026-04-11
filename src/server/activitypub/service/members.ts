@@ -466,10 +466,6 @@ class ActivityPubService {
             event_id: share.event_id,
             calendar_id: calendar.id,
           },
-          defaults: {
-            event_id: share.event_id,
-            calendar_id: calendar.id,
-          },
           transaction: t,
         });
       });

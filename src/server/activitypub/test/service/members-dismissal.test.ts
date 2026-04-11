@@ -61,6 +61,9 @@ describe('unshareEvent - RepostDismissalEntity upsert', () => {
   afterEach(async () => {
     sandbox.restore();
     await teardownActivityPubSchema();
+    // Restore connection-wide pragma so neighboring test files are not
+    // affected by the OFF state set in beforeEach.
+    await db.query('PRAGMA foreign_keys = ON');
   });
 
   it('creates a RepostDismissalEntity row after destroying the SharedEventEntity', async () => {
@@ -170,6 +173,55 @@ describe('unshareEvent - RepostDismissalEntity upsert', () => {
     });
     expect(targetDismissal).not.toBeNull();
   });
+
+  it('rolls back the SharedEventEntity destroy if the dismissal write fails', async () => {
+    // Seed the AP URL → local event UUID lookup
+    await EventObjectEntity.create({
+      event_id: localEventId,
+      ap_id: eventApUrl,
+      attributed_to: 'https://remote.example.com/calendars/some-calendar',
+    });
+
+    // Seed a SharedEventEntity that unshareEvent would try to destroy
+    await SharedEventEntity.create({
+      id: 'share-activity-uuid-rollback',
+      event_id: localEventId,
+      calendar_id: calendarId,
+      auto_posted: false,
+    });
+
+    // Force the dismissal write inside the transaction to throw AFTER the
+    // SharedEventEntity destroy. The transaction wrapper must roll back the
+    // destroy. We use sinon.stub directly (not the sandbox) so we can restore
+    // it in finally even if the test assertion blows up.
+    const findOrCreateStub = sinon.stub(RepostDismissalEntity, 'findOrCreate')
+      .rejects(new Error('simulated dismissal write failure'));
+
+    const calendar = Calendar.fromObject({ id: calendarId, urlName: 'test-calendar' });
+    const account = Account.fromObject({ id: 'test-account-id' });
+
+    try {
+      await expect(
+        service.unshareEvent(account, calendar, eventApUrl),
+      ).rejects.toThrow('simulated dismissal write failure');
+
+      // The SharedEventEntity row must still be present — the destroy was
+      // rolled back when findOrCreate threw inside the transaction callback.
+      const remainingShares = await SharedEventEntity.findAll({
+        where: { event_id: localEventId, calendar_id: calendarId },
+      });
+      expect(remainingShares).toHaveLength(1);
+
+      // And no dismissal row should have been written.
+      const dismissals = await RepostDismissalEntity.findAll({
+        where: { event_id: localEventId, calendar_id: calendarId },
+      });
+      expect(dismissals).toHaveLength(0);
+    }
+    finally {
+      findOrCreateStub.restore();
+    }
+  });
 });
 
 describe('shareEvent - RepostDismissalEntity deletion', () => {
@@ -199,6 +251,9 @@ describe('shareEvent - RepostDismissalEntity deletion', () => {
   afterEach(async () => {
     sandbox.restore();
     await teardownActivityPubSchema();
+    // Restore connection-wide pragma so neighboring test files are not
+    // affected by the OFF state set in beforeEach.
+    await db.query('PRAGMA foreign_keys = ON');
   });
 
   it('deletes any existing dismissal for (event_id, calendar_id) before creating the new share', async () => {
@@ -269,5 +324,52 @@ describe('shareEvent - RepostDismissalEntity deletion', () => {
     expect(d1).not.toBeNull();
     expect(d2).not.toBeNull();
     expect(d3).not.toBeNull();
+  });
+
+  it('rolls back the dismissal destroy if the SharedEventEntity create fails', async () => {
+    // Seed the AP URL → local event UUID lookup
+    await EventObjectEntity.create({
+      event_id: localEventId,
+      ap_id: eventApUrl,
+      attributed_to: 'https://remote.example.com/calendars/some-calendar',
+    });
+
+    // Seed a pre-existing dismissal that shareEvent would normally delete
+    await RepostDismissalEntity.create({
+      event_id: localEventId,
+      calendar_id: calendarId,
+    });
+
+    // Force the SharedEventEntity create inside the transaction to throw
+    // AFTER the dismissal destroy. The transaction wrapper must roll back
+    // the dismissal destroy. We use sinon.stub directly (not the sandbox)
+    // so we can restore it in finally even if the assertion blows up.
+    const createStub = sinon.stub(SharedEventEntity, 'create')
+      .rejects(new Error('simulated share create failure'));
+
+    const calendar = Calendar.fromObject({ id: calendarId, urlName: 'test-calendar' });
+    const account = Account.fromObject({ id: 'test-account-id' });
+
+    try {
+      await expect(
+        service.shareEvent(account, calendar, eventApUrl),
+      ).rejects.toThrow('simulated share create failure');
+
+      // The dismissal row must still be present — the destroy was rolled
+      // back when create threw inside the transaction callback.
+      const dismissals = await RepostDismissalEntity.findAll({
+        where: { event_id: localEventId, calendar_id: calendarId },
+      });
+      expect(dismissals).toHaveLength(1);
+
+      // And no SharedEventEntity row should have been persisted.
+      const shares = await SharedEventEntity.findAll({
+        where: { event_id: localEventId, calendar_id: calendarId },
+      });
+      expect(shares).toHaveLength(0);
+    }
+    finally {
+      createStub.restore();
+    }
   });
 });
