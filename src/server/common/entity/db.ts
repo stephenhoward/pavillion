@@ -298,10 +298,10 @@ export const seedFollowData = async () => {
   };
 
   const chainCalendarIds = {
-    chain_a: 'cha10001-0000-4000-8000-000000000001',
-    chain_b: 'cha10001-0000-4000-8000-000000000002',
-    chain_c: 'cha10001-0000-4000-8000-000000000003',
-    chain_x: 'cha10001-0000-4000-8000-000000000004',
+    chain_a: 'feed0001-0000-4000-8000-000000000001',
+    chain_b: 'feed0001-0000-4000-8000-000000000002',
+    chain_c: 'feed0001-0000-4000-8000-000000000003',
+    chain_x: 'feed0001-0000-4000-8000-000000000004',
   };
 
   const chainActors: Record<string, any> = {};
@@ -348,6 +348,30 @@ export const seedFollowData = async () => {
       });
     }
   }
+
+  // --- EventObjectEntity for chain_a's demo event ---
+  //
+  // This row is load-bearing: PR #184's checkAndPerformAutoRepost loop guard
+  // returns early when no EventObjectEntity exists for a local event, which
+  // would silently skip the cascade. It must live in seedFollowData() rather
+  // than a JSON seed file because its ap_id and attributed_to fields embed
+  // the runtime domain from config — hardcoding a fixed domain would break
+  // the fixture on any instance whose local.yaml uses a different domain.
+
+  const chainAEventId = 'feed0005-0000-4000-8000-000000000001';
+  const chainAActorUri = chainActorUris.chain_a;
+  const chainAEventApId = `${chainAActorUri}/events/${chainAEventId}`;
+
+  await db.models['EventObjectEntity'].findOrCreate({
+    where: { event_id: chainAEventId },
+    defaults: {
+      id: 'feed0008-0000-4000-8000-000000000001',
+      event_id: chainAEventId,
+      ap_id: chainAEventApId,
+      attributed_to: chainAActorUri,
+      source_categories: null,
+    },
+  });
 };
 
 export default db;

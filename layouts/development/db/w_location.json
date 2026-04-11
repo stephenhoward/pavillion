@@ -71,8 +71,8 @@
             "country": "USA"
         },
         {
-            "id": "cha10004-0000-4000-8000-000000000001",
-            "calendar_id": "cha10001-0000-4000-8000-000000000001",
+            "id": "feed0004-0000-4000-8000-000000000001",
+            "calendar_id": "feed0001-0000-4000-8000-000000000001",
             "name": "Chain Demo Hall",
             "address": "1 Federation Way",
             "city": "Portland",
