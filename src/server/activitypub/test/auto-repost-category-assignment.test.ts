@@ -22,7 +22,7 @@ vi.mock('@/server/activitypub/helper/outbox', () => ({
 }));
 
 import ProcessInboxService from '@/server/activitypub/service/inbox';
-import { FollowingCalendarEntity, SharedEventEntity } from '@/server/activitypub/entity/activitypub';
+import { FollowingCalendarEntity, SharedEventEntity, RepostDismissalEntity } from '@/server/activitypub/entity/activitypub';
 import { EventObjectEntity } from '@/server/activitypub/entity/event_object';
 import { EventCategoryAssignmentEntity } from '@/server/calendar/entity/event_category_assignment';
 import { Calendar, CalendarContent } from '@/common/model/calendar';
@@ -124,6 +124,9 @@ describe('ProcessInboxService - auto-repost category assignment', () => {
       auto_repost_originals: true,
       auto_repost_reposts: false,
     } as any);
+
+    // Stub RepostDismissalEntity.findOne (no prior sticky dismissal → null)
+    sandbox.stub(RepostDismissalEntity, 'findOne').resolves(null);
 
     // Stub SharedEventEntity.findOne (duplicate check → null = not shared yet)
     sandbox.stub(SharedEventEntity, 'findOne').resolves(null);
@@ -345,6 +348,7 @@ describe('ProcessInboxService - auto-repost category assignment', () => {
         auto_repost_reposts: false,
       } as any);
 
+      sandbox.stub(RepostDismissalEntity, 'findOne').resolves(null);
       sandbox.stub(SharedEventEntity, 'findOne').resolves(null);
 
       const sharedEventCreateStub = sandbox.stub(SharedEventEntity, 'create').resolves({
