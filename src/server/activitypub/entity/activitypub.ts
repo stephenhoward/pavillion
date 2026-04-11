@@ -1,9 +1,10 @@
-import { Model, Table, Column, PrimaryKey, BelongsTo, DataType, ForeignKey } from 'sequelize-typescript';
+import { Model, Table, Column, PrimaryKey, BelongsTo, DataType, ForeignKey, Index } from 'sequelize-typescript';
 
 import { event_activity } from '@/common/model/events';
 import { FollowingCalendar, FollowerCalendar } from '@/common/model/follow';
 import db from '@/server/common/entity/db';
 import { CalendarEntity } from '@/server/calendar/entity/calendar';
+import { EventEntity } from '@/server/calendar/entity/event';
 import { CalendarActorEntity } from '@/server/activitypub/entity/calendar_actor';
 import { ActivityPubActivity } from '@/server/activitypub/model/base';
 import CreateActivity from '@/server/activitypub/model/action/create';
@@ -197,6 +198,51 @@ class SharedEventEntity extends Model {
 }
 
 /**
+ * Sticky dismissals of reposted events. A row here means "calendar X has
+ * explicitly said this event should not appear on its calendar via
+ * auto-repost." It gates only auto-repost creation; a manual re-share by
+ * the calendar owner supersedes the dismissal.
+ *
+ * The unique index on (event_id, calendar_id) enforces the one-row-per-pair
+ * invariant. The event_id FK cascades on delete so dismissals are cleaned
+ * up automatically when the underlying local event row is deleted.
+ */
+@Table({ tableName: 'ap_repost_dismissal' })
+class RepostDismissalEntity extends Model {
+
+  @PrimaryKey
+  @Column({
+    type: DataType.UUID,
+    defaultValue: DataType.UUIDV4,
+    allowNull: false,
+  })
+  declare id: string;
+
+  @ForeignKey(() => EventEntity)
+  @Index({ name: 'idx_ap_repost_dismissal_event_calendar', unique: true })
+  @Column({ type: DataType.UUID, allowNull: false })
+  declare event_id: string;
+
+  @ForeignKey(() => CalendarEntity)
+  @Index({ name: 'idx_ap_repost_dismissal_event_calendar', unique: true })
+  @Column({ type: DataType.UUID, allowNull: false })
+  declare calendar_id: string;
+
+  @Column({
+    type: DataType.DATE,
+    allowNull: false,
+    defaultValue: DataType.NOW,
+  })
+  declare dismissed_at: Date;
+
+  @BelongsTo(() => EventEntity, { foreignKey: 'event_id', onDelete: 'CASCADE' })
+  declare event: EventEntity;
+
+  @BelongsTo(() => CalendarEntity, { foreignKey: 'calendar_id' })
+  declare calendar: CalendarEntity;
+}
+
+/**
  * A list of activities (shares, etc) that other calendars have done to a calendar's
  * own events.
  *
@@ -227,6 +273,7 @@ db.addModels([
   FollowingCalendarEntity,
   FollowerCalendarEntity,
   SharedEventEntity,
+  RepostDismissalEntity,
   EventActivityEntity,
 ]);
 
@@ -237,5 +284,6 @@ export {
   FollowingCalendarEntity,
   FollowerCalendarEntity,
   SharedEventEntity,
+  RepostDismissalEntity,
   EventActivityEntity,
 };
