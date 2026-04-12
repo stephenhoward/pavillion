@@ -59,6 +59,8 @@
         "no_events_filtered_description": "No events match your current search criteria. Try adjusting your filters or clearing them to see all events.",
         "event": {
             "edit_label": "Edit event: {{name}}",
+            "edit_title": "Edit this event",
+            "select_label": "Select event: {{name}}",
             "duplicate_label": "Duplicate event: {{name}}",
             "unpost_button_label": "Unpost",
             "unpost_aria_label": "Remove repost of event: {{name}}",
