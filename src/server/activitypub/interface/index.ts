@@ -285,15 +285,7 @@ export default class ActivityPubInterface {
    * @returns Map from event_id (UUID string) to 'auto' | 'manual'
    */
   async getSharedEventStatusMap(calendarId: string): Promise<Map<string, 'auto' | 'manual'>> {
-    const sharedEvents = await SharedEventEntity.findAll({
-      where: { calendar_id: calendarId },
-      attributes: ['event_id', 'auto_posted'],
-    });
-    const result = new Map<string, 'auto' | 'manual'>();
-    for (const se of sharedEvents) {
-      result.set(se.event_id, se.auto_posted ? 'auto' : 'manual');
-    }
-    return result;
+    return this.memberService.getSharedEventStatusMap(calendarId);
   }
 
   /**

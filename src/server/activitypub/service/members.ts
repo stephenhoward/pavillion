@@ -473,6 +473,29 @@ class ActivityPubService {
   }
 
   /**
+   * Gets a map of shared event IDs to their repost status ('auto' or 'manual')
+   * for a given calendar. Derived from SharedEventEntity.auto_posted.
+   *
+   * Events NOT present in the returned map are not shared via SharedEventEntity
+   * for the given calendar and their repost status must be determined by other
+   * means (e.g., ownership or legacy EventRepostEntity).
+   *
+   * @param calendarId - The calendar UUID
+   * @returns Map from event_id (UUID string) to 'auto' | 'manual'
+   */
+  async getSharedEventStatusMap(calendarId: string): Promise<Map<string, 'auto' | 'manual'>> {
+    const sharedEvents = await SharedEventEntity.findAll({
+      where: { calendar_id: calendarId },
+      attributes: ['event_id', 'auto_posted'],
+    });
+    const result = new Map<string, 'auto' | 'manual'>();
+    for (const se of sharedEvents) {
+      result.set(se.event_id, se.auto_posted ? 'auto' : 'manual');
+    }
+    return result;
+  }
+
+  /**
    * Get list of calendars that this calendar is following
    * @param calendar The calendar whose followings to retrieve
    * @returns Array of FollowingCalendar objects with human-readable calendarActorId
